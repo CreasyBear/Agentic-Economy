@@ -66,8 +66,8 @@ const capacityKind = v.union(
 )
 const balanceKind = v.union(v.literal('account_aud'), capacityKind)
 const managedCallBookingArgs = {
-  invocationRef: v.string(),
-  commitmentRef: v.string(),
+  callRef: v.string(),
+  quoteRef: v.string(),
   idempotencyKey: v.string(),
   accountRef: v.string(),
   principalRef: v.string(),
@@ -76,7 +76,7 @@ const managedCallBookingArgs = {
   legalCustomerGeneration: v.number(),
   treasuryRef: v.string(),
   treasuryGeneration: v.number(),
-  operationRef: v.string(),
+  toolRef: v.string(),
   providerRef: v.string(),
   authorityGeneration: v.number(),
   policyGeneration: v.number(),
@@ -84,7 +84,7 @@ const managedCallBookingArgs = {
   buyerRevenueUnits: v.string(),
   buyerTaxUnits: v.string(),
   providerAmountUnits: v.string(),
-  commitmentDigest: v.string(),
+  quoteDigest: v.string(),
   inputDigest: v.string(),
   policyDigest: v.string(),
   rateEvidenceDigest: v.string(),

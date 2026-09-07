@@ -218,7 +218,7 @@ describe('interactive consequence authority', () => {
       },
       runQuery: async (reference: unknown) => {
         const functionName = getFunctionName(reference as never)
-        if (functionName === 'catalog:authorizeSupplierBusiness') return true
+        if (functionName === 'catalog:authorizeProviderBusiness') return true
         if (functionName === 'capabilitySupplyOwnerFunnel:readOwnerSupplyFunnel') {
           return {
             kind: 'available',
@@ -233,7 +233,7 @@ describe('interactive consequence authority', () => {
                 authorityMode: 'public_upstream',
                 source: { kind: 'openapi_http' },
               },
-              operationRef: 'operation:owner-supply',
+              toolRef: 'operation:owner-supply',
               stepStates: { test: 'in_progress' },
             }],
           }
@@ -289,7 +289,7 @@ describe('interactive consequence authority', () => {
       },
       runQuery: async (reference: unknown) => {
         const functionName = getFunctionName(reference as never)
-        if (functionName === 'catalog:authorizeSupplierBusiness') return true
+        if (functionName === 'catalog:authorizeProviderBusiness') return true
         if (functionName === 'capabilitySupplyOwnerFunnel:readOwnerSupplyFunnel') {
           return {
             kind: 'available',
@@ -304,7 +304,7 @@ describe('interactive consequence authority', () => {
                 authorityMode: 'public_upstream',
                 source: { kind: 'openapi_http' },
               },
-              operationRef: 'operation:current-owner',
+              toolRef: 'operation:current-owner',
               stepStates: { test: 'in_progress' },
             }],
           }
@@ -585,7 +585,7 @@ function ownerSupplyActionContext(options: Readonly<{
   readinessCompleted?: boolean
   externalProbe?: () => unknown
   recordEffect?: (...args: unknown[]) => unknown
-  canaryResult?: { kind: 'enqueued'; canaryRef: string; invocationRef: string; operationRef: string }
+  canaryResult?: { kind: 'enqueued'; canaryRef: string; callRef: string; toolRef: string }
     | { kind: 'refused'; code: string }
 }>) {
   return {
@@ -598,7 +598,7 @@ function ownerSupplyActionContext(options: Readonly<{
     },
     runQuery: async (reference: unknown) => {
       const functionName = getFunctionName(reference as never)
-      if (functionName === 'catalog:authorizeSupplierBusiness') return true
+      if (functionName === 'catalog:authorizeProviderBusiness') return true
       if (functionName === 'capabilitySupplyOwnerFunnel:readOwnerSupplyFunnel') {
         return {
           kind: 'available',
@@ -613,7 +613,7 @@ function ownerSupplyActionContext(options: Readonly<{
               authorityMode: 'public_upstream',
               source: { kind: options.sourceKind },
             },
-            operationRef: 'operation:authority-refresh',
+            toolRef: 'operation:authority-refresh',
             stepStates: {
               readiness: options.readinessCompleted === true ? 'completed' : 'in_progress',
               test: 'in_progress',
@@ -640,8 +640,8 @@ function ownerSupplyActionContext(options: Readonly<{
         return options.canaryResult ?? {
           kind: 'enqueued',
           canaryRef: 'seller-canary:test',
-          invocationRef: 'seller-canary-invocation:test',
-          operationRef: 'operation:authority-refresh',
+          callRef: 'seller-canary-invocation:test',
+          toolRef: 'operation:authority-refresh',
         }
       }
       return await (options.recordEffect ?? vi.fn())(reference, ...args)

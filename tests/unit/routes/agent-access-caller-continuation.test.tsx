@@ -86,9 +86,9 @@ vi.mock('@/modules/agent-access/agent-access.functions', () => ({
   revokeAgentCredentialServer: routeHarness.revokeRef,
 }))
 
-vi.mock('@/modules/capability-execution/operation-approval.functions', () => ({
-  decideOperationApprovalServer: routeHarness.decideApprovalRef,
-  listPendingOperationApprovalsServer: routeHarness.readApprovalsRef,
+vi.mock('@/modules/capability-execution/call-approval.functions', () => ({
+  decideCallApprovalServer: routeHarness.decideApprovalRef,
+  listPendingCallApprovalsServer: routeHarness.readApprovalsRef,
 }))
 
 import {
@@ -106,8 +106,8 @@ const caller: AgentCredentialSource = {
     name: 'Route assistant',
     applicationRef: 'agentic-economy',
     environment: 'sandbox',
-    authorityMode: 'inspect_only',
-    scopes: ['market_operations:invoke'],
+    authorityMode: 'read_only',
+    scopes: ['market_tools:call'],
     revoked: false,
     expired: false,
   },
@@ -116,16 +116,16 @@ const caller: AgentCredentialSource = {
     credentialId: KEY_ID,
     applicationRef: 'agentic-economy',
     environment: 'sandbox',
-    authorityMode: 'inspect_only',
-    operationAccess: 'all_admitted',
-    operationRefs: [],
+    authorityMode: 'read_only',
+    toolAccess: 'all_admitted',
+    toolRefs: [],
     lifecycle: 'active',
     expiresAt: 604_800_000,
     budget: {
-      maximumSpendPerInvocation: { currency: 'USD', units: '500', exponent: 2 },
+      maximumSpendPerCall: { currency: 'USD', units: '500', exponent: 2 },
       maximumDailySpend: { currency: 'USD', units: '2500', exponent: 2 },
       maximumMonthlySpend: { currency: 'USD', units: '10000', exponent: 2 },
-      maximumConcurrentInvocations: 2,
+      maximumConcurrentCalls: 2,
     },
     rate: { maximumCallsPerMinute: 30, maximumCallsPerHour: 300 },
   },

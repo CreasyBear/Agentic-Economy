@@ -218,8 +218,8 @@ function canonicalX402Args(
   operation: X402Operation,
   supplied: Record<string, unknown>,
   authority: Readonly<{
-    invocationRef: string
-    operationRef: string
+    callRef: string
+    toolRef: string
     attemptRef: string
     effectGeneration: number
     credentialRef: string
@@ -237,6 +237,7 @@ function canonicalX402Args(
     const {
       dispatchRef: _dispatchRef,
       operationRef: _operationRef,
+      toolRef: _toolRef,
       inputDigest: _inputDigest,
       attemptRef: _attemptRef,
       effectGeneration: _effectGeneration,
@@ -249,6 +250,7 @@ function canonicalX402Args(
     } = supplied
     void _dispatchRef
     void _operationRef
+    void _toolRef
     void _inputDigest
     void _attemptRef
     void _effectGeneration
@@ -259,8 +261,8 @@ function canonicalX402Args(
     void _reservationRef
     return {
       ...material,
-      dispatchRef: authority.invocationRef,
-      operationRef: authority.operationRef,
+      dispatchRef: authority.callRef,
+      toolRef: authority.toolRef,
       inputDigest: authority.inputDigest,
       attemptRef: authority.attemptRef,
       effectGeneration: authority.effectGeneration,
@@ -293,7 +295,7 @@ export const providerConsequenceX402Rpc = httpActionGeneric(async (ctx, request)
     if (operation === 'prepare_authorization') {
       const reservation = await ctx.runQuery(
         internal.moneyManagedCallLifecycle.readReservation,
-        { invocationRef: authorization.invocationRef },
+        { callRef: authorization.callRef },
       )
       if (reservation === null || reservation.state !== 'reserved') {
         return json({ kind: 'result', value: null })

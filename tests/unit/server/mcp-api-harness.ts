@@ -31,7 +31,7 @@ function pinEnv(): void {
   vi.stubEnv('VITE_CONVEX_URL', undefined)
 }
 
-export const currentOperationRef = `operation:v1:${'a'.repeat(64)}`
+export const currentToolRef = `operation:v1:${'a'.repeat(64)}`
 
 export function authenticateWithScopes(scopes: readonly string[]) {
   return async () => ({

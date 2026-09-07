@@ -12,7 +12,7 @@ import type { MarketWindow } from "@/modules/market/contracts";
 import {
   capabilityFromPrice,
   type CapabilityGroupViewModel,
-} from "@/modules/market/operation-view-model";
+} from "@/modules/market/tool-view-model";
 
 export function AeCapabilityTile({
   group,
@@ -24,8 +24,8 @@ export function AeCapabilityTile({
   const listingFact =
     group.providerCount > 1
       ? `${group.providerCount.toLocaleString()} listed`
-      : group.operations[0]?.supplierName ?? "1 listed";
-  const price = capabilityFromPrice(group.operations);
+      : group.tools[0]?.providerName ?? "1 listed";
+  const price = capabilityFromPrice(group.tools);
 
   return (
     <Item
@@ -46,7 +46,7 @@ export function AeCapabilityTile({
               {group.category.label}
             </span>
           </ItemHeader>
-          <ItemDescription>{group.operations[0]?.summary}</ItemDescription>
+          <ItemDescription>{group.tools[0]?.summary}</ItemDescription>
           <ItemFooter className="pt-intra text-sm">
             <span className="text-muted-foreground">{listingFact}</span>
             <span className="font-mono text-foreground tabular-nums">{price}</span>

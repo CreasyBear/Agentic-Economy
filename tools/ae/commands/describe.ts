@@ -1,24 +1,24 @@
 import {
-  operationChoiceDescribeOutputSchema,
-  operationDescribeInputSchema,
-} from '@/modules/registry/operation-choice-contracts'
-import { OPERATION_MARKET_DESCRIBE_PATH } from '@/modules/registry/operation-entry'
+ toolChoiceDescribeOutputSchema,
+  toolDescribeInputSchema,
+} from '@/modules/registry/tool-choice-contracts'
+import { TOOL_MARKET_DESCRIBE_PATH } from '@/modules/registry/tool-entry'
 
 import type { CliOptions } from '../lib/args'
 import { CliFailure, callJson, heading, line, printJson, requireOk } from '../lib/output'
 import { usageFailure } from '../lib/help'
-import { throwOperationReadFailure } from '../lib/operation-read-failure'
+import { throwToolReadFailure } from '../lib/tool-read-failure'
 
-/** Describe one exact current Market Operation without a caller credential. */
+/** Describe one exact current Market Tool without a caller credential. */
 export async function runDescribeCommand(args: readonly string[], options: CliOptions): Promise<void> {
-  const operationRef = args[0]?.trim()
-  if (operationRef === undefined || operationRef.length === 0 || args.length > 1) {
+  const toolRef = args[0]?.trim()
+  if (toolRef === undefined || toolRef.length === 0 || args.length > 1) {
     throw usageFailure('describe', 'describe-usage')
   }
-  const parsedInput = describeCommandDescriptor.inputSchema.safeParse({ operationRef })
+  const parsedInput = describeCommandDescriptor.inputSchema.safeParse({ toolRef })
   if (!parsedInput.success) {
-    throw new CliFailure('Operation reference must match operation:v1:<64 lowercase hex characters>.', {
-      kind: 'INVALID_ARGUMENT', code: 'operation-ref-invalid',
+    throw new CliFailure('Tool reference must match tool:v1:<64 lowercase hex characters>.', {
+      kind: 'INVALID_ARGUMENT', code: 'tool-ref-invalid',
     })
   }
   const outcome = await callJson(options.baseUrl, describeCommandDescriptor.path, {
@@ -26,34 +26,34 @@ export async function runDescribeCommand(args: readonly string[], options: CliOp
   })
   const parsed = describeCommandDescriptor.outputSchema.safeParse(requireOk(outcome, describeCommandDescriptor.path))
   if (!parsed.success) {
-    throw new CliFailure('The market returned an invalid Operation description.', {
-      kind: 'UNAVAILABLE', code: 'operation-describe-result-invalid',
+    throw new CliFailure('The market returned an invalid Tool description.', {
+      kind: 'UNAVAILABLE', code: 'tool-describe-result-invalid',
     })
   }
-  if (parsed.data.kind === 'not_found') throwOperationReadFailure({ reason: 'operation_not_found' })
+  if (parsed.data.kind === 'not_found') throwToolReadFailure({ reason: 'tool_not_found' })
   if (parsed.data.kind === 'unavailable') {
-    throwOperationReadFailure({ reason: 'source_unavailable', operationRef })
+    throwToolReadFailure({ reason: 'source_unavailable', toolRef })
   }
-  const operation = parsed.data.operation
+  const tool = parsed.data.tool
   if (options.json) {
     printJson(parsed.data)
     return
   }
-  heading(`Market Operation ${operationRef} (${outcome.durationMs}ms)`)
-  line(`  ${operation.provider.name} — ${operation.title}`)
-  line(`  ${operation.description}`)
-  line(`  health: ${operation.healthStatus}`)
-  line(`  indicative price: ${operation.priceLabel}`)
-  line(`  inputs: ${(operation.parameters ?? []).map((parameter) => `${parameter.name}${parameter.required ? '' : '?'}`).join(', ') || 'none'}`)
-  line(`  Operation reference: ${operation.operationRef}`)
-  line('  Next: use operation.inspect from your connected agent client.')
+  heading(`Market Tool ${toolRef} (${outcome.durationMs}ms)`)
+  line(`  ${tool.provider.name} — ${tool.title}`)
+  line(`  ${tool.description}`)
+  line(`  health: ${tool.healthStatus}`)
+  line(`  indicative price: ${tool.priceLabel}`)
+  line(`  inputs: ${(tool.parameters ?? []).map((parameter) => `${parameter.name}${parameter.required ? '' : '?'}`).join(', ') || 'none'}`)
+  line(`  Tool reference: ${tool.toolRef}`)
+  line('  Next: use tool.quote from your connected agent client.')
 }
 
 export const describeCommandDescriptor = {
   command: 'describe',
-  actionId: 'registry.operations.describe',
-  path: OPERATION_MARKET_DESCRIBE_PATH,
-  inputSchema: operationDescribeInputSchema,
-  outputSchema: operationChoiceDescribeOutputSchema,
+  actionId: 'registry.tools.describe',
+  path: TOOL_MARKET_DESCRIBE_PATH,
+  inputSchema: toolDescribeInputSchema,
+  outputSchema: toolChoiceDescribeOutputSchema,
   run: runDescribeCommand,
 } as const

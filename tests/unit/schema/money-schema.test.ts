@@ -40,7 +40,7 @@ describe('money schema ownership', () => {
     ]))
     expect(byName.get('moneyProviderObligations')?.indexes).toEqual(expect.arrayContaining([
       expect.objectContaining({ indexDescriptor: 'by_obligationRef', fields: ['obligationRef'] }),
-      expect.objectContaining({ indexDescriptor: 'by_invocationRef', fields: ['invocationRef'] }),
+      expect.objectContaining({ indexDescriptor: 'by_callRef', fields: ['callRef'] }),
     ]))
     const serialized = JSON.stringify(tables.filter((table) => table.tableName.startsWith('money')))
     expect(serialized).not.toMatch(/secret|paymentMethod|clientSecret/i)

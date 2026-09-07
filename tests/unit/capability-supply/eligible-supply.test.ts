@@ -16,10 +16,10 @@ import type { CapabilityOfferingRow } from '@/modules/capability-supply/internal
 import {
   capabilityBindingEligibilityHash,
   capabilityBindingRegistrationHash,
-  capabilityOperationId,
+  capabilityToolId,
   capabilityOfferingEligibilityHash,
   capabilityOfferingRegistrationHash,
-  createPublicOperationRef,
+  createPublicToolRef,
   defineCapabilityOfferingRegistration,
   defineCapabilityTransportBindingRegistration,
 } from '@/modules/capability-supply/public'
@@ -103,9 +103,9 @@ function demoProviderConnection(
   return { ...connection, authorityDigest: providerConnectionAuthorityDigest(connection) }
 }
 
-function publicationOperationRef(publicationRef: string, revision: number) {
-  return createPublicOperationRef({
-    operationId: capabilityOperationId(contractRef.capabilityId),
+function publicationToolRef(publicationRef: string, revision: number) {
+  return createPublicToolRef({
+    operationId: capabilityToolId(contractRef.capabilityId),
     publicationRef,
     publicationRevision: revision,
     contractRef,
@@ -126,7 +126,7 @@ const pricingConfig: PricingConfig = {
 const priceDigest = pricingConfigDigest(pricingConfig)
 
 function currentPublication(
-  overrides: Partial<Omit<EligiblePublicationRow, 'operationRef'>> = {},
+  overrides: Partial<Omit<EligiblePublicationRow, 'toolRef'>> = {},
   includeConnectionAuthority = true,
 ): EligiblePublicationRow {
   const publicationRef = overrides.publicationRef ?? 'pub-a'
@@ -134,13 +134,13 @@ function currentPublication(
   const connectionAuthority = includeConnectionAuthority
     ? connectionAuthoritySnapshotFromProviderConnection(
       demoProviderConnection(),
-      publicationOperationRef(publicationRef, revision),
+      publicationToolRef(publicationRef, revision),
     )
     : undefined
   return {
     publicationRef,
     revision,
-    operationRef: publicationOperationRef(publicationRef, revision),
+    toolRef: publicationToolRef(publicationRef, revision),
     ...(connectionAuthority === undefined ? {} : { connectionAuthority }),
     businessId: 'business-1',
     networkId: 'ae:public',
@@ -205,7 +205,7 @@ function admittedBinding(overrides: Partial<CapabilityBindingRow> = {}): Capabil
   const connectionAuthority = authority.kind === 'provider_connection'
     ? connectionAuthoritySnapshotFromProviderConnection(
       demoProviderConnection(),
-      publicationOperationRef('pub-a', 2),
+      publicationToolRef('pub-a', 2),
     )
     : undefined
   return {
@@ -391,14 +391,14 @@ describe('capability-supply eligible inventory', () => {
       publicationRef: 'pub-a',
       revision: 2,
       readinessValidUntil: 10_000,
-      operationRef: createPublicOperationRef({
-        operationId: capabilityOperationId(contractRef.capabilityId),
+      toolRef: createPublicToolRef({
+        operationId: capabilityToolId(contractRef.capabilityId),
         publicationRef: 'pub-a',
         publicationRevision: 2,
         contractRef,
       }),
-      admittedOperation: {
-        operationId: capabilityOperationId(contractRef.capabilityId),
+      admittedTool: {
+        operationId: capabilityToolId(contractRef.capabilityId),
         publisherRef: 'publisher:demo',
         provenanceDigest: `sha256:${'3'.repeat(64)}`,
         businessId: 'business-1',
@@ -492,7 +492,7 @@ describe('capability-supply eligible inventory', () => {
       : currentConnection
     const connectionAuthority = connectionAuthoritySnapshotFromProviderConnection(
       persistedConnection,
-      publicationOperationRef('pub-a', 2),
+      publicationToolRef('pub-a', 2),
     )
     const binding = admittedBinding({ connectionAuthority })
     const offering = activeOffering()

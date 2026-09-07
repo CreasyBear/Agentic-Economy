@@ -8,15 +8,15 @@ import {
 describe('Provider offboarding completion', () => {
   it('requires every child authority to be complete before retirement', () => {
     const base = {
-      routeableOperationCount: 0,
+      routeableToolCount: 0,
       activeOrUnknownCallCount: 0,
       unresolvedObligationCount: 0,
       activeOrCleanupPendingConnectionCount: 0,
       retentionPolicyVersion: 'retention-policy:2026-09',
     }
     expect(providerOffboardingCompletion(base)).toEqual({ kind: 'complete' })
-    expect(providerOffboardingCompletion({ ...base, routeableOperationCount: 1 })).toEqual({
-      kind: 'blocked', blocker: 'routeable_operations_remain',
+    expect(providerOffboardingCompletion({ ...base, routeableToolCount: 1 })).toEqual({
+      kind: 'blocked', blocker: 'routeable_tools_remain',
     })
     expect(providerOffboardingCompletion({ ...base, activeOrUnknownCallCount: 1 })).toEqual({
       kind: 'blocked', blocker: 'calls_remain',

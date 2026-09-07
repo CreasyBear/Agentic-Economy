@@ -10,7 +10,8 @@ export type MarketEvidenceClass =
   | "ae_invocation"
   | "ae_settlement"
   | "ae_qualified_use"
-  | "ae_operation";
+  | "ae_tool"
+  | "ae_provider";
 
 export type MarketMetricProjection = Readonly<{
   key: string;

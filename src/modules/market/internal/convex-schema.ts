@@ -115,42 +115,42 @@ export const marketTables = {
       v.literal('ae_reconciliation_required'),
     ),
     sourceRef: v.string(),
-    operationRef: v.optional(v.string()),
+    toolRef: v.optional(v.string()),
     durationMs: v.optional(v.number()),
     occurredAt: v.number(),
   })
     .index('by_kind_and_sourceRef', ['kind', 'sourceRef'])
-    .index('by_kind_and_operationRef_and_occurredAt', [
+    .index('by_kind_and_toolRef_and_occurredAt', [
       'kind',
-      'operationRef',
+      'toolRef',
       'occurredAt',
     ]),
-  marketOperationCategories: defineTable({
-    operationRef: v.string(),
+  marketToolCategories: defineTable({
+    toolRef: v.string(),
     categoryId: v.string(),
     assignedBy: v.string(),
     assignedAt: v.number(),
   })
-    .index('by_operationRef', ['operationRef'])
-    .index('by_categoryId_and_operationRef', ['categoryId', 'operationRef']),
-  marketOperationRatings: defineTable({
-    operationRef: v.string(),
+    .index('by_toolRef', ['toolRef'])
+    .index('by_categoryId_and_toolRef', ['categoryId', 'toolRef']),
+  marketToolRatings: defineTable({
+    toolRef: v.string(),
     reviewerRef: v.string(),
     score: v.number(),
     review: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
-    .index('by_operationRef_and_reviewerRef', ['operationRef', 'reviewerRef'])
+    .index('by_toolRef_and_reviewerRef', ['toolRef', 'reviewerRef'])
     .index('by_reviewerRef_and_updatedAt', ['reviewerRef', 'updatedAt']),
-  marketActiveOperations: defineTable({
-    operationRef: v.string(),
+  marketActiveTools: defineTable({
+    toolRef: v.string(),
     businessId: v.id('businesses'),
     activatedAt: v.number(),
   })
-    .index('by_operationRef', ['operationRef'])
+    .index('by_toolRef', ['toolRef'])
     .index('by_businessId', ['businessId']),
-  marketActiveSuppliers: defineTable({
+  marketActiveProviders: defineTable({
     businessId: v.id('businesses'),
     activatedAt: v.number(),
   }).index('by_businessId', ['businessId']),

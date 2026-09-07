@@ -32,7 +32,7 @@ export const readOwnerSpend = action({
     const admission: Readonly<
       | { kind: 'allowed'; accountRef: string }
       | { kind: 'refused'; code: string }
-    > = await ctx.runQuery(internal.capabilityOperationCalls.prepareOwnerSpendRead, args)
+    > = await ctx.runQuery(internal.capabilityCallProjections.prepareOwnerSpendRead, args)
     if (admission.kind === 'refused') return admission
     return await ctx.runAction(internal.moneyFormance.readPeriodSpend, {
       accountRef: admission.accountRef,

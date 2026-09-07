@@ -1,10 +1,10 @@
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
-  capabilityOperationId,
-  createAdmittedOperationRef,
-  createPublicOperationRef,
-  type AdmittedOperationRef,
-  type PublicOperationRef,
+  capabilityToolId,
+  createAdmittedToolRef,
+  createPublicToolRef,
+  type AdmittedToolRef,
+  type PublicToolRef,
 } from '@/modules/capability-supply/public'
 import type { CapabilityConnectionAuthoritySnapshot } from '../binding/registration'
 import { bindingIntegrityIsValid } from '../binding/integrity'
@@ -44,11 +44,11 @@ export async function listIntegratedCapabilitySupply(
       publicationRef: string
       revision: number
       readinessValidUntil: number
-      operationRef: PublicOperationRef
+      toolRef: PublicToolRef
       pricingConfig: PricingConfig
       priceDigest: string
       connectionAuthority?: CapabilityConnectionAuthoritySnapshot
-      admittedOperation: AdmittedOperationRef
+      admittedTool: AdmittedToolRef
     }>
   }> = []
   for (const binding of bindings) {
@@ -73,11 +73,11 @@ export async function listIntegratedCapabilitySupply(
       publicationRef: string
       revision: number
       readinessValidUntil: number
-      operationRef: PublicOperationRef
+      toolRef: PublicToolRef
       pricingConfig: PricingConfig
       priceDigest: string
       connectionAuthority?: CapabilityConnectionAuthoritySnapshot
-      admittedOperation: AdmittedOperationRef
+      admittedTool: AdmittedToolRef
     } | undefined
     const currentPublication = await ports.loadCurrentPublicationByBindingId(binding.bindingId)
     if (currentPublication !== null) {
@@ -97,21 +97,21 @@ export async function listIntegratedCapabilitySupply(
         if (pricingConfig !== undefined && priceDigest !== undefined) {
           const contract = await ports.getActiveExactCapabilityContract(contractRef)
           if (contract.kind === 'found') {
-            const admittedOperation = deriveAdmittedOperation(
+            const admittedTool = deriveAdmittedTool(
               currentPublication, offering, binding, contract.registeredAt, contract.documentJson, input.now,
             )
-            if (admittedOperation !== undefined) {
+            if (admittedTool !== undefined) {
               publication = {
                 publicationRef: currentPublication.publicationRef,
                 revision: currentPublication.revision,
                 readinessValidUntil: currentPublication.readinessValidUntil ?? 0,
-                operationRef: currentPublication.operationRef,
+                toolRef: currentPublication.toolRef,
                 pricingConfig,
                 priceDigest,
                 ...(currentPublication.connectionAuthority === undefined
                   ? {}
                   : { connectionAuthority: currentPublication.connectionAuthority }),
-                admittedOperation,
+                admittedTool,
               }
             }
           }
@@ -131,30 +131,30 @@ export async function listIntegratedCapabilitySupply(
   return { kind: 'available' as const, supplies }
 }
 
-function deriveAdmittedOperation(
+function deriveAdmittedTool(
   publication: EligiblePublicationRow,
   offering: Parameters<typeof eligibleOfferingProjection>[0],
   binding: Parameters<typeof eligibleBindingProjection>[0],
   contractRegisteredAt: number,
   contractDocumentJson: string,
   _now: number,
-): AdmittedOperationRef | undefined {
+): AdmittedToolRef | undefined {
   const contractRef = contractRefFromRow(binding)
-  const operationId = capabilityOperationId(contractRef.capabilityId)
-  const expectedOperationRef = createPublicOperationRef({
+  const operationId = capabilityToolId(contractRef.capabilityId)
+  const expectedToolRef = createPublicToolRef({
     operationId,
     publicationRef: publication.publicationRef,
     publicationRevision: publication.revision,
     contractRef,
   })
-  if (expectedOperationRef !== publication.operationRef) return undefined
+  if (expectedToolRef !== publication.toolRef) return undefined
   const origin = offering.origin?.kind === 'catalog_offering'
     ? offering.origin
     : undefined
   const catalogOfferingRef = origin?.offeringRef ?? offering.offeringId
   const catalogOfferingRevision = origin?.offeringRevision ?? 1
   try {
-    return createAdmittedOperationRef({
+    return createAdmittedToolRef({
       operationId,
       publisherRef: publication.publisherRef,
       provenanceDigest: publication.provenanceDigest,

@@ -429,7 +429,7 @@ async function currentOwnerCanReadCanaryFunding(
 ): Promise<boolean> {
   const actor = await resolveBusinessActor(ctx)
   if (actor.kind !== 'authenticated_owner') return false
-  return await ctx.runQuery(api.catalog.authorizeSupplierBusiness, { businessId })
+  return await ctx.runQuery(api.catalog.authorizeProviderBusiness, { businessId })
 }
 
 /**

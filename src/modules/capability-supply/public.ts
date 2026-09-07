@@ -5,29 +5,29 @@ import type { ExactAmount } from '@/modules/money/public'
 import { identifier, jsonValueSchema, type CapabilityContractRef } from '@/modules/capability-contract/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
-  isPublicOperationRef,
-  type PublicOperationRef,
-} from '@/modules/common/operation-ref'
+  isPublicToolRef,
+  type PublicToolRef,
+} from '@/modules/common/tool-ref'
 import { stableStringify, type StableHashValue } from '@/modules/common/stable-hash'
 
 declare const mappingRefBrand: unique symbol
 
-export { isPublicOperationRef }
-export type { PublicOperationRef }
-export type RegisteredOperationMappingRef = string & Readonly<{ [mappingRefBrand]: true }>
-export type RegisteredOperationMappingContractBinding = Readonly<{
+export { isPublicToolRef }
+export type { PublicToolRef }
+export type RegisteredToolMappingRef = string & Readonly<{ [mappingRefBrand]: true }>
+export type RegisteredToolMappingContractBinding = Readonly<{
   sourceContractRef: CapabilityContractRef
   targetContractRef: CapabilityContractRef
   sourceSchemaIdentity: string
   targetSchemaIdentity: string
 }>
 
-type RegisteredOperationMappingBase = RegisteredOperationMappingContractBinding & Readonly<{
-  mappingRef: RegisteredOperationMappingRef
+type RegisteredToolMappingBase = RegisteredToolMappingContractBinding & Readonly<{
+  mappingRef: RegisteredToolMappingRef
   authority: 'registered_contract_semantics'
 }>
 
-export type RegisteredOperationMapping = RegisteredOperationMappingBase & (
+export type RegisteredToolMapping = RegisteredToolMappingBase & (
   | Readonly<{
       kind: 'identity' | 'field'
       sourceOutputPointer: string
@@ -52,36 +52,36 @@ export type RegisteredOperationMapping = RegisteredOperationMappingBase & (
     }>
 )
 
-export function createPublicOperationRef(input: Readonly<{
+export function createPublicToolRef(input: Readonly<{
   operationId: string
   publicationRef: string
   publicationRevision: number
   contractRef: CapabilityContractRef
-}>): PublicOperationRef {
+}>): PublicToolRef {
   const material = {
     operationId: input.operationId,
     publicationRef: input.publicationRef,
     publicationRevision: input.publicationRevision,
     contractRef: input.contractRef,
   } as StableHashValue
-  return `operation:v1:${canonicalDigest(material).slice(7)}` as PublicOperationRef
+  return `operation:v1:${canonicalDigest(material).slice(7)}` as PublicToolRef
 }
-export function capabilityOperationId(capabilityId: string): string {
+export function capabilityToolId(capabilityId: string): string {
   return `capability:${capabilityId}`
 }
 
-export type AnonymousKeylessOperationEffect = Readonly<{
+export type AnonymousKeylessToolEffect = Readonly<{
   class: 'data_release' | 'financial_exposure' | 'external_state_change'
   authority: 'none' | 'explicit' | 'mandate_or_explicit'
 }>
 
-export function isAnonymousKeylessOperationEligible(input: Readonly<{
+export function isAnonymousKeylessToolEligible(input: Readonly<{
   authority: Readonly<{ kind: string }>
   adapterId: string
   method: string
   sourceKind: string
   price: CapabilityOfferingRegistration['presentation']['price']
-  effects: readonly AnonymousKeylessOperationEffect[]
+  effects: readonly AnonymousKeylessToolEffect[]
 }>): boolean {
   if (!Array.isArray(input.effects)) return false
   const hasExactZeroPrice = input.price.kind === 'fixed'
@@ -98,28 +98,28 @@ export function isAnonymousKeylessOperationEligible(input: Readonly<{
     && hasNoConsequentialEffect
 }
 
-export function isRegisteredOperationMappingRef(value: unknown): value is RegisteredOperationMappingRef {
+export function isRegisteredToolMappingRef(value: unknown): value is RegisteredToolMappingRef {
   return typeof value === 'string' && /^mapping:v1:[0-9a-f]{64}$/.test(value)
 }
 
-type RegisteredOperationMappingMaterial<Mapping = RegisteredOperationMapping> =
-  Mapping extends Readonly<{ mappingRef: RegisteredOperationMappingRef }> ? Omit<Mapping, 'mappingRef'> : never
+type RegisteredToolMappingMaterial<Mapping = RegisteredToolMapping> =
+  Mapping extends Readonly<{ mappingRef: RegisteredToolMappingRef }> ? Omit<Mapping, 'mappingRef'> : never
 
-export function createRegisteredOperationMappingRef(
-  mapping: RegisteredOperationMappingMaterial,
-): RegisteredOperationMappingRef {
-  return `mapping:v1:${canonicalDigest(mapping as StableHashValue).slice(7)}` as RegisteredOperationMappingRef
+export function createRegisteredToolMappingRef(
+  mapping: RegisteredToolMappingMaterial,
+): RegisteredToolMappingRef {
+  return `mapping:v1:${canonicalDigest(mapping as StableHashValue).slice(7)}` as RegisteredToolMappingRef
 }
 
-export function resolveRegisteredOperationMappingRef(
-  mapping: RegisteredOperationMapping,
-): RegisteredOperationMappingRef {
+export function resolveRegisteredToolMappingRef(
+  mapping: RegisteredToolMapping,
+): RegisteredToolMappingRef {
   const { mappingRef: _mappingRef, ...material } = mapping
-  const expected = createRegisteredOperationMappingRef(material)
+  const expected = createRegisteredToolMappingRef(material)
   if (mapping.mappingRef !== expected) throw new Error('registered_operation_mapping_ref_mismatch')
   return expected
 }
-export type AdmittedOperationRef = Readonly<{
+export type AdmittedToolRef = Readonly<{
   operationId: string
   publisherRef: string
   provenanceDigest: string
@@ -144,7 +144,7 @@ export type AdmittedOperationRef = Readonly<{
   effectDigest: string
 }>
 
-export function createAdmittedOperationRef(input: AdmittedOperationRef): AdmittedOperationRef {
+export function createAdmittedToolRef(input: AdmittedToolRef): AdmittedToolRef {
   if (
     input.operationId.trim().length === 0
     || input.publisherRef.trim().length === 0
@@ -165,9 +165,9 @@ export function createAdmittedOperationRef(input: AdmittedOperationRef): Admitte
   })
 }
 
-export function validateAdmittedOperationRef(input: unknown): input is AdmittedOperationRef {
+export function validateAdmittedToolRef(input: unknown): input is AdmittedToolRef {
   if (typeof input !== 'object' || input === null || Array.isArray(input)) return false
-  const value = input as Partial<AdmittedOperationRef>
+  const value = input as Partial<AdmittedToolRef>
   return typeof value.operationId === 'string'
     && typeof value.publisherRef === 'string'
     && typeof value.provenanceDigest === 'string'
@@ -195,75 +195,75 @@ export function validateAdmittedOperationRef(input: unknown): input is AdmittedO
 }
 
 export {
-  CURRENT_OPERATION_CALL_VIA,
-  PublicOperationRegistrySchemaVersion,
-  operationCompareInputSchema,
-  operationCompareOutputSchema,
-  operationDetailInputSchema,
-  operationDetailOutputSchema,
-  operationSearchInputSchema,
-  operationSearchOutputSchema,
-  publicOperationAuthenticationSchema,
-  publicOperationParameterSchema,
-  searchCapabilityOperations,
-  detailCapabilityOperation,
-  compareCapabilityOperations,
-  projectCapabilityOperation,
-  projectCapabilityOperationCatalogPrice,
-  projectCapabilityOperationParameters,
-  rankOperationSearchText,
-  serializeOperationDescriptor,
-  deserializeOperationDescriptor,
-  serializeOperationSearchResult,
-  deserializeOperationSearchResult,
-  serializeOperationDetailResult,
-  deserializeOperationDetailResult,
-  serializeOperationCompareResult,
-  deserializeOperationCompareResult,
-} from './operation-projection'
+  CURRENT_TOOL_CALL_VIA,
+  PublicToolRegistrySchemaVersion,
+  toolCompareInputSchema,
+  toolCompareOutputSchema,
+  toolDetailInputSchema,
+  toolDetailOutputSchema,
+  toolSearchInputSchema,
+  toolSearchOutputSchema,
+  publicToolAuthenticationSchema,
+  publicToolParameterSchema,
+  searchCapabilityTools,
+  detailCapabilityTool,
+  compareCapabilityTools,
+  projectCapabilityTool,
+  projectCapabilityToolCatalogPrice,
+  projectCapabilityToolParameters,
+  rankToolSearchText,
+  serializeToolDescriptor,
+  deserializeToolDescriptor,
+  serializeToolSearchResult,
+  deserializeToolSearchResult,
+  serializeToolDetailResult,
+  deserializeToolDetailResult,
+  serializeToolCompareResult,
+  deserializeToolCompareResult,
+} from './tool-projection'
 export type {
-  CapabilityOperationSourcePort,
-  OperationProjectionNavigationContract,
-  CapabilityOperationSourceRecord,
-  CatalogOfferingOperationMapEntry,
-  OperationCompareInput,
-  OperationCompareResult,
-  OperationComparisonFact,
-  OperationComparisonValue,
-  OperationCompareWireResult,
-  OperationDetailInput,
-  OperationDetailResult,
-  OperationDetailWireResult,
-  OperationSearchFilters,
-  OperationSearchInput,
-  OperationSearchRanking,
-  OperationSearchTextCandidate,
-  OperationSearchResult,
-  OperationSearchWireResult,
-  OperationSurfaceWireResult,
-  OperationSurfaceWireDescriptor,
+  CapabilityToolSourcePort,
+  ToolProjectionNavigationContract,
+  CapabilityToolSourceRecord,
+  CatalogOfferingToolMapEntry,
+  ToolCompareInput,
+  ToolCompareResult,
+  ToolComparisonFact,
+  ToolComparisonValue,
+  ToolCompareWireResult,
+  ToolDetailInput,
+  ToolDetailResult,
+  ToolDetailWireResult,
+  ToolSearchFilters,
+  ToolSearchInput,
+  ToolSearchRanking,
+  ToolSearchTextCandidate,
+  ToolSearchResult,
+  ToolSearchWireResult,
+  ToolSurfaceWireResult,
+  ToolSurfaceWireDescriptor,
   PublicCapabilityUnavailableReason,
   PublicCommercialTerms,
   PublicDataUsePolicy,
   PublicEffectPolicy,
   PublicEvidencePolicy,
   PublicCancellationPolicy,
-  PublicOperationAuthentication,
-  PublicOperationAvailability,
-  PublicOperationBusinessRef,
-  PublicOperationCatalogPrice,
-  PublicOperationDescriptor,
-  PublicOperationOfferingRef,
-  PublicOperationParameter,
-  PublicOperationParameterMapping,
-  PublicOperationPayment,
-  PublicOperationPrice,
-  PublicOperationPriceEvidence,
-  PublicOperationReadiness,
-  PublicOperationNavigationRelation,
-  PublicOperationTransport,
+  PublicToolAuthentication,
+  PublicToolAvailability,
+  PublicToolBusinessRef,
+  PublicToolCatalogPrice,
+  PublicToolDescriptor,
+  PublicToolOfferingRef,
+  PublicToolParameter,
+  PublicToolParameterMapping,
+  PublicToolPayment,
+  PublicToolPrice,
+  PublicToolPriceEvidence,
+  PublicToolReadiness,
+  PublicToolNavigationRelation,
+  PublicToolTransport,
   PublicRecoveryPolicy,
-} from './operation-projection'
+} from './tool-projection'
 export {
   admitRegisteredTransport,
   injectHttpJsonCredential,
@@ -332,11 +332,12 @@ export type {
   CapabilityProbeTarget,
 } from './internal/readiness-probe'
 export {
-  materializePublishedOperation,
-  materializeRuntimePublishedOperation,
-  parsePublishedOperationSnapshot,
-  publishedOperationMaterialMatches,
-} from './published-operation'
+  materializePublishedTool,
+  materializeRuntimePublishedTool,
+  parsePublishedToolSnapshot,
+  publishedToolIdentityDigest,
+  publishedToolMaterialMatches,
+} from './published-tool'
 export {
   recordCapabilityCallObservation,
   recordCapabilityDepthObservation,
@@ -352,10 +353,10 @@ export type {
   LiquidityZeroReason,
 } from './internal/liquidity'
 export type {
-  PublishedOperation,
-  PublishedOperationUsageObservation,
-  RuntimePublishedOperationDescriptor,
-} from './published-operation'
+  PublishedTool,
+  PublishedToolUsageObservation,
+  RuntimePublishedToolDescriptor,
+} from './published-tool'
 export {
   bindingObservedRowDigest,
 } from './internal/quarantine'
@@ -384,7 +385,7 @@ export {
   type EligibilityWritePorts,
 } from './internal/eligibility'
 export {
-  exactCurrentCatalogOperationIsRouteable,
+  exactCurrentCatalogToolIsRouteable,
   qualifySuppliedCandidate,
   queryCapabilityGraph,
   readCapabilityProbeTarget,
@@ -420,7 +421,7 @@ export {
   type OperationKeyRecord,
   type OperationLedgerPorts,
   type OperationBeginResult,
-} from './internal/operation-ledger'
+} from './internal/tool-ledger'
 export {
   decodeConvexPublicationSource,
   isDirectPublicationSource,
@@ -476,11 +477,11 @@ export { defaultSupplyPricingConfig } from './internal/supply-funnel/pricing-por
 export {
   paymentLaneAdmission,
   transportObservationDigest,
-} from './internal/x402-invocation-policy'
+} from './internal/x402-call-policy'
 export type {
   EconomicRail,
   PaymentLaneAdmission,
-} from './internal/x402-invocation-policy'
+} from './internal/x402-call-policy'
 export {
   BASE_MAINNET_NETWORK,
   BASE_MAINNET_USDC_ADDRESS,
@@ -707,7 +708,7 @@ export {
 export type {
   CreateSellerOnboardingCanaryInput,
   CreateX402SellerOnboardingCommand,
-  CurrentSellerCanaryOperationCommitment,
+  CurrentSellerCanaryQuote,
   EvaluateX402SellerPromotionInput,
   OperationExecutionPurpose,
   SellerCanaryOutputEvidenceRequirement,

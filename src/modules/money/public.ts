@@ -148,7 +148,7 @@ export type MoneyRefusalCode =
   | "security_control_unavailable"
   | "budget_policy_missing"
   | "budget_generation_stale"
-  | "budget_invocation_limit_exceeded"
+  | "budget_call_limit_exceeded"
   | "budget_daily_limit_exceeded"
   | "budget_monthly_limit_exceeded"
   | "budget_concurrency_exhausted"
@@ -282,14 +282,14 @@ export type MoneyAcceptedCharge = Readonly<{
   rake?: ExactAmount;
 }>;
 
-export type MoneyAcceptedInvocationCharge = MoneyAcceptedCharge &
+export type MoneyAcceptedCallCharge = MoneyAcceptedCharge &
   Readonly<{
     usageRef: string;
     observedAt: number;
   }>;
 
 export type ChargeAuthorizationResult =
-  MoneyAcceptedInvocationCharge | MoneyRefusal;
+  MoneyAcceptedCallCharge | MoneyRefusal;
 export type MoneyChargeOutcomeUnknown = Readonly<{
   kind: "outcome_unknown";
   transactionRef: string;
@@ -351,7 +351,7 @@ export type CreditActivityView = Readonly<{
   offeringRef: string;
   businessId: string;
   operationKey: string;
-  invocationRef: string;
+  callRef: string;
   attemptRef: string;
   grossAmount: ExactAmount;
   chargeState: ChargeState;
@@ -443,7 +443,7 @@ export const CreditActivityViewSchema = z.strictObject({
   offeringRef: moneyRefSchema,
   businessId: moneyRefSchema,
   operationKey: moneyRefSchema,
-  invocationRef: moneyRefSchema,
+  callRef: moneyRefSchema,
   attemptRef: moneyRefSchema,
   grossAmount: exactAmountSchema,
   chargeState: strictChargeStateSchema,
@@ -546,7 +546,7 @@ export {
   computeRakeSplit,
   normalizePricingConfig,
   pricingConfigDigest,
-  resolveInvocationPrice,
+  resolveCallPrice,
 } from "./internal/pricing-config";
 export type { ProviderFeeBreakdown } from "./internal/pricing-config";
 export {

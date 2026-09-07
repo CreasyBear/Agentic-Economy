@@ -1,7 +1,7 @@
 import { z } from 'zod'
 
 export type ProviderOffboardingBlocker =
-  | 'routeable_operations_remain'
+  | 'routeable_tools_remain'
   | 'calls_remain'
   | 'obligations_remain'
   | 'payout_resolution_required'
@@ -35,7 +35,7 @@ export type ProviderOffboardingStatus = Readonly<{
 }>
 
 export type ProviderOffboardingCompletionFacts = Readonly<{
-  routeableOperationCount: number
+  routeableToolCount: number
   activeOrUnknownCallCount: number
   unresolvedObligationCount: number
   activeOrCleanupPendingConnectionCount: number
@@ -45,7 +45,7 @@ export type ProviderOffboardingCompletionFacts = Readonly<{
 export function providerOffboardingCompletion(
   facts: ProviderOffboardingCompletionFacts,
 ): Readonly<{ kind: 'complete' }> | Readonly<{ kind: 'blocked'; blocker: ProviderOffboardingBlocker }> {
-  if (facts.routeableOperationCount > 0) return { kind: 'blocked', blocker: 'routeable_operations_remain' }
+  if (facts.routeableToolCount > 0) return { kind: 'blocked', blocker: 'routeable_tools_remain' }
   if (facts.activeOrUnknownCallCount > 0) return { kind: 'blocked', blocker: 'calls_remain' }
   if (facts.unresolvedObligationCount > 0) return { kind: 'blocked', blocker: 'obligations_remain' }
   if (facts.activeOrCleanupPendingConnectionCount > 0) return { kind: 'blocked', blocker: 'connections_remain' }
@@ -56,7 +56,7 @@ export function providerOffboardingCompletion(
 }
 
 const blockerSchema = z.enum([
-  'routeable_operations_remain',
+  'routeable_tools_remain',
   'calls_remain',
   'obligations_remain',
   'payout_resolution_required',

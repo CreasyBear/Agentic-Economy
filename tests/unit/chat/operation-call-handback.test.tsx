@@ -4,32 +4,32 @@
 import { cleanup, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { OperationCard } from '@/components/ae/operation-chat/OperationCard'
+import { ToolCard } from '@/components/ae/chat/ToolCard'
 import { providerSafeActionToolName } from '@/modules/actions/tool-contract'
-import { projectOperationCard } from '@/modules/chat/tool-card'
+import { projectToolCard } from '@/modules/chat/tool-card'
 
-const operationRef = `operation:v1:${'a'.repeat(64)}`
-const toolType = `tool-${providerSafeActionToolName('operation.invoke')}`
+const toolRef = `operation:v1:${'a'.repeat(64)}`
+const toolType = `tool-${providerSafeActionToolName('tool.call')}`
 
 afterEach(cleanup)
 
 function projection(output: unknown) {
-  const projected = projectOperationCard({
+  const projected = projectToolCard({
     type: toolType,
     toolCallId: 'tool-call-handback-1',
     state: 'output-available',
     output: { type: 'json', value: output },
   })
-  if (projected === null) throw new Error('Expected an Operation card')
+  if (projected === null) throw new Error('Expected a Tool card')
   return projected
 }
 
-describe('Operation call handback', () => {
+describe('Tool call handback', () => {
   it('renders literal structured output, actual charge, stable call identity, evidence, and receipt navigation', () => {
-    render(<OperationCard projection={projection({
+    render(<ToolCard projection={projection({
       kind: 'completed',
-      invocationRef: 'invocation:handback:1',
-      operationRef,
+      callRef: 'invocation:handback:1',
+      toolRef,
       output: { score: 91, classification: 'qualified' },
       evidenceHash: 'evidence:handback:1',
       usage: {
@@ -43,19 +43,19 @@ describe('Operation call handback', () => {
     })} />)
 
     expect(screen.getByText('Result ready')).toBeTruthy()
-    expect(screen.getByLabelText('Operation result').textContent).toContain('"score": 91')
+    expect(screen.getByLabelText('Call result').textContent).toContain('"score": 91')
     expect(screen.getByText('USD 1.25 · Paid')).toBeTruthy()
     expect(screen.getByText('640 ms')).toBeTruthy()
     expect(screen.getByText('invocation:handback:1')).toBeTruthy()
     expect(screen.getByRole('link', { name: 'View receipt' }).getAttribute('href'))
-      .toBe('/operations/invocations/invocation:handback:1')
+      .toBe('/calls/invocation:handback:1')
   })
 
   it('keeps an uncertain effect visibly unresolved and routes the caller to reconciliation', () => {
-    render(<OperationCard projection={projection({
+    render(<ToolCard projection={projection({
       kind: 'reconciliation_required',
-      invocationRef: 'invocation:handback:2',
-      operationRef,
+      callRef: 'invocation:handback:2',
+      toolRef,
       evidence: {
         attemptRef: 'attempt:handback:2',
         effectGeneration: 2,

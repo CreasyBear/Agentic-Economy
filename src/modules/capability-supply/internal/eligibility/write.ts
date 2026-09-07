@@ -126,7 +126,7 @@ export async function setCapabilitySupplyEligibility(
       const connection = await ports.loadProviderConnection(binding.authority.connectionRef)
       if (!connectionAuthoritySnapshotMatches(binding.connectionAuthority, connection, {
         businessId: String(offering.businessId),
-        operationRef: binding.connectionAuthority?.operationRef ?? '',
+        toolRef: binding.connectionAuthority?.toolRef ?? '',
         adapterId: binding.adapterId,
         now: updatedAt,
       })) {

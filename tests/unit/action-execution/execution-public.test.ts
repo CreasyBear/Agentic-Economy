@@ -57,7 +57,7 @@ const row: DurableControlRow<Result> = {
       kind: 'public_capability_use',
       publicationRef: 'publication:one',
       publicationRevision: 3,
-      operationRef: 'operation:one',
+      toolRef: 'operation:one',
       bindingId: 'binding:one',
       bindingRegistrationHash: 'digest:binding',
     },
@@ -79,7 +79,7 @@ function durablePort(control: DurableControlRow<Result> = row): DurableActionExe
   }
 }
 
-describe('public invocation projections', () => {
+describe('public execution projections', () => {
   it('authorizes durable status before projecting bounded attempts/history', async () => {
     const result = await readPublicExecutionStatus({
       port: durablePort(),
@@ -90,7 +90,7 @@ describe('public invocation projections', () => {
     expect(result).toMatchObject({
       kind: 'ok',
       executionRef: 'invocation:one',
-      operationRef: 'operation:one',
+      toolRef: 'operation:one',
       control: 'terminal',
       attempts: [{ attemptRef: 'attempt:one', release: 'released', outcome: 'returned' }],
       history: [{ commandId: 'command:one', kind: 'terminal' }],

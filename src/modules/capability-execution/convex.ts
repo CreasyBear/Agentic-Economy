@@ -2,24 +2,24 @@ export {
   exactAmountValue,
   jsonObject,
   jsonValue,
-  operationInvokeAuthorityValue,
+  callAuthorityValue,
   operationExecutionPurposeValue,
   sellerOnboardingCanaryExecutionEnvelopeValue,
-  operationInvokeReceiptValue,
-  invocationReconciliationValue,
-  operationResultValue,
+  callReceiptValue,
+  callReconciliationValue,
+  callResultValue,
   recoveryResultValue,
   reconciliationValue,
   reconciliationEvidenceValue,
   statusResultValue,
   usageValue,
-  type OperationInvokePersistedAuthority,
+  type CallPersistedAuthority,
 } from './internal/convex-schema'
 export {
   buildCanonicalTerminalOutcomeCommand,
   x402PaymentReconciliationEvidenceValue,
 } from '@/modules/action-execution/runtime'
-export { buildSellerOnboardingCanaryReceipt } from './invocation-worker/sellerCanaryReceipt'
+export { buildSellerOnboardingCanaryReceipt } from './call-worker/sellerCanaryReceipt'
 export type {
   CanonicalClaimSnapshot,
   CanonicalTerminalOutcome,

@@ -1,18 +1,18 @@
 // @vitest-environment jsdom
 
-import { operation, renderWithRouter, tool } from "./supply-funnel-harness";
+import { publishedTool, renderWithRouter, tool } from "./supply-funnel-harness";
 import { screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import { AeSupplyLanding } from "@/components/ae/supply/AeSupplyLanding";
 
 describe("supply landing", () => {
-  it("leads with a plain-language Provider fit decision and published Operation rows", () => {
-    renderWithRouter(<AeSupplyLanding tools={[tool]} operations={[operation]} />);
+  it("leads with a plain-language Provider fit decision and published Tool rows", () => {
+    renderWithRouter(<AeSupplyLanding tools={[tool]} publishedTools={[publishedTool]} />);
     expect(
       screen.getByRole("heading", { name: "List a service." }),
     ).toBeDefined();
-    expect(screen.getByText("Suppliers")).toBeDefined();
+    expect(screen.getByText("Providers")).toBeDefined();
     expect(
       screen
         .getByRole("link", { name: "List a service" })
@@ -37,24 +37,24 @@ describe("supply landing", () => {
   });
 
   it("renders the honest empty state", () => {
-    renderWithRouter(<AeSupplyLanding tools={[]} operations={[]} />);
-    expect(screen.getByText(/No Operations are published yet/)).toBeDefined();
+    renderWithRouter(<AeSupplyLanding tools={[]} publishedTools={[]} />);
+    expect(screen.getByText(/No Tools are published yet/)).toBeDefined();
   });
 
   it("does not present an unavailable catalogue as empty", () => {
     renderWithRouter(
       <AeSupplyLanding
         tools={[]}
-        operations={[]}
-        sourceError="Supplier information is temporarily unavailable. Try again."
+        publishedTools={[]}
+        sourceError="Provider information is temporarily unavailable. Try again."
       />,
     );
 
-    expect(screen.getByText("Supplier information is unavailable")).toBeDefined();
+    expect(screen.getByText("Provider information is unavailable")).toBeDefined();
     expect(
-      screen.getByText("Supplier information is temporarily unavailable. Try again."),
+      screen.getByText("Provider information is temporarily unavailable. Try again."),
     ).toBeDefined();
-    expect(screen.queryByText(/No Operations are published yet/)).toBeNull();
+    expect(screen.queryByText(/No Tools are published yet/)).toBeNull();
     expect(
       screen.queryByRole("heading", { name: "What agents can inspect" }),
     ).toBeNull();

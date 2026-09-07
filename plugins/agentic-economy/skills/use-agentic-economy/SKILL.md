@@ -1,24 +1,24 @@
 ---
 name: agentic-economy
-description: Find and acquire a bounded outside service through Agentic Economy when a task needs a capability the current tools do not provide. Use for Operation discovery, authorized Calls, and recovery of existing Calls; leave the user's project and planning in their current harness.
+description: Find and acquire a bounded outside service through Agentic Economy when a task needs a capability the current tools do not provide. Use for Tool discovery, authorized Calls, and recovery of existing Calls; leave the user's project and planning in their current harness.
 ---
 
 # Use Agentic Economy
 
-## Find a suitable Operation
+## Find a suitable Tool
 
 Use the installed server's tools/list before calling a tool. Public discovery has
-four tools: `ae_registry_operations_search`, `ae_registry_operations_list`,
-`ae_registry_operations_describe` and `ae_registry_operations_compare`.
+four tools: `ae_registry_tools_search`, `ae_registry_tools_list`,
+`ae_registry_tools_describe` and `ae_registry_tools_compare`.
 
-Search with a short capability phrase. Describe a returned Operation to understand
+Search with a short capability phrase. Describe a returned Tool to understand
 its required input and public terms; compare only actual returned references.
 Public discovery does not require an account connection. A result is a candidate,
 not a promise that the current caller can buy or use it.
 
-If no Operation fits, explain the missing capability without inventing a listing.
-`operation_read_unavailable` means no catalogue read completed. It is retryable,
-never proof that an Operation is absent, and never permission to reuse stale terms.
+If no Tool fits, explain the missing capability without inventing a listing.
+`tool_read_unavailable` means no catalogue read completed. It is retryable,
+never proof that a Tool is absent, and never permission to reuse stale terms.
 
 ## Connect when protected work is needed
 
@@ -27,7 +27,7 @@ protected Calls. Some hosts connect during installation. If tools remain
 unavailable, start a fresh task after connection and refresh the tool list.
 Do not call an unlisted protected tool to force sign-in.
 
-Keep the selected Operation reference and intended input in the current task.
+Keep the selected Tool reference and intended input in the current task.
 The host owns that task; Agentic Economy does not store the user's project or
 conversation. Do not put private input in a sign-in URL or ask the user to paste a
 token. Native alternatives are documented at
@@ -37,24 +37,24 @@ A configured plugin is not proof of connection. A successful authenticated read
 confirms access; `ae_agentAccess_whoami` is available when connection diagnosis is
 needed. Account connection does not grant spending authority.
 
-## Inspect and make the Call
+## Quote and make the Call
 
-With connected tools available, use `ae_operation_inspect` for the exact
-Operation and input. Read its caller-specific price, effects, data use, authority
-fit and expiring Commitment. Respect the user's limits and the returned approval
+With connected tools available, use `ae_tool_quote` for the exact Tool and input.
+Read its caller-specific price, effects, data use, authority fit and expiring
+Quote. Respect the user's limits and the returned approval
 requirements. Existing delegated authority can cover a Call; do not create an
 extra approval ceremony. A free price does not remove authority requirements.
 
-Invoke through `ae_operation_invoke` only with the returned Commitment and one
-stable `idempotencyKey` for that intended Call. Identical material with the same
-key replays the recorded work; changed material needs a new inspection.
+Call through `ae_tool_call` only with the returned `quoteRef` and one stable
+`idempotencyKey` for that intended Call. Identical material with the same
+key replays the recorded work; changed material needs a new quote.
 Never substitute a Provider, endpoint, price or credential.
 
 If a human must act, give the returned owner handoff and retain its reference.
 For insufficient credit, follow the returned `funding.handoff.create` action,
 share only its hosted Checkout URL with the payer, retain the funding session
-reference and use `funding.handoff.status`. After confirmed funding, inspect
-again before explicitly resubmitting the intended Operation. Funding is not
+reference and use `funding.handoff.status`. After confirmed funding, quote
+again before explicitly resubmitting the intended Tool. Funding is not
 authority or a purchase.
 
 ## Read the result and recover safely
@@ -62,16 +62,18 @@ authority or a purchase.
 Return the actual result or explain its current state. Delivery, settlement and
 commercial closure are separate facts; report only what the response establishes.
 
-For pending or uncertain work, retain the Invocation reference and follow the
-returned `ae_operation_status` or `ae_operation_reconcile` continuation.
-A timeout is not permission to create another Invocation. Check the original
-Call before retrying, respect Retry-After when supplied, and do not change its
-command identity to get past an error. Cancel only when the current Call offers
+For pending or uncertain work, retain the Call reference and follow the
+returned `ae_call_status` or `ae_call_reconcile` continuation. A timeout is not
+permission to create another Call. Check the original Call before retrying,
+respect Retry-After when supplied, and do not change its command identity to get
+past an error. Use `ae_call_cancel` only when the current Call offers
 cancellation. If access or evidence is missing, explain the specific next step.
+When reconciliation requires historical evidence fields, preserve the exact
+`invocationRef` and `operationRef` keys and values returned by the runtime.
 
 ## Provider setup
 
-For publishing an Operation, start at https://app.aecon.ai/for-providers and use
+For publishing a Tool, start at https://app.aecon.ai/for-providers and use
 the existing source-native setup. Retain the saved draft and connection attempt
 references across a human handoff. Re-read status when returning; a browser
 return alone does not prove that the connection or publication succeeded.

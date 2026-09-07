@@ -656,8 +656,8 @@ describe('Package 4 official Formance boundary', () => {
 
 function managedCallBooking() {
   return {
-    invocationRef: 'invocation:one',
-    commitmentRef: 'commitment:one',
+    callRef: 'invocation:one',
+    quoteRef: 'commitment:one',
     idempotencyKey: 'invoke:one',
     accountRef: 'account:one',
     principalRef: 'principal:one',
@@ -666,7 +666,7 @@ function managedCallBooking() {
     legalCustomerGeneration: 1,
     treasuryRef: 'custody:one',
     treasuryGeneration: 1,
-    operationRef: 'operation:one',
+    toolRef: 'operation:one',
     providerRef: 'provider:one',
     authorityGeneration: 1,
     policyGeneration: 1,
@@ -674,7 +674,7 @@ function managedCallBooking() {
     buyerRevenueUnits: '1',
     buyerTaxUnits: '1',
     providerAmountUnits: '1',
-    commitmentDigest: `sha256:${'1'.repeat(64)}`,
+    quoteDigest: `sha256:${'1'.repeat(64)}`,
     inputDigest: `sha256:${'2'.repeat(64)}`,
     policyDigest: `sha256:${'3'.repeat(64)}`,
     rateEvidenceDigest: `sha256:${'4'.repeat(64)}`,

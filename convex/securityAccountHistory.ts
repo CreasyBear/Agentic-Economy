@@ -291,7 +291,7 @@ async function persistObservation(
       : { kind: 'refused', code: 'event_conflict' }
   }
 
-  const operationRef = `clerk:${digestValue}`
+  const toolRef = `clerk:${digestValue}`
   const createdAt = Date.now()
   const audit = createPackage3AuditEvent({
     eventId: brandNonEmpty(eventRef, 'AuditEventId'),
@@ -303,8 +303,8 @@ async function persistObservation(
     observedAt: observation.observedAt,
     targetType: projection.targetType,
     targetRef: projection.targetRef,
-    idempotencyKey: brandNonEmpty(operationRef, 'OperationKey'),
-    correlationId: brandNonEmpty(operationRef, 'CorrelationId'),
+    idempotencyKey: brandNonEmpty(toolRef, 'OperationKey'),
+    correlationId: brandNonEmpty(toolRef, 'CorrelationId'),
     beforeState: projection.beforeState,
     outcome: projection.outcome,
     evidenceRefs: [`clerk-delivery:${digestValue}`],

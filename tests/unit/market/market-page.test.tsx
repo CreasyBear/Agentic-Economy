@@ -21,7 +21,7 @@ import "../../setup/jsdom-platform";
 
 import { AeMarketPage } from "@/components/ae/market/AeMarketPage";
 import type { MarketComparison } from "@/components/ae/market/AeMarketComparisonView";
-import type { OperationCardViewModel } from "@/modules/market/operation-view-model";
+import type { ToolCardViewModel } from "@/modules/market/tool-view-model";
 import type { MarketRouteProjection } from "@/modules/market/server";
 
 const generatedAt = "2026-08-23T03:00:00.000Z";
@@ -34,13 +34,13 @@ const projection: MarketRouteProjection = {
     pagination: { limit: 12, hasMore: false },
     items: [
       {
-        operationRef: "operation:v1:listing",
+        toolRef: "operation:v1:listing",
         title: "Company registry search",
         summary:
           "Find current company records and return a structured extract.",
-        supplierName: "Registry Works",
-        supplierSlug: "registry-works",
-        supplierInitials: "RW",
+        providerName: "Registry Works",
+        providerSlug: "registry-works",
+        providerInitials: "RW",
         capabilityId: "identity.company_search",
         capability: "Company Search",
         category: {
@@ -64,7 +64,7 @@ const projection: MarketRouteProjection = {
         },
         popularity: {
           kind: "observed",
-          completedInvocations: 842,
+          completedCalls: 842,
           display: "842 completed calls",
           definition: "Completed calls in this period.",
         },
@@ -78,12 +78,12 @@ const projection: MarketRouteProjection = {
         },
       },
       {
-        operationRef: "operation:v1:listing-two",
+        toolRef: "operation:v1:listing-two",
         title: "Company data lookup",
         summary: "Look up a company and return normalized registration data.",
-        supplierName: "Clear Ledger",
-        supplierSlug: "clear-ledger",
-        supplierInitials: "CL",
+        providerName: "Clear Ledger",
+        providerSlug: "clear-ledger",
+        providerInitials: "CL",
         capabilityId: "identity.company_search",
         capability: "Company Search",
         category: {
@@ -106,7 +106,7 @@ const projection: MarketRouteProjection = {
         },
         popularity: {
           kind: "observed",
-          completedInvocations: 96,
+          completedCalls: 96,
           display: "96 completed calls",
           definition: "Completed calls in this period.",
         },
@@ -129,7 +129,7 @@ describe("market page", () => {
   it("keeps the catalog workspace ahead of the editorial footer", () => {
     renderMarket({ window: "30d" });
 
-    expect(document.querySelector("#operations")?.className).toContain("min-h-dvh");
+    expect(document.querySelector("#tools")?.className).toContain("min-h-dvh");
   });
 
   it("shows the catalog as category shelves of capabilities", () => {
@@ -138,11 +138,11 @@ describe("market page", () => {
     expect(
       screen.getByRole("heading", {
         level: 1,
-        name: "2 current Operations",
+        name: "2 current Tools",
       }),
     ).toBeTruthy();
     expect(
-      screen.getByRole("searchbox", { name: "Search Operations" }),
+      screen.getByRole("searchbox", { name: "Search Tools" }),
     ).toBeTruthy();
     expect(
       screen.getByRole("combobox", { name: "Availability filter" }),
@@ -164,10 +164,10 @@ describe("market page", () => {
     );
     expect(screen.queryByText("Market activity")).toBeNull();
     expect(screen.getByRole("link", { name: "Connect your agent" })).toBeTruthy();
-    expect(screen.getByRole("link", { name: "Publish an Operation" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Publish a Tool" })).toBeTruthy();
   });
 
-  it("keeps admitted Operations separate once a capability is opened", () => {
+  it("keeps admitted Tools separate once a capability is opened", () => {
     renderMarket({ window: "30d", capability: "identity.company_search" });
 
     expect(screen.queryByText("Exa search")).toBeNull();
@@ -189,12 +189,12 @@ describe("market page", () => {
     expect(
       screen.getAllByRole("link", { name: "Use Company registry search" }),
     ).toHaveLength(1);
-    const operationHref = screen.getByRole("link", {
+    const toolHref = screen.getByRole("link", {
       name: "Use Company registry search",
     }).getAttribute("href");
-    expect(operationHref).not.toBeNull();
-    expect(new URL(operationHref!, "https://agentic-economy.example").searchParams.get("from"))
-      .toBe("/market?window=30d&capability=identity.company_search#operations");
+    expect(toolHref).not.toBeNull();
+    expect(new URL(toolHref!, "https://agentic-economy.example").searchParams.get("from"))
+      .toBe("/market?window=30d&capability=identity.company_search#tools");
     expect(
       within(screen.getByRole("table")).getAllByRole("row").slice(1).map(
         (row) => row.textContent,
@@ -206,17 +206,17 @@ describe("market page", () => {
   });
 
   it("shares a bounded comparison selection across result tables in catalog order", async () => {
-    const onCompareOperations = vi.fn();
+    const onCompareTools = vi.fn();
     if (projection.catalog.kind !== "ok" || projection.catalog.items[0] === undefined) {
       throw new Error("expected catalog fixture items");
     }
-    const baseOperation = projection.catalog.items[0];
-    const items: OperationCardViewModel[] = Array.from({ length: 6 }, (_, index) => ({
-      ...baseOperation,
-      operationRef: `operation:v1:compare-${String(index + 1)}`,
-      title: `Compare Operation ${String(index + 1)}`,
-      supplierName: `Supplier ${String(index + 1)}`,
-      supplierSlug: `supplier-${String(index + 1)}`,
+    const baseTool = projection.catalog.items[0];
+    const items: ToolCardViewModel[] = Array.from({ length: 6 }, (_, index) => ({
+      ...baseTool,
+      toolRef: `operation:v1:compare-${String(index + 1)}`,
+      title: `Compare Tool ${String(index + 1)}`,
+      providerName: `Provider ${String(index + 1)}`,
+      providerSlug: `supplier-${String(index + 1)}`,
       capabilityId: `compare.capability_${String(index + 1)}`,
       capability: `Compare capability ${String(index + 1)}`,
       ...(index === 5
@@ -240,12 +240,12 @@ describe("market page", () => {
     renderMarket(
       { window: "30d", query: "compare" },
       comparisonProjection,
-      onCompareOperations,
+      onCompareTools,
     );
 
     const checkboxes = items.map((item) => screen.getByRole<HTMLButtonElement>(
       "checkbox",
-      { name: `Select ${item.title} by ${item.supplierName}` },
+      { name: `Select ${item.title} by ${item.providerName}` },
     ));
     expect(screen.queryByRole("checkbox", { name: /Select all/ })).toBeNull();
     expect(checkboxes[5]?.disabled).toBe(true);
@@ -253,55 +253,55 @@ describe("market page", () => {
     for (const index of [3, 0, 2, 1]) {
       const item = items[index]!;
       fireEvent.click(screen.getByRole("checkbox", {
-        name: `Select ${item.title} by ${item.supplierName}`,
+        name: `Select ${item.title} by ${item.providerName}`,
       }));
     }
 
-    const tray = screen.getByRole("complementary", { name: "Operation comparison" });
+    const tray = screen.getByRole("complementary", { name: "Tool comparison" });
     expect(within(tray).getByRole("status", { name: "4 of 4 selected" })).toBeTruthy();
     const firstSelected = screen.getByRole<HTMLButtonElement>("checkbox", {
-      name: "Select Compare Operation 1 by Supplier 1",
+      name: "Select Compare Tool 1 by Provider 1",
     });
     const fifthChoice = screen.getByRole<HTMLButtonElement>("checkbox", {
-      name: "Select Compare Operation 5 by Supplier 5",
+      name: "Select Compare Tool 5 by Provider 5",
     });
     expect(fifthChoice.disabled).toBe(true);
     expect(firstSelected.disabled).toBe(false);
     expect(firstSelected.closest("tr")?.getAttribute("data-state")).toBe("selected");
 
     fireEvent.click(within(tray).getByRole("button", { name: "Compare 4" }));
-    expect(onCompareOperations).toHaveBeenCalledWith(
-      items.slice(0, 4).map((item) => item.operationRef),
+    expect(onCompareTools).toHaveBeenCalledWith(
+      items.slice(0, 4).map((item) => item.toolRef),
     );
 
     fireEvent.click(within(tray).getByRole("button", {
-      name: "Remove Compare Operation 2 by Supplier 2 from comparison",
+      name: "Remove Compare Tool 2 by Provider 2 from comparison",
     }));
     await waitFor(() => expect(screen.getByRole<HTMLButtonElement>("checkbox", {
-      name: "Select Compare Operation 5 by Supplier 5",
+      name: "Select Compare Tool 5 by Provider 5",
     }).disabled).toBe(false));
     expect(screen.getByRole("checkbox", {
-      name: "Select Compare Operation 2 by Supplier 2",
+      name: "Select Compare Tool 2 by Provider 2",
     }).getAttribute("aria-checked")).toBe("false");
 
     fireEvent.click(screen.getByRole("button", { name: "Clear all" }));
     await waitFor(() => {
-      expect(screen.queryByRole("complementary", { name: "Operation comparison" })).toBeNull();
+      expect(screen.queryByRole("complementary", { name: "Tool comparison" })).toBeNull();
       expect(document.activeElement).toBe(screen.getByRole("link", { name: "Catalog" }));
     });
   });
 
-  it("prunes selected Operations before a changed result page renders", () => {
-    const onCompareOperations = vi.fn();
+  it("prunes selected Tools before a changed result page renders", () => {
+    const onCompareTools = vi.fn();
     const rendered = renderMarket(
       { window: "30d", capability: "identity.company_search" },
       projection,
-      onCompareOperations,
+      onCompareTools,
     );
     fireEvent.click(screen.getByRole("checkbox", {
       name: "Select Company registry search by Registry Works",
     }));
-    expect(screen.getByRole("complementary", { name: "Operation comparison" })).toBeTruthy();
+    expect(screen.getByRole("complementary", { name: "Tool comparison" })).toBeTruthy();
 
     const secondOnly: MarketRouteProjection = {
       ...projection,
@@ -316,21 +316,21 @@ describe("market page", () => {
     rendered.rerenderMarket(
       { window: "30d", query: "different page" },
       secondOnly,
-      onCompareOperations,
+      onCompareTools,
     );
 
-    expect(screen.queryByRole("complementary", { name: "Operation comparison" })).toBeNull();
+    expect(screen.queryByRole("complementary", { name: "Tool comparison" })).toBeNull();
     expect(screen.getByRole("checkbox", {
       name: "Select Company data lookup by Clear Ledger",
     }).getAttribute("aria-checked")).toBe("false");
   });
 
   it("clears draft comparison selection when the catalog context changes", async () => {
-    const onCompareOperations = vi.fn();
+    const onCompareTools = vi.fn();
     const rendered = renderMarket(
       { window: "30d", query: "company" },
       projection,
-      onCompareOperations,
+      onCompareTools,
     );
     fireEvent.click(screen.getByRole("checkbox", {
       name: "Select Company registry search by Registry Works",
@@ -339,11 +339,11 @@ describe("market page", () => {
     rendered.rerenderMarket(
       { window: "30d", query: "registry" },
       projection,
-      onCompareOperations,
+      onCompareTools,
     );
 
     await waitFor(() => expect(screen.queryByRole("complementary", {
-      name: "Operation comparison",
+      name: "Tool comparison",
     })).toBeNull());
   });
 
@@ -356,16 +356,16 @@ describe("market page", () => {
           catalog: {
             ...projection.catalog,
             items: [
-              { ...projection.catalog.items[0]!, operationRef: firstRef },
-              { ...projection.catalog.items[1]!, operationRef: secondRef },
+              { ...projection.catalog.items[0]!, toolRef: firstRef },
+              { ...projection.catalog.items[1]!, toolRef: secondRef },
             ],
           },
         }
       : projection;
     const unavailableComparison: MarketComparison = {
       kind: "unavailable",
-      schemaVersion: "registry-operations:v2",
-      reason: "operation_unavailable",
+      schemaVersion: "registry-tools:v2",
+      reason: "tool_unavailable",
     };
     const search = {
       window: "30d" as const,
@@ -399,7 +399,7 @@ describe("market page", () => {
       name: "Select Company data lookup by Clear Ledger",
     }).getAttribute("aria-checked")).toBe("true");
     expect(screen.getByRole("complementary", {
-      name: "Operation comparison",
+      name: "Tool comparison",
     })).toBeTruthy();
 
     cleanup();
@@ -571,7 +571,7 @@ describe("market page", () => {
     });
   });
 
-  it("announces an empty Operation search truthfully", () => {
+  it("announces an empty Tool search truthfully", () => {
     renderMarket(
       { window: "30d", query: "not in the catalogue" },
       {
@@ -581,7 +581,7 @@ describe("market page", () => {
     );
 
     expect(screen.getByRole("status").textContent).toBe("0 shown");
-    expect(screen.getByText("No Operations match these filters")).toBeTruthy();
+    expect(screen.getByText("No Tools match these filters")).toBeTruthy();
     expect(screen.getByRole("link", { name: "Clear filters" })).toBeTruthy();
   });
 
@@ -595,10 +595,10 @@ describe("market page", () => {
     );
 
     expect(
-      screen.getByText("The Operation catalog is temporarily unavailable"),
+      screen.getByText("The Tool catalog is temporarily unavailable"),
     ).toBeTruthy();
     expect(screen.getByRole("status").textContent).toBe("Catalogue unavailable");
-    expect(screen.queryByText("No Operations match these filters")).toBeNull();
+    expect(screen.queryByText("No Tools match these filters")).toBeNull();
     expect(screen.getByRole("link", { name: "Try again" })).toBeTruthy();
   });
 
@@ -622,7 +622,7 @@ describe("market page", () => {
     );
 
     expect(
-      screen.getByRole("heading", { level: 1, name: "136 current Operations" }),
+      screen.getByRole("heading", { level: 1, name: "136 current Tools" }),
     ).toBeTruthy();
     expect(screen.getByRole("status").textContent).toContain("1 of 136");
     expect(screen.getByRole("link", { name: "Next 12" }).getAttribute("href")).toContain(
@@ -634,7 +634,7 @@ describe("market page", () => {
 function renderMarket(
   search: Parameters<typeof AeMarketPage>[0]["search"],
   marketProjection = projection,
-  onCompareOperations?: (operationRefs: readonly string[]) => void,
+  onCompareTools?: (toolRefs: readonly string[]) => void,
   comparison?: MarketComparison,
 ) {
   const rootRoute = createRootRoute();
@@ -642,7 +642,7 @@ function renderMarket(
     createRoute({ getParentRoute: () => rootRoute, path: "/market" }),
     createRoute({
       getParentRoute: () => rootRoute,
-      path: "/operations/$operationRef",
+      path: "/tools/$toolRef",
     }),
     createRoute({ getParentRoute: () => rootRoute, path: "/for-agents" }),
     createRoute({ getParentRoute: () => rootRoute, path: "/for-providers" }),
@@ -656,15 +656,15 @@ function renderMarket(
   const market = (
     nextSearch: Parameters<typeof AeMarketPage>[0]["search"],
     nextProjection: MarketRouteProjection,
-    nextOnCompareOperations = onCompareOperations,
+    nextOnCompareTools = onCompareTools,
   ) => (
     <RouterContextProvider router={router}>
       <AeMarketPage
         projection={nextProjection}
         search={nextSearch}
-        {...(nextOnCompareOperations === undefined
+        {...(nextOnCompareTools === undefined
           ? {}
-          : { onCompareOperations: nextOnCompareOperations })}
+          : { onCompareTools: nextOnCompareTools })}
         {...(comparison === undefined ? {} : { comparison })}
       />
     </RouterContextProvider>
@@ -675,8 +675,8 @@ function renderMarket(
     rerenderMarket: (
       nextSearch: Parameters<typeof AeMarketPage>[0]["search"],
       nextProjection: MarketRouteProjection,
-      nextOnCompareOperations = onCompareOperations,
-    ) => rendered.rerender(market(nextSearch, nextProjection, nextOnCompareOperations)),
+      nextOnCompareTools = onCompareTools,
+    ) => rendered.rerender(market(nextSearch, nextProjection, nextOnCompareTools)),
   });
 }
 

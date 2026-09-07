@@ -23,7 +23,7 @@ import {
   persistOfferingSourceState,
 } from './catalogOfferingMutations'
 import { requireSourceWrite, sourceWriteArgs } from './sourceWriteAdmission'
-import { upsertSupplierOperationIdentity } from './capabilitySupplierOperationProjection'
+import { upsertProviderToolIdentity } from './capabilityProviderToolProjection'
 
 const sourceKindValue = v.union(
   v.literal('openapi'),
@@ -272,10 +272,10 @@ async function saveSupplyIntegrationDraft(
     integrationDraft: normalized.draft,
     integrationDraftUpdatedAt: normalized.draft.updatedAt,
   })
-  await upsertSupplierOperationIdentity(ctx, {
+  await upsertProviderToolIdentity(ctx, {
     businessId: args.businessId,
     providerRef: String(args.businessId),
-    operationRef: refs.offeringRef,
+    toolRef: refs.offeringRef,
     offeringRef: refs.offeringRef,
     offeringRevision: offering.currentRevision,
     updatedAt: now,

@@ -12,7 +12,7 @@ import {
 } from '@/modules/agent-access/public'
 import {
   createAgentAccessGrant,
-  normalizeAgentAccessOperationSelection,
+  normalizeAgentAccessToolSelection,
   normalizeStoredAgentAccessGrant,
 } from '@/modules/agent-access/policy'
 import type {
@@ -21,7 +21,7 @@ import type {
   IssuedAgentBindingRegistration,
 } from '@/modules/agent-access/agent-access'
 import {
-  MARKET_OPERATIONS_INVOKE_SCOPE,
+  MARKET_TOOLS_CALL_SCOPE,
   MARKET_SUPPLY_MANAGE_SCOPE,
   agentAuthorityModeForScopes,
   agentAuthorityScopeForMode,
@@ -59,7 +59,7 @@ import { admitInteractiveOwnerConsequence } from './lib/ownerConsequence'
 
 
 const environment = v.union(v.literal('sandbox'), v.literal('production'))
-const authorityMode = v.union(v.literal('inspect_only'), v.literal('approve_each'), v.literal('bounded_mandate'), v.literal('full_yolo'))
+const authorityMode = v.union(v.literal('read_only'), v.literal('approval_required'), v.literal('spending_policy'), v.literal('unrestricted_test_only'))
 const lifecycle = v.union(v.literal('active'), v.literal('revoked'), v.literal('expired'))
 export const agentAccessPrincipalValue = v.object({
   principalId: v.string(),
@@ -79,7 +79,7 @@ const agentPrincipalArgs = {
   scopes: v.array(v.string()),
   authorityMode,
   grantGeneration: v.number(),
-  policyDigest: v.string(),
+  spendingPolicyDigest: v.string(),
   lifecycle,
   expiresAt: v.optional(v.number()),
   seenAt: v.number(),
@@ -93,7 +93,7 @@ const issuedBindingResult = v.union(
     kind: v.union(v.literal('recorded'), v.literal('replayed')),
     grantRef: v.string(),
     generation: v.number(),
-    policyDigest: v.string(),
+    spendingPolicyDigest: v.string(),
     lifecycle,
     expiresAt: v.number(),
   }),
@@ -109,9 +109,9 @@ const issuedBindingArgs = {
   environment,
   scopes: v.array(v.string()),
   authorityMode,
-  operationAccess: v.union(v.literal('all_admitted'), v.literal('selected_operations')),
-  operationRefs: v.array(v.string()),
-  policy: agentAccessPolicyValue,
+  toolAccess: v.union(v.literal('all_admitted'), v.literal('selected_tools')),
+  toolRefs: v.array(v.string()),
+  spendingPolicy: agentAccessPolicyValue,
   createdAt: v.number(),
   expiresAt: v.number(),
 }
@@ -123,7 +123,7 @@ type RegisterIssuedBindingResult = Readonly<{
   kind: 'recorded' | 'replayed'
   grantRef: string
   generation: number
-  policyDigest: string
+  spendingPolicyDigest: string
   lifecycle: 'active' | 'revoked' | 'expired'
   expiresAt: number
 }> | Readonly<{
@@ -151,9 +151,9 @@ const replacementRegistrationArgs = {
   principalRef: v.string(), replacementMode: v.union(v.literal('planned'), v.literal('compromise')),
   issuanceKey: v.string(), grantRef: v.string(), credentialId: v.string(),
   applicationRef: v.string(), environment, scopes: v.array(v.string()), authorityMode,
-  operationAccess: v.union(v.literal('all_admitted'), v.literal('selected_operations')),
-  operationRefs: v.array(v.string()),
-  policy: agentAccessPolicyValue, createdAt: v.number(), expiresAt: v.number(),
+  toolAccess: v.union(v.literal('all_admitted'), v.literal('selected_tools')),
+  toolRefs: v.array(v.string()),
+  spendingPolicy: agentAccessPolicyValue, createdAt: v.number(), expiresAt: v.number(),
 }
 const replacementTransitionArgs = {
   principalRef: v.string(), successorCredentialRef: v.string(), successorGrantRef: v.string(),
@@ -203,9 +203,9 @@ type AgentPrincipalWrite = Readonly<{
   applicationRef: string
   environment: 'sandbox' | 'production'
   scopes: readonly string[]
-  authorityMode: 'inspect_only' | 'approve_each' | 'bounded_mandate' | 'full_yolo'
+  authorityMode: 'read_only' | 'approval_required' | 'spending_policy' | 'unrestricted_test_only'
   grantGeneration: number
-  policyDigest: string
+  spendingPolicyDigest: string
   lifecycle: 'active' | 'revoked' | 'expired'
   expiresAt?: number
   seenAt: number
@@ -305,7 +305,7 @@ function principalRegistry(ctx: Pick<MutationCtx, 'db'>, now: number): Principal
 }
 
 async function writeAgentPrincipal(ctx: Pick<MutationCtx, 'db'>, args: AgentPrincipalWrite): Promise<{ kind: 'recorded' } | { kind: 'conflict' }> {
-  if (args.environment === 'production' && args.authorityMode === 'full_yolo') return { kind: 'conflict' as const }
+  if (args.environment === 'production' && args.authorityMode === 'unrestricted_test_only') return { kind: 'conflict' as const }
   const existing = await ctx.db.query('agentAccessPrincipals')
     .withIndex('by_principalId', (query) => query.eq('principalId', args.principalId)).unique()
   const scopes = uniqueSorted(args.scopes)
@@ -319,7 +319,7 @@ async function writeAgentPrincipal(ctx: Pick<MutationCtx, 'db'>, args: AgentPrin
       scopes,
       authorityMode: args.authorityMode,
       grantGeneration: args.grantGeneration,
-      policyDigest: args.policyDigest,
+      spendingPolicyDigest: args.spendingPolicyDigest,
       lifecycle: args.lifecycle,
       ...(args.expiresAt === undefined ? {} : { expiresAt: args.expiresAt }),
       lastSeenAt: args.seenAt,
@@ -339,7 +339,7 @@ async function writeAgentPrincipal(ctx: Pick<MutationCtx, 'db'>, args: AgentPrin
     scopes,
     authorityMode: args.authorityMode,
     grantGeneration: args.grantGeneration,
-    policyDigest: args.policyDigest,
+    spendingPolicyDigest: args.spendingPolicyDigest,
     lifecycle: args.lifecycle,
     ...(args.expiresAt === undefined ? {} : { expiresAt: args.expiresAt }),
     ...(args.ownerTokenIdentifier === undefined ? {} : { ownerTokenIdentifier: args.ownerTokenIdentifier }),
@@ -353,7 +353,7 @@ function issuedBindingCommand(args: IssuedAgentBindingRegistration): StableHashV
   return {
     ...args,
     scopes: [...args.scopes],
-    operationRefs: [...args.operationRefs],
+    toolRefs: [...args.toolRefs],
   } as StableHashValue
 }
 
@@ -367,7 +367,7 @@ async function validIssuedBindingAssertion(
     && assertion.principalId === 'ae:server-function'
     && assertion.ownerId === 'ae:server-function'
     && assertion.credentialId === 'ae:server-function'
-    && assertion.scopes.includes(MARKET_OPERATIONS_INVOKE_SCOPE)
+    && assertion.scopes.includes(MARKET_TOOLS_CALL_SCOPE)
     && await verifyCustomerRequestServiceAssertion({
       key,
       operation: REGISTER_ISSUED_BINDING_OPERATION,
@@ -387,7 +387,7 @@ async function validReplacementAssertion(
     && assertion.principalId === 'ae:server-function'
     && assertion.ownerId === 'ae:server-function'
     && assertion.credentialId === 'ae:server-function'
-    && assertion.scopes.includes(MARKET_OPERATIONS_INVOKE_SCOPE)
+    && assertion.scopes.includes(MARKET_TOOLS_CALL_SCOPE)
     && await verifyCustomerRequestServiceAssertion({ key, operation, command, assertion })
 }
 
@@ -411,7 +411,7 @@ export const registerIssuedAgentBindingForServer: RegisteredMutation<'public', R
     }
     const now = Date.now()
     const scopes = uniqueSorted(input.scopes)
-    const operationSelection = normalizeAgentAccessOperationSelection(input)
+    const toolSelection = normalizeAgentAccessToolSelection(input)
     if (input.grantRef !== issuedAgentGrantRef(identity.subject, input.issuanceKey)) {
       return { kind: 'refused' as const, code: 'authentication_required' as const }
     }
@@ -422,13 +422,13 @@ export const registerIssuedAgentBindingForServer: RegisteredMutation<'public', R
       || input.expiresAt <= now
       || input.createdAt > now + 60_000
       || scopes.length !== input.scopes.length
-      || operationSelection === undefined
-      || operationSelection.operationAccess !== input.policy.operationAccess
-      || operationSelection.operationRefs.length !== input.policy.operationRefs.length
-      || operationSelection.operationRefs.some((ref, index) => ref !== input.policy.operationRefs[index])
+      || toolSelection === undefined
+      || toolSelection.toolAccess !== input.spendingPolicy.toolAccess
+      || toolSelection.toolRefs.length !== input.spendingPolicy.toolRefs.length
+      || toolSelection.toolRefs.some((ref, index) => ref !== input.spendingPolicy.toolRefs[index])
       || agentAuthorityModeForScopes(scopes) !== input.authorityMode
-      || input.policy.environment !== input.environment
-      || (input.environment === 'production' && input.authorityMode === 'full_yolo')) {
+      || input.spendingPolicy.environment !== input.environment
+      || (input.environment === 'production' && input.authorityMode === 'unrestricted_test_only')) {
       return { kind: 'conflict' as const }
     }
 
@@ -446,10 +446,10 @@ export const registerIssuedAgentBindingForServer: RegisteredMutation<'public', R
       applicationRef: input.applicationRef,
       credentialId: input.credentialId,
       environment: input.environment,
-      operationAccess: operationSelection.operationAccess,
-      operationRefs: operationSelection.operationRefs,
+      toolAccess: toolSelection.toolAccess,
+      toolRefs: toolSelection.toolRefs,
       authorityMode: input.authorityMode,
-      policy: input.policy,
+      spendingPolicy: input.spendingPolicy,
       lifecycle: 'active',
       generation: 1,
       createdAt: input.createdAt,
@@ -565,7 +565,7 @@ export const registerIssuedAgentBindingForServer: RegisteredMutation<'public', R
       context: action,
       subjectPrincipalRef: principalRef(refs.principalRef),
       scopes: canonicalAgentDelegationScopes(scopes),
-      resourceRefs: operationSelection.operationAccess === 'all_admitted' ? ['*'] : operationSelection.operationRefs,
+      resourceRefs: toolSelection.toolAccess === 'all_admitted' ? ['*'] : toolSelection.toolRefs,
       budgetLimit: 1,
       expiresAt: input.expiresAt,
     })
@@ -578,7 +578,7 @@ export const registerIssuedAgentBindingForServer: RegisteredMutation<'public', R
     if ((storedGrant.kind !== 'recorded' && storedGrant.kind !== 'replayed')
       || storedGrant.grantRef === undefined
       || storedGrant.generation === undefined
-      || storedGrant.policyDigest === undefined
+      || storedGrant.spendingPolicyDigest === undefined
       || storedGrant.lifecycle === undefined
       || storedGrant.expiresAt === undefined) throw new Error('issued_agent_grant_conflict')
     const storedPrincipal = await writeAgentPrincipal(ctx, {
@@ -591,7 +591,7 @@ export const registerIssuedAgentBindingForServer: RegisteredMutation<'public', R
       scopes,
       authorityMode: input.authorityMode,
       grantGeneration: storedGrant.generation,
-      policyDigest: storedGrant.policyDigest,
+      spendingPolicyDigest: storedGrant.spendingPolicyDigest,
       lifecycle: storedGrant.lifecycle,
       expiresAt: storedGrant.expiresAt,
       seenAt: now,
@@ -613,7 +613,7 @@ export const registerIssuedAgentBindingForServer: RegisteredMutation<'public', R
       kind: replaying || storedGrant.kind === 'replayed' ? 'replayed' as const : 'recorded' as const,
       grantRef: storedGrant.grantRef,
       generation: storedGrant.generation,
-      policyDigest: storedGrant.policyDigest,
+      spendingPolicyDigest: storedGrant.spendingPolicyDigest,
       lifecycle: storedGrant.lifecycle,
       expiresAt: storedGrant.expiresAt,
     }
@@ -712,7 +712,7 @@ export const prepareCredentialReplacementForServer = mutation({
     const identity = await ctx.auth.getUserIdentity()
     if (identity === null || !await validReplacementAssertion(
       PREPARE_REPLACEMENT_OPERATION,
-      { ...input, scopes: [...input.scopes], operationRefs: [...input.operationRefs] } as StableHashValue,
+      { ...input, scopes: [...input.scopes], toolRefs: [...input.toolRefs] } as StableHashValue,
       serviceAuth,
     )) return { kind: 'refused' as const, code: 'authentication_required' as const }
     let owner: Awaited<ReturnType<typeof resolveInteractiveAuthorityContext>>
@@ -737,19 +737,19 @@ export async function prepareCredentialReplacementCore(
   now: number,
 ) {
     const scopes = uniqueSorted(input.scopes)
-    const operationSelection = normalizeAgentAccessOperationSelection(input)
+    const toolSelection = normalizeAgentAccessToolSelection(input)
     if (input.principalRef.trim().length === 0
       || input.credentialId.trim().length === 0
       || input.expiresAt <= now
       || input.createdAt > now + 60_000
       || scopes.length !== input.scopes.length
-      || operationSelection === undefined
-      || operationSelection.operationAccess !== input.policy.operationAccess
-      || operationSelection.operationRefs.length !== input.policy.operationRefs.length
-      || operationSelection.operationRefs.some((ref, index) => ref !== input.policy.operationRefs[index])
+      || toolSelection === undefined
+      || toolSelection.toolAccess !== input.spendingPolicy.toolAccess
+      || toolSelection.toolRefs.length !== input.spendingPolicy.toolRefs.length
+      || toolSelection.toolRefs.some((ref, index) => ref !== input.spendingPolicy.toolRefs[index])
       || agentAuthorityModeForScopes(scopes) !== input.authorityMode
-      || input.policy.environment !== input.environment
-      || (input.environment === 'production' && input.authorityMode === 'full_yolo')) {
+      || input.spendingPolicy.environment !== input.environment
+      || (input.environment === 'production' && input.authorityMode === 'unrestricted_test_only')) {
       return { kind: 'conflict' as const }
     }
     const [membership, principal, current] = await Promise.all([
@@ -854,13 +854,13 @@ export async function prepareCredentialReplacementCore(
       applicationRef: current.applicationRef,
       credentialId: input.credentialId,
       environment: input.environment,
-      operationAccess: operationSelection.operationAccess,
-      operationRefs: operationSelection.operationRefs,
+      toolAccess: toolSelection.toolAccess,
+      toolRefs: toolSelection.toolRefs,
       authorityMode: input.authorityMode,
-      policy: {
-        ...input.policy,
-        budget: { ...input.policy.budget, generation },
-        rate: { ...input.policy.rate, generation },
+      spendingPolicy: {
+        ...input.spendingPolicy,
+        budget: { ...input.spendingPolicy.budget, generation },
+        rate: { ...input.spendingPolicy.rate, generation },
       },
       lifecycle: 'active',
       generation,
@@ -877,7 +877,7 @@ export async function prepareCredentialReplacementCore(
       context: action,
       subjectPrincipalRef: principalRef(input.principalRef),
       scopes: canonicalAgentDelegationScopes(scopes),
-      resourceRefs: operationSelection.operationAccess === 'all_admitted' ? ['*'] : operationSelection.operationRefs,
+      resourceRefs: toolSelection.toolAccess === 'all_admitted' ? ['*'] : toolSelection.toolRefs,
       budgetLimit: 1,
       expiresAt: input.expiresAt,
     })
@@ -941,6 +941,12 @@ export async function transitionCredentialReplacementCore(
     || successorGrant.principalId !== input.principalRef
     || successorGrant.credentialId === current.credentialId && mode === 'cancel'
     || current.ownerId !== owner.accountRef) return { kind: 'conflict' as const }
+  let normalizedSuccessorGrant: ReturnType<typeof normalizeStoredAgentAccessGrant>
+  try {
+    normalizedSuccessorGrant = normalizeStoredAgentAccessGrant(successorGrant)
+  } catch {
+    return { kind: 'conflict' as const }
+  }
   const successorBinding = await ctx.db.query('externalIdentityBindings')
     .withIndex('by_bindingRef', (query) => query.eq('bindingRef', successor.bindingRef)).unique()
   if (successorBinding === null || successorBinding.providerIdentifier !== successorGrant.credentialId) return { kind: 'conflict' as const }
@@ -973,15 +979,15 @@ export async function transitionCredentialReplacementCore(
   await revokeReplacementMaterial(ctx, predecessor.credential, predecessor.binding, predecessor.grant, owner, now, 'predecessor_replaced')
   const successorScopes = current.scopes.includes(MARKET_SUPPLY_MANAGE_SCOPE)
     ? [MARKET_SUPPLY_MANAGE_SCOPE]
-    : [MARKET_OPERATIONS_INVOKE_SCOPE, agentAuthorityScopeForMode(successorGrant.authorityMode)]
+    : [MARKET_TOOLS_CALL_SCOPE, agentAuthorityScopeForMode(normalizedSuccessorGrant.authorityMode)]
   await ctx.db.patch(current._id, {
     credentialId: successorBinding.providerIdentifier,
     scopes: successorScopes,
-    authorityMode: successorGrant.authorityMode,
-    grantGeneration: successorGrant.generation,
-    policyDigest: successorGrant.policyDigest,
-    lifecycle: successorGrant.lifecycle,
-    expiresAt: successorGrant.expiresAt,
+    authorityMode: normalizedSuccessorGrant.authorityMode,
+    grantGeneration: normalizedSuccessorGrant.generation,
+    spendingPolicyDigest: normalizedSuccessorGrant.spendingPolicyDigest,
+    lifecycle: normalizedSuccessorGrant.lifecycle,
+    expiresAt: normalizedSuccessorGrant.expiresAt,
     lastSeenAt: now,
   })
   await persistAgentAudit(ctx, {
@@ -1363,17 +1369,23 @@ async function promoteRemainingCredential(
       .take(2)
     const grant = grants.find((candidate) => candidate.principalId === admission.principalId)
     if (grant === undefined) continue
+    let normalizedGrant: ReturnType<typeof normalizeStoredAgentAccessGrant>
+    try {
+      normalizedGrant = normalizeStoredAgentAccessGrant(grant)
+    } catch {
+      continue
+    }
     const scopes = hasSupplyAuthority
       ? [MARKET_SUPPLY_MANAGE_SCOPE]
-      : [MARKET_OPERATIONS_INVOKE_SCOPE, agentAuthorityScopeForMode(grant.authorityMode)]
+      : [MARKET_TOOLS_CALL_SCOPE, agentAuthorityScopeForMode(normalizedGrant.authorityMode)]
     await ctx.db.patch(admission._id, {
       credentialId: binding.providerIdentifier,
       scopes,
-      authorityMode: grant.authorityMode,
-      grantGeneration: grant.generation,
-      policyDigest: grant.policyDigest,
-      lifecycle: 'active',
-      expiresAt: grant.expiresAt,
+      authorityMode: normalizedGrant.authorityMode,
+      grantGeneration: normalizedGrant.generation,
+      spendingPolicyDigest: normalizedGrant.spendingPolicyDigest,
+      lifecycle: normalizedGrant.lifecycle,
+      expiresAt: normalizedGrant.expiresAt,
       lastSeenAt: now,
     })
     return
@@ -1381,7 +1393,7 @@ async function promoteRemainingCredential(
   await ctx.db.patch(admission._id, { lifecycle: 'revoked', lastSeenAt: now })
 }
 
-async function invalidateOAuthRefreshFamilies(
+export async function invalidateOAuthRefreshFamilies(
   ctx: MutationCtx,
   target: Readonly<{ credentialRef?: string; principalRef?: string }>,
   reason: string,
@@ -1660,12 +1672,12 @@ export type AgentPrincipalAdmission =
 async function verifyAgentPrincipalForScope(
   ctx: Pick<MutationCtx | QueryCtx, 'db'>,
   principal: AgentAccessPrincipalValue,
-  requiredScope: typeof MARKET_OPERATIONS_INVOKE_SCOPE | typeof MARKET_SUPPLY_MANAGE_SCOPE,
-  requireMandate = false,
+  requiredScope: typeof MARKET_TOOLS_CALL_SCOPE | typeof MARKET_SUPPLY_MANAGE_SCOPE,
+  requireSpendingPolicy = false,
 ): Promise<AgentPrincipalAdmission> {
   if (!principal.scopes.includes(requiredScope)
-    || (principal.environment === 'production' && principal.authorityMode === 'full_yolo')
-    || (requireMandate && principal.authorityMode !== 'bounded_mandate' && principal.authorityMode !== 'full_yolo')) {
+    || (principal.environment === 'production' && principal.authorityMode === 'unrestricted_test_only')
+    || (requireSpendingPolicy && principal.authorityMode !== 'spending_policy' && principal.authorityMode !== 'unrestricted_test_only')) {
     return { kind: 'refused', reason: 'authorization_denied' }
   }
   const stored = await ctx.db.query('agentAccessPrincipals')
@@ -1701,7 +1713,7 @@ async function verifyAgentPrincipalForScope(
     && candidate.applicationRef === stored.applicationRef
     && candidate.authorityMode === stored.authorityMode
     && candidate.generation === stored.grantGeneration
-    && candidate.policyDigest === stored.policyDigest
+    && candidate.spendingPolicyDigest === stored.spendingPolicyDigest
     && candidate.expiresAt > Date.now())
   return grant === undefined
     ? { kind: 'refused', reason: 'authorization_denied' }
@@ -1718,16 +1730,16 @@ export type AgentSupplyPrincipalAdmission = AgentPrincipalAdmission
 export async function verifySupplyAgentPrincipal(
   ctx: Pick<MutationCtx | QueryCtx, 'db'>,
   principal: AgentAccessPrincipalValue,
-  requireMandate = false,
+  requireSpendingPolicy = false,
 ): Promise<AgentPrincipalAdmission> {
-  return await verifyAgentPrincipalForScope(ctx, principal, MARKET_SUPPLY_MANAGE_SCOPE, requireMandate)
+  return await verifyAgentPrincipalForScope(ctx, principal, MARKET_SUPPLY_MANAGE_SCOPE, requireSpendingPolicy)
 }
 
 export async function verifyMarketAgentPrincipal(
   ctx: Pick<MutationCtx | QueryCtx, 'db'>,
   principal: AgentAccessPrincipalValue,
 ): Promise<AgentPrincipalAdmission> {
-  return await verifyAgentPrincipalForScope(ctx, principal, MARKET_OPERATIONS_INVOKE_SCOPE)
+  return await verifyAgentPrincipalForScope(ctx, principal, MARKET_TOOLS_CALL_SCOPE)
 }
 
 export const recordAgentPrincipal = internalMutation({
@@ -1774,6 +1786,12 @@ export const registerAgentPrincipal = mutation({
     if (grants.length !== 1) return { kind: 'conflict' as const }
     const [grant] = grants
     if (grant === undefined) return { kind: 'conflict' as const }
+    let normalizedGrant: ReturnType<typeof normalizeStoredAgentAccessGrant>
+    try {
+      normalizedGrant = normalizeStoredAgentAccessGrant(grant)
+    } catch {
+      return { kind: 'conflict' as const }
+    }
     const delegation = await ctx.db.query('authorityDelegationGrants')
       .withIndex('by_grantRef', (query) => query.eq('grantRef', grant.grantRef))
       .take(2)
@@ -1786,7 +1804,7 @@ export const registerAgentPrincipal = mutation({
       principalRef: canonical.principalRef,
       accountRef: canonical.accountRef,
       grantRef: grant.grantRef,
-      grantGeneration: grant.generation,
+      grantGeneration: normalizedGrant.generation,
       requiredScopes: delegationGrant.scopes,
       resourceRefs: delegationGrant.resourceRefs,
       now,
@@ -1797,15 +1815,15 @@ export const registerAgentPrincipal = mutation({
       || args.credentialId !== canonical.credentialLocator
       || args.applicationRef !== grant.applicationRef
       || args.environment !== grant.environment
-      || args.authorityMode !== grant.authorityMode
-      || args.grantGeneration !== grant.generation
-      || args.policyDigest !== grant.policyDigest
-      || args.lifecycle !== grant.lifecycle
-      || args.expiresAt !== grant.expiresAt
+      || args.authorityMode !== normalizedGrant.authorityMode
+      || args.grantGeneration !== normalizedGrant.generation
+      || args.spendingPolicyDigest !== normalizedGrant.spendingPolicyDigest
+      || args.lifecycle !== normalizedGrant.lifecycle
+      || args.expiresAt !== normalizedGrant.expiresAt
       || grant.principalId !== canonical.principalRef
       || grant.ownerId !== canonical.accountRef
       || grant.credentialId !== canonical.credentialLocator
-      || grant.expiresAt > canonical.credentialExpiresAt
+      || normalizedGrant.expiresAt > canonical.credentialExpiresAt
       || expectedScopes.length !== liveDelegation.scopes.length
       || expectedScopes.some((scope, index) => scope !== liveDelegation.scopes[index])) {
       return { kind: 'conflict' as const }
@@ -1817,11 +1835,11 @@ export const registerAgentPrincipal = mutation({
       applicationRef: grant.applicationRef,
       environment: grant.environment,
       scopes: uniqueSorted(args.scopes),
-      authorityMode: grant.authorityMode,
-      grantGeneration: grant.generation,
-      policyDigest: grant.policyDigest,
-      lifecycle: grant.lifecycle,
-      expiresAt: grant.expiresAt,
+      authorityMode: normalizedGrant.authorityMode,
+      grantGeneration: normalizedGrant.generation,
+      spendingPolicyDigest: normalizedGrant.spendingPolicyDigest,
+      lifecycle: normalizedGrant.lifecycle,
+      expiresAt: normalizedGrant.expiresAt,
       seenAt: now,
       ownerTokenIdentifier: identity.tokenIdentifier,
     })
@@ -1839,14 +1857,14 @@ export const getAgentPrincipal = internalQuery({
     scopes: v.array(v.string()),
     authorityMode,
     grantGeneration: v.number(),
-    policyDigest: v.string(),
+    spendingPolicyDigest: v.string(),
     lifecycle,
     expiresAt: v.optional(v.number()),
   }), v.null()),
   handler: async (ctx, args) => {
     const row = await ctx.db.query('agentAccessPrincipals')
       .withIndex('by_principalId', (query) => query.eq('principalId', args.principalId)).unique()
-    return row === null || (row.environment === 'production' && row.authorityMode === 'full_yolo') ? null : {
+    return row === null || (row.environment === 'production' && row.authorityMode === 'unrestricted_test_only') ? null : {
       principalId: row.principalId,
       ownerId: row.ownerId,
       ...(row.ownerTokenIdentifier === undefined ? {} : { ownerTokenIdentifier: row.ownerTokenIdentifier }),
@@ -1856,7 +1874,7 @@ export const getAgentPrincipal = internalQuery({
       scopes: row.scopes,
       authorityMode: row.authorityMode,
       grantGeneration: row.grantGeneration,
-      policyDigest: row.policyDigest,
+      spendingPolicyDigest: row.spendingPolicyDigest,
       lifecycle: row.lifecycle,
       ...(row.expiresAt === undefined ? {} : { expiresAt: row.expiresAt }),
     }

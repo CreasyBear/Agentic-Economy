@@ -1,5 +1,5 @@
-import { operationInvokeRecoveryResultSchema, operationCancelInputSchema } from '@/modules/capability-execution/operation-recovery.actions'
-import { OPERATION_INVOKE_ROUTE_CONTRACT } from '@/modules/capability-execution/operation-invoke-entry'
+import { callRecoveryResultSchema, callCancelInputSchema } from '@/modules/capability-execution/call-recovery.actions'
+import { CALL_ROUTE_CONTRACT } from '@/modules/capability-execution/call-entry'
 
 import type { CliOptions } from '../lib/args'
 import { CliFailure, callJson, requireOk } from '../lib/output'
@@ -10,21 +10,21 @@ import {
   requireAgentAccessKey,
 } from './status'
 
-function cancelPath(invocationRef: string): string {
-  return OPERATION_INVOKE_ROUTE_CONTRACT.cancel.path.replace(
-    '{invocationRef}',
-    encodeURIComponent(invocationRef),
+function cancelPath(callRef: string): string {
+  return CALL_ROUTE_CONTRACT.cancel.path.replace(
+    '{callRef}',
+    encodeURIComponent(callRef),
   )
 }
 
 export async function runCancelCommand(args: readonly string[], options: CliOptions): Promise<void> {
-  const invocationRef = args[0]?.trim()
-  if (invocationRef === undefined || invocationRef.length === 0 || args.length > 1) {
+  const callRef = args[0]?.trim()
+  if (callRef === undefined || callRef.length === 0 || args.length > 1) {
     throw usageFailure('cancel', 'cancel-usage')
   }
   const apiKey = requireAgentAccessKey('cancel', options)
   const idempotencyKey = options.idempotencyKey?.trim()
-  const parsedInput = operationCancelInputSchema.safeParse({ invocationRef, idempotencyKey })
+  const parsedInput = callCancelInputSchema.safeParse({ callRef, idempotencyKey })
   if (!parsedInput.success) {
     throw new CliFailure('Cancel requires --idempotency-key with a bounded stable command identity.', {
       kind: 'INVALID_ARGUMENT',
@@ -32,11 +32,11 @@ export async function runCancelCommand(args: readonly string[], options: CliOpti
     })
   }
 
-  const path = cancelPath(parsedInput.data.invocationRef)
+  const path = cancelPath(parsedInput.data.callRef)
   let outcome
   try {
     outcome = await callJson(options.baseUrl, path, {
-      method: OPERATION_INVOKE_ROUTE_CONTRACT.cancel.method,
+      method: CALL_ROUTE_CONTRACT.cancel.method,
       headers: {
         Authorization: `Bearer ${apiKey}`,
       },
@@ -44,21 +44,21 @@ export async function runCancelCommand(args: readonly string[], options: CliOpti
     })
   } catch (error) {
     if (error instanceof CliFailure) throw error
-    throw recoveryTransportFailure('cancel', parsedInput.data.invocationRef, parsedInput.data.idempotencyKey)
+    throw recoveryTransportFailure('cancel', parsedInput.data.callRef, parsedInput.data.idempotencyKey)
   }
   let resultBody: unknown
   try {
-    resultBody = requireOk(outcome, 'operation cancellation')
+    resultBody = requireOk(outcome, 'Call cancellation')
   } catch (error) {
     if (error instanceof CliFailure && error.kind !== 'UNAVAILABLE') throw error
-    throw recoveryTransportFailure('cancel', parsedInput.data.invocationRef, parsedInput.data.idempotencyKey)
+    throw recoveryTransportFailure('cancel', parsedInput.data.callRef, parsedInput.data.idempotencyKey)
   }
-  const parsedResult = operationInvokeRecoveryResultSchema.safeParse(resultBody)
+  const parsedResult = callRecoveryResultSchema.safeParse(resultBody)
   if (!parsedResult.success) {
     throw new CliFailure('The gateway returned an invalid cancellation result.', {
       kind: 'UNAVAILABLE',
-      code: 'operation-cancel-result-invalid',
+      code: 'call-cancel-result-invalid',
     })
   }
-  renderStatusResult('Operation cancellation', parsedInput.data.invocationRef, parsedResult.data, options)
+  renderStatusResult('Call cancellation', parsedInput.data.callRef, parsedResult.data, options)
 }

@@ -11,7 +11,7 @@ const routeState = vi.hoisted(() => {
   const state = {
     HomeComponent: null as (() => ReactNode) | null,
     search: { q: undefined as string | undefined },
-    loaderData: { read: { kind: 'ok' as const, operations: [], matchedCount: 0 }, canonicalBaseUrl: 'https://ae.example' },
+    loaderData: { read: { kind: 'ok' as const, tools: [], matchedCount: 0 }, canonicalBaseUrl: 'https://ae.example' },
     navigate: vi.fn(async () => undefined),
   }
   return state
@@ -50,7 +50,7 @@ describe('catalogue-first home', () => {
     cleanup()
     routeState.search = { q: undefined }
     routeState.navigate.mockClear()
-    routeState.loaderData = { read: { kind: 'ok', operations: [], matchedCount: 0 }, canonicalBaseUrl: 'https://ae.example' }
+    routeState.loaderData = { read: { kind: 'ok', tools: [], matchedCount: 0 }, canonicalBaseUrl: 'https://ae.example' }
   })
 
   it('leads with the tool market and an agent instruction, with no network work', () => {
@@ -67,7 +67,7 @@ describe('catalogue-first home', () => {
     expect(screen.queryByText('Install Agentic Economy and verify it in this coding agent.')).toBeNull()
     expect(screen.queryByText(/Claude Code/)).toBeNull()
     expect(document.querySelector('[data-slot="ae-site-browser"]')?.textContent).toContain('/llms.txt')
-    expect(screen.getAllByRole('link', { name: 'Browse Operations' }).length).toBeGreaterThan(0)
+    expect(screen.getAllByRole('link', { name: 'Browse Tools' }).length).toBeGreaterThan(0)
     expect(screen.getByRole('heading', { name: HOME.catalogHeading })).toBeTruthy()
     expect(screen.getByText(HOME.catalogEmpty)).toBeTruthy()
     expect(screen.queryByRole('heading', { name: 'One connection.' })).toBeNull()
@@ -85,7 +85,7 @@ describe('catalogue-first home', () => {
 
     const catalog = document.querySelector('#home-catalog')
     expect(catalog).not.toBeNull()
-    const browse = screen.getAllByRole('link', { name: 'Browse Operations' })
+    const browse = screen.getAllByRole('link', { name: 'Browse Tools' })
     expect(browse.some((link) => catalog?.contains(link) && link.getAttribute('href')?.startsWith('/market'))).toBe(true)
     const hero = document.querySelector('#home-hero')?.closest('section')
     expect(browse.some((link) => hero?.contains(link))).toBe(true)

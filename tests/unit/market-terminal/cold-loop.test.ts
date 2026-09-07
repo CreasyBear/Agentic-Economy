@@ -9,29 +9,30 @@ import { runDescribeCommand } from '../../../tools/ae/commands/describe'
 import { runListCommand } from '../../../tools/ae/commands/list'
 import { runSearchCommand } from '../../../tools/ae/commands/search'
 import { runStatusCommand } from '../../../tools/ae/commands/status'
-import { runInvokeCommand } from '../../../tools/ae/commands/invoke'
+import { runCallCommand } from '../../../tools/ae/commands/call'
 import { parseArgs, type CliOptions } from '../../../tools/ae/lib/args'
 import { CliFailure } from '../../../tools/ae/lib/output'
 import { storeConnection } from '../../../tools/ae/lib/config'
-import { OPERATION_INVOKE_ROUTE_CONTRACT } from '@/modules/capability-execution/operation-invoke-entry'
-import { projectOperationDescription, projectOperationListChoices, projectOperationSearchChoices } from '@/modules/registry/operation-choice-contracts'
-import { operationDetailOutputSchema, operationSearchOutputSchema } from '@/modules/capability-supply/public'
+import { CALL_ROUTE_CONTRACT } from '@/modules/capability-execution/call-entry'
+import { TOOL_QUOTE_PATH } from '@/modules/capability-execution/quote'
+import { projectToolDescription, projectToolListChoices, projectToolSearchChoices } from '@/modules/registry/tool-choice-contracts'
+import { toolDetailOutputSchema, toolSearchOutputSchema } from '@/modules/capability-supply/public'
 
-type OperationDescriptorFixture = Readonly<{ operationRef: string; [key: string]: unknown }>
+type ToolDescriptorFixture = Readonly<{ toolRef: string; [key: string]: unknown }>
 const CURRENT_OPERATION_REF = `operation:v1:${'d'.repeat(64)}`
 const CURRENT_COMMITMENT_REF = `operation-commitment:v1:${'e'.repeat(64)}`
 
 const SEARCH_ITEM_NAVIGATION = [
-  { relation: 'describe', pathTemplate: '/api/v1/market-operations/describe', method: 'POST', actionId: 'registry.operations.describe', authentication: 'none' },
-  { relation: 'compare', pathTemplate: '/api/v1/market-operations/compare', method: 'POST', actionId: 'registry.operations.compare', authentication: 'none' },
-  { relation: 'invoke', pathTemplate: '/api/v1/operations/call', method: 'POST', actionId: 'operations.invoke', authentication: 'required' },
-  { relation: 'authenticate', pathTemplate: '/oauth/device/code', method: 'POST', actionId: 'agent-access.device-code', authentication: 'none' },
+  { relation: 'describe', pathTemplate: '/api/v1/market-tools/describe', method: 'POST', actionId: 'registry.tools.describe', authentication: 'none' },
+  { relation: 'compare', pathTemplate: '/api/v1/market-tools/compare', method: 'POST', actionId: 'registry.tools.compare', authentication: 'none' },
+  { relation: 'call', pathTemplate: '/api/v1/tools/quote', method: 'POST', actionId: 'tool.quote', authentication: 'required' },
+  { relation: 'review_route', pathTemplate: '/agent-access', method: 'GET', actionId: 'agentAccess.review', authentication: 'required' },
 ] as const
 
-function operationDescriptor(operationRef: string, summary = 'Current reference lookup') {
+function operationDescriptor(toolRef: string, summary = 'Current reference lookup') {
   return {
-    operationRef,
-    callVia: OPERATION_INVOKE_ROUTE_CONTRACT.invoke.path,
+    toolRef,
+    callVia: CALL_ROUTE_CONTRACT.call.path,
     paymentLane: 'brokered',
     operationId: 'reference.lookup',
     contract: {
@@ -66,15 +67,15 @@ function operationDescriptor(operationRef: string, summary = 'Current reference 
   }
 }
 
-function operationSearchResult(query: string, operations: readonly OperationDescriptorFixture[]) {
-  return projectOperationSearchChoices(operationSearchOutputSchema.parse({
+function operationSearchResult(query: string, operations: readonly ToolDescriptorFixture[]) {
+  return projectToolSearchChoices(toolSearchOutputSchema.parse({
     kind: 'ok' as const,
-    schemaVersion: 'registry-operations:v1' as const,
+    schemaVersion: 'registry-tools:v1' as const,
     query,
     items: operations,
     matchedCount: operations.length,
     ranking: operations.map((operation, index) => ({
-      operationRef: operation.operationRef,
+      toolRef: operation.toolRef,
       rank: index + 1,
       score: operations.length - index,
     })),
@@ -83,23 +84,23 @@ function operationSearchResult(query: string, operations: readonly OperationDesc
   }))
 }
 
-function operationDetailResult(operation: OperationDescriptorFixture) {
-  return projectOperationDescription(operationDetailOutputSchema.parse({
+function operationDetailResult(operation: ToolDescriptorFixture) {
+  return projectToolDescription(toolDetailOutputSchema.parse({
     kind: 'found' as const,
-    schemaVersion: 'registry-operations:v1' as const,
-    operation,
+    schemaVersion: 'registry-tools:v1' as const,
+    tool: operation,
   }))
 }
 
-function operationListResult(operations: readonly OperationDescriptorFixture[]) {
-  return projectOperationListChoices(operationSearchOutputSchema.parse({
+function operationListResult(operations: readonly ToolDescriptorFixture[]) {
+  return projectToolListChoices(toolSearchOutputSchema.parse({
     kind: 'ok' as const,
-    schemaVersion: 'registry-operations:v1' as const,
+    schemaVersion: 'registry-tools:v1' as const,
     query: '',
     items: operations,
     matchedCount: operations.length,
     ranking: operations.map((operation, index) => ({
-      operationRef: operation.operationRef,
+      toolRef: operation.toolRef,
       rank: index + 1,
       score: operations.length - index,
     })),
@@ -123,21 +124,21 @@ function connectedAccount() {
     credentialId: 'credential:buyer',
     applicationRef: 'agentic-economy',
     environment: 'sandbox' as const,
-    scopes: ['market_operations:invoke', 'customer_requests:bounded_mandate'],
-    authorityMode: 'bounded_mandate' as const,
+    scopes: ['market_tools:call', 'customer_requests:spending_policy'],
+    authorityMode: 'spending_policy' as const,
   }
 }
 
 function operationInspection(
-  operationRef: string,
+  toolRef: string,
   input: Record<string, unknown>,
   commitmentRef = CURRENT_COMMITMENT_REF,
 ) {
   return {
     kind: 'committed',
-    commitmentRef,
-    operationRef,
-    operationRevision: 1,
+    quoteRef: commitmentRef,
+    toolRef,
+    toolVersion: 1,
     expiresAt: 1_900_000_000_000,
     normalizedInput: input,
     price: { currency: 'AUD', units: '1000000', exponent: 6 },
@@ -147,15 +148,15 @@ function operationInspection(
     },
     budget: {
       principalRef: 'principal:cold-loop',
-      maximumPerInvocation: { currency: 'AUD', units: '5000000', exponent: 6 },
+      maximumPerCall: { currency: 'AUD', units: '5000000', exponent: 6 },
     },
     policyRefs: ['commercial-policy:sandbox'],
     evidenceDigest: 'sha256:inspection',
     continuation: {
-      action: 'operation.invoke',
+      action: 'tool.call',
       method: 'POST',
-      path: '/api/v1/operations/call',
-      input: { commitmentRef, idempotencyKey: 'replace-at-invocation' },
+      path: '/api/v1/tools/call',
+      input: { quoteRef: commitmentRef, idempotencyKey: 'replace-at-call' },
     },
   }
 }
@@ -205,7 +206,7 @@ afterEach(() => {
   rmSync(testConfigDirectory, { recursive: true, force: true })
 })
 
-describe('external-agent Market Operation cold loop', () => {
+describe('external-agent Market Tool cold loop', () => {
   it('searches anonymously over the public Operation route', async () => {
     const operationRef = `operation:v1:${'c'.repeat(64)}`
     const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify(
@@ -216,15 +217,15 @@ describe('external-agent Market Operation cold loop', () => {
     await runSearchCommand(['extract invoices'], options)
 
     const [url, init] = fetchMock.mock.calls[0]!
-    expect(url).toBe('https://market.example/api/v1/market-operations/search')
+    expect(url).toBe('https://market.example/api/v1/market-tools/search')
     expect(init?.method).toBe('POST')
     expect(new Headers(init?.headers).get('Authorization')).toBeNull()
     expect(JSON.parse(String(init?.body))).toEqual({ query: 'extract invoices', limit: 10 })
   })
   it('gives empty search results private demand memory plus a safe browse fallback', async () => {
-    const result = projectOperationSearchChoices(operationSearchOutputSchema.parse({
+    const result = projectToolSearchChoices(toolSearchOutputSchema.parse({
       kind: 'no_candidates',
-      schemaVersion: 'registry-operations:v1',
+      schemaVersion: 'registry-tools:v1',
       query: 'invoice extraction',
       appliedFilters: {},
       matchedCount: 0,
@@ -252,7 +253,7 @@ describe('external-agent Market Operation cold loop', () => {
     } finally {
       humanOutput.restore()
     }
-    expect(humanOutput.read()).toContain('No current Operations match this job.')
+    expect(humanOutput.read()).toContain('No current Tools match this job.')
     expect(humanOutput.read()).toContain("Remember this missing job: ae request create 'invoice extraction'")
     expect(humanOutput.read()).toContain('Browse all: ae list')
     expect(humanOutput.read()).toContain('https://market.example/market')
@@ -288,11 +289,11 @@ describe('external-agent Market Operation cold loop', () => {
     } finally {
       filteredHumanOutput.restore()
     }
-    expect(filteredHumanOutput.read()).toContain('No current Operations match these filters.')
+    expect(filteredHumanOutput.read()).toContain('No current Tools match these filters.')
     expect(filteredHumanOutput.read()).toContain('Browse matching filters: ae list --filters \'{"healthStatus":["degraded"]}\'')
     expect(filteredHumanOutput.read()).not.toContain('Remember this missing job')
   })
-  it('browses all current Operations when no job is supplied', async () => {
+  it('browses all current Tools when no job is supplied', async () => {
     const operationRef = `operation:v1:${'b'.repeat(64)}`
     const result = operationListResult([operationDescriptor(operationRef)])
     const output = captureStdout()
@@ -305,9 +306,9 @@ describe('external-agent Market Operation cold loop', () => {
       output.restore()
     }
 
-    expect(fetchMock.mock.calls[0]?.[0]).toBe('https://market.example/api/v1/market-operations/list')
+    expect(fetchMock.mock.calls[0]?.[0]).toBe('https://market.example/api/v1/market-tools/list')
     expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({ limit: 50 })
-    expect(output.read()).toContain('Current Operations')
+    expect(output.read()).toContain('Current Tools')
   })
   it('rejects a malformed successful search body with a safe CLI error', async () => {
     const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
@@ -319,7 +320,7 @@ describe('external-agent Market Operation cold loop', () => {
 
     await expect(runSearchCommand(['extract invoices'], options)).rejects.toMatchObject({
       kind: 'UNAVAILABLE',
-      code: 'operation-search-result-invalid',
+      code: 'tool-search-result-invalid',
     } satisfies Partial<CliFailure>)
   })
 
@@ -386,8 +387,7 @@ describe('external-agent Market Operation cold loop', () => {
     }
 
     expect(defaultSerialized).toBe(`${JSON.stringify(expectedDefault, undefined, 2)}\n`)
-    expect(defaultResult.items.map((item) => item.operationRef)).toEqual(operationRefs)
-    expect(defaultResult.items.every((item) => !('navigation' in item))).toBe(true)
+    expect(defaultResult.items.map((item) => item.toolRef)).toEqual(operationRefs)
 
     const technicalOutput = captureStdout()
     try {
@@ -450,7 +450,7 @@ describe('external-agent Market Operation cold loop', () => {
     })
   })
 
-  it('describes one exact operation anonymously', async () => {
+  it('describes one exact Tool anonymously', async () => {
     const operationRef = `operation:v1:${'a'.repeat(64)}`
     const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify(
       operationDetailResult(operationDescriptor(operationRef, 'Extract invoices')),
@@ -466,9 +466,9 @@ describe('external-agent Market Operation cold loop', () => {
 
     expect(JSON.parse(output.read())).toMatchObject({
       kind: 'found',
-      schemaVersion: 'registry-operations:v2',
-      operation: {
-        operationRef,
+      schemaVersion: 'registry-tools:v2',
+      tool: {
+        toolRef: operationRef,
         capabilityId: 'reference.lookup',
         description: 'Extract invoices',
         provider: { name: 'Reference Services', slug: 'reference' },
@@ -479,10 +479,10 @@ describe('external-agent Market Operation cold loop', () => {
     expect(JSON.parse(output.read())).not.toHaveProperty('nextCommand')
 
     const [url, init] = fetchMock.mock.calls[0]!
-    expect(url).toBe('https://market.example/api/v1/market-operations/describe')
+    expect(url).toBe('https://market.example/api/v1/market-tools/describe')
     expect(init?.method).toBe('POST')
     expect(new Headers(init?.headers).get('Authorization')).toBeNull()
-    expect(JSON.parse(String(init?.body))).toEqual({ operationRef })
+    expect(JSON.parse(String(init?.body))).toEqual({ toolRef: operationRef })
   })
 
   it('keeps describe output canonical and free of duplicated source navigation', async () => {
@@ -512,9 +512,9 @@ describe('external-agent Market Operation cold loop', () => {
       defaultOutput.restore()
     }
     const defaultSerialized = defaultOutput.read()
-    const defaultResult = JSON.parse(defaultSerialized) as { operation: Record<string, unknown> }
-    expect(defaultResult.operation).not.toHaveProperty('navigation')
-    expect(defaultResult.operation).toHaveProperty('inputJsonSchema')
+    const defaultResult = JSON.parse(defaultSerialized) as { tool: Record<string, unknown> }
+    expect(defaultResult.tool).not.toHaveProperty('navigation')
+    expect(defaultResult.tool).toHaveProperty('inputJsonSchema')
     expect(defaultResult).not.toHaveProperty('nextCommand')
 
     const technicalOutput = captureStdout()
@@ -545,7 +545,7 @@ describe('external-agent Market Operation cold loop', () => {
     }
 
     expect(output.read()).toContain('health: operational')
-    expect(output.read()).toContain('Next: use operation.inspect from your connected agent client.')
+    expect(output.read()).toContain('Next: use tool.quote from your connected agent client.')
     expect(output.read()).not.toContain('ae call')
     expect(fetchMock).toHaveBeenCalledTimes(1)
   })
@@ -554,37 +554,37 @@ describe('external-agent Market Operation cold loop', () => {
     const operationRef = `operation:v1:${'e'.repeat(64)}`
     const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
       kind: 'found',
-      operation: { operationRef },
+      tool: { toolRef: operationRef },
     }), { status: 200, headers: { 'content-type': 'application/json' } }))
     vi.stubGlobal('fetch', fetchMock)
 
     await expect(runDescribeCommand([operationRef], options)).rejects.toMatchObject({
       kind: 'UNAVAILABLE',
-      code: 'operation-describe-result-invalid',
+      code: 'tool-describe-result-invalid',
     } satisfies Partial<CliFailure>)
   })
 
-  it('rejects a non-canonical OperationRef before network work', async () => {
+  it('rejects a non-canonical Tool reference before network work', async () => {
     const fetchMock = vi.fn<typeof fetch>()
     vi.stubGlobal('fetch', fetchMock)
 
     await expect(runDescribeCommand(['operation:v1:current'], options)).rejects.toMatchObject({
       kind: 'INVALID_ARGUMENT',
-      code: 'operation-ref-invalid',
+      code: 'tool-ref-invalid',
     } satisfies Partial<CliFailure>)
     expect(fetchMock).not.toHaveBeenCalled()
   })
-  it('completes the anonymous-to-authenticated operation lifecycle with durable replay', async () => {
-    const operationRef = `operation:v1:${'a'.repeat(64)}`
-    const comparisonRef = `operation:v1:${'b'.repeat(64)}`
-    const invocationRef = `invocation:v1:${'c'.repeat(64)}`
+  it('completes the anonymous-to-authenticated Tool lifecycle with durable replay', async () => {
+    const toolRef = `operation:v1:${'a'.repeat(64)}`
+    const comparisonToolRef = `operation:v1:${'b'.repeat(64)}`
+    const callRef = `invocation:v1:${'c'.repeat(64)}`
     const idempotencyKey = 'cold-loop-idempotency'
     const initialInput = { query: 'bitcoin price' }
     const changedInput = { query: 'ethereum price' }
     const completedResult = {
       kind: 'completed' as const,
-      invocationRef,
-      operationRef,
+      callRef,
+      toolRef,
       output: { value: 42, currency: 'USD' },
       evidenceHash: 'sha256:cold-loop-effect',
       usage: {
@@ -597,8 +597,8 @@ describe('external-agent Market Operation cold loop', () => {
     }
     const unavailableRead = {
       kind: 'unavailable' as const,
-      schemaVersion: 'registry-operations:v2' as const,
-      reason: 'operation_not_found' as const,
+      schemaVersion: 'registry-tools:v2' as const,
+      reason: 'tool_not_found' as const,
     }
     const requests: Array<{
       url: string
@@ -606,13 +606,13 @@ describe('external-agent Market Operation cold loop', () => {
       authorization: string | null
       body: unknown
     }> = []
-    const durableInvocations = new Map<string, {
-      operationRef: string
+    const durableCalls = new Map<string, {
+      toolRef: string
       input: Record<string, unknown>
       result: typeof completedResult
     }>()
-    const commitments = new Map<string, {
-      operationRef: string
+    const quotes = new Map<string, {
+      toolRef: string
       input: Record<string, unknown>
     }>()
     let providerEffects = 0
@@ -627,45 +627,43 @@ describe('external-agent Market Operation cold loop', () => {
       requests.push({ url, method, authorization, body })
       const route = new URL(url).pathname
 
-      if (route === '/api/v1/market-operations/search') {
+      if (route === '/api/v1/market-tools/search') {
         return jsonResponse(operationSearchResult('bitcoin price', [
-          operationDescriptor(operationRef, 'Current bitcoin price'),
-          operationDescriptor(comparisonRef, 'Comparison bitcoin price'),
+          operationDescriptor(toolRef, 'Current bitcoin price'),
+          operationDescriptor(comparisonToolRef, 'Comparison bitcoin price'),
         ]))
       }
-      if (route === '/api/v1/market-operations/describe') {
-        return jsonResponse(operationDetailResult(operationDescriptor(operationRef, 'Current bitcoin price')))
+      if (route === '/api/v1/market-tools/describe') {
+        return jsonResponse(operationDetailResult(operationDescriptor(toolRef, 'Current bitcoin price')))
       }
-      if (
-        route === '/api/v1/market-operations/compare'
-      ) {
+      if (route === '/api/v1/market-tools/compare') {
         return jsonResponse(unavailableRead)
       }
-      if (route === '/api/v1/operations/inspect') {
+      if (route === TOOL_QUOTE_PATH) {
         if (authorization !== 'Bearer ae-test-caller-key') {
-          throw new Error('inspect must be authenticated')
+          throw new Error('quote must be authenticated')
         }
-        const request = body as { operationRef: string; input: Record<string, unknown> }
+        const request = body as { toolRef: string; input: Record<string, unknown> }
         const commitmentRef = JSON.stringify(request.input) === JSON.stringify(initialInput)
           ? `operation-commitment:v1:${'1'.repeat(64)}`
           : `operation-commitment:v1:${'2'.repeat(64)}`
-        commitments.set(commitmentRef, request)
-        return jsonResponse(operationInspection(request.operationRef, request.input, commitmentRef))
+        quotes.set(commitmentRef, request)
+        return jsonResponse(operationInspection(request.toolRef, request.input, commitmentRef))
       }
-      if (route === '/api/v1/operations/call') {
+      if (route === CALL_ROUTE_CONTRACT.call.path) {
         if (authorization !== 'Bearer ae-test-caller-key') {
-          throw new Error('invoke must be authenticated')
+          throw new Error('call must be authenticated')
         }
         const request = body as {
-          commitmentRef: string
+          quoteRef: string
           idempotencyKey: string
         }
-        const committed = commitments.get(request.commitmentRef)
-        if (committed === undefined) throw new Error('invoke without inspection commitment')
-        const existing = durableInvocations.get(request.idempotencyKey)
+        const committed = quotes.get(request.quoteRef)
+        if (committed === undefined) throw new Error('call without quote')
+        const existing = durableCalls.get(request.idempotencyKey)
         if (existing !== undefined) {
           if (
-            existing.operationRef !== committed.operationRef
+            existing.toolRef !== committed.toolRef
             || JSON.stringify(existing.input) !== JSON.stringify(committed.input)
           ) {
             return jsonResponse({
@@ -682,29 +680,29 @@ describe('external-agent Market Operation cold loop', () => {
         }
 
         providerEffects += 1
-        durableInvocations.set(request.idempotencyKey, {
-          operationRef: committed.operationRef,
+        durableCalls.set(request.idempotencyKey, {
+          toolRef: committed.toolRef,
           input: committed.input,
           result: completedResult,
         })
         return jsonResponse({
           kind: 'pending',
-          invocationRef,
-          operationRef: committed.operationRef,
+          callRef,
+          toolRef: committed.toolRef,
           retryAfterMs: 100,
         })
       }
-      if (route === `/api/v1/operations/${encodeURIComponent(invocationRef)}`) {
+      if (route === `/api/v1/calls/${encodeURIComponent(callRef)}`) {
         if (authorization !== 'Bearer ae-test-caller-key') {
           throw new Error('status must be authenticated')
         }
-        const existing = durableInvocations.get(idempotencyKey)
-        if (existing === undefined) throw new Error('status read before invocation')
+        const existing = durableCalls.get(idempotencyKey)
+        if (existing === undefined) throw new Error('status read before call')
         return jsonResponse({
           kind: 'found',
-          invocationRef,
+          callRef,
           version: 1,
-          operationRef,
+          toolRef,
           state: 'terminal',
           evidenceHash: existing.result.evidenceHash,
           result: existing.result,
@@ -720,12 +718,12 @@ describe('external-agent Market Operation cold loop', () => {
     vi.stubGlobal('fetch', fetchMock)
 
     await runSearchCommand(['bitcoin', 'price'], options)
-    await runDescribeCommand([operationRef], options)
+    await runDescribeCommand([toolRef], options)
     await expect(
-      runCompareCommand([operationRef, comparisonRef], options),
+      runCompareCommand([toolRef, comparisonToolRef], options),
     ).rejects.toMatchObject({
       kind: 'NOT_FOUND',
-      code: 'operation_not_found',
+      code: 'tool_not_found',
       exitCode: 1,
     } satisfies Partial<CliFailure>)
     setApiKey('ae-test-caller-key')
@@ -735,31 +733,31 @@ describe('external-agent Market Operation cold loop', () => {
       await run()
       return JSON.parse(writes.slice(start).join('')) as Record<string, unknown>
     }
-    const pending = await readJsonOutput(() => runInvokeCommand(
-      [operationRef],
+    const pending = await readJsonOutput(() => runCallCommand(
+      [toolRef],
       { ...invokeOptions, input: JSON.stringify(initialInput) },
     ))
-    expect(pending).toMatchObject({ kind: 'pending', invocationRef, operationRef })
+    expect(pending).toMatchObject({ kind: 'pending', callRef, toolRef })
     expect(pending).not.toHaveProperty('idempotencyKey')
 
-    const status = await readJsonOutput(() => runStatusCommand([invocationRef], invokeOptions))
+    const status = await readJsonOutput(() => runStatusCommand([callRef], invokeOptions))
     expect(status).toMatchObject({
       kind: 'found',
-      invocationRef,
-      operationRef,
+      callRef,
+      toolRef,
       state: 'terminal',
       result: completedResult,
     })
 
-    const replay = await readJsonOutput(() => runInvokeCommand(
-      [operationRef],
+    const replay = await readJsonOutput(() => runCallCommand(
+      [toolRef],
       { ...invokeOptions, input: JSON.stringify(initialInput) },
     ))
     expect(replay).toEqual(completedResult)
     expect(status.result).toEqual(completedResult)
 
-    await expect(runInvokeCommand(
-      [operationRef],
+    await expect(runCallCommand(
+      [toolRef],
       { ...invokeOptions, input: JSON.stringify(changedInput) },
     )).rejects.toMatchObject({
       kind: 'ALREADY_EXISTS',
@@ -768,16 +766,16 @@ describe('external-agent Market Operation cold loop', () => {
 
     expect(providerEffects).toBe(1)
     expect(requests.map(({ method, url }) => ({ method, url }))).toEqual([
-      { method: 'POST', url: 'https://market.example/api/v1/market-operations/search' },
-      { method: 'POST', url: 'https://market.example/api/v1/market-operations/describe' },
-      { method: 'POST', url: 'https://market.example/api/v1/market-operations/compare' },
-      { method: 'POST', url: 'https://market.example/api/v1/operations/inspect' },
-      { method: 'POST', url: 'https://market.example/api/v1/operations/call' },
-      { method: 'GET', url: `https://market.example/api/v1/operations/${encodeURIComponent(invocationRef)}` },
-      { method: 'POST', url: 'https://market.example/api/v1/operations/inspect' },
-      { method: 'POST', url: 'https://market.example/api/v1/operations/call' },
-      { method: 'POST', url: 'https://market.example/api/v1/operations/inspect' },
-      { method: 'POST', url: 'https://market.example/api/v1/operations/call' },
+      { method: 'POST', url: 'https://market.example/api/v1/market-tools/search' },
+      { method: 'POST', url: 'https://market.example/api/v1/market-tools/describe' },
+      { method: 'POST', url: 'https://market.example/api/v1/market-tools/compare' },
+      { method: 'POST', url: `https://market.example${TOOL_QUOTE_PATH}` },
+      { method: 'POST', url: 'https://market.example/api/v1/tools/call' },
+      { method: 'GET', url: `https://market.example/api/v1/calls/${encodeURIComponent(callRef)}` },
+      { method: 'POST', url: `https://market.example${TOOL_QUOTE_PATH}` },
+      { method: 'POST', url: 'https://market.example/api/v1/tools/call' },
+      { method: 'POST', url: `https://market.example${TOOL_QUOTE_PATH}` },
+      { method: 'POST', url: 'https://market.example/api/v1/tools/call' },
     ])
     expect(requests.map(({ authorization }) => authorization)).toEqual([
       null,
@@ -793,15 +791,15 @@ describe('external-agent Market Operation cold loop', () => {
     ])
     expect(requests.map(({ body }) => body)).toEqual([
       { query: 'bitcoin price', limit: 10 },
-      { operationRef },
-      { operationRefs: [operationRef, comparisonRef] },
-      { operationRef, input: initialInput },
-      { commitmentRef: `operation-commitment:v1:${'1'.repeat(64)}`, idempotencyKey },
+      { toolRef },
+      { toolRefs: [toolRef, comparisonToolRef] },
+      { toolRef, input: initialInput },
+      { quoteRef: `operation-commitment:v1:${'1'.repeat(64)}`, idempotencyKey },
       undefined,
-      { operationRef, input: initialInput },
-      { commitmentRef: `operation-commitment:v1:${'1'.repeat(64)}`, idempotencyKey },
-      { operationRef, input: changedInput },
-      { commitmentRef: `operation-commitment:v1:${'2'.repeat(64)}`, idempotencyKey },
+      { toolRef, input: initialInput },
+      { quoteRef: `operation-commitment:v1:${'1'.repeat(64)}`, idempotencyKey },
+      { toolRef, input: changedInput },
+      { quoteRef: `operation-commitment:v1:${'2'.repeat(64)}`, idempotencyKey },
     ])
   })
 
@@ -810,13 +808,13 @@ describe('external-agent Market Operation cold loop', () => {
     const fetchMock = vi.fn<typeof fetch>()
       .mockResolvedValueOnce(responseJson(operationInspection(CURRENT_OPERATION_REF, {})))
       .mockResolvedValueOnce(responseJson({
-        kind: 'pending', invocationRef: 'invocation:generated', operationRef: CURRENT_OPERATION_REF, retryAfterMs: 100,
+        kind: 'pending', callRef: 'invocation:generated', toolRef: CURRENT_OPERATION_REF, retryAfterMs: 100,
       }))
     vi.stubGlobal('fetch', fetchMock)
 
     const output = captureStdout()
     try {
-      await runInvokeCommand([CURRENT_OPERATION_REF], { ...options, input: '{}' })
+      await runCallCommand([CURRENT_OPERATION_REF], { ...options, input: '{}' })
     } finally {
       output.restore()
     }
@@ -835,14 +833,14 @@ describe('external-agent Market Operation cold loop', () => {
       .mockResolvedValueOnce(responseJson(operationInspection(CURRENT_OPERATION_REF, {})))
       .mockResolvedValueOnce(new Response(JSON.stringify({
       kind: 'pending',
-      invocationRef: 'invocation:current',
-      operationRef: CURRENT_OPERATION_REF,
+      callRef: 'invocation:current',
+      toolRef: CURRENT_OPERATION_REF,
       retryAfterMs: 100,
     }), { status: 200, headers: { 'content-type': 'application/json' } }))
     vi.stubGlobal('fetch', fetchMock)
 
     try {
-      await runInvokeCommand([CURRENT_OPERATION_REF], {
+      await runCallCommand([CURRENT_OPERATION_REF], {
         ...options,
         baseUrlSource: 'flag',
         input: '{}',
@@ -854,15 +852,15 @@ describe('external-agent Market Operation cold loop', () => {
 
     const printed = JSON.parse(output.read()) as {
       kind: string
-      invocationRef: string
-      operationRef: string
+      callRef: string
+      toolRef: string
       retryAfterMs: number
       nextCommand: string
     }
     expect(printed).toEqual({
       kind: 'pending',
-      invocationRef: 'invocation:current',
-      operationRef: CURRENT_OPERATION_REF,
+      callRef: 'invocation:current',
+      toolRef: CURRENT_OPERATION_REF,
       retryAfterMs: 100,
       nextCommand: 'ae status invocation:current --base-url https://market.example --json',
     })
@@ -875,9 +873,9 @@ describe('external-agent Market Operation cold loop', () => {
     setApiKey('ae-test-caller-key')
     const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
       kind: 'found',
-      invocationRef: 'invocation:current',
+      callRef: 'invocation:current',
       version: 1,
-      operationRef: CURRENT_OPERATION_REF,
+      toolRef: CURRENT_OPERATION_REF,
       state: 'in_progress',
     }), { status: 200, headers: { 'content-type': 'application/json' } }))
     vi.stubGlobal('fetch', fetchMock)
@@ -888,7 +886,7 @@ describe('external-agent Market Operation cold loop', () => {
       output.restore()
     }
     const [url, init] = fetchMock.mock.calls[0]!
-    expect(url).toBe('https://market.example/api/v1/operations/invocation%3Acurrent')
+    expect(url).toBe('https://market.example/api/v1/calls/invocation%3Acurrent')
     expect(init?.method).toBe('GET')
     expect(new Headers(init?.headers).get('Authorization')).toBe('Bearer ae-test-caller-key')
     expect(JSON.parse(output.read())).toMatchObject({
@@ -931,9 +929,9 @@ describe('external-agent Market Operation cold loop', () => {
     const output = captureStdout()
     const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
       kind: 'found',
-      invocationRef: 'invocation:current',
+      callRef: 'invocation:current',
       version: 1,
-      operationRef: CURRENT_OPERATION_REF,
+      toolRef: CURRENT_OPERATION_REF,
       state: 'in_progress',
     }), { status: 200, headers: { 'content-type': 'application/json' } }))
     vi.stubGlobal('fetch', fetchMock)
@@ -945,7 +943,7 @@ describe('external-agent Market Operation cold loop', () => {
     }
 
     const [url, init] = fetchMock.mock.calls[0]!
-    expect(url).toBe('http://127.0.0.1:3210/api/v1/operations/invocation%3Acurrent')
+    expect(url).toBe('http://127.0.0.1:3210/api/v1/calls/invocation%3Acurrent')
     expect(new Headers(init?.headers).get('Authorization')).toBe('Bearer ae-test-caller-key')
     expect(JSON.parse(output.read())).toMatchObject({
       nextCommand: 'ae status invocation:current --base-url http://127.0.0.1:3210 --json',
@@ -966,7 +964,7 @@ describe('external-agent Market Operation cold loop', () => {
       .mockResolvedValueOnce(new Response(JSON.stringify({
         access_token: 'ae-issued-secret',
         token_type: 'Bearer',
-        scope: 'market_operations:invoke customer_requests:bounded_mandate',
+        scope: 'market_tools:call customer_requests:spending_policy',
         expires_in: 604800,
       }), { status: 200, headers: { 'content-type': 'application/json' } }))
       .mockResolvedValueOnce(responseJson(connectedAccount()))
@@ -983,7 +981,7 @@ describe('external-agent Market Operation cold loop', () => {
     expect(JSON.parse(String(registration[1]?.body))).toMatchObject({
       grant_types: ['urn:ietf:params:oauth:grant-type:device_code'],
       token_endpoint_auth_method: 'none',
-      scope: 'market_operations:invoke customer_requests:bounded_mandate',
+      scope: 'market_tools:call customer_requests:spending_policy',
     })
     const deviceAuthorization = fetchMock.mock.calls[1]!
     expect(deviceAuthorization[0]).toBe('https://market.example/oauth/device_authorization')
@@ -1042,7 +1040,7 @@ describe('external-agent Market Operation cold loop', () => {
     resolveToken?.(Response.json({
       access_token: 'private-access-token',
       token_type: 'Bearer',
-      scope: 'market_operations:invoke customer_requests:bounded_mandate',
+      scope: 'market_tools:call customer_requests:spending_policy',
     }))
     await connect
 
@@ -1093,7 +1091,7 @@ describe('external-agent Market Operation cold loop', () => {
       .mockResolvedValueOnce(Response.json({
         access_token: 'ae-issued-secret',
         token_type: 'Bearer',
-        scope: 'market_operations:invoke customer_requests:bounded_mandate',
+        scope: 'market_tools:call customer_requests:spending_policy',
       }))
       .mockResolvedValueOnce(Response.json(connectedAccount()))
     vi.stubGlobal('fetch', fetchMock)

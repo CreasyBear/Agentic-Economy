@@ -21,7 +21,7 @@ export type SourceAuthorityReviewResult =
       kind: 'verified' | 'replayed'
       publicationRef: string
       revision: number
-      operationRef: string
+      toolRef: string
       sourceAuthorityState: 'verified'
     }>
   | Readonly<{

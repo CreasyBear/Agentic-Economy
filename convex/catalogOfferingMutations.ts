@@ -75,8 +75,8 @@ import {
   type SellerOnboardingCanaryInvocationObservation,
 } from '../src/modules/capability-execution'
 import {
-  materializeRuntimePublishedOperation,
-  parsePublishedOperationSnapshot,
+  materializeRuntimePublishedTool,
+  parsePublishedToolSnapshot,
   sellerCanaryCompletionEvidenceMatches,
   X402_SELLER_CANARY_ADMISSION_REQUIRED_REF,
   x402SellerCanaryAdmissionEvidenceRef,
@@ -86,9 +86,9 @@ import {
   type X402SellerPromotionAnchor,
 } from '../src/modules/capability-supply/public'
 import {
-  readCurrentPublishedOperation,
+  readCurrentPublishedTool,
   readExactSellerCanaryOperationSnapshotHandler,
-} from './capabilitySupplyCurrentOperation'
+} from './capabilitySupplyCurrentTool'
 import {
   SELLER_ONBOARDING_CANARY_PLATFORM_APPLICATION_REF,
   SELLER_ONBOARDING_CANARY_PLATFORM_GRANT_REF,
@@ -111,23 +111,23 @@ type UpsertOfferingAccessPathArgs = OfferingSourceMutationArgs & { offeringRef: 
 type WithdrawOfferingAccessPathArgs = OfferingSourceMutationArgs & { accessPathRef: string; expectedRevision: number }
 type RetryBusinessSupplyProjectionArgs = { businessId: Id<'businesses'> }
 type PromoteX402SellerCanaryArgs = OfferingSourceMutationArgs & { canaryRef: string }
-type EnsureSupplierBusinessArgs = {
+type EnsureProviderBusinessArgs = {
   name: string
   slug: string
   website: string
   providerIdentifier: string
 }
-type RenameSupplierBusinessArgs = OfferingSourceMutationArgs & { name: string }
+type RenameProviderBusinessArgs = OfferingSourceMutationArgs & { name: string }
 type OfferingCommandTarget = Readonly<{
   offeringRef?: string
   accessPathRef?: string
 }>
 
-export type RenameSupplierBusinessResult =
+export type RenameProviderBusinessResult =
   | { kind: 'updated' | 'unchanged'; businessId: Id<'businesses'>; slug: string; name: string }
   | { kind: 'refused'; code: 'unauthenticated' | 'wrong_owner' | 'invalid_name' | 'source_write_refused' }
 
-export type EnsureSupplierBusinessResult =
+export type EnsureProviderBusinessResult =
   | { kind: 'created' | 'existing'; businessId: Id<'businesses'>; slug: string }
   | {
       kind: 'refused'
@@ -142,7 +142,7 @@ export type PromoteX402SellerCanaryResult =
       offeringRevision: number
       publicationRef: string
       publicationRevision: number
-      operationRef: string
+      toolRef: string
       promotionEvidenceDigest: string
       outputDigest: string
     }
@@ -173,7 +173,7 @@ export type PromoteX402SellerCanaryResult =
         | 'output_unusable'
     }
 
-export async function authorizeSupplierBusinessHandler(
+export async function authorizeProviderBusinessHandler(
   ctx: QueryCtx,
   args: { businessId: Id<'businesses'> },
 ): Promise<boolean> {
@@ -183,10 +183,10 @@ export async function authorizeSupplierBusinessHandler(
   return business !== null && business.owningAccountRef === actor.canonicalAccountRef
 }
 
-export async function ensureSupplierBusinessHandler(
+export async function ensureProviderBusinessHandler(
   ctx: MutationCtx,
-  args: EnsureSupplierBusinessArgs,
-): Promise<EnsureSupplierBusinessResult> {
+  args: EnsureProviderBusinessArgs,
+): Promise<EnsureProviderBusinessResult> {
   const actor = await resolveBusinessActor(ctx)
   if (actor.kind !== 'authenticated_owner') {
     return { kind: 'refused', code: 'unauthenticated' }
@@ -246,10 +246,10 @@ export async function ensureSupplierBusinessHandler(
   return { kind: 'created', businessId, slug }
 }
 
-export async function renameSupplierBusinessHandler(
+export async function renameProviderBusinessHandler(
   ctx: MutationCtx,
-  args: RenameSupplierBusinessArgs,
-): Promise<RenameSupplierBusinessResult> {
+  args: RenameProviderBusinessArgs,
+): Promise<RenameProviderBusinessResult> {
   const actor = await resolveBusinessActor(ctx)
   if (actor.kind !== 'authenticated_owner') return { kind: 'refused', code: 'unauthenticated' }
   const business = await ctx.db.get(args.businessId)
@@ -295,7 +295,7 @@ export async function renameSupplierBusinessHandler(
         .withIndex('by_business', (query) => query.eq('businessSlug', business.slug))
         .take(1)
       if (existingProjection.length > 0) {
-        throw new Error(`supplier_rename_projection_failed:${projection.code}`)
+        throw new Error(`provider_rename_projection_failed:${projection.code}`)
       }
     }
   }
@@ -705,7 +705,7 @@ export async function withdrawOfferingAccessPathHandler(ctx: MutationCtx, args: 
 }
 
 function promotionAnchorFromEnvelope(
-  envelope: NonNullable<Doc<'capabilityOperationInvocations'>['sellerOnboardingCanary']>,
+  envelope: NonNullable<Doc<'capabilityCalls'>['sellerOnboardingCanary']>,
 ): X402SellerPromotionAnchor {
   return {
     ownerId: envelope.ownerId,
@@ -717,8 +717,8 @@ function promotionAnchorFromEnvelope(
     accessPathSourceHash: envelope.accessPathSourceHash,
     publicationRef: envelope.publicationRef,
     publicationRevision: envelope.publicationRevision,
-    draftOperationRef: envelope.operationRef,
-    operationMaterialDigest: envelope.operationMaterialDigest,
+    draftOperationRef: envelope.toolRef,
+    toolMaterialDigest: envelope.toolMaterialDigest,
     contractDigest: envelope.contractDigest,
     bindingDigest: envelope.bindingDigest,
     priceDigest: envelope.priceDigest,
@@ -731,7 +731,7 @@ function promotionAnchorFromEnvelope(
 }
 
 function reconstructCanaryCommitment(
-  envelope: NonNullable<Doc<'capabilityOperationInvocations'>['sellerOnboardingCanary']>,
+  envelope: NonNullable<Doc<'capabilityCalls'>['sellerOnboardingCanary']>,
 ) {
   try {
     const commitment = createSellerOnboardingCanaryCommitment({
@@ -744,8 +744,8 @@ function reconstructCanaryCommitment(
       accessPathSourceHash: envelope.accessPathSourceHash,
       publicationRef: envelope.publicationRef,
       publicationRevision: envelope.publicationRevision,
-      draftOperationRef: envelope.operationRef,
-      operationMaterialDigest: envelope.operationMaterialDigest,
+      draftOperationRef: envelope.toolRef,
+      toolMaterialDigest: envelope.toolMaterialDigest,
       contractDigest: envelope.contractDigest,
       bindingDigest: envelope.bindingDigest,
       priceDigest: envelope.priceDigest,
@@ -782,7 +782,7 @@ function reconstructCanaryCommitment(
 }
 
 function canaryObservation(
-  row: Doc<'capabilityOperationInvocations'>,
+  row: Doc<'capabilityCalls'>,
   outputContractValid: boolean,
   outputDeterministic: boolean,
 ): SellerOnboardingCanaryInvocationObservation {
@@ -817,8 +817,8 @@ function canaryObservation(
     executionPurpose: envelope.executionPurpose,
     canaryRef: envelope.canaryRef,
     canaryCommitmentDigest: envelope.canaryCommitmentDigest,
-    invocationRef: row.invocationRef,
-    operationRef: row.operationRef,
+    callRef: row.callRef,
+    toolRef: row.toolRef,
     inputDigest: row.inputDigest,
     state,
     outputContractValid,
@@ -877,7 +877,7 @@ async function exactCatalogPromotionTarget(
 
 async function exactCurrentSellerClaim(
   ctx: MutationCtx,
-  operation: NonNullable<ReturnType<typeof parsePublishedOperationSnapshot>>,
+  operation: NonNullable<ReturnType<typeof parsePublishedToolSnapshot>>,
   anchor: X402SellerPromotionAnchor,
 ): Promise<boolean> {
   if (operation.binding.authority.kind !== 'provider_connection'
@@ -898,8 +898,8 @@ async function exactCurrentSellerClaim(
 }
 
 function exactPlatformCanaryFundingEvidence(
-  row: Doc<'capabilityOperationInvocations'>,
-  envelope: NonNullable<Doc<'capabilityOperationInvocations'>['sellerOnboardingCanary']>,
+  row: Doc<'capabilityCalls'>,
+  envelope: NonNullable<Doc<'capabilityCalls'>['sellerOnboardingCanary']>,
 ): boolean {
   const funding = envelope.funding
   const authority = row.authority
@@ -917,22 +917,22 @@ function exactPlatformCanaryFundingEvidence(
     || row.environment !== 'sandbox'
     || authority === undefined
     || authorizedAmount === undefined) return false
-  return authority.invocationRef === row.invocationRef
-    && authority.operationRef === row.operationRef
+  return authority.callRef === row.callRef
+    && authority.toolRef === row.toolRef
     && authority.inputDigest === row.inputDigest
     && authority.grantRef === funding.grantRef
     && authority.grantGeneration === funding.grantGeneration
     && authority.grantDigest === funding.policyDigest
-    && authority.acceptedBasis.kind === 'standing_mandate_use'
-    && authority.acceptedBasis.mandateRef === `agent-access-grant:${funding.grantRef}`
-    && authority.acceptedBasis.mandateGeneration === funding.grantGeneration
+    && authority.acceptedBasis.kind === 'spending_policy_use'
+    && authority.acceptedBasis.spendingPolicyRef === `agent-access-grant:${funding.grantRef}`
+    && authority.acceptedBasis.spendingPolicyGeneration === funding.grantGeneration
     && authority.acceptedBasis.grantEvidenceRef === `agent-access-grant-evidence:${funding.policyDigest}`
     && compareExactAmounts(authorizedAmount, funding.requestedSpend) === 0
 }
 
 function promotionOutputEvidence(
-  row: Doc<'capabilityOperationInvocations'>,
-  operation: NonNullable<ReturnType<typeof parsePublishedOperationSnapshot>>,
+  row: Doc<'capabilityCalls'>,
+  operation: NonNullable<ReturnType<typeof parsePublishedToolSnapshot>>,
 ): Readonly<{
   contractValid: boolean
   deterministic: boolean
@@ -950,7 +950,7 @@ function promotionOutputEvidence(
   }
   let contractValid = false
   try {
-    contractValid = materializeRuntimePublishedOperation(operation).validateOutput(result.output)
+    contractValid = materializeRuntimePublishedTool(operation).validateOutput(result.output)
   } catch {
     contractValid = false
   }
@@ -963,7 +963,7 @@ function promotionOutputEvidence(
   const expectedOutputSchemaDigest = canonicalDigest(operation.contract.outputSchema as StableHashValue)
   const expectedOutputEvidenceDigest = canonicalDigest({
     kind: 'seller_onboarding_canary_expected_output:v1',
-    operationMaterialDigest: operation.materialDigest,
+    toolMaterialDigest: operation.materialDigest,
     contractDigest: operation.identity.contractDigest,
     inputDigest: row.inputDigest,
     outputSchema: operation.contract.outputSchema,
@@ -983,7 +983,7 @@ function promotionOutputEvidence(
 function currentAnchorFromSnapshot(
   sealed: X402SellerPromotionAnchor,
   snapshot: NonNullable<Awaited<ReturnType<typeof readExactSellerCanaryOperationSnapshotHandler>>>,
-  operation: NonNullable<ReturnType<typeof parsePublishedOperationSnapshot>>,
+  operation: NonNullable<ReturnType<typeof parsePublishedToolSnapshot>>,
 ): X402SellerPromotionAnchor {
   return {
     ownerId: sealed.ownerId,
@@ -995,8 +995,8 @@ function currentAnchorFromSnapshot(
     accessPathSourceHash: snapshot.accessPathSourceHash,
     publicationRef: snapshot.publicationRef,
     publicationRevision: snapshot.publicationRevision,
-    draftOperationRef: snapshot.operationRef,
-    operationMaterialDigest: operation.materialDigest,
+    draftOperationRef: snapshot.toolRef,
+    toolMaterialDigest: operation.materialDigest,
     contractDigest: operation.identity.contractDigest,
     bindingDigest: operation.identity.bindingDigest,
     priceDigest: operation.priceDigest,
@@ -1029,7 +1029,7 @@ async function admitExactSellerCanaryPublication(
     .unique()
   if (publication === null
     || String(publication.businessId) !== anchor.businessId
-    || publication.operationRef !== anchor.draftOperationRef
+    || publication.toolRef !== anchor.draftOperationRef
     || publication.disposition !== 'current'
     || publication.registrationEvidenceRefs.filter(
       (ref) => ref === X402_SELLER_CANARY_ADMISSION_REQUIRED_REF,
@@ -1062,7 +1062,7 @@ export async function promoteX402SellerCanaryHandler(
   const sourceWrite = await requireSourceWrite(ctx, args, 'catalog_publish')
   if (sourceWrite.kind === 'rejected') return { kind: 'refused', code: 'source_write_refused' }
 
-  const rows = await ctx.db.query('capabilityOperationInvocations')
+  const rows = await ctx.db.query('capabilityCalls')
     .withIndex('by_sellerOnboardingCanary_canaryRef', (query) => (
       query.eq('sellerOnboardingCanary.canaryRef', args.canaryRef)
     ))
@@ -1074,20 +1074,20 @@ export async function promoteX402SellerCanaryHandler(
     || envelope.canaryRef !== args.canaryRef
     || envelope.ownerId !== actor.canonicalAccountRef
     || envelope.businessId !== String(args.businessId)
-    || row.invocationRef !== envelope.invocationRef
-    || row.operationRef !== envelope.operationRef
+    || row.callRef !== envelope.callRef
+    || row.toolRef !== envelope.toolRef
     || row.inputDigest !== envelope.inputDigest
     || row.idempotencyKey !== envelope.idempotencyKey) {
     return { kind: 'refused', code: 'canary_evidence_invalid' }
   }
   const commitment = reconstructCanaryCommitment(envelope)
-  const retainedOperation = row.operationJson === undefined
+  const retainedOperation = row.toolJson === undefined
     ? undefined
-    : parsePublishedOperationSnapshot(row.operationJson)
+    : parsePublishedToolSnapshot(row.toolJson)
   if (commitment === undefined
     || retainedOperation === undefined
     || retainedOperation.runtimeEnvironment !== 'sandbox'
-    || retainedOperation.materialDigest !== envelope.operationMaterialDigest
+    || retainedOperation.materialDigest !== envelope.toolMaterialDigest
     || retainedOperation.identity.contractDigest !== envelope.contractDigest
     || retainedOperation.identity.bindingDigest !== envelope.bindingDigest
     || retainedOperation.priceDigest !== envelope.priceDigest) {
@@ -1109,14 +1109,14 @@ export async function promoteX402SellerCanaryHandler(
     .unique()
 
   if (operationMarker !== null) {
-    const currentOperation = await readCurrentPublishedOperation(ctx, envelope.operationRef, now)
+    const currentOperation = await readCurrentPublishedTool(ctx, envelope.toolRef, now)
     const claimCurrent = currentOperation !== undefined
       && await exactCurrentSellerClaim(ctx, currentOperation, sealed)
     const current = currentOperation === undefined
       ? sealed
       : {
           ...sealed,
-          operationMaterialDigest: currentOperation.materialDigest,
+          toolMaterialDigest: currentOperation.materialDigest,
           readinessObservedAt: currentOperation.readiness.observedAt,
           readinessValidUntil: currentOperation.readiness.validUntil,
         }
@@ -1168,7 +1168,7 @@ export async function promoteX402SellerCanaryHandler(
       offeringRevision: sealed.offeringRevision,
       publicationRef: sealed.publicationRef,
       publicationRevision: sealed.publicationRevision,
-      operationRef: sealed.draftOperationRef,
+      toolRef: sealed.draftOperationRef,
       promotionEvidenceDigest: evaluated.promotionEvidence.promotionEvidenceDigest,
       outputDigest: output.outputDigest,
     }
@@ -1184,7 +1184,7 @@ export async function promoteX402SellerCanaryHandler(
   })
   const currentOperation = snapshot === null
     ? undefined
-    : parsePublishedOperationSnapshot(snapshot.operationJson)
+    : parsePublishedToolSnapshot(snapshot.toolJson)
   if (snapshot === null || currentOperation === undefined) {
     return { kind: 'refused', code: 'target_drift' }
   }
@@ -1217,9 +1217,9 @@ export async function promoteX402SellerCanaryHandler(
   if (business.publicStatus === 'unpublished') {
     await ctx.db.patch(args.businessId, { publicStatus: 'published' })
   }
-  const publicOperation = await readCurrentPublishedOperation(ctx, sealed.draftOperationRef, now)
+  const publicOperation = await readCurrentPublishedTool(ctx, sealed.draftOperationRef, now)
   if (publicOperation === undefined
-    || publicOperation.materialDigest !== evaluated.target.operationMaterialDigest
+    || publicOperation.materialDigest !== evaluated.target.toolMaterialDigest
     || publicOperation.identity.contractDigest !== sealed.contractDigest
     || publicOperation.identity.bindingDigest !== sealed.bindingDigest
     || publicOperation.priceDigest !== sealed.priceDigest) {
@@ -1263,7 +1263,7 @@ export async function promoteX402SellerCanaryHandler(
     offeringRevision: sealed.offeringRevision,
     publicationRef: sealed.publicationRef,
     publicationRevision: sealed.publicationRevision,
-    operationRef: sealed.draftOperationRef,
+    toolRef: sealed.draftOperationRef,
     promotionEvidenceDigest: evaluated.promotionEvidence.promotionEvidenceDigest,
     outputDigest: output.outputDigest,
   }
@@ -1519,13 +1519,13 @@ export async function loadExactOfferingSourceState(
           .eq('key', operation.operationKey)
       ))
       .unique()
-  const operationRefs = readCatalogOperationRefs(operationRow)
+  const toolRefs = readCatalogOperationRefs(operationRow)
   const explicitPath = target.accessPathRef === undefined
     ? null
     : await db.query('offeringAccessPaths')
       .withIndex('by_accessPathRef', (query) => query.eq('accessPathRef', target.accessPathRef!))
       .unique()
-  const replayRef = operationRefs[0]
+  const replayRef = toolRefs[0]
   const replayOffering = target.offeringRef === undefined && explicitPath === null && replayRef !== undefined
     ? await db.query('businessOfferings')
       .withIndex('by_offeringRef', (query) => query.eq('offeringRef', replayRef))
@@ -1575,7 +1575,7 @@ export async function loadExactOfferingSourceState(
     offerings: offering === undefined ? [] : [offering],
     revisions: revisionRow === null ? [] : [readCatalogRevision(revisionRow)],
     accessPaths: pathRows.map(readCatalogAccessPath),
-    operations: readCatalogOperation(operationRow, operationRefs),
+    operations: readCatalogOperation(operationRow, toolRefs),
   }
 }
 
@@ -1590,16 +1590,16 @@ function readCatalogOperationRefs(operationRow: Doc<'operationKeys'> | null): st
 
 function readCatalogOperation(
   operationRow: Doc<'operationKeys'> | null,
-  operationRefs: readonly string[],
+  toolRefs: readonly string[],
 ): OfferingSourceState['operations'] {
-  return operationRefs[0] === undefined || operationRow === null
+  return toolRefs[0] === undefined || operationRow === null
     ? []
     : [{
         actorRef: requiredCatalogString(operationRow, 'actorRef'),
         operationName: requiredCatalogString(operationRow, 'operationName'),
         operationKey: requiredCatalogString(operationRow, 'key'),
         requestHash: brandNonEmpty(requiredCatalogString(operationRow, 'requestHash'), 'SourceHash'),
-        resultRef: operationRefs[0],
+        resultRef: toolRefs[0],
         ...(operationRow.resultHash === undefined
           ? {}
           : { resultHash: brandNonEmpty(requiredCatalogString(operationRow, 'resultHash'), 'SourceHash') }),
@@ -1646,12 +1646,12 @@ export async function loadOfferingSourceState(
           .eq('key', operation.operationKey)
       ))
       .unique()
-  const operationRefs = readCatalogOperationRefs(operationRow)
+  const toolRefs = readCatalogOperationRefs(operationRow)
   return {
     offerings,
     revisions: revisionRows.flatMap((row) => row === null ? [] : [readCatalogRevision(row)]),
     accessPaths: pathRows.flat().map(readCatalogAccessPath),
-    operations: readCatalogOperation(operationRow, operationRefs),
+    operations: readCatalogOperation(operationRow, toolRefs),
   }
 }
 

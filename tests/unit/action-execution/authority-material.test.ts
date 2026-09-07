@@ -9,8 +9,12 @@ import { stableStringify } from '@/modules/common/stable-hash'
 
 const vectors = [
   {
-    name: 'approve_each',
+    name: 'approval_required',
     basis: {
+      kind: 'approval_required' as const,
+      authorityRef: 'authority:explicit:7',
+    },
+    canonical: {
       kind: 'approve_each' as const,
       authorityRef: 'authority:explicit:7',
     },
@@ -18,8 +22,16 @@ const vectors = [
     digest: 'sha256:09739fb4cd2a90edeb5904b032e26f21207d1404eed91302bce68c30185282eb',
   },
   {
-    name: 'standing_mandate_use',
+    name: 'spending_policy_use',
     basis: {
+      kind: 'spending_policy_use' as const,
+      spendingPolicyRef: 'mandate:bounded:7',
+      spendingPolicyVersion: 2,
+      spendingPolicyGeneration: 7,
+      authorityUseRef: 'authority-use:bounded:7',
+      grantEvidenceRef: 'grant-evidence:bounded:7',
+    },
+    canonical: {
       kind: 'standing_mandate_use' as const,
       mandateRef: 'mandate:bounded:7',
       mandateVersion: 2,
@@ -31,8 +43,22 @@ const vectors = [
     digest: 'sha256:41936e95851c29751cfa7c862d5341f7862e8dccab4c6d2fef9a3f8dfbf233f9',
   },
   {
-    name: 'customer_request_mandate_use with explicit authorization',
+    name: 'customer_request_authorization_use with explicit authorization',
     basis: {
+      kind: 'customer_request_authorization_use' as const,
+      requestAuthorizationRef: 'mandate:request:7',
+      requestAuthorizationDigest: 'sha256:mandate',
+      requestRevision: 3,
+      routeGeneration: 4,
+      authorization: {
+        kind: 'explicit' as const,
+        authorizationEvidenceRef: 'approval:evidence:7',
+        authorizationEvidenceDigest: 'sha256:approval',
+      },
+      grantRef: 'grant:7',
+      grantDigest: 'sha256:grant',
+    },
+    canonical: {
       kind: 'customer_request_mandate_use' as const,
       mandateRef: 'mandate:request:7',
       mandateDigest: 'sha256:mandate',
@@ -50,8 +76,23 @@ const vectors = [
     digest: 'sha256:d6cdbc5fdb7c02b18a607b45f31f8d781594a975f8f4f7405e6da6207568d364',
   },
   {
-    name: 'customer_request_mandate_use with standing low-risk authorization',
+    name: 'customer_request_authorization_use with standing low-risk authorization',
     basis: {
+      kind: 'customer_request_authorization_use' as const,
+      requestAuthorizationRef: 'mandate:request:8',
+      requestAuthorizationDigest: 'sha256:mandate8',
+      requestRevision: 5,
+      routeGeneration: 6,
+      authorization: {
+        kind: 'spending_policy_low_risk' as const,
+        spendingPolicyRef: 'standing-policy:8',
+        spendingPolicyDigest: 'sha256:policy8',
+        authorityUseRef: 'authority-use:8',
+      },
+      grantRef: 'grant:8',
+      grantDigest: 'sha256:grant8',
+    },
+    canonical: {
       kind: 'customer_request_mandate_use' as const,
       mandateRef: 'mandate:request:8',
       mandateDigest: 'sha256:mandate8',
@@ -75,6 +116,14 @@ const vectors = [
       kind: 'public_capability_use' as const,
       publicationRef: 'publication:7',
       publicationRevision: 2,
+      toolRef: 'operation:7',
+      bindingId: 'binding:7',
+      bindingRegistrationHash: 'sha256:binding',
+    },
+    canonical: {
+      kind: 'public_capability_use' as const,
+      publicationRef: 'publication:7',
+      publicationRevision: 2,
       operationRef: 'operation:7',
       bindingId: 'binding:7',
       bindingRegistrationHash: 'sha256:binding',
@@ -89,7 +138,7 @@ describe('canonical authority basis material', () => {
     for (const vector of vectors) {
       const material = canonicalAuthorityBasisMaterial(vector.basis)
 
-      expect(material, vector.name).toEqual(vector.basis)
+      expect(material, vector.name).toEqual(vector.canonical)
       expect(stableStringify(material), vector.name).toBe(vector.json)
       expect(canonicalDigest(material), vector.name).toBe(vector.digest)
     }

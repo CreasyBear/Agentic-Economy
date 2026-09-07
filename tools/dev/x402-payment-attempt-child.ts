@@ -32,7 +32,7 @@ const attempt: X402PaymentAttempt = {
   payTo: '0x0000000000000000000000000000000000000001',
   amount: { currency: 'USDC', units: '37', exponent: 2 },
   providerEndpoint: 'https://provider.invalid/paid',
-  operationRevision: 'sha256:revision',
+  toolVersion: 'sha256:revision',
   authorizationDigest: event.authorizationDigest!,
   custodyRef: `sha256:${'a'.repeat(64)}`,
   state: state as X402PaymentAttempt['state'],

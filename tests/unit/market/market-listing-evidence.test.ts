@@ -35,11 +35,11 @@ describe("market listing evidence", () => {
   it("projects persisted category, authenticated ratings, usage, and bounded latency", () => {
     const projection = projectMarketListingEvidence(
       {
-        operationRef: "operation:v1:observed",
+        toolRef: "operation:v1:observed",
         categoryId: "identity-compliance",
         ratingCount: 4,
         ratingSum: 18,
-        completedInvocations: 1_240,
+        completedCalls: 1_240,
         latencySamplesMs: [90, 110, 100, 130, 2_000, 120],
       },
       "generic.capability",
@@ -54,7 +54,7 @@ describe("market listing evidence", () => {
     });
     expect(projection.popularity).toMatchObject({
       kind: "observed",
-      completedInvocations: 1_240,
+      completedCalls: 1_240,
       display: "1,240 completed calls",
     });
     expect(projection.latency).toMatchObject({
@@ -70,10 +70,10 @@ describe("market listing evidence", () => {
   it("does not claim latency below the minimum evidence threshold", () => {
     const projection = projectMarketListingEvidence(
       {
-        operationRef: "operation:v1:sparse",
+        toolRef: "operation:v1:sparse",
         ratingCount: 0,
         ratingSum: 0,
-        completedInvocations: 3,
+        completedCalls: 3,
         latencySamplesMs: [10, 20, 30, 40],
       },
       "code.deploy",

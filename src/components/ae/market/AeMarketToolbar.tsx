@@ -94,7 +94,7 @@ export function AeMarketToolbar({
           ) : null}
           <Field className="gap-0">
             <FieldLabel htmlFor={searchInputId} className="sr-only">
-              Search Operations
+              Search Tools
             </FieldLabel>
             <InputGroup className="min-h-touch sm:min-h-9">
               <InputGroupInput
@@ -103,7 +103,7 @@ export function AeMarketToolbar({
                 name="query"
                 type="search"
                 defaultValue={search.query ?? ""}
-                placeholder="Search Operations"
+                placeholder="Search Tools"
               />
               <InputGroupAddon>
                 <SearchIcon aria-hidden="true" />

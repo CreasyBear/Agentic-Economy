@@ -2,69 +2,70 @@ import { TableAggregate } from '@convex-dev/aggregate'
 import { v } from 'convex/values'
 
 import { isMarketCategoryId } from '../src/modules/market/listing-evidence'
+import { isPublicToolRef } from '../src/modules/common/tool-ref'
 import { components } from './_generated/api'
 import type { DataModel } from './_generated/dataModel'
 import { internalMutation, mutation, query, type MutationCtx, type QueryCtx } from './_generated/server'
 import { resolveBusinessActor } from './authz'
 
-const MAX_OPERATION_REFS = 20
+const MAX_TOOL_REFS = 20
 const MAX_LATENCY_SAMPLES = 48
 
 const ratingAggregate = new TableAggregate<{
   Namespace: string
   Key: number
   DataModel: DataModel
-  TableName: 'marketOperationRatings'
-}>(components.marketOperationRatings, {
-  namespace: (doc) => doc.operationRef,
+  TableName: 'marketToolRatings'
+}>(components.marketToolRatings, {
+  namespace: (doc) => doc.toolRef,
   sortKey: (doc) => doc.createdAt,
   sumValue: (doc) => doc.score,
 })
 
-const operationEvidenceAggregate = new TableAggregate<{
+const toolEvidenceAggregate = new TableAggregate<{
   Namespace: string
   Key: number
   DataModel: DataModel
   TableName: 'marketEvidenceFacts'
 }>(components.marketOperationEvidence, {
-  namespace: (doc) => evidenceNamespace(doc.kind, doc.operationRef),
+  namespace: (doc) => evidenceNamespace(doc.kind, doc.toolRef),
   sortKey: (doc) => doc.occurredAt,
 })
 
 const listingEvidenceValue = v.object({
-  operationRef: v.string(),
+  toolRef: v.string(),
   categoryId: v.optional(v.string()),
   ratingCount: v.number(),
   ratingSum: v.number(),
-  completedInvocations: v.number(),
+  completedCalls: v.number(),
   qualifiedUses: v.number(),
   latencySamplesMs: v.array(v.number()),
 })
 
 export const read = query({
   args: {
-    operationRefs: v.array(v.string()),
+    toolRefs: v.array(v.string()),
     since: v.number(),
   },
   returns: v.array(listingEvidenceValue),
   handler: async (ctx, args) => {
-    const operationRefs = uniqueOperationRefs(args.operationRefs)
-    if (operationRefs.length > MAX_OPERATION_REFS) {
-      throw new Error('market_listing_evidence_operation_limit_exceeded')
+    const toolRefs = uniqueToolRefs(args.toolRefs)
+    if (toolRefs.length > MAX_TOOL_REFS) {
+      throw new Error('market_listing_evidence_tool_limit_exceeded')
     }
     return await Promise.all(
-      operationRefs.map((operationRef) => readOperationEvidence(ctx, operationRef, args.since)),
+      toolRefs.map((toolRef) => readToolEvidence(ctx, toolRef, args.since)),
     )
   },
 })
 
 export const rate = mutation({
   args: {
-    operationRef: v.string(),
+    toolRef: v.string(),
     score: v.number(),
     review: v.optional(v.string()),
   },
-  returns: v.object({ kind: v.literal('recorded'), operationRef: v.string() }),
+  returns: v.object({ kind: v.literal('recorded'), toolRef: v.string() }),
   handler: async (ctx, args) => {
     const actor = await resolveBusinessActor(ctx)
     if (actor.kind !== 'authenticated_owner') {
@@ -73,22 +74,22 @@ export const rate = mutation({
     if (!Number.isInteger(args.score) || args.score < 1 || args.score > 5) {
       throw new Error('market_rating_score_invalid')
     }
-    if (!isOperationRef(args.operationRef)) {
-      throw new Error('market_rating_operation_ref_invalid')
+    if (!isPublicToolRef(args.toolRef)) {
+      throw new Error('market_rating_tool_ref_invalid')
     }
     const review = args.review?.trim()
     if (review !== undefined && (review.length === 0 || review.length > 2_000)) {
       throw new Error('market_rating_review_invalid')
     }
     const now = Date.now()
-    const existing = await ctx.db.query('marketOperationRatings')
-      .withIndex('by_operationRef_and_reviewerRef', (index) => (
-        index.eq('operationRef', args.operationRef).eq('reviewerRef', actor.canonicalPrincipalRef)
+    const existing = await ctx.db.query('marketToolRatings')
+      .withIndex('by_toolRef_and_reviewerRef', (index) => (
+        index.eq('toolRef', args.toolRef).eq('reviewerRef', actor.canonicalPrincipalRef)
       ))
       .unique()
     if (existing === null) {
-      const id = await ctx.db.insert('marketOperationRatings', {
-        operationRef: args.operationRef,
+      const id = await ctx.db.insert('marketToolRatings', {
+        toolRef: args.toolRef,
         reviewerRef: actor.canonicalPrincipalRef,
         score: args.score,
         ...(review === undefined ? {} : { review }),
@@ -111,72 +112,72 @@ export const rate = mutation({
       if (updated === null) throw new Error('market_rating_missing_after_replace')
       await ratingAggregate.replace(ctx, existing, updated)
     }
-    return { kind: 'recorded' as const, operationRef: args.operationRef }
+    return { kind: 'recorded' as const, toolRef: args.toolRef }
   },
 })
 
 export const assignCategory = internalMutation({
   args: {
-    operationRef: v.string(),
+    toolRef: v.string(),
     categoryId: v.string(),
     assignedBy: v.string(),
     assignedAt: v.number(),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
-    if (!isOperationRef(args.operationRef) || !isMarketCategoryId(args.categoryId)) {
+    if (!isPublicToolRef(args.toolRef) || !isMarketCategoryId(args.categoryId)) {
       throw new Error('market_category_assignment_invalid')
     }
-    const existing = await ctx.db.query('marketOperationCategories')
-      .withIndex('by_operationRef', (index) => index.eq('operationRef', args.operationRef))
+    const existing = await ctx.db.query('marketToolCategories')
+      .withIndex('by_toolRef', (index) => index.eq('toolRef', args.toolRef))
       .unique()
-    if (existing === null) await ctx.db.insert('marketOperationCategories', args)
+    if (existing === null) await ctx.db.insert('marketToolCategories', args)
     else await ctx.db.replace(existing._id, args)
     return null
   },
 })
 
-export async function insertOperationEvidence(
+export async function insertToolEvidence(
   ctx: MutationCtx,
   row: DataModel['marketEvidenceFacts']['document'],
 ): Promise<void> {
-  await operationEvidenceAggregate.insert(ctx, row)
+  await toolEvidenceAggregate.insert(ctx, row)
 }
 
-async function readOperationEvidence(
+async function readToolEvidence(
   ctx: QueryCtx,
-  operationRef: string,
+  toolRef: string,
   since: number,
 ) {
-  const [category, ratingCount, ratingSum, completedInvocations, qualifiedUses, latencyRows] = await Promise.all([
-    ctx.db.query('marketOperationCategories')
-      .withIndex('by_operationRef', (index) => index.eq('operationRef', operationRef))
+  const [category, ratingCount, ratingSum, completedCalls, qualifiedUses, latencyRows] = await Promise.all([
+    ctx.db.query('marketToolCategories')
+      .withIndex('by_toolRef', (index) => index.eq('toolRef', toolRef))
       .unique(),
-    ratingAggregate.count(ctx, { namespace: operationRef }),
-    ratingAggregate.sum(ctx, { namespace: operationRef }),
-    operationEvidenceAggregate.count(ctx, {
-      namespace: evidenceNamespace('ae_invocation_completed', operationRef),
+    ratingAggregate.count(ctx, { namespace: toolRef }),
+    ratingAggregate.sum(ctx, { namespace: toolRef }),
+    toolEvidenceAggregate.count(ctx, {
+      namespace: evidenceNamespace('ae_invocation_completed', toolRef),
       bounds: { lower: { key: since, inclusive: true } },
     }),
-    operationEvidenceAggregate.count(ctx, {
-      namespace: evidenceNamespace('ae_qualified_use', operationRef),
+    toolEvidenceAggregate.count(ctx, {
+      namespace: evidenceNamespace('ae_qualified_use', toolRef),
       bounds: { lower: { key: since, inclusive: true } },
     }),
     ctx.db.query('marketEvidenceFacts')
-      .withIndex('by_kind_and_operationRef_and_occurredAt', (index) => (
+      .withIndex('by_kind_and_toolRef_and_occurredAt', (index) => (
         index.eq('kind', 'ae_invocation_completed')
-          .eq('operationRef', operationRef)
+          .eq('toolRef', toolRef)
           .gte('occurredAt', since)
       ))
       .order('desc')
       .take(MAX_LATENCY_SAMPLES),
   ])
   return {
-    operationRef,
+    toolRef,
     ...(category === null ? {} : { categoryId: category.categoryId }),
     ratingCount,
     ratingSum,
-    completedInvocations,
+    completedCalls,
     qualifiedUses,
     latencySamplesMs: latencyRows.flatMap((row) => (
       row.durationMs === undefined ? [] : [row.durationMs]
@@ -184,18 +185,14 @@ async function readOperationEvidence(
   }
 }
 
-function evidenceNamespace(kind: string, operationRef: string | undefined): string {
-  return `${kind}:${operationRef ?? 'unscoped'}`
+function evidenceNamespace(kind: string, toolRef: string | undefined): string {
+  return `${kind}:${toolRef ?? 'unscoped'}`
 }
 
-function uniqueOperationRefs(operationRefs: readonly string[]): string[] {
-  const values = [...new Set(operationRefs.map((value) => value.trim()).filter(Boolean))]
-  if (values.some((value) => value.length > 256)) {
-    throw new Error('market_listing_evidence_operation_ref_invalid')
+function uniqueToolRefs(toolRefs: readonly string[]): string[] {
+  const values = [...new Set(toolRefs.map((value) => value.trim()).filter(Boolean))]
+  if (values.some((value) => value.length > 256 || !isPublicToolRef(value))) {
+    throw new Error('market_listing_evidence_tool_ref_invalid')
   }
   return values
-}
-
-function isOperationRef(value: string): boolean {
-  return /^operation:v1:[0-9a-f]{64}$/.test(value)
 }

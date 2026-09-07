@@ -13,11 +13,11 @@ import {
 } from '@/components/ae/website'
 
 import type { SupplyLandingTool } from '@/modules/capability-supply/supply-funnel.functions'
-import type { OperationCardViewModel } from '@/modules/market/operation-view-model'
+import type { ToolCardViewModel } from '@/modules/market/tool-view-model'
 
 import { AeSupplyAgentProof } from './AeSupplyAgentProof'
 
-export const SUPPLY_OFFER_SENTENCE = 'List one service agents can inspect and call. You describe the price, access, effects, and evidence; Agentic Economy records it as an Operation.'
+export const SUPPLY_OFFER_SENTENCE = 'List one service agents can inspect and call. You describe the price, access, effects, and evidence; Agentic Economy records it as a Tool.'
 
 const SUPPLY_STEPS = [
   { number: '01', title: 'Choose one service', detail: 'Choose one bounded service with exact inputs and one usable outcome—not an entire app or account.' },
@@ -50,12 +50,12 @@ const SUPPLY_SOURCE_FIT = [
 
 export function AeSupplyLanding({
   tools,
-  operations,
+  publishedTools,
   sourceError,
   onRetry,
 }: Readonly<{
   tools: readonly SupplyLandingTool[]
-  operations: readonly OperationCardViewModel[]
+  publishedTools: readonly ToolCardViewModel[]
   sourceError?: string
   onRetry?: () => void
 }>) {
@@ -65,7 +65,7 @@ export function AeSupplyLanding({
         <AeSiteHeroIntro>
           <AeSiteHeadingPair>
             <div className="mx-auto grid w-full max-w-xl justify-items-center gap-3">
-              <AeSiteEyebrow>Suppliers</AeSiteEyebrow>
+              <AeSiteEyebrow>Providers</AeSiteEyebrow>
               <AeSiteHeading as="h1" size="md" id="supply-hero">
                 List a service.
               </AeSiteHeading>
@@ -82,9 +82,9 @@ export function AeSupplyLanding({
         </AeSiteHeroIntro>
       </AeSiteSection>
       {sourceError === undefined ? null : (
-        <AeSiteSection ariaLabel="Supplier recovery" scheme="canvas">
+        <AeSiteSection ariaLabel="Provider recovery" scheme="canvas">
           <Alert variant="destructive" className="max-w-3xl">
-            <AlertTitle>Supplier information is unavailable</AlertTitle>
+            <AlertTitle>Provider information is unavailable</AlertTitle>
             <AlertDescription>
               <p>{sourceError}</p>
               {onRetry === undefined ? null : (
@@ -96,7 +96,7 @@ export function AeSupplyLanding({
           </Alert>
         </AeSiteSection>
       )}
-      <AeSiteSection ariaLabel="Check supplier fit" scheme="canvas">
+      <AeSiteSection ariaLabel="Check provider fit" scheme="canvas">
         <div className="grid max-w-3xl gap-page">
           <div className="grid gap-intra">
             <AeSiteEyebrow>Before you sign in</AeSiteEyebrow>
@@ -124,7 +124,7 @@ export function AeSupplyLanding({
           </div>
         </div>
       </AeSiteSection>
-      <AeSiteSection ariaLabel="How to publish an Operation" scheme="surface">
+      <AeSiteSection ariaLabel="How to publish a Tool" scheme="surface">
         <AeSiteStack>
           <ol className="m-0 grid list-none gap-page p-0">
             {SUPPLY_STEPS.map((step) => (
@@ -152,7 +152,7 @@ export function AeSupplyLanding({
       </AeSiteSection>
       {sourceError === undefined ? (
         <AeSiteSection ariaLabel="What agents can inspect" scheme="surface">
-          <AeSupplyAgentProof tools={tools} operations={operations} />
+          <AeSupplyAgentProof tools={tools} publishedTools={publishedTools} />
         </AeSiteSection>
       ) : null}
     </>

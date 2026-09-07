@@ -4,16 +4,16 @@ import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 
 import { z } from 'zod'
-import { MARKET_OPERATIONS_INVOKE_SCOPE, MARKET_SUPPLY_MANAGE_SCOPE } from '@/modules/agent-access/contract'
+import { MARKET_TOOLS_CALL_SCOPE, MARKET_SUPPLY_MANAGE_SCOPE } from '@/modules/agent-access/contract'
 import { CliFailure } from './output'
 
-export type StoredConnectionProfile = 'market' | 'supplier'
+export type StoredConnectionProfile = 'market' | 'provider'
 
 const connectionSchema = z.object({
   accessToken: z.string().min(1),
   tokenType: z.string().min(1).default('Bearer'),
   scope: z.string().optional(),
-  profile: z.enum(['market', 'supplier']).default('market'),
+  profile: z.enum(['market', 'provider']).default('market'),
   connectedAt: z.string().datetime(),
 })
 
@@ -157,15 +157,15 @@ function writeConfig(next: z.infer<typeof configSchema>): string {
 }
 
 function profileForScope(scope: string | undefined): StoredConnectionProfile {
-  return scope?.split(/\s+/u).includes(MARKET_SUPPLY_MANAGE_SCOPE) === true ? 'supplier' : 'market'
+  return scope?.split(/\s+/u).includes(MARKET_SUPPLY_MANAGE_SCOPE) === true ? 'provider' : 'market'
 }
 
 function connectionKey(origin: string, profile: StoredConnectionProfile): string {
-  return profile === 'market' ? origin : `${origin}#supplier`
+  return profile === 'market' ? origin : `${origin}#provider`
 }
 
 function originForConnectionKey(key: string): string {
-  return key.endsWith('#supplier') ? key.slice(0, -'#supplier'.length) : key
+  return key.endsWith('#provider') ? key.slice(0, -'#provider'.length) : key
 }
 
 export function readStoredConnection(baseUrl: string, profile: StoredConnectionProfile = 'market'): StoredConnection | undefined {
@@ -231,7 +231,7 @@ export function removeStoredConnection(baseUrl: string, profile?: StoredConnecti
   const origin = new URL(baseUrl).origin
   const current = readConfig()
   const keys = profile === undefined
-    ? [connectionKey(origin, 'market'), connectionKey(origin, 'supplier')]
+    ? [connectionKey(origin, 'market'), connectionKey(origin, 'provider')]
     : [connectionKey(origin, profile)]
   if (!keys.some((key) => current.connections[key] !== undefined)) {
     return { origin, removed: false, configPath: configPath() }
@@ -290,7 +290,7 @@ export function storeMcpConnection(input: Readonly<{ baseUrl: string; accessToke
   return path
 }
 
-export function resolveAgentAccessCredential(baseUrl: string, requiredScope: string = MARKET_OPERATIONS_INVOKE_SCOPE): Readonly<{
+export function resolveAgentAccessCredential(baseUrl: string, requiredScope: string = MARKET_TOOLS_CALL_SCOPE): Readonly<{
   accessToken: string
   origin: string
   source: 'environment' | 'stored'
@@ -304,7 +304,7 @@ export function resolveAgentAccessCredential(baseUrl: string, requiredScope: str
       source: 'environment',
     }
   }
-  const profile: StoredConnectionProfile = requiredScope === MARKET_SUPPLY_MANAGE_SCOPE ? 'supplier' : 'market'
+  const profile: StoredConnectionProfile = requiredScope === MARKET_SUPPLY_MANAGE_SCOPE ? 'provider' : 'market'
   const stored = readStoredConnection(baseUrl, profile)
   return stored === undefined
     ? undefined

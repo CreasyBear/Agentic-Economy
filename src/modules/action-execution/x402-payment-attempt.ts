@@ -33,10 +33,10 @@ export type X402PaymentAttempt = Readonly<{
   payTo: string
   amount: ExactAmount
   providerEndpoint: string
-  operationRevision: string
+  toolVersion: string
   authorizationDigest: string
   custodyRef: string
-  operationRef?: string
+  toolRef?: string
   inputDigest?: string
   paymentObservationDigest?: string
   settlementStatus?: X402SettlementStatus

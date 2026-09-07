@@ -7,7 +7,6 @@ import {
 } from '@/modules/agent-access/agent-access-console'
 import type { AgentAccessKeyInventoryItem } from '@/modules/agent-access/agent-access'
 import type { ChargeState, MoneyQueryPort } from '@/modules/money/public'
-import type { OperationCompareResult } from '@/modules/capability-supply/public'
 import { canonicalAgentRecord } from '../../helpers/agent-directory-fixture'
 
 const ownerId = 'owner-console-1'
@@ -18,8 +17,8 @@ const key: AgentAccessKeyInventoryItem = {
   name: 'Console assistant',
   applicationRef: 'agentic-economy',
   environment: 'sandbox',
-  authorityMode: 'inspect_only',
-  scopes: ['market_operations:invoke', 'customer_requests:inspect_only'],
+  authorityMode: 'read_only',
+  scopes: ['market_tools:call', 'customer_requests:read_only'],
   revoked: false,
   expired: false,
 }
@@ -42,7 +41,7 @@ const usage = {
   serviceRef: 'service:quote',
   offeringRef: 'offering:quote',
   businessId: 'business:one',
-  invocationRef: 'invocation:one',
+  callRef: 'invocation:one',
   attemptRef: 'attempt:one',
   operationKey: 'quote.latest',
   priceDigest: 'price:one',
@@ -76,15 +75,15 @@ const grant = {
   applicationRef: key.applicationRef,
   environment: key.environment,
   authorityMode: key.authorityMode,
-  operationAccess: 'all_admitted' as const,
-  operationRefs: [],
+  toolAccess: 'all_admitted' as const,
+  toolRefs: [],
   lifecycle: 'active' as const,
   expiresAt: 10_000,
   budget: {
-    maximumSpendPerInvocation: { currency: 'USD', units: '100', exponent: 2 },
+    maximumSpendPerCall: { currency: 'USD', units: '100', exponent: 2 },
     maximumDailySpend: { currency: 'USD', units: '500', exponent: 2 },
     maximumMonthlySpend: { currency: 'USD', units: '2000', exponent: 2 },
-    maximumConcurrentInvocations: 1,
+    maximumConcurrentCalls: 1,
   },
   rate: { maximumCallsPerMinute: 10, maximumCallsPerHour: 100 },
 }
@@ -103,32 +102,34 @@ describe('agent access money seam', () => {
     expect(result?.usage).toMatchObject({ credentialId: 'key_console_1', callCount: 1, paidCallCount: 1, grossSpend: { currency: 'USD', units: '500', exponent: 2 } })
   })
 
-  it('projects canonical Operation and supplier labels onto task activity', async () => {
-    const operationRef = `operation:v1:${'a'.repeat(64)}`
-    const [readback] = await readAgentCredentialSources([key], moneyPort(operationRef), [grant])
+  it('projects canonical Tool and Provider labels onto task activity', async () => {
+    const toolRef = `operation:v1:${'a'.repeat(64)}`
+    const [readback] = await readAgentCredentialSources([key], moneyPort(toolRef), [grant])
     if (readback === undefined) throw new Error('expected agent readback')
     const enriched = await enrichAgentDirectoryActivity(projectAgentDirectory(
       [readback],
       [canonicalAgentRecord([readback])],
     ), {
-      isOperationRef: (value) => value === operationRef,
-      compare: async ({ operationRefs }) => {
-        expect(operationRefs).toEqual([operationRef])
+      isToolRef: (value) => value === toolRef,
+      compare: async ({ toolRefs }) => {
+        expect(toolRefs).toEqual([toolRef])
         return {
           kind: 'ok',
-          operations: [{
-            operationRef,
+          tools: [{
+            toolRef,
             offering: { label: 'Extract invoice fields' },
             business: { name: 'Ledger Labs' },
           }],
-        } as unknown as OperationCompareResult
+        }
       },
     })
 
-    expect(enriched.details[0]?.activity[0]?.operation).toEqual({
+    expect(enriched.details[0]?.activity[0]?.tool).toEqual({
       label: 'Extract invoice fields',
-      supplier: 'Ledger Labs',
+      provider: 'Ledger Labs',
     })
+    expect(enriched.details[0]?.activity[0]).not.toHaveProperty('operation')
+    expect(enriched.details[0]?.activity[0]).not.toHaveProperty('supplier')
   })
 
   it('groups multiple credentials by canonical principal without merging independent agents', () => {

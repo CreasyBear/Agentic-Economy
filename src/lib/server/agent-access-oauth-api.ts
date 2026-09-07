@@ -55,7 +55,7 @@ import {
   AGENT_ACCESS_PURPOSE,
   AGENT_ACCESS_MAX_TTL_SECONDS,
   AGENT_ACCESS_MIN_TTL_SECONDS,
-  agentAccessOperationSelectionDigest,
+  agentAccessToolSelectionDigest,
   issueAgentAccessKey,
 } from '@/modules/agent-access/agent-access'
 import { issuedAgentGrantRef } from '@/modules/agent-access/issued-agent-binding'
@@ -63,8 +63,8 @@ import { defaultSandboxAgentAccessPolicy } from '@/modules/agent-access/sandbox-
 import { buildProductionAgentAccessPolicy, defaultProductionAgentAccessPolicy } from '@/modules/agent-access/production-policy'
 import {
   agentAccessPolicySchema,
-  normalizeAgentAccessOperationSelection,
-  type AgentAccessOperationAccess,
+  normalizeAgentAccessToolSelection,
+  type AgentAccessToolAccess,
   type AgentAccessPolicy,
 } from '@/modules/agent-access/policy'
 import {
@@ -77,8 +77,8 @@ import {
 } from '@/modules/agent-access/agent-access.functions'
 import { assertCsrf } from '@/modules/security/public'
 import { loadAgentDirectoryReadback, loadOwnerReconnectCandidates } from '@/modules/agent-access/agent-access-console'
-import { readCapabilityOperationCompare } from '@/modules/capability-supply/operation-source'
-import { isPublicOperationRef } from '@/modules/capability-supply/public'
+import { readCapabilityToolCompare } from '@/modules/capability-supply/tool-source'
+import { isPublicToolRef } from '@/modules/capability-supply/public'
 import {
   reserveAgentAccessConsentForOwner,
   type AgentAccessOAuthRefreshFamily,
@@ -109,7 +109,7 @@ type OAuthApiOptions = Readonly<{
     grantRef: string
     authorityMode: AgentAccessAuthorityMode
     approvedAccess: AgentAccessOAuthRequestedAccess
-    policy: AgentAccessPolicy
+    spendingPolicy: AgentAccessPolicy
     target: AgentConnectionTarget
   }>) => Promise<Readonly<{ keyId: string; secret?: string; replacement?: AgentCredentialReplacement }>>
   registerBinding?: typeof registerIssuedAgentBinding
@@ -210,8 +210,8 @@ export async function handleDeviceAuthorizationPost(request: Request, options: O
   if (authorizationDetails.kind === 'invalid') return oauthError('invalid_request', 400)
   const requestedAccess = authorizationDetails.kind === 'ok' ? authorizationDetails.requestedAccess : undefined
   const normalizedScopes = normalizeRequestedScopes(scopeText)
-  if (requestedAccess !== undefined && (normalizedScopes?.mode === 'full_yolo'
-    || (normalizedScopes?.profile === 'supplier' && requestedAccess.operationAccess !== 'all_admitted'))) {
+  if (requestedAccess !== undefined && (normalizedScopes?.mode === 'unrestricted_test_only'
+    || (normalizedScopes?.profile === 'provider' && requestedAccess.toolAccess !== 'all_admitted'))) {
     return oauthError('invalid_request', 400)
   }
   const result = await beginDeviceGrant(requireStore(options), {
@@ -394,8 +394,8 @@ function authorizationRequestScopeError(
   requestedAccess: AgentAccessOAuthRequestedAccess | undefined,
 ): 'invalid_scope' | 'invalid_request' | undefined {
   if (normalizedScopes?.offlineAccess === true && !client.grantTypes.includes('refresh_token')) return 'invalid_scope'
-  return requestedAccess !== undefined && (normalizedScopes?.mode === 'full_yolo'
-    || (normalizedScopes?.profile === 'supplier' && requestedAccess.operationAccess !== 'all_admitted'))
+  return requestedAccess !== undefined && (normalizedScopes?.mode === 'unrestricted_test_only'
+    || (normalizedScopes?.profile === 'provider' && requestedAccess.toolAccess !== 'all_admitted'))
     ? 'invalid_request'
     : undefined
 }
@@ -491,9 +491,9 @@ async function consentAuthObject(
 type ConsentApprovalFields = Readonly<{
   expectedGrantRevision: number
   expectedTargetRevision: number
-  approvedOperationSelection: Readonly<{
-    operationAccess: AgentAccessOperationAccess
-    operationRefs: readonly string[]
+  approvedToolSelection: Readonly<{
+    toolAccess: AgentAccessToolAccess
+    toolRefs: readonly string[]
   }>
   reservationTarget: Parameters<typeof reserveAgentAccessConsentForOwner>[0]['connectionTarget']
   state: string | null
@@ -502,7 +502,7 @@ type ConsentApprovalFields = Readonly<{
 function consentApprovalFields(form: URLSearchParams): ConsentApprovalFields | undefined {
   const expectedGrantRevision = positiveFormInteger(form.get('expected_grant_revision'))
   const expectedTargetRevision = positiveFormInteger(form.get('expected_target_revision'))
-  const approvedOperationSelection = parseApprovedOperationSelection(form)
+  const approvedToolSelection = parseApprovedToolSelection(form)
   const targetKind = form.get('connection_target')
   const principalRef = form.get('principal_ref')
   const replacementMode = form.get('replacement_mode')
@@ -510,7 +510,7 @@ function consentApprovalFields(form: URLSearchParams): ConsentApprovalFields | u
   if (
     expectedGrantRevision === undefined
     || expectedTargetRevision === undefined
-    || approvedOperationSelection === undefined
+    || approvedToolSelection === undefined
     || (targetKind !== 'new_agent' && targetKind !== 'replace_credential')
     || (state !== null && state.length > 2_048)
   ) return undefined
@@ -529,7 +529,7 @@ function consentApprovalFields(form: URLSearchParams): ConsentApprovalFields | u
   return {
     expectedGrantRevision,
     expectedTargetRevision,
-    approvedOperationSelection,
+    approvedToolSelection,
     reservationTarget,
     state,
   }
@@ -577,8 +577,8 @@ export async function handleOAuthConsentPost(request: Request, options: OAuthApi
     expectedGrantRevision: approval.expectedGrantRevision,
     expectedTargetRevision: approval.expectedTargetRevision,
     authorityMode,
-    approvedOperationAccess: approval.approvedOperationSelection.operationAccess,
-    approvedOperationRefs: approval.approvedOperationSelection.operationRefs,
+    approvedToolAccess: approval.approvedToolSelection.toolAccess,
+    approvedToolRefs: approval.approvedToolSelection.toolRefs,
     reservationTarget: approval.reservationTarget,
     connectionTarget: parseConnectionTarget(form),
     state: approval.state,
@@ -612,8 +612,8 @@ async function reserveAndFinalizeConsent(input: Readonly<{
   expectedGrantRevision: number
   expectedTargetRevision: number
   authorityMode: AgentAccessAuthorityMode
-  approvedOperationAccess: AgentAccessOperationAccess
-  approvedOperationRefs: readonly string[]
+  approvedToolAccess: AgentAccessToolAccess
+  approvedToolRefs: readonly string[]
   reservationTarget: Parameters<typeof reserveAgentAccessConsentForOwner>[0]['connectionTarget']
   connectionTarget: AgentConnectionTarget | undefined
   state: string | null
@@ -628,8 +628,8 @@ async function reserveAndFinalizeConsent(input: Readonly<{
     expectedGrantRevision: input.expectedGrantRevision,
     expectedTargetRevision: input.expectedTargetRevision,
     authorityMode: input.authorityMode,
-    approvedOperationAccess: input.approvedOperationAccess,
-    approvedOperationRefs: input.approvedOperationRefs,
+    approvedToolAccess: input.approvedToolAccess,
+    approvedToolRefs: input.approvedToolRefs,
     connectionTarget: input.reservationTarget,
     proof: input.proof,
   })
@@ -962,7 +962,7 @@ async function defaultIssueRefreshKey(input: Readonly<{
       aeScopes: JSON.stringify(input.family.scopes),
       aePrincipalRef: input.family.principalRef,
       aeConnectionTarget: 'replace_credential',
-      aeOperationSelectionDigest: agentAccessOperationSelectionDigest(input.family),
+      aeToolSelectionDigest: agentAccessToolSelectionDigest(input.family),
     },
     description: 'Rotated credential for a durable Agentic Economy connection.',
   })
@@ -1159,19 +1159,19 @@ async function issueReplacementGrantKey(input: Readonly<{
   target: Extract<AgentConnectionTarget, { kind: 'replace_credential' }>
   idempotencyKey: string
   authorityMode: AgentAccessAuthorityMode
-  policy: AgentAccessPolicy
+  spendingPolicy: AgentAccessPolicy
   options: OAuthApiOptions
 }>): Promise<{ keyId: string; replacement: AgentCredentialReplacement }> {
   const api = isLocalE2EAuthBypassEnabled()
     ? createLocalE2EAgentAccessKeyApi()
     : createClerkAgentAccessKeyApi(clerkClient().apiKeys)
   const successorGrantRef = issuedAgentGrantRef(input.ownerId, input.idempotencyKey)
-  const operationSelectionDigest = agentAccessOperationSelectionDigest(input.policy)
+  const toolSelectionDigest = agentAccessToolSelectionDigest(input.spendingPolicy)
   const accessTtlSeconds = accessCredentialTtlSeconds(input.grant.approvedAccess)
   const existing = (await api.list({ subject: input.ownerId, includeInvalid: false, limit: 100 })).data.find((key) => (
     !key.revoked && !key.expired && key.claims?.aeGrantRef === successorGrantRef
   ))
-  if (existing !== undefined && existing.claims?.aeOperationSelectionDigest !== operationSelectionDigest) {
+  if (existing !== undefined && existing.claims?.aeToolSelectionDigest !== toolSelectionDigest) {
     throw new AgentAccessOAuthIssueRefusal('invalid_grant')
   }
   let createdHere = false
@@ -1192,7 +1192,7 @@ async function issueReplacementGrantKey(input: Readonly<{
       aeScopes: JSON.stringify(input.grant.requestedScopes),
       aePrincipalRef: input.target.principalRef,
       aeConnectionTarget: 'replace_credential',
-      aeOperationSelectionDigest: operationSelectionDigest,
+      aeToolSelectionDigest: toolSelectionDigest,
     },
     description: 'Replacement credential for an existing Agentic Economy agent.',
   }).then((created) => {
@@ -1211,9 +1211,9 @@ async function issueReplacementGrantKey(input: Readonly<{
     environment: input.grant.approvedAccess.environment,
     scopes: input.grant.requestedScopes,
     authorityMode: input.authorityMode,
-    operationAccess: input.policy.operationAccess,
-    operationRefs: input.policy.operationRefs,
-    policy: input.policy,
+    toolAccess: input.spendingPolicy.toolAccess,
+    toolRefs: input.spendingPolicy.toolRefs,
+    spendingPolicy: input.spendingPolicy,
     createdAt: existing?.createdAt ?? createdAt,
     expiresAt: existing?.expiresAt ?? existing?.expiration ?? createdAt + accessTtlSeconds * 1_000,
   })
@@ -1249,12 +1249,12 @@ async function issueGrantKey(
   const issue: AgentAccessOAuthIssueKey = async ({ ownerId: inputOwnerId, grant: inputGrant, target: inputTarget }) => {
     const idempotencyKey = inputGrant.issuanceKey ?? `oauth-${inputGrant.grantRef.replaceAll(':', '-')}`
     const authorityMode = modeForGrant(inputGrant)
-    if (authorityMode === undefined || (inputGrant.approvedAccess.environment === 'production' && authorityMode === 'full_yolo')) {
+    if (authorityMode === undefined || (inputGrant.approvedAccess.environment === 'production' && authorityMode === 'unrestricted_test_only')) {
       throw new AgentAccessOAuthIssueRefusal('invalid_scope')
     }
-    let policy: AgentAccessPolicy
+    let spendingPolicy: AgentAccessPolicy
     try {
-      policy = deriveOAuthGrantPolicy(inputGrant.approvedAccess)
+      spendingPolicy = deriveOAuthGrantPolicy(inputGrant.approvedAccess)
     } catch {
       throw new AgentAccessOAuthIssueRefusal('invalid_grant')
     }
@@ -1270,7 +1270,7 @@ async function issueGrantKey(
           ...inputGrant.approvedAccess,
           expiresInSeconds: accessCredentialTtlSeconds(inputGrant.approvedAccess),
         },
-        policy,
+        spendingPolicy,
         target: inputTarget,
       })
     }
@@ -1282,7 +1282,7 @@ async function issueGrantKey(
         target: inputTarget,
         idempotencyKey,
         authorityMode,
-        policy,
+        spendingPolicy,
         options,
       })
     }
@@ -1295,17 +1295,17 @@ async function issueGrantKey(
         scopes: inputGrant.requestedScopes,
         grantRef: issuedAgentGrantRef(inputOwnerId, idempotencyKey),
         environment: inputGrant.approvedAccess.environment,
-        operationAccess: inputGrant.approvedAccess.operationAccess,
-        operationRefs: inputGrant.approvedAccess.operationRefs,
+        toolAccess: inputGrant.approvedAccess.toolAccess,
+        toolRefs: inputGrant.approvedAccess.toolRefs,
         expiresInSeconds: accessCredentialTtlSeconds(inputGrant.approvedAccess),
-        ...(inputGrant.approvedAccess.maximumSpendPerInvocation === undefined ? {} : { maximumSpendPerInvocation: inputGrant.approvedAccess.maximumSpendPerInvocation }),
+        ...(inputGrant.approvedAccess.maximumSpendPerCall === undefined ? {} : { maximumSpendPerCall: inputGrant.approvedAccess.maximumSpendPerCall }),
         ...(inputGrant.approvedAccess.maximumDailySpend === undefined ? {} : { maximumDailySpend: inputGrant.approvedAccess.maximumDailySpend }),
         ...(inputGrant.approvedAccess.maximumMonthlySpend === undefined ? {} : { maximumMonthlySpend: inputGrant.approvedAccess.maximumMonthlySpend }),
-        ...(inputGrant.approvedAccess.maximumConcurrentInvocations === undefined ? {} : { maximumConcurrentInvocations: inputGrant.approvedAccess.maximumConcurrentInvocations }),
+        ...(inputGrant.approvedAccess.maximumConcurrentCalls === undefined ? {} : { maximumConcurrentCalls: inputGrant.approvedAccess.maximumConcurrentCalls }),
         ...(inputGrant.approvedAccess.maximumCallsPerMinute === undefined ? {} : { maximumCallsPerMinute: inputGrant.approvedAccess.maximumCallsPerMinute }),
         ...(inputGrant.approvedAccess.maximumCallsPerHour === undefined ? {} : { maximumCallsPerHour: inputGrant.approvedAccess.maximumCallsPerHour }),
       },
-      policy,
+      spendingPolicy,
       returnSecret: false,
       api: localE2E
         ? createLocalE2EAgentAccessKeyApi()
@@ -1338,15 +1338,15 @@ function parseConnectionTarget(form: URLSearchParams): AgentConnectionTarget | u
   }
 }
 
-function parseApprovedOperationSelection(form: URLSearchParams): Readonly<{
-  operationAccess: AgentAccessOperationAccess
-  operationRefs: readonly string[]
+function parseApprovedToolSelection(form: URLSearchParams): Readonly<{
+  toolAccess: AgentAccessToolAccess
+  toolRefs: readonly string[]
 }> | undefined {
-  const operationAccess = form.get('approved_operation_access')
-  if (operationAccess !== 'all_admitted' && operationAccess !== 'selected_operations') return undefined
-  return normalizeAgentAccessOperationSelection({
-    operationAccess,
-    operationRefs: form.getAll('approved_operation_ref'),
+  const toolAccess = form.get('approved_tool_access')
+  if (toolAccess !== 'all_admitted' && toolAccess !== 'selected_tools') return undefined
+  return normalizeAgentAccessToolSelection({
+    toolAccess,
+    toolRefs: form.getAll('approved_tool_ref'),
   })
 }
 
@@ -1360,8 +1360,8 @@ async function consentAgentTargets(
     const listed = options.listAgents !== undefined
       ? await options.listAgents(cursor)
       : await loadAgentDirectoryReadback({
-          compare: readCapabilityOperationCompare,
-          isOperationRef: isPublicOperationRef,
+          compare: readCapabilityToolCompare,
+          isToolRef: isPublicToolRef,
         }, cursor).then((directory) => ({
           items: directory.items.map(({ principalRef, principalRevision, displayName }) => ({
             principalRef,
@@ -1401,7 +1401,7 @@ function deriveOAuthGrantPolicy(requestedAccess: AgentAccessOAuthRequestedAccess
     throw new Error('invalid_requested_access')
   }
   const controls = [
-    requestedAccess.maximumConcurrentInvocations,
+    requestedAccess.maximumConcurrentCalls,
     requestedAccess.maximumCallsPerMinute,
     requestedAccess.maximumCallsPerHour,
   ]
@@ -1409,7 +1409,7 @@ function deriveOAuthGrantPolicy(requestedAccess: AgentAccessOAuthRequestedAccess
     throw new Error('invalid_requested_access')
   }
   const amounts = [
-    requestedAccess.maximumSpendPerInvocation,
+    requestedAccess.maximumSpendPerCall,
     requestedAccess.maximumDailySpend,
     requestedAccess.maximumMonthlySpend,
   ]
@@ -1419,21 +1419,21 @@ function deriveOAuthGrantPolicy(requestedAccess: AgentAccessOAuthRequestedAccess
     const base = defaultSandboxAgentAccessPolicy({ currency: 'USD', exponent: 2 })
     return agentAccessPolicySchema.parse({
       ...base,
-      operationAccess: requestedAccess.operationAccess,
-      operationRefs: requestedAccess.operationRefs,
+      toolAccess: requestedAccess.toolAccess,
+      toolRefs: requestedAccess.toolRefs,
     })
   }
   if (budgetCount !== 0 && budgetCount !== amounts.length) throw new Error('invalid_requested_access')
   let base: AgentAccessPolicy
   if (budgetCount === amounts.length) {
-    const [maximumSpendPerInvocation, maximumDailySpend, maximumMonthlySpend] = amounts
-    if (maximumSpendPerInvocation === undefined || maximumDailySpend === undefined || maximumMonthlySpend === undefined) {
+    const [maximumSpendPerCall, maximumDailySpend, maximumMonthlySpend] = amounts
+    if (maximumSpendPerCall === undefined || maximumDailySpend === undefined || maximumMonthlySpend === undefined) {
       throw new Error('invalid_requested_access')
     }
     base = buildProductionAgentAccessPolicy({
-      currency: maximumSpendPerInvocation.currency,
-      exponent: maximumSpendPerInvocation.exponent,
-      maximumSpendPerInvocation,
+      currency: maximumSpendPerCall.currency,
+      exponent: maximumSpendPerCall.exponent,
+      maximumSpendPerCall,
       maximumDailySpend,
       maximumMonthlySpend,
     })
@@ -1442,11 +1442,11 @@ function deriveOAuthGrantPolicy(requestedAccess: AgentAccessOAuthRequestedAccess
   }
   return agentAccessPolicySchema.parse({
     ...base,
-    operationAccess: requestedAccess.operationAccess,
-    operationRefs: requestedAccess.operationRefs,
+    toolAccess: requestedAccess.toolAccess,
+    toolRefs: requestedAccess.toolRefs,
     budget: {
       ...base.budget,
-      ...(requestedAccess.maximumConcurrentInvocations === undefined ? {} : { maximumConcurrentInvocations: requestedAccess.maximumConcurrentInvocations }),
+      ...(requestedAccess.maximumConcurrentCalls === undefined ? {} : { maximumConcurrentCalls: requestedAccess.maximumConcurrentCalls }),
     },
     rate: {
       ...base.rate,

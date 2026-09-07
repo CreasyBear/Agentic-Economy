@@ -13,6 +13,7 @@ import {
   SELLER_ONBOARDING_CANARY_PLATFORM_GRANT_REF,
   SELLER_ONBOARDING_CANARY_PLATFORM_OWNER_ID,
   SELLER_ONBOARDING_CANARY_PLATFORM_PRINCIPAL_ID,
+  SELLER_ONBOARDING_CANARY_RATE_POLICY_REF,
 } from '../../../convex/capabilitySupplyCanaryFunding'
 import { BASE_SEPOLIA_NETWORK } from '../../../src/modules/capability-supply/public'
 import { convexModules as modules } from '../../helpers/convex-fixtures'
@@ -73,7 +74,7 @@ describe('seller onboarding canary funding readiness', () => {
     expect(replay).toMatchObject({
       kind: 'ensured',
       created: [],
-      policyDigest: first.kind === 'ensured' ? first.policyDigest : undefined,
+      spendingPolicyDigest: first.kind === 'ensured' ? first.spendingPolicyDigest : undefined,
     })
 
     const rows = await backend.run(async (ctx) => ({
@@ -85,13 +86,13 @@ describe('seller onboarding canary funding readiness', () => {
     expect(rows.grants[0]).toMatchObject({
       grantRef: SELLER_ONBOARDING_CANARY_PLATFORM_GRANT_REF,
       environment: 'sandbox',
-      authorityMode: 'full_yolo',
-      policy: {
+      authorityMode: 'unrestricted_test_only',
+      spendingPolicy: {
         budget: {
-          maximumSpendPerInvocation: { currency: 'USD', units: SELLER_ONBOARDING_CANARY_MAXIMUM_PER_CALL_ATOMIC, exponent: 6 },
+          maximumSpendPerCall: { currency: 'USD', units: SELLER_ONBOARDING_CANARY_MAXIMUM_PER_CALL_ATOMIC, exponent: 6 },
           maximumDailySpend: { currency: 'USD', units: SELLER_ONBOARDING_CANARY_MAXIMUM_DAILY_ATOMIC, exponent: 6 },
           maximumMonthlySpend: { currency: 'USD', units: SELLER_ONBOARDING_CANARY_MAXIMUM_MONTHLY_ATOMIC, exponent: 6 },
-          maximumConcurrentInvocations: 1,
+          maximumConcurrentCalls: 1,
         },
       },
     })
@@ -120,7 +121,7 @@ describe('seller onboarding canary funding readiness', () => {
         applicationRef: SELLER_ONBOARDING_CANARY_PLATFORM_APPLICATION_REF,
         environment: 'sandbox' as const,
         generation: provisioned.generation,
-        policyDigest: provisioned.policyDigest,
+        spendingPolicyDigest: provisioned.spendingPolicyDigest,
         expiresAt: persisted.expiresAt,
       },
       now: NOW,
@@ -135,7 +136,7 @@ describe('seller onboarding canary funding readiness', () => {
       credentialId: exact.expected.credentialId,
       applicationRef: exact.expected.applicationRef,
       generation: exact.expected.generation,
-      policyDigest: exact.expected.policyDigest,
+      spendingPolicyDigest: exact.expected.spendingPolicyDigest,
       expiresAt: exact.expected.expiresAt,
     })
 
@@ -146,7 +147,7 @@ describe('seller onboarding canary funding readiness', () => {
       { credentialId: 'credential_wrong' },
       { applicationRef: 'application_wrong' },
       { generation: exact.expected.generation + 1 },
-      { policyDigest: `sha256:${'f'.repeat(64)}` },
+      { spendingPolicyDigest: `sha256:${'f'.repeat(64)}` },
       { expiresAt: exact.expected.expiresAt - 1 },
     ]
     for (const mismatch of mismatches) {
@@ -216,6 +217,85 @@ describe('seller onboarding canary funding readiness', () => {
     expect(serialized).not.toContain('sandbox-wallet-secret')
   })
 
+  it('returns the preserved digest when a historical v2 grant normalizes to current readiness', async () => {
+    configureManagedSandboxCustody()
+    const backend = convexTest(schema, modules)
+    const provisioned = await backend.mutation(
+      internal.capabilitySupplyCanaryFunding.provisionSellerOnboardingCanaryFunding,
+      { now: NOW },
+    )
+    if (provisioned.kind !== 'ensured') throw new Error('canary platform grant fixture missing')
+
+    await backend.run(async (ctx) => {
+      const grant = await ctx.db.query('agentAccessGrants')
+        .withIndex('by_grantRef', (query) => query.eq('grantRef', SELLER_ONBOARDING_CANARY_PLATFORM_GRANT_REF))
+        .unique()
+      if (grant === null) throw new Error('canary platform grant row missing')
+      await ctx.db.replace('agentAccessGrants', grant._id, {
+        format: 'ae.agent-access-grant:v2',
+        grantRef: SELLER_ONBOARDING_CANARY_PLATFORM_GRANT_REF,
+        principalId: SELLER_ONBOARDING_CANARY_PLATFORM_PRINCIPAL_ID,
+        ownerId: SELLER_ONBOARDING_CANARY_PLATFORM_OWNER_ID,
+        applicationRef: SELLER_ONBOARDING_CANARY_PLATFORM_APPLICATION_REF,
+        credentialId: SELLER_ONBOARDING_CANARY_PLATFORM_CREDENTIAL_ID,
+        environment: 'sandbox',
+        authorityMode: 'full_yolo',
+        budgetPolicyRef: SELLER_ONBOARDING_CANARY_BUDGET_POLICY_REF,
+        ratePolicyRef: SELLER_ONBOARDING_CANARY_RATE_POLICY_REF,
+        lifecycle: 'active',
+        generation: 1,
+        policyDigest: provisioned.spendingPolicyDigest,
+        createdAt: grant.createdAt,
+        updatedAt: grant.updatedAt,
+        expiresAt: grant.expiresAt,
+        operationAccess: 'all_admitted',
+        operationRefs: [],
+        policy: {
+          format: 'ae.agent-access-policy:v2',
+          operationAccess: 'all_admitted',
+          operationRefs: [],
+          environment: 'sandbox',
+          budget: {
+            budgetPolicyRef: SELLER_ONBOARDING_CANARY_BUDGET_POLICY_REF,
+            generation: 1,
+            currency: 'USD',
+            exponent: 6,
+            maximumSpendPerInvocation: {
+              currency: 'USD',
+              units: SELLER_ONBOARDING_CANARY_MAXIMUM_PER_CALL_ATOMIC,
+              exponent: 6,
+            },
+            maximumDailySpend: {
+              currency: 'USD',
+              units: SELLER_ONBOARDING_CANARY_MAXIMUM_DAILY_ATOMIC,
+              exponent: 6,
+            },
+            maximumMonthlySpend: {
+              currency: 'USD',
+              units: SELLER_ONBOARDING_CANARY_MAXIMUM_MONTHLY_ATOMIC,
+              exponent: 6,
+            },
+            maximumConcurrentInvocations: 1,
+          },
+          rate: {
+            ratePolicyRef: SELLER_ONBOARDING_CANARY_RATE_POLICY_REF,
+            generation: 1,
+            maximumCallsPerMinute: 1,
+            maximumCallsPerHour: 5,
+          },
+        },
+      })
+    })
+
+    await expect(backend.query(
+      internal.capabilitySupplyCanaryFunding.readSellerOnboardingCanaryFundingReadiness,
+      { now: NOW },
+    )).resolves.toMatchObject({
+      kind: 'ready',
+      spendingPolicyDigest: provisioned.spendingPolicyDigest,
+    })
+  })
+
   it('rejects broader custody caps, wrong-network RPC, and duplicate RPC endpoints', async () => {
     const backend = convexTest(schema, modules)
     await backend.mutation(
@@ -264,16 +344,20 @@ describe('seller onboarding canary funding readiness', () => {
         .withIndex('by_principalId', (query) => query.eq('principalId', SELLER_ONBOARDING_CANARY_PLATFORM_PRINCIPAL_ID))
         .unique()
       if (grant === null || principal === null) throw new Error('canary funding fixture missing')
+      const spendingPolicy = grant.spendingPolicy
+      if (spendingPolicy === undefined || spendingPolicy.format !== 'ae.agent-access-policy:v2') {
+        throw new Error('canary funding fixture policy missing')
+      }
       await ctx.db.patch(grant._id, {
-        policy: {
-          ...grant.policy,
+        spendingPolicy: {
+          ...spendingPolicy,
           budget: {
-            ...grant.policy.budget,
+            ...spendingPolicy.budget,
             maximumMonthlySpend: { currency: 'USD', units: '50001', exponent: 6 },
           },
         },
       })
-      await ctx.db.patch(principal._id, { scopes: ['market_operations:invoke', 'market_supply:manage'] })
+      await ctx.db.patch(principal._id, { scopes: ['market_tools:call', 'market_supply:manage'] })
     })
 
     await expect(backend.query(
@@ -294,6 +378,9 @@ describe('seller onboarding canary funding readiness', () => {
     const stillDrifted = await backend.run(async (ctx) => await ctx.db.query('agentAccessGrants')
       .withIndex('by_grantRef', (query) => query.eq('grantRef', SELLER_ONBOARDING_CANARY_PLATFORM_GRANT_REF))
       .unique())
-    expect(stillDrifted?.policy.budget.maximumMonthlySpend.units).toBe('50001')
+    if (stillDrifted?.spendingPolicy?.format !== 'ae.agent-access-policy:v2') {
+      throw new Error('canary funding fixture policy missing')
+    }
+    expect(stillDrifted.spendingPolicy.budget.maximumMonthlySpend.units).toBe('50001')
   })
 })

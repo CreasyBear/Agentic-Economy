@@ -343,9 +343,9 @@ describe('provider consequence route coverage gaps', () => {
         },
       }
     })
-    vi.doMock('@/modules/capability-execution/invocation-worker/jitProviderConsequence', async () => {
-      const actual = await vi.importActual<typeof import('@/modules/capability-execution/invocation-worker/jitProviderConsequence')>(
-        '@/modules/capability-execution/invocation-worker/jitProviderConsequence',
+    vi.doMock('@/modules/capability-execution/call-worker/jitProviderConsequence', async () => {
+      const actual = await vi.importActual<typeof import('@/modules/capability-execution/call-worker/jitProviderConsequence')>(
+        '@/modules/capability-execution/call-worker/jitProviderConsequence',
       )
       return {
         ...actual,
@@ -373,7 +373,7 @@ describe('provider consequence route coverage gaps', () => {
       expect(response.status).toBe(200)
       expect(probe).toHaveBeenCalledOnce()
     } finally {
-      vi.doUnmock('@/modules/capability-execution/invocation-worker/jitProviderConsequence')
+      vi.doUnmock('@/modules/capability-execution/call-worker/jitProviderConsequence')
       vi.doUnmock('@/modules/capability-supply/server')
     }
   })
@@ -494,9 +494,9 @@ describe('provider consequence route coverage gaps', () => {
 
   it('contains an unexpected consequence-boundary construction failure', async () => {
     vi.resetModules()
-    vi.doMock('@/modules/capability-execution/invocation-worker/jitProviderConsequence', async () => {
-      const actual = await vi.importActual<typeof import('@/modules/capability-execution/invocation-worker/jitProviderConsequence')>(
-        '@/modules/capability-execution/invocation-worker/jitProviderConsequence',
+    vi.doMock('@/modules/capability-execution/call-worker/jitProviderConsequence', async () => {
+      const actual = await vi.importActual<typeof import('@/modules/capability-execution/call-worker/jitProviderConsequence')>(
+        '@/modules/capability-execution/call-worker/jitProviderConsequence',
       )
       return {
         ...actual,
@@ -509,7 +509,7 @@ describe('provider consequence route coverage gaps', () => {
       await expect(dynamicRoute.handleProviderConsequenceRequest(consequenceRequest(), environment()))
         .resolves.toMatchObject({ status: 503 })
     } finally {
-      vi.doUnmock('@/modules/capability-execution/invocation-worker/jitProviderConsequence')
+      vi.doUnmock('@/modules/capability-execution/call-worker/jitProviderConsequence')
     }
   })
 
@@ -572,8 +572,8 @@ function invocation(): ProviderInvocation {
       grantDigest: DIGEST('5'), capabilityContractDigest: DIGEST('6'),
       maximumSpend: { currency: 'USD', units: '0', exponent: 2 }, expiresAt: NOW + 120_000,
       callIdentity: { keyId: 'route-calls:test', signature: 'hmac-sha256:test' },
-      authorityGeneration: 7, authorityDigest: DIGEST('7'), leaseRef: 'lease:test', invocationRef: 'invocation:test',
-      operationRef: 'operation:test', grantedScopes: ['provider:invoke'], grantedResources: ['operation:test'],
+      authorityGeneration: 7, authorityDigest: DIGEST('7'), leaseRef: 'lease:test', callRef: 'call:test',
+      toolRef: 'tool:test', grantedScopes: ['provider:invoke'], grantedResources: ['tool:test'],
       readinessValidUntil: NOW + 120_000, readinessDigest: DIGEST('8'),
     },
     inputJson: '{}',
@@ -604,11 +604,11 @@ function ticket(routeInvocation: ProviderInvocation = invocation()): CanonicalPr
   return {
     version: 'provider-consequence:v1', ticketRef: 'provider-ticket:test', effectRef: 'connection-effect:test',
     requestDigest: requestDigest(routeInvocation), invocationDigest, issuedAt: NOW - 1_000, expiresAt: NOW + 10_000,
-    invocationRef: 'invocation:test', operationRef: 'operation:test', leaseRef: 'lease:test',
+    callRef: 'call:test', toolRef: 'tool:test', leaseRef: 'lease:test',
     connectionRef: routeInvocation.binding.authority.connectionRef,
     authorityGeneration: 7, providerRef: 'provider:test', adapterId: routeInvocation.binding.adapterId,
     authorityDigest: routeInvocation.authority.authorityDigest, grantedScopes: ['provider:invoke'],
-    grantedResources: ['operation:test'], readinessValidUntil, readinessDigest,
+    grantedResources: ['tool:test'], readinessValidUntil, readinessDigest,
     owningAccountRef: `acc_${'1'.repeat(32)}`, activeAccountRef: `acc_${'1'.repeat(32)}`,
     actorPrincipalRef: `prn_${'2'.repeat(32)}`, grantRef: 'grant:test', grantGeneration: 3,
     secret: { secretRef: CUSTOMER_SECRET_REF, activeGeneration: CUSTOMER_GENERATION, pointerRevision: 4 },
@@ -874,10 +874,10 @@ function probeFetch(
         const challenge = x402Challenge()
         const selectedRequirement = challenge.accepts[0]
         const base = {
-          state: 'prepared', dispatchRef: canonicalTicket.invocationRef,
+          state: 'prepared', dispatchRef: canonicalTicket.callRef,
           attemptRef: routeInvocation.authority.attemptRef,
           effectGeneration: routeInvocation.authority.effectGeneration,
-          operationRef: canonicalTicket.operationRef, credentialRef: PAYMENT_SECRET_REF,
+          toolRef: canonicalTicket.toolRef, credentialRef: PAYMENT_SECRET_REF,
           challengeJson: JSON.stringify(challenge), selectedRequirementJson: JSON.stringify(selectedRequirement),
           challengeDigest: canonicalDigest(challenge), paymentIdentifier: routeInvocation.authority.operationKeyDigest,
         }

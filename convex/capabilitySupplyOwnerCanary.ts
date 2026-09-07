@@ -5,33 +5,33 @@ import type { Doc, Id } from './_generated/dataModel'
 import type { MutationCtx } from './_generated/server'
 import { resolveBusinessActor } from './authz'
 import { requireSourceWrite, sourceWriteArgs } from './sourceWriteAdmission'
-import { readExactSellerCanaryOperationSnapshotHandler } from './capabilitySupplyCurrentOperation'
-import { reserveHandler } from './lib/operationInvocations/admission'
+import { readExactSellerCanaryOperationSnapshotHandler } from './capabilitySupplyCurrentTool'
+import { reserveHandler } from './lib/callLifecycle/admission'
 import {
-  enqueueInvocationDispatch,
+  enqueueCallDispatch,
   enqueueKnownUnpaidSellerCanaryRearm,
   enqueueRecoveredSellerCanaryReplay,
   enqueueSafeBeforeReleaseSellerCanaryResume,
   knownUnpaidSellerCanaryRefusal,
   safeBeforeReleaseSellerCanaryRefusal,
   SELLER_CANARY_ROUTE_SIGNING_UNAVAILABLE_NEXT_ACTION,
-} from './lib/operationInvocations/dispatch'
+} from './lib/callLifecycle/dispatch'
 import {
   jsonObject,
-  operationResultValue,
+  callResultValue,
   sellerOnboardingCanaryExecutionEnvelopeValue,
 } from '@/modules/capability-execution/convex'
 import {
-  buildOperationInvokeAuthority,
-  type OperationInvokeGrant,
-} from '@/modules/capability-execution/operation-invoke'
+  buildCallAuthority,
+  type CallGrant,
+} from '@/modules/capability-execution/call-authority'
 import {
   createSellerOnboardingCanaryCommitment,
   sellerOnboardingCanaryExecutionEnvelope,
 } from '@/modules/capability-supply/public'
 import {
-  materializeRuntimePublishedOperation,
-  parsePublishedOperationSnapshot,
+  materializeRuntimePublishedTool,
+  parsePublishedToolSnapshot,
 } from '@/modules/capability-supply/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { isBoundedJsonValue, type JsonValue } from '@/modules/capability-contract/public'
@@ -59,8 +59,8 @@ const requestSellerOnboardingCanaryResult = v.union(
   v.object({
     kind: v.union(v.literal('enqueued'), v.literal('replayed')),
     canaryRef: v.string(),
-    invocationRef: v.string(),
-    operationRef: v.string(),
+    callRef: v.string(),
+    toolRef: v.string(),
   }),
   v.object({
     kind: v.literal('refused'),
@@ -81,7 +81,7 @@ const requestSellerOnboardingCanaryResult = v.union(
 
 const sellerOnboardingCanaryEvidenceValue = v.union(v.object({
   sellerOnboardingCanary: sellerOnboardingCanaryExecutionEnvelopeValue,
-  operationJson: v.string(),
+  toolJson: v.string(),
   state: v.union(
     v.literal('pending'),
     v.literal('completed'),
@@ -89,7 +89,7 @@ const sellerOnboardingCanaryEvidenceValue = v.union(v.object({
     v.literal('reconciliation_required'),
     v.literal('cancelled'),
   ),
-  result: v.optional(operationResultValue),
+  result: v.optional(callResultValue),
   evidenceHash: v.optional(v.string()),
   attemptRef: v.optional(v.string()),
   updatedAt: v.number(),
@@ -120,8 +120,8 @@ const ownerSellerCanaryStatusValue = v.union(
   v.object({
     kind: v.literal('available'),
     canaryRef: v.string(),
-    invocationRef: v.string(),
-    operationRef: v.string(),
+    callRef: v.string(),
+    toolRef: v.string(),
     offeringRef: v.string(),
     offeringRevision: v.number(),
     publicationRef: v.string(),
@@ -180,9 +180,9 @@ type RequestArgs = {
   sourceWrite?: unknown
   sourceWriteRequest?: unknown
 }
-type CanaryEnvelope = NonNullable<Doc<'capabilityOperationInvocations'>['sellerOnboardingCanary']>
+type CanaryEnvelope = NonNullable<Doc<'capabilityCalls'>['sellerOnboardingCanary']>
 
-function operationGrant(grant: AgentAccessGrant): OperationInvokeGrant {
+function operationGrant(grant: AgentAccessGrant): CallGrant {
   return {
     grantRef: grant.grantRef,
     principalId: grant.principalId,
@@ -191,11 +191,11 @@ function operationGrant(grant: AgentAccessGrant): OperationInvokeGrant {
     credentialId: grant.credentialId,
     environment: grant.environment,
     generation: grant.generation,
-    policyDigest: grant.policyDigest,
+    policyDigest: grant.spendingPolicyDigest,
     expiresAt: grant.expiresAt,
     lifecycle: 'active',
-    operationAccess: grant.operationAccess,
-    operationRefs: grant.operationRefs,
+    toolAccess: grant.toolAccess,
+    toolRefs: grant.toolRefs,
   }
 }
 
@@ -203,7 +203,7 @@ function stableCanaryIdentity(envelope: CanaryEnvelope) {
   return {
     executionPurpose: envelope.executionPurpose,
     canaryRef: envelope.canaryRef,
-    operationRef: envelope.operationRef,
+    toolRef: envelope.toolRef,
     ownerId: envelope.ownerId,
     businessId: envelope.businessId,
     offeringRef: envelope.offeringRef,
@@ -232,8 +232,8 @@ function persistedCanaryCommitmentIsValid(envelope: CanaryEnvelope): boolean {
       accessPathSourceHash: envelope.accessPathSourceHash,
       publicationRef: envelope.publicationRef,
       publicationRevision: envelope.publicationRevision,
-      draftOperationRef: envelope.operationRef,
-      operationMaterialDigest: envelope.operationMaterialDigest,
+      draftOperationRef: envelope.toolRef,
+      toolMaterialDigest: envelope.toolMaterialDigest,
       contractDigest: envelope.contractDigest,
       bindingDigest: envelope.bindingDigest,
       priceDigest: envelope.priceDigest,
@@ -269,7 +269,7 @@ function persistedCanaryCommitmentIsValid(envelope: CanaryEnvelope): boolean {
 }
 
 function exactPersistedCanaryIdentity(
-  row: Doc<'capabilityOperationInvocations'>,
+  row: Doc<'capabilityCalls'>,
   requested: CanaryEnvelope,
 ): boolean {
   const existing = row.sellerOnboardingCanary
@@ -278,8 +278,8 @@ function exactPersistedCanaryIdentity(
     && existing.canaryRef === requested.canaryRef
     && canonicalDigest(stableCanaryIdentity(existing) as never)
       === canonicalDigest(stableCanaryIdentity(requested) as never)
-    && row.invocationRef === existing.invocationRef
-    && row.operationRef === existing.operationRef
+    && row.callRef === existing.callRef
+    && row.toolRef === existing.toolRef
     && row.inputDigest === existing.inputDigest
     && row.idempotencyKey === existing.idempotencyKey
     && row.principalId === existing.funding.principalId
@@ -341,11 +341,11 @@ export async function requestSellerOnboardingCanaryHandler(
     || snapshot.offeringRevision !== args.offeringRevision
     || snapshot.offeringSourceHash !== args.offeringSourceHash
   ) return { kind: 'refused', code: 'staging_snapshot_missing' }
-  const operation = parsePublishedOperationSnapshot(snapshot.operationJson)
+  const operation = parsePublishedToolSnapshot(snapshot.toolJson)
   if (operation === undefined || operation.runtimeEnvironment !== 'sandbox') {
     return { kind: 'refused', code: 'staging_snapshot_missing' }
   }
-  const descriptor = materializeRuntimePublishedOperation(operation)
+  const descriptor = materializeRuntimePublishedTool(operation)
   const canaryInput = operation.contract.inputExamples?.find(({ input }) => (
     isBoundedJsonValue(input) && descriptor.validateInput(input)
   ))?.input
@@ -370,7 +370,7 @@ export async function requestSellerOnboardingCanaryHandler(
     sellerOnboardingCanaryPlatformGrantExpectation(actor.canonicalAccountRef, now),
   )
   if (grant === null) return { kind: 'refused', code: 'canary_grant_missing' }
-  const maximumSpend = grant.policy.budget.maximumSpendPerInvocation
+  const maximumSpend = grant.spendingPolicy.budget.maximumSpendPerCall
   if (compareExactAmounts(requestedSpend, maximumSpend) !== -1
     && compareExactAmounts(requestedSpend, maximumSpend) !== 0) {
     return { kind: 'refused', code: 'canary_budget_exceeded' }
@@ -386,8 +386,8 @@ export async function requestSellerOnboardingCanaryHandler(
     accessPathSourceHash: snapshot.accessPathSourceHash,
     publicationRef: snapshot.publicationRef,
     publicationRevision: snapshot.publicationRevision,
-    draftOperationRef: snapshot.operationRef,
-    operationMaterialDigest: operation.materialDigest,
+    draftOperationRef: snapshot.toolRef,
+    toolMaterialDigest: operation.materialDigest,
     contractDigest: operation.identity.contractDigest,
     bindingDigest: operation.identity.bindingDigest,
     priceDigest: operation.priceDigest,
@@ -399,7 +399,7 @@ export async function requestSellerOnboardingCanaryHandler(
     expectedOutputSchemaDigest: canonicalDigest(operation.contract.outputSchema),
     expectedOutputEvidenceDigest: canonicalDigest({
       kind: 'seller_onboarding_canary_expected_output:v1',
-      operationMaterialDigest: operation.materialDigest,
+      toolMaterialDigest: operation.materialDigest,
       contractDigest: operation.identity.contractDigest,
       inputDigest,
       outputSchema: operation.contract.outputSchema,
@@ -414,7 +414,7 @@ export async function requestSellerOnboardingCanaryHandler(
     fundingApplicationRef: grant.applicationRef,
     fundingGrantRef: grant.grantRef,
     fundingGrantGeneration: grant.generation,
-    fundingPolicyDigest: grant.policyDigest,
+    fundingPolicyDigest: grant.spendingPolicyDigest,
     requestedSpend,
     maximumSpend,
     expiresAt: Math.min(snapshot.readinessValidUntil, grant.expiresAt, now + 5 * 60_000),
@@ -422,29 +422,29 @@ export async function requestSellerOnboardingCanaryHandler(
   })
   const commitment = canaryCommitment(args.operationKey)
   const envelope = sellerOnboardingCanaryExecutionEnvelope(commitment)
-  const authorityForEnvelope = (target: CanaryEnvelope) => buildOperationInvokeAuthority({
+  const authorityForEnvelope = (target: CanaryEnvelope) => buildCallAuthority({
     authority: {
       kind: 'approved',
       basis: {
-        kind: 'standing_mandate_use',
-        mandateRef: `agent-access-grant:${grant.grantRef}`,
-        mandateVersion: 1,
-        mandateGeneration: grant.generation,
-        authorityUseRef: `operation-authority-use:${target.invocationRef}`,
-        grantEvidenceRef: `agent-access-grant-evidence:${grant.policyDigest}`,
+        kind: 'spending_policy_use',
+        spendingPolicyRef: `agent-access-grant:${grant.grantRef}`,
+        spendingPolicyVersion: 1,
+        spendingPolicyGeneration: grant.generation,
+        authorityUseRef: `operation-authority-use:${target.callRef}`,
+        grantEvidenceRef: `agent-access-grant-evidence:${grant.spendingPolicyDigest}`,
       },
       expiresAt: new Date(target.expiresAt).toISOString(),
     },
     grant: operationGrant(grant),
     operation,
     descriptor,
-    operationRef: snapshot.operationRef,
-    invocationRef: target.invocationRef,
+    toolRef: snapshot.toolRef,
+    callRef: target.callRef,
     inputDigest,
     decisionPrice: target.funding.requestedSpend,
     now,
   })
-  const existingRows = await ctx.db.query('capabilityOperationInvocations')
+  const existingRows = await ctx.db.query('capabilityCalls')
     .withIndex('by_sellerOnboardingCanary_canaryRef', (query) => (
       query.eq('sellerOnboardingCanary.canaryRef', envelope.canaryRef)
     ))
@@ -460,20 +460,20 @@ export async function requestSellerOnboardingCanaryHandler(
     if (
       refreshedAuthority !== undefined
       && refreshedEnvelope.canaryRef === existing.sellerOnboardingCanary?.canaryRef
-      && refreshedEnvelope.invocationRef === existing.invocationRef
+      && refreshedEnvelope.callRef === existing.callRef
     ) {
       const refreshed = {
         envelope: refreshedEnvelope,
         authority: refreshedAuthority,
         grantGeneration: grant.generation,
-        policyDigest: grant.policyDigest,
+        policyDigest: grant.spendingPolicyDigest,
         grantExpiresAt: grant.expiresAt,
-        operationJson: snapshot.operationJson,
+        toolJson: snapshot.toolJson,
         inputJson: JSON.stringify(canaryInput),
         inputDigest,
         requestDigest: canonicalDigest({
           purpose: refreshedEnvelope.executionPurpose,
-          operationRef: snapshot.operationRef,
+          toolRef: snapshot.toolRef,
           input: canaryInput,
           canaryCommitmentDigest: refreshedEnvelope.canaryCommitmentDigest,
         }),
@@ -485,8 +485,8 @@ export async function requestSellerOnboardingCanaryHandler(
         return {
           kind: 'enqueued',
           canaryRef: refreshedEnvelope.canaryRef,
-          invocationRef: refreshedEnvelope.invocationRef,
-          operationRef: refreshedEnvelope.operationRef,
+          callRef: refreshedEnvelope.callRef,
+          toolRef: refreshedEnvelope.toolRef,
         }
       }
       const resumed = await enqueueSafeBeforeReleaseSellerCanaryResume(ctx, existing, refreshed)
@@ -494,8 +494,8 @@ export async function requestSellerOnboardingCanaryHandler(
         return {
           kind: 'enqueued',
           canaryRef: refreshedEnvelope.canaryRef,
-          invocationRef: refreshedEnvelope.invocationRef,
-          operationRef: refreshedEnvelope.operationRef,
+          callRef: refreshedEnvelope.callRef,
+          toolRef: refreshedEnvelope.toolRef,
         }
       }
       const recoveredWorkless = existing.state === 'pending'
@@ -512,60 +512,60 @@ export async function requestSellerOnboardingCanaryHandler(
         return {
           kind: dispatch.kind,
           canaryRef: refreshedEnvelope.canaryRef,
-          invocationRef: refreshedEnvelope.invocationRef,
-          operationRef: refreshedEnvelope.operationRef,
+          callRef: refreshedEnvelope.callRef,
+          toolRef: refreshedEnvelope.toolRef,
         }
       }
     }
     return {
       kind: 'replayed',
       canaryRef: existing.sellerOnboardingCanary!.canaryRef,
-      invocationRef: existing.invocationRef,
-      operationRef: existing.operationRef,
+      callRef: existing.callRef,
+      toolRef: existing.toolRef,
     }
   }
   const requestDigest = canonicalDigest({
     purpose: envelope.executionPurpose,
-    operationRef: snapshot.operationRef,
+    toolRef: snapshot.toolRef,
     input: canaryInput,
     canaryCommitmentDigest: envelope.canaryCommitmentDigest,
   })
   const authority = authorityForEnvelope(envelope)
   if (authority === undefined) return { kind: 'refused', code: 'canary_identity_conflict' }
   const reserved = await reserveHandler(ctx, {
-    commitmentRef: envelope.canaryRef,
-    invocationRef: envelope.invocationRef,
+    quoteRef: envelope.canaryRef,
+    callRef: envelope.callRef,
     principalId: grant.principalId,
     ownerId: grant.ownerId,
     credentialId: grant.credentialId,
     applicationRef: grant.applicationRef,
     grantRef: grant.grantRef,
     environment: 'sandbox',
-    operationRef: snapshot.operationRef,
+    toolRef: snapshot.toolRef,
     idempotencyKey: args.operationKey,
     inputDigest,
     requestDigest,
     grantGeneration: grant.generation,
-    policyDigest: grant.policyDigest,
+    policyDigest: grant.spendingPolicyDigest,
     grantExpiresAt: grant.expiresAt,
-    operationJson: snapshot.operationJson,
+    toolJson: snapshot.toolJson,
     inputJson: JSON.stringify(canaryInput),
     sellerOnboardingCanary: envelope,
     now,
   })
   if (reserved.kind === 'conflict') return { kind: 'refused', code: 'canary_identity_conflict' }
   if (reserved.kind === 'refused') return { kind: 'refused', code: 'canary_dispatch_refused' }
-  const row = await ctx.db.query('capabilityOperationInvocations')
-    .withIndex('by_invocationRef', (query) => query.eq('invocationRef', envelope.invocationRef))
+  const row = await ctx.db.query('capabilityCalls')
+    .withIndex('by_callRef', (query) => query.eq('callRef', envelope.callRef))
     .unique()
   if (row === null) return { kind: 'refused', code: 'canary_identity_conflict' }
-  const dispatch = await enqueueInvocationDispatch(ctx, row, authority, now)
+  const dispatch = await enqueueCallDispatch(ctx, row, authority, now)
   if (dispatch.kind === 'refused') return { kind: 'refused', code: 'canary_dispatch_refused' }
   return {
     kind: dispatch.kind,
     canaryRef: envelope.canaryRef,
-    invocationRef: envelope.invocationRef,
-    operationRef: envelope.operationRef,
+    callRef: envelope.callRef,
+    toolRef: envelope.toolRef,
   }
 }
 
@@ -579,7 +579,7 @@ export const readSellerOnboardingCanaryEvidence = internalQuery({
   args: { canaryRef: v.string() },
   returns: sellerOnboardingCanaryEvidenceValue,
   handler: async (ctx, args) => {
-    const row = await ctx.db.query('capabilityOperationInvocations')
+    const row = await ctx.db.query('capabilityCalls')
       .withIndex('by_sellerOnboardingCanary_canaryRef', (query) => (
         query.eq('sellerOnboardingCanary.canaryRef', args.canaryRef)
       ))
@@ -587,16 +587,16 @@ export const readSellerOnboardingCanaryEvidence = internalQuery({
     if (
       row === null
       || row.sellerOnboardingCanary === undefined
-      || row.operationJson === undefined
+      || row.toolJson === undefined
       || row.sellerOnboardingCanary.canaryRef !== args.canaryRef
-      || row.sellerOnboardingCanary.invocationRef !== row.invocationRef
-      || row.sellerOnboardingCanary.operationRef !== row.operationRef
+      || row.sellerOnboardingCanary.callRef !== row.callRef
+      || row.sellerOnboardingCanary.toolRef !== row.toolRef
       || row.sellerOnboardingCanary.inputDigest !== row.inputDigest
       || row.sellerOnboardingCanary.idempotencyKey !== row.idempotencyKey
     ) return null
     return {
       sellerOnboardingCanary: structuredClone(row.sellerOnboardingCanary),
-      operationJson: row.operationJson,
+      toolJson: row.toolJson,
       state: row.state,
       ...(row.result === undefined ? {} : { result: structuredClone(row.result) }),
       ...(row.evidenceHash === undefined ? {} : { evidenceHash: row.evidenceHash }),
@@ -625,7 +625,7 @@ export const readOwnerSellerOnboardingCanaryStatus = query({
       return { kind: 'error' as const, code: 'wrong_owner' as const }
     }
 
-    const rows = await ctx.db.query('capabilityOperationInvocations')
+    const rows = await ctx.db.query('capabilityCalls')
       .withIndex('by_sellerOnboardingCanary_target', (index) => index
         .eq('sellerOnboardingCanary.businessId', String(args.businessId))
         .eq('sellerOnboardingCanary.offeringRef', args.offeringRef)
@@ -648,8 +648,8 @@ export const readOwnerSellerOnboardingCanaryStatus = query({
       || canary.offeringSourceHash !== args.offeringSourceHash
       || canary.publicationRef !== args.publicationRef
       || canary.publicationRevision !== args.publicationRevision
-      || canary.invocationRef !== row.invocationRef
-      || canary.operationRef !== row.operationRef
+      || canary.callRef !== row.callRef
+      || canary.toolRef !== row.toolRef
       || canary.inputDigest !== row.inputDigest
       || canary.idempotencyKey !== row.idempotencyKey) {
       return { kind: 'conflict' as const }
@@ -681,8 +681,8 @@ export const readOwnerSellerOnboardingCanaryStatus = query({
     return {
       kind: 'available' as const,
       canaryRef: canary.canaryRef,
-      invocationRef: canary.invocationRef,
-      operationRef: canary.operationRef,
+      callRef: canary.callRef,
+      toolRef: canary.toolRef,
       offeringRef: canary.offeringRef,
       offeringRevision: canary.offeringRevision,
       publicationRef: canary.publicationRef,

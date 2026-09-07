@@ -97,7 +97,7 @@ describe('owner capability withdraw and republish', () => {
     const fullOwnerTestEvent = {
       ...ownerTestEventBase,
       publicationRevision: first.publicationRevision,
-      operationRef: first.operationRef,
+      toolRef: first.toolRef,
       taskDigest: 'owner-test-task:hostile',
     }
     await expect(owner.mutation(internal.capabilitySupply.recordCapabilityCallEvent, {
@@ -151,7 +151,7 @@ describe('owner capability withdraw and republish', () => {
       owner.mutation(internal.capabilitySupply.recordCapabilityCallEvent, {
         ...ownerTestEventBase,
         eventRef: 'owner-supply-test:r1:missing-identity',
-        operationRef: first.operationRef,
+        toolRef: first.toolRef,
         taskDigest: 'owner-test-task:r1:missing-identity',
       }),
     ).rejects.toThrow('capability_call_event_publication_identity_invalid')
@@ -160,7 +160,7 @@ describe('owner capability withdraw and republish', () => {
         ...ownerTestEventBase,
         eventRef: 'owner-supply-test:r1',
         publicationRevision: first.publicationRevision,
-        operationRef: first.operationRef,
+        toolRef: first.toolRef,
         taskDigest: 'owner-test-task:r1',
       }),
     ).resolves.toEqual({ kind: 'recorded' })
@@ -169,7 +169,7 @@ describe('owner capability withdraw and republish', () => {
         ...ownerTestEventBase,
         eventRef: 'owner-supply-test:r1',
         publicationRevision: first.publicationRevision,
-        operationRef: first.operationRef,
+        toolRef: first.toolRef,
         taskDigest: 'owner-test-task:r1',
       }),
     ).resolves.toEqual({ kind: 'replayed' })
@@ -178,7 +178,7 @@ describe('owner capability withdraw and republish', () => {
         ...ownerTestEventBase,
         eventRef: 'owner-supply-test:r1',
         publicationRevision: first.publicationRevision,
-        operationRef: first.operationRef,
+        toolRef: first.toolRef,
         taskDigest: 'owner-test-task:r1:forged-replay',
       }),
     ).rejects.toThrow('capability_call_event_identity_conflict')
@@ -189,7 +189,7 @@ describe('owner capability withdraw and republish', () => {
       publicationRef: first.publicationRef,
       eventRef: 'owner-supply-test:zero-depth',
       publicationRevision: first.publicationRevision,
-      operationRef: first.operationRef,
+      toolRef: first.toolRef,
       taskDigest: 'owner-test-task:zero-depth',
       eventKind: 'supply_liquidity_depth_observed',
       outcome: 'zero',
@@ -209,7 +209,7 @@ describe('owner capability withdraw and republish', () => {
     expect(firstReadback.offerings).toHaveLength(1)
     expect(firstReadback.offerings[0]).toMatchObject({
       offeringRef,
-      operationRef: first.operationRef,
+      toolRef: first.toolRef,
       publicationRef: first.publicationRef,
     })
     expect(firstReadback.activityTruncated).toBe(false)
@@ -313,7 +313,7 @@ describe('owner capability withdraw and republish', () => {
     if (republished.kind !== 'republished')
       throw new Error(`owner_test_republish_unexpected:${republished.kind}`)
     expect(republished.revision).toBe(first.publicationRevision + 1)
-    expect(republished.operationRef).not.toBe(first.operationRef)
+    expect(republished.toolRef).not.toBe(first.toolRef)
 
     await observeReadiness(first.publicationRef, republished.revision, 'r2')
     await expect(
@@ -321,7 +321,7 @@ describe('owner capability withdraw and republish', () => {
         ...ownerTestEventBase,
         eventRef: 'owner-supply-test:r1:stale-after-republish',
         publicationRevision: first.publicationRevision,
-        operationRef: first.operationRef,
+        toolRef: first.toolRef,
         taskDigest: 'owner-test-task:r1:stale-after-republish',
       }),
     ).rejects.toThrow('capability_call_event_publication_stale')
@@ -330,7 +330,7 @@ describe('owner capability withdraw and republish', () => {
         ...ownerTestEventBase,
         eventRef: 'owner-supply-test:r2',
         publicationRevision: republished.revision,
-        operationRef: republished.operationRef,
+        toolRef: republished.toolRef,
         taskDigest: 'owner-test-task:r2',
         evidenceRefs: ['owner-test:evidence:r2'],
       }),

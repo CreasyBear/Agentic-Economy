@@ -102,12 +102,12 @@ function ChatConvexProvider({ children }: { children: ReactNode }) {
     return (
       <AePageState
         title="Chat is unavailable"
-        description="Chat is not configured. The Operation catalogue remains available."
+        description="Chat is not configured. The Tool catalogue remains available."
         tone="warning"
         action={(
           <Button asChild className="min-h-touch">
-            <Link to="/market" search={{ window: '30d' }} hash="operations">
-              Browse Operations
+            <Link to="/market" search={{ window: '30d' }} hash="tools">
+              Browse Tools
             </Link>
           </Button>
         )}

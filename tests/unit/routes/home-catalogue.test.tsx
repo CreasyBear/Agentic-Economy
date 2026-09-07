@@ -12,15 +12,15 @@ import {
 import { afterEach, describe, expect, it } from 'vitest'
 import '../../setup/jsdom-platform'
 
-import type { OperationCardViewModel } from '@/modules/market/operation-view-model'
+import type { ToolCardViewModel } from '@/modules/market/tool-view-model'
 import { HomeCapabilityResults } from '@/components/ae/home/AeHomeLanding'
 
-const operation = {
-  operationRef: 'operation:v1:invoice-extraction',
+const tool = {
+  toolRef: 'operation:v1:invoice-extraction',
   title: 'Invoice extraction',
-  supplierName: 'Ledger Labs',
-  supplierSlug: 'ledger-labs',
-  supplierInitials: 'LL',
+  providerName: 'Ledger Labs',
+  providerSlug: 'ledger-labs',
+  providerInitials: 'LL',
   capabilityId: 'invoice.extract',
   capability: 'Invoice extract',
   category: { id: 'data-research', label: 'Data', description: 'Data tools' },
@@ -33,16 +33,16 @@ const operation = {
   lastVerifiedAt: 1_725_000_000_000,
   callLabel: 'Use capability',
   rating: { kind: 'unrated', count: 0, display: 'No ratings yet', definition: 'No rating' },
-  popularity: { kind: 'no_activity', completedInvocations: 0, display: 'No completed calls yet', definition: 'No calls' },
+  popularity: { kind: 'no_activity', completedCalls: 0, display: 'No completed calls yet', definition: 'No calls' },
   latency: { kind: 'insufficient_sample', sampleSize: 0, minimumSampleSize: 5, display: 'Not enough data', definition: 'No sample' },
-} satisfies OperationCardViewModel
+} satisfies ToolCardViewModel
 
 function renderResults() {
   const rootRoute = createRootRoute()
   const routeTree = rootRoute.addChildren([
     createRoute({ getParentRoute: () => rootRoute, path: '/' }),
     createRoute({ getParentRoute: () => rootRoute, path: '/market' }),
-    createRoute({ getParentRoute: () => rootRoute, path: '/operations/$operationRef' }),
+    createRoute({ getParentRoute: () => rootRoute, path: '/tools/$toolRef' }),
   ])
   const router = createRouter({
     routeTree,
@@ -50,7 +50,7 @@ function renderResults() {
   })
   return render(
     <RouterContextProvider router={router}>
-      <HomeCapabilityResults read={{ kind: 'ok', operations: [operation], matchedCount: 1 }} />
+      <HomeCapabilityResults read={{ kind: 'ok', tools: [tool], matchedCount: 1 }} />
     </RouterContextProvider>,
   )
 }
@@ -58,10 +58,10 @@ function renderResults() {
 afterEach(cleanup)
 
 describe('catalogue-first home', () => {
-  it('peeks capabilities as catalog tiles instead of Operation rows', () => {
+  it('peeks capabilities as catalog tiles instead of Tool rows', () => {
     renderResults()
 
-    expect(screen.getByRole('heading', { level: 2, name: 'Current Operations' })).toBeTruthy()
+    expect(screen.getByRole('heading', { level: 2, name: 'Current Tools' })).toBeTruthy()
     const row = screen.getByRole('listitem')
     expect(
       within(row).getByRole('link', {
@@ -93,17 +93,17 @@ describe('catalogue-first home', () => {
       </RouterContextProvider>,
     )
 
-    expect(screen.getByText(/The Operation catalog is temporarily unavailable/)).toBeTruthy()
+    expect(screen.getByText(/The Tool catalog is temporarily unavailable/)).toBeTruthy()
     const retry = screen.getByRole('link', { name: 'Try again' })
     expect(retry.getAttribute('href')).toBe('/')
     view.rerender(
       <RouterContextProvider router={router}>
-        <HomeCapabilityResults read={{ kind: 'ok', operations: [], matchedCount: 0 }} />
+        <HomeCapabilityResults read={{ kind: 'ok', tools: [], matchedCount: 0 }} />
       </RouterContextProvider>,
     )
-    expect(screen.getByText(/No Operations are published yet/)).toBeTruthy()
+    expect(screen.getByText(/No Tools are published yet/)).toBeTruthy()
     expect(screen.queryByText('Invoice extract')).toBeNull()
-    const browse = screen.getAllByRole('link', { name: 'Browse Operations' })
+    const browse = screen.getAllByRole('link', { name: 'Browse Tools' })
     expect(browse.some((link) => link.getAttribute('href')?.includes('/market'))).toBe(true)
   })
 })

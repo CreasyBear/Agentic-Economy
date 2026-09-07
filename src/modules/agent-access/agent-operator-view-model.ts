@@ -4,9 +4,9 @@ import type { AgentConnectionReadback } from '@/modules/agent-access/agent-conne
 import type { CreditAccountView, CreditActivityView, KeyUsageView } from '@/modules/money/public'
 
 export type AgentActivityView = CreditActivityView & Readonly<{
-  operation?: Readonly<{
+  tool?: Readonly<{
     label: string
-    supplier: string
+    provider: string
   }>
 }>
 

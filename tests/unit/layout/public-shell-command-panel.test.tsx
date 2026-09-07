@@ -34,10 +34,10 @@ describe('public shell command panel', () => {
     expect(screen.getByText('Public page')).toBeTruthy()
   })
 
-  it('exposes Operation search on every public page and restores focus after Cmd/Ctrl-K closes', async () => {
+  it('exposes Tool search on every public page and restores focus after Cmd/Ctrl-K closes', async () => {
     renderPublicShell()
 
-    const trigger = screen.getByRole('button', { name: 'Find Operations' })
+    const trigger = screen.getByRole('button', { name: 'Find Tools' })
     expect(trigger.className).toContain('min-h-touch')
     expect(trigger.getAttribute('aria-expanded')).toBe('false')
 
@@ -56,7 +56,7 @@ describe('public shell command panel', () => {
   it('exposes mobile navigation state and restores its trigger after each close path', async () => {
     renderPublicShell()
 
-    expect(screen.getByRole('button', { name: 'Find Operations' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Find Tools' })).toBeTruthy()
     const trigger = screen.getByRole('button', { name: 'Open public menu' })
     expect(trigger.getAttribute('aria-expanded')).toBe('false')
     expect(trigger.getAttribute('aria-controls')).toBeNull()
@@ -121,7 +121,7 @@ function renderPublicShell(mode: 'page' | 'workspace' = 'page'): void {
     createRoute({ getParentRoute: () => rootRoute, path: '/terms' }),
     createRoute({ getParentRoute: () => rootRoute, path: '/privacy/remove-business' }),
     createRoute({ getParentRoute: () => rootRoute, path: '/sign-in/$' }),
-    createRoute({ getParentRoute: () => rootRoute, path: '/operations/$operationRef' }),
+    createRoute({ getParentRoute: () => rootRoute, path: '/tools/$toolRef' }),
   ])
   const router = createRouter({
     routeTree,

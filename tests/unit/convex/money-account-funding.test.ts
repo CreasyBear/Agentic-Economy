@@ -8,6 +8,7 @@ import { withSourceWrite } from '../../helpers/source-write-admission'
 import { createCustomerRequestServiceAssertion, toStableHashValue } from '@/modules/agent-access/service-auth-envelope'
 import { issuedAgentGrantRef } from '@/modules/agent-access/issued-agent-binding'
 import { defaultSandboxAgentAccessPolicy } from '@/modules/agent-access/sandbox-policy'
+import { CUSTOMER_REQUEST_READ_ONLY_SCOPE, MARKET_TOOLS_CALL_SCOPE } from '@/modules/agent-access/contract'
 import type { AgentAccessPrincipal } from '@/modules/agent-access/agent-access'
 import type { ConvexFixtureBackend } from '../../helpers/convex-fixtures'
 
@@ -38,14 +39,14 @@ async function issueBuyerAgent(
   const input = {
     issuanceKey, grantRef: issuedAgentGrantRef(subject, issuanceKey), credentialId: `credential:${subject}`,
     displayName: `${subject} buyer`, applicationRef: 'agentic-economy', environment: 'sandbox' as const,
-    scopes: ['market_operations:invoke'], authorityMode: 'inspect_only' as const,
-    operationAccess: 'all_admitted' as const, operationRefs: [] as string[],
-    policy: defaultSandboxAgentAccessPolicy({ currency: 'AUD', exponent: 6 }), createdAt: now, expiresAt: now + 600_000,
+    scopes: [MARKET_TOOLS_CALL_SCOPE, CUSTOMER_REQUEST_READ_ONLY_SCOPE], authorityMode: 'read_only' as const,
+    toolAccess: 'all_admitted' as const, toolRefs: [] as string[],
+    spendingPolicy: defaultSandboxAgentAccessPolicy({ currency: 'AUD', exponent: 6 }), createdAt: now, expiresAt: now + 600_000,
   }
   const serviceAuth = await createCustomerRequestServiceAssertion({
     key: SERVICE_KEY, operation: 'agentAccessPrincipals.registerIssuedAgentBindingForServer',
     command: toStableHashValue({ ...input, scopes: [...input.scopes] }),
-    principal: { principalId: 'ae:server-function', ownerId: 'ae:server-function', credentialId: 'ae:server-function', scopes: ['market_operations:invoke'] },
+    principal: { principalId: 'ae:server-function', ownerId: 'ae:server-function', credentialId: 'ae:server-function', scopes: [MARKET_TOOLS_CALL_SCOPE] },
     issuedAt: now,
   })
   const result = await owner.mutation(registerBinding, { ...input, serviceAuth })

@@ -7,8 +7,8 @@ import {
   pricingConfigValue,
 } from '@/modules/capability-supply/public'
 
-import { registeredOperationMappingValue } from './capabilitySupplyValues'
-import { toRegisteredOperationMapping } from './capabilitySupplyRowMappers'
+import { registeredToolMappingValue } from './capabilitySupplyValues'
+import { toRegisteredToolMapping } from './capabilitySupplyRowMappers'
 import { eligibleSupplyPorts } from './capabilitySupplyEligiblePorts'
 import { resolveBusinessActor } from './authz'
 import { canonicalDigest } from '../src/modules/common/canonical-digest'
@@ -61,11 +61,11 @@ export const eligibleSupplyValue = v.object({
       publicationRef: v.string(),
       revision: v.number(),
       readinessValidUntil: v.number(),
-      operationRef: v.string(),
+      toolRef: v.string(),
       pricingConfig: pricingConfigValue,
       priceDigest: v.string(),
       connectionAuthority: v.optional(connectionAuthoritySnapshotValue),
-      admittedOperation: v.object({
+      admittedTool: v.object({
         publicationRef: v.string(),
         publicationRevision: v.number(),
         publisherRef: v.string(),
@@ -131,7 +131,7 @@ export const recordCapabilityCallEventArgs = {
   offeringRef: v.string(),
   publicationRef: v.optional(v.string()),
   publicationRevision: v.optional(v.number()),
-  operationRef: v.optional(v.string()),
+  toolRef: v.optional(v.string()),
   taskDigest: v.string(),
   eventKind: v.union(
     v.literal('supply_liquidity_fill_observed'),
@@ -175,7 +175,7 @@ export type RecordCapabilityCallEventArgs = Readonly<{
   offeringRef: string
   publicationRef?: string | undefined
   publicationRevision?: number | undefined
-  operationRef?: string | undefined
+  toolRef?: string | undefined
   taskDigest: string
   eventKind: 'supply_liquidity_fill_observed' | 'supply_liquidity_first_success_observed' | 'supply_liquidity_depth_observed' | 'supply_owner_test_observed'
   outcome: 'filled' | 'zero'
@@ -188,7 +188,7 @@ export type RecordCapabilityCallEventArgs = Readonly<{
   evidenceRefs: string[]
   environment: 'local' | 'development' | 'sandbox' | 'production'
 }>
-export const listMappingsReturns = v.array(registeredOperationMappingValue)
+export const listMappingsReturns = v.array(registeredToolMappingValue)
 
 export async function listIntegratedCapabilitySupply(
   db: QueryCtx['db'],
@@ -249,13 +249,13 @@ export async function listMappingsHandler(
   args: { networkId: string; limit: number },
 ) {
   const rows = await ctx.db
-    .query('registeredOperationMappings')
+    .query('registeredToolMappings')
     .withIndex('by_networkId_and_mappingRef', (query) =>
       query.eq('networkId', args.networkId),
     )
     .take(args.limit)
   return rows.flatMap((row) => {
-    const mapping = toRegisteredOperationMapping(row)
+    const mapping = toRegisteredToolMapping(row)
     return mapping === null ? [] : [mapping]
   })
 }
@@ -289,7 +289,7 @@ export async function recordCapabilityCallEventHandler(
     offeringRef: args.offeringRef,
     publicationRef: publication.publicationRef,
     publicationRevision: publication.revision,
-    operationRef: publication.operationRef,
+    toolRef: publication.toolRef,
     taskDigest: args.taskDigest,
     eventKind: args.eventKind,
     outcome: args.outcome,
@@ -370,7 +370,7 @@ async function requireCurrentCallEventPublication(
 ) {
   if (args.publicationRef === undefined
     || args.publicationRevision === undefined
-    || args.operationRef === undefined) {
+    || args.toolRef === undefined) {
     throw new Error('capability_call_event_publication_identity_invalid')
   }
   const publication = await ctx.db.query('capabilityPublications')
@@ -380,7 +380,7 @@ async function requireCurrentCallEventPublication(
     .unique()
   if (publication === null
     || publication.businessId !== args.businessId
-    || publication.operationRef !== args.operationRef) {
+    || publication.toolRef !== args.toolRef) {
     throw new Error('capability_call_event_publication_identity_invalid')
   }
   if (publication.disposition !== 'current') {

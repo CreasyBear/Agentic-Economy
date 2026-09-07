@@ -27,8 +27,8 @@ const ticketValue = v.object({
   invocationDigest: v.string(),
   issuedAt: v.number(),
   expiresAt: v.number(),
-  invocationRef: v.string(),
-  operationRef: v.string(),
+  callRef: v.string(),
+  toolRef: v.string(),
   leaseRef: v.string(),
   connectionRef: v.string(),
   authorityGeneration: v.number(),
@@ -69,8 +69,8 @@ export const issueProviderConsequenceTicketArgs = {
   requestDigest: v.string(),
   invocationDigest: v.string(),
   operationKeyDigest: v.string(),
-  invocationRef: v.string(),
-  operationRef: v.string(),
+  callRef: v.string(),
+  toolRef: v.string(),
   attemptRef: v.string(),
   effectGeneration: v.number(),
   leaseRef: v.string(),
@@ -105,8 +105,8 @@ type IssueArgs = {
   requestDigest: string
   invocationDigest: string
   operationKeyDigest: string
-  invocationRef: string
-  operationRef: string
+  callRef: string
+  toolRef: string
   attemptRef: string
   effectGeneration: number
   leaseRef: string
@@ -130,8 +130,8 @@ type CanonicalTicket = {
   invocationDigest: string
   issuedAt: number
   expiresAt: number
-  invocationRef: string
-  operationRef: string
+  callRef: string
+  toolRef: string
   leaseRef: string
   connectionRef: string
   authorityGeneration: number
@@ -160,16 +160,19 @@ function exactStrings(left: readonly string[], right: readonly string[]): boolea
 }
 
 function ticketClaimsDigest(ticket: CanonicalTicket): string {
+  const { callRef, toolRef, ...historicalTicket } = ticket
   return canonicalDigest({
     kind: 'provider-consequence-ticket-claims:v1',
     ticket: {
-      ...ticket,
-      grantedScopes: [...ticket.grantedScopes],
-      grantedResources: [...ticket.grantedResources],
-      secret: { ...ticket.secret },
-      ...(ticket.paymentSecret === undefined
+      ...historicalTicket,
+      invocationRef: callRef,
+      operationRef: toolRef,
+      grantedScopes: [...historicalTicket.grantedScopes],
+      grantedResources: [...historicalTicket.grantedResources],
+      secret: { ...historicalTicket.secret },
+      ...(historicalTicket.paymentSecret === undefined
         ? {}
-        : { paymentSecret: { ...ticket.paymentSecret } }),
+        : { paymentSecret: { ...historicalTicket.paymentSecret } }),
     },
   } as StableHashValue)
 }
@@ -183,8 +186,8 @@ function ticketFromRow(row: Doc<'providerConsequenceJournal'>): CanonicalTicket 
     invocationDigest: row.invocationDigest,
     issuedAt: row.issuedAt,
     expiresAt: row.expiresAt,
-    invocationRef: row.invocationRef,
-    operationRef: row.operationRef,
+    callRef: row.callRef,
+    toolRef: row.toolRef,
     leaseRef: row.leaseRef,
     connectionRef: row.connectionRef,
     authorityGeneration: row.authorityGeneration,
@@ -222,8 +225,8 @@ function matchesIssueIdentity(row: Doc<'providerConsequenceJournal'>, args: Issu
     && row.requestDigest === args.requestDigest
     && row.invocationDigest === args.invocationDigest
     && row.operationKeyDigest === args.operationKeyDigest
-    && row.invocationRef === args.invocationRef
-    && row.operationRef === args.operationRef
+    && row.callRef === args.callRef
+    && row.toolRef === args.toolRef
     && row.attemptRef === args.attemptRef
     && row.effectGeneration === args.effectGeneration
     && row.leaseRef === args.leaseRef
@@ -250,8 +253,8 @@ function matchesExistingEffect(
     && row.requestDigest === args.requestDigest
     && row.invocationDigest === args.invocationDigest
     && row.operationKeyDigest === args.operationKeyDigest
-    && row.invocationRef === args.invocationRef
-    && row.operationRef === args.operationRef
+    && row.callRef === args.callRef
+    && row.toolRef === args.toolRef
     && row.attemptRef === args.attemptRef
     && row.effectGeneration === args.effectGeneration
     && row.leaseRef === args.leaseRef
@@ -289,8 +292,8 @@ function canonicalIssueInput(args: IssueArgs): boolean {
     && DIGEST.test(args.requestDigest)
     && DIGEST.test(args.invocationDigest)
     && DIGEST.test(args.operationKeyDigest)
-    && OPAQUE_REF.test(args.invocationRef)
-    && OPAQUE_REF.test(args.operationRef)
+    && OPAQUE_REF.test(args.callRef)
+    && OPAQUE_REF.test(args.toolRef)
     && OPAQUE_REF.test(args.attemptRef)
     && Number.isSafeInteger(args.effectGeneration)
     && args.effectGeneration >= 1
@@ -344,11 +347,11 @@ export async function issueProviderConsequenceTicketHandler(
     }
     return unavailable('effect_journal_unavailable')
   }
-  const [lease, invocation, signingPointer, paymentPointer] = await Promise.all([
+  const [lease, call, signingPointer, paymentPointer] = await Promise.all([
     ctx.db.query('capabilityProviderConnectionLeases')
       .withIndex('by_leaseRef', (query) => query.eq('leaseRef', args.leaseRef)).unique(),
-    ctx.db.query('capabilityOperationInvocations')
-      .withIndex('by_invocationRef', (query) => query.eq('invocationRef', args.invocationRef)).unique(),
+    ctx.db.query('capabilityCalls')
+      .withIndex('by_callRef', (query) => query.eq('callRef', args.callRef)).unique(),
     ctx.db.query('secretPointers')
       .withIndex('by_secretRef', (query) => query.eq('secretRef', args.signingSecretRef)).unique(),
     args.paymentSecretRef === undefined
@@ -358,8 +361,8 @@ export async function issueProviderConsequenceTicketHandler(
   ])
   if (lease === null
     || lease.state !== 'active'
-    || lease.invocationRef !== args.invocationRef
-    || lease.operationRef !== args.operationRef
+    || lease.callRef !== args.callRef
+    || lease.toolRef !== args.toolRef
     || lease.providerRef !== args.providerRef
     || lease.adapterId !== args.adapterId
     || lease.authorityDigest !== args.authorityDigest
@@ -368,13 +371,13 @@ export async function issueProviderConsequenceTicketHandler(
     || lease.readinessValidUntil !== args.readinessValidUntil
     || lease.readinessDigest !== args.readinessDigest
     || lease.expiresAt <= now) return unavailable('lease_authority_unavailable')
-  if (invocation === null
-    || invocation.operationRef !== args.operationRef
-    || invocation.grantRef !== lease.grantRef
-    || invocation.grantGeneration !== lease.grantGeneration
-    || invocation.principalId !== lease.actorPrincipalRef
-    || invocation.grantExpiresAt <= now
-    || invocation.attemptRef !== args.attemptRef) {
+  if (call === null
+    || call.toolRef !== args.toolRef
+    || call.grantRef !== lease.grantRef
+    || call.grantGeneration !== lease.grantGeneration
+    || call.principalId !== lease.actorPrincipalRef
+    || call.grantExpiresAt <= now
+    || call.attemptRef !== args.attemptRef) {
     return unavailable('invocation_authority_unavailable')
   }
   const connection = await ctx.db.query('capabilityProviderConnections')
@@ -417,14 +420,14 @@ export async function issueProviderConsequenceTicketHandler(
     now + MAX_TICKET_LIFETIME_MS,
     lease.expiresAt,
     lease.readinessValidUntil,
-    invocation.grantExpiresAt,
+    call.grantExpiresAt,
   )
   if (expiresAt - now < MIN_TICKET_LIFETIME_MS) return unavailable('ticket_lifetime_unavailable')
 
   const admission = await beginEffect(ctx, {
     leaseRef: args.leaseRef,
-    invocationRef: args.invocationRef,
-    operationRef: args.operationRef,
+    callRef: args.callRef,
+    toolRef: args.toolRef,
     commandId: args.commandId,
   })
   if (admission.kind !== 'admitted'
@@ -480,8 +483,8 @@ export async function issueProviderConsequenceTicketHandler(
     invocationDigest: args.invocationDigest,
     issuedAt: now,
     expiresAt,
-    invocationRef: args.invocationRef,
-    operationRef: args.operationRef,
+    callRef: args.callRef,
+    toolRef: args.toolRef,
     leaseRef: args.leaseRef,
     connectionRef: admission.connectionRef,
     authorityGeneration: admission.authorityGeneration,
@@ -521,8 +524,8 @@ export async function issueProviderConsequenceTicketHandler(
     invocationDigest: ticket.invocationDigest,
     operationKeyDigest: args.operationKeyDigest,
     ticketClaimsDigest: claimsDigest,
-    invocationRef: ticket.invocationRef,
-    operationRef: ticket.operationRef,
+    callRef: ticket.callRef,
+    toolRef: ticket.toolRef,
     attemptRef: args.attemptRef,
     effectGeneration: args.effectGeneration,
     leaseRef: ticket.leaseRef,
@@ -877,9 +880,9 @@ function matchingOptionalIdentity(
   args: Record<string, unknown>,
   row: Doc<'providerConsequenceJournal'>,
 ): boolean {
-  return (args.dispatchRef === undefined || args.dispatchRef === row.invocationRef)
-    && (args.invocationRef === undefined || args.invocationRef === row.invocationRef)
-    && (args.operationRef === undefined || args.operationRef === row.operationRef)
+  return (args.dispatchRef === undefined || args.dispatchRef === row.callRef)
+    && (args.callRef === undefined || args.callRef === row.callRef)
+    && (args.toolRef === undefined || args.toolRef === row.toolRef)
     && (args.attemptRef === undefined || args.attemptRef === row.attemptRef)
     && (args.effectGeneration === undefined || args.effectGeneration === row.effectGeneration)
     && (args.providerRef === undefined || args.providerRef === row.providerRef)
@@ -900,10 +903,10 @@ async function matchingStoredAttempt(
     .withIndex('by_custodyRef', (query) => query.eq('custodyRef', custodyRef)).unique()
   return attempt !== null
     && attempt.authorizationDigest === authorizationDigest
-    && attempt.dispatchRef === row.invocationRef
+    && attempt.dispatchRef === row.callRef
     && attempt.attemptRef === row.attemptRef
     && attempt.effectGeneration === row.effectGeneration
-    && attempt.operationRef === row.operationRef
+    && attempt.toolRef === row.toolRef
     && attempt.credentialRef === row.paymentSecretRef
 }
 
@@ -935,26 +938,26 @@ export async function authorizeProviderConsequenceX402RpcHandler(
   ]
   if (!identityBoundOperations.includes(input.operation)
     && !await matchingStoredAttempt(ctx, args, row)) return { kind: 'unavailable' as const }
-  const invocation = await ctx.db.query('capabilityOperationInvocations')
-    .withIndex('by_invocationRef', (query) => query.eq('invocationRef', row.invocationRef)).unique()
-  if (invocation === null
-    || invocation.operationRef !== row.operationRef
-    || invocation.grantRef !== row.grantRef
-    || invocation.grantGeneration !== row.grantGeneration
-    || invocation.principalId !== row.actorPrincipalRef) return { kind: 'unavailable' as const }
+  const call = await ctx.db.query('capabilityCalls')
+    .withIndex('by_callRef', (query) => query.eq('callRef', row.callRef)).unique()
+  if (call === null
+    || call.toolRef !== row.toolRef
+    || call.grantRef !== row.grantRef
+    || call.grantGeneration !== row.grantGeneration
+    || call.principalId !== row.actorPrincipalRef) return { kind: 'unavailable' as const }
   return {
     kind: 'authorized' as const,
-    invocationRef: row.invocationRef,
-    operationRef: row.operationRef,
+    callRef: row.callRef,
+    toolRef: row.toolRef,
     attemptRef: row.attemptRef,
     effectGeneration: row.effectGeneration,
     credentialRef: row.paymentSecretRef,
-    principalId: invocation.principalId,
-    credentialId: invocation.credentialId,
-    grantRef: invocation.grantRef,
-    grantGeneration: invocation.grantGeneration,
-    environment: invocation.environment,
-    inputDigest: invocation.inputDigest,
+    principalId: call.principalId,
+    credentialId: call.credentialId,
+    grantRef: call.grantRef,
+    grantGeneration: call.grantGeneration,
+    environment: call.environment,
+    inputDigest: call.inputDigest,
     providerRef: row.providerRef,
   }
 }
@@ -964,8 +967,8 @@ export const authorizeProviderConsequenceX402Rpc = internalMutationGeneric({
   returns: v.union(
     v.object({
       kind: v.literal('authorized'),
-      invocationRef: v.string(),
-      operationRef: v.string(),
+      callRef: v.string(),
+      toolRef: v.string(),
       attemptRef: v.string(),
       effectGeneration: v.number(),
       credentialRef: v.string(),

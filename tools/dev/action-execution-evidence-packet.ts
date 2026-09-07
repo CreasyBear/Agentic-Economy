@@ -26,19 +26,19 @@ import {
   type SuppliedCandidateQuoteResult,
 } from '../../src/modules/capability-supply/server'
 import {
-  executeDevelopmentProviderOperationAction,
-  type DevelopmentProviderOperationInput,
-  type DevelopmentProviderOperationResult,
-} from './fixtures/provider-operation/development-provider-operation.actions'
+  executeDevelopmentProviderToolAction,
+  type DevelopmentProviderToolInput,
+  type DevelopmentProviderToolResult,
+} from './fixtures/provider-tool/development-provider-tool.actions'
 import { materialDigest } from '../../src/modules/action-execution/preparation'
 import {
   validateReconciliationEvidence,
   type ReconciliationEvidence,
 } from '../../src/modules/action-execution/reconciliation-evidence'
 import type { EvidenceProvenanceV1 } from './evidence-provenance'
-import type { runDevelopmentProviderOperationEvidence } from './fixtures/provider-operation/development-provider-operation-evidence'
+import type { runDevelopmentProviderToolEvidence } from './fixtures/provider-tool/development-provider-tool-evidence'
 
-type ProviderOperationPacket = Awaited<ReturnType<typeof runDevelopmentProviderOperationEvidence>>
+type ProviderToolPacket = Awaited<ReturnType<typeof runDevelopmentProviderToolEvidence>>
 
 export type EvidenceEnvelope = Readonly<{
   schema: 'ae.action-execution-development-evidence:v2'
@@ -113,25 +113,25 @@ export async function readAndVerifyDevelopmentPacket(
   }
 }
 
-export async function readAndVerifyProviderOperationPacket(path: string, expectedRevision: string) {
+export async function readAndVerifyProviderToolPacket(path: string, expectedRevision: string) {
   const basic = await readAndVerifyDevelopmentPacket(path, expectedRevision, {
-    id: executeDevelopmentProviderOperationAction.id,
+    id: executeDevelopmentProviderToolAction.id,
     version: 'v1',
   })
   const envelope = JSON.parse(await readFile(path, 'utf8')) as EvidenceEnvelope
   const durable = envelope.packet.durable as {
     terminal: PacketDurable
     uncertain: PacketDurable & { source: {
-      input: DevelopmentProviderOperationInput
+      input: DevelopmentProviderToolInput
       prepared: PreparedExecution
-      before: ActionExecutionView<DevelopmentProviderOperationResult>
-      after: ActionExecutionView<DevelopmentProviderOperationResult>
+      before: ActionExecutionView<DevelopmentProviderToolResult>
+      after: ActionExecutionView<DevelopmentProviderToolResult>
     } }
   }
-  const terminal = await reconstructProviderOperationRows(durable.terminal, true)
-  const uncertain = await reconstructProviderOperationRows(durable.uncertain, false)
-  validateProviderOperationLinkage(durable.terminal, true)
-  validateProviderOperationLinkage(durable.uncertain, false)
+  const terminal = await reconstructProviderToolRows(durable.terminal, true)
+  const uncertain = await reconstructProviderToolRows(durable.uncertain, false)
+  validateProviderToolLinkage(durable.terminal, true)
+  validateProviderToolLinkage(durable.uncertain, false)
   if (
     durable.uncertain.source.before.control.state !== 'reconciliation_required'
     || durable.uncertain.source.before.attempts[0]?.release.state !== 'possibly_released'
@@ -141,7 +141,7 @@ export async function readAndVerifyProviderOperationPacket(path: string, expecte
     terminal.observedResolution.state !== 'returned'
     || terminal.observedResolution.result.kind !== 'effect_confirmed'
   ) throw new Error('packet_provider_operation_terminal_refused')
-  validateProviderOperationAdvertisedChecks(envelope.packet, terminal)
+  validateProviderToolAdvertisedChecks(envelope.packet, terminal)
   return {
     ...basic,
     reconstructed: {
@@ -154,11 +154,11 @@ export async function readAndVerifyProviderOperationPacket(path: string, expecte
   }
 }
 
-function validateProviderOperationAdvertisedChecks(
+function validateProviderToolAdvertisedChecks(
   packet: Record<string, unknown>,
-  terminal: Awaited<ReturnType<typeof reconstructProviderOperationRows>>,
+  terminal: Awaited<ReturnType<typeof reconstructProviderToolRows>>,
 ) {
-  const input = packet as unknown as ProviderOperationPacket
+  const input = packet as unknown as ProviderToolPacket
   const eventOrder = input.eventOrder
   const authorityIndex = eventOrder.findIndex(({ kind }) => kind === 'authority_decision')
   const releaseIndex = eventOrder.findIndex(({ kind }) => kind === 'provider_release')
@@ -233,11 +233,11 @@ function validateProviderOperationAdvertisedChecks(
     events: {
       direct_read: [],
       direct_consequential: [
-        { kind: 'direct_runner_started', actionId: executeDevelopmentProviderOperationAction.id },
-        { kind: 'provider_release', actionId: executeDevelopmentProviderOperationAction.id },
+        { kind: 'direct_runner_started', actionId: executeDevelopmentProviderToolAction.id },
+        { kind: 'provider_release', actionId: executeDevelopmentProviderToolAction.id },
         {
           kind: 'direct_runner_returned',
-          actionId: executeDevelopmentProviderOperationAction.id,
+          actionId: executeDevelopmentProviderToolAction.id,
           outcome: 'effect_confirmed',
         },
       ],
@@ -258,7 +258,7 @@ function validateProviderOperationAdvertisedChecks(
       durableHistoryRecords: input.durable.terminal.history.length,
       terminalResultReconstructed: terminal.control.state === 'terminal',
       exactAuthorityBeforeRelease: recomputed.authorityBeforeRelease,
-      retryClass: executeDevelopmentProviderOperationAction.invocationContract!.retryClass,
+      retryClass: executeDevelopmentProviderToolAction.invocationContract!.retryClass,
     },
     referenceReuse: {
       completedReferences: 1,
@@ -280,12 +280,12 @@ function validateProviderOperationAdvertisedChecks(
   ) throw new Error('packet_provider_operation_gate7_reconstruction_refused')
 }
 
-function validateProviderOperationLinkage(durable: PacketDurable, terminal: boolean) {
+function validateProviderToolLinkage(durable: PacketDurable, terminal: boolean) {
   const control = durable.controls[0]!
   const source = durable.source as unknown as {
-    input: DevelopmentProviderOperationInput
+    input: DevelopmentProviderToolInput
     prepared: PreparedExecution
-    result?: DevelopmentProviderOperationResult
+    result?: DevelopmentProviderToolResult
     resultIdentity?: { sourceResultRef: string; resultDigest: string }
     reconciliationEvidence?: ReconciliationEvidence
   }
@@ -298,13 +298,13 @@ function validateProviderOperationLinkage(durable: PacketDurable, terminal: bool
     durable.controls.length !== 1
     || typeof control.sourceRef !== 'string'
     || control.sourceRef.length === 0
-    || controlProjection.action?.id !== executeDevelopmentProviderOperationAction.id
+    || controlProjection.action?.id !== executeDevelopmentProviderToolAction.id
     || controlProjection.action.contractVersion !== 'v1'
     || canonicalDigest(controlProjection.origin as never)
       !== canonicalDigest((control.authorityBinding as { origin?: unknown })?.origin as never)
     || control.preparedMaterialDigest !== source.prepared.materialInputDigest
     || control.preparedMaterialDigest
-      !== materialDigest(source.input, executeDevelopmentProviderOperationAction.invocationContract!.materialInputPaths)
+      !== materialDigest(source.input, executeDevelopmentProviderToolAction.invocationContract!.materialInputPaths)
   ) throw new Error('packet_provider_operation_control_linkage_refused')
   const attemptRefs = new Set<string>()
   for (const attempt of durable.attempts) {
@@ -349,7 +349,7 @@ function validateProviderOperationLinkage(durable: PacketDurable, terminal: bool
     if (
       evidence === undefined
       || attempt === undefined
-      || evidence.source !== executeDevelopmentProviderOperationAction.invocationContract!.reconciliationEvidenceSource
+      || evidence.source !== executeDevelopmentProviderToolAction.invocationContract!.reconciliationEvidenceSource
       || evidence.invocationRef !== executionRef
       || evidence.attemptRef !== attempt.attemptRef
       || evidence.effectGeneration !== attempt.effectGeneration
@@ -357,7 +357,7 @@ function validateProviderOperationLinkage(durable: PacketDurable, terminal: bool
     ) throw new Error('packet_provider_operation_reconciliation_linkage_refused')
     const evidenceError = validateReconciliationEvidence({
       evidence,
-      source: executeDevelopmentProviderOperationAction.invocationContract!.reconciliationEvidenceSource,
+      source: executeDevelopmentProviderToolAction.invocationContract!.reconciliationEvidenceSource,
       executionRef,
       attemptRef: String(attempt.attemptRef),
       effectGeneration: Number(attempt.effectGeneration),
@@ -377,11 +377,11 @@ function validateProviderOperationLinkage(durable: PacketDurable, terminal: bool
   }
 }
 
-async function reconstructProviderOperationRows(durable: PacketDurable, terminal: boolean) {
+async function reconstructProviderToolRows(durable: PacketDurable, terminal: boolean) {
   if (!durable.controls?.length || !durable.history?.length) {
     throw new Error('packet_provider_operation_durable_rows_refused')
   }
-  const state = createDevelopmentDurableState<DevelopmentProviderOperationResult>()
+  const state = createDevelopmentDurableState<DevelopmentProviderToolResult>()
   for (const row of durable.controls) state.controls.set(String(row.executionRef), row as never)
   const executionRef = String(durable.controls[0]!.executionRef)
   const attempts = new Map()
@@ -389,13 +389,13 @@ async function reconstructProviderOperationRows(durable: PacketDurable, terminal
   state.attempts.set(executionRef, attempts)
   state.history.set(executionRef, durable.history as never)
   const source = durable.source as unknown as {
-    input: DevelopmentProviderOperationInput
+    input: DevelopmentProviderToolInput
     prepared: PreparedExecution
-    result?: DevelopmentProviderOperationResult
+    result?: DevelopmentProviderToolResult
   }
   const result = source.result
   const tracer = createDurableActionExecutionTracer({
-    action: executeDevelopmentProviderOperationAction,
+    action: executeDevelopmentProviderToolAction,
     port: createDevelopmentDurablePort(state),
     now: developmentEvidenceNow,
     nextExecutionRef: () => 'verify:unused',

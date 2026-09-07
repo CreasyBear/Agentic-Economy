@@ -15,7 +15,7 @@ import type {
   ProviderConnectionAuthorityValidationResult,
   RouteTransportInvocation,
   RouteTransportRuntime,
-} from './route-transport-invoke'
+} from './route-transport-call'
 import {
   decodeX402Challenge,
   freshX402ChallengeSelection,
@@ -719,8 +719,8 @@ async function validateX402ProviderAuthority(
         ? {}
         : {
             leaseRef: authority.leaseRef,
-            invocationRef: authority.invocationRef,
-            operationRef: authority.operationRef,
+            callRef: authority.callRef,
+            toolRef: authority.toolRef,
             grantedScopes: authority.grantedScopes,
             grantedResources: authority.grantedResources,
             readinessValidUntil: authority.readinessValidUntil,

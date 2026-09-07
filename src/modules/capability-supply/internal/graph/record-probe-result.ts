@@ -86,7 +86,7 @@ export async function recordCapabilityProbeResult(
     || (binding.authority.kind === 'provider_connection' && (
       !connectionAuthoritySnapshotMatches(binding.connectionAuthority, currentConnection, {
         businessId: String(offering.businessId),
-        operationRef: publication.operationRef,
+        toolRef: publication.toolRef,
         adapterId: binding.adapterId,
         now,
       })

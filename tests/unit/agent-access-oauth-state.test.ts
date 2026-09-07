@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { CUSTOMER_REQUEST_BOUNDED_MANDATE_SCOPE, MARKET_OPERATIONS_INVOKE_SCOPE, MARKET_SUPPLY_MANAGE_SCOPE } from '@/modules/agent-access/contract'
+import { CUSTOMER_REQUEST_SPENDING_POLICY_SCOPE, MARKET_TOOLS_CALL_SCOPE, MARKET_SUPPLY_MANAGE_SCOPE } from '@/modules/agent-access/contract'
 import { AGENT_ACCESS_KEY_TTL_SECONDS } from '@/modules/agent-access/agent-access'
 
 import {
@@ -88,7 +88,7 @@ const authClient: AgentAccessOAuthClient = {
   grantTypes: ['authorization_code'],
 }
 
-const scopes = [MARKET_OPERATIONS_INVOKE_SCOPE, 'customer_requests:approve_each']
+const scopes = [MARKET_TOOLS_CALL_SCOPE, 'customer_requests:approval_required']
 const issueKey = async () => ({ keyId: 'key_machine' })
 const operationRefA = `operation:v1:${'a'.repeat(64)}`
 const operationRefB = `operation:v1:${'b'.repeat(64)}`
@@ -150,43 +150,43 @@ describe('Customer Request OAuth state machine', () => {
     const digest = await hashOAuthValue(deviceCode)
     expect(digest).not.toContain(deviceCode)
     expect(userCode).toMatch(/^[A-Z2-9]{4}-[A-Z2-9]{4}$/u)
-    expect(normalizeRequestedScopes('customer_requests:approve_each')).toEqual({
-      mode: 'approve_each', scopes: [MARKET_OPERATIONS_INVOKE_SCOPE, 'customer_requests:approve_each'],
+    expect(normalizeRequestedScopes('customer_requests:approval_required')).toEqual({
+      mode: 'approval_required', scopes: [MARKET_TOOLS_CALL_SCOPE, 'customer_requests:approval_required'],
       profile: 'market',
       offlineAccess: false,
     })
-    expect(normalizeRequestedScopes(`customer_requests:approve_each ${AGENT_ACCESS_OAUTH_OFFLINE_SCOPE}`)).toEqual({
-      mode: 'approve_each', scopes: [MARKET_OPERATIONS_INVOKE_SCOPE, 'customer_requests:approve_each'],
+    expect(normalizeRequestedScopes(`customer_requests:approval_required ${AGENT_ACCESS_OAUTH_OFFLINE_SCOPE}`)).toEqual({
+      mode: 'approval_required', scopes: [MARKET_TOOLS_CALL_SCOPE, 'customer_requests:approval_required'],
       profile: 'market',
       offlineAccess: true,
     })
-    expect(normalizeRequestedScopes('customer_requests:create customer_requests:approve_each')).toBeUndefined()
-    expect(normalizeRequestedScopes(`${MARKET_OPERATIONS_INVOKE_SCOPE} ${CUSTOMER_REQUEST_BOUNDED_MANDATE_SCOPE}`)).toEqual({
-      mode: 'bounded_mandate',
-      scopes: [MARKET_OPERATIONS_INVOKE_SCOPE, CUSTOMER_REQUEST_BOUNDED_MANDATE_SCOPE],
+    expect(normalizeRequestedScopes('customer_requests:create customer_requests:approval_required')).toBeUndefined()
+    expect(normalizeRequestedScopes(`${MARKET_TOOLS_CALL_SCOPE} ${CUSTOMER_REQUEST_SPENDING_POLICY_SCOPE}`)).toEqual({
+      mode: 'spending_policy',
+      scopes: [MARKET_TOOLS_CALL_SCOPE, CUSTOMER_REQUEST_SPENDING_POLICY_SCOPE],
       profile: 'market',
       offlineAccess: false,
     })
     expect(normalizeRequestedScopes(MARKET_SUPPLY_MANAGE_SCOPE)).toEqual({
-      mode: 'bounded_mandate',
+      mode: 'spending_policy',
       scopes: [MARKET_SUPPLY_MANAGE_SCOPE],
-      profile: 'supplier',
+      profile: 'provider',
       offlineAccess: false,
     })
-    expect(normalizeRequestedScopes(`${MARKET_SUPPLY_MANAGE_SCOPE} ${MARKET_OPERATIONS_INVOKE_SCOPE}`)).toBeUndefined()
-    expect(normalizeRequestedScopes('customer_requests:create customer_requests:approve_each customer_requests:full_yolo')).toBeUndefined()
+    expect(normalizeRequestedScopes(`${MARKET_SUPPLY_MANAGE_SCOPE} ${MARKET_TOOLS_CALL_SCOPE}`)).toBeUndefined()
+    expect(normalizeRequestedScopes('customer_requests:create customer_requests:approval_required customer_requests:unrestricted_test_only')).toBeUndefined()
     expect(normalizeRequestedScopes('customer_requests:create customer_requests:standing_authority')).toBeUndefined()
   })
 
   it('persists explicit requested access for both flows and the exact default when absent', async () => {
     const requestedAccess = {
       environment: 'production' as const,
-      operationAccess: 'selected_operations' as const,
-      operationRefs: [`operation:v1:${'a'.repeat(64)}`],
-      maximumSpendPerInvocation: { currency: 'USD', units: '100', exponent: 2 },
+      toolAccess: 'selected_tools' as const,
+      toolRefs: [`operation:v1:${'a'.repeat(64)}`],
+      maximumSpendPerCall: { currency: 'USD', units: '100', exponent: 2 },
       maximumDailySpend: { currency: 'USD', units: '500', exponent: 2 },
       maximumMonthlySpend: { currency: 'USD', units: '5000', exponent: 2 },
-      maximumConcurrentInvocations: 2,
+      maximumConcurrentCalls: 2,
       maximumCallsPerMinute: 10,
       maximumCallsPerHour: 100,
       expiresInSeconds: 86_400,
@@ -215,8 +215,8 @@ describe('Customer Request OAuth state machine', () => {
 
     const expectedDefault = {
       environment: 'sandbox' as const,
-      operationAccess: 'all_admitted' as const,
-      operationRefs: [],
+      toolAccess: 'all_admitted' as const,
+      toolRefs: [],
       expiresInSeconds: AGENT_ACCESS_KEY_TTL_SECONDS,
     }
     expect(JSON.stringify((await deviceGrant(storeFixture())).grant.requestedAccess)).toBe(JSON.stringify(expectedDefault))
@@ -266,13 +266,13 @@ describe('Customer Request OAuth state machine', () => {
       const store = storeFixture()
       const result = await beginDirectGrant(flow, store, {
         environment: 'sandbox',
-        operationAccess: 'selected_operations',
-        operationRefs: [operationRefB, operationRefA],
+        toolAccess: 'selected_tools',
+        toolRefs: [operationRefB, operationRefA],
         expiresInSeconds: 600,
       })
       expect(result.kind).toBe('ok')
       expect([...store.grants.values()][0]?.requestedAccess).toMatchObject({
-        operationAccess: 'selected_operations', operationRefs: [operationRefA, operationRefB],
+        toolAccess: 'selected_tools', toolRefs: [operationRefA, operationRefB],
       })
       expect(store.grants.size).toBe(1)
     },
@@ -282,10 +282,10 @@ describe('Customer Request OAuth state machine', () => {
     'refuses invalid direct %s Operation selection before insert',
     async (flow) => {
       const invalidSelections = [
-        { operationAccess: 'selected_operations' as const, operationRefs: [] },
-        { operationAccess: 'selected_operations' as const, operationRefs: [operationRefA, operationRefA] },
-        { operationAccess: 'selected_operations' as const, operationRefs: ['operation:not-canonical'] },
-        { operationAccess: 'all_admitted' as const, operationRefs: [operationRefA] },
+        { toolAccess: 'selected_tools' as const, toolRefs: [] },
+        { toolAccess: 'selected_tools' as const, toolRefs: [operationRefA, operationRefA] },
+        { toolAccess: 'selected_tools' as const, toolRefs: ['operation:not-canonical'] },
+        { toolAccess: 'all_admitted' as const, toolRefs: [operationRefA] },
       ]
       for (const selection of invalidSelections) {
         const store = storeFixture()
@@ -302,7 +302,7 @@ describe('Customer Request OAuth state machine', () => {
     async (flow) => {
       const store = storeFixture()
       await expect(beginDirectGrant(flow, store, {
-        environment: 'sandbox', operationAccess: 'selected_operations', operationRefs: [operationRefA], expiresInSeconds: 600,
+        environment: 'sandbox', toolAccess: 'selected_tools', toolRefs: [operationRefA], expiresInSeconds: 600,
       }, [MARKET_SUPPLY_MANAGE_SCOPE])).resolves.toEqual({ kind: 'refused', reason: 'invalid_scope' })
       expect(store.grants.size).toBe(0)
     },
@@ -337,7 +337,7 @@ describe('Customer Request OAuth state machine', () => {
       grantRef: started.value.grant.grantRef,
       ownerId: 'owner-one',
       now: 1_001,
-      authorityMode: 'bounded_mandate',
+      authorityMode: 'spending_policy',
       issueKey: async ({ grant }) => {
         issuedScopes.push([...grant.requestedScopes])
         return { keyId: 'key_supplier' }
@@ -355,7 +355,7 @@ describe('Customer Request OAuth state machine', () => {
       grantRef: tampered.value.grant.grantRef,
       ownerId: 'owner-one',
       now: 1_001,
-      authorityMode: 'inspect_only',
+      authorityMode: 'read_only',
       issueKey,
     })).resolves.toEqual({ kind: 'refused', reason: 'invalid_scope' })
   })

@@ -6,7 +6,7 @@ import {
   marketRequestListAction,
   marketRequestStatusAction,
 } from '@/modules/market-demand/market-demand.actions'
-import { registryOperationsSearchAction } from '@/modules/registry/operations.actions'
+import { registryToolsSearchAction } from '@/modules/registry/tools.actions'
 
 const principal = {
   principalId: 'prn_00000000000040008000000000000072',
@@ -14,8 +14,8 @@ const principal = {
   credentialId: 'credential:market-demand',
   applicationRef: 'agentic-economy',
   environment: 'sandbox' as const,
-  scopes: ['market_operations:invoke'],
-  authorityMode: 'inspect_only' as const,
+  scopes: ['market_tools:call'],
+  authorityMode: 'read_only' as const,
 }
 
 afterEach(() => {
@@ -23,8 +23,8 @@ afterEach(() => {
 })
 
 describe('market demand action contract', () => {
-  it('refuses to store demand when a current canonical Operation already matches', async () => {
-    vi.spyOn(registryOperationsSearchAction, 'run').mockResolvedValue({ kind: 'ok' } as never)
+  it('refuses to store demand when a current canonical Tool already matches', async () => {
+    vi.spyOn(registryToolsSearchAction, 'run').mockResolvedValue({ kind: 'ok' } as never)
     const service = createMarketDemandService(
       new Request('https://ae.example/api/v1/market-requests', { method: 'POST', body: '{}' }),
       '{}',
@@ -40,7 +40,7 @@ describe('market demand action contract', () => {
   it('keeps create, list, and status on the same private credential-owned surface contract', () => {
     for (const action of [marketRequestCreateAction, marketRequestListAction, marketRequestStatusAction]) {
       expect(action.surfaces).toEqual(['http', 'mcp', 'cli'])
-      expect(action.credentialAdmission?.scope).toBe('market_operations:invoke')
+      expect(action.credentialAdmission?.scope).toBe('market_tools:call')
       expect(action.boundaries.join(' ')).toMatch(/exact|private|credential/iu)
     }
     expect(marketRequestCreateAction.readOnly).toBe(false)

@@ -5,13 +5,13 @@ import { useState } from 'react'
 
 import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
 import {
-  readOwnerOperationsIdentityDetailServer,
-  readOwnerSupplierOperationStatusServer,
-} from '@/components/ae/offerings/owner-operations.functions'
+  readProviderWorkspaceIdentityDetailServer,
+  readProviderToolStatusServer,
+} from '@/components/ae/offerings/provider-workspace.functions'
 import {
-  AeSupplierOperationDetail,
-  type SupplierOperationActionOutcome,
-} from '@/components/ae/supply/AeSupplierOperationDetail'
+  AeProviderToolDetail,
+  type ProviderToolActionOutcome,
+} from '@/components/ae/supply/AeProviderToolDetail'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
@@ -28,9 +28,9 @@ import { operatorRouteOptions } from '@/lib/operator/route-options'
 export const Route = createFileRoute('/_operator/owner/supply/$offeringRef')({
   ...operatorRouteOptions,
   loader: async ({ params }) => {
-    const identity = await readOwnerOperationsIdentityDetailServer()
+    const identity = await readProviderWorkspaceIdentityDetailServer()
     if (identity.kind !== 'available') return { identity, status: { kind: 'not_found' as const } }
-    const status = await readOwnerSupplierOperationStatusServer({ data: {
+    const status = await readProviderToolStatusServer({ data: {
       businessId: identity.businessId,
       offeringRef: params.offeringRef,
     } })
@@ -38,7 +38,7 @@ export const Route = createFileRoute('/_operator/owner/supply/$offeringRef')({
   },
   head: () => ({
     meta: [
-      { title: 'Operation status | Agentic Economy' },
+      { title: 'Tool status | Agentic Economy' },
       { name: 'robots', content: 'noindex' },
     ],
   }),
@@ -49,25 +49,25 @@ function OwnerSupplyDetailRoute() {
   const { offeringRef } = Route.useParams()
   const result = Route.useLoaderData()
   const router = useRouter()
-  const [operationKeys] = useState(() => new Map<string, string>())
+  const [toolKeys] = useState(() => new Map<string, string>())
   const recheck = useServerFn(recheckOwnerCapabilityServer)
   const withdraw = useServerFn(withdrawOwnerCapabilityServer)
   const republishRequest = useServerFn(republishOwnerCapabilityServer)
   const republish = useReverification(republishRequest)
 
   if (result.identity.kind !== 'available' || result.status.kind !== 'available') {
-    return <UnavailableOperation offeringRef={offeringRef} unavailable={result.status.kind === 'unavailable'} />
+    return <UnavailableTool offeringRef={offeringRef} unavailable={result.status.kind === 'unavailable'} />
   }
   if (
-    result.status.operation.offeringRef !== offeringRef
+    result.status.tool.offeringRef !== offeringRef
     || result.status.status.businessRef !== result.identity.businessId
   ) {
-    return <UnavailableOperation offeringRef={offeringRef} unavailable={false} />
+    return <UnavailableTool offeringRef={offeringRef} unavailable={false} />
   }
   const context: SupplyFunnelActionContext | undefined = result.status.maintenance === undefined
     ? undefined
     : { businessId: result.identity.businessId, ...result.status.maintenance }
-  const name = result.status.operation.name
+  const name = result.status.tool.name
   const resumeHref = result.status.resumeCandidateRef === undefined
     ? undefined
     : `/owner/offerings/new?draft=${encodeURIComponent(result.status.resumeCandidateRef)}`
@@ -75,17 +75,17 @@ function OwnerSupplyDetailRoute() {
   function maintenanceAction(
     action: 'recheck' | 'withdraw' | 'republish',
     serverFn: (input: { data: OwnerSupplyMaintenanceInput }) => Promise<OwnerSupplyCommandResult>,
-  ): (() => Promise<SupplierOperationActionOutcome>) | undefined {
+  ): (() => Promise<ProviderToolActionOutcome>) | undefined {
     if (context === undefined) return undefined
     return async () => {
       const actionKey = `${action}:${canonicalDigest(context)}`
-      let operationKey = operationKeys.get(actionKey)
-      if (operationKey === undefined) {
-        operationKey = `owner-supply:${action}:${crypto.randomUUID()}`
-        operationKeys.set(actionKey, operationKey)
+      let toolKey = toolKeys.get(actionKey)
+      if (toolKey === undefined) {
+        toolKey = `owner-supply:${action}:${crypto.randomUUID()}`
+        toolKeys.set(actionKey, toolKey)
       }
-      const outcome = await serverFn({ data: maintenanceCommand(context, action, operationKey) })
-      if (!sourceUnavailable(outcome)) operationKeys.delete(actionKey)
+      const outcome = await serverFn({ data: maintenanceCommand(context, action, toolKey) })
+      if (!sourceUnavailable(outcome)) toolKeys.delete(actionKey)
       if (outcome.kind === 'refused') return { kind: 'refused', message: correctionRefusal(outcome.reason) }
       await router.invalidate()
       return { kind: 'applied', message: correctionMessage(outcome) }
@@ -101,15 +101,15 @@ function OwnerSupplyDetailRoute() {
       title={name}
       description="Current publication, source health, delivery and Qualified Use."
       currentPath={`/owner/supply/${encodeURIComponent(offeringRef)}`}
-      breadcrumbs={[{ label: 'Operations', href: '/owner/offerings' }, { label: name }]}
+      breadcrumbs={[{ label: 'Tools', href: '/owner/offerings' }, { label: name }]}
     >
-      <AeSupplierOperationDetail
+      <AeProviderToolDetail
         name={name}
         status={result.status.status}
         {...(resumeHref === undefined ? {} : { resumeHref })}
         onRefresh={async () => {
           await router.invalidate()
-          return { kind: 'applied', message: 'The canonical Operation status is current.' }
+          return { kind: 'applied', message: 'The canonical Tool status is current.' }
         }}
         {...(onRecheck === undefined ? {} : { onRecheck })}
         {...(onWithdraw === undefined ? {} : { onWithdraw })}
@@ -119,25 +119,25 @@ function OwnerSupplyDetailRoute() {
   )
 }
 
-function UnavailableOperation({ offeringRef, unavailable }: Readonly<{ offeringRef: string; unavailable: boolean }>) {
+function UnavailableTool({ offeringRef, unavailable }: Readonly<{ offeringRef: string; unavailable: boolean }>) {
   return (
     <AeOperatorShell
       operatorRole="owner"
-      title="Operation status"
-      description="AE could not confirm this Operation."
+      title="Tool status"
+      description="AE could not confirm this Tool."
       currentPath={`/owner/supply/${encodeURIComponent(offeringRef)}`}
     >
       <div className="grid gap-related">
         <Alert variant={unavailable ? 'destructive' : 'default'}>
-          <AlertTitle>{unavailable ? 'Operation status unavailable' : 'Operation not found'}</AlertTitle>
+          <AlertTitle>{unavailable ? 'Tool status unavailable' : 'Tool not found'}</AlertTitle>
           <AlertDescription>
             {unavailable
-              ? 'AE could not read the canonical lifecycle. No Operation was changed.'
-              : 'This Operation is not part of the current Provider workspace.'}
+              ? 'AE could not read the canonical lifecycle. No Tool was changed.'
+              : 'This Tool is not part of the current Provider workspace.'}
           </AlertDescription>
         </Alert>
         <Button asChild variant="secondary" className="min-h-touch w-fit">
-          <Link to="/owner/offerings">Return to Operations</Link>
+          <Link to="/owner/offerings">Return to Tools</Link>
         </Button>
       </div>
     </AeOperatorShell>
@@ -147,31 +147,31 @@ function UnavailableOperation({ offeringRef, unavailable }: Readonly<{ offeringR
 function maintenanceCommand(
   context: SupplyFunnelActionContext,
   action: 'recheck' | 'withdraw' | 'republish',
-  operationKey: string,
+  toolKey: string,
 ): OwnerSupplyMaintenanceInput {
   return {
     ...context,
-    operationKey,
+    operationKey: toolKey,
     correlationId: `owner-supply:${action}:${context.offeringRef}`,
     reasonCode: `owner_supply_${action}`,
-    evidenceRefs: ['owner-supply:operation-status'],
+    evidenceRefs: ['owner-supply:tool-status'],
   }
 }
 
 function correctionMessage(result: Exclude<OwnerSupplyCommandResult, { kind: 'refused' }>): string {
-  if (result.kind === 'withdrawn') return 'The Operation is withdrawn and no longer accepts new work.'
-  if (result.kind === 'republished') return 'The Operation was submitted for validation before returning to the market.'
-  return 'AE scheduled a fresh source and readiness check for this Operation.'
+  if (result.kind === 'withdrawn') return 'The Tool is withdrawn and no longer accepts new work.'
+  if (result.kind === 'republished') return 'The Tool was submitted for validation before returning to the market.'
+  return 'AE scheduled a fresh source and readiness check for this Tool.'
 }
 
 function correctionRefusal(reason: string): string {
   if (reason === 'revision_changed' || reason === 'publication_stale') {
-    return 'The Operation changed elsewhere. Reload its current status before trying again.'
+    return 'The Tool changed elsewhere. Reload its current status before trying again.'
   }
   if (reason === 'source_unavailable') {
-    return 'AE could not confirm the source. Reload this Operation before trying another action.'
+    return 'AE could not confirm the source. Reload this Tool before trying another action.'
   }
-  return 'AE refused this change because the current Operation no longer satisfies its required preconditions.'
+  return 'AE refused this change because the current Tool no longer satisfies its required preconditions.'
 }
 
 function sourceUnavailable(result: OwnerSupplyCommandResult): boolean {

@@ -23,7 +23,7 @@ import {
   type ProviderRouteTransportInvocation,
   type RouteTransportInvocation,
   type RouteTransportRuntime,
-} from './route-transport-invoke'
+} from './route-transport-call'
 
 type RouteTransportCancellationInvocationFor<
   Invocation extends RouteTransportInvocation,

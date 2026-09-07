@@ -71,7 +71,7 @@ type AePageSkeletonProps = {
   description?: string
   /**
    * Content shape of the skeleton. Defaults to a list of three rows, which is
-   * the dominant public pattern (catalogue rows, supplier listings, results).
+   * the dominant public pattern (catalogue rows, provider listings, results).
    */
   shape?: 'list' | 'detail' | 'market'
 }

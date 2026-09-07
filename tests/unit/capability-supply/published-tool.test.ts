@@ -1,0 +1,576 @@
+import { describe, expect, it, vi } from 'vitest'
+import { encodePaymentRequiredHeader, encodePaymentResponseHeader } from '@x402/core/http'
+import { validatePaymentRequired } from '@x402/core/schemas'
+import type { PaymentRequired } from '@x402/core/types'
+
+import {
+  buildDevelopmentPublishedToolEvidence,
+  verifyDevelopmentPublishedToolEvidence,
+} from '../../../tools/dev/fixtures/capability-supply/development-published-tool-evidence'
+import {
+  buildDevelopmentAlternatePublishedToolEvidence,
+  verifyDevelopmentAlternatePublishedToolEvidence,
+} from '../../../tools/dev/fixtures/capability-supply/development-alternate-published-tool-evidence'
+import {
+  invokePreparedRouteTransport,
+  prepareRegisteredRouteTransportInvocation,
+  type ProviderConnectionAuthorityLookup,
+  type RouteTransportInvocation,
+  type RouteTransportRuntime,
+  type X402PaymentSignatureRequest,
+  type X402RouteTransportRuntime,
+} from '@/modules/capability-supply/route-transport-runtime'
+import {
+  admitRegisteredTransport,
+  capabilityBindingRegistrationHash,
+  capabilityOfferingRegistrationHash,
+  capabilityToolId,
+  createPublicToolRef,
+  defineCapabilityOfferingRegistration,
+  defineCapabilityTransportBindingRegistration,
+  importX402Capability,
+  materializePublishedTool,
+  publishedToolIdentityDigest,
+  type PublishedTool,
+} from '@/modules/capability-supply/public'
+import { defineCapabilityContract } from '@/modules/capability-contract/public'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { isRecord } from '@/modules/common/is-record'
+
+const BASE_NETWORK = 'eip155:8453' as const
+const BASE_USDC = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913' as const
+const IMPORTED_PAY_TO = '0x209693Bc6afc0C5328bA36FaF03C514EF312287C' as const
+
+async function invokeRouteTransport(
+  routeInvocation: RouteTransportInvocation,
+  runtime: RouteTransportRuntime,
+) {
+  const preparation = prepareRegisteredRouteTransportInvocation(
+    routeInvocation,
+    runtime.x402PaymentSigningAvailable,
+  )
+  return preparation.kind === 'refused'
+    ? preparation.observation
+    : await invokePreparedRouteTransport(preparation.prepared, runtime)
+}
+type ProviderRouteTransportBinding = Extract<
+  RouteTransportInvocation,
+  { readonly binding: { readonly authority: { readonly kind: 'provider_connection' } } }
+>['binding']
+
+function providerRouteTransportBinding(
+  tool: PublishedTool,
+): ProviderRouteTransportBinding {
+  const authority = tool.binding.authority
+  if (authority.kind !== 'provider_connection') {
+    throw new Error('provider_connection_required')
+  }
+  return {
+    adapterId: tool.identity.adapterId,
+    endpointUrl: tool.binding.endpointUrl,
+    authority,
+    ...tool.transport,
+  }
+}
+
+function freshX402Response(tool: PublishedTool): Response {
+  const binding = providerRouteTransportBinding(tool)
+  const configuration = JSON.parse(binding.configJson) as { paymentRequiredJson?: string }
+  if (configuration.paymentRequiredJson === undefined) {
+    throw new Error('payment_required_json_missing')
+  }
+  const paymentRequired = JSON.parse(configuration.paymentRequiredJson) as PaymentRequired
+  return new Response(null, {
+    status: 402,
+    headers: { 'Payment-Required': encodePaymentRequiredHeader(paymentRequired) },
+  })
+}
+
+function currentProviderAuthority(tool: Readonly<{
+  connectionAuthority?: Readonly<{ authorityGeneration: number; authorityDigest: string }>
+}>): Readonly<{ authorityGeneration: number; authorityDigest: string }> {
+  const snapshot = tool.connectionAuthority
+  if (snapshot === undefined) throw new Error('connection_authority_missing')
+  return {
+    authorityGeneration: snapshot.authorityGeneration,
+    authorityDigest: snapshot.authorityDigest,
+  }
+}
+
+function providerCredentialReader(tool: PublishedTool) {
+  const snapshot = tool.connectionAuthority
+  if (snapshot === undefined) throw new Error('connection_authority_missing')
+  return (input: ProviderConnectionAuthorityLookup) => {
+    if (
+      input.connectionRef !== snapshot.connectionRef
+      || input.providerRef !== snapshot.providerRef
+      || input.adapterId !== snapshot.adapterId
+    ) {
+      return { kind: 'unavailable' as const, reason: 'not_found' as const }
+    }
+    if (input.authorityGeneration !== snapshot.authorityGeneration) {
+      return { kind: 'unavailable' as const, reason: 'stale_generation' as const }
+    }
+    if (input.authorityDigest !== snapshot.authorityDigest) {
+      return { kind: 'unavailable' as const, reason: 'digest_mismatch' as const }
+    }
+    return { kind: 'resolved' as const, credentialRef: snapshot.connectionRef }
+  }
+}
+
+describe('published Tool materialization', () => {
+  it('verifies the alternate managed x402 fixture with on-request pricing', () => {
+    const packet = buildDevelopmentAlternatePublishedToolEvidence()
+
+    expect(() => verifyDevelopmentAlternatePublishedToolEvidence(packet)).not.toThrow()
+    expect(packet.tool.identity.price).toEqual({ kind: 'on_request' })
+  })
+
+  it('binds exact publication, contract, offering, transport, price, readiness and separate usage evidence', () => {
+    const packet = buildDevelopmentPublishedToolEvidence()
+    expect(() => verifyDevelopmentPublishedToolEvidence(packet)).not.toThrow()
+    expect(packet.discovery).toHaveLength(5)
+    expect(packet.tool.identity).toMatchObject({
+      businessId: 'mock:business:published-api',
+      publicationRevision: 7,
+      contractId: 'cryptocurrency.quotes.latest',
+      contractVersion: 1,
+      adapterId: 'x402-fetch:v2',
+      endpoint: {
+        method: 'GET',
+        path: '/x402/v3/cryptocurrency/quotes/latest',
+      },
+      price: { kind: 'fixed', amount: { currency: 'AUD', units: '1000000', exponent: 6 } },
+    })
+    expect(packet.tool.usageObservation).toMatchObject({
+      calls: 8,
+      distinctPayers: 2,
+      source: 'mock:provider-attributed-usage-export',
+    })
+    expect(packet.tool.usageObservation?.evidenceRefs).not.toEqual(
+      packet.tool.readiness.evidenceRefs,
+    )
+    expect(packet.descriptor).toMatchObject({
+      authorityRequirement: 'principal',
+      retryClass: 'reconcile_before_retry',
+      consequenceClass: 'communication',
+    })
+  })
+  it('binds runtime environment into material identity', () => {
+    const packet = buildDevelopmentPublishedToolEvidence()
+    const production = materializePublishedTool({
+      ...packet.sourceMaterial,
+      publication: { ...packet.sourceMaterial.publication, runtimeEnvironment: 'production' },
+    })
+
+    expect(packet.tool.runtimeEnvironment).toBe('sandbox')
+    expect(production.runtimeEnvironment).toBe('production')
+    expect(production.materialDigest).not.toBe(packet.tool.materialDigest)
+  })
+
+  it('preserves the unchanged identity when provider authority is absent', () => {
+    const packet = buildDevelopmentPublishedToolEvidence()
+    const { connectionAuthority: _connectionAuthority, ...identity } = packet.tool.identity
+
+    expect(publishedToolIdentityDigest(identity)).toBe(canonicalDigest(identity))
+  })
+
+  it.each([
+    ['equal', true],
+    ['conflicting', false],
+  ] as const)('rejects a nested old/new authority key collision when values are %s', (_label, equal) => {
+    const packet = buildDevelopmentPublishedToolEvidence()
+    const connectionAuthority = packet.tool.identity.connectionAuthority
+    if (connectionAuthority === undefined) throw new Error('connection_authority_missing')
+    Object.assign(connectionAuthority, {
+      operationRef: equal ? connectionAuthority.toolRef : 'operation:v1:conflicting',
+    })
+
+    expect(() => publishedToolIdentityDigest(packet.tool.identity))
+      .toThrow('published_tool_identity_invalid')
+  })
+
+  it('rejects a caller attempt to widen the closed Tool input', () => {
+    const packet = buildDevelopmentPublishedToolEvidence()
+    expect(packet.descriptor.validateInput({ symbol: 'BTC', convert: 'USD' })).toBe(true)
+    expect(packet.descriptor.validateInput({ symbol: 'ETH', convert: 'USD' })).toBe(false)
+    expect(packet.descriptor.validateInput({ symbol: 'BTC', convert: 'EUR' })).toBe(false)
+    expect(packet.descriptor.validateInput({
+      symbol: 'BTC',
+      convert: 'USD',
+      method: 'POST',
+      payTo: '0xattacker',
+    })).toBe(false)
+  })
+
+  it('accepts only the exact BTC/USD provider evidence shape', () => {
+    const { descriptor } = buildDevelopmentPublishedToolEvidence()
+    const exact = {
+      data: {
+        BTC: {
+          symbol: 'BTC',
+          quote: {
+            USD: { price: 100_000, last_updated: '2026-07-20T08:00:00.000Z' },
+          },
+        },
+      },
+    }
+    expect(descriptor.validateOutput(exact)).toBe(true)
+    expect(descriptor.validateOutput({
+      data: {
+        BTC: {
+          symbol: 'BTC',
+          quote: {
+            EUR: { price: 90_000, last_updated: '2026-07-20T08:00:00.000Z' },
+          },
+        },
+      },
+    })).toBe(false)
+    expect(descriptor.validateOutput({ data: { BTC: { price: 100_000 } } })).toBe(false)
+  })
+
+  it('runs the admitted GET material rather than a hand-built binding', async () => {
+    const packet = buildDevelopmentPublishedToolEvidence()
+    const send = vi.fn(async (url: URL, init?: { method?: string; body?: string; headers?: Readonly<Record<string, string>> }) => {
+      expect(url.href).toBe(
+        'https://provider.example/x402/v3/cryptocurrency/quotes/latest?symbol=BTC&convert=USD',
+      )
+      expect(init?.method).toBe('GET')
+      expect(init?.body).toBeUndefined()
+      if (!Object.hasOwn(init?.headers ?? {}, 'Payment-Signature')) {
+        return freshX402Response(packet.tool)
+      }
+      return Response.json({
+        data: {
+          BTC: {
+            symbol: 'BTC',
+            quote: {
+              USD: { price: 100_000, last_updated: '2026-07-20T08:00:00.000Z' },
+            },
+          },
+        },
+      }, { headers: { 'Payment-Response': encodePaymentResponseHeader({
+        success: true,
+        transaction: 'mock:published-tool-settlement',
+        network: 'eip155:8453',
+        amount: '10000',
+        payer: 'mock:payer',
+      }) } })
+    })
+    const invocation: RouteTransportInvocation = {
+      binding: providerRouteTransportBinding(packet.tool),
+      authority: {
+        attemptRef: 'mock:attempt:get',
+        operationKeyDigest: canonicalDigest({ operation: packet.tool.operationId }),
+        mandateDigest: canonicalDigest({ mandate: 'mock' }),
+        grantDigest: canonicalDigest({ grant: 'mock' }),
+        capabilityContractDigest: packet.tool.identity.contractDigest,
+        maximumSpend: { currency: 'USD', units: '1', exponent: 2 },
+        ...currentProviderAuthority(packet.tool),
+        expiresAt: Date.now() + 120_000,
+        callIdentity: { keyId: 'mock:key', signature: 'mock:signature' },
+      },
+      inputJson: JSON.stringify({ symbol: 'BTC', convert: 'USD' }),
+    }
+    await expect(invokeRouteTransport(invocation, {
+      readProviderConnectionCredentialRef: providerCredentialReader(packet.tool),
+      validateProviderConnectionAuthority: () => ({ kind: 'valid' as const }),
+      send,
+      resolveCredential: () => 'mock-credential',
+      readX402PaymentCredentialRef: async () => 'env:AE_X402_PAYMENT_PRIVATE_KEY',
+      markX402PaymentPossiblySubmitted: () => undefined,
+      ...preparedX402Custody(async () => 'mock:payment-signature'),
+    })).resolves.toMatchObject({ transport: 'x402', disposition: 'succeeded' })
+    expect(send).toHaveBeenCalledTimes(2)
+  })
+
+  it.each(['GET', 'POST'] as const)(
+    'carries imported x402 %s through admission, materialization and runtime',
+    async (method) => {
+      const tool = await buildImportedTool(method)
+      const send = vi.fn(async (url: URL, init?: { method?: string; body?: string; headers?: Readonly<Record<string, string>> }) => {
+        expect(init?.method).toBe(method)
+        if (method === 'GET') {
+          expect(url.search).toBe('?symbol=BTC&convert=USD')
+          expect(init?.body).toBeUndefined()
+        } else {
+          expect(url.search).toBe('')
+          expect(JSON.parse(String(init?.body))).toEqual({ symbol: 'BTC', convert: 'USD' })
+        }
+        if (!Object.hasOwn(init?.headers ?? {}, 'Payment-Signature')) {
+          return freshX402Response(tool)
+        }
+        return Response.json({
+          data: {
+            BTC: {
+              symbol: 'BTC',
+              quote: {
+                USD: { price: 100_000, last_updated: '2026-07-20T08:00:00.000Z' },
+              },
+            },
+          },
+        }, { headers: { 'Payment-Response': encodePaymentResponseHeader({
+          success: true,
+          transaction: `mock:published-tool-${method}-settlement`,
+          network: BASE_NETWORK,
+          amount: '10000',
+          payer: 'mock:payer',
+        }) } })
+      })
+      await expect(invokeRouteTransport({
+        binding: providerRouteTransportBinding(tool),
+        authority: {
+          attemptRef: `mock:attempt:${method}`,
+          operationKeyDigest: canonicalDigest({ operation: tool.operationId, method }),
+          mandateDigest: canonicalDigest({ mandate: 'mock' }),
+          grantDigest: canonicalDigest({ grant: 'mock' }),
+          capabilityContractDigest: tool.identity.contractDigest,
+          maximumSpend: { currency: 'USD', units: '1', exponent: 2 },
+          ...currentProviderAuthority(tool),
+          expiresAt: Date.now() + 120_000,
+          callIdentity: { keyId: 'mock:key', signature: 'mock:signature' },
+        },
+        inputJson: JSON.stringify({ symbol: 'BTC', convert: 'USD' }),
+      }, {
+        validateProviderConnectionAuthority: () => ({ kind: 'valid' as const }),
+        readProviderConnectionCredentialRef: providerCredentialReader(tool),
+        send,
+        resolveCredential: () => 'mock-credential',
+        readX402PaymentCredentialRef: async () => 'env:AE_X402_PAYMENT_PRIVATE_KEY',
+        markX402PaymentPossiblySubmitted: () => undefined,
+        ...preparedX402Custody(async () => 'mock:payment-signature'),
+      })).resolves.toMatchObject({ transport: 'x402', disposition: 'succeeded' })
+    },
+  )
+
+  it('rejects independently rebuilt material tampering', () => {
+    const baseline = buildDevelopmentPublishedToolEvidence()
+    type Packet = typeof baseline
+    const config = (packet: Packet): Record<string, unknown> => {
+      const value = packet.sourceMaterial.binding.adapter.config
+      if (!isRecord(value)) throw new Error('binding_config_missing')
+      return value
+    }
+    const tamperers: readonly [string, (packet: Packet) => void][] = [
+      ['offering price', (packet) => {
+        const price = packet.sourceMaterial.offering.presentation.price
+        if (price.kind !== 'fixed') throw new Error('fixed_price_missing')
+        Object.assign(price.amount, { units: '2' })
+      }],
+      ['binding payTo', (packet) => { config(packet).payTo = '0xattacker' }],
+      ['binding network', (packet) => { config(packet).network = 'eip155:1' }],
+      ['binding asset', (packet) => { config(packet).asset = '0xattacker' }],
+      ['offering amount', (packet) => {
+        const price = packet.sourceMaterial.offering.presentation.price
+        if (price.kind !== 'fixed') throw new Error('fixed_price_missing')
+        Object.assign(price.amount, { units: '99' })
+      }],
+      ['method mismatch', (packet) => { config(packet).method = 'POST' }],
+      ['admitted config', (packet) => { Object.assign(packet.sourceMaterial.admittedTransport, { configJson: '{"method":"POST"}' }) }],
+      ['binding source digest', (packet) => {
+        const source = packet.sourceMaterial.qualification.sources[3]
+        if (source === undefined) throw new Error('binding_source_missing')
+        Object.assign(source, { digest: canonicalDigest({ forged: true }) })
+      }],
+      ['Tool material', (packet) => {
+        if (packet.tool.identity.payment.kind !== 'x402') throw new Error('x402_payment_missing')
+        Object.assign(packet.tool.identity.payment, { payTo: '0xattacker' })
+      }],
+      ['readiness', (packet) => { Object.assign(packet.readinessObservation, { validUntil: packet.readinessObservation.validUntil + 1 }) }],
+      ['usage', (packet) => {
+        if (packet.tool.usageObservation === undefined) throw new Error('usage_observation_missing')
+        Object.assign(packet.tool.usageObservation, { calls: 9 })
+        Object.assign(packet.tool, { materialDigest: publishedToolIdentityDigest(packet.tool.identity) })
+      }],
+      ['endpoint', (packet) => {
+        Object.assign(packet.tool.identity.endpoint, { path: '/attacker' })
+        Object.assign(packet.tool, { materialDigest: publishedToolIdentityDigest(packet.tool.identity) })
+      }],
+      ['descriptor', (packet) => { Object.assign(packet.descriptor, { retryClass: 'replayable' }) }],
+    ]
+    for (const [_label, tamper] of tamperers) {
+      const packet = buildDevelopmentPublishedToolEvidence()
+      tamper(packet)
+      expect(() => verifyDevelopmentPublishedToolEvidence(packet)).toThrow(
+        'development_published_tool_evidence_invalid',
+      )
+    }
+  })
+})
+
+async function buildImportedTool(method: 'GET' | 'POST') {
+  const base = buildDevelopmentPublishedToolEvidence()
+  const source = base.sourceMaterial
+  const { contractFormat: _format, inputSchema, outputSchema, ref: _ref, ...metadata } = source.contract
+  const imported = await importX402Capability({
+    kind: 'x402',
+    resource: {
+      resourceUrl: source.binding.endpointUrl,
+      method,
+      ...(method === 'GET'
+        ? { query: [{ inputPointer: '/symbol', parameter: 'symbol' }, { inputPointer: '/convert', parameter: 'convert' }] }
+        : {}),
+      inputSchema,
+      outputSchema,
+      price: { currency: 'USD', units: '1', exponent: 2 },
+      scheme: 'exact',
+      network: BASE_NETWORK,
+      asset: BASE_USDC,
+      payTo: IMPORTED_PAY_TO,
+      routeAmountExponent: 2,
+      assetAmountExponent: 6,
+      paymentRequired: validatePaymentRequired({
+        x402Version: 2,
+        resource: {
+          url: method === 'GET'
+            ? `${source.binding.endpointUrl}?symbol=BTC&convert=USD`
+            : source.binding.endpointUrl,
+        },
+        accepts: [{
+          scheme: 'exact',
+          network: BASE_NETWORK,
+          amount: '10000',
+          asset: BASE_USDC,
+          payTo: IMPORTED_PAY_TO,
+          maxTimeoutSeconds: 60,
+          extra: { name: 'USDC', version: '2' },
+        }],
+      }),
+    },
+    contract: metadata,
+    commercial: {
+      offering: {
+        offeringId: source.offering.offeringId,
+        networkId: source.offering.networkId,
+        presentation: {
+          ...source.offering.presentation,
+          price: {
+            kind: 'fixed',
+            amount: { currency: 'USD', units: '1', exponent: 2 },
+          },
+        },
+        searchTerms: source.offering.searchTerms,
+        registrationEvidenceRefs: source.offering.registrationEvidenceRefs,
+      },
+      bindingId: source.binding.bindingId,
+      authority: source.binding.authority,
+      registrationEvidenceRefs: source.binding.registrationEvidenceRefs,
+      requestTimeoutMs: 5_000,
+    },
+    evidenceRefs: [`mock:source:${method}`],
+  })
+  if (imported.kind !== 'normalized') throw new Error(imported.reason)
+  const contract = defineCapabilityContract(JSON.parse(imported.draft.documentJson))
+  const offering = defineCapabilityOfferingRegistration({
+    ...imported.draft.offering,
+    businessId: source.offering.businessId,
+    contractRef: contract.ref,
+    presentation: source.offering.presentation,
+  })
+  const binding = defineCapabilityTransportBindingRegistration({
+    ...imported.draft.binding,
+    offeringId: offering.offeringId,
+    networkId: offering.networkId,
+    contractRef: contract.ref,
+  })
+  const admission = admitRegisteredTransport({
+    adapterId: binding.adapter.adapterId,
+    endpointUrl: binding.endpointUrl,
+    authority: binding.authority,
+    continuation: binding.continuation,
+    cancellation: binding.cancellation,
+    config: binding.adapter.config,
+  })
+  if (admission.kind !== 'admitted') throw new Error(admission.reason)
+  const offeringDigest = capabilityOfferingRegistrationHash(offering)
+  const bindingDigest = capabilityBindingRegistrationHash(binding, admission.transport)
+  const qualification = {
+    ...source.qualification,
+    candidate: {
+      ...source.qualification.candidate,
+      contractRef: contract.ref,
+    },
+    sources: source.qualification.sources.map((entry) => {
+      if (entry.kind === 'publication') {
+        return { ...entry, digest: imported.draft.source.descriptorDigest }
+      }
+      if (entry.kind === 'contract') return { ...entry, digest: contract.ref.contractDigest }
+      if (entry.kind === 'offering') return { ...entry, digest: offeringDigest }
+      if (entry.kind === 'binding') return { ...entry, digest: bindingDigest }
+      return entry
+    }),
+  }
+  const publication = {
+    ...source.publication,
+    sourceDigest: imported.draft.source.descriptorDigest,
+  }
+  let connectionAuthority = source.connectionAuthority
+  if (binding.authority.kind === 'provider_connection') {
+    if (connectionAuthority === undefined) throw new Error('connection_authority_missing')
+    connectionAuthority = {
+      ...connectionAuthority,
+      connectionRef: binding.authority.connectionRef,
+      providerRef: binding.authority.providerRef,
+      adapterId: binding.adapter.adapterId,
+      toolRef: createPublicToolRef({
+        operationId: capabilityToolId(contract.ref.capabilityId),
+        publicationRef: publication.publicationRef,
+        publicationRevision: publication.revision,
+        contractRef: contract.ref,
+      }),
+    }
+  }
+  return materializePublishedTool({
+    publication,
+    contract,
+    offering,
+    binding,
+    ...(connectionAuthority === undefined ? {} : { connectionAuthority }),
+    admittedTransport: admission.transport,
+    qualification,
+    ...(source.usageObservation === undefined ? {} : { usageObservation: source.usageObservation }),
+  })
+}
+function preparedX402Custody(
+  create: (request: X402PaymentSignatureRequest) => Promise<string | undefined>,
+): Pick<
+  X402RouteTransportRuntime,
+  'prepareX402PaymentAuthorization'
+  | 'readX402PaymentAuthorization'
+  | 'readX402PaymentAuthorizationByDigest'
+  | 'verifyX402Settlement'
+> {
+  const custody = new Map<string, Readonly<{
+    authorizationDigest: string
+    readAuthorization: () => string
+  }>>()
+  return {
+    prepareX402PaymentAuthorization: async (request) => {
+      const paymentSignature = await create(request)
+      if (paymentSignature === undefined || paymentSignature.length === 0) return undefined
+      const custodyRef = canonicalDigest({
+        kind: 'test-x402-custody:v1',
+        paymentIdentifier: request.paymentIdentifier,
+        challengeDigest: request.challengeDigest,
+        attemptRef: request.attemptRef,
+        effectGeneration: request.effectGeneration,
+      })
+      const authorizationDigest = canonicalDigest({ kind: 'test-x402-authorization:v1', custodyRef })
+      custody.set(custodyRef, { authorizationDigest, readAuthorization: () => paymentSignature })
+      return { custodyRef, authorizationDigest }
+    },
+    readX402PaymentAuthorization: async ({ custodyRef, authorizationDigest }) => {
+      const prepared = custody.get(custodyRef)
+      return prepared?.authorizationDigest === authorizationDigest
+        ? prepared.readAuthorization()
+        : undefined
+    },
+    readX402PaymentAuthorizationByDigest: async ({ custodyRef, authorizationDigest }) => {
+      const prepared = custody.get(custodyRef)
+      return prepared?.authorizationDigest === authorizationDigest
+        ? prepared.readAuthorization()
+        : undefined
+    },
+    verifyX402Settlement: async () => true,
+  }
+}

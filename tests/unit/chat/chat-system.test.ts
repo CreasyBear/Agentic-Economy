@@ -9,10 +9,11 @@ import {
   projectTranscriptTurns,
   readAnonymousChatHandoff,
   rememberAnonymousChatHandoff,
-} from '@/components/ae/operation-chat/presentation'
+} from '@/components/ae/chat/presentation'
 import { providerSafeActionToolName } from '@/modules/actions/tool-contract'
 
-const operationRef = `operation:v1:${'a'.repeat(64)}`
+const toolRef = `operation:v1:${'a'.repeat(64)}`
+const quoteRef = `operation-commitment:v1:${'f'.repeat(64)}`
 
 afterEach(() => {
   vi.unstubAllGlobals()
@@ -74,16 +75,16 @@ describe('anonymous chat recovery', () => {
 })
 
 describe('transcript projector', () => {
-  it('allowlists the five operation tools and drops reasoning, sources, and files', () => {
+  it('allowlists the six market Tools and drops reasoning, sources, and files', () => {
     const turns = projectTranscriptTurns([{
       id: 'assistant-1',
       role: 'assistant',
       parts: [
-        { type: 'text', text: 'Here are the operations.' },
+        { type: 'text', text: 'Here are the Tools.' },
         ...CHAT_TOOL_IDS.map((toolId) => ({
           type: `tool-${providerSafeActionToolName(toolId)}`,
           state: 'output-available',
-          output: { kind: 'ok', operationRef, name: `${toolId} result` },
+          output: { kind: 'ok', toolRef, name: `${toolId} result` },
         })),
         { type: 'reasoning', text: 'PRIVATE_REASONING' },
         { type: 'source-url', url: 'https://private.example' },
@@ -92,7 +93,7 @@ describe('transcript projector', () => {
     }])
 
     expect(turns).toHaveLength(1)
-    expect(turns[0]?.text).toBe('Here are the operations.')
+    expect(turns[0]?.text).toBe('Here are the Tools.')
     expect(turns[0]?.tools.map((tool) => tool.toolId)).toEqual([...CHAT_TOOL_IDS])
     expect(JSON.stringify(turns)).not.toContain('PRIVATE_REASONING')
     expect(JSON.stringify(turns)).not.toContain('private.example')
@@ -106,15 +107,15 @@ describe('transcript projector', () => {
       role: 'assistant',
       parts: [
         {
-          type: `tool-${providerSafeActionToolName('registry.operations.search')}`,
+          type: `tool-${providerSafeActionToolName('registry.tools.search')}`,
           state: 'output-available',
           output: {
             kind: 'ok',
-            schemaVersion: 'registry-operations:v3',
+            schemaVersion: 'registry-tools:v3',
             query: 'weather',
             count: 12,
             items: [{
-              operationRef: searchRef,
+              toolRef: searchRef,
               capabilityId: 'weather.forecast',
               title: 'Weather finder',
               description: 'Look up forecasts',
@@ -126,13 +127,13 @@ describe('transcript projector', () => {
           },
         },
         {
-          type: `tool-${providerSafeActionToolName('operation.inspect')}`,
+          type: `tool-${providerSafeActionToolName('tool.quote')}`,
           state: 'output-available',
           output: {
             kind: 'committed',
-            commitmentRef: 'commitment:chat:weather:1',
-            operationRef: searchRef,
-            operationRevision: 1,
+            quoteRef,
+            toolRef: searchRef,
+            toolVersion: 1,
             expiresAt: 60_000,
             normalizedInput: { location: 'Perth' },
             price: { currency: 'USD', units: '199', exponent: 2 },
@@ -142,25 +143,25 @@ describe('transcript projector', () => {
             },
             budget: {
               principalRef: 'principal:chat:1',
-              maximumPerInvocation: { currency: 'USD', units: '1000', exponent: 2 },
+              maximumPerCall: { currency: 'USD', units: '1000', exponent: 2 },
             },
             policyRefs: ['policy:chat:1'],
             evidenceDigest: 'evidence:inspection:1',
             continuation: {
-              action: 'operation.invoke',
+              action: 'tool.call',
               method: 'POST',
-              path: '/api/v1/operations/call',
-              input: { commitmentRef: 'commitment:chat:weather:1', idempotencyKey: 'invoke-weather-1' },
+              path: '/api/v1/tools/call',
+              input: { quoteRef, idempotencyKey: 'invoke-weather-1' },
             },
           },
         },
         {
-          type: `tool-${providerSafeActionToolName('operation.invoke')}`,
+          type: `tool-${providerSafeActionToolName('tool.call')}`,
           state: 'output-available',
           output: {
             kind: 'completed',
-            invocationRef: 'invocation:chat:weather:1',
-            operationRef: searchRef,
+            callRef: 'invocation:chat:weather:1',
+            toolRef: searchRef,
             output: { forecast: executeSecret, nested: { evidenceHash: executeSecret } },
             evidenceHash: 'evidence:weather:1',
             usage: {
@@ -179,9 +180,9 @@ describe('transcript projector', () => {
     const [search, inspection, execute] = turns[0]?.tools ?? []
     expect(search?.kind).toBe('choices')
     expect(search?.kind === 'choices' ? search.choices : undefined).toEqual([{
-      operationRef: searchRef,
+      toolRef: searchRef,
       title: 'Weather finder',
-      supplier: 'Sky Co',
+      provider: 'Sky Co',
       price: 'USD 0.50',
       readiness: 'Operational',
     }])
@@ -191,26 +192,26 @@ describe('transcript projector', () => {
       { label: 'Account available', value: 'USD 5.00' },
       { label: 'Agent maximum', value: 'USD 10.00' },
       { label: 'Expires', value: '1970-01-01T00:01:00.000Z' },
-      { label: 'Commitment', value: 'commitment:chat:weather:1' },
+      { label: 'Quote', value: quoteRef },
     ])
     expect(execute?.kind).toBe('execute')
     expect(execute?.kind === 'execute' ? execute.state : undefined).toBe('completed')
-    expect(execute?.kind === 'execute' ? execute.invocationRef : undefined).toBe('invocation:chat:weather:1')
+    expect(execute?.kind === 'execute' ? execute.callRef : undefined).toBe('invocation:chat:weather:1')
     expect(execute?.kind === 'execute' ? execute.outputPreview : undefined).toContain(executeSecret)
     expect(execute?.kind === 'execute' ? execute.facts : undefined).toEqual([
       { label: 'Charge', value: 'USD 0.25 · Paid' },
       { label: 'Duration', value: '850 ms' },
     ])
-    expect(execute?.kind === 'execute' ? execute.continuation : undefined).toMatchObject({
+    expect(execute?.kind === 'execute' ? execute.suggestedNextAction : undefined).toMatchObject({
       label: 'View receipt',
-      href: '/operations/invocations/invocation:chat:weather:1',
+      href: '/calls/invocation:chat:weather:1',
     })
     expect(JSON.stringify(turns)).not.toContain('Look up forecasts')
     expect(JSON.stringify(turns)).not.toContain('sky-co')
   })
 
   it('projects the actual JSON-wrapped tool-result shape and keeps unresolved states explicit', () => {
-    const partType = `tool-${providerSafeActionToolName('operation.invoke')}`
+    const partType = `tool-${providerSafeActionToolName('tool.call')}`
     const completed = projectTranscriptTurns([{
       id: 'assistant-wire-shape',
       role: 'assistant',
@@ -222,8 +223,8 @@ describe('transcript projector', () => {
           type: 'json',
           value: {
             kind: 'completed',
-            invocationRef: 'invocation:wire:1',
-            operationRef,
+            callRef: 'invocation:wire:1',
+            toolRef,
             output: { answer: 42 },
             evidenceHash: 'evidence:wire:1',
             usage: {
@@ -241,7 +242,7 @@ describe('transcript projector', () => {
     expect(completed).toMatchObject({
       kind: 'execute',
       state: 'completed',
-      invocationRef: 'invocation:wire:1',
+      callRef: 'invocation:wire:1',
       outputPreview: '{\n  "answer": 42\n}',
     })
 
@@ -254,8 +255,8 @@ describe('transcript projector', () => {
         state: 'output-available',
         output: {
           kind: 'reconciliation_required',
-          invocationRef: 'invocation:wire:2',
-          operationRef,
+          callRef: 'invocation:wire:2',
+          toolRef,
           evidence: {
             attemptRef: 'attempt:wire:2',
             effectGeneration: 1,
@@ -270,8 +271,8 @@ describe('transcript projector', () => {
     expect(unresolved).toMatchObject({
       kind: 'execute',
       state: 'reconciliation_required',
-      invocationRef: 'invocation:wire:2',
-      continuation: { kind: 'reconcile' },
+      callRef: 'invocation:wire:2',
+      suggestedNextAction: { kind: 'reconcile' },
     })
     expect(unresolved?.kind === 'execute' ? unresolved.summary : '').toMatch(/Do not retry/i)
   })
@@ -281,15 +282,15 @@ describe('transcript projector', () => {
       id: 'assistant-call-handoff',
       role: 'assistant',
       parts: [{
-        type: `tool-${providerSafeActionToolName('operation.invoke')}`,
+        type: `tool-${providerSafeActionToolName('tool.call')}`,
         toolCallId: 'tool-call-stored-1',
         state: 'output-available',
         output: {
           type: 'json',
           value: {
             kind: 'completed',
-            invocationRef: 'invocation:stored:1',
-            operationRef,
+            callRef: 'invocation:stored:1',
+            toolRef,
             output: { usable: true },
             evidenceHash: 'evidence:stored:1',
             usage: {
@@ -309,29 +310,29 @@ describe('transcript projector', () => {
     expect(execute).toMatchObject({
       kind: 'execute',
       state: 'completed',
-      invocationRef: 'invocation:stored:1',
+      callRef: 'invocation:stored:1',
       outputPreview: '{\n  "usable": true\n}',
-      continuation: { label: 'View receipt' },
+      suggestedNextAction: { label: 'View receipt' },
     })
     clearAnonymousChatHandoff('handoff-call')
   })
 
   it('keeps every canonical interrupted or refused business state distinct from transport completion', () => {
-    const partType = `tool-${providerSafeActionToolName('operation.invoke')}`
+    const partType = `tool-${providerSafeActionToolName('tool.call')}`
     const outputs = [
       {
         kind: 'pending',
-        invocationRef: 'invocation:states:pending',
-        operationRef,
+        callRef: 'invocation:states:pending',
+        toolRef,
         retryAfterMs: 1_000,
       },
       {
         kind: 'needs_authority',
-        invocationRef: 'invocation:states:authority',
-        operationRef,
+        callRef: 'invocation:states:authority',
+        toolRef,
         authorityRequest: {
-          kind: 'approve_each',
-          operationRef,
+          kind: 'approval_required',
+          toolRef,
           consequence: 'external_effect',
           retryClass: 'reconcile_before_retry',
           maximumSpend: { currency: 'USD', units: '200', exponent: 2 },
@@ -340,7 +341,7 @@ describe('transcript projector', () => {
       },
       {
         kind: 'refused',
-        operationRef,
+        toolRef,
         code: 'budget_exceeded',
         retryable: false,
         nextAction: 'Increase the bounded mandate before trying again.',
@@ -360,13 +361,13 @@ describe('transcript projector', () => {
 
     expect(cards.map((card) => card?.kind === 'execute' ? card.state : undefined))
       .toEqual(['pending', 'needs_authority', 'refused'])
-    expect(cards[0]?.kind === 'execute' ? cards[0].continuation?.label : undefined).toBe('Check call status')
+    expect(cards[0]?.kind === 'execute' ? cards[0].suggestedNextAction?.label : undefined).toBe('Check call status')
     expect(cards[1]?.kind === 'execute' ? cards[1].nextAction : undefined).toMatch(/pending approval/i)
     expect(cards[2]?.kind === 'execute' ? cards[2].nextAction : undefined).toMatch(/bounded mandate/i)
   })
 
-  it('renders every JSON value shape and makes a truncated preview recoverable by invocation identity', () => {
-    const partType = `tool-${providerSafeActionToolName('operation.invoke')}`
+  it('renders every JSON value shape and makes a truncated preview recoverable by Call identity', () => {
+    const partType = `tool-${providerSafeActionToolName('tool.call')}`
     const values = [null, 'literal', [1, true], { answer: 42 }] as const
 
     for (const [index, output] of values.entries()) {
@@ -378,8 +379,8 @@ describe('transcript projector', () => {
           state: 'output-available',
           output: {
             kind: 'completed',
-            invocationRef: `invocation:output:${index}`,
-            operationRef,
+            callRef: `invocation:output:${index}`,
+            toolRef,
             output,
             evidenceHash: `evidence:output:${index}`,
             usage: {
@@ -403,8 +404,8 @@ describe('transcript projector', () => {
         state: 'output-available',
         output: {
           kind: 'completed',
-          invocationRef: 'invocation:output:long',
-          operationRef,
+          callRef: 'invocation:output:long',
+          toolRef,
           output: 'x'.repeat(9_000),
           evidenceHash: 'evidence:output:long',
           usage: {
@@ -420,8 +421,8 @@ describe('transcript projector', () => {
 
     expect(longCard?.kind === 'execute' ? longCard.outputTruncated : undefined).toBe(true)
     expect(longCard?.kind === 'execute' ? longCard.outputPreview?.length : undefined).toBe(8_000)
-    expect(longCard?.kind === 'execute' ? longCard.continuation?.href : undefined)
-      .toBe('/operations/invocations/invocation:output:long')
+    expect(longCard?.kind === 'execute' ? longCard.suggestedNextAction?.href : undefined)
+      .toBe('/calls/invocation:output:long')
   })
 
   it('projects compare contrasts from comparison facts, not a second search list', () => {
@@ -431,13 +432,13 @@ describe('transcript projector', () => {
       id: 'assistant-compare',
       role: 'assistant',
       parts: [{
-        type: `tool-${providerSafeActionToolName('registry.operations.compare')}`,
+        type: `tool-${providerSafeActionToolName('registry.tools.compare')}`,
         state: 'output-available',
         output: {
           kind: 'ok',
-          operations: [
+          tools: [
             {
-              operationRef: skyRef,
+              toolRef: skyRef,
               offering: { label: 'Weather finder' },
               business: { name: 'Sky Co' },
               commercial: { price: { kind: 'fixed', amount: { currency: 'USD', units: '50', exponent: 2 } } },
@@ -445,7 +446,7 @@ describe('transcript projector', () => {
               availability: { posture: 'routeable' },
             },
             {
-              operationRef: rainRef,
+              toolRef: rainRef,
               offering: { label: 'Rain lookup' },
               business: { name: 'Nimbus' },
               commercial: { price: { kind: 'fixed', amount: { currency: 'USD', units: '75', exponent: 2 } } },
@@ -457,42 +458,42 @@ describe('transcript projector', () => {
             {
               field: 'summary',
               values: [
-                { operationRef: skyRef, value: 'SECRET_SUMMARY', source: 'publication' },
-                { operationRef: rainRef, value: 'OTHER_SUMMARY', source: 'publication' },
+                { toolRef: skyRef, value: 'SECRET_SUMMARY', source: 'publication' },
+                { toolRef: rainRef, value: 'OTHER_SUMMARY', source: 'publication' },
               ],
             },
             {
               field: 'price',
               values: [
-                { operationRef: skyRef, value: { kind: 'fixed', amount: { currency: 'USD', units: '50', exponent: 2 } }, source: 'publication' },
-                { operationRef: rainRef, value: { kind: 'fixed', amount: { currency: 'USD', units: '75', exponent: 2 } }, source: 'publication' },
+                { toolRef: skyRef, value: { kind: 'fixed', amount: { currency: 'USD', units: '50', exponent: 2 } }, source: 'publication' },
+                { toolRef: rainRef, value: { kind: 'fixed', amount: { currency: 'USD', units: '75', exponent: 2 } }, source: 'publication' },
               ],
             },
             {
               field: 'effects',
               values: [
-                { operationRef: skyRef, value: [{ class: 'data_release' }], source: 'contract' },
-                { operationRef: rainRef, value: [{ class: 'data_release' }, { class: 'financial_exposure' }], source: 'contract' },
+                { toolRef: skyRef, value: [{ class: 'data_release' }], source: 'contract' },
+                { toolRef: rainRef, value: [{ class: 'data_release' }, { class: 'financial_exposure' }], source: 'contract' },
               ],
             },
             {
               field: 'dataUse',
               values: [
-                { operationRef: skyRef, value: [{ classification: 'public' }], source: 'contract' },
-                { operationRef: rainRef, value: [{ classification: 'personal' }], source: 'contract' },
+                { toolRef: skyRef, value: [{ classification: 'public' }], source: 'contract' },
+                { toolRef: rainRef, value: [{ classification: 'personal' }], source: 'contract' },
               ],
             },
             {
               field: 'availability',
               values: [
-                { operationRef: skyRef, value: { posture: 'routeable' }, source: 'readiness' },
-                { operationRef: rainRef, value: { posture: 'setup_required' }, source: 'readiness' },
+                { toolRef: skyRef, value: { posture: 'routeable' }, source: 'readiness' },
+                { toolRef: rainRef, value: { posture: 'setup_required' }, source: 'readiness' },
               ],
             },
             {
               field: 'provenance',
               values: [
-                { operationRef: skyRef, value: { publisher: 'provider_owned', sourceKind: 'openapi_http' }, source: 'publication' },
+                { toolRef: skyRef, value: { publisher: 'provider_owned', sourceKind: 'openapi_http' }, source: 'publication' },
               ],
             },
           ],
@@ -522,15 +523,15 @@ describe('transcript projector', () => {
       id: 'assistant-3',
       role: 'assistant',
       parts: [{
-        type: `tool-${providerSafeActionToolName('registry.operations.search')}`,
+        type: `tool-${providerSafeActionToolName('registry.tools.search')}`,
         state: 'output-available',
         output: {
           kind: 'ok',
-          schemaVersion: 'registry-operations:v3',
+          schemaVersion: 'registry-tools:v3',
           query: 'weather',
           count: 1,
           items: [{
-            operationRef: searchRef,
+            toolRef: searchRef,
             capabilityId: 'weather.forecast',
             title: 'Weather finder',
             description: 'Look up forecasts',
@@ -547,9 +548,9 @@ describe('transcript projector', () => {
     const stored = readAnonymousChatHandoff('handoff-thread')
     const turns = projectTranscriptTurns(stored)
     expect(turns[0]?.tools[0]?.kind === 'choices' ? turns[0].tools[0].choices : undefined).toEqual([{
-      operationRef: searchRef,
+      toolRef: searchRef,
       title: 'Weather finder',
-      supplier: 'Sky Co',
+      provider: 'Sky Co',
       price: 'USD 0.50',
       readiness: 'Operational',
     }])

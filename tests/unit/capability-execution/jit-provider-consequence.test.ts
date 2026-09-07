@@ -77,10 +77,10 @@ function invocation(): ProviderRouteTransportInvocation {
       authorityGeneration: 4,
       authorityDigest: canonicalDigest({ connection: 'test', generation: 4 }),
       leaseRef: 'lease:test',
-      invocationRef: 'invocation:test',
-      operationRef: 'operation:test',
+      callRef: 'call:test',
+      toolRef: 'tool:test',
       grantedScopes: ['provider:invoke'],
-      grantedResources: ['operation:test'],
+      grantedResources: ['tool:test'],
       readinessValidUntil: NOW + 20_000,
       readinessDigest: canonicalDigest({ readiness: 'test' }),
     },
@@ -156,16 +156,16 @@ function requestDigest(routeInvocation: RouteTransportInvocation): string {
 function ticket(routeInvocation = invocation()): CanonicalProviderConsequenceTicket {
   const authority = routeInvocation.authority
   const {
-    invocationRef,
-    operationRef,
+    callRef,
+    toolRef,
     leaseRef,
     grantedScopes,
     grantedResources,
     readinessValidUntil,
     readinessDigest,
   } = authority
-  if (invocationRef === undefined
-    || operationRef === undefined
+  if (callRef === undefined
+    || toolRef === undefined
     || leaseRef === undefined
     || grantedScopes === undefined
     || grantedResources === undefined
@@ -180,8 +180,8 @@ function ticket(routeInvocation = invocation()): CanonicalProviderConsequenceTic
     invocationDigest,
     issuedAt: NOW - 1_000,
     expiresAt: NOW + 10_000,
-    invocationRef,
-    operationRef,
+    callRef,
+    toolRef,
     leaseRef,
     connectionRef: routeInvocation.binding.authority.connectionRef,
     authorityGeneration: authority.authorityGeneration,
@@ -770,8 +770,8 @@ describe('JIT provider consequence boundary', () => {
   it('requires a provider lease authority with every consequence binding field materialized', async () => {
     const routeInvocation = invocation()
     const missing = [
-      'invocationRef',
-      'operationRef',
+      'callRef',
+      'toolRef',
       'leaseRef',
       'grantedScopes',
       'grantedResources',

@@ -17,7 +17,7 @@ describe('MCP host adapter account money', () => {
       jsonrpc: '2.0', id: 'account-balance', method: 'tools/call',
       params: { name: 'ae_agentAccess_balance', arguments: { currency: 'AUD' } },
     }, {
-      authenticate: authenticateWithScopes(['market_operations:invoke']),
+      authenticate: authenticateWithScopes(['market_tools:call']),
       accountManagementService: { balance, activity: vi.fn() },
     }, { authorization: 'Bearer buyer-only' })
 
@@ -29,19 +29,19 @@ describe('MCP host adapter account money', () => {
     })
     expect(balance).toHaveBeenCalledWith(expect.objectContaining({
       input: { currency: 'AUD' },
-      principal: expect.objectContaining({ scopes: ['market_operations:invoke'] }),
+        principal: expect.objectContaining({ scopes: ['market_tools:call'] }),
     }))
   })
 
-  it('refuses supplier-only credentials before account money dispatch', async () => {
+  it('refuses Provider-only credentials before account money dispatch', async () => {
     const balance = vi.fn()
     const response = await postMcp({
-      jsonrpc: '2.0', id: 'supplier-account-balance', method: 'tools/call',
+      jsonrpc: '2.0', id: 'provider-account-balance', method: 'tools/call',
       params: { name: 'ae_agentAccess_balance', arguments: { currency: 'AUD' } },
     }, {
       authenticate: authenticateWithScopes(['market_supply:manage']),
       accountManagementService: { balance, activity: vi.fn() },
-    }, { authorization: 'Bearer supplier-only' })
+    }, { authorization: 'Bearer provider-only' })
 
     expect(response.status).toBe(403)
     expect(balance).not.toHaveBeenCalled()

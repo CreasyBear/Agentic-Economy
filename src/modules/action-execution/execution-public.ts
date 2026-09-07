@@ -43,11 +43,11 @@ export type PublicExecutionStatus = Readonly<{
   executionRef: string
   executionVersion: number
   action: Readonly<{ id: string; contractVersion: string }>
-  operationRef?: string
+  toolRef?: string
   origin: ActionExecutionOrigin['kind']
   control: ActionExecutionView['control']['state']
   freshness: ActionExecutionView['freshness']['state']
-  authority?: 'approve_each' | 'standing_mandate_use' | 'customer_request_mandate_use' | 'public_capability_use'
+  authority?: 'approval_required' | 'spending_policy_use' | 'customer_request_authorization_use' | 'public_capability_use'
   attempts: readonly PublicExecutionAttempt[]
   history: readonly PublicExecutionHistory[]
 }>
@@ -194,15 +194,15 @@ function projectPublicExecutionStatus<Result extends ActionResult>(
   attempts: readonly DurableAttemptRow[],
   history: readonly DurableHistoryRow[],
 ): PublicExecutionStatus {
-  const operationRef = row.control.acceptedAuthority?.kind === 'public_capability_use'
-    ? row.control.acceptedAuthority.operationRef
+  const toolRef = row.control.acceptedAuthority?.kind === 'public_capability_use'
+    ? row.control.acceptedAuthority.toolRef
     : undefined
   return {
     kind: 'ok',
     executionRef: row.executionRef,
     executionVersion: row.executionVersion,
     action: row.control.action,
-    ...(operationRef === undefined ? {} : { operationRef }),
+    ...(toolRef === undefined ? {} : { toolRef }),
     origin: row.control.origin.kind,
     control: row.control.control.state,
     freshness: row.control.freshness.state,
@@ -219,15 +219,15 @@ function projectPublicExecutionStatus<Result extends ActionResult>(
 function projectPublicExecutionView<Result extends ActionResult>(
   view: ActionExecutionView<Result>,
 ): PublicExecutionStatus {
-  const operationRef = view.acceptedAuthority?.kind === 'public_capability_use'
-    ? view.acceptedAuthority.operationRef
+  const toolRef = view.acceptedAuthority?.kind === 'public_capability_use'
+    ? view.acceptedAuthority.toolRef
     : undefined
   return {
     kind: 'ok',
     executionRef: view.executionRef,
     executionVersion: view.executionVersion,
     action: view.action,
-    ...(operationRef === undefined ? {} : { operationRef }),
+    ...(toolRef === undefined ? {} : { toolRef }),
     origin: view.origin.kind,
     control: view.control.state,
     freshness: view.freshness.state,

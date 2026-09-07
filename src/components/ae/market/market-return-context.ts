@@ -1,4 +1,4 @@
-import { isPublicOperationRef } from '@/modules/capability-supply/public'
+import { isPublicToolRef } from '@/modules/capability-supply/public'
 import { marketWindowSchema, type MarketWindow } from '@/modules/market/contracts'
 import { isMarketCategoryId, type MarketCategoryId } from '@/modules/market/listing-evidence'
 
@@ -20,10 +20,10 @@ export type MarketReturnSearch = Readonly<{
 
 export type MarketReturnNavigation = Readonly<{
   search: MarketReturnSearch
-  hash?: 'operations'
+  hash?: 'tools'
 }>
 
-export const FALLBACK_MARKET_RETURN_CONTEXT = '/market?window=30d#operations' as MarketReturnContext
+export const FALLBACK_MARKET_RETURN_CONTEXT = '/market?window=30d#tools' as MarketReturnContext
 
 const MAX_RETURN_CONTEXT_LENGTH = 3_000
 const MARKET_CONTEXT_ORIGIN = 'https://agentic-economy.invalid'
@@ -39,7 +39,7 @@ const knownParameters = new Set([
 
 export function buildMarketReturnContext(
   search: MarketReturnSearch,
-  hash?: 'operations',
+  hash?: 'tools',
 ): MarketReturnContext {
   const parameters = new URLSearchParams({ window: search.window })
   if (search.query !== undefined) parameters.set('query', search.query)
@@ -70,7 +70,7 @@ export function readMarketReturnContext(value: unknown): MarketReturnContext | u
   if (
     url.origin !== MARKET_CONTEXT_ORIGIN
     || url.pathname !== '/market'
-    || (url.hash !== '' && url.hash !== '#operations')
+    || (url.hash !== '' && url.hash !== '#tools')
   ) return undefined
 
   for (const key of url.searchParams.keys()) {
@@ -126,7 +126,7 @@ export function toMarketReturnNavigation(
       ...(capability === null ? {} : { capability }),
       ...(compare === null ? {} : { compare }),
     },
-    ...(url.hash === '#operations' ? { hash: 'operations' as const } : {}),
+    ...(url.hash === '#tools' ? { hash: 'tools' as const } : {}),
   }
 }
 
@@ -135,5 +135,5 @@ function isValidComparison(value: string): boolean {
   return refs.length >= 2
     && refs.length <= 4
     && new Set(refs).size === refs.length
-    && refs.every(isPublicOperationRef)
+    && refs.every(isPublicToolRef)
 }

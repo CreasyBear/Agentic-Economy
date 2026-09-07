@@ -11,7 +11,7 @@ import {
   convexModules as modules,
   publishedBusinessOwner,
 } from '../../helpers/convex-fixtures'
-import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { agentAccessPolicyDigest } from '@/modules/agent-access/policy'
 
 describe('capability supply readiness authority', () => {
   it('derives readiness authority only from the current resource owner and pinned publisher', async () => {
@@ -34,7 +34,7 @@ describe('capability supply readiness authority', () => {
       if (principal === null) throw new Error('canonical principal missing')
       const publicationId = await ctx.db.insert('capabilityPublications', {
         publicationRef: 'publication:readiness-authority',
-        operationRef: 'operation:readiness-authority',
+        toolRef: 'operation:readiness-authority',
         revision: 1,
         businessId,
         networkId: 'ae:public',
@@ -167,18 +167,18 @@ describe('capability supply readiness authority', () => {
       const expiresAt = now + 300_000
       const policy = {
         format: 'ae.agent-access-policy:v2' as const,
-        operationAccess: 'all_admitted' as const,
-        operationRefs: [] as string[],
+        toolAccess: 'all_admitted' as const,
+        toolRefs: [] as string[],
         environment: 'production' as const,
         budget: {
           budgetPolicyRef: 'budget:readiness-publisher',
           generation: 7,
           currency: 'AUD',
           exponent: 2,
-          maximumSpendPerInvocation: { currency: 'AUD', units: '0', exponent: 2 },
+          maximumSpendPerCall: { currency: 'AUD', units: '0', exponent: 2 },
           maximumDailySpend: { currency: 'AUD', units: '0', exponent: 2 },
           maximumMonthlySpend: { currency: 'AUD', units: '0', exponent: 2 },
-          maximumConcurrentInvocations: 1,
+          maximumConcurrentCalls: 1,
         },
         rate: {
           ratePolicyRef: 'rate:readiness-publisher',
@@ -187,7 +187,7 @@ describe('capability supply readiness authority', () => {
           maximumCallsPerHour: 1,
         },
       }
-      const policyDigest = canonicalDigest(policy as never)
+      const policyDigest = agentAccessPolicyDigest(policy)
       const agentId = await ctx.db.insert('agentAccessPrincipals', {
         principalId,
         ownerId: owningAccountRef,
@@ -195,9 +195,9 @@ describe('capability supply readiness authority', () => {
         applicationRef: 'application:readiness-publisher',
         environment: 'production',
         scopes: ['market_supply:manage'],
-        authorityMode: 'bounded_mandate',
+        authorityMode: 'spending_policy',
         grantGeneration: 7,
-        policyDigest,
+        spendingPolicyDigest: policyDigest,
         lifecycle: 'active',
         expiresAt,
         recordedAt: 1,
@@ -211,22 +211,22 @@ describe('capability supply readiness authority', () => {
         applicationRef: 'application:readiness-publisher',
         credentialId: 'credential:readiness-publisher',
         environment: 'production',
-        operationAccess: 'all_admitted',
-        operationRefs: [],
-        authorityMode: 'bounded_mandate',
-        policy,
+        toolAccess: 'all_admitted',
+        toolRefs: [],
+        authorityMode: 'spending_policy',
+        spendingPolicy: policy,
         budgetPolicyRef: 'budget:readiness-publisher',
         ratePolicyRef: 'rate:readiness-publisher',
         lifecycle: 'active',
         generation: 7,
-        policyDigest,
+        spendingPolicyDigest: policyDigest,
         createdAt: 1,
         updatedAt: 1,
         expiresAt,
       })
       const publicationId = await ctx.db.insert('capabilityPublications', {
         publicationRef: 'publication:readiness-agent-authority',
-        operationRef: 'operation:readiness-agent-authority',
+        toolRef: 'operation:readiness-agent-authority',
         revision: 1,
         businessId,
         networkId: 'ae:public',

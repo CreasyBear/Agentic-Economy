@@ -54,7 +54,7 @@ describe("current supply funnel", () => {
     ).toBeDefined();
     expect(
       screen.getByText(
-        "Your payout account is ready. You can approve a payout after supplier earnings reach the minimum shown above.",
+        "Your payout account is ready. You can approve a payout after provider earnings reach the minimum shown above.",
       ),
     ).toBeDefined();
     expect(

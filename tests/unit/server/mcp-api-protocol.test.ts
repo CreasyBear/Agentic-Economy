@@ -36,30 +36,32 @@ describe('MCP host adapter protocol', () => {
     const instructions = body.result?.instructions
     expect(instructions).toBe(
       'Use Agentic Economy to acquire one bounded outside contribution when your current harness lacks a capability. '
-      + 'Search with `ae_registry_operations_search` and a capability phrase. '
-      + 'Use `ae_registry_operations_list` to browse, `ae_registry_operations_describe` for one exact input contract, and `ae_registry_operations_compare` for up to four exact references. '
-      + 'Call `ae_operation_inspect` with the exact Operation and input. Complete its one continuation or required action, then inspect again. Invoke only with the Commitment returned by inspection. '
-      + 'If Account credit is insufficient, use `ae_funding_handoff_create`, give only its Stripe checkoutUrl to the payer, persist fundingSessionId, poll `ae_funding_handoff_status`, then explicitly retry the original Operation only after ready. '
-      + 'If effects are uncertain, use `ae_operation_status` or `ae_operation_reconcile` before retrying. '
+      + 'Search with `ae_registry_tools_search` and a capability phrase. '
+      + 'Use `ae_registry_tools_list` to browse, `ae_registry_tools_describe` for one exact input contract, and `ae_registry_tools_compare` for up to four exact references. '
+      + 'Call `ae_tool_quote` with the exact Tool and input. Complete its one continuation or required action, then request a fresh Quote if the input or authority changes. '
+      + 'Call only with the Quote returned by `ae_tool_quote`. '
+      + 'If Account credit is insufficient, use `ae_funding_handoff_create`, give only its Stripe checkoutUrl to the payer, persist fundingSessionId, poll `ae_funding_handoff_status`, then explicitly retry the original Tool only after ready. '
+      + 'If effects are uncertain, use `ae_call_status` or `ae_call_reconcile` before retrying. '
       + 'Agentic Economy returns the contribution or receipt; your existing harness keeps project planning and execution.',
     )
     expect(typeof instructions).toBe('string')
     expect([...String(instructions).matchAll(/`(ae_[^`]+)`/g)].map((match) => match[1])).toEqual([
-      'ae_registry_operations_search',
-      'ae_registry_operations_list',
-      'ae_registry_operations_describe',
-      'ae_registry_operations_compare',
-      'ae_operation_inspect',
+      'ae_registry_tools_search',
+      'ae_registry_tools_list',
+      'ae_registry_tools_describe',
+      'ae_registry_tools_compare',
+      'ae_tool_quote',
+      'ae_tool_quote',
       'ae_funding_handoff_create',
       'ae_funding_handoff_status',
-      'ae_operation_status',
-      'ae_operation_reconcile',
+      'ae_call_status',
+      'ae_call_reconcile',
     ])
     expect(instructions).toContain('one bounded outside contribution')
     expect(instructions).toContain('your existing harness keeps project planning and execution')
     expect(instructions).not.toMatch(/Agentic Economy (?:owns|plans|executes|orchestrates)/i)
     expect(instructions).not.toMatch(/api[_ -]?key|bearer|credential|password|secret|private origin|https?:\/\/|localhost/i)
-    expect(instructions).not.toMatch(/\brequest\b|\bevidence\b|idempotenc/i)
+    expect(instructions).not.toMatch(/\bevidence\b|idempotenc/i)
   })
   it('maps top-level MCP request schema failures to Invalid params', async () => {
     const malformedInitialize = await postMcp({
@@ -311,7 +313,7 @@ describe('MCP host adapter protocol', () => {
       readOnly: false,
       effect: {
         class: 'external_state_change', reversible: false, recipientKind: 'none',
-        dataClasses: [], spendExposure: 'none', approval: 'approve_each',
+        dataClasses: [], spendExposure: 'none', approval: 'approval_required',
       },
       surfaces: ['mcp'],
       outputSchema: z.strictObject({ kind: z.literal('ok') }),
@@ -356,7 +358,7 @@ describe('MCP host adapter protocol', () => {
 
     expect(response.status).toBe(401)
     expect(response.headers.get('WWW-Authenticate')).toBe(
-      'Bearer resource_metadata="https://canonical.example/.well-known/oauth-protected-resource", scope="market_operations:invoke customer_requests:approve_each offline_access"',
+      'Bearer resource_metadata="https://canonical.example/.well-known/oauth-protected-resource", scope="market_tools:call customer_requests:approval_required offline_access"',
     )
   })
 

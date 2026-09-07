@@ -129,44 +129,44 @@ describe('Provider source integration draft', () => {
       correlationId: 'supplier-operations:list:one',
     }
     const directory = await backend.mutation(
-      api.capabilitySupplierOperations.listAgent,
+      api.capabilityProviderTools.listAgent,
       await withSourceWrite('catalog_publish', directoryCommand),
     )
     expect(directory).toMatchObject({ kind: 'available', isDone: true })
     if (directory.kind !== 'available') throw new Error('supplier_operation_directory_unavailable')
     expect(directory.page.map(({ statusJson }) => JSON.parse(statusJson))).toMatchObject([{
-      schemaVersion: 'supplier_operations:v1',
+      schemaVersion: 'provider_tools:v1',
       businessRef: String(businessId),
-      operationRef: resumed.offeringRef,
+      toolRef: resumed.offeringRef,
       state: 'Draft',
     }])
     const exact = await backend.mutation(
-      api.capabilitySupplierOperations.readAgent,
+      api.capabilityProviderTools.readAgent,
       await withSourceWrite('catalog_publish', {
         businessId,
-        operationRef: resumed.offeringRef,
+        toolRef: resumed.offeringRef,
         agentPrincipal: principal,
         operationKey: 'supplier-operations:read:one',
         correlationId: 'supplier-operations:read:one',
       }),
     )
     expect(exact.kind === 'available' ? JSON.parse(exact.statusJson) : exact).toMatchObject({
-      schemaVersion: 'supplier_operations:v1',
-      operationRef: resumed.offeringRef,
+      schemaVersion: 'provider_tools:v1',
+      toolRef: resumed.offeringRef,
       state: 'Draft',
     })
     const ownerExact = await owner.query(
-      api.capabilitySupplierOperations.readOwner,
+      api.capabilityProviderTools.readOwner,
       { businessId, offeringRef: resumed.offeringRef, now: 1_000 },
     )
     expect(ownerExact.kind === 'available' ? JSON.parse(ownerExact.statusJson) : ownerExact).toMatchObject({
-      schemaVersion: 'supplier_operations:v1',
-      operationRef: resumed.offeringRef,
+      schemaVersion: 'provider_tools:v1',
+      toolRef: resumed.offeringRef,
       state: 'Draft',
     })
     expect(ownerExact).toMatchObject({ kind: 'available', resumeCandidateRef: candidateRef })
     const ownerDirectory = await owner.query(
-      api.capabilitySupplierOperations.listOwner,
+      api.capabilityProviderTools.listOwner,
       { businessId, now: 1_000, paginationOpts: { numItems: 50, cursor: null } },
     )
     expect(ownerDirectory).toMatchObject({
@@ -179,25 +179,25 @@ describe('Provider source integration draft', () => {
       }],
     })
     expect(ownerDirectory.kind === 'available' ? JSON.parse(ownerDirectory.page[0]!.statusJson) : ownerDirectory)
-      .toMatchObject({ schemaVersion: 'supplier_operations:v1', state: 'Draft' })
+      .toMatchObject({ schemaVersion: 'provider_tools:v1', state: 'Draft' })
     await expect(foreignOwner.query(
-      api.capabilitySupplierOperations.readOwner,
+      api.capabilityProviderTools.readOwner,
       { businessId, offeringRef: resumed.offeringRef, now: 1_000 },
     )).resolves.toEqual({ kind: 'not_found' })
     await expect(foreignOwner.query(
-      api.capabilitySupplierOperations.listOwner,
+      api.capabilityProviderTools.listOwner,
       { businessId, now: 1_000, paginationOpts: { numItems: 50, cursor: null } },
     )).resolves.toEqual({ kind: 'not_found' })
     await backend.run(async (ctx) => {
-      const rows = await ctx.db.query('capabilitySupplierOperationProjections').take(10)
+      const rows = await ctx.db.query('capabilityProviderToolProjections').take(10)
       await Promise.all(rows.map((row) => ctx.db.delete(row._id)))
     })
     await expect(backend.mutation(
-      internal.capabilitySupplierOperations.backfillDraftPage,
+      internal.capabilityProviderTools.backfillDraftPage,
       { paginationOpts: { numItems: 100, cursor: null } },
     )).resolves.toMatchObject({ processed: 1, isDone: true })
     const restored = await backend.mutation(
-      api.capabilitySupplierOperations.listAgent,
+      api.capabilityProviderTools.listAgent,
       await withSourceWrite('catalog_publish', { ...directoryCommand, operationKey: 'supplier-operations:list:restored' }),
     )
     expect(restored.kind === 'available' ? restored.page : []).toHaveLength(1)
@@ -357,10 +357,10 @@ describe('Provider source integration draft', () => {
       await backend.run(async (ctx) => {
         for (let index = batchStart; index < batchStart + 500; index += 1) {
           const offeringRef = `offering:supplier-capacity:${index}`
-          await ctx.db.insert('capabilitySupplierOperationProjections', {
+          await ctx.db.insert('capabilityProviderToolProjections', {
             businessId,
             providerRef: 'provider:supplier-capacity',
-            operationRef: `operation:supplier-capacity:${index}`,
+            toolRef: `operation:supplier-capacity:${index}`,
             offeringRef,
             offeringRevision: 1,
             updatedAt: index,
@@ -389,7 +389,7 @@ describe('Provider source integration draft', () => {
     }
 
     const firstPage = await owner.query(
-      api.capabilitySupplierOperations.listOwner,
+      api.capabilityProviderTools.listOwner,
       { businessId, now: 10_000, paginationOpts: { numItems: 50, cursor: null } },
     )
     expect(firstPage).toMatchObject({ kind: 'available', isDone: false })

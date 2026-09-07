@@ -245,7 +245,7 @@ export const moneyTables = {
       v.literal('account'),
       v.literal('legal_customer'),
       v.literal('treasury_pool'),
-      v.literal('operation'),
+      v.literal('tool'),
       v.literal('provider_obligation'),
       v.literal('document'),
     )),
@@ -436,8 +436,8 @@ export const moneyTables = {
     ]),
   moneyProviderObligations: defineTable({
     obligationRef: identifier,
-    invocationRef: identifier,
-    operationRef: identifier,
+    callRef: identifier,
+    toolRef: identifier,
     providerRef: identifier,
     buyerAccountRef: identifier,
     buyerAsset: v.literal('AUD'),
@@ -474,7 +474,7 @@ export const moneyTables = {
     reversedAt: v.optional(v.number()),
   })
     .index('by_obligationRef', ['obligationRef'])
-    .index('by_invocationRef', ['invocationRef'])
+    .index('by_callRef', ['callRef'])
     .index('by_buyerAccountRef_and_createdAt', ['buyerAccountRef', 'createdAt'])
     .index('by_providerRef_and_createdAt', ['providerRef', 'createdAt'])
     .index('by_providerRef_and_state', ['providerRef', 'state']),
@@ -488,7 +488,7 @@ export const moneyTables = {
     serviceRef: identifier,
     offeringRef: identifier,
     businessId: identifier,
-    invocationRef: identifier,
+    callRef: identifier,
     attemptRef: identifier,
     operationKey: identifier,
     priceDigest: identifier,
@@ -499,13 +499,13 @@ export const moneyTables = {
   })
     .index('by_principalId_and_credentialId_and_currency_and_observedAt', ['principalId', 'credentialId', 'currency', 'observedAt'])
     .index('by_businessId_and_observedAt', ['businessId', 'observedAt'])
-    .index('by_invocationRef', ['invocationRef'])
+    .index('by_callRef', ['callRef'])
     .index('by_usageRef', ['usageRef']),
   moneyX402PaymentAttempts: defineTable({
     dispatchRef: identifier,
     attemptRef: identifier,
     effectGeneration: v.number(),
-    operationRef: v.optional(identifier),
+    toolRef: v.optional(identifier),
     inputDigest: v.optional(identifier),
     paymentIdentifier: identifier,
     operationKeyDigest: identifier,
@@ -593,7 +593,7 @@ export const moneyTables = {
   qualifiedUseReceipts: defineTable({
     qualifiedUseRef: identifier,
     materialDigest: identifier,
-    invocationRef: identifier,
+    callRef: identifier,
     attemptRef: identifier,
     effectGeneration: v.number(),
     businessId: identifier,
@@ -603,7 +603,7 @@ export const moneyTables = {
     authorityGrantRef: v.optional(identifier),
     authorityGrantGeneration: v.optional(v.number()),
     authorityResourceRef: v.optional(identifier),
-    operationRef: identifier,
+    toolRef: identifier,
     publicationRef: identifier,
     publicationRevision: v.number(),
     contractDigest: identifier,
@@ -619,8 +619,8 @@ export const moneyTables = {
   })
     .index('by_qualifiedUseRef', ['qualifiedUseRef'])
     .index('by_businessId_and_qualifiedAt', ['businessId', 'qualifiedAt'])
-    .index('by_invocationRef', ['invocationRef'])
-    .index('by_operationRef_and_qualifiedAt', ['operationRef', 'qualifiedAt']),
+    .index('by_callRef', ['callRef'])
+    .index('by_toolRef_and_qualifiedAt', ['toolRef', 'qualifiedAt']),
   moneyConnectAccountCommands: defineTable({
     commandRef: identifier,
     businessId: identifier,

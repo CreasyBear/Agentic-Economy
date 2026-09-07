@@ -15,8 +15,8 @@ import {
 } from '@/components/ui/dialog'
 
 import { useCommandPanel } from './CommandPanelProvider'
-import { OperationsSearchPage } from './pages/OperationsSearchPage'
-import { OperationInspectPage } from './pages/OperationInspectPage'
+import { ToolsSearchPage } from './pages/ToolsSearchPage'
+import { ToolDetailPage } from './pages/ToolDetailPage'
 import { useCommandPanelHotKeys } from './useCommandPanelHotKeys'
 
 const PANEL_CONTENT_ID = 'ae-command-panel-content'
@@ -59,11 +59,11 @@ export function AeCommandPanel() {
           variant="outline"
           size="sm"
           className="min-h-touch justify-start rounded-none bg-background px-3 shadow-none sm:min-w-56"
-          aria-label="Find Operations"
+          aria-label="Find Tools"
           aria-controls={PANEL_CONTENT_ID}
         >
           <SearchIcon aria-hidden="true" />
-          <span className="hidden font-mono text-xs font-medium uppercase tracking-wide sm:inline">Find Operations</span>
+          <span className="hidden font-mono text-xs font-medium uppercase tracking-wide sm:inline">Find Tools</span>
           <kbd className="ms-auto hidden border-s border-border ps-2 font-mono text-[0.6875rem] text-muted-foreground sm:inline">
             ⌘K
           </kbd>
@@ -86,7 +86,7 @@ export function AeCommandPanel() {
       >
         <DialogTitle className="sr-only">Command console</DialogTitle>
         <DialogDescription className="sr-only">
-          Search the Operation catalog, describe one Operation, and take its next action.
+          Search the Tool catalog, describe one Tool, and take its next action.
         </DialogDescription>
         {panel.pageCount > 1 ? (
           <div className="flex min-h-touch shrink-0 items-center justify-between border-b border-border px-gutter">
@@ -104,20 +104,20 @@ export function AeCommandPanel() {
         ) : null}
         <div className="flex min-h-0 flex-1 flex-col" data-testid="command-panel-body">
           <div
-            hidden={panel.topPage.kind !== 'operations-search'}
+            hidden={panel.topPage.kind !== 'tools-search'}
             className="contents"
-            aria-hidden={panel.topPage.kind !== 'operations-search'}
+            aria-hidden={panel.topPage.kind !== 'tools-search'}
           >
-            <OperationsSearchPage
-              isActive={panel.topPage.kind === 'operations-search'}
+            <ToolsSearchPage
+              isActive={panel.topPage.kind === 'tools-search'}
               query={searchQuery}
               onQueryChange={updateSearchQuery}
-              onSelectOperation={panel.pushInspect}
+              onSelectTool={panel.pushToolDetail}
             />
           </div>
-          {panel.topPage.kind === 'operation-inspect' ? (
-            <OperationInspectPage
-              operationRef={panel.topPage.operationRef}
+          {panel.topPage.kind === 'tool-detail' ? (
+            <ToolDetailPage
+              toolRef={panel.topPage.toolRef}
               onNavigate={completeNavigation}
             />
           ) : null}

@@ -25,10 +25,10 @@ import type { AgentLifecycleResult } from '@/modules/agent-access/agent-access'
 import type { OwnerConnectionLifecycleResult } from '@/modules/agent-access/public'
 import type { AgentDirectoryProjection } from '@/modules/agent-access/agent-operator-view-model'
 import {
-  decideOperationApprovalServer,
-  listPendingOperationApprovalsServer,
-  type PendingOperationApproval,
-} from '@/modules/capability-execution/operation-approval.functions'
+  decideCallApprovalServer,
+  listPendingCallApprovalsServer,
+  type PendingCallApproval,
+} from '@/modules/capability-execution/call-approval.functions'
 
 export type AgentAccessSearch = Readonly<{ caller?: string }>
 
@@ -91,12 +91,12 @@ function AgentAccessHome() {
   const [directoryError, setDirectoryError] = useState<string>()
   const [lifecycleIssue, setLifecycleIssue] = useState<LifecycleIssue>()
   const [lifecyclePending, setLifecyclePending] = useState<LifecycleCommand>()
-  const readApprovals = useServerFn(listPendingOperationApprovalsServer)
-  const decideApproval = useServerFn(decideOperationApprovalServer)
-  const [approvals, setApprovals] = useState<readonly PendingOperationApproval[]>([])
+  const readApprovals = useServerFn(listPendingCallApprovalsServer)
+  const decideApproval = useServerFn(decideCallApprovalServer)
+  const [approvals, setApprovals] = useState<readonly PendingCallApproval[]>([])
   const [approvalsLoading, setApprovalsLoading] = useState(true)
   const [approvalsError, setApprovalsError] = useState<string>()
-  const [approvalDecision, setApprovalDecision] = useState<Readonly<{ invocationRef: string; decision: 'approve' | 'deny' }>>()
+  const [approvalDecision, setApprovalDecision] = useState<Readonly<{ callRef: string; decision: 'approve' | 'deny' }>>()
   const [approvalStatus, setApprovalStatus] = useState<string>()
   const [showSetup, setShowSetup] = useState(false)
 
@@ -258,22 +258,22 @@ function AgentAccessHome() {
     }
   }
 
-  async function decidePendingApproval(invocationRef: string, operationRef: string, decision: 'approve' | 'deny') {
+  async function decidePendingApproval(callRef: string, toolRef: string, decision: 'approve' | 'deny') {
     if (localE2E || approvalDecision !== undefined) return
-    setApprovalDecision({ invocationRef, decision })
+    setApprovalDecision({ callRef, decision })
     setApprovalsError(undefined)
     setApprovalStatus(undefined)
     try {
-      const result = await decideApproval({ data: { invocationRef, decision } })
+      const result = await decideApproval({ data: { callRef, decision } })
       if (result.kind === 'refused') {
         setApprovalsError(operationApprovalErrorCopy(result.code))
         return
       }
       setApprovalStatus(result.kind === 'replayed'
-        ? `${operationRef} already had a recorded decision.`
+        ? `${toolRef} already had a recorded decision.`
         : result.kind === 'approved'
-          ? `${operationRef} approved once.`
-          : `${operationRef} declined.`)
+          ? `${toolRef} approved once.`
+          : `${toolRef} declined.`)
       await loadApprovals()
     } catch (cause) {
       captureClientExceptionOnClient(cause)
@@ -368,8 +368,8 @@ function AgentAccessHome() {
         {...(approvalDecision === undefined ? {} : { approvalDecision })}
         {...(approvalStatus === undefined ? {} : { approvalStatus })}
         onRetryApprovals={() => void loadApprovals()}
-        onDecideApproval={(invocationRef, operationRef, decision) => {
-          void decidePendingApproval(invocationRef, operationRef, decision)
+        onDecideApproval={(callRef, toolRef, decision) => {
+          void decidePendingApproval(callRef, toolRef, decision)
         }}
       />}
       {directory.nextCursor === undefined ? null : (

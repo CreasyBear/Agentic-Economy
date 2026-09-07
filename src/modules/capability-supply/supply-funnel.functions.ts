@@ -214,7 +214,7 @@ function disabledProviderConnectionPreview() {
       action: 'supply.source.preview' as const,
       blockedCapabilities: ['supply.publish'] as const,
       cta: '/owner/offerings',
-      ctaLabel: 'Return to Operations',
+      ctaLabel: 'Return to Tools',
       description: 'Provider connections are not enabled for this deployment.',
       iconUrl: null,
       status: 'required' as const,

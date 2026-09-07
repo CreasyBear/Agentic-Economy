@@ -15,7 +15,7 @@ export type Package5ReferenceFixtureDefinition = Readonly<{
   consequences: Readonly<{ effects: readonly []; dataUse: readonly []; evidence: readonly [] }>
   pricing: Readonly<{ kind: 'free' | 'source_x402' }>
   validationInput: Readonly<{ value: string }>
-  invokeInput: Readonly<{ value: string }>
+  callInput: Readonly<{ value: string }>
 }>
 
 export function package5ReferenceFixtureDefinitions(origin: string): readonly Package5ReferenceFixtureDefinition[] {
@@ -29,14 +29,14 @@ export function package5ReferenceFixtureDefinitions(origin: string): readonly Pa
   const common = (kind: SourceKind) => ({
     kind,
     presentation: {
-      name: `Package 5 ${kind.replace('_', ' ')} reference Operation`,
-      description: `Deterministic ${kind.replace('_', ' ')} Provider Operation for Package 5 release proof.`,
+      name: `Package 5 ${kind.replace('_', ' ')} reference Tool`,
+      description: `Deterministic ${kind.replace('_', ' ')} Provider Tool for Package 5 release proof.`,
       category: 'release-proof' as const,
     },
     consequences: { effects: [], dataUse: [], evidence: [] } as const,
     pricing: { kind: kind === 'x402' ? 'source_x402' as const : 'free' as const },
     validationInput: { value: `${kind}-validation` },
-    invokeInput: { value: `${kind}-invocation` },
+    callInput: { value: `${kind}-call` },
   })
   return [
     {

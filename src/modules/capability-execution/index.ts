@@ -6,7 +6,7 @@ export {
 } from '@/modules/capability-supply/public'
 export type {
   CreateSellerOnboardingCanaryInput,
-  CurrentSellerCanaryOperationCommitment,
+  CurrentSellerCanaryQuote,
   OperationExecutionPurpose,
   SellerOnboardingCanaryCommitment,
   SellerOnboardingCanaryExecutionEnvelope,

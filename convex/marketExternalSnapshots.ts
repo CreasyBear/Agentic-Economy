@@ -15,8 +15,8 @@ const snapshotValue = v.object({
   snapshotJson: v.string(),
 });
 const firstPartyCountsValue = v.object({
-  operations: v.number(),
-  suppliers: v.number(),
+  tools: v.number(),
+  providers: v.number(),
   invocations: v.number(),
   completedInvocations: v.number(),
   qualifiedUses: v.number(),

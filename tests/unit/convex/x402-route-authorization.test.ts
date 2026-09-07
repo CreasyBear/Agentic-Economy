@@ -38,7 +38,7 @@ vi.mock('@/modules/capability-supply/server', () => ({
 import {
   readX402Authorization,
   replayManagedX402SigningForRecovery,
-} from '@/modules/capability-execution/invocation-worker/x402Route'
+} from '@/modules/capability-execution/call-worker/x402Route'
 
 const CUSTODY_REF = 'custody:attempt-one'
 const AUTHORIZATION_DIGEST = 'sha256:authorization-one'
@@ -162,7 +162,7 @@ describe('x402 route authorization', () => {
           payTo: expect.any(String),
         }),
       }),
-      { method: 'GET', operationRef: 'operation:one', aeEnvironment: 'production' },
+      { method: 'GET', toolRef: 'operation:one', aeEnvironment: 'production' },
       REQUEST_FINGERPRINT,
     )
     expect(db.current()).toMatchObject({
@@ -433,7 +433,7 @@ function expected(overrides: Partial<{
   credentialRef: string
   requestFingerprint: string
   useCustodySigner: boolean
-  requestFingerprintContext: { method: 'GET' | 'POST'; operationRef: string; aeEnvironment: 'sandbox' | 'production' }
+  requestFingerprintContext: { method: 'GET' | 'POST'; toolRef: string; aeEnvironment: 'sandbox' | 'production' }
 }> = {}): {
   credentialRef: string
   dispatchRef: string
@@ -442,7 +442,7 @@ function expected(overrides: Partial<{
   paymentIdentifier: string
   useCustodySigner: boolean
   requestFingerprint: string
-  requestFingerprintContext: { method: 'GET' | 'POST'; operationRef: string; aeEnvironment: 'sandbox' | 'production' }
+  requestFingerprintContext: { method: 'GET' | 'POST'; toolRef: string; aeEnvironment: 'sandbox' | 'production' }
 } {
   return {
     credentialRef: CREDENTIAL_REF,
@@ -452,7 +452,7 @@ function expected(overrides: Partial<{
     paymentIdentifier: PAYMENT_IDENTIFIER,
     useCustodySigner: true,
     requestFingerprint: REQUEST_FINGERPRINT,
-    requestFingerprintContext: { method: 'GET', operationRef: 'operation:one', aeEnvironment: 'production' },
+    requestFingerprintContext: { method: 'GET', toolRef: 'operation:one', aeEnvironment: 'production' },
     ...overrides,
   }
 }

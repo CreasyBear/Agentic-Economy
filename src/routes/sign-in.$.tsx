@@ -39,7 +39,7 @@ function SignInRoute() {
     : isAgentAccessFlow
       ? 'Sign in to connect an agent'
       : isProviderFlow
-        ? 'Sign in to manage Operations'
+        ? 'Sign in to manage Tools'
         : 'Sign in'
   const body = isLocalE2E
     ? 'This browser journey does not connect a Clerk account. Nothing is signed in or authorized.'
@@ -61,7 +61,7 @@ function SignInRoute() {
             body={body}
           >
             <AeSiteButton asChild>
-              <a href={isAgentAccessFlow ? '/agent-access' : '/market?window=30d#operations'}>
+              <a href={isAgentAccessFlow ? '/agent-access' : '/market?window=30d#tools'}>
                 {isAgentAccessFlow ? 'Open agent access preview' : 'Browse the catalog'}
               </a>
             </AeSiteButton>

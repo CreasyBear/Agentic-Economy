@@ -68,8 +68,8 @@ function leaseCommand(current: ProviderConnection, overrides: Partial<Parameters
   return {
     commandId: 'command:lease:one',
     leaseRef: 'lease:one',
-    invocationRef: 'invocation:one',
-    operationRef: 'operation:one',
+    callRef: 'invocation:one',
+    toolRef: 'operation:one',
     connectionRef: current.connectionRef,
     providerRef: current.providerRef,
     providerAccountRef: current.providerAccountRef,
@@ -397,6 +397,15 @@ describe('provider connection domain', () => {
 
     expect(result).toMatchObject({ kind: 'applied', lease: { state: 'active', expiresAt: 2_000 } })
     if (result.kind !== 'applied') return
+    expect(result.commandDigest).toBe('sha256:2d526c08f2d085b18f8cdecfac1286be273cb24ca9a7f6c7355b3ae952b9b900')
+    expect(issueProviderConnectionLease(current, command, 1_100, result.lease)).toMatchObject({
+      kind: 'duplicate',
+      commandDigest: result.commandDigest,
+    })
+    expect(issueProviderConnectionLease(current, { ...command, leaseMs: 999 }, 1_100, result.lease)).toEqual({
+      kind: 'refused',
+      code: 'command_identity_conflict',
+    })
     expect(result.lease).not.toHaveProperty('credentialRef')
     const resolved = resolveProviderConnectionCredentialRefForLease(
       current,

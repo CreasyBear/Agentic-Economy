@@ -15,7 +15,7 @@ import {
   recordX402PaymentSignatureDigest,
   recordX402PaymentSigningIntent,
 } from '../../../convex/moneyX402PaymentAttempts'
-import { queueExpiredX402Authorization } from '../../../convex/capabilityOperationX402AuthorizationExpiry'
+import { queueExpiredX402Authorization } from '../../../convex/capabilityCallX402AuthorizationExpiry'
 import { X402_PAYMENT_SIGNING_CLAIM_LEASE_MS } from '../../../convex/moneyX402PaymentAuthorization'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { stableStringify } from '@/modules/common/stable-hash'
@@ -528,7 +528,7 @@ describe('money x402 payment authorization attempt', () => {
     db.seed({
       ...attempt(),
       state,
-      operationRef: args.operationRef,
+      toolRef: args.toolRef,
       inputDigest: args.inputDigest,
       paymentObservationDigest: args.paymentObservationDigest,
       transportObservationDigest: args.transportObservationDigest,
@@ -558,7 +558,7 @@ describe('money x402 payment authorization attempt', () => {
       db.seed({
         ...attempt(),
         state,
-        operationRef: args.operationRef,
+        toolRef: args.toolRef,
         inputDigest: args.inputDigest,
         settlementStatus,
         paymentResponseDigest: args.paymentResponseDigest,
@@ -570,7 +570,7 @@ describe('money x402 payment authorization attempt', () => {
 
       expect(db.rows('moneyX402PaymentAttempts')[0]).toMatchObject({
         state,
-        operationRef: args.operationRef,
+        toolRef: args.toolRef,
         inputDigest: args.inputDigest,
         settlementStatus,
         paymentResponseDigest: args.paymentResponseDigest,
@@ -595,7 +595,7 @@ describe('money x402 payment authorization attempt', () => {
     db.seed({
       ...attempt(),
       state: 'reconciliation_required',
-      operationRef: args.operationRef,
+      toolRef: args.toolRef,
       inputDigest: args.inputDigest,
       settlementStatus: args.settlementStatus,
       paymentResponseDigest: args.paymentResponseDigest,
@@ -703,7 +703,7 @@ describe('money x402 payment authorization attempt', () => {
   })
 
   it.each([
-    ['operationRef', 'x402_payment_observation_attribution_invalid'],
+    ['toolRef', 'x402_payment_observation_attribution_invalid'],
     ['inputDigest', 'x402_payment_observation_attribution_invalid'],
     ['paymentObservationDigest', 'x402_payment_observation_attribution_invalid'],
     ['transportObservationDigest', 'x402_payment_observation_attribution_invalid'],
@@ -716,7 +716,7 @@ describe('money x402 payment authorization attempt', () => {
     db.seed({
       ...attempt(),
       state: 'observed',
-      operationRef: args.operationRef,
+      toolRef: args.toolRef,
       inputDigest: args.inputDigest,
       paymentObservationDigest: args.paymentObservationDigest,
       transportObservationDigest: args.transportObservationDigest,
@@ -865,7 +865,7 @@ describe('money x402 payment authorization attempt', () => {
     db.seed({
       ...attempt(),
       _id: 'payment:expiry',
-      operationRef: 'operation:test',
+    toolRef: 'operation:test',
       inputDigest: 'sha256:input',
       reservationRef: 'reservation:test',
       paymentUnsignedMaterialJson: unsignedMaterialJson,
@@ -878,15 +878,15 @@ describe('money x402 payment authorization attempt', () => {
       paymentAuthorizationExpiresAt: 4_000,
       paymentSigningClaimedAt: 1,
     })
-    db.seedTable('capabilityOperationInvocations', invocationRow())
+    db.seedTable('capabilityCalls', invocationRow())
     db.seedTable('actionExecutionControls', actionControlRow())
     const args = expiryArgs()
 
-    await expect(queueExpired({ db }, args)).resolves.toMatchObject({ kind: 'queued', disposition: 'automatic', invocationRef: 'invocation:test', operationRef: 'operation:test', evidence: {
+    await expect(queueExpired({ db }, args)).resolves.toMatchObject({ kind: 'queued', disposition: 'automatic', callRef: 'invocation:test', toolRef: 'operation:test', evidence: {
       attemptRef: 'attempt:test', effectGeneration: 1, evidenceSource: 'x402_authorization_expired:provider_transaction_or_chain_nonce_evidence_required',
     } })
     const payment = db.rows('moneyX402PaymentAttempts')[0]
-    const invocation = db.rows('capabilityOperationInvocations')[0]
+    const invocation = db.rows('capabilityCalls')[0]
     expect(payment).toMatchObject({
       state: 'reconciliation_required',
       paymentUnsignedMaterialDigest: unsignedMaterialDigest,
@@ -911,8 +911,8 @@ describe('money x402 payment authorization attempt', () => {
       attemptRef: 'attempt:test',
       result: {
         kind: 'reconciliation_required',
-        invocationRef: 'invocation:test',
-        operationRef: 'operation:test',
+        callRef: 'invocation:test',
+        toolRef: 'operation:test',
         evidence: {
           attemptRef: 'attempt:test',
           effectGeneration: 1,
@@ -930,12 +930,12 @@ describe('money x402 payment authorization attempt', () => {
     })
 
     const committedSnapshot = JSON.stringify({ payment, invocation })
-    await expect(queueExpired({ db }, args)).resolves.toMatchObject({ kind: 'queued', disposition: 'automatic', invocationRef: 'invocation:test', operationRef: 'operation:test', evidence: {
+    await expect(queueExpired({ db }, args)).resolves.toMatchObject({ kind: 'queued', disposition: 'automatic', callRef: 'invocation:test', toolRef: 'operation:test', evidence: {
       attemptRef: 'attempt:test', effectGeneration: 1, evidenceSource: 'x402_authorization_expired:provider_transaction_or_chain_nonce_evidence_required',
     } })
     expect(JSON.stringify({
       payment: db.rows('moneyX402PaymentAttempts')[0],
-      invocation: db.rows('capabilityOperationInvocations')[0],
+      invocation: db.rows('capabilityCalls')[0],
     })).toBe(committedSnapshot)
 
     await expect(claim({ db }, claimArgs())).rejects.toThrow('x402_payment_attempt_reconciliation_required')
@@ -955,8 +955,8 @@ describe('money x402 payment authorization attempt', () => {
       paymentAuthorizationExpiresAt: 6_000,
       paymentUnsignedMaterialJson: unsignedMaterialJson,
     })
-    db.seedTable('capabilityOperationInvocations', invocationRow({
-      invocationRef: 'invocation:not-yet-expired',
+    db.seedTable('capabilityCalls', invocationRow({
+      callRef: 'invocation:not-yet-expired',
       attemptRef: 'attempt:not-yet-expired',
       principalId: 'principal:not-yet-expired',
       credentialId: 'credential:not-yet-expired',
@@ -977,8 +977,8 @@ describe('money x402 payment authorization attempt', () => {
       paymentAuthorizationExpiresAt: 4_000,
       paymentUnsignedMaterialJson: unsignedMaterialJson,
     })
-    db.seedTable('capabilityOperationInvocations', invocationRow({
-      invocationRef: 'invocation:possibly-submitted',
+    db.seedTable('capabilityCalls', invocationRow({
+      callRef: 'invocation:possibly-submitted',
       attemptRef: 'attempt:possibly-submitted',
       principalId: 'principal:possibly-submitted',
       credentialId: 'credential:possibly-submitted',
@@ -988,7 +988,7 @@ describe('money x402 payment authorization attempt', () => {
       attemptRef: 'attempt:possibly-submitted',
     }))
     const notYetExpiredArgs = expiryArgs({
-      invocationRef: 'invocation:not-yet-expired',
+      callRef: 'invocation:not-yet-expired',
       principalId: 'principal:not-yet-expired',
       credentialId: 'credential:not-yet-expired',
       attemptRef: 'attempt:not-yet-expired',
@@ -996,37 +996,37 @@ describe('money x402 payment authorization attempt', () => {
       authorizationDigest: 'sha256:authorization:not-yet-expired',
     })
     const possiblySubmittedArgs = expiryArgs({
-      invocationRef: 'invocation:possibly-submitted',
+      callRef: 'invocation:possibly-submitted',
       principalId: 'principal:possibly-submitted',
       credentialId: 'credential:possibly-submitted',
       attemptRef: 'attempt:possibly-submitted',
       custodyRef: 'sha256:custody:possibly-submitted',
       authorizationDigest: 'sha256:authorization:possibly-submitted',
     })
-    const before = JSON.stringify({ payments: db.rows('moneyX402PaymentAttempts'), invocations: db.rows('capabilityOperationInvocations') })
+    const before = JSON.stringify({ payments: db.rows('moneyX402PaymentAttempts'), invocations: db.rows('capabilityCalls') })
 
     await expect(queueExpired({ db }, notYetExpiredArgs)).resolves.toEqual({ kind: 'not_queued' })
     await expect(queueExpired({ db }, possiblySubmittedArgs)).resolves.toEqual({ kind: 'not_queued' })
-    expect(JSON.stringify({ payments: db.rows('moneyX402PaymentAttempts'), invocations: db.rows('capabilityOperationInvocations') })).toBe(before)
+    expect(JSON.stringify({ payments: db.rows('moneyX402PaymentAttempts'), invocations: db.rows('capabilityCalls') })).toBe(before)
   })
 
   it('does not overwrite an unrelated outer reconciliation projection', async () => {
     const db = new MemoryDb()
     db.seed({
       ...attempt(),
-      operationRef: 'operation:test',
+    toolRef: 'operation:test',
       inputDigest: 'sha256:input',
       reservationRef: 'reservation:test',
       paymentUnsignedMaterialJson: unsignedMaterialJson,
       paymentAuthorizationExpiresAt: 4_000,
     })
-    db.seedTable('capabilityOperationInvocations', invocationRow({
+    db.seedTable('capabilityCalls', invocationRow({
       state: 'reconciliation_required',
       dispatchState: 'reconciliation_required',
       result: {
         kind: 'reconciliation_required',
-        invocationRef: 'invocation:test',
-        operationRef: 'operation:test',
+        callRef: 'invocation:test',
+        toolRef: 'operation:test',
         evidence: {
           attemptRef: 'attempt:test',
           effectGeneration: 1,
@@ -1043,28 +1043,28 @@ describe('money x402 payment authorization attempt', () => {
       },
     }))
     db.seedTable('actionExecutionControls', actionControlRow())
-    const before = JSON.stringify({ payments: db.rows('moneyX402PaymentAttempts'), invocations: db.rows('capabilityOperationInvocations') })
+    const before = JSON.stringify({ payments: db.rows('moneyX402PaymentAttempts'), invocations: db.rows('capabilityCalls') })
 
     await expect(queueExpired({ db }, expiryArgs())).resolves.toEqual({ kind: 'not_queued' })
-    expect(JSON.stringify({ payments: db.rows('moneyX402PaymentAttempts'), invocations: db.rows('capabilityOperationInvocations') })).toBe(before)
+    expect(JSON.stringify({ payments: db.rows('moneyX402PaymentAttempts'), invocations: db.rows('capabilityCalls') })).toBe(before)
   })
 
   it('refuses the expiry transition when the canonical control version changed', async () => {
     const db = new MemoryDb()
     db.seed({
       ...attempt(),
-      operationRef: 'operation:test',
+    toolRef: 'operation:test',
       inputDigest: 'sha256:input',
       reservationRef: 'reservation:test',
       paymentUnsignedMaterialJson: unsignedMaterialJson,
       paymentAuthorizationExpiresAt: 4_000,
     })
-    db.seedTable('capabilityOperationInvocations', invocationRow())
+    db.seedTable('capabilityCalls', invocationRow())
     db.seedTable('actionExecutionControls', actionControlRow({ executionVersion: 3 }))
-    const before = JSON.stringify({ payments: db.rows('moneyX402PaymentAttempts'), invocations: db.rows('capabilityOperationInvocations') })
+    const before = JSON.stringify({ payments: db.rows('moneyX402PaymentAttempts'), invocations: db.rows('capabilityCalls') })
 
     await expect(queueExpired({ db }, expiryArgs())).resolves.toEqual({ kind: 'not_queued' })
-    expect(JSON.stringify({ payments: db.rows('moneyX402PaymentAttempts'), invocations: db.rows('capabilityOperationInvocations') })).toBe(before)
+    expect(JSON.stringify({ payments: db.rows('moneyX402PaymentAttempts'), invocations: db.rows('capabilityCalls') })).toBe(before)
   })
 
   it.each([0, 26, 1.5, Number.MAX_SAFE_INTEGER + 1])(
@@ -1111,7 +1111,7 @@ function prepareArgs(overrides: Record<string, unknown> = {}): Record<string, un
     dispatchRef: 'invocation:test',
     attemptRef: 'attempt:test',
     effectGeneration: 1,
-    operationRef: 'operation:test',
+    toolRef: 'operation:test',
     inputDigest: 'sha256:input',
     paymentIdentifier,
     operationKeyDigest: 'sha256:operation',
@@ -1206,7 +1206,7 @@ function paymentObservationArgs(overrides: Record<string, unknown> = {}): Record
     attemptRef: 'attempt:test',
     effectGeneration: 1,
     paymentIdentifier,
-    operationRef: 'operation:test',
+      toolRef: 'operation:test',
     inputDigest: 'sha256:input',
     transportObservationDigest: 'sha256:transport-observation',
     transportRequestDigest: 'sha256:transport-request',
@@ -1226,7 +1226,7 @@ function reconciliationArgs(): Record<string, unknown> {
     dispatchRef: 'invocation:test',
     attemptRef: 'attempt:test',
     effectGeneration: 1,
-    operationRef: 'operation:test',
+    toolRef: 'operation:test',
     inputDigest: 'sha256:input',
     evidenceRef: 'evidence:x402-reconciliation',
     evidenceDigest: 'sha256:x402-reconciliation',
@@ -1252,7 +1252,7 @@ function seedReconciliationAuthority(
   db.seed({
     ...attempt(),
     state: 'reconciliation_required',
-    operationRef: 'operation:test',
+    toolRef: 'operation:test',
     inputDigest: 'sha256:input',
     reservationRef: 'reservation:test',
     transportObservationDigest: 'sha256:transport-observation',
@@ -1260,7 +1260,7 @@ function seedReconciliationAuthority(
     paymentObservationDigest: 'sha256:payment-observation',
     settlementStatus: 'unknown',
   })
-  db.seedTable('capabilityOperationInvocations', invocationRow({
+  db.seedTable('capabilityCalls', invocationRow({
     principalId: `prn_${'2'.repeat(32)}`,
     ownerId: `acc_${'3'.repeat(32)}`,
     credentialId: `crd_${'4'.repeat(32)}`,
@@ -1286,9 +1286,9 @@ function seedReconciliationAuthority(
     credentialId: `crd_${'4'.repeat(32)}`,
     applicationRef: 'application:test',
     environment: 'sandbox',
-    scopes: ['market_operations:invoke'],
+    scopes: ['market_tools:call'],
     grantGeneration: 1,
-    policyDigest: 'sha256:policy',
+    spendingPolicyDigest: 'sha256:policy',
     lifecycle: 'active',
     expiresAt: 8_000_000_000_000,
   })
@@ -1337,7 +1337,7 @@ function seedReconciliationAuthority(
     accountRef: `acc_${'3'.repeat(32)}`,
     actorPrincipalRef: `prn_${'2'.repeat(32)}`,
     subjectPrincipalRef: `prn_${'2'.repeat(32)}`,
-    scopes: ['market_operations:invoke'],
+    scopes: ['market_tools:call'],
     resourceRefs: ['operation:test'],
     budgetLimit: 1_000,
     budgetUsed: 0,
@@ -1352,12 +1352,12 @@ function seedReconciliationAuthority(
 function invocationRow(overrides: Record<string, unknown> = {}): Row {
   return {
     _id: 'invocation:row',
-    invocationRef: 'invocation:test',
+    callRef: 'invocation:test',
     principalId: 'principal:test',
     ownerId: 'owner:test',
     credentialId: 'credential:test',
     applicationRef: 'application:test',
-    operationRef: 'operation:test',
+    toolRef: 'operation:test',
     idempotencyKey: 'idempotency:test',
     environment: 'sandbox',
     grantRef: 'grant:test',
@@ -1377,7 +1377,7 @@ function invocationRow(overrides: Record<string, unknown> = {}): Row {
 
 function expiryArgs(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
-    invocationRef: 'invocation:test',
+    callRef: 'invocation:test',
     principalId: 'principal:test',
     credentialId: 'credential:test',
     attemptRef: 'attempt:test',

@@ -3,12 +3,12 @@ import {
   admitRegisteredTransport,
   capabilityBindingEligibilityHash,
   capabilityBindingRegistrationHash,
-  capabilityOperationId,
-  createPublicOperationRef,
+  capabilityToolId,
+  createPublicToolRef,
   defineCapabilityTransportBindingRegistration,
-  isPublicOperationRef,
+  isPublicToolRef,
   type CapabilityTransportBindingRegistration,
-  type PublicOperationRef,
+  type PublicToolRef,
 } from '@/modules/capability-supply/public'
 
 import { isProviderConnectionAuthorityCurrent, type ProviderConnection } from '../../provider-connection'
@@ -85,8 +85,8 @@ export type RotateCapabilityTransportBindingAuthorityInput = Readonly<{
   providerRef: string
   adapterId: string
   previousAuthority: CapabilityConnectionAuthoritySnapshot
-  previousOperationRef: PublicOperationRef
-  nextOperationRef: PublicOperationRef
+  previousToolRef: PublicToolRef
+  nextToolRef: PublicToolRef
 }>
 
 export type RotateCapabilityTransportBindingAuthorityPatch = Readonly<{
@@ -121,9 +121,9 @@ export async function rotateCapabilityTransportBindingAuthority(
   if (
     !Number.isSafeInteger(updatedAt)
     || updatedAt < 0
-    || !isPublicOperationRef(input.previousOperationRef)
-    || !isPublicOperationRef(input.nextOperationRef)
-    || input.previousOperationRef === input.nextOperationRef
+    || !isPublicToolRef(input.previousToolRef)
+    || !isPublicToolRef(input.nextToolRef)
+    || input.previousToolRef === input.nextToolRef
   ) {
     return { kind: 'refused', reason: 'connection_authority_stale' }
   }
@@ -156,7 +156,7 @@ export async function rotateCapabilityTransportBindingAuthority(
   const connection = await ports.loadProviderConnection(input.connectionRef)
   if (!connectionAuthoritySnapshotMatches(expectedAuthority, connection, {
     businessId: input.businessId,
-    operationRef: input.previousOperationRef,
+    toolRef: input.previousToolRef,
     adapterId: input.adapterId,
     now: updatedAt,
   })) {
@@ -164,7 +164,7 @@ export async function rotateCapabilityTransportBindingAuthority(
   }
   const nextAuthority = connectionAuthoritySnapshotFromProviderConnection(
     connection,
-    input.nextOperationRef,
+    input.nextToolRef,
   )
   await ports.patchBindingConnectionAuthority(binding.bindingId, {
     expectedRegistrationHash: binding.registrationHash,
@@ -187,7 +187,7 @@ export async function registerCapabilityTransportBinding(
   ports: BindingWritePorts,
   input: unknown,
   registeredAt: number,
-  expectedOperationRef?: string,
+  expectedToolRef?: string,
 ): Promise<RegisterBindingWriteResult> {
   let registration: CapabilityTransportBindingRegistration
   try {
@@ -213,13 +213,13 @@ export async function registerCapabilityTransportBinding(
   if (contract.kind === 'refused') return contract
   const admission = admitRegisteredTransport(transportAdmissionInput(registration))
   if (admission.kind === 'refused') return admission
-  const operationRef = expectedOperationRef ?? createPublicOperationRef({
-    operationId: capabilityOperationId(registration.contractRef.capabilityId),
+  const toolRef = expectedToolRef ?? createPublicToolRef({
+    operationId: capabilityToolId(registration.contractRef.capabilityId),
     publicationRef: registration.offeringId,
     publicationRevision: 1,
     contractRef: registration.contractRef,
   })
-  if (!isPublicOperationRef(operationRef)) {
+  if (!isPublicToolRef(toolRef)) {
     return { kind: 'refused' as const, reason: 'connection_operation_mismatch' as const }
   }
 
@@ -244,7 +244,7 @@ export async function registerCapabilityTransportBinding(
       return { kind: 'refused' as const, reason: 'connection_authority_invalid' as const }
     }
     connection = loaded
-    connectionAuthority = connectionAuthoritySnapshotFromProviderConnection(loaded, operationRef)
+    connectionAuthority = connectionAuthoritySnapshotFromProviderConnection(loaded, toolRef)
   }
 
   const registrationHash = capabilityBindingRegistrationHash(registration, admission.transport)
@@ -259,7 +259,7 @@ export async function registerCapabilityTransportBinding(
     if (registration.authority.kind === 'provider_connection'
       && !connectionAuthoritySnapshotMatches(existing.connectionAuthority, connection, {
         businessId: String(offering.businessId),
-        operationRef,
+        toolRef,
         adapterId: admission.transport.adapterId,
         now: registeredAt,
       })) {

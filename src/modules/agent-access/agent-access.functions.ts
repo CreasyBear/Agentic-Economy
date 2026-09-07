@@ -40,7 +40,7 @@ import {
 } from './policy'
 import {
   AGENT_ACCESS_AUTHORITY_MODE_VALUES,
-  MARKET_OPERATIONS_INVOKE_SCOPE,
+  MARKET_TOOLS_CALL_SCOPE,
   agentAuthorityModeForScopes,
   agentAuthorityScopeForMode,
 } from './contract'
@@ -61,22 +61,22 @@ const issueInputSchema = z.strictObject({
   applicationRef: z.string().trim().min(1).max(200).optional(),
   environment: z.enum(['sandbox', 'production']).optional(),
   authorityMode: z.enum(AGENT_ACCESS_AUTHORITY_MODE_VALUES).optional(),
-  maximumSpendPerInvocation: exactAmountSchema.optional(),
+  maximumSpendPerCall: exactAmountSchema.optional(),
   maximumDailySpend: exactAmountSchema.optional(),
   maximumMonthlySpend: exactAmountSchema.optional(),
-  maximumConcurrentInvocations: z.number().int().safe().positive().optional(),
+  maximumConcurrentCalls: z.number().int().safe().positive().optional(),
   maximumCallsPerMinute: z.number().int().safe().positive().optional(),
   maximumCallsPerHour: z.number().int().safe().positive().optional(),
   expiresInSeconds: z.number().int().safe().min(AGENT_ACCESS_MIN_TTL_SECONDS).max(AGENT_ACCESS_MAX_TTL_SECONDS).optional(),
 }).superRefine((value, context) => {
   const budgetFields = [
-    value.maximumSpendPerInvocation,
+    value.maximumSpendPerCall,
     value.maximumDailySpend,
     value.maximumMonthlySpend,
   ]
   const budgetCount = budgetFields.filter((field) => field !== undefined).length
   if (budgetCount !== 0 && budgetCount !== budgetFields.length) {
-    context.addIssue({ code: 'custom', message: 'production_budget_must_be_complete', path: ['maximumSpendPerInvocation'] })
+    context.addIssue({ code: 'custom', message: 'production_budget_must_be_complete', path: ['maximumSpendPerCall'] })
   }
   const rateFields = [value.maximumCallsPerMinute, value.maximumCallsPerHour]
   const rateCount = rateFields.filter((field) => field !== undefined).length
@@ -91,10 +91,10 @@ type IssueInput = z.infer<typeof issueInputSchema>
 export function buildOwnerAgentAccessPolicy(input: Readonly<Pick<
   IssueInput,
   | 'environment'
-  | 'maximumSpendPerInvocation'
+  | 'maximumSpendPerCall'
   | 'maximumDailySpend'
   | 'maximumMonthlySpend'
-  | 'maximumConcurrentInvocations'
+  | 'maximumConcurrentCalls'
   | 'maximumCallsPerMinute'
   | 'maximumCallsPerHour'
   | 'expiresInSeconds'
@@ -102,14 +102,14 @@ export function buildOwnerAgentAccessPolicy(input: Readonly<Pick<
 >>): AgentAccessPolicy {
   const environment = input.environment ?? 'sandbox'
   if (environment === 'sandbox') return defaultSandboxAgentAccessPolicy({ currency: 'USD', exponent: 2 })
-  const hasBudget = input.maximumSpendPerInvocation !== undefined
+  const hasBudget = input.maximumSpendPerCall !== undefined
     && input.maximumDailySpend !== undefined
     && input.maximumMonthlySpend !== undefined
   const base = hasBudget
     ? buildProductionAgentAccessPolicy({
         currency: 'USD',
         exponent: 2,
-        maximumSpendPerInvocation: input.maximumSpendPerInvocation,
+        maximumSpendPerCall: input.maximumSpendPerCall,
         maximumDailySpend: input.maximumDailySpend,
         maximumMonthlySpend: input.maximumMonthlySpend,
       })
@@ -118,9 +118,9 @@ export function buildOwnerAgentAccessPolicy(input: Readonly<Pick<
     ...base,
     budget: {
       ...base.budget,
-      ...(input.maximumConcurrentInvocations === undefined
+      ...(input.maximumConcurrentCalls === undefined
         ? {}
-        : { maximumConcurrentInvocations: input.maximumConcurrentInvocations }),
+        : { maximumConcurrentCalls: input.maximumConcurrentCalls }),
     },
     rate: {
       ...base.rate,
@@ -136,10 +136,10 @@ export function buildOwnerAgentAccessPolicy(input: Readonly<Pick<
 
 function issueScopes(input: IssueInput): readonly string[] | undefined {
   if (input.scopes === undefined && input.authorityMode === undefined) {
-    return [MARKET_OPERATIONS_INVOKE_SCOPE, agentAuthorityScopeForMode('inspect_only')]
+    return [MARKET_TOOLS_CALL_SCOPE, agentAuthorityScopeForMode('read_only')]
   }
   const scopes = input.scopes === undefined && input.authorityMode !== undefined
-    ? [MARKET_OPERATIONS_INVOKE_SCOPE, agentAuthorityScopeForMode(input.authorityMode)]
+    ? [MARKET_TOOLS_CALL_SCOPE, agentAuthorityScopeForMode(input.authorityMode)]
     : input.scopes
   if (scopes === undefined || input.authorityMode === undefined) return scopes
   return agentAuthorityModeForScopes(scopes) === input.authorityMode ? scopes : undefined
@@ -300,7 +300,7 @@ export async function registerAgentAccessPrincipal(
       scopes: [...input.scopes],
       authorityMode: input.authorityMode,
       grantGeneration: input.grantGeneration,
-      policyDigest: input.policyDigest,
+      spendingPolicyDigest: input.spendingPolicyDigest,
       lifecycle: input.lifecycle,
       ...(input.expiresAt === undefined ? {} : { expiresAt: input.expiresAt }),
       seenAt: input.seenAt,
@@ -318,11 +318,11 @@ export async function registerIssuedAgentBinding(
     const command = {
       ...input,
       scopes: [...input.scopes],
-      operationRefs: [...input.operationRefs],
+      toolRefs: [...input.toolRefs],
     }
     const serviceAuth = await createConvexServerFunctionAssertion({
       operation: 'agentAccessPrincipals.registerIssuedAgentBindingForServer',
-      scope: MARKET_OPERATIONS_INVOKE_SCOPE,
+      scope: MARKET_TOOLS_CALL_SCOPE,
       command,
     })
     return await callSourceMutation(registerIssuedAgentBindingMutation, { ...command, serviceAuth })
@@ -339,7 +339,7 @@ async function callReplacementMutation(
   try {
     const serviceAuth = await createConvexServerFunctionAssertion({
       operation,
-      scope: MARKET_OPERATIONS_INVOKE_SCOPE,
+      scope: MARKET_TOOLS_CALL_SCOPE,
       command,
     })
     return await callSourceMutation(reference as never, { ...command, serviceAuth } as never) as AgentCredentialReplacementRegistrationResult | AgentCredentialReplacementTransitionResult
@@ -354,7 +354,7 @@ export async function prepareAgentCredentialReplacement(
   return await callReplacementMutation(
     'agentAccessPrincipals.prepareCredentialReplacementForServer',
     prepareCredentialReplacementMutation,
-    { ...input, scopes: [...input.scopes], operationRefs: [...input.operationRefs] },
+    { ...input, scopes: [...input.scopes], toolRefs: [...input.toolRefs] },
   ) as AgentCredentialReplacementRegistrationResult
 }
 
@@ -385,7 +385,7 @@ export const issueAgentAccessKeyServer = createServerFn({ method: 'POST' })
     const environment = data.environment ?? 'sandbox'
     const authorityMode = scopes === undefined ? undefined : agentAuthorityModeForScopes(scopes)
     if (scopes === undefined || authorityMode === undefined
-      || (environment === 'production' && authorityMode === 'full_yolo')) {
+      || (environment === 'production' && authorityMode === 'unrestricted_test_only')) {
       return { kind: 'error' as const, code: 'invalid_input' as const, retryable: false }
     }
     let policy: AgentAccessPolicy
@@ -423,10 +423,10 @@ export const issueAgentAccessKeyServer = createServerFn({ method: 'POST' })
         name: data.name,
         idempotencyKey: data.idempotencyKey,
         scopes,
-        ...(data.maximumSpendPerInvocation === undefined ? {} : { maximumSpendPerInvocation: data.maximumSpendPerInvocation }),
+        ...(data.maximumSpendPerCall === undefined ? {} : { maximumSpendPerCall: data.maximumSpendPerCall }),
         ...(data.maximumDailySpend === undefined ? {} : { maximumDailySpend: data.maximumDailySpend }),
         ...(data.maximumMonthlySpend === undefined ? {} : { maximumMonthlySpend: data.maximumMonthlySpend }),
-        ...(data.maximumConcurrentInvocations === undefined ? {} : { maximumConcurrentInvocations: data.maximumConcurrentInvocations }),
+        ...(data.maximumConcurrentCalls === undefined ? {} : { maximumConcurrentCalls: data.maximumConcurrentCalls }),
         ...(data.maximumCallsPerMinute === undefined ? {} : { maximumCallsPerMinute: data.maximumCallsPerMinute }),
         ...(data.maximumCallsPerHour === undefined ? {} : { maximumCallsPerHour: data.maximumCallsPerHour }),
         ...(data.expiresInSeconds === undefined ? {} : { expiresInSeconds: data.expiresInSeconds }),
@@ -434,7 +434,7 @@ export const issueAgentAccessKeyServer = createServerFn({ method: 'POST' })
         ...(data.applicationRef === undefined ? {} : { applicationRef: data.applicationRef }),
         ...(data.environment === undefined ? {} : { environment: data.environment }),
       },
-      policy,
+      spendingPolicy: policy,
       api,
       registerBinding: registerIssuedAgentBinding,
     })
@@ -456,7 +456,7 @@ async function lifecycleCanonicalMutation<Command extends Record<string, string>
 ): Promise<AgentLifecycleCanonicalResult> {
   const serviceAuth = await createConvexServerFunctionAssertion({
     operation,
-    scope: MARKET_OPERATIONS_INVOKE_SCOPE,
+    scope: MARKET_TOOLS_CALL_SCOPE,
     command,
   })
   return await callSourceMutation(reference as never, { ...command, serviceAuth } as never) as AgentLifecycleCanonicalResult
@@ -466,7 +466,7 @@ export async function recordAgentProviderRevocation(command: ProviderRevocationC
   const operation = 'agentAccessPrincipals.recordProviderRevocationForServer'
   const serviceAuth = await createConvexServerFunctionAssertion({
     operation,
-    scope: MARKET_OPERATIONS_INVOKE_SCOPE,
+    scope: MARKET_TOOLS_CALL_SCOPE,
     command,
   })
   return await callSourceMutation(recordProviderRevocationMutation, { ...command, serviceAuth })

@@ -180,7 +180,7 @@ export type CdpX402PaymentAuthorization = Readonly<{
 
 export type CdpX402RequestFingerprintContext = Readonly<{
   method: 'GET' | 'POST'
-  operationRef: string
+  toolRef: string
   aeEnvironment?: X402AeEnvironment
 }>
 
@@ -281,7 +281,7 @@ export function cdpX402RequestFingerprint(
     payTo: normalizeIdentityString(selectedRequirement.payTo),
     route: request.challenge.resource.url,
     method: context.method,
-    operationRef: context.operationRef,
+    toolRef: context.toolRef,
     paymentIdentifier: request.paymentIdentifier,
     challengeDigest: canonicalDigest({
       ...request.challenge,
@@ -514,7 +514,7 @@ export async function createCdpEvmX402PaymentSignature(
   const fingerprintContext = {
     ...(dependencies.requestFingerprintContext ?? {
       method: 'GET' as const,
-      operationRef: `cdp-x402:${identifier}`,
+      toolRef: `cdp-x402:${identifier}`,
     }),
     aeEnvironment: profile.aeEnvironment,
   }

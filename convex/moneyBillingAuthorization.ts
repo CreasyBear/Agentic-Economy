@@ -2,7 +2,7 @@ import type { MutationCtx, QueryCtx } from './_generated/server'
 import type { Doc } from './_generated/dataModel'
 import { resolveBusinessActor } from './authz'
 import { requireSourceWrite } from './sourceWriteAdmission'
-import { MARKET_OPERATIONS_INVOKE_SCOPE } from '../src/modules/agent-access/contract'
+import { MARKET_TOOLS_CALL_SCOPE } from '../src/modules/agent-access/contract'
 import { DELEGATION_MAX_ANCESTRY_GRANTS } from '../src/modules/authority/delegation/public'
 
 export type BillingSourceWriteArgs = {
@@ -120,13 +120,13 @@ export async function canonicalBillingPrincipalContext<
   } as Context
 }
 
-export type PersistedInvocationAuthorityExpectation = Readonly<{
-  invocationRef: string
+export type PersistedCallAuthorityExpectation = Readonly<{
+  callRef: string
   principalId?: string
   credentialId?: string
   grantRef?: string
   grantGeneration?: number
-  operationRef?: string
+  toolRef?: string
   inputDigest?: string
   attemptRef?: string
 }>
@@ -141,31 +141,31 @@ function optionalAuthorityExpectationMatches<T>(
   return expected === undefined || expected === actual
 }
 
-function invocationMatchesAuthorityExpectation(
-  invocation: Doc<'capabilityOperationInvocations'>,
-  expected: PersistedInvocationAuthorityExpectation,
+function callMatchesAuthorityExpectation(
+  call: Doc<'capabilityCalls'>,
+  expected: PersistedCallAuthorityExpectation,
 ): boolean {
   return allAuthorityFacts([
-    invocation.invocationRef === expected.invocationRef,
-    optionalAuthorityExpectationMatches(expected.principalId, invocation.principalId),
-    optionalAuthorityExpectationMatches(expected.credentialId, invocation.credentialId),
-    optionalAuthorityExpectationMatches(expected.grantRef, invocation.grantRef),
-    optionalAuthorityExpectationMatches(expected.grantGeneration, invocation.grantGeneration),
-    optionalAuthorityExpectationMatches(expected.operationRef, invocation.operationRef),
-    optionalAuthorityExpectationMatches(expected.inputDigest, invocation.inputDigest),
-    optionalAuthorityExpectationMatches(expected.attemptRef, invocation.attemptRef),
-    invocation.state !== 'refused',
-    invocation.state !== 'cancelled',
+    call.callRef === expected.callRef,
+    optionalAuthorityExpectationMatches(expected.principalId, call.principalId),
+    optionalAuthorityExpectationMatches(expected.credentialId, call.credentialId),
+    optionalAuthorityExpectationMatches(expected.grantRef, call.grantRef),
+    optionalAuthorityExpectationMatches(expected.grantGeneration, call.grantGeneration),
+    optionalAuthorityExpectationMatches(expected.toolRef, call.toolRef),
+    optionalAuthorityExpectationMatches(expected.inputDigest, call.inputDigest),
+    optionalAuthorityExpectationMatches(expected.attemptRef, call.attemptRef),
+    call.state !== 'refused',
+    call.state !== 'cancelled',
   ])
 }
 
 function bindingIsCurrent(
   binding: Doc<'externalIdentityBindings'> | null,
-  invocation: Doc<'capabilityOperationInvocations'>,
+  call: Doc<'capabilityCalls'>,
 ): binding is Doc<'externalIdentityBindings'> {
   if (binding === null) return false
   return allAuthorityFacts([
-    binding.principalRef === invocation.principalId,
+    binding.principalRef === call.principalId,
     binding.lifecycle === 'active',
     binding.providerState.kind === 'known',
     binding.providerState.kind === 'known'
@@ -178,7 +178,7 @@ function bindingIsCurrent(
 function credentialIsCurrent(
   credential: Doc<'credentials'> | null,
   binding: Doc<'externalIdentityBindings'>,
-  invocation: Doc<'capabilityOperationInvocations'>,
+  call: Doc<'capabilityCalls'>,
   now: number,
 ): boolean {
   if (credential === null) return false
@@ -192,7 +192,7 @@ function credentialIsCurrent(
       ])
   return allAuthorityFacts([
     credential.bindingRef === binding.bindingRef,
-    credential.principalRef === invocation.principalId,
+    credential.principalRef === call.principalId,
     credential.generation === binding.credentialGeneration,
     credential.type === 'api_key',
     credential.expiresAt > now,
@@ -201,50 +201,50 @@ function credentialIsCurrent(
 }
 
 function accountAuthorityIsCurrent(input: Readonly<{
-  invocation: Doc<'capabilityOperationInvocations'>
+  call: Doc<'capabilityCalls'>
   account: Doc<'accounts'> | null
   membership: Doc<'memberships'> | null
   ownership: Doc<'accountOwnerships'> | null
 }>): boolean {
-  const { invocation, account, membership, ownership } = input
+  const { call, account, membership, ownership } = input
   if (account === null) return false
   const membershipIsCurrent = membership !== null && allAuthorityFacts([
-    membership.accountRef === invocation.ownerId,
-    membership.memberPrincipalRef === invocation.principalId,
+    membership.accountRef === call.ownerId,
+    membership.memberPrincipalRef === call.principalId,
     membership.lifecycle === 'active',
   ])
   const ownershipIsCurrent = ownership !== null && allAuthorityFacts([
-    ownership.accountRef === invocation.ownerId,
-    ownership.ownerPrincipalRef === invocation.principalId,
+    ownership.accountRef === call.ownerId,
+    ownership.ownerPrincipalRef === call.principalId,
     ownership.lifecycle === 'active',
   ])
   return allAuthorityFacts([
-    account.accountRef === invocation.ownerId,
+    account.accountRef === call.ownerId,
     account.lifecycle === 'active',
     membershipIsCurrent || ownershipIsCurrent,
   ])
 }
 
 function principalAuthorityIsCurrent(input: Readonly<{
-  invocation: Doc<'capabilityOperationInvocations'>
+  call: Doc<'capabilityCalls'>
   agentPrincipal: Doc<'agentAccessPrincipals'> | null
   principal: Doc<'principals'> | null
   now: number
 }>): boolean {
-  const { invocation, agentPrincipal, principal, now } = input
+  const { call, agentPrincipal, principal, now } = input
   if (agentPrincipal === null || principal === null) return false
   return allAuthorityFacts([
-    agentPrincipal.principalId === invocation.principalId,
-    agentPrincipal.ownerId === invocation.ownerId,
-    agentPrincipal.credentialId === invocation.credentialId,
-    agentPrincipal.applicationRef === invocation.applicationRef,
-    agentPrincipal.environment === invocation.environment,
-    agentPrincipal.grantGeneration === invocation.grantGeneration,
-    agentPrincipal.policyDigest === invocation.policyDigest,
-    agentPrincipal.scopes.includes(MARKET_OPERATIONS_INVOKE_SCOPE),
+    agentPrincipal.principalId === call.principalId,
+    agentPrincipal.ownerId === call.ownerId,
+    agentPrincipal.credentialId === call.credentialId,
+    agentPrincipal.applicationRef === call.applicationRef,
+    agentPrincipal.environment === call.environment,
+    agentPrincipal.grantGeneration === call.grantGeneration,
+    agentPrincipal.spendingPolicyDigest === call.policyDigest,
+    agentPrincipal.scopes.includes(MARKET_TOOLS_CALL_SCOPE),
     agentPrincipal.lifecycle === 'active',
     agentPrincipal.expiresAt === undefined || agentPrincipal.expiresAt > now,
-    principal.principalRef === invocation.principalId,
+    principal.principalRef === call.principalId,
     principal.kind === 'agent',
     principal.lifecycle === 'active',
   ])
@@ -252,42 +252,42 @@ function principalAuthorityIsCurrent(input: Readonly<{
 
 function grantAuthorityIsCurrent(
   grant: Doc<'agentAccessGrants'> | null,
-  invocation: Doc<'capabilityOperationInvocations'>,
+  call: Doc<'capabilityCalls'>,
   now: number,
 ): boolean {
   if (grant === null) return false
   return allAuthorityFacts([
-    grant.grantRef === invocation.grantRef,
-    grant.principalId === invocation.principalId,
-    grant.ownerId === invocation.ownerId,
-    grant.credentialId === invocation.credentialId,
-    grant.applicationRef === invocation.applicationRef,
-    grant.environment === invocation.environment,
-    grant.generation === invocation.grantGeneration,
-    grant.policyDigest === invocation.policyDigest,
+    grant.grantRef === call.grantRef,
+    grant.principalId === call.principalId,
+    grant.ownerId === call.ownerId,
+    grant.credentialId === call.credentialId,
+    grant.applicationRef === call.applicationRef,
+    grant.environment === call.environment,
+    grant.generation === call.grantGeneration,
+    grant.policyDigest === call.policyDigest,
     grant.lifecycle === 'active',
-    grant.expiresAt === invocation.grantExpiresAt,
+    grant.expiresAt === call.grantExpiresAt,
     grant.expiresAt > now,
   ])
 }
 
 /**
- * Rechecks the durable invocation, agent, grant, Principal, and Account rows
+ * Rechecks the durable Call, agent, grant, Principal, and Account rows
  * at the instant a money consequence is applied. Caller-shaped fields are
  * accepted only as exact-match expectations against those durable rows.
  */
-export async function persistedInvocationAuthorityIsCurrent(
+export async function persistedCallAuthorityIsCurrent(
   ctx: Pick<MutationCtx, 'db'>,
-  expected: PersistedInvocationAuthorityExpectation,
+  expected: PersistedCallAuthorityExpectation,
 ): Promise<boolean> {
-  const invocation = await ctx.db
-    .query('capabilityOperationInvocations')
-    .withIndex('by_invocationRef', (query) =>
-      query.eq('invocationRef', expected.invocationRef),
+  const call = await ctx.db
+    .query('capabilityCalls')
+    .withIndex('by_callRef', (query) =>
+      query.eq('callRef', expected.callRef),
     )
     .unique()
-  if (invocation === null || !invocationMatchesAuthorityExpectation(invocation, expected)) {
-    recordPersistedAuthorityFailure(expected, 'invocation_mismatch')
+  if (call === null || !callMatchesAuthorityExpectation(call, expected)) {
+    recordPersistedAuthorityFailure(expected, 'call_mismatch')
     return false
   }
   const now = Date.now()
@@ -296,10 +296,10 @@ export async function persistedInvocationAuthorityIsCurrent(
     .withIndex('by_providerNamespace_and_providerIdentifier', (query) =>
       query
         .eq('providerNamespace', 'clerk/api-key')
-        .eq('providerIdentifier', invocation.credentialId),
+        .eq('providerIdentifier', call.credentialId),
     )
     .unique()
-  if (!bindingIsCurrent(binding, invocation)) {
+  if (!bindingIsCurrent(binding, call)) {
     recordPersistedAuthorityFailure(expected, 'binding_not_current')
     return false
   }
@@ -307,25 +307,25 @@ export async function persistedInvocationAuthorityIsCurrent(
     ctx.db
       .query('agentAccessPrincipals')
       .withIndex('by_principalId', (query) =>
-        query.eq('principalId', invocation.principalId),
+        query.eq('principalId', call.principalId),
       )
       .unique(),
     ctx.db
       .query('principals')
       .withIndex('by_principalRef', (query) =>
-        query.eq('principalRef', invocation.principalId),
+        query.eq('principalRef', call.principalId),
       )
       .unique(),
     ctx.db
       .query('accounts')
       .withIndex('by_accountRef', (query) =>
-        query.eq('accountRef', invocation.ownerId),
+        query.eq('accountRef', call.ownerId),
       )
       .unique(),
     ctx.db
       .query('agentAccessGrants')
       .withIndex('by_grantRef', (query) =>
-        query.eq('grantRef', invocation.grantRef),
+        query.eq('grantRef', call.grantRef),
       )
       .unique(),
     ctx.db
@@ -338,7 +338,7 @@ export async function persistedInvocationAuthorityIsCurrent(
       )
       .unique(),
   ])
-  if (!credentialIsCurrent(credential, binding, invocation, now)) {
+  if (!credentialIsCurrent(credential, binding, call, now)) {
     recordPersistedAuthorityFailure(expected, 'credential_not_current')
     return false
   }
@@ -352,7 +352,7 @@ export async function persistedInvocationAuthorityIsCurrent(
             (query) =>
               query
                 .eq('accountRef', account.accountRef)
-                .eq('memberPrincipalRef', invocation.principalId)
+                .eq('memberPrincipalRef', call.principalId)
                 .eq('lifecycle', 'active'),
           )
           .unique(),
@@ -363,24 +363,24 @@ export async function persistedInvocationAuthorityIsCurrent(
           )
           .unique(),
       ])
-  if (!principalAuthorityIsCurrent({ invocation, agentPrincipal, principal, now })) {
+  if (!principalAuthorityIsCurrent({ call, agentPrincipal, principal, now })) {
     recordPersistedAuthorityFailure(expected, 'principal_not_current')
     return false
   }
-  if (!accountAuthorityIsCurrent({ invocation, account, membership, ownership })) {
+  if (!accountAuthorityIsCurrent({ call, account, membership, ownership })) {
     recordPersistedAuthorityFailure(expected, 'account_not_current')
     return false
   }
-  if (!grantAuthorityIsCurrent(grant, invocation, now)) {
+  if (!grantAuthorityIsCurrent(grant, call, now)) {
     recordPersistedAuthorityFailure(expected, 'grant_not_current')
     return false
   }
-  const delegationCurrent = await currentInvocationDelegationAncestryIsValid(ctx, {
-      leafGrantRef: invocation.grantRef,
-      expectedGeneration: invocation.grantGeneration,
-      accountRef: invocation.ownerId,
-      principalRef: invocation.principalId,
-      operationRef: invocation.operationRef,
+  const delegationCurrent = await currentCallDelegationAncestryIsValid(ctx, {
+      leafGrantRef: call.grantRef,
+      expectedGeneration: call.grantGeneration,
+      accountRef: call.ownerId,
+      principalRef: call.principalId,
+      toolRef: call.toolRef,
       now,
     })
   if (!delegationCurrent) {
@@ -390,9 +390,9 @@ export async function persistedInvocationAuthorityIsCurrent(
 }
 
 function recordPersistedAuthorityFailure(
-  expected: PersistedInvocationAuthorityExpectation,
+  expected: PersistedCallAuthorityExpectation,
   reason:
-    | 'invocation_mismatch'
+    | 'call_mismatch'
     | 'binding_not_current'
     | 'credential_not_current'
     | 'principal_not_current'
@@ -400,21 +400,21 @@ function recordPersistedAuthorityFailure(
     | 'grant_not_current'
     | 'delegation_not_current',
 ): void {
-  console.warn('persisted_invocation_authority_refused', {
-    invocationRef: expected.invocationRef,
+  console.warn('persisted_call_authority_refused', {
+    callRef: expected.callRef,
     attemptRef: expected.attemptRef,
     reason,
   })
 }
 
-async function currentInvocationDelegationAncestryIsValid(
+async function currentCallDelegationAncestryIsValid(
   ctx: Pick<MutationCtx, 'db'>,
   input: Readonly<{
     leafGrantRef: string
     expectedGeneration: number
     accountRef: string
     principalRef: string
-    operationRef: string
+    toolRef: string
     now: number
   }>,
 ): Promise<boolean> {
@@ -522,15 +522,15 @@ function delegationLeafIsCurrent(
     leafGrantRef: string
     expectedGeneration: number
     principalRef: string
-    operationRef: string
+    toolRef: string
   }>,
 ): boolean {
   return allAuthorityFacts([
     leaf.grantRef === input.leafGrantRef,
     leaf.generation === input.expectedGeneration,
     leaf.subjectPrincipalRef === input.principalRef,
-    leaf.scopes.includes(MARKET_OPERATIONS_INVOKE_SCOPE),
-    leaf.resourceRefs.includes('*') || leaf.resourceRefs.includes(input.operationRef),
+    leaf.scopes.includes(MARKET_TOOLS_CALL_SCOPE),
+    leaf.resourceRefs.includes('*') || leaf.resourceRefs.includes(input.toolRef),
   ])
 }
 

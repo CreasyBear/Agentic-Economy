@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 
-import { OperationChat } from '@/components/ae/operation-chat'
+import { Chat } from '@/components/ae/chat'
 
 type NewThreadRouteSearch = { q?: string }
 
@@ -29,7 +29,7 @@ function NewThreadPage() {
     params: { threadId },
   })
   return (
-    <OperationChat
+    <Chat
       threadId={null}
       initialPrompt={q ?? ''}
       onThreadCreated={openThread}

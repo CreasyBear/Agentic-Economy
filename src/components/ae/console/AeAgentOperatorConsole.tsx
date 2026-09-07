@@ -28,8 +28,8 @@ import type {
 } from '@/modules/agent-access/agent-operator-view-model'
 import { formatTimestamp } from '@/lib/ui/format-time'
 import { formatCurrencyAmount, type ExactAmount } from '@/modules/money/public'
-import type { PendingOperationApproval } from '@/modules/capability-execution/operation-approval.functions'
-import { suggestContinuation } from '@/modules/market/suggested-continuation'
+import type { PendingCallApproval } from '@/modules/capability-execution/call-approval.functions'
+import { suggestNextAction } from '@/modules/market/suggested-next-action'
 import type { AgentConnectionReadback } from '@/modules/agent-access/public'
 import { NATIVE_MCP_CLIENTS } from '@/lib/cli-distribution'
 
@@ -42,13 +42,13 @@ export type AeAgentOperatorConsoleProps = Readonly<{
   onRenameAgent?: (principalRef: string, expectedRevision: number, displayName: string) => Promise<boolean>
   agentHistory?: ReactNode
   lifecyclePending?: Readonly<{ kind: 'credential' | 'connection' | 'agent'; ref: string }>
-  approvals: readonly PendingOperationApproval[]
+  approvals: readonly PendingCallApproval[]
   approvalsLoading: boolean
   approvalsError?: string
-  approvalDecision?: Readonly<{ invocationRef: string; decision: 'approve' | 'deny' }>
+  approvalDecision?: Readonly<{ callRef: string; decision: 'approve' | 'deny' }>
   approvalStatus?: string
   onRetryApprovals: () => void
-  onDecideApproval: (invocationRef: string, operationRef: string, decision: 'approve' | 'deny') => void
+  onDecideApproval: (callRef: string, toolRef: string, decision: 'approve' | 'deny') => void
   accessUnavailable?: boolean
   selectedPrincipalId?: string
   getAgentHref?: (principalId: string) => string
@@ -173,7 +173,7 @@ export function AeAgentOperatorConsole({
   }
 
   const agentsPhase = stagedListPhase({ firstLoadPending, rows: directoryItems })
-  const missingAgentContinuation = suggestContinuation({
+  const missingAgentNextAction = suggestNextAction({
     subject: 'connection',
     state: 'missing',
     actor: 'buyer',
@@ -259,7 +259,7 @@ export function AeAgentOperatorConsole({
             description="Start setup from the agent and approve the request to create access you can revoke."
             action={
               <Button asChild className="min-h-touch">
-                <a href={missingAgentContinuation.href}>{missingAgentContinuation.label}</a>
+                <a href={missingAgentNextAction.href}>{missingAgentNextAction.label}</a>
               </Button>
             }
           />
@@ -311,7 +311,7 @@ export function AeAgentOperatorConsole({
             {agentRecoveryCopy(selected) === undefined ? null : (
               <p className="text-sm text-muted-foreground">{agentRecoveryCopy(selected)}</p>
             )}
-            <AuthorizedOperations detail={selected} />
+            <AuthorizedTools detail={selected} />
             <ConnectionReceipts
               detail={selected}
               {...(lifecyclePending === undefined ? {} : { lifecyclePending })}
@@ -386,17 +386,17 @@ function WaitingApprovalsSection({
   onRetry,
   onDecide,
 }: Readonly<{
-  approvals: readonly PendingOperationApproval[]
+  approvals: readonly PendingCallApproval[]
   loading: boolean
   error?: string
-  decision?: Readonly<{ invocationRef: string; decision: 'approve' | 'deny' }>
+  decision?: Readonly<{ callRef: string; decision: 'approve' | 'deny' }>
   onRetry: () => void
-  onDecide: (invocationRef: string, operationRef: string, decision: 'approve' | 'deny') => void
+  onDecide: (callRef: string, toolRef: string, decision: 'approve' | 'deny') => void
 }>) {
   if (!loading && error === undefined && approvals.length === 0) return null
 
   return (
-    <AeSection title="Waiting for approval" description="Review the exact operation before allowing it to run once.">
+    <AeSection title="Waiting for approval" description="Review the exact Tool before allowing it to run once.">
       {loading && approvals.length === 0 ? (
         <div className="grid gap-intra" aria-busy="true" aria-label="Loading waiting approvals">
           <Skeleton className="h-touch w-full" />
@@ -417,19 +417,19 @@ function WaitingApprovalsSection({
       {approvals.length === 0 ? null : (
         <ol className="m-0 list-none divide-y divide-border border-y border-border p-0">
           {approvals.map((approval) => {
-            const deciding = decision?.invocationRef === approval.invocationRef
+            const deciding = decision?.callRef === approval.callRef
             const controlsDisabled = decision !== undefined
             return (
-              <li key={approval.invocationRef} className="grid min-w-0 gap-4 py-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+              <li key={approval.callRef} className="grid min-w-0 gap-4 py-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
                 <div className="grid min-w-0 gap-3">
                   <div className="grid gap-1">
-                    <p className="text-sm font-medium text-muted-foreground">Operation</p>
+                    <p className="text-sm font-medium text-muted-foreground">Tool</p>
                     <Link
-                      to="/operations/$operationRef"
-                      params={{ operationRef: approval.operationRef }}
+                      to="/tools/$toolRef"
+                      params={{ toolRef: approval.toolRef }}
                       className="break-all font-medium text-foreground underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     >
-                      {approval.operationRef}
+                      {approval.toolRef}
                     </Link>
                   </div>
                   <AeFactList
@@ -442,7 +442,7 @@ function WaitingApprovalsSection({
                     type="button"
                     className="min-h-touch w-full sm:w-auto"
                     disabled={controlsDisabled}
-                    onClick={() => onDecide(approval.invocationRef, approval.operationRef, 'approve')}
+                    onClick={() => onDecide(approval.callRef, approval.toolRef, 'approve')}
                   >
                     {deciding && decision?.decision === 'approve' ? 'Approving once…' : 'Approve once'}
                   </Button>
@@ -451,7 +451,7 @@ function WaitingApprovalsSection({
                     variant="secondary"
                     className="min-h-touch w-full sm:w-auto"
                     disabled={controlsDisabled}
-                    onClick={() => onDecide(approval.invocationRef, approval.operationRef, 'deny')}
+                    onClick={() => onDecide(approval.callRef, approval.toolRef, 'deny')}
                   >
                     {deciding && decision?.decision === 'deny' ? 'Declining…' : 'Decline'}
                   </Button>
@@ -465,7 +465,7 @@ function WaitingApprovalsSection({
   )
 }
 
-function approvalFacts(approval: PendingOperationApproval): readonly AeFact[] {
+function approvalFacts(approval: PendingCallApproval): readonly AeFact[] {
   const facts: AeFact[] = [
     { label: 'Consequence', value: consequenceLabel(approval.authorityRequest.consequence) },
   ]
@@ -490,13 +490,13 @@ function agentFacts(detail: AgentDetail): readonly AeFact[] {
       ? 'No activity recorded'
       : formatTimestamp(detail.agent.lastSeenAt),
       mono: true },
-    { label: 'Per call', value: formatAmount(detail.grant?.budget.maximumSpendPerInvocation), mono: true},
+    { label: 'Per call', value: formatAmount(detail.grant?.budget.maximumSpendPerCall), mono: true},
     { label: 'Daily budget', value: formatAmount(detail.grant?.budget.maximumDailySpend), mono: true},
     { label: 'Monthly budget', value: formatAmount(detail.grant?.budget.maximumMonthlySpend), mono: true},
     { label: 'Rate', value: detail.grant === undefined ? 'Unavailable' : `${detail.grant.rate.maximumCallsPerMinute}/min · ${detail.grant.rate.maximumCallsPerHour}/hour`, mono: true},
-    { label: 'Concurrency', value: detail.grant === undefined ? 'Unavailable' : String(detail.grant.budget.maximumConcurrentInvocations), mono: true},
+    { label: 'Concurrency', value: detail.grant === undefined ? 'Unavailable' : String(detail.grant.budget.maximumConcurrentCalls), mono: true},
     { label: 'Authority', value: scopeLabel(detail.authorityMode) },
-    { label: 'Operations', value: operationAccessLabel(detail) },
+    { label: 'Tools', value: toolAccessLabel(detail) },
     { label: 'Balance', value: formatAmount(accountBalance), mono: true},
     { label: 'Calls', value: String(detail.usage?.callCount ?? 0), mono: true},
     { label: 'Spend', value: formatAmount(detail.usage?.grossSpend ?? zeroBalance), mono: true},
@@ -666,7 +666,7 @@ function reconnectInstructionFor(connectorDisplayName: string): string {
     ?? 'Reconnect from the original agent client.'
 }
 
-function consequenceLabel(consequence: PendingOperationApproval['authorityRequest']['consequence']): string {
+function consequenceLabel(consequence: PendingCallApproval['authorityRequest']['consequence']): string {
   switch (consequence) {
     case 'read_only':
       return 'Read only'
@@ -696,13 +696,13 @@ function environmentLabel(environment: AgentDirectoryItem['environment']): strin
 
 function scopeLabel(mode: AgentDetail['authorityMode']): string {
   switch (mode) {
-    case 'inspect_only':
+    case 'read_only':
       return 'Browse only'
-    case 'approve_each':
+    case 'approval_required':
       return 'Ask each time'
-    case 'bounded_mandate':
+    case 'spending_policy':
       return 'Work within limits'
-    case 'full_yolo':
+    case 'unrestricted_test_only':
       return 'Custom authority'
     default: {
       const exhaustive: never = mode
@@ -711,30 +711,30 @@ function scopeLabel(mode: AgentDetail['authorityMode']): string {
   }
 }
 
-function operationAccessLabel(detail: AgentDetail): string {
+function toolAccessLabel(detail: AgentDetail): string {
   if (detail.grant === undefined) return 'Unavailable'
-  if (detail.grant.operationAccess === 'all_admitted') return 'All admitted Operations'
-  return detail.grant.operationRefs.length === 0
+  if (detail.grant.toolAccess === 'all_admitted') return 'All admitted Tools'
+  return detail.grant.toolRefs.length === 0
     ? 'None'
-    : `${detail.grant.operationRefs.length} selected ${detail.grant.operationRefs.length === 1 ? 'Operation' : 'Operations'}`
+    : `${detail.grant.toolRefs.length} selected ${detail.grant.toolRefs.length === 1 ? 'Tool' : 'Tools'}`
 }
 
-function AuthorizedOperations({ detail }: Readonly<{ detail: AgentDetail }>) {
-  if (detail.grant?.operationAccess !== 'selected_operations' || detail.grant.operationRefs.length === 0) {
+function AuthorizedTools({ detail }: Readonly<{ detail: AgentDetail }>) {
+  if (detail.grant?.toolAccess !== 'selected_tools' || detail.grant.toolRefs.length === 0) {
     return null
   }
   return (
     <div className="grid gap-2">
-      <h3 className="text-sm font-medium text-foreground">Authorized Operations</h3>
+      <h3 className="text-sm font-medium text-foreground">Authorized Tools</h3>
       <ul className="m-0 grid list-none gap-2 p-0">
-        {detail.grant.operationRefs.map((operationRef) => (
-          <li key={operationRef} className="min-w-0 rounded-md border px-3 py-2">
+        {detail.grant.toolRefs.map((toolRef) => (
+          <li key={toolRef} className="min-w-0 rounded-md border px-3 py-2">
             <Link
-              to="/operations/$operationRef"
-              params={{ operationRef }}
+              to="/tools/$toolRef"
+              params={{ toolRef }}
               className="block truncate font-mono text-sm underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
-              {operationRef}
+              {toolRef}
             </Link>
           </li>
         ))}

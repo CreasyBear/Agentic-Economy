@@ -14,14 +14,14 @@ function AeObservabilityErrorFallback() {
   return (
     <AeEmptyState
       title="Something went wrong"
-      description="The page stopped unexpectedly. Try loading it again, or continue from the Operation catalogue."
+      description="The page stopped unexpectedly. Try loading it again, or continue from the Tool catalogue."
       role="alert"
       action={
         <div className="flex flex-wrap justify-center gap-3">
           <Button type="button" variant="default" className="min-h-touch" onClick={() => window.location.reload()}>
             Try again
           </Button>
-          <Button asChild variant="secondary" className="min-h-touch"><a href="/market">Browse Operations</a></Button>
+          <Button asChild variant="secondary" className="min-h-touch"><a href="/market?window=30d#tools">Browse Tools</a></Button>
         </div>
       }
     />

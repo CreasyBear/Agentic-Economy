@@ -4,7 +4,7 @@ import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
   prepareSupplyPublicationV2,
   selectSupplyProviderAuthority,
-  type PublishSupplyOperationV2Input,
+  type PublishSupplyToolV2Input,
 } from '@/modules/capability-supply/supply-publication-v2'
 
 const JSON_SCHEMA = 'https://json-schema.org/draft/2020-12/schema'
@@ -56,7 +56,7 @@ function sourceDocument() {
   }
 }
 
-function publicationInput(document = sourceDocument()): PublishSupplyOperationV2Input {
+function publicationInput(document = sourceDocument()): PublishSupplyToolV2Input {
   const sourceDigest = canonicalDigest(document)
   const selector = {
     serverUrl: 'https://provider.example/api/',

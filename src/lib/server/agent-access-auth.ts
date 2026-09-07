@@ -11,7 +11,7 @@ import {
 import {
   AGENT_ACCESS_DEFAULT_APPLICATION_REF,
   AGENT_ACCESS_ENVIRONMENT_VALUES,
-  MARKET_OPERATIONS_INVOKE_SCOPE,
+  MARKET_TOOLS_CALL_SCOPE,
   agentAuthorityModeAllows,
   agentAuthorityModeForScopes,
   type AgentAccessEnvironment,
@@ -132,7 +132,7 @@ export async function authenticateAgentAccess(
   status: 401 | 403
   reason: 'authentication_required' | 'scope_required'
 }>> {
-  const requiredScope = options.requiredScope === undefined ? MARKET_OPERATIONS_INVOKE_SCOPE : options.requiredScope
+  const requiredScope = options.requiredScope === undefined ? MARKET_TOOLS_CALL_SCOPE : options.requiredScope
   const requiredScopes = Object.freeze([...new Set(
     options.requiredScopes ?? (requiredScope === null ? [] : [requiredScope]),
   )].sort())

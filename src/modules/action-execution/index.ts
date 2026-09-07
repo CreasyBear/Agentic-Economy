@@ -55,17 +55,17 @@ export type {
 } from './canonical-claim'
 export {
   authorityUseIntegrityValid,
-  issueStandingMandate,
-  mandateIntegrityValid,
-  restoreStandingMandateStore,
-  StandingMandateStore,
-  STANDING_MANDATE_FORMAT,
-} from './standing-mandate'
+  issueSpendingPolicy,
+  spendingPolicyIntegrityValid,
+  restoreSpendingPolicyStore,
+  SpendingPolicyStore,
+  SPENDING_POLICY_FORMAT,
+} from './spending-policy'
 export {
-  createDevelopmentStandingMandateGrantVerifier,
-  verifiedGrantMatchesMandate,
-} from './standing-mandate-grant'
-export { evaluateStandingMandatePolicy } from './standing-mandate-policy'
+  createDevelopmentSpendingPolicyGrantVerifier,
+  verifiedGrantMatchesSpendingPolicy,
+} from './spending-policy-grant'
+export { evaluateSpendingPolicy } from './spending-policy-evaluation'
 export { materialDigest } from './preparation'
 export {
   cancelPublicExecution,
@@ -95,26 +95,26 @@ export type {
   InvokeActionInput,
   PrepareActionInput,
   PreparedExecution,
-  StandingMandateAuthorityBasis,
+  SpendingPolicyAuthorityBasis,
 } from './contracts'
 export type {
   AuthorityUse,
   AuthorityUseMaterial,
   AuthorityExposureOffset,
-  MandateDecision,
-  MandateRefusalCode,
-  StandingMandate,
-  StandingMandateScope,
-  StandingMandateSnapshot,
-} from './standing-mandate'
+  SpendingPolicyResult,
+  SpendingPolicyRefusalCode,
+  SpendingPolicy,
+  SpendingPolicyScope,
+  SpendingPolicySnapshot,
+} from './spending-policy'
 export type {
-  StandingMandateGrantVerifier,
-  VerifiedStandingMandateGrant,
-} from './standing-mandate-grant'
+  SpendingPolicyGrantVerifier,
+  VerifiedSpendingPolicyGrant,
+} from './spending-policy-grant'
 export type {
-  StandingMandatePolicyDecision,
-  StandingMandatePolicyProposal,
-} from './standing-mandate-policy'
+  SpendingPolicyDecision,
+  SpendingPolicyProposal,
+} from './spending-policy-evaluation'
 export type {
   ExposureOffsetRuleIdentity,
   ExposureReleaseAttestation,

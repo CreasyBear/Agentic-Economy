@@ -5,7 +5,7 @@ import {
   type PublicationCommandPorts,
   type RepublishPreparedCapabilityCommandInput,
 } from '@/modules/capability-supply/internal/publication'
-import type { OperationKeyRecord } from '@/modules/capability-supply/internal/operation-ledger'
+import type { OperationKeyRecord } from '@/modules/capability-supply/internal/tool-ledger'
 
 import {
   actor,
@@ -170,7 +170,7 @@ describe('capability-supply publication commands republish', () => {
     if ('reason' in result) throw new Error(`republish_fixture_refused:${result.reason}`)
     expect(registerBinding).toHaveBeenCalledWith(expect.objectContaining({
       bindingId: `${fixture.binding.bindingId}:revision:2`,
-    }), 10, result.operationRef)
+    }), 10, result.toolRef)
     expect(scheduleReadiness).toHaveBeenCalledWith(fixture.publication.publicationRef, 2)
     expect(fixture.publication.disposition).toBe('withdrawn')
   })

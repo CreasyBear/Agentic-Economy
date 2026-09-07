@@ -68,7 +68,7 @@ type MutationArgs = Readonly<{
   environment: 'sandbox' | 'production'
   scopes: readonly string[]
   requiredScopes: readonly string[]
-  authorityMode: 'inspect_only' | 'approve_each' | 'bounded_mandate' | 'full_yolo'
+  authorityMode: 'read_only' | 'approval_required' | 'spending_policy' | 'unrestricted_test_only'
   operationKey: string
   correlationId: string
   sourceWrite?: Readonly<Record<string, unknown>>
@@ -156,7 +156,7 @@ describe('canonical agent authority boundary', () => {
       applicationRef: 'agent-application',
       environment: 'production',
       scopes: ['operations:invoke'],
-      authorityMode: 'bounded_mandate',
+      authorityMode: 'spending_policy',
     })
     expect(result?.principalId).not.toBe(OTHER_PRINCIPAL_REF)
     expect(result?.ownerId).not.toBe(OTHER_ACCOUNT_REF)
@@ -443,6 +443,15 @@ describe('canonical agent authority boundary', () => {
     },
   )
 
+  it('fails closed when the persisted access-grant policy digest is corrupted', async () => {
+    const backend = testBackend()
+    await seedCanonicalChain(backend, {
+      accessGrant: { policyDigest: 'sha256:corrupted-access-grant-policy' },
+    })
+
+    await expect(runResolver(backend)).resolves.toBeNull()
+  })
+
   it('requires exact source-write admission for the registered production mutation', async () => {
     vi.stubEnv('AE_SOURCE_WRITE_SECRET', SECRET)
     const backend = testBackend()
@@ -478,7 +487,7 @@ function validInput(): MutationArgs {
     environment: 'production',
     scopes: ['operations:invoke'],
     requiredScopes: ['operations:invoke'],
-    authorityMode: 'bounded_mandate',
+    authorityMode: 'spending_policy',
     operationKey: 'operations:invoke',
     correlationId: 'correlation:invoke:1',
   }
@@ -618,9 +627,9 @@ async function seedCanonicalChain(
       applicationRef: 'agent-application',
       environment: 'production',
       scopes: ['operations:invoke'],
-      authorityMode: 'bounded_mandate',
+      authorityMode: 'spending_policy',
       grantGeneration: 4,
-      policyDigest: ACCESS_POLICY_DIGEST,
+      spendingPolicyDigest: ACCESS_POLICY_DIGEST,
       lifecycle: 'active',
       expiresAt: NOW + 60_000,
       recordedAt: NOW - 9_000,

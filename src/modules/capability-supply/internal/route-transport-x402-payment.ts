@@ -13,7 +13,7 @@ import { isProviderConnectionCredentialRef } from '../provider-connection'
 import type {
   RouteTransportInvocation,
   RouteTransportRuntime,
-} from './route-transport-invoke'
+} from './route-transport-call'
 import {
   decodeX402PaymentRequiredHeader,
   validateX402PaymentRequired,

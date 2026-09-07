@@ -16,7 +16,12 @@ import {
   normalizeRequestedScopes,
   requestedScopesForMode,
 } from '../src/modules/agent-access/oauth-state'
-import { normalizeAgentAccessOperationSelection } from '../src/modules/agent-access/policy'
+import {
+  AGENT_ACCESS_GRANT_FORMAT,
+  AGENT_ACCESS_POLICY_FORMAT,
+  normalizeAgentAccessToolSelection,
+  normalizeStoredAgentAccessGrant,
+} from '../src/modules/agent-access/policy'
 import {
   agentAccessConsentReservationValue,
   agentAccessPolicyValue,
@@ -33,6 +38,7 @@ import {
   prepareCredentialReplacementCore,
   revokeCanonicalCredentialForService,
   revokeReplacementMaterial,
+  invalidateOAuthRefreshFamilies,
   transitionCredentialReplacementCore,
 } from './agentAccessPrincipals'
 import { admitAuthorityCredentialChangeRate } from './lib/rateLimit'
@@ -65,12 +71,12 @@ const requestedAccessAmount = v.object({
 })
 const requestedAccess = v.object({
   environment: v.union(v.literal('sandbox'), v.literal('production')),
-  operationAccess: v.union(v.literal('all_admitted'), v.literal('selected_operations')),
-  operationRefs: v.array(v.string()),
-  maximumSpendPerInvocation: v.optional(requestedAccessAmount),
+  toolAccess: v.union(v.literal('all_admitted'), v.literal('selected_tools')),
+  toolRefs: v.array(v.string()),
+  maximumSpendPerCall: v.optional(requestedAccessAmount),
   maximumDailySpend: v.optional(requestedAccessAmount),
   maximumMonthlySpend: v.optional(requestedAccessAmount),
-  maximumConcurrentInvocations: v.optional(v.number()),
+  maximumConcurrentCalls: v.optional(v.number()),
   maximumCallsPerMinute: v.optional(v.number()),
   maximumCallsPerHour: v.optional(v.number()),
   expiresInSeconds: v.number(),
@@ -100,10 +106,10 @@ const replacement = v.object({
   predecessorCredentialRef: v.string(), predecessorKeyId: v.string(), successorGrantRef: v.string(),
 })
 const authorityMode = v.union(
-  v.literal('inspect_only'),
-  v.literal('approve_each'),
-  v.literal('bounded_mandate'),
-  v.literal('full_yolo'),
+  v.literal('read_only'),
+  v.literal('approval_required'),
+  v.literal('spending_policy'),
+  v.literal('unrestricted_test_only'),
 )
 const clerkProofEvidence = v.object({
   reverificationId: v.string(),
@@ -139,8 +145,8 @@ const refreshFamily = v.object({
   familyRef: v.string(), revision: v.number(), clientId: v.string(), ownerId: v.string(),
   ownerPrincipalRef: v.string(), providerSubject: v.string(), principalRef: v.string(), displayName: v.string(), applicationRef: v.string(), environment,
   scopes: v.array(v.string()), authorityMode,
-  operationAccess: v.union(v.literal('all_admitted'), v.literal('selected_operations')),
-  operationRefs: v.array(v.string()), policy: agentAccessPolicyValue,
+  toolAccess: v.union(v.literal('all_admitted'), v.literal('selected_tools')),
+  toolRefs: v.array(v.string()), spendingPolicy: agentAccessPolicyValue,
   currentCredentialRef: v.string(), currentProviderCredentialId: v.string(), currentGrantRef: v.string(),
   currentGeneration: v.number(), currentAccessExpiresAt: v.number(), currentTokenHash: v.string(), lifecycle: refreshFamilyLifecycle,
   createdAt: v.number(), expiresAt: v.number(), updatedAt: v.number(),
@@ -150,8 +156,8 @@ const agentConnectionReadback = v.object({
   connectionRef: v.string(), revision: v.number(), principalRef: v.string(),
   agentDisplayName: v.string(), connectorDisplayName: v.string(), environment,
   state: refreshFamilyLifecycle, authorityMode,
-  operationAccess: v.union(v.literal('all_admitted'), v.literal('selected_operations')),
-  operationRefs: v.array(v.string()), policy: agentAccessPolicyValue,
+  toolAccess: v.union(v.literal('all_admitted'), v.literal('selected_tools')),
+  toolRefs: v.array(v.string()), spendingPolicy: agentAccessPolicyValue,
   commercialScopes: v.array(v.string()), connectedAt: v.number(), lastRotatedAt: v.number(),
   accessExpiresAt: v.number(), connectionExpiresAt: v.number(),
   revokedAt: v.optional(v.number()), revocationReason: v.optional(v.string()),
@@ -384,8 +390,8 @@ export const reserveAgentAccessConsent = mutation({
     expectedGrantRevision: v.number(),
     expectedTargetRevision: v.number(),
     authorityMode,
-    approvedOperationAccess: v.union(v.literal('all_admitted'), v.literal('selected_operations')),
-    approvedOperationRefs: v.array(v.string()),
+    approvedToolAccess: v.union(v.literal('all_admitted'), v.literal('selected_tools')),
+    approvedToolRefs: v.array(v.string()),
     connectionTarget: consentConnectionTarget,
     proof: v.optional(clerkProofEvidence),
     operationKey: v.string(),
@@ -766,8 +772,8 @@ export const createRefreshFamily = mutation({
       displayName: oauthGrant.displayName,
       applicationRef: current.applicationRef, environment: current.environment,
       scopes: current.scopes, authorityMode: current.authorityMode,
-      operationAccess: current.operationAccess, operationRefs: current.operationRefs,
-      policy: current.policy, currentCredentialRef: current.credentialRef,
+      toolAccess: current.toolAccess, toolRefs: current.toolRefs,
+      spendingPolicy: current.spendingPolicy, currentCredentialRef: current.credentialRef,
       currentProviderCredentialId: args.keyId, currentGrantRef: current.grantRef,
       currentGeneration: current.generation, currentAccessExpiresAt: current.expiresAt,
       currentTokenHash: args.tokenHash,
@@ -906,8 +912,8 @@ export const commitRefreshFamilyRotation = mutation({
       principalRef: family.principalRef, replacementMode: 'planned', issuanceKey: args.issuanceKey,
       grantRef: args.successorGrantRef, credentialId: args.successorCredentialId,
       applicationRef: family.applicationRef, environment: family.environment, scopes: family.scopes,
-      authorityMode: family.authorityMode, operationAccess: family.operationAccess,
-      operationRefs: family.operationRefs, policy: family.policy,
+      authorityMode: family.authorityMode, toolAccess: family.toolAccess,
+      toolRefs: family.toolRefs, spendingPolicy: family.spendingPolicy,
       createdAt: args.createdAt, expiresAt: args.accessExpiresAt,
     }, owner, args.createdAt)
     if (prepared.kind !== 'recorded' && prepared.kind !== 'replayed') {
@@ -938,10 +944,10 @@ export const commitRefreshFamilyRotation = mutation({
       currentGeneration: prepared.generation,
       currentAccessExpiresAt: args.accessExpiresAt,
       currentTokenHash: args.successorTokenHash,
-      policy: {
-        ...family.policy,
-        budget: { ...family.policy.budget, generation: prepared.generation },
-        rate: { ...family.policy.rate, generation: prepared.generation },
+      spendingPolicy: {
+        ...family.spendingPolicy,
+        budget: { ...family.spendingPolicy.budget, generation: prepared.generation },
+        rate: { ...family.spendingPolicy.rate, generation: prepared.generation },
       },
       updatedAt: args.createdAt,
     })
@@ -1041,10 +1047,17 @@ async function resolveRefreshCanonicalMaterial(ctx: MutationCtx, keyId: string) 
       .eq('credentialId', keyId).eq('environment', accessPrincipal.environment).eq('lifecycle', 'active'))
     .take(2)
   const grant = grants.find((candidate) => candidate.principalId === accessPrincipal.principalId)
-  if (grant === undefined || grant.format !== 'ae.agent-access-grant:v2'
-    || grant.operationRefs === undefined || grant.policy.format !== 'ae.agent-access-policy:v2'
-    || grant.policy.operationRefs === undefined || grant.generation !== credential.generation
-    || grant.policyDigest !== accessPrincipal.policyDigest) return null
+  if (grant === undefined || grant.format !== AGENT_ACCESS_GRANT_FORMAT) return null
+  let normalizedGrant: ReturnType<typeof normalizeStoredAgentAccessGrant>
+  try {
+    normalizedGrant = normalizeStoredAgentAccessGrant(grant)
+  } catch {
+    return null
+  }
+  if (normalizedGrant.format !== AGENT_ACCESS_GRANT_FORMAT
+    || normalizedGrant.spendingPolicy.format !== AGENT_ACCESS_POLICY_FORMAT
+    || normalizedGrant.generation !== credential.generation
+    || normalizedGrant.spendingPolicyDigest !== accessPrincipal.spendingPolicyDigest) return null
   const [membership, ownerships] = await Promise.all([
     ctx.db.query('memberships')
       .withIndex('by_accountRef_and_memberPrincipalRef_and_lifecycle', (query) => query
@@ -1063,21 +1076,21 @@ async function resolveRefreshCanonicalMaterial(ctx: MutationCtx, keyId: string) 
     applicationRef: accessPrincipal.applicationRef,
     environment: accessPrincipal.environment,
     scopes: [...accessPrincipal.scopes],
-    authorityMode: accessPrincipal.authorityMode,
-    operationAccess: grant.operationAccess,
-    operationRefs: [...grant.operationRefs],
-    policy: {
-      format: 'ae.agent-access-policy:v2' as const,
-      operationAccess: grant.policy.operationAccess,
-      operationRefs: [...grant.policy.operationRefs],
-      environment: grant.policy.environment,
-      budget: { ...grant.policy.budget },
-      rate: { ...grant.policy.rate },
+    authorityMode: normalizedGrant.authorityMode,
+    toolAccess: normalizedGrant.toolAccess,
+    toolRefs: [...normalizedGrant.toolRefs],
+    spendingPolicy: {
+      format: AGENT_ACCESS_POLICY_FORMAT,
+      toolAccess: normalizedGrant.spendingPolicy.toolAccess,
+      toolRefs: [...normalizedGrant.spendingPolicy.toolRefs],
+      environment: normalizedGrant.spendingPolicy.environment,
+      budget: { ...normalizedGrant.spendingPolicy.budget },
+      rate: { ...normalizedGrant.spendingPolicy.rate },
     },
     credentialRef: credential.credentialRef,
-    grantRef: grant.grantRef,
-    generation: grant.generation,
-    expiresAt: credential.expiresAt,
+    grantRef: normalizedGrant.grantRef,
+    generation: normalizedGrant.generation,
+    expiresAt: normalizedGrant.expiresAt,
   }
 }
 
@@ -1148,9 +1161,9 @@ async function projectOwnerConnection(
     environment: family.environment,
     state,
     authorityMode: family.authorityMode,
-    operationAccess: family.operationAccess,
-    operationRefs: family.operationRefs,
-    policy: family.policy,
+    toolAccess: family.toolAccess,
+    toolRefs: family.toolRefs,
+    spendingPolicy: family.spendingPolicy,
     commercialScopes: family.scopes.filter((scope) => scope !== 'offline_access'),
     connectedAt: family.createdAt,
     lastRotatedAt: family.updatedAt,
@@ -1205,8 +1218,8 @@ type ConsentReservationArgs = Readonly<{
   expectedGrantRevision: number
   expectedTargetRevision: number
   authorityMode: AgentAccessAuthorityMode
-  approvedOperationAccess: 'all_admitted' | 'selected_operations'
-  approvedOperationRefs: readonly string[]
+  approvedToolAccess: 'all_admitted' | 'selected_tools'
+  approvedToolRefs: readonly string[]
   connectionTarget:
     | Readonly<{ kind: 'new_agent' }>
     | Readonly<{
@@ -1249,7 +1262,7 @@ type AgentAccessPredecessorSnapshot = Readonly<{
   environment: Doc<'agentAccessPrincipals'>['environment']
   grantRef: string
   grantGeneration: number
-  policyDigest: string
+  spendingPolicyDigest: string
   bindingRef: string
   bindingRevision: number
   bindingCredentialGeneration: number
@@ -1268,27 +1281,27 @@ async function deriveConsentCommand(
   if (requested === undefined
     || !AGENT_ACCESS_AUTHORITY_MODE_VALUES.includes(args.authorityMode)
     || !agentAuthorityModeAllows(requested.mode, args.authorityMode)
-    || (requested.profile === 'supplier' && args.authorityMode !== 'bounded_mandate')) return null
-  const selectedScopes = requested.profile === 'supplier'
+    || (requested.profile === 'provider' && args.authorityMode !== 'spending_policy')) return null
+  const selectedScopes = requested.profile === 'provider'
     ? requested.scopes
     : requestedScopesForMode(args.authorityMode)
-  const approvedSelection = normalizeAgentAccessOperationSelection({
-    operationAccess: args.approvedOperationAccess,
-    operationRefs: args.approvedOperationRefs,
+  const approvedSelection = normalizeAgentAccessToolSelection({
+    toolAccess: args.approvedToolAccess,
+    toolRefs: args.approvedToolRefs,
   })
   if (approvedSelection === undefined
-    || (requested.profile === 'supplier' && approvedSelection.operationAccess !== 'all_admitted')) return null
+    || (requested.profile === 'provider' && approvedSelection.toolAccess !== 'all_admitted')) return null
   let approvedAccess: Doc<'agentAccessOAuthGrants'>['approvedAccess']
   if (oauthGrant.status === 'pending') {
-    if (!operationSelectionNarrows(oauthGrant.requestedAccess, approvedSelection)) return null
-    if (!await allSelectedOperationsAreCurrent(ctx, approvedSelection.operationRefs)) return null
+    if (!toolSelectionNarrows(oauthGrant.requestedAccess, approvedSelection)) return null
+    if (!await allSelectedToolsAreCurrent(ctx, approvedSelection.toolRefs)) return null
     approvedAccess = {
       ...oauthGrant.requestedAccess,
-      operationAccess: approvedSelection.operationAccess,
-      operationRefs: approvedSelection.operationRefs,
+      toolAccess: approvedSelection.toolAccess,
+      toolRefs: approvedSelection.toolRefs,
     }
   } else {
-    if (!sameOperationSelection(oauthGrant.approvedAccess, approvedSelection)) return null
+    if (!sameToolSelection(oauthGrant.approvedAccess, approvedSelection)) return null
     approvedAccess = oauthGrant.approvedAccess
   }
   const issuanceMaterial = {
@@ -1423,36 +1436,36 @@ async function deriveConsentCommand(
   }
 }
 
-function operationSelectionNarrows(
-  requested: Pick<Doc<'agentAccessOAuthGrants'>['requestedAccess'], 'operationAccess' | 'operationRefs'>,
-  approved: Readonly<{ operationAccess: 'all_admitted' | 'selected_operations'; operationRefs: readonly string[] }>,
+function toolSelectionNarrows(
+  requested: Pick<Doc<'agentAccessOAuthGrants'>['requestedAccess'], 'toolAccess' | 'toolRefs'>,
+  approved: Readonly<{ toolAccess: 'all_admitted' | 'selected_tools'; toolRefs: readonly string[] }>,
 ): boolean {
-  if (requested.operationAccess === 'all_admitted') return true
-  const requestedRefs = new Set(requested.operationRefs)
-  return approved.operationAccess === 'selected_operations'
-    && approved.operationRefs.every((operationRef) => requestedRefs.has(operationRef))
+  if (requested.toolAccess === 'all_admitted') return true
+  const requestedRefs = new Set(requested.toolRefs)
+  return approved.toolAccess === 'selected_tools'
+    && approved.toolRefs.every((toolRef) => requestedRefs.has(toolRef))
 }
 
-async function allSelectedOperationsAreCurrent(
+async function allSelectedToolsAreCurrent(
   ctx: Pick<MutationCtx, 'db'>,
-  operationRefs: readonly string[],
+  toolRefs: readonly string[],
 ): Promise<boolean> {
-  const rows = await Promise.all(operationRefs.map(async (operationRef) => await ctx.db
+  const rows = await Promise.all(toolRefs.map(async (toolRef) => await ctx.db
     .query('capabilityPublications')
-    .withIndex('by_operationRef_and_disposition', (query) => (
-      query.eq('operationRef', operationRef).eq('disposition', 'current')
+    .withIndex('by_toolRef_and_disposition', (query) => (
+      query.eq('toolRef', toolRef).eq('disposition', 'current')
     ))
     .unique()))
   return rows.every((row) => row !== null)
 }
 
-function sameOperationSelection(
-  left: Pick<Doc<'agentAccessOAuthGrants'>['approvedAccess'], 'operationAccess' | 'operationRefs'>,
-  right: Readonly<{ operationAccess: 'all_admitted' | 'selected_operations'; operationRefs: readonly string[] }>,
+function sameToolSelection(
+  left: Pick<Doc<'agentAccessOAuthGrants'>['approvedAccess'], 'toolAccess' | 'toolRefs'>,
+  right: Readonly<{ toolAccess: 'all_admitted' | 'selected_tools'; toolRefs: readonly string[] }>,
 ): boolean {
-  return left.operationAccess === right.operationAccess
-    && left.operationRefs.length === right.operationRefs.length
-    && left.operationRefs.every((operationRef, index) => operationRef === right.operationRefs[index])
+  return left.toolAccess === right.toolAccess
+    && left.toolRefs.length === right.toolRefs.length
+    && left.toolRefs.every((toolRef, index) => toolRef === right.toolRefs[index])
 }
 
 async function resolveReplacementPredecessor(
@@ -1491,11 +1504,23 @@ async function resolveReplacementPredecessor(
       .eq('environment', current.environment)
       .eq('generation', current.grantGeneration))
     .take(2)
-  const currentGrants = grants.filter((candidate) => candidate.principalId === canonicalPrincipalRef
-    && candidate.ownerId === activeAccountRef
-    && candidate.applicationRef === current.applicationRef
-    && candidate.lifecycle === 'active'
-    && candidate.policyDigest === current.policyDigest)
+  const currentGrants = grants.flatMap((candidate) => {
+    let normalizedCandidate: ReturnType<typeof normalizeStoredAgentAccessGrant>
+    try {
+      normalizedCandidate = normalizeStoredAgentAccessGrant(candidate)
+    } catch {
+      return []
+    }
+    return candidate.principalId === canonicalPrincipalRef
+      && candidate.ownerId === activeAccountRef
+      && candidate.applicationRef === current.applicationRef
+      && candidate.environment === current.environment
+      && normalizedCandidate.lifecycle === 'active'
+      && normalizedCandidate.generation === current.grantGeneration
+      && normalizedCandidate.spendingPolicyDigest === current.spendingPolicyDigest
+      ? [{ candidate, normalized: normalizedCandidate }]
+      : []
+  })
   if (currentGrants.length !== 1) return null
   const currentGrant = currentGrants[0]
   if (currentGrant === undefined) return null
@@ -1503,9 +1528,9 @@ async function resolveReplacementPredecessor(
     credentialId: current.credentialId,
     applicationRef: current.applicationRef,
     environment: current.environment,
-    grantRef: currentGrant.grantRef,
-    grantGeneration: currentGrant.generation,
-    policyDigest: currentGrant.policyDigest,
+    grantRef: currentGrant.candidate.grantRef,
+    grantGeneration: currentGrant.normalized.generation,
+    spendingPolicyDigest: currentGrant.normalized.spendingPolicyDigest,
     bindingRef: binding.bindingRef,
     bindingRevision: binding.revision,
     bindingCredentialGeneration: binding.credentialGeneration,
@@ -1533,7 +1558,16 @@ async function revokeCompromisedPredecessor(
       .withIndex('by_grantRef', (query) => query.eq('grantRef', snapshot.grantRef))
       .unique(),
   ])
+  let normalizedGrant: ReturnType<typeof normalizeStoredAgentAccessGrant> | undefined
+  if (grant !== null) {
+    try {
+      normalizedGrant = normalizeStoredAgentAccessGrant(grant)
+    } catch {
+      normalizedGrant = undefined
+    }
+  }
   if (credential === null || binding === null || grant === null
+    || normalizedGrant === undefined
     || credential.lifecycle !== 'active'
     || credential.revision !== snapshot.credentialRevision
     || credential.generation !== snapshot.credentialGeneration
@@ -1541,9 +1575,9 @@ async function revokeCompromisedPredecessor(
     || binding.revision !== snapshot.bindingRevision
     || binding.credentialGeneration !== snapshot.bindingCredentialGeneration
     || binding.providerIdentifier !== snapshot.credentialId
-    || grant.lifecycle !== 'active'
-    || grant.generation !== snapshot.grantGeneration
-    || grant.policyDigest !== snapshot.policyDigest
+    || normalizedGrant.lifecycle !== 'active'
+    || normalizedGrant.generation !== snapshot.grantGeneration
+    || normalizedGrant.spendingPolicyDigest !== snapshot.spendingPolicyDigest
     || credential.principalRef !== grant.principalId
     || binding.principalRef !== grant.principalId) return false
   await revokeReplacementMaterial(
@@ -1555,6 +1589,12 @@ async function revokeCompromisedPredecessor(
     now,
     'suspected_compromise',
     correlationRef,
+  )
+  await invalidateOAuthRefreshFamilies(
+    ctx,
+    { credentialRef: credential.credentialRef },
+    'suspected_compromise',
+    now,
   )
   return true
 }
@@ -1672,7 +1712,7 @@ function samePredecessorSnapshot(
     && left.environment === right.environment
     && left.grantRef === right.grantRef
     && left.grantGeneration === right.grantGeneration
-    && left.policyDigest === right.policyDigest
+    && left.spendingPolicyDigest === right.spendingPolicyDigest
     && left.bindingRef === right.bindingRef
     && left.bindingRevision === right.bindingRevision
     && left.bindingCredentialGeneration === right.bindingCredentialGeneration
@@ -1853,20 +1893,20 @@ function sameRequestedAccess(
   right: OAuthRequestedAccessMaterial,
 ): boolean {
   const sameAmount = (
-    leftAmount: OAuthRequestedAccessMaterial['maximumSpendPerInvocation'],
-    rightAmount: OAuthRequestedAccessMaterial['maximumSpendPerInvocation'],
+    leftAmount: OAuthRequestedAccessMaterial['maximumSpendPerCall'],
+    rightAmount: OAuthRequestedAccessMaterial['maximumSpendPerCall'],
   ): boolean => leftAmount === undefined || rightAmount === undefined
     ? leftAmount === rightAmount
     : leftAmount.currency === rightAmount.currency
       && leftAmount.units === rightAmount.units
       && leftAmount.exponent === rightAmount.exponent
   return left.environment === right.environment
-    && left.operationAccess === right.operationAccess
-    && sameStringArray(left.operationRefs, right.operationRefs)
-    && sameAmount(left.maximumSpendPerInvocation, right.maximumSpendPerInvocation)
+    && left.toolAccess === right.toolAccess
+    && sameStringArray(left.toolRefs, right.toolRefs)
+    && sameAmount(left.maximumSpendPerCall, right.maximumSpendPerCall)
     && sameAmount(left.maximumDailySpend, right.maximumDailySpend)
     && sameAmount(left.maximumMonthlySpend, right.maximumMonthlySpend)
-    && left.maximumConcurrentInvocations === right.maximumConcurrentInvocations
+    && left.maximumConcurrentCalls === right.maximumConcurrentCalls
     && left.maximumCallsPerMinute === right.maximumCallsPerMinute
     && left.maximumCallsPerHour === right.maximumCallsPerHour
     && left.expiresInSeconds === right.expiresInSeconds

@@ -8,7 +8,7 @@ import {
   supplyConnectionRevokeAction,
   supplyEarningsAction,
   supplyOffboardingStatusAction,
-  supplyOperationsListAction,
+  supplyToolsListAction,
   supplyPublishAction,
   supplyRecheckAction,
   supplyRepublishAction,
@@ -36,7 +36,7 @@ import { requireAgentAccessKey } from './status'
 
 export const SUPPLY_COMMAND_DESCRIPTORS = Object.freeze([
   { actionId: supplySourcePreviewAction.id, command: 'supply', subcommand: 'preview', route: SUPPLY_ACTION_ROUTE_CONTRACTS.sourcePreview, action: supplySourcePreviewAction },
-  { actionId: supplyOperationsListAction.id, command: 'supply', subcommand: 'operations', route: SUPPLY_ACTION_ROUTE_CONTRACTS.operationsList, action: supplyOperationsListAction },
+  { actionId: supplyToolsListAction.id, command: 'supply', subcommand: 'operations', route: SUPPLY_ACTION_ROUTE_CONTRACTS.toolsList, action: supplyToolsListAction },
   { actionId: supplyStatusAction.id, command: 'supply', subcommand: 'status', route: SUPPLY_ACTION_ROUTE_CONTRACTS.status, action: supplyStatusAction },
   { actionId: supplyPublishAction.id, command: 'supply', subcommand: 'publish', route: SUPPLY_ACTION_ROUTE_CONTRACTS.publish, action: supplyPublishAction },
   { actionId: supplyWithdrawAction.id, command: 'supply', subcommand: 'withdraw', route: SUPPLY_ACTION_ROUTE_CONTRACTS.withdraw, action: supplyWithdrawAction },
@@ -59,7 +59,7 @@ function descriptorFor(subcommand: string): SupplyDescriptor | undefined {
 
 function parseInputJson(options: CliOptions): Record<string, unknown> {
   if (options.input === undefined) {
-    throw new CliFailure('This supplier command requires --input with one JSON object.', {
+    throw new CliFailure('This provider command requires --input with one JSON object.', {
       kind: 'INVALID_ARGUMENT',
       code: 'supply-input-required',
     })
@@ -69,7 +69,7 @@ function parseInputJson(options: CliOptions): Record<string, unknown> {
     if (!isRecord(parsed)) throw new TypeError('not_object')
     return parsed
   } catch {
-    throw new CliFailure('Supplier --input must be one valid JSON object.', {
+    throw new CliFailure('Provider --input must be one valid JSON object.', {
       kind: 'INVALID_ARGUMENT',
       code: 'supply-input-invalid',
     })
@@ -98,11 +98,11 @@ function inputFor(subcommand: string, args: readonly string[], options: CliOptio
   }
   if (subcommand === 'status') {
     const businessRef = args[1]
-    const operationRef = args[2]
-    if (businessRef === undefined || operationRef === undefined || args.length > 3) {
+    const toolRef = args[2]
+    if (businessRef === undefined || toolRef === undefined || args.length > 3) {
       throw usageFailure('supply status', 'supply-status-usage')
     }
-    return { businessRef, operationRef }
+    return { businessRef, toolRef }
   }
   if (subcommand === 'offboarding') {
     const businessRef = args[1]
@@ -147,26 +147,26 @@ function printSupplyResult(subcommand: string, result: unknown, options: CliOpti
     printJson(result)
     return
   }
-  heading(`Supplier ${subcommand}`)
-  const operations = result.kind === 'available' && Array.isArray(result.page)
+  heading(`Provider ${subcommand}`)
+  const tools = result.kind === 'available' && Array.isArray(result.page)
     ? result.page
-    : result.kind === 'available' && isRecord(result.status) && result.status.schemaVersion === 'supplier_operations:v1'
+    : result.kind === 'available' && isRecord(result.status) && result.status.schemaVersion === 'provider_tools:v1'
       ? [result.status]
       : undefined
-  if (operations !== undefined) {
-    line(`${operations.length} Operation${operations.length === 1 ? '' : 's'}`)
-    for (const operation of operations) {
-      if (!isRecord(operation)) continue
-      const source = isRecord(operation.source) ? operation.source : undefined
-      const routeability = isRecord(operation.routeability) ? operation.routeability : undefined
-      const health = isRecord(operation.health) ? operation.health : undefined
+  if (tools !== undefined) {
+    line(`${tools.length} Tool${tools.length === 1 ? '' : 's'}`)
+    for (const tool of tools) {
+      if (!isRecord(tool)) continue
+      const source = isRecord(tool.source) ? tool.source : undefined
+      const routeability = isRecord(tool.routeability) ? tool.routeability : undefined
+      const health = isRecord(tool.health) ? tool.health : undefined
       const delivery = isRecord(health?.delivery) ? health.delivery : undefined
       const usefulOutcome = isRecord(health?.usefulOutcome) ? health.usefulOutcome : undefined
-      const continuation = isRecord(operation.continuation) ? operation.continuation : undefined
-      const ownerHandoff = isRecord(operation.ownerHandoff) ? operation.ownerHandoff : undefined
+      const continuation = isRecord(tool.continuation) ? tool.continuation : undefined
+      const ownerHandoff = isRecord(tool.ownerHandoff) ? tool.ownerHandoff : undefined
       table([
-        ['operation', String(operation.operationRef ?? '')],
-        ['state', String(operation.state ?? '')],
+        ['tool', String(tool.toolRef ?? '')],
+        ['state', String(tool.state ?? '')],
         ['source', String(source?.kind ?? '')],
         ['routeable', routeability?.available === true ? 'yes' : 'no'],
         ['connection', String(health?.connection ?? '')],
@@ -187,7 +187,7 @@ function printSupplyResult(subcommand: string, result: unknown, options: CliOpti
   if (result.kind === 'available' && Array.isArray(result.connections)) {
     line(`${result.connections.length} provider connection${result.connections.length === 1 ? '' : 's'}`)
     if (result.connections.length === 0) {
-      const continuation = connectionContinuationForCli('supplier')
+      const continuation = connectionContinuationForCli('provider')
       table([['next', continuation.command ?? continuation.href ?? continuation.label]])
       return
     }
@@ -231,7 +231,7 @@ function printSupplyResult(subcommand: string, result: unknown, options: CliOpti
   printJson(result)
 }
 
-/** First-class supplier Operation lifecycle over the canonical HTTP actions. */
+/** First-class Provider Tool lifecycle over the canonical HTTP actions. */
 export async function runSupplyCommand(args: readonly string[], options: CliOptions): Promise<void> {
   const subcommand = args[0] ?? 'status'
   const descriptor = descriptorFor(subcommand)
@@ -254,7 +254,7 @@ export async function runSupplyCommand(args: readonly string[], options: CliOpti
   })
   const result = descriptor.action.outputSchema.safeParse(requireOk(outcome, `supply ${subcommand}`))
   if (!result.success) {
-    throw new CliFailure('The server returned an invalid supplier action projection.', {
+    throw new CliFailure('The server returned an invalid provider action projection.', {
       kind: 'UNAVAILABLE',
       code: 'supply-result-invalid',
     })

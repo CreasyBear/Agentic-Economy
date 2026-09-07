@@ -61,8 +61,8 @@ describe('site brief markdown', () => {
     expect(body).toContain('ae connect --base-url "https://ae.example"')
     expect(body).not.toContain('ae connect --base-url "https://ae.example" --mcp')
     expect(body.indexOf('ae search "<job>"')).toBeLessThan(body.indexOf('ae connect'))
-    expect(body).toContain('Call `operation.inspect` with the exact input')
-    expect(body).toContain('Invoke only with the returned Commitment')
+    expect(body).toContain('Request the caller-specific `tool.quote` with the exact input after connecting.')
+    expect(body).toContain('Call only with the returned Quote through')
     expect(body).toContain('official MCP client')
     expect(body).toContain('native account connection before protected work')
   })
@@ -89,8 +89,8 @@ describe('site brief markdown', () => {
     expect(guide).not.toContain('ae connect --base-url "https://ae.example" --mcp')
     expect(guide).toContain('POST body example')
     expect(guide).toContain('application/problem+json')
-    expect(guide).toContain('ae describe "$AE_OPERATION_REF" --base-url "https://ae.example" --json')
-    expect(guide).toContain('ae call "$AE_OPERATION_REF" --input "$AE_INPUT_JSON"')
+    expect(guide).toContain('ae describe "$AE_TOOL_REF" --base-url "https://ae.example" --json')
+    expect(guide).toContain('ae call "$AE_TOOL_REF" --input "$AE_INPUT_JSON"')
     expect(guide).not.toContain('advanced')
     expect(guide).toContain(`protocol \`${LATEST_PROTOCOL_VERSION}\``)
     expect(guide).toContain('Client connect performs initialization')
@@ -104,7 +104,7 @@ describe('site brief markdown', () => {
     expect(about).toContain('https://ae.example/for-agents')
     expect(about).toContain('https://ae.example/for-providers')
     expect(about).toContain('https://ae.example/market')
-    expect(about).toContain('publishes a job')
+    expect(about).toContain('Providers publish the job')
     expect(about).not.toMatch(/\/api\/answer|\/api\/chat\/anonymous/u)
   })
 
@@ -178,23 +178,23 @@ describe('refusal documents', () => {
     expect(body).toContain('Do not invent provider details.')
   })
 
-  it('points an unprojectable page only at canonical Operation surfaces', () => {
+  it('points an unprojectable page only at canonical Tool surfaces', () => {
     const body = buildUnknownPageMarkdown('/careers', options)
     expect(body).toContain('`/careers` is served as HTML only')
     expect(body).toContain('https://ae.example/llms.txt')
     expect(body).toContain('https://ae.example/market')
-    expect(body).toContain('https://ae.example/api/v1/market-operations/search')
-    expect(body).toContain('https://ae.example/api/v1/market-operations/describe')
+    expect(body).toContain('https://ae.example/api/v1/market-tools/search')
+    expect(body).toContain('https://ae.example/api/v1/market-tools/describe')
     expect(body).toContain('https://ae.example/mcp')
     expect(body).toContain('ae search')
     expect(body).not.toMatch(/\/api\/answer|\/api\/chat\/anonymous|X-AE-Turn-Key/u)
   })
 
-  it('keeps catalogue and business projections on Operation surfaces', () => {
+  it('keeps catalogue and business projections on Tool surfaces', () => {
     const bodies = [buildCatalogMarkdown([business()], options), buildBusinessMarkdown(business(), options)]
     for (const body of bodies) {
       expect(body).toContain('https://ae.example/market')
-      expect(body).toContain('https://ae.example/api/v1/market-operations/search')
+      expect(body).toContain('https://ae.example/api/v1/market-tools/search')
       expect(body).toContain('https://ae.example/mcp')
       expect(body).toContain('ae search')
       expect(body).not.toMatch(/\/api\/answer|\/api\/chat\/anonymous|X-AE-Turn-Key/u)

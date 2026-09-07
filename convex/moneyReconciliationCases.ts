@@ -15,7 +15,7 @@ const scopeType = v.union(
   v.literal('account'),
   v.literal('legal_customer'),
   v.literal('treasury_pool'),
-  v.literal('operation'),
+  v.literal('tool'),
   v.literal('provider_obligation'),
   v.literal('document'),
 )

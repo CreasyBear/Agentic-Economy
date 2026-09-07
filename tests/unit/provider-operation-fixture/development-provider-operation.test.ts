@@ -1,18 +1,18 @@
 import { beforeAll, describe, expect, it } from 'vitest'
 
 import { findAction } from '@/modules/actions'
-import { executeDevelopmentProviderOperationAction } from '../../../tools/dev/fixtures/provider-operation/development-provider-operation.actions'
-import { runDevelopmentProviderOperationEvidence } from '../../../tools/dev/fixtures/provider-operation/development-provider-operation-evidence'
+import { executeDevelopmentProviderToolAction } from '../../../tools/dev/fixtures/provider-tool/development-provider-tool.actions'
+import { runDevelopmentProviderToolEvidence } from '../../../tools/dev/fixtures/provider-tool/development-provider-tool-evidence'
 
 describe('provider_operation.executeDevelopmentCancellable', () => {
-  let packet: Awaited<ReturnType<typeof runDevelopmentProviderOperationEvidence>>
+  let packet: Awaited<ReturnType<typeof runDevelopmentProviderToolEvidence>>
   beforeAll(async () => {
-    packet = await runDevelopmentProviderOperationEvidence()
+    packet = await runDevelopmentProviderToolEvidence()
   })
 
   it('keeps the consequential development fixture outside the global registry and every reachable surface', () => {
     expect(findAction('provider_operation.executeDevelopmentCancellable')).toBeUndefined()
-    expect(executeDevelopmentProviderOperationAction).toMatchObject({
+    expect(executeDevelopmentProviderToolAction).toMatchObject({
       readOnly: false,
       surfaces: [],
       invocationContract: {

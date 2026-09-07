@@ -30,7 +30,7 @@ describe('agent door page', () => {
     expect(screen.getByText(AGENT_PAGE.harnesses)).toBeTruthy()
     expect(screen.getByText(AGENT_PAGE.subhead)).toBeTruthy()
     expect(screen.getByRole('heading', { name: 'Connect with Codex' })).toBeTruthy()
-    expect(screen.getByRole('link', { name: 'Browse Operations' })).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Browse Tools' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Copy Codex MCP command' })).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Copy Claude Code MCP command' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Copy Cursor MCP command' })).toBeNull()

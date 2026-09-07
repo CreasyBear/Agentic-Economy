@@ -18,7 +18,7 @@ function service(overrides: Partial<SupplyManagementService> = {}): SupplyManage
       ctaLabel: 'Check source', description: 'Check source.', iconUrl: null,
       status: 'required', title: 'Source unavailable',
     } }),
-    operationsList: vi.fn().mockResolvedValue({ kind: 'not_found' }),
+    toolsList: vi.fn().mockResolvedValue({ kind: 'not_found' }),
     status: vi.fn().mockResolvedValue({ kind: 'not_found' }),
     publish: vi.fn().mockResolvedValue({ kind: 'refused', reason: 'unused' }),
     withdraw: vi.fn().mockResolvedValue({ kind: 'refused', reason: 'unused' }),
@@ -42,10 +42,10 @@ const resolvePrincipal = async () => ({
   applicationRef: 'agentic-economy',
   environment: 'sandbox' as const,
   scopes: ['market_supply:manage'],
-  authorityMode: 'bounded_mandate' as const,
+  authorityMode: 'spending_policy' as const,
 })
 
-describe('supplier action HTTP adapter', () => {
+describe('Provider action HTTP adapter', () => {
   it('dispatches native source preview through the same authenticated read boundary', async () => {
     const sourcePreview = vi.fn().mockResolvedValue({
       kind: 'ready',
@@ -62,7 +62,7 @@ describe('supplier action HTTP adapter', () => {
     const response = await handleSupplyActionPost(
       new Request('https://ae.example/api/v1/supply/sources/preview', {
         method: 'POST',
-        headers: { Authorization: 'Bearer hidden-supplier-secret' },
+        headers: { Authorization: 'Bearer hidden-provider-secret' },
         body: JSON.stringify({
           kind: 'openapi',
           definitionUrl: 'https://provider.example/openapi.yaml',
@@ -87,8 +87,8 @@ describe('supplier action HTTP adapter', () => {
     const response = await handleSupplyActionPost(
       new Request('https://ae.example/api/v1/supply/status', {
         method: 'POST',
-        headers: { Authorization: 'Bearer hidden-supplier-secret' },
-        body: JSON.stringify({ businessRef: 'business:one', operationRef: 'operation:one' }),
+        headers: { Authorization: 'Bearer hidden-provider-secret' },
+        body: JSON.stringify({ businessRef: 'business:one', toolRef: 'operation:one' }),
       }),
       'status',
       { authenticate, resolvePrincipal, supplyManagementService: service({ status }) },
@@ -99,31 +99,31 @@ describe('supplier action HTTP adapter', () => {
     expect(response.headers.get('x-ae-request-id')).toBeTruthy()
     await expect(response.json()).resolves.toEqual({ kind: 'not_found' })
     expect(status).toHaveBeenCalledWith(expect.objectContaining({
-      input: { businessRef: 'business:one', operationRef: 'operation:one' },
+      input: { businessRef: 'business:one', toolRef: 'operation:one' },
       principal: expect.objectContaining({ scopes: ['market_supply:manage'] }),
     }))
   })
 
-  it('dispatches the bounded Provider Operation directory independently of exact status', async () => {
-    const operationsList = vi.fn().mockResolvedValue({ kind: 'not_found' })
+  it('dispatches the bounded Provider Tool directory independently of exact status', async () => {
+    const toolsList = vi.fn().mockResolvedValue({ kind: 'not_found' })
     const response = await handleSupplyActionPost(
-      new Request('https://ae.example/api/v1/supply/operations/list', {
+      new Request('https://ae.example/api/v1/supply/tools/list', {
         method: 'POST',
-        headers: { Authorization: 'Bearer hidden-supplier-secret' },
+        headers: { Authorization: 'Bearer hidden-provider-secret' },
         body: JSON.stringify({ businessRef: 'business:one', limit: 50 }),
       }),
-      'operationsList',
-      { authenticate, resolvePrincipal, supplyManagementService: service({ operationsList }) },
+      'toolsList',
+      { authenticate, resolvePrincipal, supplyManagementService: service({ toolsList }) },
     )
 
     expect(response.status).toBe(200)
     await expect(response.json()).resolves.toEqual({ kind: 'not_found' })
-    expect(operationsList).toHaveBeenCalledWith(expect.objectContaining({
+    expect(toolsList).toHaveBeenCalledWith(expect.objectContaining({
       input: { businessRef: 'business:one', limit: 50 },
     }))
   })
 
-  it('refuses buyer-only credentials without invoking supplier lifecycle', async () => {
+  it('refuses buyer-only credentials without invoking Provider lifecycle', async () => {
     const status = vi.fn()
     const response = await handleSupplyActionPost(
       new Request('https://ae.example/api/v1/supply/status', {
@@ -132,7 +132,7 @@ describe('supplier action HTTP adapter', () => {
         body: JSON.stringify({ businessRef: 'business:one' }),
       }),
       'status',
-      { authenticate: async () => await authenticate(['market_operations:invoke']), supplyManagementService: service({ status }) },
+      { authenticate: async () => await authenticate(['market_tools:call']), supplyManagementService: service({ status }) },
     )
 
     expect(response.status).toBe(403)
@@ -158,12 +158,12 @@ describe('supplier action HTTP adapter', () => {
     expect(status).not.toHaveBeenCalled()
   })
 
-  it('dispatches provider connection detail through the same supplier authentication boundary', async () => {
+  it('dispatches Provider connection detail through the same authentication boundary', async () => {
     const connectionDetail = vi.fn().mockResolvedValue({ kind: 'not_found' })
     const response = await handleSupplyActionPost(
       new Request('https://ae.example/api/v1/supply/connections/detail', {
         method: 'POST',
-        headers: { Authorization: 'Bearer hidden-supplier-secret' },
+        headers: { Authorization: 'Bearer hidden-provider-secret' },
         body: JSON.stringify({ connectionRef: 'connection:x402:one' }),
       }),
       'connectionDetail',
@@ -184,7 +184,7 @@ describe('supplier action HTTP adapter', () => {
     const writeResponse = await handleSupplyActionPost(
       new Request('https://ae.example/api/v1/supply/withdraw', {
         method: 'POST',
-        headers: { Authorization: 'Bearer hidden-supplier-secret' },
+        headers: { Authorization: 'Bearer hidden-provider-secret' },
         body: JSON.stringify({
           businessId: 'business:one', offeringRef: 'offering:one', offeringRevision: 1,
           offeringSourceHash: 'source:one', publicationRef: 'publication:one', publicationRevision: 1,
@@ -210,7 +210,7 @@ describe('supplier action HTTP adapter', () => {
     const previewResponse = await handleSupplyActionPost(
       new Request('https://ae.example/api/v1/supply/sources/preview', {
         method: 'POST',
-        headers: { Authorization: 'Bearer hidden-supplier-secret' },
+        headers: { Authorization: 'Bearer hidden-provider-secret' },
         body: JSON.stringify({ kind: 'openapi', definitionUrl: 'https://provider.example/openapi.yaml', environment: 'production' }),
       }),
       'sourcePreview',
@@ -246,7 +246,7 @@ describe('supplier action HTTP adapter', () => {
     const response = await handleSupplyActionPost(
       new Request('https://ae.example/api/v1/supply/connections/connect', {
         method: 'POST',
-        headers: { Authorization: 'Bearer hidden-supplier-secret' },
+        headers: { Authorization: 'Bearer hidden-provider-secret' },
         body: JSON.stringify(body),
       }),
       'connectionConnect',

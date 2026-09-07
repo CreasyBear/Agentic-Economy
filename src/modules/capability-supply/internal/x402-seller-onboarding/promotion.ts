@@ -18,7 +18,7 @@ export type X402SellerPromotionAnchor = Readonly<{
   publicationRef: string
   publicationRevision: number
   draftOperationRef: string
-  operationMaterialDigest: string
+  toolMaterialDigest: string
   contractDigest: string
   bindingDigest: string
   priceDigest: string
@@ -154,7 +154,7 @@ function validAnchor(anchor: X402SellerPromotionAnchor): boolean {
     && [
       anchor.offeringSourceHash,
       anchor.accessPathSourceHash,
-      anchor.operationMaterialDigest,
+      anchor.toolMaterialDigest,
       anchor.contractDigest,
       anchor.bindingDigest,
       anchor.priceDigest,
@@ -170,10 +170,10 @@ function validAnchor(anchor: X402SellerPromotionAnchor): boolean {
 function promotionMaterialAnchor(anchor: X402SellerPromotionAnchor) {
   const {
     // Readiness is deliberately refreshed before promotion. In the current
-    // projection it also changes operationMaterialDigest through the evidence
+    // projection it also changes toolMaterialDigest through the evidence
     // source, so neither field may manufacture a second paid-canary identity
     // or invalidate already-settled evidence.
-    operationMaterialDigest: _operationMaterialDigest,
+    toolMaterialDigest: _toolMaterialDigest,
     readinessDigest: _readinessDigest,
     readinessObservedAt: _readinessObservedAt,
     readinessValidUntil: _readinessValidUntil,
@@ -201,7 +201,7 @@ function anchorMatchesCommitment(
     && anchor.publicationRef === commitment.publicationRef
     && anchor.publicationRevision === commitment.publicationRevision
     && anchor.draftOperationRef === commitment.draftOperationRef
-    && anchor.operationMaterialDigest === commitment.operationMaterialDigest
+    && anchor.toolMaterialDigest === commitment.toolMaterialDigest
     && anchor.contractDigest === commitment.contractDigest
     && anchor.bindingDigest === commitment.bindingDigest
     && anchor.priceDigest === commitment.priceDigest
@@ -247,13 +247,13 @@ export function evaluateX402SellerPromotion(
   const canary = projectSellerOnboardingCanaryStatus({
     commitment,
     observation,
-    currentOperation: {
+    currentTool: {
       // The paid observation is evaluated against its sealed execution
       // snapshot. Fresh current readiness was already checked above against
       // every durable material anchor and is allowed to carry a new evidence-
-      // derived operationMaterialDigest.
+      // derived toolMaterialDigest.
       draftOperationRef: sealed.draftOperationRef,
-      operationMaterialDigest: sealed.operationMaterialDigest,
+      toolMaterialDigest: sealed.toolMaterialDigest,
       contractDigest: sealed.contractDigest,
       bindingDigest: sealed.bindingDigest,
       priceDigest: sealed.priceDigest,

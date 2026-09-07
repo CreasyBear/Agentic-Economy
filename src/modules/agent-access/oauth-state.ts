@@ -4,14 +4,14 @@ import { sanitizeTelemetryError } from '@/lib/observability/private-route-safety
 import { base64Codec } from '@/modules/common/base64-codec'
 import type { ExactAmount } from '@/modules/money/public'
 import {
-  normalizeAgentAccessOperationSelection,
-  type AgentAccessOperationAccess,
+  normalizeAgentAccessToolSelection,
+  type AgentAccessToolAccess,
 } from './policy'
 
 import {
-  CUSTOMER_REQUEST_APPROVE_EACH_SCOPE,
+  CUSTOMER_REQUEST_APPROVAL_REQUIRED_SCOPE,
   CUSTOMER_REQUEST_AGENT_SCOPE,
-  MARKET_OPERATIONS_INVOKE_SCOPE,
+  MARKET_TOOLS_CALL_SCOPE,
   MARKET_SUPPLY_MANAGE_SCOPE,
   agentAuthorityModeForScopes,
   agentAuthorityScopeForMode,
@@ -28,8 +28,8 @@ export const AGENT_ACCESS_POLL_INTERVAL_SECONDS = 5
 export const AGENT_ACCESS_ISSUANCE_LEASE_SECONDS = 30
 export const AGENT_ACCESS_OAUTH_OFFLINE_SCOPE = 'offline_access' as const
 export const AGENT_ACCESS_OAUTH_SAFE_MCP_SCOPES = Object.freeze([
-  MARKET_OPERATIONS_INVOKE_SCOPE,
-  CUSTOMER_REQUEST_APPROVE_EACH_SCOPE,
+  MARKET_TOOLS_CALL_SCOPE,
+  CUSTOMER_REQUEST_APPROVAL_REQUIRED_SCOPE,
   AGENT_ACCESS_OAUTH_OFFLINE_SCOPE,
 ] as const)
 export const AGENT_ACCESS_OAUTH_REFRESH_FAMILY_TTL_SECONDS = 30 * 24 * 60 * 60
@@ -100,12 +100,12 @@ export type AgentCredentialReplacement = Readonly<{
 }>
 export type AgentAccessOAuthRequestedAccess = Readonly<{
   environment: AgentAccessEnvironment
-  operationAccess: AgentAccessOperationAccess
-  operationRefs: readonly string[]
-  maximumSpendPerInvocation?: ExactAmount
+  toolAccess: AgentAccessToolAccess
+  toolRefs: readonly string[]
+  maximumSpendPerCall?: ExactAmount
   maximumDailySpend?: ExactAmount
   maximumMonthlySpend?: ExactAmount
-  maximumConcurrentInvocations?: number
+  maximumConcurrentCalls?: number
   maximumCallsPerMinute?: number
   maximumCallsPerHour?: number
   expiresInSeconds: number
@@ -243,13 +243,13 @@ export type AgentAccessOAuthCreatedAuthorizationGrant = Readonly<{
 }>
 
 export function requestedScopesForMode(mode: AgentAccessAuthorityMode): readonly string[] {
-  return [MARKET_OPERATIONS_INVOKE_SCOPE, agentAuthorityScopeForMode(mode)]
+  return [MARKET_TOOLS_CALL_SCOPE, agentAuthorityScopeForMode(mode)]
 }
 
 export function normalizeRequestedScopes(scopeText: string | null | undefined): Readonly<{
   mode: AgentAccessAuthorityMode
   scopes: readonly string[]
-  profile: 'market' | 'supplier'
+  profile: 'market' | 'provider'
   offlineAccess: boolean
 }> | undefined {
   if (scopeText === null || scopeText === undefined) return undefined
@@ -258,16 +258,16 @@ export function normalizeRequestedScopes(scopeText: string | null | undefined): 
   const offlineAccess = rawScopes.includes(AGENT_ACCESS_OAUTH_OFFLINE_SCOPE)
   const authorityScopes = rawScopes.filter((scope) => scope !== AGENT_ACCESS_OAUTH_OFFLINE_SCOPE)
   if (authorityScopes.length === 1 && authorityScopes[0] === MARKET_SUPPLY_MANAGE_SCOPE) {
-    return { mode: 'bounded_mandate', scopes: [MARKET_SUPPLY_MANAGE_SCOPE], profile: 'supplier', offlineAccess }
+    return { mode: 'spending_policy', scopes: [MARKET_SUPPLY_MANAGE_SCOPE], profile: 'provider', offlineAccess }
   }
-  const scopes = authorityScopes.includes(MARKET_OPERATIONS_INVOKE_SCOPE)
+  const scopes = authorityScopes.includes(MARKET_TOOLS_CALL_SCOPE)
     ? authorityScopes
-    : [MARKET_OPERATIONS_INVOKE_SCOPE, ...authorityScopes]
+    : [MARKET_TOOLS_CALL_SCOPE, ...authorityScopes]
   if (scopes.includes(CUSTOMER_REQUEST_AGENT_SCOPE)) return undefined
   const mode = agentAuthorityModeForScopes(scopes)
   if (mode === undefined) return undefined
   const modeScope = agentAuthorityScopeForMode(mode)
-  const extras = scopes.filter((scope) => scope !== MARKET_OPERATIONS_INVOKE_SCOPE && scope !== modeScope)
+  const extras = scopes.filter((scope) => scope !== MARKET_TOOLS_CALL_SCOPE && scope !== modeScope)
   if (extras.length > 0) return undefined
   return { mode, scopes: requestedScopesForMode(mode), profile: 'market', offlineAccess }
 }
@@ -305,7 +305,7 @@ export async function beginDeviceGrant(
   if (scopes === undefined || scopes.offlineAccess) return { kind: 'refused', reason: 'invalid_scope' }
   const requestedAccess = normalizeOAuthRequestedAccess(input.requestedAccess)
   if (requestedAccess === undefined
-    || (scopes.profile === 'supplier' && requestedAccess.operationAccess !== 'all_admitted')) {
+    || (scopes.profile === 'provider' && requestedAccess.toolAccess !== 'all_admitted')) {
     return { kind: 'refused', reason: 'invalid_scope' }
   }
   const deviceCode = createOpaqueOAuthValue()
@@ -354,7 +354,7 @@ export async function beginAuthorizationCodeGrant(
     scopes.offlineAccess ? AGENT_ACCESS_OAUTH_REFRESH_FAMILY_TTL_SECONDS : undefined,
   )
   if (requestedAccess === undefined
-    || (scopes.profile === 'supplier' && requestedAccess.operationAccess !== 'all_admitted')) {
+    || (scopes.profile === 'provider' && requestedAccess.toolAccess !== 'all_admitted')) {
     return { kind: 'refused', reason: 'invalid_scope' }
   }
   const grant: AgentAccessOAuthGrant = {
@@ -385,15 +385,15 @@ function normalizeOAuthRequestedAccess(
 ): AgentAccessOAuthRequestedAccess | undefined {
   const source = requestedAccess ?? {
     environment: 'sandbox' as const,
-    operationAccess: 'all_admitted' as const,
-    operationRefs: [],
+    toolAccess: 'all_admitted' as const,
+    toolRefs: [],
     expiresInSeconds: defaultExpiresInSeconds,
   }
-  const selection = normalizeAgentAccessOperationSelection(source)
+  const selection = normalizeAgentAccessToolSelection(source)
   return selection === undefined ? undefined : {
     ...source,
-    operationAccess: selection.operationAccess,
-    operationRefs: selection.operationRefs,
+    toolAccess: selection.toolAccess,
+    toolRefs: selection.toolRefs,
   }
 }
 

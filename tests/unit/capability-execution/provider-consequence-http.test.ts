@@ -47,8 +47,8 @@ function path(reference: unknown) {
 function authority() {
   return {
     kind: 'authorized' as const,
-    invocationRef: 'invocation:canonical',
-    operationRef: 'operation:canonical',
+    callRef: 'call:canonical',
+    toolRef: 'tool:canonical',
     attemptRef: 'attempt:canonical',
     effectGeneration: 3,
     credentialRef: `sec_${'1'.repeat(32)}`,
@@ -248,8 +248,8 @@ describe('provider consequence Convex HTTP callbacks', () => {
 
     expect(response.status).toBe(200)
     expect(calls[1]?.args).toMatchObject({
-      dispatchRef: authority().invocationRef,
-      operationRef: authority().operationRef,
+      dispatchRef: authority().callRef,
+      toolRef: authority().toolRef,
       inputDigest: authority().inputDigest,
       attemptRef: authority().attemptRef,
       effectGeneration: authority().effectGeneration,
@@ -257,10 +257,11 @@ describe('provider consequence Convex HTTP callbacks', () => {
       reservationRef: 'formance-usdc:test',
     })
     expect(path(runQuery.mock.calls[0]?.[0])).toBe('moneyManagedCallLifecycle:readReservation')
-    expect(runQuery.mock.calls[0]?.[1]).toEqual({ invocationRef: authority().invocationRef })
+    expect(runQuery.mock.calls[0]?.[1]).toEqual({ callRef: authority().callRef })
     expect(calls[1]?.args).not.toHaveProperty('custodyBudgetRef')
     expect(calls[1]?.args).not.toHaveProperty('custodyGeneration')
     expect(calls[1]?.args).not.toHaveProperty('custodyDailyMaximumUnits')
+    expect(calls[1]?.args).not.toHaveProperty('operationRef')
   })
 
   it.each([null, { reservationRef: 'formance-aud:test', state: 'released' }])(

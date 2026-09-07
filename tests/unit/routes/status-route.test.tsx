@@ -244,7 +244,7 @@ function responseForProbe(
       name: 'Agentic Economy',
       origin: 'https://ae.test',
       endpoints: [],
-      operationGateway: {},
+      toolGateway: {},
     },
     { kind: 'ok', sourceRevision: 'a'.repeat(40) },
   ] as const

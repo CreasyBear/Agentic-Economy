@@ -18,9 +18,9 @@ const listOwnerCallsQuery = sourceQuery<{
     principalRef: string
     credentialRef: string
     applicationRef: string
-    operationRef: string
+    toolRef: string
     providerRef: string
-    operationLabel: string
+    toolLabel: string
     state: 'completed' | 'refused' | 'outcome_unknown'
     deliveryState: 'delivered' | 'not_delivered' | 'unknown'
     paymentState: 'settled' | 'released' | 'unknown' | 'not_applicable'
@@ -35,7 +35,7 @@ const listOwnerCallsQuery = sourceQuery<{
   }>
   continueCursor: string
   isDone: boolean
-}>('capabilityOperationCalls:listOwnerCalls')
+}>('capabilityCallProjections:listOwnerCalls')
 
 const periodInput = z.strictObject({
   dimensionKind: z.enum(['account', 'agent', 'operation', 'provider', 'application']),
@@ -88,7 +88,7 @@ const readOwnerUsageQuery = sourceQuery<{
   dimensionRef?: string
   periodStartAt: number
   periodEndAt: number
-}, UsageResult>('capabilityOperationCalls:readOwnerUsage')
+}, UsageResult>('capabilityCallProjections:readOwnerUsage')
 
 const readOwnerSpendAction = sourceAction<{
   periodStartAt: number

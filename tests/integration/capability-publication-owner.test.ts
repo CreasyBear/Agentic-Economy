@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { api, internal } from '../../convex/_generated/api'
-import { OPERATION_INVOKE_ROUTE_CONTRACT } from '@/modules/capability-execution/operation-invoke-entry'
+import { CALL_ROUTE_CONTRACT } from '@/modules/capability-execution/call-entry'
 import {
   convexTestWithMarketComponents,
   ownerAdmin,
@@ -97,29 +97,29 @@ describe('capability publication owner', () => {
         publicationRef: published.publicationRef,
       }),
     ).resolves.toMatchObject({ lifecycle: { state: 'active', reasons: [] } })
-    const operationDetail = await owner.query(
-      api.capabilitySupplyOperations.detail,
+    const toolDetail = await owner.query(
+      api.capabilitySupplyTools.detail,
       {
-        operationRef: published.operationRef,
+        toolRef: published.toolRef,
       },
     )
-    expect(operationDetail.kind).toBe('found')
-    if (operationDetail.kind !== 'found')
-      throw new Error(`operation_detail_unavailable:${operationDetail.kind}`)
-    expect(operationDetail.operation).toMatchObject({
-      callVia: OPERATION_INVOKE_ROUTE_CONTRACT.invoke.path,
+    expect(toolDetail.kind).toBe('found')
+    if (toolDetail.kind !== 'found')
+      throw new Error(`tool_detail_unavailable:${toolDetail.kind}`)
+    expect(toolDetail.tool).toMatchObject({
+      callVia: CALL_ROUTE_CONTRACT.call.path,
       paymentLane: 'brokered',
     })
-    expect(operationDetail.operation.commercial.priceEvidence).toEqual(
+    expect(toolDetail.tool.commercial.priceEvidence).toEqual(
       expect.objectContaining({
         priceDigest: expect.any(String),
       }),
     )
     expect(
-      operationDetail.operation.commercial.priceEvidence,
+      toolDetail.tool.commercial.priceEvidence,
     ).not.toHaveProperty('observedAt')
     expect(
-      operationDetail.operation.commercial.priceEvidence,
+      toolDetail.tool.commercial.priceEvidence,
     ).not.toHaveProperty('validUntil')
 
     await backend.run(async (ctx) => {

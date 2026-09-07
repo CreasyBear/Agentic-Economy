@@ -10,7 +10,7 @@ import { AeEmptyState } from "@/components/ae/feedback/AeEmptyState";
 import { AePageHeader } from "@/components/ae/layout/AePageHeader";
 import { AeCapabilityTile } from "@/components/ae/market/AeCapabilityTile";
 import {
-  AE_COMPARE_MAX_OPERATIONS,
+  AE_COMPARE_MAX_TOOLS,
   AeCompareTray,
 } from "@/components/ae/market/AeCompareTray";
 import {
@@ -21,7 +21,7 @@ import {
   AeMarketToolbar,
   type AeMarketToolbarSearch,
 } from "@/components/ae/market/AeMarketToolbar";
-import { AeOperationTable } from "@/components/ae/market/AeOperationTable";
+import { AeToolTable } from "@/components/ae/market/AeToolTable";
 import {
   buildMarketReturnContext,
   type MarketReturnContext,
@@ -33,7 +33,7 @@ import { ItemGroup } from "@/components/ui/item";
 import { Pagination, PaginationContent, PaginationItem } from "@/components/ui/pagination";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AGENT_DOOR } from "@/content/brand-copy";
-import { resolveOperationCategoryIcon } from "@/lib/public/operation-icons";
+import { resolveToolCategoryIcon } from "@/lib/public/tool-icons";
 import type { MarketWindow } from "@/modules/market/contracts";
 import {
   marketCategories,
@@ -42,28 +42,28 @@ import {
 import {
   capabilityFromPrice,
   groupCapabilitiesByCategory,
-  groupOperationCards,
+  groupToolCards,
   type CapabilityGroupViewModel,
   type CategoryShelfViewModel,
-  type OperationCardViewModel,
-} from "@/modules/market/operation-view-model";
+  type ToolCardViewModel,
+} from "@/modules/market/tool-view-model";
 import type { MarketRouteProjection } from "@/modules/market/server";
 
 type MarketPageSearch = AeMarketToolbarSearch & Readonly<{ compare?: string }>;
 
 const CATALOG_DESCRIPTION =
-  "Inspect price, access, and readiness without an account. Only available Operations can be called.";
+  "Inspect price, access, and readiness without an account. Only available Tools can be called.";
 
 export function AeMarketPage({
   projection,
   search,
   comparison,
-  onCompareOperations,
+  onCompareTools,
 }: {
   projection: MarketRouteProjection;
   search: MarketPageSearch;
   comparison?: MarketComparison;
-  onCompareOperations?: (operationRefs: readonly string[]) => void;
+  onCompareTools?: (toolRefs: readonly string[]) => void;
 }) {
   const { window, catalog } = projection;
   const navigate = useNavigate();
@@ -80,15 +80,15 @@ export function AeMarketPage({
     search.cursor,
   ].join("\u0000");
   const categoryId = search.category ?? "all";
-  const marketTableReturnTo = buildMarketReturnContext(search, "operations");
+  const marketTableReturnTo = buildMarketReturnContext(search, "tools");
   const marketComparisonReturnTo = buildMarketReturnContext(search);
-  const operations = useMemo(
+  const tools = useMemo(
     () => catalog.kind === "ok" ? catalog.items : [],
     [catalog],
   );
   const capabilityGroups = useMemo(
-    () => groupOperationCards(operations),
-    [operations],
+    () => groupToolCards(tools),
+    [tools],
   );
   const shelves = useMemo(
     () => groupCapabilitiesByCategory(capabilityGroups),
@@ -99,23 +99,23 @@ export function AeMarketPage({
   const drilledGroup = capabilityGroups.find(
     (group) =>
       group.capabilityId === search.capability ||
-      group.operations.some(
-        (operation) => operation.capabilityId === search.capability,
+      group.tools.some(
+        (tool) => tool.capabilityId === search.capability,
       ),
   );
   const query = search.query;
   const isQuery = query !== undefined;
   const unavailable = catalog.kind === "unavailable";
   const empty = !unavailable && matchedCount === 0;
-  const operationLabel = matchedCount === 1 ? "Operation" : "Operations";
-  const shownCount = drilledGroup?.operations.length ?? operations.length;
+  const toolLabel = matchedCount === 1 ? "Tool" : "Tools";
+  const shownCount = drilledGroup?.tools.length ?? tools.length;
   const currentRowSelection = useMemo(
-    () => pruneRowSelection(rowSelection, operations),
-    [operations, rowSelection],
+    () => pruneRowSelection(rowSelection, tools),
+    [tools, rowSelection],
   );
-  const selectedOperations = useMemo(
-    () => operations.filter((operation) => currentRowSelection[operation.operationRef] === true),
-    [currentRowSelection, operations],
+  const selectedTools = useMemo(
+    () => tools.filter((tool) => currentRowSelection[tool.toolRef] === true),
+    [currentRowSelection, tools],
   );
   useEffect(() => {
     setIsEditingComparison(false);
@@ -128,20 +128,20 @@ export function AeMarketPage({
   }, [isEditingComparison]);
   const updateRowSelection: OnChangeFn<RowSelectionState> = (updater) => {
     setRowSelection((current) => {
-      const currentVisible = pruneRowSelection(current, operations);
+      const currentVisible = pruneRowSelection(current, tools);
       const next = typeof updater === "function" ? updater(currentVisible) : updater;
-      return pruneRowSelection(next, operations);
+      return pruneRowSelection(next, tools);
     });
   };
-  const marketSelection: AeRecordTableSelection<OperationCardViewModel> | undefined =
-    onCompareOperations === undefined ? undefined : {
+  const marketSelection: AeRecordTableSelection<ToolCardViewModel> | undefined =
+    onCompareTools === undefined ? undefined : {
       state: currentRowSelection,
       onChange: updateRowSelection,
-      getRowLabel: (operation) => `${operation.title} by ${operation.supplierName}`,
-      canSelectRow: (operation) =>
-        operation.readiness !== "Unavailable" &&
-        (currentRowSelection[operation.operationRef] === true ||
-          selectedOperations.length < AE_COMPARE_MAX_OPERATIONS),
+      getRowLabel: (tool) => `${tool.title} by ${tool.providerName}`,
+      canSelectRow: (tool) =>
+        tool.readiness !== "Unavailable" &&
+        (currentRowSelection[tool.toolRef] === true ||
+          selectedTools.length < AE_COMPARE_MAX_TOOLS),
       showSelectAll: false,
       showStatus: false,
     };
@@ -160,9 +160,9 @@ export function AeMarketPage({
         onEditSelection={() => {
           const selectedRefs = new Set(search.compare?.split(",") ?? []);
           setRowSelection(Object.fromEntries(
-            operations
-              .filter((operation) => selectedRefs.has(operation.operationRef))
-              .map((operation) => [operation.operationRef, true]),
+            tools
+              .filter((tool) => selectedRefs.has(tool.toolRef))
+              .map((tool) => [tool.toolRef, true]),
           ));
           setIsEditingComparison(true);
         }}
@@ -211,13 +211,13 @@ export function AeMarketPage({
   let body: ReactNode;
 
   if (drilledGroup !== undefined) {
-    const count = drilledGroup.operations.length;
+    const count = drilledGroup.tools.length;
     title = drilledGroup.label;
-    description = `${drilledGroup.category.label} · ${count.toLocaleString()} listed · ${capabilityFromPrice(drilledGroup.operations)}`;
+    description = `${drilledGroup.category.label} · ${count.toLocaleString()} listed · ${capabilityFromPrice(drilledGroup.tools)}`;
     actions = catalogLink;
     body = (
-      <AeOperationTable
-        operations={drilledGroup.operations}
+      <AeToolTable
+        tools={drilledGroup.tools}
         returnTo={marketTableReturnTo}
         {...(marketSelection === undefined ? {} : { selection: marketSelection })}
       />
@@ -225,13 +225,13 @@ export function AeMarketPage({
   } else if (isQuery) {
     title = `Results for “${query}”`;
     description =
-      "Current Operations that match this job. Inspect access and readiness before calling.";
+      "Current Tools that match this job. Inspect access and readiness before calling.";
     actions = catalogLink;
     body =
       unavailable || empty || catalog.kind !== "ok" ? (
         <CatalogEmpty unavailable={unavailable} />
       ) : (
-        <OperationResults
+        <ToolResults
           groups={capabilityGroups}
           catalog={catalog}
           window={window}
@@ -242,13 +242,13 @@ export function AeMarketPage({
       );
   } else {
     title = unavailable
-      ? "The Operation catalog"
-      : `${matchedCount.toLocaleString()} current ${operationLabel}`;
+      ? "The Tool catalog"
+      : `${matchedCount.toLocaleString()} current ${toolLabel}`;
     description = CATALOG_DESCRIPTION;
     actions = (
       <>
         <AeSiteButton asChild variant="outlined">
-          <Link to="/for-providers">Publish an Operation</Link>
+          <Link to="/for-providers">Publish a Tool</Link>
         </AeSiteButton>
         <AeSiteButton asChild>
           <Link to="/for-agents">{AGENT_DOOR.cta}</Link>
@@ -270,7 +270,7 @@ export function AeMarketPage({
   }
 
   return (
-    <div id="operations" className="min-h-dvh scroll-mt-anchor">
+    <div id="tools" className="min-h-dvh scroll-mt-anchor">
       <AePageHeader
         eyebrow="Catalog"
         title={title}
@@ -280,22 +280,22 @@ export function AeMarketPage({
         variant="market"
       />
       <div
-        className={selectedOperations.length === 0
+        className={selectedTools.length === 0
           ? "ae-rail grid gap-section pb-page"
           : "ae-rail grid gap-section pb-96 sm:pb-72"}
       >
         <AeMarketToolbar search={search} />
         {body}
-        {onCompareOperations === undefined ? null : (
+        {onCompareTools === undefined ? null : (
           <AeCompareTray
-            operations={selectedOperations}
-            onRemove={(operationRef) => {
-              setRowSelection((current) => ({ ...current, [operationRef]: false }));
+            tools={selectedTools}
+            onRemove={(toolRef) => {
+              setRowSelection((current) => ({ ...current, [toolRef]: false }));
             }}
             onClear={() => setRowSelection({})}
-            onCompare={(operationRefs) => {
+            onCompare={(toolRefs) => {
               setIsEditingComparison(false);
-              onCompareOperations(operationRefs);
+              onCompareTools(toolRefs);
             }}
             fallbackFocusRef={selectionFallbackRef}
           />
@@ -309,8 +309,8 @@ function CatalogEmpty({ unavailable }: { unavailable: boolean }) {
   return unavailable ? (
     <AeEmptyState
       icon={<SearchIcon />}
-      title="The Operation catalog is temporarily unavailable"
-      description="Try again shortly. Existing Operation links continue to work."
+      title="The Tool catalog is temporarily unavailable"
+      description="Try again shortly. Existing Tool links continue to work."
       action={
         <Button asChild className="min-h-touch">
           <Link to="/market" search={{ window: "30d" }}>Try again</Link>
@@ -320,7 +320,7 @@ function CatalogEmpty({ unavailable }: { unavailable: boolean }) {
   ) : (
     <AeEmptyState
       icon={<SearchIcon />}
-      title="No Operations match these filters"
+      title="No Tools match these filters"
       description="Try a broader search, another category, or a different availability."
       action={
         <Button asChild className="min-h-touch">
@@ -380,7 +380,7 @@ function CatalogTabs({
         {marketCategories.map((category) => {
           const shelf = shelves.find((item) => item.category.id === category.id);
           const count = shelf?.capabilities.length ?? 0;
-          const CategoryIcon = resolveOperationCategoryIcon(category.id);
+          const CategoryIcon = resolveToolCategoryIcon(category.id);
           return (
             <TabsTrigger
               key={category.id}
@@ -458,7 +458,7 @@ function CategoryShelf({
   );
 }
 
-function OperationResults({
+function ToolResults({
   groups,
   catalog,
   window,
@@ -470,7 +470,7 @@ function OperationResults({
   catalog: Extract<MarketRouteProjection["catalog"], { kind: "ok" }>;
   window: MarketWindow;
   search: MarketPageSearch;
-  selection?: AeRecordTableSelection<OperationCardViewModel>;
+  selection?: AeRecordTableSelection<ToolCardViewModel>;
   returnTo: MarketReturnContext;
 }) {
   return (
@@ -493,8 +493,8 @@ function OperationResults({
               {group.providerCount === 1 ? "provider" : "providers"}
             </p>
           </div>
-          <AeOperationTable
-            operations={group.operations}
+          <AeToolTable
+            tools={group.tools}
             returnTo={returnTo}
             {...(selection === undefined ? {} : { selection })}
           />
@@ -554,12 +554,12 @@ function capabilityGroupCountLabel(count: number) {
 
 function pruneRowSelection(
   selection: RowSelectionState,
-  operations: readonly OperationCardViewModel[],
+  tools: readonly ToolCardViewModel[],
 ): RowSelectionState {
-  const currentRefs = new Set(operations.map((operation) => operation.operationRef));
+  const currentRefs = new Set(tools.map((tool) => tool.toolRef));
   return Object.fromEntries(
-    Object.entries(selection).filter(([operationRef, selected]) =>
-      selected === true && currentRefs.has(operationRef)),
+    Object.entries(selection).filter(([toolRef, selected]) =>
+      selected === true && currentRefs.has(toolRef)),
   );
 }
 

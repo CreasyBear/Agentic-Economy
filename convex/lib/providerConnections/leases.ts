@@ -34,8 +34,8 @@ export const leaseValue = v.object({
   actorPrincipalRef: v.string(),
   grantRef: v.string(),
   grantGeneration: v.number(),
-  invocationRef: v.string(),
-  operationRef: v.string(),
+  callRef: v.string(),
+  toolRef: v.string(),
   connectionRef: v.string(),
   providerRef: v.string(),
   providerAccountRef: v.string(),
@@ -112,8 +112,8 @@ export const leaseAuthorityValidation = v.union(
 const leaseIssueFields = {
   commandId: v.string(),
   leaseRef: v.string(),
-  invocationRef: v.string(),
-  operationRef: v.string(),
+  callRef: v.string(),
+  toolRef: v.string(),
   connectionRef: v.string(),
   providerRef: v.string(),
   providerAccountRef: v.string(),
@@ -139,13 +139,13 @@ export const readLeaseArgs = {
   leaseRef: v.string(),
 } as const
 export const readLeaseByInvocationArgs = {
-  invocationRef: v.string(),
+  callRef: v.string(),
 } as const
 export const resolveLeaseCredentialRefArgs = {
   leaseRef: v.string(),
   connectionRef: v.string(),
-  invocationRef: v.string(),
-  operationRef: v.string(),
+  callRef: v.string(),
+  toolRef: v.string(),
   providerRef: v.string(),
   providerAccountRef: v.string(),
   adapterId: v.string(),
@@ -160,8 +160,8 @@ export const resolveLeaseCredentialRefArgs = {
 export const validateLeaseAuthorityArgs = {
   leaseRef: v.string(),
   connectionRef: v.string(),
-  invocationRef: v.string(),
-  operationRef: v.string(),
+  callRef: v.string(),
+  toolRef: v.string(),
   providerRef: v.string(),
   adapterId: v.string(),
   authorityGeneration: v.number(),
@@ -204,8 +204,8 @@ export const invalidateLeaseArgs = {
 type IssueLeaseArgs = {
   commandId: string
   leaseRef: string
-  invocationRef: string
-  operationRef: string
+  callRef: string
+  toolRef: string
   connectionRef: string
   providerRef: string
   providerAccountRef: string
@@ -227,8 +227,8 @@ type IssueLeaseArgs = {
 type ResolveLeaseCredentialRefArgs = {
   leaseRef: string
   connectionRef: string
-  invocationRef: string
-  operationRef: string
+  callRef: string
+  toolRef: string
   providerRef: string
   providerAccountRef: string
   adapterId: string
@@ -244,8 +244,8 @@ type ResolveLeaseCredentialRefArgs = {
 type ValidateLeaseAuthorityArgs = {
   leaseRef: string
   connectionRef: string
-  invocationRef: string
-  operationRef: string
+  callRef: string
+  toolRef: string
   providerRef: string
   adapterId: string
   authorityGeneration: number
@@ -302,11 +302,11 @@ async function resolveInvocationLeaseAuthority(
   args: IssueLeaseArgs,
   connection: ReturnType<typeof toDomain>,
 ) {
-  const invocation = await ctx.db.query('capabilityOperationInvocations')
-    .withIndex('by_invocationRef', (query) => query.eq('invocationRef', args.invocationRef))
+  const invocation = await ctx.db.query('capabilityCalls')
+    .withIndex('by_callRef', (query) => query.eq('callRef', args.callRef))
     .unique()
   if (invocation === null) return null
-  if (invocation.operationRef !== args.operationRef) return null
+  if (invocation.toolRef !== args.toolRef) return null
   const now = Date.now()
   const snapshot = await validateCanonicalAgentDelegation(ctx, {
     evidenceKind: 'provider-connection-lease',
@@ -316,7 +316,7 @@ async function resolveInvocationLeaseAuthority(
     grantRef: invocation.grantRef,
     grantGeneration: invocation.grantGeneration,
     requiredScopes: ['connection:lease'],
-    resourceRefs: [invocation.operationRef, `connection:${args.connectionRef}`],
+    resourceRefs: [invocation.toolRef, `connection:${args.connectionRef}`],
     now,
   })
   const leaf = snapshot?.ancestry.at(-1)
@@ -417,8 +417,8 @@ export async function issueLeaseHandler(ctx: MutationCtx, args: IssueLeaseArgs) 
     {
       commandId: args.commandId,
       leaseRef: args.leaseRef,
-      invocationRef: args.invocationRef,
-      operationRef: args.operationRef,
+      callRef: args.callRef,
+      toolRef: args.toolRef,
       connectionRef: args.connectionRef,
       providerRef: args.providerRef,
       providerAccountRef: args.providerAccountRef,
@@ -461,9 +461,9 @@ export async function readLeaseHandler(ctx: QueryCtx, args: { leaseRef: string }
   return toLeaseRow(lease, row.lastCommandId, row.lastCommandDigest)
 }
 
-export async function readLeaseByInvocationHandler(ctx: QueryCtx, args: { invocationRef: string }) {
+export async function readLeaseByInvocationHandler(ctx: QueryCtx, args: { callRef: string }) {
   const row = await ctx.db.query('capabilityProviderConnectionLeases')
-    .withIndex('by_invocationRef', (index) => index.eq('invocationRef', args.invocationRef)).order('desc').first()
+    .withIndex('by_callRef', (index) => index.eq('callRef', args.callRef)).order('desc').first()
   if (row === null) return null
   const connection = await ctx.db.query('capabilityProviderConnections')
     .withIndex('by_connectionRef', (index) => index.eq('connectionRef', row.connectionRef)).unique()
@@ -488,8 +488,8 @@ export async function validateLeaseAuthorityHandler(ctx: QueryCtx, args: Validat
 
 export const beginLeaseEffectArgs = {
   leaseRef: v.string(),
-  invocationRef: v.string(),
-  operationRef: v.string(),
+  callRef: v.string(),
+  toolRef: v.string(),
   commandId: v.string(),
 } as const
 
@@ -512,25 +512,25 @@ export const leaseEffectAdmission = v.union(
 
 function leaseMatchesEffectRequest(
   lease: ReturnType<typeof toLeaseDomain>,
-  args: Readonly<{ invocationRef: string; operationRef: string }>,
+  args: Readonly<{ callRef: string; toolRef: string }>,
 ): boolean {
   return [
-    lease.invocationRef === args.invocationRef,
-    lease.operationRef === args.operationRef,
+    lease.callRef === args.callRef,
+    lease.toolRef === args.toolRef,
     lease.state === 'active',
   ].every(Boolean)
 }
 
 async function invocationAuthorityMatchesLease(
   ctx: MutationCtx,
-  invocation: Doc<'capabilityOperationInvocations'> | null,
+  invocation: Doc<'capabilityCalls'> | null,
   lease: ReturnType<typeof toLeaseDomain>,
   connection: ReturnType<typeof toDomain>,
-  operationRef: string,
+  toolRef: string,
   now: number,
 ): Promise<boolean> {
   if (invocation === null || ![
-    invocation.operationRef === operationRef,
+    invocation.toolRef === toolRef,
     invocation.grantRef === lease.grantRef,
     invocation.grantGeneration === lease.grantGeneration,
     invocation.principalId === lease.actorPrincipalRef,
@@ -545,7 +545,7 @@ async function invocationAuthorityMatchesLease(
     grantRef: lease.grantRef,
     grantGeneration: lease.grantGeneration,
     requiredScopes: ['connection:begin_effect', 'connection:lease'],
-    resourceRefs: [operationRef, `connection:${lease.connectionRef}`],
+    resourceRefs: [toolRef, `connection:${lease.connectionRef}`],
     now,
   })
   const leaf = snapshot?.ancestry.at(-1)
@@ -560,7 +560,7 @@ async function invocationAuthorityMatchesLease(
 
 export async function beginLeaseEffectHandler(
   ctx: MutationCtx,
-  args: Readonly<{ leaseRef: string; invocationRef: string; operationRef: string; commandId: string }>,
+  args: Readonly<{ leaseRef: string; callRef: string; toolRef: string; commandId: string }>,
 ) {
   const leaseRow = await ctx.db.query('capabilityProviderConnectionLeases')
     .withIndex('by_leaseRef', (query) => query.eq('leaseRef', args.leaseRef))
@@ -583,11 +583,11 @@ export async function beginLeaseEffectHandler(
   if (connection.secretRef === undefined) {
     return { kind: 'unavailable' as const, reason: 'credential_unavailable' }
   }
-  const invocation = await ctx.db.query('capabilityOperationInvocations')
-    .withIndex('by_invocationRef', (query) => query.eq('invocationRef', args.invocationRef))
+  const invocation = await ctx.db.query('capabilityCalls')
+    .withIndex('by_callRef', (query) => query.eq('callRef', args.callRef))
     .unique()
   const now = Date.now()
-  if (!await invocationAuthorityMatchesLease(ctx, invocation, lease, connection, args.operationRef, now)) return {
+  if (!await invocationAuthorityMatchesLease(ctx, invocation, lease, connection, args.toolRef, now)) return {
     kind: 'unavailable' as const, reason: 'invocation_authority_mismatch',
   }
   return {

@@ -1,26 +1,26 @@
 /**
  * Pure page-stack state machine for the operator command panel.
  *
- * The panel is a stacked router: the root layer is always the operations
- * search page and inspect layers are pushed on top. Closing the panel never
+ * The panel is a stacked router: the root layer is always the Tool
+ * search page and detail layers are pushed on top. Closing the panel never
  * touches the stack, so a Cmd-k flicker cannot discard an in-flight lookup;
  * only an Escape on the last remaining layer requests a close, and only a
  * completed navigation resets the stack.
  */
 
 export type CommandPanelPage =
-  | Readonly<{ kind: 'operations-search' }>
-  | Readonly<{ kind: 'operation-inspect'; operationRef: string }>
+  | Readonly<{ kind: 'tools-search' }>
+  | Readonly<{ kind: 'tool-detail'; toolRef: string }>
 
 export type CommandPanelStack = readonly [CommandPanelPage, ...CommandPanelPage[]]
 
 /** Hard stop so a misbehaving consumer cannot grow the stack forever. */
 const MAX_STACK_DEPTH = 8
 
-export const initialCommandPanelPages: CommandPanelStack = [{ kind: 'operations-search' }]
+export const initialCommandPanelPages: CommandPanelStack = [{ kind: 'tools-search' }]
 
 /**
- * Top of the deck: the most recently pushed inspect layer, or the mandatory
+ * Top of the deck: the most recently pushed detail layer, or the mandatory
  * root search page when no layer sits above it. The machine owns this view so
  * consumers never index past the guaranteed root.
  */

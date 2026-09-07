@@ -2,7 +2,7 @@ import { v } from 'convex/values'
 import type { Id } from '../../_generated/dataModel'
 import type {
   ProviderConnection,
-  ProviderConnectionInvocationLease,
+  ProviderConnectionCallLease,
 } from '../../../src/modules/capability-supply/provider-connection'
 
 export const lifecycle = v.union(
@@ -310,8 +310,8 @@ export type ProviderConnectionLeaseRow = {
   actorPrincipalRef: string
   grantRef: string
   grantGeneration: number
-  invocationRef: string
-  operationRef: string
+  callRef: string
+  toolRef: string
   connectionRef: string
   providerRef: string
   providerAccountRef: string
@@ -324,7 +324,7 @@ export type ProviderConnectionLeaseRow = {
   approvalDecisionDigest: string
   readinessValidUntil: number
   readinessDigest?: string
-  state: ProviderConnectionInvocationLease['state']
+  state: ProviderConnectionCallLease['state']
   issuedAt: number
   expiresAt: number
   consumedAt?: number

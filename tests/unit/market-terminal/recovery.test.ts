@@ -2,14 +2,14 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import {
   AGENT_ACCESS_OAUTH_DEVICE_CLIENT_REGISTRATION_REQUEST,
-  MARKET_OPERATIONS_INVOKE_SCOPE,
+  MARKET_TOOLS_CALL_SCOPE,
   MARKET_SUPPLY_MANAGE_SCOPE,
 } from '@/modules/agent-access/contract'
-import { operationReconciliationEvidenceSchema } from '@/modules/capability-execution/operation-recovery.actions'
+import { callReconciliationEvidenceSchema } from '@/modules/capability-execution/call-recovery.actions'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 
 import { runCancelCommand } from '../../../tools/ae/commands/cancel'
-import { runInvokeCommand } from '../../../tools/ae/commands/invoke'
+import { runCallCommand } from '../../../tools/ae/commands/call'
 import { runManifestCommand } from '../../../tools/ae/commands/manifest'
 import { runRecoverCommand } from '../../../tools/ae/commands/recover'
 import { requireAgentAccessKey } from '../../../tools/ae/commands/status'
@@ -28,9 +28,9 @@ const OPERATION_REF = `operation:v1:${'a'.repeat(64)}`
 const COMMITMENT_REF = `operation-commitment:v1:${'b'.repeat(64)}`
 const inspection = {
   kind: 'committed' as const,
-  commitmentRef: COMMITMENT_REF,
-  operationRef: OPERATION_REF,
-  operationRevision: 1,
+  quoteRef: COMMITMENT_REF,
+  toolRef: OPERATION_REF,
+  toolVersion: 1,
   expiresAt: 1_000,
   normalizedInput: {},
   price: { currency: 'AUD' as const, units: '0', exponent: 6 as const },
@@ -40,22 +40,22 @@ const inspection = {
   },
   budget: {
     principalRef: 'principal:one',
-    maximumPerInvocation: { currency: 'AUD' as const, units: '0', exponent: 6 as const },
+    maximumPerCall: { currency: 'AUD' as const, units: '0', exponent: 6 as const },
   },
   policyRefs: ['policy:sandbox'],
   evidenceDigest: 'sha256:evidence',
   continuation: {
-    action: 'operation.invoke' as const,
+    action: 'tool.call' as const,
     method: 'POST' as const,
-    path: '/api/v1/operations/call' as const,
-    input: { commitmentRef: COMMITMENT_REF, idempotencyKey: `invoke:${COMMITMENT_REF}` },
+    path: '/api/v1/tools/call' as const,
+    input: { quoteRef: COMMITMENT_REF, idempotencyKey: `call:${COMMITMENT_REF}` },
   },
 }
 
 const completed = {
   kind: 'completed' as const,
-  invocationRef: 'invocation:one',
-  operationRef: OPERATION_REF,
+  callRef: 'invocation:one',
+  toolRef: OPERATION_REF,
   output: { value: 1 },
   evidenceHash: 'sha256:evidence',
   usage: {
@@ -105,7 +105,7 @@ describe('CLI operation recovery projections', () => {
 
   it('inspects existing connections before authorizing a recovery identity', () => {
     for (const [scope, nextCommand] of [
-      [MARKET_OPERATIONS_INVOKE_SCOPE, 'ae account connections'],
+      [MARKET_TOOLS_CALL_SCOPE, 'ae account connections'],
       [MARKET_SUPPLY_MANAGE_SCOPE, 'ae account connections'],
     ] as const) {
       try {
@@ -166,14 +166,14 @@ describe('CLI operation recovery projections', () => {
         recovery: {
           example: Record<string, unknown>
           digestMaterialRule: string
-          invocationRefIdentityRule: string
+          callRefIdentityRule: string
         }
       }
     }
     expect(manifest.commands.recover.summary).toContain('not a replay')
     expect(manifest.commands.recover.guidance.join(' ')).toContain('genuinely uncertain')
     expect(manifest.commands.recover.guidance.join(' ')).toContain('canonical evidence')
-    expect(manifest.coldLoop).toEqual(['search', 'inspect', 'connect', 'call', 'history', 'wait', 'receipt', 'reuse'])
+    expect(manifest.coldLoop).toEqual(['search', 'describe', 'connect', 'call', 'history', 'wait', 'receipt', 'reuse'])
     expect(manifest.payment).toMatchObject({
       providerQuotedAmount: { field: 'commercial.priceBreakdown.providerQuotedAmount', exact: true },
       agenticEconomyFee: { field: 'commercial.priceBreakdown.agenticEconomyFee', rate: '10%', feeBps: 1_000 },
@@ -185,7 +185,7 @@ describe('CLI operation recovery projections', () => {
     expect(manifest.polling.oauth).toMatchObject({ intervalSeconds: expect.any(Number), waitOn: ['authorization_pending'] })
     expect(manifest.recovery).toMatchObject({ statusFirst: true, reconcile: expect.stringContaining('genuinely uncertain') })
     expect(manifest.receipt).toMatchObject({
-      location: ['invoke.receipt', 'status.receipt', 'status.result.receipt', 'recover.receipt'],
+      location: ['call.receipt', 'status.receipt', 'status.result.receipt', 'recover.receipt'],
       referenceField: 'receipt.receiptRef',
     })
     expect(manifest.ownerContinuations).toMatchObject({
@@ -196,17 +196,17 @@ describe('CLI operation recovery projections', () => {
       commandField: 'idempotencyKey',
       commandFieldRequired: true,
       location: 'body.idempotencyKey',
-      requiredFor: ['operation.invoke', 'operation.cancel', 'operation.reconcile'],
+      requiredFor: ['tool.call', 'call.cancel', 'call.reconcile'],
     })
     expect(manifest.gateway.idempotency).not.toHaveProperty('header')
     expect(manifest.gateway.idempotency).not.toHaveProperty('precedence')
     expect(output.read()).not.toContain('advanced reconcile')
     const recovery = manifest.evidence.recovery
-    expect(operationReconciliationEvidenceSchema.safeParse(recovery.example).success).toBe(true)
+    expect(callReconciliationEvidenceSchema.safeParse(recovery.example).success).toBe(true)
     const { digest, ...material } = recovery.example
     expect(digest).toBe(canonicalDigest(material))
     expect(recovery.digestMaterialRule).toContain('all evidence fields except digest')
-    expect(recovery.invocationRefIdentityRule).toContain('evidence.invocationRef')
+    expect(recovery.callRefIdentityRule).toContain('historical evidence.invocationRef')
     expect(manifest.gateway.oauth.requestedScope).toBe(
       AGENT_ACCESS_OAUTH_DEVICE_CLIENT_REGISTRATION_REQUEST.scope,
     )
@@ -227,22 +227,22 @@ describe('CLI operation recovery projections', () => {
       }), { status: 200, headers: { 'content-type': 'application/json' } }))
       .mockResolvedValueOnce(new Response(JSON.stringify({
         kind: 'pending',
-        invocationRef: 'invocation:one',
-        operationRef: OPERATION_REF,
+        callRef: 'invocation:one',
+        toolRef: OPERATION_REF,
         retryAfterMs: 100,
       }), { status: 200, headers: { 'content-type': 'application/json' } }))
       .mockResolvedValueOnce(new Response(JSON.stringify({
         kind: 'found',
-        invocationRef: 'invocation:one',
+        callRef: 'invocation:one',
         version: 1,
-        operationRef: OPERATION_REF,
+        toolRef: OPERATION_REF,
         state: 'terminal',
         result: completed,
       }), { status: 200, headers: { 'content-type': 'application/json' } }))
     vi.stubGlobal('fetch', fetchMock)
 
     try {
-      await runInvokeCommand([OPERATION_REF], { ...baseOptions, input: '{}', idempotencyKey: 'idem:one', wait: true })
+      await runCallCommand([OPERATION_REF], { ...baseOptions, input: '{}', idempotencyKey: 'idem:one', wait: true })
     } finally {
       output.restore()
     }
@@ -256,9 +256,9 @@ describe('CLI operation recovery projections', () => {
     const output = capture(process.stdout)
     const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
       kind: 'found',
-      invocationRef: 'invocation:one',
+      callRef: 'invocation:one',
       version: 1,
-      operationRef: OPERATION_REF,
+      toolRef: OPERATION_REF,
       state: 'cancelled',
     }), { status: 200, headers: { 'content-type': 'application/json' } }))
     vi.stubGlobal('fetch', fetchMock)
@@ -270,7 +270,7 @@ describe('CLI operation recovery projections', () => {
     }
 
     const [url, init] = fetchMock.mock.calls[0]!
-    expect(url).toBe('https://market.example/api/v1/operations/invocation%3Aone/cancel')
+    expect(url).toBe('https://market.example/api/v1/calls/invocation%3Aone/cancel')
     expect(init?.method).toBe('POST')
     expect(new Headers(init?.headers).get('Authorization')).toBe('Bearer ae-test-caller-key')
     expect(init?.redirect).toBe('manual')
@@ -285,9 +285,9 @@ describe('CLI operation recovery projections', () => {
       const output = capture(process.stdout)
       const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
         kind: 'found',
-        invocationRef: 'invocation:one',
+        callRef: 'invocation:one',
         version: 1,
-        operationRef: OPERATION_REF,
+        toolRef: OPERATION_REF,
         state,
         ...(state === 'terminal' ? { result: completed } : {}),
       }), { status: 200, headers: { 'content-type': 'application/json' } }))
@@ -309,9 +309,9 @@ describe('CLI operation recovery projections', () => {
     const output = capture(process.stdout)
     vi.stubGlobal('fetch', vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
       kind: 'found',
-      invocationRef: 'invocation:one',
+      callRef: 'invocation:one',
       version: 1,
-      operationRef: OPERATION_REF,
+      toolRef: OPERATION_REF,
       state: 'terminal',
       result: completed,
     }), { status: 200, headers: { 'content-type': 'application/json' } })))
@@ -331,9 +331,9 @@ describe('CLI operation recovery projections', () => {
     const output = capture(process.stdout)
     vi.stubGlobal('fetch', vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
       kind: 'found',
-      invocationRef: 'invocation:one',
+      callRef: 'invocation:one',
       version: 1,
-      operationRef: OPERATION_REF,
+      toolRef: OPERATION_REF,
       state: 'reconciliation_required',
     }), { status: 200, headers: { 'content-type': 'application/json' } })))
 
@@ -356,9 +356,9 @@ describe('CLI operation recovery projections', () => {
     const output = capture(process.stdout)
     vi.stubGlobal('fetch', vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
       kind: 'found',
-      invocationRef: 'invocation:one',
+      callRef: 'invocation:one',
       version: 1,
-      operationRef: OPERATION_REF,
+      toolRef: OPERATION_REF,
       state: 'terminal',
       usage: {
         usageRef: 'usage:credit',
@@ -386,9 +386,9 @@ describe('CLI operation recovery projections', () => {
     const output = capture(process.stdout)
     vi.stubGlobal('fetch', vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
       kind: 'found',
-      invocationRef: 'invocation:one',
+      callRef: 'invocation:one',
       version: 1,
-      operationRef: OPERATION_REF,
+      toolRef: OPERATION_REF,
       state: 'terminal',
       usage: {
         usageRef: 'usage:credit',
@@ -421,12 +421,12 @@ describe('CLI operation recovery projections', () => {
       .mockRejectedValueOnce(new Error('socket timeout'))
     vi.stubGlobal('fetch', fetchMock)
 
-    await expect(runInvokeCommand([OPERATION_REF], { ...baseOptions, input: '{}', idempotencyKey: 'idem:one' })).rejects.toMatchObject({
+    await expect(runCallCommand([OPERATION_REF], { ...baseOptions, input: '{}', idempotencyKey: 'idem:one' })).rejects.toMatchObject({
       kind: 'UNAVAILABLE',
-      code: 'operation-transport-unknown',
+      code: 'call-transport-unknown',
       detail: {
-        operationRef: OPERATION_REF,
-        recovery: 'Repeat invoke with the same idempotency identity.',
+        toolRef: OPERATION_REF,
+        recovery: 'Repeat call with the same idempotency identity.',
         identityPreserved: true,
       },
     } satisfies Partial<CliFailure>)
@@ -471,7 +471,7 @@ describe('CLI operation recovery projections', () => {
     expect(thrown).toBeInstanceOf(CliFailure)
     if (!(thrown instanceof CliFailure)) return
     expect(thrown.kind).toBe('UNAVAILABLE')
-    expect(thrown.code).toBe('operation-reconcile-transport-unknown')
+    expect(thrown.code).toBe('call-reconcile-transport-unknown')
     expect(thrown.message).not.toContain('TOPSECRET')
     expect(JSON.stringify({ kind: thrown.kind, code: thrown.code, message: thrown.message, detail: thrown.detail }))
       .not.toContain('TOPSECRET')
@@ -499,12 +499,12 @@ describe('CLI operation recovery projections', () => {
       }))
     vi.stubGlobal('fetch', fetchMock)
 
-    await expect(runInvokeCommand([OPERATION_REF], { ...baseOptions, input: '{}', idempotencyKey: 'idem:503' }))
+    await expect(runCallCommand([OPERATION_REF], { ...baseOptions, input: '{}', idempotencyKey: 'idem:503' }))
       .rejects.toMatchObject({
         kind: 'UNAVAILABLE',
         code: 'provider_unavailable',
         retryable: true,
-        message: '/api/v1/operations/call returned 503: Unavailable',
+        message: '/api/v1/tools/call returned 503: Unavailable',
       } satisfies Partial<CliFailure>)
   })
 
@@ -523,7 +523,7 @@ describe('CLI operation recovery projections', () => {
     vi.stubGlobal('fetch', fetchMock)
     const output = capture(process.stdout)
     try {
-      await runInvokeCommand([OPERATION_REF], { ...baseOptions, input: '{}' })
+      await runCallCommand([OPERATION_REF], { ...baseOptions, input: '{}' })
     } finally {
       output.restore()
     }
@@ -540,9 +540,9 @@ describe('CLI operation recovery projections', () => {
     const output = capture(process.stdout)
     const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
       kind: 'found',
-      invocationRef: 'invocation:one',
+      callRef: 'invocation:one',
       version: 1,
-      operationRef: OPERATION_REF,
+      toolRef: OPERATION_REF,
       state: 'terminal',
       result: completed,
     }), { status: 200, headers: { 'content-type': 'application/json' } }))
@@ -559,7 +559,7 @@ describe('CLI operation recovery projections', () => {
     }
 
     const [url, init] = fetchMock.mock.calls[0]!
-    expect(url).toBe('https://market.example/api/v1/operations/invocation%3Aone/reconcile')
+    expect(url).toBe('https://market.example/api/v1/calls/invocation%3Aone/reconcile')
     expect(init?.method).toBe('POST')
     expect(new Headers(init?.headers).get('Authorization')).toBe('Bearer ae-test-caller-key')
     expect(init?.redirect).toBe('manual')
@@ -567,7 +567,8 @@ describe('CLI operation recovery projections', () => {
     const rendered = output.read()
     expect(JSON.parse(rendered)).toMatchObject({
       kind: 'found',
-      invocationRef: 'invocation:one',
+      callRef: 'invocation:one',
+      toolRef: OPERATION_REF,
       result: completed,
       nextCommand: 'ae status invocation:one --base-url https://market.example --json',
     })
@@ -580,9 +581,9 @@ describe('CLI operation recovery projections', () => {
     const stderr = capture(process.stderr)
     vi.stubGlobal('fetch', vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
       kind: 'found',
-      invocationRef: 'invocation:one',
+      callRef: 'invocation:one',
       version: 1,
-      operationRef: OPERATION_REF,
+      toolRef: OPERATION_REF,
       state: 'terminal',
       result: completed,
     }), { status: 200, headers: { 'content-type': 'application/json' } })))

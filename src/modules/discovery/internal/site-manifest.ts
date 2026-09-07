@@ -4,18 +4,19 @@ import { schemaDescriptorDigest } from '@/modules/common/canonical-digest'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 import { trimTrailingSlashes } from '@/modules/common/trim-trailing-slashes'
 import {
-  OPERATION_INVOKE_ROUTE_CONTRACT,
-  OPERATION_INVOKE_ACTION_ID,
-  OPERATION_INVOKE_SCOPE,
-} from '@/modules/capability-execution/operation-invoke-entry'
+  CALL_ROUTE_CONTRACT,
+  CALL_ACTION_ID,
+  CALL_SCOPE,
+} from '@/modules/capability-execution/call-entry'
+import { TOOL_QUOTE_ACTION_ID } from '@/modules/capability-execution/quote'
 import {
-  operationInvokeResultKindValues,
-  operationInvokeRefusalCodeValues,
-} from '@/modules/capability-execution/operation-invoke-contracts'
+  callResultKindValues,
+  callRefusalCodeValues,
+} from '@/modules/capability-execution/call-contracts'
 import {
-  operationInvokeStatusStateValues,
-  operationInvokeStatusRefusalCodeValues,
-} from '@/modules/capability-execution/operation-recovery-contracts'
+  callStatusStateValues,
+  callStatusRefusalCodeValues,
+} from '@/modules/capability-execution/call-recovery-contracts'
 import { AGENT_ACCESS_OAUTH_SCOPES } from '@/lib/http/oauth-challenge'
 import {
   AGENT_ACCESS_OAUTH_GRANT_TYPES,
@@ -26,24 +27,24 @@ import {
   AGENT_ACCESS_OAUTH_ERROR_VALUES,
 } from '@/modules/agent-access/oauth-state'
 import {
-  operationRouteExamples,
+  callRouteExamples,
   publicMcpToolDocs,
   type PublicMcpToolDoc,
-  type PublicOperationRouteExample,
-} from './operation-contract'
+  type PublicCallRouteExample,
+} from './tool-contract'
 import { PublicAgentSkillPath } from './agent-skill'
 import { DiscoveryListingBoundaryLine, DiscoveryPublicSurfacePaths } from './discovery-files'
 import { DeveloperDiscoveryUnsupportedCapabilities } from '../developer-discovery'
 import type { DeveloperDiscoveryUnsupportedCapability } from '../developer-discovery'
-import { OPERATION_MARKET_ACTION_ENTRIES } from '@/modules/registry/operation-entry'
+import { TOOL_MARKET_ACTION_ENTRIES } from '@/modules/registry/tool-entry'
 import { describeActionForAgent, findAction } from '@/modules/actions'
 import { SiteDiscoveryManifestSchemaVersion } from '../site-manifest-version'
 import { FUNDING_PREFLIGHT_ROUTE_CONTRACTS } from '@/modules/money/public'
 
 const AGENT_HTTP_AUTHENTICATION = 'clerk_api_key' as const
 export const SITE_DISCOVERY_SUMMARY_LINES = Object.freeze([
-  'AE publishes a canonical catalogue of admitted market Operations.',
-  'Paid market work goes through POST /api/v1/operations/call.',
+  'AE publishes a canonical catalogue of admitted market Tools.',
+  'Paid market work goes through POST /api/v1/tools/call.',
   'Discovery supports comparison; it does not by itself prove execution, payment, or fulfilment.',
 ])
 
@@ -57,11 +58,11 @@ export const SiteDiscoveryEndpointKindValues = [
   'business_manifest',
   'discovery_file',
   'discovery_artifact',
-  'operation_read',
-  'operation_invoke',
-  'operation_status',
-  'operation_cancel',
-  'operation_reconcile',
+  'tool_read',
+  'call',
+  'call_status',
+  'call_cancel',
+  'call_reconcile',
   'funding_preflight',
   'privacy_request',
 ] as const
@@ -99,7 +100,7 @@ type SiteDiscoveryOAuthContract = Readonly<{
   scopesSupported: readonly string[]
 }>
 
-type SiteDiscoveryOperationRouteContract = Readonly<{
+type SiteDiscoveryCallRouteContract = Readonly<{
   actionId: string
   contractVersion: string
   method: string
@@ -109,10 +110,10 @@ type SiteDiscoveryOperationRouteContract = Readonly<{
   inputJsonSchema?: unknown
   outputJsonSchema?: unknown
   mcpToolName?: string
-  example: PublicOperationRouteExample
+  example: PublicCallRouteExample
 }>
 
-type SiteDiscoveryOperationRouteSummary = Omit<SiteDiscoveryOperationRouteContract, 'example'>
+type SiteDiscoveryCallRouteSummary = Omit<SiteDiscoveryCallRouteContract, 'example'>
 
 type SiteDiscoveryMcpToolContract = PublicMcpToolDoc
 
@@ -124,11 +125,11 @@ export type SiteDiscoveryManifestContract = Readonly<{
   origin: string
   generatedAt: number
   endpoints: readonly SiteDiscoveryEndpointContract[]
-  operationGateway: Readonly<{
-    contract: typeof OPERATION_INVOKE_ROUTE_CONTRACT.invoke.contractVersion
-    action: typeof OPERATION_INVOKE_ACTION_ID
-    scope: typeof OPERATION_INVOKE_SCOPE
-    routes: readonly SiteDiscoveryOperationRouteContract[]
+  toolGateway: Readonly<{
+    contract: typeof CALL_ROUTE_CONTRACT.call.contractVersion
+    action: typeof CALL_ACTION_ID
+    scope: typeof CALL_SCOPE
+    routes: readonly SiteDiscoveryCallRouteContract[]
     mcpTools: readonly SiteDiscoveryMcpToolContract[]
     oauth: SiteDiscoveryOAuthContract
     http: Readonly<{
@@ -148,14 +149,14 @@ export type SiteDiscoveryManifestContract = Readonly<{
       protocolVersion: typeof MCP_LATEST_PROTOCOL_VERSION
       lifecycle: readonly ['initialize', 'notifications/initialized', 'tools/list', 'tools/call', 'close']
       endpoint: string
-      operationInvokeTool: string
+      callTool: string
       inputFields: readonly string[]
     }>
     executionModes: Readonly<{
       gateway: Readonly<{
-        action: typeof OPERATION_INVOKE_ACTION_ID
+        action: typeof CALL_ACTION_ID
         authentication: typeof AGENT_HTTP_AUTHENTICATION
-        requiresOperationRef: true
+        requiresToolRef: true
       }>
       catalogOnly: Readonly<{
         action: null
@@ -169,10 +170,10 @@ export type SiteDiscoveryManifestContract = Readonly<{
       conflict: 'changed_material_refused'
       uncertain: 'recover_before_retry'
     }>
-    outcomes: typeof operationInvokeResultKindValues
-    statusStates: typeof operationInvokeStatusStateValues
-    refusalCodes: typeof operationInvokeRefusalCodeValues
-    statusRefusalCodes: typeof operationInvokeStatusRefusalCodeValues
+    outcomes: typeof callResultKindValues
+    statusStates: typeof callStatusStateValues
+    refusalCodes: typeof callRefusalCodeValues
+    statusRefusalCodes: typeof callStatusRefusalCodeValues
     recovery: Readonly<{
       statusAction: string
       advancedActions: Readonly<{
@@ -195,9 +196,9 @@ export type SiteDiscoveryManifestContract = Readonly<{
 export const SiteDiscoveryManifestPath = '/.well-known/ucp' as const
 const humanSurfaceLabels: Readonly<Record<string, string>> = {
   '/': 'Human entry point',
-  '/market': 'Operation catalogue',
+  '/market': 'Tool catalogue',
   '/for-agents': 'Agent setup guide',
-  '/for-providers': 'Guide for operation providers',
+  '/for-providers': 'Guide for Tool providers',
   '/about': 'About',
   '/privacy/remove-business': 'Listing correction or removal',
   [SiteDiscoveryManifestPath]: 'This document',
@@ -209,7 +210,7 @@ const humanSurfaceLabels: Readonly<Record<string, string>> = {
  *
  * Every path here is projected from a list that already governs another public
  * surface — the developer discovery routes and artifacts, the llms.txt public
- * surface list, and the operation invoke contract. Nothing is restated by
+ * surface list, and the Call route contract. Nothing is restated by
  * hand, so an endpoint cannot drift into this document without also changing
  * the surface that owns it.
  */
@@ -217,13 +218,13 @@ export function buildSiteDiscoveryManifest(
   input: Readonly<{ canonicalBaseUrl: string; now: number }>
 ): SiteDiscoveryManifestContract {
   const origin = trimTrailingSlashes(input.canonicalBaseUrl)
-  const routes = operationRouteExamples().map(({ route, example }) => ({ ...route, example }))
+  const routes = callRouteExamples().map(({ route, example }) => ({ ...route, example }))
   const mcpTools = publicMcpToolDocs()
-  const operationInvokeTool = mcpTools.find((tool) => tool.actionId === OPERATION_INVOKE_ACTION_ID)
-  if (operationInvokeTool === undefined) throw new Error('Operation invoke MCP tool is not registered')
-  const operationInvokeAction = findAction(OPERATION_INVOKE_ACTION_ID)
-  if (operationInvokeAction === undefined) throw new Error('Operation invoke action is not registered')
-  const operationInvokeDescriptor = describeActionForAgent(operationInvokeAction)
+  const callTool = mcpTools.find((tool) => tool.actionId === CALL_ACTION_ID)
+  if (callTool === undefined) throw new Error('Call action MCP tool is not registered')
+  const callAction = findAction(CALL_ACTION_ID)
+  if (callAction === undefined) throw new Error('Call action is not registered')
+  const callDescriptor = describeActionForAgent(callAction)
 
   const body = {
     schemaVersion: SiteDiscoveryManifestSchemaVersion,
@@ -232,10 +233,10 @@ export function buildSiteDiscoveryManifest(
     summary: SITE_DISCOVERY_SUMMARY_LINES,
     origin,
     endpoints: buildEndpoints(origin),
-    operationGateway: {
-      contract: OPERATION_INVOKE_ROUTE_CONTRACT.invoke.contractVersion,
-      action: OPERATION_INVOKE_ACTION_ID,
-      scope: OPERATION_INVOKE_SCOPE,
+    toolGateway: {
+      contract: CALL_ROUTE_CONTRACT.call.contractVersion,
+      action: CALL_ACTION_ID,
+      scope: CALL_SCOPE,
       routes,
       mcpTools,
       oauth: {
@@ -253,11 +254,11 @@ export function buildSiteDiscoveryManifest(
         errors: AGENT_ACCESS_OAUTH_ERROR_VALUES,
       },
       http: {
-        requestMediaType: OPERATION_INVOKE_ROUTE_CONTRACT.media.request,
-        responseMediaType: OPERATION_INVOKE_ROUTE_CONTRACT.media.response,
+        requestMediaType: CALL_ROUTE_CONTRACT.media.request,
+        responseMediaType: CALL_ROUTE_CONTRACT.media.response,
         idempotencyLocation: 'body.idempotencyKey',
-        authorizationHeader: OPERATION_INVOKE_ROUTE_CONTRACT.headers.authorization,
-        problemMediaType: OPERATION_INVOKE_ROUTE_CONTRACT.media.problem,
+        authorizationHeader: CALL_ROUTE_CONTRACT.headers.authorization,
+        problemMediaType: CALL_ROUTE_CONTRACT.media.problem,
         retry: {
           retryableField: 'retryable',
           retryAfterHeader: 'Retry-After',
@@ -267,16 +268,16 @@ export function buildSiteDiscoveryManifest(
       },
       mcp: {
         endpoint: `${origin}${MCP_HTTP_ENDPOINT_PATH}`,
-        operationInvokeTool: operationInvokeTool.name,
+        callTool: callTool.name,
         protocolVersion: MCP_LATEST_PROTOCOL_VERSION,
         lifecycle: ['initialize', 'notifications/initialized', 'tools/list', 'tools/call', 'close'],
-        inputFields: Object.keys(operationInvokeDescriptor.inputJsonSchema?.properties ?? {}),
+        inputFields: Object.keys(callDescriptor.inputJsonSchema?.properties ?? {}),
       },
       executionModes: {
         gateway: {
-          action: OPERATION_INVOKE_ACTION_ID,
+          action: CALL_ACTION_ID,
           authentication: AGENT_HTTP_AUTHENTICATION,
-          requiresOperationRef: true,
+          requiresToolRef: true,
         },
         catalogOnly: {
           action: null,
@@ -290,15 +291,15 @@ export function buildSiteDiscoveryManifest(
         conflict: 'changed_material_refused',
         uncertain: 'recover_before_retry',
       },
-      outcomes: operationInvokeResultKindValues,
-      statusStates: operationInvokeStatusStateValues,
-      refusalCodes: operationInvokeRefusalCodeValues,
-      statusRefusalCodes: operationInvokeStatusRefusalCodeValues,
+      outcomes: callResultKindValues,
+      statusStates: callStatusStateValues,
+      refusalCodes: callRefusalCodeValues,
+      statusRefusalCodes: callStatusRefusalCodeValues,
       recovery: {
-        statusAction: OPERATION_INVOKE_ROUTE_CONTRACT.status.actionId,
+        statusAction: CALL_ROUTE_CONTRACT.status.actionId,
         advancedActions: {
-          cancel: OPERATION_INVOKE_ROUTE_CONTRACT.cancel.actionId,
-          reconcile: OPERATION_INVOKE_ROUTE_CONTRACT.reconcile.actionId,
+          cancel: CALL_ROUTE_CONTRACT.cancel.actionId,
+          reconcile: CALL_ROUTE_CONTRACT.reconcile.actionId,
         },
         retryRule: 'inspect_status_then_recover_uncertain',
       },
@@ -318,7 +319,7 @@ export function buildSiteDiscoveryManifest(
 /**
  * Cold-start projection: enough to choose the next surface without embedding
  * every JSON schema twice. Exact action schemas remain available through MCP
- * tools/list, /api/discovery/schema, and Operation detail.
+ * tools/list, /api/discovery/schema, and Tool detail.
  */
 export function projectCompactSiteDiscoveryManifest(
   manifest: SiteDiscoveryManifestContract,
@@ -340,27 +341,27 @@ export function projectCompactSiteDiscoveryManifest(
       ...(endpoint.actionId === undefined ? {} : { actionId: endpoint.actionId }),
       ...(endpoint.contractVersion === undefined ? {} : { contractVersion: endpoint.contractVersion }),
     })),
-    operationGateway: {
-      contract: manifest.operationGateway.contract,
-      action: manifest.operationGateway.action,
-      scope: manifest.operationGateway.scope,
+    toolGateway: {
+      contract: manifest.toolGateway.contract,
+      action: manifest.toolGateway.action,
+      scope: manifest.toolGateway.scope,
       mcp: {
-        endpoint: manifest.operationGateway.mcp.endpoint,
-        protocolVersion: manifest.operationGateway.mcp.protocolVersion,
-        operationInvokeTool: manifest.operationGateway.mcp.operationInvokeTool,
+        endpoint: manifest.toolGateway.mcp.endpoint,
+        protocolVersion: manifest.toolGateway.mcp.protocolVersion,
+        callTool: manifest.toolGateway.mcp.callTool,
         lifecycle: 'The official MCP client performs initialize and close; this endpoint is session-optional.',
       },
       access: {
         anonymous: {
-          cli: 'List, search, describe, and compare current Operations without connecting.',
+          cli: 'List, search, describe, and compare current Tools without connecting.',
         },
         connected: {
-          authentication: manifest.operationGateway.executionModes.gateway.authentication,
+          authentication: manifest.toolGateway.executionModes.gateway.authentication,
           cli: 'ae connect',
-          invokeAction: manifest.operationGateway.executionModes.gateway.action,
+          callAction: manifest.toolGateway.executionModes.gateway.action,
         },
       },
-      recovery: manifest.operationGateway.recovery,
+      recovery: manifest.toolGateway.recovery,
     },
     assistantSetup: manifest.assistantSetup,
     fullContract: `${manifest.origin}${SiteDiscoveryManifestPath}?technical=1`,
@@ -374,15 +375,18 @@ export function projectCompactSiteDiscoveryManifest(
 }
 
 function buildEndpoints(origin: string): readonly SiteDiscoveryEndpointContract[] {
-  const operationRoutes: readonly SiteDiscoveryOperationRouteSummary[] = operationRouteExamples().map(({ route }) => route)
+  const callRoutes: readonly SiteDiscoveryCallRouteSummary[] = callRouteExamples().map(({ route }) => route)
   const labels: Readonly<Record<string, string>> = {
     ...humanSurfaceLabels,
-    ...Object.fromEntries(operationRoutes.map((route) => [route.path, `Operation ${route.actionId}`])),
-    ...Object.fromEntries(OPERATION_MARKET_ACTION_ENTRIES.map((entry) => [entry.pathTemplate, `Operation ${entry.relation}`])),
+    ...Object.fromEntries(callRoutes.map((route) => [
+      route.path,
+      `${route.actionId === TOOL_QUOTE_ACTION_ID ? 'Tool' : 'Call'} ${route.actionId}`,
+    ])),
+    ...Object.fromEntries(TOOL_MARKET_ACTION_ENTRIES.map((entry) => [entry.pathTemplate, `Tool ${entry.relation}`])),
     ...Object.fromEntries(FUNDING_PREFLIGHT_ROUTE_CONTRACTS.map((route) => [route.path, route.label])),
   }
   const paths: readonly string[] = [
-    ...operationRoutes.map((route) => route.path),
+    ...callRoutes.map((route) => route.path),
     ...DiscoveryPublicSurfacePaths,
     PublicAgentSkillPath,
     ...FUNDING_PREFLIGHT_ROUTE_CONTRACTS.map((route) => route.path),
@@ -393,20 +397,20 @@ function buildEndpoints(origin: string): readonly SiteDiscoveryEndpointContract[
   for (const path of paths) {
     if (seen.has(path)) continue
     seen.add(path)
-    const access = accessFor(path, operationRoutes)
-    const operationRead = OPERATION_MARKET_ACTION_ENTRIES.find((entry) => entry.pathTemplate === path)
-    const operationAction = operationRead === undefined ? undefined : findAction(operationRead.actionId)
-    if (operationRead !== undefined && operationAction === undefined) {
-      throw new Error(`Operation market action is not registered: ${operationRead.actionId}`)
+    const access = accessFor(path, callRoutes)
+    const toolRead = TOOL_MARKET_ACTION_ENTRIES.find((entry) => entry.pathTemplate === path)
+    const toolAction = toolRead === undefined ? undefined : findAction(toolRead.actionId)
+    if (toolRead !== undefined && toolAction === undefined) {
+      throw new Error(`Tool market action is not registered: ${toolRead.actionId}`)
     }
-    const operationDescriptor = operationAction === undefined ? undefined : describeActionForAgent(operationAction)
-    const operationMetadata = operationAction === undefined || operationDescriptor === undefined
+    const toolDescriptor = toolAction === undefined ? undefined : describeActionForAgent(toolAction)
+    const toolMetadata = toolAction === undefined || toolDescriptor === undefined
       ? undefined
       : {
-        actionId: operationDescriptor.id,
-        contractVersion: operationAction.invocationContract.version,
-        ...(operationDescriptor.inputJsonSchema === undefined ? {} : { inputJsonSchema: operationDescriptor.inputJsonSchema }),
-        ...(operationDescriptor.outputJsonSchema === undefined ? {} : { outputJsonSchema: operationDescriptor.outputJsonSchema }),
+        actionId: toolDescriptor.id,
+        contractVersion: toolAction.invocationContract.version,
+        ...(toolDescriptor.inputJsonSchema === undefined ? {} : { inputJsonSchema: toolDescriptor.inputJsonSchema }),
+        ...(toolDescriptor.outputJsonSchema === undefined ? {} : { outputJsonSchema: toolDescriptor.outputJsonSchema }),
       }
     const fundingRoute = FUNDING_PREFLIGHT_ROUTE_CONTRACTS.find((route) => route.path === path)
     const fundingMetadata = fundingRoute === undefined
@@ -419,17 +423,17 @@ function buildEndpoints(origin: string): readonly SiteDiscoveryEndpointContract[
         outputJsonSchema: convertSchemaToJsonSchema(fundingRoute.outputSchema),
       }
     endpoints.push({
-      kind: kindFor(path, operationRoutes),
+      kind: kindFor(path, callRoutes),
       label: labels[path] ?? path,
       method: access.method,
       path,
       url: `${origin}${path}`,
       templated: path.includes('{'),
-      mediaType: mediaTypeFor(path, operationRoutes),
+      mediaType: mediaTypeFor(path, callRoutes),
       authentication: access.authentication,
       ...(access.requiredScope === undefined ? {} : { requiredScope: access.requiredScope }),
       ...(access.requiredHeaders === undefined ? {} : { requiredHeaders: access.requiredHeaders }),
-      ...(operationMetadata === undefined ? {} : operationMetadata),
+      ...(toolMetadata === undefined ? {} : toolMetadata),
       ...(fundingMetadata === undefined ? {} : fundingMetadata),
     })
   }
@@ -437,14 +441,14 @@ function buildEndpoints(origin: string): readonly SiteDiscoveryEndpointContract[
   return endpoints
 }
 
-function kindFor(path: string, operationRoutes: readonly SiteDiscoveryOperationRouteSummary[]): SiteDiscoveryEndpointKind {
+function kindFor(path: string, callRoutes: readonly SiteDiscoveryCallRouteSummary[]): SiteDiscoveryEndpointKind {
   if (FUNDING_PREFLIGHT_ROUTE_CONTRACTS.some((route) => route.path === path)) return 'funding_preflight'
-  if (OPERATION_MARKET_ACTION_ENTRIES.some((entry) => entry.pathTemplate === path)) return 'operation_read'
-  const operationRoute = operationRoutes.find((route) => route.path === path)
-  if (operationRoute?.actionId === OPERATION_INVOKE_ROUTE_CONTRACT.invoke.actionId) return 'operation_invoke'
-  if (operationRoute?.actionId === OPERATION_INVOKE_ROUTE_CONTRACT.status.actionId) return 'operation_status'
-  if (operationRoute?.actionId === OPERATION_INVOKE_ROUTE_CONTRACT.cancel.actionId) return 'operation_cancel'
-  if (operationRoute?.actionId === OPERATION_INVOKE_ROUTE_CONTRACT.reconcile.actionId) return 'operation_reconcile'
+  if (TOOL_MARKET_ACTION_ENTRIES.some((entry) => entry.pathTemplate === path)) return 'tool_read'
+  const callRoute = callRoutes.find((route) => route.path === path)
+  if (callRoute?.actionId === CALL_ROUTE_CONTRACT.call.actionId) return 'call'
+  if (callRoute?.actionId === CALL_ROUTE_CONTRACT.status.actionId) return 'call_status'
+  if (callRoute?.actionId === CALL_ROUTE_CONTRACT.cancel.actionId) return 'call_cancel'
+  if (callRoute?.actionId === CALL_ROUTE_CONTRACT.reconcile.actionId) return 'call_reconcile'
   if (path === SiteDiscoveryManifestPath) return 'site_entry_point'
   if (path === PublicAgentSkillPath) return 'assistant_setup'
   if (path === '/privacy/remove-business') return 'privacy_request'
@@ -454,7 +458,7 @@ function kindFor(path: string, operationRoutes: readonly SiteDiscoveryOperationR
   return 'human_surface'
 }
 
-function accessFor(path: string, operationRoutes: readonly SiteDiscoveryOperationRouteSummary[]): Readonly<{
+function accessFor(path: string, callRoutes: readonly SiteDiscoveryCallRouteSummary[]): Readonly<{
   method: 'GET' | 'POST'
   authentication: 'none' | typeof AGENT_HTTP_AUTHENTICATION
   requiredScope?: string
@@ -470,24 +474,24 @@ function accessFor(path: string, operationRoutes: readonly SiteDiscoveryOperatio
         : {}),
     }
   }
-  const marketOperation = OPERATION_MARKET_ACTION_ENTRIES.find((entry) => entry.pathTemplate === path)
-  if (marketOperation !== undefined) {
-    return { method: marketOperation.method, authentication: marketOperation.authentication }
+  const marketTool = TOOL_MARKET_ACTION_ENTRIES.find((entry) => entry.pathTemplate === path)
+  if (marketTool !== undefined) {
+    return { method: marketTool.method, authentication: marketTool.authentication }
   }
-  const operationRoute = operationRoutes.find((route) => route.path === path)
-  if (operationRoute !== undefined) {
+  const callRoute = callRoutes.find((route) => route.path === path)
+  if (callRoute !== undefined) {
     return {
-      method: operationRoute.method as 'GET' | 'POST',
+      method: callRoute.method as 'GET' | 'POST',
       authentication: AGENT_HTTP_AUTHENTICATION,
-      requiredScope: OPERATION_INVOKE_SCOPE,
-      requiredHeaders: Object.fromEntries(operationRoute.requiredHeaders.map((header) => [header, 'required'])),
+      requiredScope: CALL_SCOPE,
+      requiredHeaders: Object.fromEntries(callRoute.requiredHeaders.map((header) => [header, 'required'])),
     }
   }
   return { method: 'GET', authentication: 'none' }
 }
 
-function mediaTypeFor(path: string, operationRoutes: readonly SiteDiscoveryOperationRouteSummary[]): string {
-  if (operationRoutes.some((route) => route.path === path)) return OPERATION_INVOKE_ROUTE_CONTRACT.media.response
+function mediaTypeFor(path: string, callRoutes: readonly SiteDiscoveryCallRouteSummary[]): string {
+  if (callRoutes.some((route) => route.path === path)) return CALL_ROUTE_CONTRACT.media.response
   if (path.endsWith('.txt')) return 'text/plain'
   if (path.endsWith('.xml')) return 'application/xml'
   if (path.endsWith('.md')) return 'text/markdown'

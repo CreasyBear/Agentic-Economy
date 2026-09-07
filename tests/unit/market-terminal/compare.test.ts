@@ -4,9 +4,6 @@ import { runCompareCommand } from '../../../tools/ae/commands/compare'
 import type { CliOptions } from '../../../tools/ae/lib/args'
 import { commandUsage } from '../../../tools/ae/lib/help'
 import { CliFailure } from '../../../tools/ae/lib/output'
-import { OPERATION_INVOKE_ROUTE_CONTRACT } from '@/modules/capability-execution/operation-invoke-entry'
-import { projectOperationCompareChoices } from '@/modules/registry/operation-choice-contracts'
-import { operationCompareOutputSchema } from '@/modules/capability-supply/public'
 
 const options: CliOptions = {
   baseUrl: 'https://market.example',
@@ -21,75 +18,31 @@ const refs = [
   `operation:v1:${'b'.repeat(64)}`,
 ]
 
-const operation = {
-  operationRef: refs[0]!,
-  operationId: 'reference.lookup',
-  callVia: OPERATION_INVOKE_ROUTE_CONTRACT.invoke.path,
-  paymentLane: 'brokered',
-  contract: {
+function tool(toolRef: string, providerName = 'Reference Services') {
+  return {
+    toolRef,
     capabilityId: 'reference.lookup',
-    version: 1,
-    inputJsonSchema: { type: 'object' },
-    outputJsonSchema: { type: 'object' },
-    customerAnnotations: [],
-  },
-  business: { businessId: 'business:reference', slug: 'reference', name: 'Reference Services' },
-  offering: { offeringRef: 'offering:reference', revision: 1, label: 'Reference quote', summary: 'One reference quote.' },
-  summary: 'Look up one reference value.',
-  commercial: {
-    price: { kind: 'fixed', amount: { currency: 'USD', units: '125', exponent: 2 } },
-    materialTerms: [],
-    relationship: { kind: 'none', summary: 'No commercial relationship.' },
-  },
-  dataUse: [],
-  effects: [],
-  evidence: [],
-  cancellation: { kind: 'unsupported' },
-  recovery: { idempotency: 'required', recovery: 'retry_safe' },
-  authentication: { kind: 'ae_api_key' },
-  transport: { method: 'GET', pathTemplate: '/lookup', responseStatus: 200, responseContentType: 'application/json', requestTimeoutMs: 5_000 },
-  provenance: { publisher: 'provider_owned', sourceKind: 'openapi_http' },
-  availability: { posture: 'setup_required', observedAt: 1_000, validUntil: 10_000 },
-  navigation: [],
-} as const
+    title: 'Reference quote',
+    description: 'Look up one reference value.',
+    provider: { name: providerName, slug: providerName.toLowerCase().replaceAll(' ', '-') },
+    priceLabel: 'USD 1.25',
+    healthStatus: 'operational' as const,
+  }
+}
 
-const humanResult = projectOperationCompareChoices(operationCompareOutputSchema.parse({
+const result = {
   kind: 'ok' as const,
-  schemaVersion: 'registry-operations:v1' as const,
-  operations: [operation],
-  facts: [
-    {
-      field: 'price' as const,
-      values: [{
-        operationRef: operation.operationRef,
-        value: operation.commercial.price,
-        source: 'publication' as const,
-        observedAt: 1_000,
-        validUntil: 10_000,
-      }],
-    },
-    {
-      field: 'availability' as const,
-      values: [{
-        operationRef: operation.operationRef,
-        value: operation.availability,
-        source: 'readiness' as const,
-        observedAt: 1_000,
-        validUntil: 10_000,
-      }],
-    },
-  ],
-  navigation: [],
-}))
-const result = humanResult
+  schemaVersion: 'registry-tools:v2' as const,
+  tools: [tool(refs[0]!)],
+}
 
 afterEach(() => {
   vi.restoreAllMocks()
   vi.unstubAllGlobals()
 })
 
-describe('anonymous Operation compare CLI', () => {
-  it('posts exact refs to the canonical compare route without auth', async () => {
+describe('anonymous Tool compare CLI', () => {
+  it('posts exact Tool refs to the canonical compare route without auth', async () => {
     const output: string[] = []
     vi.spyOn(process.stdout, 'write').mockImplementation((chunk) => {
       output.push(String(chunk))
@@ -104,25 +57,26 @@ describe('anonymous Operation compare CLI', () => {
     await runCompareCommand(refs, { ...options, technical: true })
 
     const [url, init] = fetchMock.mock.calls[0]!
-    expect(url).toBe('https://market.example/api/v1/market-operations/compare')
+    expect(url).toBe('https://market.example/api/v1/market-tools/compare')
     expect(init?.method).toBe('POST')
     expect(new Headers(init?.headers).get('Authorization')).toBeNull()
-    expect(JSON.parse(String(init?.body))).toEqual({ operationRefs: refs })
+    expect(JSON.parse(String(init?.body))).toEqual({ toolRefs: refs })
     expect(JSON.parse(output.join(''))).toEqual({
       ...result,
       nextCommands: [{
-        operationRef: operation.operationRef,
-        command: `ae describe ${operation.operationRef} --json --technical`,
+        toolRef: refs[0],
+        command: `ae describe ${refs[0]} --json --technical`,
       }],
     })
   })
+
   it('renders canonical comparison facts and gates technical identity behind --technical', async () => {
     const output: string[] = []
     vi.spyOn(process.stdout, 'write').mockImplementation((chunk) => {
       output.push(String(chunk))
       return true
     })
-    const fetchMock = vi.fn<typeof fetch>().mockImplementation(async () => new Response(JSON.stringify(humanResult), {
+    const fetchMock = vi.fn<typeof fetch>().mockImplementation(async () => new Response(JSON.stringify(result), {
       status: 200,
       headers: { 'content-type': 'application/json' },
     }))
@@ -132,20 +86,20 @@ describe('anonymous Operation compare CLI', () => {
     const human = output.join('')
     expect(human).toContain('Reference Services — Reference quote')
     expect(human).toContain('indicative price: USD 1.25')
-    expect(human).toContain('Choose one Provider, then describe its exact Operation:')
-    expect(human).toContain(`ae describe ${operation.operationRef}`)
+    expect(human).toContain('Choose one Provider, then describe its exact Tool:')
+    expect(human).toContain(`ae describe ${refs[0]}`)
 
     output.length = 0
     await runCompareCommand(refs, { ...options, json: false, technical: true })
     const technical = output.join('')
-    expect(technical).toContain(operation.operationRef)
-    expect(technical).toContain('schema: registry-operations:v2')
+    expect(technical).toContain(refs[0]!)
+    expect(technical).toContain('schema: registry-tools:v2')
     expect(technical).toContain('capability=reference.lookup')
   })
 
-  it('hands one exact ref to inspect without performing meaningless comparison work', async () => {
+  it('hands one exact Tool ref to describe without performing meaningless comparison work', async () => {
     expect(commandUsage('compare')).toBe(
-      'ae compare <operation-ref> <operation-ref> [<operation-ref> ...]',
+      'ae compare <tool-ref> <tool-ref> [<tool-ref> ...]',
     )
     const fetchMock = vi.fn<typeof fetch>()
     vi.stubGlobal('fetch', fetchMock)
@@ -158,30 +112,22 @@ describe('anonymous Operation compare CLI', () => {
     })).rejects.toMatchObject({
       kind: 'INVALID_ARGUMENT',
       code: 'compare-needs-alternative',
-      suggestion: 'Describe this Operation directly, or search for another Provider to compare.',
+      suggestion: 'Describe this Tool directly, or search for another Provider to compare.',
       nextCommand: `ae describe ${refs[0]} --base-url 'http://[::1]:3024' --json --technical`,
     } satisfies Partial<CliFailure>)
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
-  it('returns one exact inspect continuation per supplier and preserves the selected origin and output mode', async () => {
+  it('returns one exact describe continuation per Tool and preserves the selected origin and output mode', async () => {
     const output: string[] = []
     vi.spyOn(process.stdout, 'write').mockImplementation((chunk) => {
       output.push(String(chunk))
       return true
     })
-    const secondOperation = {
-      ...operation,
-      operationRef: refs[1]!,
-      business: { businessId: 'business:alternative', slug: 'alternative', name: 'Alternative Services' },
+    const compared = {
+      ...result,
+      tools: [tool(refs[0]!), tool(refs[1]!, 'Alternative Services')],
     }
-    const compared = projectOperationCompareChoices(operationCompareOutputSchema.parse({
-      kind: 'ok',
-      schemaVersion: 'registry-operations:v1',
-      operations: [operation, secondOperation],
-      facts: [],
-      navigation: [],
-    }))
     vi.stubGlobal('fetch', vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify(compared), {
       status: 200,
       headers: { 'content-type': 'application/json' },
@@ -196,9 +142,9 @@ describe('anonymous Operation compare CLI', () => {
 
     expect(JSON.parse(output.join(''))).toEqual({
       ...compared,
-      nextCommands: refs.map((operationRef) => ({
-        operationRef,
-        command: `ae describe ${operationRef} --base-url 'http://[::1]:3024' --json --technical`,
+      nextCommands: refs.map((toolRef) => ({
+        toolRef,
+        command: `ae describe ${toolRef} --base-url 'http://[::1]:3024' --json --technical`,
       })),
     })
     expect(output.join('')).not.toMatch(/credential|password|secret|idempotency/iu)
@@ -207,7 +153,7 @@ describe('anonymous Operation compare CLI', () => {
   it.each([
     { args: [], code: 'compare-usage' },
     { args: [refs[0]!, refs[1]!, refs[0]!, refs[1]!, refs[0]!], code: 'compare-usage' },
-    { args: [refs[0]!, 'not-an-operation-ref'], code: 'compare-input' },
+    { args: [refs[0]!, 'not-a-tool-ref'], code: 'compare-input' },
   ])('rejects malformed or out-of-bound refs before network work', async ({ args, code }) => {
     const fetchMock = vi.fn<typeof fetch>()
     vi.stubGlobal('fetch', fetchMock)

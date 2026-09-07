@@ -26,7 +26,7 @@ export type NormalizePricingConfigResult =
   | Readonly<{ kind: 'valid'; config: PricingConfig }>
   | Readonly<{ kind: 'invalid'; code: 'pricing_config_invalid' }>
 
-export type ResolveInvocationPriceInput = Readonly<{
+export type ResolveCallPriceInput = Readonly<{
   config: PricingConfig | unknown
   freeCallsUsed: number
   priceDigest: string
@@ -75,7 +75,7 @@ export function pricingConfigDigest(config: PricingConfig): string {
   return canonicalDigest(normalized.config)
 }
 
-export function resolveInvocationPrice(input: ResolveInvocationPriceInput): PricingResolution {
+export function resolveCallPrice(input: ResolveCallPriceInput): PricingResolution {
   const normalized = normalizePricingConfig(input.config)
   if (normalized.kind === 'invalid') return { kind: 'refused', code: 'pricing_config_invalid' }
   const config = normalized.config

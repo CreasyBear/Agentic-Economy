@@ -1,38 +1,38 @@
 import { providerSafeActionToolName } from '@/modules/actions/tool-contract'
 import { isRecord } from '@/modules/common/is-record'
-import { isPublicOperationRef } from '@/modules/capability-supply/public'
+import { isPublicToolRef } from '@/modules/capability-supply/public'
 import type {
-  PublicOperationAuthentication,
-  PublicOperationAvailability,
-  PublicOperationPrice,
+  PublicToolAuthentication,
+  PublicToolAvailability,
+  PublicToolPrice,
 } from '@/modules/capability-supply/public'
 import {
-  formatOperationAuthentication,
-  formatOperationPrice,
-  formatOperationReadiness,
-} from '@/modules/market/operation-view-model'
+  formatToolAuthentication,
+  formatToolPrice,
+  formatToolReadiness,
+} from '@/modules/market/tool-view-model'
 import {
-  operationInvokeResultKindValues,
-  operationInvokeResultSchema,
-  type OperationInvokeResult,
-} from '@/modules/capability-execution/operation-invoke-contracts'
+  callResultKindValues,
+  callResultSchema,
+  type CallResult,
+} from '@/modules/capability-execution/call-contracts'
 import {
-  operationInspectResultSchema,
-  type OperationInspectResult,
-} from '@/modules/capability-execution/operation-commitment'
+  toolQuoteResultSchema,
+  type ToolQuoteResult,
+} from '@/modules/capability-execution/quote'
 import {
-  suggestContinuation,
-  type SuggestedContinuation,
-} from '@/modules/market/suggested-continuation'
+  suggestNextAction,
+  type SuggestedNextAction,
+} from '@/modules/market/suggested-next-action'
 import { formatCurrencyAmount, readExactAmount } from '@/modules/money/public'
 
 export const CHAT_TOOL_IDS = [
-  'registry.operations.list',
-  'registry.operations.search',
-  'registry.operations.describe',
-  'registry.operations.compare',
-  'operation.inspect',
-  'operation.invoke',
+  'registry.tools.list',
+  'registry.tools.search',
+  'registry.tools.describe',
+  'registry.tools.compare',
+  'tool.quote',
+  'tool.call',
 ] as const
 
 export type ChatToolId = (typeof CHAT_TOOL_IDS)[number]
@@ -51,67 +51,67 @@ export const CHAT_TOOL_NAME_MAP = Object.freeze({
 })
 
 export const CHAT_TOOL_TITLES: Readonly<Record<ChatToolId, string>> = {
-  'registry.operations.list': 'Browse Operations',
-  'registry.operations.search': 'Search tools',
-  'registry.operations.describe': 'Operation details',
-  'registry.operations.compare': 'Compare tools',
-  'operation.inspect': 'Confirm purchase terms',
-  'operation.invoke': 'Invoke',
+  'registry.tools.list': 'Browse Tools',
+  'registry.tools.search': 'Search tools',
+  'registry.tools.describe': 'Tool details',
+  'registry.tools.compare': 'Compare tools',
+  'tool.quote': 'Confirm purchase terms',
+  'tool.call': 'Call',
 }
 
-export type OperationChoiceRow = Readonly<{
-  operationRef: string
+export type ToolChoiceRow = Readonly<{
+  toolRef: string
   title: string
-  supplier?: string
+  provider?: string
   price?: string
   readiness?: string
   access?: string
 }>
 
-export type OperationFact = Readonly<{
+export type ToolFact = Readonly<{
   label: string
   value: string
 }>
 
-export type OperationExecutionState = OperationInvokeResult['kind']
+export type CallResultState = CallResult['kind']
 
 type CardChrome = Readonly<{
   toolId: ChatToolId
   title: string
 }>
 
-export type OperationCardProjection =
+export type ToolCardProjection =
   | (CardChrome & { kind: 'working' })
   | (CardChrome & { kind: 'status'; state: 'refused' | 'error'; summary: string })
   | (CardChrome & {
       kind: 'choices'
       state: 'complete'
-      choices: readonly OperationChoiceRow[]
-      operationRefs: readonly string[]
+      choices: readonly ToolChoiceRow[]
+      toolRefs: readonly string[]
       count?: number
-      contrasts?: readonly OperationFact[]
+      contrasts?: readonly ToolFact[]
     })
   | (CardChrome & {
       kind: 'inspect'
       state: 'complete'
-      facts: readonly OperationFact[]
-      operationRefs: readonly string[]
+      facts: readonly ToolFact[]
+      toolRefs: readonly string[]
     })
   | (CardChrome & {
       kind: 'execute'
-      state: OperationExecutionState
-      operationRefs: readonly string[]
+      state: CallResultState
+      toolRefs: readonly string[]
       name?: string
-      invocationRef?: string
+      callRef?: string
       outputPreview?: string
       outputTruncated?: boolean
-      facts: readonly OperationFact[]
+      facts: readonly ToolFact[]
       receiptRef?: string
       evidenceHash?: string
       summary: string
       nextAction?: string
       retryable?: boolean
-      continuation?: SuggestedContinuation
+      suggestedNextAction?: SuggestedNextAction
     })
 
 const REFUSAL_SUMMARIES: Readonly<Record<string, string>> = {
@@ -124,8 +124,8 @@ const REFUSAL_SUMMARIES: Readonly<Record<string, string>> = {
   under_review: 'Under review',
   updated_terms_require_review: 'Updated terms require review',
   not_supported_by_ae: 'Not supported',
-  operation_not_found: 'Not found',
-  operation_unavailable: 'Unavailable',
+  tool_not_found: 'Not found',
+  tool_unavailable: 'Unavailable',
   mapping_unavailable: 'Mapping unavailable',
   mapping_incompatible: 'Mapping incompatible',
   mapping_cycle: 'Mapping cycle detected',
@@ -175,11 +175,11 @@ function boundedString(value: unknown, maximum: number): string | undefined {
 }
 
 function addRef(refs: string[], value: unknown): void {
-  if (refs.length >= 4 || !isPublicOperationRef(value) || refs.includes(value)) return
+  if (refs.length >= 4 || !isPublicToolRef(value) || refs.includes(value)) return
   refs.push(value)
 }
 
-function readPrice(value: unknown): PublicOperationPrice | undefined {
+function readPrice(value: unknown): PublicToolPrice | undefined {
   if (!isRecord(value) || typeof value.kind !== 'string') return undefined
   if (value.kind === 'on_request') return { kind: 'on_request' }
   if (value.kind === 'fixed') {
@@ -196,7 +196,7 @@ function readPrice(value: unknown): PublicOperationPrice | undefined {
   return undefined
 }
 
-function readAuthentication(value: unknown): PublicOperationAuthentication | undefined {
+function readAuthentication(value: unknown): PublicToolAuthentication | undefined {
   if (!isRecord(value) || typeof value.kind !== 'string') return undefined
   if (value.kind === 'ae_api_key') return { kind: 'ae_api_key' }
   if (value.kind === 'x402') return { kind: 'x402' }
@@ -209,7 +209,7 @@ function readAuthentication(value: unknown): PublicOperationAuthentication | und
   return undefined
 }
 
-function readPosture(value: unknown): PublicOperationAvailability['posture'] | undefined {
+function readPosture(value: unknown): PublicToolAvailability['posture'] | undefined {
   if (!isRecord(value) || typeof value.posture !== 'string') return undefined
   if (value.posture === 'routeable' || value.posture === 'setup_required' || value.posture === 'unavailable') {
     return value.posture
@@ -217,14 +217,14 @@ function readPosture(value: unknown): PublicOperationAvailability['posture'] | u
   return undefined
 }
 
-function rowFromChoiceFields(value: unknown): OperationChoiceRow | null {
+function rowFromChoiceFields(value: unknown): ToolChoiceRow | null {
   if (!isRecord(value)) return null
   const refs: string[] = []
-  addRef(refs, value.operationRef)
-  const operationRef = refs[0]
+  addRef(refs, value.toolRef)
+  const toolRef = refs[0]
   const title = stringField(value.title)
-  if (operationRef === undefined || title === undefined) return null
-  const supplier = isRecord(value.provider) ? stringField(value.provider.name) : undefined
+  if (toolRef === undefined || title === undefined) return null
+  const provider = isRecord(value.provider) ? stringField(value.provider.name) : undefined
   const price = stringField(value.priceLabel)
   const healthStatus = stringField(value.healthStatus)
   const readiness = healthStatus === 'operational'
@@ -236,90 +236,94 @@ function rowFromChoiceFields(value: unknown): OperationChoiceRow | null {
         : undefined
   const authentication = readAuthentication(value.authentication)
   return {
-    operationRef,
+    toolRef,
     title,
-    ...(supplier === undefined ? {} : { supplier }),
+    ...(provider === undefined ? {} : { provider }),
     ...(price === undefined ? {} : { price }),
     ...(readiness === undefined ? {} : { readiness }),
-    ...(authentication === undefined ? {} : { access: formatOperationAuthentication(authentication) }),
+    ...(authentication === undefined ? {} : { access: formatToolAuthentication(authentication) }),
   }
 }
 
-function rowFromDescriptorFields(value: unknown): OperationChoiceRow | null {
+function rowFromDescriptorFields(value: unknown): ToolChoiceRow | null {
   if (!isRecord(value)) return null
   const refs: string[] = []
-  addRef(refs, value.operationRef)
-  const operationRef = refs[0]
+  addRef(refs, value.toolRef)
+  const toolRef = refs[0]
   const title = isRecord(value.offering) ? stringField(value.offering.label) : undefined
-  if (operationRef === undefined || title === undefined) return null
-  const supplier = isRecord(value.business) ? stringField(value.business.name) : undefined
+  if (toolRef === undefined || title === undefined) return null
+  const provider = isRecord(value.provider)
+    ? stringField(value.provider.name)
+    : isRecord(value.business)
+      ? stringField(value.business.name)
+      : undefined
   const price = isRecord(value.commercial) ? readPrice(value.commercial.price) : undefined
   const posture = readPosture(value.availability)
   const authentication = readAuthentication(value.authentication)
   return {
-    operationRef,
+    toolRef,
     title,
-    ...(supplier === undefined ? {} : { supplier }),
-    ...(price === undefined ? {} : { price: formatOperationPrice(price) }),
-    ...(posture === undefined ? {} : { readiness: formatOperationReadiness(posture) }),
-    ...(authentication === undefined ? {} : { access: formatOperationAuthentication(authentication) }),
+    ...(provider === undefined ? {} : { provider }),
+    ...(price === undefined ? {} : { price: formatToolPrice(price) }),
+    ...(posture === undefined ? {} : { readiness: formatToolReadiness(posture) }),
+    ...(authentication === undefined ? {} : { access: formatToolAuthentication(authentication) }),
   }
 }
 
-function projectLiveChoice(value: unknown): OperationChoiceRow | null {
+function projectLiveChoice(value: unknown): ToolChoiceRow | null {
   return rowFromChoiceFields(value) ?? rowFromDescriptorFields(value)
 }
 
-function projectLiveChoices(values: unknown): OperationChoiceRow[] {
+function projectLiveChoices(values: unknown): ToolChoiceRow[] {
   if (!Array.isArray(values)) return []
-  const choices: OperationChoiceRow[] = []
+  const choices: ToolChoiceRow[] = []
   for (const value of values) {
     const choice = projectLiveChoice(value)
     if (choice === null) continue
-    if (choices.some((existing) => existing.operationRef === choice.operationRef)) continue
+    if (choices.some((existing) => existing.toolRef === choice.toolRef)) continue
     choices.push(choice)
     if (choices.length >= 4) break
   }
   return choices
 }
 
-function projectStoredChoice(value: unknown): OperationChoiceRow | null {
+function projectStoredChoice(value: unknown): ToolChoiceRow | null {
   if (!isRecord(value)) return null
   const refs: string[] = []
-  addRef(refs, value.operationRef)
-  const operationRef = refs[0]
+  addRef(refs, value.toolRef)
+  const toolRef = refs[0]
   const title = stringField(value.title)
-  if (operationRef === undefined || title === undefined) return null
-  const supplier = stringField(value.supplier)
+  if (toolRef === undefined || title === undefined) return null
+  const provider = stringField(value.provider)
   const price = stringField(value.price)
   const readiness = stringField(value.readiness)
   const access = stringField(value.access)
   return {
-    operationRef,
+    toolRef,
     title,
-    ...(supplier === undefined ? {} : { supplier }),
+    ...(provider === undefined ? {} : { provider }),
     ...(price === undefined ? {} : { price }),
     ...(readiness === undefined ? {} : { readiness }),
     ...(access === undefined ? {} : { access }),
   }
 }
 
-function projectStoredChoices(values: unknown): OperationChoiceRow[] {
+function projectStoredChoices(values: unknown): ToolChoiceRow[] {
   if (!Array.isArray(values)) return []
-  const choices: OperationChoiceRow[] = []
+  const choices: ToolChoiceRow[] = []
   for (const value of values) {
     const choice = projectStoredChoice(value)
     if (choice === null) continue
-    if (choices.some((existing) => existing.operationRef === choice.operationRef)) continue
+    if (choices.some((existing) => existing.toolRef === choice.toolRef)) continue
     choices.push(choice)
     if (choices.length >= 4) break
   }
   return choices
 }
 
-function projectStoredFacts(values: unknown): OperationFact[] {
+function projectStoredFacts(values: unknown): ToolFact[] {
   if (!Array.isArray(values)) return []
-  const facts: OperationFact[] = []
+  const facts: ToolFact[] = []
   for (const value of values) {
     if (!isRecord(value)) continue
     const label = stringField(value.label)
@@ -331,17 +335,17 @@ function projectStoredFacts(values: unknown): OperationFact[] {
   return facts
 }
 
-function collectOperationRefs(output: Record<string, unknown>, choices: readonly OperationChoiceRow[]): string[] {
-  const operationRefs: string[] = []
-  addRef(operationRefs, output.operationRef)
-  if (isRecord(output.operation)) addRef(operationRefs, output.operation.operationRef)
-  for (const field of ['operationRefs', 'items', 'operations'] as const) {
+function collectToolRefs(output: Record<string, unknown>, choices: readonly ToolChoiceRow[]): string[] {
+  const toolRefs: string[] = []
+  addRef(toolRefs, output.toolRef)
+  if (isRecord(output.tool)) addRef(toolRefs, output.tool.toolRef)
+  for (const field of ['toolRefs', 'items', 'tools'] as const) {
     const values = output[field]
     if (!Array.isArray(values)) continue
-    for (const value of values) addRef(operationRefs, isRecord(value) ? value.operationRef : value)
+    for (const value of values) addRef(toolRefs, isRecord(value) ? value.toolRef : value)
   }
-  for (const choice of choices) addRef(operationRefs, choice.operationRef)
-  return operationRefs
+  for (const choice of choices) addRef(toolRefs, choice.toolRef)
+  return toolRefs
 }
 
 function matchedCount(output: Record<string, unknown>): number | undefined {
@@ -352,7 +356,7 @@ function matchedCount(output: Record<string, unknown>): number | undefined {
     return Math.max(0, output.matchedCount)
   }
   if (Array.isArray(output.items)) return output.items.length
-  if (Array.isArray(output.operations)) return output.operations.length
+  if (Array.isArray(output.tools)) return output.tools.length
   return undefined
 }
 
@@ -397,7 +401,7 @@ function merchandiseCompareValue(field: (typeof COMPARE_FIELDS)[number], value: 
   switch (field) {
     case 'price': {
       const price = readPrice(value)
-      return price === undefined ? undefined : formatOperationPrice(price)
+      return price === undefined ? undefined : formatToolPrice(price)
     }
     case 'effects':
       return labelsFromPolicy(value, effectLabel)
@@ -405,7 +409,7 @@ function merchandiseCompareValue(field: (typeof COMPARE_FIELDS)[number], value: 
       return labelsFromPolicy(value, dataUseLabel)
     case 'availability': {
       const posture = readPosture(value)
-      return posture === undefined ? undefined : formatOperationReadiness(posture)
+      return posture === undefined ? undefined : formatToolReadiness(posture)
     }
     default: {
       const exhaustive: never = field
@@ -437,10 +441,10 @@ function isCompareField(value: string): value is (typeof COMPARE_FIELDS)[number]
 
 function projectCompareContrasts(
   output: Record<string, unknown>,
-  choices: readonly OperationChoiceRow[],
-): OperationFact[] {
+  choices: readonly ToolChoiceRow[],
+): ToolFact[] {
   if (!Array.isArray(output.facts)) return []
-  const facts: OperationFact[] = []
+  const facts: ToolFact[] = []
   for (const entry of output.facts) {
     if (!isRecord(entry) || typeof entry.field !== 'string' || !isCompareField(entry.field)) continue
     if (!Array.isArray(entry.values)) continue
@@ -449,8 +453,8 @@ function projectCompareContrasts(
       if (!isRecord(cell)) continue
       const merchandised = merchandiseCompareValue(entry.field, cell.value)
       if (merchandised === undefined) continue
-      const title = typeof cell.operationRef === 'string'
-        ? choices.find((choice) => choice.operationRef === cell.operationRef)?.title
+      const title = typeof cell.toolRef === 'string'
+        ? choices.find((choice) => choice.toolRef === cell.toolRef)?.title
         : undefined
       parts.push(title === undefined ? merchandised : `${title}: ${merchandised}`)
       if (parts.length >= 4) break
@@ -472,22 +476,22 @@ const CHARGE_STATE_LABELS = {
   refunded: 'Refunded',
 } as const
 
-function invocationContinuation(
-  state: Exclude<OperationExecutionState, 'refused'>,
-  invocationRef: string,
-): SuggestedContinuation {
-  return suggestContinuation({
-    subject: 'invocation',
+function callNextAction(
+  state: Exclude<CallResultState, 'refused'>,
+  callRef: string,
+): SuggestedNextAction {
+  return suggestNextAction({
+    subject: 'call',
     state: state === 'completed'
       ? 'completed'
       : state === 'reconciliation_required'
         ? 'reconciliation_required'
         : 'pending',
-    invocationRef,
+    callRef,
   })
 }
 
-function outputPreview(value: OperationInvokeResult & { kind: 'completed' }): Readonly<{
+function outputPreview(value: CallResult & { kind: 'completed' }): Readonly<{
   text: string
   truncated: boolean
 }> {
@@ -499,17 +503,17 @@ function outputPreview(value: OperationInvokeResult & { kind: 'completed' }): Re
   }
 }
 
-function receiptFacts(result: Extract<OperationInvokeResult, { receipt?: unknown }>): OperationFact[] {
+function receiptFacts(result: Extract<CallResult, { receipt?: unknown }>): ToolFact[] {
   return result.receipt === undefined
     ? []
     : [{ label: 'Receipt', value: result.receipt.state.replaceAll('_', ' ') }]
 }
 
-function projectInvokeResult(result: OperationInvokeResult): OperationCardProjection {
-  const operationRefs = result.operationRef === undefined ? [] : [result.operationRef]
+function projectCallResult(result: CallResult): ToolCardProjection {
+  const toolRefs = result.toolRef === undefined ? [] : [result.toolRef]
   if (result.kind === 'completed') {
     const preview = outputPreview(result)
-    const facts: OperationFact[] = [
+    const facts: ToolFact[] = [
       {
         label: 'Charge',
         value: `${formatCurrencyAmount(result.usage.amount)} · ${CHARGE_STATE_LABELS[result.usage.chargeState]}`,
@@ -520,40 +524,40 @@ function projectInvokeResult(result: OperationInvokeResult): OperationCardProjec
       ...receiptFacts(result),
     ]
     return {
-      ...chrome('operation.invoke'),
+      ...chrome('tool.call'),
       kind: 'execute',
       state: result.kind,
-      operationRefs,
-      invocationRef: result.invocationRef,
+      toolRefs,
+      callRef: result.callRef,
       outputPreview: preview.text,
       ...(preview.truncated ? { outputTruncated: true } : {}),
       facts,
       ...(result.receipt === undefined ? {} : { receiptRef: result.receipt.receiptRef }),
       evidenceHash: result.evidenceHash,
-      summary: 'The Operation returned a result the calling agent can use now.',
-      continuation: invocationContinuation(result.kind, result.invocationRef),
+      summary: 'The Tool returned a result the calling agent can use now.',
+      suggestedNextAction: callNextAction(result.kind, result.callRef),
     }
   }
   if (result.kind === 'pending') {
     return {
-      ...chrome('operation.invoke'),
+      ...chrome('tool.call'),
       kind: 'execute',
       state: result.kind,
-      operationRefs,
-      invocationRef: result.invocationRef,
+      toolRefs,
+      callRef: result.callRef,
       facts: [{ label: 'Check after', value: `${result.retryAfterMs} ms` }],
       summary: 'The call was accepted, but no terminal result is recorded yet.',
-      continuation: invocationContinuation(result.kind, result.invocationRef),
+      suggestedNextAction: callNextAction(result.kind, result.callRef),
     }
   }
   if (result.kind === 'needs_authority') {
     const maximumSpend = result.authorityRequest.maximumSpend
     return {
-      ...chrome('operation.invoke'),
+      ...chrome('tool.call'),
       kind: 'execute',
       state: result.kind,
-      operationRefs,
-      invocationRef: result.invocationRef,
+      toolRefs,
+      callRef: result.callRef,
       facts: [
         { label: 'Consequence', value: result.authorityRequest.consequence.replaceAll('_', ' ') },
         ...(maximumSpend === undefined
@@ -562,16 +566,16 @@ function projectInvokeResult(result: OperationInvokeResult): OperationCardProjec
       ],
       summary: 'The call is paused until the required authority is granted.',
       nextAction: 'Review the pending approval in the agent console.',
-      continuation: invocationContinuation(result.kind, result.invocationRef),
+      suggestedNextAction: callNextAction(result.kind, result.callRef),
     }
   }
   if (result.kind === 'reconciliation_required') {
     return {
-      ...chrome('operation.invoke'),
+      ...chrome('tool.call'),
       kind: 'execute',
       state: result.kind,
-      operationRefs,
-      invocationRef: result.invocationRef,
+      toolRefs,
+      callRef: result.callRef,
       facts: [
         { label: 'Attempt', value: result.evidence.attemptRef },
         { label: 'Effect generation', value: String(result.evidence.effectGeneration) },
@@ -579,14 +583,14 @@ function projectInvokeResult(result: OperationInvokeResult): OperationCardProjec
       ],
       ...(result.receipt === undefined ? {} : { receiptRef: result.receipt.receiptRef }),
       summary: 'The external effect is uncertain. Do not retry this call until it is reconciled.',
-      continuation: invocationContinuation(result.kind, result.invocationRef),
+      suggestedNextAction: callNextAction(result.kind, result.callRef),
     }
   }
   return {
-    ...chrome('operation.invoke'),
+    ...chrome('tool.call'),
     kind: 'execute',
     state: result.kind,
-    operationRefs,
+    toolRefs,
     facts: receiptFacts(result),
     ...(result.receipt === undefined ? {} : { receiptRef: result.receipt.receiptRef }),
     summary: REFUSAL_SUMMARIES[result.code] ?? result.code.replaceAll('_', ' '),
@@ -596,22 +600,22 @@ function projectInvokeResult(result: OperationInvokeResult): OperationCardProjec
 }
 
 function projectInspectResult(
-  result: Extract<OperationInspectResult, { kind: 'committed' }>,
-): OperationCardProjection {
+  result: Extract<ToolQuoteResult, { kind: 'committed' }>,
+): ToolCardProjection {
   return {
-    ...chrome('operation.inspect'),
+    ...chrome('tool.quote'),
     kind: 'inspect',
     state: 'complete',
-    operationRefs: [result.operationRef],
+    toolRefs: [result.toolRef],
     facts: [
       { label: 'Decision price', value: formatCurrencyAmount(result.price) },
       { label: 'Account available', value: formatCurrencyAmount(result.account.available) },
-      { label: 'Agent maximum', value: formatCurrencyAmount(result.budget.maximumPerInvocation) },
+      { label: 'Agent maximum', value: formatCurrencyAmount(result.budget.maximumPerCall) },
       ...(result.sourceRequirement === undefined
         ? []
         : [{ label: 'Provider requirement', value: formatCurrencyAmount(result.sourceRequirement) }]),
       { label: 'Expires', value: new Date(result.expiresAt).toISOString() },
-      { label: 'Commitment', value: result.commitmentRef },
+      { label: 'Quote', value: result.quoteRef },
     ],
   }
 }
@@ -635,14 +639,14 @@ function outputRecord(part: Record<string, unknown>): Record<string, unknown> | 
     : part.output
 }
 
-function statusCard(toolId: ChatToolId, state: 'refused' | 'error', summary: string): OperationCardProjection {
+function statusCard(toolId: ChatToolId, state: 'refused' | 'error', summary: string): ToolCardProjection {
   return { ...chrome(toolId), kind: 'status', state, summary }
 }
 
-function projectLiveBody(toolId: ChatToolId, output: Record<string, unknown>): OperationCardProjection {
+function projectLiveBody(toolId: ChatToolId, output: Record<string, unknown>): ToolCardProjection {
   switch (toolId) {
-    case 'registry.operations.list':
-    case 'registry.operations.search': {
+    case 'registry.tools.list':
+    case 'registry.tools.search': {
       const choices = projectLiveChoices(output.items)
       const count = matchedCount(output)
       return {
@@ -650,12 +654,12 @@ function projectLiveBody(toolId: ChatToolId, output: Record<string, unknown>): O
         kind: 'choices',
         state: 'complete',
         choices,
-        operationRefs: collectOperationRefs(output, choices),
+        toolRefs: collectToolRefs(output, choices),
         ...(count === undefined ? {} : { count }),
       }
     }
-    case 'registry.operations.compare': {
-      const choices = projectLiveChoices(output.operations)
+    case 'registry.tools.compare': {
+      const choices = projectLiveChoices(output.tools)
       const count = matchedCount(output)
       const contrasts = projectCompareContrasts(output, choices)
       return {
@@ -663,24 +667,24 @@ function projectLiveBody(toolId: ChatToolId, output: Record<string, unknown>): O
         kind: 'choices',
         state: 'complete',
         choices,
-        operationRefs: collectOperationRefs(output, choices),
+        toolRefs: collectToolRefs(output, choices),
         ...(count === undefined ? {} : { count }),
         ...(contrasts.length === 0 ? {} : { contrasts }),
       }
     }
-    case 'registry.operations.describe': {
-      const choice = projectLiveChoice(output.operation ?? output)
+    case 'registry.tools.describe': {
+      const choice = projectLiveChoice(output.tool ?? output)
       const choices = choice === null ? [] : [choice]
       return {
         ...chrome(toolId),
         kind: 'choices',
         state: 'complete',
         choices,
-        operationRefs: collectOperationRefs(output, choices),
+        toolRefs: collectToolRefs(output, choices),
       }
     }
-    case 'operation.inspect':
-    case 'operation.invoke':
+    case 'tool.quote':
+    case 'tool.call':
       return statusCard(toolId, 'error', 'Tool unavailable')
     default: {
       const exhaustive: never = toolId
@@ -693,7 +697,7 @@ function isChatToolId(value: unknown): value is ChatToolId {
   return typeof value === 'string' && (CHAT_TOOL_IDS as readonly string[]).includes(value)
 }
 
-function projectStoredCard(part: Record<string, unknown>): OperationCardProjection | null {
+function projectStoredCard(part: Record<string, unknown>): ToolCardProjection | null {
   if (!isChatToolId(part.toolId)) return null
   const toolId = part.toolId
   if (part.kind === 'working' || part.state === 'working') return { ...chrome(toolId), kind: 'working' }
@@ -702,23 +706,23 @@ function projectStoredCard(part: Record<string, unknown>): OperationCardProjecti
     return statusCard(toolId, state, stringField(part.summary) ?? (state === 'refused' ? 'Request refused' : 'Tool unavailable'))
   }
   const refs: string[] = []
-  if (Array.isArray(part.operationRefs)) for (const value of part.operationRefs) addRef(refs, value)
-  if (part.kind === 'inspect' || toolId === 'operation.inspect') {
+  if (Array.isArray(part.toolRefs)) for (const value of part.toolRefs) addRef(refs, value)
+  if (part.kind === 'inspect' || toolId === 'tool.quote') {
     return {
       ...chrome(toolId),
       kind: 'inspect',
       state: 'complete',
       facts: projectStoredFacts(part.facts),
-      operationRefs: refs,
+      toolRefs: refs,
     }
   }
-  if (part.kind === 'execute' || toolId === 'operation.invoke') {
+  if (part.kind === 'execute' || toolId === 'tool.call') {
     const name = stringField(part.name)
     const state = part.state === 'complete'
       ? 'completed'
-      : operationInvokeResultKindValues.find((value) => value === part.state)
+      : callResultKindValues.find((value) => value === part.state)
     if (state === undefined) return statusCard(toolId, 'error', 'Tool unavailable')
-    const invocationRef = boundedString(part.invocationRef, 400)
+    const callRef = boundedString(part.callRef, 400)
     const outputPreview = boundedString(part.outputPreview, MAX_EXECUTE_OUTPUT_PREVIEW_CHARS)
     const receiptRef = boundedString(part.receiptRef, 400)
     const evidenceHash = boundedString(part.evidenceHash, 400)
@@ -728,9 +732,9 @@ function projectStoredCard(part: Record<string, unknown>): OperationCardProjecti
       ...chrome(toolId),
       kind: 'execute',
       state,
-      operationRefs: refs,
+      toolRefs: refs,
       ...(name === undefined ? {} : { name }),
-      ...(invocationRef === undefined ? {} : { invocationRef }),
+      ...(callRef === undefined ? {} : { callRef }),
       ...(outputPreview === undefined ? {} : { outputPreview }),
       ...(part.outputTruncated === true ? { outputTruncated: true } : {}),
       facts: projectStoredFacts(part.facts),
@@ -739,9 +743,9 @@ function projectStoredCard(part: Record<string, unknown>): OperationCardProjecti
       summary,
       ...(nextAction === undefined ? {} : { nextAction }),
       ...(typeof part.retryable === 'boolean' ? { retryable: part.retryable } : {}),
-      ...(state === 'refused' || invocationRef === undefined
+      ...(state === 'refused' || callRef === undefined
         ? {}
-        : { continuation: invocationContinuation(state, invocationRef) }),
+        : { suggestedNextAction: callNextAction(state, callRef) }),
     }
   }
   const count = typeof part.count === 'number' && Number.isSafeInteger(part.count) && part.count >= 0
@@ -753,15 +757,15 @@ function projectStoredCard(part: Record<string, unknown>): OperationCardProjecti
     kind: 'choices',
     state: 'complete',
     choices: projectStoredChoices(part.choices),
-    operationRefs: refs,
+    toolRefs: refs,
     ...(count === undefined ? {} : { count }),
     ...(contrasts.length === 0 ? {} : { contrasts }),
   }
 }
 
-export function projectOperationCard(part: unknown): OperationCardProjection | null {
+export function projectToolCard(part: unknown): ToolCardProjection | null {
   if (!isRecord(part)) return null
-  if (part.type === 'operation-card') return projectStoredCard(part)
+  if (part.type === 'tool-card') return projectStoredCard(part)
 
   const providerName = providerToolName(part)
   const toolId = providerName === undefined ? undefined : providerToCanonical[providerName]
@@ -773,24 +777,24 @@ export function projectOperationCard(part: unknown): OperationCardProjection | n
   const output = outputRecord(part)
   const kind = output?.kind
   if (kind === 'error') return statusCard(toolId, 'error', 'Tool unavailable')
-  if (toolId === 'operation.invoke') {
+  if (toolId === 'tool.call') {
     if (kind === 'chat_tool_refused') {
       const reason = typeof output?.reason === 'string' ? REFUSAL_SUMMARIES[output.reason] : undefined
       return statusCard(toolId, 'refused', reason ?? 'Request refused')
     }
     if (output === undefined) return statusCard(toolId, 'error', 'Tool unavailable')
-    const result = operationInvokeResultSchema.safeParse(output)
+    const result = callResultSchema.safeParse(output)
     return result.success
-      ? projectInvokeResult(result.data)
+      ? projectCallResult(result.data)
       : statusCard(toolId, 'error', 'Tool unavailable')
   }
-  if (toolId === 'operation.inspect') {
+  if (toolId === 'tool.quote') {
     if (kind === 'chat_tool_refused') {
       const reason = typeof output?.reason === 'string' ? REFUSAL_SUMMARIES[output.reason] : undefined
       return statusCard(toolId, 'refused', reason ?? 'Request refused')
     }
     if (output === undefined) return statusCard(toolId, 'error', 'Tool unavailable')
-    const result = operationInspectResultSchema.safeParse(output)
+    const result = toolQuoteResultSchema.safeParse(output)
     if (!result.success) return statusCard(toolId, 'error', 'Tool unavailable')
     return result.data.kind === 'committed'
       ? projectInspectResult(result.data)
@@ -816,13 +820,13 @@ export function projectOperationCard(part: unknown): OperationCardProjection | n
   return projectLiveBody(toolId, output)
 }
 
-export function serializeOperationCard(card: OperationCardProjection): Record<string, unknown> | null {
+export function serializeToolCard(card: ToolCardProjection): Record<string, unknown> | null {
   switch (card.kind) {
     case 'working':
       return null
     case 'status':
       return {
-        type: 'operation-card',
+        type: 'tool-card',
         kind: 'status',
         toolId: card.toolId,
         title: card.title,
@@ -831,12 +835,12 @@ export function serializeOperationCard(card: OperationCardProjection): Record<st
       }
     case 'choices':
       return {
-        type: 'operation-card',
+        type: 'tool-card',
         kind: 'choices',
         toolId: card.toolId,
         title: card.title,
         state: 'complete',
-        operationRefs: [...card.operationRefs],
+        toolRefs: [...card.toolRefs],
         choices: card.choices.map((choice) => ({ ...choice })),
         ...(card.count === undefined ? {} : { count: card.count }),
         ...(card.contrasts === undefined || card.contrasts.length === 0
@@ -845,24 +849,24 @@ export function serializeOperationCard(card: OperationCardProjection): Record<st
       }
     case 'inspect':
       return {
-        type: 'operation-card',
+        type: 'tool-card',
         kind: 'inspect',
         toolId: card.toolId,
         title: card.title,
         state: 'complete',
-        operationRefs: [...card.operationRefs],
+        toolRefs: [...card.toolRefs],
         facts: card.facts.map((fact) => ({ ...fact })),
       }
     case 'execute':
       return {
-        type: 'operation-card',
+        type: 'tool-card',
         kind: 'execute',
         toolId: card.toolId,
         title: card.title,
         state: card.state,
-        operationRefs: [...card.operationRefs],
+        toolRefs: [...card.toolRefs],
         ...(card.name === undefined ? {} : { name: card.name }),
-        ...(card.invocationRef === undefined ? {} : { invocationRef: card.invocationRef }),
+        ...(card.callRef === undefined ? {} : { callRef: card.callRef }),
         ...(card.outputPreview === undefined ? {} : { outputPreview: card.outputPreview }),
         ...(card.outputTruncated === true ? { outputTruncated: true } : {}),
         facts: card.facts.map((fact) => ({ ...fact })),
@@ -879,8 +883,8 @@ export function serializeOperationCard(card: OperationCardProjection): Record<st
   }
 }
 
-export function operationCardState(
-  card: OperationCardProjection,
+export function toolCardState(
+  card: ToolCardProjection,
 ): 'working' | 'pending' | 'complete' | 'attention' | 'refused' | 'error' {
   switch (card.kind) {
     case 'working':

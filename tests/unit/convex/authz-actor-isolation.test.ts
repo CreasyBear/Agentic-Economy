@@ -10,7 +10,7 @@ import {
 } from '../../helpers/convex-fixtures'
 type Backend = ConvexFixtureBackend
 
-describe('resolveBusinessActor isolation through the Supplier Operation directory', () => {
+describe('resolveBusinessActor isolation through the Provider Operation directory', () => {
   it('fails closed when the current account owns multiple supplier identities', async () => {
     const backend = convexTestWithMarketComponents()
     const published = await publishedBusinessOwner(backend, 'owner-identity-conflict')
@@ -25,7 +25,7 @@ describe('resolveBusinessActor isolation through the Supplier Operation director
       })
     })
 
-    await expect(published.owner.query(api.catalog.getCurrentOwnerSupplierIdentity, {}))
+    await expect(published.owner.query(api.catalog.getCurrentOwnerProviderIdentity, {}))
       .resolves.toEqual({ kind: 'conflict', code: 'multiple_businesses' })
   })
 
@@ -38,7 +38,7 @@ describe('resolveBusinessActor isolation through the Supplier Operation director
     'wrong_account',
     'stale_generation',
   ] as const)(
-    'evaluates resolveBusinessActor %s through the Supplier Operation directory',
+    'evaluates resolveBusinessActor %s through the Provider Operation directory',
     async (caseKind) => {
       const backend = convexTestWithMarketComponents()
       const slug = `authz-actor-isolation-${caseKind}`
@@ -109,7 +109,7 @@ describe('resolveBusinessActor isolation through the Supplier Operation director
       }))
       const before = await authorityState()
 
-      const result = await caller.query(api.capabilitySupplierOperations.listOwner, {
+      const result = await caller.query(api.capabilityProviderTools.listOwner, {
         businessId: published.businessId,
         now: 1_000,
         paginationOpts: { numItems: 50, cursor: null },

@@ -1,39 +1,39 @@
 import {
-  operationCompareInputSchema,
+  toolCompareInputSchema,
 } from '@/modules/capability-supply/public'
-import { operationChoiceCompareOutputSchema } from '@/modules/registry/operation-choice-contracts'
-import { OPERATION_MARKET_COMPARE_PATH } from '@/modules/registry/operation-entry'
+import { toolChoiceCompareOutputSchema } from '@/modules/registry/tool-choice-contracts'
+import { TOOL_MARKET_COMPARE_PATH } from '@/modules/registry/tool-entry'
 
 import type { CliOptions } from '../lib/args'
 import { CliFailure, callJson, heading, line, printJson, requireOk } from '../lib/output'
 import { continuationCommand } from '../lib/continuation-command'
 import { usageFailure } from '../lib/help'
-import { operationLabel } from '../lib/operation-format'
-import { throwOperationReadFailure } from '../lib/operation-read-failure'
+import { toolLabel } from '../lib/tool-format'
+import { throwToolReadFailure } from '../lib/tool-read-failure'
 
-/** Compare exact current Operation references through the anonymous market route. */
+/** Compare exact current Tool references through the anonymous market route. */
 export async function runCompareCommand(args: readonly string[], options: CliOptions): Promise<void> {
   if (args.length < 1 || args.length > 4) {
     throw usageFailure('compare', 'compare-usage')
   }
 
   const parsedInput = compareCommandDescriptor.inputSchema.safeParse({
-    operationRefs: args.map((arg) => arg.trim()),
+    toolRefs: args.map((arg) => arg.trim()),
   })
   if (!parsedInput.success) {
-    throw new CliFailure('Compare requires two to four exact operation references.', {
+    throw new CliFailure('Compare requires two to four exact tool references.', {
       kind: 'INVALID_ARGUMENT',
       code: 'compare-input',
     })
   }
-  if (parsedInput.data.operationRefs.length === 1) {
-    const operationRef = parsedInput.data.operationRefs[0]!
-    throw new CliFailure('A comparison needs at least two Operations.', {
+  if (parsedInput.data.toolRefs.length === 1) {
+    const toolRef = parsedInput.data.toolRefs[0]!
+    throw new CliFailure('A comparison needs at least two Tools.', {
       kind: 'INVALID_ARGUMENT',
       code: 'compare-needs-alternative',
-      suggestion: 'Describe this Operation directly, or search for another Provider to compare.',
+      suggestion: 'Describe this Tool directly, or search for another Provider to compare.',
       nextCommand: continuationCommand([
-        'ae', 'describe', operationRef,
+        'ae', 'describe', toolRef,
         ...(options.baseUrlSource === undefined || options.baseUrlSource === 'hosted_default'
           ? []
           : ['--base-url', options.baseUrl]),
@@ -50,20 +50,20 @@ export async function runCompareCommand(args: readonly string[], options: CliOpt
   })
   const parsedResult = compareCommandDescriptor.outputSchema.safeParse(requireOk(outcome, path))
   if (!parsedResult.success) {
-    throw new CliFailure('The market returned an invalid operation comparison result.', {
+    throw new CliFailure('The market returned an invalid tool comparison result.', {
       kind: 'UNAVAILABLE',
-      code: 'operation-compare-result-invalid',
+      code: 'tool-compare-result-invalid',
     })
   }
 
   const result = parsedResult.data
   if (result.kind === 'unavailable') {
-    throwOperationReadFailure({ reason: result.reason })
+    throwToolReadFailure({ reason: result.reason })
   }
-  const nextCommands = result.operations.map((operation) => ({
-    operationRef: operation.operationRef,
+  const nextCommands = result.tools.map((tool) => ({
+    toolRef: tool.toolRef,
     command: continuationCommand([
-      'ae', 'describe', operation.operationRef,
+      'ae', 'describe', tool.toolRef,
       ...(options.baseUrlSource === undefined || options.baseUrlSource === 'hosted_default'
         ? []
         : ['--base-url', options.baseUrl]),
@@ -76,21 +76,21 @@ export async function runCompareCommand(args: readonly string[], options: CliOpt
     return
   }
 
-  printHumanComparison(result, parsedInput.data.operationRefs.length, options.technical === true)
-  line('  Choose one Provider, then describe its exact Operation:')
+  printHumanComparison(result, parsedInput.data.toolRefs.length, options.technical === true)
+  line('  Choose one Provider, then describe its exact Tool:')
   for (const next of nextCommands) line(`    ${next.command}`)
 }
 
-type AvailableComparison = Extract<ReturnType<typeof operationChoiceCompareOutputSchema.parse>, { kind: 'ok' }>
+type AvailableComparison = Extract<ReturnType<typeof toolChoiceCompareOutputSchema.parse>, { kind: 'ok' }>
 
 function printHumanComparison(result: AvailableComparison, requestedCount: number, technical: boolean): void {
-  heading(`Operation comparison (${requestedCount} exact references)`)
-  line('  operations:')
-  for (const [index, operation] of result.operations.entries()) {
-    line(`    ${index + 1}. ${operationLabel(operation)}`)
-    line(`       ${operation.description}`)
-    line(`       indicative price: ${operation.priceLabel}`)
-    line(`       health: ${operation.healthStatus}`)
+  heading(`Tool comparison (${requestedCount} exact references)`)
+  line('  tools:')
+  for (const [index, tool] of result.tools.entries()) {
+    line(`    ${index + 1}. ${toolLabel(tool)}`)
+    line(`       ${tool.description}`)
+    line(`       indicative price: ${tool.priceLabel}`)
+    line(`       health: ${tool.healthStatus}`)
   }
   if (technical) printTechnicalComparison(result)
 }
@@ -98,16 +98,16 @@ function printHumanComparison(result: AvailableComparison, requestedCount: numbe
 function printTechnicalComparison(result: AvailableComparison): void {
   line('  technical:')
   line(`    schema: ${result.schemaVersion}`)
-  for (const operation of result.operations) {
-    line(`    ${operation.operationRef} · capability=${operation.capabilityId}`)
+  for (const tool of result.tools) {
+    line(`    ${tool.toolRef} · capability=${tool.capabilityId}`)
   }
 }
 
 export const compareCommandDescriptor = {
   command: 'compare',
-  actionId: 'registry.operations.compare',
-  path: OPERATION_MARKET_COMPARE_PATH,
-  inputSchema: operationCompareInputSchema,
-  outputSchema: operationChoiceCompareOutputSchema,
+  actionId: 'registry.tools.compare',
+  path: TOOL_MARKET_COMPARE_PATH,
+  inputSchema: toolCompareInputSchema,
+  outputSchema: toolChoiceCompareOutputSchema,
   run: runCompareCommand,
 } as const

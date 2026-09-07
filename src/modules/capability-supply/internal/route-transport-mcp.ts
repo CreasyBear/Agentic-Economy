@@ -24,7 +24,7 @@ import {
   parseMcpJsonRpcTransportConfiguration,
   type McpJsonRpcTransportConfiguration,
 } from './transport-adapters'
-import type { RouteTransportInvocation } from './route-transport-invoke'
+import type { RouteTransportInvocation } from './route-transport-call'
 import {
   MAX_RESPONSE_BYTES,
   refused,

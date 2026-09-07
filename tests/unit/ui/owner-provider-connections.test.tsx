@@ -73,7 +73,7 @@ describe('owner x402 connection controls', () => {
     expect(screen.getByText('No scheduled authority expiry')).toBeTruthy()
     expect(screen.getByText('Connection health not checked yet')).toBeTruthy()
     expect(screen.getByText(/Credential rotation: not applicable/)).toBeTruthy()
-    expect(screen.getByText(/Operation readiness is checked per Operation/)).toBeTruthy()
+    expect(screen.getByText(/Tool readiness is checked per Tool/)).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Check connection' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Reauthorize' })).toBeTruthy()
     expect(mocks.useReverification).toHaveBeenCalledWith(mocks.connect)

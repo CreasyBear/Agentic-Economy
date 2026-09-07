@@ -2,12 +2,12 @@ import { z } from 'zod'
 
 import { callPublicSourceMutation, sourceMutation } from '@/lib/server/convex-source'
 import { sourceWriteAdmissionFromRequest, sourceWriteRequestFromAdmission } from '@/lib/server/source-write-admission'
-import { MARKET_OPERATIONS_INVOKE_SCOPE } from '@/modules/agent-access/contract'
+import { MARKET_TOOLS_CALL_SCOPE } from '@/modules/agent-access/contract'
 import type { AgentAccessPrincipal } from '@/modules/agent-access/agent-access'
 import { defineAction } from '@/modules/common/action'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
-import { publicOperationChoiceSchema } from '@/modules/registry/operation-choice-contracts'
-import { registryOperationsSearchAction } from '@/modules/registry/operations.actions'
+import { publicToolChoiceSchema } from '@/modules/registry/tool-choice-contracts'
+import { registryToolsSearchAction } from '@/modules/registry/tools.actions'
 
 export const MARKET_REQUEST_CREATE_ACTION_ID = 'marketDemand.record' as const
 export const MARKET_REQUEST_LIST_ACTION_ID = 'marketDemand.list' as const
@@ -20,7 +20,7 @@ export const MARKET_REQUEST_ROUTE_CONTRACTS = Object.freeze({
     method: 'POST' as const,
     path: '/api/v1/market-requests' as const,
     routerPath: '/api/v1/market-requests' as const,
-    scope: MARKET_OPERATIONS_INVOKE_SCOPE,
+    scope: MARKET_TOOLS_CALL_SCOPE,
   }),
   list: Object.freeze({
     actionId: MARKET_REQUEST_LIST_ACTION_ID,
@@ -28,7 +28,7 @@ export const MARKET_REQUEST_ROUTE_CONTRACTS = Object.freeze({
     method: 'POST' as const,
     path: '/api/v1/market-requests/list' as const,
     routerPath: '/api/v1/market-requests/list' as const,
-    scope: MARKET_OPERATIONS_INVOKE_SCOPE,
+    scope: MARKET_TOOLS_CALL_SCOPE,
   }),
   status: Object.freeze({
     actionId: MARKET_REQUEST_STATUS_ACTION_ID,
@@ -36,7 +36,7 @@ export const MARKET_REQUEST_ROUTE_CONTRACTS = Object.freeze({
     method: 'POST' as const,
     path: '/api/v1/market-requests/status' as const,
     routerPath: '/api/v1/market-requests/status' as const,
-    scope: MARKET_OPERATIONS_INVOKE_SCOPE,
+    scope: MARKET_TOOLS_CALL_SCOPE,
   }),
 })
 
@@ -104,7 +104,7 @@ export const marketRequestStatusResultSchema = z.discriminatedUnion('kind', [
     query: z.string().min(1).max(200),
     createdAt: z.number().int().nonnegative(),
     matchedCount: z.number().int().positive(),
-    operations: z.array(publicOperationChoiceSchema).min(1).max(5),
+    tools: z.array(publicToolChoiceSchema).min(1).max(5),
   }),
   z.strictObject({ kind: z.literal('not_found') }),
   z.strictObject({ kind: z.literal('error'), code: z.enum(['unauthenticated', 'source_unavailable']) }),
@@ -157,8 +157,8 @@ export function createMarketDemandService(request: Request, bodyText: string): M
 
   return {
     create: async ({ input, principal, correlationId }) => {
-      const current = await registryOperationsSearchAction.run({
-        data: registryOperationsSearchAction.schema.parse({ query: input.query, limit: 1 }),
+      const current = await registryToolsSearchAction.run({
+        data: registryToolsSearchAction.schema.parse({ query: input.query, limit: 1 }),
         context: { caller: 'http', request },
       })
       if (current.kind === 'unavailable') return { kind: 'refused', code: 'source_unavailable' }
@@ -238,8 +238,8 @@ export function createMarketDemandService(request: Request, bodyText: string): M
       if (raw.kind !== 'found' || !('request' in raw)) return { kind: 'error', code: 'source_unavailable' }
       const requestRecord = marketRequestSummarySchema.safeParse(raw.request)
       if (!requestRecord.success) return { kind: 'error', code: 'source_unavailable' }
-      const search = await registryOperationsSearchAction.run({
-        data: registryOperationsSearchAction.schema.parse({ query: requestRecord.data.query, limit: 3 }),
+      const search = await registryToolsSearchAction.run({
+        data: registryToolsSearchAction.schema.parse({ query: requestRecord.data.query, limit: 3 }),
         context: { caller: 'http', request },
       })
       if (search.kind === 'unavailable') return { kind: 'error', code: 'source_unavailable' }
@@ -252,14 +252,14 @@ export function createMarketDemandService(request: Request, bodyText: string): M
           matchedCount: 0,
         }
       }
-      const operations = search.items.slice(0, 5)
+      const tools = search.items.slice(0, 5)
       return marketRequestStatusResultSchema.parse({
         kind: 'matched',
         requestRef: requestRecord.data.requestRef,
         query: requestRecord.data.query,
         createdAt: requestRecord.data.createdAt,
         matchedCount: search.count,
-        operations,
+        tools,
       })
     },
   }
@@ -268,10 +268,10 @@ export function createMarketDemandService(request: Request, bodyText: string): M
 export const marketRequestCreateAction = defineAction<MarketRequestCreateInput, MarketRequestCreateResult>({
   id: MARKET_REQUEST_CREATE_ACTION_ID,
   name: 'Record missing market demand',
-  summary: 'Privately remember one job that current canonical Market Operations did not satisfy.',
+  summary: 'Privately remember one job that current canonical Market Tools did not satisfy.',
   boundaries: [
     'Stores only the bounded job phrase and authenticated credential ownership; it is not a project, task, tender, or supplier message.',
-    'The signal never becomes an Operation and grants no supplier authority.',
+    'The signal never becomes a Tool and grants no supplier authority.',
     'Raw requests remain private to the exact credential profile in this interface.',
   ],
   schema: marketRequestCreateInputSchema,
@@ -287,7 +287,7 @@ export const marketRequestCreateAction = defineAction<MarketRequestCreateInput, 
   },
   surfaces: ['http', 'mcp', 'cli'],
   mcp: { idempotent: true, openWorld: false, destructive: false },
-  credentialAdmission: { scope: MARKET_OPERATIONS_INVOKE_SCOPE, authority: 'descriptor_classified' },
+  credentialAdmission: { scope: MARKET_TOOLS_CALL_SCOPE, authority: 'descriptor_classified' },
   invocationContract: {
     version: MARKET_REQUEST_ROUTE_CONTRACTS.create.contractVersion,
     consequenceClass: 'external_effect', materialInputPaths: ['query', 'idempotencyKey'],
@@ -312,7 +312,7 @@ export const marketRequestListAction = defineAction<MarketRequestListInput, Mark
   summary: 'List the authenticated credential profile’s private missing-job signals, newest first.',
   boundaries: [
     'Returns only signals owned by the exact authenticated principal and credential profile.',
-    'Does not expose other buyers, supplier analytics, project context, or raw Operation inputs.',
+    'Does not expose other buyers, supplier analytics, project context, or raw Tool inputs.',
   ],
   schema: marketRequestListInputSchema,
   outputSchema: marketRequestListResultSchema,
@@ -323,7 +323,7 @@ export const marketRequestListAction = defineAction<MarketRequestListInput, Mark
   readOnly: true,
   effect: { class: 'observation', reversible: true, recipientKind: 'none', dataClasses: ['market_demand'], spendExposure: 'none', approval: 'none' },
   surfaces: ['http', 'mcp', 'cli'],
-  credentialAdmission: { scope: MARKET_OPERATIONS_INVOKE_SCOPE, authority: 'descriptor_classified' },
+  credentialAdmission: { scope: MARKET_TOOLS_CALL_SCOPE, authority: 'descriptor_classified' },
   invocationContract: {
     version: MARKET_REQUEST_ROUTE_CONTRACTS.list.contractVersion,
     consequenceClass: 'read_only', materialInputPaths: ['limit', 'cursor'], authorityRequirement: 'principal',
@@ -344,11 +344,11 @@ export const marketRequestListAction = defineAction<MarketRequestListInput, Mark
 export const marketRequestStatusAction = defineAction<MarketRequestStatusInput, MarketRequestStatusResult>({
   id: MARKET_REQUEST_STATUS_ACTION_ID,
   name: 'Check private market request',
-  summary: 'Check whether current canonical Market Operations now match one private missing-job signal.',
+  summary: 'Check whether current canonical Market Tools now match one private missing-job signal.',
   boundaries: [
     'Reads only a request owned by the exact authenticated principal and credential profile.',
-    'A match is recomputed from current canonical Operations; stored demand is never treated as supply.',
-    'Checking does not call, reserve, notify, or authorize any Operation.',
+    'A match is recomputed from current canonical Tools; stored demand is never treated as supply.',
+    'Checking does not call, reserve, notify, or authorize any Tool.',
   ],
   schema: marketRequestStatusInputSchema,
   outputSchema: marketRequestStatusResultSchema,
@@ -356,11 +356,11 @@ export const marketRequestStatusAction = defineAction<MarketRequestStatusInput, 
   readOnly: true,
   effect: { class: 'observation', reversible: true, recipientKind: 'none', dataClasses: ['market_demand'], spendExposure: 'none', approval: 'none' },
   surfaces: ['http', 'mcp', 'cli'],
-  credentialAdmission: { scope: MARKET_OPERATIONS_INVOKE_SCOPE, authority: 'descriptor_classified' },
+  credentialAdmission: { scope: MARKET_TOOLS_CALL_SCOPE, authority: 'descriptor_classified' },
   invocationContract: {
     version: MARKET_REQUEST_ROUTE_CONTRACTS.status.contractVersion,
     consequenceClass: 'read_only', materialInputPaths: ['requestRef'], authorityRequirement: 'principal',
-    retryClass: 'replayable', expectedEvidence: ['current_operation_matches'], safeContinuations: ['registry.operations.describe'],
+    retryClass: 'replayable', expectedEvidence: ['current_tool_matches'], safeContinuations: ['registry.tools.describe'],
     invalidationConditions: ['request_ref_changed', 'credential_profile_changed', 'market_supply_changed'],
   },
   run: async ({ data, context }) => {

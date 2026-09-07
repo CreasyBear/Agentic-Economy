@@ -26,7 +26,7 @@ const anchor: X402SellerPromotionAnchor = {
   publicationRef: 'publication:weather',
   publicationRevision: 4,
   draftOperationRef: 'operation:weather',
-  operationMaterialDigest: digest('operation-material'),
+  toolMaterialDigest: digest('operation-material'),
   contractDigest: digest('contract'),
   bindingDigest: digest('binding'),
   priceDigest: digest('price'),
@@ -49,7 +49,7 @@ function commitment(overrides: Readonly<{ sellerPayTo?: string }> = {}) {
     publicationRef: anchor.publicationRef,
     publicationRevision: anchor.publicationRevision,
     draftOperationRef: anchor.draftOperationRef,
-    operationMaterialDigest: anchor.operationMaterialDigest,
+    toolMaterialDigest: anchor.toolMaterialDigest,
     contractDigest: anchor.contractDigest,
     bindingDigest: anchor.bindingDigest,
     priceDigest: anchor.priceDigest,
@@ -84,8 +84,8 @@ function observation(): SellerOnboardingCanaryInvocationObservation {
     executionPurpose: 'seller_onboarding_canary',
     canaryRef: candidate.canaryRef,
     canaryCommitmentDigest: candidate.commitmentDigest,
-    invocationRef: envelope.invocationRef,
-    operationRef: candidate.draftOperationRef,
+    callRef: envelope.callRef,
+    toolRef: candidate.draftOperationRef,
     inputDigest: candidate.inputDigest,
     state: 'completed',
     outputContractValid: true,
@@ -178,7 +178,7 @@ describe('x402 seller Publish promotion policy', () => {
       promotionEvidence: {
         canaryRef: commitment().canaryRef,
         draftOperationRef: anchor.draftOperationRef,
-        operationMaterialDigest: anchor.operationMaterialDigest,
+        toolMaterialDigest: anchor.toolMaterialDigest,
       },
       consumptionDigest: expect.stringMatching(/^sha256:[0-9a-f]{64}$/),
     })
@@ -187,7 +187,7 @@ describe('x402 seller Publish promotion policy', () => {
   it('keeps settled evidence promotable after execution expiry when current readiness is fresh and material is unchanged', () => {
     const refreshed = {
       ...anchor,
-      operationMaterialDigest: digest('operation-material-with-refreshed-readiness'),
+      toolMaterialDigest: digest('operation-material-with-refreshed-readiness'),
       readinessDigest: digest('refreshed-readiness'),
       readinessObservedAt: 1_100,
       readinessValidUntil: 2_000,

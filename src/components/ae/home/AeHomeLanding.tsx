@@ -21,23 +21,23 @@ import {
 import { ItemGroup } from "@/components/ui/item";
 import { HOME } from "@/content/brand-copy";
 import type { HomeCapabilityRead } from "@/modules/market/home-catalogue";
-import { groupOperationCards } from "@/modules/market/operation-view-model";
+import { groupToolCards } from "@/modules/market/tool-view-model";
 
 type AeHomeLandingProps = Readonly<{
   read: HomeCapabilityRead;
 }>;
 
 export function AeHomeLanding({ read }: AeHomeLandingProps) {
-  const operationCount = read.kind === "unavailable" ? 0 : read.matchedCount;
-  const operationLabel = operationCount === 1 ? "Operation" : "Operations";
+  const toolCount = read.kind === "unavailable" ? 0 : read.matchedCount;
+  const toolLabel = toolCount === 1 ? "Tool" : "Tools";
   const meta =
     read.kind === "unavailable"
       ? "Catalogue unavailable"
-      : `${operationCount.toLocaleString()} current ${operationLabel}`;
+      : `${toolCount.toLocaleString()} current ${toolLabel}`;
 
   return (
     <div className="flex flex-col">
-      <HomeHero meta={meta} showMeta={read.kind === "ok" && operationCount > 0} />
+      <HomeHero meta={meta} showMeta={read.kind === "ok" && toolCount > 0} />
       <HomeCapabilityResults read={read} />
     </div>
   );
@@ -65,7 +65,7 @@ function HomeHero({
         </AeSiteHeadingPair>
         <div className="flex flex-wrap items-center justify-center gap-related">
           <AeSiteButton asChild>
-            <Link to="/market" search={{ window: "30d" }}>Browse Operations</Link>
+            <Link to="/market" search={{ window: "30d" }}>Browse Tools</Link>
           </AeSiteButton>
         </div>
       </AeSiteHeroIntro>
@@ -82,7 +82,7 @@ export function HomeCapabilityResults({
   read,
 }: Readonly<{ read: HomeCapabilityRead }>) {
   const groups = useMemo(
-    () => (read.kind === "ok" ? groupOperationCards(read.operations) : []),
+    () => (read.kind === "ok" ? groupToolCards(read.tools) : []),
     [read],
   );
 
@@ -122,7 +122,7 @@ export function HomeCapabilityResults({
               action={
                 <AeSiteButton asChild variant="outlined">
                   <Link to="/market" search={{ window: "30d" }}>
-                    Browse Operations
+                    Browse Tools
                   </Link>
                 </AeSiteButton>
               }

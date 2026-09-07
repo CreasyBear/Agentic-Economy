@@ -11,11 +11,11 @@ import type {
   SourceWriteAdmissionRequest,
 } from '@/modules/security/source-write-admission'
 
-export type RenameSupplierDisplayNameResult =
+export type RenameProviderDisplayNameResult =
   | Readonly<{ kind: 'updated' | 'unchanged'; businessId: string; slug: string; name: string }>
   | Readonly<{ kind: 'refused'; code: 'unauthenticated' | 'wrong_owner' | 'invalid_name' | 'source_write_refused' | 'source_unavailable' }>
 
-type RenameSourceResult = Exclude<RenameSupplierDisplayNameResult, { code: 'source_unavailable' }>
+type RenameSourceResult = Exclude<RenameProviderDisplayNameResult, { code: 'source_unavailable' }>
 type RenameCommand = Readonly<{
   businessId: string
   name: string
@@ -27,18 +27,18 @@ type SourceWriteFields = Readonly<{
   sourceWriteRequest: SourceWriteAdmissionRequest
 }>
 
-const renameSupplierBusinessMutation = sourceMutation<
+const renameProviderBusinessMutation = sourceMutation<
   RenameCommand & SourceWriteFields,
   RenameSourceResult
->('catalog:renameSupplierBusiness')
+>('catalog:renameProviderBusiness')
 
-export const renameSupplierDisplayNameServer = createServerFn({ method: 'POST' })
+export const renameProviderDisplayNameServer = createServerFn({ method: 'POST' })
   .validator((data) => z.strictObject({
     businessId: z.string().min(1),
     name: z.string(),
     requestKey: z.string().min(8).max(200),
   }).parse(data))
-  .handler(async ({ data, context }): Promise<RenameSupplierDisplayNameResult> => {
+  .handler(async ({ data, context }): Promise<RenameProviderDisplayNameResult> => {
     const command: RenameCommand = {
       businessId: data.businessId,
       name: data.name,
@@ -53,7 +53,7 @@ export const renameSupplierDisplayNameServer = createServerFn({ method: 'POST' }
         operationKey: command.operationKey,
         correlationId: command.correlationId,
       })
-      return await callSourceMutation(renameSupplierBusinessMutation, {
+      return await callSourceMutation(renameProviderBusinessMutation, {
         ...command,
         sourceWrite,
         sourceWriteRequest: sourceWriteRequestFromAdmission(sourceWrite),

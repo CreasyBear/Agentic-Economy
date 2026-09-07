@@ -36,13 +36,13 @@ describe('AE CLI origin-bound connection store', () => {
     storeConnection({
       baseUrl: 'https://market.example',
       accessToken: 'secret-one',
-      scope: 'market_operations:invoke',
+      scope: 'market_tools:call',
     })
 
     expect(readStoredConnection('https://market.example')).toMatchObject({
       accessToken: 'secret-one',
       tokenType: 'Bearer',
-      scope: 'market_operations:invoke',
+      scope: 'market_tools:call',
       profile: 'market',
     })
     expect(readStoredConnection('https://other.example')).toBeUndefined()
@@ -67,7 +67,7 @@ describe('AE CLI origin-bound connection store', () => {
     storeConnection({
       baseUrl: 'https://z.example',
       accessToken: 'secret-z',
-      scope: 'market_operations:invoke',
+      scope: 'market_tools:call',
     })
     storeConnection({
       baseUrl: 'https://a.example',
@@ -89,17 +89,17 @@ describe('AE CLI origin-bound connection store', () => {
     expect(statSync(configPath()).mode & 0o777).toBe(0o600)
   })
 
-  it('keeps buyer and supplier credentials as separate profiles for one origin', () => {
-    storeConnection({ baseUrl: 'https://market.example', accessToken: 'buyer-secret', scope: 'market_operations:invoke' })
-    storeConnection({ baseUrl: 'https://market.example', accessToken: 'supplier-secret', scope: 'market_supply:manage' })
+  it('keeps buyer and Provider credentials as separate profiles for one origin', () => {
+    storeConnection({ baseUrl: 'https://market.example', accessToken: 'buyer-secret', scope: 'market_tools:call' })
+    storeConnection({ baseUrl: 'https://market.example', accessToken: 'provider-secret', scope: 'market_supply:manage' })
 
-    expect(resolveAgentAccessCredential('https://market.example', 'market_operations:invoke')?.accessToken).toBe('buyer-secret')
-    expect(resolveAgentAccessCredential('https://market.example', 'market_supply:manage')?.accessToken).toBe('supplier-secret')
-    expect(listStoredConnections().map(({ profile }) => profile)).toEqual(['market', 'supplier'])
+    expect(resolveAgentAccessCredential('https://market.example', 'market_tools:call')?.accessToken).toBe('buyer-secret')
+    expect(resolveAgentAccessCredential('https://market.example', 'market_supply:manage')?.accessToken).toBe('provider-secret')
+    expect(listStoredConnections().map(({ profile }) => profile)).toEqual(['market', 'provider'])
 
-    expect(removeStoredConnection('https://market.example', 'supplier')).toMatchObject({ removed: true })
+    expect(removeStoredConnection('https://market.example', 'provider')).toMatchObject({ removed: true })
     expect(readStoredConnection('https://market.example', 'market')?.accessToken).toBe('buyer-secret')
-    expect(readStoredConnection('https://market.example', 'supplier')).toBeUndefined()
+    expect(readStoredConnection('https://market.example', 'provider')).toBeUndefined()
   })
 
   it('writes an importable Streamable HTTP MCP connection with user-only permissions', () => {

@@ -43,7 +43,7 @@ export type GraphCatalogAccessPath = Readonly<{
 export type GraphPublicationRow = CapabilityPublicationLifecycleRow & Readonly<{
   id: string
   publicationRef: string
-  operationRef: string
+  toolRef: string
   revision: number
   networkId: string
   businessId: string

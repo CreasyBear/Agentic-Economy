@@ -6,7 +6,7 @@ import {
   normalizePricingConfig,
   parseDecimalExactAmount,
   pricingConfigDigest,
-  resolveInvocationPrice,
+  resolveCallPrice,
   type ExactAmount,
   type PricingConfig,
 } from '../../../src/modules/money/public'
@@ -14,14 +14,14 @@ import {
 describe('money pricing configuration', () => {
   it('resolves zero-price and paid AUD calls', () => {
     const zero: PricingConfig = { version: 'pricing:v3', kind: 'fixed_aud', currency: 'AUD', exponent: 6, amountUnits: '0' }
-    expect(resolveInvocationPrice({ config: zero, freeCallsUsed: 99, priceDigest: 'price:zero' })).toEqual({
+    expect(resolveCallPrice({ config: zero, freeCallsUsed: 99, priceDigest: 'price:zero' })).toEqual({
       kind: 'free',
       reason: 'zero_price',
       amount: amount('AUD', '0', 6),
       priceDigest: 'price:zero',
     })
     const paid: PricingConfig = { version: 'pricing:v3', kind: 'fixed_aud', currency: 'AUD', exponent: 6, amountUnits: '5000000' }
-    expect(resolveInvocationPrice({ config: paid, freeCallsUsed: 0, priceDigest: 'price:paid' })).toEqual({
+    expect(resolveCallPrice({ config: paid, freeCallsUsed: 0, priceDigest: 'price:paid' })).toEqual({
       kind: 'paid',
       amount: amount('AUD', '5000000', 6),
       priceDigest: 'price:paid',
@@ -34,13 +34,13 @@ describe('money pricing configuration', () => {
   })
 
   it('rejects invalid configuration and currency mismatch', () => {
-    expect(resolveInvocationPrice({
+    expect(resolveCallPrice({
       config: { version: 'pricing:v3', kind: 'fixed_aud', currency: 'usd', exponent: 6, amountUnits: '500' },
       freeCallsUsed: 0,
       priceDigest: 'price:bad',
     })).toEqual({ kind: 'refused', code: 'pricing_config_invalid' })
     const config: PricingConfig = { version: 'pricing:v3', kind: 'fixed_aud', currency: 'AUD', exponent: 6, amountUnits: '500' }
-    expect(resolveInvocationPrice({ config, freeCallsUsed: 0, expectedCurrency: 'USD', priceDigest: 'price:bad' })).toEqual({ kind: 'refused', code: 'currency_mismatch' })
+    expect(resolveCallPrice({ config, freeCallsUsed: 0, expectedCurrency: 'USD', priceDigest: 'price:bad' })).toEqual({ kind: 'refused', code: 'currency_mismatch' })
   })
 
   it('changes digest when pricing changes and splits exact units', () => {

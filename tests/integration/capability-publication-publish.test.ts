@@ -71,7 +71,7 @@ describe('capability publication publish', () => {
         kind: 'verified',
         publicationRef: published.publicationRef,
         revision: published.publicationRevision,
-        operationRef: published.operationRef,
+        toolRef: published.toolRef,
         sourceAuthorityState: 'verified',
       })
     const persisted = await backend.run(async (ctx) => ({
@@ -242,8 +242,8 @@ describe('capability publication publish', () => {
       admissionCases: [
         {
           businessId,
-          operationRef: published.operationRef,
-          operationRevision: 1,
+          toolRef: published.toolRef,
+          toolVersion: 1,
           publicationRef: published.publicationRef,
           publicationRevision: 1,
           state: 'submitted',

@@ -20,7 +20,7 @@ import {
 } from '@/modules/capability-supply/supply-funnel.functions'
 import { utf8ToHex } from '@/modules/capability-supply/public'
 import { providerConnectionTargetId } from './provider-connection-target'
-import { suggestContinuation } from '@/modules/market/suggested-continuation'
+import { suggestNextAction } from '@/modules/market/suggested-next-action'
 import { formatRelativeTime, formatTimestamp, timestampIso } from '@/lib/ui/format-time'
 import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
 
@@ -66,10 +66,10 @@ export function AeOwnerProviderConnections({
   const revokeInFlightRef = useRef(false)
   const commandIdsRef = useRef(new Map<string, string>())
   const canConnect = !readOnly && businessId !== undefined && businessId.length > 0
-  const missingConnectionContinuation = suggestContinuation({
+  const missingConnectionNextAction = suggestNextAction({
     subject: 'connection',
     state: 'missing',
-    actor: 'supplier',
+    actor: 'provider',
   })
 
   useEffect(() => {
@@ -81,7 +81,7 @@ export function AeOwnerProviderConnections({
         return
       }
       if (
-        targetId !== 'supplier-connections'
+        targetId !== 'provider-connections'
         && targetId !== 'provider-x402-resource-url'
         && !targetId.startsWith('provider-connection-')
       ) return
@@ -117,7 +117,7 @@ export function AeOwnerProviderConnections({
     try {
       await router.invalidate()
       setRefreshRequired(false)
-      setNotice({ kind: 'status', text: 'Supplier connections updated.' })
+      setNotice({ kind: 'status', text: 'Provider connections updated.' })
       return true
     } catch (cause) {
       captureClientExceptionOnClient(cause)
@@ -159,7 +159,7 @@ export function AeOwnerProviderConnections({
       if (result.kind === 'refused') {
         if (result.code === 'source_unavailable') {
           setRefreshRequired(true)
-          setNotice({ kind: 'error', text: 'The supplier connection outcome was not confirmed. Reload current connections before repeating it.' })
+          setNotice({ kind: 'error', text: 'The provider connection outcome was not confirmed. Reload current connections before repeating it.' })
           return
         }
         commandIdsRef.current.delete(commandKey)
@@ -176,7 +176,7 @@ export function AeOwnerProviderConnections({
         setRefreshedForRebind(reauthorizationRef)
         setNotice({
           kind: 'status',
-          text: 'Authority reauthorized. Re-admit the exact Operation so its binding uses the new generation and digest.',
+          text: 'Authority reauthorized. Re-admit the exact Tool so its binding uses the new generation and digest.',
         })
       }
     } catch (cause) {
@@ -188,7 +188,7 @@ export function AeOwnerProviderConnections({
       setRefreshRequired(true)
       setNotice({
         kind: 'error',
-        text: 'The supplier connection outcome was not confirmed. Reload current connections first; an unchanged retry will reuse the same command reference.',
+        text: 'The provider connection outcome was not confirmed. Reload current connections first; an unchanged retry will reuse the same command reference.',
       })
     } finally {
       setBusy(undefined)
@@ -296,7 +296,7 @@ export function AeOwnerProviderConnections({
       if (result.kind === 'refused') {
         if (result.code === 'source_unavailable') {
           setRefreshRequired(true)
-          setNotice({ kind: 'error', text: 'The supplier connection outcome was not confirmed. Reload current connections before repeating it.' })
+          setNotice({ kind: 'error', text: 'The provider connection outcome was not confirmed. Reload current connections before repeating it.' })
           return
         }
         commandIdsRef.current.delete(commandKey)
@@ -310,7 +310,7 @@ export function AeOwnerProviderConnections({
       setRefreshRequired(true)
       setNotice({
         kind: 'error',
-        text: 'The supplier connection outcome was not confirmed. Reload current connections first; an unchanged retry will reuse the same command reference.',
+        text: 'The provider connection outcome was not confirmed. Reload current connections first; an unchanged retry will reuse the same command reference.',
       })
     } finally {
       setBusy(undefined)
@@ -406,21 +406,21 @@ export function AeOwnerProviderConnections({
 
   return (
     <div
-      id="supplier-connections"
+      id="provider-connections"
       tabIndex={-1}
       className="scroll-mt-6 outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
     >
       <AeSection
-        title="Supplier connections"
-        description="Connect a hosted x402 endpoint so Agentic Economy can route paid calls without collecting an API key or wallet secret. Then open an operation and select this connection as its access authority."
+        title="Provider connections"
+        description="Connect a hosted x402 endpoint so Agentic Economy can route paid calls without collecting an API key or wallet secret. Then open a Tool and select this connection as its access authority."
       >
       {connections.length === 0 ? (
         <AeEmptyState
           title="No provider connection yet"
-          description="Add the public HTTPS endpoint that returns the x402 payment challenge for your operation."
+          description="Add the public HTTPS endpoint that returns the x402 payment challenge for your Tool."
           action={readOnly ? undefined : (
             <Button type="button" className="min-h-touch" onClick={beginConnection}>
-              {missingConnectionContinuation.label}
+              {missingConnectionNextAction.label}
             </Button>
           )}
         />
@@ -455,7 +455,7 @@ export function AeOwnerProviderConnections({
                   )}
                   <p className="text-sm text-muted-foreground">{providerConnectionHealth(connection)}</p>
                   <p className="text-sm text-muted-foreground">Credential rotation: not applicable. x402 stores no provider credential or private key.</p>
-                  <p className="text-sm text-muted-foreground">Operation readiness is checked per Operation and is not implied by connection health.</p>
+                  <p className="text-sm text-muted-foreground">Tool readiness is checked per Tool and is not implied by connection health.</p>
                   <AeCopyReference label="connection reference" value={connection.connectionRef} />
                 </div>
                 {(connection.lifecycle === 'active' || connection.lifecycle === 'reauthorization_required') ? (
@@ -494,13 +494,13 @@ export function AeOwnerProviderConnections({
                   <Alert>
                     <AlertTitle>Authority refreshed</AlertTitle>
                     <AlertDescription className="grid gap-3">
-                      Re-admit {rebindOfferingRef} now so this Operation binds to the refreshed authority snapshot.
+                      Re-admit {rebindOfferingRef} now so this Tool binds to the refreshed authority snapshot.
                       <Button asChild className="min-h-touch justify-self-start">
                         <a
                           ref={rebindLinkRef}
                           href={`/owner/supply/${encodeURIComponent(rebindOfferingRef)}#provider`}
                         >
-                          Re-admit Operation
+                          Re-admit Tool
                         </a>
                       </Button>
                     </AlertDescription>
@@ -526,7 +526,7 @@ export function AeOwnerProviderConnections({
         title="Revoke this provider connection?"
         description={revokeTarget === undefined
           ? ''
-          : `Revoke access to ${providerConnectionResource(revokeTarget)}. New calls through this connection will stop. Operations that use it need a replacement connection and re-admission before they can accept new calls.`}
+          : `Revoke access to ${providerConnectionResource(revokeTarget)}. New calls through this connection will stop. Tools that use it need a replacement connection and re-admission before they can accept new calls.`}
         confirmLabel="Revoke provider connection"
         confirmVariant="destructive"
         pending={revokePending}
@@ -631,11 +631,11 @@ export function AeOwnerProviderConnections({
         </form>
       ) : readOnly ? null : (
         <AeEmptyState
-          title="Supplier identity is required to connect"
-          description="Create an unpublished supplier workspace, then return here to inspect and claim the x402 endpoint."
+          title="Provider identity is required to connect"
+          description="Create an unpublished provider workspace, then return here to inspect and claim the x402 endpoint."
           action={
             <Button asChild className="min-h-touch">
-              <Link to="/owner/offerings">Create supplier workspace</Link>
+              <Link to="/owner/offerings">Create provider workspace</Link>
             </Button>
           }
         />
@@ -698,12 +698,12 @@ function providerConnectionHealth(connection: OwnerProviderConnection): string {
 
 function connectionRefusalCopy(code: string, correlationRef?: string): string {
   if (code === 'security_control_unavailable') {
-    return `The security control is unavailable, so no supplier authority was changed.${correlationRef === undefined ? '' : ` Reference ${correlationRef}.`}`
+    return `The security control is unavailable, so no provider authority was changed.${correlationRef === undefined ? '' : ` Reference ${correlationRef}.`}`
   }
-  if (code === 'reauthentication_required' || code === 'proof_stale') return 'Verify your identity again before changing this supplier authority.'
+  if (code === 'reauthentication_required' || code === 'proof_stale') return 'Verify your identity again before changing this provider authority.'
   if (code === 'proof_replayed' || code === 'command_changed') return 'The verified command no longer matches this change. Review the connection and verify again.'
-  if (code === 'rate_limited') return 'Too many supplier-authority changes were attempted. Wait, then reload the current connection before trying again.'
-  if (code === 'claim_invalid' || code === 'invalid_identity') return 'The payee claim expired or no longer matches this supplier and endpoint. Inspect it and sign again.'
+  if (code === 'rate_limited') return 'Too many provider-authority changes were attempted. Wait, then reload the current connection before trying again.'
+  if (code === 'claim_invalid' || code === 'invalid_identity') return 'The payee claim expired or no longer matches this provider and endpoint. Inspect it and sign again.'
   if (code === 'inspection_ambiguous') return 'The endpoint now exposes more than one supported payment lane. Make one Base USDC exact lane unambiguous, then inspect again.'
   if (code === 'inspection_unsupported') return 'The endpoint no longer exposes AE’s supported Base USDC exact payment lane.'
   if (code.startsWith('inspection_')) return 'The live x402 challenge changed or is no longer valid. Inspect the endpoint again.'

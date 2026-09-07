@@ -53,7 +53,7 @@ describe('dev-seeded public catalog decision facts', () => {
     const foreignBusinessId = await backend.run(async (ctx) => ctx.db.insert('businesses', {
       owningAccountRef: 'acc_foreign_supplier',
       slug: 'foreign-unpublished-supplier',
-      name: 'Foreign Unpublished Supplier',
+      name: 'Foreign Unpublished Provider',
       normalizedName: 'foreign unpublished supplier',
       category: 'External service',
       businessContext: {

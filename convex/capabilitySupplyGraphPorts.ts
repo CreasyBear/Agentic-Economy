@@ -192,7 +192,7 @@ function toPublicationRow(doc: Doc<'capabilityPublications'>): GraphPublicationR
   return {
     id: doc._id,
     publicationRef: doc.publicationRef,
-    operationRef: doc.operationRef,
+    toolRef: doc.toolRef,
     revision: doc.revision,
     networkId: doc.networkId,
     businessId: doc.businessId,

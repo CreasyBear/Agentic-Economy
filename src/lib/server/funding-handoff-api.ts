@@ -9,7 +9,7 @@ import { problem } from '@/lib/server/problem'
 import { runWithRequestCorrelation, withRequestCorrelationHeader } from '@/lib/server/request-correlation'
 import { sourceWriteAdmissionFromRequest, sourceWriteRequestFromAdmission } from '@/lib/server/source-write-admission'
 import { createAccountManagementService } from '@/modules/agent-access/account.actions'
-import { MARKET_OPERATIONS_INVOKE_SCOPE } from '@/modules/agent-access/contract'
+import { MARKET_TOOLS_CALL_SCOPE } from '@/modules/agent-access/contract'
 import {
   readFundingConstraints,
   type CreditPaymentPort,
@@ -222,13 +222,13 @@ export async function handleFundingHandoffAction(
     const admitted = await authenticateAgentAccess({
       ...(options.authenticate === undefined ? {} : { authenticate: options.authenticate }),
       ...(resolvePrincipal === undefined ? {} : { resolvePrincipal }),
-      requiredScope: MARKET_OPERATIONS_INVOKE_SCOPE,
+      requiredScope: MARKET_TOOLS_CALL_SCOPE,
       consequenceResource: `surface:http:funding-handoff-${actionName}`,
     })
     if (admitted.kind !== 'authenticated') {
       const failure = gatewayFailureToProblem({ kind: 'refused', code: admitted.reason, retryable: false })
       return withRequestCorrelationHeader(problem({ ...failure, status: admitted.status, detail: 'Connect a buyer agent before creating or reading a funding handoff.' }, {
-        Vary: 'Authorization', 'WWW-Authenticate': bearerChallenge(resolveCanonicalBaseUrl(request).baseUrl, MARKET_OPERATIONS_INVOKE_SCOPE),
+        Vary: 'Authorization', 'WWW-Authenticate': bearerChallenge(resolveCanonicalBaseUrl(request).baseUrl, MARKET_TOOLS_CALL_SCOPE),
       }), correlationId)
     }
     let raw: unknown = {}

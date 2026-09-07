@@ -25,7 +25,7 @@ describe('developer discovery SEO and AEO safety', () => {
     expect(serialized).toContain('"mutation":false')
     expect(serialized).toContain('"payment":false')
     expect(serialized).toContain('"protectedAction":false')
-    expect(serialized).toContain('"providerOperation":false')
+    expect(serialized).toContain('"providerTool":false')
     expect(serialized).toContain('"requestMarket":false')
     expect(serialized).not.toMatch(forbiddenSeoDiscoveryPattern)
   })

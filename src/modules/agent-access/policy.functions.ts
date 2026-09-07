@@ -6,7 +6,7 @@ import {
   type CustomerRequestServiceAssertion,
 } from '@/modules/agent-access/service-auth-envelope'
 
-import { MARKET_OPERATIONS_INVOKE_SCOPE } from './contract'
+import { MARKET_TOOLS_CALL_SCOPE } from './contract'
 import {
   createAgentAccessGrant,
   type AgentAccessGrant,
@@ -27,7 +27,7 @@ type RegisterAgentAccessGrantSourceResult = Readonly<{
   kind: 'recorded' | 'replayed'
   grantRef: string
   generation: number
-  policyDigest: string
+  spendingPolicyDigest: string
   lifecycle: 'active' | 'revoked' | 'expired'
   expiresAt: number
 }> | Readonly<{
@@ -74,7 +74,7 @@ async function createAgentAccessServerAssertion(
     command,
     principal: {
       ...principal,
-      scopes: [MARKET_OPERATIONS_INVOKE_SCOPE],
+      scopes: [MARKET_TOOLS_CALL_SCOPE],
     },
     issuedAt: Date.now(),
   })

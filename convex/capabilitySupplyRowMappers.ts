@@ -1,21 +1,21 @@
 import {
-  isRegisteredOperationMappingRef,
-  resolveRegisteredOperationMappingRef,
-  type RegisteredOperationMapping,
+  isRegisteredToolMappingRef,
+  resolveRegisteredToolMappingRef,
+  type RegisteredToolMapping,
 } from '@/modules/capability-supply/public'
 import type { CapabilityBindingRow, CapabilityOfferingRow } from '@/modules/capability-supply/public'
 import type { Doc } from './_generated/dataModel'
 
-export function toRegisteredOperationMapping(
-  doc: Doc<'registeredOperationMappings'>,
-): RegisteredOperationMapping | null {
-  if (!isRegisteredOperationMappingRef(doc.mappingRef)) return null
-  const mapping: RegisteredOperationMapping = {
+export function toRegisteredToolMapping(
+  doc: Doc<'registeredToolMappings'>,
+): RegisteredToolMapping | null {
+  if (!isRegisteredToolMappingRef(doc.mappingRef)) return null
+  const mapping: RegisteredToolMapping = {
     ...doc.material,
     mappingRef: doc.mappingRef,
   }
   try {
-    return resolveRegisteredOperationMappingRef(mapping) === mapping.mappingRef ? mapping : null
+    return resolveRegisteredToolMappingRef(mapping) === mapping.mappingRef ? mapping : null
   } catch {
     return null
   }

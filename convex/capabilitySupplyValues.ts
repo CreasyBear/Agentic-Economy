@@ -1,1 +1,1 @@
-export { registeredOperationMappingValue } from '@/modules/capability-supply/convex'
+export { registeredToolMappingValue } from '@/modules/capability-supply/convex'

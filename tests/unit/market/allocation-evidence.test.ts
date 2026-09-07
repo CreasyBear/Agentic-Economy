@@ -11,10 +11,10 @@ const firstAllocation: AllocationEvidenceObservation = {
   searchIdentity: 'search:tax-record-lookup:1',
   allocationIdentity: 'allocation:tax-record-lookup:1',
   callIdentity: 'call:01J-FIRST',
-  operationRef: `operation:v1:${'a'.repeat(64)}`,
+  toolRef: `operation:v1:${'a'.repeat(64)}`,
 }
 
-describe('Operation allocation evidence', () => {
+describe('Tool allocation evidence', () => {
   it('deduplicates same-Call and same-allocation replay without repeat-demand evidence', () => {
     const projection = projectAllocationEvidence([
       firstAllocation,
@@ -40,7 +40,7 @@ describe('Operation allocation evidence', () => {
       searchIdentity: 'search:foreign-company-record:1',
       allocationIdentity: 'allocation:foreign-company-record:1',
       callIdentity: 'call:01J-SECOND',
-      operationRef: `operation:v1:${'b'.repeat(64)}`,
+      toolRef: `operation:v1:${'b'.repeat(64)}`,
     }
     const projection = projectAllocationEvidence([
       firstAllocation,
@@ -89,7 +89,7 @@ describe('Operation allocation evidence', () => {
         searchIdentity: 'search:unrelated',
         allocationIdentity: 'allocation:unrelated',
         callIdentity: 'call:unrelated',
-        operationRef: `operation:v1:${'b'.repeat(64)}`,
+        toolRef: `operation:v1:${'b'.repeat(64)}`,
       },
     ])
 
@@ -97,9 +97,9 @@ describe('Operation allocation evidence', () => {
     expect(projection.repeatDemandCount).toBe(0)
   })
 
-  it('fails closed on malformed current Operation references', () => {
+  it('fails closed on malformed current Tool references', () => {
     const projection = projectAllocationEvidence([
-      { ...firstAllocation, operationRef: 'operation:v1:not-a-digest' },
+      { ...firstAllocation, toolRef: 'operation:v1:not-a-digest' },
     ])
 
     expect(projection.facts).toEqual([])

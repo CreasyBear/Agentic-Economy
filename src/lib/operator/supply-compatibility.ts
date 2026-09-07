@@ -3,15 +3,15 @@ export type SupplyCompatibilityIntent = Readonly<{
   hash?: string
 }>
 
-export type OwnerOperationsCompatibilitySearch = Readonly<{
+export type OwnerToolsCompatibilitySearch = Readonly<{
   rebind?: string
   connect?: 'return' | 'refresh'
   cursor?: string
 }>
 
-export function parseOwnerOperationsCompatibilitySearch(
+export function parseOwnerToolsCompatibilitySearch(
   search: Readonly<Record<string, unknown>>,
-): OwnerOperationsCompatibilitySearch {
+): OwnerToolsCompatibilitySearch {
   if ((search.connect === 'return' || search.connect === 'refresh') && Object.keys(search).length === 1) {
     return { connect: search.connect }
   }
@@ -28,7 +28,7 @@ export function parseSupplyCompatibilityIntent(
   search: Readonly<Record<string, unknown>>,
   hash: string,
 ): SupplyCompatibilityIntent {
-  const validatedSearch = parseOwnerOperationsCompatibilitySearch(search)
+  const validatedSearch = parseOwnerToolsCompatibilitySearch(search)
   if (hash === 'earnings' && Object.keys(search).length === 0) {
     return { search: {}, hash: 'earnings' }
   }
@@ -60,7 +60,7 @@ export function parseSupplyCompatibilityIntentFromUrl(
   // URL fragments are not sent with the initial HTTP request. Preserve only a
   // validated rebind reference at that boundary; the browser retains the
   // original fragment, and the workspace still refuses to act without it.
-  const validatedSearch = parseOwnerOperationsCompatibilitySearch(search)
+  const validatedSearch = parseOwnerToolsCompatibilitySearch(search)
   return hash === '' && validatedSearch.rebind !== undefined
     ? { search: { rebind: validatedSearch.rebind } }
     : intent

@@ -5,10 +5,10 @@ import { AePublicPage } from "@/components/ae/layout/AePublicPage";
 import { AePageSkeleton, AePageState } from "@/components/ae/layout/AePageState";
 import { AeMarketPage } from "@/components/ae/market/AeMarketPage";
 import { Button } from "@/components/ui/button";
-import { readCapabilityOperationCompare } from "@/modules/capability-supply/operation-source";
+import { readCapabilityToolCompare } from "@/modules/capability-supply/tool-source";
 import {
-  isPublicOperationRef,
-  operationCompareInputSchema,
+  isPublicToolRef,
+  toolCompareInputSchema,
 } from "@/modules/capability-supply/public";
 import {
   marketWindowSchema,
@@ -19,7 +19,7 @@ import {
   type MarketCategoryId,
 } from "@/modules/market/listing-evidence";
 import { readMarketRouteServer } from "@/modules/market/market.functions";
-import { projectOperationCompareChoices } from "@/modules/registry/operation-choice-contracts";
+import { projectToolCompareChoices } from "@/modules/registry/tool-choice-contracts";
 import { buildPublicPageHead } from "@/modules/seo/public";
 
 export type MarketSearch = Readonly<{
@@ -33,10 +33,10 @@ export type MarketSearch = Readonly<{
 }>;
 
 const readMarketComparisonServer = createServerFn({ method: "GET" })
-  .validator((data) => operationCompareInputSchema.parse(data))
+  .validator((data) => toolCompareInputSchema.parse(data))
   .handler(async ({ data }) =>
-    projectOperationCompareChoices(
-      await readCapabilityOperationCompare({ operationRefs: data.operationRefs }),
+    projectToolCompareChoices(
+      await readCapabilityToolCompare({ toolRefs: data.toolRefs }),
     ),
   );
 
@@ -46,7 +46,7 @@ export function parseMarketCompareRefs(value: unknown): readonly string[] | unde
   if (
     refs.length < 2 ||
     refs.length > 4 ||
-    !refs.every(isPublicOperationRef)
+    !refs.every(isPublicToolRef)
   ) {
     return undefined;
   }
@@ -100,7 +100,7 @@ export const Route = createFileRoute("/market")({
     ...(search.compare === undefined ? {} : { compare: search.compare }),
   }),
   loader: async ({ deps }) => {
-    const operationRefs = parseMarketCompareRefs(deps.compare);
+    const toolRefs = parseMarketCompareRefs(deps.compare);
     const [projection, comparison] = await Promise.all([
       readMarketRouteServer({
         data: {
@@ -112,9 +112,9 @@ export const Route = createFileRoute("/market")({
           ...(deps.cursor === undefined ? {} : { cursor: deps.cursor }),
         },
       }),
-      operationRefs === undefined
+      toolRefs === undefined
         ? Promise.resolve(undefined)
-        : readMarketComparisonServer({ data: { operationRefs } }),
+        : readMarketComparisonServer({ data: { toolRefs } }),
     ]);
     return { projection, comparison };
   },
@@ -142,7 +142,7 @@ function MarketError({ reset }: ErrorComponentProps) {
     <AePageState
       tone="danger"
       title="The market view didn’t load"
-      description="Try again to fetch the current catalog and comparison. No Operation was called."
+        description="Try again to fetch the current catalog and comparison. No Tool was called."
       action={
         <Button type="button" className="min-h-touch" onClick={reset}>
           Try again
@@ -165,10 +165,10 @@ function MarketRoute() {
         {...(data.comparison === undefined
           ? {}
           : { comparison: data.comparison })}
-        onCompareOperations={(operationRefs) => {
+        onCompareTools={(toolRefs) => {
           void navigate({
             to: "/market",
-            search: { ...search, compare: operationRefs.join(",") },
+            search: { ...search, compare: toolRefs.join(",") },
           });
         }}
       />

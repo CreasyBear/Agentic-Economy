@@ -22,7 +22,7 @@ const deepenedFolders = [
   'src/modules/capability-supply/internal/quarantine',
   'src/modules/capability-supply/internal/publication',
   'src/modules/capability-supply/internal/shared',
-  'src/modules/capability-supply/internal/operation-ledger',
+  'src/modules/capability-supply/internal/tool-ledger',
 ] as const
 
 describe('capability supply boundaries', () => {
@@ -95,11 +95,11 @@ describe('capability supply boundaries', () => {
 
   it('reads canonical Operations directly without a cutover read model', () => {
     const schema = readFileSync('src/modules/capability-supply/internal/convex-schema.ts', 'utf8')
-    const queries = readFileSync('convex/capabilitySupplyOperationQueries.ts', 'utf8')
+    const queries = readFileSync('convex/capabilitySupplyToolQueries.ts', 'utf8')
 
-    expect(schema).not.toContain('capabilityCurrentOperationReadControls')
-    expect(schema).not.toContain('capabilityCurrentOperationDetails')
-    expect(queries).toMatch(/query\('capabilityPublications'\)[\s\S]*?\.withIndex\('by_operationRef_and_disposition'/)
+    expect(schema).not.toContain('capabilityCurrentToolReadControls')
+    expect(schema).not.toContain('capabilityCurrentToolDetails')
+    expect(queries).toMatch(/query\('capabilityPublications'\)[\s\S]*?\.withIndex\('by_toolRef_and_disposition'/)
     expect(queries).not.toContain('CURRENT_OPERATION_SHADOW')
   })
 

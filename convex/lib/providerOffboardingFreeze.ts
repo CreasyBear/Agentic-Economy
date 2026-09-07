@@ -14,13 +14,13 @@ export async function providerRouteabilityIsFrozen(
     && current.routeabilityFrozenAt !== undefined
 }
 
-export async function operationProviderRouteabilityIsFrozen(
+export async function toolProviderRouteabilityIsFrozen(
   ctx: Pick<QueryCtx, 'db'>,
-  operationRef: string,
+  toolRef: string,
 ): Promise<boolean> {
   const publication = await ctx.db.query('capabilityPublications')
-    .withIndex('by_operationRef_and_disposition', (index) => index
-      .eq('operationRef', operationRef)
+    .withIndex('by_toolRef_and_disposition', (index) => index
+      .eq('toolRef', toolRef)
       .eq('disposition', 'current'))
     .first()
   return publication === null

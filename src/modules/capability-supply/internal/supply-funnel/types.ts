@@ -57,9 +57,9 @@ export type SupplyFunnelRefusal =
   | "source_too_deep"
   | "source_version_unsupported"
   | "selector_invalid"
-  | "operation_not_found"
-  | "operation_not_keyless"
-  | "operation_not_executable"
+  | "tool_not_found"
+  | "tool_not_keyless"
+  | "tool_not_executable"
   | "schema_missing"
   | "schema_profile_unsupported"
   | "openapi_query_parameter_definition_unsupported"
@@ -108,9 +108,9 @@ export type SupplyFunnelStepCompletion = Readonly<{
   revision?: number;
   sourceHash?: string;
   publicationRef?: string;
-  operationRef?: string;
+  toolRef?: string;
   canaryRef?: string;
-  invocationRef?: string;
+  callRef?: string;
   refusal?: SupplyFunnelRefusal;
   message?: string;
 }>;
@@ -126,8 +126,8 @@ export type OwnerSellerCanaryReadback = Readonly<
   | {
       kind: "available";
       canaryRef: string;
-      invocationRef: string;
-      operationRef: string;
+      callRef: string;
+      toolRef: string;
       offeringRef: string;
       offeringRevision: number;
       publicationRef: string;
@@ -197,7 +197,7 @@ export type OwnerSellerCanaryPromotionResult = Readonly<
       offeringRevision: number;
       publicationRef: string;
       publicationRevision: number;
-      operationRef: string;
+      toolRef: string;
       promotionEvidenceDigest: string;
       outputDigest: string;
     }
@@ -280,7 +280,7 @@ export type OwnerSupplyCommandResult = Readonly<
       kind: "republished";
       publicationRef: string;
       revision: number;
-      operationRef: string;
+      toolRef: string;
       bindingId: string;
       lifecycle: Readonly<{
         state: "active" | "inactive";
@@ -297,7 +297,7 @@ export type OwnerSupplyReadbackSource = Readonly<{
   digest: string;
 }>;
 
-export type OwnerSupplyOperationEvidence = Readonly<{
+export type OwnerSupplyToolEvidence = Readonly<{
   windowStartAt: number;
   windowEndAt: number;
   delivery:
@@ -355,7 +355,7 @@ export type OwnerSupplyOfferingReadback = Readonly<{
     state: "current" | "withdrawn" | "superseded" | "incompatible";
     publicationRef: string;
     publicationRevision: number;
-    operationRef: string;
+    toolRef: string;
     authorityMode:
       | "provider_owned"
       | "ae_curated_external"
@@ -444,7 +444,7 @@ export type OwnerSupplyOfferingReadback = Readonly<{
   currentStep: SupplyFunnelStep;
   stepStates: Readonly<Record<SupplyFunnelStep, SupplyFunnelStepState>>;
   actionableReason?: SupplyFunnelRefusal;
-  operationEvidence?: OwnerSupplyOperationEvidence;
+  toolEvidence?: OwnerSupplyToolEvidence;
   accessPaths: readonly Readonly<{
     accessPathRef: string;
     offeringSourceHash: string;

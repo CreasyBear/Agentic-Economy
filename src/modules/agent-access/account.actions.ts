@@ -13,7 +13,7 @@ import { exactAmountSchema } from '@/modules/money/public'
 
 import {
   AGENT_ACCESS_AUTHORITY_MODE_VALUES,
-  MARKET_OPERATIONS_INVOKE_SCOPE,
+  MARKET_TOOLS_CALL_SCOPE,
   MARKET_SUPPLY_MANAGE_SCOPE,
 } from './contract'
 import { AGENT_ACCESS_ENVIRONMENT_VALUES } from './agent-access'
@@ -29,8 +29,8 @@ export const AGENT_ACCOUNT_SELF_ROUTE_CONTRACT = Object.freeze({
   method: 'GET' as const,
   path: AGENT_ACCOUNT_SELF_HTTP_PATH,
   routerPath: '/api/v1/account' as const,
-  scope: MARKET_OPERATIONS_INVOKE_SCOPE,
-  anyScopes: Object.freeze([MARKET_OPERATIONS_INVOKE_SCOPE, MARKET_SUPPLY_MANAGE_SCOPE]),
+  scope: MARKET_TOOLS_CALL_SCOPE,
+  anyScopes: Object.freeze([MARKET_TOOLS_CALL_SCOPE, MARKET_SUPPLY_MANAGE_SCOPE]),
   media: Object.freeze({ response: 'application/json; charset=utf-8' as const }),
 })
 
@@ -41,7 +41,7 @@ export const AGENT_ACCOUNT_MONEY_ROUTE_CONTRACTS = Object.freeze({
     method: 'POST' as const,
     path: '/api/v1/account/balance' as const,
     routerPath: '/api/v1/account/balance' as const,
-    scope: MARKET_OPERATIONS_INVOKE_SCOPE,
+    scope: MARKET_TOOLS_CALL_SCOPE,
   }),
   activity: Object.freeze({
     actionId: AGENT_ACCOUNT_ACTIVITY_ACTION_ID,
@@ -49,7 +49,7 @@ export const AGENT_ACCOUNT_MONEY_ROUTE_CONTRACTS = Object.freeze({
     method: 'POST' as const,
     path: '/api/v1/account/activity' as const,
     routerPath: '/api/v1/account/activity' as const,
-    scope: MARKET_OPERATIONS_INVOKE_SCOPE,
+    scope: MARKET_TOOLS_CALL_SCOPE,
   }),
 })
 
@@ -106,7 +106,7 @@ export const agentAccountActivityResultSchema = z.discriminatedUnion('kind', [
     items: z.array(z.strictObject({
       callRef: z.string().min(1),
       credentialRef: z.string().min(1),
-      operationRef: z.string().min(1),
+      toolRef: z.string().min(1),
       providerRef: z.string().min(1),
       state: z.enum(['completed', 'refused', 'outcome_unknown']),
       deliveryState: z.enum(['delivered', 'not_delivered', 'unknown']),
@@ -268,7 +268,7 @@ export const agentAccountSelfAction = defineAction<
   },
   surfaces: ['http', 'mcp', 'cli'],
   credentialAdmission: {
-    scope: MARKET_OPERATIONS_INVOKE_SCOPE,
+    scope: MARKET_TOOLS_CALL_SCOPE,
     anyScopes: AGENT_ACCOUNT_SELF_ROUTE_CONTRACT.anyScopes,
     authority: 'descriptor_classified',
   },
@@ -318,7 +318,7 @@ export const agentAccountBalanceAction = defineAction<AgentAccountBalanceInput, 
     dataClasses: ['usage_evidence'], spendExposure: 'none', approval: 'none',
   },
   surfaces: ['http', 'mcp', 'cli'],
-  credentialAdmission: { scope: MARKET_OPERATIONS_INVOKE_SCOPE, authority: 'descriptor_classified' },
+  credentialAdmission: { scope: MARKET_TOOLS_CALL_SCOPE, authority: 'descriptor_classified' },
   invocationContract: {
     version: AGENT_ACCOUNT_MONEY_ROUTE_CONTRACTS.balance.contractVersion,
     consequenceClass: 'read_only', materialInputPaths: ['currency'], authorityRequirement: 'principal',
@@ -348,7 +348,7 @@ export const agentAccountActivityAction = defineAction<AgentAccountActivityInput
   schema: agentAccountActivityInputSchema,
   outputSchema: agentAccountActivityResultSchema,
   parameters: [
-    { name: 'currency', type: 'string', description: 'Activity currency, default USD.', required: false },
+    { name: 'currency', type: 'string', description: 'Activity currency, default AUD.', required: false },
     { name: 'limit', type: 'number', description: 'Page size from 1 through 100.', required: false },
     { name: 'cursor', type: 'string', description: 'Opaque cursor returned by the previous page.', required: false },
   ],
@@ -358,7 +358,7 @@ export const agentAccountActivityAction = defineAction<AgentAccountActivityInput
     dataClasses: ['usage_evidence'], spendExposure: 'none', approval: 'none',
   },
   surfaces: ['http', 'mcp', 'cli'],
-  credentialAdmission: { scope: MARKET_OPERATIONS_INVOKE_SCOPE, authority: 'descriptor_classified' },
+  credentialAdmission: { scope: MARKET_TOOLS_CALL_SCOPE, authority: 'descriptor_classified' },
   invocationContract: {
     version: AGENT_ACCOUNT_MONEY_ROUTE_CONTRACTS.activity.contractVersion,
     consequenceClass: 'read_only', materialInputPaths: ['currency', 'limit', 'cursor'], authorityRequirement: 'principal',

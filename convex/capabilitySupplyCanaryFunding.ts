@@ -1,15 +1,15 @@
 import { v } from 'convex/values'
 
-import { MARKET_OPERATIONS_INVOKE_SCOPE } from '@/modules/agent-access/contract'
+import { MARKET_TOOLS_CALL_SCOPE } from '@/modules/agent-access/contract'
 import {
   createAgentAccessGrant,
+  agentAccessPolicyDigest,
   normalizeStoredAgentAccessGrant,
   type AgentAccessGrant,
   type AgentAccessPolicy,
   type NormalizedStoredAgentAccessGrant,
 } from '@/modules/agent-access/policy'
 import { agentAccessGrantValue } from '@/modules/agent-access/public'
-import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { StringEnvironment } from '@/lib/server/read-trimmed-env'
 import {
   cdpX402CustodyConfigurationFromEnvironment,
@@ -79,7 +79,7 @@ const provisionResult = v.union(
     grantRef: v.literal(SELLER_ONBOARDING_CANARY_PLATFORM_GRANT_REF),
     principalId: v.literal(SELLER_ONBOARDING_CANARY_PLATFORM_PRINCIPAL_ID),
     generation: v.literal(SELLER_ONBOARDING_CANARY_GRANT_GENERATION),
-    policyDigest: v.string(),
+    spendingPolicyDigest: v.string(),
     budgetPolicyRef: v.literal(SELLER_ONBOARDING_CANARY_BUDGET_POLICY_REF),
   }),
   v.object({
@@ -94,7 +94,7 @@ const readinessResult = v.union(
     grantRef: v.literal(SELLER_ONBOARDING_CANARY_PLATFORM_GRANT_REF),
     principalId: v.literal(SELLER_ONBOARDING_CANARY_PLATFORM_PRINCIPAL_ID),
     generation: v.literal(SELLER_ONBOARDING_CANARY_GRANT_GENERATION),
-    policyDigest: v.string(),
+    spendingPolicyDigest: v.string(),
     budgetPolicyRef: v.literal(SELLER_ONBOARDING_CANARY_BUDGET_POLICY_REF),
     paymentProfile: v.literal('base-sepolia-usdc-exact'),
     network: v.literal(BASE_SEPOLIA_NETWORK),
@@ -124,7 +124,7 @@ const exactPlatformGrantArgs = {
       applicationRef: v.string(),
       environment: v.literal('sandbox'),
       generation: v.number(),
-      policyDigest: v.string(),
+      spendingPolicyDigest: v.string(),
       expiresAt: v.number(),
     }),
   ),
@@ -144,7 +144,7 @@ export type SellerOnboardingCanaryPlatformGrantExpectation = Readonly<{
     applicationRef: string
     environment: 'sandbox'
     generation: number
-    policyDigest: string
+    spendingPolicyDigest: string
     expiresAt: number
   }>
   now: number
@@ -168,18 +168,18 @@ function canaryPolicy(): AgentAccessPolicy {
   const amount = (units: string) => ({ currency: 'USD', units, exponent: 6 })
   return {
     format: 'ae.agent-access-policy:v2',
-    operationAccess: 'all_admitted',
-    operationRefs: [],
+    toolAccess: 'all_admitted',
+    toolRefs: [],
     environment: 'sandbox',
     budget: {
       budgetPolicyRef: SELLER_ONBOARDING_CANARY_BUDGET_POLICY_REF,
       generation: SELLER_ONBOARDING_CANARY_GRANT_GENERATION,
       currency: 'USD',
       exponent: 6,
-      maximumSpendPerInvocation: amount(SELLER_ONBOARDING_CANARY_MAXIMUM_PER_CALL_ATOMIC),
+      maximumSpendPerCall: amount(SELLER_ONBOARDING_CANARY_MAXIMUM_PER_CALL_ATOMIC),
       maximumDailySpend: amount(SELLER_ONBOARDING_CANARY_MAXIMUM_DAILY_ATOMIC),
       maximumMonthlySpend: amount(SELLER_ONBOARDING_CANARY_MAXIMUM_MONTHLY_ATOMIC),
-      maximumConcurrentInvocations: 1,
+      maximumConcurrentCalls: 1,
     },
     rate: {
       ratePolicyRef: SELLER_ONBOARDING_CANARY_RATE_POLICY_REF,
@@ -198,9 +198,9 @@ function expectedCanaryGrant(now: number): AgentAccessGrant {
     applicationRef: SELLER_ONBOARDING_CANARY_PLATFORM_APPLICATION_REF,
     credentialId: SELLER_ONBOARDING_CANARY_PLATFORM_CREDENTIAL_ID,
     environment: 'sandbox',
-    operationAccess: 'all_admitted',
-    authorityMode: 'full_yolo',
-    policy: canaryPolicy(),
+    toolAccess: 'all_admitted',
+    authorityMode: 'unrestricted_test_only',
+    spendingPolicy: canaryPolicy(),
     lifecycle: 'active',
     generation: SELLER_ONBOARDING_CANARY_GRANT_GENERATION,
     createdAt: now,
@@ -244,9 +244,9 @@ function grantReadinessCodes(
     || grant.applicationRef !== expected.applicationRef
     || grant.credentialId !== expected.credentialId
     || grant.environment !== 'sandbox'
-    || grant.operationAccess !== 'all_admitted'
-    || grant.operationRefs.length !== 0
-    || grant.authorityMode !== 'full_yolo'
+    || grant.toolAccess !== 'all_admitted'
+    || grant.toolRefs.length !== 0
+    || grant.authorityMode !== 'unrestricted_test_only'
     || grant.generation !== SELLER_ONBOARDING_CANARY_GRANT_GENERATION
     || grant.expiresAt !== SELLER_ONBOARDING_CANARY_GRANT_EXPIRES_AT
   ) codes.push('canary_grant_material_invalid')
@@ -254,12 +254,12 @@ function grantReadinessCodes(
     codes.push('canary_grant_stale')
   }
   if (
-    grant.policyDigest !== expected.policyDigest
-    || canonicalDigest(grant.policy as never) !== expected.policyDigest
+    grant.spendingPolicyDigest !== expected.spendingPolicyDigest
+    || agentAccessPolicyDigest(grant.spendingPolicy) !== expected.spendingPolicyDigest
     || grant.budgetPolicyRef !== SELLER_ONBOARDING_CANARY_BUDGET_POLICY_REF
     || grant.ratePolicyRef !== SELLER_ONBOARDING_CANARY_RATE_POLICY_REF
-    || grant.policy.budget.generation !== SELLER_ONBOARDING_CANARY_GRANT_GENERATION
-    || grant.policy.rate.generation !== SELLER_ONBOARDING_CANARY_GRANT_GENERATION
+    || grant.spendingPolicy.budget.generation !== SELLER_ONBOARDING_CANARY_GRANT_GENERATION
+    || grant.spendingPolicy.rate.generation !== SELLER_ONBOARDING_CANARY_GRANT_GENERATION
   ) codes.push('canary_policy_stale')
   return codes
 }
@@ -271,9 +271,9 @@ function principalReadinessCodes(
     applicationRef: string
     environment: 'sandbox' | 'production'
     scopes: readonly string[]
-    authorityMode: 'inspect_only' | 'approve_each' | 'bounded_mandate' | 'full_yolo'
+    authorityMode: 'read_only' | 'approval_required' | 'spending_policy' | 'unrestricted_test_only'
     grantGeneration: number
-    policyDigest: string
+    spendingPolicyDigest: string
     lifecycle: 'active' | 'revoked' | 'expired'
     expiresAt?: number
   }>,
@@ -285,10 +285,10 @@ function principalReadinessCodes(
     && principal.applicationRef === SELLER_ONBOARDING_CANARY_PLATFORM_APPLICATION_REF
     && principal.environment === 'sandbox'
     && principal.scopes.length === 1
-    && principal.scopes[0] === MARKET_OPERATIONS_INVOKE_SCOPE
-    && principal.authorityMode === 'full_yolo'
+    && principal.scopes[0] === MARKET_TOOLS_CALL_SCOPE
+    && principal.authorityMode === 'unrestricted_test_only'
     && principal.grantGeneration === SELLER_ONBOARDING_CANARY_GRANT_GENERATION
-    && principal.policyDigest === expected.policyDigest
+    && principal.spendingPolicyDigest === expected.spendingPolicyDigest
     && principal.lifecycle === 'active'
     && principal.expiresAt === SELLER_ONBOARDING_CANARY_GRANT_EXPIRES_AT
     && principal.expiresAt > now
@@ -330,19 +330,19 @@ export async function readExactSellerOnboardingCanaryPlatformGrantHandler(
     || normalized.environment !== 'sandbox'
     || normalized.lifecycle !== 'active'
     || normalized.expiresAt <= args.now
-    || normalized.authorityMode !== 'full_yolo'
-    || normalized.operationAccess !== 'all_admitted'
-    || normalized.operationRefs.length !== 0
-    || normalized.policy.environment !== 'sandbox'
-    || normalized.policy.operationAccess !== 'all_admitted'
-    || normalized.policy.operationRefs.length !== 0
+    || normalized.authorityMode !== 'unrestricted_test_only'
+    || normalized.toolAccess !== 'all_admitted'
+    || normalized.toolRefs.length !== 0
+    || normalized.spendingPolicy.environment !== 'sandbox'
+    || normalized.spendingPolicy.toolAccess !== 'all_admitted'
+    || normalized.spendingPolicy.toolRefs.length !== 0
     || normalized.budgetPolicyRef !== SELLER_ONBOARDING_CANARY_BUDGET_POLICY_REF
     || normalized.ratePolicyRef !== SELLER_ONBOARDING_CANARY_RATE_POLICY_REF
-    || normalized.policy.budget.budgetPolicyRef !== normalized.budgetPolicyRef
-    || normalized.policy.rate.ratePolicyRef !== normalized.ratePolicyRef
-    || normalized.policy.budget.generation !== normalized.generation
-    || normalized.policy.rate.generation !== normalized.generation
-    || canonicalDigest(normalized.policy as never) !== normalized.policyDigest
+    || normalized.spendingPolicy.budget.budgetPolicyRef !== normalized.budgetPolicyRef
+    || normalized.spendingPolicy.rate.ratePolicyRef !== normalized.ratePolicyRef
+    || normalized.spendingPolicy.budget.generation !== normalized.generation
+    || normalized.spendingPolicy.rate.generation !== normalized.generation
+    || agentAccessPolicyDigest(normalized.spendingPolicy) !== normalized.spendingPolicyDigest
   ) return null
   if (args.expected.kind === 'persisted_dispatch' && (
     normalized.grantRef !== args.expected.grantRef
@@ -352,7 +352,7 @@ export async function readExactSellerOnboardingCanaryPlatformGrantHandler(
     || normalized.applicationRef !== args.expected.applicationRef
     || normalized.environment !== args.expected.environment
     || normalized.generation !== args.expected.generation
-    || normalized.policyDigest !== args.expected.policyDigest
+    || normalized.spendingPolicyDigest !== args.expected.spendingPolicyDigest
     || normalized.expiresAt !== args.expected.expiresAt
   )) return null
 
@@ -369,10 +369,10 @@ export async function readExactSellerOnboardingCanaryPlatformGrantHandler(
     || principal.authorityMode !== normalized.authorityMode
     || principal.lifecycle !== 'active'
     || principal.grantGeneration !== normalized.generation
-    || principal.policyDigest !== normalized.policyDigest
+    || principal.spendingPolicyDigest !== normalized.spendingPolicyDigest
     || principal.expiresAt === undefined
     || principal.expiresAt <= args.now
-    || !principal.scopes.includes(MARKET_OPERATIONS_INVOKE_SCOPE)
+    || !principal.scopes.includes(MARKET_TOOLS_CALL_SCOPE)
   ) return null
 
   return normalized
@@ -481,10 +481,10 @@ export const provisionSellerOnboardingCanaryFunding = internalMutation({
         credentialId: SELLER_ONBOARDING_CANARY_PLATFORM_CREDENTIAL_ID,
         applicationRef: SELLER_ONBOARDING_CANARY_PLATFORM_APPLICATION_REF,
         environment: 'sandbox',
-        scopes: [MARKET_OPERATIONS_INVOKE_SCOPE],
-        authorityMode: 'full_yolo',
+        scopes: [MARKET_TOOLS_CALL_SCOPE],
+        authorityMode: 'unrestricted_test_only',
         grantGeneration: SELLER_ONBOARDING_CANARY_GRANT_GENERATION,
-        policyDigest: expected.policyDigest,
+        spendingPolicyDigest: expected.spendingPolicyDigest,
         lifecycle: 'active',
         expiresAt: SELLER_ONBOARDING_CANARY_GRANT_EXPIRES_AT,
         recordedAt: args.now,
@@ -498,7 +498,7 @@ export const provisionSellerOnboardingCanaryFunding = internalMutation({
       grantRef: SELLER_ONBOARDING_CANARY_PLATFORM_GRANT_REF,
       principalId: SELLER_ONBOARDING_CANARY_PLATFORM_PRINCIPAL_ID,
       generation: SELLER_ONBOARDING_CANARY_GRANT_GENERATION,
-      policyDigest: expected.policyDigest,
+      spendingPolicyDigest: expected.spendingPolicyDigest,
       budgetPolicyRef: SELLER_ONBOARDING_CANARY_BUDGET_POLICY_REF,
     }
   },
@@ -573,7 +573,7 @@ export const readSellerOnboardingCanaryFundingReadiness = internalQuery({
       grantRef: SELLER_ONBOARDING_CANARY_PLATFORM_GRANT_REF,
       principalId: SELLER_ONBOARDING_CANARY_PLATFORM_PRINCIPAL_ID,
       generation: SELLER_ONBOARDING_CANARY_GRANT_GENERATION,
-      policyDigest: grant.policyDigest,
+      spendingPolicyDigest: expected.spendingPolicyDigest,
       budgetPolicyRef: SELLER_ONBOARDING_CANARY_BUDGET_POLICY_REF,
       paymentProfile: 'base-sepolia-usdc-exact' as const,
       network: BASE_SEPOLIA_NETWORK,

@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 import { handleMarketRequestPost } from '@/lib/server/market-demand-api'
 
-const authenticate = async (scopes: readonly string[] = ['market_operations:invoke']) => ({
+const authenticate = async (scopes: readonly string[] = ['market_tools:call']) => ({
   isAuthenticated: true as const,
   tokenType: 'api_key' as const,
   id: 'key_current',
@@ -36,7 +36,7 @@ describe('private market demand HTTP adapter', () => {
       {
         authenticate,
         resolvePrincipal: async (projection, requiredScopes, consequenceResource) => {
-          expect(requiredScopes).toEqual(['market_operations:invoke'])
+          expect(requiredScopes).toEqual(['market_tools:call'])
           expect(consequenceResource).toBe('surface:http:market-request-create')
           return { ...projection, ...principal }
         },

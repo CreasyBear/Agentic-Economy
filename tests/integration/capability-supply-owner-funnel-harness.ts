@@ -9,6 +9,7 @@ import {
   type CapabilityPublicationOfferingDraft,
 } from '@/modules/capability-supply/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { agentAccessPolicyDigest } from '@/modules/agent-access/policy'
 import { isRecord } from '@/modules/common/is-record'
 import { rescaleExactAmount } from '@/modules/money/public'
 import {
@@ -468,24 +469,24 @@ export async function seedSupplyAgentPrincipal(
     applicationRef: 'agentic-economy',
     environment: 'production' as const,
     scopes: ['market_supply:manage'],
-    authorityMode: 'bounded_mandate' as const,
+    authorityMode: 'spending_policy' as const,
   }
   const now = Date.now()
   const amount = { currency: 'USD', units: '0', exponent: 2 }
   const policy = {
     format: 'ae.agent-access-policy:v2' as const,
-    operationAccess: 'all_admitted' as const,
-    operationRefs: [],
+    toolAccess: 'all_admitted' as const,
+    toolRefs: [],
     environment: 'production' as const,
     budget: {
       budgetPolicyRef: `budget-policy:supply-reservation:${suffix}`,
       generation: 1,
       currency: 'USD',
       exponent: 2,
-      maximumSpendPerInvocation: amount,
+      maximumSpendPerCall: amount,
       maximumDailySpend: amount,
       maximumMonthlySpend: amount,
-      maximumConcurrentInvocations: 4,
+      maximumConcurrentCalls: 4,
     },
     rate: {
       ratePolicyRef: `rate-policy:supply-reservation:${suffix}`,
@@ -502,15 +503,15 @@ export async function seedSupplyAgentPrincipal(
     applicationRef: principal.applicationRef,
     credentialId: principal.credentialId,
     environment: principal.environment,
-    operationAccess: 'all_admitted' as const,
-    operationRefs: [],
+    toolAccess: 'all_admitted' as const,
+    toolRefs: [],
     authorityMode: principal.authorityMode,
-    policy,
+    spendingPolicy: policy,
     budgetPolicyRef: policy.budget.budgetPolicyRef,
     ratePolicyRef: policy.rate.ratePolicyRef,
     lifecycle: 'active' as const,
     generation: 1,
-    policyDigest: canonicalDigest(policy as never),
+    spendingPolicyDigest: agentAccessPolicyDigest(policy),
     createdAt: now,
     updatedAt: now,
     expiresAt: now + 7 * 24 * 60 * 60 * 1_000,
@@ -574,7 +575,7 @@ export async function seedSupplyAgentPrincipal(
     scopes: [...principal.scopes],
     ownerTokenIdentifier: `token:supply-reservation:${suffix}`,
     grantGeneration: 1,
-    policyDigest: grant.policyDigest,
+    spendingPolicyDigest: grant.spendingPolicyDigest,
     lifecycle: 'active',
     seenAt: now,
   })

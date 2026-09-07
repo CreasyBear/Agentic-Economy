@@ -8,10 +8,10 @@ import {
   admitPublicationDraft,
   capabilityBindingRegistrationHash,
   capabilityOfferingRegistrationHash,
-  capabilityOperationId,
+  capabilityToolId,
   connectionAuthoritySnapshotFromProviderConnection,
   connectionAuthoritySnapshotsEqual,
-  createPublicOperationRef,
+  createPublicToolRef,
   isX402PaymentRequirementForProfile,
   parsePinnedX402PaymentRequiredJson,
   parseX402FetchTransportConfiguration,
@@ -210,7 +210,7 @@ function convexStagingResult(
     ...(result.operationId === undefined ? {} : { operationId: result.operationId }),
     publicationRef: result.publicationRef,
     publicationRevision: result.publicationRevision,
-    operationRef: result.operationRef,
+    toolRef: result.toolRef,
     contractRef: { ...result.contractRef },
     offeringId: result.offeringId,
     bindingId: result.bindingId,
@@ -336,12 +336,12 @@ function stagingPublicationPorts(
     registerOffering: (registration, now) => (
       registerCapabilityOffering(stagingWriter, registration, now)
     ),
-    registerBinding: (registration, now, expectedOperationRef) => (
+    registerBinding: (registration, now, expectedToolRef) => (
       registerCapabilityTransportBinding(
         stagingWriter,
         registration,
         now,
-        expectedOperationRef,
+        expectedToolRef,
       )
     ),
     setEligibility: (eligibility, now) => (
@@ -407,8 +407,8 @@ async function reuseExactStagedPublication(
     registrationEvidenceRefs: [...binding.registrationEvidenceRefs],
   }, admitted.admittedTransport.transport)
   const contractRef = admitted.encoded.contract.ref
-  const operationRef = createPublicOperationRef({
-    operationId: capabilityOperationId(contractRef.capabilityId),
+  const toolRef = createPublicToolRef({
+    operationId: capabilityToolId(contractRef.capabilityId),
     publicationRef,
     publicationRevision: 1,
     contractRef,
@@ -425,7 +425,7 @@ async function reuseExactStagedPublication(
     || publication.businessId !== input.args.businessId
     || publication.runtimeEnvironment !== 'sandbox'
     || publication.disposition !== 'current'
-    || publication.operationRef !== operationRef
+    || publication.toolRef !== toolRef
     || publication.offeringId !== offering.offeringId
     || publication.bindingId !== binding.bindingId
     || publication.capabilityId !== contractRef.capabilityId
@@ -449,7 +449,7 @@ async function reuseExactStagedPublication(
 
   const nextAuthority = connectionAuthoritySnapshotFromProviderConnection(
     providerConnectionDomain(input.connection),
-    operationRef,
+    toolRef,
   )
   await ctx.db.patch(bindingDoc._id, {
     connectionAuthority: {
@@ -485,7 +485,7 @@ async function reuseExactStagedPublication(
     kind: 'replayed',
     publicationRef,
     publicationRevision: 1,
-    operationRef,
+    toolRef,
     contractRef,
     offeringId: offering.offeringId,
     bindingId: binding.bindingId,
@@ -505,8 +505,8 @@ async function reuseExactStagedPublication(
 }
 
 /**
- * Owner-only admission of one Base Sepolia x402 staging Operation. The
- * The exact publication receives an Operation-scoped admission fence. Seller
+ * Owner-only admission of one Base Sepolia x402 staging Tool. The
+ * The exact publication receives a Tool-scoped admission fence. Seller
  * business visibility therefore cannot expose this revision before its paid
  * canary is explicitly promoted.
  */

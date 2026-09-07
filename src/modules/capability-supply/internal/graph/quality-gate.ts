@@ -4,21 +4,21 @@ import type { GraphCatalogAccessPath } from './ports'
 
 /**
  * One routeability predicate for public catalog projection and direct
- * operation loading. The caller supplies durable readback facts; this helper
- * only accepts an operation when every identity edge is exact and current.
+ * Tool loading. The caller supplies durable readback facts; this helper only
+ * accepts a Tool when every identity edge is exact and current.
  */
-export type CurrentCatalogOperationInput = Readonly<{
+export type CurrentCatalogToolInput = Readonly<{
   origin: CapabilityOfferingOrigin | undefined
   originCurrent: boolean
   accessPath: GraphCatalogAccessPath | null
-  publicationOperationRef: string
-  expectedOperationRef: string
+  publicationToolRef: string
+  expectedToolRef: string
   endpointUrl: string
   method: 'GET' | 'POST' | undefined
 }>
 
-export type RouteabilityQualityInput = CurrentCatalogOperationInput & Readonly<{
-  catalogOperationCurrent: boolean
+export type RouteabilityQualityInput = CurrentCatalogToolInput & Readonly<{
+  catalogToolCurrent: boolean
   businessCurrent: boolean
   publicationCurrent: boolean
   sellerCanaryAdmissionCurrent?: boolean
@@ -29,13 +29,13 @@ export type RouteabilityQualityInput = CurrentCatalogOperationInput & Readonly<{
   lifecycleActive: boolean
 }>
 
-export function exactCurrentCatalogOperationIsRouteable(
-  input: CurrentCatalogOperationInput,
+export function exactCurrentCatalogToolIsRouteable(
+  input: CurrentCatalogToolInput,
 ): boolean {
   const { origin, accessPath } = input
   if (
     !input.originCurrent
-    || input.publicationOperationRef !== input.expectedOperationRef
+    || input.publicationToolRef !== input.expectedToolRef
     || origin?.kind !== 'catalog_offering'
     || origin.declaredAccessPathRef === undefined
     || origin.accessPathSourceHash === undefined
@@ -63,5 +63,5 @@ export function routeabilityQualityGate(input: RouteabilityQualityInput): boolea
     && input.bindingCurrent
     && input.pricingCurrent
     && input.lifecycleActive
-    && input.catalogOperationCurrent
+    && input.catalogToolCurrent
 }

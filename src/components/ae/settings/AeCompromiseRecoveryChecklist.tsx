@@ -14,9 +14,9 @@ const recoveryChecks = [
     href: '/agent-access',
   },
   {
-    title: 'Revoke or reauthorize supplier connections',
+    title: 'Revoke or reauthorize provider connections',
     description: 'Review x402 wallet-control authority and its current generation separately from Operation readiness.',
-    href: '/owner/offerings#supplier-connections',
+    href: '/owner/offerings#provider-connections',
   },
   {
     title: 'Review payout authority',
@@ -40,7 +40,7 @@ export function AeCompromiseRecoveryChecklist() {
       <Alert>
         <AlertTitle>This page does not mark the Account contained</AlertTitle>
         <AlertDescription>
-          Resetting MFA alone does not revoke existing sessions, Agent credentials, supplier authority, or payout authority.
+          Resetting MFA alone does not revoke existing sessions, Agent credentials, provider authority, or payout authority.
         </AlertDescription>
       </Alert>
       <ol className="grid gap-intra" aria-label="Compromise recovery checks">

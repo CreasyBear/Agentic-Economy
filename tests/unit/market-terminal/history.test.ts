@@ -26,7 +26,7 @@ beforeEach(() => {
   process.env.AE_CONFIG_DIR = directory
   delete process.env.AE_API_KEY
   delete process.env.AE_API_KEY_ORIGIN
-  storeConnection({ baseUrl: options.baseUrl, accessToken: 'buyer-secret', scope: 'market_operations:invoke' })
+  storeConnection({ baseUrl: options.baseUrl, accessToken: 'buyer-secret', scope: 'market_tools:call' })
 })
 
 afterEach(async () => {
@@ -41,16 +41,16 @@ afterEach(async () => {
   vi.unstubAllGlobals()
 })
 
-describe('AE CLI invocation history', () => {
-  it('lists exact owned invocation summaries with opaque pagination', async () => {
+describe('AE CLI Call history', () => {
+  it('lists exact owned Call summaries with opaque pagination', async () => {
     const fetch = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
-      expect(String(url)).toBe('https://market.example/api/v1/operations?limit=5&cursor=cursor%3Aone&state=completed')
+      expect(String(url)).toBe('https://market.example/api/v1/calls?limit=5&cursor=cursor%3Aone&state=completed')
       expect(new Headers(init?.headers).get('authorization')).toBe('Bearer buyer-secret')
       return Response.json({
         kind: 'available',
         items: [{
-          invocationRef: 'invocation:one',
-          operationRef: 'operation:one',
+          callRef: 'call:one',
+          toolRef: 'operation:v1:one',
           state: 'completed',
           createdAt: 10,
           updatedAt: 20,
@@ -65,7 +65,7 @@ describe('AE CLI invocation history', () => {
     await runHistoryCommand([], options)
 
     expect(JSON.parse(write.mock.calls.map(([value]) => String(value)).join(''))).toMatchObject({
-      items: [{ invocationRef: 'invocation:one' }],
+      items: [{ callRef: 'call:one' }],
       nextCursor: 'cursor:two',
       nextCommand: 'ae history --limit 5 --state completed --cursor cursor:two --json',
     })
@@ -94,8 +94,8 @@ describe('AE CLI invocation history', () => {
       response.end(JSON.stringify({
         kind: 'available',
         items: [{
-          invocationRef: cursor === null ? 'invocation:first' : 'invocation:second',
-          operationRef: 'operation:history',
+          callRef: cursor === null ? 'call:first' : 'call:second',
+          toolRef: 'operation:v1:history',
           state: 'completed',
           createdAt: 10,
           updatedAt: 20,
@@ -147,13 +147,13 @@ describe('AE CLI invocation history', () => {
         authorization: `Bearer ${bearer}`,
         host: `[::1]:${address.port}`,
         method: 'GET',
-        path: '/api/v1/operations?limit=5&state=completed',
+        path: '/api/v1/calls?limit=5&state=completed',
       },
       {
         authorization: `Bearer ${bearer}`,
         host: `[::1]:${address.port}`,
         method: 'GET',
-        path: `/api/v1/operations?${continuedQuery.toString()}`,
+        path: `/api/v1/calls?${continuedQuery.toString()}`,
       },
     ])
     expect(existsSync(cursorInjectionMarker)).toBe(false)

@@ -102,12 +102,12 @@ describe('green release baseline', () => {
     }
 
     const generalConformance = scripts['test:conformance']!
-    expect(generalConformance).toContain('tests/unit/capability-execution/operation-invoke-admit.test.ts')
-    expect(generalConformance).not.toContain('published-operation-provider-conformance.test.ts')
+    expect(generalConformance).toContain('tests/unit/capability-execution/call-admit.test.ts')
+    expect(generalConformance).not.toContain('published-tool-provider-conformance.test.ts')
     expect(generalConformance).not.toContain('provider-conformance-evidence.test.ts')
 
     const chatConformance = scripts['test:chat:conformance']!
-    expect(chatConformance).toContain('tests/unit/chat/operation-chat-agent-tools.test.ts')
+    expect(chatConformance).toContain('tests/unit/chat/chat-agent-tools.test.ts')
     expect(chatConformance).not.toContain('tests/unit/chat/operation-chat-execute.test.ts')
     expect(chatConformance).not.toContain('tests/unit/capability-execution/operation-execute.test.ts')
     expect(chatConformance).toContain(' -- --no-file-parallelism')

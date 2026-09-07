@@ -90,9 +90,9 @@ export const run = manager.define({
   }
   for (let page = 0; ; page += 1) {
     const withdrawn = await step.runMutation(
-      offboardingInternal.withdrawOperationTargetsPage,
+      offboardingInternal.withdrawToolTargetsPage,
       args,
-      { name: `withdraw-operations-${page}` },
+      { name: `withdraw-tools-${page}` },
     )
     if (!withdrawn.ready) throw new Error('provider_offboarding_freeze_blocked')
     if (withdrawn.done) break
@@ -118,15 +118,15 @@ export const run = manager.define({
     if (snapshotted.done) break
   }
   await step.runMutation(offboardingInternal.completeFreeze, args, { name: 'complete-freeze' })
-  let operationCursor: string | undefined
+  let toolCursor: string | undefined
   for (let page = 0; ; page += 1) {
     const drained = await step.runMutation(
       offboardingInternal.drainCallsPage,
-      { ...args, ...(operationCursor === undefined ? {} : { afterOperationRef: operationCursor }) },
+      { ...args, ...(toolCursor === undefined ? {} : { afterToolRef: toolCursor }) },
       { name: page === 0 ? 'drain-calls' : `drain-calls-${page}` },
     )
     if (!drained.ready) throw new Error('provider_offboarding_calls_blocked')
-    operationCursor = drained.nextOperationRef
+    toolCursor = drained.nextToolRef
     if (drained.done) break
   }
   await step.runMutation(offboardingInternal.completeCallDrain, args, { name: 'complete-call-drain' })
@@ -153,11 +153,11 @@ export const run = manager.define({
   for (let page = 0; ; page += 1) {
     const verified = await step.runMutation(
       offboardingInternal.verifyCallsPage,
-      { ...args, ...(verificationCursor === undefined ? {} : { afterOperationRef: verificationCursor }) },
+      { ...args, ...(verificationCursor === undefined ? {} : { afterToolRef: verificationCursor }) },
       { name: `verify-calls-${page}` },
     )
     if (!verified.ready) throw new Error('provider_offboarding_calls_blocked')
-    verificationCursor = verified.nextOperationRef
+    verificationCursor = verified.nextToolRef
     if (verified.done) break
   }
   let retirementCursor: string | undefined
@@ -224,7 +224,7 @@ export const startCase = mutation({
       requiredScopes: ['catalog_publish', 'connection:revoke'],
       resourceRefs: [`business:${String(args.businessId)}`],
       budgetAmount: 0,
-      consequenceSummary: 'Freeze every supplied Operation, settle outstanding work, revoke Provider connections, and retire this Provider.',
+      consequenceSummary: 'Freeze every supplied Tool, settle outstanding work, revoke Provider connections, and retire this Provider.',
       statusReadbackRef: `/owner/offerings#offboarding`,
       correlationRef: caseRef,
       idempotencyRef: caseRef,
@@ -243,7 +243,7 @@ export const startCase = mutation({
       requestedByPrincipalRef: actor.canonicalPrincipalRef,
       authorityRevision: actor.authorityRevision,
       authorityProvenance: actor.authorityProvenance,
-      operationTargetCount: 0,
+      toolTargetCount: 0,
       offeringTargetCount: 0,
       connectionTargetCount: 0,
       targetSnapshotDigest: canonicalDigest({ version: 'provider-offboarding-targets:v1', caseRef, targets: [] }),
@@ -493,7 +493,7 @@ export const withdrawCatalogDocumentsPage = internalMutation({
   },
 })
 
-export const withdrawOperationTargetsPage = internalMutation({
+export const withdrawToolTargetsPage = internalMutation({
   args: { caseRef: v.string() },
   returns: v.object({ ready: v.boolean(), done: v.boolean() }),
   handler: async (ctx, args) => {
@@ -511,7 +511,7 @@ export const withdrawOperationTargetsPage = internalMutation({
         publication.revision,
       )
       if (canonicalPublication === null) {
-        await block(ctx, row, 'freeze-routeability', 'routeable_operations_remain')
+        await block(ctx, row, 'freeze-routeability', 'routeable_tools_remain')
         return { ready: false, done: false }
       }
       const authorityDigest = canonicalDigest({
@@ -525,20 +525,20 @@ export const withdrawOperationTargetsPage = internalMutation({
       const existingTarget = await ctx.db.query('capabilityProviderOffboardingTargets')
         .withIndex('by_caseRef_and_kind_and_targetRef', (index) => index
           .eq('caseRef', row.caseRef)
-          .eq('kind', 'operation')
-          .eq('targetRef', publication.operationRef))
+          .eq('kind', 'tool')
+          .eq('targetRef', publication.toolRef))
         .unique()
       if (existingTarget === null) {
         await ctx.db.insert('capabilityProviderOffboardingTargets', {
           caseRef: row.caseRef,
           businessId: row.businessId,
-          kind: 'operation',
-          targetRef: publication.operationRef,
+          kind: 'tool',
+          targetRef: publication.toolRef,
           targetRevision: publication.revision,
           authorityDigest,
           createdAt: Date.now(),
         })
-        insertedTargets.push({ targetRef: publication.operationRef, targetRevision: publication.revision, authorityDigest })
+        insertedTargets.push({ targetRef: publication.toolRef, targetRevision: publication.revision, authorityDigest })
       }
       const result = await withdrawCapabilityCommand({
         publication: canonicalPublication,
@@ -546,13 +546,13 @@ export const withdrawOperationTargetsPage = internalMutation({
         now: Date.now(),
       }, publicationPorts(ctx))
       if (result.kind === 'refused') {
-        await block(ctx, row, 'freeze-routeability', 'routeable_operations_remain')
+        await block(ctx, row, 'freeze-routeability', 'routeable_tools_remain')
         return { ready: false, done: false }
       }
     }
     if (insertedTargets.length > 0) {
       await ctx.db.patch(row._id, {
-        operationTargetCount: row.operationTargetCount + insertedTargets.length,
+        toolTargetCount: row.toolTargetCount + insertedTargets.length,
         targetSnapshotDigest: canonicalDigest({
           version: 'provider-offboarding-target-page:v1',
           previousDigest: row.targetSnapshotDigest,
@@ -696,11 +696,11 @@ export const completeFreeze = internalMutation({
 })
 
 export const drainCallsPage = internalMutation({
-  args: { caseRef: v.string(), afterOperationRef: v.optional(v.string()) },
-  returns: v.object({ ready: v.boolean(), done: v.boolean(), nextOperationRef: v.optional(v.string()) }),
+  args: { caseRef: v.string(), afterToolRef: v.optional(v.string()) },
+  returns: v.object({ ready: v.boolean(), done: v.boolean(), nextToolRef: v.optional(v.string()) }),
   handler: async (ctx, args) => {
     const row = await requireCase(ctx, args.caseRef)
-    const targets = await readTargetPage(ctx, row.caseRef, 'operation', args.afterOperationRef)
+    const targets = await readTargetPage(ctx, row.caseRef, 'tool', args.afterToolRef)
     for (const target of targets) {
       if (await hasActiveCall(ctx, target.targetRef)) {
         await block(ctx, row, 'drain-calls', 'calls_remain')
@@ -711,7 +711,7 @@ export const drainCallsPage = internalMutation({
     return {
       ready: true,
       done: targets.length < 100,
-      ...(targets.length < 100 || last === undefined ? {} : { nextOperationRef: last.targetRef }),
+      ...(targets.length < 100 || last === undefined ? {} : { nextToolRef: last.targetRef }),
     }
   },
 })
@@ -793,11 +793,11 @@ export const completeConnectionRevocation = internalMutation({
 })
 
 export const verifyCallsPage = internalMutation({
-  args: { caseRef: v.string(), afterOperationRef: v.optional(v.string()) },
-  returns: v.object({ ready: v.boolean(), done: v.boolean(), nextOperationRef: v.optional(v.string()) }),
+  args: { caseRef: v.string(), afterToolRef: v.optional(v.string()) },
+  returns: v.object({ ready: v.boolean(), done: v.boolean(), nextToolRef: v.optional(v.string()) }),
   handler: async (ctx, args) => {
     const row = await requireCase(ctx, args.caseRef)
-    const targets = await readTargetPage(ctx, row.caseRef, 'operation', args.afterOperationRef)
+    const targets = await readTargetPage(ctx, row.caseRef, 'tool', args.afterToolRef)
     for (const target of targets) {
       if (await hasActiveCall(ctx, target.targetRef)) {
         await block(ctx, row, 'drain-calls', 'calls_remain')
@@ -808,7 +808,7 @@ export const verifyCallsPage = internalMutation({
     return {
       ready: true,
       done: targets.length < 100,
-      ...(targets.length < 100 || last === undefined ? {} : { nextOperationRef: last.targetRef }),
+      ...(targets.length < 100 || last === undefined ? {} : { nextToolRef: last.targetRef }),
     }
   },
 })
@@ -880,7 +880,7 @@ export const verifyCompletion = internalMutation({
       .filter((queryBuilder) => queryBuilder.eq(queryBuilder.field('disposition'), 'current'))
       .take(1)
     const completion = providerOffboardingCompletion({
-      routeableOperationCount: routeable.length,
+      routeableToolCount: routeable.length,
       activeOrUnknownCallCount: 0,
       unresolvedObligationCount: await hasUnresolvedObligations(ctx, row.providerRef) ? 1 : 0,
       activeOrCleanupPendingConnectionCount: await countActiveConnections(ctx, row.businessId),
@@ -945,7 +945,7 @@ async function block(
 async function readTargetPage(
   ctx: MutationCtx,
   caseRef: string,
-  kind: 'operation' | 'offering' | 'connection',
+  kind: 'tool' | 'offering' | 'connection',
   afterTargetRef?: string,
 ): Promise<Array<Doc<'capabilityProviderOffboardingTargets'>>> {
   return await ctx.db.query('capabilityProviderOffboardingTargets')
@@ -956,10 +956,10 @@ async function readTargetPage(
     .take(100)
 }
 
-async function hasActiveCall(ctx: MutationCtx, operationRef: string): Promise<boolean> {
+async function hasActiveCall(ctx: MutationCtx, toolRef: string): Promise<boolean> {
   for (const state of ['pending', 'reconciliation_required'] as const) {
-    if ((await ctx.db.query('capabilityOperationInvocations')
-      .withIndex('by_operationRef_and_state', (index) => index.eq('operationRef', operationRef).eq('state', state))
+    if ((await ctx.db.query('capabilityCalls')
+      .withIndex('by_toolRef_and_state', (index) => index.eq('toolRef', toolRef).eq('state', state))
       .take(1)).length > 0) return true
   }
   return false

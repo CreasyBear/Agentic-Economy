@@ -5,7 +5,7 @@ import {
 } from '@/modules/agent-access/account.actions'
 import {
   findAction,
-  listOperationRouteDescriptors,
+  listCallRouteDescriptors,
   mcpToolName,
 } from '@/modules/actions'
 import {
@@ -15,15 +15,15 @@ import {
 } from '@/modules/agent-access/oauth-state'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
-  operationInvokeReceiptAsset,
-  operationInvokeResultKindValues,
-} from '@/modules/capability-execution/operation-invoke-contracts'
-import { OPERATION_INVOKE_ROUTE_CONTRACT } from '@/modules/capability-execution/operation-invoke-entry'
+  callReceiptAsset,
+  callResultKindValues,
+} from '@/modules/capability-execution/call-contracts'
+import { CALL_ROUTE_CONTRACT } from '@/modules/capability-execution/call-entry'
 import { SUPPLY_ACTION_ROUTE_CONTRACTS } from '@/modules/capability-supply/supply-actions'
 import { describeActionForAgent } from '@/modules/common/action'
 import {
-  OPERATION_MARKET_ACTION_ENTRIES,
-} from '@/modules/registry/operation-entry'
+  TOOL_MARKET_ACTION_ENTRIES,
+} from '@/modules/registry/tool-entry'
 
 import type { CliOptions } from '../lib/args'
 import { printJson } from '../lib/output'
@@ -32,7 +32,7 @@ const RECOVERY_EVIDENCE_MATERIAL = {
   kind: 'action_invocation_reconciliation' as const,
   version: 1 as const,
   evidenceRef: 'evidence:v1:example',
-  source: 'provider-operation:v1:example-observer',
+  source: 'provider-tool:v1:example-observer',
   invocationRef: 'invocation:v1:example',
   attemptRef: 'attempt:v1:example',
   effectGeneration: 1,
@@ -83,7 +83,7 @@ export const ROOT_COMMAND_GROUPS = [
 
 export const ROOT_HELP_START = [
   'ae search "<job>"',
-  'ae describe <operation-ref>',
+  'ae describe <tool-ref>',
   'ae connect',
   'ae help call',
 ] as const
@@ -95,7 +95,7 @@ type RootCommandManifestEntry = CommandManifestEntry & Readonly<{
 }>
 
 export const COMMANDS: Readonly<Record<string, RootCommandManifestEntry>> = {
-  manifest: { summary: 'Read this machine-readable Operation terminal contract.', args: '', json: true, group: 'reference', rootOrder: 1 },
+  manifest: { summary: 'Read this machine-readable Tool terminal contract.', args: '', json: true, group: 'reference', rootOrder: 1 },
   config: {
     summary: 'Inspect effective local CLI origin, paths, overrides, and redacted connection state without changing anything.',
     args: '',
@@ -107,7 +107,7 @@ export const COMMANDS: Readonly<Record<string, RootCommandManifestEntry>> = {
     ],
   },
   search: {
-    summary: 'Search current public Market Operations for a job.',
+    summary: 'Search current public Tools for a job.',
     args: '"<job>" [--limit <1-20>] [--cursor <cursor>] [--filters \'<json>\']',
     json: true,
     group: 'discover_compare',
@@ -115,102 +115,102 @@ export const COMMANDS: Readonly<Record<string, RootCommandManifestEntry>> = {
     guidance: [
       'Filters: networkId, location, effects, dataUse, healthStatus, currency, and maximumPrice.',
       'Exact price example for at most USD 0.50: --filters \'{"currency":"USD","maximumPrice":{"currency":"USD","units":"50","exponent":2}}\'',
-      'Search returns compact catalog facts. Exact payable price and caller readiness are confirmed by operation.inspect.',
+      'Search returns compact catalog facts. Exact payable price and caller readiness are confirmed by tool.quote.',
     ],
   },
   list: {
-    summary: 'Browse current public Market Operations.',
+    summary: 'Browse current public Tools.',
     args: '[--limit <1-100>] [--cursor <cursor>] [--filters \'<json>\']',
     json: true,
     group: 'discover_compare',
     rootOrder: 1,
   },
   request: {
-    summary: 'Remember and revisit a private missing job after current Market Operations return no match.',
+    summary: 'Remember and revisit a private missing job after current Tools return no match.',
     args: '<create|list|status>',
     json: true,
     group: 'discover_compare',
     rootOrder: 5,
     authentication: 'buyer',
     guidance: [
-      'A request is private market memory for this exact credential profile, not a project, tender, supplier message, or callable Operation.',
-      'Create refuses when a current canonical Operation already matches; search and inspect that Operation instead.',
+      'A request is private market memory for this exact credential profile, not a project, tender, provider message, or callable Tool.',
+      'Create refuses when a current canonical Tool already matches; search and describe that Tool instead.',
     ],
     commands: {
       create: { summary: 'Record one no-result job with replay-safe identity.', args: '"<job>" [--idempotency-key <key>]', json: true },
       list: { summary: 'List this connection’s private missing-job requests, newest first.', args: '[--limit <1-100>] [--cursor <cursor>]', json: true },
-      status: { summary: 'Check whether current canonical Operations now match one private request.', args: '<request-ref>', json: true },
+      status: { summary: 'Check whether current canonical Tools now match one private request.', args: '<request-ref>', json: true },
     },
   },
   describe: {
-    summary: 'Describe one exact current Market Operation before connecting or invoking.',
-    args: '<operation-ref> [--technical]',
+    summary: 'Describe one exact current Market Tool before quoting or calling.',
+    args: '<tool-ref> [--technical]',
     json: true,
     group: 'discover_compare',
     rootOrder: 2,
     guidance: [
-      'Catalog health and price are indicative. Use operation.inspect for caller-specific readiness and exact terms.',
+      'Catalog health and price are indicative. Use tool.quote for caller-specific readiness and exact terms.',
     ],
   },
-  compare: { summary: 'Compare two to four exact current Operation references.', args: '<operation-ref> <operation-ref> [<operation-ref> ...]', json: true, group: 'discover_compare', rootOrder: 3 },
+  compare: { summary: 'Compare two to four exact current Tool references.', args: '<tool-ref> <tool-ref> [<tool-ref> ...]', json: true, group: 'discover_compare', rootOrder: 3 },
   connect: {
     summary: 'Register a public device client or validate one separately stored AE credential profile.',
-    args: '[--supplier]',
+    args: '[--provider]',
     json: true,
     group: 'connect_account',
     rootOrder: 1,
     guidance: [
-      'Without --supplier, request buyer Operation access. With --supplier, request a separate owner-approved market_supply:manage credential.',
-      'Buyer and supplier credentials are stored independently for the exact server origin.',
+      'Without --provider, request buyer access. With --provider, request a separate owner-approved market_supply:manage credential.',
+      'Buyer and provider credentials are stored independently for the exact server origin.',
     ],
   },
   doctor: {
-    summary: 'Check this CLI connection across the Operation market loop without changing server or local state.',
-    args: '[businessId] [--supplier]',
+    summary: 'Check this CLI connection across the Tool market loop without changing server or local state.',
+    args: '[businessId] [--provider]',
     json: true,
     group: 'reference',
     rootOrder: 3,
     guidance: [
-      'Uses existing read-only surfaces only; it never connects, funds, retries, reconciles, or changes supplier state.',
-      'Rechecks the five newest private market requests and points directly to the first current matching Operation without revealing the saved job phrase.',
-      'When recovery is clear, confirms the newest previously successful Operation is still current and offers inspection without replaying prior inputs or effects.',
-      'Pass --supplier to validate separately stored supplier access; add a business ID to include Operation and provider readiness.',
+      'Uses existing read-only surfaces only; it never connects, funds, retries, reconciles, or changes provider state.',
+      'Rechecks the five newest private market requests and points directly to the first current matching Tool without revealing the saved job phrase.',
+      'When recovery is clear, confirms the newest previously successful Tool is still current and offers description without replaying prior inputs or effects.',
+      'Pass --provider to validate separately stored provider access; add a business ID to include Tool and provider readiness.',
     ],
   },
   account: {
     summary: 'Inspect current agent identity, exact buyer credit, credential activity, or local origin-bound connections.',
-    args: '[status [market|supplier]|balance [currency]|activity [currency]|connections|disconnect [market|supplier]]',
+    args: '[status [market|provider]|balance [currency]|activity [currency]|connections|disconnect [market|provider]]',
     json: true,
     group: 'connect_account',
     rootOrder: 2,
     authentication: 'buyer',
     commands: {
-      status: { summary: 'Read one buyer or supplier credential profile’s principal, owner account, scopes, and authority mode.', args: '[market|supplier]', json: true },
+      status: { summary: 'Read one buyer or provider credential profile’s principal, owner account, scopes, and authority mode.', args: '[market|provider]', json: true },
       balance: { summary: 'Read exact buyer credit and the owner-browser funding continuation.', args: '[currency]', json: true },
       activity: { summary: 'List this credential profile’s bounded charge activity, newest first.', args: '[currency] [--limit <1-100>] [--cursor <cursor>]', json: true },
       connections: { summary: 'List locally stored origin-bound AE connections without revealing bearer material.', args: '', json: true },
-      disconnect: { summary: 'Remove one local credential profile for the selected origin. Unqualified removes buyer/market; pass supplier to remove only supplier. Server-side revocation remains owner-controlled.', args: '[market|supplier]', json: true },
+      disconnect: { summary: 'Remove one local credential profile for the selected origin. Unqualified removes buyer/market; pass provider to remove only provider. Server-side revocation remains owner-controlled.', args: '[market|provider]', json: true },
     },
   },
   supply: {
-    summary: 'Inspect and manage owner-bound supplier Operations, provider connections, earnings, and recovery with an owner-issued supplier credential.',
+    summary: 'Inspect and manage owner-bound provider Tools, provider connections, earnings, and recovery with an owner-issued provider credential.',
     args: '<preview|operations|status|publish|withdraw|recheck|republish|earnings|connections|connection|connect|reconnect|revoke|offboarding>',
     json: true,
     group: 'supply',
     rootOrder: 1,
     guidance: [
-      'Requires a separately owner-approved credential with market_supply:manage; obtain it with ae connect --supplier.',
+      'Requires a separately owner-approved credential with market_supply:manage; obtain it with ae connect --provider.',
       'Use status before lifecycle writes and preserve the exact offering and publication revisions it returns.',
     ],
     commands: {
-      preview: { summary: 'Discover candidate Operations from one native Provider source without publishing or invoking.', args: "--input '<json>'", json: true },
-      status: { summary: 'List Provider Operations or read one exact Operation lifecycle.', args: '<businessRef> [operationRef]', json: true },
-      publish: { summary: 'Publish one admitted supplier Operation artifact.', args: "--input '<json>' [--idempotency-key <key>]", json: true },
-      withdraw: { summary: 'Withdraw one exact current supplier publication.', args: "--input '<json>' [--idempotency-key <key>]", json: true },
+      preview: { summary: 'Discover candidate Tools from one native Provider source without publishing or calling.', args: "--input '<json>'", json: true },
+      status: { summary: 'List Provider Tools or read one exact Tool lifecycle.', args: '<businessRef> [toolRef]', json: true },
+      publish: { summary: 'Publish one admitted provider Tool artifact.', args: "--input '<json>' [--idempotency-key <key>]", json: true },
+      withdraw: { summary: 'Withdraw one exact current provider publication.', args: "--input '<json>' [--idempotency-key <key>]", json: true },
       recheck: { summary: 'Schedule readiness revalidation for one exact publication.', args: "--input '<json>' [--idempotency-key <key>]", json: true },
       republish: { summary: 'Republish one exact withdrawn publication.', args: "--input '<json>' [--idempotency-key <key>]", json: true },
-      earnings: { summary: 'Read exact supplier earnings and payout status for one currency.', args: '<currency>', json: true },
-      connections: { summary: 'List the bounded provider-connection projection for one supplier business, including non-active recovery states.', args: '<businessId> [lifecycle]', json: true },
+      earnings: { summary: 'Read exact provider earnings and payout status for one currency.', args: '<currency>', json: true },
+      connections: { summary: 'List the bounded provider-connection projection for one provider business, including non-active recovery states.', args: '<businessId> [lifecycle]', json: true },
       connection: { summary: 'Inspect one exact provider connection and its current concurrency identity.', args: '<connectionRef>', json: true },
       connect: { summary: 'Connect one public credentialless x402 endpoint.', args: "--input '<json>' [--idempotency-key <key>]", json: true },
       reconnect: { summary: 'Refresh one exact provider connection using its current generation and digest.', args: "--input '<json>' [--idempotency-key <key>]", json: true },
@@ -228,7 +228,7 @@ export const COMMANDS: Readonly<Record<string, RootCommandManifestEntry>> = {
   },
   call: {
     summary: 'Call one capability: anonymous MCP for eligible free keyless reads, otherwise the connected AE gateway.',
-    args: "<operation-ref> --input '<json>' [--wait]",
+    args: "<tool-ref> --input '<json>' [--wait]",
     json: true,
     group: 'call_recover',
     rootOrder: 1,
@@ -238,38 +238,38 @@ export const COMMANDS: Readonly<Record<string, RootCommandManifestEntry>> = {
     ],
   },
   history: {
-    summary: 'List this credential profile’s own invocation summaries, newest first.',
+    summary: 'List this credential profile’s own Call summaries, newest first.',
     args: '[--limit <1-100>] [--cursor <cursor>] [--state <state>]',
     json: true,
     group: 'call_recover',
     rootOrder: 2,
     authentication: 'buyer',
-    guidance: ['Use the returned invocationRef with status for one snapshot or wait for a bounded recorded outcome.'],
+    guidance: ['Use the returned callRef with status for one snapshot or wait for a bounded recorded outcome.'],
   },
-  status: { summary: 'Read one authenticated invocation status and evidence projection.', args: '<invocation-ref>', json: true, group: 'call_recover', rootOrder: 3, authentication: 'buyer' },
+  status: { summary: 'Read one authenticated Call status and evidence projection.', args: '<call-ref>', json: true, group: 'call_recover', rootOrder: 3, authentication: 'buyer' },
   wait: {
-    summary: 'Wait boundedly for one recorded invocation to reach a durable outcome.',
-    args: '<invocation-ref>',
+    summary: 'Wait boundedly for one recorded Call to reach a durable outcome.',
+    args: '<call-ref>',
     json: true,
     group: 'call_recover',
     rootOrder: 4,
     authentication: 'buyer',
     guidance: [
-      'Read-only: observes the existing invocation and never retries it, grants authority, or creates a replacement call.',
-      'A timeout preserves the invocation identity and returns the exact wait command to continue later.',
+      'Read-only: observes the existing Call and never retries it, grants authority, or creates a replacement Call.',
+      'A timeout preserves the Call identity and returns the exact wait command to continue later.',
     ],
   },
-  cancel: { summary: 'Cancel one authenticated invocation explicitly.', args: '<invocation-ref> --idempotency-key <key>', json: true, group: 'call_recover', rootOrder: 5, authentication: 'buyer' },
+  cancel: { summary: 'Cancel one authenticated Call explicitly.', args: '<call-ref> --idempotency-key <key>', json: true, group: 'call_recover', rootOrder: 5, authentication: 'buyer' },
   recover: {
-    summary: 'Reconcile a genuinely uncertain invocation with canonical evidence after a real uncertain outcome; this is not a replay.',
-    args: "<invocation-ref> '<evidence-json>' --idempotency-key <key>",
+    summary: 'Reconcile a genuinely uncertain Call with canonical evidence after a real uncertain outcome; this is not a replay.',
+    args: "<call-ref> '<evidence-json>' --idempotency-key <key>",
     json: true,
     group: 'call_recover',
     rootOrder: 6,
     authentication: 'buyer',
     guidance: [
-      'Inspect status first and use this only when the invocation outcome remains genuinely uncertain.',
-      'Provide canonical evidence for the same invocation and stable idempotency key; recover reconciles the outcome and does not replay a known result.',
+      'Inspect status first and use this only when the Call outcome remains genuinely uncertain.',
+      'Provide canonical evidence for the same Call and stable idempotency key; recover reconciles the outcome and does not replay a known result.',
     ],
   },
   revoke: {
@@ -296,30 +296,30 @@ function describedAction(actionId: string) {
 
 /**
  * `ae manifest [--json]` — the external-agent handshake. The front door is the
- * canonical Operation search/inspection/invocation/recovery contract, not a
+ * canonical Tool discovery/quote/call/recovery contract, not a
  * second legacy catalog or generic action inventory.
  */
 export async function runManifestCommand(_args: readonly string[], options: CliOptions): Promise<void> {
-  const operationReads = OPERATION_MARKET_ACTION_ENTRIES.map((route) => ({
+  const toolReads = TOOL_MARKET_ACTION_ENTRIES.map((route) => ({
     route,
     action: describedAction(route.actionId),
   }))
-  const gateway = listOperationRouteDescriptors().map((route) => ({
+  const gateway = listCallRouteDescriptors().map((route) => ({
     route,
     action: describedAction(route.actionId),
   }))
 
   const manifest = {
     $schema: 'https://agentic-economy/market-terminal/manifest:v3',
-    protocol: 'agentic-economy.operation-terminal.v1',
+    protocol: 'agentic-economy.tool-terminal.v1',
     about: 'Discover exact current work, inspect terms, connect one agent key, call idempotently, preserve the receipt, and reuse successful work.',
     commands: COMMANDS,
-    coldLoop: ['search', 'inspect', 'connect', 'call', 'history', 'wait', 'receipt', 'reuse'],
+    coldLoop: ['search', 'describe', 'connect', 'call', 'history', 'wait', 'receipt', 'reuse'],
     payment: {
       providerQuotedAmount: {
         field: 'commercial.priceBreakdown.providerQuotedAmount',
         exact: true,
-        meaning: 'The exact provider quote for the admitted invocation.',
+        meaning: 'The exact provider quote for the admitted Call.',
       },
       agenticEconomyFee: {
         field: 'commercial.priceBreakdown.agenticEconomyFee',
@@ -337,13 +337,13 @@ export async function runManifestCommand(_args: readonly string[], options: CliO
       asset: {
         symbol: 'USDC',
         name: 'Official USDC on Base',
-        address: operationInvokeReceiptAsset,
+        address: callReceiptAsset,
       },
     },
     approval: {
       owner: 'Owner approval is completed in the authenticated /agent-access browser surface; an agent credential cannot fund or revoke owner authority.',
       deviceFlow: 'Open verification_uri and approve the displayed user_code before polling the token endpoint.',
-      invocation: 'When invoke returns needs_authority, wait for the owner decision in /agent-access before retrying the same invocation identity.',
+      call: 'When call returns needs_authority, wait for the owner decision in /agent-access before retrying the same Call identity.',
     },
     polling: {
       oauth: {
@@ -352,24 +352,24 @@ export async function runManifestCommand(_args: readonly string[], options: CliO
         increaseIntervalOn: ['slow_down'],
         stopOn: AGENT_ACCESS_OAUTH_ERROR_VALUES.filter((error) => error !== 'authorization_pending' && error !== 'slow_down'),
       },
-      invokeWait: 'call --wait polls status using the gateway retryAfterMs value until a terminal result or bounded timeout; a timeout preserves invocationRef for status.',
-      recordedWait: 'wait observes one existing invocation through the status route until a durable result or bounded timeout; it never creates or retries an invocation.',
+      callWait: 'call --wait polls status using the gateway retryAfterMs value until a terminal result or bounded timeout; a timeout preserves callRef for status.',
+      recordedWait: 'wait observes one existing Call through the status route until a durable result or bounded timeout; it never creates or retries a Call.',
     },
     recovery: {
-      history: 'Use root history to recover invocation references owned by the current credential profile before reading exact status or waiting for a recorded result.',
+      history: 'Use root history to recover Call references owned by the current credential profile before reading exact status or waiting for a recorded result.',
       statusFirst: true,
-      cancel: 'Use root cancel with the same invocationRef and a stable idempotency key when cancellation is supported and the invocation should stop.',
-      reconcile: 'Use root recover only after a genuinely uncertain outcome, with canonical evidence for the same invocationRef and the same idempotency identity; recover never replays a known result.',
+      cancel: 'Use root cancel with the same callRef and a stable idempotency key when cancellation is supported and the Call should stop.',
+      reconcile: 'Use root recover only after a genuinely uncertain outcome, with canonical evidence for the same Call and the same idempotency identity; recover never replays a known result.',
     },
     receipt: {
-      location: ['invoke.receipt', 'status.receipt', 'status.result.receipt', 'recover.receipt'],
+      location: ['call.receipt', 'status.receipt', 'status.result.receipt', 'recover.receipt'],
       referenceField: 'receipt.receiptRef',
       identityFields: ['providerQuotedAmount', 'agenticEconomyFee', 'totalBuyerAuthorization', 'network', 'asset'],
     },
     ownerContinuations: OWNER_BROWSER_CONTINUATIONS,
     anonymous: {
       authentication: 'none',
-      routes: operationReads.map(({ route, action }) => ({
+      routes: toolReads.map(({ route, action }) => ({
         method: route.method,
         path: route.pathTemplate,
         actionId: action.id,
@@ -377,26 +377,26 @@ export async function runManifestCommand(_args: readonly string[], options: CliO
         ...(action.inputJsonSchema === undefined ? {} : { inputJsonSchema: action.inputJsonSchema }),
         ...(action.outputJsonSchema === undefined ? {} : { outputJsonSchema: action.outputJsonSchema }),
       })),
-      operationReads,
+      toolReads,
     },
     gateway: {
       authentication: 'Bearer AE_API_KEY (bound to AE_API_KEY_ORIGIN)',
-      scope: OPERATION_INVOKE_ROUTE_CONTRACT.scope,
-      media: OPERATION_INVOKE_ROUTE_CONTRACT.media,
-      headers: OPERATION_INVOKE_ROUTE_CONTRACT.headers,
+      scope: CALL_ROUTE_CONTRACT.scope,
+      media: CALL_ROUTE_CONTRACT.media,
+      headers: CALL_ROUTE_CONTRACT.headers,
       routes: gateway,
       idempotency: {
         commandField: 'idempotencyKey',
         commandFieldRequired: true,
         location: 'body.idempotencyKey',
-        requiredFor: ['operation.invoke', 'operation.cancel', 'operation.reconcile'],
+        requiredFor: ['tool.call', 'call.cancel', 'call.reconcile'],
         replay: 'same_material_returns_exact_original_result',
         conflict: 'changed_material_refused_as_idempotency_conflict',
         uncertain: 'recover_only_after_a_real_uncertain_outcome',
       },
       outcomes: {
-        action: describedAction(OPERATION_INVOKE_ROUTE_CONTRACT.invoke.actionId).outputJsonSchema,
-        values: operationInvokeResultKindValues,
+        action: describedAction(CALL_ROUTE_CONTRACT.call.actionId).outputJsonSchema,
+        values: callResultKindValues,
       },
       oauth: {
         authorizationServerMetadataPath: AGENT_ACCESS_OAUTH_PATHS.authorizationServerMetadata,
@@ -444,7 +444,7 @@ export async function runManifestCommand(_args: readonly string[], options: CliO
         revocation: 'Root revoke emits the owner-browser continuation /agent-access#revoke; it does not revoke through an agent credential or an API route.',
         oneTimeSecretDelivery: false,
       },
-      credentialBoundary: 'AE resolves provider, endpoint, connection, supplier credential, price, authority, and evidence server-side.',
+      credentialBoundary: 'AE resolves provider, endpoint, connection, provider credential, price, authority, and evidence server-side.',
     },
     account: {
       action: describedAction(AGENT_ACCOUNT_SELF_ROUTE_CONTRACT.actionId),
@@ -458,8 +458,8 @@ export async function runManifestCommand(_args: readonly string[], options: CliO
     },
     supply: {
       authentication: 'Bearer owner-issued credential with market_supply:manage',
-      connectCommand: 'ae connect --supplier',
-      issuanceBoundary: 'Supplier authority is a separate owner-approved credential profile; the ordinary ae connect buyer flow remains buyer-only.',
+      connectCommand: 'ae connect --provider',
+      issuanceBoundary: 'Provider authority is a separate owner-approved credential profile; the ordinary ae connect buyer flow remains buyer-only.',
       commands: COMMANDS.supply,
       routes: Object.values(SUPPLY_ACTION_ROUTE_CONTRACTS).map((route) => ({
         ...route,
@@ -472,14 +472,14 @@ export async function runManifestCommand(_args: readonly string[], options: CliO
       strict: true,
     },
     evidence: {
-      status: 'Durable status may return exact usage and evidence projections admitted by the operation runtime.',
+      status: 'Durable status may return exact usage and evidence projections admitted by the Call runtime.',
       recovery: {
-        actionId: OPERATION_INVOKE_ROUTE_CONTRACT.reconcile.actionId,
+        actionId: CALL_ROUTE_CONTRACT.reconcile.actionId,
         example: RECOVERY_EVIDENCE_EXAMPLE,
         digestMaterialRule: 'Compute canonicalDigest over all evidence fields except digest; include every other present field, including optional fields, exactly once and do not include the outer command wrapper.',
-        invocationRefIdentityRule: 'The recover command invocationRef argument, evidence.invocationRef, and canonical invocationRef returned by invoke/status must be byte-for-byte identical; operationRef, attemptRef, and idempotencyKey are not substitutes.',
+        callRefIdentityRule: 'The recover command callRef argument and canonical callRef returned by call/status must identify the same Call; historical evidence.invocationRef remains byte-for-byte identical to the invocation identity recorded by the runtime. toolRef, attemptRef, and idempotencyKey are not substitutes.',
       },
-      unknown: 'A transport timeout is not a terminal outcome; inspect status and use recover only when the outcome remains genuinely uncertain, supplying canonical evidence and the same invocation and idempotency references. Recover reconciles evidence; it does not replay a known result.',
+      unknown: 'A transport timeout is not a terminal outcome; inspect status and use recover only when the outcome remains genuinely uncertain, supplying canonical evidence and the same Call and idempotency references. Recover reconciles evidence; it does not replay a known result.',
     },
   }
   if (options.technical === true) {
@@ -492,47 +492,47 @@ export async function runManifestCommand(_args: readonly string[], options: CliO
     protocol: manifest.protocol,
     about: manifest.about,
     commands: manifest.commands,
-    coldLoop: ['search', 'inspect', 'call', 'wait', 'receipt', 'reuse'],
+    coldLoop: ['search', 'describe', 'call', 'wait', 'receipt', 'reuse'],
     access: {
-      anonymous: 'List, search, describe, and compare current Operations without connecting.',
-      connected: 'Run ae connect once; authenticated invocation covers free and paid operations, and consequential operations require approval.',
+      anonymous: 'List, search, describe, and compare current Tools without connecting.',
+      connected: 'Run ae connect once; authenticated Calls cover free and paid Tools, and consequential Tools require approval.',
     },
     account: {
-      command: 'ae account status [market|supplier]',
+      command: 'ae account status [market|provider]',
       balance: 'ae account balance [currency]',
       activity: 'ae account activity [currency] [--limit <1-100>] [--cursor <cursor>]',
       connections: 'ae account connections',
       disconnect: 'ae account disconnect',
       disconnectDefaultProfile: 'market',
-      disconnectSupplier: 'ae account disconnect supplier',
+      disconnectProvider: 'ae account disconnect provider',
     },
     supply: {
-      connect: 'ae connect --supplier',
+      connect: 'ae connect --provider',
       operations: 'ae supply operations <businessRef>',
-      status: 'ae supply status <businessRef> <operationRef>',
+      status: 'ae supply status <businessRef> <toolRef>',
       connections: 'ae supply connections <businessId>',
       connection: 'ae supply connection <connectionRef>',
-      authority: 'Requires a separately owner-approved market_supply:manage credential; buyer and supplier profiles remain independent.',
+      authority: 'Requires a separately owner-approved market_supply:manage credential; buyer and provider profiles remain independent.',
     },
-    routes: operationReads.map(({ route, action }) => ({
+    routes: toolReads.map(({ route, action }) => ({
       relation: route.relation,
       method: route.method,
       path: route.pathTemplate,
       actionId: action.id,
     })),
     call: {
-      command: "ae call <operationRef> --input '<json>'",
+      command: "ae call <toolRef> --input '<json>'",
       connected: {
         command: 'ae connect',
-        transport: 'operation.invoke:v1',
+        transport: 'tool.call:v1',
         authentication: 'Bearer AE_API_KEY (bound to AE_API_KEY_ORIGIN)',
-        receipt: 'Every accepted gateway call returns or progresses toward one invocation receipt.',
+        receipt: 'Every accepted gateway Call returns or progresses toward one Call receipt.',
       },
     },
     recovery: {
       history: 'ae history [--state <state>]',
-      status: 'ae status <invocationRef>',
-      wait: 'ae wait <invocationRef>',
+      status: 'ae status <callRef>',
+      wait: 'ae wait <callRef>',
       rule: 'If the outcome is uncertain, read status before any retry and preserve the same identity.',
     },
     fullContract: 'ae manifest --technical --json',

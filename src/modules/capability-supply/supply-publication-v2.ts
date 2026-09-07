@@ -20,7 +20,7 @@ import {
   loadPublicOpenApi,
   supplySourceInputSchema,
   type McpSourceDiscovery,
-  type SupplyOperationCandidate,
+  type SupplyToolCandidate,
   type SupplySourcePreviewDependencies,
 } from './source-preview'
 import type { X402SellerEndpointInspection } from './internal/x402-seller-endpoint-inspector'
@@ -50,7 +50,7 @@ const fixedAudPricingSchema = z.strictObject({
   }),
 })
 
-export const publishSupplyOperationV2InputSchema = z.strictObject({
+export const publishSupplyToolV2InputSchema = z.strictObject({
   businessRef: z.string().trim().min(1).max(200),
   source: supplySourceInputSchema,
   candidateRef: z.string().regex(/^sha256:[0-9a-f]{64}$/u),
@@ -82,7 +82,7 @@ export const publishSupplyOperationV2InputSchema = z.strictObject({
     publishAfterSuccessfulValidation: z.literal(true),
   }),
 })
-export type PublishSupplyOperationV2Input = z.infer<typeof publishSupplyOperationV2InputSchema>
+export type PublishSupplyToolV2Input = z.infer<typeof publishSupplyToolV2InputSchema>
 
 export type SupplyPublicationV2Preparation =
   | Readonly<{
@@ -90,7 +90,7 @@ export type SupplyPublicationV2Preparation =
       prepared: PreparedPublicationDraft
       sourceRevision: string
       sourceDigest: string
-      candidate: SupplyOperationCandidate
+      candidate: SupplyToolCandidate
       sourceDescriptorJson: string
       sourceSelectorJson: string
       sourceAuthorityState: 'verified' | 'review_required'
@@ -134,7 +134,7 @@ export function selectSupplyProviderAuthority(
 }
 
 export async function prepareSupplyPublicationV2(
-  input: PublishSupplyOperationV2Input,
+  input: PublishSupplyToolV2Input,
   dependencies: SupplyPublicationV2Dependencies = {},
 ): Promise<SupplyPublicationV2Preparation> {
   if (input.source.environment !== input.environment) return refused('environment_mismatch')
@@ -248,8 +248,8 @@ export async function prepareSupplyPublicationV2(
 }
 
 function contractMetadata(
-  input: PublishSupplyOperationV2Input,
-  candidate: SupplyOperationCandidate,
+  input: PublishSupplyToolV2Input,
+  candidate: SupplyToolCandidate,
 ): CapabilityContractMetadata | undefined {
   const dataReleaseEffect = input.consequences.effects.find(({ class: effectClass }) => effectClass === 'data_release')
   if (input.consequences.dataUse.length > 0 && dataReleaseEffect === undefined) return undefined
@@ -293,7 +293,7 @@ function contractMetadata(
   }
 }
 
-function offeringFor(input: PublishSupplyOperationV2Input, candidate: SupplyOperationCandidate) {
+function offeringFor(input: PublishSupplyToolV2Input, candidate: SupplyToolCandidate) {
   const suffix = sourceRouteIdentity(input, candidate).slice(7, 31)
   return {
     offeringId: `offering:provider:${suffix}`,
@@ -330,8 +330,8 @@ function offeringFor(input: PublishSupplyOperationV2Input, candidate: SupplyOper
 }
 
 function commercialFor(
-  input: PublishSupplyOperationV2Input,
-  candidate: SupplyOperationCandidate,
+  input: PublishSupplyToolV2Input,
+  candidate: SupplyToolCandidate,
   authority: CapabilityTransportAuthority,
 ) {
   const suffix = sourceRouteIdentity(input, candidate).slice(7, 31)
@@ -354,8 +354,8 @@ function commercialFor(
 }
 
 function sourceRouteIdentity(
-  input: PublishSupplyOperationV2Input,
-  candidate: SupplyOperationCandidate,
+  input: PublishSupplyToolV2Input,
+  candidate: SupplyToolCandidate,
 ): string {
   const sourceKind = input.source.kind === 'openapi'
     ? 'openapi_http'
@@ -382,8 +382,8 @@ function sourceRouteIdentity(
 }
 
 function canonicalSourceSelector(
-  input: PublishSupplyOperationV2Input,
-  candidate: SupplyOperationCandidate,
+  input: PublishSupplyToolV2Input,
+  candidate: SupplyToolCandidate,
 ): CapabilityPublicationSourceSelector {
   const selector = candidate.sourceSelector
   if (input.source.kind === 'openapi' && 'path' in selector) {
@@ -403,8 +403,8 @@ function canonicalSourceSelector(
 }
 
 function publicationImport(args: Readonly<{
-  input: PublishSupplyOperationV2Input
-  candidate: SupplyOperationCandidate
+  input: PublishSupplyToolV2Input
+  candidate: SupplyToolCandidate
   contract: CapabilityContractMetadata
   authority: CapabilityTransportAuthority
   openApiDocument: unknown
@@ -506,7 +506,7 @@ function publicationImport(args: Readonly<{
   }
 }
 
-function pricingConfigFor(input: PublishSupplyOperationV2Input, candidate: SupplyOperationCandidate): unknown | undefined {
+function pricingConfigFor(input: PublishSupplyToolV2Input, candidate: SupplyToolCandidate): unknown | undefined {
   if (input.pricing.kind === 'free') {
     return candidate.x402 === undefined
       ? { version: 'pricing:v3', kind: 'fixed_aud', currency: 'AUD', exponent: 6, amountUnits: '0' }

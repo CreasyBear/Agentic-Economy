@@ -1,4 +1,5 @@
-import { normalizeAgentAccessOperationSelection, type AgentAccessOperationAccess } from './policy'
+import { AGENT_ACCESS_AUTHORITY_MODE_VALUES, type AgentAccessAuthorityMode } from './contract'
+import { normalizeAgentAccessToolSelection, type AgentAccessToolAccess } from './policy'
 
 export type AgentConsentTarget = Readonly<{
   principalRef: string
@@ -12,11 +13,11 @@ export type AgentConsentDetails = Readonly<{
   grantRevision?: number
   flow?: 'device_code' | 'authorization_code'
   clientName?: string
-  mode?: string
-  accessProfile?: 'market' | 'supplier'
+  mode?: AgentAccessAuthorityMode
+  accessProfile?: 'market' | 'provider'
   environment?: 'sandbox' | 'production'
-  operationAccess?: AgentAccessOperationAccess
-  operationRefs?: readonly string[]
+  toolAccess?: AgentAccessToolAccess
+  toolRefs?: readonly string[]
   expiresInSeconds?: number
   accessSummary?: string
   agentTargets: readonly AgentConsentTarget[]
@@ -25,6 +26,21 @@ export type AgentConsentDetails = Readonly<{
   reconnectPrincipalRef?: string
   reconnectAmbiguous?: boolean
 }>
+
+function readConsentTarget(value: unknown): AgentConsentTarget | undefined {
+  if (typeof value !== 'object' || value === null
+    || !('principalRef' in value) || typeof value.principalRef !== 'string'
+    || value.principalRef.trim().length === 0
+    || !('principalRevision' in value) || typeof value.principalRevision !== 'number'
+    || !Number.isSafeInteger(value.principalRevision) || value.principalRevision <= 0
+    || !('displayName' in value) || typeof value.displayName !== 'string'
+    || value.displayName.trim().length === 0) return undefined
+  return {
+    principalRef: value.principalRef,
+    principalRevision: value.principalRevision,
+    displayName: value.displayName,
+  }
+}
 
 export function readAgentConsentDetails(html: string): AgentConsentDetails {
   const document = new DOMParser().parseFromString(html, 'text/html')
@@ -41,20 +57,21 @@ export function readAgentConsentDetails(html: string): AgentConsentDetails {
     : undefined
   const flow = consent?.dataset.flow
   const clientName = consent?.dataset.clientName
-  const mode = consent?.dataset.authorityMode
+  const modeValue = consent?.dataset.authorityMode
+  const mode = AGENT_ACCESS_AUTHORITY_MODE_VALUES.find((candidate) => candidate === modeValue)
   const accessProfile = consent?.dataset.accessProfile
   const environment = consent?.dataset.environment
-  const operationAccessValue = consent?.dataset.operationAccess
-  let operationSelection: ReturnType<typeof normalizeAgentAccessOperationSelection>
+  const toolAccessValue = consent?.dataset.toolAccess
+  let toolSelection: ReturnType<typeof normalizeAgentAccessToolSelection>
   try {
-    const operationRefs: unknown = JSON.parse(decodeURIComponent(consent?.dataset.operationRefs ?? ''))
-    operationSelection = (operationAccessValue === 'all_admitted' || operationAccessValue === 'selected_operations')
-      && Array.isArray(operationRefs)
-      && operationRefs.every((ref) => typeof ref === 'string')
-      ? normalizeAgentAccessOperationSelection({ operationAccess: operationAccessValue, operationRefs })
+    const toolRefs: unknown = JSON.parse(decodeURIComponent(consent?.dataset.toolRefs ?? ''))
+    toolSelection = (toolAccessValue === 'all_admitted' || toolAccessValue === 'selected_tools')
+      && Array.isArray(toolRefs)
+      && toolRefs.every((ref) => typeof ref === 'string')
+      ? normalizeAgentAccessToolSelection({ toolAccess: toolAccessValue, toolRefs })
       : undefined
   } catch {
-    operationSelection = undefined
+    toolSelection = undefined
   }
   const expiresInSecondsValue = Number(consent?.dataset.expiresInSeconds)
   const expiresInSeconds = Number.isSafeInteger(expiresInSecondsValue) && expiresInSecondsValue > 0
@@ -63,27 +80,33 @@ export function readAgentConsentDetails(html: string): AgentConsentDetails {
   const accessSummary = consent?.dataset.accessSummary
   let agentTargets: readonly AgentConsentTarget[] = []
   let agentTargetsNextCursor: string | undefined
-  let agentTargetsUnavailable = consent?.dataset.agentTargetsUnavailable === 'true'
+  const targetAvailability = consent?.dataset.agentTargetsUnavailable
+  let agentTargetsUnavailable = targetAvailability !== undefined
+    && targetAvailability !== 'false'
+  if (targetAvailability === undefined) agentTargetsUnavailable = false
   const reconnectPrincipalRefValue = consent?.dataset.reconnectPrincipalRef
   const reconnectAmbiguous = consent?.dataset.reconnectAmbiguous === 'true'
   try {
     const parsed: unknown = JSON.parse(decodeURIComponent(consent?.dataset.agentTargets ?? '%5B%5D'))
     if (Array.isArray(parsed)) {
-      agentTargets = parsed.flatMap((value) => (
-        typeof value === 'object' && value !== null
-          && 'principalRef' in value && typeof value.principalRef === 'string'
-          && 'principalRevision' in value && Number.isSafeInteger(value.principalRevision) && Number(value.principalRevision) > 0
-          && 'displayName' in value && typeof value.displayName === 'string'
-          ? [{ principalRef: value.principalRef, principalRevision: Number(value.principalRevision), displayName: value.displayName }]
-          : []
-      ))
+      agentTargets = parsed.flatMap((value) => {
+        const target = readConsentTarget(value)
+        if (target === undefined) agentTargetsUnavailable = true
+        return target === undefined ? [] : [target]
+      })
+    } else {
+      agentTargetsUnavailable = true
     }
     const encodedCursor = consent?.dataset.agentTargetsNextCursor
     if (encodedCursor !== undefined && encodedCursor.length > 0) {
-      agentTargetsNextCursor = decodeURIComponent(encodedCursor)
+      const decodedCursor = decodeURIComponent(encodedCursor)
+      if (decodedCursor.length === 0 || decodedCursor.length > 2_048) {
+        agentTargetsUnavailable = true
+      } else {
+        agentTargetsNextCursor = decodedCursor
+      }
     }
   } catch {
-    agentTargets = []
     agentTargetsNextCursor = undefined
     agentTargetsUnavailable = true
   }
@@ -93,12 +116,12 @@ export function readAgentConsentDetails(html: string): AgentConsentDetails {
     ...(grantRevision === undefined ? {} : { grantRevision }),
     ...(flow === 'device_code' || flow === 'authorization_code' ? { flow } : {}),
     ...(clientName === undefined || clientName.length === 0 ? {} : { clientName }),
-    ...(mode === undefined || mode.length === 0 ? {} : { mode }),
-    ...(accessProfile === 'market' || accessProfile === 'supplier' ? { accessProfile } : {}),
+    ...(mode === undefined ? {} : { mode }),
+    ...(accessProfile === 'market' || accessProfile === 'provider' ? { accessProfile } : {}),
     ...(environment === 'sandbox' || environment === 'production' ? { environment } : {}),
-    ...(operationSelection === undefined ? {} : {
-      operationAccess: operationSelection.operationAccess,
-      operationRefs: operationSelection.operationRefs,
+    ...(toolSelection === undefined ? {} : {
+      toolAccess: toolSelection.toolAccess,
+      toolRefs: toolSelection.toolRefs,
     }),
     ...(expiresInSeconds === undefined ? {} : { expiresInSeconds }),
     ...(accessSummary === undefined || accessSummary.length === 0 ? {} : { accessSummary }),

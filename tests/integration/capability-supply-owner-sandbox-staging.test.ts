@@ -373,10 +373,10 @@ describe('owner Base Sepolia staging publication', () => {
     if (publicStatus === 'unpublished') expect(ownerPublication).toBeNull()
     else expect(ownerPublication).toMatchObject({ lifecycle: { state: 'inactive' } })
     await expect(backend.query(
-      internal.capabilitySupplyOperations.readCurrentPublishedOperationSnapshot,
-      { operationRef: staged.operationRef },
+      internal.capabilitySupplyTools.readCurrentPublishedToolSnapshot,
+      { toolRef: staged.toolRef },
     )).resolves.toBeNull()
-    const publicSearch = await backend.query(api.capabilitySupplyOperations.search, {
+    const publicSearch = await backend.query(api.capabilitySupplyTools.search, {
       query: 'paid lookup',
       limit: 3,
     })
@@ -386,18 +386,18 @@ describe('owner Base Sepolia staging publication', () => {
       expect(publicSearch).toMatchObject({
         kind: 'ok',
         items: [{
-          operationRef: staged.operationRef,
+          toolRef: staged.toolRef,
           availability: { posture: 'setup_required' },
         }],
       })
     }
-    const publicDetail = await backend.query(api.capabilitySupplyOperations.detail, {
-      operationRef: staged.operationRef,
+    const publicDetail = await backend.query(api.capabilitySupplyTools.detail, {
+      toolRef: staged.toolRef,
     })
     if (publicStatus === 'unpublished') expect(publicDetail.kind).toBe('not_found')
     else expect(publicDetail).toMatchObject({
       kind: 'found',
-      operation: {
+      tool: {
         availability: { posture: 'setup_required' },
       },
     })
@@ -486,7 +486,7 @@ describe('owner Base Sepolia staging publication', () => {
       kind: 'replayed',
       publicationRef: staged.publicationRef,
       publicationRevision: staged.publicationRevision,
-      operationRef: staged.operationRef,
+      toolRef: staged.toolRef,
     })
     const rebound = await backend.run(async (ctx) => ({
       offering: await ctx.db.query('capabilityOfferings')

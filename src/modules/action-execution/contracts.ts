@@ -29,18 +29,18 @@ export type ActionExecutionOrigin =
 
 export type ExecutionActor = Readonly<{ callerRef: string; principalRef: string }>
 
-export type StandingMandateAuthorityBasis = Readonly<{
-  kind: 'standing_mandate_use'
-  mandateRef: string
-  mandateVersion: number
-  mandateGeneration: number
+export type SpendingPolicyAuthorityBasis = Readonly<{
+  kind: 'spending_policy_use'
+  spendingPolicyRef: string
+  spendingPolicyVersion: number
+  spendingPolicyGeneration: number
   authorityUseRef: string
   grantEvidenceRef: string
 }>
-export type CustomerRequestMandateAuthorityBasis = Readonly<{
-  kind: 'customer_request_mandate_use'
-  mandateRef: string
-  mandateDigest: string
+export type CustomerRequestAuthorizationAuthorityBasis = Readonly<{
+  kind: 'customer_request_authorization_use'
+  requestAuthorizationRef: string
+  requestAuthorizationDigest: string
   requestRevision: number
   routeGeneration: number
   authorization:
@@ -50,9 +50,9 @@ export type CustomerRequestMandateAuthorityBasis = Readonly<{
         authorizationEvidenceDigest: string
       }>
     | Readonly<{
-        kind: 'standing_low_risk'
-        standingPolicyRef: string
-        standingPolicyDigest: string
+        kind: 'spending_policy_low_risk'
+        spendingPolicyRef: string
+        spendingPolicyDigest: string
         authorityUseRef: string
       }>
   grantRef: string
@@ -62,7 +62,7 @@ export type PublicCapabilityAuthorityBasis = Readonly<{
   kind: 'public_capability_use'
   publicationRef: string
   publicationRevision: number
-  operationRef: string
+  toolRef: string
   bindingId: string
   bindingRegistrationHash: string
 }>
@@ -148,9 +148,9 @@ export type ActionExecutionView<Result extends ActionResult = ActionResult> = Re
   prepared?: PreparedExecution
   authority?: Readonly<{ reference: string; expiresAt: string }>
   acceptedAuthority?:
-    | Readonly<{ kind: 'approve_each'; authorityRef: string }>
-    | StandingMandateAuthorityBasis
-    | CustomerRequestMandateAuthorityBasis
+    | Readonly<{ kind: 'approval_required'; authorityRef: string }>
+    | SpendingPolicyAuthorityBasis
+    | CustomerRequestAuthorizationAuthorityBasis
     | PublicCapabilityAuthorityBasis
   observedResolution:
     | Readonly<{ state: 'pending' }>
@@ -198,25 +198,25 @@ export function canonicalAuthorityBasisMaterial(
   basis: ActionExecutionAcceptedAuthority,
 ): StableHashValue {
   switch (basis.kind) {
-    case 'approve_each':
+    case 'approval_required':
       return {
-        kind: basis.kind,
+        kind: 'approve_each',
         authorityRef: basis.authorityRef,
       }
-    case 'standing_mandate_use':
+    case 'spending_policy_use':
       return {
-        kind: basis.kind,
-        mandateRef: basis.mandateRef,
-        mandateVersion: basis.mandateVersion,
-        mandateGeneration: basis.mandateGeneration,
+        kind: 'standing_mandate_use',
+        mandateRef: basis.spendingPolicyRef,
+        mandateVersion: basis.spendingPolicyVersion,
+        mandateGeneration: basis.spendingPolicyGeneration,
         authorityUseRef: basis.authorityUseRef,
         grantEvidenceRef: basis.grantEvidenceRef,
       }
-    case 'customer_request_mandate_use':
+    case 'customer_request_authorization_use':
       return {
-        kind: basis.kind,
-        mandateRef: basis.mandateRef,
-        mandateDigest: basis.mandateDigest,
+        kind: 'customer_request_mandate_use',
+        mandateRef: basis.requestAuthorizationRef,
+        mandateDigest: basis.requestAuthorizationDigest,
         requestRevision: basis.requestRevision,
         routeGeneration: basis.routeGeneration,
         authorization: basis.authorization.kind === 'explicit'
@@ -226,9 +226,9 @@ export function canonicalAuthorityBasisMaterial(
               authorizationEvidenceDigest: basis.authorization.authorizationEvidenceDigest,
             }
           : {
-              kind: basis.authorization.kind,
-              standingPolicyRef: basis.authorization.standingPolicyRef,
-              standingPolicyDigest: basis.authorization.standingPolicyDigest,
+              kind: 'standing_low_risk',
+              standingPolicyRef: basis.authorization.spendingPolicyRef,
+              standingPolicyDigest: basis.authorization.spendingPolicyDigest,
               authorityUseRef: basis.authorization.authorityUseRef,
             },
         grantRef: basis.grantRef,
@@ -239,7 +239,9 @@ export function canonicalAuthorityBasisMaterial(
         kind: basis.kind,
         publicationRef: basis.publicationRef,
         publicationRevision: basis.publicationRevision,
-        operationRef: basis.operationRef,
+        // The Tool-facing field is source vocabulary; the hash material keeps
+        // the existing protected operationRef key and exact bytes.
+        operationRef: basis.toolRef,
         bindingId: basis.bindingId,
         bindingRegistrationHash: basis.bindingRegistrationHash,
       }
@@ -284,13 +286,13 @@ export interface ActionExecutionTracer<Input, Result extends ActionResult> {
     origin: ActionExecutionOrigin
     accept: boolean
   }>): Promise<ExecutionDecision<Result>>
-  authorizeStandingMandateUse(input: Readonly<{
+  authorizeSpendingPolicyUse(input: Readonly<{
     executionRef: string
     expectedExecutionVersion: number
     authorityRef: string
     actor: ExecutionActor
     origin: ActionExecutionOrigin
-    basis: StandingMandateAuthorityBasis
+    basis: SpendingPolicyAuthorityBasis
   }>): Promise<ExecutionDecision<Result>>
   execute(input: Readonly<{
     executionRef: string
@@ -309,7 +311,7 @@ export interface ActionExecutionTracer<Input, Result extends ActionResult> {
     materialInput: Input
     leaseOwner: string
     leaseMs: number
-    acceptedAuthorityBasis?: StandingMandateAuthorityBasis
+    acceptedAuthorityBasis?: SpendingPolicyAuthorityBasis
   }>): Promise<ExecutionDecision<Result>>
   executeAcquired(input: Readonly<{
     executionRef: string
@@ -373,9 +375,9 @@ export type AuthorityBindingSnapshot = Readonly<{
   consequence: string
   limits: ActionExecutionLimits
   acceptedBasis?:
-    | Readonly<{ kind: 'approve_each'; authorityRef: string }>
-    | StandingMandateAuthorityBasis
-    | CustomerRequestMandateAuthorityBasis
+    | Readonly<{ kind: 'approval_required'; authorityRef: string }>
+    | SpendingPolicyAuthorityBasis
+    | CustomerRequestAuthorizationAuthorityBasis
     | PublicCapabilityAuthorityBasis
 
 }>

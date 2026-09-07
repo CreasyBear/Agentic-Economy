@@ -10,7 +10,7 @@ import {
 import { persistDevSeedCatalogState } from './devSeedStore'
 import { canonicalDigest } from '../src/modules/common/canonical-digest'
 import { AGENT_ACCESS_DEFAULT_APPLICATION_REF } from '@/modules/agent-access/agent-access'
-import { MARKET_OPERATIONS_INVOKE_SCOPE } from '@/modules/agent-access/contract'
+import { MARKET_TOOLS_CALL_SCOPE } from '@/modules/agent-access/contract'
 import {
   MAX_ACCESS_PATHS_PER_OFFERING,
   type OfferingPrice,
@@ -186,10 +186,10 @@ export const ensureLocalE2EOwnerIdentity = internalMutation({
         credentialId: LOCAL_E2E_OWNER_CREDENTIAL_ID,
         applicationRef: AGENT_ACCESS_DEFAULT_APPLICATION_REF,
         environment: 'sandbox',
-        scopes: [MARKET_OPERATIONS_INVOKE_SCOPE],
-        authorityMode: 'approve_each',
+        scopes: [MARKET_TOOLS_CALL_SCOPE],
+        authorityMode: 'approval_required',
         grantGeneration: 1,
-        policyDigest: 'local-e2e-owner-key',
+        spendingPolicyDigest: 'local-e2e-owner-key',
         lifecycle: 'active',
         recordedAt: now,
         lastSeenAt: now,

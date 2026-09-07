@@ -100,7 +100,7 @@ describe('Account AUD funding HTTP boundary', () => {
       input: { principalAmount: { currency: 'AUD', exponent: 6, units: '5000000' }, idempotencyKey: 'logical-attempt-one' },
       principal: {
         principalId: 'principal:agent-one', ownerId: 'account:one', credentialId: 'credential:one',
-        applicationRef: 'agentic-economy', environment: 'sandbox', scopes: ['market_operations:invoke'], authorityMode: 'inspect_only',
+        applicationRef: 'agentic-economy', environment: 'sandbox', scopes: ['market_operations:invoke'], authorityMode: 'read_only',
       },
       correlationId: 'correlation:test',
     })

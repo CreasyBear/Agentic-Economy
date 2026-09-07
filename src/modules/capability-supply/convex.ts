@@ -1,6 +1,6 @@
 export {
   connectionAuthoritySnapshotValue,
-  registeredOperationMappingValue,
+  registeredToolMappingValue,
 } from './internal/convex-schema'
 export { dereferenceLocalSchema } from './internal/schema-deref-shared'
 export {

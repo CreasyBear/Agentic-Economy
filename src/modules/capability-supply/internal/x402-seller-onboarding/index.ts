@@ -11,7 +11,7 @@ export {
 } from './canary'
 export type {
   CreateSellerOnboardingCanaryInput,
-  CurrentSellerCanaryOperationCommitment,
+  CurrentSellerCanaryQuote,
   OperationExecutionPurpose,
   SellerOnboardingCanaryCommitment,
   SellerOnboardingCanaryExecutionEnvelope,

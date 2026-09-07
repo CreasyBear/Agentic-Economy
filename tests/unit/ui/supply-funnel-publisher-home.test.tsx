@@ -1,24 +1,24 @@
 import { describe, expect, it } from 'vitest'
 
-import { projectOwnerOperations } from '@/components/ae/offerings/owner-operations-projection'
-import type { OwnerOperationsInventoryResult, OwnerOperationsLifecycleRow } from '@/components/ae/offerings/owner-operations.functions'
-import type { SupplierOperationStatus } from '@/modules/capability-supply/supplier-operation-status'
+import { projectProviderWorkspace } from '@/components/ae/offerings/provider-workspace-projection'
+import type { ProviderWorkspaceInventoryResult, ProviderWorkspaceLifecycleRow } from '@/components/ae/offerings/provider-workspace.functions'
+import type { ProviderToolStatus } from '@/modules/capability-supply/provider-tool-status'
 
 const inventory = {
   kind: 'available',
-  supplier: { name: 'Supplier' },
+  provider: { name: 'Provider' },
   projection: 'current',
   isDone: true,
   continueCursor: '',
-  operations: [{ offeringRef: 'offering:one', currentRevision: 2, name: 'One', category: 'tools', summary: 'Does one thing', status: 'published', accessPathCount: 1 }],
-} as const satisfies OwnerOperationsInventoryResult
+  tools: [{ offeringRef: 'offering:one', currentRevision: 2, name: 'One', category: 'tools', summary: 'Does one thing', status: 'published', accessPathCount: 1 }],
+} as const satisfies ProviderWorkspaceInventoryResult
 
-function operationStatus(patch: Partial<SupplierOperationStatus> = {}): SupplierOperationStatus {
+function operationStatus(patch: Partial<ProviderToolStatus> = {}): ProviderToolStatus {
   return {
-    schemaVersion: 'supplier_operations:v1',
+    schemaVersion: 'provider_tools:v1',
     businessRef: 'business:one',
     providerRef: 'provider:one',
-    operationRef: 'operation:one',
+    toolRef: 'operation:one',
     revision: 2,
     state: 'Published',
     reasonCodes: [],
@@ -39,11 +39,11 @@ function operationStatus(patch: Partial<SupplierOperationStatus> = {}): Supplier
   }
 }
 
-function lifecycle(status = operationStatus()): OwnerOperationsLifecycleRow {
+function lifecycle(status = operationStatus()): ProviderWorkspaceLifecycleRow {
   return { offeringRef: 'offering:one', status }
 }
 
-describe('canonical Supplier Operation directory projection', () => {
+describe('canonical Provider Tool directory projection', () => {
   it.each([
     ['Draft', false],
     ['Needs setup', false],
@@ -54,7 +54,7 @@ describe('canonical Supplier Operation directory projection', () => {
     ['Action required', false],
     ['Retired', false],
   ] as const)('renders the canonical %s state without a parallel lifecycle', (state, available) => {
-    const result = projectOwnerOperations(inventory, {
+    const result = projectProviderWorkspace(inventory, {
       kind: 'available',
       value: [lifecycle(operationStatus({ state, routeability: { available, reasonCodes: [] } }))],
     })
@@ -80,7 +80,7 @@ describe('canonical Supplier Operation directory projection', () => {
         title: 'Reconnect source',
       },
     })
-    const result = projectOwnerOperations(inventory, { kind: 'available', value: [lifecycle(status)] })
+    const result = projectProviderWorkspace(inventory, { kind: 'available', value: [lifecycle(status)] })
     expect(result.kind).toBe('available')
     if (result.kind === 'available') {
       expect(result.rows[0]).toMatchObject({
@@ -92,18 +92,18 @@ describe('canonical Supplier Operation directory projection', () => {
   })
 
   it('fails safely for missing, stale or duplicate canonical rows', () => {
-    const missing = projectOwnerOperations(inventory, { kind: 'unavailable' })
+    const missing = projectProviderWorkspace(inventory, { kind: 'unavailable' })
     expect(missing.kind === 'available' ? missing.rows[0] : missing).toMatchObject({ lifecycleLabel: 'Status unavailable', availability: 'unknown' })
 
-    const stale = projectOwnerOperations(inventory, {
+    const stale = projectProviderWorkspace(inventory, {
       kind: 'available',
       value: [lifecycle(operationStatus({ revision: 1 }))],
     })
     expect(stale.kind === 'available' ? stale.rows[0] : stale).toMatchObject({ lifecycleLabel: 'Updating', lifecyclePending: true })
 
-    expect(projectOwnerOperations({ ...inventory, operations: [...inventory.operations, ...inventory.operations] }, { kind: 'available', value: [] }))
+    expect(projectProviderWorkspace({ ...inventory, tools: [...inventory.tools, ...inventory.tools] }, { kind: 'available', value: [] }))
       .toEqual({ kind: 'conflict', reason: 'duplicate_definition' })
-    expect(projectOwnerOperations(inventory, { kind: 'available', value: [lifecycle(), lifecycle()] }))
+    expect(projectProviderWorkspace(inventory, { kind: 'available', value: [lifecycle(), lifecycle()] }))
       .toEqual({ kind: 'conflict', reason: 'duplicate_supply' })
   })
 })

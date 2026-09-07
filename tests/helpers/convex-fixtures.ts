@@ -38,9 +38,9 @@ export function convexTestWithMarketComponents() {
   agentTest.register(backend)
   registerAggregate(backend, 'marketEvidence')
   registerAggregate(backend, 'marketOperationEvidence')
-  registerAggregate(backend, 'marketOperationRatings')
-  registerAggregate(backend, 'marketActiveOperations')
-  registerAggregate(backend, 'marketActiveSuppliers')
+  registerAggregate(backend, 'marketToolRatings')
+  registerAggregate(backend, 'marketActiveTools')
+  registerAggregate(backend, 'marketActiveProviders')
   return backend
 }
 

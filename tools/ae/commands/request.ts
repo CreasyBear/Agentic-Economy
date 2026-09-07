@@ -9,7 +9,7 @@ import type { CliOptions } from '../lib/args'
 import { continuationCommand } from '../lib/continuation-command'
 import { usageFailure } from '../lib/help'
 import { CliFailure, callJson, heading, line, printJson, requireOk, table } from '../lib/output'
-import { operationLabel } from '../lib/operation-format'
+import { toolLabel } from '../lib/tool-format'
 import { requireAgentAccessKey } from './status'
 
 export const MARKET_REQUEST_COMMAND_DESCRIPTORS = Object.freeze([
@@ -70,7 +70,7 @@ async function createRequest(args: readonly string[], options: CliOptions): Prom
         : undefined
     throw new CliFailure(
       parsed.data.code === 'current_match_exists'
-        ? 'Current Market Operations already match this job; nothing was recorded.'
+        ? 'Current Market Tools already match this job; nothing was recorded.'
         : parsed.data.code === 'idempotency_conflict'
           ? 'That idempotency key already identifies a different market request.'
           : 'The missing job could not be recorded.',
@@ -167,7 +167,7 @@ async function requestStatus(args: readonly string[], options: CliOptions): Prom
     })
   }
   const nextCommand = parsed.data.kind === 'matched'
-    ? continuationCommand(['ae', 'describe', parsed.data.operations[0]?.operationRef ?? ''])
+    ? continuationCommand(['ae', 'describe', parsed.data.tools[0]?.toolRef ?? ''])
     : parsed.data.kind === 'open'
       ? continuationCommand(['ae', 'request', 'status', parsed.data.requestRef])
       : undefined
@@ -193,11 +193,11 @@ async function requestStatus(args: readonly string[], options: CliOptions): Prom
     ['matches', String(parsed.data.matchedCount)],
   ])
   if (parsed.data.kind === 'matched') {
-    for (const operation of parsed.data.operations) {
-      line(`  ${operationLabel(operation)} — ${operation.operationRef}`)
+    for (const tool of parsed.data.tools) {
+      line(`  ${toolLabel(tool)} — ${tool.toolRef}`)
     }
   } else {
-    line('No current canonical Operation matches yet.')
+    line('No current canonical Tool matches yet.')
   }
   if (nextCommand !== undefined) line(`Next: ${nextCommand}`)
 }

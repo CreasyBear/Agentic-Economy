@@ -8,7 +8,7 @@ export const Route = createFileRoute('/for-providers')({
   loader: () => loadSupplyLandingReadbackServer(),
   head: () => buildPublicPageHead({
     path: '/for-providers',
-    title: 'Publish an Operation | Agentic Economy',
+    title: 'Publish a Tool | Agentic Economy',
     description: 'Publish one bounded job, its price, access terms, readiness, and evidence.',
   }),
   component: SupplyLandingRoute,
@@ -19,7 +19,7 @@ function SupplyLandingRoute() {
   const router = useRouter()
   const recoveryProps = readback.kind === 'error'
     ? {
-        sourceError: 'Supplier information is temporarily unavailable. Try again.',
+        sourceError: 'Provider information is temporarily unavailable. Try again.',
         onRetry: () => router.invalidate(),
       }
     : {}
@@ -27,7 +27,7 @@ function SupplyLandingRoute() {
     <AePublicPage>
       <AeSupplyLanding
         tools={readback.kind === 'available' ? readback.tools : []}
-        operations={readback.kind === 'available' ? readback.listings : []}
+        publishedTools={readback.kind === 'available' ? readback.listings : []}
         {...recoveryProps}
       />
     </AePublicPage>

@@ -18,7 +18,7 @@ import type { AccountFundingBalance, AccountFundingBeginInput } from '@/modules/
 
 vi.mock('@tanstack/react-router', () => ({
   Link: ({ to, params, children, ...props }: { to: string; params?: Record<string, string>; children: ReactNode }) => (
-    <a href={params?.operationRef === undefined ? to : to.replace('$operationRef', encodeURIComponent(params.operationRef))} {...props}>{children}</a>
+    <a href={params?.toolRef === undefined ? to : to.replace('$toolRef', encodeURIComponent(params.toolRef))} {...props}>{children}</a>
   ),
 }))
 
@@ -29,8 +29,8 @@ const keyReadback: AgentCredentialSource = {
     name: 'UI assistant',
     applicationRef: 'agentic-economy',
     environment: 'sandbox',
-    authorityMode: 'inspect_only',
-    scopes: ['market_operations:invoke', 'customer_requests:inspect_only'],
+    authorityMode: 'read_only',
+    scopes: ['market_tools:call', 'customer_requests:read_only'],
     revoked: false,
     expired: false,
   },
@@ -39,16 +39,16 @@ const keyReadback: AgentCredentialSource = {
     credentialId: 'key_ui_1',
     applicationRef: 'agentic-economy',
     environment: 'sandbox',
-    authorityMode: 'inspect_only',
-    operationAccess: 'all_admitted',
-    operationRefs: [],
+    authorityMode: 'read_only',
+    toolAccess: 'all_admitted',
+    toolRefs: [],
     lifecycle: 'active',
     expiresAt: 604_800_000,
     budget: {
-      maximumSpendPerInvocation: { currency: 'USD', units: '500', exponent: 2 },
+      maximumSpendPerCall: { currency: 'USD', units: '500', exponent: 2 },
       maximumDailySpend: { currency: 'USD', units: '2500', exponent: 2 },
       maximumMonthlySpend: { currency: 'USD', units: '10000', exponent: 2 },
-      maximumConcurrentInvocations: 2,
+      maximumConcurrentCalls: 2,
     },
     rate: { maximumCallsPerMinute: 30, maximumCallsPerHour: 300 },
   },
@@ -102,7 +102,7 @@ describe('owner credit target', () => {
           offeringRef: 'offering:weather',
           businessId: 'business:weather',
           operationKey: 'weather.lookup',
-          invocationRef: 'invocation:insufficient',
+          callRef: 'invocation:insufficient',
           attemptRef: 'attempt:insufficient',
           grossAmount: { currency: 'USD', units: '500', exponent: 2 },
           chargeState: 'insufficient_credit',
@@ -119,6 +119,37 @@ describe('owner credit target', () => {
     fireEvent.click(screen.getByRole('button', { name: 'View Call declined for insufficient credit' }))
     const continuation = screen.getByRole('link', { name: 'Add credit' })
     expect(continuation.getAttribute('href')).toBe('/owner/credit#fund')
+  })
+
+  it('reads the current Tool Provider from the charge detail sheet', () => {
+    const source: AgentCredentialSource = {
+      ...keyReadback,
+      activity: [{
+        activityRef: 'activity:tool-provider',
+        credentialId: 'key_ui_1',
+        serviceRef: 'service:invoice-fields',
+        offeringRef: 'offering:invoice-fields',
+        businessId: 'business:ledger-labs',
+        operationKey: `operation:v1:${'a'.repeat(64)}`,
+        callRef: 'invocation:tool-provider',
+        attemptRef: 'attempt:tool-provider',
+        priceDigest: `sha256:${'b'.repeat(64)}`,
+        chargeState: 'paid',
+        grossAmount: { currency: 'USD', units: '500', exponent: 2 },
+        transactionRef: 'transaction:tool-provider',
+        observedAt: 3,
+        tool: { label: 'Extract invoice fields', provider: 'Ledger Labs' },
+      }],
+    }
+    render(<AeOwnerCredit
+      directory={projectAgentDirectory([source], [canonicalAgentRecord([source])])}
+      accountBalance={accountBalance}
+      loading={false}
+    />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'View Extract invoice fields' }))
+    expect(screen.getByText('Provider')).toBeTruthy()
+    expect(screen.getByText('Ledger Labs')).toBeTruthy()
   })
 
   it('keeps financial documents and owned reconciliation evidence on the Account surface', async () => {
@@ -353,11 +384,11 @@ describe('assistant access components', () => {
         onRevokeCredential={() => undefined}
         onDisconnectAgent={() => undefined}
         approvals={[{
-          invocationRef: 'invocation:approval:one',
-          operationRef: 'market.email.send:v1',
+          callRef: 'call:approval:one',
+          toolRef: 'market.email.send:v1',
           authorityRequest: {
-            kind: 'approve_each',
-            operationRef: 'market.email.send:v1',
+            kind: 'approval_required',
+            toolRef: 'market.email.send:v1',
             consequence: 'communication',
             retryClass: 'reconcile_before_retry',
             maximumSpend: { currency: 'USD', units: '125', exponent: 2 },
@@ -366,7 +397,7 @@ describe('assistant access components', () => {
           createdAt: 1,
         }]}
         approvalsLoading={false}
-        approvalDecision={{ invocationRef: 'invocation:approval:one', decision: 'approve' }}
+        approvalDecision={{ callRef: 'call:approval:one', decision: 'approve' }}
         approvalStatus="market.email.send:v1 approved once."
         onRetryApprovals={() => undefined}
         onDecideApproval={onDecideApproval}
@@ -375,7 +406,7 @@ describe('assistant access components', () => {
     )
 
     expect(screen.getByRole('heading', { name: 'Waiting for approval' })).toBeTruthy()
-    expect(screen.getByRole('link', { name: 'market.email.send:v1' }).getAttribute('href')).toBe('/operations/market.email.send%3Av1')
+    expect(screen.getByRole('link', { name: 'market.email.send:v1' }).getAttribute('href')).toBe('/tools/market.email.send%3Av1')
     expect(screen.getByText('Sends a communication')).toBeTruthy()
     expect(screen.getByText('USD 1.25')).toBeTruthy()
     expect(screen.getByText('recipient.email, message.subject')).toBeTruthy()
@@ -386,6 +417,6 @@ describe('assistant access components', () => {
     expect(declineButton.hasAttribute('disabled')).toBe(true)
     fireEvent.click(declineButton)
     expect(onDecideApproval).not.toHaveBeenCalled()
-    expect(screen.queryByText(/invocation:approval:one|credential|transport|input/iu)).toBeNull()
+    expect(screen.queryByText(/call:approval:one|credential|transport|input/iu)).toBeNull()
   })
 })

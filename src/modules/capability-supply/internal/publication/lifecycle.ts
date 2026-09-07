@@ -104,8 +104,8 @@ export function publicationLifecycle(
     && (
       !connectionAuthoritySnapshotMatches(binding.connectionAuthority, currentConnection, {
         businessId: String(offering.businessId),
-        operationRef: publication.connectionAuthority?.operationRef
-          ?? binding.connectionAuthority?.operationRef
+        toolRef: publication.connectionAuthority?.toolRef
+          ?? binding.connectionAuthority?.toolRef
           ?? '',
         adapterId: binding.adapterId,
         now,

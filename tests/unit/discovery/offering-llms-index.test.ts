@@ -10,14 +10,14 @@ import type { PublicBusinessCatalogApiV2Dto } from '@/modules/registry/public'
 
 const canonicalBaseUrl = 'https://ae.example'
 
-describe('Operation-first llms.txt index', () => {
+describe('Tool-first llms.txt index', () => {
   it('teaches one canonical market loop and stays compact', () => {
     const result = buildOfferingLlmsTxt(catalogOf(50), { canonicalBaseUrl })
     const markers = [
       '1. Search by outcome:',
       '2. Describe one exact result:',
-      '3. Call `operation.inspect`',
-      '4. Invoke only with the returned Commitment',
+      '3. Call `tool.quote`',
+      '4. Call only with the returned Quote',
       '5. Keep the receipt:',
       'Canonical catalogue:',
     ]
@@ -29,8 +29,8 @@ describe('Operation-first llms.txt index', () => {
       previous = current
     }
 
-    expect(result.body).toContain(`POST ${canonicalBaseUrl}/api/v1/market-operations/search`)
-    expect(result.body).toContain(`POST ${canonicalBaseUrl}/api/v1/market-operations/describe`)
+    expect(result.body).toContain(`POST ${canonicalBaseUrl}/api/v1/market-tools/search`)
+    expect(result.body).toContain(`POST ${canonicalBaseUrl}/api/v1/market-tools/describe`)
     expect(result.body).toContain(`${canonicalBaseUrl}/market`)
     expect(result.body).not.toMatch(/Published businesses|\/api\/businesses|registry\.search|registry\.detail/u)
     expect(new TextEncoder().encode(result.body).length).toBeLessThan(4096)
@@ -50,7 +50,7 @@ describe('Operation-first llms.txt index', () => {
     const body = buildOfferingLlmsTxt([], { canonicalBaseUrl }).body
 
     expect(body).toContain('Public: list, search, describe, and compare.')
-    expect(body).toContain('Connect only when operation.inspect returns the OAuth challenge.')
+    expect(body).toContain('Connect only when tool.quote returns the OAuth challenge.')
     expect(body).toContain('The AE key identifies the caller.')
     expect(body).toContain('Never infer fulfilment, payment, deployment, or a receipt')
     expect(body).toContain('Boundary:')

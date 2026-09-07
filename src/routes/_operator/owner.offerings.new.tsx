@@ -5,7 +5,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 
 import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
 import { AeSupplySourceNativeStart } from '@/components/ae/supply/AeSupplySourceNativeStart'
-import { readOwnerOperationsIdentityDetailServer } from '@/components/ae/offerings/owner-operations.functions'
+import { readProviderWorkspaceIdentityDetailServer } from '@/components/ae/offerings/provider-workspace.functions'
 import {
   filterOwnerSupplyAuthorityOptions,
   previewOwnerSupplySourceServer,
@@ -27,7 +27,7 @@ export const Route = createFileRoute('/_operator/owner/offerings/new')({
   }),
   loaderDeps: ({ search }) => ({ connectionRef: search.connection, environment: search.environment, draftRef: search.draft }),
   loader: async ({ deps }) => {
-    const identity = await readOwnerOperationsIdentityDetailServer()
+    const identity = await readProviderWorkspaceIdentityDetailServer()
     let sourceUnavailable = false
     let connections: Awaited<ReturnType<typeof readOwnerProviderConnectionsServer>> = []
     if (identity.kind === 'available') {
@@ -71,8 +71,8 @@ function NewOwnerOfferingRoute() {
   const publish = useReverification(publishRequest)
 
   return (
-    <AeOperatorShell operatorRole="owner" title="Add service" description="Connect the interface you already operate. AE discovers the Operations and validates the one you submit." currentPath="/owner/offerings/new" breadcrumbs={[{ label: 'Operations', href: '/owner/offerings' }, { label: 'Add service' }]}>
-      {identity.kind !== 'available' ? <Alert variant="destructive"><AlertTitle>Provider workspace unavailable</AlertTitle><AlertDescription>AE could not confirm the current Business. Return to Operations and try again.</AlertDescription></Alert> : sourceUnavailable ? (
+    <AeOperatorShell operatorRole="owner" title="Add service" description="Connect the interface you already operate. AE discovers the Tools and validates the one you submit." currentPath="/owner/offerings/new" breadcrumbs={[{ label: 'Tools', href: '/owner/offerings' }, { label: 'Add service' }]}>
+      {identity.kind !== 'available' ? <Alert variant="destructive"><AlertTitle>Provider workspace unavailable</AlertTitle><AlertDescription>AE could not confirm the current Business. Return to Tools and try again.</AlertDescription></Alert> : sourceUnavailable ? (
         <Alert variant="destructive"><AlertTitle>Saved source unavailable</AlertTitle><AlertDescription>AE could not read the saved source or current connections. Reload before starting or submitting another connection.</AlertDescription></Alert>
       ) : (<>
         {resumeRequested && resume.kind !== 'available' ? (

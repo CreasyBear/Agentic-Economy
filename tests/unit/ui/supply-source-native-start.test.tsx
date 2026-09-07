@@ -36,7 +36,7 @@ describe('source-native Provider start', () => {
         blockedCapabilities: ['supply.publish'],
         cta: '/owner/supply/connections/new?attempt=pca_http',
         ctaLabel: 'Connect service',
-        description: 'Enter the service credential securely, then AE will return to this Operation.',
+        description: 'Enter the service credential securely, then AE will return to this Tool.',
         iconUrl: null,
         status: 'required',
         title: 'Connect service',
@@ -121,13 +121,13 @@ describe('source-native Provider start', () => {
     expect((screen.getByLabelText('OpenAPI URL') as HTMLInputElement).value).toBe('https://provider.example/openapi.yaml')
     expect(screen.getByLabelText('Production').getAttribute('aria-checked')).toBe('true')
     expect(screen.getByRole('radio', { name: /Reference lookup/i }).getAttribute('aria-checked')).toBe('true')
-    expect((screen.getByLabelText('Operation name') as HTMLInputElement).value).toBe('Reference lookup')
+    expect((screen.getByLabelText('Tool name') as HTMLInputElement).value).toBe('Reference lookup')
     expect((screen.getByLabelText('Description') as HTMLTextAreaElement).value).toBe('Looks up one public reference.')
     expect(onPreview).not.toHaveBeenCalled()
     expect(onSelectCandidate).not.toHaveBeenCalled()
   })
 
-  it('discovers a native source and submits the selected Operation without protocol reconstruction fields', async () => {
+  it('discovers a native source and submits the selected Tool without protocol reconstruction fields', async () => {
     const onPreview = vi.fn().mockResolvedValue({
       kind: 'ready',
       sourceDigest: `sha256:${'b'.repeat(64)}`,
@@ -144,7 +144,7 @@ describe('source-native Provider start', () => {
       kind: 'submitted',
       publicationRef: 'publication:lookup',
       publicationRevision: 1,
-      operationRef: 'operation:lookup',
+      toolRef: 'tool:lookup',
       state: 'Submitted',
     })
     const onSelectCandidate = vi.fn().mockResolvedValue({ kind: 'saved' })
@@ -167,7 +167,7 @@ describe('source-native Provider start', () => {
     fireEvent.change(screen.getByLabelText('OpenAPI URL'), {
       target: { value: 'https://provider.example/openapi.yaml' },
     })
-    fireEvent.click(screen.getByRole('button', { name: 'Find Operations' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Find Tools' }))
     await screen.findByText('Reference lookup')
     expect(onPreview).toHaveBeenCalledWith(
       {
@@ -237,7 +237,7 @@ describe('source-native Provider start', () => {
             blockedCapabilities: ['supply.publish'],
             cta: '/owner/supply/connections/new?attempt=pca_one',
             ctaLabel: 'Connect server',
-            description: 'Sign in to the MCP server, then AE will continue finding Operations.',
+            description: 'Sign in to the MCP server, then AE will continue finding Tools.',
             iconUrl: null,
             status: 'required',
             title: 'Connect MCP server',
@@ -249,14 +249,14 @@ describe('source-native Provider start', () => {
       />,
     )
 
-    fireEvent.click(screen.getByRole('button', { name: 'Find Operations' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Find Tools' }))
 
     const action = await screen.findByRole('link', { name: 'Connect server' })
     expect(action.getAttribute('href')).toBe('/owner/supply/connections/new?attempt=pca_one')
     expect(screen.queryByText(/could not inspect/i)).toBeNull()
   })
 
-  it('requires one exact Registry remote before finding Operations', async () => {
+  it('requires one exact Registry remote before finding Tools', async () => {
     const remoteRef = `sha256:${'d'.repeat(64)}`
     const onPreview = vi.fn()
       .mockResolvedValueOnce({
@@ -306,7 +306,7 @@ describe('source-native Provider start', () => {
       />,
     )
 
-    fireEvent.click(screen.getByRole('button', { name: 'Find Operations' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Find Tools' }))
 
     expect(await screen.findByText('Select MCP server')).toBeTruthy()
     expect(onPreview).toHaveBeenNthCalledWith(1, {

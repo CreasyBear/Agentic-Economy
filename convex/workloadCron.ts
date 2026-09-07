@@ -246,11 +246,11 @@ export const reconcile = internalQuery({
 async function attributeInvocationResourceAccount(
   ctx: MutationCtx,
   current: WorkloadCronSnapshot,
-  invocationRef: string,
+  callRef: string,
 ): Promise<void> {
   const invocation = await ctx.db
-    .query('capabilityOperationInvocations')
-    .withIndex('by_invocationRef', (query) => query.eq('invocationRef', invocationRef))
+    .query('capabilityCalls')
+    .withIndex('by_callRef', (query) => query.eq('callRef', callRef))
     .unique()
   if (invocation === null) throw new WorkloadCronBoundaryError('workload_resource_authority_invalid')
   const grant = await ctx.db
@@ -266,7 +266,7 @@ async function attributeInvocationResourceAccount(
   if (invocation.principalId !== grant.subjectPrincipalRef
     || invocation.ownerId !== grant.accountRef
     || invocation.grantExpiresAt !== grant.expiresAt
-    || !grant.resourceRefs.includes(invocation.operationRef)) {
+    || !grant.resourceRefs.includes(invocation.toolRef)) {
     throw new WorkloadCronBoundaryError('workload_resource_authority_invalid')
   }
   try {
@@ -286,7 +286,7 @@ async function attributeInvocationResourceAccount(
         idempotencyRef: `cron-admit:${current.admittedAt}:${canonicalGrantRef}:${invocation.grantGeneration}`,
       },
       requiredScopes: grant.scopes,
-      resourceRefs: [invocation.operationRef],
+      resourceRefs: [invocation.toolRef],
       budgetAmount: 0,
     })
     const consequenceNow = Date.now()
@@ -372,14 +372,14 @@ export async function dispatchWorkloadCronConsequenceHandler(
     await attributeInvocationResourceAccount(ctx, current, args.resourceInvocationRef)
   }
   switch (args.operation) {
-    case 'capabilityOperationInvocations:cancelBeforeClaim':
-      return await ctx.runMutation(internal.capabilityOperationInvocations.cancelBeforeClaim, args.payload as never)
-    case 'capabilityOperationInvocations:claimAutomaticReconciliationCandidate':
-      return await ctx.runMutation(internal.capabilityOperationInvocations.claimAutomaticReconciliationCandidate, args.payload as never)
-    case 'capabilityOperationInvocations:finishAutomaticReconciliation':
-      return await ctx.runMutation(internal.capabilityOperationInvocations.finishAutomaticReconciliation, args.payload as never)
-    case 'capabilityOperationX402AuthorizationExpiry:queueExpiredX402Authorization':
-      return await ctx.runMutation(internal.capabilityOperationX402AuthorizationExpiry.queueExpiredX402Authorization, args.payload as never)
+    case 'capabilityCalls:cancelBeforeClaim':
+      return await ctx.runMutation(internal.capabilityCalls.cancelBeforeClaim, args.payload as never)
+    case 'capabilityCalls:claimAutomaticReconciliationCandidate':
+      return await ctx.runMutation(internal.capabilityCalls.claimAutomaticReconciliationCandidate, args.payload as never)
+    case 'capabilityCalls:finishAutomaticReconciliation':
+      return await ctx.runMutation(internal.capabilityCalls.finishAutomaticReconciliation, args.payload as never)
+    case 'capabilityCallX402AuthorizationExpiry:queueExpiredX402Authorization':
+      return await ctx.runMutation(internal.capabilityCallX402AuthorizationExpiry.queueExpiredX402Authorization, args.payload as never)
     case 'capabilitySupply:recordCapabilityProbeResult':
       return await ctx.runMutation(internal.capabilitySupply.recordCapabilityProbeResult, args.payload as never)
     case 'facilitatorDiscovery:reconcile':
@@ -440,7 +440,7 @@ export async function reconcileDueFacilitatorInvocationsHandler(ctx: WorkloadCro
   return await runAdmittedAction(
     ctx,
     'reconcile due facilitator invocations',
-    internal.capabilityOperationInvocationWorker.reconcileScheduled,
+    internal.capabilityCallWorker.reconcileScheduled,
     {},
   )
 }

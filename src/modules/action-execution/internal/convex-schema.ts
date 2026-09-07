@@ -83,19 +83,19 @@ export const attemptTransitionValue = v.object({
  * reconstruct which authority was consumed.
  */
 export const acceptedAuthorityValue = v.union(
-  v.object({ kind: v.literal('approve_each'), authorityRef: v.string() }),
+  v.object({ kind: v.literal('approval_required'), authorityRef: v.string() }),
   v.object({
-    kind: v.literal('standing_mandate_use'),
-    mandateRef: v.string(),
-    mandateVersion: v.number(),
-    mandateGeneration: v.number(),
+    kind: v.literal('spending_policy_use'),
+    spendingPolicyRef: v.string(),
+    spendingPolicyVersion: v.number(),
+    spendingPolicyGeneration: v.number(),
     authorityUseRef: v.string(),
     grantEvidenceRef: v.string(),
   }),
   v.object({
-    kind: v.literal('customer_request_mandate_use'),
-    mandateRef: v.string(),
-    mandateDigest: v.string(),
+    kind: v.literal('customer_request_authorization_use'),
+    requestAuthorizationRef: v.string(),
+    requestAuthorizationDigest: v.string(),
     requestRevision: v.number(),
     routeGeneration: v.number(),
     authorization: v.union(
@@ -105,9 +105,9 @@ export const acceptedAuthorityValue = v.union(
         authorizationEvidenceDigest: v.string(),
       }),
       v.object({
-        kind: v.literal('standing_low_risk'),
-        standingPolicyRef: v.string(),
-        standingPolicyDigest: v.string(),
+        kind: v.literal('spending_policy_low_risk'),
+        spendingPolicyRef: v.string(),
+        spendingPolicyDigest: v.string(),
         authorityUseRef: v.string(),
       }),
     ),
@@ -118,7 +118,7 @@ export const acceptedAuthorityValue = v.union(
     kind: v.literal('public_capability_use'),
     publicationRef: v.string(),
     publicationRevision: v.number(),
-    operationRef: v.string(),
+    toolRef: v.string(),
     bindingId: v.string(),
     bindingRegistrationHash: v.string(),
   }),

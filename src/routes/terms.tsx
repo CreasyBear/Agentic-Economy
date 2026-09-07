@@ -18,7 +18,7 @@ export const Route = createFileRoute('/terms')({
   head: () => buildPublicPageHead({
     path: '/terms',
     title: 'Terms | Agentic Economy',
-    description: 'Plain-language terms for finding, comparing, paying for, and calling Agentic Economy Operations.',
+    description: 'Plain-language terms for finding, comparing, paying for, and calling Agentic Economy Tools.',
   }),
   component: TermsRoute,
 })
@@ -26,7 +26,7 @@ export const Route = createFileRoute('/terms')({
 const canDoItems = [
   {
     icon: SearchIcon,
-    title: 'Find an Operation',
+    title: 'Find a Tool',
     body: 'Search the catalogue by capability, category, supplier, or task.',
   },
   {
@@ -44,7 +44,7 @@ const canDoItems = [
 const termsItems = [
   {
     icon: StoreIcon,
-    title: 'The exact Operation sets the terms',
+    title: 'The exact Tool sets the terms',
     body: 'Its current contract, supplier, price, readiness, inputs, and access requirements govern the call.',
   },
   {
@@ -55,7 +55,7 @@ const termsItems = [
   {
     icon: RefreshCcwIcon,
     title: 'Replay cannot create a second call or charge',
-    body: 'A repeated idempotent request returns the recorded invocation outcome. Uncertain releases follow the recovery and reconciliation rules shown on the Operation.',
+    body: 'A repeated idempotent request returns the recorded invocation outcome. Uncertain releases follow the recovery and reconciliation rules shown on the Tool.',
   },
 ] as const
 
@@ -65,7 +65,7 @@ function TermsRoute() {
       kind="document"
       eyebrow="Legal"
       title="Terms"
-      description="Use Agentic Economy to find, inspect, pay for, and call published Operations."
+      description="Use Agentic Economy to find, inspect, pay for, and call published Tools."
     >
       <div className="ae-rail grid max-w-prose gap-page pb-page">
         <section className="grid gap-related">
@@ -87,8 +87,8 @@ function TermsRoute() {
         </section>
 
         <section className="flex flex-wrap gap-related border-t border-border pt-section">
-          <Button asChild variant="default" className="min-h-touch"><Link to="/market" search={{ window: '30d' }} hash="operations">Browse catalog</Link></Button>
-          <Button asChild variant="secondary" className="min-h-touch"><Link to="/for-providers">Publish an Operation <ArrowRightIcon aria-hidden="true" /></Link></Button>
+          <Button asChild variant="default" className="min-h-touch"><Link to="/market" search={{ window: '30d' }} hash="tools">Browse catalog</Link></Button>
+          <Button asChild variant="secondary" className="min-h-touch"><Link to="/for-providers">Publish a Tool <ArrowRightIcon aria-hidden="true" /></Link></Button>
         </section>
       </div>
     </AePublicPage>

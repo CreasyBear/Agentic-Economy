@@ -46,7 +46,7 @@ import { clerkConsequenceProofValue } from './lib/consequenceProof'
 import { admitAgentPublicationConsequence } from './lib/agentPublicationConsequence'
 import { admitInteractiveOwnerConsequence } from './lib/ownerConsequence'
 import { providerRouteabilityIsFrozen } from './lib/providerOffboardingFreeze'
-import { upsertSupplierOperationIdentity } from './capabilitySupplierOperationProjection'
+import { upsertProviderToolIdentity } from './capabilityProviderToolProjection'
 import {
   authorityValue,
   cancellationValue,
@@ -79,7 +79,7 @@ export const verifyCapabilitySourceAuthorityResultValue = v.union(
     kind: v.union(v.literal('verified'), v.literal('replayed')),
     publicationRef: v.string(),
     revision: v.number(),
-    operationRef: v.string(),
+    toolRef: v.string(),
     sourceAuthorityState: v.literal('verified'),
   }),
   v.object({
@@ -137,7 +137,7 @@ export async function verifyCapabilitySourceAuthorityHandler(
       kind: 'replayed' as const,
       publicationRef: publication.publicationRef,
       revision: publication.revision,
-      operationRef: publication.operationRef,
+      toolRef: publication.toolRef,
       sourceAuthorityState: 'verified' as const,
     }
   }
@@ -176,7 +176,7 @@ export async function verifyCapabilitySourceAuthorityHandler(
     kind: 'verified' as const,
     publicationRef: publication.publicationRef,
     revision: publication.revision,
-    operationRef: publication.operationRef,
+    toolRef: publication.toolRef,
     sourceAuthorityState: 'verified' as const,
   }
 }
@@ -256,7 +256,7 @@ const preparedPublicationRefusalValue = v.union(
   v.literal('source_too_deep'),
   v.literal('source_version_unsupported'),
   v.literal('selector_invalid'),
-  v.literal('operation_not_found'),
+  v.literal('tool_not_found'),
   v.literal('schema_missing'),
   v.literal('schema_profile_unsupported'),
   v.literal('openapi_query_parameter_definition_unsupported'),
@@ -308,7 +308,7 @@ export const preparedPublicationResultValue = v.union(
     operationId: v.optional(v.string()),
     publicationRef: v.string(),
     publicationRevision: v.number(),
-    operationRef: v.string(),
+    toolRef: v.string(),
     contractRef: contractRefValue,
     offeringId: v.string(),
     bindingId: v.string(),
@@ -353,7 +353,7 @@ function convexPreparedPublicationResult(
       : { operationId: result.operationId }),
     publicationRef: result.publicationRef,
     publicationRevision: result.publicationRevision,
-    operationRef: result.operationRef,
+    toolRef: result.toolRef,
     contractRef: result.contractRef,
     offeringId: result.offeringId,
     bindingId: result.bindingId,
@@ -416,7 +416,7 @@ async function recordSupplyAdmissionCase(
     operationKey: args.operationKey,
     correlationId: args.correlationId,
     businessId: String(args.businessId),
-    operationRef: result.operationRef,
+    toolRef: result.toolRef,
     publicationRef: result.publicationRef,
     publicationRevision: result.publicationRevision,
     sourceDigest: result.sourceDigest,
@@ -430,8 +430,8 @@ async function recordSupplyAdmissionCase(
     owningAccountRef: business.owningAccountRef,
     businessId: args.businessId,
     providerRef,
-    operationRef: result.operationRef,
-    operationRevision: result.publicationRevision,
+    toolRef: result.toolRef,
+    toolVersion: result.publicationRevision,
     publicationRef: result.publicationRef,
     publicationRevision: result.publicationRevision,
     sourceKind: result.sourceKind,
@@ -461,10 +461,10 @@ async function recordSupplyAdmissionCase(
   const catalogOrigin = args.prepared.offering.origin?.kind === 'catalog_offering'
     ? args.prepared.offering.origin
     : undefined
-  await upsertSupplierOperationIdentity(ctx, {
+  await upsertProviderToolIdentity(ctx, {
     businessId: args.businessId,
     providerRef,
-    operationRef: result.operationRef,
+    toolRef: result.toolRef,
     offeringRef: catalogOrigin?.offeringRef ?? result.offeringId,
     offeringRevision: catalogOrigin?.offeringRevision ?? result.publicationRevision,
     publicationRef: result.publicationRef,
@@ -495,12 +495,12 @@ export function publicationPorts(ctx: MutationCtx) {
   const publicationCommandPorts = capabilitySupplyPublicationPorts(ctx, {
     registerOffering: (registration, now) =>
       registerCapabilityOffering(ctx.db, registration, now),
-    registerBinding: (registration, now, expectedOperationRef) =>
+    registerBinding: (registration, now, expectedToolRef) =>
       registerCapabilityTransportBinding(
         ctx.db,
         registration,
         now,
-        expectedOperationRef,
+        expectedToolRef,
       ),
     setEligibility: (eligibility, now) =>
       setCapabilitySupplyEligibility(ctx.db, eligibility, now),
@@ -648,7 +648,7 @@ export async function publishPreparedCapabilityHandler(
         `offering:${args.offeringRef}`,
         `publication:${args.prepared.offering.offeringId}`,
       ],
-      consequenceSummary: 'Publish this exact Operation revision to the market.',
+      consequenceSummary: 'Publish this exact Tool revision to the market.',
       statusReadbackRef: `owner/supply/${args.offeringRef}`,
       correlationRef: args.correlationId,
       idempotencyRef: args.operationKey,
@@ -674,7 +674,7 @@ export async function publishPreparedCapabilityHandler(
         `publication:${args.prepared.offering.offeringId}`,
       ],
       budgetAmount: 0,
-      consequenceSummary: 'Publish this exact Operation revision to the market.',
+      consequenceSummary: 'Publish this exact Tool revision to the market.',
       statusReadbackRef: `owner/supply/${args.offeringRef}`,
       correlationRef: args.correlationId,
       idempotencyRef: args.operationKey,

@@ -188,7 +188,7 @@ export type ActionEffectMetadata = Readonly<{
   recipientKind: 'none' | 'business' | 'customer' | 'provider_system'
   dataClasses: readonly string[]
   spendExposure: 'none' | 'bounded' | 'unbounded'
-  approval: 'none' | 'approve_each' | 'mandate_eligible'
+  approval: 'none' | 'approval_required' | 'policy_eligible'
 }>
 
 export type ActionExecutionContract = Readonly<{

@@ -24,7 +24,7 @@ describe('discovery files', () => {
     const sitemap = buildSitemapXml(state, { canonicalBaseUrl: 'http://localhost:3000', now: 0 })
     const serialized = `${llms.body}\n${sitemap.body}`
     expect(llms.body).not.toContain('/api/v1/registry')
-    expect(llms.body).toContain('/api/v1/market-operations/search')
+    expect(llms.body).toContain('/api/v1/market-tools/search')
 
     expect(llms.body).not.toContain('slug=fremantle-heat-pump-repairs')
     expect(llms.body).toContain('Canonical catalogue:')
@@ -36,7 +36,7 @@ describe('discovery files', () => {
     )
   })
 
-  it('builds llms.txt from canonical Operation links without embedding provider records', () => {
+  it('builds llms.txt from canonical Tool links without embedding provider records', () => {
     const state = createFixtureDiscoverySourceState()
     const revision = state.revisions.at(0)
 
@@ -62,11 +62,11 @@ describe('discovery files', () => {
     expect(result.body).not.toMatch(/route\.ae\.example|\.well-known\/ae-routing|\/v1\/route/)
     expect(result.body).toContain('- MCP: https://ae.example/mcp')
     expect(result.body).toContain('1. Search by outcome: `ae search')
-    expect(result.body.indexOf('1. Search by outcome:')).toBeLessThan(result.body.indexOf('3. Call `operation.inspect`'))
-    expect(result.body).toContain('POST https://ae.example/api/v1/market-operations/search')
-    expect(result.body).toContain('POST https://ae.example/api/v1/market-operations/describe')
-    expect(result.body).toContain('Invoke only with the returned Commitment')
-    expect(result.body).toContain('ae status "$AE_INVOCATION_REF"')
+    expect(result.body.indexOf('1. Search by outcome:')).toBeLessThan(result.body.indexOf('3. Call `tool.quote`'))
+    expect(result.body).toContain('POST https://ae.example/api/v1/market-tools/search')
+    expect(result.body).toContain('POST https://ae.example/api/v1/market-tools/describe')
+    expect(result.body).toContain('Call only with the returned Quote')
+    expect(result.body).toContain('ae status "$AE_CALL_REF"')
     expect(result.body).toContain('Use cancel or recover only when that receipt offers the action.')
     expect(result.body).toContain('Public: list, search, describe, and compare.')
     expect(result.body).toContain('The low-level write API requires `idempotencyKey`; the CLI creates and retains it automatically.')
@@ -80,8 +80,8 @@ describe('discovery files', () => {
       expect.arrayContaining([
         'https://ae.example/',
         'https://ae.example/demo-listed-provider',
-        'https://ae.example/api/v1/market-operations/search',
-        'https://ae.example/api/v1/market-operations/describe',
+        'https://ae.example/api/v1/market-tools/search',
+        'https://ae.example/api/v1/market-tools/describe',
       ])
     )
     expect(result.urls).not.toEqual(expect.arrayContaining([

@@ -1,6 +1,6 @@
 import type { CapabilityBindingRow } from '../binding'
 import type { CapabilityOfferingOrigin } from '../../public'
-import type { PublicOperationRef } from '../../public'
+import type { PublicToolRef } from '../../public'
 import type { ProviderConnection } from '../../provider-connection'
 import type { CapabilityContractRef, CapabilityOfferingRow } from '../offering'
 import type { CapabilityPublicationLifecycleRow } from '../publication'
@@ -15,7 +15,7 @@ export type EligiblePublishedBusiness = Readonly<{
 export type EligiblePublicationRow = CapabilityPublicationLifecycleRow & Readonly<{
   publicationRef: string
   revision: number
-  operationRef: PublicOperationRef
+  toolRef: PublicToolRef
   businessId: string
   networkId: string
   capabilityId: string

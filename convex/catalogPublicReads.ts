@@ -206,7 +206,7 @@ export const catalogOwnerSupplyResult = v.union(
   }),
 )
 
-export const currentOwnerSupplierIdentityResult = v.union(
+export const currentOwnerProviderIdentityResult = v.union(
   v.object({ kind: v.literal('error'), code: v.literal('unauthenticated') }),
   v.object({ kind: v.literal('not_found') }),
   v.object({ kind: v.literal('conflict'), code: v.literal('multiple_businesses') }),
@@ -318,8 +318,8 @@ export async function getCurrentOwnerOfferingSupplyHandler(ctx: QueryCtx) {
   }
 }
 
-/** Minimal authenticated owner scope used by narrow Operations projections. */
-export async function getCurrentOwnerSupplierIdentityHandler(ctx: QueryCtx) {
+/** Minimal authenticated owner scope used by narrow Provider projections. */
+export async function getCurrentOwnerProviderIdentityHandler(ctx: QueryCtx) {
   const actor = await resolveBusinessActor(ctx)
   if (actor.kind !== 'authenticated_owner') return { kind: 'error' as const, code: 'unauthenticated' as const }
   const businesses = await ctx.db

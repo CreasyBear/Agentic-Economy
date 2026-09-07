@@ -21,16 +21,16 @@ import type { PublicOfferingSupplyProjection } from '@/modules/catalog/public'
 
 afterEach(cleanup)
 
-describe('Supplier Operation directory', () => {
-  it('starts the source-native Add Operation journey', () => {
+describe('Provider Tool directory', () => {
+  it('starts the source-native Add Tool journey', () => {
     renderAt(<AeOwnerOfferingsList offerings={[]} />, '/owner/offerings')
 
-    expect(screen.getByRole('heading', { name: 'No Operations yet' })).toBeTruthy()
-    expect(screen.getByText('Connect a source and choose the exact Operation AE should validate.')).toBeTruthy()
-    expect(screen.getByRole('link', { name: 'Add Operation' }).getAttribute('href')).toBe('/owner/offerings/new')
+    expect(screen.getByRole('heading', { name: 'No Tools yet' })).toBeTruthy()
+    expect(screen.getByText('Connect a source and choose the exact Tool AE should validate.')).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Add Tool' }).getAttribute('href')).toBe('/owner/offerings/new')
   })
 
-  it('opens the authoritative Supplier Operation readback', () => {
+  it('opens the authoritative Provider Tool readback', () => {
     const projection = projectionFixture()
     renderAt(
       <AeOwnerOfferingsList
@@ -47,7 +47,7 @@ describe('Supplier Operation directory', () => {
       .toBe('/owner/supply/offering%3Ablockchain-query')
   })
 
-  it('orders compact rows as Operation, lifecycle, blocker, and one continuation', () => {
+  it('orders compact rows as Tool, lifecycle, blocker, and one continuation', () => {
     const offering = {
       ...toOwnerOfferingSummary(projectionFixture()),
       lifecycleLabel: 'Published',
@@ -58,7 +58,7 @@ describe('Supplier Operation directory', () => {
 
     renderAt(<AeOwnerOfferingsList offerings={[offering]} />, '/owner/offerings')
 
-    const compactList = screen.getByTestId('owner-operations-compact-list')
+    const compactList = screen.getByTestId('provider-workspace-compact-list')
     const row = within(compactList).getByRole('listitem')
     expect(Array.from(row.children).map((child) => child.textContent)).toEqual([
       'Blockchain data queryPublished / Available',

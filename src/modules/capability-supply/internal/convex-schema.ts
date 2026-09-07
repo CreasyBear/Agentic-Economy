@@ -100,27 +100,27 @@ export const connectionAuthoritySnapshotValue = v.object({
   adapterId: v.string(),
   authorityGeneration: v.number(),
   authorityDigest: v.string(),
-  operationRef: v.string(),
+  toolRef: v.string(),
   grantedScopes: v.array(v.string()),
   grantedResources: v.array(v.string()),
 })
 const connectionAuthority = connectionAuthoritySnapshotValue
-const registeredOperationMappingBaseFields = {
+const registeredToolMappingBaseFields = {
   authority: v.literal('registered_contract_semantics'),
   sourceContractRef: v.object(contractRefFields),
   targetContractRef: v.object(contractRefFields),
   sourceSchemaIdentity: v.string(),
   targetSchemaIdentity: v.string(),
 }
-const registeredOperationMappingMaterialValue = v.union(
+const registeredToolMappingMaterialValue = v.union(
   v.object({
-    ...registeredOperationMappingBaseFields,
+    ...registeredToolMappingBaseFields,
     kind: v.union(v.literal('identity'), v.literal('field')),
     sourceOutputPointer: v.string(),
     targetInputPointer: v.string(),
   }),
   v.object({
-    ...registeredOperationMappingBaseFields,
+    ...registeredToolMappingBaseFields,
     kind: v.literal('array_project'),
     sourceArrayPointer: v.string(),
     sourceItemPointer: v.string(),
@@ -129,7 +129,7 @@ const registeredOperationMappingMaterialValue = v.union(
     maxItems: v.number(),
   }),
   v.object({
-    ...registeredOperationMappingBaseFields,
+    ...registeredToolMappingBaseFields,
     kind: v.literal('registered_transform'),
     transformRef: v.string(),
     transformVersion: v.number(),
@@ -140,16 +140,16 @@ const registeredOperationMappingMaterialValue = v.union(
   }),
 )
 
-export const registeredOperationMappingValue = v.union(
+export const registeredToolMappingValue = v.union(
   v.object({
-    ...registeredOperationMappingBaseFields,
+    ...registeredToolMappingBaseFields,
     mappingRef: v.string(),
     kind: v.union(v.literal('identity'), v.literal('field')),
     sourceOutputPointer: v.string(),
     targetInputPointer: v.string(),
   }),
   v.object({
-    ...registeredOperationMappingBaseFields,
+    ...registeredToolMappingBaseFields,
     mappingRef: v.string(),
     kind: v.literal('array_project'),
     sourceArrayPointer: v.string(),
@@ -159,7 +159,7 @@ export const registeredOperationMappingValue = v.union(
     maxItems: v.number(),
   }),
   v.object({
-    ...registeredOperationMappingBaseFields,
+    ...registeredToolMappingBaseFields,
     mappingRef: v.string(),
     kind: v.literal('registered_transform'),
     transformRef: v.string(),
@@ -171,12 +171,12 @@ export const registeredOperationMappingValue = v.union(
   }),
 )
 
-export { registeredOperationMappingMaterialValue }
+export { registeredToolMappingMaterialValue }
 
 export const capabilitySupplyTables = {
   capabilityPublications: defineTable({
     publicationRef: v.string(),
-    operationRef: v.string(),
+    toolRef: v.string(),
     revision: v.number(),
     businessId: v.id('businesses'),
     networkId: v.string(),
@@ -243,7 +243,7 @@ export const capabilitySupplyTables = {
     withdrawnAt: v.optional(v.number()),
   })
     .index('by_publicationRef_and_revision', ['publicationRef', 'revision'])
-    .index('by_operationRef_and_disposition', ['operationRef', 'disposition'])
+    .index('by_toolRef_and_disposition', ['toolRef', 'disposition'])
     .index('by_networkId_and_disposition', ['networkId', 'disposition'])
     .index('by_businessId_and_disposition', ['businessId', 'disposition'])
     .index('by_disposition_and_readinessValidUntil', [
@@ -260,8 +260,8 @@ export const capabilitySupplyTables = {
     owningAccountRef: v.string(),
     businessId: v.id('businesses'),
     providerRef: v.string(),
-    operationRef: v.string(),
-    operationRevision: v.number(),
+    toolRef: v.string(),
+    toolVersion: v.number(),
     publicationRef: v.string(),
     publicationRevision: v.number(),
     sourceKind: v.union(
@@ -300,14 +300,14 @@ export const capabilitySupplyTables = {
   })
     .index('by_caseRef', ['caseRef'])
     .index('by_publicationRef_and_revision', ['publicationRef', 'publicationRevision'])
-    .index('by_operationRef_and_revision', ['operationRef', 'operationRevision'])
+    .index('by_toolRef_and_version', ['toolRef', 'toolVersion'])
     .index('by_businessId_and_submittedAt', ['businessId', 'submittedAt'])
     .index('by_state_and_updatedAt', ['state', 'updatedAt']),
 
-  capabilitySupplierOperationProjections: defineTable({
+  capabilityProviderToolProjections: defineTable({
     businessId: v.id('businesses'),
     providerRef: v.string(),
-    operationRef: v.string(),
+    toolRef: v.string(),
     offeringRef: v.string(),
     offeringRevision: v.number(),
     publicationRef: v.optional(v.string()),
@@ -317,7 +317,7 @@ export const capabilitySupplyTables = {
     updatedAt: v.number(),
   })
     .index('by_businessId_and_updatedAt', ['businessId', 'updatedAt'])
-    .index('by_businessId_and_operationRef', ['businessId', 'operationRef'])
+    .index('by_businessId_and_toolRef', ['businessId', 'toolRef'])
     .index('by_businessId_and_offeringRef', ['businessId', 'offeringRef']),
 
   capabilityProviderOffboardingCases: defineTable({
@@ -345,7 +345,7 @@ export const capabilitySupplyTables = {
       currentOwnershipRef: v.string(),
       resolvedAt: v.number(),
     }),
-    operationTargetCount: v.number(),
+    toolTargetCount: v.number(),
     offeringTargetCount: v.number(),
     connectionTargetCount: v.number(),
     targetSnapshotDigest: v.string(),
@@ -385,7 +385,7 @@ export const capabilitySupplyTables = {
   capabilityProviderOffboardingTargets: defineTable({
     caseRef: v.string(),
     businessId: v.id('businesses'),
-    kind: v.union(v.literal('operation'), v.literal('offering'), v.literal('connection')),
+    kind: v.union(v.literal('tool'), v.literal('offering'), v.literal('connection')),
     targetRef: v.string(),
     targetRevision: v.number(),
     authorityDigest: v.string(),
@@ -621,8 +621,8 @@ export const capabilitySupplyTables = {
     actorPrincipalRef: v.string(),
     grantRef: v.string(),
     grantGeneration: v.number(),
-    invocationRef: v.string(),
-    operationRef: v.string(),
+    callRef: v.string(),
+    toolRef: v.string(),
     connectionRef: v.string(),
     providerRef: v.string(),
     providerAccountRef: v.string(),
@@ -653,7 +653,7 @@ export const capabilitySupplyTables = {
   })
     .index('by_leaseRef', ['leaseRef'])
     .index('by_connectionRef_and_state', ['connectionRef', 'state'])
-    .index('by_invocationRef', ['invocationRef'])
+    .index('by_callRef', ['callRef'])
     .index('by_connectionRef_and_authorityGeneration', [
       'connectionRef',
       'authorityGeneration',
@@ -688,10 +688,10 @@ export const capabilitySupplyTables = {
       'connectionRef',
       'authorityGeneration',
     ]),
-  registeredOperationMappings: defineTable({
+  registeredToolMappings: defineTable({
     networkId: v.string(),
     mappingRef: v.string(),
-    material: registeredOperationMappingMaterialValue,
+    material: registeredToolMappingMaterialValue,
     publisherRef: v.string(),
     authorityMode: v.union(
       v.literal('provider_owned'),

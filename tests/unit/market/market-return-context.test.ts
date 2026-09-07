@@ -17,7 +17,7 @@ describe('market return context', () => {
       capability: 'identity.company_search',
       cursor: 'page-2',
       compare: `${first},${second}`,
-    }, 'operations')
+    }, 'tools')
 
     expect(readMarketReturnContext(context)).toBe(context)
     const url = new URL(context, 'https://agentic-economy.example')
@@ -30,7 +30,7 @@ describe('market return context', () => {
       cursor: 'page-2',
       compare: `${first},${second}`,
     })
-    expect(url.hash).toBe('#operations')
+    expect(url.hash).toBe('#tools')
   })
 
   it.each([

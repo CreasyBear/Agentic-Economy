@@ -8,10 +8,10 @@ import type { CapabilityOfferingRow } from '@/modules/capability-supply/internal
 import {
   capabilityBindingEligibilityHash,
   capabilityBindingRegistrationHash,
-  capabilityOperationId,
+  capabilityToolId,
   capabilityOfferingEligibilityHash,
   capabilityOfferingRegistrationHash,
-  createPublicOperationRef,
+  createPublicToolRef,
   defineCapabilityOfferingRegistration,
   defineCapabilityTransportBindingRegistration,
 } from '@/modules/capability-supply/public'
@@ -107,8 +107,8 @@ const catalogAccessPath: GraphCatalogAccessPath = {
     provenance: 'business_declared',
   },
 }
-const operationRef = createPublicOperationRef({
-  operationId: capabilityOperationId(contract.capabilityId),
+const toolRef = createPublicToolRef({
+  operationId: capabilityToolId(contract.capabilityId),
   publicationRef: developmentEvidenceCandidate.publicationRef,
   publicationRevision: developmentEvidenceCandidate.revision,
   contractRef: contract.ref,
@@ -185,7 +185,7 @@ export function createDevelopmentEvidenceSupplyPorts(): CapabilityGraphPorts {
     registeredAt: developmentEvidenceNowMs - 10_000, updatedAt: developmentEvidenceNowMs - 10_000,
   }
   const publication: GraphPublicationRow = {
-    id: 'mock:publication-row', ...developmentEvidenceCandidate, operationRef, ...contract.ref,
+    id: 'mock:publication-row', ...developmentEvidenceCandidate, toolRef, ...contract.ref,
     sourceKind: 'openapi_http', sourceDigest: canonicalDigest({ fixture: true }),
     pricingConfig, priceDigest,
     disposition: 'current', credentialState: 'ready', healthState: 'healthy',

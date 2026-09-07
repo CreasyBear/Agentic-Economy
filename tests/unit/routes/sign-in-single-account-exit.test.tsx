@@ -74,7 +74,7 @@ describe('sign-in account exit', () => {
 
     render(<Component />)
 
-    expect(screen.getByRole('heading', { name: 'Sign in to manage Operations' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Sign in to manage Tools' })).toBeTruthy()
     expect(screen.getByText(/return to your Provider workspace/)).toBeTruthy()
     expect(screen.getAllByText(/Don’t have an account/)).toHaveLength(1)
     expect(screen.getByRole('link', { name: 'Sign up' }).getAttribute('href')).toBe('/sign-up')

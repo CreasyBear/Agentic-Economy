@@ -20,42 +20,42 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
-import type { OperationCardViewModel } from '@/modules/market/operation-view-model'
+import type { ToolCardViewModel } from '@/modules/market/tool-view-model'
 
-export const AE_COMPARE_MAX_OPERATIONS = 4 as const
+export const AE_COMPARE_MAX_TOOLS = 4 as const
 
 export type AeCompareTrayProps = Readonly<{
-  operations: readonly OperationCardViewModel[]
-  onRemove: (operationRef: string) => void
+  tools: readonly ToolCardViewModel[]
+  onRemove: (toolRef: string) => void
   onClear: () => void
-  onCompare: (operationRefs: readonly string[]) => void
+  onCompare: (toolRefs: readonly string[]) => void
   fallbackFocusRef: RefObject<HTMLElement | null>
 }>
 
 export function AeCompareTray({
-  operations,
+  tools,
   onRemove,
   onClear,
   onCompare,
   fallbackFocusRef,
 }: AeCompareTrayProps) {
   const removeButtonRefs = useRef(new Map<string, HTMLButtonElement>())
-  const present = operations.length > 0
-  const [lastSelectedOperations, setLastSelectedOperations] = useState(
-    () => operations.slice(0, AE_COMPARE_MAX_OPERATIONS),
+  const present = tools.length > 0
+  const [lastSelectedTools, setLastSelectedTools] = useState(
+    () => tools.slice(0, AE_COMPARE_MAX_TOOLS),
   )
   useEffect(() => {
-    if (present) setLastSelectedOperations(operations.slice(0, AE_COMPARE_MAX_OPERATIONS))
-  }, [operations, present])
-  const selectedOperations = present
-    ? operations.slice(0, AE_COMPARE_MAX_OPERATIONS)
-    : lastSelectedOperations
-  const selectedCount = selectedOperations.length
+    if (present) setLastSelectedTools(tools.slice(0, AE_COMPARE_MAX_TOOLS))
+  }, [tools, present])
+  const selectedTools = present
+    ? tools.slice(0, AE_COMPARE_MAX_TOOLS)
+    : lastSelectedTools
+  const selectedCount = selectedTools.length
 
-  const focusAfterUpdate = (operationRef?: string) => {
+  const focusAfterUpdate = (toolRef?: string) => {
     queueMicrotask(() => {
-      if (operationRef !== undefined) {
-        const nextRemoveButton = removeButtonRefs.current.get(operationRef)
+      if (toolRef !== undefined) {
+        const nextRemoveButton = removeButtonRefs.current.get(toolRef)
         if (nextRemoveButton !== undefined) {
           nextRemoveButton.focus()
           return
@@ -65,17 +65,17 @@ export function AeCompareTray({
     })
   }
 
-  const removeOperation = (operationRef: string) => {
-    const removedIndex = selectedOperations.findIndex(
-      (operation) => operation.operationRef === operationRef,
+  const removeTool = (toolRef: string) => {
+    const removedIndex = selectedTools.findIndex(
+      (tool) => tool.toolRef === toolRef,
     )
-    const nextFocusOperation =
-      selectedOperations[removedIndex + 1] ?? selectedOperations[removedIndex - 1]
-    onRemove(operationRef)
-    focusAfterUpdate(nextFocusOperation?.operationRef)
+    const nextFocusTool =
+      selectedTools[removedIndex + 1] ?? selectedTools[removedIndex - 1]
+    onRemove(toolRef)
+    focusAfterUpdate(nextFocusTool?.toolRef)
   }
 
-  const clearOperations = () => {
+  const clearTools = () => {
     onClear()
     focusAfterUpdate()
   }
@@ -84,7 +84,7 @@ export function AeCompareTray({
     <Presence present={present}>
       <aside
         data-state={present ? 'open' : 'closed'}
-        aria-label="Operation comparison"
+        aria-label="Tool comparison"
         className="pointer-events-none fixed inset-x-0 bottom-0 z-30 px-gutter pb-[max(var(--spacing-related),env(safe-area-inset-bottom))] duration-base ease-emphasized data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:slide-out-to-bottom-2 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:slide-in-from-bottom-2 motion-reduce:animate-none motion-reduce:duration-0"
       >
         <Card
@@ -92,15 +92,15 @@ export function AeCompareTray({
         >
         <CardHeader className="gap-intra">
           <div className="flex min-w-0 items-center justify-between gap-related">
-            <CardTitle>Compare Operations</CardTitle>
+            <CardTitle>Compare Tools</CardTitle>
             <Badge
               variant="secondary"
               role="status"
               aria-live="polite"
               aria-atomic="true"
-              aria-label={`${selectedCount.toLocaleString()} of ${AE_COMPARE_MAX_OPERATIONS.toLocaleString()} selected`}
+              aria-label={`${selectedCount.toLocaleString()} of ${AE_COMPARE_MAX_TOOLS.toLocaleString()} selected`}
             >
-              {selectedCount.toLocaleString()} / {AE_COMPARE_MAX_OPERATIONS.toLocaleString()}
+              {selectedCount.toLocaleString()} / {AE_COMPARE_MAX_TOOLS.toLocaleString()}
             </Badge>
           </div>
           <CardDescription>
@@ -109,24 +109,24 @@ export function AeCompareTray({
         </CardHeader>
         <CardContent className="min-w-0">
           <div
-            aria-label="Selected Operations"
+            aria-label="Selected Tools"
             className="flex min-w-0 gap-intra overflow-x-auto overscroll-x-contain pb-1"
           >
-            {selectedOperations.map((operation) => (
-              <Badge key={operation.operationRef} variant="outline" className="shrink-0 ps-3">
-                <span>{operation.title}</span>
-                <span className="text-muted-foreground">{operation.supplierName}</span>
+            {selectedTools.map((tool) => (
+              <Badge key={tool.toolRef} variant="outline" className="shrink-0 ps-3">
+                <span>{tool.title}</span>
+                <span className="text-muted-foreground">{tool.providerName}</span>
                 <Button
                   ref={(node) => {
-                    if (node === null) removeButtonRefs.current.delete(operation.operationRef)
-                    else removeButtonRefs.current.set(operation.operationRef, node)
+                    if (node === null) removeButtonRefs.current.delete(tool.toolRef)
+                    else removeButtonRefs.current.set(tool.toolRef, node)
                   }}
                   type="button"
                   variant="ghost"
                   size="icon-xs"
                   className="-me-1"
-                  aria-label={`Remove ${operation.title} by ${operation.supplierName} from comparison`}
-                  onClick={() => removeOperation(operation.operationRef)}
+                  aria-label={`Remove ${tool.title} by ${tool.providerName} from comparison`}
+                  onClick={() => removeTool(tool.toolRef)}
                 >
                   <XIcon data-icon="inline-end" aria-hidden="true" />
                 </Button>
@@ -136,14 +136,14 @@ export function AeCompareTray({
         </CardContent>
         <Separator />
         <CardFooter className="flex-wrap justify-between gap-intra">
-          <Button type="button" variant="ghost" size="sm" onClick={clearOperations}>
+          <Button type="button" variant="ghost" size="sm" onClick={clearTools}>
             Clear all
           </Button>
           <Button
             type="button"
             size="sm"
             disabled={selectedCount < 2}
-            onClick={() => onCompare(selectedOperations.map((operation) => operation.operationRef))}
+            onClick={() => onCompare(selectedTools.map((tool) => tool.toolRef))}
           >
             Compare {selectedCount.toLocaleString()}
           </Button>
@@ -155,9 +155,9 @@ export function AeCompareTray({
 }
 
 function selectionGuidance(selectedCount: number): string {
-  if (selectedCount === 1) return 'Select one more Operation to compare.'
-  if (selectedCount === AE_COMPARE_MAX_OPERATIONS) {
-    return `Maximum ${AE_COMPARE_MAX_OPERATIONS.toLocaleString()} Operations selected.`
+  if (selectedCount === 1) return 'Select one more Tool to compare.'
+  if (selectedCount === AE_COMPARE_MAX_TOOLS) {
+    return `Maximum ${AE_COMPARE_MAX_TOOLS.toLocaleString()} Tools selected.`
   }
   return 'Compare current price, readiness, data use, and effects.'
 }

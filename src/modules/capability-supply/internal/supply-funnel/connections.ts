@@ -45,10 +45,10 @@ const readOwnerProviderConnectionsQuery = sourceQuery<
   Record<string, never>,
   readonly ProviderConnectionOwnerProjection[]
 >("capabilityProviderConnections:listOwner");
-const authorizeSupplierBusinessQuery = sourceQuery<
+const authorizeProviderBusinessQuery = sourceQuery<
   { businessId: string },
   boolean
->("catalog:authorizeSupplierBusiness");
+>("catalog:authorizeProviderBusiness");
 const connectOwnerX402Mutation = sourceMutation<
   {
     businessId: string;
@@ -181,7 +181,7 @@ export async function connectOwnerX402({
 }): Promise<OwnerProviderConnectionCommandResult> {
   const proof = await requireStrictClerkConsequenceProof(data.commandId);
   try {
-    if (!await callSourceQuery(authorizeSupplierBusinessQuery, { businessId: data.businessId })) {
+    if (!await callSourceQuery(authorizeProviderBusinessQuery, { businessId: data.businessId })) {
       return { kind: "refused", code: "authorization_denied" };
     }
     const inspection = await inspectX402SellerEndpoint({
@@ -260,11 +260,11 @@ export async function inspectOwnerX402({
 }: {
   data: z.infer<typeof inspectOwnerX402InputSchema>;
 }) {
-  if (!await callSourceQuery(authorizeSupplierBusinessQuery, { businessId: data.businessId })) {
+  if (!await callSourceQuery(authorizeProviderBusinessQuery, { businessId: data.businessId })) {
     return {
       kind: "refused" as const,
       reason: "authorization_denied" as const,
-      action: "Sign in as the supplier owner before inspecting this endpoint.",
+      action: "Sign in as the Provider owner before inspecting this endpoint.",
       probe: { observedAt: Date.now() },
     };
   }

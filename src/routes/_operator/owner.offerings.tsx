@@ -1,37 +1,37 @@
 import { createFileRoute, Outlet, useLocation } from '@tanstack/react-router'
 
-import { AeOwnerOperationsWorkspace } from '@/components/ae/offerings/AeOwnerOperationsWorkspace'
+import { AeProviderWorkspace } from '@/components/ae/offerings/AeProviderWorkspace'
 import { AeOwnerOfferingsList } from '@/components/ae/offerings/AeOwnerOfferings'
 import {
-  readOwnerOperationsConnectionsSummaryServer,
-  readOwnerOperationsPageServer,
-  readOwnerOperationsPayoutSummaryServer,
-  readOwnerOperationsPublicStatusServer,
+  readProviderWorkspaceConnectionsSummaryServer,
+  readProviderWorkspacePageServer,
+  readProviderWorkspacePayoutSummaryServer,
+  readProviderWorkspacePublicStatusServer,
   readOwnerProviderOffboardingServer,
-} from '@/components/ae/offerings/owner-operations.functions'
+} from '@/components/ae/offerings/provider-workspace.functions'
 import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
 import { operatorRouteOptions } from '@/lib/operator/route-options'
-import { parseOwnerOperationsCompatibilitySearch } from '@/lib/operator/supply-compatibility'
+import { parseOwnerToolsCompatibilitySearch } from '@/lib/operator/supply-compatibility'
 
 export const Route = createFileRoute('/_operator/owner/offerings')({
   ...operatorRouteOptions,
-  validateSearch: parseOwnerOperationsCompatibilitySearch,
+  validateSearch: parseOwnerToolsCompatibilitySearch,
   loaderDeps: ({ search }) => ({ cursor: search.cursor }),
   pendingComponent: OwnerOfferingsPending,
   loader: async ({ deps }) => {
-    const page = await readOwnerOperationsPageServer({ data: deps.cursor === undefined ? {} : { cursor: deps.cursor } })
+    const page = await readProviderWorkspacePageServer({ data: deps.cursor === undefined ? {} : { cursor: deps.cursor } })
     const inventory = page.inventory
     if (inventory.kind !== 'available') return { inventory }
     return {
       inventory,
       lifecycle: Promise.resolve(page.lifecycle ?? { kind: 'unavailable' as const }),
-      connections: readOwnerOperationsConnectionsSummaryServer().catch(() => ({ kind: 'unavailable' as const })),
-      payouts: readOwnerOperationsPayoutSummaryServer().catch(() => ({ kind: 'unavailable' as const })),
-      publicStatus: readOwnerOperationsPublicStatusServer().catch(() => ({ kind: 'unavailable' as const })),
+      connections: readProviderWorkspaceConnectionsSummaryServer().catch(() => ({ kind: 'unavailable' as const })),
+      payouts: readProviderWorkspacePayoutSummaryServer().catch(() => ({ kind: 'unavailable' as const })),
+      publicStatus: readProviderWorkspacePublicStatusServer().catch(() => ({ kind: 'unavailable' as const })),
       offboarding: readOwnerProviderOffboardingServer().catch(() => ({ kind: 'unavailable' as const })),
     }
   },
-  head: () => ({ meta: [{ title: 'Operations | Agentic Economy' }, { name: 'robots', content: 'noindex' }] }),
+  head: () => ({ meta: [{ title: 'Tools | Agentic Economy' }, { name: 'robots', content: 'noindex' }] }),
   component: OwnerOfferingsRoute,
 })
 
@@ -39,14 +39,14 @@ function OwnerOfferingsRoute() {
   const location = useLocation()
   const data = Route.useLoaderData()
   if (location.pathname !== '/owner/offerings') return <Outlet />
-  return <AeOwnerOperationsWorkspace {...data} />
+  return <AeProviderWorkspace {...data} />
 }
 
 function OwnerOfferingsPending() {
   return (
     <AeOperatorShell
       operatorRole="owner"
-      title="Operations"
+      title="Tools"
       description="Publish the exact tools agents can inspect and call."
       currentPath="/owner/offerings"
     >

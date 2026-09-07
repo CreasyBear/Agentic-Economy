@@ -96,17 +96,17 @@ describe('private market request CLI', () => {
     })
   })
 
-  it('points a matched request directly at the first current Operation', async () => {
+  it('points a matched request directly at the first current Tool', async () => {
     const requestRef = `market-request:v1:${'c'.repeat(64)}`
-    const operationRef = `operation:v1:${'d'.repeat(64)}`
+    const toolRef = `operation:v1:${'d'.repeat(64)}`
     vi.stubGlobal('fetch', vi.fn<typeof fetch>().mockResolvedValue(responseJson({
       kind: 'matched',
       requestRef,
       query: 'missing job',
       createdAt: 10,
       matchedCount: 1,
-      operations: [{
-        operationRef,
+      tools: [{
+        toolRef,
         capabilityId: 'invoice.translate',
         title: 'Invoice translation',
         description: 'Translate invoices.',
@@ -124,7 +124,7 @@ describe('private market request CLI', () => {
 
     expect(JSON.parse(output.read())).toMatchObject({
       kind: 'matched',
-      nextCommand: `ae describe ${operationRef}`,
+      nextCommand: `ae describe ${toolRef}`,
     })
   })
 })

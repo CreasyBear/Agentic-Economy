@@ -8,7 +8,7 @@ import {
 import type { SupplySourceInput } from '../../../src/modules/capability-supply/source-preview'
 
 const sha = (letter: string): string => `sha256:${letter.repeat(64)}`
-const operationRef = (index: number): string => `operation:v1:${String(index).repeat(64)}`
+const toolRef = (index: number): string => `operation:v1:${String(index).repeat(64)}`
 const sourceKinds = ['openapi', 'mcp', 'agent_plugin', 'x402'] as const
 
 function source(kind: (typeof sourceKinds)[number]): SupplySourceInput {
@@ -60,17 +60,17 @@ function config(fetch: typeof globalThis.fetch): Package5ProviderOperationsConfi
       consequences: { effects: [], dataUse: [], evidence: [] },
       pricing: kind === 'x402' ? { kind: 'source_x402' } : { kind: 'free' },
       validationInput: { value: kind },
-      invokeInput: { value: kind },
+      callInput: { value: kind },
     })),
   }
 }
 
 function status(kind: (typeof sourceKinds)[number], index: number) {
   return {
-    schemaVersion: 'supplier_operations:v1',
+    schemaVersion: 'provider_tools:v1',
     businessRef: 'business:fixture',
     providerRef: `provider:${kind}`,
-    operationRef: operationRef(index + 1),
+    toolRef: toolRef(index + 1),
     revision: 1,
     state: 'Published',
     reasonCodes: [],
@@ -132,50 +132,50 @@ function successfulFetch(requests: Request[]): typeof globalThis.fetch {
     if (path.endsWith('/supply/publish')) {
       const sourceKind = String(((body.source as Record<string, unknown>).kind)) as (typeof sourceKinds)[number]
       const index = sourceKinds.indexOf(sourceKind)
-      return json({ kind: 'submitted', publicationRef: `publication:${sourceKind}`, publicationRevision: 1, operationRef: operationRef(index + 1), state: 'Submitted' })
+      return json({ kind: 'submitted', publicationRef: `publication:${sourceKind}`, publicationRevision: 1, toolRef: toolRef(index + 1), state: 'Submitted' })
     }
     if (path.endsWith('/supply/status')) {
-      const index = sourceKinds.findIndex((_, candidateIndex) => body.operationRef === operationRef(candidateIndex + 1))
-      return json({ kind: 'available', schemaVersion: 'supplier_operations:v1', businessRef: 'business:fixture', status: status(sourceKinds[index]!, index) })
+      const index = sourceKinds.findIndex((_, candidateIndex) => body.toolRef === toolRef(candidateIndex + 1))
+      return json({ kind: 'available', schemaVersion: 'provider_tools:v1', businessRef: 'business:fixture', status: status(sourceKinds[index]!, index) })
     }
-    if (path.endsWith('/supply/operations/list')) {
-      return json({ kind: 'available', schemaVersion: 'supplier_operations:v1', businessRef: 'business:fixture', page: sourceKinds.map(status), isDone: true, continueCursor: null })
+    if (path.endsWith('/supply/tools/list')) {
+      return json({ kind: 'available', schemaVersion: 'provider_tools:v1', businessRef: 'business:fixture', page: sourceKinds.map(status), isDone: true, continueCursor: null })
     }
-    if (path.endsWith('/market-operations/search')) {
+    if (path.endsWith('/market-tools/search')) {
       const index = sourceKinds.findIndex((sourceKind) => String(body.query).includes(sourceKind))
       return json({
-        kind: 'ok', schemaVersion: 'registry-operations:v3', query: body.query, count: 1,
-        items: [{ operationRef: operationRef(index + 1), capabilityId: `fixture.${sourceKinds[index]}`, title: String(body.query), description: 'fixture', provider: { name: 'Fixture', slug: 'fixture' }, priceLabel: 'Free', healthStatus: 'operational' }],
+        kind: 'ok', schemaVersion: 'registry-tools:v3', query: body.query, count: 1,
+        items: [{ toolRef: toolRef(index + 1), capabilityId: `fixture.${sourceKinds[index]}`, title: String(body.query), description: 'fixture', provider: { name: 'Fixture', slug: 'fixture' }, priceLabel: 'Free', healthStatus: 'operational' }],
         pagination: { limit: 20, hasMore: false },
       })
     }
-    if (path.endsWith('/market-operations/describe')) {
+    if (path.endsWith('/market-tools/describe')) {
       return json({
-        kind: 'found', schemaVersion: 'registry-operations:v2', operation: {
-          operationRef: body.operationRef, capabilityId: 'fixture.execute', title: 'Fixture', description: 'fixture', provider: { name: 'Fixture', slug: 'fixture' },
+        kind: 'found', schemaVersion: 'registry-tools:v2', tool: {
+          toolRef: body.toolRef, capabilityId: 'fixture.execute', title: 'Fixture', description: 'fixture', provider: { name: 'Fixture', slug: 'fixture' },
           priceLabel: 'Free', healthStatus: 'operational', inputJsonSchema: { type: 'object' }, outputJsonSchema: { type: 'object' }, materialTerms: [], dataUse: [], effects: [], evidence: [], authentication: { kind: 'ae_api_key' },
         },
       })
     }
-    if (path.endsWith('/operations/call') && 'operationRef' in body) {
+    if (path.endsWith('/tools/call') && 'toolRef' in body) {
       return json({ type: 'https://agentic-economy.example/problems/invalid-argument', title: 'Invalid argument', status: 400, code: 'invalid_request' }, 400)
     }
-    if (path.endsWith('/operations/inspect')) {
+    if (path.endsWith('/tools/quote')) {
       const index = sourceKinds.findIndex((sourceKind) => (body.input as Record<string, unknown>).value === sourceKind)
-      const commitmentRef = `operation-commitment:v1:${String(index + 5).repeat(64)}`
+      const quoteRef = `operation-commitment:v1:${String(index + 5).repeat(64)}`
       return json({
-        kind: 'committed', commitmentRef, operationRef: body.operationRef, operationRevision: 1, expiresAt: 1_700_000_060_000,
+        kind: 'committed', quoteRef, toolRef: body.toolRef, toolVersion: 1, expiresAt: 1_700_000_060_000,
         normalizedInput: body.input, price: { currency: 'AUD', units: '0', exponent: 6 },
         account: { accountRef: 'account:fixture', available: { currency: 'AUD', units: '1000000', exponent: 6 } },
-        budget: { principalRef: 'principal:buyer', maximumPerInvocation: { currency: 'AUD', units: '1000000', exponent: 6 } },
+        budget: { principalRef: 'principal:buyer', maximumPerCall: { currency: 'AUD', units: '1000000', exponent: 6 } },
         policyRefs: ['policy:fixture'], evidenceDigest: sha('e'),
-        continuation: { action: 'operation.invoke', method: 'POST', path: '/api/v1/operations/call', input: { commitmentRef, idempotencyKey: `invoke-${index}` } },
+        continuation: { action: 'tool.call', method: 'POST', path: '/api/v1/tools/call', input: { quoteRef, idempotencyKey: `call-${index}` } },
       })
     }
-    if (path.endsWith('/operations/call')) {
+    if (path.endsWith('/tools/call')) {
       const index = Number(String(body.idempotencyKey).split('-').at(-1))
       return json({
-        kind: 'completed', invocationRef: `invocation:${index}`, operationRef: operationRef(index + 1), output: { ok: true }, evidenceHash: sha('d'),
+        kind: 'completed', callRef: `invocation:${index}`, toolRef: toolRef(index + 1), output: { ok: true }, evidenceHash: sha('d'),
         usage: { usageRef: `usage:${index}`, observedAt: 1_700_000_000_000, chargeState: 'free_tier', amount: { currency: 'AUD', units: '0', exponent: 6 }, priceDigest: sha('c') },
       })
     }
@@ -208,42 +208,42 @@ describe('Package 5 Provider Operations release harness', () => {
         '/api/v1/supply/sources/preview',
         '/api/v1/supply/publish',
         '/api/v1/supply/status',
-        '/api/v1/supply/operations/list',
-        '/api/v1/market-operations/search',
-        '/api/v1/market-operations/describe',
-        '/api/v1/operations/call',
-        '/api/v1/operations/inspect',
-        '/api/v1/operations/call',
+        '/api/v1/supply/tools/list',
+        '/api/v1/market-tools/search',
+        '/api/v1/market-tools/describe',
+        '/api/v1/tools/call',
+        '/api/v1/tools/quote',
+        '/api/v1/tools/call',
       ]),
     ])
 
     for (const request of requests.filter((candidate) => new URL(candidate.url).pathname.includes('/supply/'))) {
       expect(request.headers.get('authorization')).toBe('Bearer provider-secret')
     }
-    for (const request of requests.filter((candidate) => new URL(candidate.url).pathname.startsWith('/api/v1/operations/'))) {
+    for (const request of requests.filter((candidate) => new URL(candidate.url).pathname.startsWith('/api/v1/tools/'))) {
       expect(request.headers.get('authorization')).toBe('Bearer buyer-secret')
     }
     const invokeBodies = await Promise.all(requests
-      .filter((request) => new URL(request.url).pathname === '/api/v1/operations/call')
+      .filter((request) => new URL(request.url).pathname === '/api/v1/tools/call')
       .map(async (request) => JSON.parse(await request.clone().text())))
-    expect(invokeBodies.filter((body) => 'commitmentRef' in body)).toHaveLength(4)
-    expect(invokeBodies.filter((body) => 'commitmentRef' in body).every((body) => Object.keys(body).sort().join(',') === 'commitmentRef,idempotencyKey')).toBe(true)
+    expect(invokeBodies.filter((body) => 'quoteRef' in body)).toHaveLength(4)
+    expect(invokeBodies.filter((body) => 'quoteRef' in body).every((body) => Object.keys(body).sort().join(',') === 'idempotencyKey,quoteRef')).toBe(true)
   })
 
-  it('fails the release when the public gateway accepts the obsolete invoke shape', async () => {
+  it('fails the release when the public gateway accepts the obsolete call shape', async () => {
     const requests: Request[] = []
     const fetch = successfulFetch(requests)
     const acceptingFetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const request = new Request(input, init)
-      if (new URL(request.url).pathname === '/api/v1/operations/call') {
+      if (new URL(request.url).pathname === '/api/v1/tools/call') {
         const body = JSON.parse(await request.clone().text()) as Record<string, unknown>
-        if ('operationRef' in body) return json({ kind: 'completed' })
+        if ('toolRef' in body) return json({ kind: 'completed' })
       }
       return await fetch(input, init)
     }) as typeof globalThis.fetch
 
     await expect(runPackage5ProviderOperationsRelease(config(acceptingFetch)))
-      .rejects.toThrow('package5_old_invoke_shape_accepted')
+      .rejects.toThrow('package5_old_call_shape_accepted')
   })
 
   it('returns one hosted authority-review handoff and resumes the same publication after approval', async () => {
@@ -254,11 +254,11 @@ describe('Package 5 Provider Operations release harness', () => {
       const request = new Request(input, init)
       if (new URL(request.url).pathname === '/api/v1/supply/status') {
         const body = JSON.parse(await request.clone().text()) as Record<string, unknown>
-        if (body.operationRef === operationRef(1) && !reviewed) {
+        if (body.toolRef === toolRef(1) && !reviewed) {
           requests.push(request)
           return json({
             kind: 'available',
-            schemaVersion: 'supplier_operations:v1',
+            schemaVersion: 'provider_tools:v1',
             businessRef: 'business:fixture',
             status: {
               ...status('openapi', 0),
@@ -281,14 +281,14 @@ describe('Package 5 Provider Operations release harness', () => {
     expect(firstFailure).toMatchObject({
       name: 'Package5AuthorityReviewRequired',
       sourceKind: 'openapi',
-      operationRef: operationRef(1),
+      toolRef: toolRef(1),
     })
     const reviewUrl = new URL((firstFailure as { reviewUrl: string }).reviewUrl)
     expect(`${reviewUrl.origin}${reviewUrl.pathname}`).toBe('https://staging.agentic-economy.example/admin/index-health')
     expect(Object.fromEntries(reviewUrl.searchParams)).toEqual({
       expectedRevision: '1',
       expectedSourceDigest: sha('1'),
-      operationRef: operationRef(1),
+      toolRef: toolRef(1),
       publicationRef: 'publication:openapi',
       sourceKind: 'openapi',
       sourceUrl: 'https://fixtures.example/source',

@@ -1,8 +1,8 @@
 import {
   capabilityBindingRegistrationHash,
-  capabilityOperationId,
+  capabilityToolId,
   capabilityOfferingRegistrationHash,
-  createPublicOperationRef,
+  createPublicToolRef,
   type CapabilityOfferingOrigin,
 } from '@/modules/capability-supply/public'
 import { canonicalDigest, isCanonicalDigest } from '@/modules/common/canonical-digest'
@@ -15,8 +15,8 @@ import {
 } from '../binding/registration'
 import { bindingIntegrityIsValid } from '../binding/integrity'
 import { offeringIntegrityIsValid } from '../offering/integrity'
-import { beginOperation, replayOperationResult, succeedOperation } from '../operation-ledger/policy'
-import { ensureSupplyAudit } from '../operation-ledger/replay'
+import { beginOperation, replayOperationResult, succeedOperation } from '../tool-ledger/policy'
+import { ensureSupplyAudit } from '../tool-ledger/replay'
 import type { EligibilityInput } from '../eligibility'
 import type { RegistrationContext, SupplyCommandActor } from '../shared/command-envelope'
 import {
@@ -83,7 +83,7 @@ export type PublishPreparedCapabilityCommandResult =
       operationId?: string
       publicationRef: string
       publicationRevision: number
-      operationRef: string
+      toolRef: string
       contractRef: Readonly<{ capabilityId: string; version: number; contractDigest: string }>
       offeringId: string
       bindingId: string
@@ -197,7 +197,7 @@ function republishTargetMatches(input: Readonly<{
   businessId: string
   runtimeEnvironment: PublishPreparedCapabilityCommandInput['runtimeEnvironment']
   revision: number
-  operationRef: string
+  toolRef: string
   metadata: CapabilityPublicationProvenance
 }>): boolean {
   const {
@@ -209,12 +209,12 @@ function republishTargetMatches(input: Readonly<{
     businessId,
     runtimeEnvironment,
     revision,
-    operationRef,
+    toolRef,
     metadata,
   } = input
   const { encoded, offering } = admitted
   return allPublicationFacts([
-    target.operationRef === operationRef,
+    target.toolRef === toolRef,
     target.revision === revision,
     target.businessId === businessId,
     target.networkId === offering.networkId,
@@ -316,8 +316,8 @@ export async function republishPreparedCapabilityCommand(
   ) {
     return { kind: 'refused', reason: 'pricing_config_invalid' }
   }
-  const expectedPreviousOperationRef = createPublicOperationRef({
-    operationId: capabilityOperationId(publication.capabilityId),
+  const expectedPreviousOperationRef = createPublicToolRef({
+    operationId: capabilityToolId(publication.capabilityId),
     publicationRef: publication.publicationRef,
     publicationRevision: publication.revision,
     contractRef: {
@@ -326,7 +326,7 @@ export async function republishPreparedCapabilityCommand(
       contractDigest: publication.contractDigest,
     },
   })
-  if (publication.operationRef !== expectedPreviousOperationRef) {
+  if (publication.toolRef !== expectedPreviousOperationRef) {
     return { kind: 'refused', reason: 'registration_changed' }
   }
   const result = await commitPreparedPublicationCommand({
@@ -455,12 +455,12 @@ async function preparePublicationBinding(input: Readonly<{
         connection,
         {
           businessId: command.businessId,
-          operationRef: command.previousPublication.operationRef,
+          toolRef: command.previousPublication.toolRef,
           adapterId: originalBinding.adapter.adapterId,
           now: command.now,
         },
       )) return { kind: 'refused', reason: 'connection_authority_stale' }
-      if (persistedAuthority.operationRef !== command.previousPublication.operationRef) {
+      if (persistedAuthority.toolRef !== command.previousPublication.toolRef) {
         return { kind: 'refused', reason: 'connection_authority_stale' }
       }
       binding = {
@@ -503,7 +503,7 @@ async function preparePublicationTarget(input: Readonly<{
       kind: 'valid'
       publicationRef: string
       targetPublication: PublicationCommandRow | null
-      operationRef: ReturnType<typeof createPublicOperationRef>
+      toolRef: ReturnType<typeof createPublicToolRef>
     }>
 > {
   const { command, ports, admitted, binding, metadata } = input
@@ -532,8 +532,8 @@ async function preparePublicationTarget(input: Readonly<{
       priceDigest: prepared.priceDigest,
     })
   ) return { kind: 'refused', reason: 'offering_identity_conflict' }
-  const operationRef = createPublicOperationRef({
-    operationId: capabilityOperationId(encoded.contract.ref.capabilityId),
+  const toolRef = createPublicToolRef({
+    operationId: capabilityToolId(encoded.contract.ref.capabilityId),
     publicationRef,
     publicationRevision: command.revision,
     contractRef: encoded.contract.ref,
@@ -541,7 +541,7 @@ async function preparePublicationTarget(input: Readonly<{
   if (
     command.previousPublication === undefined
     && targetPublication !== null
-    && targetPublication.operationRef !== operationRef
+    && targetPublication.toolRef !== toolRef
   ) throw new Error('capability_publication_operation_ref_invalid')
   if (
     command.previousPublication !== undefined
@@ -555,11 +555,11 @@ async function preparePublicationTarget(input: Readonly<{
       businessId: command.businessId,
       runtimeEnvironment: command.runtimeEnvironment,
       revision: command.revision,
-      operationRef,
+      toolRef,
       metadata,
     })
   ) return { kind: 'refused', reason: 'registration_changed' }
-  return { kind: 'valid', publicationRef, targetPublication, operationRef }
+  return { kind: 'valid', publicationRef, targetPublication, toolRef }
 }
 
 async function commitPreparedPublicationCommand(
@@ -646,12 +646,12 @@ async function commitPreparedPublicationCommand(
     metadata: publicationMetadata,
   })
   if (preparedTarget.kind === 'refused') return preparedTarget
-  const { publicationRef, targetPublication, operationRef } = preparedTarget
+  const { publicationRef, targetPublication, toolRef } = preparedTarget
   const expected = {
     ...publicationProjection(encoded.contract.ref, offering.offeringId, binding.bindingId),
     publicationRef,
     publicationRevision: input.revision,
-    operationRef,
+    toolRef,
     contractRef: encoded.contract.ref,
     offeringId: offering.offeringId,
     bindingId: binding.bindingId,
@@ -684,7 +684,7 @@ async function commitPreparedPublicationCommand(
       previousPublication: {
         publicationRef: input.previousPublication.publicationRef,
         revision: input.previousPublication.revision,
-        operationRef: input.previousPublication.operationRef,
+        toolRef: input.previousPublication.toolRef,
         bindingId: input.previousPublication.bindingId,
       },
     }),
@@ -708,7 +708,7 @@ async function commitPreparedPublicationCommand(
   if (contractResult.kind === 'refused') throw new Error(`capability_publication_contract_${contractResult.reason}`)
   const offeringResult = await ports.registerOffering(offering, input.now)
   if (offeringResult.kind === 'refused') throw new Error(`capability_publication_offering_${offeringResult.reason}`)
-  const bindingResult = await ports.registerBinding(binding, input.now, operationRef)
+  const bindingResult = await ports.registerBinding(binding, input.now, toolRef)
   if (bindingResult.kind === 'refused') throw new Error(`capability_publication_binding_${bindingResult.reason}`)
 
   const eligibilityInput: EligibilityInput = {
@@ -729,7 +729,7 @@ async function commitPreparedPublicationCommand(
 
   if (targetPublication === null) {
     await ports.insertPublication({
-      operationRef,
+      toolRef,
       publicationRef,
       revision: input.revision,
       businessId: input.businessId,
@@ -778,7 +778,7 @@ async function commitPreparedPublicationCommand(
       sourceDigest,
       priceDigest: prepared.priceDigest,
       contractRef: encoded.contract.ref,
-      operationRef,
+      toolRef,
       offeringId: offering.offeringId,
       bindingId: binding.bindingId,
       ...(isRepublish ? { supersedesRevision: input.previousPublication!.revision } : {}),

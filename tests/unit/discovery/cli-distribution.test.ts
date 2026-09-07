@@ -27,8 +27,8 @@ describe('CLI distribution', () => {
     expect(aeCliInstallCommand('https://ae.example/')).toBe(`npm install --global "https://ae.example/downloads/${AE_CLI_ARCHIVE_FILENAME}"`)
     expect(aeCliEaccesFallbackCommand('https://ae.example/')).toBe(`npm install --global --prefix "$HOME/.local" "https://ae.example/downloads/${AE_CLI_ARCHIVE_FILENAME}"`)
     expect(AE_MCP_CONNECTION_SCOPES).toEqual([
-      'market_operations:invoke',
-      'customer_requests:approve_each',
+      'market_tools:call',
+      'customer_requests:approval_required',
       'offline_access',
     ])
     expect(AE_MCP_WHOAMI_TOOL_NAME).toBe('ae_agentAccess_whoami')

@@ -10,9 +10,17 @@ import {
 import { projectPublicServicesPage, type PublicBusinessCatalogApiV2Page } from '@/modules/registry/public'
 
 describe('action registry', () => {
-  it('publishes the reference-matched Operation catalog without legacy aliases', () => {
+  it('publishes the current Tool catalog without legacy aliases', () => {
     const ids = listActions().map((action) => action.id)
     expect(ids).toEqual(expect.arrayContaining([
+      'registry.tools.list',
+      'registry.tools.search',
+      'registry.tools.describe',
+      'registry.tools.compare',
+      'tool.quote',
+      'tool.call',
+    ]))
+    expect(ids).not.toEqual(expect.arrayContaining([
       'registry.operations.list',
       'registry.operations.search',
       'registry.operations.describe',
@@ -20,13 +28,9 @@ describe('action registry', () => {
       'operation.inspect',
       'operation.invoke',
     ]))
-    expect(ids).not.toEqual(expect.arrayContaining([
-      'registry.operations.detail',
-      'registry.operations.inspectPlan',
-    ]))
 
-    const list = findAction('registry.operations.list')
-    const search = findAction('registry.operations.search')
+    const list = findAction('registry.tools.list')
+    const search = findAction('registry.tools.search')
     expect(list?.schema.safeParse({}).success).toBe(true)
     expect(list?.schema.safeParse({ limit: 100 }).success).toBe(true)
     expect(list?.schema.safeParse({ limit: 101 }).success).toBe(false)
@@ -73,15 +77,15 @@ describe('action registry', () => {
   })
 
 
-  it('exposes exactly the bounded operation actions to chat', () => {
+  it('exposes exactly the bounded Tool actions to chat', () => {
     const exposed = listActions().filter((action) => action.surfaces.includes('chat')).map((action) => action.id)
     expect(exposed).toEqual([
-      'registry.operations.list',
-      'registry.operations.search',
-      'registry.operations.describe',
-      'registry.operations.compare',
-      'operation.inspect',
-      'operation.invoke',
+      'registry.tools.list',
+      'registry.tools.search',
+      'registry.tools.describe',
+      'registry.tools.compare',
+      'tool.quote',
+      'tool.call',
     ])
   })
 
@@ -92,15 +96,15 @@ describe('action registry', () => {
   it('exposes MCP actions and keeps the anonymous tier read-only', () => {
     const exposed = listMcpActions()
     expect(exposed.map((action) => action.id)).toEqual([
-      'registry.operations.list', 'registry.operations.search',
-      'registry.operations.describe', 'registry.operations.compare',
+      'registry.tools.list', 'registry.tools.search',
+      'registry.tools.describe', 'registry.tools.compare',
       'agentAccess.whoami',
       'agentAccess.balance', 'agentAccess.activity',
       'funding.handoff.config', 'funding.handoff.create', 'funding.handoff.status',
       'marketDemand.record', 'marketDemand.list', 'marketDemand.status',
-      'operation.inspect', 'operation.invoke', 'operation.list', 'operation.status',
-      'operation.cancel', 'operation.reconcile',
-      'supply.source.preview', 'supply.operations.list', 'supply.status', 'supply.publish', 'supply.withdraw',
+      'tool.quote', 'tool.call', 'call.list', 'call.status',
+      'call.cancel', 'call.reconcile',
+      'supply.source.preview', 'supply.tools.list', 'supply.status', 'supply.publish', 'supply.withdraw',
       'supply.recheck', 'supply.republish', 'supply.earnings',
       'supply.connection.list', 'supply.connection.detail',
       'supply.connection.connect', 'supply.connection.reconnect',
@@ -113,31 +117,31 @@ describe('action registry', () => {
     expect(exposed.slice(-14).every((action) => action.surfaces.includes('cli'))).toBe(true)
     const anonymous = exposed.filter((action) => action.readOnly && action.credentialAdmission === undefined)
     expect(anonymous.map((action) => action.id)).toEqual([
-      'registry.operations.list', 'registry.operations.search',
-      'registry.operations.describe', 'registry.operations.compare',
+      'registry.tools.list', 'registry.tools.search',
+      'registry.tools.describe', 'registry.tools.compare',
     ])
     for (const action of anonymous) {
       expect(action.readOnly).toBe(true)
     }
-    expect(exposed.find((action) => action.id === 'operation.invoke')?.readOnly).toBe(false)
-    expect(exposed.find((action) => action.id === 'operation.status')?.readOnly).toBe(true)
-    expect(exposed.find((action) => action.id === 'operation.cancel')?.readOnly).toBe(false)
-    expect(exposed.find((action) => action.id === 'operation.reconcile')?.readOnly).toBe(false)
-    for (const id of ['operation.invoke', 'operation.status', 'operation.cancel', 'operation.reconcile']) {
+    expect(exposed.find((action) => action.id === 'tool.call')?.readOnly).toBe(false)
+    expect(exposed.find((action) => action.id === 'call.status')?.readOnly).toBe(true)
+    expect(exposed.find((action) => action.id === 'call.cancel')?.readOnly).toBe(false)
+    expect(exposed.find((action) => action.id === 'call.reconcile')?.readOnly).toBe(false)
+    for (const id of ['tool.call', 'call.status', 'call.cancel', 'call.reconcile']) {
       expect(exposed.find((action) => action.id === id)?.surfaces).toEqual(
-        id === 'operation.invoke' ? ['http', 'mcp', 'cli', 'chat'] : ['http', 'mcp', 'cli'],
+        id === 'tool.call' ? ['http', 'mcp', 'cli', 'chat'] : ['http', 'mcp', 'cli'],
       )
     }
     expect(exposed.map((action) => mcpToolName(action))).toEqual([
-      'ae_registry_operations_list', 'ae_registry_operations_search',
-      'ae_registry_operations_describe', 'ae_registry_operations_compare',
+      'ae_registry_tools_list', 'ae_registry_tools_search',
+      'ae_registry_tools_describe', 'ae_registry_tools_compare',
       'ae_agentAccess_whoami',
       'ae_agentAccess_balance', 'ae_agentAccess_activity',
       'ae_funding_handoff_config', 'ae_funding_handoff_create', 'ae_funding_handoff_status',
       'ae_marketDemand_record', 'ae_marketDemand_list', 'ae_marketDemand_status',
-      'ae_operation_inspect', 'ae_operation_invoke', 'ae_operation_list', 'ae_operation_status',
-      'ae_operation_cancel', 'ae_operation_reconcile',
-      'ae_supply_source_preview', 'ae_supply_operations_list', 'ae_supply_status', 'ae_supply_publish', 'ae_supply_withdraw',
+      'ae_tool_quote', 'ae_tool_call', 'ae_call_list', 'ae_call_status',
+      'ae_call_cancel', 'ae_call_reconcile',
+      'ae_supply_source_preview', 'ae_supply_tools_list', 'ae_supply_status', 'ae_supply_publish', 'ae_supply_withdraw',
       'ae_supply_recheck', 'ae_supply_republish', 'ae_supply_earnings',
       'ae_supply_connection_list', 'ae_supply_connection_detail',
       'ae_supply_connection_connect', 'ae_supply_connection_reconnect',
@@ -148,9 +152,9 @@ describe('action registry', () => {
   it('exposes current agent identity without exposing bearer material', async () => {
     const action = findAction('agentAccess.whoami')
     expect(action?.surfaces).toEqual(['http', 'mcp', 'cli'])
-    expect(action?.credentialAdmission?.scope).toBe('market_operations:invoke')
+    expect(action?.credentialAdmission?.scope).toBe('market_tools:call')
     expect(action?.credentialAdmission?.anyScopes).toEqual([
-      'market_operations:invoke',
+      'market_tools:call',
       'market_supply:manage',
     ])
     expect(action?.readOnly).toBe(true)
@@ -165,8 +169,8 @@ describe('action registry', () => {
           credentialId: 'key_current',
           applicationRef: 'agentic-economy',
           environment: 'sandbox',
-          scopes: ['market_operations:invoke'],
-          authorityMode: 'inspect_only',
+          scopes: ['market_tools:call'],
+          authorityMode: 'read_only',
         },
       },
     })
@@ -177,15 +181,15 @@ describe('action registry', () => {
       credentialId: 'key_current',
       applicationRef: 'agentic-economy',
       environment: 'sandbox',
-      scopes: ['market_operations:invoke'],
-      authorityMode: 'inspect_only',
+      scopes: ['market_tools:call'],
+      authorityMode: 'read_only',
     })
     expect(JSON.stringify(result)).not.toContain('Bearer')
     expect(action?.outputSchema.safeParse({ ...result, accessToken: 'secret' }).success).toBe(false)
   })
   it('registers supply actions with narrow inputs and output contracts', () => {
     const sourcePreview = findAction('supply.source.preview')
-    const operationsList = findAction('supply.operations.list')
+    const toolsList = findAction('supply.tools.list')
     const publish = findAction('supply.publish')
     const withdraw = findAction('supply.withdraw')
     const status = findAction('supply.status')
@@ -197,9 +201,9 @@ describe('action registry', () => {
     const connectionConnect = findAction('supply.connection.connect')
     const connectionReconnect = findAction('supply.connection.reconnect')
     const connectionRevoke = findAction('supply.connection.revoke')
-    expect(operationsList?.parameters.map(({ name }) => name)).toEqual(['businessRef', 'limit', 'cursor'])
-    expect(status?.parameters.map(({ name }) => name)).toEqual(['businessRef', 'operationRef'])
-    expect(status?.parameters.find(({ name }) => name === 'operationRef')?.required).toBe(true)
+    expect(toolsList?.parameters.map(({ name }) => name)).toEqual(['businessRef', 'limit', 'cursor'])
+    expect(status?.parameters.map(({ name }) => name)).toEqual(['businessRef', 'toolRef'])
+    expect(status?.parameters.find(({ name }) => name === 'toolRef')?.required).toBe(true)
     expect(publish?.parameters.map(({ name }) => name)).toEqual([
       'businessRef', 'source', 'candidateRef', 'expectedSourceDigest', 'connectionRef',
       'presentation', 'consequences', 'pricing', 'validationInput', 'environment',
@@ -212,7 +216,7 @@ describe('action registry', () => {
     expect(earnings?.parameters.map(({ name }) => name)).toEqual(['currency'])
     expect(recheck?.parameters).toEqual(withdraw?.parameters)
     expect(republish?.parameters).toEqual(withdraw?.parameters)
-    for (const action of [sourcePreview, operationsList, status, publish, withdraw, recheck, republish, earnings, connectionList, connectionDetail, connectionConnect, connectionReconnect, connectionRevoke]) {
+    for (const action of [sourcePreview, toolsList, status, publish, withdraw, recheck, republish, earnings, connectionList, connectionDetail, connectionConnect, connectionReconnect, connectionRevoke]) {
       expect(action?.surfaces).toEqual(['http', 'mcp', 'cli'])
       expect(action?.credentialAdmission?.scope).toBe('market_supply:manage')
     }
@@ -241,26 +245,26 @@ describe('action registry', () => {
   })
 
   it('describes comparison references from the canonical schema', () => {
-    const compare = findAction('registry.operations.compare')
+    const compare = findAction('registry.tools.compare')
     expect(compare?.parameters).toEqual([
       {
-        name: 'operationRefs',
+        name: 'toolRefs',
         type: 'array',
-        description: 'One to four opaque current Operation references.',
+        description: 'One to four opaque current Tool references.',
         required: true,
       },
     ])
   })
 
-  it('keeps operation invocation on the authenticated action boundary', () => {
-    const action = findAction('operation.invoke')
+  it('keeps Tool Calls on the authenticated action boundary', () => {
+    const action = findAction('tool.call')
     expect(action).toBeDefined()
     expect(action?.surfaces).toEqual(['http', 'mcp', 'cli', 'chat'])
     expect(action?.readOnly).toBe(false)
     expect(action?.boundaries.join(' ')).toMatch(/AE-issued bearer key|provider authority|consequential approval/i)
     expect(action?.boundaries.join(' ')).toMatch(/server-side|never returned/i)
     expect(listActions().filter((candidate) => candidate.surfaces.includes('chat')).map(({ id }) => id))
-      .toContain('operation.invoke')
+      .toContain('tool.call')
   })
 
   it('carries output validation schemas on every action', () => {
@@ -373,10 +377,10 @@ describe('action registry', () => {
     expect(detail.hasOutputSchema).toBe(true)
     expect(detail.outputJsonSchema).toBeDefined()
 
-    const invoke = describeActionForAgent(findAction('operation.invoke')!)
-    expect(invoke.hasOutputSchema).toBe(true)
-    expect(invoke.outputJsonSchema).toBeDefined()
-    expect(invoke.inputJsonSchema).toBeDefined()
+    const call = describeActionForAgent(findAction('tool.call')!)
+    expect(call.hasOutputSchema).toBe(true)
+    expect(call.outputJsonSchema).toBeDefined()
+    expect(call.inputJsonSchema).toBeDefined()
   })
   it('marks canonical registry actions as read-only with honest boundaries', () => {
     const search = findAction('registry.search')
@@ -409,20 +413,20 @@ describe('action registry', () => {
     expect(JSON.stringify(canonicalDescriptors)).not.toMatch(/MCP|OpenAPI|callable|autonomous|agent-native|DTO|fixture/i)
   })
 
-  it('keeps operation.invoke off the anonymous MCP tier', () => {
-    const action = findAction('operation.invoke')
+  it('keeps tool.call off the anonymous MCP tier', () => {
+    const action = findAction('tool.call')
     expect(action).toBeDefined()
     expect(action?.readOnly).toBe(false)
     expect(listMcpActions().filter((candidate) => candidate.readOnly && candidate.credentialAdmission === undefined).map(({ id }) => id))
-      .not.toContain('operation.invoke')
+      .not.toContain('tool.call')
   })
 
-  it('carries boundary-honest descriptors on the agent-facing invoke tool', () => {
-    const action = findAction('operation.invoke')
-    if (action === undefined) throw new Error('operation.invoke missing')
+  it('carries boundary-honest descriptors on the agent-facing Call tool', () => {
+    const action = findAction('tool.call')
+    if (action === undefined) throw new Error('tool.call missing')
     const descriptor = describeActionForAgent(action)
     expect(descriptor.boundaries.length).toBeGreaterThan(0)
-    expect(descriptor.parameters.map((p) => p.name)).toContain('commitmentRef')
+    expect(descriptor.parameters.map((p) => p.name)).toContain('quoteRef')
     expect(descriptor.parameters.map((p) => p.name)).toContain('idempotencyKey')
   })
 

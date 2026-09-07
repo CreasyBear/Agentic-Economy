@@ -132,7 +132,7 @@ const request = {
 
 const fingerprintContext: CdpX402RequestFingerprintContext = {
   method: 'GET',
-  operationRef: 'operation:test',
+  toolRef: 'operation:test',
 }
 
 type SignTypedDataInput = {
@@ -491,7 +491,7 @@ describe('CDP x402 custody signer', () => {
       ...fixture.dependencies,
       requestFingerprintContext: {
         method: 'POST',
-        operationRef: 'operation:live-shaped-cdp-server',
+        toolRef: 'operation:live-shaped-cdp-server',
         aeEnvironment: 'sandbox',
       },
     })

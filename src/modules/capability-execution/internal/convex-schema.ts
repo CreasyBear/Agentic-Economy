@@ -5,10 +5,10 @@ import {
   type CanonicalClaimAuthority,
 } from '@/modules/action-execution/runtime'
 
-export type OperationInvokePersistedAuthority = CanonicalClaimAuthority & Readonly<{
+export type CallPersistedAuthority = CanonicalClaimAuthority & Readonly<{
   format: 'operation-invoke-authority:v1'
-  invocationRef: string
-  operationRef: string
+  callRef: string
+  toolRef: string
   inputDigest: string
   grantRef: string
   grantGeneration: number
@@ -23,10 +23,10 @@ export const exactAmountValue = v.object({
   units: v.string(),
   exponent: v.number(),
 })
-export const operationInvokeAuthorityValue = v.object({
+export const callAuthorityValue = v.object({
   format: v.literal('operation-invoke-authority:v1'),
-  invocationRef: v.string(),
-  operationRef: v.string(),
+  callRef: v.string(),
+  toolRef: v.string(),
   inputDigest: v.string(),
   grantRef: v.string(),
   grantGeneration: v.number(),
@@ -49,8 +49,8 @@ export const sellerOnboardingCanaryExecutionEnvelopeValue = v.object({
   executionPurpose: v.literal('seller_onboarding_canary'),
   canaryRef: v.string(),
   canaryCommitmentDigest: v.string(),
-  invocationRef: v.string(),
-  operationRef: v.string(),
+  callRef: v.string(),
+  toolRef: v.string(),
   ownerId: v.string(),
   businessId: v.string(),
   offeringRef: v.string(),
@@ -60,7 +60,7 @@ export const sellerOnboardingCanaryExecutionEnvelopeValue = v.object({
   accessPathSourceHash: v.string(),
   publicationRef: v.string(),
   publicationRevision: v.number(),
-  operationMaterialDigest: v.string(),
+  toolMaterialDigest: v.string(),
   contractDigest: v.string(),
   bindingDigest: v.string(),
   priceDigest: v.string(),
@@ -111,7 +111,7 @@ export const usageValue = v.object({
   transactionRef: v.optional(v.string()),
   durationMs: v.optional(v.number()),
 })
-const operationInvokeReceiptFields = {
+const callReceiptFields = {
   receiptRef: v.string(),
   state: v.union(v.literal('settled'), v.literal('refunded'), v.literal('reconciliation_required')),
   priceDigest: v.string(),
@@ -123,9 +123,9 @@ const operationInvokeReceiptFields = {
   evidenceHash: v.string(),
   issuedAt: v.string(),
 } as const
-export const operationInvokeReceiptValue = v.union(
+export const callReceiptValue = v.union(
   v.object({
-    ...operationInvokeReceiptFields,
+    ...callReceiptFields,
     commercialModel: v.literal('account_aud'),
     buyerCharge: exactAmountValue,
     serviceFee: exactAmountValue,
@@ -153,7 +153,7 @@ export const operationInvokeReceiptValue = v.union(
     ),
   }),
   v.object({
-    ...operationInvokeReceiptFields,
+    ...callReceiptFields,
     commercialModel: v.literal('seller_canary_x402'),
     providerQuotedAmount: exactAmountValue,
     agenticEconomyFee: exactAmountValue,
@@ -164,7 +164,7 @@ export const operationInvokeReceiptValue = v.union(
     asset: v.literal('0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913'),
   }),
   v.object({
-    ...operationInvokeReceiptFields,
+    ...callReceiptFields,
     commercialModel: v.literal('seller_canary_x402'),
     providerQuotedAmount: exactAmountValue,
     agenticEconomyFee: exactAmountValue,
@@ -176,8 +176,8 @@ export const operationInvokeReceiptValue = v.union(
   }),
 )
 const authorityRequestValue = v.object({
-  kind: v.union(v.literal('approve_each'), v.literal('bounded_mandate')),
-  operationRef: v.string(),
+  kind: v.union(v.literal('approval_required'), v.literal('spending_policy')),
+  toolRef: v.string(),
   consequence: v.union(v.literal('read_only'), v.literal('communication'), v.literal('external_effect')),
   retryClass: v.union(v.literal('replayable'), v.literal('attributable_retry'), v.literal('reconcile_before_retry')),
   maximumSpend: v.optional(exactAmountValue),
@@ -212,23 +212,23 @@ export const reconciliationEvidenceValue = v.object({
   digest: v.string(),
 })
 
-export const operationResultValue = v.union(
+export const callResultValue = v.union(
   v.object({
     kind: v.literal('completed'),
-    invocationRef: v.string(),
-    operationRef: v.string(),
+    callRef: v.string(),
+    toolRef: v.string(),
     output: jsonValue,
     evidenceHash: v.string(),
     // Seller-onboarding canaries are non-buyer conformance proofs. The canary
     // projector is the only completion path
     // allowed to omit this field; ordinary completion still requires it.
     usage: v.optional(usageValue),
-    receipt: v.optional(operationInvokeReceiptValue),
+    receipt: v.optional(callReceiptValue),
   }),
-  v.object({ kind: v.literal('pending'), invocationRef: v.string(), operationRef: v.string(), retryAfterMs: v.number() }),
-  v.object({ kind: v.literal('needs_authority'), invocationRef: v.string(), operationRef: v.string(), authorityRequest: authorityRequestValue }),
-  v.object({ kind: v.literal('reconciliation_required'), invocationRef: v.string(), operationRef: v.string(), evidence: reconciliationValue, receipt: v.optional(operationInvokeReceiptValue) }),
-  v.object({ kind: v.literal('refused'), operationRef: v.optional(v.string()), code: v.string(), retryable: v.boolean(), nextAction: v.optional(v.string()), receipt: v.optional(operationInvokeReceiptValue) }),
+  v.object({ kind: v.literal('pending'), callRef: v.string(), toolRef: v.string(), retryAfterMs: v.number() }),
+  v.object({ kind: v.literal('needs_authority'), callRef: v.string(), toolRef: v.string(), authorityRequest: authorityRequestValue }),
+  v.object({ kind: v.literal('reconciliation_required'), callRef: v.string(), toolRef: v.string(), evidence: reconciliationValue, receipt: v.optional(callReceiptValue) }),
+  v.object({ kind: v.literal('refused'), toolRef: v.optional(v.string()), code: v.string(), retryable: v.boolean(), nextAction: v.optional(v.string()), receipt: v.optional(callReceiptValue) }),
 )
 
 const statusState = v.union(
@@ -239,27 +239,27 @@ const statusState = v.union(
 
 export const statusResultValue = v.union(
   v.object({
-    kind: v.literal('found'), invocationRef: v.string(), version: v.number(), operationRef: v.string(), state: statusState,
+    kind: v.literal('found'), callRef: v.string(), version: v.number(), toolRef: v.string(), state: statusState,
     previousInput: v.optional(jsonObject),
     usage: v.optional(usageValue), evidenceHash: v.optional(v.string()), attemptRef: v.optional(v.string()),
-    effectGeneration: v.optional(v.number()), result: v.optional(operationResultValue), receipt: v.optional(operationInvokeReceiptValue),
+    effectGeneration: v.optional(v.number()), result: v.optional(callResultValue), receipt: v.optional(callReceiptValue),
   }),
   v.object({
-    kind: v.literal('unchanged'), invocationRef: v.string(), version: v.number(), retryAfterMs: v.number(),
+    kind: v.literal('unchanged'), callRef: v.string(), version: v.number(), retryAfterMs: v.number(),
   }),
   v.object({
-    kind: v.literal('refused'), invocationRef: v.string(),
+    kind: v.literal('refused'), callRef: v.string(),
     code: v.union(v.literal('invocation_not_found'), v.literal('grant_not_found'), v.literal('grant_revoked'), v.literal('grant_expired'), v.literal('grant_generation_stale'), v.literal('environment_mismatch'), v.literal('invocation_runtime_unavailable')),
-    retryable: v.boolean(), nextAction: v.optional(v.string()), receipt: v.optional(operationInvokeReceiptValue),
+    retryable: v.boolean(), nextAction: v.optional(v.string()), receipt: v.optional(callReceiptValue),
   }),
 )
 
 export const recoveryResultValue = v.union(
   statusResultValue,
-  v.object({ kind: v.literal('reconciliation_required'), invocationRef: v.string(), operationRef: v.string(), evidence: reconciliationValue, receipt: v.optional(operationInvokeReceiptValue) }),
+  v.object({ kind: v.literal('reconciliation_required'), callRef: v.string(), toolRef: v.string(), evidence: reconciliationValue, receipt: v.optional(callReceiptValue) }),
 )
 
-export const invocationReconciliationValue = v.object({
+export const callReconciliationValue = v.object({
   attemptCount: v.number(),
   nextAttemptAt: v.number(),
   leaseOwner: v.optional(v.string()),
@@ -283,16 +283,16 @@ const providerConsequenceJournalStateValue = v.union(
 )
 
 
-export const capabilityOperationInvocationTables = {
-  capabilityOperationCallProjections: defineTable({
+export const capabilityCallTables = {
+  capabilityCallProjections: defineTable({
     callRef: v.string(),
     accountRef: v.string(),
     principalRef: v.string(),
     credentialRef: v.string(),
     applicationRef: v.string(),
-    operationRef: v.string(),
+    toolRef: v.string(),
     providerRef: v.string(),
-    operationLabel: v.string(),
+    toolLabel: v.string(),
     state: v.union(
       v.literal('completed'),
       v.literal('refused'),
@@ -319,13 +319,13 @@ export const capabilityOperationInvocationTables = {
     .index('by_callRef', ['callRef'])
     .index('by_accountRef_and_createdAt', ['accountRef', 'createdAt'])
     .index('by_accountRef_and_principalRef_and_createdAt', ['accountRef', 'principalRef', 'createdAt'])
-    .index('by_accountRef_and_operationRef_and_createdAt', ['accountRef', 'operationRef', 'createdAt'])
+    .index('by_accountRef_and_toolRef_and_createdAt', ['accountRef', 'toolRef', 'createdAt'])
     .index('by_accountRef_and_providerRef_and_createdAt', ['accountRef', 'providerRef', 'createdAt'])
     .index('by_providerRef_and_createdAt', ['providerRef', 'createdAt'])
-    .index('by_operationRef_and_createdAt', ['operationRef', 'createdAt'])
+    .index('by_toolRef_and_createdAt', ['toolRef', 'createdAt'])
     .index('by_accountRef_and_applicationRef_and_createdAt', ['accountRef', 'applicationRef', 'createdAt']),
-  capabilityOperationCommitments: defineTable({
-    commitmentRef: v.string(),
+  capabilityQuotes: defineTable({
+    quoteRef: v.string(),
     principalId: v.string(),
     accountRef: v.string(),
     credentialId: v.string(),
@@ -335,11 +335,11 @@ export const capabilityOperationInvocationTables = {
     grantGeneration: v.number(),
     grantPolicyDigest: v.string(),
     grantExpiresAt: v.number(),
-    operationRef: v.string(),
-    operationRevision: v.number(),
-    operationMaterialDigest: v.string(),
-    currentOperationDigest: v.string(),
-    operationJson: v.string(),
+    toolRef: v.string(),
+    toolVersion: v.number(),
+    toolMaterialDigest: v.string(),
+    currentToolDigest: v.string(),
+    toolJson: v.string(),
     normalizedInputJson: v.string(),
     inputDigest: v.string(),
     pricingJson: v.string(),
@@ -353,7 +353,7 @@ export const capabilityOperationInvocationTables = {
     rateEvidenceDigest: v.optional(v.string()),
     budgetPolicyRef: v.string(),
     budgetGeneration: v.number(),
-    maximumSpendPerInvocationUnits: v.string(),
+    maximumSpendPerCallUnits: v.string(),
     formanceSchemaVersion: v.string(),
     policyGeneration: v.number(),
     legalCustomerRef: v.string(),
@@ -374,22 +374,22 @@ export const capabilityOperationInvocationTables = {
     commercialPolicyDigest: v.string(),
     evidenceDigest: v.string(),
     state: v.union(v.literal('issued'), v.literal('consumed'), v.literal('expired')),
-    consumedInvocationRef: v.optional(v.string()),
+    consumedCallRef: v.optional(v.string()),
     expiresAt: v.number(),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
-    .index('by_commitmentRef', ['commitmentRef'])
+    .index('by_quoteRef', ['quoteRef'])
     .index('by_credentialId_and_createdAt', ['credentialId', 'createdAt'])
     .index('by_state_and_expiresAt', ['state', 'expiresAt']),
-  capabilityOperationInvocations: defineTable({
-    commitmentRef: v.optional(v.string()),
-    invocationRef: v.string(),
+  capabilityCalls: defineTable({
+    quoteRef: v.optional(v.string()),
+    callRef: v.string(),
     principalId: v.string(),
     ownerId: v.string(),
     credentialId: v.string(),
     applicationRef: v.string(),
-    operationRef: v.string(),
+    toolRef: v.string(),
     // Presence is the complete, server-built seller canary authority. Ordinary
     // market calls have no canary field and cannot acquire one through invoke.
     sellerOnboardingCanary: v.optional(sellerOnboardingCanaryExecutionEnvelopeValue),
@@ -399,7 +399,7 @@ export const capabilityOperationInvocationTables = {
     grantGeneration: v.number(),
     policyDigest: v.string(),
     grantExpiresAt: v.number(),
-    operationJson: v.optional(v.string()),
+    toolJson: v.optional(v.string()),
     inputJson: v.optional(v.string()),
     inputDigest: v.string(),
     requestDigest: v.string(),
@@ -417,7 +417,7 @@ export const capabilityOperationInvocationTables = {
     formanceSettlementRefs: v.optional(v.array(v.string())),
     formanceUnknownReference: v.optional(v.string()),
     formanceUnknownStatusRef: v.optional(v.string()),
-    authority: v.optional(operationInvokeAuthorityValue),
+    authority: v.optional(callAuthorityValue),
     state: v.union(v.literal('pending'), v.literal('completed'), v.literal('refused'), v.literal('reconciliation_required'), v.literal('cancelled')),
     workId: v.optional(v.string()),
     dispatchState: v.optional(v.union(
@@ -427,15 +427,15 @@ export const capabilityOperationInvocationTables = {
       v.literal('failed'),
       v.literal('reconciliation_required'),
     )),
-    result: v.optional(operationResultValue),
+    result: v.optional(callResultValue),
     usage: v.optional(usageValue),
     evidenceHash: v.optional(v.string()),
     attemptRef: v.optional(v.string()),
-    reconciliation: v.optional(invocationReconciliationValue),
+    reconciliation: v.optional(callReconciliationValue),
     updatedAt: v.number(),
     createdAt: v.number(),
   })
-    .index('by_invocationRef', ['invocationRef'])
+    .index('by_callRef', ['callRef'])
     .index('by_sellerOnboardingCanary_canaryRef', ['sellerOnboardingCanary.canaryRef'])
     .index('by_sellerOnboardingCanary_target', [
       'sellerOnboardingCanary.businessId',
@@ -449,8 +449,8 @@ export const capabilityOperationInvocationTables = {
     .index('by_credentialId_and_createdAt', ['credentialId', 'createdAt'])
     .index('by_credentialId_and_state', ['credentialId', 'state'])
     .index('by_credentialId_and_state_and_grantExpiresAt', ['credentialId', 'state', 'grantExpiresAt'])
-    .index('by_principalId_and_invocationRef', ['principalId', 'invocationRef'])
-    .index('by_operationRef_and_state', ['operationRef', 'state'])
+    .index('by_principalId_and_callRef', ['principalId', 'callRef'])
+    .index('by_toolRef_and_state', ['toolRef', 'state'])
     .index('by_ownerId_and_state_and_createdAt', ['ownerId', 'state', 'createdAt'])
     .index('by_state_and_reconciliation_nextAttemptAt', ['state', 'reconciliation.nextAttemptAt']),
   // Append-only proof that a seller canary was re-armed only after either a
@@ -459,7 +459,7 @@ export const capabilityOperationInvocationTables = {
   sellerOnboardingCanaryRearmAudits: defineTable({
     auditRef: v.string(),
     canaryRef: v.string(),
-    invocationRef: v.string(),
+    callRef: v.string(),
     priorWorkId: v.string(),
     rearmedWorkId: v.string(),
     refusalCode: v.union(
@@ -497,7 +497,7 @@ export const capabilityOperationInvocationTables = {
     rearmedAt: v.number(),
   })
     .index('by_auditRef', ['auditRef'])
-    .index('by_invocationRef', ['invocationRef'])
+    .index('by_callRef', ['callRef'])
     .index('by_canaryRef', ['canaryRef']),
   // Authority-provenance-only journal. It stores no provider or payment secret
   // material; every field either pins the admitted consequence snapshot or
@@ -512,8 +512,8 @@ export const capabilityOperationInvocationTables = {
     invocationDigest: v.string(),
     operationKeyDigest: v.string(),
     ticketClaimsDigest: v.string(),
-    invocationRef: v.string(),
-    operationRef: v.string(),
+    callRef: v.string(),
+    toolRef: v.string(),
     attemptRef: v.string(),
     effectGeneration: v.number(),
     leaseRef: v.string(),

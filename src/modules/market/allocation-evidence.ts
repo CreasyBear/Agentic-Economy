@@ -1,7 +1,7 @@
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
-  isPublicOperationRef,
-  type PublicOperationRef,
+  isPublicToolRef,
+  type PublicToolRef,
 } from '@/modules/capability-supply/public'
 
 export const MAX_ALLOCATION_EVIDENCE_OBSERVATIONS = 256
@@ -12,11 +12,11 @@ export type AllocationEvidenceObservation = Readonly<{
   searchIdentity: string
   allocationIdentity: string
   callIdentity: string
-  operationRef: string
+  toolRef: string
 }>
 
-export type AllocationEvidenceFact = Omit<AllocationEvidenceObservation, 'operationRef'> & Readonly<{
-  operationRef: PublicOperationRef
+export type AllocationEvidenceFact = Omit<AllocationEvidenceObservation, 'toolRef'> & Readonly<{
+  toolRef: PublicToolRef
   factIdentity: string
 }>
 
@@ -92,21 +92,21 @@ export function projectAllocationEvidence(
 
 function normalizeObservation(
   observation: AllocationEvidenceObservation,
-): (Omit<AllocationEvidenceObservation, 'operationRef'> & { operationRef: PublicOperationRef }) | undefined {
+): (Omit<AllocationEvidenceObservation, 'toolRef'> & { toolRef: PublicToolRef }) | undefined {
   const normalized = {
     demandSubjectIdentity: observation.demandSubjectIdentity.trim(),
     gapIdentity: observation.gapIdentity.trim(),
     searchIdentity: observation.searchIdentity.trim(),
     allocationIdentity: observation.allocationIdentity.trim(),
     callIdentity: observation.callIdentity.trim(),
-    operationRef: observation.operationRef.trim(),
+    toolRef: observation.toolRef.trim(),
   }
-  const operationRef = normalized.operationRef
+  const toolRef = normalized.toolRef
   if (
     !Object.values(normalized).every((value) => value.length > 0) ||
-    !isPublicOperationRef(operationRef)
+    !isPublicToolRef(toolRef)
   ) {
     return undefined
   }
-  return { ...normalized, operationRef }
+  return { ...normalized, toolRef }
 }

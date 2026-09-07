@@ -17,7 +17,7 @@ import {
 } from '@/modules/capability-supply/server'
 import syntheticPost from '@/modules/capability-supply/internal/x402-bazaar-fixtures/synthetic-post-payment-required.json'
 import { inspectLiveX402Requirement } from '@/modules/capability-execution/live-x402-requirement'
-import type { PublishedOperation } from '@/modules/capability-supply/public'
+import type { PublishedTool } from '@/modules/capability-supply/public'
 
 const endpointUrl = 'https://seller.example.test/v1/enrich'
 
@@ -98,7 +98,7 @@ describe('x402 seller endpoint inspector', () => {
           payTo: '0x0000000000000000000000000000000000000002',
         },
       },
-    } as unknown as PublishedOperation
+    } as unknown as PublishedTool
     const dependencies = {
       now: () => 1_000,
       validatePublicTarget: async () => true,
@@ -138,7 +138,7 @@ describe('x402 seller endpoint inspector', () => {
           payTo: '0x0000000000000000000000000000000000000002',
         },
       },
-    } as unknown as PublishedOperation
+    } as unknown as PublishedTool
     await expect(inspectLiveX402Requirement(operation, { query: 'Ada' }, {
       now: () => 1_000,
       validatePublicTarget: async () => true,

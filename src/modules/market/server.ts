@@ -1,8 +1,8 @@
 import { callPublicSourceQuery, sourceQuery } from "@/lib/server/convex-source";
-import { readCapabilityOperationSearch } from "@/modules/capability-supply/operation-source";
+import { readCapabilityToolSearch } from "@/modules/capability-supply/tool-source";
 import type {
-  OperationSearchResult,
-  PublicOperationDescriptor,
+  ToolSearchResult,
+  PublicToolDescriptor,
 } from "@/modules/capability-supply/public";
 import {
   MARKET_MAX_DAILY_POINTS,
@@ -28,9 +28,9 @@ import {
 import {
   catalogJobLabel,
   catalogJobSummary,
-  toOperationCardViewModel,
-  type OperationCardViewModel,
-} from "./operation-view-model";
+  toToolCardViewModel,
+  type ToolCardViewModel,
+} from "./tool-view-model";
 
 const compactNumberFormatter = new Intl.NumberFormat("en", {
   notation: "compact",
@@ -46,8 +46,8 @@ type MarketSourceRead = Readonly<{
   generatedAt: number;
   firstPartyAvailable: boolean;
   firstParty: Readonly<{
-    operations: number;
-    suppliers: number;
+    tools: number;
+    providers: number;
     invocations: number;
     completedInvocations: number;
     qualifiedUses: number;
@@ -62,14 +62,14 @@ const readMarket = sourceQuery<
 >("marketExternalSnapshots:read");
 
 const readListingEvidence = sourceQuery<
-  { operationRefs: string[]; since: number },
+  { toolRefs: string[]; since: number },
   readonly MarketListingEvidenceSource[]
 >("marketListingEvidence:read");
 
 export type MarketCatalogProjection =
   | Readonly<{
       kind: "ok";
-      items: readonly OperationCardViewModel[];
+      items: readonly ToolCardViewModel[];
       matchedCount: number;
       pagination: Readonly<{
         limit: number;
@@ -91,38 +91,38 @@ export type MarketCatalogQuery = Readonly<{
   cursor?: string;
 }>;
 
-export async function readOperationListingEvidence(
-  operation: PublicOperationDescriptor,
+export async function readToolListingEvidence(
+  tool: PublicToolDescriptor,
   window: MarketWindow = "30d",
 ): Promise<MarketListingEvidenceProjection> {
   const summary = catalogJobSummary(
-    operation.summary || operation.offering.summary,
+    tool.summary || tool.offering.summary,
   );
   const catalogText = `${catalogJobLabel(
-    operation.contract.capabilityId,
-    operation.offering.label,
+    tool.contract.capabilityId,
+    tool.offering.label,
     summary,
   )} ${summary}`;
   try {
     const [source] = await callPublicSourceQuery(readListingEvidence, {
-      operationRefs: [operation.operationRef],
+      toolRefs: [tool.toolRef],
       since: Date.now() - windowMilliseconds(window),
     });
     return source === undefined
       ? emptyMarketListingEvidence(
-          operation.operationRef,
-          operation.contract.capabilityId,
+          tool.toolRef,
+          tool.contract.capabilityId,
           catalogText,
         )
       : projectMarketListingEvidence(
           source,
-          operation.contract.capabilityId,
+          tool.contract.capabilityId,
           catalogText,
         );
   } catch {
     return emptyMarketListingEvidence(
-      operation.operationRef,
-      operation.contract.capabilityId,
+      tool.toolRef,
+      tool.contract.capabilityId,
       catalogText,
     );
   }
@@ -133,9 +133,9 @@ export async function readMarketRouteProjection(
   catalogQuery: MarketCatalogQuery = {},
 ): Promise<MarketRouteProjection> {
   const generatedAt = Date.now();
-  let catalog: OperationSearchResult;
+  let catalog: ToolSearchResult;
   try {
-    catalog = await readCapabilityOperationSearch({
+    catalog = await readCapabilityToolSearch({
       query: catalogQuery.query ?? "",
       limit: 12,
       ...(catalogQuery.cursor === undefined
@@ -148,7 +148,7 @@ export async function readMarketRouteProjection(
   } catch {
     catalog = {
       kind: "unavailable",
-      schemaVersion: "registry-operations:v1",
+      schemaVersion: "registry-tools:v1",
       reason: "source_unavailable",
       navigation: [],
     };
@@ -248,20 +248,20 @@ function firstPartyProjection(
         10;
   const metrics: MarketMetricProjection[] = [
     firstPartyMetric(
-      "operations",
-      "Ready Operations",
-      counts.operations,
+      "tools",
+      "Ready Tools",
+      counts.tools,
       generatedAt,
-      "ae_operation",
-      "Operations that are admitted and ready to run now.",
+      "ae_tool",
+      "Tools that are admitted and ready to run now.",
     ),
     firstPartyMetric(
-      "suppliers",
-      "Active suppliers",
-      counts.suppliers,
+      "providers",
+      "Active Providers",
+      counts.providers,
       generatedAt,
-      "ae_operation",
-      "Suppliers with at least one Operation ready to run.",
+      "ae_provider",
+      "Providers with at least one Tool ready to run.",
     ),
     firstPartyMetric(
       "invocations",
@@ -327,7 +327,7 @@ function firstPartyProjection(
 }
 
 async function projectCatalog(
-  catalog: OperationSearchResult,
+  catalog: ToolSearchResult,
   window: MarketWindow,
   generatedAt: number,
 ): Promise<MarketCatalogProjection> {
@@ -336,46 +336,46 @@ async function projectCatalog(
   if (catalog.kind === "no_candidates")
     return { kind: "no_candidates", matchedCount: 0 };
 
-  const operationRefs = catalog.items.map(
-    (operation) => operation.operationRef,
+  const toolRefs = catalog.items.map(
+    (tool) => tool.toolRef,
   );
   let evidence: readonly MarketListingEvidenceSource[] = [];
   try {
     evidence = await callPublicSourceQuery(readListingEvidence, {
-      operationRefs,
+      toolRefs,
       since: generatedAt - windowMilliseconds(window),
     });
   } catch {
     evidence = [];
   }
-  const evidenceByOperationRef = new Map(
-    evidence.map((item) => [item.operationRef, item] as const),
+  const evidenceByToolRef = new Map(
+    evidence.map((item) => [item.toolRef, item] as const),
   );
   return {
     kind: "ok",
-    items: catalog.items.map((operation) => {
+    items: catalog.items.map((tool) => {
       const summary = catalogJobSummary(
-        operation.summary || operation.offering.summary,
+        tool.summary || tool.offering.summary,
       );
       const catalogText = `${catalogJobLabel(
-        operation.contract.capabilityId,
-        operation.offering.label,
+        tool.contract.capabilityId,
+        tool.offering.label,
         summary,
       )} ${summary}`;
-      const source = evidenceByOperationRef.get(operation.operationRef);
+      const source = evidenceByToolRef.get(tool.toolRef);
       const projection =
         source === undefined
           ? emptyMarketListingEvidence(
-              operation.operationRef,
-              operation.contract.capabilityId,
+              tool.toolRef,
+              tool.contract.capabilityId,
               catalogText,
             )
           : projectMarketListingEvidence(
               source,
-              operation.contract.capabilityId,
+              tool.contract.capabilityId,
               catalogText,
             );
-      return toOperationCardViewModel(operation, projection);
+      return toToolCardViewModel(tool, projection);
     }),
     matchedCount: catalog.matchedCount,
     pagination: catalog.pagination,
@@ -423,8 +423,8 @@ function emptyMarketSource(now: number): MarketSourceRead {
     generatedAt: now,
     firstPartyAvailable: false,
     firstParty: {
-      operations: 0,
-      suppliers: 0,
+      tools: 0,
+      providers: 0,
       invocations: 0,
       completedInvocations: 0,
       qualifiedUses: 0,

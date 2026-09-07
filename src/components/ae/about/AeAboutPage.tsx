@@ -74,7 +74,7 @@ export function AeAboutPage() {
             }
             right={
               <AboutDoor
-                headingId="about-supplier-door"
+                headingId="about-provider-door"
                 heading={BUSINESS_DOOR.heading}
                 body={BUSINESS_DOOR.body}
                 href="/for-providers"
@@ -98,9 +98,9 @@ export function AeAboutPage() {
             <div className="grid content-start gap-section">
               <div className="grid gap-related">
                 <AeSiteHeading as="h2" size="md" id="about-suppliers">
-                  {ABOUT.suppliersHeading}
+                  {ABOUT.providersHeading}
                 </AeSiteHeading>
-                <AeSiteBody muted>{ABOUT.suppliersBody}</AeSiteBody>
+                <AeSiteBody muted>{ABOUT.providersBody}</AeSiteBody>
               </div>
               <AeSiteButton asChild variant="outlined" className="w-fit">
                 <Link to="/market" search={{ window: '30d' }}>

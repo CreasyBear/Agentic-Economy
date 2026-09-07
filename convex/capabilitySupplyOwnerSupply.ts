@@ -18,9 +18,9 @@ const ownerSupplyCompletedValue = v.object({
   revision: v.number(),
   message: v.string(),
   publicationRef: v.optional(v.string()),
-  operationRef: v.optional(v.string()),
+  toolRef: v.optional(v.string()),
   canaryRef: v.optional(v.string()),
-  invocationRef: v.optional(v.string()),
+  callRef: v.optional(v.string()),
 })
 const ownerSupplyActionResultValue = v.union(
   ownerSupplyCompletedValue,
@@ -39,8 +39,8 @@ const ownerSupplyActionResultValue = v.union(
       v.literal('response_content_type_invalid'), v.literal('response_too_large'),
       v.literal('response_invalid'), v.literal('credential_unavailable'),
       v.literal('credential_rejected'), v.literal('target_changed'),
-      v.literal('revision_changed'), v.literal('operation_not_found'),
-      v.literal('operation_not_keyless'), v.literal('operation_not_executable'),
+      v.literal('revision_changed'), v.literal('tool_not_found'),
+      v.literal('tool_not_keyless'), v.literal('tool_not_executable'),
       v.literal('input_invalid'),
       v.literal('admission_unproven'), v.literal('conformance_unproven'),
       v.literal('credential_readiness_unobserved'), v.literal('health_unobserved'),
@@ -71,7 +71,7 @@ type OwnerSupplyOffering = Readonly<{
   sourceHash?: string
   publicationRef?: string
   publicationRevision?: number
-  operationRef?: string
+  toolRef?: string
   publisher?: string
   sourceKind?: string
   readinessCompleted?: boolean
@@ -103,7 +103,7 @@ async function ownerSupplyOffering(
     ...(offering.publication?.publicationRevision === undefined
       ? {}
       : { publicationRevision: offering.publication.publicationRevision }),
-    ...(offering.operationRef === undefined ? {} : { operationRef: offering.operationRef }),
+    ...(offering.toolRef === undefined ? {} : { toolRef: offering.toolRef }),
     readinessCompleted: offering.stepStates.readiness === 'completed',
     ...(offering.publication === undefined ? {} : {
       publisher: offering.publication.authorityMode,
@@ -117,7 +117,7 @@ type OwnerSupplyAuthority = Extract<Awaited<ReturnType<typeof resolveBusinessAct
 async function currentOwnerSupplyAuthority(ctx: ActionCtx, businessId: Id<'businesses'>): Promise<OwnerSupplyAuthority | null> {
   const actor = await resolveBusinessActor(ctx)
   if (actor.kind !== 'authenticated_owner') return null
-  return await ctx.runQuery(api.catalog.authorizeSupplierBusiness, { businessId })
+  return await ctx.runQuery(api.catalog.authorizeProviderBusiness, { businessId })
     ? actor
     : null
 }
@@ -202,10 +202,10 @@ export const runOwnerSupplyReadiness = action({
       offeringRef: args.offeringRef,
       revision: args.offeringRevision,
       publicationRef: args.publicationRef,
-      ...(offering.operationRef === undefined ? {} : { operationRef: offering.operationRef }),
+      ...(offering.toolRef === undefined ? {} : { toolRef: offering.toolRef }),
       message: offering.sourceKind === 'x402'
-        ? 'The exact staged Operation is ready for the seller canary. It is not public yet.'
-        : 'The admitted public operation is ready.',
+        ? 'The exact staged Tool is ready for the seller canary. It is not public yet.'
+        : 'The admitted public Tool is ready.',
     }
   },
 })
@@ -225,7 +225,7 @@ export const runOwnerSupplyTest = action({
       args.publicationRef,
       args.publicationRevision,
     )
-    if (offering === undefined || offering.operationRef === undefined) {
+    if (offering === undefined || offering.toolRef === undefined) {
       return { step: 'test', state: 'refused', refusal: 'revision_changed' }
     }
     if (offering.sourceKind === 'x402') {
@@ -259,9 +259,9 @@ export const runOwnerSupplyTest = action({
         offeringRef: args.offeringRef,
         revision: args.offeringRevision,
         publicationRef: args.publicationRef,
-        operationRef: canary.operationRef,
+        toolRef: canary.toolRef,
         canaryRef: canary.canaryRef,
-        invocationRef: canary.invocationRef,
+        callRef: canary.callRef,
         message: 'The exact seller canary was admitted and queued on Base Sepolia. Publication remains blocked until settlement and output evidence pass.',
       }
     }
@@ -292,7 +292,7 @@ export const runOwnerSupplyTest = action({
       operationKey: args.operationKey,
       publicationRef: args.publicationRef,
       publicationRevision: args.publicationRevision,
-      operationRef: offering.operationRef,
+      toolRef: offering.toolRef,
     })
     if (!sameOwnerSupplyAuthority(
       probeAuthority,
@@ -306,7 +306,7 @@ export const runOwnerSupplyTest = action({
       offeringRef: args.offeringRef,
       publicationRef: args.publicationRef,
       publicationRevision: args.publicationRevision,
-      operationRef: offering.operationRef,
+      toolRef: offering.toolRef,
       taskDigest,
       eventKind: 'supply_owner_test_observed',
       outcome: 'filled',
@@ -323,7 +323,7 @@ export const runOwnerSupplyTest = action({
       offeringRef: args.offeringRef,
       revision: args.offeringRevision,
       publicationRef: args.publicationRef,
-      operationRef: offering.operationRef,
+      toolRef: offering.toolRef,
       message: 'A fresh operation probe returned a contract-valid response.',
     }
   },

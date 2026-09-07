@@ -19,7 +19,7 @@ import type {
   SupplyFunnelStepState,
   SupplyLandingTool,
 } from "@/modules/capability-supply/supply-funnel.functions";
-import type { OperationCardViewModel } from "@/modules/market/operation-view-model";
+import type { ToolCardViewModel } from "@/modules/market/tool-view-model";
 import {
   pricingConfigDigest,
   type PricingConfig,
@@ -47,12 +47,12 @@ export const tool: SupplyLandingTool = {
   summary: "Read published services.",
   boundaries: ["Read-only."],
 };
-export const operation: OperationCardViewModel = {
-  operationRef: `operation:v1:${"a".repeat(64)}`,
+export const publishedTool: ToolCardViewModel = {
+  toolRef: `operation:v1:${"a".repeat(64)}`,
   title: "Quote API",
-  supplierName: "Example Labs",
-  supplierSlug: "example-labs",
-  supplierInitials: "EL",
+  providerName: "Example Labs",
+  providerSlug: "example-labs",
+  providerInitials: "EL",
   capabilityId: "demo.quote",
   capability: "Quote API",
   category: { id: "data-research", label: "Data", description: "Data tools" },
@@ -65,7 +65,7 @@ export const operation: OperationCardViewModel = {
   lastVerifiedAt: 1,
   callLabel: "Use capability",
   rating: { kind: "unrated", count: 0, display: "No ratings yet", definition: "No rating" },
-  popularity: { kind: "no_activity", completedInvocations: 0, display: "No completed calls yet", definition: "No calls" },
+  popularity: { kind: "no_activity", completedCalls: 0, display: "No completed calls yet", definition: "No calls" },
   latency: { kind: "insufficient_sample", sampleSize: 0, minimumSampleSize: 5, display: "Not enough data", definition: "No sample" },
 };
 
@@ -222,7 +222,7 @@ export function offeringAt(step: SupplyFunnelStep): OwnerSupplyOfferingReadback 
       state: "current",
       publicationRef: "publication:one",
       publicationRevision: 1,
-      operationRef: "operation:one",
+      toolRef: "operation:one",
       authorityMode: "provider_owned",
       contractRef: {
         capabilityId: "demo.quote",

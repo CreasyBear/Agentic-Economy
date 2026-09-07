@@ -6,7 +6,7 @@ import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
   invokeProviderConsequenceViaVercel,
   providerConsequenceX402PaymentCustodyAvailable,
-} from '@/modules/capability-execution/invocation-worker/providerConsequenceBridge'
+} from '@/modules/capability-execution/call-worker/providerConsequenceBridge'
 import {
   providerConsequenceInvocationDigest,
   providerConsequenceTicketClaimsDigest,
@@ -69,10 +69,10 @@ function invocation(): ProviderInvocation {
       authorityGeneration: 7,
       authorityDigest: DIGEST('7'),
       leaseRef: 'lease:test',
-      invocationRef: 'invocation:test',
-      operationRef: 'operation:test',
+      callRef: 'call:test',
+      toolRef: 'tool:test',
       grantedScopes: ['provider:invoke'],
-      grantedResources: ['operation:test'],
+      grantedResources: ['tool:test'],
       readinessValidUntil: NOW + 15_000,
       readinessDigest: DIGEST('8'),
     },
@@ -91,8 +91,8 @@ function ticket(routeInvocation = invocation()): CanonicalProviderConsequenceTic
     invocationDigest,
     issuedAt: NOW,
     expiresAt: NOW + 10_000,
-    invocationRef: 'invocation:test',
-    operationRef: 'operation:test',
+    callRef: 'call:test',
+    toolRef: 'tool:test',
     leaseRef: 'lease:test',
     connectionRef: CANONICAL_CONNECTION_REF,
     authorityGeneration: 7,
@@ -100,7 +100,7 @@ function ticket(routeInvocation = invocation()): CanonicalProviderConsequenceTic
     adapterId: 'http-json:v1',
     authorityDigest: DIGEST('7'),
     grantedScopes: ['provider:invoke'],
-    grantedResources: ['operation:test'],
+    grantedResources: ['tool:test'],
     readinessValidUntil: NOW + 15_000,
     readinessDigest: DIGEST('8'),
     owningAccountRef: `acc_${'1'.repeat(32)}`,
@@ -200,7 +200,7 @@ describe('provider consequence Convex-to-Vercel bridge', () => {
     expect(ctx.runMutation).toHaveBeenCalledOnce()
     const mutationInput = vi.mocked(ctx.runMutation).mock.calls[0]?.[1] as Record<string, unknown>
     expect(mutationInput).toMatchObject({
-      invocationRef: 'invocation:test',
+      callRef: 'call:test',
       attemptRef: 'attempt:test',
       effectGeneration: 4,
       operationKeyDigest: DIGEST('3'),
@@ -407,7 +407,7 @@ describe('provider consequence Convex-to-Vercel bridge', () => {
     })).resolves.toMatchObject({ failureCode: 'provider_consequence_authority_invalid' })
 
     for (const field of [
-      'leaseRef', 'invocationRef', 'operationRef', 'attemptRef', 'effectGeneration',
+      'leaseRef', 'callRef', 'toolRef', 'attemptRef', 'effectGeneration',
       'operationKeyDigest', 'grantedScopes', 'grantedResources', 'readinessValidUntil',
     ] as const) {
       const candidate = invocation()

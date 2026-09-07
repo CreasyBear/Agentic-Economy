@@ -66,7 +66,7 @@ const retryCleanup = makeFunctionReference<'mutation', Record<string, unknown>, 
   'capabilityProviderConnectionAgents:retryCleanup',
 )
 
-async function issueSupplierAgent(
+async function issueProviderAgent(
   backend: ConvexFixtureBackend,
   owner: ReturnType<ConvexFixtureBackend['withIdentity']>,
   subject: string,
@@ -77,14 +77,14 @@ async function issueSupplierAgent(
     issuanceKey,
     grantRef: issuedAgentGrantRef(subject, issuanceKey),
     credentialId: `credential:${subject}`,
-    displayName: 'Supplier provider manager',
+    displayName: 'Provider provider manager',
     applicationRef: 'agentic-economy',
     environment: 'sandbox' as const,
     scopes: ['market_supply:manage'],
-    operationAccess: 'all_admitted' as const,
-    operationRefs: [],
-    authorityMode: 'bounded_mandate' as const,
-    policy: defaultSandboxAgentAccessPolicy({ currency: 'USD', exponent: 2 }),
+    toolAccess: 'all_admitted' as const,
+    toolRefs: [],
+    authorityMode: 'spending_policy' as const,
+    spendingPolicy: defaultSandboxAgentAccessPolicy({ currency: 'USD', exponent: 2 }),
     createdAt: now,
     expiresAt: now + 600_000,
   }
@@ -96,7 +96,7 @@ async function issueSupplierAgent(
       principalId: 'ae:server-function',
       ownerId: 'ae:server-function',
       credentialId: 'ae:server-function',
-      scopes: ['market_operations:invoke'],
+      scopes: ['market_tools:call'],
     },
     issuedAt: now,
   })
@@ -142,7 +142,7 @@ describe('supplier-agent provider connection lifecycle', () => {
   it('lists, inspects, reconnects, revokes, and preserves recovery state under one issued supplier grant', async () => {
     const backend = convexTestWithWorkers({ pauseWorkpool: true })
     const fixture = await publishedBusinessOwner(backend, 'agent-provider-lifecycle')
-    const principal = await issueSupplierAgent(backend, fixture.owner, 'user_agent-provider-lifecycle')
+    const principal = await issueProviderAgent(backend, fixture.owner, 'user_agent-provider-lifecycle')
     const base = { agentPrincipal: principal }
 
     const connectOperationKey = 'supplier-connection:connect:one'
@@ -261,7 +261,7 @@ describe('supplier-agent provider connection lifecycle', () => {
     const backend = convexTestWithWorkers({ pauseWorkpool: true })
     const fixture = await publishedBusinessOwner(backend, 'agent-provider-owner')
     const sibling = await publishedBusinessOwner(backend, 'agent-provider-sibling')
-    const principal = await issueSupplierAgent(backend, fixture.owner, 'user_agent-provider-owner')
+    const principal = await issueProviderAgent(backend, fixture.owner, 'user_agent-provider-owner')
     const unsigned = {
       businessId: fixture.businessId as Id<'businesses'>,
       limit: 100,
@@ -286,7 +286,7 @@ describe('supplier-agent provider connection lifecycle', () => {
   it('carries a real revoke through cleanup while refusing stale or substituted callback authority', async () => {
     const backend = convexTestWithWorkers({ pauseWorkpool: true })
     const fixture = await publishedBusinessOwner(backend, 'agent-provider-cleanup-callback')
-    const principal = await issueSupplierAgent(backend, fixture.owner, 'user_agent-provider-cleanup-callback')
+    const principal = await issueProviderAgent(backend, fixture.owner, 'user_agent-provider-cleanup-callback')
     const base = { agentPrincipal: principal }
     const connectOperationKey = 'supplier-connection:connect:cleanup-callback'
     const cleanupClaim = await sellerClaim(String(fixture.businessId), 'https://provider.example/x402-cleanup')

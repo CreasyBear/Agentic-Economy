@@ -165,29 +165,29 @@ async function resolveCurrentGrantAuthority(
   }
 }
 
-/** Resolve Account provenance only from the durable invocation's pinned grant. */
-export async function resolveCanonicalInvocationAuthority(
+/** Resolve Account provenance only from the durable Call's pinned grant. */
+export async function resolveCanonicalCallAuthority(
   ctx: MutationCtx,
-  invocationRef: string,
+  callRef: string,
 ): Promise<CanonicalQualifiedUseAuthority> {
-  if (invocationRef.trim().length === 0) return qualifiedUseAuthorityFailure()
-  const invocation = await ctx.db
-    .query('capabilityOperationInvocations')
-    .withIndex('by_invocationRef', (query) =>
-      query.eq('invocationRef', invocationRef),
+  if (callRef.trim().length === 0) return qualifiedUseAuthorityFailure()
+  const call = await ctx.db
+    .query('capabilityCalls')
+    .withIndex('by_callRef', (query) =>
+      query.eq('callRef', callRef),
     )
     .unique()
-  if (invocation === null || invocation.invocationRef !== invocationRef ||
-    invocation.environment !== 'production') return qualifiedUseAuthorityFailure()
+  if (call === null || call.callRef !== callRef ||
+    call.environment !== 'production') return qualifiedUseAuthorityFailure()
   return await resolveCurrentGrantAuthority(ctx, {
-    grantRef: invocation.grantRef,
-    generation: invocation.grantGeneration,
-    expectedPrincipalRef: invocation.principalId,
-    expectedExpiresAt: invocation.grantExpiresAt,
-    requiredResourceRefs: [invocation.operationRef],
+    grantRef: call.grantRef,
+    generation: call.grantGeneration,
+    expectedPrincipalRef: call.principalId,
+    expectedExpiresAt: call.grantExpiresAt,
+    requiredResourceRefs: [call.toolRef],
   }).then((authority) => ({
     ...authority,
-    authorityResourceRef: invocation.operationRef,
+    authorityResourceRef: call.toolRef,
   }))
 }
 

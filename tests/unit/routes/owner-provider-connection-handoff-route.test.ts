@@ -30,7 +30,7 @@ vi.mock('@/modules/capability-supply/supply-funnel.functions', () => ({
   saveOwnerSupplySourceDraftServer: vi.fn(),
   startOwnerSupplySourceConnectionServer: vi.fn(),
 }))
-vi.mock('@/components/ae/offerings/owner-operations.functions', () => ({ readOwnerOperationsIdentityDetailServer: mocks.readIdentity }))
+vi.mock('@/components/ae/offerings/provider-workspace.functions', () => ({ readProviderWorkspaceIdentityDetailServer: mocks.readIdentity }))
 vi.mock('@/components/ae/layout/AeOperatorShell', () => ({ AeOperatorShell: ({ children }: { children: unknown }) => children }))
 vi.mock('@tanstack/react-start', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@tanstack/react-start')>()),

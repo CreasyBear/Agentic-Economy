@@ -39,9 +39,9 @@ const strictAuthObject: NonNullable<OAuthApiOptions['authObject']> = {
   factorVerificationAge: [0, 0],
   getToken: async () => 'convex-test-token',
 }
-const allOperations = { operationAccess: 'all_admitted' as const, operationRefs: [] as const }
-const operationRefA = `operation:v1:${'a'.repeat(64)}`
-const operationRefB = `operation:v1:${'b'.repeat(64)}`
+const allTools = { toolAccess: 'all_admitted' as const, toolRefs: [] as const }
+const toolRefA = `operation:v1:${'a'.repeat(64)}`
+const toolRefB = `operation:v1:${'b'.repeat(64)}`
 
 function consentSecurity(store: ReturnType<typeof storeFixture>, ownerId = 'user_local'): Pick<OAuthApiOptions, 'authObject' | 'reserveConsent'> {
   const authObject = { ...strictAuthObject, userId: ownerId }
@@ -99,8 +99,8 @@ function consentSecurity(store: ReturnType<typeof storeFixture>, ownerId = 'user
         requestedScopes: selectedScopes,
         approvedAccess: {
           ...current.requestedAccess,
-          operationAccess: input.approvedOperationAccess,
-          operationRefs: [...input.approvedOperationRefs],
+          toolAccess: input.approvedToolAccess,
+          toolRefs: [...input.approvedToolRefs],
         },
         connectionTarget,
         issuanceKey: `oauth-${current.grantRef.replaceAll(':', '-')}`,
@@ -173,7 +173,7 @@ function storeFixture(): AgentAccessOAuthStore & { grants: Map<string, AgentAcce
 const formRequest = (url: string, values: Record<string, string>, origin = new URL(url).origin): Request => {
   const body = new URLSearchParams(values)
   if (new URL(url).pathname === '/oauth/authorize' && values.decision === 'approve') {
-    if (!body.has('approved_operation_access')) body.set('approved_operation_access', 'all_admitted')
+    if (!body.has('approved_tool_access')) body.set('approved_tool_access', 'all_admitted')
     if (values.connection_target === 'replace_credential' && !body.has('replacement_mode')) {
       body.set('replacement_mode', 'planned')
     }
@@ -186,25 +186,25 @@ const formRequest = (url: string, values: Record<string, string>, origin = new U
 }
 
 const productionAuthorizationDetails = {
-  type: 'agentic_economy_market_operations',
+  type: 'agentic_economy_market_tools',
   environment: 'production',
   expires_in_seconds: 7_200,
-  maximum_spend_per_invocation: { currency: 'USD', units: '100', exponent: 2 },
+  maximum_spend_per_call: { currency: 'USD', units: '100', exponent: 2 },
   maximum_daily_spend: { currency: 'USD', units: '500', exponent: 2 },
   maximum_monthly_spend: { currency: 'USD', units: '2000', exponent: 2 },
-  maximum_concurrent_invocations: 3,
+  maximum_concurrent_calls: 3,
   maximum_calls_per_minute: 7,
   maximum_calls_per_hour: 42,
 } as const
 
 const productionRequestedAccess = {
   environment: 'production',
-  ...allOperations,
+  ...allTools,
   expiresInSeconds: 7_200,
-  maximumSpendPerInvocation: { currency: 'USD', units: '100', exponent: 2 },
+  maximumSpendPerCall: { currency: 'USD', units: '100', exponent: 2 },
   maximumDailySpend: { currency: 'USD', units: '500', exponent: 2 },
   maximumMonthlySpend: { currency: 'USD', units: '2000', exponent: 2 },
-  maximumConcurrentInvocations: 3,
+  maximumConcurrentCalls: 3,
   maximumCallsPerMinute: 7,
   maximumCallsPerHour: 42,
 } as const
@@ -224,11 +224,11 @@ function refreshFamilyFixture(input: Partial<AgentAccessOAuthRefreshFamily> = {}
     displayName: 'Durable agent',
     applicationRef: 'app_agentic_economy',
     environment: 'sandbox',
-    scopes: ['market_operations:invoke', 'customer_requests:approve_each'],
-    authorityMode: 'approve_each',
-    operationAccess: 'all_admitted',
-    operationRefs: [],
-    policy: defaultSandboxAgentAccessPolicy({ currency: 'USD', exponent: 2 }),
+    scopes: ['market_tools:call', 'customer_requests:approval_required'],
+    authorityMode: 'approval_required',
+    toolAccess: 'all_admitted',
+    toolRefs: [],
+    spendingPolicy: defaultSandboxAgentAccessPolicy({ currency: 'USD', exponent: 2 }),
     currentCredentialRef: 'crd_access_1',
     currentProviderCredentialId: 'ak_access_1',
     currentGrantRef: 'grt_access_1',
@@ -257,26 +257,26 @@ function refreshStoreFixture(
 }
 
 describe('Customer Request OAuth HTTP adapter', () => {
-  it('normalizes exact Operation selection and rejects partial or malformed authorization details', () => {
+  it('normalizes exact Tool selection and rejects partial or malformed authorization details', () => {
     const detail = (selection: Record<string, unknown> = {}) => JSON.stringify([{
-      type: 'agentic_economy_market_operations',
+      type: 'agentic_economy_market_tools',
       environment: 'sandbox',
       expires_in_seconds: 600,
       ...selection,
     }])
     expect(parseAuthorizationDetails(detail())).toMatchObject({
-      kind: 'ok', requestedAccess: { operationAccess: 'all_admitted', operationRefs: [] },
+      kind: 'ok', requestedAccess: { toolAccess: 'all_admitted', toolRefs: [] },
     })
     expect(parseAuthorizationDetails(detail({
-      operation_access: 'selected_operations', operation_refs: [operationRefB, operationRefA],
+      tool_access: 'selected_tools', tool_refs: [toolRefB, toolRefA],
     }))).toMatchObject({
-      kind: 'ok', requestedAccess: { operationAccess: 'selected_operations', operationRefs: [operationRefA, operationRefB] },
+      kind: 'ok', requestedAccess: { toolAccess: 'selected_tools', toolRefs: [toolRefA, toolRefB] },
     })
-    expect(parseAuthorizationDetails(detail({ operation_access: 'selected_operations' }))).toEqual({ kind: 'invalid' })
-    expect(parseAuthorizationDetails(detail({ operation_access: 'selected_operations', operation_refs: [operationRefA, operationRefA] }))).toEqual({ kind: 'invalid' })
-    expect(parseAuthorizationDetails(detail({ operation_access: 'selected_operations', operation_refs: [] }))).toEqual({ kind: 'invalid' })
-    expect(parseAuthorizationDetails(detail({ operation_access: 'all_admitted', operation_refs: [operationRefA] }))).toEqual({ kind: 'invalid' })
-    expect(parseAuthorizationDetails(detail({ operation_access: 'selected_operations', operation_refs: Array.from({ length: 65 }, (_, index) => `operation:v1:${String(index).padStart(64, '0')}`) }))).toEqual({ kind: 'invalid' })
+    expect(parseAuthorizationDetails(detail({ tool_access: 'selected_tools' }))).toEqual({ kind: 'invalid' })
+    expect(parseAuthorizationDetails(detail({ tool_access: 'selected_tools', tool_refs: [toolRefA, toolRefA] }))).toEqual({ kind: 'invalid' })
+    expect(parseAuthorizationDetails(detail({ tool_access: 'selected_tools', tool_refs: [] }))).toEqual({ kind: 'invalid' })
+    expect(parseAuthorizationDetails(detail({ tool_access: 'all_admitted', tool_refs: [toolRefA] }))).toEqual({ kind: 'invalid' })
+    expect(parseAuthorizationDetails(detail({ tool_access: 'selected_tools', tool_refs: Array.from({ length: 65 }, (_, index) => `operation:v1:${String(index).padStart(64, '0')}`) }))).toEqual({ kind: 'invalid' })
   })
 
   it('issues bounded device state, slows polling, and safely replays an interrupted delivery', async () => {
@@ -284,7 +284,7 @@ describe('Customer Request OAuth HTTP adapter', () => {
     await store.insertClient({ clientId: 'client-local', clientName: 'Local assistant', redirectUris: ['http://localhost/callback'], grantTypes: ['urn:ietf:params:oauth:grant-type:device_code'], tokenEndpointAuthMethod: 'none', createdAt: 1_000 })
     const options = { store, now: () => 1_000, issueKey: async () => ({ keyId: 'ak_local' }), getSecret: async () => ({ secret: 'secret-local' }) }
     const issued = await handleDeviceAuthorizationPost(formRequest('http://localhost/oauth/device_authorization', {
-      client_id: 'client-local', scope: 'market_operations:invoke customer_requests:approve_each',
+      client_id: 'client-local', scope: 'market_tools:call customer_requests:approval_required',
     }), options)
     expect(issued.status).toBe(200)
     const body = await issued.json() as { device_code: string; user_code: string }
@@ -316,12 +316,12 @@ describe('Customer Request OAuth HTTP adapter', () => {
     })
     const grant = await store.getGrantByHash('device', await hashOAuthValue(body.device_code))
     if (grant === null) throw new Error('grant missing')
-    expect(grant.requestedAccess).toEqual({ environment: 'sandbox', ...allOperations, expiresInSeconds: AGENT_ACCESS_KEY_TTL_SECONDS })
+    expect(grant.requestedAccess).toEqual({ environment: 'sandbox', ...allTools, expiresInSeconds: AGENT_ACCESS_KEY_TTL_SECONDS })
     await store.updateGrant(grant.grantRef, 'pending', grant.revision, { status: 'approved', keyId: 'ak_local', ownerId: 'user_local' })
     const delivered = await handleOAuthTokenPost(formRequest('http://localhost/oauth/token', {
       grant_type: 'urn:ietf:params:oauth:grant-type:device_code', client_id: 'client-local', device_code: body.device_code,
     }), options)
-    expect(await delivered.json()).toMatchObject({ access_token: 'secret-local', token_type: 'Bearer', scope: 'market_operations:invoke customer_requests:approve_each', expires_in: 604800 })
+    expect(await delivered.json()).toMatchObject({ access_token: 'secret-local', token_type: 'Bearer', scope: 'market_tools:call customer_requests:approval_required', expires_in: 604800 })
     const replay = await handleOAuthTokenPost(formRequest('http://localhost/oauth/token', {
       grant_type: 'urn:ietf:params:oauth:grant-type:device_code', client_id: 'client-local', device_code: body.device_code,
     }), options)
@@ -378,7 +378,7 @@ describe('Customer Request OAuth HTTP adapter', () => {
       },
     }
     const issued = await handleDeviceAuthorizationPost(formRequest('http://localhost/oauth/device_authorization', {
-      client_id: 'client-replacement', scope: 'market_operations:invoke customer_requests:approve_each',
+      client_id: 'client-replacement', scope: 'market_tools:call customer_requests:approval_required',
     }), options)
     const device = await issued.json() as { device_code: string }
     const grant = [...store.grants.values()][0]
@@ -388,7 +388,7 @@ describe('Customer Request OAuth HTTP adapter', () => {
       expected_grant_revision: String(grant.revision),
       expected_target_revision: '1',
       decision: 'approve',
-      authority_mode: 'approve_each',
+      authority_mode: 'approval_required',
       connection_target: 'replace_credential',
       principal_ref: 'prn_agent_a',
     }), options)
@@ -474,13 +474,13 @@ describe('Customer Request OAuth HTTP adapter', () => {
       },
     }
     await handleDeviceAuthorizationPost(formRequest('http://localhost/oauth/device_authorization', {
-      client_id: 'client-compromise', scope: 'market_operations:invoke customer_requests:approve_each',
+      client_id: 'client-compromise', scope: 'market_tools:call customer_requests:approval_required',
     }), options)
     const grant = [...store.grants.values()][0]
     if (grant === undefined) throw new Error('compromise grant missing')
     const response = await handleOAuthConsentPost(formRequest('http://localhost/oauth/authorize', {
       grant_ref: grant.grantRef, expected_grant_revision: String(grant.revision), expected_target_revision: '1',
-      decision: 'approve', authority_mode: 'approve_each', connection_target: 'replace_credential',
+      decision: 'approve', authority_mode: 'approval_required', connection_target: 'replace_credential',
       principal_ref: 'prn_agent_compromised', replacement_mode: 'compromise',
     }), options)
 
@@ -517,13 +517,13 @@ describe('Customer Request OAuth HTTP adapter', () => {
       issueKey,
     }
     await handleDeviceAuthorizationPost(formRequest('http://localhost/oauth/device_authorization', {
-      client_id: 'client-compromise-unknown', scope: 'market_operations:invoke customer_requests:approve_each',
+      client_id: 'client-compromise-unknown', scope: 'market_tools:call customer_requests:approval_required',
     }), options)
     const grant = [...store.grants.values()][0]
     if (grant === undefined) throw new Error('compromise recovery grant missing')
     const request = () => handleOAuthConsentPost(formRequest('http://localhost/oauth/authorize', {
       grant_ref: grant.grantRef, expected_grant_revision: String(grant.revision), expected_target_revision: '1',
-      decision: 'approve', authority_mode: 'approve_each', connection_target: 'replace_credential',
+      decision: 'approve', authority_mode: 'approval_required', connection_target: 'replace_credential',
       principal_ref: 'prn_agent_compromised', replacement_mode: 'compromise',
     }), options)
 
@@ -552,9 +552,9 @@ describe('Customer Request OAuth HTTP adapter', () => {
     })
     await store.insertGrant({
       grantRef: 'device:recovery', revision: 1, flow: 'device_code', clientId: 'client-recovery',
-      requestedScopes: ['market_operations:invoke', 'customer_requests:inspect_only'],
-      requestedAccess: { environment: 'sandbox', ...allOperations, expiresInSeconds: 600 },
-      approvedAccess: { environment: 'sandbox', ...allOperations, expiresInSeconds: 600 },
+      requestedScopes: ['market_tools:call', 'customer_requests:read_only'],
+      requestedAccess: { environment: 'sandbox', ...allTools, expiresInSeconds: 600 },
+      approvedAccess: { environment: 'sandbox', ...allTools, expiresInSeconds: 600 },
       deviceCodeHash: await hashOAuthValue('recover-device'), userCodeHash: await hashOAuthValue('RECOVER1'),
       status: 'issuing', ownerId: 'owner-one', createdAt: 1_000, expiresAt: 601_000,
       issuanceKey: 'oauth-device-recovery', issuanceStartedAt: 1_001,
@@ -596,9 +596,9 @@ describe('Customer Request OAuth HTTP adapter', () => {
     } as const
     await store.insertGrant({
       grantRef: 'device:expired-replacement', revision: 1, flow: 'device_code', clientId: 'client-expired-replacement',
-      requestedScopes: ['market_operations:invoke', 'customer_requests:approve_each'],
-      requestedAccess: { environment: 'sandbox', ...allOperations, expiresInSeconds: 600 },
-      approvedAccess: { environment: 'sandbox', ...allOperations, expiresInSeconds: 600 },
+      requestedScopes: ['market_tools:call', 'customer_requests:approval_required'],
+      requestedAccess: { environment: 'sandbox', ...allTools, expiresInSeconds: 600 },
+      approvedAccess: { environment: 'sandbox', ...allTools, expiresInSeconds: 600 },
       deviceCodeHash: await hashOAuthValue('expired-device-code'), userCodeHash: 'expired-user-code',
       status: 'approved', ownerId: 'user_local', keyId: 'ak_successor', createdAt: 1_000, expiresAt: 2_000,
       nextPollAt: 1_000, displayName: 'Expired replacement',
@@ -657,7 +657,7 @@ describe('Customer Request OAuth HTTP adapter', () => {
     const details = JSON.stringify([productionAuthorizationDetails])
     const device = await handleDeviceAuthorizationPost(formRequest('http://localhost/oauth/device_authorization', {
       client_id: 'client-details-device',
-      scope: 'market_operations:invoke customer_requests:approve_each',
+      scope: 'market_tools:call customer_requests:approval_required',
       authorization_details: details,
     }), options)
     expect(device.status).toBe(200)
@@ -671,7 +671,7 @@ describe('Customer Request OAuth HTTP adapter', () => {
       redirect_uri: 'http://localhost/callback',
       response_type: 'code',
       state: 'state-details',
-      scope: 'market_operations:invoke customer_requests:approve_each',
+      scope: 'market_tools:call customer_requests:approval_required',
       code_challenge: 'challenge-details',
       code_challenge_method: 'S256',
       authorization_details: details,
@@ -716,7 +716,7 @@ describe('Customer Request OAuth HTTP adapter', () => {
     expect(response.status).toBe(302)
     const created = [...store.grants.values()].find(({ clientId }) => clientId === 'client-native-default')
     expect(created).toMatchObject({
-      requestedScopes: ['market_operations:invoke', 'customer_requests:approve_each'],
+      requestedScopes: ['market_tools:call', 'customer_requests:approval_required'],
       offlineAccess: true,
     })
   })
@@ -726,7 +726,7 @@ describe('Customer Request OAuth HTTP adapter', () => {
       type: productionAuthorizationDetails.type,
       environment: productionAuthorizationDetails.environment,
       expires_in_seconds: productionAuthorizationDetails.expires_in_seconds,
-      maximum_spend_per_invocation: productionAuthorizationDetails.maximum_spend_per_invocation,
+      maximum_spend_per_call: productionAuthorizationDetails.maximum_spend_per_call,
       maximum_daily_spend: productionAuthorizationDetails.maximum_daily_spend,
     }
     const invalidCases: Array<{ value: unknown; scope?: string }> = [
@@ -734,11 +734,11 @@ describe('Customer Request OAuth HTTP adapter', () => {
       { value: [{ ...productionAuthorizationDetails, unexpected: true }] },
       { value: [productionAuthorizationDetails, productionAuthorizationDetails] },
       { value: [partialDetails] },
-      { value: [{ ...productionAuthorizationDetails, maximum_spend_per_invocation: { currency: 'USD', units: '600', exponent: 2 }, maximum_daily_spend: { currency: 'USD', units: '500', exponent: 2 } }] },
+      { value: [{ ...productionAuthorizationDetails, maximum_spend_per_call: { currency: 'USD', units: '600', exponent: 2 }, maximum_daily_spend: { currency: 'USD', units: '500', exponent: 2 } }] },
       { value: [{ ...productionAuthorizationDetails, maximum_monthly_spend: { currency: 'EUR', units: '2000', exponent: 2 } }] },
-      { value: [{ ...productionAuthorizationDetails, maximum_spend_per_invocation: { currency: 'USD', units: '0', exponent: 2 } }] },
+      { value: [{ ...productionAuthorizationDetails, maximum_spend_per_call: { currency: 'USD', units: '0', exponent: 2 } }] },
       { value: [{ ...productionAuthorizationDetails, environment: 'sandbox' }] },
-      { value: [productionAuthorizationDetails], scope: 'market_operations:invoke customer_requests:full_yolo' },
+      { value: [productionAuthorizationDetails], scope: 'market_tools:call customer_requests:unrestricted_test_only' },
     ]
 
     for (const [index, invalidCase] of invalidCases.entries()) {
@@ -747,7 +747,7 @@ describe('Customer Request OAuth HTTP adapter', () => {
       const details = typeof invalidCase.value === 'string' ? invalidCase.value : JSON.stringify(invalidCase.value)
       const response = await handleDeviceAuthorizationPost(formRequest('http://localhost/oauth/device_authorization', {
         client_id: `client-invalid-details-${index}`,
-        scope: invalidCase.scope ?? 'market_operations:invoke customer_requests:approve_each',
+        scope: invalidCase.scope ?? 'market_tools:call customer_requests:approval_required',
         authorization_details: details,
       }), { store, now: () => 1_000 })
       expect(response.status, `case ${index}`).toBe(400)
@@ -759,7 +759,7 @@ describe('Customer Request OAuth HTTP adapter', () => {
   it('keeps rate-limit failures in the OAuth error envelope', async () => {
     const response = await handleDeviceAuthorizationPost(formRequest('http://localhost/oauth/device_authorization', {
       client_id: 'client-limited',
-      scope: 'market_operations:invoke customer_requests:inspect_only',
+      scope: 'market_tools:call customer_requests:read_only',
     }), {
       rateLimit: async () => ({ ok: false, retryAfter: 12_345 }),
     })
@@ -788,7 +788,7 @@ describe('Customer Request OAuth HTTP adapter', () => {
       })
       const response = await handleDeviceAuthorizationPost(formRequest('https://spoofed.agentic.test/oauth/device_authorization', {
         client_id: 'client-canonical',
-        scope: 'market_operations:invoke customer_requests:inspect_only',
+        scope: 'market_tools:call customer_requests:read_only',
       }), { store, now: () => 1_000 })
       const body = await response.json() as { verification_uri: string }
 
@@ -831,7 +831,7 @@ describe('Customer Request OAuth HTTP adapter', () => {
         grant_types: ['authorization_code', 'refresh_token'],
         response_types: ['code'],
         token_endpoint_auth_method: 'none',
-        scope: 'market_operations:invoke customer_requests:approve_each offline_access',
+        scope: 'market_tools:call customer_requests:approval_required offline_access',
       }),
     }), { store, now: () => 1_000 })
 
@@ -839,7 +839,7 @@ describe('Customer Request OAuth HTTP adapter', () => {
     expect(await response.json()).toMatchObject({
       grant_types: ['authorization_code', 'refresh_token'],
       response_types: ['code'],
-      scope: 'market_operations:invoke customer_requests:approve_each offline_access',
+      scope: 'market_tools:call customer_requests:approval_required offline_access',
     })
   })
 
@@ -854,10 +854,10 @@ describe('Customer Request OAuth HTTP adapter', () => {
     })
     await store.insertGrant({
       grantRef: 'authorization:offline', revision: 1, flow: 'authorization_code', clientId: 'client-durable',
-      redirectUri: 'http://localhost/callback', requestedScopes: ['market_operations:invoke', 'customer_requests:approve_each'],
+      redirectUri: 'http://localhost/callback', requestedScopes: ['market_tools:call', 'customer_requests:approval_required'],
       offlineAccess: true,
-      requestedAccess: { environment: 'sandbox', ...allOperations, expiresInSeconds: 30 * 24 * 60 * 60 },
-      approvedAccess: { environment: 'sandbox', ...allOperations, expiresInSeconds: 30 * 24 * 60 * 60 },
+      requestedAccess: { environment: 'sandbox', ...allTools, expiresInSeconds: 30 * 24 * 60 * 60 },
+      approvedAccess: { environment: 'sandbox', ...allTools, expiresInSeconds: 30 * 24 * 60 * 60 },
       codeChallenge: await hashOAuthValue(verifier), codeChallengeMethod: 'S256',
       authorizationCodeHash: await hashOAuthValue(authorizationCode), status: 'approved', ownerId: 'user_local',
       keyId: 'ak_access_1', createdAt: now, expiresAt: now + 60_000, displayName: 'Durable client',
@@ -878,7 +878,7 @@ describe('Customer Request OAuth HTTP adapter', () => {
     expect(offline.status).toBe(200)
     expect(offlineBody).toMatchObject({
       access_token: 'access-secret-1', token_type: 'Bearer', expires_in: AGENT_ACCESS_KEY_TTL_SECONDS,
-      scope: 'market_operations:invoke customer_requests:approve_each offline_access',
+      scope: 'market_tools:call customer_requests:approval_required offline_access',
     })
     expect(typeof offlineBody.refresh_token).toBe('string')
     expect(persisted).toHaveLength(1)
@@ -900,9 +900,9 @@ describe('Customer Request OAuth HTTP adapter', () => {
     const onlineCode = 'online-authorization-code'
     await store.insertGrant({
       grantRef: 'authorization:online', revision: 1, flow: 'authorization_code', clientId: 'client-durable',
-      redirectUri: 'http://localhost/callback', requestedScopes: ['market_operations:invoke', 'customer_requests:approve_each'],
-      requestedAccess: { environment: 'sandbox', ...allOperations, expiresInSeconds: AGENT_ACCESS_KEY_TTL_SECONDS },
-      approvedAccess: { environment: 'sandbox', ...allOperations, expiresInSeconds: AGENT_ACCESS_KEY_TTL_SECONDS },
+      redirectUri: 'http://localhost/callback', requestedScopes: ['market_tools:call', 'customer_requests:approval_required'],
+      requestedAccess: { environment: 'sandbox', ...allTools, expiresInSeconds: AGENT_ACCESS_KEY_TTL_SECONDS },
+      approvedAccess: { environment: 'sandbox', ...allTools, expiresInSeconds: AGENT_ACCESS_KEY_TTL_SECONDS },
       codeChallenge: await hashOAuthValue(verifier), codeChallengeMethod: 'S256',
       authorizationCodeHash: await hashOAuthValue(onlineCode), status: 'approved', ownerId: 'user_local',
       keyId: 'ak_access_online', createdAt: now, expiresAt: now + 60_000, displayName: 'Online client',
@@ -971,7 +971,7 @@ describe('Customer Request OAuth HTTP adapter', () => {
     expect(response.status).toBe(200)
     expect(body).toMatchObject({
       access_token: 'ak_access_2-secret', token_type: 'Bearer', expires_in: AGENT_ACCESS_KEY_TTL_SECONDS,
-      scope: 'market_operations:invoke customer_requests:approve_each offline_access',
+      scope: 'market_tools:call customer_requests:approval_required offline_access',
     })
     expect(body.refresh_token).not.toBe(oldRefreshToken)
     expect(issued).toHaveLength(1)
@@ -986,6 +986,42 @@ describe('Customer Request OAuth HTTP adapter', () => {
       successorTokenHash: await hashOAuthValue(body.refresh_token as string),
     })
     expect(revoked).toEqual(['ak_access_1'])
+  })
+
+  it('rejects a refresh from a compromised inactive family before successor key issuance', async () => {
+    const now = 12_000
+    const oldRefreshToken = 'compromised-old-refresh-token'
+    const family = refreshFamilyFixture({
+      currentTokenHash: await hashOAuthValue(oldRefreshToken),
+      lifecycle: 'revoked',
+      revokedAt: now - 1,
+      revocationReason: 'suspected_compromise',
+      updatedAt: now - 1,
+    })
+    const store = storeFixture()
+    await store.insertClient({
+      clientId: family.clientId, clientName: 'Durable client', redirectUris: ['http://localhost/callback'],
+      grantTypes: ['authorization_code', 'refresh_token'], tokenEndpointAuthMethod: 'none', createdAt: now,
+    })
+    const issueRefreshKey = vi.fn<NonNullable<OAuthApiOptions['issueRefreshKey']>>()
+    const claimRefreshFamily = vi.fn<AgentAccessOAuthRefreshStore['claimRefreshFamily']>(async () => (
+      family.lifecycle === 'revoked' && family.revocationReason === 'suspected_compromise'
+        ? { kind: 'invalid_grant' }
+        : { kind: 'busy' }
+    ))
+    const response = await handleOAuthTokenPost(formRequest('http://localhost/oauth/token', {
+      grant_type: 'refresh_token', refresh_token: oldRefreshToken, client_id: family.clientId,
+    }), {
+      store,
+      refreshStore: refreshStoreFixture({ claimRefreshFamily }),
+      issueRefreshKey,
+      now: () => now,
+    })
+
+    expect(response.status).toBe(400)
+    await expect(response.json()).resolves.toMatchObject({ error: 'invalid_grant' })
+    expect(claimRefreshFamily).toHaveBeenCalledOnce()
+    expect(issueRefreshKey).not.toHaveBeenCalled()
   })
 
   it('reconciles a lost commit response without revoking the promoted successor', async () => {
@@ -1108,7 +1144,7 @@ describe('Customer Request OAuth HTTP adapter', () => {
       authenticateOwner: async () => ({ isAuthenticated: true, userId: 'user_supplier' }),
       issueKey: async (input) => {
         expect(input.scopes).toEqual([MARKET_SUPPLY_MANAGE_SCOPE])
-        expect(input.authorityMode).toBe('bounded_mandate')
+        expect(input.authorityMode).toBe('spending_policy')
         return { keyId: 'ak_supplier' }
       },
       getSecret: async () => ({ secret: 'supplier-secret-once' }),
@@ -1118,22 +1154,22 @@ describe('Customer Request OAuth HTTP adapter', () => {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         ...AGENT_ACCESS_OAUTH_DEVICE_CLIENT_REGISTRATION_REQUEST,
-        client_name: 'Agentic Economy Supplier CLI',
+        client_name: 'Agentic Economy Provider CLI',
         scope: MARKET_SUPPLY_MANAGE_SCOPE,
       }),
     }), options)
     const registered = await registration.json() as { client_id: string; scope: string }
     expect(registered.scope).toBe(MARKET_SUPPLY_MANAGE_SCOPE)
 
-    const selectedSupplier = await handleDeviceAuthorizationPost(formRequest('http://localhost/oauth/device_authorization', {
+    const selectedProvider = await handleDeviceAuthorizationPost(formRequest('http://localhost/oauth/device_authorization', {
       client_id: registered.client_id,
       scope: MARKET_SUPPLY_MANAGE_SCOPE,
       authorization_details: JSON.stringify([{
-        type: 'agentic_economy_market_operations', environment: 'sandbox', expires_in_seconds: 600,
-        operation_access: 'selected_operations', operation_refs: [operationRefA],
+        type: 'agentic_economy_market_tools', environment: 'sandbox', expires_in_seconds: 600,
+        tool_access: 'selected_tools', tool_refs: [toolRefA],
       }]),
     }), options)
-    expect(selectedSupplier.status).toBe(400)
+    expect(selectedProvider.status).toBe(400)
 
     const device = await handleDeviceAuthorizationPost(formRequest('http://localhost/oauth/device_authorization', {
       client_id: registered.client_id,
@@ -1142,9 +1178,9 @@ describe('Customer Request OAuth HTTP adapter', () => {
     const deviceGrant = await device.json() as { device_code: string; user_code: string }
     const consent = await handleOAuthAuthorizeGet(new Request(`http://localhost/oauth/authorize?user_code=${encodeURIComponent(deviceGrant.user_code)}`), options)
     const html = await consent.text()
-    expect(html).toContain('data-access-profile="supplier"')
+    expect(html).toContain('data-access-profile="provider"')
     expect(html).toContain(`Technical permission: ${MARKET_SUPPLY_MANAGE_SCOPE}`)
-    expect(html).toContain('manage your published supplier Operations')
+    expect(html).toContain('manage your published Provider Tools')
 
     const grant = [...store.grants.values()][0]
     if (grant === undefined) throw new Error('supplier grant missing')
@@ -1153,7 +1189,7 @@ describe('Customer Request OAuth HTTP adapter', () => {
       expected_grant_revision: String(grant.revision),
       expected_target_revision: String(grant.revision),
       decision: 'approve',
-      authority_mode: 'bounded_mandate',
+      authority_mode: 'spending_policy',
       connection_target: 'new_agent',
     }), options)
     expect(approved.status).toBe(200)
@@ -1194,7 +1230,7 @@ describe('Customer Request OAuth HTTP adapter', () => {
     expect(store.clients.size).toBe(0)
 
     await store.insertClient({ clientId: 'client-auth', clientName: 'MCP local', redirectUris: ['http://localhost/callback'], grantTypes: ['authorization_code'], tokenEndpointAuthMethod: 'none', createdAt: 1_000 })
-    const consentStart = await handleOAuthAuthorizeGet(new Request('http://localhost/oauth/authorize?client_id=client-auth&redirect_uri=http%3A%2F%2Flocalhost%2Fcallback&response_type=code&state=s&scope=market_operations%3Ainvoke%20customer_requests%3Aapprove_each&code_challenge=abc&code_challenge_method=S256'), { store, now: () => 1_000, authenticateOwner: async () => ({ isAuthenticated: true, userId: 'user_local' }) })
+    const consentStart = await handleOAuthAuthorizeGet(new Request('http://localhost/oauth/authorize?client_id=client-auth&redirect_uri=http%3A%2F%2Flocalhost%2Fcallback&response_type=code&state=s&scope=market_tools%3Acall%20customer_requests%3Aapproval_required&code_challenge=abc&code_challenge_method=S256'), { store, now: () => 1_000, authenticateOwner: async () => ({ isAuthenticated: true, userId: 'user_local' }) })
     expect(consentStart.status).toBe(302)
     const consent = await handleOAuthAuthorizeGet(new Request(consentStart.headers.get('location')!), {
       store,
@@ -1209,8 +1245,8 @@ describe('Customer Request OAuth HTTP adapter', () => {
     })
     const consentHtml = await consent.text()
     expect(consentHtml).toContain('data-ae-consent')
-    expect(consentHtml).toContain('data-authority-mode="approve_each"')
-    expect(consentHtml).toContain('<p data-ae-scope>Technical permission: customer_requests:approve_each</p>')
+    expect(consentHtml).toContain('data-authority-mode="approval_required"')
+    expect(consentHtml).toContain('<p data-ae-scope>Technical permission: customer_requests:approval_required</p>')
     expect(consentHtml).toContain('You approve each request before it moves forward.')
     expect(consentHtml).toContain('<details>')
     expect(consentHtml).toContain('data-reconnect-principal-ref="prn_existing"')
@@ -1219,7 +1255,7 @@ describe('Customer Request OAuth HTTP adapter', () => {
     expect(consentHtml).not.toContain('Customer Request scope:')
     expect(consentHtml).not.toContain('secret')
     const sandboxGrant = [...store.grants.values()].find((grant) => grant.flow === 'authorization_code')
-    expect(sandboxGrant?.requestedAccess).toEqual({ environment: 'sandbox', ...allOperations, expiresInSeconds: AGENT_ACCESS_KEY_TTL_SECONDS })
+    expect(sandboxGrant?.requestedAccess).toEqual({ environment: 'sandbox', ...allTools, expiresInSeconds: AGENT_ACCESS_KEY_TTL_SECONDS })
   })
 
   it('pages replacement targets with an opaque cursor and marks enrichment failures', async () => {
@@ -1234,7 +1270,7 @@ describe('Customer Request OAuth HTTP adapter', () => {
     })
     const device = await handleDeviceAuthorizationPost(formRequest('http://localhost/oauth/device_authorization', {
       client_id: 'client-paged-consent',
-      scope: 'market_operations:invoke customer_requests:approve_each',
+      scope: 'market_tools:call customer_requests:approval_required',
     }), { store, now: () => 1_000 })
     const grant = await device.json() as { user_code: string }
     const cursors: Array<string | null> = []
@@ -1285,7 +1321,7 @@ describe('Customer Request OAuth HTTP adapter', () => {
       redirect_uri: 'http://localhost/callback',
       response_type: 'code',
       state: 'production-state',
-      scope: 'market_operations:invoke customer_requests:bounded_mandate',
+      scope: 'market_tools:call customer_requests:spending_policy',
       code_challenge: 'production-challenge',
       code_challenge_method: 'S256',
       authorization_details: JSON.stringify([productionAuthorizationDetails]),
@@ -1296,11 +1332,11 @@ describe('Customer Request OAuth HTTP adapter', () => {
     const controlledHtml = await controlledGate.text()
     expect(controlledHtml).toContain('data-environment="production"')
     expect(controlledHtml).toContain('data-expires-in-seconds="7200"')
-    expect(controlledHtml).toContain('Authority mode: bounded_mandate')
-    expect(controlledHtml).toContain('Maximum spend per invocation: USD 1.00.')
+    expect(controlledHtml).toContain('Authority mode: spending_policy')
+    expect(controlledHtml).toContain('Maximum spend per Call: USD 1.00.')
     expect(controlledHtml).toContain('Maximum daily spend: USD 5.00.')
     expect(controlledHtml).toContain('Maximum monthly spend: USD 20.00.')
-    expect(controlledHtml).toContain('Maximum concurrent invocations: 3.')
+    expect(controlledHtml).toContain('Maximum concurrent Calls: 3.')
     expect(controlledHtml).toContain('Maximum calls per minute: 7.')
     expect(controlledHtml).toContain('Maximum calls per hour: 42.')
     expect(controlledHtml).not.toContain(JSON.stringify(productionAuthorizationDetails))
@@ -1314,11 +1350,11 @@ describe('Customer Request OAuth HTTP adapter', () => {
       redirect_uri: 'http://localhost/callback',
       response_type: 'code',
       state: 'production-zero-state',
-      scope: 'market_operations:invoke customer_requests:approve_each',
+      scope: 'market_tools:call customer_requests:approval_required',
       code_challenge: 'production-zero-challenge',
       code_challenge_method: 'S256',
       authorization_details: JSON.stringify([{
-        type: 'agentic_economy_market_operations',
+        type: 'agentic_economy_market_tools',
         environment: 'production',
         expires_in_seconds: 3_600,
       }]),
@@ -1329,12 +1365,12 @@ describe('Customer Request OAuth HTTP adapter', () => {
     expect(await zeroDefaultGate.text()).toContain('Spending is disabled by the zero default.')
   })
 
-  it('derives sandbox, zero-budget, and bounded production issuance from persisted access', async () => {
+  it('derives sandbox, zero-budget, and spending-policy production issuance from persisted access', async () => {
     const store = storeFixture()
     await store.insertClient({ clientId: 'client-local', clientName: 'Local assistant', redirectUris: ['http://localhost/callback'], grantTypes: ['urn:ietf:params:oauth:grant-type:device_code'], tokenEndpointAuthMethod: 'none', createdAt: 1_000 })
-    await store.insertGrant({ grantRef: 'device:sandbox-issuance', revision: 1, flow: 'device_code', clientId: 'client-local', requestedScopes: ['market_operations:invoke', 'customer_requests:inspect_only'], requestedAccess: { environment: 'sandbox', ...allOperations, expiresInSeconds: AGENT_ACCESS_KEY_TTL_SECONDS }, approvedAccess: { environment: 'sandbox', ...allOperations, expiresInSeconds: AGENT_ACCESS_KEY_TTL_SECONDS }, deviceCodeHash: 'sandbox-code', userCodeHash: 'sandbox-user', status: 'pending', createdAt: 1_000, expiresAt: 601_000, nextPollAt: 1_000, displayName: 'Sandbox assistant' })
-    await store.insertGrant({ grantRef: 'device:production-zero', revision: 1, flow: 'device_code', clientId: 'client-local', requestedScopes: ['market_operations:invoke', 'customer_requests:approve_each'], requestedAccess: { environment: 'production', ...allOperations, expiresInSeconds: 1_234 }, approvedAccess: { environment: 'production', ...allOperations, expiresInSeconds: 1_234 }, deviceCodeHash: 'zero-code', userCodeHash: 'zero-user', status: 'pending', createdAt: 1_000, expiresAt: 601_000, nextPollAt: 1_000, displayName: 'Zero assistant' })
-    await store.insertGrant({ grantRef: 'device:production-bounded', revision: 1, flow: 'device_code', clientId: 'client-local', requestedScopes: ['market_operations:invoke', 'customer_requests:bounded_mandate'], requestedAccess: productionRequestedAccess, approvedAccess: productionRequestedAccess, deviceCodeHash: await hashOAuthValue('bounded-code'), userCodeHash: 'bounded-user', status: 'pending', createdAt: 1_000, expiresAt: 601_000, nextPollAt: 1_000, displayName: 'Bounded assistant' })
+    await store.insertGrant({ grantRef: 'device:sandbox-issuance', revision: 1, flow: 'device_code', clientId: 'client-local', requestedScopes: ['market_tools:call', 'customer_requests:read_only'], requestedAccess: { environment: 'sandbox', ...allTools, expiresInSeconds: AGENT_ACCESS_KEY_TTL_SECONDS }, approvedAccess: { environment: 'sandbox', ...allTools, expiresInSeconds: AGENT_ACCESS_KEY_TTL_SECONDS }, deviceCodeHash: 'sandbox-code', userCodeHash: 'sandbox-user', status: 'pending', createdAt: 1_000, expiresAt: 601_000, nextPollAt: 1_000, displayName: 'Sandbox assistant' })
+    await store.insertGrant({ grantRef: 'device:production-zero', revision: 1, flow: 'device_code', clientId: 'client-local', requestedScopes: ['market_tools:call', 'customer_requests:approval_required'], requestedAccess: { environment: 'production', ...allTools, expiresInSeconds: 1_234 }, approvedAccess: { environment: 'production', ...allTools, expiresInSeconds: 1_234 }, deviceCodeHash: 'zero-code', userCodeHash: 'zero-user', status: 'pending', createdAt: 1_000, expiresAt: 601_000, nextPollAt: 1_000, displayName: 'Zero assistant' })
+    await store.insertGrant({ grantRef: 'device:production-bounded', revision: 1, flow: 'device_code', clientId: 'client-local', requestedScopes: ['market_tools:call', 'customer_requests:spending_policy'], requestedAccess: productionRequestedAccess, approvedAccess: productionRequestedAccess, deviceCodeHash: await hashOAuthValue('bounded-code'), userCodeHash: 'bounded-user', status: 'pending', createdAt: 1_000, expiresAt: 601_000, nextPollAt: 1_000, displayName: 'Bounded assistant' })
     const issued: OAuthIssueInput[] = []
     const options = {
       store,
@@ -1346,37 +1382,37 @@ describe('Customer Request OAuth HTTP adapter', () => {
       getSecret: async () => ({ secret: 'bounded-secret' }),
     }
     for (const [grantRef, authorityMode] of [
-      ['device:sandbox-issuance', 'inspect_only'],
-      ['device:production-zero', 'approve_each'],
-      ['device:production-bounded', 'bounded_mandate'],
+      ['device:sandbox-issuance', 'read_only'],
+      ['device:production-zero', 'approval_required'],
+      ['device:production-bounded', 'spending_policy'],
     ] as const) {
       const response = await handleOAuthConsentPost(formRequest('http://localhost/oauth/authorize', { grant_ref: grantRef, expected_grant_revision: '1', expected_target_revision: '1', decision: 'approve', authority_mode: authorityMode, connection_target: 'new_agent' }), options)
       expect(response.status).toBe(200)
     }
-    const retry = await handleOAuthConsentPost(formRequest('http://localhost/oauth/authorize', { grant_ref: 'device:production-bounded', expected_grant_revision: '1', expected_target_revision: '1', decision: 'approve', authority_mode: 'bounded_mandate', connection_target: 'new_agent' }), options)
+    const retry = await handleOAuthConsentPost(formRequest('http://localhost/oauth/authorize', { grant_ref: 'device:production-bounded', expected_grant_revision: '1', expected_target_revision: '1', decision: 'approve', authority_mode: 'spending_policy', connection_target: 'new_agent' }), options)
     expect(retry.status).toBe(200)
     expect(await retry.json()).toMatchObject({
       kind: 'approved',
       grantRef: 'device:production-bounded',
     })
     expect(issued).toHaveLength(3)
-    expect(issued[0]?.approvedAccess).toEqual({ environment: 'sandbox', ...allOperations, expiresInSeconds: AGENT_ACCESS_KEY_TTL_SECONDS })
-    expect(issued[0]?.policy).toEqual(defaultSandboxAgentAccessPolicy({ currency: 'USD', exponent: 2 }))
-    expect(issued[1]?.approvedAccess).toEqual({ environment: 'production', ...allOperations, expiresInSeconds: 1_234 })
-    expect(issued[1]?.policy).toEqual(defaultProductionAgentAccessPolicy({ currency: 'USD', exponent: 2 }))
-    const boundedBase = buildProductionAgentAccessPolicy({
+    expect(issued[0]?.approvedAccess).toEqual({ environment: 'sandbox', ...allTools, expiresInSeconds: AGENT_ACCESS_KEY_TTL_SECONDS })
+    expect(issued[0]?.spendingPolicy).toEqual(defaultSandboxAgentAccessPolicy({ currency: 'USD', exponent: 2 }))
+    expect(issued[1]?.approvedAccess).toEqual({ environment: 'production', ...allTools, expiresInSeconds: 1_234 })
+    expect(issued[1]?.spendingPolicy).toEqual(defaultProductionAgentAccessPolicy({ currency: 'USD', exponent: 2 }))
+    const spendingPolicyBase = buildProductionAgentAccessPolicy({
       currency: 'USD',
       exponent: 2,
-      maximumSpendPerInvocation: productionRequestedAccess.maximumSpendPerInvocation,
+      maximumSpendPerCall: productionRequestedAccess.maximumSpendPerCall,
       maximumDailySpend: productionRequestedAccess.maximumDailySpend,
       maximumMonthlySpend: productionRequestedAccess.maximumMonthlySpend,
     })
-    expect(issued[2]?.authorityMode).toBe('bounded_mandate')
+    expect(issued[2]?.authorityMode).toBe('spending_policy')
     expect(issued[2]?.approvedAccess).toEqual(productionRequestedAccess)
-    expect(issued[2]?.policy).toEqual({
-      ...boundedBase,
-      budget: { ...boundedBase.budget, maximumConcurrentInvocations: 3 },
-      rate: { ...boundedBase.rate, maximumCallsPerMinute: 7, maximumCallsPerHour: 42 },
+    expect(issued[2]?.spendingPolicy).toEqual({
+      ...spendingPolicyBase,
+      budget: { ...spendingPolicyBase.budget, maximumConcurrentCalls: 3 },
+      rate: { ...spendingPolicyBase.rate, maximumCallsPerMinute: 7, maximumCallsPerHour: 42 },
     })
 
     const token = await handleOAuthTokenPost(formRequest('http://localhost/oauth/token', {
@@ -1387,10 +1423,10 @@ describe('Customer Request OAuth HTTP adapter', () => {
     expect(await token.json()).toMatchObject({ access_token: 'bounded-secret', expires_in: 7_200 })
   })
 
-  it('does not issue production full_yolo or invalid persisted access', async () => {
+  it('does not issue production unrestricted_test_only or invalid persisted access', async () => {
     const store = storeFixture()
-    await store.insertGrant({ grantRef: 'device:full-yolo', revision: 1, flow: 'device_code', clientId: 'client-local', requestedScopes: ['market_operations:invoke', 'customer_requests:full_yolo'], requestedAccess: { environment: 'production', ...allOperations, expiresInSeconds: 1_000 }, approvedAccess: { environment: 'production', ...allOperations, expiresInSeconds: 1_000 }, deviceCodeHash: 'full-code', userCodeHash: 'full-user', status: 'pending', createdAt: 1_000, expiresAt: 601_000, nextPollAt: 1_000, displayName: 'Unsafe assistant' })
-    await store.insertGrant({ grantRef: 'device:invalid-access', revision: 1, flow: 'device_code', clientId: 'client-local', requestedScopes: ['market_operations:invoke', 'customer_requests:approve_each'], requestedAccess: { environment: 'production', ...allOperations, expiresInSeconds: 1_000, maximumSpendPerInvocation: { currency: 'USD', units: '100', exponent: 2 } }, approvedAccess: { environment: 'production', ...allOperations, expiresInSeconds: 1_000, maximumSpendPerInvocation: { currency: 'USD', units: '100', exponent: 2 } }, deviceCodeHash: 'invalid-code', userCodeHash: 'invalid-user', status: 'pending', createdAt: 1_000, expiresAt: 601_000, nextPollAt: 1_000, displayName: 'Invalid assistant' })
+    await store.insertGrant({ grantRef: 'device:full-yolo', revision: 1, flow: 'device_code', clientId: 'client-local', requestedScopes: ['market_tools:call', 'customer_requests:unrestricted_test_only'], requestedAccess: { environment: 'production', ...allTools, expiresInSeconds: 1_000 }, approvedAccess: { environment: 'production', ...allTools, expiresInSeconds: 1_000 }, deviceCodeHash: 'full-code', userCodeHash: 'full-user', status: 'pending', createdAt: 1_000, expiresAt: 601_000, nextPollAt: 1_000, displayName: 'Unsafe assistant' })
+    await store.insertGrant({ grantRef: 'device:invalid-access', revision: 1, flow: 'device_code', clientId: 'client-local', requestedScopes: ['market_tools:call', 'customer_requests:approval_required'], requestedAccess: { environment: 'production', ...allTools, expiresInSeconds: 1_000, maximumSpendPerCall: { currency: 'USD', units: '100', exponent: 2 } }, approvedAccess: { environment: 'production', ...allTools, expiresInSeconds: 1_000, maximumSpendPerCall: { currency: 'USD', units: '100', exponent: 2 } }, deviceCodeHash: 'invalid-code', userCodeHash: 'invalid-user', status: 'pending', createdAt: 1_000, expiresAt: 601_000, nextPollAt: 1_000, displayName: 'Invalid assistant' })
     let issueCount = 0
     const options = {
       store,
@@ -1400,9 +1436,9 @@ describe('Customer Request OAuth HTTP adapter', () => {
       authenticateOwner: async () => ({ isAuthenticated: true, userId: 'user_local' }),
       issueKey: async () => { issueCount += 1; return { keyId: 'ak_should-not-exist' } },
     }
-    const fullYolo = await handleOAuthConsentPost(formRequest('http://localhost/oauth/authorize', { grant_ref: 'device:full-yolo', expected_grant_revision: '1', expected_target_revision: '1', decision: 'approve', authority_mode: 'full_yolo', connection_target: 'new_agent' }), options)
-    const invalid = await handleOAuthConsentPost(formRequest('http://localhost/oauth/authorize', { grant_ref: 'device:invalid-access', expected_grant_revision: '1', expected_target_revision: '1', decision: 'approve', authority_mode: 'approve_each', connection_target: 'new_agent' }), options)
-    expect(fullYolo.status).toBe(202)
+    const unrestrictedTestOnly = await handleOAuthConsentPost(formRequest('http://localhost/oauth/authorize', { grant_ref: 'device:full-yolo', expected_grant_revision: '1', expected_target_revision: '1', decision: 'approve', authority_mode: 'unrestricted_test_only', connection_target: 'new_agent' }), options)
+    const invalid = await handleOAuthConsentPost(formRequest('http://localhost/oauth/authorize', { grant_ref: 'device:invalid-access', expected_grant_revision: '1', expected_target_revision: '1', decision: 'approve', authority_mode: 'approval_required', connection_target: 'new_agent' }), options)
+    expect(unrestrictedTestOnly.status).toBe(202)
     expect(invalid.status).toBe(202)
     expect(issueCount).toBe(0)
     expect(store.grants.get('device:full-yolo')?.status).toBe('issuing')
@@ -1476,9 +1512,9 @@ describe('Customer Request OAuth HTTP adapter', () => {
       revision: 2,
       flow: 'device_code',
       clientId: 'client-local',
-      requestedScopes: ['market_operations:invoke', 'customer_requests:inspect_only'],
-      requestedAccess: { environment: 'sandbox', ...allOperations, expiresInSeconds: AGENT_ACCESS_KEY_TTL_SECONDS },
-      approvedAccess: { environment: 'sandbox', ...allOperations, expiresInSeconds: AGENT_ACCESS_KEY_TTL_SECONDS },
+      requestedScopes: ['market_tools:call', 'customer_requests:read_only'],
+      requestedAccess: { environment: 'sandbox', ...allTools, expiresInSeconds: AGENT_ACCESS_KEY_TTL_SECONDS },
+      approvedAccess: { environment: 'sandbox', ...allTools, expiresInSeconds: AGENT_ACCESS_KEY_TTL_SECONDS },
       deviceCodeHash: 'device-hash',
       userCodeHash: await hashOAuthValue('ISSU-ING1'),
       status: 'issuing',
@@ -1527,9 +1563,9 @@ describe('Customer Request OAuth HTTP adapter', () => {
       revision: 2,
       flow: 'device_code',
       clientId: 'client-local',
-      requestedScopes: ['market_operations:invoke', 'customer_requests:inspect_only'],
-      requestedAccess: { environment: 'sandbox', ...allOperations, expiresInSeconds: AGENT_ACCESS_KEY_TTL_SECONDS },
-      approvedAccess: { environment: 'sandbox', ...allOperations, expiresInSeconds: AGENT_ACCESS_KEY_TTL_SECONDS },
+      requestedScopes: ['market_tools:call', 'customer_requests:read_only'],
+      requestedAccess: { environment: 'sandbox', ...allTools, expiresInSeconds: AGENT_ACCESS_KEY_TTL_SECONDS },
+      approvedAccess: { environment: 'sandbox', ...allTools, expiresInSeconds: AGENT_ACCESS_KEY_TTL_SECONDS },
       userCodeHash: await hashOAuthValue('PRIV-ATE1'),
       status: 'issuing',
       ...(grantOwnerId === undefined ? {} : { ownerId: grantOwnerId }),
@@ -1567,9 +1603,9 @@ describe('Customer Request OAuth HTTP adapter', () => {
         revision: 3,
         flow: 'device_code',
         clientId: 'client-local',
-        requestedScopes: ['market_operations:invoke', 'customer_requests:inspect_only'],
-        requestedAccess: { environment: 'sandbox', ...allOperations, expiresInSeconds: AGENT_ACCESS_KEY_TTL_SECONDS },
-        approvedAccess: { environment: 'sandbox', ...allOperations, expiresInSeconds: AGENT_ACCESS_KEY_TTL_SECONDS },
+        requestedScopes: ['market_tools:call', 'customer_requests:read_only'],
+        requestedAccess: { environment: 'sandbox', ...allTools, expiresInSeconds: AGENT_ACCESS_KEY_TTL_SECONDS },
+        approvedAccess: { environment: 'sandbox', ...allTools, expiresInSeconds: AGENT_ACCESS_KEY_TTL_SECONDS },
         userCodeHash: await hashOAuthValue(`COMPLETE-${status}`),
         status,
         ownerId: 'user_local',
@@ -1598,21 +1634,21 @@ describe('Customer Request OAuth HTTP adapter', () => {
 
   it('binds device consent to the signed-in owner and returns no key secret', async () => {
     const store = storeFixture()
-    await store.insertGrant({ grantRef: 'device:1', revision: 1, flow: 'device_code', clientId: 'client-local', requestedScopes: ['market_operations:invoke', 'customer_requests:inspect_only'], requestedAccess: { environment: 'sandbox', ...allOperations, expiresInSeconds: AGENT_ACCESS_KEY_TTL_SECONDS }, approvedAccess: { environment: 'sandbox', ...allOperations, expiresInSeconds: AGENT_ACCESS_KEY_TTL_SECONDS }, deviceCodeHash: 'd', userCodeHash: await hashOAuthValue('ABCD-EFGH'), status: 'pending', createdAt: 1_000, expiresAt: 601_000, nextPollAt: 1_000, displayName: 'Local assistant' })
+    await store.insertGrant({ grantRef: 'device:1', revision: 1, flow: 'device_code', clientId: 'client-local', requestedScopes: ['market_tools:call', 'customer_requests:read_only'], requestedAccess: { environment: 'sandbox', ...allTools, expiresInSeconds: AGENT_ACCESS_KEY_TTL_SECONDS }, approvedAccess: { environment: 'sandbox', ...allTools, expiresInSeconds: AGENT_ACCESS_KEY_TTL_SECONDS }, deviceCodeHash: 'd', userCodeHash: await hashOAuthValue('ABCD-EFGH'), status: 'pending', createdAt: 1_000, expiresAt: 601_000, nextPollAt: 1_000, displayName: 'Local assistant' })
     let issuedInput: OAuthIssueInput | undefined
-    const response = await handleOAuthConsentPost(formRequest('http://localhost/oauth/authorize', { grant_ref: 'device:1', expected_grant_revision: '1', expected_target_revision: '1', decision: 'approve', authority_mode: 'inspect_only', connection_target: 'new_agent' }), {
+    const response = await handleOAuthConsentPost(formRequest('http://localhost/oauth/authorize', { grant_ref: 'device:1', expected_grant_revision: '1', expected_target_revision: '1', decision: 'approve', authority_mode: 'read_only', connection_target: 'new_agent' }), {
       store, ...consentSecurity(store), now: () => 1_000, canonicalBaseUrl: 'http://localhost', authenticateOwner: async () => ({ isAuthenticated: true, userId: 'user_local' }), issueKey: async (input) => { issuedInput = input; return { keyId: 'ak_local' } },
     })
     expect(response.status).toBe(200)
     expect(await response.text()).not.toContain('ak_local')
     expect(store.grants.get('device:1')?.status).toBe('approved')
-    expect(issuedInput?.authorityMode).toBe('inspect_only')
-    expect(issuedInput?.approvedAccess).toEqual({ environment: 'sandbox', ...allOperations, expiresInSeconds: AGENT_ACCESS_KEY_TTL_SECONDS })
-    expect(issuedInput?.policy).toEqual(defaultSandboxAgentAccessPolicy({ currency: 'USD', exponent: 2 }))
+    expect(issuedInput?.authorityMode).toBe('read_only')
+    expect(issuedInput?.approvedAccess).toEqual({ environment: 'sandbox', ...allTools, expiresInSeconds: AGENT_ACCESS_KEY_TTL_SECONDS })
+    expect(issuedInput?.spendingPolicy).toEqual(defaultSandboxAgentAccessPolicy({ currency: 'USD', exponent: 2 }))
   })
   it('denies a pending grant without requiring approval proof or issuing a key', async () => {
     const store = storeFixture()
-    await store.insertGrant({ grantRef: 'device:denied', revision: 1, flow: 'device_code', clientId: 'client-local', requestedScopes: ['market_operations:invoke', 'customer_requests:inspect_only'], requestedAccess: { environment: 'sandbox', ...allOperations, expiresInSeconds: AGENT_ACCESS_KEY_TTL_SECONDS }, approvedAccess: { environment: 'sandbox', ...allOperations, expiresInSeconds: AGENT_ACCESS_KEY_TTL_SECONDS }, deviceCodeHash: 'd-denied', userCodeHash: 'u-denied', status: 'pending', createdAt: 1_000, expiresAt: 601_000, nextPollAt: 1_000, displayName: 'Declined assistant' })
+    await store.insertGrant({ grantRef: 'device:denied', revision: 1, flow: 'device_code', clientId: 'client-local', requestedScopes: ['market_tools:call', 'customer_requests:read_only'], requestedAccess: { environment: 'sandbox', ...allTools, expiresInSeconds: AGENT_ACCESS_KEY_TTL_SECONDS }, approvedAccess: { environment: 'sandbox', ...allTools, expiresInSeconds: AGENT_ACCESS_KEY_TTL_SECONDS }, deviceCodeHash: 'd-denied', userCodeHash: 'u-denied', status: 'pending', createdAt: 1_000, expiresAt: 601_000, nextPollAt: 1_000, displayName: 'Declined assistant' })
     const reserveConsent = vi.fn<NonNullable<OAuthApiOptions['reserveConsent']>>()
     const issueKey = vi.fn<NonNullable<OAuthApiOptions['issueKey']>>()
 
@@ -1636,14 +1672,14 @@ describe('Customer Request OAuth HTTP adapter', () => {
   })
   it('replays an identical completed approval without issuing another key', async () => {
     const store = storeFixture()
-    await store.insertGrant({ grantRef: 'device:completed-replay', revision: 1, flow: 'device_code', clientId: 'client-local', requestedScopes: ['market_operations:invoke', 'customer_requests:inspect_only'], requestedAccess: { environment: 'sandbox', ...allOperations, expiresInSeconds: AGENT_ACCESS_KEY_TTL_SECONDS }, approvedAccess: { environment: 'sandbox', ...allOperations, expiresInSeconds: AGENT_ACCESS_KEY_TTL_SECONDS }, deviceCodeHash: 'd-replay', userCodeHash: 'u-replay', status: 'pending', createdAt: 1_000, expiresAt: 601_000, nextPollAt: 1_000, displayName: 'Replay-safe assistant' })
+    await store.insertGrant({ grantRef: 'device:completed-replay', revision: 1, flow: 'device_code', clientId: 'client-local', requestedScopes: ['market_tools:call', 'customer_requests:read_only'], requestedAccess: { environment: 'sandbox', ...allTools, expiresInSeconds: AGENT_ACCESS_KEY_TTL_SECONDS }, approvedAccess: { environment: 'sandbox', ...allTools, expiresInSeconds: AGENT_ACCESS_KEY_TTL_SECONDS }, deviceCodeHash: 'd-replay', userCodeHash: 'u-replay', status: 'pending', createdAt: 1_000, expiresAt: 601_000, nextPollAt: 1_000, displayName: 'Replay-safe assistant' })
     const issueKey = vi.fn(async () => ({ keyId: 'ak_replay_safe' }))
     const request = () => formRequest('http://localhost/oauth/authorize', {
       grant_ref: 'device:completed-replay',
       expected_grant_revision: '1',
       expected_target_revision: '1',
       decision: 'approve',
-      authority_mode: 'inspect_only',
+      authority_mode: 'read_only',
       connection_target: 'new_agent',
     })
     const options = {
@@ -1683,7 +1719,7 @@ describe('Customer Request OAuth HTTP adapter', () => {
     vi.stubEnv('VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E', 'true')
     const store = storeFixture()
     await store.insertClient({ clientId: 'client-local', clientName: 'Local E2E assistant', redirectUris: ['http://localhost/callback'], grantTypes: ['urn:ietf:params:oauth:grant-type:device_code'], tokenEndpointAuthMethod: 'none', createdAt: 1_000 })
-    await store.insertGrant({ grantRef: 'device:local-e2e-consent', revision: 1, flow: 'device_code', clientId: 'client-local', requestedScopes: ['market_operations:invoke', 'customer_requests:inspect_only'], requestedAccess: { environment: 'sandbox', ...allOperations, expiresInSeconds: AGENT_ACCESS_KEY_TTL_SECONDS }, approvedAccess: { environment: 'sandbox', ...allOperations, expiresInSeconds: AGENT_ACCESS_KEY_TTL_SECONDS }, deviceCodeHash: await hashOAuthValue('local-e2e-device'), userCodeHash: 'u-local-e2e', status: 'pending', createdAt: 1_000, expiresAt: 601_000, nextPollAt: 1_000, displayName: 'Local E2E assistant' })
+    await store.insertGrant({ grantRef: 'device:local-e2e-consent', revision: 1, flow: 'device_code', clientId: 'client-local', requestedScopes: ['market_tools:call', 'customer_requests:read_only'], requestedAccess: { environment: 'sandbox', ...allTools, expiresInSeconds: AGENT_ACCESS_KEY_TTL_SECONDS }, approvedAccess: { environment: 'sandbox', ...allTools, expiresInSeconds: AGENT_ACCESS_KEY_TTL_SECONDS }, deviceCodeHash: await hashOAuthValue('local-e2e-device'), userCodeHash: 'u-local-e2e', status: 'pending', createdAt: 1_000, expiresAt: 601_000, nextPollAt: 1_000, displayName: 'Local E2E assistant' })
     const security = consentSecurity(store, LOCAL_E2E_OPERATOR_PRINCIPAL)
     const reserveConsent = vi.fn(security.reserveConsent!)
     const localApi = createLocalE2EAgentAccessKeyApi()
@@ -1694,7 +1730,7 @@ describe('Customer Request OAuth HTTP adapter', () => {
         kind: 'recorded',
         grantRef: input.grantRef,
         generation: 1,
-        policyDigest: 'sha256:local-e2e-policy',
+        spendingPolicyDigest: 'sha256:local-e2e-policy',
         lifecycle: 'active',
         expiresAt: input.expiresAt,
       }
@@ -1704,7 +1740,7 @@ describe('Customer Request OAuth HTTP adapter', () => {
       expected_grant_revision: '1',
       expected_target_revision: '1',
       decision: 'approve',
-      authority_mode: 'inspect_only',
+      authority_mode: 'read_only',
       connection_target: 'new_agent',
     })
 
@@ -1732,8 +1768,8 @@ describe('Customer Request OAuth HTTP adapter', () => {
       const replayReservation = reserveConsent.mock.calls[1]?.[0]
       expect(registerBinding.mock.calls[0]?.[0]).toMatchObject({
         displayName: 'Local E2E assistant',
-        operationAccess: 'all_admitted',
-        operationRefs: [],
+        toolAccess: 'all_admitted',
+        toolRefs: [],
       })
       expect(firstReservation?.proof).toMatchObject({
         firstFactorAgeMinutes: 0,
@@ -1771,7 +1807,7 @@ describe('Customer Request OAuth HTTP adapter', () => {
     vi.stubEnv('VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E', 'true')
     const store = storeFixture()
     await store.insertClient({ clientId: 'client-local-replacement', clientName: 'Local replacement', redirectUris: ['http://localhost/callback'], grantTypes: ['urn:ietf:params:oauth:grant-type:device_code'], tokenEndpointAuthMethod: 'none', createdAt: 1_000 })
-    await store.insertGrant({ grantRef: 'device:local-replacement', revision: 1, flow: 'device_code', clientId: 'client-local-replacement', requestedScopes: ['market_operations:invoke', 'customer_requests:inspect_only'], requestedAccess: { environment: 'sandbox', ...allOperations, expiresInSeconds: AGENT_ACCESS_KEY_TTL_SECONDS }, approvedAccess: { environment: 'sandbox', ...allOperations, expiresInSeconds: AGENT_ACCESS_KEY_TTL_SECONDS }, deviceCodeHash: await hashOAuthValue('local-replacement-device'), userCodeHash: 'u-local-replacement', status: 'pending', createdAt: 1_000, expiresAt: 601_000, nextPollAt: 1_000, displayName: 'Local replacement' })
+    await store.insertGrant({ grantRef: 'device:local-replacement', revision: 1, flow: 'device_code', clientId: 'client-local-replacement', requestedScopes: ['market_tools:call', 'customer_requests:read_only'], requestedAccess: { environment: 'sandbox', ...allTools, expiresInSeconds: AGENT_ACCESS_KEY_TTL_SECONDS }, approvedAccess: { environment: 'sandbox', ...allTools, expiresInSeconds: AGENT_ACCESS_KEY_TTL_SECONDS }, deviceCodeHash: await hashOAuthValue('local-replacement-device'), userCodeHash: 'u-local-replacement', status: 'pending', createdAt: 1_000, expiresAt: 601_000, nextPollAt: 1_000, displayName: 'Local replacement' })
     const replacement = {
       principalRef: 'prn_selected_agent',
       generation: 2,
@@ -1782,8 +1818,8 @@ describe('Customer Request OAuth HTTP adapter', () => {
     } as const
     const prepareReplacement = vi.fn<NonNullable<OAuthApiOptions['prepareReplacement']>>(async (input) => {
       expect(input.principalRef).toBe('prn_selected_agent')
-      expect(input.operationAccess).toBe('all_admitted')
-      expect(input.operationRefs).toEqual([])
+      expect(input.toolAccess).toBe('all_admitted')
+      expect(input.toolRefs).toEqual([])
       return { kind: 'recorded', ...replacement }
     })
 
@@ -1793,7 +1829,7 @@ describe('Customer Request OAuth HTTP adapter', () => {
         expected_grant_revision: '1',
         expected_target_revision: '4',
         decision: 'approve',
-        authority_mode: 'inspect_only',
+        authority_mode: 'read_only',
         connection_target: 'replace_credential',
         principal_ref: 'prn_selected_agent',
       }), {
@@ -1817,7 +1853,7 @@ describe('Customer Request OAuth HTTP adapter', () => {
   })
   it('returns Clerk reverification hints before reservation and terminal JSON when signed evidence is unavailable', async () => {
     const store = storeFixture()
-    await store.insertGrant({ grantRef: 'device:proof-gate', revision: 1, flow: 'device_code', clientId: 'client-local', requestedScopes: ['market_operations:invoke', 'customer_requests:inspect_only'], requestedAccess: { environment: 'sandbox', ...allOperations, expiresInSeconds: AGENT_ACCESS_KEY_TTL_SECONDS }, approvedAccess: { environment: 'sandbox', ...allOperations, expiresInSeconds: AGENT_ACCESS_KEY_TTL_SECONDS }, deviceCodeHash: 'd-proof', userCodeHash: 'u-proof', status: 'pending', createdAt: 1_000, expiresAt: 601_000, nextPollAt: 1_000, displayName: 'Proof assistant' })
+    await store.insertGrant({ grantRef: 'device:proof-gate', revision: 1, flow: 'device_code', clientId: 'client-local', requestedScopes: ['market_tools:call', 'customer_requests:read_only'], requestedAccess: { environment: 'sandbox', ...allTools, expiresInSeconds: AGENT_ACCESS_KEY_TTL_SECONDS }, approvedAccess: { environment: 'sandbox', ...allTools, expiresInSeconds: AGENT_ACCESS_KEY_TTL_SECONDS }, deviceCodeHash: 'd-proof', userCodeHash: 'u-proof', status: 'pending', createdAt: 1_000, expiresAt: 601_000, nextPollAt: 1_000, displayName: 'Proof assistant' })
     const reserveConsent = vi.fn<NonNullable<OAuthApiOptions['reserveConsent']>>()
     const issueKey = vi.fn<NonNullable<OAuthApiOptions['issueKey']>>()
     const request = () => formRequest('http://localhost/oauth/authorize', {
@@ -1825,7 +1861,7 @@ describe('Customer Request OAuth HTTP adapter', () => {
       expected_grant_revision: '1',
       expected_target_revision: '1',
       decision: 'approve',
-      authority_mode: 'inspect_only',
+      authority_mode: 'read_only',
       connection_target: 'new_agent',
     })
     const hint = await handleOAuthConsentPost(request(), {
@@ -1867,7 +1903,7 @@ describe('Customer Request OAuth HTTP adapter', () => {
   })
   it('returns a durable reference and does not issue a key when the security rate limit is unavailable', async () => {
     const store = storeFixture()
-    await store.insertGrant({ grantRef: 'device:rate-storage-outage', revision: 1, flow: 'device_code', clientId: 'client-local', requestedScopes: ['market_operations:invoke', 'customer_requests:inspect_only'], requestedAccess: { environment: 'sandbox', ...allOperations, expiresInSeconds: AGENT_ACCESS_KEY_TTL_SECONDS }, approvedAccess: { environment: 'sandbox', ...allOperations, expiresInSeconds: AGENT_ACCESS_KEY_TTL_SECONDS }, deviceCodeHash: 'd-rate-storage', userCodeHash: 'u-rate-storage', status: 'pending', createdAt: 1_000, expiresAt: 601_000, nextPollAt: 1_000, displayName: 'Rate-safe assistant' })
+    await store.insertGrant({ grantRef: 'device:rate-storage-outage', revision: 1, flow: 'device_code', clientId: 'client-local', requestedScopes: ['market_tools:call', 'customer_requests:read_only'], requestedAccess: { environment: 'sandbox', ...allTools, expiresInSeconds: AGENT_ACCESS_KEY_TTL_SECONDS }, approvedAccess: { environment: 'sandbox', ...allTools, expiresInSeconds: AGENT_ACCESS_KEY_TTL_SECONDS }, deviceCodeHash: 'd-rate-storage', userCodeHash: 'u-rate-storage', status: 'pending', createdAt: 1_000, expiresAt: 601_000, nextPollAt: 1_000, displayName: 'Rate-safe assistant' })
     const reserveConsent = vi.fn<NonNullable<OAuthApiOptions['reserveConsent']>>(async () => ({
       kind: 'unavailable',
       code: 'security_control_unavailable',
@@ -1880,7 +1916,7 @@ describe('Customer Request OAuth HTTP adapter', () => {
       expected_grant_revision: '1',
       expected_target_revision: '1',
       decision: 'approve',
-      authority_mode: 'inspect_only',
+      authority_mode: 'read_only',
       connection_target: 'new_agent',
     }), {
       store,
@@ -1902,8 +1938,8 @@ describe('Customer Request OAuth HTTP adapter', () => {
   })
   it('reports key issuance outages as retryable server failures without consuming the grant', async () => {
     const store = storeFixture()
-    await store.insertGrant({ grantRef: 'device:issuance-outage', revision: 1, flow: 'device_code', clientId: 'client-local', requestedScopes: ['market_operations:invoke', 'customer_requests:inspect_only'], requestedAccess: { environment: 'sandbox', ...allOperations, expiresInSeconds: AGENT_ACCESS_KEY_TTL_SECONDS }, approvedAccess: { environment: 'sandbox', ...allOperations, expiresInSeconds: AGENT_ACCESS_KEY_TTL_SECONDS }, deviceCodeHash: 'd-outage', userCodeHash: 'u-outage', status: 'pending', createdAt: 1_000, expiresAt: 601_000, nextPollAt: 1_000, displayName: 'Unavailable assistant' })
-    const response = await handleOAuthConsentPost(formRequest('http://localhost/oauth/authorize', { grant_ref: 'device:issuance-outage', expected_grant_revision: '1', expected_target_revision: '1', decision: 'approve', authority_mode: 'inspect_only', connection_target: 'new_agent' }), {
+    await store.insertGrant({ grantRef: 'device:issuance-outage', revision: 1, flow: 'device_code', clientId: 'client-local', requestedScopes: ['market_tools:call', 'customer_requests:read_only'], requestedAccess: { environment: 'sandbox', ...allTools, expiresInSeconds: AGENT_ACCESS_KEY_TTL_SECONDS }, approvedAccess: { environment: 'sandbox', ...allTools, expiresInSeconds: AGENT_ACCESS_KEY_TTL_SECONDS }, deviceCodeHash: 'd-outage', userCodeHash: 'u-outage', status: 'pending', createdAt: 1_000, expiresAt: 601_000, nextPollAt: 1_000, displayName: 'Unavailable assistant' })
+    const response = await handleOAuthConsentPost(formRequest('http://localhost/oauth/authorize', { grant_ref: 'device:issuance-outage', expected_grant_revision: '1', expected_target_revision: '1', decision: 'approve', authority_mode: 'read_only', connection_target: 'new_agent' }), {
       store,
       ...consentSecurity(store),
       now: () => 1_000,
@@ -1923,7 +1959,7 @@ describe('Customer Request OAuth HTTP adapter', () => {
   })
   it('rejects consent from a foreign Origin before changing the grant', async () => {
     const store = storeFixture()
-    await store.insertGrant({ grantRef: 'device:foreign-origin', revision: 1, flow: 'device_code', clientId: 'client-local', requestedScopes: ['market_operations:invoke', 'customer_requests:inspect_only'], requestedAccess: { environment: 'sandbox', ...allOperations, expiresInSeconds: AGENT_ACCESS_KEY_TTL_SECONDS }, approvedAccess: { environment: 'sandbox', ...allOperations, expiresInSeconds: AGENT_ACCESS_KEY_TTL_SECONDS }, deviceCodeHash: 'd-foreign', userCodeHash: 'u-foreign', status: 'pending', createdAt: 1_000, expiresAt: 601_000, nextPollAt: 1_000, displayName: 'Local assistant' })
+    await store.insertGrant({ grantRef: 'device:foreign-origin', revision: 1, flow: 'device_code', clientId: 'client-local', requestedScopes: ['market_tools:call', 'customer_requests:read_only'], requestedAccess: { environment: 'sandbox', ...allTools, expiresInSeconds: AGENT_ACCESS_KEY_TTL_SECONDS }, approvedAccess: { environment: 'sandbox', ...allTools, expiresInSeconds: AGENT_ACCESS_KEY_TTL_SECONDS }, deviceCodeHash: 'd-foreign', userCodeHash: 'u-foreign', status: 'pending', createdAt: 1_000, expiresAt: 601_000, nextPollAt: 1_000, displayName: 'Local assistant' })
     const response = await handleOAuthConsentPost(formRequest('http://localhost/oauth/authorize', { grant_ref: 'device:foreign-origin', decision: 'approve' }, 'https://evil.example'), {
       store, now: () => 1_000, canonicalBaseUrl: 'http://localhost', authenticateOwner: async () => ({ isAuthenticated: true, userId: 'user_local' }), issueKey: async () => ({ keyId: 'ak_local' }),
     })

@@ -520,10 +520,10 @@ describe('System workload cron boundary', () => {
 
   it('routes every declared mutation consequence through same-transaction current admission', async () => {
     const operations = [
-      'capabilityOperationInvocations:cancelBeforeClaim',
-      'capabilityOperationInvocations:claimAutomaticReconciliationCandidate',
-      'capabilityOperationInvocations:finishAutomaticReconciliation',
-      'capabilityOperationX402AuthorizationExpiry:queueExpiredX402Authorization',
+      'capabilityCalls:cancelBeforeClaim',
+      'capabilityCalls:claimAutomaticReconciliationCandidate',
+      'capabilityCalls:finishAutomaticReconciliation',
+      'capabilityCallX402AuthorizationExpiry:queueExpiredX402Authorization',
       'capabilitySupply:recordCapabilityProbeResult',
       'facilitatorDiscovery:reconcile',
       'marketExternalRegistry:begin',
@@ -788,11 +788,11 @@ function seedInvocationAuthority(
   const rootActor = 'prn_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
   const intermediate = 'prn_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'
   const leafSubject = 'prn_cccccccccccccccccccccccccccccccc'
-  db.seed('capabilityOperationInvocations', {
-    invocationRef: 'inv_cron',
+  db.seed('capabilityCalls', {
+    callRef: 'inv_cron',
     principalId: input.invocationPrincipalRef ?? leafSubject,
     ownerId: input.invocationAccountRef ?? resourceAccountRef,
-    operationRef: input.invocationOperationRef ?? 'invocation:inv_cron',
+    toolRef: input.invocationOperationRef ?? 'invocation:inv_cron',
     grantRef: leafGrantRef,
     grantGeneration: 7,
     grantExpiresAt: input.invocationGrantExpiresAt ?? (input.grantExpiresAt ?? Date.now() + 60_000),

@@ -57,7 +57,7 @@ const principal: AgentAccessPrincipal = {
   applicationRef: 'agentic-economy',
   environment: 'production',
   scopes: ['market_supply:manage'],
-  authorityMode: 'full_yolo',
+  authorityMode: 'unrestricted_test_only',
 }
 const preparedMaterial = {
   sourceKind: 'openapi_http',
@@ -161,7 +161,7 @@ function setHappyPublishResponses() {
           kind: 'published',
           publicationRef: 'publication:one',
           publicationRevision: 1,
-          operationRef: 'operation:one',
+          toolRef: 'operation:one',
           lifecycle: { state: 'active', reasons: [] },
         }
       default:
@@ -191,10 +191,10 @@ beforeEach(() => {
 describe('supply action runtime boundaries', () => {
   it('separates the paginated Provider directory from one exact lifecycle status', async () => {
     const projectedStatus = {
-      schemaVersion: 'supplier_operations:v1',
+      schemaVersion: 'provider_tools:v1',
       businessRef: 'business:supply-actions',
       providerRef: 'business:supply-actions',
-      operationRef: 'operation:one',
+      toolRef: 'operation:one',
       revision: 1,
       state: 'Published',
       reasonCodes: [],
@@ -212,28 +212,28 @@ describe('supply action runtime boundaries', () => {
         operationalConditions: [],
       },
     }
-    mocks.callPublicSourceMutation.mockImplementation(async (mutation: { name: string }) => mutation.name === 'capabilitySupplierOperations:listAgent'
+    mocks.callPublicSourceMutation.mockImplementation(async (mutation: { name: string }) => mutation.name === 'capabilityProviderTools:listAgent'
       ? { kind: 'available', page: [{ statusJson: JSON.stringify(projectedStatus) }], isDone: true, continueCursor: '' }
       : { kind: 'available', statusJson: JSON.stringify(projectedStatus) })
     const service = createSupplyManagementService(new Request('https://agent.example/api'), '{}')
 
-    const directory = await service.operationsList({
+    const directory = await service.toolsList({
       input: { businessRef: 'business:supply-actions', limit: 50 },
       principal,
       correlationId: 'list:one',
     })
     const status = await service.status({
-      input: { businessRef: 'business:supply-actions', operationRef: 'operation:one' },
+      input: { businessRef: 'business:supply-actions', toolRef: 'operation:one' },
       principal,
       correlationId: 'status:one',
     })
 
     expect(directory).toMatchObject({
       kind: 'available',
-      schemaVersion: 'supplier_operations:v1',
+      schemaVersion: 'provider_tools:v1',
       businessRef: 'business:supply-actions',
       page: [{
-        operationRef: 'operation:one',
+        toolRef: 'operation:one',
         state: 'Published',
       }],
       isDone: true,
@@ -241,10 +241,10 @@ describe('supply action runtime boundaries', () => {
     })
     expect(status).toMatchObject({
       kind: 'available',
-      schemaVersion: 'supplier_operations:v1',
+      schemaVersion: 'provider_tools:v1',
       businessRef: 'business:supply-actions',
       status: {
-        operationRef: 'operation:one',
+        toolRef: 'operation:one',
         state: 'Published',
         routeability: { available: true },
         health: {
@@ -354,7 +354,7 @@ describe('supply action runtime boundaries', () => {
           ],
         }
       }
-      if (mutation.name === 'capabilitySupply:publishPreparedCapability') return { kind: 'published', publicationRef: 'publication:one', publicationRevision: 1, operationRef: 'operation:one', lifecycle: { state: 'active', reasons: [] } }
+      if (mutation.name === 'capabilitySupply:publishPreparedCapability') return { kind: 'published', publicationRef: 'publication:one', publicationRevision: 1, toolRef: 'operation:one', lifecycle: { state: 'active', reasons: [] } }
       throw new Error(`unexpected_source_mutation:${mutation.name}`)
     })
     const service = createSupplyManagementService(new Request('https://agent.example/api'), '{}')
@@ -421,7 +421,7 @@ describe('supply action runtime boundaries', () => {
         kind: 'republished',
         publicationRef: withdrawInput.publicationRef,
         revision: 2,
-        operationRef: 'operation:one',
+        toolRef: 'operation:one',
         bindingId: 'binding:one',
         lifecycle: { state: 'active', reasons: [] },
       })

@@ -3,13 +3,13 @@ import { v } from 'convex/values'
 
 import { sourceWriteArgs } from './sourceWriteAdmission'
 import {
-  authorizeSupplierBusinessHandler,
-  ensureSupplierBusinessHandler,
-  renameSupplierBusinessHandler,
+  authorizeProviderBusinessHandler,
+  ensureProviderBusinessHandler,
+  renameProviderBusinessHandler,
 } from './catalogOfferingMutations'
 import {
-  currentOwnerSupplierIdentityResult,
-  getCurrentOwnerSupplierIdentityHandler,
+  currentOwnerProviderIdentityResult,
+  getCurrentOwnerProviderIdentityHandler,
   getCurrentOwnerPublicCatalogHandler,
   getPublicBusinessCatalogBySlugHandler,
   publicCatalogReadbackResult,
@@ -26,7 +26,7 @@ export {
   withdrawOfferingAccessPathCommand,
 } from './catalogOfferingMutations'
 
-const ensureSupplierBusinessResult = v.union(
+const ensureProviderBusinessResult = v.union(
   v.object({
     kind: v.union(v.literal('created'), v.literal('existing')),
     businessId: v.id('businesses'),
@@ -42,7 +42,7 @@ const ensureSupplierBusinessResult = v.union(
     ),
   }),
 )
-const renameSupplierBusinessResult = v.union(
+const renameProviderBusinessResult = v.union(
   v.object({
     kind: v.union(v.literal('updated'), v.literal('unchanged')),
     businessId: v.id('businesses'),
@@ -60,18 +60,18 @@ const renameSupplierBusinessResult = v.union(
   }),
 )
 
-export const ensureSupplierBusiness = mutationGeneric({
+export const ensureProviderBusiness = mutationGeneric({
   args: {
     name: v.string(),
     slug: v.string(),
     website: v.string(),
     providerIdentifier: v.string(),
   },
-  returns: ensureSupplierBusinessResult,
-  handler: ensureSupplierBusinessHandler,
+  returns: ensureProviderBusinessResult,
+  handler: ensureProviderBusinessHandler,
 })
 
-export const renameSupplierBusiness = mutationGeneric({
+export const renameProviderBusiness = mutationGeneric({
   args: {
     businessId: v.id('businesses'),
     name: v.string(),
@@ -79,14 +79,14 @@ export const renameSupplierBusiness = mutationGeneric({
     correlationId: v.string(),
     ...sourceWriteArgs,
   },
-  returns: renameSupplierBusinessResult,
-  handler: renameSupplierBusinessHandler,
+  returns: renameProviderBusinessResult,
+  handler: renameProviderBusinessHandler,
 })
 
-export const authorizeSupplierBusiness = queryGeneric({
+export const authorizeProviderBusiness = queryGeneric({
   args: { businessId: v.id('businesses') },
   returns: v.boolean(),
-  handler: authorizeSupplierBusinessHandler,
+  handler: authorizeProviderBusinessHandler,
 })
 
 export const getPublicBusinessCatalogBySlug = queryGeneric({
@@ -103,11 +103,11 @@ export const getCurrentOwnerPublicCatalog = queryGeneric({
   handler: getCurrentOwnerPublicCatalogHandler,
 })
 
-/** Minimal authenticated owner scope for Operations side-surface reads. */
-export const getCurrentOwnerSupplierIdentity = queryGeneric({
+/** Minimal authenticated owner scope for Provider side-surface reads. */
+export const getCurrentOwnerProviderIdentity = queryGeneric({
   args: {},
-  returns: currentOwnerSupplierIdentityResult,
-  handler: getCurrentOwnerSupplierIdentityHandler,
+  returns: currentOwnerProviderIdentityResult,
+  handler: getCurrentOwnerProviderIdentityHandler,
 })
 
 export type { PublicFirstRequestDisclosure } from '../src/modules/catalog/public'

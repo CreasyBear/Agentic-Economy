@@ -72,7 +72,7 @@ describe('sign-up account entry', () => {
     render(<Component />)
 
     expect(screen.getByRole('heading', { name: 'Create a Provider account' })).toBeTruthy()
-    expect(screen.getByText('After you create your account, you’ll continue to the Operation publishing workspace.')).toBeTruthy()
+    expect(screen.getByText('After you create your account, you’ll continue to the Tool publishing workspace.')).toBeTruthy()
     expect(routeState.clerkProps).toMatchObject({
       fallbackRedirectUrl: '/owner/supply',
       signInUrl: '/sign-in',

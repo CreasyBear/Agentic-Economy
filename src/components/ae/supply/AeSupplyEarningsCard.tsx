@@ -38,19 +38,19 @@ export function AeSupplyEarningsCard({
             }
             description={
               readback.code === "unauthenticated"
-                ? "An authenticated owner session is required to read supplier earnings."
+                ? "An authenticated owner session is required to read provider earnings."
                 : "We could not read source earnings and payout data. Try again later."
             }
           />
         ) : readback.kind === "not_found" ? (
           <AeEmptyState
             title="No earnings have been recorded."
-            description="This supplier does not have an earnings account yet. Setup or test calls do not create earnings."
+            description="This provider does not have an earnings account yet. Setup or test calls do not create earnings."
           />
         ) : readback.accounts.length === 0 ? (
           <AeEmptyState
             title="No earnings have been recorded."
-            description="No supplier earnings account exists yet. Setup or test calls do not create earnings."
+            description="No provider earnings account exists yet. Setup or test calls do not create earnings."
           />
         ) : (
           <div className="grid gap-4">
@@ -65,12 +65,12 @@ export function AeSupplyEarningsCard({
             ))}
             {readback.accountsTruncated ? (
               <p className="text-sm text-muted-foreground">
-                Only the first 10 supplier earnings currencies are shown.
+                Only the first 10 provider earnings currencies are shown.
               </p>
             ) : null}
             <p className="text-sm text-muted-foreground">
               Setup or test calls do not create earnings. Earnings appear only
-              when source money records supplier accruals.
+              when source money records provider accruals.
             </p>
           </div>
         )}
@@ -321,14 +321,14 @@ function EarningsCurrencyCard({
           {account.currency} earnings
         </h4>
         <p className="text-sm text-muted-foreground">
-          Source-recorded supplier earnings and payout state.
+          Source-recorded provider earnings and payout state.
         </p>
       </div>
       <AeFactList
         facts={[
           { label: "Gross accrued", value: formatCurrencyAmount(account.earnings.grossAccrual) },
           { label: "AE fee / rake", value: formatCurrencyAmount(account.earnings.rake) },
-          { label: "Supplier net", value: formatCurrencyAmount(account.earnings.providerNet) },
+          { label: "Provider net", value: formatCurrencyAmount(account.earnings.providerNet) },
           { label: "Paid out", value: formatCurrencyAmount(account.earnings.paidOut) },
           { label: "Held", value: formatCurrencyAmount(account.earnings.held) },
           { label: "Payout account", value: payoutAccountLabel(accountState) },
@@ -361,7 +361,7 @@ function EarningsCurrencyCard({
               ...(stripeTransferId === undefined ? [] : [{ label: "Stripe transfer", value: stripeTransferId, mono: true }]),
               ...(destinationAccountId === undefined ? [] : [{ label: "Destination", value: destinationAccountId, mono: true }]),
               ...(requestDigest === undefined ? [] : [{ label: "Request digest", value: requestDigest, mono: true }]),
-              ...(evidenceDigest === undefined ? [] : [{ label: "Supplier evidence digest", value: evidenceDigest, mono: true }]),
+              ...(evidenceDigest === undefined ? [] : [{ label: "Provider evidence digest", value: evidenceDigest, mono: true }]),
               ...(providerHeldBefore === undefined || providerHeldAfter === undefined
                 ? []
                 : [{
@@ -399,8 +399,8 @@ function EarningsCurrencyCard({
       <div className="grid gap-2">
         <p className="m-0 text-sm text-muted-foreground">
           {isWaitingForMinimumPayout
-            ? "Your payout account is ready. You can approve a payout after supplier earnings reach the minimum shown above."
-            : "Payouts become available when your payout account and supplier configuration are ready."}
+            ? "Your payout account is ready. You can approve a payout after provider earnings reach the minimum shown above."
+            : "Payouts become available when your payout account and provider configuration are ready."}
         </p>
         <div className="flex flex-wrap gap-2">
           {canApprovePayout ? (
@@ -450,10 +450,10 @@ function EarningsCurrencyCard({
           }}
           title={confirmAction === "transfer" ? "Confirm payout" : confirmAction === "onboarding" ? "Confirm payout authority update" : "Confirm payout authority"}
           description={confirmAction === "transfer"
-            ? `Transfer ${formatCurrencyAmount(account.payout.providerNet)} from supplier ${businessId} to Stripe account ending ${stripeAccountId?.slice(-4) ?? "unknown"}. AE reserves the amount now and dispatches through Stripe. It may not be reversible after dispatch; an uncertain outcome must be reconciled by status, not resubmitted.`
+            ? `Transfer ${formatCurrencyAmount(account.payout.providerNet)} from provider ${businessId} to Stripe account ending ${stripeAccountId?.slice(-4) ?? "unknown"}. AE reserves the amount now and dispatches through Stripe. It may not be reversible after dispatch; an uncertain outcome must be reconciled by status, not resubmitted.`
             : confirmAction === "onboarding"
-            ? `Reopen Stripe-hosted onboarding for ${account.currency} payouts from supplier ${businessId}. This may change where future payouts go. Current readiness remains authoritative after you return.`
-            : `Create Stripe-hosted ${account.currency} payout authority for supplier ${businessId} under your signed-in owner Account. This does not transfer funds. Current readiness is read back after you return.`}
+            ? `Reopen Stripe-hosted onboarding for ${account.currency} payouts from provider ${businessId}. This may change where future payouts go. Current readiness remains authoritative after you return.`
+            : `Create Stripe-hosted ${account.currency} payout authority for provider ${businessId} under your signed-in owner Account. This does not transfer funds. Current readiness is read back after you return.`}
           confirmLabel={confirmAction === "transfer" ? "Confirm payout" : confirmAction === "onboarding" ? "Confirm and continue" : "Confirm and set up"}
           pending={busy !== undefined}
           onConfirm={confirmPayoutAuthority}

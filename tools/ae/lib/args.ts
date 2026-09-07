@@ -10,7 +10,7 @@ export type CliOptions = {
   allowWrite: boolean
   technical?: boolean
   threadId?: string
-  operationRef?: string
+  toolRef?: string
   candidateDigest?: string
   apply?: boolean
   idempotencyKey?: string
@@ -26,7 +26,7 @@ export type CliOptions = {
   state?: string
   filters?: string | Record<string, unknown>
   input?: string
-  supplier?: boolean
+  provider?: boolean
 }
 
 export type CliBaseUrlSource =
@@ -135,7 +135,7 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
       'allow-write': { type: 'boolean' },
       apply: { type: 'boolean' },
       'thread-id': { type: 'string' },
-      'operation-ref': { type: 'string' },
+      'tool-ref': { type: 'string' },
       'candidate-digest': { type: 'string' },
       'idempotency-key': { type: 'string' },
       wait: { type: 'boolean' },
@@ -150,7 +150,7 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
       state: { type: 'string' },
       filters: { type: 'string' },
       input: { type: 'string' },
-      supplier: { type: 'boolean' },
+      provider: { type: 'boolean' },
     },
     allowPositionals: true,
     tokens: true,
@@ -175,7 +175,7 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
     technical: parsed.values.technical ?? false,
     apply: parsed.values.apply ?? false,
     ...(parsed.values['thread-id'] === undefined ? {} : { threadId: parsed.values['thread-id'] }),
-    ...(parsed.values['operation-ref'] === undefined ? {} : { operationRef: parsed.values['operation-ref'] }),
+    ...(parsed.values['tool-ref'] === undefined ? {} : { toolRef: parsed.values['tool-ref'] }),
     ...(parsed.values['candidate-digest'] === undefined ? {} : { candidateDigest: parsed.values['candidate-digest'] }),
     wait: parsed.values.wait ?? false,
     ...(parsed.values['idempotency-key'] === undefined ? {} : { idempotencyKey: parsed.values['idempotency-key'] }),
@@ -190,7 +190,7 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
     ...(parsed.values.state === undefined ? {} : { state: parsed.values.state }),
     ...(parsed.values.filters === undefined ? {} : { filters: parsed.values.filters }),
     ...(parsed.values.input === undefined ? {} : { input: parsed.values.input }),
-    supplier: parsed.values.supplier ?? false,
+    provider: parsed.values.provider ?? false,
   }
   const [command, ...positionals] = parsed.positionals
   return {

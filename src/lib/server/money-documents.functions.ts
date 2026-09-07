@@ -39,7 +39,7 @@ export type MoneyReconciliationCaseView = Readonly<{
   accountRef: string
   kind: 'projection_mismatch' | 'processor_difference' | 'treasury_difference' | 'settlement_difference' | 'document_difference'
   status: 'open' | 'resolved'
-  scopeType?: 'account' | 'legal_customer' | 'treasury_pool' | 'operation' | 'provider_obligation' | 'document'
+  scopeType?: 'account' | 'legal_customer' | 'treasury_pool' | 'tool' | 'provider_obligation' | 'document'
   scopeRef?: string
   ownerPrincipalRef?: string
   transactionRef?: string
@@ -53,8 +53,8 @@ export type MoneyReconciliationCaseView = Readonly<{
 
 export type MoneyProviderObligationView = Readonly<{
   obligationRef: string
-  invocationRef: string
-  operationRef: string
+  callRef: string
+  toolRef: string
   providerRef: string
   buyerAmountUnits: string
   providerAmountUnits: string
@@ -119,7 +119,7 @@ type ProviderReversalResult =
 const reverseProviderSettlementAction = sourceAction<
   Readonly<{
     obligationRef: string
-    invocationRef: string
+    callRef: string
     settlementTransactionRef: string
     evidenceRef: string
     evidenceDigest: string
@@ -152,7 +152,7 @@ const resolveCaseInput = z.strictObject({
 })
 const reverseProviderSettlementInput = z.strictObject({
   obligationRef: z.string().min(1).max(500),
-  invocationRef: z.string().min(1).max(500),
+  callRef: z.string().min(1).max(500),
   settlementTransactionRef: z.string().min(1).max(500),
   evidenceRef: z.string().min(1).max(500),
   evidenceDigest: z.string().regex(/^sha256:[a-f0-9]{64}$/u),
@@ -215,7 +215,9 @@ export const reverseOwnerProviderSettlementServer = createServerFn({ method: 'PO
     const commandRef = canonicalDigest({
       format: 'ae.provider-obligation-reversal-command-ref:v1',
       obligationRef: data.obligationRef,
-      invocationRef: data.invocationRef,
+      // Preserve the historical command-envelope key while sourcing it from
+      // the current canonical Call DTO.
+      invocationRef: data.callRef,
       settlementTransactionRef: data.settlementTransactionRef,
       evidenceDigest: data.evidenceDigest,
     })

@@ -204,7 +204,7 @@ function probeContractMatches(id: ProbeId, body: unknown): boolean {
         && typeof body.origin === 'string'
         && isHttpOrigin(body.origin)
         && Array.isArray(body.endpoints)
-        && isRecord(body.operationGateway)
+        && isRecord(body.toolGateway)
     case 'release':
       return body.kind === 'ok'
         && typeof body.sourceRevision === 'string'

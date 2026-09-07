@@ -14,20 +14,20 @@ import { Textarea } from '@/components/ui/textarea'
 import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
 import type { ProviderConnectionOwnerProjection } from '@/modules/capability-supply/provider-connection'
 import type {
-  SupplyOperationCandidate,
+  SupplyToolCandidate,
   SupplyMcpRemote,
   SupplySourceInput,
   SupplySourcePreview,
 } from '@/modules/capability-supply/source-preview'
 import type {
-  PublishSupplyOperationV2Input,
+  PublishSupplyToolV2Input,
 } from '@/modules/capability-supply/supply-publication-v2'
 import type { SupplyPublishResult } from '@/modules/capability-supply/supply-actions'
 import { parseDecimalExactAmount, rescaleExactAmount } from '@/modules/money/public'
 
 type SourceKind = SupplySourceInput['kind']
 type Environment = SupplySourceInput['environment']
-type AttestationKey = keyof PublishSupplyOperationV2Input['attestation']
+type AttestationKey = keyof PublishSupplyToolV2Input['attestation']
 
 export function AeSupplySourceNativeStart({
   businessRef,
@@ -60,10 +60,10 @@ export function AeSupplySourceNativeStart({
     source: SupplySourceInput
     sourceDigest: string
     sourceRevision: string
-    candidate: Pick<SupplyOperationCandidate, 'candidateRef' | 'sourceSelector' | 'title' | 'description'>
+    candidate: Pick<SupplyToolCandidate, 'candidateRef' | 'sourceSelector' | 'title' | 'description'>
   }>) => Promise<Readonly<{ kind: 'saved' | 'replayed' }> | Readonly<{ kind: 'refused'; reason: string }>>
   onDraftSaved?: (candidateRef: string, connectionRef?: string) => Promise<void> | void
-  onPublish: (input: PublishSupplyOperationV2Input) => Promise<SupplyPublishResult>
+  onPublish: (input: PublishSupplyToolV2Input) => Promise<SupplyPublishResult>
 }>) {
   const initialCandidate = initial?.preview?.candidates.find(({ candidateRef }) => candidateRef === initial.candidateRef)
   const [sourceKind, setSourceKind] = useState<SourceKind>(initial?.source.kind ?? 'openapi')
@@ -141,7 +141,7 @@ export function AeSupplySourceNativeStart({
     setSuccess(undefined)
   }
 
-  async function findOperations(remoteRefOverride?: string) {
+  async function findTools(remoteRefOverride?: string) {
     const currentSource = remoteRefOverride === undefined
       ? source
       : sourceInput({
@@ -174,7 +174,7 @@ export function AeSupplySourceNativeStart({
       setRemoteSelection(undefined)
       setPreview(result)
       setSelectedRef('')
-      if (result.candidates.length === 0) setError('No Operations were found in this source.')
+      if (result.candidates.length === 0) setError('No Tools were found in this source.')
     } catch (cause) {
       captureClientExceptionOnClient(cause)
       setError('AE could not inspect this source. Check the source and try again.')
@@ -183,7 +183,7 @@ export function AeSupplySourceNativeStart({
     }
   }
 
-  async function selectCandidate(candidate: SupplyOperationCandidate) {
+  async function selectCandidate(candidate: SupplyToolCandidate) {
     if (source === undefined || preview === undefined || pending !== undefined) return
     setPending('select')
     setError(undefined)
@@ -201,7 +201,7 @@ export function AeSupplySourceNativeStart({
         },
       })
       if (saved.kind === 'refused') {
-        setError('AE could not save this selection. Find Operations again, then select the current source candidate.')
+        setError('AE could not save this selection. Find Tools again, then select the current source candidate.')
         return
       }
       setSelectedRef(candidate.candidateRef)
@@ -217,7 +217,7 @@ export function AeSupplySourceNativeStart({
       await onDraftSaved?.(candidate.candidateRef, connectionRef === '' ? undefined : connectionRef)
     } catch (cause) {
       captureClientExceptionOnClient(cause)
-      setError('AE could not save this selection. Find Operations again, then try again.')
+      setError('AE could not save this selection. Find Tools again, then try again.')
     } finally {
       setPending(undefined)
     }
@@ -225,11 +225,11 @@ export function AeSupplySourceNativeStart({
 
   async function submit() {
     if (source === undefined || preview === undefined || selected === undefined) {
-      setError('Select one supported Operation before submitting it.')
+      setError('Select one supported Tool before submitting it.')
       return
     }
     if (category.trim() === '') {
-      setError('Enter a category before submitting this Operation.')
+      setError('Enter a category before submitting this Tool.')
       return
     }
     const pricing = pricingInput(pricingKind, price)
@@ -238,7 +238,7 @@ export function AeSupplySourceNativeStart({
       return
     }
     if (selected.authentication.kind !== 'public' && connectionRef === '') {
-      setError('Choose a connected source before submitting this Operation.')
+      setError('Choose a connected source before submitting this Tool.')
       return
     }
     if (!Object.values(attestation).every(Boolean)) {
@@ -246,12 +246,12 @@ export function AeSupplySourceNativeStart({
       return
     }
     const dataEffectIndex = dataRelease ? 0 : -1
-    const effects: PublishSupplyOperationV2Input['consequences']['effects'] = [
+    const effects: PublishSupplyToolV2Input['consequences']['effects'] = [
       ...(dataRelease ? [{ class: 'data_release' as const, authority: 'explicit' as const, reversibility: 'not_applicable' as const }] : []),
       ...(financialExposure ? [{ class: 'financial_exposure' as const, authority: 'explicit' as const, reversibility: 'conditional' as const }] : []),
       ...(externalEffect ? [{ class: 'external_state_change' as const, authority: 'explicit' as const, reversibility: 'conditional' as const }] : []),
     ]
-    const input: PublishSupplyOperationV2Input = {
+    const input: PublishSupplyToolV2Input = {
       businessRef,
       source,
       candidateRef: selected.candidateRef,
@@ -270,7 +270,7 @@ export function AeSupplySourceNativeStart({
           inputPointer: '/',
           classification: dataClassification,
           phase: 'execution',
-          purposes: ['Perform the Operation'],
+          purposes: ['Perform the Tool'],
         }],
         evidence: [{ outputPointer: '', purpose: 'completion' }],
       },
@@ -291,10 +291,10 @@ export function AeSupplySourceNativeStart({
         setError(publicationError(result.reason))
         return
       }
-      setSuccess(`Operation submitted for validation. AE will publish it after the required checks pass. Reference: ${result.operationRef}`)
+      setSuccess(`Tool submitted for validation. AE will publish it after the required checks pass. Reference: ${result.toolRef}`)
     } catch (cause) {
       captureClientExceptionOnClient(cause)
-      setError('AE could not confirm submission. Reload Operations before trying again.')
+      setError('AE could not confirm submission. Reload Tools before trying again.')
     } finally {
       setPending(undefined)
     }
@@ -313,13 +313,13 @@ export function AeSupplySourceNativeStart({
         idempotencyKey: connectionIdempotencyKey.current,
       })
       if (result.kind !== 'action_required') {
-        setError('This source no longer requires a connection. Find Operations again to continue with its current contract.')
+        setError('This source no longer requires a connection. Find Tools again to continue with its current contract.')
         return
       }
       setRequiredAction(result.requiredAction)
     } catch (cause) {
       captureClientExceptionOnClient(cause)
-      setError('AE could not start this connection. Find Operations again, then retry the current source.')
+      setError('AE could not start this connection. Find Tools again, then retry the current source.')
     } finally {
       setPending(undefined)
     }
@@ -327,7 +327,7 @@ export function AeSupplySourceNativeStart({
 
   return (
     <div className="grid gap-section">
-      <AeSection title="Add service" description="Start with the interface you already operate. AE discovers the Operations and derives the protocol facts.">
+      <AeSection title="Add service" description="Start with the interface you already operate. AE discovers the Tools and derives the protocol facts.">
         {error === undefined ? null : <Alert variant="destructive" role="alert"><AlertTitle>Action required</AlertTitle><AlertDescription>{error}</AlertDescription></Alert>}
         {requiredAction === undefined ? null : (
           <Alert role="status">
@@ -385,8 +385,8 @@ export function AeSupplySourceNativeStart({
             setSelectedRemoteRef('')
           }} onError={setError} /> : null}
           {sourceKind === 'x402' ? <X402SourceFields resourceUrl={resourceUrl} method={x402Method} onResourceUrlChange={setResourceUrl} onMethodChange={setX402Method} /> : null}
-          <Button type="button" className="min-h-touch justify-self-start" disabled={pending !== undefined} aria-busy={pending === 'preview' || undefined} onClick={() => void findOperations()}>
-            {pending === 'preview' ? 'Finding Operations…' : 'Find Operations'}
+          <Button type="button" className="min-h-touch justify-self-start" disabled={pending !== undefined} aria-busy={pending === 'preview' || undefined} onClick={() => void findTools()}>
+            {pending === 'preview' ? 'Finding Tools…' : 'Find Tools'}
           </Button>
         </FieldGroup>
       </AeSection>
@@ -395,7 +395,7 @@ export function AeSupplySourceNativeStart({
         <AeSection title="Select MCP server" description="Choose the exact remote server AE should inspect. AE will not contact another server or fail over silently.">
           <FieldGroup className="gap-4">
             <RemoteSelectionField remotes={remoteSelection.remotes} value={selectedRemoteRef} onChange={setSelectedRemoteRef} />
-            <Button type="button" className="min-h-touch justify-self-start" disabled={pending !== undefined || selectedRemoteRef === ''} onClick={() => void findOperations(selectedRemoteRef)}>
+            <Button type="button" className="min-h-touch justify-self-start" disabled={pending !== undefined || selectedRemoteRef === ''} onClick={() => void findTools(selectedRemoteRef)}>
               Continue with selected server
             </Button>
           </FieldGroup>
@@ -403,7 +403,7 @@ export function AeSupplySourceNativeStart({
       )}
 
       {preview === undefined ? null : (
-        <AeSection title="Select an Operation" description={`${preview.candidates.length} candidate${preview.candidates.length === 1 ? '' : 's'} found. Unsupported source methods remain visible with their correction.`}>
+        <AeSection title="Select a Tool" description={`${preview.candidates.length} candidate${preview.candidates.length === 1 ? '' : 's'} found. Unsupported source methods remain visible with their correction.`}>
           <RadioGroup value={selectedRef} onValueChange={(value) => {
             const candidate = preview.candidates.find(({ candidateRef }) => candidateRef === value)
             if (candidate !== undefined && candidate.disposition.kind === 'supported') void selectCandidate(candidate)
@@ -416,8 +416,8 @@ export function AeSupplySourceNativeStart({
       {selected === undefined ? null : (
         <AeSection title="Review and submit" description="Review facts derived from the source, then declare only the terms AE owns.">
           <FieldGroup className="gap-5">
-            <TextField id="supply-native-name" label="Operation name" value={name} onChange={setName} description="Shown to agents in discovery." />
-            <TextAreaField id="supply-native-description" label="Description" value={description} onChange={setDescription} description="What this Operation does and returns." />
+            <TextField id="supply-native-name" label="Tool name" value={name} onChange={setName} description="Shown to agents in discovery." />
+            <TextAreaField id="supply-native-description" label="Description" value={description} onChange={setDescription} description="What this Tool does and returns." />
             <TextField id="supply-native-category" label="Category" value={category} onChange={setCategory} description="A familiar service category, such as Research or Data." />
             <TextField id="supply-native-service-area" label="Service area (optional)" value={serviceArea} onChange={setServiceArea} description="Where this service is available, if relevant." />
             <TextField id="supply-native-availability" label="Availability (optional)" value={availability} onChange={setAvailability} description="Any operating-hours or availability constraint." />
@@ -442,7 +442,7 @@ export function AeSupplySourceNativeStart({
           </FieldGroup>
         </AeSection>
       )}
-      {pending === 'select' ? <div role="status" aria-live="polite"><AeInlineState state="saving" description="Saving the selected Operation so you can return later." /></div> : null}
+      {pending === 'select' ? <div role="status" aria-live="polite"><AeInlineState state="saving" description="Saving the selected Tool so you can return later." /></div> : null}
     </div>
   )
 }
@@ -507,7 +507,7 @@ function parseObject(value: string): Readonly<Record<string, never>> | undefined
 function pricingInput(
   kind: 'free' | 'fixed_aud' | 'source_x402',
   value: string,
-): PublishSupplyOperationV2Input['pricing'] | undefined {
+): PublishSupplyToolV2Input['pricing'] | undefined {
   if (kind === 'free') return { kind: 'free' }
   if (kind === 'source_x402') return { kind: 'source_x402' }
   const parsed = parseDecimalExactAmount('AUD', value, 2)
@@ -516,13 +516,13 @@ function pricingInput(
 }
 
 function publicationError(reason: string): string {
-  if (reason === 'source_changed' || reason === 'candidate_changed') return 'The source changed after preview. Find Operations again, then review the current facts.'
+  if (reason === 'source_changed' || reason === 'candidate_changed') return 'The source changed after preview. Find Tools again, then review the current facts.'
   if (reason === 'connection_required' || reason === 'connection_unavailable') return 'The source connection is unavailable. Reconnect it, then submit again.'
   if (reason === 'source_authority_review_required') return 'AE received the service. It remains Under review until source authority is confirmed.'
-  return `AE could not submit this Operation (${reason}). Review the source and try again.`
+  return `AE could not submit this Tool (${reason}). Review the source and try again.`
 }
 
-function CandidateRow({ candidate }: Readonly<{ candidate: SupplyOperationCandidate }>) {
+function CandidateRow({ candidate }: Readonly<{ candidate: SupplyToolCandidate }>) {
   const supported = candidate.disposition.kind === 'supported'
   return (
     <div className="grid grid-cols-[auto_1fr] gap-3 rounded-lg border border-border p-4" data-disabled={!supported || undefined}>
@@ -531,7 +531,7 @@ function CandidateRow({ candidate }: Readonly<{ candidate: SupplyOperationCandid
         <p className="font-semibold text-foreground">{candidate.title}</p>
         <p className="text-sm text-muted-foreground">{candidate.description}</p>
         <p className="text-sm text-muted-foreground">{candidate.authentication.kind === 'public' ? 'Public' : 'Connection required'} · {candidate.validationExampleAvailable ? 'Validation input available' : 'Validation input required'}</p>
-        {supported ? null : <p className="text-sm text-destructive">Action required: update this Operation at its source ({candidate.disposition.reason}).</p>}
+        {supported ? null : <p className="text-sm text-destructive">Action required: update this Tool at its source ({candidate.disposition.reason}).</p>}
       </div>
     </div>
   )
@@ -582,11 +582,11 @@ function PricingField({ kind, price, x402, onKindChange, onPriceChange }: Readon
 }
 
 function ConnectionField({ value, options, connecting, onChange, onConnect }: Readonly<{ value: string; options: readonly ProviderConnectionOwnerProjection[]; connecting: boolean; onChange: (value: string) => void; onConnect: () => void }>) {
-  return <Field><FieldLabel>Source connection</FieldLabel>{options.length === 0 ? <Alert><AlertTitle>Connect this source</AlertTitle><AlertDescription><p>This Operation requires the source’s standard authentication. Your selected Operation is saved.</p><Button type="button" variant="secondary" className="mt-4 min-h-touch" disabled={connecting} onClick={onConnect}>{connecting ? 'Opening connection…' : 'Connect service'}</Button></AlertDescription></Alert> : <RadioGroup value={value} onValueChange={onChange}>{options.map((option) => <Label key={option.connectionRef} className="min-h-touch rounded-md border border-border p-3"><RadioGroupItem value={option.connectionRef} />{option.adapterId} · connected</Label>)}</RadioGroup>}<FieldDescription>The connection is durable and separately revocable.</FieldDescription></Field>
+  return <Field><FieldLabel>Source connection</FieldLabel>{options.length === 0 ? <Alert><AlertTitle>Connect this source</AlertTitle><AlertDescription><p>This Tool requires the source’s standard authentication. Your selected Tool is saved.</p><Button type="button" variant="secondary" className="mt-4 min-h-touch" disabled={connecting} onClick={onConnect}>{connecting ? 'Opening connection…' : 'Connect service'}</Button></AlertDescription></Alert> : <RadioGroup value={value} onValueChange={onChange}>{options.map((option) => <Label key={option.connectionRef} className="min-h-touch rounded-md border border-border p-3"><RadioGroupItem value={option.connectionRef} />{option.adapterId} · connected</Label>)}</RadioGroup>}<FieldDescription>The connection is durable and separately revocable.</FieldDescription></Field>
 }
 
 function ConsequencesField({ externalEffect, dataRelease, financialExposure, dataClassification, onExternalEffectChange, onDataReleaseChange, onFinancialExposureChange, onDataClassificationChange }: Readonly<{ externalEffect: boolean; dataRelease: boolean; financialExposure: boolean; dataClassification: 'public' | 'personal' | 'sensitive'; onExternalEffectChange: (value: boolean) => void; onDataReleaseChange: (value: boolean) => void; onFinancialExposureChange: (value: boolean) => void; onDataClassificationChange: (value: 'public' | 'personal' | 'sensitive') => void }>) {
-  return <Field><FieldLabel>What can this Operation do?</FieldLabel><div className="grid gap-3"><CheckRow id="supply-effect-external" label="Change an external system" checked={externalEffect} onChange={onExternalEffectChange} /><CheckRow id="supply-effect-data" label="Send input data to the Provider" checked={dataRelease} onChange={onDataReleaseChange} /><CheckRow id="supply-effect-financial" label="Create financial exposure" checked={financialExposure} onChange={onFinancialExposureChange} /></div>{dataRelease ? <RadioGroup value={dataClassification} className="mt-3 grid gap-2 sm:grid-cols-3" onValueChange={(next) => onDataClassificationChange(next as typeof dataClassification)}>{(['public', 'personal', 'sensitive'] as const).map((classification) => <Label key={classification} className="min-h-touch rounded-md border border-border p-3"><RadioGroupItem value={classification} />{classification[0]?.toUpperCase()}{classification.slice(1)} data</Label>)}</RadioGroup> : null}<FieldDescription>AE uses these declarations for agent approval and evidence requirements.</FieldDescription></Field>
+  return <Field><FieldLabel>What can this Tool do?</FieldLabel><div className="grid gap-3"><CheckRow id="supply-effect-external" label="Change an external system" checked={externalEffect} onChange={onExternalEffectChange} /><CheckRow id="supply-effect-data" label="Send input data to the Provider" checked={dataRelease} onChange={onDataReleaseChange} /><CheckRow id="supply-effect-financial" label="Create financial exposure" checked={financialExposure} onChange={onFinancialExposureChange} /></div>{dataRelease ? <RadioGroup value={dataClassification} className="mt-3 grid gap-2 sm:grid-cols-3" onValueChange={(next) => onDataClassificationChange(next as typeof dataClassification)}>{(['public', 'personal', 'sensitive'] as const).map((classification) => <Label key={classification} className="min-h-touch rounded-md border border-border p-3"><RadioGroupItem value={classification} />{classification[0]?.toUpperCase()}{classification.slice(1)} data</Label>)}</RadioGroup> : null}<FieldDescription>AE uses these declarations for agent approval and evidence requirements.</FieldDescription></Field>
 }
 
 function AttestationField({ values, onChange }: Readonly<{ values: Record<AttestationKey, boolean>; onChange: (key: AttestationKey, checked: boolean) => void }>) {

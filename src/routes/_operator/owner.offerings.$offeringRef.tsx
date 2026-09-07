@@ -4,7 +4,7 @@ import { operatorRouteOptions } from '@/lib/operator/route-options'
 
 /**
  * Historical hand-written Offering editor URLs now resolve to the canonical
- * Supplier Operation readback. Source correction is driven from its exact
+ * Provider Tool readback. Source correction is driven from its exact
  * lifecycle continuation instead of a second writer.
  */
 export const Route = createFileRoute('/_operator/owner/offerings/$offeringRef')({
@@ -16,6 +16,6 @@ export const Route = createFileRoute('/_operator/owner/offerings/$offeringRef')(
       replace: true,
     })
   },
-  head: () => ({ meta: [{ title: 'Operation | Agentic Economy' }, { name: 'robots', content: 'noindex' }] }),
+  head: () => ({ meta: [{ title: 'Tool | Agentic Economy' }, { name: 'robots', content: 'noindex' }] }),
   component: () => null,
 })

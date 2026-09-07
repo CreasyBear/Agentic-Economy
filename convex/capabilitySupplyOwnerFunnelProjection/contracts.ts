@@ -43,7 +43,7 @@ const ownerSupplyPublicationValue = v.object({
   ),
   publicationRef: v.string(),
   publicationRevision: v.number(),
-  operationRef: v.string(),
+  toolRef: v.string(),
   authorityMode: v.union(
     v.literal('provider_owned'),
     v.literal('ae_curated_external'),
@@ -102,7 +102,7 @@ const ownerSupplyPublicationValue = v.object({
   }),
 })
 
-const ownerSupplyOperationEvidenceValue = v.object({
+const ownerSupplyToolEvidenceValue = v.object({
   windowStartAt: v.number(),
   windowEndAt: v.number(),
   delivery: v.union(
@@ -200,7 +200,7 @@ export const ownerSupplyFunnelResultValue = v.union(
           state: v.union(v.literal('not_admitted'), v.literal('admitted')),
           reason: v.optional(v.string()),
         }),
-        operationRef: v.optional(v.string()),
+        toolRef: v.optional(v.string()),
         publicationRef: v.optional(v.string()),
         publication: v.optional(ownerSupplyPublicationValue),
         lifecycle: v.object({
@@ -259,7 +259,7 @@ export const ownerSupplyFunnelResultValue = v.union(
           ),
         }),
         actionableReason: v.optional(v.string()),
-        operationEvidence: v.optional(ownerSupplyOperationEvidenceValue),
+        toolEvidence: v.optional(ownerSupplyToolEvidenceValue),
         accessPaths: v.array(
           v.object({
             accessPathRef: v.string(),

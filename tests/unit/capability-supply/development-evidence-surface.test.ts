@@ -14,7 +14,7 @@ import {
 
 const revision = 'bd23435eaf51b479dba460227e1680857c882ace'
 
-describe('Action Invocation development evidence surface', () => {
+describe('Action execution development evidence surface', () => {
   it('exposes run and fresh verify through the package CLI', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'ae-evidence-cli-'))
     const path = join(directory, 'packet.json')

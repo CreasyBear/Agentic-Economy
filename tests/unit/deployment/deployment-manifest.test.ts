@@ -80,7 +80,7 @@ describe('deployment manifest validator', () => {
       'seller-onboarding-canary-funding',
       'durable-invocation-workpool',
       'durable-stripe-webhook-inbox',
-      'provider-operations-rollout',
+      'provider-tools-rollout',
       'operation-gateway',
       'convex-scheduled-jobs',
     ])

@@ -1,9 +1,9 @@
 /**
  * AE CLI. Exercises AE the way an external agent would through public machine
- * surfaces. Market Operation list/search/describe/compare are anonymous HTTP reads;
+ * surfaces. Market Tool list/search/describe/compare are anonymous HTTP reads;
  * connect uses the existing OAuth device flow; call/status/wait/cancel/reconcile
  * use the canonical authenticated gateway (the CLI's `recover` command is
- * the `operation.reconcile` action).
+ * the `call.reconcile` action).
  * Run: ae <command> [args] [--json]
  *
  * Evidence class: every HTTP command here is labelled local execution against
@@ -27,7 +27,7 @@ import {
   commandUsage,
   rootCommandHelpGroups,
 } from './lib/help'
-import { MARKET_OPERATIONS_INVOKE_SCOPE, MARKET_SUPPLY_MANAGE_SCOPE } from '@/modules/agent-access/contract'
+import { MARKET_TOOLS_CALL_SCOPE, MARKET_SUPPLY_MANAGE_SCOPE } from '@/modules/agent-access/contract'
 import type { ProblemKind } from '@/lib/errors'
 import cliPackage from '../../packages/cli/package.json'
 
@@ -39,15 +39,15 @@ const JSON_HELP_FLAGS = {
   '--base-url': { type: 'string', description: 'Server to call; defaults to AE_CLI_BASE_URL, AE_CANONICAL_BASE_URL, local Vite when Convex is loopback, or the hosted origin.' },
   '--limit': { type: 'string', description: 'Page size: search accepts 1-20; account activity, requests, and history accept 1-100.' },
   '--cursor': { type: 'string', description: 'Opaque search, account activity, request, or history continuation cursor.' },
-  '--state': { type: 'string', description: 'Canonical invocation state filter; history only.' },
+  '--state': { type: 'string', description: 'Canonical Call state filter; history only.' },
   '--filters': { type: 'string', description: 'Canonical JSON search filters; search only.' },
-  '--input': { type: 'string', description: 'Schema-valid JSON object for call or supplier lifecycle write; call alone accepts - to read it from standard input.' },
-  '--supplier': { type: 'boolean', description: 'Request a separate owner-approved supplier credential with market_supply:manage.' },
+  '--input': { type: 'string', description: 'Schema-valid JSON object for call or provider lifecycle write; call alone accepts - to read it from standard input.' },
+  '--provider': { type: 'boolean', description: 'Request a separate owner-approved provider credential with market_supply:manage.' },
   '--json': { type: 'boolean', description: 'Emit exactly one machine-readable JSON value on stdout.' },
   '--help': { type: 'boolean', description: 'Show help without performing command work.' },
   '--version': { type: 'boolean', description: 'Show CLI version, executable, runtime, and build revision without contacting a server.' },
-  '--technical': { type: 'boolean', description: 'Include per-Operation navigation in JSON search results or inspect results, or identity and evidence metadata in human compare output.' },
-  '--idempotency-key': { type: 'string', description: 'Optional stable retry identity for a call, private market request, or supplier lifecycle write.' },
+  '--technical': { type: 'boolean', description: 'Include per-Tool navigation in JSON search results or describe results, or identity and evidence metadata in human compare output.' },
+  '--idempotency-key': { type: 'string', description: 'Optional stable retry identity for a call, private market request, or provider lifecycle write.' },
   '--wait': { type: 'boolean', description: 'Wait for a bounded call result; timeout preserves recovery detail.' },
 } as const
 
@@ -60,8 +60,8 @@ const COMMAND_OPTIONS: Readonly<Record<string, readonly string[]>> = {
   search: ['limit', 'cursor', 'filters', 'technical'],
   describe: ['technical'],
   compare: ['technical'],
-  connect: ['supplier'],
-  doctor: ['supplier'],
+  connect: ['provider'],
+  doctor: ['provider'],
   account: [],
   'account activity': ['limit', 'cursor'],
   request: [],
@@ -89,12 +89,12 @@ const COMMAND_OPTIONS: Readonly<Record<string, readonly string[]>> = {
 const AUTH_HELP = {
   credential: 'AE_API_KEY',
   credentialOrigin: 'AE_API_KEY_ORIGIN',
-  scope: MARKET_OPERATIONS_INVOKE_SCOPE,
+  scope: MARKET_TOOLS_CALL_SCOPE,
   deviceFlow: 'connect registers a public device client, displays the server-provided verification URI and user code, then polls for a one-time credential after approval.',
   existingKey: 'If AE_API_KEY is already set, connect validates it against the configured server before reporting connected; AE_API_KEY_ORIGIN must exactly match that server origin.',
   origin: 'Bind AE_API_KEY to the exact --base-url origin in AE_API_KEY_ORIGIN. Credentialed calls require HTTPS except loopback localhost, 127.0.0.1, or ::1 development.',
   next: 'Connect stores one origin-bound key with user-only permissions; private market requests, calls, history, status, wait, cancel, and recovery reuse it automatically.',
-  authenticatedOperations: {
+  authenticatedCalls: {
     call: commandUsage('call'),
     history: commandUsage('history'),
     request: commandUsage('request'),
@@ -109,9 +109,9 @@ const AUTH_HELP = {
 const SUPPLY_AUTH_HELP = {
   ...AUTH_HELP,
   scope: MARKET_SUPPLY_MANAGE_SCOPE,
-  deviceFlow: 'Run ae connect --supplier to request a separate owner-approved supplier credential; ordinary ae connect remains buyer-scoped.',
+  deviceFlow: 'Run ae connect --provider to request a separate owner-approved provider credential; ordinary ae connect remains buyer-scoped.',
   existingKey: 'Use an owner-issued AE key whose exact origin and market_supply:manage scope have already been established.',
-  next: 'Use supply status for Operations and supply connections for provider authority before lifecycle writes; preserve returned revisions, generations, and digests.',
+  next: 'Use supply status for Tools and supply connections for provider authority before lifecycle writes; preserve returned revisions, generations, and digests.',
 } as const
 
 function commandHelpName(command: string | undefined, positionals: readonly string[]): string | undefined {
@@ -273,7 +273,7 @@ function printCommandHelp(command: string | undefined, positionals: readonly str
       `  Existing key: ${AUTH_HELP.existingKey}`,
       `  Origin policy: ${AUTH_HELP.origin}`,
       `  Next: ${AUTH_HELP.next}`,
-      '  Supplier profile: ae connect --supplier requests market_supply:manage separately and does not replace the buyer credential.',
+      '  Provider profile: ae connect --provider requests market_supply:manage separately and does not replace the buyer credential.',
     )
   }
   if (metadata.authentication === 'buyer') {
@@ -290,7 +290,7 @@ function printCommandHelp(command: string | undefined, positionals: readonly str
   if (requested.startsWith('supply')) {
     lines.push(
       '',
-      'Supplier authentication:',
+      'Provider authentication:',
       `  Credential: ${SUPPLY_AUTH_HELP.credential}`,
       `  Scope: ${SUPPLY_AUTH_HELP.scope}`,
       `  Issuance: ${SUPPLY_AUTH_HELP.deviceFlow}`,
@@ -381,12 +381,12 @@ async function main(): Promise<number> {
     accountCommands,
     cancelCommands,
     configCommands,
-    marketOperationCommands,
+    marketToolCommands,
     connectCommands,
     doctorCommands,
     fundCommands,
     historyCommands,
-    invokeCommands,
+    callCommands,
     manifestCommands,
     recoverCommands,
     requestCommands,
@@ -398,12 +398,12 @@ async function main(): Promise<number> {
     import('./commands/account'),
     import('./commands/cancel'),
     import('./commands/config'),
-    import('./commands/market-operations'),
+    import('./commands/market-tools'),
     import('./commands/connect'),
     import('./commands/doctor'),
     import('./commands/fund'),
     import('./commands/history'),
-    import('./commands/invoke'),
+    import('./commands/call'),
     import('./commands/manifest'),
     import('./commands/recover'),
     import('./commands/request'),
@@ -412,19 +412,19 @@ async function main(): Promise<number> {
     import('./commands/supply'),
     import('./commands/wait'),
   ])
-  const marketOperationRunners: Record<string, CommandRunner> = Object.fromEntries(
-    marketOperationCommands.MARKET_OPERATION_COMMAND_DESCRIPTORS.map(({ command, run }) => [command, run] as const),
+  const marketToolRunners: Record<string, CommandRunner> = Object.fromEntries(
+    marketToolCommands.MARKET_TOOL_COMMAND_DESCRIPTORS.map(({ command, run }) => [command, run] as const),
   )
   const commands: Record<string, CommandRunner> = {
     manifest: manifestCommands.runManifestCommand,
     config: configCommands.runConfigCommand,
-    ...marketOperationRunners,
+    ...marketToolRunners,
     connect: connectCommands.runConnectCommand,
     doctor: doctorCommands.runDoctorCommand,
     account: accountCommands.runAccountCommand,
     supply: supplyCommands.runSupplyCommand,
     fund: fundCommands.runFundCommand,
-    [invokeCommands.invokeCommandDescriptor.command]: invokeCommands.invokeCommandDescriptor.run,
+    [callCommands.callCommandDescriptor.command]: callCommands.callCommandDescriptor.run,
     [historyCommands.historyCommandDescriptor.command]: historyCommands.historyCommandDescriptor.run,
     status: statusCommands.runStatusCommand,
     [waitCommands.waitCommandDescriptor.command]: waitCommands.waitCommandDescriptor.run,

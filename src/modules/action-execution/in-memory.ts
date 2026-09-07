@@ -373,25 +373,25 @@ export function createInMemoryActionExecutionTracer<
         return { kind: 'refused', code: 'authority_not_accepted', view: record.view }
       }
       record.view = nextView(record.view, {
-        acceptedAuthority: { kind: 'approve_each', authorityRef: input.authorityRef },
+        acceptedAuthority: { kind: 'approval_required', authorityRef: input.authorityRef },
         control: { state: 'authorized', decidedAt: options.now() },
       })
       if (record.authorityBinding) {
         record.authorityBinding = {
           ...record.authorityBinding,
           executionVersion: record.view.executionVersion,
-          acceptedBasis: { kind: 'approve_each', authorityRef: input.authorityRef },
+          acceptedBasis: { kind: 'approval_required', authorityRef: input.authorityRef },
         }
       }
       return { kind: 'accepted', view: record.view }
     },
-    async authorizeStandingMandateUse(input) {
+    async authorizeSpendingPolicyUse(input) {
       const checked = checkBinding(records.get(input.executionRef), input, options.now())
       if (checked.kind === 'refused') return checked
       const record = checked.record
       if (
         record.view.control.state !== 'awaiting_authority'
-        || input.basis.kind !== 'standing_mandate_use'
+        || input.basis.kind !== 'spending_policy_use'
         || input.basis.authorityUseRef.length === 0
         || input.basis.grantEvidenceRef.length === 0
       ) return { kind: 'refused', code: 'invalid_control_state', view: record.view }
@@ -444,7 +444,7 @@ export function createInMemoryActionExecutionTracer<
       const canAcquire = control.state === 'authorized' || control.state === 'retryable'
       if (!canAcquire) return { kind: 'refused', code: 'invalid_control_state', view: record.view }
       if (
-        record.view.acceptedAuthority?.kind === 'standing_mandate_use'
+        record.view.acceptedAuthority?.kind === 'spending_policy_use'
         && (
           input.acceptedAuthorityBasis === undefined
           || canonicalDigest(record.view.acceptedAuthority as never)

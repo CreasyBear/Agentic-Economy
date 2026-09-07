@@ -22,13 +22,13 @@ vi.mock('@/lib/server/source-write-admission', async (importOriginal) => ({
   sourceWriteRequestFromAdmission: mocks.sourceWriteRequestFromAdmission,
 }))
 
-import { createAccountManagementService } from '@/modules/agent-access/account.actions'
+import { agentAccountActivityAction, createAccountManagementService } from '@/modules/agent-access/account.actions'
 import type { AgentAccessPrincipal } from '@/modules/agent-access/agent-access'
 
 const principal: AgentAccessPrincipal = {
   principalId: 'principal:account', ownerId: 'owner:account', credentialId: 'credential:account',
   applicationRef: 'agentic-economy', environment: 'sandbox',
-  scopes: ['market_operations:invoke'], authorityMode: 'inspect_only',
+  scopes: ['market_tools:call'], authorityMode: 'read_only',
 }
 
 describe('account management action service', () => {
@@ -66,7 +66,7 @@ describe('account management action service', () => {
       activity: {
         page: [{
           callRef: 'invocation:one', credentialRef: principal.credentialId,
-          operationRef: 'operation:one', providerRef: 'business:one',
+          toolRef: 'operation:one', providerRef: 'business:one',
           state: 'completed', deliveryState: 'delivered', paymentState: 'settled',
           audAmountUnits: '1250000', observedAt: 10,
         }],
@@ -101,5 +101,10 @@ describe('account management action service', () => {
     )
     await expect(service.balance({ input: { currency: 'AUD' }, principal, correlationId: 'request:three' }))
       .resolves.toEqual({ kind: 'error', code: 'source_unavailable' })
+  })
+
+  it('describes the account activity currency as AUD', () => {
+    expect(agentAccountActivityAction.parameters.find(({ name }) => name === 'currency'))
+      .toMatchObject({ description: 'Activity currency, default AUD.' })
   })
 })

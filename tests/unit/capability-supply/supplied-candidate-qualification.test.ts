@@ -7,11 +7,11 @@ import {
   admitRegisteredTransport,
   capabilityBindingEligibilityHash,
   capabilityBindingRegistrationHash,
-  capabilityOperationId,
+  capabilityToolId,
   capabilityOfferingEligibilityHash,
   capabilityOfferingRegistrationHash,
   connectionAuthoritySnapshotFromProviderConnection,
-  createPublicOperationRef,
+  createPublicToolRef,
   defineCapabilityOfferingRegistration,
   defineCapabilityTransportBindingRegistration,
   qualifySuppliedCandidate,
@@ -48,8 +48,8 @@ const candidate: SuppliedCandidateRef = {
   bindingId: 'binding:development-reference',
   contractRef: contract.ref,
 }
-const operationRef = createPublicOperationRef({
-  operationId: capabilityOperationId(contract.capabilityId),
+const toolRef = createPublicToolRef({
+  operationId: capabilityToolId(contract.capabilityId),
   publicationRef: candidate.publicationRef,
   publicationRevision: candidate.revision,
   contractRef: contract.ref,
@@ -118,7 +118,7 @@ function developmentProviderConnection(): ProviderConnection {
 }
 const connectionAuthority = connectionAuthoritySnapshotFromProviderConnection(
   developmentProviderConnection(),
-  operationRef,
+  toolRef,
 )
 const offeringRegistration = defineCapabilityOfferingRegistration({
   offeringId: candidate.offeringId,
@@ -280,7 +280,7 @@ function publication(overrides: Partial<GraphPublicationRow> = {}): GraphPublica
   return {
     id: 'fixture:publication-row',
     ...candidate,
-    operationRef,
+    toolRef,
     ...contract.ref,
     connectionAuthority,
     sourceKind: 'openapi_http',

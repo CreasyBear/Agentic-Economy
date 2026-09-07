@@ -20,17 +20,17 @@ import {
   buildMarketReturnContext,
   type MarketReturnContext,
 } from "@/components/ae/market/market-return-context";
-import { operationChoiceCompareOutputSchema } from "@/modules/registry/operation-choice-contracts";
+import { toolChoiceCompareOutputSchema } from "@/modules/registry/tool-choice-contracts";
 
 const firstRef = `operation:v1:${"a".repeat(64)}`;
 const secondRef = `operation:v1:${"b".repeat(64)}`;
 
-const comparison = operationChoiceCompareOutputSchema.parse({
+const comparison = toolChoiceCompareOutputSchema.parse({
   kind: "ok",
-  schemaVersion: "registry-operations:v2",
-  operations: [
-    operation(firstRef, "Registry search", "Registry Works", "USD 0.25", "operational"),
-    operation(secondRef, "Company lookup", "Clear Ledger", "Price confirmed at inspection", "unverified"),
+  schemaVersion: "registry-tools:v2",
+  tools: [
+    tool(firstRef, "Registry search", "Registry Works", "USD 0.25", "operational"),
+    tool(secondRef, "Company lookup", "Clear Ledger", "Price confirmed at inspection", "unverified"),
   ],
 });
 
@@ -52,7 +52,7 @@ describe("market comparison view", () => {
     });
     renderComparison(comparison, { returnTo });
 
-    const heading = screen.getByRole("heading", { level: 1, name: "Compare Operations" });
+    const heading = screen.getByRole("heading", { level: 1, name: "Compare Tools" });
     expect(document.activeElement).toBe(heading);
     const table = screen.getByRole("table");
     expect(table.closest('[data-slot="table-container"]')?.className).toContain("overflow-x-auto");
@@ -78,8 +78,8 @@ describe("market comparison view", () => {
     const onBack = vi.fn();
     renderComparison({
       kind: "unavailable",
-      schemaVersion: "registry-operations:v2",
-      reason: "operation_unavailable",
+      schemaVersion: "registry-tools:v2",
+      reason: "tool_unavailable",
     }, { onRetry, onEditSelection, onBack });
 
     expect(document.activeElement).toBe(screen.getByRole("heading", { name: "Comparison unavailable" }));
@@ -93,15 +93,15 @@ describe("market comparison view", () => {
   });
 });
 
-function operation(
-  operationRef: string,
+function tool(
+  toolRef: string,
   title: string,
   providerName: string,
   priceLabel: string,
   healthStatus: "operational" | "degraded" | "unverified",
 ) {
   return {
-    operationRef,
+    toolRef,
     capabilityId: "identity.company_search",
     title,
     description: "Look up a company.",
@@ -123,7 +123,7 @@ function renderComparison(
   const rootRoute = createRootRoute();
   const routeTree = rootRoute.addChildren([
     createRoute({ getParentRoute: () => rootRoute, path: "/market" }),
-    createRoute({ getParentRoute: () => rootRoute, path: "/operations/$operationRef" }),
+    createRoute({ getParentRoute: () => rootRoute, path: "/tools/$toolRef" }),
   ]);
   const router = createRouter({
     routeTree,

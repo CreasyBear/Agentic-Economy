@@ -66,12 +66,12 @@ describe('development evidence boundary', () => {
 
   it('keeps development fixtures owned by tools/dev/fixtures', () => {
     const expectedCapabilitySupplyFixtures = [
-      'tools/dev/fixtures/capability-supply/development-alternate-published-operation-evidence.ts',
+      'tools/dev/fixtures/capability-supply/development-alternate-published-tool-evidence.ts',
       'tools/dev/fixtures/capability-supply/development-evidence-continuity.ts',
       'tools/dev/fixtures/capability-supply/development-evidence-fixture.ts',
       'tools/dev/fixtures/capability-supply/development-evidence-executions.ts',
       'tools/dev/fixtures/capability-supply/development-evidence-scenario.ts',
-      'tools/dev/fixtures/capability-supply/development-published-operation-evidence.ts',
+      'tools/dev/fixtures/capability-supply/development-published-tool-evidence.ts',
     ].sort()
 
     expect(globSync('src/modules/capability-supply/development-*.ts')).toEqual([])

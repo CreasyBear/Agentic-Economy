@@ -26,7 +26,7 @@ export const recordX402PaymentObservationArgs = {
   attemptRef: v.string(),
   effectGeneration: v.number(),
   paymentIdentifier: v.string(),
-  operationRef: v.string(),
+  toolRef: v.string(),
   inputDigest: v.string(),
   transportObservationDigest: v.string(),
   transportRequestDigest: v.string(),
@@ -44,7 +44,7 @@ export const reconcileX402PaymentAttemptArgs = {
   dispatchRef: v.string(),
   attemptRef: v.string(),
   effectGeneration: v.number(),
-  operationRef: v.string(),
+  toolRef: v.string(),
   inputDigest: v.string(),
   evidenceRef: v.string(),
   evidenceDigest: v.string(),
@@ -82,7 +82,7 @@ type RecordObservationArgs = {
   attemptRef: string
   effectGeneration: number
   paymentIdentifier: string
-  operationRef: string
+  toolRef: string
   inputDigest: string
   transportObservationDigest: string
   transportRequestDigest: string
@@ -97,7 +97,7 @@ type ReconcileArgs = {
   dispatchRef: string
   attemptRef: string
   effectGeneration: number
-  operationRef: string
+  toolRef: string
   inputDigest: string
   evidenceRef: string
   evidenceDigest: string
@@ -232,7 +232,7 @@ export async function recordX402PaymentObservationHandler(
     row === null
     || row.dispatchRef !== args.dispatchRef
     || row.paymentIdentifier !== args.paymentIdentifier
-    || (row.operationRef !== undefined && row.operationRef !== args.operationRef)
+    || (row.toolRef !== undefined && row.toolRef !== args.toolRef)
     || (row.inputDigest !== undefined && row.inputDigest !== args.inputDigest)
     || (
       row.state !== 'prepared'
@@ -273,7 +273,7 @@ export async function recordX402PaymentObservationHandler(
         && !sameQuarantinedOutput(persistedQuarantinedOutput, quarantinedOutput)
       ) throw new Error('x402_payment_quarantined_output_conflict')
       await ctx.db.patch(row._id, {
-        operationRef: args.operationRef,
+        toolRef: args.toolRef,
         inputDigest: args.inputDigest,
         paymentObservationDigest: args.paymentObservationDigest,
         transportObservationDigest: args.transportObservationDigest,
@@ -289,7 +289,7 @@ export async function recordX402PaymentObservationHandler(
       return null
     }
     if (
-      row.operationRef !== args.operationRef
+      row.toolRef !== args.toolRef
       || row.inputDigest !== args.inputDigest
       || row.paymentObservationDigest !== args.paymentObservationDigest
       || row.transportObservationDigest !== args.transportObservationDigest
@@ -305,7 +305,7 @@ export async function recordX402PaymentObservationHandler(
   }
   await ctx.db.patch(row._id, {
     state: targetState,
-    operationRef: args.operationRef,
+    toolRef: args.toolRef,
     paymentObservationDigest: args.paymentObservationDigest,
     inputDigest: args.inputDigest,
     transportObservationDigest: args.transportObservationDigest,
@@ -343,10 +343,10 @@ export async function reconcileX402PaymentAttemptHandler(
     return { kind: 'reconciliation_required' }
   }
   const mismatch = row.dispatchRef !== args.dispatchRef
-      ? 'dispatch_ref'
-      : row.operationRef !== args.operationRef
-        ? 'operation_ref'
-        : row.inputDigest !== args.inputDigest
+    ? 'dispatch_ref'
+    : row.toolRef !== args.toolRef
+      ? 'tool_ref'
+      : row.inputDigest !== args.inputDigest
           ? 'input_digest'
           : row.reservationRef !== args.reservationRef
             ? 'reservation_ref'

@@ -2,8 +2,8 @@ import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { normalizePricingConfig, pricingConfigDigest, type PricingConfig } from '@/modules/money/public'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 import {
-  capabilityOperationId,
-  createPublicOperationRef,
+  capabilityToolId,
+  createPublicToolRef,
   type CapabilityPublicationBindingDraft,
   type CapabilityPublicationOfferingDraft,
 } from '@/modules/capability-supply/public'
@@ -127,8 +127,8 @@ export async function refreshCapabilityCommand(
   } as StableHashValue)
 
   const revision = publication.revision + 1
-  const operationRef = createPublicOperationRef({
-    operationId: capabilityOperationId(encoded.contract.ref.capabilityId),
+  const toolRef = createPublicToolRef({
+    operationId: capabilityToolId(encoded.contract.ref.capabilityId),
     publicationRef: publication.publicationRef,
     publicationRevision: revision,
     contractRef: encoded.contract.ref,
@@ -157,7 +157,7 @@ export async function refreshCapabilityCommand(
 
   if (!compatible) {
     await ports.insertPublication({
-      operationRef,
+      toolRef,
       publicationRef: publication.publicationRef,
       revision,
       businessId: publication.businessId,
@@ -236,19 +236,19 @@ export async function refreshCapabilityCommand(
       providerRef: nextAuthority.providerRef,
       adapterId: nextBinding.adapter.adapterId,
       previousAuthority: publication.connectionAuthority,
-      previousOperationRef: publication.operationRef,
-      nextOperationRef: operationRef,
+      previousToolRef: publication.toolRef,
+      nextToolRef: toolRef,
     }, input.now)
     if (rotated.kind === 'refused') {
       throw new Error(`capability_publication_refresh_${rotated.reason}`)
     }
   }
-  const bindingResult = await ports.registerBinding(nextBinding, input.now, operationRef)
+  const bindingResult = await ports.registerBinding(nextBinding, input.now, toolRef)
   if (bindingResult.kind === 'refused') {
     throw new Error(`capability_publication_refresh_${bindingResult.reason}`)
   }
   await ports.insertPublication({
-    operationRef,
+    toolRef,
     publicationRef: publication.publicationRef,
     revision,
     businessId: publication.businessId,

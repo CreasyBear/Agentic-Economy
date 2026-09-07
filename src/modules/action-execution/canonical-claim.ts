@@ -590,27 +590,27 @@ function validateClaimInput(input: CanonicalClaimInput): void {
   if (input.authority.expiresAt <= input.recordedAt || input.attempt.leaseExpiresAt <= input.recordedAt) {
     throw new Error('action_execution_claim_expiry_invalid')
   }
-  if (input.authority.acceptedBasis.kind === 'approve_each'
+  if (input.authority.acceptedBasis.kind === 'approval_required'
     && input.authority.acceptedBasis.authorityRef !== input.authority.reference) {
     throw new Error('action_execution_claim_authority_mismatch')
   }
-  if (input.authority.acceptedBasis.kind === 'standing_mandate_use'
+  if (input.authority.acceptedBasis.kind === 'spending_policy_use'
     && input.authority.acceptedBasis.grantEvidenceRef.trim().length === 0) {
     throw new Error('action_execution_claim_authority_evidence_missing')
   }
-  if (input.authority.acceptedBasis.kind === 'customer_request_mandate_use') {
+  if (input.authority.acceptedBasis.kind === 'customer_request_authorization_use') {
     const basis = input.authority.acceptedBasis
     const authorityReferences = [
-      basis.mandateRef,
-      basis.mandateDigest,
+      basis.requestAuthorizationRef,
+      basis.requestAuthorizationDigest,
       basis.grantRef,
       basis.grantDigest,
       basis.authorization.kind === 'explicit'
         ? basis.authorization.authorizationEvidenceRef
-        : basis.authorization.standingPolicyRef,
+        : basis.authorization.spendingPolicyRef,
       basis.authorization.kind === 'explicit'
         ? basis.authorization.authorizationEvidenceDigest
-        : basis.authorization.standingPolicyDigest,
+        : basis.authorization.spendingPolicyDigest,
     ]
     if (authorityReferences.some((value) => value.trim().length === 0)) {
       throw new Error('action_execution_claim_customer_request_authority_invalid')
@@ -624,7 +624,7 @@ function validateClaimInput(input: CanonicalClaimInput): void {
       throw new Error('action_execution_claim_customer_request_authority_generation_invalid')
     }
     if (
-      basis.authorization.kind === 'standing_low_risk'
+      basis.authorization.kind === 'spending_policy_low_risk'
       && basis.authorization.authorityUseRef.trim().length === 0
     ) {
       throw new Error('action_execution_claim_customer_request_authority_use_invalid')
@@ -634,7 +634,7 @@ function validateClaimInput(input: CanonicalClaimInput): void {
     const basis = input.authority.acceptedBasis
     if (
       basis.publicationRef.trim().length === 0
-      || basis.operationRef.trim().length === 0
+      || basis.toolRef.trim().length === 0
       || basis.bindingId.trim().length === 0
       || basis.bindingRegistrationHash.trim().length === 0
       || !Number.isSafeInteger(basis.publicationRevision)

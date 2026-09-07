@@ -82,14 +82,14 @@ async function resolveSelectedOperation(
   const rawPathItem = isRecord(paths) ? paths[input.operation.path] : undefined
   const pathItem = await resolveOpenApiRecord(rawPathItem, document, derefSchema)
   if (pathItem.kind === 'refused') return pathItem
-  if (pathItem.value === undefined) return refused('operation_not_found')
+  if (pathItem.value === undefined) return refused('tool_not_found')
   const operation = await resolveOpenApiRecord(
     pathItem.value[input.operation.method],
     document,
     derefSchema,
   )
   if (operation.kind === 'refused') return operation
-  if (operation.value === undefined) return refused('operation_not_found')
+  if (operation.value === undefined) return refused('tool_not_found')
   const credential = resolveOpenApiCredential(document, operation.value)
   return credential.kind === 'refused'
     ? refused('transport_unsupported')

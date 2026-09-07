@@ -12,7 +12,7 @@ describe('market-terminal CLI error contracts', () => {
       commands: Record<string, unknown>
       groups: Array<{ id: string; title: string; commands: string[] }>
       auth: {
-        authenticatedOperations: Record<string, string>
+        authenticatedCalls: Record<string, string>
         cancelRequirements: string
       }
     }
@@ -38,7 +38,7 @@ describe('market-terminal CLI error contracts', () => {
       'recover',
       'revoke',
     ])
-    expect(Object.keys(helpBody.auth.authenticatedOperations)).toEqual([
+    expect(Object.keys(helpBody.auth.authenticatedCalls)).toEqual([
       'call',
       'history',
       'request',
@@ -47,8 +47,8 @@ describe('market-terminal CLI error contracts', () => {
       'cancel',
       'reconcile',
     ])
-    expect(helpBody.auth.authenticatedOperations.cancel).toContain('ae cancel ')
-    expect(helpBody.auth.authenticatedOperations.reconcile).toContain(' recover ')
+    expect(helpBody.auth.authenticatedCalls.cancel).toContain('ae cancel ')
+    expect(helpBody.auth.authenticatedCalls.reconcile).toContain(' recover ')
     expect(helpBody.auth.cancelRequirements).toContain('AE_API_KEY')
     expect(helpBody.auth.cancelRequirements).toContain('--idempotency-key')
     expect(helpBody.auth.cancelRequirements).toContain('body.idempotencyKey')
@@ -180,7 +180,7 @@ describe('market-terminal CLI error contracts', () => {
     })
   }, 15_000)
 
-  it('does not advertise or accept client-side truncation for supplier connections', () => {
+  it('does not advertise or accept client-side truncation for provider connections', () => {
     const help = spawnCliSync(['help', 'supply', 'connections', '--json'])
     expect(help.status).toBe(0)
     expect(JSON.parse(help.stdout)).toMatchObject({
@@ -265,11 +265,11 @@ describe('market-terminal CLI error contracts', () => {
     expect(help.stderr).toBe('')
     expect(JSON.parse(help.stdout)).toMatchObject({
       command: 'describe',
-      usage: 'ae describe <operation-ref> [--technical]',
-      guidance: [expect.stringContaining('operation.inspect')],
+      usage: 'ae describe <tool-ref> [--technical]',
+      guidance: [expect.stringContaining('tool.quote')],
       flags: {
         '--technical': {
-          description: expect.stringContaining('inspect results'),
+          description: expect.stringContaining('describe results'),
         },
       },
     })
@@ -300,7 +300,7 @@ describe('market-terminal CLI error contracts', () => {
     expect(JSON.parse(accountHelp.stdout)).toMatchObject({
       kind: 'HELP',
       command: 'account status',
-      usage: 'ae account status [market|supplier]',
+      usage: 'ae account status [market|provider]',
       summary: expect.stringContaining('principal'),
     })
     const balanceHelp = spawnCliSync(['help', 'account', 'balance', '--json'])
@@ -316,18 +316,18 @@ describe('market-terminal CLI error contracts', () => {
     expect(JSON.parse(disconnectHelp.stdout)).toMatchObject({
       kind: 'HELP',
       command: 'account disconnect',
-      usage: 'ae account disconnect [market|supplier]',
-      summary: expect.stringMatching(/Unqualified removes buyer\/market; pass supplier/u),
+      usage: 'ae account disconnect [market|provider]',
+      summary: expect.stringMatching(/Unqualified removes buyer\/market; pass provider/u),
     })
     const supplyHelp = spawnCliSync(['help', 'supply', 'status', '--json'])
     expect(supplyHelp.status).toBe(0)
     expect(JSON.parse(supplyHelp.stdout)).toMatchObject({
       kind: 'HELP',
       command: 'supply status',
-      usage: 'ae supply status <businessRef> [operationRef]',
+      usage: 'ae supply status <businessRef> [toolRef]',
       auth: {
         scope: 'market_supply:manage',
-        deviceFlow: expect.stringContaining('connect --supplier'),
+        deviceFlow: expect.stringContaining('connect --provider'),
       },
     })
     const doctorHelp = spawnCliSync(['help', 'doctor', '--json'])
@@ -335,7 +335,7 @@ describe('market-terminal CLI error contracts', () => {
     expect(JSON.parse(doctorHelp.stdout)).toMatchObject({
       kind: 'HELP',
       command: 'doctor',
-      usage: 'ae doctor [businessId] [--supplier]',
+      usage: 'ae doctor [businessId] [--provider]',
       summary: expect.stringContaining('without changing'),
     })
 
@@ -367,7 +367,7 @@ describe('market-terminal CLI error contracts', () => {
         auth: {
           credential: 'AE_API_KEY',
           credentialOrigin: 'AE_API_KEY_ORIGIN',
-          scope: 'market_operations:invoke',
+          scope: 'market_tools:call',
         },
       })
       expect(envelope.flags).toHaveProperty('--technical')
@@ -375,8 +375,8 @@ describe('market-terminal CLI error contracts', () => {
       expect(envelope.flags).toHaveProperty('--cursor')
       expect(envelope.flags).toHaveProperty('--filters')
       if (command === 'connect') {
-        expect(envelope.usage).toBe('ae connect [--supplier]')
-        expect(envelope.flags).toHaveProperty('--supplier')
+        expect(envelope.usage).toBe('ae connect [--provider]')
+        expect(envelope.flags).toHaveProperty('--provider')
         expect(envelope.flags).not.toHaveProperty('--mcp')
         expect(envelope.auth.guidance).toEqual(expect.arrayContaining([
           expect.stringContaining('verification URI'),
@@ -399,9 +399,9 @@ describe('market-terminal CLI error contracts', () => {
     const connectTextHelp = spawnCliSync(['connect', '--help'])
     expect(connectTextHelp.status).toBe(0)
     expect(connectTextHelp.stdout).toContain('AE_API_KEY_ORIGIN')
-    expect(connectTextHelp.stdout).toContain('market_operations:invoke')
+    expect(connectTextHelp.stdout).toContain('market_tools:call')
     expect(connectTextHelp.stdout).toContain('verification URI')
-    expect(connectTextHelp.stdout).toContain('ae connect --supplier')
+    expect(connectTextHelp.stdout).toContain('ae connect --provider')
     expect(connectTextHelp.stderr).toBe('')
   }, 30_000)
 
@@ -427,10 +427,10 @@ describe('market-terminal CLI error contracts', () => {
 
     const callText = spawnCliSync(['help', 'call'])
     expect(callText.status).toBe(0)
-    expect(callText.stdout).toContain("Usage: ae call <operation-ref> --input '<json>' [--wait]")
+    expect(callText.stdout).toContain("Usage: ae call <tool-ref> --input '<json>' [--wait]")
     expect(callText.stdout).toContain('Authentication:')
     expect(callText.stdout).toContain('AE_API_KEY')
-    expect(callText.stdout).toContain('market_operations:invoke')
+    expect(callText.stdout).toContain('market_tools:call')
     expect(callText.stdout).toContain('--input -')
 
     const searchText = spawnCliSync(['help', 'search'])
@@ -514,7 +514,7 @@ describe('market-terminal CLI error contracts', () => {
     expect(JSON.parse(jsonFailure.stdout)).toMatchObject({
       kind: 'INVALID_ARGUMENT',
       code: 'call-usage',
-      message: "Usage: ae call <operation-ref> --input '<json>' [--wait]",
+      message: "Usage: ae call <tool-ref> --input '<json>' [--wait]",
       suggestion: 'Review the command arguments and try again.',
       nextCommand: 'ae help call',
       exitCode: 1,
@@ -524,7 +524,7 @@ describe('market-terminal CLI error contracts', () => {
     expect(humanFailure.status).toBe(1)
     expect(humanFailure.stdout).toBe('')
     expect(humanFailure.stderr).toBe([
-      "Usage: ae call <operation-ref> --input '<json>' [--wait]",
+      "Usage: ae call <tool-ref> --input '<json>' [--wait]",
       'Review the command arguments and try again.',
       'Next: ae help call',
       '',

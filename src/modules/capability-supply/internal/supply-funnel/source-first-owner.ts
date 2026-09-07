@@ -12,9 +12,9 @@ import type { PreparedPublicationMaterial } from '../publication'
 import type { ProviderConnectionOwnerProjection } from '../../provider-connection'
 import {
   prepareSupplyPublicationV2,
-  publishSupplyOperationV2InputSchema,
+  publishSupplyToolV2InputSchema,
   selectSupplyProviderAuthority,
-  type PublishSupplyOperationV2Input,
+  type PublishSupplyToolV2Input,
 } from '../../supply-publication-v2'
 import {
   previewSupplySource,
@@ -53,7 +53,7 @@ type PublicationResult =
       kind: 'published' | 'replayed'
       publicationRef: string
       publicationRevision: number
-      operationRef: string
+      toolRef: string
     }>
   | Readonly<{ kind: 'refused'; reason: string }>
 
@@ -110,7 +110,7 @@ const readSourceSelectionDraftQuery = sourceQuery<
 export {
   ownerSourceConnectionInputSchema,
   ownerSourcePreviewInputSchema,
-  publishSupplyOperationV2InputSchema as ownerSourcePublishInputSchema,
+  publishSupplyToolV2InputSchema as ownerSourcePublishInputSchema,
 }
 
 const ownerSourceDraftInputSchema = z.strictObject({
@@ -236,7 +236,7 @@ export async function previewOwnerSupplySource({
     idempotencyKey: data.idempotencyKey,
     context,
     title: 'Connect MCP server',
-    description: 'Sign in to the MCP server, then AE will return to this source and continue finding Operations.',
+    description: 'Sign in to the MCP server, then AE will return to this source and continue finding Tools.',
     ctaLabel: 'Connect server',
   })
 }
@@ -270,7 +270,7 @@ export async function startOwnerSupplySourceConnection({
     candidateSourceDigest: data.expectedSourceDigest,
     context,
     title: 'Connect service',
-    description: 'Enter the service credential securely, then AE will return to this Operation.',
+    description: 'Enter the service credential securely, then AE will return to this Tool.',
     ctaLabel: 'Connect service',
   })
 }
@@ -469,7 +469,7 @@ export async function publishOwnerSupplySource({
   data,
   context,
 }: {
-  data: PublishSupplyOperationV2Input
+  data: PublishSupplyToolV2Input
   context: unknown
 }): Promise<SupplyPublishResult> {
   const providerAuthority = data.connectionRef === undefined
@@ -577,13 +577,13 @@ export async function publishOwnerSupplySource({
     kind: published.kind === 'replayed' ? 'replayed' : 'submitted',
     publicationRef: published.publicationRef,
     publicationRevision: published.publicationRevision,
-    operationRef: published.operationRef,
+    toolRef: published.toolRef,
     state: 'Submitted',
   }
 }
 
 function connectedSourceDependencies(
-  input: Pick<PublishSupplyOperationV2Input, 'source' | 'businessRef' | 'environment'>,
+  input: Pick<PublishSupplyToolV2Input, 'source' | 'businessRef' | 'environment'>,
   connectionRef: string,
 ): SupplySourcePreviewDependencies {
   if (input.source.kind === 'openapi') {
@@ -656,8 +656,8 @@ function unavailablePreview(): SupplySourcePreview {
       action: 'supply.source.preview',
       blockedCapabilities: ['supply.publish'],
       cta: '/owner/offerings',
-      ctaLabel: 'Return to Operations',
-      description: 'The current Business could not be confirmed. Return to Operations and try again.',
+      ctaLabel: 'Return to Tools',
+      description: 'The current Business could not be confirmed. Return to Tools and try again.',
       iconUrl: null,
       status: 'required',
       title: 'Business unavailable',

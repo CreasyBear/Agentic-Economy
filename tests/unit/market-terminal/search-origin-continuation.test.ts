@@ -46,7 +46,7 @@ describe('search origin continuations', () => {
         response.writeHead(200, { 'content-type': 'application/json' })
         response.end(JSON.stringify({
           kind: 'ok',
-          schemaVersion: 'registry-operations:v3',
+          schemaVersion: 'registry-tools:v3',
           query: input.query,
           count: 0,
           items: [],
@@ -99,11 +99,11 @@ describe('search origin continuations', () => {
     const query = "supplier's private lookup"
     vi.stubGlobal('fetch', vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
       kind: 'no_candidates',
-      schemaVersion: 'registry-operations:v3',
+      schemaVersion: 'registry-tools:v3',
       query,
       count: 0,
       items: [],
-      note: 'No operational Operations matched this search.',
+      note: 'No operational Tools matched this search.',
       pagination: { limit: 10, hasMore: false },
     }), { status: 200, headers: { 'content-type': 'application/json' } })))
     const output = captureStdout()
@@ -133,11 +133,11 @@ describe('search origin continuations', () => {
     const origin = 'http://[::1]:3024'
     vi.stubGlobal('fetch', vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
       kind: 'no_candidates',
-      schemaVersion: 'registry-operations:v3',
+      schemaVersion: 'registry-tools:v3',
       query: 'private lookup',
       count: 0,
       items: [],
-      note: 'No operational Operations matched this search.',
+      note: 'No operational Tools matched this search.',
       pagination: { limit: 10, hasMore: false },
     }), { status: 200, headers: { 'content-type': 'application/json' } })))
     const output = captureStdout()

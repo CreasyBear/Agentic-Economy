@@ -3,7 +3,7 @@ import {
   normalizePricingConfig,
   pricingConfigDigest,
   pricingConfigSchema,
-  resolveInvocationPrice,
+  resolveCallPrice,
   type ExactAmount,
   type PricingConfig,
   type PricingResolution,
@@ -46,7 +46,7 @@ export const realPricingConfigPort: PricingConfigPort = {
   },
   resolve(input) {
     const priceDigest = input.priceDigest ?? pricingConfigDigest(input.config)
-    const resolution = resolveInvocationPrice({ config: input.config, freeCallsUsed: input.freeCallsUsed, priceDigest })
+    const resolution = resolveCallPrice({ config: input.config, freeCallsUsed: input.freeCallsUsed, priceDigest })
     if (resolution.kind === 'refused') return { kind: 'refused', reason: resolution.code }
     const grossAmount = resolution.amount
     const split = computeRakeSplit(grossAmount, { rakeBps: DEFAULT_RAKE_BPS })

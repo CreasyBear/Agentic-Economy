@@ -51,8 +51,8 @@ export type FormanceCapacitySync = Readonly<{
 }>
 
 export type FormanceManagedCallBooking = Readonly<{
-  invocationRef: string
-  commitmentRef: string
+  callRef: string
+  quoteRef: string
   idempotencyKey: string
   accountRef: string
   principalRef: string
@@ -61,7 +61,7 @@ export type FormanceManagedCallBooking = Readonly<{
   legalCustomerGeneration: number
   treasuryRef: string
   treasuryGeneration: number
-  operationRef: string
+  toolRef: string
   providerRef: string
   authorityGeneration: number
   policyGeneration: number
@@ -69,7 +69,7 @@ export type FormanceManagedCallBooking = Readonly<{
   buyerRevenueUnits: string
   buyerTaxUnits: string
   providerAmountUnits: string
-  commitmentDigest: string
+  quoteDigest: string
   inputDigest: string
   policyDigest: string
   rateEvidenceDigest: string
@@ -578,7 +578,7 @@ function capacitySemantic(input: FormanceCapacitySync) {
 
 function managedCallAccounts(input: FormanceManagedCallBooking) {
   if (!managedCallSemantic(input)) return undefined
-  const callDigest = digestReference('call', input.invocationRef)
+  const callDigest = digestReference('call', input.callRef)
   const agentDigest = digestReference('agent_budget', {
     subjectRef: input.principalRef,
     generation: input.agentBudgetGeneration,
@@ -622,14 +622,14 @@ function managedCallAmounts(input: FormanceManagedCallBooking) {
 
 function managedCallSemantic(input: FormanceManagedCallBooking): boolean {
   const refs = [
-    input.invocationRef,
-    input.commitmentRef,
+    input.callRef,
+    input.quoteRef,
     input.idempotencyKey,
     input.accountRef,
     input.principalRef,
     input.legalCustomerRef,
     input.treasuryRef,
-    input.operationRef,
+    input.toolRef,
     input.providerRef,
   ]
   const generations = [
@@ -640,7 +640,7 @@ function managedCallSemantic(input: FormanceManagedCallBooking): boolean {
     input.policyGeneration,
   ]
   const digests = [
-    input.commitmentDigest,
+    input.quoteDigest,
     input.inputDigest,
     input.policyDigest,
     input.rateEvidenceDigest,
@@ -668,7 +668,7 @@ function managedCallCommand(
   variables: Readonly<Record<string, string>>,
   externalEvidenceDigest = input.x402RequirementDigest,
 ): FormanceMoneyCommand {
-  const identity = { invocationRef: input.invocationRef, commitmentRef: input.commitmentRef, stage }
+  const identity = { callRef: input.callRef, quoteRef: input.quoteRef, stage }
   const idempotencyDigest = digestValue('managed-call-idempotency', {
     idempotencyKey: input.idempotencyKey,
     ...identity,
@@ -681,7 +681,7 @@ function managedCallCommand(
     variables: Object.freeze({ ...variables }),
     metadata: Object.freeze({
       account_digest: digestReference('account', input.accountRef),
-      call_digest: digestReference('call', input.invocationRef),
+      call_digest: digestReference('call', input.callRef),
       command_digest: digestValue('managed-call-command', {
         format: 'ae.formance-managed-call:v1',
         input,
@@ -689,11 +689,13 @@ function managedCallCommand(
         template,
         externalEvidenceDigest,
       }),
-      commitment_digest: stripDigest(input.commitmentDigest),
+      // Formance's command envelope retains its historical key; the value is
+      // sourced from the current Quote evidence field.
+      commitment_digest: stripDigest(input.quoteDigest),
       external_evidence_digest: stripDigest(externalEvidenceDigest),
       idempotency_digest: idempotencyDigest,
       legal_customer_digest: digestReference('legal_customer', input.legalCustomerRef),
-      operation_digest: digestReference('operation', input.operationRef),
+      operation_digest: digestReference('operation', input.toolRef),
       policy_digest: stripDigest(input.policyDigest),
       principal_digest: digestReference('principal', input.principalRef),
       provider_digest: digestReference('provider', input.providerRef),

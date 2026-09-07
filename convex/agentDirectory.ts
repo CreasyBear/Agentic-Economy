@@ -21,7 +21,7 @@ const directoryRecord = v.object({
   lastSeenAt: v.number(),
   status: v.union(v.literal('connected'), v.literal('attention'), v.literal('expired'), v.literal('disconnected')),
   admissionLifecycle: v.union(v.literal('active'), v.literal('revoked'), v.literal('expired')),
-  authorityMode: v.union(v.literal('inspect_only'), v.literal('approve_each'), v.literal('bounded_mandate'), v.literal('full_yolo')),
+  authorityMode: v.union(v.literal('read_only'), v.literal('approval_required'), v.literal('spending_policy'), v.literal('unrestricted_test_only')),
   scopes: v.array(v.string()),
   credentialHistoryTruncated: v.boolean(),
   credentials: v.array(v.object({

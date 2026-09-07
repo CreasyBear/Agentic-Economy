@@ -328,7 +328,7 @@ describe('owner capability publication admission', () => {
       state: 'current',
       publicationRef: admitted.publicationRef,
       publicationRevision: admitted.publicationRevision,
-      operationRef: admitted.operationRef,
+      toolRef: admitted.toolRef,
     })
     expect(readbackOffering.publication?.source).toEqual({
       kind: 'openapi_http',

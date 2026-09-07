@@ -179,10 +179,10 @@ export function parseWorkloadCronSnapshot(input: unknown): WorkloadCronSnapshot 
 }
 
 export const CONSEQUENCE_OPERATIONS = [
-  'capabilityOperationInvocations:cancelBeforeClaim',
-  'capabilityOperationInvocations:claimAutomaticReconciliationCandidate',
-  'capabilityOperationInvocations:finishAutomaticReconciliation',
-  'capabilityOperationX402AuthorizationExpiry:queueExpiredX402Authorization',
+  'capabilityCalls:cancelBeforeClaim',
+  'capabilityCalls:claimAutomaticReconciliationCandidate',
+  'capabilityCalls:finishAutomaticReconciliation',
+  'capabilityCallX402AuthorizationExpiry:queueExpiredX402Authorization',
   'capabilitySupply:recordCapabilityProbeResult',
   'facilitatorDiscovery:reconcile',
   'marketExternalRegistry:begin',
@@ -195,10 +195,10 @@ export const CONSEQUENCE_OPERATIONS = [
 export type ConsequenceOperation = typeof CONSEQUENCE_OPERATIONS[number]
 
 export const consequenceOperationValue = v.union(
-  v.literal('capabilityOperationInvocations:cancelBeforeClaim'),
-  v.literal('capabilityOperationInvocations:claimAutomaticReconciliationCandidate'),
-  v.literal('capabilityOperationInvocations:finishAutomaticReconciliation'),
-  v.literal('capabilityOperationX402AuthorizationExpiry:queueExpiredX402Authorization'),
+  v.literal('capabilityCalls:cancelBeforeClaim'),
+  v.literal('capabilityCalls:claimAutomaticReconciliationCandidate'),
+  v.literal('capabilityCalls:finishAutomaticReconciliation'),
+  v.literal('capabilityCallX402AuthorizationExpiry:queueExpiredX402Authorization'),
   v.literal('capabilitySupply:recordCapabilityProbeResult'),
   v.literal('facilitatorDiscovery:reconcile'),
   v.literal('marketExternalRegistry:begin'),

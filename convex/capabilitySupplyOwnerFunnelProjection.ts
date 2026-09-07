@@ -43,20 +43,20 @@ type OwnerSupplyAvailable = Extract<
 >
 type OwnerSupplyOffering = OwnerSupplyAvailable['offerings'][number]
 type OwnerSupplyPublication = NonNullable<OwnerSupplyOffering['publication']>
-type OwnerOperationEvidence = NonNullable<OwnerSupplyOffering['operationEvidence']>
+type OwnerToolEvidence = NonNullable<OwnerSupplyOffering['toolEvidence']>
 
-function projectOperationEvidence(input: Readonly<{
-  operationRef: string
+function projectToolEvidence(input: Readonly<{
+  toolRef: string
   windowStartAt: number
   windowEndAt: number
   callsOverflow: boolean
   qualifiedUsesOverflow: boolean
-  calls: readonly Doc<'capabilityOperationCallProjections'>[]
+  calls: readonly Doc<'capabilityCallProjections'>[]
   qualifiedUses: readonly Doc<'qualifiedUseReceipts'>[]
-}>): OwnerOperationEvidence {
-  const operationCalls = input.calls.filter((row) => row.operationRef === input.operationRef)
-  const operationQualifiedUses = input.qualifiedUses.filter((row) => row.operationRef === input.operationRef)
-  const delivery: OwnerOperationEvidence['delivery'] = input.callsOverflow
+}>): OwnerToolEvidence {
+  const operationCalls = input.calls.filter((row) => row.toolRef === input.toolRef)
+  const operationQualifiedUses = input.qualifiedUses.filter((row) => row.toolRef === input.toolRef)
+  const delivery: OwnerToolEvidence['delivery'] = input.callsOverflow
     ? { kind: 'unavailable', reason: 'window_too_large', provenance: 'canonical_call_receipts' }
     : operationCalls.length === 0
       ? { kind: 'unobserved', provenance: 'canonical_call_receipts' }
@@ -69,7 +69,7 @@ function projectOperationEvidence(input: Readonly<{
           lastObservedAt: Math.max(...operationCalls.map((row) => row.updatedAt)),
           provenance: 'canonical_call_receipts',
         }
-  const usefulOutcome: OwnerOperationEvidence['usefulOutcome'] = input.qualifiedUsesOverflow
+  const usefulOutcome: OwnerToolEvidence['usefulOutcome'] = input.qualifiedUsesOverflow
     ? { kind: 'unavailable', reason: 'window_too_large', provenance: 'qualified_use_receipts' }
     : operationQualifiedUses.length === 0
       ? { kind: 'unobserved', provenance: 'qualified_use_receipts' }
@@ -231,7 +231,7 @@ export async function readOwnerSupplyFunnelProjection(
         )
         .take(OWNER_SUPPLY_CAPABILITY_OFFERINGS_READ_CAP + 1),
       db
-        .query('capabilityOperationCallProjections')
+        .query('capabilityCallProjections')
         .withIndex('by_providerRef_and_createdAt', (q) =>
           q.eq('providerRef', String(business._id)).gte('createdAt', evidenceWindowStartAt),
         )
@@ -507,12 +507,12 @@ export async function readOwnerSupplyFunnelProjection(
           sourceMaterial,
           now,
         })
-        const operationRef = publication?.operationRef
-        if (operationRef === undefined) return baseOffering
+        const toolRef = publication?.toolRef
+        if (toolRef === undefined) return baseOffering
         return {
           ...baseOffering,
-          operationEvidence: projectOperationEvidence({
-            operationRef,
+          toolEvidence: projectToolEvidence({
+            toolRef,
             windowStartAt: evidenceWindowStartAt,
             windowEndAt: now,
             callsOverflow: providerCallsOverflow,

@@ -53,8 +53,8 @@ app.use(agent)
 app.use(aggregate, { name: 'ownerActivationByStage' })
 app.use(aggregate, { name: 'marketEvidence' })
 app.use(aggregate, { name: 'marketOperationEvidence' })
-app.use(aggregate, { name: 'marketOperationRatings' })
-app.use(aggregate, { name: 'marketActiveOperations' })
-app.use(aggregate, { name: 'marketActiveSuppliers' })
+app.use(aggregate, { name: 'marketToolRatings' })
+app.use(aggregate, { name: 'marketActiveTools' })
+app.use(aggregate, { name: 'marketActiveProviders' })
 
 export default app

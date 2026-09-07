@@ -1,30 +1,30 @@
 import type { AgentAccessPrincipal } from '@/modules/agent-access/agent-access'
 import type { AccountManagementService } from '@/modules/agent-access/account.actions'
-import { OPERATION_INVOKE_ROUTE_CONTRACT } from '@/modules/capability-execution/operation-invoke-entry'
-import type { OperationInvokeService } from '@/modules/capability-execution/operation-invoke'
-import type { OperationProjectionNavigationContract } from '@/modules/capability-supply/operation-projection'
+import { CALL_ROUTE_CONTRACT } from '@/modules/capability-execution/call-entry'
+import type { CallService } from '@/modules/capability-execution/call-authority'
+import type { ToolProjectionNavigationContract } from '@/modules/capability-supply/tool-projection'
 import type { SupplyManagementService } from '@/modules/capability-supply/supply-actions'
-import { operationMarketNavigation } from '@/modules/registry/operation-entry'
+import { toolMarketNavigation } from '@/modules/registry/tool-entry'
 import type { SourceWriteAdmissionRequest } from '@/modules/security/source-write-admission'
 import type { MarketDemandService } from '@/modules/market-demand/market-demand.actions'
 import type { FundingHandoffService } from '@/modules/money/funding-handoff.actions'
 
-export const CURRENT_OPERATION_PROJECTION_NAVIGATION = Object.freeze({
+export const CURRENT_TOOL_PROJECTION_NAVIGATION = Object.freeze({
   market: Object.freeze({
-    list: operationMarketNavigation('list'),
-    search: operationMarketNavigation('search'),
-    describe: operationMarketNavigation('describe'),
-    compare: operationMarketNavigation('compare'),
+    list: toolMarketNavigation('list'),
+    search: toolMarketNavigation('search'),
+    describe: toolMarketNavigation('describe'),
+    compare: toolMarketNavigation('compare'),
   }),
-  invoke: Object.freeze({
-    relation: 'invoke',
-    pathTemplate: OPERATION_INVOKE_ROUTE_CONTRACT.invoke.path,
-    method: OPERATION_INVOKE_ROUTE_CONTRACT.invoke.method,
-    actionId: OPERATION_INVOKE_ROUTE_CONTRACT.invoke.actionId,
+  call: Object.freeze({
+    relation: 'call',
+    pathTemplate: CALL_ROUTE_CONTRACT.call.path,
+    method: CALL_ROUTE_CONTRACT.call.method,
+    actionId: CALL_ROUTE_CONTRACT.call.actionId,
     authentication: 'required',
     surfaces: ['http', 'cli', 'mcp', 'chat'] as const,
   }),
-}) satisfies OperationProjectionNavigationContract
+}) satisfies ToolProjectionNavigationContract
 
 declare module '@/modules/common/action' {
   interface ActionContextComposition {
@@ -32,8 +32,8 @@ declare module '@/modules/common/action' {
     sourceWriteRequest?: SourceWriteAdmissionRequest
     /** Full server-derived agent-access principal; never caller-supplied authority. */
     agentAccessPrincipal?: AgentAccessPrincipal
-    /** One injected operation application service shared by HTTP and MCP adapters. */
-    operationInvokeService?: OperationInvokeService
+    /** One injected Call application service shared by HTTP and MCP adapters. */
+    callService?: CallService
     /** One injected supply-management service shared by authenticated MCP and CLI adapters. */
     supplyManagementService?: SupplyManagementService
     /** One injected account read service shared by authenticated HTTP, MCP, and CLI adapters. */

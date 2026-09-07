@@ -84,7 +84,7 @@ export async function loadOwnerReconnectCandidates(
 
 
 export async function loadAgentDirectoryReadback(
-  operations: AgentAccessOperationActivityPort,
+  tools: AgentAccessToolActivityPort,
   cursor: string | null = null,
 ): Promise<AgentDirectoryProjection> {
   const [keys, source] = await Promise.all([
@@ -106,7 +106,7 @@ export async function loadAgentDirectoryReadback(
         now: Date.now(),
       })
   const projection = projectAgentDirectory(sources, canonicalAgents.page, connections)
-  const enriched = await enrichAgentDirectoryActivity(projection, operations)
+  const enriched = await enrichAgentDirectoryActivity(projection, tools)
   return canonicalAgents.isDone
     ? enriched
     : { ...enriched, nextCursor: canonicalAgents.continueCursor }
@@ -240,56 +240,55 @@ function projectAgentDetail(
   }
 }
 
-type OperationCompareResult = Readonly<
-  | {
+type AgentAccessToolCompareResult =
+  | Readonly<{
       kind: 'ok'
-      operations: readonly Readonly<{
-        operationRef: string
+      tools: readonly Readonly<{
+        toolRef: string
         offering: Readonly<{ label: string }>
         business: Readonly<{ name: string }>
       }>[]
-    }
-  | { kind: 'unavailable' }
->
+    }>
+  | Readonly<{ kind: 'unavailable' }>
 
-export type CompareOperations = (
-  input: Readonly<{ operationRefs: readonly string[] }>,
-) => Promise<OperationCompareResult>
+export type CompareTools = (
+  input: Readonly<{ toolRefs: readonly string[] }>,
+) => Promise<AgentAccessToolCompareResult>
 
-export type AgentAccessOperationActivityPort = Readonly<{
-  compare: CompareOperations
-  isOperationRef: (value: string) => boolean
+export type AgentAccessToolActivityPort = Readonly<{
+  compare: CompareTools
+  isToolRef: (value: string) => boolean
 }>
 
 export async function enrichAgentDirectoryActivity(
   directory: AgentDirectoryProjection,
-  operations: AgentAccessOperationActivityPort,
+  tools: AgentAccessToolActivityPort,
 ): Promise<AgentDirectoryProjection> {
   const recentActivity = directory.details
     .flatMap(({ activity }) => activity)
     .toSorted((left, right) => right.observedAt - left.observedAt)
-  const operationRefs = [...new Set(recentActivity.reduce<string[]>((refs, { operationKey }) => {
-    if (operations.isOperationRef(operationKey)) refs.push(operationKey)
+  const toolRefs = [...new Set(recentActivity.reduce<string[]>((refs, { operationKey }) => {
+    if (tools.isToolRef(operationKey)) refs.push(operationKey)
     return refs
   }, []))]
     .slice(0, 40)
-  if (operationRefs.length === 0) return directory
+  if (toolRefs.length === 0) return directory
 
-  const batches = Array.from({ length: Math.ceil(operationRefs.length / 4) }, (_, index) => (
-    operationRefs.slice(index * 4, index * 4 + 4)
+  const batches = Array.from({ length: Math.ceil(toolRefs.length / 4) }, (_, index) => (
+    toolRefs.slice(index * 4, index * 4 + 4)
   ))
-  const comparisons = await Promise.all(batches.map(async (operationRefs) => {
+  const comparisons = await Promise.all(batches.map(async (toolRefs) => {
     try {
-      return await operations.compare({ operationRefs })
+      return await tools.compare({ toolRefs })
     } catch {
       return undefined
     }
   }))
-  const labels = new Map(comparisons.flatMap((comparison) => (
+  const labels = new Map<string, Readonly<{ label: string; provider: string }>>(comparisons.flatMap((comparison) => (
     comparison?.kind === 'ok'
-      ? comparison.operations.map((operation) => [operation.operationRef, {
-        label: operation.offering.label,
-        supplier: operation.business.name,
+      ? comparison.tools.map((tool) => [tool.toolRef, {
+        label: tool.offering.label,
+        provider: tool.business.name,
       }] as const)
       : []
   )))
@@ -298,10 +297,10 @@ export async function enrichAgentDirectoryActivity(
     details: directory.details.map((detail) => ({
       ...detail,
       activity: detail.activity.map((entry) => {
-        const operation = operations.isOperationRef(entry.operationKey)
+        const tool = tools.isToolRef(entry.operationKey)
           ? labels.get(entry.operationKey)
           : undefined
-        return operation === undefined ? entry : { ...entry, operation }
+        return tool === undefined ? entry : { ...entry, tool }
       }),
     })),
   }

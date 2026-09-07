@@ -23,6 +23,7 @@ import {
   AGENT_ACCESS_AUTHORITY_MODE_VALUES,
   type AgentAccessAuthorityMode,
 } from '../src/modules/agent-access/contract'
+import { normalizeStoredAgentAccessGrant } from '../src/modules/agent-access/policy'
 import { createAgentAuditEnvelope } from '../src/modules/agent-access/public'
 import { createPackage3AuditEvent } from '../src/modules/observability/public'
 import {
@@ -43,10 +44,10 @@ const KNOWN_CREDENTIAL_DENIAL_BUCKET_MS = 5 * 60 * 1_000
 
 const environmentValue = v.union(v.literal('sandbox'), v.literal('production'))
 const authorityModeValue = v.union(
-  v.literal('inspect_only'),
-  v.literal('approve_each'),
-  v.literal('bounded_mandate'),
-  v.literal('full_yolo'),
+  v.literal('read_only'),
+  v.literal('approval_required'),
+  v.literal('spending_policy'),
+  v.literal('unrestricted_test_only'),
 )
 
 const canonicalAgentBindingValue = v.object({
@@ -183,14 +184,22 @@ export async function resolveCanonicalAgentBinding(
     return await denyKnownCredential('authentication_required')
   }
   const accessGrant = accessGrants[0]
-  if (accessGrant === undefined
-    || accessGrant.principalId !== binding.principalRef
+  if (accessGrant === undefined) {
+    return await denyKnownCredential('authentication_required')
+  }
+  let normalizedAccessGrant: ReturnType<typeof normalizeStoredAgentAccessGrant>
+  try {
+    normalizedAccessGrant = normalizeStoredAgentAccessGrant(accessGrant)
+  } catch {
+    return await denyKnownCredential('authentication_required')
+  }
+  if (accessGrant.principalId !== binding.principalRef
     || accessGrant.ownerId !== admission.ownerId
     || accessGrant.applicationRef !== input.applicationRef
     || accessGrant.environment !== input.environment
-    || accessGrant.authorityMode !== input.authorityMode
+    || normalizedAccessGrant.authorityMode !== input.authorityMode
     || accessGrant.generation !== admission.grantGeneration
-    || accessGrant.policyDigest !== admission.policyDigest) {
+    || normalizedAccessGrant.spendingPolicyDigest !== admission.spendingPolicyDigest) {
     return await denyKnownCredential('authentication_required')
   }
   const consequenceNow = Date.now()

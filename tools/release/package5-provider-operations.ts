@@ -3,37 +3,37 @@ import { z } from 'zod'
 
 import { jsonValueSchema } from '../../src/modules/capability-contract/public'
 import {
-  OPERATION_INSPECT_PATH,
-  operationInspectResultSchema,
-} from '../../src/modules/capability-execution/operation-commitment'
+  TOOL_QUOTE_PATH,
+  toolQuoteResultSchema,
+} from '../../src/modules/capability-execution/quote'
 import {
-  operationInvokeInputSchema,
-  operationInvokeMachineResultSchema,
-} from '../../src/modules/capability-execution/operation-invoke-contracts'
-import { OPERATION_INVOKE_HTTP_PATH } from '../../src/modules/capability-execution/operation-invoke-entry'
+  callInputSchema,
+  callMachineResultSchema,
+} from '../../src/modules/capability-execution/call-contracts'
+import { CALL_HTTP_PATH } from '../../src/modules/capability-execution/call-entry'
 import {
   supplySourceInputSchema,
   supplySourcePreviewSchema,
-  type SupplyOperationCandidate,
+  type SupplyToolCandidate,
 } from '../../src/modules/capability-supply/source-preview'
 import {
-  publishSupplyOperationV2InputSchema,
+  publishSupplyToolV2InputSchema,
 } from '../../src/modules/capability-supply/supply-publication-v2'
 import {
-  supplyOperationsListResultSchema,
+  supplyToolsListResultSchema,
   supplyPublishResultSchema,
   supplyStatusResultSchema,
   SUPPLY_ACTION_ROUTE_CONTRACTS,
 } from '../../src/modules/capability-supply/supply-actions'
 import { canonicalDigest } from '../../src/modules/common/canonical-digest'
 import {
-  OPERATION_MARKET_DESCRIBE_PATH,
-  OPERATION_MARKET_SEARCH_PATH,
-} from '../../src/modules/common/market-operation-paths'
+  TOOL_MARKET_DESCRIBE_PATH,
+  TOOL_MARKET_SEARCH_PATH,
+} from '../../src/modules/common/market-tool-paths'
 import {
-  operationChoiceDescribeOutputSchema,
-  operationChoiceSearchOutputSchema,
-} from '../../src/modules/registry/operation-choice-contracts'
+ toolChoiceDescribeOutputSchema,
+ toolChoiceSearchOutputSchema,
+} from '../../src/modules/registry/tool-choice-contracts'
 
 const SOURCE_KINDS = ['openapi', 'mcp', 'agent_plugin', 'x402'] as const
 const MAX_RESPONSE_BYTES = 1_048_576
@@ -50,11 +50,11 @@ const fixtureSchema = z.strictObject({
     z.strictObject({ resourceUrl: z.string().url(), method: z.enum(['GET', 'POST']) }),
   ]),
   connectionRef: z.string().trim().min(1).optional(),
-  presentation: publishSupplyOperationV2InputSchema.shape.presentation,
-  consequences: publishSupplyOperationV2InputSchema.shape.consequences,
-  pricing: publishSupplyOperationV2InputSchema.shape.pricing,
+  presentation: publishSupplyToolV2InputSchema.shape.presentation,
+  consequences: publishSupplyToolV2InputSchema.shape.consequences,
+  pricing: publishSupplyToolV2InputSchema.shape.pricing,
   validationInput: jsonObjectSchema,
-  invokeInput: jsonObjectSchema,
+  callInput: jsonObjectSchema,
 }).superRefine((fixture, context) => {
   if (fixture.source.kind !== fixture.kind) {
     context.addIssue({ code: 'custom', path: ['source', 'kind'], message: 'fixture_source_kind_mismatch' })
@@ -102,7 +102,7 @@ const fixtureReceiptSchema = z.strictObject({
   publication: z.strictObject({
     publicationRef: z.string(),
     publicationRevision: z.number().int().positive(),
-    operationRef: z.string(),
+  operationRef: z.string(),
   }),
   supplierOperation: z.strictObject({
     state: z.literal('Published'),
@@ -140,18 +140,18 @@ export type Package5ProviderOperationsReceipt = z.infer<typeof package5ProviderO
 export class Package5AuthorityReviewRequired extends Error {
   readonly reviewUrl: string
   readonly sourceKind: Package5SourceKind
-  readonly operationRef: string
+  readonly toolRef: string
 
   constructor(input: Readonly<{
     reviewUrl: string
     sourceKind: Package5SourceKind
-    operationRef: string
+    toolRef: string
   }>) {
     super(`package5_source_authority_review_required:${input.reviewUrl}`)
     this.name = 'Package5AuthorityReviewRequired'
     this.reviewUrl = input.reviewUrl
     this.sourceKind = input.sourceKind
-    this.operationRef = input.operationRef
+    this.toolRef = input.toolRef
   }
 }
 
@@ -273,7 +273,7 @@ function requireSuccess(response: JsonResponse, code: string): unknown {
   return response.body
 }
 
-function selectCandidate(fixture: Package5SourceFixture, candidates: readonly SupplyOperationCandidate[]): SupplyOperationCandidate {
+function selectCandidate(fixture: Package5SourceFixture, candidates: readonly SupplyToolCandidate[]): SupplyToolCandidate {
   const matches = candidates.filter((candidate) => {
     const selector = candidate.sourceSelector
     const match = fixture.candidateMatch
@@ -290,7 +290,7 @@ function selectCandidate(fixture: Package5SourceFixture, candidates: readonly Su
 async function waitForPublished(
   config: Package5ProviderOperationsConfig,
   publication: Readonly<{
-    operationRef: string
+    toolRef: string
     publicationRef: string
     publicationRevision: number
     sourceKind: Package5SourceKind
@@ -305,7 +305,7 @@ async function waitForPublished(
   for (let attempt = 0; attempt < maximumAttempts; attempt += 1) {
     const response = await post(config, SUPPLY_ACTION_ROUTE_CONTRACTS.status.path, {
       businessRef: config.businessRef,
-      operationRef: publication.operationRef,
+      toolRef: publication.toolRef,
     }, config.providerApiKey)
     const parsed = supplyStatusResultSchema.safeParse(requireSuccess(response, 'package5_supply_status_failed'))
     if (!parsed.success || parsed.data.kind !== 'available') throw new Error('package5_supply_status_invalid')
@@ -316,13 +316,13 @@ async function waitForPublished(
       reviewUrl.searchParams.set('publicationRef', publication.publicationRef)
       reviewUrl.searchParams.set('expectedRevision', String(publication.publicationRevision))
       reviewUrl.searchParams.set('expectedSourceDigest', publication.sourceDigest)
-      reviewUrl.searchParams.set('operationRef', publication.operationRef)
+      reviewUrl.searchParams.set('toolRef', publication.toolRef)
       reviewUrl.searchParams.set('sourceKind', publication.sourceKind)
       reviewUrl.searchParams.set('sourceUrl', publication.sourceUrl)
       throw new Package5AuthorityReviewRequired({
         reviewUrl: reviewUrl.toString(),
         sourceKind: publication.sourceKind,
-        operationRef: publication.operationRef,
+        toolRef: publication.toolRef,
       })
     }
     if (parsed.data.status.state === 'Action required' || parsed.data.status.state === 'Retired') {
@@ -338,23 +338,23 @@ async function waitForPublished(
 
 async function proveProviderDirectory(
   config: Package5ProviderOperationsConfig,
-  operationRef: string,
+  toolRef: string,
 ): Promise<void> {
   let cursor: string | undefined
   for (let pageNumber = 0; pageNumber < MAX_PROVIDER_DIRECTORY_PAGES; pageNumber += 1) {
-    const response = await post(config, SUPPLY_ACTION_ROUTE_CONTRACTS.operationsList.path, {
+    const response = await post(config, SUPPLY_ACTION_ROUTE_CONTRACTS.toolsList.path, {
       businessRef: config.businessRef,
       limit: 100,
       ...(cursor === undefined ? {} : { cursor }),
     }, config.providerApiKey)
-    const parsed = supplyOperationsListResultSchema.safeParse(requireSuccess(response, 'package5_supply_list_failed'))
+    const parsed = supplyToolsListResultSchema.safeParse(requireSuccess(response, 'package5_supply_list_failed'))
     if (!parsed.success || parsed.data.kind !== 'available') throw new Error('package5_supply_list_invalid')
-    const found = parsed.data.page.find((status) => status.operationRef === operationRef)
+    const found = parsed.data.page.find((status) => status.toolRef === toolRef)
     if (found !== undefined) {
       if (found.state !== 'Published' || !found.routeability.available) throw new Error('package5_supply_list_not_published')
       return
     }
-    if (parsed.data.isDone) throw new Error('package5_supply_list_operation_missing')
+    if (parsed.data.isDone) throw new Error('package5_supply_list_tool_missing')
     const next = parsed.data.continueCursor
     if (next === null || next === cursor) throw new Error('package5_supply_list_cursor_invalid')
     cursor = next
@@ -362,8 +362,8 @@ async function proveProviderDirectory(
   throw new Error('package5_supply_list_page_limit')
 }
 
-function exactOperation(items: readonly { operationRef: string }[], operationRef: string, code: string): void {
-  if (items.filter((item) => item.operationRef === operationRef).length !== 1) throw new Error(code)
+function exactTool(items: readonly { toolRef: string }[], toolRef: string, code: string): void {
+  if (items.filter((item) => item.toolRef === toolRef).length !== 1) throw new Error(code)
 }
 
 async function proveFixture(
@@ -375,7 +375,7 @@ async function proveFixture(
   if (!preview.success || preview.data.kind !== 'ready') throw new Error(`package5_${fixture.kind}_preview_not_ready`)
   const candidate = selectCandidate(fixture, preview.data.candidates)
 
-  const publishInput = publishSupplyOperationV2InputSchema.parse({
+  const publishInput = publishSupplyToolV2InputSchema.parse({
     businessRef: config.businessRef,
     source: fixture.source,
     candidateRef: candidate.candidateRef,
@@ -397,73 +397,73 @@ async function proveFixture(
   const published = supplyPublishResultSchema.safeParse(requireSuccess(publishResponse, `package5_${fixture.kind}_publish_failed`))
   if (!published.success || published.data.kind === 'refused') throw new Error(`package5_${fixture.kind}_publish_refused`)
 
-  const supplierStatus = await waitForPublished(config, {
-    operationRef: published.data.operationRef,
+  const providerStatus = await waitForPublished(config, {
+    toolRef: published.data.toolRef,
     publicationRef: published.data.publicationRef,
     publicationRevision: published.data.publicationRevision,
     sourceKind: fixture.kind,
     sourceDigest: preview.data.sourceDigest,
     sourceUrl: preview.data.provenance.sourceUrl,
   })
-  if (supplierStatus.source.kind !== fixture.kind
-    || supplierStatus.source.revision !== preview.data.sourceRevision
-    || supplierStatus.source.digest !== preview.data.sourceDigest
-    || !supplierStatus.routeability.available) {
+  if (providerStatus.source.kind !== fixture.kind
+    || providerStatus.source.revision !== preview.data.sourceRevision
+    || providerStatus.source.digest !== preview.data.sourceDigest
+    || !providerStatus.routeability.available) {
     throw new Error(`package5_${fixture.kind}_authoritative_readback_mismatch`)
   }
-  await proveProviderDirectory(config, published.data.operationRef)
+  await proveProviderDirectory(config, published.data.toolRef)
 
-  const searchResponse = await post(config, OPERATION_MARKET_SEARCH_PATH, {
+  const searchResponse = await post(config, TOOL_MARKET_SEARCH_PATH, {
     query: fixture.presentation.name,
     limit: 20,
   })
-  const search = operationChoiceSearchOutputSchema.safeParse(requireSuccess(searchResponse, `package5_${fixture.kind}_search_failed`))
+  const search = toolChoiceSearchOutputSchema.safeParse(requireSuccess(searchResponse, `package5_${fixture.kind}_search_failed`))
   if (!search.success || search.data.kind !== 'ok') throw new Error(`package5_${fixture.kind}_search_invalid`)
-  exactOperation(search.data.items, published.data.operationRef, `package5_${fixture.kind}_search_identity_mismatch`)
+  exactTool(search.data.items, published.data.toolRef, `package5_${fixture.kind}_search_identity_mismatch`)
 
-  const describeResponse = await post(config, OPERATION_MARKET_DESCRIBE_PATH, {
-    operationRef: published.data.operationRef,
+  const describeResponse = await post(config, TOOL_MARKET_DESCRIBE_PATH, {
+    toolRef: published.data.toolRef,
   })
-  const describe = operationChoiceDescribeOutputSchema.safeParse(requireSuccess(describeResponse, `package5_${fixture.kind}_describe_failed`))
+  const describe = toolChoiceDescribeOutputSchema.safeParse(requireSuccess(describeResponse, `package5_${fixture.kind}_describe_failed`))
   if (!describe.success || describe.data.kind !== 'found'
-    || describe.data.operation.operationRef !== published.data.operationRef
-    || describe.data.operation.healthStatus !== 'operational') {
+    || describe.data.tool.toolRef !== published.data.toolRef
+    || describe.data.tool.healthStatus !== 'operational') {
     throw new Error(`package5_${fixture.kind}_describe_invalid`)
   }
 
   // This request cannot cross the effect boundary because the current public
-  // contract accepts only a Commitment. It proves the pre-Commitment writer is
-  // truly gone from the deployed gateway.
-  const obsoleteInvoke = await post(config, OPERATION_INVOKE_HTTP_PATH, {
-    operationRef: published.data.operationRef,
-    input: fixture.invokeInput,
+  // contract accepts only a Quote. It proves the pre-Quote writer is truly
+  // gone from the deployed gateway.
+  const obsoleteCall = await post(config, CALL_HTTP_PATH, {
+    toolRef: published.data.toolRef,
+    input: fixture.callInput,
     idempotencyKey: `package5-obsolete:${config.expectedSourceRevision}:${fixture.kind}`,
   }, config.buyerApiKey)
-  if (obsoleteInvoke.status >= 200 && obsoleteInvoke.status < 300) throw new Error('package5_old_invoke_shape_accepted')
-  if (obsoleteInvoke.status !== 400
-    || typeof obsoleteInvoke.body !== 'object'
-    || obsoleteInvoke.body === null
-    || !('code' in obsoleteInvoke.body)
-    || obsoleteInvoke.body.code !== 'invalid_request') {
-    throw new Error('package5_old_invoke_shape_rejection_invalid')
+  if (obsoleteCall.status >= 200 && obsoleteCall.status < 300) throw new Error('package5_old_call_shape_accepted')
+  if (obsoleteCall.status !== 400
+    || typeof obsoleteCall.body !== 'object'
+    || obsoleteCall.body === null
+    || !('code' in obsoleteCall.body)
+    || obsoleteCall.body.code !== 'invalid_request') {
+    throw new Error('package5_old_call_shape_rejection_invalid')
   }
 
-  const inspectResponse = await post(config, OPERATION_INSPECT_PATH, {
-    operationRef: published.data.operationRef,
-    input: fixture.invokeInput,
+  const quoteResponse = await post(config, TOOL_QUOTE_PATH, {
+    toolRef: published.data.toolRef,
+    input: fixture.callInput,
   }, config.buyerApiKey)
-  const inspection = operationInspectResultSchema.safeParse(requireSuccess(inspectResponse, `package5_${fixture.kind}_inspect_failed`))
-  if (!inspection.success || inspection.data.kind !== 'committed') throw new Error(`package5_${fixture.kind}_inspect_not_committed`)
-  if (inspection.data.operationRef !== published.data.operationRef
-    || canonicalDigest(inspection.data.normalizedInput) !== canonicalDigest(fixture.invokeInput)) {
-    throw new Error(`package5_${fixture.kind}_commitment_mismatch`)
+  const quote = toolQuoteResultSchema.safeParse(requireSuccess(quoteResponse, `package5_${fixture.kind}_quote_failed`))
+  if (!quote.success || quote.data.kind !== 'committed') throw new Error(`package5_${fixture.kind}_quote_not_committed`)
+  if (quote.data.toolRef !== published.data.toolRef
+    || canonicalDigest(quote.data.normalizedInput) !== canonicalDigest(fixture.callInput)) {
+    throw new Error(`package5_${fixture.kind}_quote_mismatch`)
   }
-  const invokeInput = operationInvokeInputSchema.parse(inspection.data.continuation.input)
-  const invokeResponse = await post(config, inspection.data.continuation.path, invokeInput, config.buyerApiKey)
-  const invocation = operationInvokeMachineResultSchema.safeParse(requireSuccess(invokeResponse, `package5_${fixture.kind}_invoke_failed`))
-  if (!invocation.success || invocation.data.kind !== 'completed'
-    || invocation.data.operationRef !== published.data.operationRef) {
-    throw new Error(`package5_${fixture.kind}_invoke_not_completed`)
+  const callInput = callInputSchema.parse(quote.data.continuation.input)
+  const callResponse = await post(config, quote.data.continuation.path, callInput, config.buyerApiKey)
+  const call = callMachineResultSchema.safeParse(requireSuccess(callResponse, `package5_${fixture.kind}_call_failed`))
+  if (!call.success || call.data.kind !== 'completed'
+    || call.data.toolRef !== published.data.toolRef) {
+    throw new Error(`package5_${fixture.kind}_call_not_completed`)
   }
 
   return fixtureReceiptSchema.parse({
@@ -476,19 +476,19 @@ async function proveFixture(
     publication: {
       publicationRef: published.data.publicationRef,
       publicationRevision: published.data.publicationRevision,
-      operationRef: published.data.operationRef,
+      operationRef: published.data.toolRef,
     },
     supplierOperation: {
-      state: supplierStatus.state,
-      revision: supplierStatus.revision,
-      observedAt: supplierStatus.observedAt,
-      ...(supplierStatus.validUntil === undefined ? {} : { validUntil: supplierStatus.validUntil }),
+      state: providerStatus.state,
+      revision: providerStatus.revision,
+      observedAt: providerStatus.observedAt,
+      ...(providerStatus.validUntil === undefined ? {} : { validUntil: providerStatus.validUntil }),
     },
     buyer: {
-      commitmentRef: inspection.data.commitmentRef,
-      invocationRef: invocation.data.invocationRef,
-      evidenceHash: invocation.data.evidenceHash,
-      outputDigest: canonicalDigest(invocation.data.output),
+      commitmentRef: quote.data.quoteRef,
+      invocationRef: call.data.callRef,
+      evidenceHash: call.data.evidenceHash,
+      outputDigest: canonicalDigest(call.data.output),
     },
   })
 }

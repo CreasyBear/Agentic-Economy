@@ -51,7 +51,7 @@ export const agentBalanceAdmissionResult = v.union(
 const activityValue = v.object({
   callRef: v.string(),
   credentialRef: v.string(),
-  operationRef: v.string(),
+  toolRef: v.string(),
   providerRef: v.string(),
   state: v.union(v.literal('completed'), v.literal('refused'), v.literal('outcome_unknown')),
   deliveryState: v.union(v.literal('delivered'), v.literal('not_delivered'), v.literal('unknown')),
@@ -114,7 +114,7 @@ export async function listAgentActivityHandler(
   if (args.paginationOpts.numItems < 1 || args.paginationOpts.numItems > 100) {
     return { kind: 'error', code: 'source_unavailable' }
   }
-  const page = await ctx.db.query('capabilityOperationCallProjections')
+  const page = await ctx.db.query('capabilityCallProjections')
     .withIndex('by_accountRef_and_principalRef_and_createdAt', (query) => query
       .eq('accountRef', admission.ownerId)
       .eq('principalRef', admission.principalId))
@@ -127,7 +127,7 @@ export async function listAgentActivityHandler(
       page: page.page.map((row) => ({
         callRef: row.callRef,
         credentialRef: row.credentialRef,
-        operationRef: row.operationRef,
+        toolRef: row.toolRef,
         providerRef: row.providerRef,
         state: row.state,
         deliveryState: row.deliveryState,

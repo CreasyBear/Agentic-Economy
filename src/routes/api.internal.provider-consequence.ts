@@ -361,10 +361,10 @@ function x402RuntimeFactory(
       )
       if (!isRecord(value)
         || value.state !== 'prepared'
-        || value.dispatchRef !== ticket.invocationRef
+        || value.dispatchRef !== ticket.callRef
         || value.attemptRef !== authority.attemptRef
         || value.effectGeneration !== authority.effectGeneration
-        || value.operationRef !== ticket.operationRef
+        || value.toolRef !== ticket.toolRef
         || value.credentialRef !== credentialRef
         || typeof value.challengeJson !== 'string'
         || typeof value.selectedRequirementJson !== 'string'

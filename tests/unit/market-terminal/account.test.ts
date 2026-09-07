@@ -42,7 +42,7 @@ describe('AE CLI account interface', () => {
 
     const output = write.mock.calls.map(([value]) => String(value)).join('')
     expect(output).toContain('No stored connections for any origin.')
-    expect(output).toContain('Anonymous search and inspection remain available.')
+    expect(output).toContain('Anonymous search and description remain available.')
     expect(output.match(/^Next: /gmu)).toHaveLength(1)
     expect(output).toContain('Next: ae connect --base-url https://market.example')
   })
@@ -81,7 +81,7 @@ describe('AE CLI account interface', () => {
     storeConnection({
       baseUrl: identityOrigin,
       accessToken: 'hidden-identity-secret',
-      scope: 'market_operations:invoke',
+      scope: 'market_tools:call',
       profile: 'market',
     })
     const write = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
@@ -115,7 +115,7 @@ describe('AE CLI account interface', () => {
       return Response.json({
         kind: 'authenticated', principalRef: 'prn_identity', accountRef: 'acc_identity',
         credentialId: 'key_identity', applicationRef: 'agentic-economy', environment: 'sandbox',
-        scopes: ['market_operations:invoke'], authorityMode: 'inspect_only',
+        scopes: ['market_tools:call'], authorityMode: 'read_only',
       })
     })
     vi.stubGlobal('fetch', fetch)
@@ -163,12 +163,12 @@ describe('AE CLI account interface', () => {
     expect(output).not.toContain('hidden-z-secret')
   })
 
-  it('uses the supplier status form when supplier is the only other-origin profile', async () => {
+  it('uses the provider status form when provider is the only other-origin profile', async () => {
     storeConnection({
       baseUrl: 'https://supplier.example',
       accessToken: 'hidden-supplier-secret',
       scope: 'market_supply:manage',
-      profile: 'supplier',
+      profile: 'provider',
     })
     const write = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
 
@@ -179,7 +179,7 @@ describe('AE CLI account interface', () => {
       items: Array<{ statusCommand: string }>
       nextCommand: string
     }
-    const expected = 'ae account status supplier --base-url https://supplier.example'
+    const expected = 'ae account status provider --base-url https://supplier.example'
     expect(result.nextCommand).toBe(expected)
     expect(result.items[0]?.statusCommand).toBe(expected)
     expect(output).not.toContain('hidden-supplier-secret')
@@ -202,12 +202,12 @@ describe('AE CLI account interface', () => {
     expect(output).not.toContain('hidden-ipv6-secret')
   })
 
-  it('keeps the buyer connect continuation when only a selected supplier profile exists', async () => {
+  it('keeps the buyer connect continuation when only a selected provider profile exists', async () => {
     storeConnection({
       baseUrl: options.baseUrl,
       accessToken: 'hidden-selected-supplier-secret',
       scope: 'market_supply:manage',
-      profile: 'supplier',
+      profile: 'provider',
     })
     const write = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
 
@@ -216,7 +216,7 @@ describe('AE CLI account interface', () => {
     const output = write.mock.calls.map(([value]) => String(value)).join('')
     expect(JSON.parse(output)).toMatchObject({
       credentialSource: 'none',
-      items: [expect.objectContaining({ profile: 'supplier', state: 'selected_active' })],
+      items: [expect.objectContaining({ profile: 'provider', state: 'selected_active' })],
       nextCommand: 'ae connect --base-url https://market.example',
     })
     expect(output).not.toContain('hidden-selected-supplier-secret')
@@ -229,7 +229,7 @@ describe('AE CLI account interface', () => {
       baseUrl: options.baseUrl,
       accessToken: 'hidden-supplier-secret',
       scope: 'market_supply:manage',
-      profile: 'supplier',
+      profile: 'provider',
     })
     storeConnection({ baseUrl: 'https://other.example', accessToken: 'hidden-other-secret' })
     const write = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
@@ -240,7 +240,7 @@ describe('AE CLI account interface', () => {
     expect(result).toMatchObject({
       credentialSource: 'environment',
       items: [
-        expect.objectContaining({ origin: 'https://market.example', profile: 'supplier' }),
+        expect.objectContaining({ origin: 'https://market.example', profile: 'provider' }),
         expect.objectContaining({ origin: 'https://other.example', profile: 'market' }),
       ],
     })
@@ -259,8 +259,8 @@ describe('AE CLI account interface', () => {
         credentialId: 'key_current',
         applicationRef: 'agentic-economy',
         environment: 'sandbox',
-        scopes: ['market_operations:invoke'],
-        authorityMode: 'inspect_only',
+        scopes: ['market_tools:call'],
+        authorityMode: 'read_only',
       })
     })
     vi.stubGlobal('fetch', fetch)
@@ -278,25 +278,25 @@ describe('AE CLI account interface', () => {
     expect(output).not.toContain('hidden-secret')
   })
 
-  it('selects the independently stored supplier profile for self-inspection', async () => {
+  it('selects the independently stored provider profile for self-inspection', async () => {
     storeConnection({
       baseUrl: options.baseUrl,
       accessToken: 'hidden-supplier-secret',
       scope: 'market_supply:manage',
-      profile: 'supplier',
+      profile: 'provider',
     })
     const fetch = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
       expect(new Headers(init?.headers).get('authorization')).toBe('Bearer hidden-supplier-secret')
       return Response.json({
         kind: 'authenticated', principalRef: 'prn_supplier', accountRef: 'acc_owner',
         credentialId: 'key_supplier', applicationRef: 'agentic-economy', environment: 'sandbox',
-        scopes: ['market_supply:manage'], authorityMode: 'bounded_mandate',
+        scopes: ['market_supply:manage'], authorityMode: 'spending_policy',
       })
     })
     vi.stubGlobal('fetch', fetch)
     const write = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
 
-    await runAccountCommand(['status', 'supplier'], options)
+    await runAccountCommand(['status', 'provider'], options)
 
     expect(JSON.parse(write.mock.calls.map(([value]) => String(value)).join(''))).toMatchObject({
       credentialId: 'key_supplier', scopes: ['market_supply:manage'],
@@ -304,7 +304,7 @@ describe('AE CLI account interface', () => {
   })
 
   it('lists sanitized local connections and disconnects only the selected stored origin', async () => {
-    storeConnection({ baseUrl: options.baseUrl, accessToken: 'hidden-secret', scope: 'market_operations:invoke' })
+    storeConnection({ baseUrl: options.baseUrl, accessToken: 'hidden-secret', scope: 'market_tools:call' })
     storeConnection({ baseUrl: 'https://other.example', accessToken: 'other-secret' })
     const write = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
 
@@ -334,18 +334,18 @@ describe('AE CLI account interface', () => {
     expect(readStoredConnection('https://other.example')?.accessToken).toBe('other-secret')
   })
 
-  it('defaults disconnect to the buyer profile and preserves supplier authority', async () => {
+  it('defaults disconnect to the buyer profile and preserves provider authority', async () => {
     storeConnection({
       baseUrl: options.baseUrl,
       accessToken: 'hidden-market-secret',
-      scope: 'market_operations:invoke',
+      scope: 'market_tools:call',
       profile: 'market',
     })
     storeConnection({
       baseUrl: options.baseUrl,
       accessToken: 'hidden-supplier-secret',
       scope: 'market_supply:manage',
-      profile: 'supplier',
+      profile: 'provider',
     })
     const write = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
 
@@ -362,25 +362,25 @@ describe('AE CLI account interface', () => {
     expect(output).not.toContain('hidden-market-secret')
     expect(output).not.toContain('hidden-supplier-secret')
     expect(readStoredConnection(options.baseUrl, 'market')).toBeUndefined()
-    expect(readStoredConnection(options.baseUrl, 'supplier')?.accessToken).toBe('hidden-supplier-secret')
+    expect(readStoredConnection(options.baseUrl, 'provider')?.accessToken).toBe('hidden-supplier-secret')
   })
 
-  it('disconnects only an explicit supplier profile and names it in human output', async () => {
+  it('disconnects only an explicit provider profile and names it in human output', async () => {
     storeConnection({
       baseUrl: options.baseUrl,
       accessToken: 'hidden-market-secret',
-      scope: 'market_operations:invoke',
+      scope: 'market_tools:call',
       profile: 'market',
     })
     storeConnection({
       baseUrl: options.baseUrl,
       accessToken: 'hidden-supplier-secret',
       scope: 'market_supply:manage',
-      profile: 'supplier',
+      profile: 'provider',
     })
     const write = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
 
-    await runAccountCommand(['disconnect', 'supplier'], { ...options, json: false })
+    await runAccountCommand(['disconnect', 'provider'], { ...options, json: false })
 
     const output = write.mock.calls.map(([value]) => String(value)).join('')
     expect(output).toBe([
@@ -388,15 +388,15 @@ describe('AE CLI account interface', () => {
       'Disconnect AE',
       '-------------',
       '  origin   https://market.example',
-      '  profile  supplier',
+      '  profile  provider',
       '  removed  yes',
-      'Run ae connect --supplier to authorize a new supplier credential for this origin.',
+      'Run ae connect --provider to authorize a new provider credential for this origin.',
       '',
     ].join('\n'))
     expect(output).not.toContain('hidden-market-secret')
     expect(output).not.toContain('hidden-supplier-secret')
     expect(readStoredConnection(options.baseUrl, 'market')?.accessToken).toBe('hidden-market-secret')
-    expect(readStoredConnection(options.baseUrl, 'supplier')).toBeUndefined()
+    expect(readStoredConnection(options.baseUrl, 'provider')).toBeUndefined()
   })
 
   it('reads exact buyer balance and exposes funding only as an owner-browser continuation', async () => {
@@ -567,7 +567,7 @@ describe('AE CLI account interface', () => {
     expect(write).not.toHaveBeenCalled()
   })
 
-  it('refuses an environment-managed buyer without blocking explicit supplier disconnect', async () => {
+  it('refuses an environment-managed buyer without blocking explicit provider disconnect', async () => {
     process.env.AE_API_KEY = 'environment-secret'
     process.env.AE_API_KEY_ORIGIN = options.baseUrl
     storeConnection({ baseUrl: options.baseUrl, accessToken: 'hidden-market-secret', profile: 'market' })
@@ -575,7 +575,7 @@ describe('AE CLI account interface', () => {
       baseUrl: options.baseUrl,
       accessToken: 'hidden-supplier-secret',
       scope: 'market_supply:manage',
-      profile: 'supplier',
+      profile: 'provider',
     })
 
     await expect(runAccountCommand(['disconnect'], options)).rejects.toMatchObject({
@@ -583,18 +583,18 @@ describe('AE CLI account interface', () => {
       code: 'environment_credential_cannot_be_removed',
     } satisfies Partial<CliFailure>)
     expect(readStoredConnection(options.baseUrl, 'market')?.accessToken).toBe('hidden-market-secret')
-    expect(readStoredConnection(options.baseUrl, 'supplier')?.accessToken).toBe('hidden-supplier-secret')
+    expect(readStoredConnection(options.baseUrl, 'provider')?.accessToken).toBe('hidden-supplier-secret')
 
     const write = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
-    await runAccountCommand(['disconnect', 'supplier'], options)
+    await runAccountCommand(['disconnect', 'provider'], options)
 
     const output = write.mock.calls.map(([value]) => String(value)).join('')
-    expect(JSON.parse(output)).toMatchObject({ profile: 'supplier', removed: true })
+    expect(JSON.parse(output)).toMatchObject({ profile: 'provider', removed: true })
     expect(output).not.toContain('environment-secret')
     expect(output).not.toContain('hidden-market-secret')
     expect(output).not.toContain('hidden-supplier-secret')
     expect(readStoredConnection(options.baseUrl, 'market')?.accessToken).toBe('hidden-market-secret')
-    expect(readStoredConnection(options.baseUrl, 'supplier')).toBeUndefined()
+    expect(readStoredConnection(options.baseUrl, 'provider')).toBeUndefined()
   })
 })
 

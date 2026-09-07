@@ -19,7 +19,7 @@ import type {
 } from '@/modules/agent-access/oauth-state'
 import type { AgentAccessEnvironment } from '@/modules/agent-access/agent-access'
 import type { AgentAccessAuthorityMode } from '@/modules/agent-access/contract'
-import type { AgentAccessOperationAccess, AgentAccessPolicy } from '@/modules/agent-access/policy'
+import type { AgentAccessToolAccess, AgentAccessPolicy } from '@/modules/agent-access/policy'
 import type {
   SourceWriteAdmission,
   SourceWriteAdmissionRequest,
@@ -128,9 +128,9 @@ export type AgentAccessOAuthRefreshFamily = Readonly<{
   environment: AgentAccessEnvironment
   scopes: readonly string[]
   authorityMode: AgentAccessAuthorityMode
-  operationAccess: AgentAccessOperationAccess
-  operationRefs: readonly string[]
-  policy: AgentAccessPolicy
+  toolAccess: AgentAccessToolAccess
+  toolRefs: readonly string[]
+  spendingPolicy: AgentAccessPolicy
   currentCredentialRef: string
   currentProviderCredentialId: string
   currentGrantRef: string
@@ -239,9 +239,9 @@ type ReserveConsentCommand = Readonly<{
   grantRef: string
   expectedGrantRevision: number
   expectedTargetRevision: number
-  authorityMode: 'inspect_only' | 'approve_each' | 'bounded_mandate' | 'full_yolo'
-  approvedOperationAccess: 'all_admitted' | 'selected_operations'
-  approvedOperationRefs: readonly string[]
+  authorityMode: AgentAccessAuthorityMode
+  approvedToolAccess: 'all_admitted' | 'selected_tools'
+  approvedToolRefs: readonly string[]
   connectionTarget: Readonly<{ kind: 'new_agent' }> | Readonly<{
     kind: 'replace_credential'
     principalRef: string
@@ -268,8 +268,8 @@ export async function reserveAgentAccessConsentForOwner(input: Readonly<{
   expectedGrantRevision: number
   expectedTargetRevision: number
   authorityMode: ReserveConsentCommand['authorityMode']
-  approvedOperationAccess: ReserveConsentCommand['approvedOperationAccess']
-  approvedOperationRefs: readonly string[]
+  approvedToolAccess: ReserveConsentCommand['approvedToolAccess']
+  approvedToolRefs: readonly string[]
   connectionTarget: ReserveConsentCommand['connectionTarget']
   proof: ReserveConsentCommand['proof']
 }>): Promise<AgentAccessConsentReservationResult> {
@@ -279,8 +279,8 @@ export async function reserveAgentAccessConsentForOwner(input: Readonly<{
     expectedGrantRevision: input.expectedGrantRevision,
     expectedTargetRevision: input.expectedTargetRevision,
     authorityMode: input.authorityMode,
-    approvedOperationAccess: input.approvedOperationAccess,
-    approvedOperationRefs: [...input.approvedOperationRefs],
+    approvedToolAccess: input.approvedToolAccess,
+    approvedToolRefs: [...input.approvedToolRefs],
     connectionTarget: input.connectionTarget,
     proof: input.proof,
     operationKey,
@@ -435,21 +435,21 @@ function requestedAccessForConvex(
 ): GrantArgs['grant']['requestedAccess'] {
   return {
     environment: requestedAccess.environment,
-    operationAccess: requestedAccess.operationAccess,
-    operationRefs: [...requestedAccess.operationRefs],
+    toolAccess: requestedAccess.toolAccess,
+    toolRefs: [...requestedAccess.toolRefs],
     expiresInSeconds: requestedAccess.expiresInSeconds,
-    ...(requestedAccess.maximumSpendPerInvocation === undefined
+    ...(requestedAccess.maximumSpendPerCall === undefined
       ? {}
-      : { maximumSpendPerInvocation: { ...requestedAccess.maximumSpendPerInvocation } }),
+      : { maximumSpendPerCall: { ...requestedAccess.maximumSpendPerCall } }),
     ...(requestedAccess.maximumDailySpend === undefined
       ? {}
       : { maximumDailySpend: { ...requestedAccess.maximumDailySpend } }),
     ...(requestedAccess.maximumMonthlySpend === undefined
       ? {}
       : { maximumMonthlySpend: { ...requestedAccess.maximumMonthlySpend } }),
-    ...(requestedAccess.maximumConcurrentInvocations === undefined
+    ...(requestedAccess.maximumConcurrentCalls === undefined
       ? {}
-      : { maximumConcurrentInvocations: requestedAccess.maximumConcurrentInvocations }),
+      : { maximumConcurrentCalls: requestedAccess.maximumConcurrentCalls }),
     ...(requestedAccess.maximumCallsPerMinute === undefined
       ? {}
       : { maximumCallsPerMinute: requestedAccess.maximumCallsPerMinute }),

@@ -4,17 +4,17 @@ import { toJsonSchemaCompat } from '@modelcontextprotocol/sdk/server/zod-json-sc
 import { describe, expect, it, vi } from 'vitest'
 
 import { listMcpActions, mcpToolName } from '@/modules/actions'
-import type { OperationInvokeService } from '@/modules/capability-execution/operation-invoke'
+import type { CallService } from '@/modules/capability-execution/call-authority'
 import {
-  currentOperationRef,
+  currentToolRef,
   handleMcpRequest,
 } from './mcp-api-harness'
 
-const invocationRef = 'invocation:official-client:1'
+const callRef = 'invocation:official-client:1'
 
 function officialClient(
-  service: OperationInvokeService,
-  scopes: readonly string[] = ['market_operations:invoke'],
+  service: CallService,
+  scopes: readonly string[] = ['market_tools:call'],
 ): Readonly<{
   client: Client
   transport: StreamableHTTPClientTransport
@@ -41,7 +41,7 @@ function officialClient(
           principalId: 'prn_00000000000040008000000000000044',
           ownerId: 'acc_00000000000040008000000000000044',
         }),
-        operationInvokeService: service,
+        callService: service,
       })
     },
   })
@@ -49,7 +49,7 @@ function officialClient(
 }
 
 async function connectOfficialClient(
-  service: OperationInvokeService,
+  service: CallService,
   scopes?: readonly string[],
 ): Promise<Client> {
   const { client, transport } = officialClient(service, scopes)
@@ -61,14 +61,14 @@ async function connectOfficialClient(
 
 describe('MCP host adapter with the official client', () => {
   it('compiles every admitted tool contract while removing repeated schema bytes', async () => {
-    const service: OperationInvokeService = {
-      invokeOperation: vi.fn(),
-      readInvocationStatus: vi.fn(),
-      cancelInvocation: vi.fn(),
-      reconcileInvocation: vi.fn(),
+    const service: CallService = {
+      callTool: vi.fn(),
+      readCallStatus: vi.fn(),
+      cancelCall: vi.fn(),
+      reconcileCall: vi.fn(),
     }
     const client = await connectOfficialClient(service, [
-      'market_operations:invoke',
+      'market_tools:call',
       'market_supply:manage',
     ])
     const listed = await client.listTools()
@@ -110,11 +110,11 @@ describe('MCP host adapter with the official client', () => {
     expect(inputSchemaBytes).toBeLessThanOrEqual(expectedActions.length * 800)
   })
 
-  it('retains invocationRef across a fresh client and reads the terminal structured result', async () => {
+  it('retains Call identity across a fresh client and reads the terminal structured result', async () => {
     const completed = {
       kind: 'completed' as const,
-      invocationRef,
-      operationRef: currentOperationRef,
+      callRef,
+      toolRef: currentToolRef,
       output: { providerFreshValue: 'fresh-provider-value-4d2e' },
       evidenceHash: 'evidence:official-client:1',
       usage: {
@@ -146,12 +146,13 @@ describe('MCP host adapter with the official client', () => {
         issuedAt: '2026-08-31T00:00:00.000Z',
       },
     }
-    const service: OperationInvokeService = {
-      inspectOperation: vi.fn(async () => ({
+    const quoteRef = `operation-commitment:v1:${'c'.repeat(64)}`
+    const service: CallService = {
+      quoteTool: vi.fn(async () => ({
         kind: 'committed' as const,
-        commitmentRef: `operation-commitment:v1:${'c'.repeat(64)}`,
-        operationRef: currentOperationRef,
-        operationRevision: 1,
+        quoteRef,
+        toolRef: currentToolRef,
+        toolVersion: 1,
         expiresAt: Date.now() + 60_000,
         normalizedInput: { company: 'Acme' },
         price: { currency: 'AUD' as const, units: '0', exponent: 6 as const },
@@ -161,84 +162,84 @@ describe('MCP host adapter with the official client', () => {
         },
         budget: {
           principalRef: 'prn_00000000000040008000000000000044',
-          maximumPerInvocation: { currency: 'AUD' as const, units: '0', exponent: 6 as const },
+          maximumPerCall: { currency: 'AUD' as const, units: '0', exponent: 6 as const },
         },
         policyRefs: ['commercial-policy:test'],
         evidenceDigest: 'sha256:inspection',
         continuation: {
-          action: 'operation.invoke' as const,
+          action: 'tool.call' as const,
           method: 'POST' as const,
-          path: '/api/v1/operations/call' as const,
+          path: '/api/v1/tools/call' as const,
           input: {
-            commitmentRef: `operation-commitment:v1:${'c'.repeat(64)}`,
-            idempotencyKey: 'invoke:operation-commitment:official-client',
+            quoteRef,
+            idempotencyKey: 'official-client-call-1',
           },
         },
       })),
-      invokeOperation: vi.fn(async () => ({
+      callTool: vi.fn(async () => ({
         kind: 'pending' as const,
-        invocationRef,
-        operationRef: currentOperationRef,
+        callRef,
+        toolRef: currentToolRef,
         retryAfterMs: 1_000,
       })),
-      readInvocationStatus: vi.fn(async () => ({
+      readCallStatus: vi.fn(async () => ({
         kind: 'found' as const,
         version: 1,
-        invocationRef,
-        operationRef: currentOperationRef,
+        callRef,
+        toolRef: currentToolRef,
         state: 'terminal' as const,
         evidenceHash: completed.evidenceHash,
         usage: completed.usage,
         result: completed,
       })),
-      cancelInvocation: vi.fn(),
-      reconcileInvocation: vi.fn(),
+      cancelCall: vi.fn(),
+      reconcileCall: vi.fn(),
     }
 
     const invokeClient = await connectOfficialClient(service)
     await invokeClient.listTools()
-    const inspected = await invokeClient.callTool({
-      name: 'ae_operation_inspect',
-      arguments: { operationRef: currentOperationRef, input: { company: 'Acme' } },
+    const quoted = await invokeClient.callTool({
+      name: 'ae_tool_quote',
+      arguments: { toolRef: currentToolRef, input: { company: 'Acme' } },
     })
-    expect(inspected.structuredContent).toEqual({
+    expect(quoted.structuredContent).toEqual({
       result: expect.objectContaining({
         kind: 'committed',
-        commitmentRef: `operation-commitment:v1:${'c'.repeat(64)}`,
+        quoteRef,
       }),
     })
-    const invoked = await invokeClient.callTool({
-      name: 'ae_operation_invoke',
+    const called = await invokeClient.callTool({
+      name: 'ae_tool_call',
       arguments: {
-        commitmentRef: `operation-commitment:v1:${'c'.repeat(64)}`,
-        idempotencyKey: 'official-client-invoke-1',
+        quoteRef,
+        idempotencyKey: 'official-client-call-1',
       },
     })
     await invokeClient.close()
 
-    expect(invoked.structuredContent).toEqual({
-      result: expect.objectContaining({ kind: 'pending', invocationRef }),
+    expect(called.structuredContent).toEqual({
+      result: expect.objectContaining({ kind: 'pending', callRef }),
     })
 
     const recoveryClient = await connectOfficialClient(service)
     await recoveryClient.listTools()
     const recovered = await recoveryClient.callTool({
-      name: 'ae_operation_status',
-      arguments: { invocationRef },
+      name: 'ae_call_status',
+      arguments: { callRef },
     })
     await recoveryClient.close()
 
     expect(recovered.structuredContent).toEqual({
       result: expect.objectContaining({
         kind: 'found',
-        invocationRef,
+        callRef,
         state: 'terminal',
         result: completed,
       }),
     })
-    expect(service.invokeOperation).toHaveBeenCalledTimes(1)
-    expect(service.readInvocationStatus).toHaveBeenCalledWith(expect.objectContaining({
-      invocationRef,
+    expect(service.callTool).toHaveBeenCalledTimes(1)
+    expect(service.readCallStatus).toHaveBeenCalledWith(expect.objectContaining({
+      callRef,
       principal: expect.objectContaining({
         principalId: 'prn_00000000000040008000000000000044',
       }),

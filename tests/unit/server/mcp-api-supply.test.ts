@@ -54,7 +54,7 @@ describe('MCP host adapter supply', () => {
     expect(requestBytes).toBeLessThan(320 * 1024)
 
     const supplyService = {
-      operationsList: vi.fn(),
+    toolsList: vi.fn(),
       status: vi.fn(),
       publish: vi.fn().mockResolvedValue({ kind: 'refused', reason: 'boundary_probe' }),
       withdraw: vi.fn(),
@@ -78,9 +78,9 @@ describe('MCP host adapter supply', () => {
     })
   })
 
-  it('rejects an operation-only principal from calling a supplier action without invoking its service', async () => {
+  it('rejects a buyer principal from calling a Provider action without invoking its service', async () => {
     const supplyService = {
-      operationsList: vi.fn(),
+      toolsList: vi.fn(),
       status: vi.fn(),
       publish: vi.fn(),
       withdraw: vi.fn(),
@@ -91,14 +91,14 @@ describe('MCP host adapter supply', () => {
     }
     const response = await postMcp({
       jsonrpc: '2.0',
-      id: 'operation-only-supply-call',
+      id: 'buyer-only-supply-call',
       method: 'tools/call',
       params: {
         name: 'ae_supply_earnings',
         arguments: { currency: 'USD' },
       },
     }, {
-      authenticate: authenticateWithScopes(['market_operations:invoke']),
+      authenticate: authenticateWithScopes(['market_tools:call']),
       supplyManagementService: supplyService,
     })
 
@@ -111,9 +111,9 @@ describe('MCP host adapter supply', () => {
     expect(supplyService.earnings).not.toHaveBeenCalled()
   })
 
-  it('rejects an anonymous principal from calling a supplier action without invoking its service', async () => {
+  it('rejects an anonymous principal from calling a Provider action without invoking its service', async () => {
     const supplyService = {
-      operationsList: vi.fn(),
+      toolsList: vi.fn(),
       status: vi.fn(),
       publish: vi.fn(),
       withdraw: vi.fn(),
@@ -150,9 +150,9 @@ describe('MCP host adapter supply', () => {
     expect(supplyService.earnings).not.toHaveBeenCalled()
   })
 
-  it('dispatches a supplier action for a supply-only principal', async () => {
+  it('dispatches a Provider action for a supply-only principal', async () => {
     const supplyService = {
-      operationsList: vi.fn(),
+      toolsList: vi.fn(),
       status: vi.fn(),
       publish: vi.fn(),
       withdraw: vi.fn(),
@@ -189,7 +189,7 @@ describe('MCP host adapter supply', () => {
 
   it('dispatches provider connection inspection for a supply-only principal', async () => {
     const supplyService = {
-      operationsList: vi.fn(),
+      toolsList: vi.fn(),
       status: vi.fn(),
       publish: vi.fn(),
       withdraw: vi.fn(),
@@ -201,7 +201,7 @@ describe('MCP host adapter supply', () => {
     supplyService.connectionDetail.mockResolvedValue({ kind: 'not_found' })
     const response = await postMcp({
       jsonrpc: '2.0',
-      id: 'supplier-connection-detail',
+      id: 'provider-connection-detail',
       method: 'tools/call',
       params: {
         name: 'ae_supply_connection_detail',
@@ -224,7 +224,7 @@ describe('MCP host adapter supply', () => {
 
   it('fails Package 5 action writes closed in production without hiding read actions', async () => {
     const supplyService = {
-      operationsList: vi.fn().mockResolvedValue({ kind: 'not_found' }),
+      toolsList: vi.fn().mockResolvedValue({ kind: 'not_found' }),
       status: vi.fn(), publish: vi.fn(),
       withdraw: vi.fn().mockResolvedValue({ kind: 'refused', reason: 'must-not-run' }),
       recheck: vi.fn(), republish: vi.fn(), earnings: vi.fn(),
@@ -256,13 +256,13 @@ describe('MCP host adapter supply', () => {
 
     const readResponse = await postMcp({
       jsonrpc: '2.0', id: 'available-supply-read', method: 'tools/call',
-      params: { name: 'ae_supply_operations_list', arguments: { businessRef: 'business:one', limit: 50 } },
+      params: { name: 'ae_supply_tools_list', arguments: { businessRef: 'business:one', limit: 50 } },
     }, options, { authorization: 'Bearer supply-only' })
 
     expect(readResponse.status).toBe(200)
     expect((await readMcpBody(readResponse)).result).toMatchObject({
       structuredContent: { result: { kind: 'not_found' } },
     })
-    expect(supplyService.operationsList).toHaveBeenCalledOnce()
+    expect(supplyService.toolsList).toHaveBeenCalledOnce()
   })
 })

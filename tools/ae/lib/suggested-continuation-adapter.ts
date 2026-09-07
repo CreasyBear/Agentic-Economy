@@ -1,21 +1,21 @@
 import {
-  continuationForInvocationStatus,
-  continuationForOperationFacts,
-  suggestContinuation,
-  type SuggestedContinuation,
-} from '@/modules/market/suggested-continuation'
+  nextActionForCallStatus,
+  nextActionForToolFacts,
+  suggestNextAction,
+  type SuggestedNextAction,
+} from '@/modules/market/suggested-next-action'
 
-type OperationContinuationInput = Readonly<{
-  operationRef: string
+type ToolNextActionInput = Readonly<{
+  toolRef: string
   searchQuery: string
   availabilityPosture: 'setup_required' | 'routeable' | 'unavailable'
   requiresBuyerCredential: boolean
   hasBuyerCredential: boolean
 }>
 
-type InvocationContinuationInput = Readonly<{
+type CallNextActionInput = Readonly<{
   kind: 'found' | 'refused'
-  invocationRef: string
+  callRef: string
   state?:
     | 'gathering_information'
     | 'awaiting_authority'
@@ -30,63 +30,63 @@ type InvocationContinuationInput = Readonly<{
   retryable?: boolean
 }>
 
-type SupplierContinuationInput = Readonly<{
+type ProviderNextActionInput = Readonly<{
   offeringRef: string
   catalogStatus: 'draft' | 'published' | 'paused' | 'retired'
   lifecycleState: 'inactive' | 'active' | 'withdrawn' | 'incompatible'
   liveAvailable: boolean
   publicationState?: 'current' | 'withdrawn' | 'superseded' | 'incompatible'
-  operationRef?: string
+  toolRef?: string
 }>
 
-export function operationContinuationForCli(
-  input: OperationContinuationInput,
-): SuggestedContinuation {
-  return continuationForOperationFacts(input)
+export function toolNextActionForCli(
+  input: ToolNextActionInput,
+): SuggestedNextAction {
+  return nextActionForToolFacts(input)
 }
 
-export function invocationContinuationForCli(
-  input: InvocationContinuationInput,
-): SuggestedContinuation | undefined {
+export function callNextActionForCli(
+  input: CallNextActionInput,
+): SuggestedNextAction | undefined {
   if (input.kind === 'found' && input.state !== undefined) {
     if (input.state === 'terminal' || input.state === 'cancelled' || input.state === 'invalidated') {
       return undefined
     }
-    return continuationForInvocationStatus({ invocationRef: input.invocationRef, state: input.state })
+    return nextActionForCallStatus({ callRef: input.callRef, state: input.state })
   }
-  return suggestContinuation({
-    subject: 'invocation',
+  return suggestNextAction({
+    subject: 'call',
     state: input.retryable === true ? 'retryable' : 'completed',
-    invocationRef: input.invocationRef,
+    callRef: input.callRef,
   })
 }
 
-export function supplierContinuationForCli(
-  input: SupplierContinuationInput,
-): SuggestedContinuation {
+export function providerNextActionForCli(
+  input: ProviderNextActionInput,
+): SuggestedNextAction {
   const state = input.catalogStatus === 'draft'
     ? 'draft'
     : input.lifecycleState === 'incompatible' || input.publicationState === 'incompatible'
       ? 'incompatible'
       : input.lifecycleState === 'withdrawn' || input.publicationState === 'withdrawn'
         ? 'withdrawn'
-        : input.liveAvailable && input.publicationState === 'current' && input.operationRef !== undefined
+        : input.liveAvailable && input.publicationState === 'current' && input.toolRef !== undefined
           ? 'current'
           : 'unready'
-  return suggestContinuation({
-    subject: 'supplier',
+  return suggestNextAction({
+    subject: 'provider',
     state,
     offeringRef: input.offeringRef,
-    ...(input.operationRef === undefined ? {} : { operationRef: input.operationRef }),
+    ...(input.toolRef === undefined ? {} : { toolRef: input.toolRef }),
   })
 }
 
 export function connectionContinuationForCli(
-  actor: 'buyer' | 'supplier',
-): SuggestedContinuation {
-  return suggestContinuation({ subject: 'connection', state: 'missing', actor })
+  actor: 'buyer' | 'provider',
+): SuggestedNextAction {
+  return suggestNextAction({ subject: 'connection', state: 'missing', actor })
 }
 
-export function creditContinuationForCli(): SuggestedContinuation {
-  return suggestContinuation({ subject: 'credit', state: 'insufficient' })
+export function creditContinuationForCli(): SuggestedNextAction {
+  return suggestNextAction({ subject: 'credit', state: 'insufficient' })
 }

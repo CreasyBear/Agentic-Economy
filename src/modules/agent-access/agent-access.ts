@@ -1,7 +1,7 @@
 import {
   AGENT_ACCESS_AUTHORITY_MODE_VALUES,
   CUSTOMER_REQUEST_AGENT_SCOPE,
-  MARKET_OPERATIONS_INVOKE_SCOPE,
+  MARKET_TOOLS_CALL_SCOPE,
   MARKET_SUPPLY_MANAGE_SCOPE,
   agentAuthorityModeAllows,
   agentAuthorityModeForScopes,
@@ -10,9 +10,9 @@ import {
 } from './contract'
 import {
   AGENT_ACCESS_ENVIRONMENT_VALUES,
-  normalizeAgentAccessOperationSelection,
+  normalizeAgentAccessToolSelection,
   type AgentAccessEnvironment,
-  type AgentAccessOperationAccess,
+  type AgentAccessToolAccess,
   type AgentAccessPolicy,
 } from './policy'
 import { compareExactAmounts, type ExactAmount } from '@/modules/money/public'
@@ -67,10 +67,10 @@ export type AgentAccessGrantRegistrationInput = Readonly<{
   applicationRef: string
   credentialId: string
   environment: AgentAccessEnvironment
-  operationAccess: AgentAccessOperationAccess
-  operationRefs: readonly string[]
+  toolAccess: AgentAccessToolAccess
+  toolRefs: readonly string[]
   authorityMode: AgentAccessAuthorityMode
-  policy: AgentAccessPolicy
+  spendingPolicy: AgentAccessPolicy
   lifecycle: 'active'
   generation: number
   createdAt: number
@@ -82,7 +82,7 @@ export type AgentAccessGrantBinding = Readonly<{
   kind: 'recorded' | 'replayed'
   grantRef: string
   generation: number
-  policyDigest: string
+  spendingPolicyDigest: string
   lifecycle: 'active' | 'revoked' | 'expired'
   expiresAt: number
 }>
@@ -91,7 +91,7 @@ export type AgentAccessGrantRegistrationResult = Readonly<{
   kind: 'recorded' | 'replayed' | 'conflict' | 'unavailable'
   grantRef?: string
   generation?: number
-  policyDigest?: string
+  spendingPolicyDigest?: string
   lifecycle?: 'active' | 'revoked' | 'expired'
   expiresAt?: number
 }>
@@ -105,9 +105,9 @@ export type IssuedAgentBindingRegistration = Readonly<{
   environment: AgentAccessEnvironment
   scopes: readonly string[]
   authorityMode: AgentAccessAuthorityMode
-  operationAccess: AgentAccessOperationAccess
-  operationRefs: readonly string[]
-  policy: AgentAccessPolicy
+  toolAccess: AgentAccessToolAccess
+  toolRefs: readonly string[]
+  spendingPolicy: AgentAccessPolicy
   createdAt: number
   expiresAt: number
 }>
@@ -122,9 +122,9 @@ export type AgentCredentialReplacementRegistration = Readonly<{
   environment: AgentAccessEnvironment
   scopes: readonly string[]
   authorityMode: AgentAccessAuthorityMode
-  operationAccess: AgentAccessOperationAccess
-  operationRefs: readonly string[]
-  policy: AgentAccessPolicy
+  toolAccess: AgentAccessToolAccess
+  toolRefs: readonly string[]
+  spendingPolicy: AgentAccessPolicy
   createdAt: number
   expiresAt: number
 }>
@@ -186,7 +186,7 @@ export type AgentAccessPrincipalRegistration = Readonly<{
   scopes: readonly string[]
   authorityMode: AgentAccessAuthorityMode
   grantGeneration: number
-  policyDigest: string
+  spendingPolicyDigest: string
   lifecycle: 'active' | 'revoked' | 'expired'
   expiresAt?: number
   seenAt: number
@@ -220,12 +220,12 @@ export type AgentAccessKeyIssueInput = Readonly<{
   grantRef?: string
   applicationRef?: string
   environment?: AgentAccessEnvironment
-  operationAccess?: AgentAccessOperationAccess
-  operationRefs?: readonly string[]
-  maximumSpendPerInvocation?: ExactAmount
+  toolAccess?: AgentAccessToolAccess
+  toolRefs?: readonly string[]
+  maximumSpendPerCall?: ExactAmount
   maximumDailySpend?: ExactAmount
   maximumMonthlySpend?: ExactAmount
-  maximumConcurrentInvocations?: number
+  maximumConcurrentCalls?: number
   maximumCallsPerMinute?: number
   maximumCallsPerHour?: number
   expiresInSeconds?: number
@@ -245,7 +245,7 @@ type IssueInput = Readonly<{
   ownerId?: string
   principal: { userId: string } | undefined
   input: AgentAccessKeyIssueInput
-  policy: AgentAccessPolicy
+  spendingPolicy: AgentAccessPolicy
   api: AgentAccessKeyApi
   registerBinding: (input: IssuedAgentBindingRegistration) => Promise<AgentAccessGrantRegistrationResult>
   returnSecret?: boolean
@@ -255,7 +255,7 @@ export async function issueAgentAccessKey(input: IssueInput): Promise<AgentAcces
   if (ownerId === undefined) return { kind: 'error', code: 'missing_auth', retryable: false }
   const name = input.input.name.trim()
   const idempotencyKey = input.input.idempotencyKey.trim()
-  const rawScopes = input.input.scopes ?? [MARKET_OPERATIONS_INVOKE_SCOPE, agentAuthorityScopeForMode('inspect_only')]
+  const rawScopes = input.input.scopes ?? [MARKET_TOOLS_CALL_SCOPE, agentAuthorityScopeForMode('read_only')]
   const scopes = canonicalAgentScopes(rawScopes)
   const authorityMode = scopes === undefined ? undefined : agentAuthorityModeForScopes(scopes)
   const grantRef = input.input.grantRef?.trim() || idempotencyKey
@@ -266,8 +266,8 @@ export async function issueAgentAccessKey(input: IssueInput): Promise<AgentAcces
     || grantRef.length < 1 || grantRef.length > 300 || applicationRef.length < 1 || applicationRef.length > 200
     || authorityMode === undefined || scopes === undefined
     || !validExpiry(expiresInSeconds)
-    || !policyMatchesRequestedControls(input.policy, input.input)
-    || (environment === 'production' && authorityMode === 'full_yolo')) {
+    || !policyMatchesRequestedControls(input.spendingPolicy, input.input)
+    || (environment === 'production' && authorityMode === 'unrestricted_test_only')) {
     return { kind: 'error', code: 'invalid_input', retryable: false }
   }
   const issuanceClaims = issuanceClaimMaterial(input.input)
@@ -312,7 +312,7 @@ export async function issueAgentAccessKey(input: IssueInput): Promise<AgentAcces
         aeScopes: JSON.stringify(scopes),
         ...issuanceClaims,
       },
-      description: 'Use Agentic Economy Market Operations with this assistant.',
+      description: 'Use Agentic Economy Tools with this assistant.',
     })
     const createdAt = Date.now()
     const expiresAt = createdAt + expiresInSeconds * 1000
@@ -365,9 +365,9 @@ async function bindAgentPrincipal(
       environment,
       scopes: [...scopes],
       authorityMode,
-      policy: input.policy,
-      operationAccess: input.policy.operationAccess,
-      operationRefs: input.policy.operationRefs,
+      spendingPolicy: input.spendingPolicy,
+      toolAccess: input.spendingPolicy.toolAccess,
+      toolRefs: input.spendingPolicy.toolRefs,
       createdAt: createdAt ?? Date.now(),
       expiresAt,
     }))
@@ -380,14 +380,14 @@ function completeGrantBinding(result: AgentAccessGrantRegistrationResult): Agent
   if (result.kind !== 'recorded' && result.kind !== 'replayed'
     || typeof result.grantRef !== 'string'
     || typeof result.generation !== 'number'
-    || typeof result.policyDigest !== 'string'
+    || typeof result.spendingPolicyDigest !== 'string'
     || result.lifecycle === undefined
     || typeof result.expiresAt !== 'number') return null
   return {
     kind: result.kind,
     grantRef: result.grantRef,
     generation: result.generation,
-    policyDigest: result.policyDigest,
+    spendingPolicyDigest: result.spendingPolicyDigest,
     lifecycle: result.lifecycle,
     expiresAt: result.expiresAt,
   }
@@ -408,7 +408,7 @@ async function rollbackAgentKey(
 export function projectAgentAccessKey(record: AgentAccessKeyRecord): AgentAccessKeyInventoryItem | undefined {
   if (record.claims?.aePurpose !== AGENT_ACCESS_PURPOSE
     || record.scopes === undefined
-    || (!record.scopes.includes(MARKET_OPERATIONS_INVOKE_SCOPE)
+    || (!record.scopes.includes(MARKET_TOOLS_CALL_SCOPE)
       && !record.scopes.includes(MARKET_SUPPLY_MANAGE_SCOPE))) return undefined
   const scopes = canonicalAgentScopes(record.scopes)
   const authorityMode = scopes === undefined ? undefined : agentAuthorityModeForScopes(scopes)
@@ -467,22 +467,22 @@ function policyMatchesRequestedControls(
   policy: AgentAccessPolicy,
   input: AgentAccessKeyIssueInput,
 ): boolean {
-  const selection = normalizeAgentAccessOperationSelection({
-    operationAccess: input.operationAccess ?? 'all_admitted',
-    ...(input.operationRefs === undefined ? {} : { operationRefs: input.operationRefs }),
+  const selection = normalizeAgentAccessToolSelection({
+    toolAccess: input.toolAccess ?? 'all_admitted',
+    ...(input.toolRefs === undefined ? {} : { toolRefs: input.toolRefs }),
   })
   if (selection === undefined
-    || selection.operationAccess !== policy.operationAccess
-    || selection.operationRefs.length !== policy.operationRefs.length
-    || selection.operationRefs.some((ref, index) => ref !== policy.operationRefs[index])) return false
+    || selection.toolAccess !== policy.toolAccess
+    || selection.toolRefs.length !== policy.toolRefs.length
+    || selection.toolRefs.some((ref, index) => ref !== policy.toolRefs[index])) return false
   const amounts: readonly [ExactAmount | undefined, ExactAmount][] = [
-    [input.maximumSpendPerInvocation, policy.budget.maximumSpendPerInvocation],
+    [input.maximumSpendPerCall, policy.budget.maximumSpendPerCall],
     [input.maximumDailySpend, policy.budget.maximumDailySpend],
     [input.maximumMonthlySpend, policy.budget.maximumMonthlySpend],
   ]
   if (amounts.some(([requested, actual]) => requested !== undefined && compareExactAmounts(requested, actual) !== 0)) return false
   const limits: readonly [number | undefined, number][] = [
-    [input.maximumConcurrentInvocations, policy.budget.maximumConcurrentInvocations],
+    [input.maximumConcurrentCalls, policy.budget.maximumConcurrentCalls],
     [input.maximumCallsPerMinute, policy.rate.maximumCallsPerMinute],
     [input.maximumCallsPerHour, policy.rate.maximumCallsPerHour],
   ]
@@ -494,54 +494,54 @@ function amountClaim(amount: ExactAmount): string {
 }
 
 function issuanceClaimMaterial(input: AgentAccessKeyIssueInput): Record<string, string> {
-  const selection = normalizeAgentAccessOperationSelection({
-    operationAccess: input.operationAccess ?? 'all_admitted',
-    ...(input.operationRefs === undefined ? {} : { operationRefs: input.operationRefs }),
+  const selection = normalizeAgentAccessToolSelection({
+    toolAccess: input.toolAccess ?? 'all_admitted',
+    ...(input.toolRefs === undefined ? {} : { toolRefs: input.toolRefs }),
   })
   return {
     ...(selection === undefined ? {} : {
-      aeOperationSelectionDigest: agentAccessOperationSelectionDigest(selection),
+      aeToolSelectionDigest: agentAccessToolSelectionDigest(selection),
     }),
-    ...(input.maximumSpendPerInvocation === undefined ? {} : { aeMaximumSpendPerInvocation: amountClaim(input.maximumSpendPerInvocation) }),
+    ...(input.maximumSpendPerCall === undefined ? {} : { aeMaximumSpendPerCall: amountClaim(input.maximumSpendPerCall) }),
     ...(input.maximumDailySpend === undefined ? {} : { aeMaximumDailySpend: amountClaim(input.maximumDailySpend) }),
     ...(input.maximumMonthlySpend === undefined ? {} : { aeMaximumMonthlySpend: amountClaim(input.maximumMonthlySpend) }),
-    ...(input.maximumConcurrentInvocations === undefined ? {} : { aeMaximumConcurrentInvocations: String(input.maximumConcurrentInvocations) }),
+    ...(input.maximumConcurrentCalls === undefined ? {} : { aeMaximumConcurrentCalls: String(input.maximumConcurrentCalls) }),
     ...(input.maximumCallsPerMinute === undefined ? {} : { aeMaximumCallsPerMinute: String(input.maximumCallsPerMinute) }),
     ...(input.maximumCallsPerHour === undefined ? {} : { aeMaximumCallsPerHour: String(input.maximumCallsPerHour) }),
     ...(input.expiresInSeconds === undefined ? {} : { aeExpiresInSeconds: String(input.expiresInSeconds) }),
   }
 }
 
-export function agentAccessOperationSelectionDigest(selection: Readonly<{
-  operationAccess: AgentAccessOperationAccess
-  operationRefs: readonly string[]
+export function agentAccessToolSelectionDigest(selection: Readonly<{
+  toolAccess: AgentAccessToolAccess
+  toolRefs: readonly string[]
 }>): string {
-  const normalized = normalizeAgentAccessOperationSelection(selection)
-  if (normalized === undefined) throw new Error('agent_access_operation_selection_invalid')
+  const normalized = normalizeAgentAccessToolSelection(selection)
+  if (normalized === undefined) throw new Error('agent_access_tool_selection_invalid')
   return canonicalDigest({
     format: 'ae.operation-selection:v1',
-    operationAccess: normalized.operationAccess,
-    operationRefs: normalized.operationRefs,
+    toolAccess: normalized.toolAccess,
+    toolRefs: normalized.toolRefs,
   } as never)
 }
 
 function canonicalAgentScopes(scopes: readonly string[]): readonly string[] | undefined {
   if (scopes.length === 0 || new Set(scopes).size !== scopes.length) return undefined
   const hasSupplyScope = scopes.includes(MARKET_SUPPLY_MANAGE_SCOPE)
-  const withGatewayScope = scopes.includes(MARKET_OPERATIONS_INVOKE_SCOPE) || hasSupplyScope
+  const withGatewayScope = scopes.includes(MARKET_TOOLS_CALL_SCOPE) || hasSupplyScope
     ? [...scopes]
-    : [MARKET_OPERATIONS_INVOKE_SCOPE, ...scopes]
+    : [MARKET_TOOLS_CALL_SCOPE, ...scopes]
   if (withGatewayScope.includes(CUSTOMER_REQUEST_AGENT_SCOPE)) return undefined
   const authorityMode = agentAuthorityModeForScopes(withGatewayScope)
   if (authorityMode === undefined) return undefined
   const modeScope = agentAuthorityScopeForMode(authorityMode)
   const hasRequestedModeScope = withGatewayScope.includes(modeScope)
-  const extras = withGatewayScope.filter((scope) => scope !== MARKET_OPERATIONS_INVOKE_SCOPE
+  const extras = withGatewayScope.filter((scope) => scope !== MARKET_TOOLS_CALL_SCOPE
     && scope !== MARKET_SUPPLY_MANAGE_SCOPE
     && scope !== modeScope)
   if (extras.length > 0) return undefined
   return [
-    ...(withGatewayScope.includes(MARKET_OPERATIONS_INVOKE_SCOPE) ? [MARKET_OPERATIONS_INVOKE_SCOPE] : []),
+    ...(withGatewayScope.includes(MARKET_TOOLS_CALL_SCOPE) ? [MARKET_TOOLS_CALL_SCOPE] : []),
     ...(withGatewayScope.includes(MARKET_SUPPLY_MANAGE_SCOPE) ? [MARKET_SUPPLY_MANAGE_SCOPE] : []),
     ...(hasRequestedModeScope ? [modeScope] : []),
   ]
@@ -550,7 +550,7 @@ function canonicalAgentScopes(scopes: readonly string[]): readonly string[] | un
 export {
   AGENT_ACCESS_AUTHORITY_MODE_VALUES,
   CUSTOMER_REQUEST_AGENT_SCOPE,
-  MARKET_OPERATIONS_INVOKE_SCOPE,
+  MARKET_TOOLS_CALL_SCOPE,
   MARKET_SUPPLY_MANAGE_SCOPE,
   agentAuthorityModeAllows,
   agentAuthorityModeForScopes,

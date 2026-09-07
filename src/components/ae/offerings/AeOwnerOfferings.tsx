@@ -101,7 +101,7 @@ export function AeOwnerOfferingsList({
     {
       id: 'name',
       accessorFn: (item) => item.offering.name,
-      header: ({ column }) => <AeOperatorSortableHeader label="Operation" column={column} />,
+      header: ({ column }) => <AeOperatorSortableHeader label="Tool" column={column} />,
       cell: ({ row }) => (
         <div className="grid min-w-[12rem] gap-0.5">
           <span className="font-medium">{row.original.offering.name}</span>
@@ -181,17 +181,17 @@ export function AeOwnerOfferingsList({
       )}
       {offerings.length === 0 && !loading ? (
         <AeEmptyState
-          title="No Operations yet"
-          description="Connect a source and choose the exact Operation AE should validate."
-          action={<Button asChild className="min-h-touch"><Link to="/owner/offerings/new">Add Operation</Link></Button>}
+          title="No Tools yet"
+          description="Connect a source and choose the exact Tool AE should validate."
+          action={<Button asChild className="min-h-touch"><Link to="/owner/offerings/new">Add Tool</Link></Button>}
         />
       ) : (
         <AeRecordTable
           columns={columns}
           data={offerings}
-          caption="Operations"
-          countLabel="Operations"
-          filterPlaceholder="Filter Operations…"
+          caption="Tools"
+          countLabel="Tools"
+          filterPlaceholder="Filter Tools…"
           getRowId={(item) => item.offering.offeringRef}
           loading={loading}
           {...(filterValue === undefined ? {} : { filterValue })}
@@ -205,10 +205,10 @@ export function AeOwnerOfferingsList({
           }}
           {...(hasLifecyclePresentation ? {
             compactContent: (
-              <ul ref={compactRootRef} className="m-0 list-none divide-y divide-border p-0" data-testid="owner-operations-compact-list">
+              <ul ref={compactRootRef} className="m-0 list-none divide-y divide-border p-0" data-testid="provider-workspace-compact-list">
                 {compactOfferings.map((item) => {
                   const action = item.continuation ?? {
-                    label: 'Open Operation',
+                    label: 'Open Tool',
                     href: `/owner/supply/${encodeURIComponent(item.offering.offeringRef)}`,
                   }
                   return (

@@ -11,14 +11,14 @@ import {
 } from '@/modules/money/public'
 
 const identity = {
-  invocationRef: 'invocation:one',
+  callRef: 'invocation:one',
   attemptRef: 'operation-attempt:invocation:one:1',
   effectGeneration: 1,
 } as const
 
 const material: QualifiedUseMaterial = {
   businessId: 'business:supplier',
-  operationRef: 'operation:quote',
+  toolRef: 'operation:quote',
   publicationRef: 'publication:quote',
   publicationRevision: 3,
   contractDigest: 'sha256:contract',
@@ -81,7 +81,7 @@ describe('qualified use eligibility', () => {
     environment: 'production',
     contractValidOutput: true,
     releaseOutcome: 'released',
-    ownerSelfInvocation: false,
+    ownerSelfCall: false,
     refundedBeforeDelivery: false,
   } as const
 
@@ -91,7 +91,7 @@ describe('qualified use eligibility', () => {
 
   it.each([
     [{ environment: 'sandbox' }, 'non_production_environment'],
-    [{ ownerSelfInvocation: true }, 'owner_self_invocation'],
+    [{ ownerSelfCall: true }, 'owner_self_invocation'],
     [{ releaseOutcome: 'uncertain' as const }, 'outcome_uncertain'],
     [{ contractValidOutput: false }, 'delivery_not_contract_valid'],
     [{ releaseOutcome: 'not_released' as const }, 'delivery_not_contract_valid'],

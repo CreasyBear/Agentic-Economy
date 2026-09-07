@@ -1,6 +1,6 @@
 import {
-  capabilityOperationId,
-  createPublicOperationRef,
+  capabilityToolId,
+  createPublicToolRef,
   qualifySuppliedCandidate,
   type EligiblePublicationRow,
   type EligiblePublishedBusiness,
@@ -88,8 +88,8 @@ function toPublishedBusiness(doc: Doc<'businesses'>): EligiblePublishedBusiness 
 }
 
 function toPublicationRow(doc: Doc<'capabilityPublications'>): EligiblePublicationRow | null {
-  const operationRef = createPublicOperationRef({
-    operationId: capabilityOperationId(doc.capabilityId),
+  const toolRef = createPublicToolRef({
+    operationId: capabilityToolId(doc.capabilityId),
     publicationRef: doc.publicationRef,
     publicationRevision: doc.revision,
     contractRef: {
@@ -98,7 +98,7 @@ function toPublicationRow(doc: Doc<'capabilityPublications'>): EligiblePublicati
       contractDigest: doc.contractDigest,
     },
   })
-  if (operationRef !== doc.operationRef
+  if (toolRef !== doc.toolRef
     || doc.pricingConfigJson === undefined
     || doc.priceDigest === undefined) return null
   let pricingConfig
@@ -111,7 +111,7 @@ function toPublicationRow(doc: Doc<'capabilityPublications'>): EligiblePublicati
   }
   return {
     publicationRef: doc.publicationRef,
-    operationRef,
+    toolRef,
     revision: doc.revision,
     businessId: String(doc.businessId),
     networkId: doc.networkId,

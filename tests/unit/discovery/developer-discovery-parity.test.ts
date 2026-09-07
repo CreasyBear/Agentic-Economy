@@ -12,7 +12,7 @@ import {
 import type { DeveloperDiscoveryRouteSnapshot } from '@/modules/discovery/developer-discovery'
 
 const forbiddenPrivateOrAuthorityPattern =
-  /inquiryBody|ownerReply|claimantContact|ownerNotes|notificationPayload|providerPayload|adminEvidence|rawContact(?!Excluded)|private:evidence|callable":true|paymentRequired":true|providerOperation":true|requestMarket":true|mutation":true|payment":true|protectedAction":true/iu
+  /inquiryBody|ownerReply|claimantContact|ownerNotes|notificationPayload|providerPayload|adminEvidence|rawContact(?!Excluded)|private:evidence|callable":true|paymentRequired":true|providerTool":true|requestMarket":true|mutation":true|payment":true|protectedAction":true/iu
 
 describe('developer discovery generated artifact parity', () => {
   it('generates schema and examples from public route DTO fields only', () => {
@@ -35,7 +35,7 @@ describe('developer discovery generated artifact parity', () => {
         mutation: false,
         payment: false,
         protectedAction: false,
-        providerOperation: false,
+        providerTool: false,
         requestMarket: false,
       },
       pagination: {

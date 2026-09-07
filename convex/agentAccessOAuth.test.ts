@@ -11,6 +11,7 @@ import {
 } from '../src/modules/security/source-write-admission'
 import { canonicalDigest } from '../src/modules/common/canonical-digest'
 import { issuedAgentGrantRef } from '../src/modules/agent-access/issued-agent-binding'
+import { agentAccessPolicyDigest } from '../src/modules/agent-access/policy'
 import { api, internal } from './_generated/api'
 import type { Doc } from './_generated/dataModel'
 import schema from './schema'
@@ -61,27 +62,27 @@ const grant = {
   revision: 1,
   flow: 'device_code' as const,
   clientId: 'client-convex',
-  requestedScopes: ['market_operations:invoke', 'customer_requests:inspect_only'],
+  requestedScopes: ['market_tools:call', 'customer_requests:read_only'],
   requestedAccess: {
     environment: 'production' as const,
-    operationAccess: 'all_admitted' as const,
-    operationRefs: [],
-    maximumSpendPerInvocation: { currency: 'USD', units: '100', exponent: 2 },
+    toolAccess: 'all_admitted' as const,
+    toolRefs: [],
+    maximumSpendPerCall: { currency: 'USD', units: '100', exponent: 2 },
     maximumDailySpend: { currency: 'USD', units: '500', exponent: 2 },
     maximumMonthlySpend: { currency: 'USD', units: '5000', exponent: 2 },
-    maximumConcurrentInvocations: 2,
+    maximumConcurrentCalls: 2,
     maximumCallsPerMinute: 10,
     maximumCallsPerHour: 100,
     expiresInSeconds: 86_400,
   },
   approvedAccess: {
     environment: 'production' as const,
-    operationAccess: 'all_admitted' as const,
-    operationRefs: [],
-    maximumSpendPerInvocation: { currency: 'USD', units: '100', exponent: 2 },
+    toolAccess: 'all_admitted' as const,
+    toolRefs: [],
+    maximumSpendPerCall: { currency: 'USD', units: '100', exponent: 2 },
     maximumDailySpend: { currency: 'USD', units: '500', exponent: 2 },
     maximumMonthlySpend: { currency: 'USD', units: '5000', exponent: 2 },
-    maximumConcurrentInvocations: 2,
+    maximumConcurrentCalls: 2,
     maximumCallsPerMinute: 10,
     maximumCallsPerHour: 100,
     expiresInSeconds: 86_400,
@@ -109,8 +110,8 @@ const client = {
 }
 const cleanupRequestedAccess = {
   environment: 'sandbox' as const,
-  operationAccess: 'all_admitted' as const,
-  operationRefs: [],
+  toolAccess: 'all_admitted' as const,
+  toolRefs: [],
   expiresInSeconds: 600,
 }
 
@@ -135,9 +136,9 @@ const reservationCommand = (input: Readonly<{
     grantRef: input.grantRef,
     expectedGrantRevision: 1,
     expectedTargetRevision: input.expectedTargetRevision ?? 1,
-    authorityMode: 'inspect_only' as const,
-    approvedOperationAccess: 'all_admitted' as const,
-    approvedOperationRefs: [],
+    authorityMode: 'read_only' as const,
+    approvedToolAccess: 'all_admitted' as const,
+    approvedToolRefs: [],
     connectionTarget: { kind: 'new_agent' as const },
     ...(input.reverificationId === undefined ? {} : {
       proof: proofEvidence(
@@ -163,9 +164,9 @@ const replacementReservationCommand = (input: Readonly<{
     grantRef: input.grantRef,
     expectedGrantRevision: 1,
     expectedTargetRevision: input.targetRevision,
-    authorityMode: 'inspect_only' as const,
-    approvedOperationAccess: 'all_admitted' as const,
-    approvedOperationRefs: [],
+    authorityMode: 'read_only' as const,
+    approvedToolAccess: 'all_admitted' as const,
+    approvedToolRefs: [],
     connectionTarget: {
       kind: 'replace_credential' as const,
       principalRef: input.principalRef,
@@ -197,34 +198,34 @@ const consentMaterialMutations: ReadonlyArray<Readonly<{
     patch: (row) => ({ requestedAccess: { ...row.requestedAccess, environment: 'sandbox' } }),
   },
   {
-    name: 'Operation access mode', id: 'operation-access',
+    name: 'Tool access mode', id: 'tool-access',
     patch: (row) => ({ requestedAccess: {
       ...row.requestedAccess,
-      operationAccess: 'selected_operations',
-      operationRefs: [`operation:v1:${'a'.repeat(64)}`],
+      toolAccess: 'selected_tools',
+      toolRefs: [`operation:v1:${'a'.repeat(64)}`],
     } }),
   },
   {
-    name: 'selected Operation reference', id: 'operation-ref',
+    name: 'selected Tool reference', id: 'tool-ref',
     patch: (row) => ({ requestedAccess: {
       ...row.requestedAccess,
-      operationAccess: 'selected_operations',
-      operationRefs: [`operation:v1:${'b'.repeat(64)}`],
+      toolAccess: 'selected_tools',
+      toolRefs: [`operation:v1:${'b'.repeat(64)}`],
     } }),
   },
   {
-    name: 'selected Operation cardinality', id: 'operation-cardinality',
+    name: 'selected Tool cardinality', id: 'tool-cardinality',
     patch: (row) => ({ requestedAccess: {
       ...row.requestedAccess,
-      operationAccess: 'selected_operations',
-      operationRefs: [`operation:v1:${'a'.repeat(64)}`, `operation:v1:${'b'.repeat(64)}`],
+      toolAccess: 'selected_tools',
+      toolRefs: [`operation:v1:${'a'.repeat(64)}`, `operation:v1:${'b'.repeat(64)}`],
     } }),
   },
   {
-    name: 'per-invocation spend cap', id: 'per-invocation-spend',
+    name: 'per-Call spend cap', id: 'per-call-spend',
     patch: (row) => ({ requestedAccess: {
       ...row.requestedAccess,
-      maximumSpendPerInvocation: { currency: 'USD', units: '101', exponent: 2 },
+      maximumSpendPerCall: { currency: 'USD', units: '101', exponent: 2 },
     } }),
   },
   {
@@ -243,7 +244,7 @@ const consentMaterialMutations: ReadonlyArray<Readonly<{
   },
   {
     name: 'concurrency limit', id: 'concurrency',
-    patch: (row) => ({ requestedAccess: { ...row.requestedAccess, maximumConcurrentInvocations: 3 } }),
+    patch: (row) => ({ requestedAccess: { ...row.requestedAccess, maximumConcurrentCalls: 3 } }),
   },
   {
     name: 'per-minute rate', id: 'per-minute',
@@ -778,7 +779,7 @@ describe('Agent Access consequence proof reservation', () => {
       ...(await sourceArgs(changedProof, 'nonce:reserve:exact:changed-proof')),
     })).resolves.toEqual({ kind: 'conflict', code: 'invalid_state' })
 
-    const changedAuthorityMode = { ...command, authorityMode: 'approve_each' as const }
+    const changedAuthorityMode = { ...command, authorityMode: 'approval_required' as const }
     await expect(owner.backend.mutation(api.agentAccessOAuth.reserveAgentAccessConsent, {
       ...changedAuthorityMode,
       ...(await sourceArgs(changedAuthorityMode, 'nonce:reserve:exact:changed-mode')),
@@ -870,7 +871,7 @@ describe('Agent Access consequence proof reservation', () => {
     })).resolves.toMatchObject({ kind: 'rate_limited' })
   })
 
-  it('preserves requested Operation access and atomically records the owner-approved narrowing', async () => {
+  it('preserves requested Tool access and atomically records the owner-approved narrowing', async () => {
     process.env.AE_SOURCE_WRITE_SECRET = SOURCE_WRITE_SECRET
     const backend = convexTest(schema, modules)
     registerRateLimiter(backend)
@@ -878,15 +879,15 @@ describe('Agent Access consequence proof reservation', () => {
     const firstOperationRef = `operation:v1:${'a'.repeat(64)}`
     const secondOperationRef = `operation:v1:${'b'.repeat(64)}`
     const operationRefs = [firstOperationRef, secondOperationRef]
-    await insertCurrentOperations(backend, operationRefs)
+    await insertCurrentTools(backend, operationRefs)
     const oauthGrant = await insertReservableGrant(backend, 'device:reserve-operation-narrowing')
     const command = {
       ...reservationCommand({
         grantRef: oauthGrant.grantRef,
         reverificationId: 'rev_operation_narrowing',
       }),
-      approvedOperationAccess: 'selected_operations' as const,
-      approvedOperationRefs: operationRefs,
+      approvedToolAccess: 'selected_tools' as const,
+      approvedToolRefs: operationRefs,
     }
 
     const first = await owner.backend.mutation(api.agentAccessOAuth.reserveAgentAccessConsent, {
@@ -898,8 +899,8 @@ describe('Agent Access consequence proof reservation', () => {
     const facts = await reservationFacts(backend)
     expect(facts.grants.find((row) => row.grantRef === oauthGrant.grantRef)).toMatchObject({
       status: 'issuing',
-      requestedAccess: { operationAccess: 'all_admitted', operationRefs: [] },
-      approvedAccess: { operationAccess: 'selected_operations', operationRefs },
+      requestedAccess: { toolAccess: 'all_admitted', toolRefs: [] },
+      approvedAccess: { toolAccess: 'selected_tools', toolRefs: operationRefs },
       consequenceReservation: { commandDigest: first.commandDigest },
     })
     expect(facts.proofs.find((row) => row.reverificationId === 'rev_operation_narrowing'))
@@ -910,14 +911,14 @@ describe('Agent Access consequence proof reservation', () => {
       ...(await sourceArgs(command, 'nonce:reserve:operation-narrowing:replay')),
     })).resolves.toEqual({ ...first, kind: 'replayed' })
 
-    const changedSelection = { ...command, approvedOperationRefs: [firstOperationRef] }
+    const changedSelection = { ...command, approvedToolRefs: [firstOperationRef] }
     await expect(owner.backend.mutation(api.agentAccessOAuth.reserveAgentAccessConsent, {
       ...changedSelection,
       ...(await sourceArgs(changedSelection, 'nonce:reserve:operation-narrowing:changed')),
     })).resolves.toEqual({ kind: 'conflict', code: 'stale_target' })
   })
 
-  it('allows only a non-empty subset of selected requested Operations and refuses foreign references', async () => {
+  it('allows only a non-empty subset of selected requested Tools and refuses foreign references', async () => {
     process.env.AE_SOURCE_WRITE_SECRET = SOURCE_WRITE_SECRET
     const backend = convexTest(schema, modules)
     registerRateLimiter(backend)
@@ -926,13 +927,13 @@ describe('Agent Access consequence proof reservation', () => {
     const secondRequestedRef = `operation:v1:${'d'.repeat(64)}`
     const requestedRefs = [firstRequestedRef, secondRequestedRef]
     const foreignRef = `operation:v1:${'e'.repeat(64)}`
-    await insertCurrentOperations(backend, [...requestedRefs, foreignRef])
+    await insertCurrentTools(backend, [...requestedRefs, foreignRef])
     const subsetGrant = await insertReservableGrant(backend, 'device:reserve-operation-subset')
-    await patchRequestedOperationAccess(backend, subsetGrant.grantRef, requestedRefs)
+    await patchRequestedToolAccess(backend, subsetGrant.grantRef, requestedRefs)
     const subset = {
       ...reservationCommand({ grantRef: subsetGrant.grantRef, reverificationId: 'rev_operation_subset' }),
-      approvedOperationAccess: 'selected_operations' as const,
-      approvedOperationRefs: [firstRequestedRef],
+      approvedToolAccess: 'selected_tools' as const,
+      approvedToolRefs: [firstRequestedRef],
     }
     await expect(owner.backend.mutation(api.agentAccessOAuth.reserveAgentAccessConsent, {
       ...subset,
@@ -940,11 +941,11 @@ describe('Agent Access consequence proof reservation', () => {
     })).resolves.toMatchObject({ kind: 'reserved' })
 
     const foreignGrant = await insertReservableGrant(backend, 'device:reserve-operation-foreign')
-    await patchRequestedOperationAccess(backend, foreignGrant.grantRef, requestedRefs)
+    await patchRequestedToolAccess(backend, foreignGrant.grantRef, requestedRefs)
     const foreign = {
       ...reservationCommand({ grantRef: foreignGrant.grantRef, reverificationId: 'rev_operation_foreign' }),
-      approvedOperationAccess: 'selected_operations' as const,
-      approvedOperationRefs: [firstRequestedRef, foreignRef],
+      approvedToolAccess: 'selected_tools' as const,
+      approvedToolRefs: [firstRequestedRef, foreignRef],
     }
     await expect(owner.backend.mutation(api.agentAccessOAuth.reserveAgentAccessConsent, {
       ...foreign,
@@ -1125,6 +1126,7 @@ describe('Agent Access consequence proof reservation', () => {
     registerRateLimiter(backend)
     const owner = await materializeReservationOwner(backend, 'compromise')
     const target = await insertReplacementTarget(backend, owner.accountRef, 'compromise', 3)
+    const predecessorRefresh = await insertPredecessorRefreshFamily(backend, target, owner)
     const oauthGrant = await insertReservableGrant(backend, 'device:reserve-compromise')
     const command = replacementReservationCommand({
       grantRef: oauthGrant.grantRef,
@@ -1149,6 +1151,8 @@ describe('Agent Access consequence proof reservation', () => {
         .withIndex('by_grantRef', (query) => query.eq('grantRef', target.predecessor.grantRef)).unique(),
       providerRevocation: await ctx.db.query('agentAccessProviderRevocations')
         .withIndex('by_credentialRef', (query) => query.eq('credentialRef', target.predecessor.credentialRef)).unique(),
+      refreshFamily: await ctx.db.query('agentAccessOAuthRefreshFamilies')
+        .withIndex('by_familyRef', (query) => query.eq('familyRef', predecessorRefresh.familyRef)).unique(),
       oauthGrant: await ctx.db.query('agentAccessOAuthGrants')
         .withIndex('by_grantRef', (query) => query.eq('grantRef', oauthGrant.grantRef)).unique(),
     }))
@@ -1162,6 +1166,32 @@ describe('Agent Access consequence proof reservation', () => {
       lifecycle: 'pending',
       correlationRef: first.correlationRef,
     })
+    expect(state.refreshFamily).toMatchObject({
+      lifecycle: 'revoked',
+      revocationReason: 'suspected_compromise',
+      currentCredentialRef: target.predecessor.credentialRef,
+    })
+    const staleRefresh = {
+      tokenHash: predecessorRefresh.tokenHash,
+      clientId: predecessorRefresh.clientId,
+      claimRef: 'refresh-compromise-stale-claim',
+      successorTokenHash: 'sha256:compromise-successor-refresh',
+      now: Date.now(),
+      claimExpiresAt: Date.now() + 30_000,
+      operationKey: 'oauth-refresh:claim:compromise-stale',
+      correlationId: 'oauth-refresh:claim:compromise-stale',
+    }
+    await expect(backend.mutation(api.agentAccessOAuth.claimRefreshFamily, {
+      ...staleRefresh,
+      ...(await sourceArgs(staleRefresh)),
+    })).resolves.toEqual({ kind: 'invalid_grant' })
+    await expect(backend.run(async (ctx) => await ctx.db.query('agentAccessOAuthRefreshTokens')
+      .withIndex('by_familyRef_and_generation', (query) => query
+        .eq('familyRef', predecessorRefresh.familyRef).eq('generation', 1))
+      .take(3))).resolves.toEqual([expect.objectContaining({
+      tokenHash: predecessorRefresh.tokenHash,
+      lifecycle: 'active',
+    })])
     expect(state.oauthGrant).toMatchObject({
       status: 'issuing',
       connectionTarget: {
@@ -1257,7 +1287,7 @@ describe('Agent Access consequence proof reservation', () => {
             .unique()
           if (principal === null || grant === null) throw new Error('replacement grant policy rows missing')
           const policyDigest = `${grant.policyDigest}:changed`
-          await ctx.db.patch(principal._id, { policyDigest })
+          await ctx.db.patch(principal._id, { spendingPolicyDigest: policyDigest })
           await ctx.db.patch(grant._id, { policyDigest })
         })
       },
@@ -1523,7 +1553,7 @@ describe('durable OAuth refresh families', () => {
       agentDisplayName: 'Durable Codex connection',
       connectorDisplayName: 'Codex',
       state: 'active',
-      commercialScopes: ['customer_requests:inspect_only', 'market_operations:invoke'],
+      commercialScopes: ['customer_requests:read_only', 'market_tools:call'],
       credentialGeneration: 1,
     })])
     expect(JSON.stringify(result)).not.toMatch(/clientId|credentialRef|providerSubject|tokenHash|offline_access/u)
@@ -1850,24 +1880,24 @@ async function insertRefreshFamilyFixture(
   const providerSubject = `user_refresh_${seed}`
   const accessExpiresAt = now + 7 * 86_400_000
   const familyExpiresAt = now + 30 * 86_400_000
-  const policy = {
+  const spendingPolicy = {
     format: 'ae.agent-access-policy:v2' as const,
-    operationAccess: 'all_admitted' as const,
-    operationRefs: [],
+    toolAccess: 'all_admitted' as const,
+    toolRefs: [],
     environment: 'sandbox' as const,
     budget: {
       budgetPolicyRef: `budget:${suffix}`, generation: 1, currency: 'USD', exponent: 2,
-      maximumSpendPerInvocation: { currency: 'USD', units: '100', exponent: 2 },
+      maximumSpendPerCall: { currency: 'USD', units: '100', exponent: 2 },
       maximumDailySpend: { currency: 'USD', units: '500', exponent: 2 },
       maximumMonthlySpend: { currency: 'USD', units: '5000', exponent: 2 },
-      maximumConcurrentInvocations: 2,
+      maximumConcurrentCalls: 2,
     },
     rate: {
       ratePolicyRef: `rate:${suffix}`, generation: 1,
       maximumCallsPerMinute: 10, maximumCallsPerHour: 100,
     },
   }
-  const policyDigest = canonicalDigest(policy)
+  const spendingPolicyDigest = agentAccessPolicyDigest(spendingPolicy)
   await backend.run(async (ctx) => {
     await ctx.db.insert('agentAccessOAuthClients', {
       clientId, clientName: 'Codex', redirectUris: ['http://localhost/callback'],
@@ -1898,26 +1928,33 @@ async function insertRefreshFamilyFixture(
     await ctx.db.insert('agentAccessPrincipals', {
       principalId: principalRef, ownerId: owner.accountRef, credentialId: keyId,
       applicationRef: 'agentic-economy', environment: 'sandbox',
-      scopes: ['customer_requests:inspect_only', 'market_operations:invoke'], authorityMode: 'inspect_only',
-      grantGeneration: 1, policyDigest, lifecycle: 'active', expiresAt: accessExpiresAt,
+      scopes: ['customer_requests:read_only', 'market_tools:call'], authorityMode: 'read_only',
+      grantGeneration: 1, spendingPolicyDigest, lifecycle: 'active', expiresAt: accessExpiresAt,
       recordedAt: now, lastSeenAt: now,
     })
     await ctx.db.insert('agentAccessGrants', {
       format: 'ae.agent-access-grant:v2', grantRef: accessGrantRef, principalId: principalRef,
       ownerId: owner.accountRef, applicationRef: 'agentic-economy', credentialId: keyId,
-      environment: 'sandbox', operationAccess: 'all_admitted', operationRefs: [],
-      authorityMode: 'inspect_only', policy,
-      budgetPolicyRef: policy.budget.budgetPolicyRef, ratePolicyRef: policy.rate.ratePolicyRef,
-      lifecycle: 'active', generation: 1, policyDigest,
+      environment: 'sandbox', toolAccess: 'all_admitted', toolRefs: [],
+      authorityMode: 'read_only', spendingPolicy,
+      budgetPolicyRef: spendingPolicy.budget.budgetPolicyRef, ratePolicyRef: spendingPolicy.rate.ratePolicyRef,
+      lifecycle: 'active', generation: 1, spendingPolicyDigest,
       createdAt: now, updatedAt: now, expiresAt: accessExpiresAt,
     })
     const requestedAccess = {
-      environment: 'sandbox' as const, operationAccess: 'all_admitted' as const,
-      operationRefs: [], expiresInSeconds: 7 * 86_400,
+      environment: 'sandbox' as const, toolAccess: 'all_admitted' as const,
+      toolRefs: [],
+      maximumSpendPerCall: { currency: 'USD', units: '100', exponent: 2 },
+      maximumDailySpend: { currency: 'USD', units: '500', exponent: 2 },
+      maximumMonthlySpend: { currency: 'USD', units: '5000', exponent: 2 },
+      maximumConcurrentCalls: 2,
+      maximumCallsPerMinute: 10,
+      maximumCallsPerHour: 100,
+      expiresInSeconds: 7 * 86_400,
     }
     await ctx.db.insert('agentAccessOAuthGrants', {
       grantRef: oauthGrantRef, revision: 1, flow: 'authorization_code', clientId,
-      requestedScopes: ['customer_requests:inspect_only', 'market_operations:invoke'], offlineAccess: true,
+      requestedScopes: ['customer_requests:read_only', 'market_tools:call'], offlineAccess: true,
       requestedAccess, approvedAccess: requestedAccess, status: 'consumed', ownerId: providerSubject,
       keyId, createdAt: now, expiresAt: now + 600_000, consumedAt: now,
       displayName: 'Durable Codex connection',
@@ -1988,48 +2025,48 @@ async function insertReservableGrant(
   return value
 }
 
-async function insertCurrentOperations(
+async function insertCurrentTools(
   backend: TestConvex<typeof schema>,
-  operationRefs: readonly string[],
+  toolRefs: readonly string[],
 ): Promise<void> {
   await backend.run(async (ctx) => {
     const businessId = await ctx.db.insert('businesses', {
-      owningAccountRef: 'acc_agent_access_operation_fixture',
-      slug: `agent-access-operation-${operationRefs[0]?.slice(-8) ?? 'fixture'}`,
-      name: 'Agent access Operation fixture',
-      normalizedName: 'agent access operation fixture',
+      owningAccountRef: 'acc_agent_access_tool_fixture',
+      slug: `agent-access-tool-${toolRefs[0]?.slice(-8) ?? 'fixture'}`,
+      name: 'Agent access Tool fixture',
+      normalizedName: 'agent access tool fixture',
       category: 'professional services',
       businessContext: { kind: 'local_human', suburb: 'Perth', stateTerritory: 'WA' },
       publicStatus: 'published',
       trustTier: 'listed',
-      sourceHash: canonicalDigest({ operationRefs } as never),
+      sourceHash: canonicalDigest({ toolRefs } as never),
       createdAt: 1,
       updatedAt: 1,
     })
-    for (const [index, operationRef] of operationRefs.entries()) {
+    for (const [index, toolRef] of toolRefs.entries()) {
       await ctx.db.insert('capabilityPublications', {
-        publicationRef: `publication:agent-access:${operationRef.slice(-8)}`,
-        operationRef,
+        publicationRef: `publication:agent-access:${toolRef.slice(-8)}`,
+        toolRef,
         revision: 1,
         businessId,
         networkId: 'ae:public',
         runtimeEnvironment: 'production',
-        capabilityId: `agent-access.operation.${index}`,
+        capabilityId: `agent-access.tool.${index}`,
         version: 1,
-        contractDigest: canonicalDigest({ operationRef, kind: 'contract' } as never),
+        contractDigest: canonicalDigest({ toolRef, kind: 'contract' } as never),
         sourceKind: 'ae_envelope',
         sourceRevision: '1',
-        sourceDigest: canonicalDigest({ operationRef, kind: 'source' } as never),
-        publisherRef: 'prn_agent_access_operation_fixture',
+        sourceDigest: canonicalDigest({ toolRef, kind: 'source' } as never),
+        publisherRef: 'prn_agent_access_tool_fixture',
         authorityMode: 'provider_owned',
-        provenanceDigest: canonicalDigest({ operationRef, kind: 'provenance' } as never),
+        provenanceDigest: canonicalDigest({ toolRef, kind: 'provenance' } as never),
         offeringId: `offering:agent-access:${index}`,
         bindingId: `binding:agent-access:${index}`,
         disposition: 'current',
         credentialState: 'unobserved',
         healthState: 'unobserved',
         readinessEvidenceRefs: [],
-        registrationEvidenceRefs: ['test:agent-access-operation'],
+        registrationEvidenceRefs: ['test:agent-access-tool'],
         createdAt: 1,
         updatedAt: 1,
       })
@@ -2037,20 +2074,20 @@ async function insertCurrentOperations(
   })
 }
 
-async function patchRequestedOperationAccess(
+async function patchRequestedToolAccess(
   backend: TestConvex<typeof schema>,
   grantRef: string,
-  operationRefs: readonly string[],
+  toolRefs: readonly string[],
 ): Promise<void> {
   await backend.run(async (ctx) => {
     const row = await ctx.db.query('agentAccessOAuthGrants')
       .withIndex('by_grantRef', (query) => query.eq('grantRef', grantRef))
       .unique()
-    if (row === null) throw new Error('operation access grant missing')
+    if (row === null) throw new Error('tool access grant missing')
     const selected = {
       ...row.requestedAccess,
-      operationAccess: 'selected_operations' as const,
-      operationRefs: [...operationRefs],
+      toolAccess: 'selected_tools' as const,
+      toolRefs: [...toolRefs],
     }
     await ctx.db.patch(row._id, { requestedAccess: selected, approvedAccess: selected })
   })
@@ -2073,10 +2110,31 @@ async function insertReplacementTarget(
   const bindingRef = `binding:${suffix}`
   const credentialRef = `credential:${suffix}:1`
   const grantRef = `grant:${suffix}:1`
-  const policyDigest = `sha256:${suffix}${suffix}`
   const environment = 'production' as const
   const generation = 1
   const expiresAt = Date.now() + 86_400_000
+  const legacyPolicy = {
+    format: 'ae.agent-access-policy:v1' as const,
+    operationAccess: 'all_admitted' as const,
+    environment,
+    budget: {
+      budgetPolicyRef: `budget:${suffix}`,
+      generation,
+      currency: 'USD',
+      exponent: 2,
+      maximumSpendPerInvocation: { currency: 'USD', units: '100', exponent: 2 },
+      maximumDailySpend: { currency: 'USD', units: '500', exponent: 2 },
+      maximumMonthlySpend: { currency: 'USD', units: '5000', exponent: 2 },
+      maximumConcurrentInvocations: 2,
+    },
+    rate: {
+      ratePolicyRef: `rate:${suffix}`,
+      generation,
+      maximumCallsPerMinute: 10,
+      maximumCallsPerHour: 100,
+    },
+  }
+  const policyDigest = canonicalDigest(legacyPolicy)
   await backend.run(async (ctx) => {
     await ctx.db.insert('principals', {
       principalRef,
@@ -2107,10 +2165,10 @@ async function insertReplacementTarget(
       credentialId,
       applicationRef,
       environment,
-      scopes: ['market_operations:invoke', 'customer_requests:inspect_only'],
-      authorityMode: 'inspect_only',
+      scopes: ['market_tools:call', 'customer_requests:read_only'],
+      authorityMode: 'read_only',
       grantGeneration: generation,
-      policyDigest,
+      spendingPolicyDigest: policyDigest,
       lifecycle: 'active',
       expiresAt,
       recordedAt: 1,
@@ -2152,27 +2210,7 @@ async function insertReplacementTarget(
       environment,
       operationAccess: 'all_admitted',
       authorityMode: 'inspect_only',
-      policy: {
-        format: 'ae.agent-access-policy:v1',
-        operationAccess: 'all_admitted',
-        environment,
-        budget: {
-          budgetPolicyRef: `budget:${suffix}`,
-          generation,
-          currency: 'USD',
-          exponent: 2,
-          maximumSpendPerInvocation: { currency: 'USD', units: '100', exponent: 2 },
-          maximumDailySpend: { currency: 'USD', units: '500', exponent: 2 },
-          maximumMonthlySpend: { currency: 'USD', units: '5000', exponent: 2 },
-          maximumConcurrentInvocations: 2,
-        },
-        rate: {
-          ratePolicyRef: `rate:${suffix}`,
-          generation,
-          maximumCallsPerMinute: 10,
-          maximumCallsPerHour: 100,
-        },
-      },
+      policy: legacyPolicy,
       budgetPolicyRef: `budget:${suffix}`,
       ratePolicyRef: `rate:${suffix}`,
       lifecycle: 'active',
@@ -2192,7 +2230,7 @@ async function insertReplacementTarget(
       environment,
       grantRef,
       grantGeneration: generation,
-      policyDigest,
+      spendingPolicyDigest: policyDigest,
       bindingRef,
       bindingRevision: 1,
       bindingCredentialGeneration: generation,
@@ -2201,6 +2239,78 @@ async function insertReplacementTarget(
       credentialGeneration: generation,
     },
   }
+}
+
+async function insertPredecessorRefreshFamily(
+  backend: TestConvex<typeof schema>,
+  target: ReplacementTargetFixture,
+  owner: Readonly<{ accountRef: string; principalRef: string }>,
+) {
+  const suffix = target.predecessor.credentialRef.replaceAll(':', '-')
+  const now = Date.now()
+  const clientId = `client:compromise:${suffix}`
+  const familyRef = `refresh:compromise:${suffix}`
+  const tokenHash = `sha256:compromise-old-refresh:${suffix}`
+  const spendingPolicy = {
+    format: 'ae.agent-access-policy:v2' as const,
+    toolAccess: 'all_admitted' as const,
+    toolRefs: [],
+    environment: target.predecessor.environment,
+    budget: {
+      budgetPolicyRef: `budget:${suffix}`,
+      generation: target.predecessor.grantGeneration,
+      currency: 'USD',
+      exponent: 2,
+      maximumSpendPerCall: { currency: 'USD', units: '100', exponent: 2 },
+      maximumDailySpend: { currency: 'USD', units: '500', exponent: 2 },
+      maximumMonthlySpend: { currency: 'USD', units: '5000', exponent: 2 },
+      maximumConcurrentCalls: 2,
+    },
+    rate: {
+      ratePolicyRef: `rate:${suffix}`,
+      generation: target.predecessor.grantGeneration,
+      maximumCallsPerMinute: 10,
+      maximumCallsPerHour: 100,
+    },
+  }
+  await backend.run(async (ctx) => {
+    await ctx.db.insert('agentAccessOAuthRefreshFamilies', {
+      familyRef,
+      revision: 1,
+      clientId,
+      ownerId: owner.accountRef,
+      ownerPrincipalRef: owner.principalRef,
+      providerSubject: `user:${suffix}`,
+      principalRef: target.principalRef,
+      displayName: 'Compromised predecessor connection',
+      applicationRef: target.predecessor.applicationRef,
+      environment: target.predecessor.environment,
+      scopes: ['market_tools:call', 'customer_requests:read_only'],
+      authorityMode: 'read_only',
+      toolAccess: 'all_admitted',
+      toolRefs: [],
+      spendingPolicy,
+      currentCredentialRef: target.predecessor.credentialRef,
+      currentProviderCredentialId: target.predecessor.credentialId,
+      currentGrantRef: target.predecessor.grantRef,
+      currentGeneration: target.predecessor.grantGeneration,
+      currentAccessExpiresAt: now + 60_000,
+      currentTokenHash: tokenHash,
+      lifecycle: 'active',
+      createdAt: now,
+      expiresAt: now + 86_400_000,
+      updatedAt: now,
+    })
+    await ctx.db.insert('agentAccessOAuthRefreshTokens', {
+      tokenHash,
+      accessTokenHash: `sha256:compromise-access:${suffix}`,
+      familyRef,
+      generation: 1,
+      lifecycle: 'active',
+      createdAt: now,
+    })
+  })
+  return { familyRef, clientId, tokenHash }
 }
 
 async function reservationFacts(backend: TestConvex<typeof schema>) {

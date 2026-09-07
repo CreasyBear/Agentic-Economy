@@ -1,11 +1,11 @@
-import { operationCatalogSearchInputSchema, operationChoiceSearchOutputSchema } from '@/modules/registry/operation-choice-contracts'
-import { OPERATION_MARKET_SEARCH_PATH } from '@/modules/registry/operation-entry'
+import { toolCatalogSearchInputSchema, toolChoiceSearchOutputSchema } from '@/modules/registry/tool-choice-contracts'
+import { TOOL_MARKET_SEARCH_PATH } from '@/modules/registry/tool-entry'
 
 import type { CliOptions } from '../lib/args'
 import { CliFailure, callJson, heading, line, printJson, requireOk } from '../lib/output'
 import { continuationCommand } from '../lib/continuation-command'
-import { throwOperationReadFailure } from '../lib/operation-read-failure'
-/** Search current public Market Operations without a caller credential. */
+import { throwToolReadFailure } from '../lib/tool-read-failure'
+/** Search current public Market Tools without a caller credential. */
 export async function runSearchCommand(args: readonly string[], options: CliOptions): Promise<void> {
   const query = args.join(' ').trim()
   if (!searchCommandDescriptor.inputSchema.safeParse({ query }).success) {
@@ -36,15 +36,15 @@ export async function runSearchCommand(args: readonly string[], options: CliOpti
   })
   const parsedResult = searchCommandDescriptor.outputSchema.safeParse(requireOk(outcome, path))
   if (!parsedResult.success) {
-    throw new CliFailure('The market returned an invalid operation search result.', {
+    throw new CliFailure('The market returned an invalid tool search result.', {
       kind: 'UNAVAILABLE',
-      code: 'operation-search-result-invalid',
+      code: 'tool-search-result-invalid',
     })
   }
 
   const result = parsedResult.data
   if (result.kind === 'unavailable') {
-    throwOperationReadFailure({
+    throwToolReadFailure({
       reason: result.reason,
       cursorProvided: parsedInput.data.cursor !== undefined,
     })
@@ -71,13 +71,13 @@ export async function runSearchCommand(args: readonly string[], options: CliOpti
   const nextActionCommand = result.kind === 'ok' && result.items.length > 0
     ? result.items.length === 1
       ? continuationCommand([
-          'ae', 'describe', result.items[0]?.operationRef,
+          'ae', 'describe', result.items[0]?.toolRef,
           ...originContinuation,
           ...outputContinuation,
           ...technicalContinuation,
         ])
       : continuationCommand([
-          'ae', 'compare', ...result.items.slice(0, 4).map(({ operationRef }) => operationRef),
+          'ae', 'compare', ...result.items.slice(0, 4).map(({ toolRef }) => toolRef),
           ...originContinuation,
           ...outputContinuation,
           ...technicalContinuation,
@@ -124,11 +124,11 @@ export async function runSearchCommand(args: readonly string[], options: CliOpti
     return
   }
 
-  heading(`Market Operations for "${result.query}" (${outcome.durationMs}ms)`)
+  heading(`Market Tools for "${result.query}" (${outcome.durationMs}ms)`)
   if (result.kind === 'no_candidates') {
     line(hasSearchFilters
-      ? '  No current Operations match these filters.'
-      : '  No current Operations match this job.')
+      ? '  No current Tools match these filters.'
+      : '  No current Tools match this job.')
     if (requestCommand !== undefined) line(`  Remember this missing job: ${requestCommand}`)
     if (broadenSearchCommand !== undefined) line(`  Browse matching filters: ${broadenSearchCommand}`)
     line(`  Browse all: ${browseCommand}`)
@@ -137,11 +137,11 @@ export async function runSearchCommand(args: readonly string[], options: CliOpti
   }
 
   line(`  ${result.count} match${result.count === 1 ? '' : 'es'}`)
-  for (const [index, operation] of result.items.entries()) {
-    line(`  ${index + 1}. ${operation.provider.name} — ${operation.title}`)
-    line(`     ref: ${operation.operationRef}`)
+  for (const [index, tool] of result.items.entries()) {
+    line(`  ${index + 1}. ${tool.provider.name} — ${tool.title}`)
+    line(`     ref: ${tool.toolRef}`)
     line(
-      `     ${operation.healthStatus} · ${operation.priceLabel}`,
+      `     ${tool.healthStatus} · ${tool.priceLabel}`,
     )
   }
   if (nextActionCommand !== undefined) line(`  Next: ${nextActionCommand}`)
@@ -175,9 +175,9 @@ function parseSearchFilters(value: string | Record<string, unknown>): unknown {
 
 export const searchCommandDescriptor = {
   command: 'search',
-  actionId: 'registry.operations.search',
-  path: OPERATION_MARKET_SEARCH_PATH,
-  inputSchema: operationCatalogSearchInputSchema,
-  outputSchema: operationChoiceSearchOutputSchema,
+  actionId: 'registry.tools.search',
+  path: TOOL_MARKET_SEARCH_PATH,
+  inputSchema: toolCatalogSearchInputSchema,
+  outputSchema: toolChoiceSearchOutputSchema,
   run: runSearchCommand,
 } as const

@@ -37,7 +37,7 @@ type ConnectDetails = Readonly<{
   verificationUri: string
   expiresIn: number
   intervalMs: number
-  supplier: boolean
+  provider: boolean
 }>
 
 function oauthForm(values: Record<string, string>): { body: string; headers: HeadersInit } {
@@ -66,7 +66,7 @@ function positiveSeconds(value: unknown, field: string, fallback: number): numbe
   return value
 }
 function connectPending(details: ConnectDetails): JsonRecord {
-  const nextAction = `Approve ${details.verificationUri} with user code ${details.userCode}, then run ae connect${details.supplier ? ' --supplier' : ''} again if this wait expires.`
+  const nextAction = `Approve ${details.verificationUri} with user code ${details.userCode}, then run ae connect${details.provider ? ' --provider' : ''} again if this wait expires.`
   return {
     kind: 'pending',
     clientId: details.clientId,
@@ -76,8 +76,8 @@ function connectPending(details: ConnectDetails): JsonRecord {
   }
 }
 
-function connectedNextAction(supplier: boolean): string {
-  if (supplier) return 'Run ae supply operations <businessRef>.'
+function connectedNextAction(provider: boolean): string {
+  if (provider) return 'Run ae supply operations <businessRef>.'
   return 'Run ae search "what you need".'
 }
 
@@ -105,9 +105,9 @@ function printConnectResult(value: JsonRecord, options: CliOptions): void {
   ])
   if (value.kind === 'connected') {
     line('Your agent is connected. The origin-bound key is stored with user-only file permissions.')
-    line(`Next: ${value.profile === 'supplier'
+    line(`Next: ${value.profile === 'provider'
       ? 'ae supply operations <businessRef>.'
-      : 'ae search "what you need", then ae describe <operation> and ae call <operation> --input \'{...}\'.'}`)
+      : 'ae search "what you need", then ae describe <tool> and ae call <tool> --input \'{...}\'.'}`)
   } else if (typeof value.nextAction === 'string') {
     line(value.nextAction)
   }
@@ -122,13 +122,13 @@ function openVerificationUri(uri: string, options: CliOptions): void {
   child.unref()
 }
 
-async function validateAccessToken(options: CliOptions, key: string, supplier: boolean): Promise<AgentAccountSelfResult> {
+async function validateAccessToken(options: CliOptions, key: string, provider: boolean): Promise<AgentAccountSelfResult> {
   const outcome = await callJson(options.baseUrl, AGENT_ACCOUNT_SELF_ROUTE_CONTRACT.path, {
     method: AGENT_ACCOUNT_SELF_ROUTE_CONTRACT.method,
     headers: { Authorization: `Bearer ${key}` },
   })
   const account = agentAccountSelfResultSchema.safeParse(outcome.body)
-  const requiredScopes = (supplier ? MARKET_SUPPLY_MANAGE_SCOPE : AGENT_ACCESS_OAUTH_DEVICE_CLIENT_REGISTRATION_REQUEST.scope).split(' ')
+  const requiredScopes = (provider ? MARKET_SUPPLY_MANAGE_SCOPE : AGENT_ACCESS_OAUTH_DEVICE_CLIENT_REGISTRATION_REQUEST.scope).split(' ')
   if (outcome.ok && account.success && requiredScopes.every((scope) => account.data.scopes.includes(scope))) {
     return account.data
   }
@@ -144,12 +144,12 @@ async function validateAccessToken(options: CliOptions, key: string, supplier: b
   })
 }
 
-async function validateConfiguredKey(options: CliOptions, supplier: boolean): Promise<AgentAccountSelfResult> {
-  return await validateAccessToken(options, requireAgentAccessKey('connect', options, supplier ? MARKET_SUPPLY_MANAGE_SCOPE : undefined), supplier)
+async function validateConfiguredKey(options: CliOptions, provider: boolean): Promise<AgentAccountSelfResult> {
+  return await validateAccessToken(options, requireAgentAccessKey('connect', options, provider ? MARKET_SUPPLY_MANAGE_SCOPE : undefined), provider)
 }
-async function validateIssuedAccessToken(options: CliOptions, key: string, supplier: boolean): Promise<AgentAccountSelfResult> {
+async function validateIssuedAccessToken(options: CliOptions, key: string, provider: boolean): Promise<AgentAccountSelfResult> {
   return await retry(
-    async () => await validateAccessToken(options, key, supplier),
+    async () => await validateAccessToken(options, key, provider),
     {
       retries: ISSUED_KEY_VALIDATION_RETRIES,
       delay: ISSUED_KEY_VALIDATION_DELAY_MS,
@@ -165,26 +165,26 @@ export async function runConnectCommand(args: readonly string[], options: CliOpt
     throw usageFailure('connect', 'connect-usage')
   }
 
-  const supplier = options.supplier === true
-  const requestedScope = supplier
+  const provider = options.provider === true
+  const requestedScope = provider
     ? MARKET_SUPPLY_MANAGE_SCOPE
     : AGENT_ACCESS_OAUTH_DEVICE_CLIENT_REGISTRATION_REQUEST.scope
-  const registrationRequest = supplier
+  const registrationRequest = provider
     ? {
         ...AGENT_ACCESS_OAUTH_DEVICE_CLIENT_REGISTRATION_REQUEST,
-        client_name: 'Agentic Economy Supplier CLI',
+        client_name: 'Agentic Economy Provider CLI',
         scope: requestedScope,
       }
     : AGENT_ACCESS_OAUTH_DEVICE_CLIENT_REGISTRATION_REQUEST
-  const configuredCredential = resolveAgentAccessCredential(options.baseUrl, supplier ? MARKET_SUPPLY_MANAGE_SCOPE : undefined)
+  const configuredCredential = resolveAgentAccessCredential(options.baseUrl, provider ? MARKET_SUPPLY_MANAGE_SCOPE : undefined)
   if (configuredCredential !== undefined) {
     try {
-      const account = await validateConfiguredKey(options, supplier)
+      const account = await validateConfiguredKey(options, provider)
       printConnectResult({
         kind: 'connected',
         credential: 'origin_bound_agent_key',
-        profile: supplier ? 'supplier' : 'market',
-        connectionState: supplier ? 'ready_to_supply' : 'ready_to_buy',
+        profile: provider ? 'provider' : 'market',
+        connectionState: provider ? 'ready_to_supply' : 'ready_to_buy',
         principalRef: account.principalRef,
         accountRef: account.accountRef,
         credentialId: account.credentialId,
@@ -192,7 +192,7 @@ export async function runConnectCommand(args: readonly string[], options: CliOpt
         scopes: account.scopes,
         ownerConnectionHref: ownerConnectionHref(options.baseUrl, account.principalRef),
         source: `validated_${configuredCredential.source}`,
-        nextAction: connectedNextAction(supplier),
+        nextAction: connectedNextAction(provider),
       }, options)
       return
     } catch (error) {
@@ -224,7 +224,7 @@ export async function runConnectCommand(args: readonly string[], options: CliOpt
     verificationUri: textField(deviceRecord?.verification_uri, 'verification_uri'),
     expiresIn: positiveSeconds(deviceRecord?.expires_in, 'expires_in', 600),
     intervalMs: Math.min(MAX_POLL_DELAY_MS, Math.max(MIN_POLL_DELAY_MS, positiveSeconds(deviceRecord?.interval, 'interval', DEFAULT_POLL_DELAY_MS / 1000) * 1_000)),
-    supplier,
+    provider,
   }
 
   if (options.json) {
@@ -265,13 +265,13 @@ export async function runConnectCommand(args: readonly string[], options: CliOpt
         throw new CliFailure('OAuth token response was not a JSON object.', { kind: 'UNAVAILABLE', code: 'connect-response-invalid' })
       }
       const accessToken = textField(token.access_token, 'access_token')
-      const account = await validateIssuedAccessToken(options, accessToken, supplier)
+      const account = await validateIssuedAccessToken(options, accessToken, provider)
       const storedAt = storeConnection({
         baseUrl: options.baseUrl,
         accessToken,
         ...(typeof token.token_type === 'string' ? { tokenType: token.token_type } : {}),
         ...(typeof token.scope === 'string' ? { scope: token.scope } : {}),
-        profile: supplier ? 'supplier' : 'market',
+        profile: provider ? 'provider' : 'market',
       })
       printConnectResult({
         kind: 'connected',
@@ -281,8 +281,8 @@ export async function runConnectCommand(args: readonly string[], options: CliOpt
         ...(typeof token.token_type === 'string' ? { tokenType: token.token_type } : {}),
         ...(typeof token.scope === 'string' ? { scope: token.scope } : {}),
         credential: 'origin_bound_agent_key',
-        profile: supplier ? 'supplier' : 'market',
-        connectionState: supplier ? 'ready_to_supply' : 'ready_to_buy',
+        profile: provider ? 'provider' : 'market',
+        connectionState: provider ? 'ready_to_supply' : 'ready_to_buy',
         principalRef: account.principalRef,
         accountRef: account.accountRef,
         credentialId: account.credentialId,
@@ -291,7 +291,7 @@ export async function runConnectCommand(args: readonly string[], options: CliOpt
         ownerConnectionHref: ownerConnectionHref(options.baseUrl, account.principalRef),
         credentialStored: true,
         configPath: storedAt,
-        nextAction: connectedNextAction(supplier),
+        nextAction: connectedNextAction(provider),
       }, options)
       return
     }

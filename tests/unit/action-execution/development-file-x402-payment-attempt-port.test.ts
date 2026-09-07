@@ -70,7 +70,7 @@ describe('development file x402 payment attempt port', () => {
         payTo: 'recipient',
         amount: { currency: 'USDC', units: '1', exponent: 2 },
         providerEndpoint: 'https://provider.invalid',
-        operationRevision: 'revision',
+        toolVersion: 'revision',
         authorizationDigest: 'authorization',
         custodyRef: 'raw-auth-payload',
         state: 'prepared',

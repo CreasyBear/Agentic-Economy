@@ -22,7 +22,7 @@ beforeEach(() => {
   process.env.AE_CONFIG_DIR = directory
   delete process.env.AE_API_KEY
   delete process.env.AE_API_KEY_ORIGIN
-  storeConnection({ baseUrl: baseOptions.baseUrl, accessToken: 'hidden-supplier-secret', scope: 'market_supply:manage' })
+  storeConnection({ baseUrl: baseOptions.baseUrl, accessToken: 'hidden-provider-secret', scope: 'market_supply:manage' })
 })
 
 afterEach(() => {
@@ -34,48 +34,48 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-describe('AE CLI supplier Operation lifecycle', () => {
-  it('requests and stores a separate supplier credential without replacing buyer access', async () => {
-    removeStoredConnection(baseOptions.baseUrl, 'supplier')
+describe('AE CLI provider Tool lifecycle', () => {
+  it('requests and stores a separate provider credential without replacing buyer access', async () => {
+    removeStoredConnection(baseOptions.baseUrl, 'provider')
     storeConnection({ baseUrl: baseOptions.baseUrl, accessToken: 'buyer-secret', scope: 'market_operations:invoke customer_requests:bounded_mandate' })
     const fetch = vi.fn()
-      .mockResolvedValueOnce(Response.json({ client_id: 'supplier-client' }, { status: 201 }))
+      .mockResolvedValueOnce(Response.json({ client_id: 'provider-client' }, { status: 201 }))
       .mockResolvedValueOnce(Response.json({
-        device_code: 'supplier-device',
-        user_code: 'SUPP-LIER',
-        verification_uri: 'https://market.example/agent-access/authorize?user_code=SUPP-LIER',
+        device_code: 'provider-device',
+        user_code: 'PROV-IDER',
+        verification_uri: 'https://market.example/agent-access/authorize?user_code=PROV-IDER',
         expires_in: 600,
         interval: 1,
       }))
       .mockResolvedValueOnce(Response.json({
-        access_token: 'new-supplier-secret',
+        access_token: 'new-provider-secret',
         token_type: 'Bearer',
         scope: 'market_supply:manage',
       }))
       .mockResolvedValueOnce(Response.json({
         kind: 'authenticated',
-        principalRef: 'prn_supplier',
+        principalRef: 'prn_provider',
         accountRef: 'acc_owner',
-        credentialId: 'key_supplier',
+        credentialId: 'key_provider',
         applicationRef: 'agentic-economy',
         environment: 'sandbox',
         scopes: ['market_supply:manage'],
-        authorityMode: 'bounded_mandate',
+        authorityMode: 'spending_policy',
       }))
     vi.stubGlobal('fetch', fetch)
     const write = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
 
-    await runConnectCommand([], { ...baseOptions, supplier: true })
+    await runConnectCommand([], { ...baseOptions, provider: true })
 
     const registration = JSON.parse(String(fetch.mock.calls[0]?.[1]?.body)) as Record<string, unknown>
-    expect(registration).toMatchObject({ client_name: 'Agentic Economy Supplier CLI', scope: 'market_supply:manage' })
+    expect(registration).toMatchObject({ client_name: 'Agentic Economy Provider CLI', scope: 'market_supply:manage' })
     expect(String(fetch.mock.calls[1]?.[1]?.body)).toContain('scope=market_supply%3Amanage')
     expect(String(fetch.mock.calls[3]?.[0])).toBe('https://market.example/api/v1/account')
     expect(readStoredConnection(baseOptions.baseUrl, 'market')?.accessToken).toBe('buyer-secret')
-    expect(readStoredConnection(baseOptions.baseUrl, 'supplier')?.accessToken).toBe('new-supplier-secret')
+    expect(readStoredConnection(baseOptions.baseUrl, 'provider')?.accessToken).toBe('new-provider-secret')
     expect(JSON.parse(write.mock.calls.map(([value]) => String(value)).join(''))).toMatchObject({
       kind: 'connected',
-      profile: 'supplier',
+      profile: 'provider',
       scope: 'market_supply:manage',
     })
   })
@@ -84,17 +84,17 @@ describe('AE CLI supplier Operation lifecycle', () => {
     const fetch = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
       expect(String(url)).toBe('https://market.example/api/v1/supply/status')
       expect(init?.method).toBe('POST')
-      expect(new Headers(init?.headers).get('authorization')).toBe('Bearer hidden-supplier-secret')
-      expect(JSON.parse(String(init?.body))).toEqual({ businessRef: 'business:one', operationRef: 'operation:one' })
+      expect(new Headers(init?.headers).get('authorization')).toBe('Bearer hidden-provider-secret')
+      expect(JSON.parse(String(init?.body))).toEqual({ businessRef: 'business:one', toolRef: 'operation:one' })
       return Response.json({
         kind: 'available',
-        schemaVersion: 'supplier_operations:v1',
+        schemaVersion: 'provider_tools:v1',
         businessRef: 'business:one',
         status: {
-          schemaVersion: 'supplier_operations:v1',
+          schemaVersion: 'provider_tools:v1',
           businessRef: 'business:one',
           providerRef: 'provider:one',
-          operationRef: 'operation:one',
+          toolRef: 'operation:one',
           revision: 1,
           state: 'Published',
           reasonCodes: [],
@@ -121,8 +121,8 @@ describe('AE CLI supplier Operation lifecycle', () => {
 
     expect(fetch).toHaveBeenCalledOnce()
     const output = write.mock.calls.map(([value]) => String(value)).join('')
-    expect(JSON.parse(output)).toMatchObject({ kind: 'available', status: { operationRef: 'operation:one', state: 'Published' } })
-    expect(output).not.toContain('hidden-supplier-secret')
+    expect(JSON.parse(output)).toMatchObject({ kind: 'available', status: { toolRef: 'operation:one', state: 'Published' } })
+    expect(output).not.toContain('hidden-provider-secret')
   })
 
   it('reads Provider offboarding without granting the CLI authority to start or resume it', async () => {
@@ -158,16 +158,16 @@ describe('AE CLI supplier Operation lifecycle', () => {
     expect(output).toContain('payout_resolution_required')
   })
 
-  it('renders the shared supplier continuation from current lifecycle facts', async () => {
+  it('renders the shared provider continuation from current lifecycle facts', async () => {
     const fetch = vi.fn().mockResolvedValue(Response.json({
       kind: 'available',
-      schemaVersion: 'supplier_operations:v1',
+      schemaVersion: 'provider_tools:v1',
       businessRef: 'business:one',
       page: [{
-        schemaVersion: 'supplier_operations:v1',
+        schemaVersion: 'provider_tools:v1',
         businessRef: 'business:one',
         providerRef: 'provider:one',
-        operationRef: 'operation:one',
+        toolRef: 'operation:one',
         revision: 1,
         state: 'Under review',
         reasonCodes: [],
@@ -227,7 +227,7 @@ describe('AE CLI supplier Operation lifecycle', () => {
 
     await runSupplyCommand(['connections', 'business:one'], { ...baseOptions, json: false })
 
-    expect(write.mock.calls.flat().join('')).toContain('next  /owner/offerings#supplier-connections')
+    expect(write.mock.calls.flat().join('')).toContain('next  /owner/offerings#provider-connections')
   })
 
   it('adds one explicit idempotency key to maintenance material', async () => {

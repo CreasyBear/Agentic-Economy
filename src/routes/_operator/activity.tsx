@@ -110,11 +110,11 @@ function ActivityAvailable({
     () => [
       {
         id: 'task',
-        accessorFn: (item) => item.operationLabel,
+        accessorFn: (item) => item.toolLabel,
         header: ({ column }) => <AeOperatorSortableHeader label="Task" column={column} />,
         cell: ({ row }) => (
           <span className="font-medium text-foreground">
-            {row.original.operationLabel}
+            {row.original.toolLabel}
           </span>
         ),
       },
@@ -204,7 +204,7 @@ function ActivityAvailable({
               label: 'View',
               onOpen: setSelected,
               getAccessibleLabel: (item) =>
-                `View ${item.operationLabel}`,
+                `View ${item.toolLabel}`,
             }}
           />
           <AeRecordSheet
@@ -212,7 +212,7 @@ function ActivityAvailable({
             onOpenChange={(open) => {
               if (!open) setSelected(undefined)
             }}
-            title={selected === undefined ? 'Call' : selected.operationLabel}
+            title={selected === undefined ? 'Call' : selected.toolLabel}
             {...(selected === undefined ? {} : { facts: activityFacts(selected) })}
             {...(selected === undefined
               ? {}
@@ -220,8 +220,8 @@ function ActivityAvailable({
                   action: (
                     <Button asChild className="min-h-touch">
                       <Link
-                        to="/operations/invocations/$invocationRef"
-                        params={{ invocationRef: selected.callRef }}
+                        to="/calls/$callRef"
+                        params={{ callRef: selected.callRef }}
                       >
                         View receipt
                       </Link>

@@ -1,5 +1,5 @@
 import {
-  isPublicOperationRef,
+  isPublicToolRef,
   connectionAuthoritySnapshotsEqual,
   type PublicationCommandPorts,
   type OperationLedgerPorts,
@@ -13,13 +13,13 @@ import {
   registerCapabilityContractDocument,
 } from './capabilityContractDocuments'
 import { eligibleSupplyPorts } from './capabilitySupplyEligiblePorts'
-import { capabilitySupplyOperationPorts } from './capabilitySupplyOperationPorts'
-import { syncMarketOperationPresence } from './marketPresence'
+import { capabilitySupplyToolPorts } from './capabilitySupplyToolPorts'
+import { syncMarketToolPresence } from './marketPresence'
 export function capabilitySupplyPublicationPorts(
   ctx: MutationCtx,
   writers: Pick<OperationLedgerPorts, 'registerOffering' | 'registerBinding' | 'setEligibility'>,
 ): PublicationCommandPorts {
-  const ledger = capabilitySupplyOperationPorts(ctx.db, writers)
+  const ledger = capabilitySupplyToolPorts(ctx.db, writers)
   return {
     ...ledger,
     catalogOriginIsCurrent: async (origin, businessId) => (
@@ -41,12 +41,12 @@ export function capabilitySupplyPublicationPorts(
           index.eq('publicationRef', publicationRef).eq('revision', revision)
         )).unique()
       if (publication === null) return null
-      if (!isPublicOperationRef(publication.operationRef)) {
+      if (!isPublicToolRef(publication.toolRef)) {
         throw new Error('capability_publication_operation_ref_invalid')
       }
       return {
         id: publication._id,
-        operationRef: publication.operationRef,
+        toolRef: publication.toolRef,
         publicationRef: publication.publicationRef,
         revision: publication.revision,
         businessId: publication.businessId,
@@ -94,12 +94,12 @@ export function capabilitySupplyPublicationPorts(
         ))
         .take(16)
       return publications.map((publication) => {
-        if (!isPublicOperationRef(publication.operationRef)) {
+        if (!isPublicToolRef(publication.toolRef)) {
           throw new Error('capability_publication_operation_ref_invalid')
         }
         return {
           id: publication._id,
-          operationRef: publication.operationRef,
+          toolRef: publication.toolRef,
           publicationRef: publication.publicationRef,
           revision: publication.revision,
           businessId: String(publication.businessId),
@@ -151,7 +151,7 @@ export function capabilitySupplyPublicationPorts(
         await ctx.db.patch(binding._id, { sourceRouteRef: input.sourceRouteRef })
       }
       await ctx.db.insert('capabilityPublications', {
-        operationRef: input.operationRef,
+        toolRef: input.toolRef,
         publicationRef: input.publicationRef,
         revision: input.revision,
         businessId: input.businessId as Id<'businesses'>,
@@ -194,8 +194,8 @@ export function capabilitySupplyPublicationPorts(
         disposition: 'superseded',
         updatedAt,
       })
-      if (publication !== null) await syncMarketOperationPresence(ctx, {
-        operationRef: publication.operationRef,
+      if (publication !== null) await syncMarketToolPresence(ctx, {
+        toolRef: publication.toolRef,
         businessId: publication.businessId,
         active: false,
         now: updatedAt,
@@ -209,8 +209,8 @@ export function capabilitySupplyPublicationPorts(
         withdrawnAt: updatedAt,
         updatedAt,
       })
-      if (publication !== null) await syncMarketOperationPresence(ctx, {
-        operationRef: publication.operationRef,
+      if (publication !== null) await syncMarketToolPresence(ctx, {
+        toolRef: publication.toolRef,
         businessId: publication.businessId,
         active: false,
         now: updatedAt,

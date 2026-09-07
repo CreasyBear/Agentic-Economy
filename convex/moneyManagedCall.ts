@@ -4,12 +4,12 @@ import type { Doc } from './_generated/dataModel'
 import { internalMutation, internalQuery, type MutationCtx } from './_generated/server'
 import { canonicalDigest } from '../src/modules/common/canonical-digest'
 import { PACKAGE4_FORMANCE_REQUIREMENTS } from '../src/modules/money/public'
-import { parsePublishedOperationSnapshot } from '../src/modules/capability-supply/public'
+import { parsePublishedToolSnapshot } from '../src/modules/capability-supply/public'
 
 const transactionRefsValue = v.array(v.string())
 const bookingValue = v.object({
-  invocationRef: v.string(),
-  commitmentRef: v.string(),
+  callRef: v.string(),
+  quoteRef: v.string(),
   idempotencyKey: v.string(),
   accountRef: v.string(),
   principalRef: v.string(),
@@ -18,7 +18,7 @@ const bookingValue = v.object({
   legalCustomerGeneration: v.number(),
   treasuryRef: v.string(),
   treasuryGeneration: v.number(),
-  operationRef: v.string(),
+  toolRef: v.string(),
   providerRef: v.string(),
   authorityGeneration: v.number(),
   policyGeneration: v.number(),
@@ -26,7 +26,7 @@ const bookingValue = v.object({
   buyerRevenueUnits: v.string(),
   buyerTaxUnits: v.string(),
   providerAmountUnits: v.string(),
-  commitmentDigest: v.string(),
+  quoteDigest: v.string(),
   inputDigest: v.string(),
   policyDigest: v.string(),
   rateEvidenceDigest: v.string(),
@@ -35,63 +35,63 @@ const bookingValue = v.object({
 })
 
 function bookingFromRows(
-  invocation: Doc<'capabilityOperationInvocations'>,
-  commitment: Doc<'capabilityOperationCommitments'>,
+  call: Doc<'capabilityCalls'>,
+  quote: Doc<'capabilityQuotes'>,
 ) {
-  const operation = parsePublishedOperationSnapshot(commitment.operationJson)
-  if (operation === undefined
-    || invocation.commitmentRef !== commitment.commitmentRef
-    || invocation.ownerId !== commitment.accountRef
-    || invocation.principalId !== commitment.principalId
-    || invocation.operationRef !== commitment.operationRef
-    || commitment.formanceSchemaVersion !== PACKAGE4_FORMANCE_REQUIREMENTS.schemaVersion
-    || commitment.sourceUsdcUnits === undefined
-    || commitment.x402RequirementDigest === undefined
-    || commitment.rateEvidenceDigest === undefined
-    || commitment.treasuryCustodyRef === undefined
-    || commitment.treasuryCustodyGeneration === undefined
-    || commitment.treasuryEvidenceDigest === undefined) return null
+  const tool = parsePublishedToolSnapshot(quote.toolJson)
+  if (tool === undefined
+    || call.quoteRef !== quote.quoteRef
+    || call.ownerId !== quote.accountRef
+    || call.principalId !== quote.principalId
+    || call.toolRef !== quote.toolRef
+    || quote.formanceSchemaVersion !== PACKAGE4_FORMANCE_REQUIREMENTS.schemaVersion
+    || quote.sourceUsdcUnits === undefined
+    || quote.x402RequirementDigest === undefined
+    || quote.rateEvidenceDigest === undefined
+    || quote.treasuryCustodyRef === undefined
+    || quote.treasuryCustodyGeneration === undefined
+    || quote.treasuryEvidenceDigest === undefined) return null
   return {
-    invocationRef: invocation.invocationRef,
-    commitmentRef: commitment.commitmentRef,
-    idempotencyKey: invocation.idempotencyKey,
-    accountRef: commitment.accountRef,
-    principalRef: commitment.principalId,
-    agentBudgetGeneration: commitment.budgetGeneration,
-    legalCustomerRef: commitment.legalCustomerRef,
-    legalCustomerGeneration: commitment.legalCustomerGeneration,
-    treasuryRef: commitment.treasuryCustodyRef,
-    treasuryGeneration: commitment.treasuryCustodyGeneration,
-    operationRef: commitment.operationRef,
-    providerRef: operation.identity.businessId,
-    authorityGeneration: commitment.grantGeneration,
-    policyGeneration: commitment.policyGeneration,
-    buyerAmountUnits: commitment.decisionAudUnits,
-    buyerRevenueUnits: commitment.buyerRevenueUnits,
-    buyerTaxUnits: commitment.buyerTaxUnits,
-    providerAmountUnits: commitment.sourceUsdcUnits,
-    commitmentDigest: commitment.evidenceDigest,
-    inputDigest: commitment.inputDigest,
-    policyDigest: commitment.commercialPolicyDigest,
-    rateEvidenceDigest: commitment.rateEvidenceDigest,
-    treasuryEvidenceDigest: commitment.treasuryEvidenceDigest,
-    x402RequirementDigest: commitment.x402RequirementDigest,
+    callRef: call.callRef,
+    quoteRef: quote.quoteRef,
+    idempotencyKey: call.idempotencyKey,
+    accountRef: quote.accountRef,
+    principalRef: quote.principalId,
+    agentBudgetGeneration: quote.budgetGeneration,
+    legalCustomerRef: quote.legalCustomerRef,
+    legalCustomerGeneration: quote.legalCustomerGeneration,
+    treasuryRef: quote.treasuryCustodyRef,
+    treasuryGeneration: quote.treasuryCustodyGeneration,
+    toolRef: quote.toolRef,
+    providerRef: tool.identity.businessId,
+    authorityGeneration: quote.grantGeneration,
+    policyGeneration: quote.policyGeneration,
+    buyerAmountUnits: quote.decisionAudUnits,
+    buyerRevenueUnits: quote.buyerRevenueUnits,
+    buyerTaxUnits: quote.buyerTaxUnits,
+    providerAmountUnits: quote.sourceUsdcUnits,
+    quoteDigest: quote.evidenceDigest,
+    inputDigest: quote.inputDigest,
+    policyDigest: quote.commercialPolicyDigest,
+    rateEvidenceDigest: quote.rateEvidenceDigest,
+    treasuryEvidenceDigest: quote.treasuryEvidenceDigest,
+    x402RequirementDigest: quote.x402RequirementDigest,
   }
 }
 
-async function loadRows(ctx: MutationCtx, invocationRef: string) {
-  const invocation = await ctx.db.query('capabilityOperationInvocations')
-    .withIndex('by_invocationRef', (query) => query.eq('invocationRef', invocationRef))
+async function loadRows(ctx: MutationCtx, callRef: string) {
+  const call = await ctx.db.query('capabilityCalls')
+    .withIndex('by_callRef', (query) => query.eq('callRef', callRef))
     .unique()
-  if (invocation === null || invocation.commitmentRef === undefined) return null
-  const commitment = await ctx.db.query('capabilityOperationCommitments')
-    .withIndex('by_commitmentRef', (query) => query.eq('commitmentRef', invocation.commitmentRef!))
+  if (call === null || call.quoteRef === undefined) return null
+  const quote = await ctx.db.query('capabilityQuotes')
+    .withIndex('by_quoteRef', (query) => query.eq('quoteRef', call.quoteRef!))
     .unique()
-  return commitment === null ? null : { invocation, commitment }
+  return quote === null ? null : { call, quote }
 }
 
 export const readBooking = internalQuery({
-  args: { invocationRef: v.string() },
+  args: { callRef: v.string() },
   returns: v.union(v.object({
     kind: v.literal('available'),
     booking: bookingValue,
@@ -109,17 +109,17 @@ export const readBooking = internalQuery({
     entryRefusalCode: v.optional(v.literal('financial_scope_locked')),
   }), v.object({ kind: v.literal('not_required') }), v.object({ kind: v.literal('not_found') })),
   handler: async (ctx, args) => {
-    const invocation = await ctx.db.query('capabilityOperationInvocations')
-      .withIndex('by_invocationRef', (query) => query.eq('invocationRef', args.invocationRef))
+    const call = await ctx.db.query('capabilityCalls')
+      .withIndex('by_callRef', (query) => query.eq('callRef', args.callRef))
       .unique()
-    if (invocation === null || invocation.commitmentRef === undefined) return { kind: 'not_found' as const }
-    const commitment = await ctx.db.query('capabilityOperationCommitments')
-      .withIndex('by_commitmentRef', (query) => query.eq('commitmentRef', invocation.commitmentRef!))
+    if (call === null || call.quoteRef === undefined) return { kind: 'not_found' as const }
+    const quote = await ctx.db.query('capabilityQuotes')
+      .withIndex('by_quoteRef', (query) => query.eq('quoteRef', call.quoteRef!))
       .unique()
-    if (commitment === null) return { kind: 'not_found' as const }
-    const booking = bookingFromRows(invocation, commitment)
+    if (quote === null) return { kind: 'not_found' as const }
+    const booking = bookingFromRows(call, quote)
     if (booking === null) {
-      return commitment.sourceUsdcUnits === undefined && commitment.decisionAudUnits === '0'
+      return quote.sourceUsdcUnits === undefined && quote.decisionAudUnits === '0'
         ? { kind: 'not_required' as const }
         : { kind: 'not_found' as const }
     }
@@ -127,8 +127,8 @@ export const readBooking = internalQuery({
       ['account', booking.accountRef],
       ['legal_customer', booking.legalCustomerRef],
       ['treasury_pool', booking.treasuryRef],
-      ['operation', booking.operationRef],
-      ['provider_obligation', `provider-obligation:${booking.invocationRef}`],
+      ['tool', booking.toolRef],
+      ['provider_obligation', `provider-obligation:${booking.callRef}`],
     ] as const
     let financialScopeLocked = false
     for (const [scopeType, scopeRef] of scopes) {
@@ -147,58 +147,58 @@ export const readBooking = internalQuery({
       kind: 'available' as const,
       booking,
       ...(financialScopeLocked ? { entryRefusalCode: 'financial_scope_locked' as const } : {}),
-      ...(invocation.formanceFinancialState === undefined
+      ...(call.formanceFinancialState === undefined
         ? {}
-        : { financialState: invocation.formanceFinancialState }),
-      ...(invocation.formanceReservationRefs === undefined
+        : { financialState: call.formanceFinancialState }),
+      ...(call.formanceReservationRefs === undefined
         ? {}
-        : { reservationRefs: invocation.formanceReservationRefs }),
-      ...(invocation.formanceReleaseRefs === undefined
+        : { reservationRefs: call.formanceReservationRefs }),
+      ...(call.formanceReleaseRefs === undefined
         ? {}
-        : { releaseRefs: invocation.formanceReleaseRefs }),
-      ...(invocation.formanceSettlementRefs === undefined
+        : { releaseRefs: call.formanceReleaseRefs }),
+      ...(call.formanceSettlementRefs === undefined
         ? {}
-        : { settlementRefs: invocation.formanceSettlementRefs }),
+        : { settlementRefs: call.formanceSettlementRefs }),
     }
   },
 })
 
 export const attachReservation = internalMutation({
-  args: { invocationRef: v.string(), transactionRefs: transactionRefsValue },
+  args: { callRef: v.string(), transactionRefs: transactionRefsValue },
   returns: v.union(
     v.object({ kind: v.literal('attached'), replayed: v.boolean() }),
     v.object({ kind: v.literal('refused'), code: v.string() }),
   ),
   handler: async (ctx, args) => {
-    const rows = await loadRows(ctx, args.invocationRef)
+    const rows = await loadRows(ctx, args.callRef)
     if (rows === null || args.transactionRefs.length !== 3) {
       return { kind: 'refused' as const, code: 'formance_reservation_invalid' }
     }
     const digest = canonicalDigest({
       format: 'ae.formance-managed-call-reservation:v1',
-      invocationRef: args.invocationRef,
+      callRef: args.callRef,
       transactionRefs: args.transactionRefs,
     })
-    if (rows.invocation.formanceReservationDigest !== undefined) {
-      return rows.invocation.formanceReservationDigest === digest
+    if (rows.call.formanceReservationDigest !== undefined) {
+      return rows.call.formanceReservationDigest === digest
         ? { kind: 'attached' as const, replayed: true }
         : { kind: 'refused' as const, code: 'formance_reservation_conflict' }
     }
-    if (rows.invocation.state !== 'pending' || rows.commitment.state !== 'consumed') {
+    if (rows.call.state !== 'pending' || rows.quote.state !== 'consumed') {
       return { kind: 'refused' as const, code: 'formance_reservation_state_conflict' }
     }
-    const booking = bookingFromRows(rows.invocation, rows.commitment)
+    const booking = bookingFromRows(rows.call, rows.quote)
     if (booking === null) {
       return { kind: 'refused' as const, code: 'formance_reservation_material_invalid' }
     }
     const now = Date.now()
-    const obligationRef = `provider-obligation:${args.invocationRef}`
+    const obligationRef = `provider-obligation:${args.callRef}`
     const existingObligation = await ctx.db.query('moneyProviderObligations')
       .withIndex('by_obligationRef', (query) => query.eq('obligationRef', obligationRef))
       .unique()
     if (existingObligation !== null) {
-      const sameObligation = existingObligation.invocationRef === args.invocationRef
-        && existingObligation.operationRef === booking.operationRef
+      const sameObligation = existingObligation.callRef === args.callRef
+        && existingObligation.toolRef === booking.toolRef
         && existingObligation.providerRef === booking.providerRef
         && existingObligation.buyerAccountRef === booking.accountRef
         && existingObligation.buyerAmountUnits === booking.buyerAmountUnits
@@ -209,8 +209,8 @@ export const attachReservation = internalMutation({
     } else {
       await ctx.db.insert('moneyProviderObligations', {
         obligationRef,
-        invocationRef: args.invocationRef,
-        operationRef: booking.operationRef,
+        callRef: args.callRef,
+        toolRef: booking.toolRef,
         providerRef: booking.providerRef,
         buyerAccountRef: booking.accountRef,
         buyerAsset: 'AUD',
@@ -223,14 +223,14 @@ export const attachReservation = internalMutation({
         state: 'accrued',
         payoutEligibility: 'ineligible_x402',
         evidenceRefs: [
-          booking.commitmentRef,
+          booking.quoteRef,
           ...args.transactionRefs,
         ],
         createdAt: now,
         updatedAt: now,
       })
     }
-    await ctx.db.patch(rows.invocation._id, {
+    await ctx.db.patch(rows.call._id, {
       formanceFinancialState: 'reserved',
       formanceReservationRefs: [...args.transactionRefs],
       formanceReservationDigest: digest,
@@ -241,12 +241,12 @@ export const attachReservation = internalMutation({
 })
 
 export const markReservationUnknown = internalMutation({
-  args: { invocationRef: v.string(), reference: v.string(), statusRef: v.string() },
+  args: { callRef: v.string(), reference: v.string(), statusRef: v.string() },
   returns: v.boolean(),
   handler: async (ctx, args) => {
-    const rows = await loadRows(ctx, args.invocationRef)
+    const rows = await loadRows(ctx, args.callRef)
     if (rows === null) return false
-    await ctx.db.patch(rows.invocation._id, {
+    await ctx.db.patch(rows.call._id, {
       formanceFinancialState: 'outcome_unknown',
       formanceUnknownReference: args.reference,
       formanceUnknownStatusRef: args.statusRef,
@@ -254,10 +254,10 @@ export const markReservationUnknown = internalMutation({
       dispatchState: 'reconciliation_required',
       result: {
         kind: 'reconciliation_required',
-        invocationRef: rows.invocation.invocationRef,
-        operationRef: rows.invocation.operationRef,
+        callRef: rows.call.callRef,
+        toolRef: rows.call.toolRef,
         evidence: {
-          attemptRef: `formance-reservation:${rows.invocation.invocationRef}`,
+          attemptRef: `formance-reservation:${rows.call.callRef}`,
           effectGeneration: 1,
           requiredAt: new Date().toISOString(),
           retry: 'reconcile_before_retry',

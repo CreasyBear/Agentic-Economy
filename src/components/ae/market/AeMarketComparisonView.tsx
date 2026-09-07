@@ -18,9 +18,9 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { operationChoiceCompareOutputSchema } from "@/modules/registry/operation-choice-contracts";
+import { toolChoiceCompareOutputSchema } from "@/modules/registry/tool-choice-contracts";
 
-export type MarketComparison = z.infer<typeof operationChoiceCompareOutputSchema>;
+export type MarketComparison = z.infer<typeof toolChoiceCompareOutputSchema>;
 
 type ComparisonField = "description" | "priceLabel" | "healthStatus";
 
@@ -90,10 +90,10 @@ export function AeMarketComparisonView({
             Catalog comparison
           </p>
           <h1 ref={headingRef} tabIndex={-1} className="text-3xl font-semibold tracking-tight outline-none">
-            Compare Operations
+            Compare Tools
           </h1>
           <p className="max-w-2xl text-sm text-muted-foreground">
-            Canonical published terms and current readiness for the selected Operations.
+            Canonical published terms and current readiness for the selected Tools.
           </p>
         </div>
         <div className="flex flex-wrap gap-intra">
@@ -110,7 +110,7 @@ export function AeMarketComparisonView({
         <CardHeader>
           <CardTitle>Current comparison</CardTitle>
           <CardDescription>
-            {comparison.operations.length.toLocaleString()} Operations · prices and policies are sourced from the current catalog contract.
+            {comparison.tools.length.toLocaleString()} Tools · prices and policies are sourced from the current catalog contract.
           </CardDescription>
         </CardHeader>
         <CardContent className="min-w-0">
@@ -118,17 +118,17 @@ export function AeMarketComparisonView({
             <TableHeader>
               <TableRow>
                 <TableHead scope="col">Fact</TableHead>
-                {comparison.operations.map((operation) => (
-                  <TableHead key={operation.operationRef} scope="col" className="min-w-52 whitespace-normal align-top">
+                {comparison.tools.map((tool) => (
+                  <TableHead key={tool.toolRef} scope="col" className="min-w-52 whitespace-normal align-top">
                     <div className="grid gap-intra py-intra normal-case tracking-normal">
-                      <span className="text-sm font-semibold text-foreground">{operation.title}</span>
-                      <span className="font-sans text-xs font-normal text-muted-foreground">{operation.provider.name}</span>
+                      <span className="text-sm font-semibold text-foreground">{tool.title}</span>
+                      <span className="font-sans text-xs font-normal text-muted-foreground">{tool.provider.name}</span>
                       <Button asChild variant="outline" size="sm" className="w-fit min-h-touch">
                         <Link
-                          to="/operations/$operationRef"
-                          params={{ operationRef: operation.operationRef }}
+                          to="/tools/$toolRef"
+                          params={{ toolRef: tool.toolRef }}
                           search={{ from: returnTo }}
-                          aria-label={`Describe ${operation.title} by ${operation.provider.name}`}
+                          aria-label={`Describe ${tool.title} by ${tool.provider.name}`}
                         >
                           Describe
                         </Link>
@@ -142,11 +142,11 @@ export function AeMarketComparisonView({
               {comparisonRows.map(({ field, label }) => (
                 <TableRow key={field}>
                   <TableHead scope="row" className="align-top">{label}</TableHead>
-                  {comparison.operations.map((operation) => (
-                    <TableCell key={operation.operationRef} className="min-w-52 whitespace-normal align-top">
+                  {comparison.tools.map((tool) => (
+                    <TableCell key={tool.toolRef} className="min-w-52 whitespace-normal align-top">
                       <ComparisonValue
                         field={field}
-                        value={comparisonValue(comparison, field, operation.operationRef)}
+                        value={comparisonValue(comparison, field, tool.toolRef)}
                       />
                     </TableCell>
                   ))}
@@ -171,19 +171,19 @@ function ComparisonValue({ field, value }: { field: ComparisonField; value: unkn
 function comparisonValue(
   comparison: Extract<MarketComparison, { kind: "ok" }>,
   field: ComparisonField,
-  operationRef: string,
+  toolRef: string,
 ): unknown {
-  return comparison.operations.find((operation) => operation.operationRef === operationRef)?.[field];
+  return comparison.tools.find((tool) => tool.toolRef === toolRef)?.[field];
 }
 
 function unavailableTitle(reason: Extract<MarketComparison, { kind: "unavailable" }>["reason"]): string {
-  if (reason === "operation_not_found") return "An Operation is no longer listed";
-  if (reason === "operation_unavailable") return "An Operation is not currently available";
+  if (reason === "tool_not_found") return "A Tool is no longer listed";
+  if (reason === "tool_unavailable") return "A Tool is not currently available";
   return "This comparison could not be read";
 }
 
 function unavailableDescription(reason: Extract<MarketComparison, { kind: "unavailable" }>["reason"]): string {
-  if (reason === "operation_not_found") return "Edit the selection to replace the missing Operation, then compare again.";
-  if (reason === "operation_unavailable") return "Readiness changed after selection. Edit the selection or retry after the catalog updates.";
-  return "The comparison references were refused. Return to the results and select two to four current Operations.";
+  if (reason === "tool_not_found") return "Edit the selection to replace the missing Tool, then compare again.";
+  if (reason === "tool_unavailable") return "Readiness changed after selection. Edit the selection or retry after the catalog updates.";
+  return "The comparison references were refused. Return to the results and select two to four current Tools.";
 }

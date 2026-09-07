@@ -12,7 +12,7 @@ const authenticate = async () => ({
   tokenType: 'api_key' as const,
   id: 'credential:one',
   subject: 'user_agent_one',
-  scopes: ['market_operations:invoke'],
+  scopes: ['market_tools:call'],
 })
 
 const resolvePrincipal: AgentAccessPrincipalResolver = async (projection) => ({
@@ -57,7 +57,7 @@ describe('agent funding handoff HTTP boundary', () => {
       { authenticate: async () => ({ isAuthenticated: false, tokenType: null, id: null, subject: null, scopes: null }) },
     )
     expect(result.status).toBe(401)
-    expect(result.headers.get('www-authenticate')).toContain('market_operations:invoke')
+    expect(result.headers.get('www-authenticate')).toContain('market_tools:call')
   })
 
   it('takes HTTP idempotency from the standard header and returns a replay receipt', async () => {

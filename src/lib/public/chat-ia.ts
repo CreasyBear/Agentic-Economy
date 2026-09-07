@@ -33,7 +33,7 @@ export const chatComposer = {
 
 export const chatRecovery = {
   reference: 'Support reference',
-  browse: 'Browse Operations',
+  browse: 'Browse Tools',
 } as const
 
 export const chatHandoffNotice = 'Signed in — messages from here are saved.'
@@ -103,7 +103,7 @@ export function chatChoiceLinkName(title: string, readiness: string | undefined)
   return `${chatChoiceAction(readiness)} ${title}`
 }
 
-export function chatViewOperation(name: string): string {
+export function chatViewTool(name: string): string {
   return `View ${name}`
 }
 
@@ -111,7 +111,7 @@ export function chatMatchedOperations(count: number): string {
   return count === 1 ? '1 tool' : `${count} tools`
 }
 
-export function chatShowingOperations(shown: number, total: number): string {
+export function chatShowingTools(shown: number, total: number): string {
   if (shown === 0 || total <= shown) return chatMatchedOperations(total)
   return `Showing ${shown} of ${total}`
 }

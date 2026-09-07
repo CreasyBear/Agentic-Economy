@@ -5,11 +5,11 @@ import { createRef, useRef, useState } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import {
-  AE_COMPARE_MAX_OPERATIONS,
+  AE_COMPARE_MAX_TOOLS,
   AeCompareTray,
 } from '@/components/ae/market/AeCompareTray'
-import { operationCompareInputSchema } from '@/modules/capability-supply/public'
-import type { OperationCardViewModel } from '@/modules/market/operation-view-model'
+import { toolCompareInputSchema } from '@/modules/capability-supply/public'
+import type { ToolCardViewModel } from '@/modules/market/tool-view-model'
 
 afterEach(() => {
   cleanup()
@@ -18,13 +18,13 @@ afterEach(() => {
 })
 
 describe('AeCompareTray', () => {
-  it('stays absent with no selection and requires a second Operation before comparison', () => {
+  it('stays absent with no selection and requires a second Tool before comparison', () => {
     const fallbackFocusRef = createRef<HTMLButtonElement>()
     const { rerender } = render(
       <>
         <button type="button" ref={fallbackFocusRef}>Catalog table</button>
         <AeCompareTray
-          operations={[]}
+          tools={[]}
           onRemove={() => undefined}
           onClear={() => undefined}
           onCompare={() => undefined}
@@ -33,13 +33,13 @@ describe('AeCompareTray', () => {
       </>,
     )
 
-    expect(screen.queryByRole('complementary', { name: 'Operation comparison' })).toBeNull()
+    expect(screen.queryByRole('complementary', { name: 'Tool comparison' })).toBeNull()
 
     rerender(
       <>
         <button type="button" ref={fallbackFocusRef}>Catalog table</button>
         <AeCompareTray
-          operations={[operation(1)]}
+          tools={[tool(1)]}
           onRemove={() => undefined}
           onClear={() => undefined}
           onCompare={() => undefined}
@@ -48,13 +48,13 @@ describe('AeCompareTray', () => {
       </>,
     )
 
-    const tray = screen.getByRole('complementary', { name: 'Operation comparison' })
-    expect(within(tray).getByText('Select one more Operation to compare.')).toBeTruthy()
+    const tray = screen.getByRole('complementary', { name: 'Tool comparison' })
+    expect(within(tray).getByText('Select one more Tool to compare.')).toBeTruthy()
     expect(within(tray).getByLabelText('1 of 4 selected').getAttribute('data-slot')).toBe('badge')
     expect(within(tray).getByRole<HTMLButtonElement>('button', { name: 'Compare 1' }).disabled).toBe(true)
     expect(
       within(tray).getByRole('button', {
-        name: 'Remove Operation 1 by Supplier 1 from comparison',
+        name: 'Remove Tool 1 by Provider 1 from comparison',
       }),
     ).toBeTruthy()
   })
@@ -66,7 +66,7 @@ describe('AeCompareTray', () => {
       <>
         <button type="button" ref={fallbackFocusRef}>Catalog table</button>
         <AeCompareTray
-          operations={Array.from({ length: 5 }, (_, index) => operation(index + 1))}
+          tools={Array.from({ length: 5 }, (_, index) => tool(index + 1))}
           onRemove={() => undefined}
           onClear={() => undefined}
           onCompare={onCompare}
@@ -75,33 +75,33 @@ describe('AeCompareTray', () => {
       </>,
     )
 
-    const tray = screen.getByRole('complementary', { name: 'Operation comparison' })
+    const tray = screen.getByRole('complementary', { name: 'Tool comparison' })
     expect(within(tray).getByLabelText('4 of 4 selected')).toBeTruthy()
-    expect(within(tray).getByText('Maximum 4 Operations selected.')).toBeTruthy()
-    expect(within(tray).queryByText('Operation 5')).toBeNull()
+    expect(within(tray).getByText('Maximum 4 Tools selected.')).toBeTruthy()
+    expect(within(tray).queryByText('Tool 5')).toBeNull()
 
     fireEvent.click(within(tray).getByRole('button', { name: 'Compare 4' }))
 
     expect(onCompare).toHaveBeenCalledOnce()
     expect(onCompare).toHaveBeenCalledWith([
-      operationRef(1),
-      operationRef(2),
-      operationRef(3),
-      operationRef(4),
+      toolRef(1),
+      toolRef(2),
+      toolRef(3),
+      toolRef(4),
     ])
   })
 
   it('moves focus to the nearest remove control, then restores fallback focus when cleared', async () => {
     function Harness() {
-      const [selected, setSelected] = useState(() => [operation(1), operation(2), operation(3)])
+      const [selected, setSelected] = useState(() => [tool(1), tool(2), tool(3)])
       const fallbackFocusRef = useRef<HTMLButtonElement>(null)
       return (
         <>
           <button type="button" ref={fallbackFocusRef}>Catalog table</button>
           <AeCompareTray
-            operations={selected}
-            onRemove={(operationRef) => {
-              setSelected((current) => current.filter((item) => item.operationRef !== operationRef))
+            tools={selected}
+            onRemove={(toolRef) => {
+              setSelected((current) => current.filter((item) => item.toolRef !== toolRef))
             }}
             onClear={() => setSelected([])}
             onCompare={() => undefined}
@@ -114,19 +114,19 @@ describe('AeCompareTray', () => {
     render(<Harness />)
 
     fireEvent.click(screen.getByRole('button', {
-      name: 'Remove Operation 2 by Supplier 2 from comparison',
+      name: 'Remove Tool 2 by Provider 2 from comparison',
     }))
 
     await waitFor(() => {
       expect(document.activeElement).toBe(screen.getByRole('button', {
-        name: 'Remove Operation 3 by Supplier 3 from comparison',
+        name: 'Remove Tool 3 by Provider 3 from comparison',
       }))
     })
 
     fireEvent.click(screen.getByRole('button', { name: 'Clear all' }))
 
     await waitFor(() => {
-      expect(screen.queryByRole('complementary', { name: 'Operation comparison' })).toBeNull()
+      expect(screen.queryByRole('complementary', { name: 'Tool comparison' })).toBeNull()
       expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Catalog table' }))
     })
   })
@@ -135,7 +135,7 @@ describe('AeCompareTray', () => {
     const fallbackFocusRef = createRef<HTMLButtonElement>()
     render(
       <AeCompareTray
-        operations={[operation(1), operation(2)]}
+        tools={[tool(1), tool(2)]}
         onRemove={() => undefined}
         onClear={() => undefined}
         onCompare={() => undefined}
@@ -143,7 +143,7 @@ describe('AeCompareTray', () => {
       />,
     )
 
-    const tray = screen.getByRole('complementary', { name: 'Operation comparison' })
+    const tray = screen.getByRole('complementary', { name: 'Tool comparison' })
     expect(tray.className).toContain('safe-area-inset-bottom')
     expect(tray.className).toContain('motion-reduce:animate-none')
     const card = tray.querySelector('[data-slot="card"]')
@@ -152,7 +152,7 @@ describe('AeCompareTray', () => {
     expect(tray.querySelector('[data-slot="card-content"]')).not.toBeNull()
     expect(tray.querySelector('[data-slot="separator"]')).not.toBeNull()
     expect(tray.querySelector('[data-slot="card-footer"]')).not.toBeNull()
-    expect(within(tray).getByLabelText('Selected Operations').className).toContain('overflow-x-auto')
+    expect(within(tray).getByLabelText('Selected Tools').className).toContain('overflow-x-auto')
   })
 
   it('keeps the Presence child mounted until its exit animation finishes', async () => {
@@ -174,7 +174,7 @@ describe('AeCompareTray', () => {
     const fallbackFocusRef = createRef<HTMLButtonElement>()
     const { rerender } = render(
       <AeCompareTray
-        operations={[operation(1), operation(2)]}
+        tools={[tool(1), tool(2)]}
         onRemove={() => undefined}
         onClear={() => undefined}
         onCompare={() => undefined}
@@ -184,7 +184,7 @@ describe('AeCompareTray', () => {
 
     rerender(
       <AeCompareTray
-        operations={[]}
+        tools={[]}
         onRemove={() => undefined}
         onClear={() => undefined}
         onCompare={() => undefined}
@@ -192,7 +192,7 @@ describe('AeCompareTray', () => {
       />,
     )
 
-    const exitingTray = screen.getByRole('complementary', { name: 'Operation comparison' })
+    const exitingTray = screen.getByRole('complementary', { name: 'Tool comparison' })
     expect(exitingTray.getAttribute('data-state')).toBe('closed')
 
     const animationEnd = new Event('animationend', { bubbles: true })
@@ -202,39 +202,39 @@ describe('AeCompareTray', () => {
     fireEvent(exitingTray, animationEnd)
 
     await waitFor(() => {
-      expect(screen.queryByRole('complementary', { name: 'Operation comparison' })).toBeNull()
+      expect(screen.queryByRole('complementary', { name: 'Tool comparison' })).toBeNull()
     })
   })
 
   it('shares the compare endpoint maximum instead of inventing a second UI limit', () => {
     const fourRefs = Array.from(
-      { length: AE_COMPARE_MAX_OPERATIONS },
-      (_, index) => operationRef(index + 1),
+      { length: AE_COMPARE_MAX_TOOLS },
+      (_, index) => toolRef(index + 1),
     )
-    expect(AE_COMPARE_MAX_OPERATIONS).toBe(4)
-    expect(operationCompareInputSchema.safeParse({ operationRefs: fourRefs }).success).toBe(true)
+    expect(AE_COMPARE_MAX_TOOLS).toBe(4)
+    expect(toolCompareInputSchema.safeParse({ toolRefs: fourRefs }).success).toBe(true)
     expect(
-      operationCompareInputSchema.safeParse({
-        operationRefs: [...fourRefs, operationRef(AE_COMPARE_MAX_OPERATIONS + 1)],
+      toolCompareInputSchema.safeParse({
+        toolRefs: [...fourRefs, toolRef(AE_COMPARE_MAX_TOOLS + 1)],
       }).success,
     ).toBe(false)
   })
 })
 
-function operation(index: number): OperationCardViewModel {
+function tool(index: number): ToolCardViewModel {
   return {
-    operationRef: operationRef(index),
-    title: `Operation ${index.toLocaleString()}`,
+    toolRef: toolRef(index),
+    title: `Tool ${index.toLocaleString()}`,
     summary: `Summary ${index.toLocaleString()}`,
-    supplierName: `Supplier ${index.toLocaleString()}`,
-    supplierSlug: `supplier-${index.toLocaleString()}`,
-    supplierInitials: `S${index.toLocaleString()}`,
+    providerName: `Provider ${index.toLocaleString()}`,
+    providerSlug: `supplier-${index.toLocaleString()}`,
+    providerInitials: `S${index.toLocaleString()}`,
     capabilityId: 'test.compare',
     capability: 'Test comparison',
     category: {
       id: 'other',
       label: 'Other',
-      description: 'Other Operations.',
+      description: 'Other Tools.',
     },
     price: `USD ${index.toLocaleString()}.00`,
     authentication: 'No connection required',
@@ -251,7 +251,7 @@ function operation(index: number): OperationCardViewModel {
     },
     popularity: {
       kind: 'observed',
-      completedInvocations: 0,
+      completedCalls: 0,
       display: 'No completed calls yet',
       definition: 'Completed calls.',
     },
@@ -265,6 +265,6 @@ function operation(index: number): OperationCardViewModel {
   }
 }
 
-function operationRef(index: number): `operation:v1:${string}` {
+function toolRef(index: number): `operation:v1:${string}` {
   return `operation:v1:${index.toString(16).padStart(64, '0')}`
 }

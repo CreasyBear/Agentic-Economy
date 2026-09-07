@@ -6,7 +6,7 @@ import {
 } from '@/modules/capability-supply/owner-supply-validators'
 import type { Doc } from '../_generated/dataModel'
 import type { OwnerSupplyFunnelResult } from './contracts'
-import { projectProviderManagementStatus } from '@/modules/capability-supply/operation-health'
+import { projectProviderManagementStatus } from '@/modules/capability-supply/tool-health'
 
 type OwnerSupplyAvailable = Extract<
   OwnerSupplyFunnelResult,
@@ -96,7 +96,7 @@ export function ownerSupplyPublicationDetails(input: Readonly<{
     ),
     publicationRef: publication.publicationRef,
     publicationRevision: publication.revision,
-    operationRef: publication.operationRef,
+    toolRef: publication.toolRef,
     authorityMode: ownerSupplyLiteral(
       publication.authorityMode,
       [
@@ -318,7 +318,7 @@ export function ownerSupplyOfferingResult(input: Readonly<{
     ...(publication === undefined
       ? {}
       : {
-          operationRef: publication.operationRef,
+          toolRef: publication.toolRef,
           publicationRef: publication.publicationRef,
         }),
     ...(publicationDetails === undefined ? {} : { publication: publicationDetails }),

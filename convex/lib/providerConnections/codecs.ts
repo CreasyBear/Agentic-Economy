@@ -2,7 +2,7 @@ import type { Id } from '../../_generated/dataModel'
 import type {
   ProviderConnection,
   ProviderConnectionCommandResult,
-  ProviderConnectionInvocationLease,
+  ProviderConnectionCallLease,
 } from '../../../src/modules/capability-supply/provider-connection'
 import type {
   ProviderConnectionLeaseRow,
@@ -105,11 +105,11 @@ export function projectCommandResult(result: ProviderConnectionCommandResult) {
     : { kind: 'duplicate' as const, connection, commandDigest: result.commandDigest }
 }
 
-export function toLeaseDomain(row: ProviderConnectionLeaseRow): ProviderConnectionInvocationLease {
+export function toLeaseDomain(row: ProviderConnectionLeaseRow): ProviderConnectionCallLease {
   return row
 }
 
-function optionalLeaseFields(lease: ProviderConnectionInvocationLease) {
+function optionalLeaseFields(lease: ProviderConnectionCallLease) {
   return Object.fromEntries(Object.entries({
     readinessDigest: lease.readinessDigest,
     consumedAt: lease.consumedAt,
@@ -118,7 +118,7 @@ function optionalLeaseFields(lease: ProviderConnectionInvocationLease) {
 }
 
 export function toLeaseRow(
-  lease: ProviderConnectionInvocationLease,
+  lease: ProviderConnectionCallLease,
   _commandId: string,
   _commandDigest: string,
 ): ProviderConnectionLeaseRow {
@@ -133,8 +133,8 @@ export function toLeaseRow(
     grantRef: lease.grantRef,
     grantGeneration: lease.grantGeneration,
     ...optionalLeaseFields(lease),
-    invocationRef: lease.invocationRef,
-    operationRef: lease.operationRef,
+    callRef: lease.callRef,
+    toolRef: lease.toolRef,
     connectionRef: lease.connectionRef,
     providerRef: lease.providerRef,
     providerAccountRef: lease.providerAccountRef,

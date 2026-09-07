@@ -1,9 +1,9 @@
 /**
  * Qualified Use delivery receipts (ADR-034).
  *
- * A Qualified Use is one authorized production invocation whose pinned contract
- * accepted the input and whose terminal supplier result passed output/evidence
- * validation. It is evidence only: Action Invocation stays the lifecycle
+ * A Qualified Use is one authorized production Call whose pinned contract
+ * accepted the input and whose terminal Provider result passed output/evidence
+ * validation. It is evidence only: Action execution stays the lifecycle
  * authority and the money ledger stays the economic authority. Receipts are
  * immutable — corrections append reversal facts elsewhere rather than mutating
  * delivery history.
@@ -23,7 +23,7 @@ export type QualifiedUsePrincipalClass =
  * Identity of the delivery being attested. Permanently unique per receipt.
  */
 export type QualifiedUseIdentity = Readonly<{
-  invocationRef: string
+  callRef: string
   attemptRef: string
   effectGeneration: number
 }>
@@ -34,7 +34,7 @@ export type QualifiedUseIdentity = Readonly<{
  */
 export type QualifiedUseMaterial = Readonly<{
   businessId: string
-  operationRef: string
+  toolRef: string
   publicationRef: string
   publicationRevision: number
   contractDigest: string
@@ -75,7 +75,7 @@ export type QualifiedUseWriteDecision =
   | Readonly<{ kind: 'refused'; code: 'qualified_use_identity_conflict' }>
 
 export function qualifiedUseRef(identity: QualifiedUseIdentity): string {
-  return `qualified-use:v1:${identity.invocationRef}:${identity.attemptRef}:${identity.effectGeneration}`
+  return `qualified-use:v1:${identity.callRef}:${identity.attemptRef}:${identity.effectGeneration}`
 }
 
 export function qualifiedUseMaterialDigest(
@@ -83,11 +83,11 @@ export function qualifiedUseMaterialDigest(
 ): string {
   return canonicalDigest({
     format: 'ae.money.qualified-use-material:v1',
-    invocationRef: input.invocationRef,
+    callRef: input.callRef,
     attemptRef: input.attemptRef,
     effectGeneration: input.effectGeneration,
     businessId: input.businessId,
-    operationRef: input.operationRef,
+    toolRef: input.toolRef,
     publicationRef: input.publicationRef,
     publicationRevision: input.publicationRevision,
     contractDigest: input.contractDigest,
@@ -104,7 +104,7 @@ export function sameQualifiedUseIdentity(
   right: QualifiedUseIdentity,
 ): boolean {
   return (
-    left.invocationRef === right.invocationRef &&
+    left.callRef === right.callRef &&
     left.attemptRef === right.attemptRef &&
     left.effectGeneration === right.effectGeneration
   )
@@ -120,13 +120,13 @@ export function qualifiedUseEligibility(
     environment: string
     contractValidOutput: boolean
     releaseOutcome: 'released' | 'not_released' | 'uncertain'
-    ownerSelfInvocation: boolean
+    ownerSelfCall: boolean
     refundedBeforeDelivery: boolean
   }>,
 ): QualifiedUseEligibility {
   if (input.environment !== 'production')
     return { kind: 'excluded', reason: 'non_production_environment' }
-  if (input.ownerSelfInvocation)
+  if (input.ownerSelfCall)
     return { kind: 'excluded', reason: 'owner_self_invocation' }
   if (input.releaseOutcome === 'uncertain')
     return { kind: 'excluded', reason: 'outcome_uncertain' }
@@ -149,11 +149,11 @@ export function buildQualifiedUseReceipt(
   return {
     qualifiedUseRef: qualifiedUseRef(input),
     materialDigest: qualifiedUseMaterialDigest(input),
-    invocationRef: input.invocationRef,
+    callRef: input.callRef,
     attemptRef: input.attemptRef,
     effectGeneration: input.effectGeneration,
     businessId: input.businessId,
-    operationRef: input.operationRef,
+    toolRef: input.toolRef,
     publicationRef: input.publicationRef,
     publicationRevision: input.publicationRevision,
     contractDigest: input.contractDigest,

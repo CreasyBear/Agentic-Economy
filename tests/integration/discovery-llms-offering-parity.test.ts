@@ -28,8 +28,8 @@ describe('durable llms Offering parity', () => {
     const result = await backend.query(api.discovery.readLlmsTxt, {
       canonicalBaseUrl: 'https://ae.example', routingBaseUrl: 'https://ae.example', now: 3,
     })
-    expect(result.body).toContain('## Capability market loop')
-    expect(result.body).toContain('The Operation catalogue is the canonical market')
+    expect(result.body).toContain('## Tool market loop')
+    expect(result.body).toContain('The Tool catalogue is the canonical market')
     expect(result.body).not.toContain('- none')
     expect(result.body).not.toContain('total=0')
     expect(result.urls).not.toContain('https://ae.example/offering-engineering')

@@ -73,7 +73,7 @@ export type { X402EvmReceipt } from './internal/x402-settlement-verifier'
 export { readGuardedX402EvmReceipt } from './internal/x402-evm-receipt-reader'
 export {
   chargeSettlementOutcome,
-  economicRailForInvocation,
+  economicRailForCall,
   paymentLaneAdmission,
   paymentObservationDigest,
   transportObservationDigest,
@@ -83,7 +83,7 @@ export {
   type PaymentLaneAdmission,
   type X402ExecutionContext,
   type X402SettlementStatus,
-} from './internal/x402-invocation-policy'
+} from './internal/x402-call-policy'
 
 export {
   qualifySuppliedCandidate,
@@ -104,7 +104,7 @@ export {
 } from './internal/x402-seller-onboarding'
 export type {
   CreateSellerOnboardingCanaryInput,
-  CurrentSellerCanaryOperationCommitment,
+  CurrentSellerCanaryQuote,
   EvaluateX402SellerPromotionInput,
   OperationExecutionPurpose,
   SellerCanaryOutputEvidenceRequirement,
@@ -164,7 +164,7 @@ export {
   type ProviderConnectionCleanupWorkKind,
   type ProviderConnectionCommandResult,
   type ProviderConnectionCredentialResolution,
-  type ProviderConnectionInvocationLease,
+  type ProviderConnectionCallLease,
   type ProviderConnectionLeaseApproval,
   type ProviderConnectionLeaseAuthoritySnapshot,
   type ProviderConnectionLeaseCommandResult,

@@ -44,7 +44,7 @@ import {
   readX402PaymentAuthorizationHandler,
   readX402PaymentAuthorizationReturns,
 } from './moneyX402PaymentRead'
-import { persistedInvocationAuthorityIsCurrent } from './moneyBillingAuthorization'
+import { persistedCallAuthorityIsCurrent } from './moneyBillingAuthorization'
 
 export const prepareX402PaymentAuthorization = internalMutation({
   args: prepareX402PaymentAuthorizationArgs,
@@ -133,11 +133,11 @@ export const reconcileX402PaymentAttempt = internalMutation({
     if (
       attempt === null ||
       attempt.dispatchRef !== args.dispatchRef ||
-      attempt.operationRef !== args.operationRef ||
+      attempt.toolRef !== args.toolRef ||
       attempt.inputDigest !== args.inputDigest ||
-      !(await persistedInvocationAuthorityIsCurrent(ctx, {
-        invocationRef: attempt.dispatchRef,
-        operationRef: attempt.operationRef,
+      !(await persistedCallAuthorityIsCurrent(ctx, {
+        callRef: attempt.dispatchRef,
+        toolRef: attempt.toolRef,
         inputDigest: attempt.inputDigest,
         attemptRef: attempt.attemptRef,
       }))

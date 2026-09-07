@@ -141,7 +141,7 @@ export const fundingHandoffConfigAction = defineAction<Record<string, never>, Fu
   parameters: [], readOnly: true,
   effect: { class: 'observation', reversible: true, recipientKind: 'none', dataClasses: [], spendExposure: 'none', approval: 'none' },
   surfaces: ['http', 'mcp'],
-  credentialAdmission: { scope: 'market_operations:invoke', authority: 'descriptor_classified' },
+  credentialAdmission: { scope: 'market_tools:call', authority: 'descriptor_classified' },
   invocationContract: {
     version: 'funding-handoff-config:v1', consequenceClass: 'read_only', materialInputPaths: [], authorityRequirement: 'principal',
     retryClass: 'replayable', expectedEvidence: ['funding_constraints'], safeContinuations: [FUNDING_HANDOFF_CREATE_ACTION_ID],
@@ -170,7 +170,7 @@ export const fundingHandoffCreateAction = defineAction<CreateFundingHandoffInput
   effect: { class: 'external_state_change', reversible: true, recipientKind: 'provider_system', dataClasses: ['payment_handoff'], spendExposure: 'none', approval: 'none' },
   surfaces: ['http', 'mcp'],
   mcp: { idempotent: true, openWorld: true, destructive: false },
-  credentialAdmission: { scope: 'market_operations:invoke', authority: 'descriptor_classified' },
+  credentialAdmission: { scope: 'market_tools:call', authority: 'descriptor_classified' },
   invocationContract: {
     version: 'funding-handoff-create:v1', consequenceClass: 'external_effect', materialInputPaths: ['principalAmount', 'idempotencyKey'],
     authorityRequirement: 'principal', retryClass: 'replayable', expectedEvidence: ['stripe_checkout_session'],
@@ -191,7 +191,7 @@ export const fundingHandoffStatusAction = defineAction<FundingHandoffStatusInput
   readOnly: true,
   effect: { class: 'observation', reversible: true, recipientKind: 'none', dataClasses: ['payment_handoff'], spendExposure: 'none', approval: 'none' },
   surfaces: ['http', 'mcp'],
-  credentialAdmission: { scope: 'market_operations:invoke', authority: 'descriptor_classified' },
+  credentialAdmission: { scope: 'market_tools:call', authority: 'descriptor_classified' },
   invocationContract: {
     version: 'funding-handoff-status:v1', consequenceClass: 'read_only', materialInputPaths: ['fundingSessionId'], authorityRequirement: 'principal',
     retryClass: 'replayable', expectedEvidence: ['funding_lifecycle', 'usable_balance'], safeContinuations: ['operation.invoke'],

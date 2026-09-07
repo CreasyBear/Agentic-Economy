@@ -27,7 +27,7 @@ import {
   supplyConnectionRevokeAction,
   supplyEarningsAction,
   supplyOffboardingStatusAction,
-  supplyOperationsListAction,
+  supplyToolsListAction,
   supplyPublishAction,
   supplyRecheckAction,
   supplyRepublishAction,
@@ -41,7 +41,7 @@ const MAX_SUPPLY_ACTION_BODY_BYTES = 320 * 1024
 
 export const SUPPLY_HTTP_ACTIONS = Object.freeze({
   sourcePreview: supplySourcePreviewAction,
-  operationsList: supplyOperationsListAction,
+  toolsList: supplyToolsListAction,
   status: supplyStatusAction,
   publish: supplyPublishAction,
   withdraw: supplyWithdrawAction,
@@ -78,14 +78,14 @@ function authenticationFailure(request: Request, reason: string, status: number,
     status,
     detail: reason === 'scope_required'
       ? `The current agent credential does not grant ${scope}.`
-      : 'Connect an owner-issued supplier credential before managing supplier Operations.',
+      : 'Connect an owner-issued provider credential before managing Provider Tools.',
   }, {
     Vary: 'Authorization',
     'WWW-Authenticate': bearerChallenge(resolveCanonicalBaseUrl(request).baseUrl, scope),
   }), correlationId)
 }
 
-/** Canonical authenticated HTTP adapter for every supplier action contract. */
+/** Canonical authenticated HTTP adapter for every provider action contract. */
 export async function handleSupplyActionPost(
   request: Request,
   actionName: SupplyHttpActionName,
@@ -98,7 +98,7 @@ export async function handleSupplyActionPost(
         status: 413,
         kind: 'PAYLOAD_TOO_LARGE',
         code: bounded.code,
-        detail: 'The supplier action body is too large.',
+        detail: 'The provider action body is too large.',
       }), correlationId)
     }
 
@@ -124,7 +124,7 @@ export async function handleSupplyActionPost(
         status: 400,
         kind: 'INVALID_ARGUMENT',
         code: 'invalid_json',
-        detail: 'The supplier action body must be valid JSON.',
+        detail: 'The provider action body must be valid JSON.',
       }), correlationId)
     }
 
@@ -171,7 +171,7 @@ export async function handleSupplyActionPost(
       const failure = gatewayFailureToProblem({ kind: 'error', code: 'source_unavailable', retryable: true })
       return withRequestCorrelationHeader(problem({
         ...failure,
-        detail: 'The supplier Operation source is temporarily unavailable.',
+        detail: 'The Provider Tool source is temporarily unavailable.',
       }), correlationId)
     }
   })

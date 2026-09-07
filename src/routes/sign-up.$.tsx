@@ -46,7 +46,7 @@ function SignUpRoute() {
     : isAgentAccessFlow
       ? 'After you create your account, you’ll return to the agent connection you started.'
       : isProviderFlow
-        ? 'After you create your account, you’ll continue to the Operation publishing workspace.'
+        ? 'After you create your account, you’ll continue to the Tool publishing workspace.'
         : redirect === undefined
           ? 'After you create your account, you’ll return to your account settings.'
           : 'After you create your account, you’ll return to where you left off.'
@@ -63,7 +63,7 @@ function SignUpRoute() {
             body={body}
           >
             <AeSiteButton asChild>
-              <Link to="/market" search={{ window: '30d' }} hash="operations">
+              <Link to="/market" search={{ window: '30d' }} hash="tools">
                 Browse the catalog
               </Link>
             </AeSiteButton>

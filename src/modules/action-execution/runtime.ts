@@ -44,7 +44,7 @@ export type {
   ExecutionActor,
   ExecutionDecision,
   PreparedExecution,
-  StandingMandateAuthorityBasis,
+  SpendingPolicyAuthorityBasis,
 } from './contracts'
 export type {
   DurableActionExecutionPort,

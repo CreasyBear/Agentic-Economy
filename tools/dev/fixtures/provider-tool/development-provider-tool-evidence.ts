@@ -1,0 +1,250 @@
+import {
+  evaluateAdr009Transfer,
+  type TransferBoundaryEvent,
+} from '../../../../src/modules/action-execution/transfer-evaluator'
+import {
+  cancelDevelopmentProviderToolAction,
+  executeDevelopmentProviderToolAction,
+  type DevelopmentProviderToolResult,
+} from './development-provider-tool.actions'
+import {
+  providerToolActor,
+  providerToolInput,
+  cancellationInput,
+} from './development-provider-tool-fixture'
+import { projectDurableRun } from './development-provider-tool-packet'
+import { createDevelopmentProviderToolProvider } from './development-provider-tool-provider'
+import {
+  runProviderToolReconciliation,
+  runCancelBeforeRelease,
+} from './development-provider-tool-recovery'
+import {
+  runCancellationInvocation,
+  runProviderToolExecution,
+} from './development-provider-tool-runner'
+
+export async function runDevelopmentProviderToolEvidence() {
+  const provider = createDevelopmentProviderToolProvider()
+  const availability = await provider.availability()
+  const requestOrigin = { kind: 'request_owned', requestRef: 'mock:request:operation', revision: 1 } as const
+  const standaloneOrigin = {
+    kind: 'standalone', callerRef: 'mock:caller:operation', principalRef: 'mock:principal:operation',
+  } as const
+
+  const requestOperation = providerToolInput(
+    availability, providerToolActor(requestOrigin).principalRef, 'mock:operation:request-owned',
+  )
+  const standaloneOperation = providerToolInput(
+    availability, providerToolActor(standaloneOrigin).principalRef, 'mock:operation:standalone',
+  )
+  const request = await runProviderToolExecution({
+    provider, operation: requestOperation, origin: requestOrigin, ref: 'request-owned',
+  })
+  const standalone = await runProviderToolExecution({
+    provider, operation: standaloneOperation, origin: standaloneOrigin, ref: 'standalone',
+  })
+
+  const sharedOriginA = {
+    kind: 'standalone', callerRef: 'mock:caller:dedupe:a', principalRef: 'mock:principal:dedupe',
+  } as const
+  const sharedOriginB = {
+    kind: 'standalone', callerRef: 'mock:caller:dedupe:b', principalRef: 'mock:principal:dedupe',
+  } as const
+  const sharedOperation = providerToolInput(
+    availability, sharedOriginA.principalRef, 'mock:operation:dedupe',
+  )
+  const effectsBeforeDedupe = provider.effectCount()
+  const dedupeA = await runProviderToolExecution({
+    provider, operation: sharedOperation, origin: sharedOriginA, ref: 'dedupe-a',
+  })
+  const effectsAfterFirst = provider.effectCount()
+  const dedupeB = await runProviderToolExecution({
+    provider, operation: structuredClone(sharedOperation), origin: sharedOriginB, ref: 'dedupe-b',
+  })
+  const effectsAfterReplay = provider.effectCount()
+  const conflict = await runProviderToolExecution({
+    provider,
+    operation: { ...sharedOperation, customer: { ...sharedOperation.customer, email: 'changed@example.test' } },
+    origin: sharedOriginB,
+    ref: 'dedupe-conflict',
+  })
+  const effectsAfterConflict = provider.effectCount()
+
+  const principalOrigin = {
+    kind: 'standalone', callerRef: 'mock:caller:principal-refusal', principalRef: 'mock:principal:authority',
+  } as const
+  const principalRefusal = await runProviderToolExecution({
+    provider,
+    operation: providerToolInput(availability, 'mock:principal:other', 'mock:operation:principal-refusal'),
+    origin: principalOrigin,
+    ref: 'principal-refusal',
+  })
+  const expiredOperation = providerToolInput(
+    availability, 'mock:principal:expired', 'mock:operation:expired',
+  )
+  const expired = await runProviderToolExecution({
+    provider,
+    operation: expiredOperation,
+    origin: {
+      kind: 'standalone', callerRef: 'mock:caller:expired', principalRef: expiredOperation.customer.principalRef,
+    },
+    ref: 'expired',
+    nowMs: Date.parse(expiredOperation.slot.expiresAt) + 1,
+  })
+
+  const unknownOrigin = {
+    kind: 'standalone', callerRef: 'mock:caller:unknown', principalRef: 'mock:principal:unknown',
+  } as const
+  const recovery = await runProviderToolReconciliation({
+    provider,
+    operation: providerToolInput(availability, unknownOrigin.principalRef, 'mock:operation:unknown'),
+    origin: unknownOrigin,
+  })
+  const cancelBefore = await runCancelBeforeRelease({
+    operation: providerToolInput(availability, 'mock:principal:cancel-before', 'mock:operation:cancel-before'),
+    origin: {
+      kind: 'standalone', callerRef: 'mock:caller:cancel-before', principalRef: 'mock:principal:cancel-before',
+    },
+  })
+
+  const effect = effectResult(standalone.view.observedResolution)
+  const cancellation = cancellationInput({
+    effectRef: effect.effectRef,
+    providerRef: effect.providerRef,
+    principalRef: standalone.owner.principalRef,
+    operationKey: 'mock:operation:cancellation',
+  })
+  const cancellationRun = await runCancellationInvocation({
+    provider, cancellation, origin: standaloneOrigin, ref: 'cancellation',
+  })
+  const cancellationReplay = await runCancellationInvocation({
+    provider, cancellation: structuredClone(cancellation), origin: standaloneOrigin, ref: 'cancellation-replay',
+  })
+  const cancellationConflict = await runCancellationInvocation({
+    provider,
+    cancellation: { ...cancellation, reason: 'Changed cancellation reason.' },
+    origin: standaloneOrigin,
+    ref: 'cancellation-conflict',
+  })
+  const cancellationEffectsBeforePrincipalRefusal = provider.cancellationEffectCount()
+  const cancellationPrincipalRefusal = await runCancellationInvocation({
+    provider,
+    cancellation: { ...cancellation, principalRef: 'mock:principal:other', operationKey: 'mock:operation:cancellation-other' },
+    origin: standaloneOrigin,
+    ref: 'cancellation-principal-refusal',
+  })
+
+  const order = standalone.events.map(({ kind }) => kind)
+  const authorityIndex = order.indexOf('authority_decision')
+  const releaseIndex = order.indexOf('provider_release')
+  const authorityBeforeRelease = authorityIndex >= 0 && releaseIndex > authorityIndex
+  const standaloneCold = await standalone.tracer.coldResume(standalone.view.executionRef)
+  const transfer = evaluateAdr009Transfer({
+    events: {
+      direct_read: [],
+      direct_consequential: [
+        { kind: 'direct_runner_started', actionId: executeDevelopmentProviderToolAction.id },
+        { kind: 'provider_release', actionId: executeDevelopmentProviderToolAction.id },
+        { kind: 'direct_runner_returned', actionId: executeDevelopmentProviderToolAction.id, outcome: 'effect_confirmed' },
+      ],
+      controlled: [
+        ...standalone.events.filter(
+          (event): event is TransferBoundaryEvent =>
+            event.kind !== 'spending_policy_authorization',
+        ),
+        { kind: 'attempt', executionRef: standalone.view.executionRef, attemptRef: standalone.view.attempts[0]!.attemptRef },
+      ],
+    },
+    requiredContinuations: { direct_read: 0, direct_consequential: 1, controlled: 1 },
+    controlledReadback: {
+      executionVersion: standalone.view.executionVersion,
+      controlRecords: standalone.state.controls.size,
+      attributableAttempts: standalone.view.attempts.length,
+      durableHistoryRecords: standalone.state.history.get(standalone.view.executionRef)?.length ?? 0,
+      terminalResultReconstructed: standaloneCold.inspect(standalone.view.executionRef)
+        ?.control.state === 'terminal',
+      exactAuthorityBeforeRelease: authorityBeforeRelease,
+      retryClass: executeDevelopmentProviderToolAction.invocationContract!.retryClass,
+    },
+    referenceReuse: {
+      completedReferences: 1, completedNodes: 1, currentNodes: 0,
+      effectsBeforeReuse: 1, effectsAfterReuse: 1,
+      copiedLifecycleOrResultFields: 0, persistedRoutePlansOrBundles: 0,
+    },
+  })
+  const executableChecks = {
+    authorityBeforeRelease,
+    dedupeThroughActionPlane:
+      effectResult(dedupeA.view.observedResolution).effectRef
+      === effectResult(dedupeB.view.observedResolution).effectRef
+      && effectsAfterFirst === effectsAfterReplay
+      && effectsAfterFirst === effectsBeforeDedupe + 1,
+    conflictWithoutEffect:
+      conflict.view.observedResolution.state === 'returned'
+      && conflict.view.observedResolution.result.kind === 'effect_refused'
+      && effectsAfterConflict === effectsAfterReplay,
+    providerCancellation:
+      cancellationRun.view.observedResolution.state === 'returned'
+      && cancellationRun.view.observedResolution.result.kind === 'effect_cancellation_confirmed'
+      && provider.cancellationEffectCount() === cancellationEffectsBeforePrincipalRefusal,
+  }
+
+  return {
+    environment: 'MOCK/DEVELOPMENT ONLY' as const,
+    proofClass: 'labelled_local_development',
+    action: { id: executeDevelopmentProviderToolAction.id, version: 'v1', surfaces: [] },
+    cancellationAction: { id: cancelDevelopmentProviderToolAction.id, version: 'v1', surfaces: [] },
+    availability,
+    eventOrder: standalone.events,
+    origins: [request.view.origin, standalone.view.origin],
+    principalRefusal: principalRefusal.view,
+    expiryRefusal: expired.view,
+    idempotency: {
+      first: dedupeA.view, replay: dedupeB.view, conflict: conflict.view,
+      effectsBeforeDedupe, effectsAfterFirst, effectsAfterReplay, effectsAfterConflict,
+    },
+    reconciliation: {
+      before: recovery.uncertain.view,
+      evidence: recovery.evidence,
+      after: recovery.reconciled,
+    },
+    cancellation: {
+      beforeRelease: cancelBefore.view,
+      confirmed: cancellationRun.view,
+      replay: cancellationReplay.view,
+      conflict: cancellationConflict.view,
+      principalRefusal: cancellationPrincipalRefusal.view,
+      cancellationEffects: provider.cancellationEffectCount(),
+      originalEffect: standalone.view.observedResolution,
+      providerEffectRecord: provider.inspect(standaloneOperation.operationKey),
+    },
+    durable: {
+      terminal: projectDurableRun(standalone),
+      uncertain: {
+        ...projectDurableRun(recovery.uncertain),
+        source: {
+          ...projectDurableRun(recovery.uncertain).source,
+          before: recovery.uncertain.view,
+          after: recovery.reconciled,
+          reconciliationEvidence: recovery.evidence,
+        },
+      },
+    },
+    executableChecks,
+    proportionality: transfer,
+    gate7: Object.values(executableChecks).every(Boolean)
+      && transfer.failedFalsifiers.length === 0
+      ? 'passes_for_declared_development_class'
+      : 'open',
+    claimCeiling: 'Labelled local development evidence only. No customer reachability, hosted behavior, real provider fulfilment, production safety, cold-agent usability, or customer value.',
+  }
+}
+
+function effectResult(
+  resolution: import('@/modules/action-execution').ActionExecutionView<DevelopmentProviderToolResult>['observedResolution'],
+) {
+  if (resolution.state !== 'returned' || resolution.result.kind !== 'effect_confirmed') {
+    throw new Error('confirmed_effect_missing')
+  }
+  return resolution.result
+}

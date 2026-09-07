@@ -54,34 +54,34 @@ function isAcceptedAuthority(
   value: unknown,
 ): value is NonNullable<ActionExecutionView['acceptedAuthority']> {
   if (!isRecord(value) || typeof value.kind !== 'string') return false
-  if (value.kind === 'approve_each') {
+  if (value.kind === 'approval_required') {
     return typeof value.authorityRef === 'string' && value.authorityRef.length > 0
   }
-  if (value.kind === 'standing_mandate_use') {
-    const mandateVersion = value.mandateVersion
-    const mandateGeneration = value.mandateGeneration
-    return typeof value.mandateRef === 'string'
-      && value.mandateRef.length > 0
-      && typeof mandateVersion === 'number'
-      && Number.isSafeInteger(mandateVersion)
-      && mandateVersion >= 1
-      && typeof mandateGeneration === 'number'
-      && Number.isSafeInteger(mandateGeneration)
-      && mandateGeneration >= 1
+  if (value.kind === 'spending_policy_use') {
+    const spendingPolicyVersion = value.spendingPolicyVersion
+    const spendingPolicyGeneration = value.spendingPolicyGeneration
+    return typeof value.spendingPolicyRef === 'string'
+      && value.spendingPolicyRef.length > 0
+      && typeof spendingPolicyVersion === 'number'
+      && Number.isSafeInteger(spendingPolicyVersion)
+      && spendingPolicyVersion >= 1
+      && typeof spendingPolicyGeneration === 'number'
+      && Number.isSafeInteger(spendingPolicyGeneration)
+      && spendingPolicyGeneration >= 1
       && typeof value.authorityUseRef === 'string'
       && value.authorityUseRef.length > 0
       && typeof value.grantEvidenceRef === 'string'
       && value.grantEvidenceRef.length > 0
   }
-  if (value.kind !== 'customer_request_mandate_use') return false
+  if (value.kind !== 'customer_request_authorization_use') return false
   const requestRevision = value.requestRevision
   const routeGeneration = value.routeGeneration
   const authorization = value.authorization
   if (
-    typeof value.mandateRef !== 'string'
-    || value.mandateRef.length === 0
-    || typeof value.mandateDigest !== 'string'
-    || value.mandateDigest.length === 0
+    typeof value.requestAuthorizationRef !== 'string'
+    || value.requestAuthorizationRef.length === 0
+    || typeof value.requestAuthorizationDigest !== 'string'
+    || value.requestAuthorizationDigest.length === 0
     || typeof requestRevision !== 'number'
     || !Number.isSafeInteger(requestRevision)
     || requestRevision < 1
@@ -101,11 +101,11 @@ function isAcceptedAuthority(
       && typeof authorization.authorizationEvidenceDigest === 'string'
       && authorization.authorizationEvidenceDigest.length > 0
   }
-  return authorization.kind === 'standing_low_risk'
-    && typeof authorization.standingPolicyRef === 'string'
-    && authorization.standingPolicyRef.length > 0
-    && typeof authorization.standingPolicyDigest === 'string'
-    && authorization.standingPolicyDigest.length > 0
+  return authorization.kind === 'spending_policy_low_risk'
+    && typeof authorization.spendingPolicyRef === 'string'
+    && authorization.spendingPolicyRef.length > 0
+    && typeof authorization.spendingPolicyDigest === 'string'
+    && authorization.spendingPolicyDigest.length > 0
     && typeof authorization.authorityUseRef === 'string'
     && authorization.authorityUseRef.length > 0
 }

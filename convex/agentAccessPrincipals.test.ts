@@ -11,6 +11,7 @@ import type {
 } from '../src/modules/agent-access/agent-access'
 import { issuedAgentCanonicalRefs, issuedAgentGrantRef } from '../src/modules/agent-access/issued-agent-binding'
 import { defaultSandboxAgentAccessPolicy } from '../src/modules/agent-access/sandbox-policy'
+import { normalizeStoredAgentAccessGrant } from '../src/modules/agent-access/policy'
 import schema from './schema'
 import { api } from './_generated/api'
 import { resolveCanonicalAgentContext, validateCanonicalAgentDelegation } from './lib/canonicalAgentAuthority'
@@ -74,11 +75,11 @@ function bindingInput(subject = 'user_owner'): IssuedAgentBindingRegistration {
     displayName: 'Fresh CLI assistant',
     applicationRef: 'agentic-economy',
     environment: 'sandbox',
-    scopes: ['customer_requests:inspect_only', 'market_operations:invoke'],
-    authorityMode: 'inspect_only',
-    policy: defaultSandboxAgentAccessPolicy({ currency: 'USD', exponent: 2 }),
-    operationAccess: 'all_admitted',
-    operationRefs: [],
+    scopes: ['customer_requests:read_only', 'market_tools:call'],
+    authorityMode: 'read_only',
+    spendingPolicy: defaultSandboxAgentAccessPolicy({ currency: 'USD', exponent: 2 }),
+    toolAccess: 'all_admitted',
+    toolRefs: [],
     createdAt: NOW,
     expiresAt: NOW + 600_000,
   }
@@ -88,12 +89,12 @@ async function assertion(input: IssuedAgentBindingRegistration): Promise<Custome
   return await createCustomerRequestServiceAssertion({
     key: SERVICE_KEY,
     operation: OPERATION,
-    command: toStableHashValue({ ...input, scopes: [...input.scopes], operationRefs: [...input.operationRefs] }),
+    command: toStableHashValue({ ...input, scopes: [...input.scopes], toolRefs: [...input.toolRefs] }),
     principal: {
       principalId: 'ae:server-function',
       ownerId: 'ae:server-function',
       credentialId: 'ae:server-function',
-      scopes: ['market_operations:invoke'],
+      scopes: ['market_tools:call'],
     },
     issuedAt: NOW,
   })
@@ -106,7 +107,7 @@ async function operationAssertion(operation: string, command: Record<string, unk
     command: toStableHashValue(command),
     principal: {
       principalId: 'ae:server-function', ownerId: 'ae:server-function', credentialId: 'ae:server-function',
-      scopes: ['market_operations:invoke'],
+      scopes: ['market_tools:call'],
     },
     issuedAt: NOW,
   })
@@ -321,9 +322,9 @@ describe('issued agent binding', () => {
     const base = bindingInput()
     const input: IssuedAgentBindingRegistration = {
       ...base,
-      operationAccess: 'selected_operations',
-      operationRefs,
-      policy: { ...base.policy, operationAccess: 'selected_operations', operationRefs },
+      toolAccess: 'selected_tools',
+      toolRefs: operationRefs,
+      spendingPolicy: { ...base.spendingPolicy, toolAccess: 'selected_tools', toolRefs: operationRefs },
     }
     await expect(owner.mutation(registerIssuedBinding, { ...input, serviceAuth: await assertion(input) }))
       .resolves.toMatchObject({ kind: 'recorded' })
@@ -344,9 +345,9 @@ describe('issued agent binding', () => {
       environment: input.environment,
       scopes: input.scopes,
       authorityMode: input.authorityMode,
-      operationAccess: 'selected_operations',
-      operationRefs,
-      policy: input.policy,
+      toolAccess: 'selected_tools',
+      toolRefs: operationRefs,
+      spendingPolicy: input.spendingPolicy,
       createdAt: NOW,
       expiresAt: NOW + 600_000,
     }
@@ -354,19 +355,19 @@ describe('issued agent binding', () => {
       ...replacement,
       serviceAuth: await operationAssertion(
         'agentAccessPrincipals.prepareCredentialReplacementForServer',
-        { ...replacement, scopes: [...replacement.scopes], operationRefs: [...replacement.operationRefs] },
+        { ...replacement, scopes: [...replacement.scopes], toolRefs: [...replacement.toolRefs] },
       ),
     })).resolves.toMatchObject({ kind: 'recorded' })
     const replacementDelegation = await backend.run(async (ctx) => await ctx.db.query('authorityDelegationGrants')
       .withIndex('by_grantRef', (query) => query.eq('grantRef', replacement.grantRef)).unique())
     expect(replacementDelegation?.resourceRefs).toEqual(operationRefs)
 
-    const mismatched = { ...replacement, issuanceKey: 'selected-mismatch-12345678', grantRef: issuedAgentGrantRef('user_owner', 'selected-mismatch-12345678'), operationRefs: [firstOperationRef] }
+    const mismatched = { ...replacement, issuanceKey: 'selected-mismatch-12345678', grantRef: issuedAgentGrantRef('user_owner', 'selected-mismatch-12345678'), toolRefs: [firstOperationRef] }
     await expect(owner.mutation(prepareReplacement, {
       ...mismatched,
       serviceAuth: await operationAssertion(
         'agentAccessPrincipals.prepareCredentialReplacementForServer',
-        { ...mismatched, scopes: [...mismatched.scopes], operationRefs: [...mismatched.operationRefs] },
+        { ...mismatched, scopes: [...mismatched.scopes], toolRefs: [...mismatched.toolRefs] },
       ),
     })).resolves.toEqual({ kind: 'conflict' })
   })
@@ -423,8 +424,8 @@ describe('issued agent binding', () => {
       'connection:revoke',
       'market_supply:manage',
     ])
-    expect(canonicalAgentDelegationScopes(['market_operations:invoke'])).toEqual([
-      'market_operations:invoke',
+    expect(canonicalAgentDelegationScopes(['market_tools:call'])).toEqual([
+      'market_tools:call',
     ])
   })
 
@@ -485,9 +486,9 @@ describe('issued agent binding', () => {
       environment: first.environment,
       scopes: first.scopes,
       authorityMode: first.authorityMode,
-      operationAccess: first.operationAccess,
-      operationRefs: first.operationRefs,
-      policy: first.policy,
+      toolAccess: first.toolAccess,
+      toolRefs: first.toolRefs,
+      spendingPolicy: first.spendingPolicy,
       createdAt: NOW,
       expiresAt: NOW + 600_000,
     }
@@ -500,7 +501,7 @@ describe('issued agent binding', () => {
       ...replacement,
       serviceAuth: await operationAssertion(
         'agentAccessPrincipals.prepareCredentialReplacementForServer',
-        { ...replacement, scopes: [...replacement.scopes], operationRefs: [...replacement.operationRefs] },
+        { ...replacement, scopes: [...replacement.scopes], toolRefs: [...replacement.toolRefs] },
       ),
     })
     expect(prepared).toMatchObject({
@@ -579,7 +580,7 @@ describe('issued agent binding', () => {
       ...cancelledInput,
       serviceAuth: await operationAssertion(
         'agentAccessPrincipals.prepareCredentialReplacementForServer',
-        { ...cancelledInput, scopes: [...cancelledInput.scopes], operationRefs: [...cancelledInput.operationRefs] },
+        { ...cancelledInput, scopes: [...cancelledInput.scopes], toolRefs: [...cancelledInput.toolRefs] },
       ),
     })
     const cancel = {
@@ -661,9 +662,9 @@ describe('issued agent binding', () => {
       environment: first.environment,
       scopes: first.scopes,
       authorityMode: first.authorityMode,
-      operationAccess: first.operationAccess,
-      operationRefs: first.operationRefs,
-      policy: first.policy,
+      toolAccess: first.toolAccess,
+      toolRefs: first.toolRefs,
+      spendingPolicy: first.spendingPolicy,
       createdAt: NOW,
       expiresAt: NOW + 600_000,
     }
@@ -671,7 +672,7 @@ describe('issued agent binding', () => {
       ...replacement,
       serviceAuth: await operationAssertion(
         'agentAccessPrincipals.prepareCredentialReplacementForServer',
-        { ...replacement, scopes: [...replacement.scopes], operationRefs: [...replacement.operationRefs] },
+        { ...replacement, scopes: [...replacement.scopes], toolRefs: [...replacement.toolRefs] },
       ),
     })
     expect(prepared).toMatchObject({
@@ -730,9 +731,9 @@ describe('issued agent binding', () => {
       environment: first.environment,
       scopes: first.scopes,
       authorityMode: first.authorityMode,
-      operationAccess: first.operationAccess,
-      operationRefs: first.operationRefs,
-      policy: first.policy,
+      toolAccess: first.toolAccess,
+      toolRefs: first.toolRefs,
+      spendingPolicy: first.spendingPolicy,
       createdAt: NOW,
       expiresAt: NOW + 600_000,
     })
@@ -807,9 +808,9 @@ describe('issued agent binding', () => {
       environment: agentA.environment,
       scopes: agentA.scopes,
       authorityMode: agentA.authorityMode,
-      operationAccess: agentA.operationAccess,
-      operationRefs: agentA.operationRefs,
-      policy: agentA.policy,
+      toolAccess: agentA.toolAccess,
+      toolRefs: agentA.toolRefs,
+      spendingPolicy: agentA.spendingPolicy,
       createdAt: NOW,
       expiresAt: NOW + 600_000,
     }
@@ -817,7 +818,7 @@ describe('issued agent binding', () => {
       ...replacement,
       serviceAuth: await operationAssertion(
         'agentAccessPrincipals.prepareCredentialReplacementForServer',
-        { ...replacement, scopes: [...replacement.scopes], operationRefs: [...replacement.operationRefs] },
+        { ...replacement, scopes: [...replacement.scopes], toolRefs: [...replacement.toolRefs] },
       ),
     })
     const promote = {
@@ -991,9 +992,9 @@ describe('issued agent binding', () => {
       environment: agentA.environment,
       scopes: agentA.scopes,
       authorityMode: agentA.authorityMode,
-      operationAccess: agentA.operationAccess,
-      operationRefs: agentA.operationRefs,
-      policy: agentA.policy,
+      toolAccess: agentA.toolAccess,
+      toolRefs: agentA.toolRefs,
+      spendingPolicy: agentA.spendingPolicy,
       createdAt: NOW,
       expiresAt: NOW + 600_000,
     }
@@ -1001,7 +1002,7 @@ describe('issued agent binding', () => {
       ...extra,
       serviceAuth: await operationAssertion(
         'agentAccessPrincipals.prepareCredentialReplacementForServer',
-        { ...extra, scopes: [...extra.scopes], operationRefs: [...extra.operationRefs] },
+        { ...extra, scopes: [...extra.scopes], toolRefs: [...extra.toolRefs] },
       ),
     })
     const extraCredentialRef = String(extraPrepared.successorCredentialRef)
@@ -1238,13 +1239,17 @@ async function insertLifecycleRefreshFamily(
     const grants = await ctx.db.query('agentAccessGrants')
       .withIndex('by_credentialId_and_environment_and_lifecycle', (query) => query
         .eq('credentialId', providerCredentialId).eq('environment', access.environment).eq('lifecycle', 'active')).take(2)
-    const grant = grants.find((candidate) => candidate.principalId === principalRef)
+    const storedGrant = grants.find((candidate) => candidate.principalId === principalRef)
+    const normalizedGrant = storedGrant === undefined ? undefined : normalizeStoredAgentAccessGrant(storedGrant)
+    const grant = normalizedGrant?.format === 'ae.agent-access-grant:v2' ? normalizedGrant : undefined
+    const spendingPolicy = grant?.spendingPolicy.format === 'ae.agent-access-policy:v2'
+      ? grant.spendingPolicy
+      : undefined
     const ownerships = await ctx.db.query('accountOwnerships')
       .withIndex('by_accountRef_and_lifecycle', (query) => query.eq('accountRef', access.ownerId).eq('lifecycle', 'active')).take(2)
     const ownership = ownerships[0]
-    if (grant === undefined || grant.format !== 'ae.agent-access-grant:v2'
-      || grant.operationRefs === undefined || grant.policy.format !== 'ae.agent-access-policy:v2'
-      || grant.policy.operationRefs === undefined || ownerships.length !== 1 || ownership === undefined) {
+    if (grant === undefined || spendingPolicy === undefined
+      || ownerships.length !== 1 || ownership === undefined) {
       throw new Error('refresh lifecycle authority fixture invalid')
     }
     const familyRef = `refresh-family:${suffix}`
@@ -1254,11 +1259,11 @@ async function insertLifecycleRefreshFamily(
       ownerPrincipalRef: ownership.ownerPrincipalRef, providerSubject: 'user_owner',
       principalRef, displayName: 'Lifecycle refresh connection', applicationRef: access.applicationRef,
       environment: access.environment, scopes: [...access.scopes], authorityMode: access.authorityMode,
-      operationAccess: grant.operationAccess, operationRefs: [...grant.operationRefs],
-      policy: {
-        format: 'ae.agent-access-policy:v2', operationAccess: grant.policy.operationAccess,
-        operationRefs: [...grant.policy.operationRefs], environment: grant.policy.environment,
-        budget: { ...grant.policy.budget }, rate: { ...grant.policy.rate },
+      toolAccess: grant.toolAccess, toolRefs: [...grant.toolRefs],
+      spendingPolicy: {
+        format: 'ae.agent-access-policy:v2', toolAccess: spendingPolicy.toolAccess,
+        toolRefs: [...spendingPolicy.toolRefs], environment: spendingPolicy.environment,
+        budget: { ...spendingPolicy.budget }, rate: { ...spendingPolicy.rate },
       },
       currentCredentialRef: credentialRef, currentProviderCredentialId: providerCredentialId,
       currentGrantRef: grant.grantRef, currentGeneration: credential.generation,

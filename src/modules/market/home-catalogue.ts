@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import type { OperationCardViewModel } from "@/modules/market/operation-view-model";
+import type { ToolCardViewModel } from "@/modules/market/tool-view-model";
 import { readMarketRouteServer } from "@/modules/market/market.functions";
 
 const HOME_CAPABILITY_LIMIT = 6;
@@ -16,7 +16,7 @@ export type RootSearchParams = {
 export type HomeCapabilityRead =
   | Readonly<{
       kind: "ok";
-      operations: readonly OperationCardViewModel[];
+      tools: readonly ToolCardViewModel[];
       matchedCount: number;
     }>
   | Readonly<{ kind: "unavailable" }>;
@@ -48,13 +48,13 @@ export async function readHomeCapabilities(): Promise<HomeCapabilityRead> {
     if (projection.catalog.kind !== "ok") {
       return projection.catalog.kind === "unavailable"
         ? { kind: "unavailable" }
-        : { kind: "ok", operations: [], matchedCount: 0 };
+        : { kind: "ok", tools: [], matchedCount: 0 };
     }
 
     return {
       kind: "ok",
       matchedCount: projection.catalog.matchedCount,
-      operations: projection.catalog.items.slice(0, HOME_CAPABILITY_LIMIT),
+      tools: projection.catalog.items.slice(0, HOME_CAPABILITY_LIMIT),
     };
   } catch {
     return { kind: "unavailable" };

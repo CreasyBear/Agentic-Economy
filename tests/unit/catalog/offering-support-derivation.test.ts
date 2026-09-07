@@ -11,9 +11,9 @@ import {
   capabilityBindingRegistrationHash,
   capabilityOfferingEligibilityHash,
   capabilityOfferingRegistrationHash,
-  capabilityOperationId,
+  capabilityToolId,
   connectionAuthoritySnapshotFromProviderConnection,
-  createPublicOperationRef,
+  createPublicToolRef,
   defineCapabilityOfferingRegistration,
   defineCapabilityTransportBindingRegistration,
 } from '../../../src/modules/capability-supply/public'
@@ -42,8 +42,8 @@ const catalogOrigin = {
   declaredAccessPathRef: 'access:1',
   accessPathSourceHash: catalogAccessPathSourceHash,
 }
-const operationRef = createPublicOperationRef({
-  operationId: capabilityOperationId(contract.ref.capabilityId),
+const toolRef = createPublicToolRef({
+  operationId: capabilityToolId(contract.ref.capabilityId),
   publicationRef: 'publication:1',
   publicationRevision: 1,
   contractRef: contract.ref,
@@ -147,7 +147,7 @@ describe('catalogue support derivation', () => {
       }, 1)
       if (connectionResult.kind !== 'applied') throw new Error(`connection_fixture_${connectionResult.kind}`)
       const connection = connectionResult.connection
-      const connectionAuthority = connectionAuthoritySnapshotFromProviderConnection(connection, operationRef)
+      const connectionAuthority = connectionAuthoritySnapshotFromProviderConnection(connection, toolRef)
       const persistedConnectionAuthority = {
         ...connectionAuthority,
         grantedScopes: [...connectionAuthority.grantedScopes],
@@ -260,7 +260,7 @@ describe('catalogue support derivation', () => {
         lastCommandDigest: connection.lastCommandDigest ?? connectionResult.commandDigest,
       })
       const publicationId = await ctx.db.insert('capabilityPublications', {
-        operationRef,
+        toolRef,
         publicationRef: 'publication:1',
         revision: 1,
         businessId,

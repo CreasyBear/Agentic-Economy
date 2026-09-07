@@ -2,7 +2,7 @@ import type { ProblemDetails } from '@/lib/errors'
 
 import type { AgentAccessAuthorityMode } from './contract'
 import type { AgentAccessEnvironment } from './agent-access'
-import type { AgentAccessOperationAccess, AgentAccessPolicy } from './policy'
+import type { AgentAccessToolAccess, AgentAccessPolicy } from './policy'
 
 export type AgentConnectionReadback = Readonly<{
   connectionRef: string
@@ -13,8 +13,8 @@ export type AgentConnectionReadback = Readonly<{
   environment: AgentAccessEnvironment
   state: 'active' | 'expired' | 'revoked'
   authorityMode: AgentAccessAuthorityMode
-  operationAccess: AgentAccessOperationAccess
-  operationRefs: readonly string[]
+  toolAccess: AgentAccessToolAccess
+  toolRefs: readonly string[]
   policy: AgentAccessPolicy
   commercialScopes: readonly string[]
   connectedAt: number

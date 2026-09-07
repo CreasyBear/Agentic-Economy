@@ -4,8 +4,8 @@ import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 
 import { AGENT_ACCESS_OAUTH_DEVICE_CLIENT_REGISTRATION_REQUEST } from '@/modules/agent-access/contract'
-import { listOperationRouteDescriptors } from '@/modules/actions'
-import { OPERATION_MARKET_ACTION_ENTRIES } from '@/modules/registry/operation-entry'
+import { listCallRouteDescriptors } from '@/modules/actions'
+import { TOOL_MARKET_ACTION_ENTRIES } from '@/modules/registry/tool-entry'
 import {
   AGENT_ACCESS_OAUTH_ERROR_VALUES,
   AGENT_ACCESS_POLL_INTERVAL_SECONDS,
@@ -74,11 +74,11 @@ describe('market terminal manifest OAuth contract', () => {
     expect(serialized).not.toContain('inputJsonSchema')
     expect(serialized).not.toContain('outputJsonSchema')
     expect(compact.fullContract).toBe('ae manifest --technical --json')
-    expect((compact.call as JsonRecord).connected).toMatchObject({ transport: 'operation.invoke:v1' })
+    expect((compact.call as JsonRecord).connected).toMatchObject({ transport: 'tool.call:v1' })
     expect(compact.account).toMatchObject({
       disconnect: 'ae account disconnect',
       disconnectDefaultProfile: 'market',
-      disconnectSupplier: 'ae account disconnect supplier',
+      disconnectProvider: 'ae account disconnect provider',
     })
   })
 
@@ -89,6 +89,7 @@ describe('market terminal manifest OAuth contract', () => {
     const registration = flow.find((step) => step.order === 1)
 
     expect(manifest.$schema).toBe('https://agentic-economy/market-terminal/manifest:v3')
+    expect(manifest.protocol).toBe('agentic-economy.tool-terminal.v1')
     expect(registration).toMatchObject({
       method: 'POST',
       path: '/oauth/register',
@@ -104,16 +105,16 @@ describe('market terminal manifest OAuth contract', () => {
     const gateway = manifest.gateway as JsonRecord
     const routes = gateway.routes as readonly JsonRecord[]
     expect(routes.map((entry) => (entry.route as JsonRecord).actionId)).toEqual(
-      listOperationRouteDescriptors().map(({ actionId }) => actionId),
+      listCallRouteDescriptors().map(({ actionId }) => actionId),
     )
     expect(routes.map((entry) => (entry.action as JsonRecord).mcpToolName)).toEqual(
-      listOperationRouteDescriptors().map(({ mcpToolName: toolName }) => toolName),
+      listCallRouteDescriptors().map(({ mcpToolName: toolName }) => toolName),
     )
-    const operationReads = ((manifest.anonymous as JsonRecord).operationReads as readonly JsonRecord[])
-    expect(operationReads).toHaveLength(OPERATION_MARKET_ACTION_ENTRIES.length)
-    for (const operationRead of operationReads) {
-      const route = operationRead.route as JsonRecord
-      const action = operationRead.action as JsonRecord
+    const toolReads = ((manifest.anonymous as JsonRecord).toolReads as readonly JsonRecord[])
+    expect(toolReads).toHaveLength(TOOL_MARKET_ACTION_ENTRIES.length)
+    for (const toolRead of toolReads) {
+      const route = toolRead.route as JsonRecord
+      const action = toolRead.action as JsonRecord
       expect(action.id).toBe(route.actionId)
       expect(action.invocationContract).toMatchObject({ version: expect.any(String) })
       expect(action.inputJsonSchema).toEqual(expect.any(Object))
@@ -149,8 +150,8 @@ describe('market terminal manifest OAuth contract', () => {
         credentialId: 'credential:test-agent',
         applicationRef: 'agentic-economy',
         environment: 'sandbox',
-        scopes: ['market_operations:invoke', 'customer_requests:bounded_mandate'],
-        authorityMode: 'bounded_mandate',
+        scopes: ['market_tools:call', 'customer_requests:spending_policy'],
+        authorityMode: 'spending_policy',
       })
     })
     const output = captureStdout()
@@ -183,7 +184,7 @@ describe('market terminal manifest OAuth contract', () => {
       principalRef: 'principal:test-agent',
       accountRef: 'account:test-owner',
       credentialId: 'credential:test-agent',
-      authorityMode: 'bounded_mandate',
+      authorityMode: 'spending_policy',
       ownerConnectionHref: 'https://ae.example/agent-access?caller=principal%3Atest-agent',
     })
     expect(output.read()).not.toContain('token-test')

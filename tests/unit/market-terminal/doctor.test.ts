@@ -38,7 +38,7 @@ describe('ae doctor', () => {
         { id: 'mcp', state: 'warn', summary: 'MCP initialization was not checked because server identity is unavailable.' },
         { id: 'buyer', state: 'warn', summary: 'Buyer credential was not sent because server identity is unavailable.' },
         { id: 'balance', state: 'warn', summary: 'Balance was not checked because server identity is unavailable.' },
-        { id: 'invocation', state: 'warn', summary: 'Invocation recovery was not checked because server identity is unavailable.' },
+        { id: 'call', state: 'warn', summary: 'Call recovery was not checked because server identity is unavailable.' },
       ],
     })
     expect(json.stdout).not.toContain('ae doctor')
@@ -111,9 +111,9 @@ describe('ae doctor', () => {
         { id: 'mcp', state: 'pass', summary: 'MCP initialization and 4 public tools passed.' },
         { id: 'readiness', state: 'pass', summary: 'Server operational readiness passed.' },
         { id: 'release', state: 'pass', summary: `Release identity is ${'a'.repeat(40)}.` },
-        { id: 'buyer', state: 'warn', summary: 'No buyer credential is selected for this origin; anonymous search and inspection remain available.', nextCommand: `ae connect --base-url ${origin}` },
+        { id: 'buyer', state: 'warn', summary: 'No buyer credential is selected for this origin; anonymous search and describe remain available.', nextCommand: `ae connect --base-url ${origin}` },
         { id: 'balance', state: 'warn', summary: 'Balance is unavailable until a buyer credential is connected.' },
-        { id: 'invocation', state: 'warn', summary: 'Invocation recovery is unavailable until a buyer credential is connected.' },
+        { id: 'call', state: 'warn', summary: 'Call recovery is unavailable until a buyer credential is connected.' },
       ],
     })
     expect(requests).toEqual([{ method: 'GET', path: '/.well-known/ucp' }])
@@ -122,8 +122,8 @@ describe('ae doctor', () => {
 
   it('checks the buyer loop and points an uncertain invocation to status without exposing credentials', async () => {
     const buyerSecret = 'FAKE_BUYER_SECRET_51f8'
-    const invocationRef = 'invocation:v1:needs-attention'
-    let invocationState: 'pending' | 'reconciliation_required' = 'reconciliation_required'
+    const callRef = 'invocation:v1:needs-attention'
+    let callState: 'pending' | 'reconciliation_required' = 'reconciliation_required'
     const observed: Array<{ method: string; path: string; authorization?: string; body?: string }> = []
     const origin = await startServer((request, response) => {
       if (respondHealthyDeployment(request, response)) return
@@ -144,7 +144,7 @@ describe('ae doctor', () => {
           respondJson(response, {
             kind: 'authenticated', principalRef: 'prn_buyer', accountRef: 'acc_owner',
             credentialId: 'credential_buyer', applicationRef: 'agentic-economy',
-            environment: 'sandbox', scopes: ['market_operations:invoke'], authorityMode: 'bounded_mandate',
+            environment: 'sandbox', scopes: ['market_tools:call'], authorityMode: 'spending_policy',
           })
           return
         }
@@ -157,12 +157,12 @@ describe('ae doctor', () => {
           })
           return
         }
-        if (request.url === '/api/v1/operations?limit=100') {
+        if (request.url === '/api/v1/calls?limit=100') {
           respondJson(response, {
             kind: 'available', hasMore: false,
             items: [{
-              invocationRef, operationRef: 'operation:v1:one', state: invocationState,
-              resultKind: invocationState, createdAt: 10, updatedAt: 20,
+              callRef, toolRef: 'operation:v1:one', state: callState,
+              resultKind: callState, createdAt: 10, updatedAt: 20,
             }],
           })
           return
@@ -189,12 +189,12 @@ describe('ae doctor', () => {
         { id: 'mcp', state: 'pass', summary: 'MCP initialization and 4 public tools passed.' },
         { id: 'readiness', state: 'pass', summary: 'Server operational readiness passed.' },
         { id: 'release', state: 'pass', summary: `Release identity is ${'a'.repeat(40)}.` },
-        { id: 'buyer', state: 'pass', summary: 'Buyer credential is origin-bound, authenticated, and has market_operations:invoke.' },
+        { id: 'buyer', state: 'pass', summary: 'Buyer credential is origin-bound, authenticated, and has market_tools:call.' },
         { id: 'balance', state: 'pass', summary: 'Buyer balance is available and the account is active.' },
         {
-          id: 'invocation', state: 'warn',
-          summary: 'A reconciliation-required invocation needs attention.',
-          nextCommand: `ae status ${invocationRef}`,
+          id: 'call', state: 'warn',
+          summary: 'A reconciliation-required Call needs attention.',
+          nextCommand: `ae status ${callRef}`,
         },
         { id: 'market_requests', state: 'pass', summary: 'No private market requests need rechecking.' },
       ],
@@ -203,7 +203,7 @@ describe('ae doctor', () => {
       { method: 'GET', path: '/.well-known/ucp' },
       { method: 'GET', path: '/api/v1/account', authorization: `Bearer ${buyerSecret}` },
       { method: 'POST', path: '/api/v1/account/balance', authorization: `Bearer ${buyerSecret}`, body: '{"currency":"AUD"}' },
-      { method: 'GET', path: '/api/v1/operations?limit=100', authorization: `Bearer ${buyerSecret}` },
+      { method: 'GET', path: '/api/v1/calls?limit=100', authorization: `Bearer ${buyerSecret}` },
       { method: 'POST', path: '/api/v1/market-requests/list', authorization: `Bearer ${buyerSecret}`, body: '{"limit":5}' },
     ])
 
@@ -211,21 +211,21 @@ describe('ae doctor', () => {
     expect(human.status).toBe(1)
     expect(human.stderr).toBe('')
     expect(human.stdout).toContain('AE doctor: degraded')
-    expect(human.stdout).toContain('! A reconciliation-required invocation needs attention.')
+    expect(human.stdout).toContain('! A reconciliation-required Call needs attention.')
     expect(human.stdout.match(/^Next: /gmu)).toEqual([`Next: `])
-    expect(human.stdout).toContain(`Next: ae status ${invocationRef}`)
+    expect(human.stdout).toContain(`Next: ae status ${callRef}`)
     expect(human.stdout).not.toContain(buyerSecret)
 
-    invocationState = 'pending'
+    callState = 'pending'
     const pending = await spawnCli(['doctor', '--base-url', origin, '--json'], { env: cleanEnvironment(directory) })
     expect(pending.status).toBe(0)
     expect(JSON.parse(pending.stdout)).toMatchObject({
       kind: 'degraded',
       checks: expect.arrayContaining([{
-        id: 'invocation',
+        id: 'call',
         state: 'warn',
-        summary: 'A nonterminal invocation is still pending.',
-        nextCommand: `ae wait ${invocationRef}`,
+        summary: 'A nonterminal Call is still pending.',
+        nextCommand: `ae wait ${callRef}`,
       }]),
     })
   }, 20_000)
@@ -234,8 +234,8 @@ describe('ae doctor', () => {
     const buyerSecret = 'FAKE_REENTRY_BUYER_SECRET_4127'
     const savedQuery = 'translate a deeply private acquisition memo'
     const requestRef = `market-request:v1:${'a'.repeat(64)}`
-    const operationRef = `operation:v1:${'b'.repeat(64)}`
-    const priorOperationRef = `operation:v1:${'d'.repeat(64)}`
+    const toolRef = `operation:v1:${'b'.repeat(64)}`
+    const priorToolRef = `operation:v1:${'d'.repeat(64)}`
     const statusBodies: unknown[] = []
     const origin = await startServer((request, response) => {
       if (respondHealthyDeployment(request, response)) return
@@ -250,7 +250,7 @@ describe('ae doctor', () => {
           respondJson(response, {
             kind: 'authenticated', principalRef: 'prn_buyer', accountRef: 'acc_owner',
             credentialId: 'credential_buyer', applicationRef: 'agentic-economy', environment: 'sandbox',
-            scopes: ['market_operations:invoke'], authorityMode: 'bounded_mandate',
+            scopes: ['market_tools:call'], authorityMode: 'spending_policy',
           })
           return
         }
@@ -263,11 +263,11 @@ describe('ae doctor', () => {
           })
           return
         }
-        if (request.url === '/api/v1/operations?limit=100') {
+        if (request.url === '/api/v1/calls?limit=100') {
           respondJson(response, {
             kind: 'available', hasMore: false,
             items: [{
-              invocationRef: 'invocation:v1:prior-success', operationRef: priorOperationRef,
+              callRef: 'invocation:v1:prior-success', toolRef: priorToolRef,
               state: 'completed', resultKind: 'completed', createdAt: 1, updatedAt: 2,
             }],
           })
@@ -284,17 +284,17 @@ describe('ae doctor', () => {
           statusBodies.push(JSON.parse(Buffer.concat(chunks).toString('utf8')))
           respondJson(response, {
             kind: 'matched', requestRef, query: savedQuery, createdAt: 10, matchedCount: 1,
-            operations: [{
-              operationRef, capabilityId: 'document.translate', title: 'Document translation',
+            tools: [{
+              toolRef, capabilityId: 'document.translate', title: 'Document translation',
               description: 'Translate one document.', provider: { name: 'Reference Services', slug: 'reference' },
               priceLabel: 'USD 0.50', healthStatus: 'operational',
             }],
           })
           return
         }
-        if (request.url === '/api/v1/market-operations/describe') {
+        if (request.url === '/api/v1/market-tools/describe') {
           respondJson(response, {
-            kind: 'found', schemaVersion: 'registry-operations:v2', operation: currentOperation(priorOperationRef),
+            kind: 'found', schemaVersion: 'registry-tools:v2', tool: currentTool(priorToolRef),
           })
           return
         }
@@ -315,11 +315,11 @@ describe('ae doctor', () => {
       kind: 'ready',
       checks: expect.arrayContaining([expect.objectContaining({
         id: 'market_requests', state: 'pass',
-        summary: '1 of 1 recent private market request now has matching Operations.',
-        nextCommand: `ae describe ${operationRef}`,
+        summary: '1 of 1 recent private market request now has matching Tools.',
+        nextCommand: `ae describe ${toolRef}`,
       }), expect.objectContaining({
         id: 'repeat_use', state: 'pass',
-        nextCommand: `ae describe ${priorOperationRef}`,
+        nextCommand: `ae describe ${priorToolRef}`,
       })]),
     })
 
@@ -327,19 +327,19 @@ describe('ae doctor', () => {
     expect(human.status).toBe(0)
     expect(human.stderr).toBe('')
     expect(human.stdout).toContain('AE doctor: ready')
-    expect(human.stdout).toContain('✓ 1 of 1 recent private market request now has matching Operations.')
+    expect(human.stdout).toContain('✓ 1 of 1 recent private market request now has matching Tools.')
     expect(human.stdout.match(/^Next: /gmu)).toEqual(['Next: '])
-    expect(human.stdout).toContain(`Next: ae describe ${operationRef}`)
+    expect(human.stdout).toContain(`Next: ae describe ${toolRef}`)
     expect(human.stdout).not.toContain(savedQuery)
     expect(human.stdout).not.toContain(requestRef)
     expect(statusBodies).toEqual([{ requestRef }, { requestRef }])
   }, 20_000)
 
-  it('recalls the newest successful current Operation without replaying private invocation material', async () => {
+  it('recalls the newest successful current Tool without replaying private Call material', async () => {
     const buyerSecret = 'FAKE_REPEAT_BUYER_SECRET_8182'
-    const invocationRef = 'invocation:v1:private-repeat-receipt'
+    const callRef = 'invocation:v1:private-repeat-receipt'
     const evidenceHash = 'sha256:private-repeat-evidence'
-    const operationRef = `operation:v1:${'c'.repeat(64)}`
+    const toolRef = `operation:v1:${'c'.repeat(64)}`
     const detailRequests: Array<{ authorization?: string; body: unknown }> = []
     let current = true
     const origin = await startServer((request, response) => {
@@ -355,7 +355,7 @@ describe('ae doctor', () => {
           respondJson(response, {
             kind: 'authenticated', principalRef: 'prn_buyer', accountRef: 'acc_owner',
             credentialId: 'credential_buyer', applicationRef: 'agentic-economy', environment: 'sandbox',
-            scopes: ['market_operations:invoke'], authorityMode: 'bounded_mandate',
+            scopes: ['market_tools:call'], authorityMode: 'spending_policy',
           })
           return
         }
@@ -368,11 +368,11 @@ describe('ae doctor', () => {
           })
           return
         }
-        if (request.url === '/api/v1/operations?limit=100') {
+        if (request.url === '/api/v1/calls?limit=100') {
           respondJson(response, {
             kind: 'available', hasMore: false,
             items: [{
-              invocationRef, operationRef, state: 'completed', resultKind: 'completed',
+              callRef, toolRef, state: 'completed', resultKind: 'completed',
               receiptRef: 'receipt:v1:private-repeat', evidenceHash, createdAt: 10, updatedAt: 20,
             }],
           })
@@ -382,14 +382,14 @@ describe('ae doctor', () => {
           respondJson(response, { kind: 'available', items: [], hasMore: false })
           return
         }
-        if (request.url === '/api/v1/market-operations/describe') {
+        if (request.url === '/api/v1/market-tools/describe') {
           detailRequests.push({
             ...(request.headers.authorization === undefined ? {} : { authorization: request.headers.authorization }),
             body: JSON.parse(Buffer.concat(chunks).toString('utf8')),
           })
           respondJson(response, current
-            ? { kind: 'found', schemaVersion: 'registry-operations:v2', operation: currentOperation(operationRef) }
-            : { kind: 'not_found', schemaVersion: 'registry-operations:v2', operationRef })
+            ? { kind: 'found', schemaVersion: 'registry-tools:v2', tool: currentTool(toolRef) }
+            : { kind: 'not_found', schemaVersion: 'registry-tools:v2', toolRef })
           return
         }
         respondJson(response, { error: 'unexpected' }, 404)
@@ -403,25 +403,25 @@ describe('ae doctor', () => {
     expect(json.status).toBe(0)
     expect(json.stderr).toBe('')
     expect(json.stdout).not.toContain(buyerSecret)
-    expect(json.stdout).not.toContain(invocationRef)
+    expect(json.stdout).not.toContain(callRef)
     expect(json.stdout).not.toContain(evidenceHash)
-    expect(detailRequests).toEqual([{ body: { operationRef } }])
+    expect(detailRequests).toEqual([{ body: { toolRef } }])
     expect(JSON.parse(json.stdout)).toMatchObject({
       kind: 'ready',
       checks: expect.arrayContaining([{
         id: 'repeat_use', state: 'pass',
-        summary: 'A previously successful Operation is still in the current catalog.',
-        nextCommand: `ae describe ${operationRef}`,
+        summary: 'A previously successful Tool is still in the current catalog.',
+        nextCommand: `ae describe ${toolRef}`,
       }]),
     })
 
     const human = await spawnCli(['doctor', '--base-url', origin], { env: cleanEnvironment(directory) })
     expect(human.status).toBe(0)
     expect(human.stderr).toBe('')
-    expect(human.stdout).toContain('✓ A previously successful Operation is still in the current catalog.')
+    expect(human.stdout).toContain('✓ A previously successful Tool is still in the current catalog.')
     expect(human.stdout.match(/^Next: /gmu)).toEqual(['Next: '])
-    expect(human.stdout).toContain(`Next: ae describe ${operationRef}`)
-    expect(human.stdout).not.toContain(invocationRef)
+    expect(human.stdout).toContain(`Next: ae describe ${toolRef}`)
+    expect(human.stdout).not.toContain(callRef)
     expect(human.stdout).not.toContain(evidenceHash)
 
     current = false
@@ -432,16 +432,16 @@ describe('ae doctor', () => {
       expect.objectContaining({ id: 'repeat_use' }),
     ]))
     expect(detailRequests).toEqual([
-      { body: { operationRef } },
-      { body: { operationRef } },
-      { body: { operationRef } },
+      { body: { toolRef } },
+      { body: { toolRef } },
+      { body: { toolRef } },
     ])
   }, 20_000)
 
-  it('summarizes supplier Operation and connection readiness for one requested business', async () => {
+  it('summarizes provider Tool and connection readiness for one requested business', async () => {
     const buyerSecret = 'FAKE_BUYER_SECRET_1872'
-    const supplierSecret = 'FAKE_SUPPLIER_SECRET_8431'
-    const supplierRequests: Array<{ path: string; body: unknown }> = []
+    const providerSecret = 'FAKE_PROVIDER_SECRET_8431'
+    const providerRequests: Array<{ path: string; body: unknown }> = []
     const origin = await startServer((request, response) => {
       if (respondHealthyDeployment(request, response)) return
       const chunks: Buffer[] = []
@@ -454,12 +454,12 @@ describe('ae doctor', () => {
           return
         }
         if (request.url === '/api/v1/account') {
-          const supplier = authorization === `Bearer ${supplierSecret}`
+          const provider = authorization === `Bearer ${providerSecret}`
           respondJson(response, {
-            kind: 'authenticated', principalRef: supplier ? 'prn_supplier' : 'prn_buyer', accountRef: 'acc_owner',
-            credentialId: supplier ? 'credential_supplier' : 'credential_buyer', applicationRef: 'agentic-economy',
-            environment: 'sandbox', scopes: [supplier ? 'market_supply:manage' : 'market_operations:invoke'],
-            authorityMode: 'bounded_mandate',
+            kind: 'authenticated', principalRef: provider ? 'prn_provider' : 'prn_buyer', accountRef: 'acc_owner',
+            credentialId: provider ? 'credential_provider' : 'credential_buyer', applicationRef: 'agentic-economy',
+            environment: 'sandbox', scopes: [provider ? 'market_supply:manage' : 'market_tools:call'],
+            authorityMode: 'spending_policy',
           })
           return
         }
@@ -472,7 +472,7 @@ describe('ae doctor', () => {
           })
           return
         }
-        if (request.url === '/api/v1/operations?limit=100') {
+        if (request.url === '/api/v1/calls?limit=100') {
           respondJson(response, { kind: 'available', items: [], hasMore: false })
           return
         }
@@ -480,10 +480,10 @@ describe('ae doctor', () => {
           respondJson(response, { kind: 'available', items: [], hasMore: false })
           return
         }
-        if (request.url === '/api/v1/supply/operations/list') {
-          supplierRequests.push({ path: request.url, body: JSON.parse(bodyText) })
+        if (request.url === '/api/v1/supply/tools/list') {
+          providerRequests.push({ path: request.url, body: JSON.parse(bodyText) })
           respondJson(response, {
-            kind: 'available', schemaVersion: 'supplier_operations:v1', businessRef: 'business:one', isDone: true, continueCursor: null,
+            kind: 'available', schemaVersion: 'provider_tools:v1', businessRef: 'business:one', isDone: true, continueCursor: null,
             page: [
               supplyOperation('offering:live', true),
               supplyOperation('offering:unready', false),
@@ -492,7 +492,7 @@ describe('ae doctor', () => {
           return
         }
         if (request.url === '/api/v1/supply/connections/list') {
-          supplierRequests.push({ path: request.url, body: JSON.parse(bodyText) })
+          providerRequests.push({ path: request.url, body: JSON.parse(bodyText) })
           respondJson(response, {
             kind: 'available', businessId: 'business:one',
             connections: [
@@ -506,16 +506,16 @@ describe('ae doctor', () => {
       })
     })
     const directory = makeConfigDirectory()
-    writeStoredConfig(directory, origin, buyerSecret, supplierSecret)
+    writeStoredConfig(directory, origin, buyerSecret, providerSecret)
 
-    const result = await spawnCli(['doctor', 'business:one', '--supplier', '--base-url', origin, '--json'], {
+    const result = await spawnCli(['doctor', 'business:one', '--provider', '--base-url', origin, '--json'], {
       env: cleanEnvironment(directory),
     })
 
     expect(result.status).toBe(0)
     expect(result.stderr).toBe('')
     expect(result.stdout).not.toContain(buyerSecret)
-    expect(result.stdout).not.toContain(supplierSecret)
+    expect(result.stdout).not.toContain(providerSecret)
     expect(JSON.parse(result.stdout)).toMatchObject({
       kind: 'degraded',
       checks: [
@@ -526,19 +526,19 @@ describe('ae doctor', () => {
         { id: 'release', state: 'pass' },
         { id: 'buyer', state: 'pass' },
         { id: 'balance', state: 'pass' },
-        { id: 'invocation', state: 'pass' },
+        { id: 'call', state: 'pass' },
         { id: 'market_requests', state: 'pass', summary: 'No private market requests need rechecking.' },
-        { id: 'supplier', state: 'pass', summary: 'Supplier credential is origin-bound, authenticated, and has market_supply:manage.' },
+        { id: 'provider', state: 'pass', summary: 'Provider credential is origin-bound, authenticated, and has market_supply:manage.' },
         {
-          id: 'supplier.readiness', state: 'warn',
-          summary: 'Supplier business has 2 Operations (1 live, 1 unready) and 2 provider connections (1 ready, 1 needing attention).',
+          id: 'provider.readiness', state: 'warn',
+          summary: 'Provider business has 2 Tools (1 live, 1 unready) and 2 provider connections (1 ready, 1 needing attention).',
           nextCommand: 'ae supply operations business:one',
         },
       ],
     })
-    expect(supplierRequests.toSorted((left, right) => left.path.localeCompare(right.path))).toEqual([
+    expect(providerRequests.toSorted((left, right) => left.path.localeCompare(right.path))).toEqual([
       { path: '/api/v1/supply/connections/list', body: { businessId: 'business:one', limit: 100 } },
-      { path: '/api/v1/supply/operations/list', body: { businessRef: 'business:one', limit: 100 } },
+      { path: '/api/v1/supply/tools/list', body: { businessRef: 'business:one', limit: 100 } },
     ])
   })
 
@@ -602,7 +602,7 @@ describe('ae doctor', () => {
           respondJson(response, {
             kind: 'authenticated', principalRef: 'prn_buyer', accountRef: 'acc_owner',
             credentialId: 'credential_buyer', applicationRef: 'agentic-economy', environment: 'sandbox',
-            scopes: ['market_operations:invoke'], authorityMode: 'bounded_mandate',
+            scopes: ['market_tools:call'], authorityMode: 'spending_policy',
           })
         } else if (request.url === '/api/v1/account/balance') {
           respondJson(response, {
@@ -611,7 +611,7 @@ describe('ae doctor', () => {
             version: 1, updatedAt: 10,
             funding: { kind: 'agent_funding_handoff', configAction: 'funding.handoff.config', createAction: 'funding.handoff.create', statusAction: 'funding.handoff.status' },
           })
-        } else if (request.url === '/api/v1/operations?limit=100') {
+        } else if (request.url === '/api/v1/calls?limit=100') {
           respondJson(response, { kind: 'available', items: [], hasMore: false })
         } else if (request.url === '/api/v1/market-requests/list') {
           respondJson(response, { kind: 'available', items: [], hasMore: false })
@@ -635,9 +635,9 @@ describe('ae doctor', () => {
         { id: 'mcp', state: 'pass', summary: 'MCP initialization and 4 public tools passed.' },
         { id: 'readiness', state: 'pass', summary: 'Server operational readiness passed.' },
         { id: 'release', state: 'pass', summary: `Release identity is ${'a'.repeat(40)}.` },
-        { id: 'buyer', state: 'pass', summary: 'Buyer credential is origin-bound, authenticated, and has market_operations:invoke.' },
+        { id: 'buyer', state: 'pass', summary: 'Buyer credential is origin-bound, authenticated, and has market_tools:call.' },
         { id: 'balance', state: 'pass', summary: 'Buyer balance is available and the account is active.' },
-        { id: 'invocation', state: 'pass', summary: 'No pending or reconciliation-required invocation needs attention.' },
+        { id: 'call', state: 'pass', summary: 'No pending or reconciliation-required Call needs attention.' },
         { id: 'market_requests', state: 'pass', summary: 'No private market requests need rechecking.' },
       ],
     })
@@ -646,7 +646,7 @@ describe('ae doctor', () => {
     expect(human.status).toBe(0)
     expect(human.stderr).toBe('')
     expect(human.stdout).toContain('AE doctor: ready')
-    expect(human.stdout).toContain('✓ No pending or reconciliation-required invocation needs attention.')
+    expect(human.stdout).toContain('✓ No pending or reconciliation-required Call needs attention.')
     expect(human.stdout).not.toContain(buyerSecret)
   })
 
@@ -741,11 +741,11 @@ describe('ae doctor', () => {
         },
         {
           id: 'buyer', state: 'warn',
-          summary: 'No buyer credential is selected for this origin; anonymous search and inspection remain available.',
+          summary: 'No buyer credential is selected for this origin; anonymous search and describe remain available.',
           nextCommand: `ae connect --base-url ${origin}`,
         },
         { id: 'balance', state: 'warn', summary: 'Balance is unavailable until a buyer credential is connected.' },
-        { id: 'invocation', state: 'warn', summary: 'Invocation recovery is unavailable until a buyer credential is connected.' },
+        { id: 'call', state: 'warn', summary: 'Call recovery is unavailable until a buyer credential is connected.' },
       ],
     })
 
@@ -847,7 +847,7 @@ function makeConfigDirectory(): string {
   return directory
 }
 
-function writeStoredConfig(directory: string, origin: string, buyerSecret: string, supplierSecret?: string): void {
+function writeStoredConfig(directory: string, origin: string, buyerSecret: string, providerSecret?: string): void {
   writeFileSync(join(directory, 'config.json'), JSON.stringify({
     version: 1,
     connections: {
@@ -855,14 +855,14 @@ function writeStoredConfig(directory: string, origin: string, buyerSecret: strin
         accessToken: buyerSecret,
         tokenType: 'Bearer',
         profile: 'market',
-        scope: 'market_operations:invoke',
+        scope: 'market_tools:call',
         connectedAt: '2026-08-30T00:00:00.000Z',
       },
-      ...(supplierSecret === undefined ? {} : {
-        [`${origin}#supplier`]: {
-          accessToken: supplierSecret,
+      ...(providerSecret === undefined ? {} : {
+        [`${origin}#provider`]: {
+          accessToken: providerSecret,
           tokenType: 'Bearer',
-          profile: 'supplier',
+          profile: 'provider',
           scope: 'market_supply:manage',
           connectedAt: '2026-08-30T00:00:00.000Z',
         },
@@ -873,10 +873,10 @@ function writeStoredConfig(directory: string, origin: string, buyerSecret: strin
 
 function supplyOperation(offeringRef: string, live: boolean) {
   return {
-    schemaVersion: 'supplier_operations:v1',
+    schemaVersion: 'provider_tools:v1',
     businessRef: 'business:one',
     providerRef: 'provider:one',
-    operationRef: offeringRef,
+    toolRef: offeringRef,
     revision: 1,
     state: live ? 'Published' : 'Action required',
     reasonCodes: live ? [] : ['health_unhealthy'],
@@ -905,9 +905,9 @@ function supplyConnection(connectionRef: string, available: boolean, lifecycle: 
   }
 }
 
-function currentOperation(operationRef: string) {
+function currentTool(toolRef: string) {
   return {
-    operationRef,
+    toolRef,
     capabilityId: 'reference.lookup',
     title: 'Reference lookup',
     description: 'Current reference lookup',

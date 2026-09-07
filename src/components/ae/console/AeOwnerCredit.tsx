@@ -19,7 +19,7 @@ import type { AccountFundingBalance } from '@/modules/money/server'
 import type { AgentActivityView, AgentDetail, AgentDirectoryProjection } from '@/modules/agent-access/agent-operator-view-model'
 import { formatTimestamp } from '@/lib/ui/format-time'
 import type { MoneyDocumentView, MoneyProviderObligationView, MoneyReconciliationCaseView } from '@/lib/server/money-documents.functions'
-import { suggestContinuation } from '@/modules/market/suggested-continuation'
+import { suggestNextAction } from '@/modules/market/suggested-next-action'
 import { AeAccountFundingPanel, type AccountFundingPort } from './AeCreditTopUpPanel'
 
 export type AeOwnerCreditProps = Readonly<{
@@ -67,16 +67,16 @@ export function AeOwnerCredit({
   const chargesPhase = stagedListPhase({ firstLoadPending, rows: activity })
   const [selected, setSelected] = useState<CreditChargeRow>()
   const [documentAction, setDocumentAction] = useState<'idle' | 'creating' | 'opening' | 'signing' | 'saved' | 'failed'>('idle')
-  const insufficientCreditContinuation = suggestContinuation({ subject: 'credit', state: 'insufficient' })
+  const insufficientCreditNextAction = suggestNextAction({ subject: 'credit', state: 'insufficient' })
   const columns = useMemo<ColumnDef<CreditChargeRow, unknown>[]>(
     () => [
       {
         id: 'task',
-        accessorFn: (row) => row.entry.operation?.label ?? activityLabel(row.entry),
+        accessorFn: (row) => row.entry.tool?.label ?? activityLabel(row.entry),
         header: ({ column }) => <AeOperatorSortableHeader label="Task" column={column} />,
         cell: ({ row }) => (
           <span className="font-medium text-foreground">
-            {row.original.entry.operation?.label ?? activityLabel(row.original.entry)}
+            {row.original.entry.tool?.label ?? activityLabel(row.original.entry)}
           </span>
         ),
       },
@@ -317,7 +317,7 @@ export function AeOwnerCredit({
               label: 'View',
               onOpen: setSelected,
               getAccessibleLabel: (item) =>
-                `View ${item.entry.operation?.label ?? activityLabel(item.entry)}`,
+                `View ${item.entry.tool?.label ?? activityLabel(item.entry)}`,
             }}
           />
         ) : activity.length === 0 ? (
@@ -326,7 +326,7 @@ export function AeOwnerCredit({
             description="Browsing does not create paid-call charges."
             action={
               <Button asChild className="min-h-touch">
-                <a href="/market?window=30d">Search Operations</a>
+                <a href="/market?window=30d">Search Tools</a>
               </Button>
             }
           />
@@ -340,7 +340,7 @@ export function AeOwnerCredit({
         onOpenChange={(open) => {
           if (!open) setSelected(undefined)
         }}
-        title={selected === undefined ? 'Charge' : (selected.entry.operation?.label ?? activityLabel(selected.entry))}
+        title={selected === undefined ? 'Charge' : (selected.entry.tool?.label ?? activityLabel(selected.entry))}
         {...(selected === undefined ? {} : { facts: chargeFacts(selected) })}
         {...(selected === undefined
           ? {}
@@ -348,9 +348,9 @@ export function AeOwnerCredit({
               action: (
                 <Button asChild className="min-h-touch">
                   {selected.entry.chargeState === 'insufficient_credit' ? (
-                    <a href={insufficientCreditContinuation.href}>{insufficientCreditContinuation.label}</a>
+                    <a href={insufficientCreditNextAction.href}>{insufficientCreditNextAction.label}</a>
                   ) : (
-                    <a href={`/operations/invocations/${selected.entry.invocationRef}`}>View receipt</a>
+                    <a href={`/calls/${selected.entry.callRef}`}>View receipt</a>
                   )}
                 </Button>
               ),
@@ -376,9 +376,9 @@ function chargeFacts(row: CreditChargeRow): readonly { label: string; value: str
     { label: 'Outcome', value: activityLabel(row.entry) },
     { label: 'Agent', value: row.item.agent.displayName },
     { label: 'Amount', value: formatCreditAmount(row.entry.grossAmount), mono: true },
-    ...(row.entry.operation === undefined
+    ...(row.entry.tool === undefined
       ? []
-      : [{ label: 'Supplier', value: row.entry.operation.supplier }]),
+      : [{ label: 'Provider', value: row.entry.tool.provider }]),
     { label: 'When', value: formatTimestamp(row.entry.observedAt), mono: true },
   ]
 }

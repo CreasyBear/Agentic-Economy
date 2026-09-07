@@ -75,13 +75,13 @@ const durableTables = [
   'qualifiedUseReceipts',
   'capabilityContractDocuments',
   'capabilityOfferings',
-  'capabilityOperationCallProjections',
-  'capabilityOperationCommitments',
-  'capabilityOperationInvocations',
+  'capabilityCallProjections',
+  'capabilityQuotes',
+  'capabilityCalls',
   'sellerOnboardingCanaryRearmAudits',
   'providerConsequenceJournal',
   'capabilityPublications',
-  'capabilitySupplierOperationProjections',
+  'capabilityProviderToolProjections',
   'capabilitySupplyAdmissionCases',
   'capabilitySupplySourceDrafts',
   'capabilityTransportBindings',
@@ -91,7 +91,7 @@ const durableTables = [
   'capabilityProviderOffboardingTargets',
   'capabilityProviderConnectionLeases',
   'capabilityProviderApprovals',
-  'registeredOperationMappings',
+  'registeredToolMappings',
   'agentAccessGrants',
   'agentAccessPrincipals',
   'agentAccessProviderRevocations',
@@ -111,15 +111,15 @@ const durableTables = [
   'actionExecutionControls',
   'actionExecutionAttempts',
   'actionExecutionHistory',
-  'marketActiveOperations',
-  'marketActiveSuppliers',
+  'marketActiveTools',
+  'marketActiveProviders',
   'marketEvidenceFacts',
   'marketExternalRegistryEntries',
   'marketExternalRegistryGenerations',
   'marketExternalRegistryState',
   'marketExternalSnapshots',
-  'marketOperationCategories',
-  'marketOperationRatings',
+  'marketToolCategories',
+  'marketToolRatings',
   'marketDemandSignals',
 ] as const
 
@@ -202,7 +202,7 @@ const requiredIndexes = {
     'by_authorizationDigest',
     'by_paymentIdentifier',
   ],
-  moneyUsageEvents: ['by_principalId_and_credentialId_and_currency_and_observedAt', 'by_businessId_and_observedAt', 'by_invocationRef', 'by_usageRef'],
+  moneyUsageEvents: ['by_principalId_and_credentialId_and_currency_and_observedAt', 'by_businessId_and_observedAt', 'by_callRef', 'by_usageRef'],
   moneyCredentialUsageSummaries: ['by_principalId_and_credentialId_and_currency'],
   moneyCommercialPolicies: ['by_policyRef', 'by_environment_and_family_and_lifecycle'],
   moneyReconciliationCases: ['by_caseRef', 'by_accountRef_and_createdAt', 'by_accountRef_and_status_and_createdAt', 'by_scopeType_and_scopeRef_and_status'],
@@ -211,7 +211,7 @@ const requiredIndexes = {
   moneyFundingCommands: ['by_commandRef', 'by_idempotencyKey', 'by_externalRef', 'by_paymentId', 'by_accountRef_and_createdAt'],
   moneyTreasuryObservations: ['by_observationRef', 'by_custody_and_observedAt'],
   moneyLegalCustomerBindings: ['by_accountRef', 'by_legalCustomerRef_and_state'],
-  moneyProviderObligations: ['by_obligationRef', 'by_invocationRef', 'by_buyerAccountRef_and_createdAt', 'by_providerRef_and_createdAt'],
+  moneyProviderObligations: ['by_obligationRef', 'by_callRef', 'by_buyerAccountRef_and_createdAt', 'by_providerRef_and_createdAt'],
   moneyStripeWebhookInbox: ['by_stripeEventId', 'by_state_and_receivedAt'],
   moneyStripeEvents: ['by_stripeEventId'],
   moneyPayoutAccounts: ['by_businessId_and_currency', 'by_stripeAccountId'],
@@ -236,19 +236,19 @@ const requiredIndexes = {
   auditEvents: ['by_eventId'],
   registrySearchDocuments: ['by_documentId', 'by_business', 'by_offering', 'by_publicStatus_updatedAt'],
   disputes: ['by_business_status'],
-  capabilityOperationInvocations: ['by_invocationRef', 'by_credentialId_and_idempotencyKey', 'by_credentialId_and_createdAt', 'by_credentialId_and_state', 'by_credentialId_and_state_and_grantExpiresAt', 'by_principalId_and_invocationRef', 'by_ownerId_and_state_and_createdAt'],
-  capabilityOperationCallProjections: [
+  capabilityCalls: ['by_callRef', 'by_credentialId_and_idempotencyKey', 'by_credentialId_and_createdAt', 'by_credentialId_and_state', 'by_credentialId_and_state_and_grantExpiresAt', 'by_principalId_and_callRef', 'by_toolRef_and_state', 'by_ownerId_and_state_and_createdAt'],
+  capabilityCallProjections: [
     'by_callRef',
     'by_accountRef_and_createdAt',
     'by_accountRef_and_principalRef_and_createdAt',
-    'by_accountRef_and_operationRef_and_createdAt',
+    'by_accountRef_and_toolRef_and_createdAt',
     'by_accountRef_and_providerRef_and_createdAt',
     'by_providerRef_and_createdAt',
-    'by_operationRef_and_createdAt',
+    'by_toolRef_and_createdAt',
     'by_accountRef_and_applicationRef_and_createdAt',
   ],
-  capabilityOperationCommitments: ['by_commitmentRef', 'by_credentialId_and_createdAt', 'by_state_and_expiresAt'],
-  sellerOnboardingCanaryRearmAudits: ['by_auditRef', 'by_invocationRef', 'by_canaryRef'],
+  capabilityQuotes: ['by_quoteRef', 'by_credentialId_and_createdAt', 'by_state_and_expiresAt'],
+  sellerOnboardingCanaryRearmAudits: ['by_auditRef', 'by_callRef', 'by_canaryRef'],
   providerConsequenceJournal: [
     'by_ticketRef',
     'by_effectRef',
@@ -259,7 +259,7 @@ const requiredIndexes = {
   capabilityProviderConnectionLeases: [
     'by_leaseRef',
     'by_connectionRef_and_state',
-    'by_invocationRef',
+    'by_callRef',
     'by_connectionRef_and_authorityGeneration',
   ],
   agentAccessGrants: [
@@ -301,7 +301,7 @@ const requiredIndexes = {
   capabilityContractDocuments: ['by_capabilityId_and_version', 'by_status_and_capabilityId_and_version'],
   capabilityPublications: [
     'by_publicationRef_and_revision',
-    'by_operationRef_and_disposition',
+    'by_toolRef_and_disposition',
     'by_networkId_and_disposition',
     'by_businessId_and_disposition',
     'by_bindingId_and_disposition',
@@ -310,7 +310,7 @@ const requiredIndexes = {
   capabilitySupplyAdmissionCases: [
     'by_caseRef',
     'by_publicationRef_and_revision',
-    'by_operationRef_and_revision',
+    'by_toolRef_and_version',
     'by_businessId_and_submittedAt',
     'by_state_and_updatedAt',
   ],
@@ -338,9 +338,9 @@ const requiredIndexes = {
     'by_lifecycle_and_expiresAt',
     'by_businessId_and_updatedAt',
   ],
-  capabilitySupplierOperationProjections: [
+  capabilityProviderToolProjections: [
     'by_businessId_and_updatedAt',
-    'by_businessId_and_operationRef',
+    'by_businessId_and_toolRef',
     'by_businessId_and_offeringRef',
   ],
   capabilitySupplySourceDrafts: [
@@ -361,7 +361,7 @@ const requiredIndexes = {
     'by_commandId',
     'by_connectionRef_and_authorityGeneration',
   ],
-  registeredOperationMappings: ['by_networkId_and_mappingRef'],
+  registeredToolMappings: ['by_networkId_and_mappingRef'],
   marketDemandSignals: [
     'by_requestRef',
     'by_credentialId_and_idempotencyKey',
@@ -391,6 +391,30 @@ describe('Convex schema', () => {
         expect(tableIndexes[tableName]).toEqual(indexes)
       else expect(tableIndexes[tableName]).toEqual(expect.arrayContaining(indexes))
     }
+  })
+
+  it('defines the renamed indexed-link fields exactly', () => {
+    const tableIndexes = new Map(
+      exported.tables.map((table) => [
+        table.tableName,
+        new Map(table.indexes.map((index) => [index.indexDescriptor, index.fields])),
+      ]),
+    )
+    const expectIndexFields = (tableName: string, indexName: string, fields: readonly string[]) => {
+      expect(tableIndexes.get(tableName)?.get(indexName)).toEqual(fields)
+    }
+
+    expectIndexFields('capabilityCallProjections', 'by_accountRef_and_toolRef_and_createdAt', ['accountRef', 'toolRef', 'createdAt'])
+    expectIndexFields('capabilityCallProjections', 'by_toolRef_and_createdAt', ['toolRef', 'createdAt'])
+    expectIndexFields('capabilityQuotes', 'by_quoteRef', ['quoteRef'])
+    expectIndexFields('capabilityCalls', 'by_callRef', ['callRef'])
+    expectIndexFields('capabilityCalls', 'by_principalId_and_callRef', ['principalId', 'callRef'])
+    expectIndexFields('capabilityCalls', 'by_toolRef_and_state', ['toolRef', 'state'])
+    expectIndexFields('sellerOnboardingCanaryRearmAudits', 'by_callRef', ['callRef'])
+    expectIndexFields('moneyProviderObligations', 'by_callRef', ['callRef'])
+    expectIndexFields('moneyUsageEvents', 'by_callRef', ['callRef'])
+    expectIndexFields('qualifiedUseReceipts', 'by_callRef', ['callRef'])
+    expectIndexFields('qualifiedUseReceipts', 'by_toolRef_and_qualifiedAt', ['toolRef', 'qualifiedAt'])
   })
 
   it('activates the backfilled Account audit indexes', () => {
@@ -704,7 +728,7 @@ describe('Convex schema', () => {
   it('validates current action execution controls and rejects removed legacy shapes', async () => {
     const backend = convexTest(schema, convexModules)
     const acceptedAuthority = {
-      kind: 'approve_each',
+      kind: 'approval_required',
       authorityRef: 'authority:schema-regression',
     } as const
     const control = {

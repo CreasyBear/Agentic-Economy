@@ -356,11 +356,11 @@ function createDurableActionExecutionTracerWithSnapshot<Input, Result extends Ac
     async decide(input) {
       return accept(input.expectedExecutionVersion, await memory.decide(input), 'decide')
     },
-    async authorizeStandingMandateUse(input) {
+    async authorizeSpendingPolicyUse(input) {
       return accept(
         input.expectedExecutionVersion,
-        await memory.authorizeStandingMandateUse(input),
-        'authorize_standing_mandate_use',
+        await memory.authorizeSpendingPolicyUse(input),
+        'authorize_spending_policy_use',
       )
     },
     async execute(input) {

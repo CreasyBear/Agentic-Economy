@@ -178,9 +178,9 @@ function isDocumentedJsonBoundary(violation: ScanViolation): boolean {
         violation.excerpt.includes(
           "runtime-validated capability publication boundary",
         ))) ||
-    ((violation.file === "convex/capabilitySupplyOperations.ts" ||
-      violation.file === "convex/capabilitySupplyOperationQueries.ts" ||
-      violation.file === "convex/capabilitySupplyOperationOriginMap.ts") &&
+    ((violation.file === "convex/capabilitySupplyTools.ts" ||
+      violation.file === "convex/capabilitySupplyToolQueries.ts" ||
+      violation.file === "convex/capabilitySupplyToolOriginMap.ts") &&
       violation.excerpt.includes("v.any()") &&
       violation.excerpt.includes("runtime-validated JsonValue boundary")) ||
     (violation.file ===
@@ -336,7 +336,7 @@ function isReviewedTransportSdkImport(violation: ScanViolation): boolean {
     "src/modules/capability-supply/internal/readiness-probe-mcp.ts",
     "src/modules/capability-supply/internal/mcp-source-discovery.ts",
     "src/modules/capability-supply/internal/supply-funnel/provider-connection-handoff.ts",
-    "src/modules/capability-supply/internal/route-transport-invoke.ts",
+    "src/modules/capability-supply/internal/route-transport-call.ts",
     "src/modules/capability-supply/internal/route-transport-mcp.ts",
     "src/modules/capability-supply/internal/route-transport-x402.ts",
     "src/modules/capability-supply/internal/x402-offer-receipt.ts",

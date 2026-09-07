@@ -5,7 +5,7 @@ export {
   ProviderConsequencePreReleaseRefusal,
   providerConsequenceInvocationDigest,
   providerConsequenceTicketClaimsDigest,
-} from './invocation-worker/jitProviderConsequence'
+} from './call-worker/jitProviderConsequence'
 export type {
   CanonicalProviderConsequenceTicket,
   JitProviderConsequenceBoundary,
@@ -17,5 +17,5 @@ export type {
   ProviderConsequenceJournalBeginResult,
   ProviderConsequenceJsonValue,
   ProviderConsequenceTicketVerifier,
-} from './invocation-worker/jitProviderConsequence'
-export { readX402EvmReceipt } from './invocation-worker/x402Settlement'
+} from './call-worker/jitProviderConsequence'
+export { readX402EvmReceipt } from './call-worker/x402Settlement'

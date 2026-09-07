@@ -548,8 +548,8 @@ function accountSegmentDigest(kind: string, reference: unknown): string {
 
 function managedCallBooking(index: number, policyDigest: string) {
   return {
-    invocationRef: `invocation:contention:${index}`,
-    commitmentRef: `commitment:contention:${index}`,
+    callRef: `invocation:contention:${index}`,
+    quoteRef: `commitment:contention:${index}`,
     idempotencyKey: `invoke:contention:${index}`,
     accountRef: 'account:contention',
     principalRef: 'principal:shared',
@@ -558,7 +558,7 @@ function managedCallBooking(index: number, policyDigest: string) {
     legalCustomerGeneration: 1,
     treasuryRef: 'custody:shared',
     treasuryGeneration: 1,
-    operationRef: 'operation:managed-x402',
+    toolRef: 'operation:managed-x402',
     providerRef: 'provider:sandbox',
     authorityGeneration: 1,
     policyGeneration: 1,
@@ -566,7 +566,7 @@ function managedCallBooking(index: number, policyDigest: string) {
     buyerRevenueUnits: '1',
     buyerTaxUnits: '1',
     providerAmountUnits: '1',
-    commitmentDigest: `sha256:${digest(`commitment:${index}`)}`,
+    quoteDigest: `sha256:${digest(`commitment:${index}`)}`,
     inputDigest: `sha256:${digest(`input:${index}`)}`,
     policyDigest,
     rateEvidenceDigest: `sha256:${digest('sandbox-rate')}`,

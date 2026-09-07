@@ -64,7 +64,7 @@ export type {
   ExpireProviderConnectionLeaseCommand,
   InvalidateProviderConnectionLeaseCommand,
   IssueProviderConnectionLeaseCommand,
-  ProviderConnectionInvocationLease,
+  ProviderConnectionCallLease,
   ProviderConnectionLeaseApproval,
   ProviderConnectionLeaseAuthoritySnapshot,
   ProviderConnectionLeaseAuthorityValidation,

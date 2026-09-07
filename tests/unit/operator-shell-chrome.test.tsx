@@ -339,7 +339,7 @@ describe('owner mobile navigation', () => {
     expect(within(sidebarNav).getByRole('link', { name: 'Calls' })).toBeTruthy()
     expect(within(sidebarNav).getByRole('link', { name: 'Agents' })).toBeTruthy()
     expect(within(sidebarNav).getByRole('link', { name: 'Credit' })).toBeTruthy()
-    expect(within(sidebarNav).queryByRole('link', { name: 'Supplier' })).toBeNull()
+    expect(within(sidebarNav).queryByRole('link', { name: 'Provider' })).toBeNull()
     expect(within(sidebarNav).queryByRole('link', { name: 'Publish' })).toBeNull()
     expect(within(sidebarNav).getByRole('link', { name: 'Account & security' })).toBeTruthy()
 

@@ -9,7 +9,7 @@ import {
   agentAccessPrincipalTables,
 } from '../src/modules/agent-access/schema'
 import { actionExecutionTables } from '../src/modules/action-execution/schema'
-import { capabilityOperationInvocationTables } from '../src/modules/capability-execution/schema'
+import { capabilityCallTables } from '../src/modules/capability-execution/schema'
 import { observabilityTables } from '../src/modules/observability/schema'
 import { registryTables } from '../src/modules/registry/schema'
 import { securityTables } from '../src/modules/security/schema'
@@ -27,7 +27,7 @@ export default defineSchema({
   ...chatTables,
   ...chatSharingTables,
   ...actionExecutionTables,
-  ...capabilityOperationInvocationTables,
+  ...capabilityCallTables,
   ...businessTables,
   ...catalogTables,
   ...capabilityContractRegistryTables,

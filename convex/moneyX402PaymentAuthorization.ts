@@ -100,7 +100,7 @@ export const prepareX402PaymentAuthorizationArgs = {
   dispatchRef: v.string(),
   attemptRef: v.string(),
   effectGeneration: v.number(),
-  operationRef: v.optional(v.string()),
+  toolRef: v.optional(v.string()),
   inputDigest: v.optional(v.string()),
   paymentIdentifier: v.string(),
   operationKeyDigest: v.string(),
@@ -135,7 +135,7 @@ type PrepareArgs = {
   dispatchRef: string
   attemptRef: string
   effectGeneration: number
-  operationRef?: string
+  toolRef?: string
   inputDigest?: string
   paymentIdentifier: string
   operationKeyDigest: string
@@ -199,7 +199,7 @@ function prepareAttributionMatches(row: AttemptRow, args: PrepareArgs): boolean 
     row.dispatchRef === args.dispatchRef
     && row.attemptRef === args.attemptRef
     && row.effectGeneration === args.effectGeneration
-    && row.operationRef === args.operationRef
+    && row.toolRef === args.toolRef
     && row.inputDigest === args.inputDigest
     && row.paymentIdentifier === args.paymentIdentifier
     && row.operationKeyDigest === args.operationKeyDigest

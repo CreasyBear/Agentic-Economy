@@ -29,7 +29,7 @@ export type SellerOnboardingCanaryCommitment = Readonly<{
   publicationRef: string
   publicationRevision: number
   draftOperationRef: string
-  operationMaterialDigest: string
+  toolMaterialDigest: string
   contractDigest: string
   bindingDigest: string
   priceDigest: string
@@ -63,8 +63,8 @@ export type SellerOnboardingCanaryExecutionEnvelope = Readonly<{
   executionPurpose: typeof SELLER_ONBOARDING_CANARY_PURPOSE
   canaryRef: string
   canaryCommitmentDigest: string
-  invocationRef: string
-  operationRef: string
+  callRef: string
+  toolRef: string
   ownerId: string
   businessId: string
   offeringRef: string
@@ -74,7 +74,7 @@ export type SellerOnboardingCanaryExecutionEnvelope = Readonly<{
   accessPathSourceHash: string
   publicationRef: string
   publicationRevision: number
-  operationMaterialDigest: string
+  toolMaterialDigest: string
   contractDigest: string
   bindingDigest: string
   priceDigest: string
@@ -101,8 +101,8 @@ export type SellerOnboardingCanaryInvocationObservation = Readonly<{
   executionPurpose: OperationExecutionPurpose
   canaryRef?: string
   canaryCommitmentDigest?: string
-  invocationRef: string
-  operationRef: string
+  callRef: string
+  toolRef: string
   inputDigest: string
   state: 'pending' | 'completed' | 'refused' | 'reconciliation_required' | 'cancelled'
   outputContractValid: boolean
@@ -118,9 +118,9 @@ export type SellerOnboardingCanaryInvocationObservation = Readonly<{
   }>
 }>
 
-export type CurrentSellerCanaryOperationCommitment = Readonly<{
+export type CurrentSellerCanaryQuote = Readonly<{
   draftOperationRef: string
-  operationMaterialDigest: string
+  toolMaterialDigest: string
   contractDigest: string
   bindingDigest: string
   priceDigest: string
@@ -130,9 +130,9 @@ export type SellerOnboardingCanaryPromotionEvidence = Readonly<{
   format: 'seller-onboarding-canary-promotion-evidence:v1'
   canaryRef: string
   canaryCommitmentDigest: string
-  invocationRef: string
+  callRef: string
   draftOperationRef: string
-  operationMaterialDigest: string
+  toolMaterialDigest: string
   contractDigest: string
   bindingDigest: string
   priceDigest: string
@@ -145,12 +145,12 @@ export type SellerOnboardingCanaryPromotionEvidence = Readonly<{
 }>
 
 export type SellerOnboardingCanaryStatus =
-  | Readonly<{ kind: 'pending'; canaryRef: string; invocationRef: string }>
-  | Readonly<{ kind: 'reconciliation_required'; canaryRef: string; invocationRef: string }>
+  | Readonly<{ kind: 'pending'; canaryRef: string; callRef: string }>
+  | Readonly<{ kind: 'reconciliation_required'; canaryRef: string; callRef: string }>
   | Readonly<{
       kind: 'failed'
       canaryRef: string
-      invocationRef: string
+      callRef: string
       code:
         | 'canary_identity_mismatch'
         | 'canary_expired'
@@ -165,7 +165,7 @@ export type SellerOnboardingCanaryStatus =
   | Readonly<{
       kind: 'passed'
       canaryRef: string
-      invocationRef: string
+      callRef: string
       promotionEvidence: SellerOnboardingCanaryPromotionEvidence
     }>
 
@@ -180,7 +180,7 @@ export type CreateSellerOnboardingCanaryInput = Readonly<{
   publicationRef: string
   publicationRevision: number
   draftOperationRef: string
-  operationMaterialDigest: string
+  toolMaterialDigest: string
   contractDigest: string
   bindingDigest: string
   priceDigest: string
@@ -273,7 +273,7 @@ function canaryCommitmentMaterial(input: CreateSellerOnboardingCanaryInput) {
     publicationRef: requiredRef(input.publicationRef, 'seller_onboarding_canary_publication_invalid'),
     publicationRevision: input.publicationRevision,
     draftOperationRef: requiredRef(input.draftOperationRef, 'seller_onboarding_canary_operation_invalid'),
-    operationMaterialDigest: requiredDigest(input.operationMaterialDigest, 'seller_onboarding_canary_operation_digest_invalid'),
+    toolMaterialDigest: requiredDigest(input.toolMaterialDigest, 'seller_onboarding_canary_operation_digest_invalid'),
     contractDigest: requiredDigest(input.contractDigest, 'seller_onboarding_canary_contract_digest_invalid'),
     bindingDigest: requiredDigest(input.bindingDigest, 'seller_onboarding_canary_binding_digest_invalid'),
     priceDigest: requiredDigest(input.priceDigest, 'seller_onboarding_canary_price_digest_invalid'),
@@ -320,7 +320,7 @@ function canaryStableIdentityMaterial(
     publicationRef: material.publicationRef,
     publicationRevision: material.publicationRevision,
     draftOperationRef: material.draftOperationRef,
-    // operationMaterialDigest currently incorporates readiness evidence. The
+    // toolMaterialDigest currently incorporates readiness evidence. The
     // stable source/contract/binding/price fields below are the charge
     // material; a readiness refresh must never mint permission for a second
     // payment against the same exact publication.
@@ -353,8 +353,8 @@ export function sellerOnboardingCanaryExecutionEnvelope(
     executionPurpose: SELLER_ONBOARDING_CANARY_PURPOSE,
     canaryRef: commitment.canaryRef,
     canaryCommitmentDigest: commitment.commitmentDigest,
-    invocationRef: `seller-canary-invocation:${commitment.canaryRef.slice('seller-canary:'.length)}`,
-    operationRef: commitment.draftOperationRef,
+    callRef: `seller-canary-invocation:${commitment.canaryRef.slice('seller-canary:'.length)}`,
+    toolRef: commitment.draftOperationRef,
     ownerId: commitment.ownerId,
     businessId: commitment.businessId,
     offeringRef: commitment.offeringRef,
@@ -364,7 +364,7 @@ export function sellerOnboardingCanaryExecutionEnvelope(
     accessPathSourceHash: commitment.accessPathSourceHash,
     publicationRef: commitment.publicationRef,
     publicationRevision: commitment.publicationRevision,
-    operationMaterialDigest: commitment.operationMaterialDigest,
+    toolMaterialDigest: commitment.toolMaterialDigest,
     contractDigest: commitment.contractDigest,
     bindingDigest: commitment.bindingDigest,
     priceDigest: commitment.priceDigest,
@@ -395,16 +395,16 @@ function observationIdentityMatches(
   return observation.executionPurpose === SELLER_ONBOARDING_CANARY_PURPOSE
     && observation.canaryRef === commitment.canaryRef
     && observation.canaryCommitmentDigest === commitment.commitmentDigest
-    && observation.operationRef === commitment.draftOperationRef
+    && observation.toolRef === commitment.draftOperationRef
     && observation.inputDigest === commitment.inputDigest
 }
 
 function currentCommitmentMatches(
   commitment: SellerOnboardingCanaryCommitment,
-  current: CurrentSellerCanaryOperationCommitment,
+  current: CurrentSellerCanaryQuote,
 ): boolean {
   return current.draftOperationRef === commitment.draftOperationRef
-    && current.operationMaterialDigest === commitment.operationMaterialDigest
+    && current.toolMaterialDigest === commitment.toolMaterialDigest
     && current.contractDigest === commitment.contractDigest
     && current.bindingDigest === commitment.bindingDigest
     && current.priceDigest === commitment.priceDigest
@@ -415,7 +415,7 @@ function failed(
   observation: SellerOnboardingCanaryInvocationObservation,
   code: Extract<SellerOnboardingCanaryStatus, { kind: 'failed' }>['code'],
 ): SellerOnboardingCanaryStatus {
-  return { kind: 'failed', canaryRef: commitment.canaryRef, invocationRef: observation.invocationRef, code }
+  return { kind: 'failed', canaryRef: commitment.canaryRef, callRef: observation.callRef, code }
 }
 
 /**
@@ -426,10 +426,10 @@ function failed(
 export function projectSellerOnboardingCanaryStatus(input: Readonly<{
   commitment: SellerOnboardingCanaryCommitment
   observation: SellerOnboardingCanaryInvocationObservation
-  currentOperation: CurrentSellerCanaryOperationCommitment
+  currentTool: CurrentSellerCanaryQuote
   now: number
 }>): SellerOnboardingCanaryStatus {
-  const { commitment, observation, currentOperation } = input
+  const { commitment, observation, currentTool } = input
   if (!observationIdentityMatches(commitment, observation)) {
     return failed(commitment, observation, 'canary_identity_mismatch')
   }
@@ -437,7 +437,7 @@ export function projectSellerOnboardingCanaryStatus(input: Readonly<{
   // An ambiguous payment can never become retryable merely because the short
   // execution authority expired. Reconciliation owns the next transition.
   if (observation.state === 'reconciliation_required') {
-    return { kind: 'reconciliation_required', canaryRef: commitment.canaryRef, invocationRef: observation.invocationRef }
+    return { kind: 'reconciliation_required', canaryRef: commitment.canaryRef, callRef: observation.callRef }
   }
   // Refused/cancelled are terminal for this exact charge identity. The caller
   // must change and re-admit material to obtain a new canary; it must not retry
@@ -451,11 +451,11 @@ export function projectSellerOnboardingCanaryStatus(input: Readonly<{
   if (observation.state === 'pending' && input.now > commitment.expiresAt) {
     return failed(commitment, observation, 'canary_expired')
   }
-  if (!currentCommitmentMatches(commitment, currentOperation)) {
+  if (!currentCommitmentMatches(commitment, currentTool)) {
     return failed(commitment, observation, 'operation_commitment_stale')
   }
   if (observation.state === 'pending') {
-    return { kind: 'pending', canaryRef: commitment.canaryRef, invocationRef: observation.invocationRef }
+    return { kind: 'pending', canaryRef: commitment.canaryRef, callRef: observation.callRef }
   }
   if (observation.state !== 'completed') return failed(commitment, observation, 'invocation_refused')
   if (!observation.outputContractValid) return failed(commitment, observation, 'output_contract_invalid')
@@ -481,9 +481,9 @@ export function projectSellerOnboardingCanaryStatus(input: Readonly<{
     format: 'seller-onboarding-canary-promotion-evidence:v1' as const,
     canaryRef: commitment.canaryRef,
     canaryCommitmentDigest: commitment.commitmentDigest,
-    invocationRef: observation.invocationRef,
+    callRef: observation.callRef,
     draftOperationRef: commitment.draftOperationRef,
-    operationMaterialDigest: commitment.operationMaterialDigest,
+    toolMaterialDigest: commitment.toolMaterialDigest,
     contractDigest: commitment.contractDigest,
     bindingDigest: commitment.bindingDigest,
     priceDigest: commitment.priceDigest,
@@ -496,7 +496,7 @@ export function projectSellerOnboardingCanaryStatus(input: Readonly<{
   return {
     kind: 'passed',
     canaryRef: commitment.canaryRef,
-    invocationRef: observation.invocationRef,
+    callRef: observation.callRef,
     promotionEvidence: {
       ...evidenceMaterial,
       promotionEvidenceDigest: canonicalDigest(evidenceMaterial as StableHashValue),

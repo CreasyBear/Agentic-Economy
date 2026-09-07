@@ -14,10 +14,10 @@ import type { CapabilityOfferingRow } from '@/modules/capability-supply/internal
 import {
   capabilityBindingEligibilityHash,
   capabilityBindingRegistrationHash,
-  capabilityOperationId,
+  capabilityToolId,
   capabilityOfferingEligibilityHash,
   capabilityOfferingRegistrationHash,
-  createPublicOperationRef,
+  createPublicToolRef,
   defineCapabilityOfferingRegistration,
   defineCapabilityTransportBindingRegistration,
 } from '@/modules/capability-supply/public'
@@ -58,8 +58,8 @@ export const candidate = {
   bindingId: 'dev:binding',
   contractRef: contract.ref,
 }
-export const operationRef = createPublicOperationRef({
-  operationId: capabilityOperationId(contract.capabilityId),
+export const toolRef = createPublicToolRef({
+  operationId: capabilityToolId(contract.capabilityId),
   publicationRef: candidate.publicationRef,
   publicationRevision: candidate.revision,
   contractRef: contract.ref,
@@ -128,7 +128,7 @@ export function developmentProviderConnection(): ProviderConnection {
 }
 export const connectionAuthority = connectionAuthoritySnapshotFromProviderConnection(
   developmentProviderConnection(),
-  operationRef,
+  toolRef,
 )
 export const offeringRegistration = defineCapabilityOfferingRegistration({
   offeringId: candidate.offeringId,
@@ -241,7 +241,7 @@ export function publication(overrides: Partial<GraphPublicationRow> = {}): Graph
   return {
     id: 'dev:publication-row',
     ...candidate,
-    operationRef,
+    toolRef,
     ...contract.ref,
     connectionAuthority,
     sourceKind: 'openapi_http',

@@ -6,7 +6,7 @@ import {
   agentAccountSelfResultSchema,
   type AgentAccountSelfResult,
 } from '@/modules/agent-access/account.actions'
-import { MARKET_OPERATIONS_INVOKE_SCOPE, MARKET_SUPPLY_MANAGE_SCOPE } from '@/modules/agent-access/contract'
+import { MARKET_TOOLS_CALL_SCOPE, MARKET_SUPPLY_MANAGE_SCOPE } from '@/modules/agent-access/contract'
 
 import type { CliOptions } from '../lib/args'
 import {
@@ -72,8 +72,8 @@ function printAccount(result: AgentAccountSelfResult, options: CliOptions): void
   ])
 }
 
-async function inspectCurrentAccount(options: CliOptions, profile: 'market' | 'supplier' = 'market'): Promise<void> {
-  const requiredScope = profile === 'supplier' ? MARKET_SUPPLY_MANAGE_SCOPE : MARKET_OPERATIONS_INVOKE_SCOPE
+async function inspectCurrentAccount(options: CliOptions, profile: 'market' | 'provider' = 'market'): Promise<void> {
+  const requiredScope = profile === 'provider' ? MARKET_SUPPLY_MANAGE_SCOPE : MARKET_TOOLS_CALL_SCOPE
   const apiKey = requireAgentAccessKey('account status', options, requiredScope)
   const outcome = await callJson(options.baseUrl, accountCommandDescriptor.path, {
     method: accountCommandDescriptor.method,
@@ -171,7 +171,7 @@ async function readAccountMoney(
     for (const item of parsed.data.items) {
       table([
         ['call', item.callRef],
-        ['operation', item.operationRef],
+        ['tool', item.toolRef],
         ['provider', item.providerRef],
         ['state', item.state],
         ['payment', item.paymentState],
@@ -192,7 +192,7 @@ function listConnections(options: CliOptions): void {
     selected: item.origin === selectedOrigin,
     active: item.origin === selectedOrigin && resolveAgentAccessCredential(
       options.baseUrl,
-      item.profile === 'supplier' ? MARKET_SUPPLY_MANAGE_SCOPE : MARKET_OPERATIONS_INVOKE_SCOPE,
+      item.profile === 'provider' ? MARKET_SUPPLY_MANAGE_SCOPE : MARKET_TOOLS_CALL_SCOPE,
     )?.source === 'stored',
   })).map((item) => {
     const state = item.active
@@ -238,7 +238,7 @@ function listConnections(options: CliOptions): void {
   heading('AE connections')
   if (items.length === 0) {
     line('No stored connections for any origin.')
-    line('Anonymous search and inspection remain available. Connect only after selecting an Operation that requires access.')
+    line('Anonymous search and description remain available. Connect only after selecting a Call that requires access.')
   } else {
     for (const item of items) {
       table([
@@ -257,8 +257,8 @@ function listConnections(options: CliOptions): void {
   if (nextCommand !== undefined) line(`Next: ${nextCommand}`)
 }
 
-function disconnectCurrentAccount(options: CliOptions, profile: 'market' | 'supplier'): void {
-  const requiredScope = profile === 'supplier' ? MARKET_SUPPLY_MANAGE_SCOPE : MARKET_OPERATIONS_INVOKE_SCOPE
+function disconnectCurrentAccount(options: CliOptions, profile: 'market' | 'provider'): void {
+  const requiredScope = profile === 'provider' ? MARKET_SUPPLY_MANAGE_SCOPE : MARKET_TOOLS_CALL_SCOPE
   const active = resolveAgentAccessCredential(options.baseUrl, requiredScope)
   if (profile === 'market' && active?.source === 'environment') {
     throw new CliFailure('The selected credential comes from AE_API_KEY. Remove that environment variable to disconnect it.', {
@@ -273,8 +273,8 @@ function disconnectCurrentAccount(options: CliOptions, profile: 'market' | 'supp
     profile,
     removed: removed.removed,
     nextAction: removed.removed
-      ? profile === 'supplier'
-        ? 'Run ae connect --supplier to authorize a new supplier credential for this origin.'
+      ? profile === 'provider'
+        ? 'Run ae connect --provider to authorize a new provider credential for this origin.'
         : 'Run ae connect to authorize a new credential for this origin.'
       : 'No stored credential existed for this origin.',
   }
@@ -299,7 +299,7 @@ export async function runAccountCommand(args: readonly string[], options: CliOpt
     return
   }
   const rawDisconnectProfile = args[1]
-  const requestedProfile = rawDisconnectProfile === 'market' || rawDisconnectProfile === 'supplier'
+  const requestedProfile = rawDisconnectProfile === 'market' || rawDisconnectProfile === 'provider'
     ? rawDisconnectProfile
     : undefined
   const disconnectProfile = requestedProfile ?? 'market'

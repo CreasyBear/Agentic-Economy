@@ -2,7 +2,7 @@ import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { stableStringify } from '@/modules/common/stable-hash'
 import type { JsonValue } from '@/modules/common/bounded-json'
 import {
-  type PublishedOperation,
+  type PublishedTool,
 } from '@/modules/capability-supply/public'
 import {
   inspectX402SellerEndpoint,
@@ -27,7 +27,7 @@ export type LiveX402RequirementResult =
  * headers, signatures, and unrestricted Provider payloads are discarded.
  */
 export async function inspectLiveX402Requirement(
-  operation: PublishedOperation,
+  operation: PublishedTool,
   input: Record<string, unknown>,
   dependencies: X402SellerEndpointInspectorDependencies = {},
 ): Promise<LiveX402RequirementResult> {

@@ -32,7 +32,7 @@ import {
   providerConnectionAuthorityValue,
   publicationLifecycleValue,
 } from './capabilitySupplyShared'
-import { syncMarketOperationPresence } from './marketPresence'
+import { syncMarketToolPresence } from './marketPresence'
 import {
   type AgentAccessPrincipalValue,
   verifySupplyAgentPrincipal,
@@ -237,8 +237,8 @@ export async function readCurrentCapabilityProbeAuthority(
     || grant.applicationRef !== storedAgent.applicationRef
     || grant.credentialId !== storedAgent.credentialId
     || grant.authorityMode !== storedAgent.authorityMode
-    || grant.operationAccess !== 'all_admitted'
-    || grant.policyDigest !== storedAgent.policyDigest
+    || grant.toolAccess !== 'all_admitted'
+    || grant.spendingPolicyDigest !== storedAgent.spendingPolicyDigest
     || grant.expiresAt <= args.now) return null
   const admission = await verifySupplyAgentPrincipal(ctx, agentPrincipal)
   if (admission.kind !== 'allowed') return null
@@ -249,7 +249,7 @@ export async function readCurrentCapabilityProbeAuthority(
     mode: 'agent_grant' as const,
     grantRef: grant.grantRef,
     grantGeneration: grant.generation,
-    grantPolicyDigest: grant.policyDigest,
+    grantPolicyDigest: grant.spendingPolicyDigest,
     authorityExpiresAt,
   })
 }
@@ -462,8 +462,8 @@ export async function observeCapabilityReadinessHandler(
     ...(args.healthState === 'healthy' ? { readinessLastHealthyAt: now } : {}),
     updatedAt: now,
   })
-  await syncMarketOperationPresence(ctx, {
-    operationRef: publication.operationRef,
+  await syncMarketToolPresence(ctx, {
+    toolRef: publication.toolRef,
     businessId: publication.businessId,
     active: publication.sourceAuthorityState !== 'review_required'
       && args.credentialState === 'ready'
@@ -609,7 +609,7 @@ export async function readCapabilityProbeTargetHandler(
           adapterId: target.connectionAuthority.adapterId,
           authorityGeneration: target.connectionAuthority.authorityGeneration,
           authorityDigest: target.connectionAuthority.authorityDigest,
-          operationRef: target.connectionAuthority.operationRef,
+          toolRef: target.connectionAuthority.toolRef,
           grantedScopes: target.connectionAuthority.grantedScopes,
           grantedResources: target.connectionAuthority.grantedResources,
         },
@@ -730,16 +730,16 @@ export async function recordCapabilityProbeResultHandler(
         for (const prior of priorObservations) {
           if (prior._id === publication._id || prior.authorityMode === 'provider_owned') continue
           await ctx.db.patch(prior._id, { disposition: 'superseded', updatedAt: Date.now() })
-          await syncMarketOperationPresence(ctx, {
-            operationRef: prior.operationRef,
+          await syncMarketToolPresence(ctx, {
+            toolRef: prior.toolRef,
             businessId: prior.businessId,
             active: false,
             now: Date.now(),
           })
         }
       }
-      await syncMarketOperationPresence(ctx, {
-        operationRef: publication.operationRef,
+      await syncMarketToolPresence(ctx, {
+        toolRef: publication.toolRef,
         businessId: publication.businessId,
         active: result.lifecycle.state === 'active',
         now: Date.now(),

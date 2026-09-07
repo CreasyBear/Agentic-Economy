@@ -1,7 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 
 import { AePageState } from '@/components/ae/layout/AePageState'
-import { OperationChat } from '@/components/ae/operation-chat'
+import { Chat } from '@/components/ae/chat'
 
 export const Route = createFileRoute('/t/$threadId')({
   head: () => ({
@@ -27,7 +27,7 @@ function ThreadPage() {
     params: { threadId: nextThreadId },
   })
   return (
-    <OperationChat
+    <Chat
       threadId={threadId}
       onThreadCreated={openThread}
       onOpenThread={openThread}

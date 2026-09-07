@@ -30,7 +30,7 @@ import type {
   ProviderConnectionLeaseAuthorityValidation,
   ProviderConnectionLeaseCredentialResolution,
 } from '../provider-connection'
-import type { RouteTransportInvocation } from './route-transport-invoke'
+import type { RouteTransportInvocation } from './route-transport-call'
 import {
   MAX_RESPONSE_BYTES,
   refused,
@@ -78,8 +78,8 @@ export type ProviderRouteTransportAuthority = RouteTransportAuthorityCommon &
     authorityGeneration: number
     authorityDigest: string
     leaseRef?: string
-    invocationRef?: string
-    operationRef?: string
+    callRef?: string
+    toolRef?: string
     grantedScopes?: readonly string[]
     grantedResources?: readonly string[]
     readinessValidUntil?: number

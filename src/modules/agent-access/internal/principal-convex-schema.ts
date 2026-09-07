@@ -2,7 +2,7 @@ import { defineTable } from 'convex/server'
 import { v } from 'convex/values'
 
 const environment = v.union(v.literal('sandbox'), v.literal('production'))
-const authorityMode = v.union(v.literal('inspect_only'), v.literal('approve_each'), v.literal('bounded_mandate'), v.literal('full_yolo'))
+const authorityMode = v.union(v.literal('read_only'), v.literal('approval_required'), v.literal('spending_policy'), v.literal('unrestricted_test_only'))
 const lifecycle = v.union(v.literal('active'), v.literal('revoked'), v.literal('expired'))
 
 export const agentAccessPrincipalTables = {
@@ -16,7 +16,7 @@ export const agentAccessPrincipalTables = {
     scopes: v.array(v.string()),
     authorityMode,
     grantGeneration: v.number(),
-    policyDigest: v.string(),
+    spendingPolicyDigest: v.string(),
     lifecycle,
     expiresAt: v.optional(v.number()),
     recordedAt: v.number(),

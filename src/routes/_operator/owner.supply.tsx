@@ -1,13 +1,13 @@
 import { Navigate, createFileRoute, Outlet, redirect, useLocation } from '@tanstack/react-router'
 
 import {
-  parseOwnerOperationsCompatibilitySearch,
+  parseOwnerToolsCompatibilitySearch,
   parseSupplyCompatibilityIntent,
   parseSupplyCompatibilityIntentFromUrl,
 } from '@/lib/operator/supply-compatibility'
 
 export const Route = createFileRoute('/_operator/owner/supply')({
-  validateSearch: parseOwnerOperationsCompatibilitySearch,
+  validateSearch: parseOwnerToolsCompatibilitySearch,
   beforeLoad: ({ location }) => {
     if (location.pathname !== '/owner/supply') return
     // Fragments are not present in the HTTP request. Let the hydrated router

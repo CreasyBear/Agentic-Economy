@@ -17,7 +17,7 @@ const routerNavigate = vi.hoisted(() => vi.fn())
 vi.mock('@tanstack/react-router', () => ({
   useRouter: () => ({ navigate: routerNavigate }),
   Link: ({ to, params, children, ...props }: { to: string; params?: Record<string, string>; children: ReactNode }) => (
-    <a href={params?.operationRef === undefined ? to : to.replace('$operationRef', encodeURIComponent(params.operationRef))} {...props}>{children}</a>
+    <a href={params?.toolRef === undefined ? to : to.replace('$toolRef', encodeURIComponent(params.toolRef))} {...props}>{children}</a>
   ),
 }))
 
@@ -31,8 +31,8 @@ const caller: AgentCredentialSource = {
     name: 'Route assistant',
     applicationRef: 'agentic-economy',
     environment: 'sandbox',
-    authorityMode: 'inspect_only',
-    scopes: ['market_operations:invoke'],
+    authorityMode: 'read_only',
+    scopes: ['market_tools:call'],
     revoked: false,
     expired: false,
   },
@@ -41,16 +41,16 @@ const caller: AgentCredentialSource = {
     credentialId: KEY_ID_CANARY,
     applicationRef: 'agentic-economy',
     environment: 'sandbox',
-    authorityMode: 'inspect_only',
-    operationAccess: 'all_admitted',
-    operationRefs: [],
+    authorityMode: 'read_only',
+    toolAccess: 'all_admitted',
+    toolRefs: [],
     lifecycle: 'active',
     expiresAt: 604_800_000,
     budget: {
-      maximumSpendPerInvocation: { currency: 'USD', units: '500', exponent: 2 },
+      maximumSpendPerCall: { currency: 'USD', units: '500', exponent: 2 },
       maximumDailySpend: { currency: 'USD', units: '2500', exponent: 2 },
       maximumMonthlySpend: { currency: 'USD', units: '10000', exponent: 2 },
-      maximumConcurrentInvocations: 2,
+      maximumConcurrentCalls: 2,
     },
     rate: { maximumCallsPerMinute: 30, maximumCallsPerHour: 300 },
   },
@@ -68,24 +68,24 @@ const connection: AgentConnectionReadback = {
   connectorDisplayName: 'Codex',
   environment: 'sandbox' as const,
   state: 'active' as const,
-  authorityMode: 'inspect_only' as const,
-  operationAccess: 'all_admitted' as const,
-  operationRefs: [],
+  authorityMode: 'read_only' as const,
+  toolAccess: 'all_admitted' as const,
+  toolRefs: [],
   policy: {
     format: 'ae.agent-access-policy:v2' as const,
-    operationAccess: 'all_admitted' as const,
-    operationRefs: [],
+    toolAccess: 'all_admitted' as const,
+    toolRefs: [],
     environment: 'sandbox' as const,
     budget: {
       budgetPolicyRef: 'budget:test', generation: 1, currency: 'USD', exponent: 2,
-      maximumSpendPerInvocation: { currency: 'USD', units: '500', exponent: 2 },
+      maximumSpendPerCall: { currency: 'USD', units: '500', exponent: 2 },
       maximumDailySpend: { currency: 'USD', units: '2500', exponent: 2 },
       maximumMonthlySpend: { currency: 'USD', units: '10000', exponent: 2 },
-      maximumConcurrentInvocations: 2,
+      maximumConcurrentCalls: 2,
     },
     rate: { ratePolicyRef: 'rate:test', generation: 1, maximumCallsPerMinute: 30, maximumCallsPerHour: 300 },
   },
-  commercialScopes: ['market_operations:invoke'],
+  commercialScopes: ['market_tools:call'],
   connectedAt: 1_000,
   lastRotatedAt: 2_000,
   accessExpiresAt: 604_800_000,
@@ -175,7 +175,7 @@ describe('assistant access owner continuation anchors', () => {
     )
 
     expect(credit.querySelector('#fund')).not.toBeNull()
-    expect(credit.querySelector('a[href="/market?window=30d"]')?.textContent).toBe('Search Operations')
+    expect(credit.querySelector('a[href="/market?window=30d"]')?.textContent).toBe('Search Tools')
     expect(keys.querySelector('#revoke')).not.toBeNull()
     expect(keys.querySelector('#fund')).toBeNull()
     expect(keys.querySelector('a[href="/for-agents"]')?.textContent).toBe('Connect agent')
@@ -201,7 +201,7 @@ describe('assistant access owner continuation anchors', () => {
     expect(dialog.textContent).not.toContain(KEY_ID_CANARY)
     expect(dialog.textContent).not.toContain(PRINCIPAL_ID)
     expect(dialog.textContent).toContain('Credential history')
-    expect(dialog.textContent).toContain('All admitted Operations')
+    expect(dialog.textContent).toContain('All admitted Tools')
     expect(dialog.textContent).toContain('Issued')
     expect(dialog.textContent).toContain('expires')
     expect(dialog.textContent).toContain('Last authenticated')
@@ -294,15 +294,15 @@ describe('assistant access owner continuation anchors', () => {
     expect(dialog.textContent).toContain('Last used')
   })
 
-  it('shows the exact selected Operation authority', () => {
-    const operationRefs = [
+  it('shows the exact selected Tool authority', () => {
+    const toolRefs = [
       `operation:v1:${'1'.repeat(64)}`,
       `operation:v1:${'2'.repeat(64)}`,
     ]
     if (caller.grant === undefined) throw new Error('expected Agent grant')
     const selectedCaller: AgentCredentialSource = {
       ...caller,
-      grant: { ...caller.grant, operationAccess: 'selected_operations', operationRefs },
+      grant: { ...caller.grant, toolAccess: 'selected_tools', toolRefs },
     }
     render(
       <AeAgentOperatorConsole
@@ -314,11 +314,11 @@ describe('assistant access owner continuation anchors', () => {
     )
 
     const dialog = screen.getByRole('dialog', { name: 'Route assistant' })
-    for (const operationRef of operationRefs) {
-      const link = within(dialog).getByRole('link', { name: operationRef })
-      expect(link.getAttribute('href')).toBe(`/operations/${encodeURIComponent(operationRef)}`)
+    for (const toolRef of toolRefs) {
+      const link = within(dialog).getByRole('link', { name: toolRef })
+      expect(link.getAttribute('href')).toBe(`/tools/${encodeURIComponent(toolRef)}`)
     }
-    expect(dialog.textContent).not.toContain('All admitted Operations')
+    expect(dialog.textContent).not.toContain('All admitted Tools')
   })
 
   it('restores the authoritative Agent name when rename is refused', async () => {

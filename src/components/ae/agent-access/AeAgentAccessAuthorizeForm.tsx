@@ -14,10 +14,11 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { isLocalE2EAuthBypassEnabled } from '@/lib/client/local-e2e-auth'
+import { agentAuthorityModeAllows, type AgentAccessAuthorityMode } from '@/modules/agent-access/contract'
 import {
-  searchMarketOperations,
-  type OperationChoiceSearchResult,
-} from '@/components/ae/command-panel/market-operations-client'
+  searchMarketTools,
+  type ToolChoiceSearchResult,
+} from '@/components/ae/command-panel/market-tools-client'
 import {
   readAgentConsentDetails,
   type AgentConsentDetails,
@@ -25,27 +26,39 @@ import {
 } from '@/modules/agent-access/public'
 import { presentConnectionProblem } from '@/modules/agent-access/public'
 
-type PublicAuthorityMode = 'inspect_only' | 'approve_each' | 'bounded_mandate'
+type PublicAuthorityMode = Exclude<AgentAccessAuthorityMode, 'unrestricted_test_only'>
 
 const authorityOptions = [
-  { value: 'inspect_only', label: 'Browse only', description: 'Discover, compare, and run free read-only operations.' },
-  { value: 'approve_each', label: 'Ask each time', description: 'Paid or consequential work comes back to you first.' },
-  { value: 'bounded_mandate', label: 'Work within limits', description: 'Paid work stays within the exact limits shown below.' },
+  { value: 'read_only', label: 'Browse only', description: 'Discover, compare, and run free read-only Tools.' },
+  { value: 'approval_required', label: 'Ask each time', description: 'Paid or consequential work comes back to you first.' },
+  { value: 'spending_policy', label: 'Work within limits', description: 'Paid work stays within the exact limits shown below.' },
 ] as const
 
-function canSelectAuthority(value: PublicAuthorityMode, ceiling: string): boolean {
-  if (value === 'inspect_only') return true
-  if (value === 'approve_each') return ceiling !== 'inspect_only'
-  return ceiling === 'bounded_mandate'
+function canSelectAuthority(value: PublicAuthorityMode, ceiling: AgentAccessAuthorityMode): boolean {
+  return agentAuthorityModeAllows(ceiling, value)
 }
+
+type AgentAccessAuthorizeFormDetails = AgentConsentDetails & Readonly<{
+  grantRef: string
+  grantRevision: number
+  flow: 'device_code' | 'authorization_code'
+  clientName: string
+  mode: AgentAccessAuthorityMode
+  environment: 'sandbox' | 'production'
+  toolAccess: 'all_admitted' | 'selected_tools'
+  toolRefs: readonly string[]
+  expiresInSeconds: number
+  accessSummary: string
+}>
 
 type ConsentFormState = Readonly<{
   status: 'idle' | 'approved' | 'denied' | 'error' | 'outcome_unknown'
   pending: boolean
-  selectedMode: PublicAuthorityMode
+  selectedMode: AgentAccessAuthorityMode
   connectionTarget: 'new_agent' | 'replace_credential'
   replacementMode: 'planned' | 'compromise'
   agentTargets: readonly AgentConsentTarget[]
+  agentTargetsUnavailable: boolean
   agentTargetsNextCursor?: string
   agentTargetsLoading: boolean
   agentTargetsError?: string
@@ -70,26 +83,23 @@ type ConsentFormAction =
       errorCode?: string
     }>
 
-function initialConsentFormState(details: AgentConsentDetails): ConsentFormState {
+function initialConsentFormState(details: AgentAccessAuthorizeFormDetails): ConsentFormState {
   const suggestedReconnect = details.reconnectPrincipalRef === undefined
     ? undefined
     : details.agentTargets.find(({ principalRef }) => principalRef === details.reconnectPrincipalRef)
   return {
     status: 'idle',
     pending: false,
-    selectedMode: details.mode === 'inspect_only'
-      ? 'inspect_only'
-      : details.mode === 'bounded_mandate'
-        ? 'bounded_mandate'
-        : 'approve_each',
+    selectedMode: details.mode,
     connectionTarget: suggestedReconnect !== undefined || details.reconnectAmbiguous ? 'replace_credential' : 'new_agent',
     replacementMode: 'planned',
     agentTargets: details.agentTargets,
+    agentTargetsUnavailable: details.agentTargetsUnavailable,
     ...(details.agentTargetsNextCursor === undefined ? {} : { agentTargetsNextCursor: details.agentTargetsNextCursor }),
     agentTargetsLoading: false,
     ...(suggestedReconnect === undefined ? {} : { replacementPrincipalRef: suggestedReconnect.principalRef }),
     ...(details.agentTargetsUnavailable
-      ? { agentTargetsError: 'Existing agents could not be loaded. Retry before replacing a credential.' }
+      ? { agentTargetsError: 'Existing agent choices could not be verified. Retry before approving this request.' }
       : {}),
   }
 }
@@ -118,6 +128,7 @@ function consentFormReducer(state: ConsentFormState, action: ConsentFormAction):
     return {
       ...retained,
       agentTargets: [...targets.values()],
+      agentTargetsUnavailable: false,
       agentTargetsLoading: false,
       ...(action.nextCursor === undefined ? {} : { agentTargetsNextCursor: action.nextCursor }),
     }
@@ -147,18 +158,7 @@ type ConsentActionResult =
 type AgentAccessAuthorizeFormProps = Readonly<{
   locator: Readonly<{ kind: 'user_code' | 'grant_ref'; value: string }>
   oauthState?: string
-  details: AgentConsentDetails & Readonly<{
-    grantRef: string
-    grantRevision: number
-    flow: 'device_code' | 'authorization_code'
-    clientName: string
-    mode: string
-    environment: 'sandbox' | 'production'
-    operationAccess: 'all_admitted' | 'selected_operations'
-    operationRefs: readonly string[]
-    expiresInSeconds: number
-    accessSummary: string
-  }>
+  details: AgentAccessAuthorizeFormDetails
 }>
 
 type SubmitApproval = (body: string) => Promise<ConsentActionResult>
@@ -193,25 +193,25 @@ function LocalAgentAccessAuthorizeForm(props: AgentAccessAuthorizeFormProps) {
 function AgentAccessAuthorizeForm({ locator, oauthState, details, submitApproval }: AgentAccessAuthorizeFormProps & Readonly<{
   submitApproval: SubmitApproval
 }>) {
-  const { grantRef, grantRevision, clientName, mode, environment, operationAccess, operationRefs, expiresInSeconds, accessSummary } = details
+  const { grantRef, grantRevision, clientName, mode, environment, toolAccess, toolRefs, expiresInSeconds, accessSummary } = details
   const [state, dispatch] = useReducer(consentFormReducer, details, initialConsentFormState)
-  const [approvedOperationAccess, setApprovedOperationAccess] = useState(operationAccess)
-  const [approvedOperationRefs, setApprovedOperationRefs] = useState<readonly string[]>(operationRefs)
-  const [operationQuery, setOperationQuery] = useState('')
-  const [operationSearch, setOperationSearch] = useState<Readonly<{
+  const [approvedToolAccess, setApprovedToolAccess] = useState(toolAccess)
+  const [approvedToolRefs, setApprovedToolRefs] = useState<readonly string[]>(toolRefs)
+  const [toolQuery, setToolQuery] = useState('')
+  const [toolSearch, setToolSearch] = useState<Readonly<{
     pending: boolean
-    result?: OperationChoiceSearchResult
+    result?: ToolChoiceSearchResult
     error?: string
   }>>({ pending: false })
   const approveButtonRef = useRef<HTMLButtonElement>(null)
   const approvalInFlightRef = useRef(false)
-  const operationSelectionSummary = approvedOperationAccess === 'all_admitted'
-    ? 'All admitted Operations, including future admitted Operations'
-    : `${approvedOperationRefs.length} selected ${approvedOperationRefs.length === 1 ? 'Operation' : 'Operations'}`
-  const approvedOperationRefSet = new Set(approvedOperationRefs)
+  const toolSelectionSummary = approvedToolAccess === 'all_admitted'
+    ? 'All admitted Tools, including future admitted Tools'
+    : `${approvedToolRefs.length} selected ${approvedToolRefs.length === 1 ? 'Tool' : 'Tools'}`
+  const approvedToolRefSet = new Set(approvedToolRefs)
   const accessProfile = details.accessProfile ?? 'market'
   const {
-    status, pending, selectedMode, connectionTarget, agentTargets, agentTargetsNextCursor,
+    status, pending, selectedMode, connectionTarget, agentTargets, agentTargetsUnavailable, agentTargetsNextCursor,
     agentTargetsLoading, agentTargetsError, replacementPrincipalRef, replacementMode,
   } = state
   const approvalLabel = connectionTarget === 'new_agent'
@@ -221,24 +221,24 @@ function AgentAccessAuthorizeForm({ locator, oauthState, details, submitApproval
       : 'Replace credential'
   const approvalPendingLabel = connectionTarget === 'new_agent' ? 'Connecting…' : 'Replacing…'
 
-  async function findOperations() {
-    const query = operationQuery.trim()
-    if (query.length === 0 || operationSearch.pending) return
-    setOperationSearch({ pending: true })
+  async function findTools() {
+    const query = toolQuery.trim()
+    if (query.length === 0 || toolSearch.pending) return
+    setToolSearch({ pending: true })
     try {
-      setOperationSearch({ pending: false, result: await searchMarketOperations({ query, limit: 8 }) })
+      setToolSearch({ pending: false, result: await searchMarketTools({ query, limit: 8 }) })
     } catch {
-      setOperationSearch({ pending: false, error: 'Operation search is temporarily unavailable. Try again.' })
+      setToolSearch({ pending: false, error: 'Tool search is temporarily unavailable. Try again.' })
     }
   }
 
-  function addApprovedOperation(operationRef: string) {
-    setApprovedOperationAccess('selected_operations')
-    setApprovedOperationRefs((current) => [...new Set([...current, operationRef])].sort())
+  function addApprovedTool(toolRef: string) {
+    setApprovedToolAccess('selected_tools')
+    setApprovedToolRefs((current) => [...new Set([...current, toolRef])].sort())
   }
 
-  function removeApprovedOperation(operationRef: string) {
-    setApprovedOperationRefs((current) => current.filter((value) => value !== operationRef))
+  function removeApprovedTool(toolRef: string) {
+    setApprovedToolRefs((current) => current.filter((value) => value !== toolRef))
   }
 
   async function loadAgentTargets() {
@@ -269,14 +269,15 @@ function AgentAccessAuthorizeForm({ locator, oauthState, details, submitApproval
       ? grantRevision
       : replacement?.principalRevision
     if (expectedTargetRevision === undefined) return undefined
-    if (approvedOperationAccess === 'selected_operations' && approvedOperationRefs.length === 0) return undefined
+    if (agentTargetsUnavailable) return undefined
+    if (approvedToolAccess === 'selected_tools' && approvedToolRefs.length === 0) return undefined
     const params = new URLSearchParams({
       grant_ref: grantRef,
       expected_grant_revision: String(grantRevision),
       expected_target_revision: String(expectedTargetRevision),
       decision: 'approve',
       authority_mode: selectedMode,
-      approved_operation_access: approvedOperationAccess,
+      approved_tool_access: approvedToolAccess,
       connection_target: connectionTarget,
       ...(replacementPrincipalRef === undefined || connectionTarget !== 'replace_credential'
         ? {}
@@ -284,7 +285,7 @@ function AgentAccessAuthorizeForm({ locator, oauthState, details, submitApproval
       ...(connectionTarget === 'replace_credential' ? { replacement_mode: replacementMode } : {}),
       ...(oauthState === undefined ? {} : { state: oauthState }),
     })
-    for (const operationRef of approvedOperationRefs) params.append('approved_operation_ref', operationRef)
+    for (const toolRef of approvedToolRefs) params.append('approved_tool_ref', toolRef)
     return params.toString()
   }
 
@@ -346,8 +347,8 @@ function AgentAccessAuthorizeForm({ locator, oauthState, details, submitApproval
           <>
             <AeSection
               title={`Connect ${clientName}`}
-              description={accessProfile === 'supplier'
-                ? 'This separate credential can inspect and manage your supplier Operations.'
+              description={accessProfile === 'provider'
+                ? 'This separate credential can inspect and manage your provider Tools.'
                 : 'How much may this agent do without asking you?'}
             >
               {agentTargets.length === 0 && agentTargetsError === undefined && agentTargetsNextCursor === undefined ? null : <fieldset className="grid gap-3" disabled={pending}>
@@ -407,10 +408,10 @@ function AgentAccessAuthorizeForm({ locator, oauthState, details, submitApproval
                   </Alert>
                 ) : null}
               </fieldset>}
-              {accessProfile === 'supplier' ? (
+              {accessProfile === 'provider' ? (
                 <Alert>
-                  <AlertTitle>Supplier management</AlertTitle>
-                  <AlertDescription>May inspect lifecycle and earnings, publish, recheck, withdraw, and republish your Operations. It cannot spend buyer credit or manage unrelated account settings.</AlertDescription>
+                  <AlertTitle>Provider management</AlertTitle>
+                  <AlertDescription>May inspect lifecycle and earnings, publish, recheck, withdraw, and republish your Tools. It cannot spend buyer credit or manage unrelated account settings.</AlertDescription>
                 </Alert>
               ) : <fieldset className="grid gap-3" disabled={pending}>
                 <legend className="sr-only">Authority</legend>
@@ -431,62 +432,62 @@ function AgentAccessAuthorizeForm({ locator, oauthState, details, submitApproval
               </fieldset>}
               {accessProfile === 'market' ? (
                 <fieldset className="grid gap-3" disabled={pending}>
-                  <legend className="text-sm font-medium text-foreground">Operations</legend>
-                  {operationAccess === 'all_admitted' ? (
+                  <legend className="text-sm font-medium text-foreground">Tools</legend>
+                  {toolAccess === 'all_admitted' ? (
                     <RadioGroup
-                      value={approvedOperationAccess}
-                      onValueChange={(value) => setApprovedOperationAccess(value as 'all_admitted' | 'selected_operations')}
+                      value={approvedToolAccess}
+                      onValueChange={(value) => setApprovedToolAccess(value as 'all_admitted' | 'selected_tools')}
                       className="grid gap-2 sm:grid-cols-2"
                     >
-                      <Label htmlFor="operations-all" className="grid cursor-pointer grid-cols-[auto_minmax(0,1fr)] gap-3 rounded-md border p-3 has-[[data-state=checked]]:border-foreground">
-                        <RadioGroupItem id="operations-all" value="all_admitted" className="mt-1" />
-                        <span><span className="block font-medium">All admitted Operations</span><span className="text-sm font-normal text-muted-foreground">Includes Operations admitted later.</span></span>
+                      <Label htmlFor="tools-all" className="grid cursor-pointer grid-cols-[auto_minmax(0,1fr)] gap-3 rounded-md border p-3 has-[[data-state=checked]]:border-foreground">
+                        <RadioGroupItem id="tools-all" value="all_admitted" className="mt-1" />
+                        <span><span className="block font-medium">All admitted Tools</span><span className="text-sm font-normal text-muted-foreground">Includes Tools admitted later.</span></span>
                       </Label>
-                      <Label htmlFor="operations-selected" className="grid cursor-pointer grid-cols-[auto_minmax(0,1fr)] gap-3 rounded-md border p-3 has-[[data-state=checked]]:border-foreground">
-                        <RadioGroupItem id="operations-selected" value="selected_operations" className="mt-1" />
-                        <span><span className="block font-medium">Selected Operations</span><span className="text-sm font-normal text-muted-foreground">Limit this Agent to exact current Operation references.</span></span>
+                      <Label htmlFor="tools-selected" className="grid cursor-pointer grid-cols-[auto_minmax(0,1fr)] gap-3 rounded-md border p-3 has-[[data-state=checked]]:border-foreground">
+                        <RadioGroupItem id="tools-selected" value="selected_tools" className="mt-1" />
+                        <span><span className="block font-medium">Selected Tools</span><span className="text-sm font-normal text-muted-foreground">Limit this Agent to exact current Tool references.</span></span>
                       </Label>
                     </RadioGroup>
                   ) : (
-                    <p className="text-sm text-muted-foreground">The caller requested selected Operations. You may approve a non-empty subset, but cannot broaden it.</p>
+                    <p className="text-sm text-muted-foreground">The caller requested selected Tools. You may approve a non-empty subset, but cannot broaden it.</p>
                   )}
-                  {approvedOperationAccess === 'selected_operations' ? (
+                  {approvedToolAccess === 'selected_tools' ? (
                     <div className="grid gap-3">
-                      {approvedOperationRefs.length === 0 ? (
-                        <Alert variant="destructive"><AlertTitle>Select at least one Operation</AlertTitle><AlertDescription>Selected access cannot be empty.</AlertDescription></Alert>
+                      {approvedToolRefs.length === 0 ? (
+                        <Alert variant="destructive"><AlertTitle>Select at least one Tool</AlertTitle><AlertDescription>Selected access cannot be empty.</AlertDescription></Alert>
                       ) : (
-                        <ul className="grid gap-2" aria-label="Approved Operations">
-                          {approvedOperationRefs.map((operationRef) => (
-                            <li key={operationRef} className="flex min-w-0 items-center justify-between gap-3 rounded-md border px-3 py-2">
+                        <ul className="grid gap-2" aria-label="Approved Tools">
+                          {approvedToolRefs.map((toolRef) => (
+                            <li key={toolRef} className="flex min-w-0 items-center justify-between gap-3 rounded-md border px-3 py-2">
                               <Link
-                                to="/operations/$operationRef"
-                                params={{ operationRef }}
+                                to="/tools/$toolRef"
+                                params={{ toolRef }}
                                 className="truncate font-mono text-sm underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                               >
-                                {operationRef}
+                                {toolRef}
                               </Link>
-                              <Button type="button" variant="secondary" onClick={() => removeApprovedOperation(operationRef)}>Remove</Button>
+                              <Button type="button" variant="secondary" onClick={() => removeApprovedTool(toolRef)}>Remove</Button>
                             </li>
                           ))}
                         </ul>
                       )}
-                      {operationAccess === 'all_admitted' ? (
+                      {toolAccess === 'all_admitted' ? (
                         <div className="grid gap-2">
-                          <Label htmlFor="operation-search">Find an admitted Operation</Label>
+                          <Label htmlFor="tool-search">Find an admitted Tool</Label>
                           <div className="flex flex-col gap-2 sm:flex-row">
-                            <Input id="operation-search" value={operationQuery} onChange={(event) => setOperationQuery(event.target.value)} />
-                            <Button type="button" variant="secondary" disabled={operationSearch.pending || operationQuery.trim().length === 0} onClick={() => void findOperations()}>
-                              {operationSearch.pending ? 'Searching…' : 'Search Operations'}
+                            <Input id="tool-search" value={toolQuery} onChange={(event) => setToolQuery(event.target.value)} />
+                            <Button type="button" variant="secondary" disabled={toolSearch.pending || toolQuery.trim().length === 0} onClick={() => void findTools()}>
+                              {toolSearch.pending ? 'Searching…' : 'Search Tools'}
                             </Button>
                           </div>
-                          {operationSearch.error === undefined ? null : <p role="alert" className="text-sm text-destructive">{operationSearch.error}</p>}
-                          {operationSearch.result?.kind === 'ok' ? (
-                            <ul className="grid gap-2" aria-label="Operation search results">
-                              {operationSearch.result.items.map((item) => (
-                                <li key={item.operationRef} className="flex min-w-0 items-center justify-between gap-3 rounded-md border px-3 py-2">
-                                  <span className="min-w-0"><span className="block truncate font-medium">{item.title}</span><span className="block truncate font-mono text-xs text-muted-foreground">{item.operationRef}</span></span>
-                                  <Button type="button" variant="secondary" disabled={approvedOperationRefSet.has(item.operationRef)} onClick={() => addApprovedOperation(item.operationRef)}>
-                                    {approvedOperationRefSet.has(item.operationRef) ? 'Added' : 'Add'}
+                          {toolSearch.error === undefined ? null : <p role="alert" className="text-sm text-destructive">{toolSearch.error}</p>}
+                          {toolSearch.result?.kind === 'ok' ? (
+                            <ul className="grid gap-2" aria-label="Tool search results">
+                              {toolSearch.result.items.map((item) => (
+                                <li key={item.toolRef} className="flex min-w-0 items-center justify-between gap-3 rounded-md border px-3 py-2">
+                                  <span className="min-w-0"><span className="block truncate font-medium">{item.title}</span><span className="block truncate font-mono text-xs text-muted-foreground">{item.toolRef}</span></span>
+                                  <Button type="button" variant="secondary" disabled={approvedToolRefSet.has(item.toolRef)} onClick={() => addApprovedTool(item.toolRef)}>
+                                    {approvedToolRefSet.has(item.toolRef) ? 'Added' : 'Add'}
                                   </Button>
                                 </li>
                               ))}
@@ -500,7 +501,7 @@ function AgentAccessAuthorizeForm({ locator, oauthState, details, submitApproval
               ) : null}
               <AeFactList facts={[
                 { label: 'Application', value: `${clientName} · ${environment === 'sandbox' ? 'Sandbox' : 'Production'}` },
-                { label: 'Operations', value: operationSelectionSummary },
+                { label: 'Tools', value: toolSelectionSummary },
                 { label: 'Approved limits', value: accessSummary },
                 { label: 'Connection', value: `Stays signed in until ${formatConsentDuration(expiresInSeconds)} after approval, unless you disconnect it first.` },
               ]} />
@@ -512,7 +513,7 @@ function AgentAccessAuthorizeForm({ locator, oauthState, details, submitApproval
                   <AeFactList density="compact" facts={[
                     { label: 'Request revision', value: String(grantRevision), mono: true },
                     { label: 'Requested environment', value: environment === 'sandbox' ? 'Sandbox' : 'Production' },
-                    { label: 'Operation references', value: operationRefs.length === 0 ? 'All admitted Operations' : operationRefs.join(', '), mono: true },
+                    { label: 'Tool references', value: toolRefs.length === 0 ? 'All admitted Tools' : toolRefs.join(', '), mono: true },
                     { label: 'Request reference', value: grantRef, mono: true },
                   ]} />
                 </CollapsibleContent>
@@ -525,7 +526,7 @@ function AgentAccessAuthorizeForm({ locator, oauthState, details, submitApproval
                 aria-describedby="consent-expiry"
                 variant={connectionTarget === 'replace_credential' && replacementMode === 'compromise' ? 'destructive' : 'default'}
                 onClick={() => void approve()}
-                disabled={pending || (approvedOperationAccess === 'selected_operations' && approvedOperationRefs.length === 0) || (connectionTarget === 'replace_credential' && replacementPrincipalRef === undefined)}
+                disabled={pending || agentTargetsUnavailable || (approvedToolAccess === 'selected_tools' && approvedToolRefs.length === 0) || (connectionTarget === 'replace_credential' && replacementPrincipalRef === undefined)}
               >
                 {pending ? approvalPendingLabel : approvalLabel}
               </Button>

@@ -1,5 +1,5 @@
 import { MCP_HTTP_ENDPOINT_PATH } from '@/lib/mcp-protocol'
-import { OPERATION_INVOKE_ROUTE_CONTRACT } from '@/modules/capability-execution/operation-invoke-entry'
+import { CALL_ROUTE_CONTRACT } from '@/modules/capability-execution/call-entry'
 import { trimTrailingSlashes } from '@/modules/common/trim-trailing-slashes'
 
 import { PublicAgentSkillPath } from './agent-skill'
@@ -13,7 +13,7 @@ import { SiteDiscoveryManifestPath } from './site-manifest'
  *
  * Like the site manifest, this is a pure projection of route lists that
  * already govern other public surfaces — the llms.txt public surface list,
- * the developer discovery routes, and the operation invoke contract. Nothing
+ * the developer discovery routes, and the Call route contract. Nothing
  * is restated by hand: an endpoint cannot appear here without existing in the
  * surface that owns it.
  */
@@ -39,8 +39,8 @@ export function buildApiCatalogDocument(
   input: Readonly<{ canonicalBaseUrl: string }>,
 ): Readonly<{ linkset: readonly ApiCatalogLinksetEntry[] }> {
   const origin = trimTrailingSlashes(input.canonicalBaseUrl)
-  const restAnchors = DiscoveryPublicSurfacePaths.filter((path) => path.startsWith('/api/v1/market-operations/'))
-  if (restAnchors.length === 0) throw new Error('No market-operation REST anchors are projected from the public surface paths')
+  const restAnchors = DiscoveryPublicSurfacePaths.filter((path) => path.startsWith('/api/v1/market-tools/'))
+  if (restAnchors.length === 0) throw new Error('No market-tool REST anchors are projected from the public surface paths')
   const llmsPath = DeveloperDiscoveryPublicRoutes.find(({ path }) => path === '/llms.txt')?.path
   if (llmsPath === undefined) throw new Error('LLMs text discovery file is not listed in developer discovery routes')
   const forAgentsPath = DiscoveryPublicSurfacePaths.find((path) => path === '/for-agents')
@@ -65,7 +65,7 @@ export function buildApiCatalogDocument(
   return {
     linkset: [
       ...restAnchors.map(anchorEntry),
-      anchorEntry(OPERATION_INVOKE_ROUTE_CONTRACT.invoke.path),
+      anchorEntry(CALL_ROUTE_CONTRACT.call.path),
       anchorEntry(MCP_HTTP_ENDPOINT_PATH),
     ],
   }

@@ -34,7 +34,7 @@ describe('market-terminal CLI error contracts', () => {
     })
   }, 15_000)
 
-  it('requires a reachable market when browsing the Operation list', () => {
+  it('requires a reachable market when browsing the Tool list', () => {
     const result = spawnCliSync([
       '--base-url',
       'http://127.0.0.1:1',
@@ -222,7 +222,7 @@ describe('market-terminal CLI error contracts', () => {
         title: 'Unavailable',
         status: 503,
         kind: 'UNAVAILABLE',
-        code: 'operation_read_unavailable',
+        code: 'tool_read_unavailable',
         retryable: true,
       }))
     })
@@ -246,7 +246,7 @@ describe('market-terminal CLI error contracts', () => {
       expect(result.stdout).not.toContain(privateQuery)
       expect(JSON.parse(result.stdout)).toMatchObject({
         kind: 'UNAVAILABLE',
-        code: 'operation_read_unavailable',
+        code: 'tool_read_unavailable',
         retryable: true,
         suggestion: 'Check AE service health before retrying this read.',
         nextCommand: `ae doctor --base-url ${origin} --json`,
@@ -460,7 +460,7 @@ describe('market-terminal CLI error contracts', () => {
     }))
     vi.stubGlobal('fetch', fetchMock)
 
-    const outcome = await callJson('https://market.example', '/api/v1/operations/call', {
+    const outcome = await callJson('https://market.example', '/api/v1/tools/call', {
       method: 'POST',
       headers: { Authorization: 'Bearer ae-secret' },
       body: '{}',

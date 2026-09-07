@@ -24,7 +24,7 @@ function commitment() {
     publicationRef: 'publication:seller-1',
     publicationRevision: 2,
     draftOperationRef: 'draft-operation:seller-1:lookup',
-    operationMaterialDigest: digest('operation'),
+    toolMaterialDigest: digest('operation'),
     contractDigest: digest('contract'),
     bindingDigest: digest('binding'),
     priceDigest: digest('price'),
@@ -65,7 +65,7 @@ function commitmentInput() {
     publicationRef: base.publicationRef,
     publicationRevision: base.publicationRevision,
     draftOperationRef: base.draftOperationRef,
-    operationMaterialDigest: base.operationMaterialDigest,
+    toolMaterialDigest: base.toolMaterialDigest,
     contractDigest: base.contractDigest,
     bindingDigest: base.bindingDigest,
     priceDigest: base.priceDigest,
@@ -96,7 +96,7 @@ function commitmentInput() {
 function current(candidate = commitment()) {
   return {
     draftOperationRef: candidate.draftOperationRef,
-    operationMaterialDigest: candidate.operationMaterialDigest,
+    toolMaterialDigest: candidate.toolMaterialDigest,
     contractDigest: candidate.contractDigest,
     bindingDigest: candidate.bindingDigest,
     priceDigest: candidate.priceDigest,
@@ -109,8 +109,8 @@ function completedObservation(candidate = commitment()): SellerOnboardingCanaryI
     executionPurpose: 'seller_onboarding_canary',
     canaryRef: candidate.canaryRef,
     canaryCommitmentDigest: candidate.commitmentDigest,
-    invocationRef: envelope.invocationRef,
-    operationRef: candidate.draftOperationRef,
+    callRef: envelope.callRef,
+    toolRef: candidate.draftOperationRef,
     inputDigest: candidate.inputDigest,
     state: 'completed',
     outputContractValid: true,
@@ -133,7 +133,7 @@ describe('seller onboarding canary seam', () => {
     const retry = createSellerOnboardingCanaryCommitment({
       ...commitmentInput(),
       idempotencyKey: 'seller-onboarding:lookup:random-retry-key',
-      operationMaterialDigest: digest('readiness-refreshed-operation-material'),
+      toolMaterialDigest: digest('readiness-refreshed-operation-material'),
       readinessDigest: digest('refreshed-readiness-observation'),
       readinessObservedAt: NOW + 1_000,
       readinessValidUntil: NOW + 120_000,
@@ -143,8 +143,8 @@ describe('seller onboarding canary seam', () => {
 
     expect(retry.canaryRef).toBe(first.canaryRef)
     expect(retry.commitmentDigest).not.toBe(first.commitmentDigest)
-    expect(sellerOnboardingCanaryExecutionEnvelope(retry).invocationRef)
-      .toBe(sellerOnboardingCanaryExecutionEnvelope(first).invocationRef)
+    expect(sellerOnboardingCanaryExecutionEnvelope(retry).callRef)
+      .toBe(sellerOnboardingCanaryExecutionEnvelope(first).callRef)
   })
 
   it.each([
@@ -186,7 +186,7 @@ describe('seller onboarding canary seam', () => {
       executionPurpose: 'seller_onboarding_canary',
       canaryRef: first.canaryRef,
       canaryCommitmentDigest: first.commitmentDigest,
-      operationRef: first.draftOperationRef,
+      toolRef: first.draftOperationRef,
       inputDigest: first.inputDigest,
       idempotencyKey: first.idempotencyKey,
       funding: {
@@ -215,7 +215,7 @@ describe('seller onboarding canary seam', () => {
       publicationRef: base.publicationRef,
       publicationRevision: base.publicationRevision,
       draftOperationRef: base.draftOperationRef,
-      operationMaterialDigest: base.operationMaterialDigest,
+      toolMaterialDigest: base.toolMaterialDigest,
       contractDigest: base.contractDigest,
       bindingDigest: base.bindingDigest,
       priceDigest: base.priceDigest,
@@ -267,7 +267,7 @@ describe('seller onboarding canary seam', () => {
     const result = projectSellerOnboardingCanaryStatus({
       commitment: candidate,
       observation: completedObservation(candidate),
-      currentOperation: current(candidate),
+      currentTool: current(candidate),
       now: NOW + 1_000,
     })
 
@@ -277,7 +277,7 @@ describe('seller onboarding canary seam', () => {
       canaryRef: candidate.canaryRef,
       canaryCommitmentDigest: candidate.commitmentDigest,
       draftOperationRef: candidate.draftOperationRef,
-      operationMaterialDigest: candidate.operationMaterialDigest,
+      toolMaterialDigest: candidate.toolMaterialDigest,
       contractDigest: candidate.contractDigest,
       bindingDigest: candidate.bindingDigest,
       priceDigest: candidate.priceDigest,
@@ -299,7 +299,7 @@ describe('seller onboarding canary seam', () => {
     const result = projectSellerOnboardingCanaryStatus({
       commitment: candidate,
       observation: { ...completedObservation(candidate), ...patch },
-      currentOperation: current(candidate),
+      currentTool: current(candidate),
       now: NOW + 1_000,
     })
     expect(result).toMatchObject({ kind: 'failed', code: expectedCode })
@@ -310,7 +310,7 @@ describe('seller onboarding canary seam', () => {
     const result = projectSellerOnboardingCanaryStatus({
       commitment: candidate,
       observation: completedObservation(candidate),
-      currentOperation: { ...current(candidate), contractDigest: digest('changed-contract') },
+      currentTool: { ...current(candidate), contractDigest: digest('changed-contract') },
       now: NOW + 1_000,
     })
     expect(result).toMatchObject({ kind: 'failed', code: 'operation_commitment_stale' })
@@ -324,13 +324,13 @@ describe('seller onboarding canary seam', () => {
         ...completedObservation(candidate),
         state: 'reconciliation_required',
       },
-      currentOperation: current(candidate),
+      currentTool: current(candidate),
       now: NOW + 1_000,
     })
     expect(result).toEqual({
       kind: 'reconciliation_required',
       canaryRef: candidate.canaryRef,
-      invocationRef: sellerOnboardingCanaryExecutionEnvelope(candidate).invocationRef,
+      callRef: sellerOnboardingCanaryExecutionEnvelope(candidate).callRef,
     })
   })
 
@@ -340,7 +340,7 @@ describe('seller onboarding canary seam', () => {
     expect(projectSellerOnboardingCanaryStatus({
       commitment: candidate,
       observation: completedObservation(candidate),
-      currentOperation: current(candidate),
+      currentTool: current(candidate),
       now: expiredAt,
     })).toMatchObject({ kind: 'passed' })
 
@@ -349,7 +349,7 @@ describe('seller onboarding canary seam', () => {
       expect(projectSellerOnboardingCanaryStatus({
         commitment: candidate,
         observation,
-        currentOperation: current(candidate),
+        currentTool: current(candidate),
         now: expiredAt,
       })).toMatchObject({
         kind: 'failed',
@@ -360,7 +360,7 @@ describe('seller onboarding canary seam', () => {
     expect(projectSellerOnboardingCanaryStatus({
       commitment: candidate,
       observation: { ...completedObservation(candidate), state: 'reconciliation_required' },
-      currentOperation: { ...current(candidate), contractDigest: digest('stale') },
+      currentTool: { ...current(candidate), contractDigest: digest('stale') },
       now: expiredAt,
     })).toMatchObject({ kind: 'reconciliation_required' })
   })

@@ -32,13 +32,13 @@ describe('ADR-009 supplied-candidate development quote collection', () => {
       },
       operationKey: 'dev:quote-operation:independent-b',
     }
-    let invocationSequence = 0
+    let executionSequence = 0
     const tracer = createInMemoryActionExecutionTracer({
       action: collectSuppliedCandidateQuoteAction,
       now: nowIso,
-      nextExecutionRef: () => `dev:invocation:authority-isolation:${++invocationSequence}`,
-      nextAuthorityRef: () => `dev:authority:quote:${invocationSequence}`,
-      nextAttemptRef: () => `dev:attempt:quote:${invocationSequence}`,
+      nextExecutionRef: () => `dev:invocation:authority-isolation:${++executionSequence}`,
+      nextAuthorityRef: () => `dev:authority:quote:${executionSequence}`,
+      nextAttemptRef: () => `dev:attempt:quote:${executionSequence}`,
     })
     const prepare = (
       invocationInput: SuppliedCandidateQuoteInput,

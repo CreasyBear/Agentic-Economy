@@ -138,14 +138,14 @@ describe('facilitator discovery reconciliation', () => {
     })
     expect(persisted.publications).toHaveLength(1)
 
-    const search = await backend.query(api.capabilitySupplyOperations.search, {
+    const search = await backend.query(api.capabilitySupplyTools.search, {
       query: 'timezone',
       limit: 20,
     })
     expect(search.kind).toBe('ok')
     if (search.kind !== 'ok') throw new Error(`expected public search result:${search.kind}`)
-    expect(search.items.map(({ operationRef }) => operationRef)).toContain(
-      persisted.publications[0]?.operationRef,
+    expect(search.items.map(({ toolRef }) => toolRef)).toContain(
+      persisted.publications[0]?.toolRef,
     )
   })
 

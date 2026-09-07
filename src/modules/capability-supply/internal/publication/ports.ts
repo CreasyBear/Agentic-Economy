@@ -4,7 +4,7 @@ import type {
   CapabilityOfferingOrigin,
   CapabilityPublicationSource,
   CapabilityPublicationSourceSelector,
-  PublicOperationRef,
+  PublicToolRef,
 } from '@/modules/capability-supply/public'
 import type { CapabilityConnectionAuthoritySnapshot } from '../binding/registration'
 import type {
@@ -12,7 +12,7 @@ import type {
   RotateCapabilityTransportBindingAuthorityResult,
 } from '../binding/write'
 import type { ProviderConnection } from '../../provider-connection'
-import type { OperationLedgerPorts } from '../operation-ledger'
+import type { OperationLedgerPorts } from '../tool-ledger'
 import type { CapabilityPublicationAuthorityMode } from './provenance'
 
 export type PublicationReadinessOutcome =
@@ -30,7 +30,7 @@ export type PublicationReadinessOutcome =
 
 export type PublicationCommandRow = Readonly<{
   id: string
-  operationRef: PublicOperationRef
+  toolRef: PublicToolRef
   publicationRef: string
   revision: number
   businessId: string
@@ -73,7 +73,7 @@ export type PublicationCommandRow = Readonly<{
 
 export type PublicationInsertInput = Readonly<{
   publicationRef: string
-  operationRef: PublicOperationRef
+  toolRef: PublicToolRef
   revision: number
   businessId: string
   networkId: string

@@ -5,33 +5,33 @@ import { AeSection } from '@/components/ae/layout/AeSection'
 import { Badge } from '@/components/ui/badge'
 
 import type { SupplyLandingTool } from '@/modules/capability-supply/supply-funnel.functions'
-import type { OperationCardViewModel } from '@/modules/market/operation-view-model'
+import type { ToolCardViewModel } from '@/modules/market/tool-view-model'
 
 const INITIAL_PROOF_COUNT = 3
 
 export function AeSupplyAgentProof({
   tools,
-  operations,
+  publishedTools,
 }: Readonly<{
   tools: readonly SupplyLandingTool[]
-  operations: readonly OperationCardViewModel[]
+  publishedTools: readonly ToolCardViewModel[]
 }>) {
   return (
     <AeSection
       title="What agents can inspect"
-      description="Supplier profiles are business metadata. AE interface actions help agents inspect them; neither becomes callable supply until an Operation is admitted and published."
+      description="Provider profiles are business metadata. AE interface actions help agents inspect them; neither becomes callable supply until a Tool is admitted and published."
     >
       <div className="grid gap-8">
         <div className="grid gap-3">
-          <h3 className="text-sm font-medium text-foreground">Operations agents can find now</h3>
-          {operations.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No Operations are published yet. Be the first supplier to add one bounded job.</p>
+          <h3 className="text-sm font-medium text-foreground">Tools agents can find now</h3>
+          {publishedTools.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No Tools are published yet. Be the first provider to add one bounded job.</p>
           ) : (
             <ProofList
-              items={operations}
-              remainingLabel="more Operations"
-              getKey={(operation) => operation.operationRef}
-              render={(operation) => <OperationProofRow operation={operation} />}
+              items={publishedTools}
+              remainingLabel="more Tools"
+              getKey={(tool) => tool.toolRef}
+              render={(tool) => <PublishedToolProofRow tool={tool} />}
             />
           )}
         </div>
@@ -103,28 +103,28 @@ function ToolProofRow({ tool }: Readonly<{ tool: SupplyLandingTool }>) {
   )
 }
 
-function OperationProofRow({ operation }: Readonly<{ operation: OperationCardViewModel }>) {
+function PublishedToolProofRow({ tool }: Readonly<{ tool: ToolCardViewModel }>) {
   return (
     <div className="grid gap-2">
       <div className="grid gap-1 sm:grid-cols-[1fr_auto] sm:items-start">
         <div>
           <Link
-            to="/operations/$operationRef"
-            params={{ operationRef: operation.operationRef }}
+            to="/tools/$toolRef"
+            params={{ toolRef: tool.toolRef }}
             className="font-medium text-foreground underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
-            {operation.title}
+            {tool.title}
           </Link>
-          <p className="text-sm text-muted-foreground">{operation.supplierName} · {operation.category.label}</p>
+          <p className="text-sm text-muted-foreground">{tool.providerName} · {tool.category.label}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2 sm:justify-end">
-          <Badge variant={operation.readiness === 'Routeable' ? 'success' : operation.readiness === 'SetupRequired' ? 'warning' : 'outline'}>
-            {operation.readinessLabel}
+          <Badge variant={tool.readiness === 'Routeable' ? 'success' : tool.readiness === 'SetupRequired' ? 'warning' : 'outline'}>
+            {tool.readinessLabel}
           </Badge>
-          <span className="text-sm tabular-nums text-muted-foreground">{operation.price}</span>
+          <span className="text-sm tabular-nums text-muted-foreground">{tool.price}</span>
         </div>
       </div>
-      <p className="text-sm text-muted-foreground">{operation.summary}</p>
+      <p className="text-sm text-muted-foreground">{tool.summary}</p>
     </div>
   )
 }

@@ -4,14 +4,14 @@ import {
   AGENT_ACCESS_DEFAULT_APPLICATION_REF,
   AGENT_ACCESS_KEY_TTL_SECONDS,
   CUSTOMER_REQUEST_AGENT_SCOPE,
-  MARKET_OPERATIONS_INVOKE_SCOPE,
+  MARKET_TOOLS_CALL_SCOPE,
   MARKET_SUPPLY_MANAGE_SCOPE,
   issueAgentAccessKey,
-  agentAccessOperationSelectionDigest,
+  agentAccessToolSelectionDigest,
   listAgentAccessKeys,
   projectAgentAccessKey,
 } from '../../src/modules/agent-access/agent-access'
-import { CUSTOMER_REQUEST_BOUNDED_MANDATE_SCOPE, CUSTOMER_REQUEST_INSPECT_ONLY_SCOPE } from '../../src/modules/agent-access/contract'
+import { CUSTOMER_REQUEST_READ_ONLY_SCOPE, CUSTOMER_REQUEST_SPENDING_POLICY_SCOPE } from '../../src/modules/agent-access/contract'
 import { defaultSandboxAgentAccessPolicy } from '../../src/modules/agent-access/sandbox-policy'
 import { buildProductionAgentAccessPolicy } from '../../src/modules/agent-access/production-policy'
 import { issuedAgentCanonicalRefs } from '../../src/modules/agent-access/issued-agent-binding'
@@ -20,19 +20,19 @@ import { LOCAL_E2E_OPERATOR_PRINCIPAL } from '../../src/lib/server/local-e2e-byp
 
 const policy = defaultSandboxAgentAccessPolicy({ currency: 'USD', exponent: 2 })
 const scopes = [
-  MARKET_OPERATIONS_INVOKE_SCOPE,
-  CUSTOMER_REQUEST_INSPECT_ONLY_SCOPE,
+  MARKET_TOOLS_CALL_SCOPE,
+  CUSTOMER_REQUEST_READ_ONLY_SCOPE,
 ] as const
 const canonicalClaims = {
   aePurpose: 'agent_access',
   aeGrantRef: 'setup-12345678',
   aeDisplayName: 'My assistant',
-  aeAuthorityMode: 'inspect_only',
+  aeAuthorityMode: 'read_only',
   aeIssuanceKey: 'setup-12345678',
   aeApplicationRef: AGENT_ACCESS_DEFAULT_APPLICATION_REF,
   aeEnvironment: 'sandbox',
   aeScopes: JSON.stringify(scopes),
-  aeOperationSelectionDigest: agentAccessOperationSelectionDigest({ operationAccess: 'all_admitted', operationRefs: [] }),
+  aeToolSelectionDigest: agentAccessToolSelectionDigest({ toolAccess: 'all_admitted', toolRefs: [] }),
 }
 
 function existingKey(overrides: Record<string, unknown> = {}) {
@@ -48,11 +48,11 @@ function existingKey(overrides: Record<string, unknown> = {}) {
     ...overrides,
   }
 }
-const recordedBinding = (grantRef: string, policyDigest = `policy:${grantRef}`) => ({
+const recordedBinding = (grantRef: string, spendingPolicyDigest = `policy:${grantRef}`) => ({
   kind: 'recorded' as const,
   grantRef,
   generation: 1,
-  policyDigest,
+  spendingPolicyDigest,
   lifecycle: 'active' as const,
   expiresAt: 2_000,
 })
@@ -84,18 +84,18 @@ describe('agent access', () => {
   it('projects a supply-only key with the bounded supply authority', () => {
     const projected = projectAgentAccessKey(existingKey({
       scopes: [MARKET_SUPPLY_MANAGE_SCOPE],
-      claims: { ...canonicalClaims, aeAuthorityMode: 'bounded_mandate' },
+      claims: { ...canonicalClaims, aeAuthorityMode: 'spending_policy' },
     }))
     expect(projected).toMatchObject({
       scopes: [MARKET_SUPPLY_MANAGE_SCOPE],
-      authorityMode: 'bounded_mandate',
+      authorityMode: 'spending_policy',
     })
   })
   it('issues a supply-only key without adding the default operation scope', async () => {
     const result = await issueAgentAccessKey({
       principal: { userId: 'owner_123' },
       input: { name: 'Supply key', idempotencyKey: 'supply-12345678', scopes: [MARKET_SUPPLY_MANAGE_SCOPE] },
-      policy,
+      spendingPolicy: policy,
       api: {
         create: vi.fn().mockResolvedValue({ id: 'supply_key', secret: 'supply_secret', revoked: false, expired: false }),
         getSecret: vi.fn().mockResolvedValue({ secret: 'supply_secret' }),
@@ -105,7 +105,7 @@ describe('agent access', () => {
     })
     expect(result).toMatchObject({
       kind: 'created',
-      authorityMode: 'bounded_mandate',
+      authorityMode: 'spending_policy',
       scopes: [MARKET_SUPPLY_MANAGE_SCOPE],
     })
   })
@@ -115,9 +115,9 @@ describe('agent access', () => {
       input: {
         name: 'Legacy create key',
         idempotencyKey: 'create-12345678',
-        scopes: [MARKET_OPERATIONS_INVOKE_SCOPE, CUSTOMER_REQUEST_AGENT_SCOPE, CUSTOMER_REQUEST_INSPECT_ONLY_SCOPE],
+        scopes: [MARKET_TOOLS_CALL_SCOPE, CUSTOMER_REQUEST_AGENT_SCOPE, CUSTOMER_REQUEST_READ_ONLY_SCOPE],
       },
-      policy,
+      spendingPolicy: policy,
       api: {
         create: vi.fn(),
         getSecret: vi.fn(),
@@ -133,9 +133,9 @@ describe('agent access', () => {
       input: {
         name: 'CLI key',
         idempotencyKey: 'cli-12345678',
-        scopes: [MARKET_OPERATIONS_INVOKE_SCOPE, CUSTOMER_REQUEST_BOUNDED_MANDATE_SCOPE],
+        scopes: [MARKET_TOOLS_CALL_SCOPE, CUSTOMER_REQUEST_SPENDING_POLICY_SCOPE],
       },
-      policy,
+      spendingPolicy: policy,
       api: {
         create: vi.fn().mockResolvedValue({ id: 'cli_key', secret: 'cli_secret', revoked: false, expired: false }),
         getSecret: vi.fn().mockResolvedValue({ secret: 'cli_secret' }),
@@ -145,8 +145,8 @@ describe('agent access', () => {
     })
     expect(result).toMatchObject({
       kind: 'created',
-      authorityMode: 'bounded_mandate',
-      scopes: [MARKET_OPERATIONS_INVOKE_SCOPE, CUSTOMER_REQUEST_BOUNDED_MANDATE_SCOPE],
+      authorityMode: 'spending_policy',
+      scopes: [MARKET_TOOLS_CALL_SCOPE, CUSTOMER_REQUEST_SPENDING_POLICY_SCOPE],
     })
   })
   it('issues and exactly replays one canonical market-operations key', async () => {
@@ -161,14 +161,14 @@ describe('agent access', () => {
     const first = await issueAgentAccessKey({
       principal: { userId: 'owner_123' },
       input: { name: 'My assistant', idempotencyKey: 'setup-12345678' },
-      policy,
+      spendingPolicy: policy,
       api,
       registerBinding,
     })
     const replay = await issueAgentAccessKey({
       principal: { userId: 'owner_123' },
       input: { name: 'My assistant', idempotencyKey: 'setup-12345678' },
-      policy,
+      spendingPolicy: policy,
       api,
       registerBinding,
     })
@@ -178,7 +178,7 @@ describe('agent access', () => {
       keyId: 'key_123',
       secret: 'ae_test_secret',
       expiresInSeconds: AGENT_ACCESS_KEY_TTL_SECONDS,
-      authorityMode: 'inspect_only',
+      authorityMode: 'read_only',
       scopes,
       grantRef: 'setup-12345678',
     })
@@ -187,7 +187,7 @@ describe('agent access', () => {
       keyId: 'key_123',
       secret: 'ae_test_secret',
       expiresInSeconds: AGENT_ACCESS_KEY_TTL_SECONDS,
-      authorityMode: 'inspect_only',
+      authorityMode: 'read_only',
       scopes,
       grantRef: 'setup-12345678',
     })
@@ -201,7 +201,7 @@ describe('agent access', () => {
       claims: {
         ...canonicalClaims,
       },
-      description: 'Use Agentic Economy Market Operations with this assistant.',
+      description: 'Use Agentic Economy Tools with this assistant.',
     }))
     expect(registerBinding).toHaveBeenCalledWith(expect.objectContaining({
       issuanceKey: 'setup-12345678',
@@ -211,8 +211,8 @@ describe('agent access', () => {
       applicationRef: AGENT_ACCESS_DEFAULT_APPLICATION_REF,
       environment: 'sandbox',
       scopes,
-      authorityMode: 'inspect_only',
-      policy,
+      authorityMode: 'read_only',
+      spendingPolicy: policy,
     }))
     expect(getSecret).toHaveBeenCalledWith('key_123')
   })
@@ -237,7 +237,7 @@ describe('agent access', () => {
         environment: 'sandbox',
         expiresInSeconds: 60,
       },
-      policy,
+      spendingPolicy: policy,
       api,
       registerBinding,
       returnSecret: false,
@@ -262,10 +262,10 @@ describe('agent access', () => {
         applicationRef: AGENT_ACCESS_DEFAULT_APPLICATION_REF,
         environment: 'sandbox',
         scopes,
-        authorityMode: 'inspect_only',
-        operationAccess: 'all_admitted',
-        operationRefs: [],
-        policy,
+        authorityMode: 'read_only',
+        toolAccess: 'all_admitted',
+        toolRefs: [],
+        spendingPolicy: policy,
       }))
     } finally {
       vi.useRealTimers()
@@ -274,38 +274,38 @@ describe('agent access', () => {
   })
 
   it('binds Clerk replay to one compact canonical Operation-selection digest', async () => {
-    const operationRefs = [`operation:v1:${'a'.repeat(64)}`, `operation:v1:${'b'.repeat(64)}`]
-    const selectedPolicy = { ...policy, operationAccess: 'selected_operations' as const, operationRefs }
+    const toolRefs = [`operation:v1:${'a'.repeat(64)}`, `operation:v1:${'b'.repeat(64)}`]
+    const selectedPolicy = { ...policy, toolAccess: 'selected_tools' as const, toolRefs }
     const create = vi.fn().mockResolvedValue({ id: 'key_selected', secret: 'selected_secret' })
     const registerBinding = vi.fn().mockResolvedValue(recordedBinding('selected-12345678'))
     const input = {
       name: 'Selected assistant', idempotencyKey: 'selected-12345678',
-      operationAccess: 'selected_operations' as const, operationRefs: [...operationRefs].reverse(),
+      toolAccess: 'selected_tools' as const, toolRefs: [...toolRefs].reverse(),
     }
     await expect(issueAgentAccessKey({
-      principal: { userId: 'owner_123' }, input, policy: selectedPolicy,
+      principal: { userId: 'owner_123' }, input, spendingPolicy: selectedPolicy,
       api: { create, getSecret: vi.fn().mockResolvedValue({ secret: 'selected_secret' }), list: vi.fn().mockResolvedValue({ data: [] }) },
       registerBinding,
     })).resolves.toMatchObject({ kind: 'created' })
     const claims = create.mock.calls[0]?.[0]?.claims as Record<string, string>
-    expect(claims.aeOperationSelectionDigest).toBe(agentAccessOperationSelectionDigest(selectedPolicy))
-    expect(JSON.stringify(claims)).not.toContain(operationRefs[0])
-    expect(JSON.stringify(claims)).not.toContain(operationRefs[1])
+    expect(claims.aeToolSelectionDigest).toBe(agentAccessToolSelectionDigest(selectedPolicy))
+    expect(JSON.stringify(claims)).not.toContain(toolRefs[0])
+    expect(JSON.stringify(claims)).not.toContain(toolRefs[1])
 
     const existing = existingKey({
       id: 'key_selected',
       claims: { ...canonicalClaims, ...claims, aeDisplayName: input.name, aeIssuanceKey: input.idempotencyKey, aeGrantRef: input.idempotencyKey },
     })
     await expect(issueAgentAccessKey({
-      principal: { userId: 'owner_123' }, input, policy: selectedPolicy,
+      principal: { userId: 'owner_123' }, input, spendingPolicy: selectedPolicy,
       api: { create: vi.fn(), getSecret: vi.fn().mockResolvedValue({ secret: 'selected_secret' }), list: vi.fn().mockResolvedValue({ data: [existing] }) },
       registerBinding,
     })).resolves.toMatchObject({ kind: 'replayed' })
-    const narrowedPolicy = { ...policy, operationAccess: 'selected_operations' as const, operationRefs: [operationRefs[0]!] }
+    const narrowedPolicy = { ...policy, toolAccess: 'selected_tools' as const, toolRefs: [toolRefs[0]!] }
     await expect(issueAgentAccessKey({
       principal: { userId: 'owner_123' },
-      input: { ...input, operationRefs: [operationRefs[0]!] },
-      policy: narrowedPolicy,
+      input: { ...input, toolRefs: [toolRefs[0]!] },
+      spendingPolicy: narrowedPolicy,
       api: { create: vi.fn(), getSecret: vi.fn(), list: vi.fn().mockResolvedValue({ data: [existing] }) },
       registerBinding,
     })).resolves.toEqual({ kind: 'error', code: 'idempotency_conflict', retryable: false })
@@ -317,7 +317,7 @@ describe('agent access', () => {
       kind: 'recorded' as const,
       grantRef: 'atomic-12345678',
       generation: 1,
-      policyDigest: 'policy:atomic-12345678',
+      spendingPolicyDigest: 'policy:atomic-12345678',
       lifecycle: 'active' as const,
       expiresAt: 2_000,
     })
@@ -325,7 +325,7 @@ describe('agent access', () => {
     const result = await issueAgentAccessKey({
       principal: { userId: 'owner_123' },
       input: { name: 'Atomic assistant', idempotencyKey: 'atomic-12345678' },
-      policy,
+      spendingPolicy: policy,
       api: {
         create,
         getSecret: vi.fn(),
@@ -351,7 +351,7 @@ describe('agent access', () => {
     const productionPolicy = buildProductionAgentAccessPolicy({
       currency: 'USD',
       exponent: 2,
-      maximumSpendPerInvocation: { currency: 'USD', units: '100', exponent: 2 },
+      maximumSpendPerCall: { currency: 'USD', units: '100', exponent: 2 },
       maximumDailySpend: { currency: 'USD', units: '500', exponent: 2 },
       maximumMonthlySpend: { currency: 'USD', units: '2000', exponent: 2 },
     })
@@ -360,9 +360,9 @@ describe('agent access', () => {
     const input = {
       name: 'Production assistant',
       idempotencyKey: 'production-12345678',
-      scopes: [MARKET_OPERATIONS_INVOKE_SCOPE, CUSTOMER_REQUEST_BOUNDED_MANDATE_SCOPE],
+      scopes: [MARKET_TOOLS_CALL_SCOPE, CUSTOMER_REQUEST_SPENDING_POLICY_SCOPE],
       environment: 'production' as const,
-      maximumSpendPerInvocation: { currency: 'USD', units: '100', exponent: 2 },
+      maximumSpendPerCall: { currency: 'USD', units: '100', exponent: 2 },
       maximumDailySpend: { currency: 'USD', units: '500', exponent: 2 },
       maximumMonthlySpend: { currency: 'USD', units: '2000', exponent: 2 },
       expiresInSeconds: 3_600,
@@ -370,17 +370,17 @@ describe('agent access', () => {
     const result = await issueAgentAccessKey({
       principal: { userId: 'owner_123' },
       input,
-      policy: productionPolicy,
+      spendingPolicy: productionPolicy,
       api: { create, getSecret: vi.fn().mockResolvedValue({ secret: 'production_secret' }), list: vi.fn().mockResolvedValue({ data: [] }) },
       registerBinding,
     })
-    expect(result).toMatchObject({ kind: 'created', expiresInSeconds: 3_600, authorityMode: 'bounded_mandate' })
+    expect(result).toMatchObject({ kind: 'created', expiresInSeconds: 3_600, authorityMode: 'spending_policy' })
     expect(create).toHaveBeenCalledWith(expect.objectContaining({
       secondsUntilExpiration: 3_600,
       claims: expect.objectContaining({
         aeEnvironment: 'production',
         aeExpiresInSeconds: '3600',
-        aeMaximumSpendPerInvocation: 'USD:100:2',
+        aeMaximumSpendPerCall: 'USD:100:2',
         aeMaximumDailySpend: 'USD:500:2',
         aeMaximumMonthlySpend: 'USD:2000:2',
       }),
@@ -389,12 +389,12 @@ describe('agent access', () => {
     const existingClaims = {
       ...canonicalClaims,
       aeEnvironment: 'production',
-      aeAuthorityMode: 'bounded_mandate',
+      aeAuthorityMode: 'spending_policy',
       aeGrantRef: 'production-12345678',
       aeIssuanceKey: 'production-12345678',
       aeDisplayName: 'Production assistant',
       aeExpiresInSeconds: '3600',
-      aeMaximumSpendPerInvocation: 'USD:100:2',
+      aeMaximumSpendPerCall: 'USD:100:2',
       aeMaximumDailySpend: 'USD:500:2',
       aeMaximumMonthlySpend: 'USD:2000:2',
       aeScopes: JSON.stringify(input.scopes),
@@ -402,7 +402,7 @@ describe('agent access', () => {
     const conflict = await issueAgentAccessKey({
       principal: { userId: 'owner_123' },
       input: { ...input, expiresInSeconds: 7_200 },
-      policy: productionPolicy,
+      spendingPolicy: productionPolicy,
       api: {
         create: vi.fn(),
         getSecret: vi.fn(),
@@ -413,17 +413,17 @@ describe('agent access', () => {
     expect(conflict).toEqual({ kind: 'error', code: 'idempotency_conflict', retryable: false })
   })
 
-  it('rejects production full_yolo before creating a Clerk key', async () => {
+  it('rejects production unrestricted_test_only before creating a Clerk key', async () => {
     const create = vi.fn()
     const result = await issueAgentAccessKey({
       principal: { userId: 'owner_123' },
       input: {
         name: 'Unsafe production key',
         idempotencyKey: 'unsafe-12345678',
-        scopes: [MARKET_OPERATIONS_INVOKE_SCOPE, 'customer_requests:full_yolo'],
+        scopes: [MARKET_TOOLS_CALL_SCOPE, 'customer_requests:unrestricted_test_only'],
         environment: 'production',
       },
-      policy: defaultSandboxAgentAccessPolicy({ currency: 'USD', exponent: 2 }),
+      spendingPolicy: defaultSandboxAgentAccessPolicy({ currency: 'USD', exponent: 2 }),
       api: { create, getSecret: vi.fn(), list: vi.fn() },
       registerBinding: vi.fn(),
     })
@@ -437,7 +437,7 @@ describe('agent access', () => {
     const result = await issueAgentAccessKey({
       principal: { userId: 'owner_fresh' },
       input: { name: 'Fresh assistant', idempotencyKey: 'fresh-12345678' },
-      policy,
+      spendingPolicy: policy,
       api: {
         create: vi.fn().mockResolvedValue({ id: 'key_fresh', secret: 'secret_fresh' }),
         getSecret: vi.fn(),
@@ -462,7 +462,7 @@ describe('agent access', () => {
     const result = await issueAgentAccessKey({
       principal: { userId: 'owner_123' },
       input: { name: 'My assistant', idempotencyKey: 'setup-12345678' },
-      policy,
+      spendingPolicy: policy,
       api: {
         create: vi.fn(),
         getSecret: vi.fn(),
@@ -480,7 +480,7 @@ describe('agent access', () => {
     await expect(issueAgentAccessKey({
       principal: undefined,
       input: { name: 'My assistant', idempotencyKey: 'setup-12345678' },
-      policy,
+      spendingPolicy: policy,
       api: { create: vi.fn(), getSecret: vi.fn(), list: vi.fn() },
       registerBinding: vi.fn(),
     })).resolves.toEqual({ kind: 'error', code: 'missing_auth', retryable: false })
@@ -492,7 +492,7 @@ describe('agent access', () => {
     const result = await issueAgentAccessKey({
       principal: { userId: 'owner_123' },
       input: { name: 'Changed assistant', idempotencyKey: 'setup-12345678' },
-      policy,
+      spendingPolicy: policy,
       api: {
         create,
         getSecret,
@@ -513,7 +513,7 @@ describe('agent access', () => {
       name: 'My assistant',
       applicationRef: AGENT_ACCESS_DEFAULT_APPLICATION_REF,
       environment: 'sandbox',
-      authorityMode: 'inspect_only',
+      authorityMode: 'read_only',
       scopes,
       createdAt: 100,
       expiresAt: 200,
@@ -524,11 +524,11 @@ describe('agent access', () => {
 
     expect(projectAgentAccessKey({
       ...record,
-      scopes: [CUSTOMER_REQUEST_AGENT_SCOPE, CUSTOMER_REQUEST_INSPECT_ONLY_SCOPE],
+      scopes: [CUSTOMER_REQUEST_AGENT_SCOPE, CUSTOMER_REQUEST_READ_ONLY_SCOPE],
     })).toBeUndefined()
     expect(projectAgentAccessKey({
       ...record,
-      scopes: [MARKET_OPERATIONS_INVOKE_SCOPE, CUSTOMER_REQUEST_AGENT_SCOPE, CUSTOMER_REQUEST_INSPECT_ONLY_SCOPE],
+      scopes: [MARKET_TOOLS_CALL_SCOPE, CUSTOMER_REQUEST_AGENT_SCOPE, CUSTOMER_REQUEST_READ_ONLY_SCOPE],
     })).toBeUndefined()
     expect(projectAgentAccessKey({
       ...record,
@@ -536,7 +536,7 @@ describe('agent access', () => {
         aePurpose: 'agent_access',
         aeGrantRef: 'setup-12345678',
         aeDisplayName: 'My assistant',
-        aeAuthorityMode: 'inspect_only',
+        aeAuthorityMode: 'read_only',
         aeIssuanceKey: 'setup-12345678',
         aeEnvironment: 'sandbox',
       },
@@ -559,7 +559,7 @@ describe('agent access', () => {
       name: 'My assistant',
       applicationRef: AGENT_ACCESS_DEFAULT_APPLICATION_REF,
       environment: 'sandbox',
-      authorityMode: 'inspect_only',
+      authorityMode: 'read_only',
       scopes,
       expiresAt: 2_000,
       revoked: false,

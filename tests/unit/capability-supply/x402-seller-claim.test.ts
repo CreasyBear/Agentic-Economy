@@ -16,14 +16,22 @@ const claim = {
 }
 
 describe('x402 seller payee claim', () => {
-  it('binds the signature message to the supplier, exact endpoint, observation, payee, and expiry', () => {
+  it('binds the exact protected signature message to the supplier, endpoint, observation, payee, and expiry', () => {
     const message = x402SellerClaimMessage(claim)
 
-    expect(message).toContain('Supplier: business:one')
-    expect(message).toContain('Endpoint: https://seller.example/operation')
-    expect(message).toContain('Observation: sha256:observation')
-    expect(message).toContain('Payee: 0x1111111111111111111111111111111111111111')
-    expect(message).toContain('does not authorize a payment or transaction')
+    expect(message).toBe([
+      'Agentic Economy x402 seller claim v1',
+      '',
+      'I control the payment address for this exact seller endpoint.',
+      'Supplier: business:one',
+      'Endpoint: https://seller.example/operation',
+      'Method: POST',
+      'Observation: sha256:observation',
+      'Payee: 0x1111111111111111111111111111111111111111',
+      'Expires: 1600000',
+      '',
+      'This signature does not authorize a payment or transaction.',
+    ].join('\n'))
     expect(x402SellerClaimDigest(claim)).not.toBe(x402SellerClaimDigest({
       ...claim,
       endpointUrl: 'https://seller.example/other',

@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Field, FieldDescription, FieldError, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
-import type { RenameSupplierDisplayNameResult } from '@/lib/server/owner-workspace.functions'
+import type { RenameProviderDisplayNameResult } from '@/lib/server/owner-workspace.functions'
 import type { PublicOwnerStatusRouteReadbackResult } from '@/modules/catalog/public'
 import type { PublicBusinessCatalogApiV2Dto } from '@/modules/registry/public'
 import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
@@ -20,13 +20,13 @@ export function AeWorkspaceGeneral({
 }: Readonly<{
   result: PublicOwnerStatusRouteReadbackResult<PublicBusinessCatalogApiV2Dto>
   identity?: Readonly<{ businessId: string; name: string; slug: string; publicStatus: 'unpublished' | 'published' | 'suppressed' }>
-  onRename?: (input: Readonly<{ businessId: string; name: string; requestKey: string }>) => Promise<RenameSupplierDisplayNameResult>
+  onRename?: (input: Readonly<{ businessId: string; name: string; requestKey: string }>) => Promise<RenameProviderDisplayNameResult>
 }>) {
   if (result.kind !== 'available' && identity !== undefined) {
     return (
       <AeSection
-        title="Supplier identity"
-        description="The supplier identity that owns these Operations. Publication status is read separately."
+        title="Provider identity"
+        description="The provider identity that owns these Tools. Publication status is read separately."
       >
         <AeFactList facts={[
           ...(onRename === undefined ? [{ label: 'Name', value: identity.name }] : []),
@@ -34,7 +34,7 @@ export function AeWorkspaceGeneral({
           { label: 'Visibility', value: identity.publicStatus },
         ]} />
         {onRename === undefined ? null : (
-          <SupplierNameEditor businessId={identity.businessId} currentName={identity.name} onRename={onRename} />
+          <ProviderNameEditor businessId={identity.businessId} currentName={identity.name} onRename={onRename} />
         )}
       </AeSection>
     )
@@ -42,12 +42,12 @@ export function AeWorkspaceGeneral({
   if (result.kind === 'not_found') {
     return (
       <AeEmptyState
-        title="No supplier identity yet"
-        description="A public supplier listing is required before this workspace can show its catalog identity."
+        title="No provider identity yet"
+        description="A public provider listing is required before this workspace can show its catalog identity."
         role="status"
         action={
           <Button asChild className="min-h-touch">
-            <Link to="/for-providers">Review supplier setup</Link>
+            <Link to="/for-providers">Review provider setup</Link>
           </Button>
         }
       />
@@ -57,12 +57,12 @@ export function AeWorkspaceGeneral({
   if (result.kind === 'unavailable') {
     return (
       <AeEmptyState
-        title="Supplier identity is unavailable"
+        title="Provider identity is unavailable"
         description="Try again in a moment. If this keeps happening, open Help."
         role="alert"
         action={
           <Button asChild variant="secondary" className="min-h-touch">
-            <Link to="/owner/offerings" hash="supplier-identity">Try again</Link>
+            <Link to="/owner/offerings" hash="provider-identity">Try again</Link>
           </Button>
         }
       />
@@ -77,8 +77,8 @@ export function AeWorkspaceGeneral({
   return (
     <>
       <AeSection
-        title="Supplier identity"
-        description="The public supplier this workspace lists. Canonical principal and account refs are resolved when you sign in; they are not a separate list yet."
+        title="Provider identity"
+        description="The public provider this workspace lists. Canonical principal and account refs are resolved when you sign in; they are not a separate list yet."
       >
         <AeFactList
           facts={[
@@ -90,25 +90,25 @@ export function AeWorkspaceGeneral({
           ]}
         />
         {onRename === undefined ? null : (
-          <SupplierNameEditor businessId={catalog.businessId} currentName={catalog.name} onRename={onRename} />
+          <ProviderNameEditor businessId={catalog.businessId} currentName={catalog.name} onRename={onRename} />
         )}
       </AeSection>
     </>
   )
 }
 
-function SupplierNameEditor({
+function ProviderNameEditor({
   businessId,
   currentName,
   onRename,
 }: Readonly<{
   businessId: string
   currentName: string
-  onRename: (input: Readonly<{ businessId: string; name: string; requestKey: string }>) => Promise<RenameSupplierDisplayNameResult>
+  onRename: (input: Readonly<{ businessId: string; name: string; requestKey: string }>) => Promise<RenameProviderDisplayNameResult>
 }>) {
   const [name, setName] = useState(currentName)
   const [pending, setPending] = useState(false)
-  const [feedback, setFeedback] = useState<RenameSupplierDisplayNameResult>()
+  const [feedback, setFeedback] = useState<RenameProviderDisplayNameResult>()
   const requestKeyRef = useRef<string | null>(null)
   const [previousCurrentName, setPreviousCurrentName] = useState(currentName)
   if (currentName !== previousCurrentName) {
@@ -122,9 +122,9 @@ function SupplierNameEditor({
   return (
     <div className="mt-section grid max-w-xl gap-related">
       <Field data-invalid={invalid || undefined}>
-        <FieldLabel htmlFor="supplier-public-name">Public supplier name</FieldLabel>
+        <FieldLabel htmlFor="provider-public-name">Public provider name</FieldLabel>
         <Input
-          id="supplier-public-name"
+          id="provider-public-name"
           value={name}
           maxLength={200}
           disabled={pending}
@@ -136,9 +136,9 @@ function SupplierNameEditor({
           }}
         />
         <FieldDescription>
-          This name appears on the supplier listing and every current Operation. Its public path and provider connection stay unchanged.
+          This name appears on the provider listing and every current Tool. Its public path and provider connection stay unchanged.
         </FieldDescription>
-        {invalid ? <FieldError>Enter a public supplier name from 1 to 160 characters.</FieldError> : null}
+        {invalid ? <FieldError>Enter a public provider name from 1 to 160 characters.</FieldError> : null}
       </Field>
       <Button
         type="button"
@@ -168,7 +168,7 @@ function SupplierNameEditor({
       {feedback?.kind === 'updated' || feedback?.kind === 'unchanged' ? (
         <Alert role="status">
           <AlertTitle>Public name saved</AlertTitle>
-          <AlertDescription>The supplier listing and current Operations now use {feedback.name}.</AlertDescription>
+          <AlertDescription>The provider listing and current Tools now use {feedback.name}.</AlertDescription>
         </Alert>
       ) : feedback?.kind === 'refused' ? (
         <Alert variant="destructive" role="alert">
@@ -184,9 +184,9 @@ function normalizeDisplayName(value: string): string {
   return value.trim().normalize('NFKC').replace(/\s+/g, ' ')
 }
 
-function renameFailureMessage(code: Extract<RenameSupplierDisplayNameResult, { kind: 'refused' }>['code']): string {
-  if (code === 'invalid_name') return 'Enter a public supplier name from 1 to 160 characters.'
-  if (code === 'unauthenticated') return 'Sign in again before changing the public supplier name.'
-  if (code === 'wrong_owner') return 'This account does not own that supplier identity.'
+function renameFailureMessage(code: Extract<RenameProviderDisplayNameResult, { kind: 'refused' }>['code']): string {
+  if (code === 'invalid_name') return 'Enter a public provider name from 1 to 160 characters.'
+  if (code === 'unauthenticated') return 'Sign in again before changing the public provider name.'
+  if (code === 'wrong_owner') return 'This account does not own that provider identity.'
   return 'Try again. The existing public name is unchanged.'
 }

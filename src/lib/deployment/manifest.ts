@@ -1,5 +1,5 @@
 import { canonicalDigest } from '@/modules/common/canonical-digest'
-import { OPERATION_INVOKE_ACTION_ID, OPERATION_INVOKE_HTTP_PATH } from '@/modules/capability-execution/operation-invoke-entry'
+import { CALL_ACTION_ID, CALL_HTTP_PATH } from '@/modules/capability-execution/call-entry'
 import {
   SourceWriteAdmissionScopeValues,
   resolveActiveSourceWriteSigningKey,
@@ -228,7 +228,7 @@ export const DEPLOYMENT_MANIFEST = Object.freeze({
       kind: 'convex-agent-access-funding-authority',
       declaration: 'Fixed AE-owned sandbox principal and exact grant; CDP development custody and Base Sepolia RPC are checked by an internal read-only readiness query.',
     }),
-    Object.freeze({ id: 'durable-invocation-workpool', kind: 'convex-workpool', components: Object.freeze(['workpool', 'operation-invocation-worker', 'operation-recovery-worker']) }),
+    Object.freeze({ id: 'durable-invocation-workpool', kind: 'convex-workpool', components: Object.freeze(['workpool', 'operation-call-worker', 'operation-recovery-worker']) }),
     Object.freeze({
       id: 'durable-stripe-webhook-inbox',
       kind: 'convex-workpool',
@@ -237,11 +237,11 @@ export const DEPLOYMENT_MANIFEST = Object.freeze({
       declaration: 'Parallelism 4; 13 attempts; 60-second exponential backoff; Stripe API 2026-07-29.dahlia.',
     }),
     Object.freeze({
-      id: 'provider-operations-rollout',
+      id: 'provider-tools-rollout',
       kind: 'controlled-rollout',
       declaration: 'Package 5 writes, hosted HTTP credentials, MCP OAuth, and Provider offboarding require independent server-side activation. Provider credentials remain in the Infisical customer scope; AE-held consequence-signing material remains in the platform scope.',
     }),
-    Object.freeze({ id: 'operation-gateway', kind: 'authenticated-action-gateway', action: `${OPERATION_INVOKE_ACTION_ID}:v1`, httpPath: OPERATION_INVOKE_HTTP_PATH, mcpPath: '/mcp' }),
+    Object.freeze({ id: 'operation-gateway', kind: 'authenticated-action-gateway', action: `${CALL_ACTION_ID}:v1`, httpPath: CALL_HTTP_PATH, mcpPath: '/mcp' }),
     Object.freeze({
       id: 'convex-scheduled-jobs',
       kind: 'convex-cron-set',

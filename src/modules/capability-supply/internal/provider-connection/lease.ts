@@ -60,15 +60,15 @@ export type ProviderConnectionLeaseApproval = Readonly<{
   grantedResources: readonly string[]
 }>
 
-export type ProviderConnectionInvocationLease = Readonly<{
+export type ProviderConnectionCallLease = Readonly<{
   leaseRef: string
   owningAccountRef: string
   activeAccountRef: string
   actorPrincipalRef: string
   grantRef: string
   grantGeneration: number
-  invocationRef: string
-  operationRef: string
+  callRef: string
+  toolRef: string
   connectionRef: string
   providerRef: string
   providerAccountRef: string
@@ -95,8 +95,8 @@ export type ProviderConnectionInvocationLease = Readonly<{
 
 export type ProviderConnectionLeaseAuthoritySnapshot = Readonly<{
   leaseRef: string
-  invocationRef: string
-  operationRef: string
+  callRef: string
+  toolRef: string
   connectionRef: string
   providerRef: string
   providerAccountRef: string
@@ -112,8 +112,8 @@ export type ProviderConnectionLeaseAuthoritySnapshot = Readonly<{
 export type IssueProviderConnectionLeaseCommand = Readonly<{
   commandId: string
   leaseRef: string
-  invocationRef: string
-  operationRef: string
+  callRef: string
+  toolRef: string
   connectionRef: string
   providerRef: string
   providerAccountRef: string
@@ -159,8 +159,8 @@ export type InvalidateProviderConnectionLeaseCommand = Readonly<{
 }>
 
 export type ProviderConnectionLeaseCommandResult =
-  | Readonly<{ kind: 'applied'; lease: ProviderConnectionInvocationLease; commandDigest: string }>
-  | Readonly<{ kind: 'duplicate'; lease: ProviderConnectionInvocationLease; commandDigest: string }>
+  | Readonly<{ kind: 'applied'; lease: ProviderConnectionCallLease; commandDigest: string }>
+  | Readonly<{ kind: 'duplicate'; lease: ProviderConnectionCallLease; commandDigest: string }>
   | Readonly<{ kind: 'refused'; code: ProviderConnectionLeaseRefusalCode }>
 
 export type ProviderConnectionLeaseCredentialResolution =
@@ -205,19 +205,26 @@ function leaseRefusal(code: ProviderConnectionLeaseRefusalCode): ProviderConnect
 }
 
 function leaseCommandDigest(kind: LeaseCommandKind, command: object): string {
-  return canonicalDigest({ kind, ...Object.fromEntries(Object.entries(command).filter(([, value]) => value !== undefined)) })
+  const material = Object.fromEntries(Object.entries(command)
+    .map(([key, value]) => {
+      if (key === 'callRef') return ['invocationRef', value]
+      if (key === 'toolRef') return ['operationRef', value]
+      return [key, value]
+    })
+    .filter(([, value]) => value !== undefined))
+  return canonicalDigest({ kind, ...material })
 }
 
 function leaseReceipt(
-  lease: ProviderConnectionInvocationLease,
+  lease: ProviderConnectionCallLease,
   commandId: string,
   commandDigest: string,
-): ProviderConnectionInvocationLease {
+): ProviderConnectionCallLease {
   return { ...lease, lastCommandId: commandId, lastCommandDigest: commandDigest }
 }
 
 function leaseReplay(
-  current: ProviderConnectionInvocationLease | undefined,
+  current: ProviderConnectionCallLease | undefined,
   commandId: string,
   commandDigest: string,
 ): ProviderConnectionLeaseCommandResult | null {
@@ -256,7 +263,7 @@ function normalizeLeaseIssueCommand(
 ): { kind: 'ok'; command: IssueProviderConnectionLeaseCommand } | { kind: 'refused'; code: ProviderConnectionLeaseRefusalCode } {
   if (!validTimestamp(now)) return { kind: 'refused', code: 'invalid_time' }
   if (!leaseIdentity(command.commandId) || !leaseIdentity(command.leaseRef)
-    || !leaseIdentity(command.invocationRef) || !leaseIdentity(command.operationRef)
+    || !leaseIdentity(command.callRef) || !leaseIdentity(command.toolRef)
     || !leaseIdentity(command.connectionRef) || !leaseIdentity(command.providerRef)
     || !leaseIdentity(command.providerAccountRef) || !leaseIdentity(command.adapterId)
     || !leaseIdentity(command.activeAccountRef) || !leaseIdentity(command.actorPrincipalRef)
@@ -329,7 +336,7 @@ function leaseApprovalRefusal(
   return null
 }
 function leaseApprovalCurrentRefusal(
-  lease: ProviderConnectionInvocationLease,
+  lease: ProviderConnectionCallLease,
   approval: ProviderConnectionLeaseApproval | null,
 ): ProviderConnectionLeaseRefusalCode | null {
   if (approval === null) return 'approval_missing'
@@ -348,15 +355,15 @@ function leaseApprovalCurrentRefusal(
 
 
 function leaseCurrentRefusal(
-  lease: ProviderConnectionInvocationLease,
+  lease: ProviderConnectionCallLease,
   current: ProviderConnection | undefined,
   expected: ProviderConnectionLeaseAuthoritySnapshot,
   now: number,
 ): ProviderConnectionLeaseRefusalCode | null {
   if (!validTimestamp(now)) return 'invalid_time'
   if (!leaseIdentity(expected.leaseRef) || expected.leaseRef !== lease.leaseRef
-    || expected.invocationRef !== lease.invocationRef
-    || expected.operationRef !== lease.operationRef
+    || expected.callRef !== lease.callRef
+    || expected.toolRef !== lease.toolRef
     || expected.connectionRef !== lease.connectionRef
     || expected.providerRef !== lease.providerRef
     || expected.providerAccountRef !== lease.providerAccountRef
@@ -386,13 +393,13 @@ function leaseCurrentRefusal(
 }
 
 function leaseExpectedSnapshot(
-  lease: ProviderConnectionInvocationLease,
+  lease: ProviderConnectionCallLease,
   command: ConsumeProviderConnectionLeaseCommand,
 ): ProviderConnectionLeaseAuthoritySnapshot {
   return {
     leaseRef: lease.leaseRef,
-    invocationRef: lease.invocationRef,
-    operationRef: lease.operationRef,
+    callRef: lease.callRef,
+    toolRef: lease.toolRef,
     connectionRef: lease.connectionRef,
     providerRef: lease.providerRef,
     providerAccountRef: lease.providerAccountRef,
@@ -407,12 +414,12 @@ function leaseExpectedSnapshot(
 }
 
 export function providerConnectionLeaseAuthoritySnapshot(
-  lease: ProviderConnectionInvocationLease,
+  lease: ProviderConnectionCallLease,
 ): ProviderConnectionLeaseAuthoritySnapshot {
   return {
     leaseRef: lease.leaseRef,
-    invocationRef: lease.invocationRef,
-    operationRef: lease.operationRef,
+    callRef: lease.callRef,
+    toolRef: lease.toolRef,
     connectionRef: lease.connectionRef,
     providerRef: lease.providerRef,
     providerAccountRef: lease.providerAccountRef,
@@ -430,7 +437,7 @@ export function issueProviderConnectionLease(
   current: ProviderConnection | undefined,
   command: IssueProviderConnectionLeaseCommand,
   now: number,
-  existing?: ProviderConnectionInvocationLease,
+  existing?: ProviderConnectionCallLease,
 ): ProviderConnectionLeaseCommandResult {
   const normalized = normalizeLeaseIssueCommand(command, now)
   if (normalized.kind === 'refused') return normalized
@@ -450,15 +457,15 @@ export function issueProviderConnectionLease(
   if (approvalError !== null) return leaseRefusal(approvalError)
   const expiresAt = now + normalized.command.leaseMs
   if (current.expiresAt !== undefined && expiresAt > current.expiresAt) return leaseRefusal('invalid_time')
-  const lease: ProviderConnectionInvocationLease = {
+  const lease: ProviderConnectionCallLease = {
     leaseRef: normalized.command.leaseRef,
     owningAccountRef: current.owningAccountRef,
     activeAccountRef: normalized.command.activeAccountRef,
     actorPrincipalRef: normalized.command.actorPrincipalRef,
     grantRef: normalized.command.grantRef,
     grantGeneration: normalized.command.grantGeneration,
-    invocationRef: normalized.command.invocationRef,
-    operationRef: normalized.command.operationRef,
+    callRef: normalized.command.callRef,
+    toolRef: normalized.command.toolRef,
     connectionRef: current.connectionRef,
     providerRef: current.providerRef,
     providerAccountRef: current.providerAccountRef,
@@ -510,7 +517,7 @@ function leaseCredentialFailureReason(
 
 export function validateProviderConnectionLeaseAuthority(
   connection: ProviderConnection | undefined,
-  lease: ProviderConnectionInvocationLease | undefined,
+  lease: ProviderConnectionCallLease | undefined,
   expected: ProviderConnectionLeaseAuthoritySnapshot,
   now: number,
   currentApproval: ProviderConnectionLeaseApproval | null,
@@ -527,7 +534,7 @@ export function validateProviderConnectionLeaseAuthority(
 
 export function resolveProviderConnectionCredentialRefForLease(
   connection: ProviderConnection | undefined,
-  lease: ProviderConnectionInvocationLease | undefined,
+  lease: ProviderConnectionCallLease | undefined,
   expected: ProviderConnectionLeaseAuthoritySnapshot,
   now: number,
   currentApproval: ProviderConnectionLeaseApproval | null,
@@ -548,7 +555,7 @@ export function resolveProviderConnectionCredentialRefForLease(
 }
 
 export function consumeProviderConnectionLease(
-  lease: ProviderConnectionInvocationLease | undefined,
+  lease: ProviderConnectionCallLease | undefined,
   current: ProviderConnection | undefined,
   command: ConsumeProviderConnectionLeaseCommand,
   now: number,
@@ -572,7 +579,7 @@ export function consumeProviderConnectionLease(
   const expected = leaseExpectedSnapshot(lease, { ...command, evidenceRefs: evidenceRefs.values })
   const refusal = leaseCurrentRefusal(lease, current, expected, now)
   if (refusal !== null) return leaseRefusal(refusal)
-  const consumed: ProviderConnectionInvocationLease = {
+  const consumed: ProviderConnectionCallLease = {
     ...lease,
     state: 'consumed',
     consumedAt: now,
@@ -583,7 +590,7 @@ export function consumeProviderConnectionLease(
 }
 
 export function expireProviderConnectionLease(
-  lease: ProviderConnectionInvocationLease | undefined,
+  lease: ProviderConnectionCallLease | undefined,
   command: ExpireProviderConnectionLeaseCommand,
   now: number,
 ): ProviderConnectionLeaseCommandResult {
@@ -600,7 +607,7 @@ export function expireProviderConnectionLease(
   if (lease.state !== 'active') return leaseRefusal('lease_inactive')
   if (!validTimestamp(now)) return leaseRefusal('invalid_time')
   if (now < lease.expiresAt) return leaseRefusal('lease_not_expired')
-  const expired: ProviderConnectionInvocationLease = {
+  const expired: ProviderConnectionCallLease = {
     ...lease,
     state: 'expired',
     evidenceRefs: uniqueSorted([...lease.evidenceRefs, ...evidenceRefs.values]),
@@ -610,7 +617,7 @@ export function expireProviderConnectionLease(
 }
 
 export function invalidateProviderConnectionLease(
-  lease: ProviderConnectionInvocationLease | undefined,
+  lease: ProviderConnectionCallLease | undefined,
   command: InvalidateProviderConnectionLeaseCommand,
   now: number,
 ): ProviderConnectionLeaseCommandResult {
@@ -627,7 +634,7 @@ export function invalidateProviderConnectionLease(
   if (lease.leaseRef !== command.leaseRef) return leaseRefusal('lease_identity_mismatch')
   if (lease.state !== 'active') return leaseRefusal('lease_inactive')
   if (!validTimestamp(now)) return leaseRefusal('invalid_time')
-  const invalidated: ProviderConnectionInvocationLease = {
+  const invalidated: ProviderConnectionCallLease = {
     ...lease,
     state: 'invalidated',
     invalidatedAt: now,

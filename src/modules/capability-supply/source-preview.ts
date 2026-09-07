@@ -60,7 +60,7 @@ export type SourceAuthenticationRequirement =
   | Readonly<{ kind: 'x402_wallet' }>
   | Readonly<{ kind: 'unsupported' }>
 
-export type SupplyOperationCandidate = Readonly<{
+export type SupplyToolCandidate = Readonly<{
   candidateRef: string
   sourceSelector:
     | Readonly<{ serverUrl: string; path: string; method: string }>
@@ -96,7 +96,7 @@ export type SupplySourcePreview =
         authority: 'unverified_public' | 'verified_registry' | 'observed_external'
       }>
       authentication: readonly SourceAuthenticationRequirement[]
-      candidates: readonly SupplyOperationCandidate[]
+      candidates: readonly SupplyToolCandidate[]
     }>
   | Readonly<{
       kind: 'remote_selection_required'
@@ -254,7 +254,7 @@ const authenticationSchema: z.ZodType<SourceAuthenticationRequirement> = z.union
 ])
 const jsonObjectSchema = z.record(z.string(), jsonValueSchema)
 const refusalReasonSchema = z.string() as z.ZodType<CapabilityPublicationImportRefusal>
-const candidateSchema: z.ZodType<SupplyOperationCandidate> = z.strictObject({
+const candidateSchema: z.ZodType<SupplyToolCandidate> = z.strictObject({
   candidateRef: z.string().regex(/^sha256:[0-9a-f]{64}$/u),
   sourceSelector: z.union([
     z.strictObject({ serverUrl: z.string().url(), path: z.string(), method: z.string() }),
@@ -452,7 +452,7 @@ async function previewAgentPluginSource(
     selectedRemoteRef: selectedRemote.remoteRef,
     remoteDigest: discovery.sourceDigest,
   })
-  const candidates: SupplyOperationCandidate[] = []
+  const candidates: SupplyToolCandidate[] = []
   for (const tool of discovery.tools) {
     if (candidates.length >= 128) break
     const selector = {
@@ -535,7 +535,7 @@ async function previewMcpSource(
     )
   }
 
-  const candidates = discovery.tools.slice(0, 128).map((tool): SupplyOperationCandidate => {
+  const candidates = discovery.tools.slice(0, 128).map((tool): SupplyToolCandidate => {
     const selector = {
       serverUrl: discovery.serverUrl,
       toolName: tool.name,
@@ -601,11 +601,11 @@ async function previewX402Source(
       : 'schema_missing'
   const selector = { resourceUrl: inspection.endpoint.url, method: input.method }
   const title = `x402 ${input.method} ${new URL(inspection.endpoint.url).hostname}`
-  const candidate: SupplyOperationCandidate = {
+  const candidate: SupplyToolCandidate = {
     candidateRef: canonicalDigest({ sourceDigest: inspection.digest, selector }),
     sourceSelector: selector,
     title,
-    description: `Paid ${input.method} Operation discovered from the live x402 payment challenge.`,
+    description: `Paid ${input.method} Tool discovered from the live x402 payment challenge.`,
     ...(discovery.kind === 'admitted'
       ? { inputSchema: discovery.inputSchema, outputSchema: discovery.outputSchema }
       : {}),
@@ -659,8 +659,8 @@ async function openApiCandidates(
   document: Readonly<Record<string, unknown>> & Readonly<{ paths: Readonly<Record<string, unknown>> }>,
   sourceDigest: string,
   definitionUrl: string,
-): Promise<readonly SupplyOperationCandidate[]> {
-  const candidates: SupplyOperationCandidate[] = []
+): Promise<readonly SupplyToolCandidate[]> {
+  const candidates: SupplyToolCandidate[] = []
   const serverUrl = openApiServerUrl(document.servers) ?? definitionUrl
   const executableServer = openApiServerUrl(document.servers) !== undefined
   for (const [path, rawPathItem] of Object.entries(document.paths)) {
@@ -689,7 +689,7 @@ async function openApiCandidate(input: Readonly<{
   sourceDigest: string
   serverUrl: string
   executableServer: boolean
-}>): Promise<SupplyOperationCandidate> {
+}>): Promise<SupplyToolCandidate> {
   const selector = { serverUrl: input.serverUrl, path: input.path, method: input.method }
   const credential = resolveOpenApiCredential(input.document, input.operation)
   const authentication = credential.kind === 'resolved'
@@ -749,7 +749,7 @@ function authenticationRequirement(
   return { kind: 'api_key', location: credential.location, name: credential.name }
 }
 
-function uniqueAuthentication(candidates: readonly SupplyOperationCandidate[]): readonly SourceAuthenticationRequirement[] {
+function uniqueAuthentication(candidates: readonly SupplyToolCandidate[]): readonly SourceAuthenticationRequirement[] {
   const unique = new Map<string, SourceAuthenticationRequirement>()
   for (const candidate of candidates) {
     unique.set(JSON.stringify(candidate.authentication), candidate.authentication)

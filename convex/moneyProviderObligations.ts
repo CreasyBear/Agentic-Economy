@@ -11,8 +11,8 @@ import type { MoneyFormanceManagedCallBooking, MoneyFormanceResult } from './mon
 
 const obligationValue = v.object({
   obligationRef: v.string(),
-  invocationRef: v.string(),
-  operationRef: v.string(),
+  callRef: v.string(),
+  toolRef: v.string(),
   providerRef: v.string(),
   buyerAccountRef: v.string(),
   buyerAsset: v.literal('AUD'),
@@ -49,7 +49,7 @@ const obligationValue = v.object({
 
 const providerReversalArgsValue = v.object({
   obligationRef: v.string(),
-  invocationRef: v.string(),
+  callRef: v.string(),
   settlementTransactionRef: v.string(),
   evidenceRef: v.string(),
   evidenceDigest: v.string(),
@@ -111,8 +111,8 @@ async function markProviderObligationDisputed(
     evidenceRefs: [...new Set([...row.evidenceRefs, args.evidenceRef])].slice(-32),
     updatedAt: Date.now(),
   })
-  const call = await ctx.db.query('capabilityOperationCallProjections')
-    .withIndex('by_callRef', (index) => index.eq('callRef', row.invocationRef))
+  const call = await ctx.db.query('capabilityCallProjections')
+    .withIndex('by_callRef', (index) => index.eq('callRef', row.callRef))
     .unique()
   if (call !== null) await ctx.db.patch(call._id, {
     providerObligationState: 'disputed',
@@ -132,7 +132,7 @@ async function prepareProviderReversal(
 ): Promise<Infer<typeof prepareProviderReversalResultValue>> {
   const sourceWrite = await requireSourceWrite(ctx, args, 'billing')
   if (sourceWrite.kind === 'rejected') return reversalRefused('source_write_denied')
-  if (![args.obligationRef, args.invocationRef, args.settlementTransactionRef,
+  if (![args.obligationRef, args.callRef, args.settlementTransactionRef,
     args.evidenceRef, args.commandRef, args.idempotencyKey].every((value) => BOUNDED_REF.test(value))
     || !SHA256.test(args.evidenceDigest)
     || !Number.isSafeInteger(args.expectedUpdatedAt)
@@ -145,7 +145,7 @@ async function prepareProviderReversal(
   const row = await readObligation(ctx, args.obligationRef)
   if (row === null
     || row.buyerAccountRef !== actor.canonicalAccountRef
-    || row.invocationRef !== args.invocationRef
+    || row.callRef !== args.callRef
     || row.settlementTransactionRef !== args.settlementTransactionRef
     || row.payoutEligibility !== 'ineligible_x402') {
     return reversalRefused('provider_obligation_not_found')
@@ -190,7 +190,7 @@ async function prepareProviderReversal(
     command: {
       version: 'ae.provider-obligation-reversal:v1',
       obligationRef: row.obligationRef,
-      invocationRef: row.invocationRef,
+      callRef: row.callRef,
       settlementTransactionRef: row.settlementTransactionRef,
       providerAmountUnits: row.providerAmountUnits,
       evidenceRef: args.evidenceRef,
@@ -247,7 +247,7 @@ export const reverseOwnerSettlement = action({
     const prepared = await ctx.runMutation(internal.moneyProviderObligations.prepareOwnerReversal, args)
     if (prepared.kind !== 'prepared') return prepared
     const material: ManagedCallMaterial = await ctx.runQuery(internal.moneyManagedCall.readBooking, {
-      invocationRef: args.invocationRef,
+      callRef: args.callRef,
     })
     if (material.kind !== 'available'
       || material.financialState !== 'settled'
@@ -268,7 +268,7 @@ export const reverseOwnerSettlement = action({
       }
       return await ctx.runMutation(internal.moneyProviderObligations.finalizeOwnerReversal, {
         obligationRef: args.obligationRef,
-        invocationRef: args.invocationRef,
+        callRef: args.callRef,
         commandRef: args.commandRef,
         idempotencyKey: args.idempotencyKey,
         evidenceRef: args.evidenceRef,
@@ -293,7 +293,7 @@ export const reverseOwnerSettlement = action({
 export const finalizeOwnerReversal = internalMutation({
   args: {
     obligationRef: v.string(),
-    invocationRef: v.string(),
+    callRef: v.string(),
     commandRef: v.string(),
     idempotencyKey: v.string(),
     evidenceRef: v.string(),
@@ -305,7 +305,7 @@ export const finalizeOwnerReversal = internalMutation({
   handler: async (ctx, args): Promise<ProviderReversalResult> => {
     const row = await readObligation(ctx, args.obligationRef)
     if (row === null
-      || row.invocationRef !== args.invocationRef
+      || row.callRef !== args.callRef
       || row.settlementTransactionRef !== args.settlementTransactionRef) {
       return reversalRefused('provider_obligation_not_found')
     }
@@ -337,8 +337,8 @@ export const finalizeOwnerReversal = internalMutation({
       reversedAt: now,
       updatedAt: now,
     })
-    const call = await ctx.db.query('capabilityOperationCallProjections')
-      .withIndex('by_callRef', (index) => index.eq('callRef', row.invocationRef))
+    const call = await ctx.db.query('capabilityCallProjections')
+      .withIndex('by_callRef', (index) => index.eq('callRef', row.callRef))
       .unique()
     if (call !== null) await ctx.db.patch(call._id, {
       providerObligationState: 'reversed',
@@ -388,8 +388,8 @@ export const markDisputed = internalMutation({
       evidenceRefs: [...row.evidenceRefs, args.evidenceRef].slice(-32),
       updatedAt: args.observedAt,
     })
-    const call = await ctx.db.query('capabilityOperationCallProjections')
-      .withIndex('by_callRef', (index) => index.eq('callRef', row.invocationRef))
+    const call = await ctx.db.query('capabilityCallProjections')
+      .withIndex('by_callRef', (index) => index.eq('callRef', row.callRef))
       .unique()
     if (call !== null) await ctx.db.patch(call._id, {
       providerObligationState: 'disputed',
@@ -414,8 +414,8 @@ export const resolveDispute = internalMutation({
       evidenceRefs: [...row.evidenceRefs, args.evidenceRef].slice(-32),
       updatedAt: args.observedAt,
     })
-    const call = await ctx.db.query('capabilityOperationCallProjections')
-      .withIndex('by_callRef', (index) => index.eq('callRef', row.invocationRef))
+    const call = await ctx.db.query('capabilityCallProjections')
+      .withIndex('by_callRef', (index) => index.eq('callRef', row.callRef))
       .unique()
     if (call !== null) await ctx.db.patch(call._id, {
       providerObligationState: 'settled',

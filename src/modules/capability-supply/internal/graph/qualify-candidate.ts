@@ -3,8 +3,8 @@ import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 import { uniqueSorted } from '@/modules/common/unique-sorted'
 import {
-  capabilityOperationId,
-  createPublicOperationRef,
+  capabilityToolId,
+  createPublicToolRef,
 } from '@/modules/capability-supply/public'
 import {
   compareExactAmounts,
@@ -29,7 +29,7 @@ import {
 } from '../facilitator-discovery-ingest'
 
 import {
-  exactCurrentCatalogOperationIsRouteable,
+  exactCurrentCatalogToolIsRouteable,
   routeabilityQualityGate,
 } from './quality-gate'
 import type { CapabilityGraphPorts } from './ports'
@@ -151,12 +151,12 @@ export async function qualifySuppliedCandidate(
   }
 
   let offeringCurrent = false
-  let catalogOperationCurrent = false
+  let catalogToolCurrent = false
   let originCurrent = false
   let catalogAccessPath = null
-  const expectedOperationRef = contract.kind === 'found'
-    ? createPublicOperationRef({
-        operationId: capabilityOperationId(contract.contract.capabilityId),
+  const expectedToolRef = contract.kind === 'found'
+    ? createPublicToolRef({
+        operationId: capabilityToolId(contract.contract.capabilityId),
         publicationRef: publication.publicationRef,
         publicationRevision: publication.revision,
         contractRef: contract.contract.ref,
@@ -188,7 +188,7 @@ export async function qualifySuppliedCandidate(
     if (origin?.kind !== 'catalog_offering' && !facilitatorAdmissionCurrent) {
       reasons.push('catalog_origin_missing')
     } else if (facilitatorAdmissionCurrent) {
-      catalogOperationCurrent = publication.operationRef === expectedOperationRef
+      catalogToolCurrent = publication.toolRef === expectedToolRef
         && bindingMethod !== undefined
     } else if (origin?.kind === 'catalog_offering') {
       originCurrent = ports.catalogOriginIsCurrent !== undefined
@@ -203,16 +203,16 @@ export async function qualifySuppliedCandidate(
         if (catalogAccessPath === null) {
           reasons.push('catalog_access_path_missing_or_stale')
         } else {
-          catalogOperationCurrent = exactCurrentCatalogOperationIsRouteable({
+          catalogToolCurrent = exactCurrentCatalogToolIsRouteable({
             origin,
             originCurrent,
             accessPath: catalogAccessPath,
-            publicationOperationRef: publication.operationRef,
-            expectedOperationRef,
+            publicationToolRef: publication.toolRef,
+            expectedToolRef,
             endpointUrl: binding?.endpointUrl ?? '',
             method: bindingMethod,
           })
-          if (!catalogOperationCurrent) reasons.push('operation_map_mismatch')
+          if (!catalogToolCurrent) reasons.push('operation_map_mismatch')
         }
       }
     }
@@ -235,7 +235,12 @@ export async function qualifySuppliedCandidate(
     sources.push(source(
       'authority',
       `authority:${binding.bindingId}`,
-      binding.connectionAuthority ?? { kind: binding.authority.kind },
+      binding.connectionAuthority === undefined
+        ? { kind: binding.authority.kind }
+        : (() => {
+            const { toolRef, ...authority } = binding.connectionAuthority
+            return { ...authority, operationRef: toolRef }
+          })(),
       binding.authority.kind === 'provider_connection' ? binding.registrationEvidenceRefs : [],
     ))
     if (
@@ -320,9 +325,9 @@ export async function qualifySuppliedCandidate(
       origin: offering.origin,
       originCurrent,
       accessPath: catalogAccessPath,
-      catalogOperationCurrent,
-      publicationOperationRef: publication.operationRef,
-      expectedOperationRef,
+      catalogToolCurrent,
+      publicationToolRef: publication.toolRef,
+      expectedToolRef,
       endpointUrl: binding.endpointUrl,
       method: bindingMethod,
       businessCurrent,

@@ -12,7 +12,7 @@ import {
 } from './capability-supply-owner-funnel-harness'
 
 describe('owner supply funnel read', () => {
-  it('returns exact Operation-scoped delivery and Qualified Use evidence', async () => {
+  it('returns exact Tool-scoped delivery and Qualified Use evidence', async () => {
     const backend = convexTest(schema, modules)
     const { businessId, owner } = await createPublishedBusinessOwner(
       backend,
@@ -34,7 +34,7 @@ describe('owner supply funnel read', () => {
     if (prepared.kind === 'refused') throw new Error(`operation_evidence_prepare_failed:${prepared.reason}`)
     const published = await owner.mutation(api.capabilitySupply.publishPreparedCapability, prepared.command)
     if (published.kind === 'refused') throw new Error(`operation_evidence_publish_failed:${published.reason}`)
-    const operationRef = published.operationRef
+    const toolRef = published.toolRef
     const now = Date.now()
     await backend.run(async (ctx) => {
       const baseCall = {
@@ -42,21 +42,21 @@ describe('owner supply funnel read', () => {
         principalRef: 'principal:buyer',
         credentialRef: 'credential:buyer',
         applicationRef: 'application:buyer',
-        operationRef,
+        toolRef,
         providerRef: String(businessId),
-        operationLabel: 'Evidence lookup',
+        toolLabel: 'Evidence lookup',
         state: 'completed' as const,
         paymentState: 'settled' as const,
         latencyMs: 20,
         createdAt: now - 1_000,
         updatedAt: now - 500,
       }
-      await ctx.db.insert('capabilityOperationCallProjections', {
+      await ctx.db.insert('capabilityCallProjections', {
         ...baseCall,
         callRef: 'call:delivered',
         deliveryState: 'delivered',
       })
-      await ctx.db.insert('capabilityOperationCallProjections', {
+      await ctx.db.insert('capabilityCallProjections', {
         ...baseCall,
         callRef: 'call:unknown',
         deliveryState: 'unknown',
@@ -64,11 +64,11 @@ describe('owner supply funnel read', () => {
       await ctx.db.insert('qualifiedUseReceipts', {
         qualifiedUseRef: 'qualified-use:operation-evidence',
         materialDigest: `sha256:${'1'.repeat(64)}`,
-        invocationRef: 'call:delivered',
+        callRef: 'call:delivered',
         attemptRef: 'attempt:delivered',
         effectGeneration: 1,
         businessId: String(businessId),
-        operationRef,
+        toolRef,
         publicationRef: published.publicationRef,
         publicationRevision: published.publicationRevision,
         contractDigest: `sha256:${'4'.repeat(64)}`,
@@ -84,7 +84,7 @@ describe('owner supply funnel read', () => {
 
     const readback = await owner.query(api.capabilitySupplyOwnerFunnel.readOwnerSupplyFunnel, { businessId })
     if (readback.kind !== 'available') throw new Error(`operation_evidence_read_failed:${readback.kind}`)
-    expect(readback.offerings[0]?.operationEvidence).toMatchObject({
+    expect(readback.offerings[0]?.toolEvidence).toMatchObject({
       delivery: {
         kind: 'observed',
         deliveredCount: 1,

@@ -9,22 +9,22 @@ import {
   agentAccountBalanceAction,
   agentAccountSelfResultSchema,
 } from '@/modules/agent-access/account.actions'
-import { MARKET_OPERATIONS_INVOKE_SCOPE, MARKET_SUPPLY_MANAGE_SCOPE } from '@/modules/agent-access/contract'
+import { MARKET_TOOLS_CALL_SCOPE, MARKET_SUPPLY_MANAGE_SCOPE } from '@/modules/agent-access/contract'
 import {
-  operationListResultSchema,
-} from '@/modules/capability-execution/operation-history.actions'
-import { OPERATION_INVOKE_ROUTE_CONTRACT } from '@/modules/capability-execution/operation-invoke-entry'
-import { operationChoiceDescribeOutputSchema } from '@/modules/registry/operation-choice-contracts'
+  callListResultSchema,
+} from '@/modules/capability-execution/call-history.actions'
+import { CALL_ROUTE_CONTRACT } from '@/modules/capability-execution/call-entry'
+import { toolChoiceDescribeOutputSchema } from '@/modules/registry/tool-choice-contracts'
 import {
   MARKET_REQUEST_ROUTE_CONTRACTS,
   marketRequestListAction,
   marketRequestStatusAction,
 } from '@/modules/market-demand/market-demand.actions'
-import { OPERATION_MARKET_DESCRIBE_PATH } from '@/modules/registry/operation-entry'
+import { TOOL_MARKET_DESCRIBE_PATH } from '@/modules/registry/tool-entry'
 import {
   SUPPLY_ACTION_ROUTE_CONTRACTS,
   supplyConnectionListAction,
-  supplyOperationsListAction,
+  supplyToolsListAction,
 } from '@/modules/capability-supply/supply-actions'
 
 import {
@@ -50,9 +50,9 @@ type DoctorCheck = Readonly<{
   nextCommand?: string
 }>
 
-type InvocationDoctorResult = Readonly<{
+type CallDoctorResult = Readonly<{
   check: DoctorCheck
-  recentCompletedOperationRef?: string
+  recentCompletedToolRef?: string
 }>
 
 const MARKET_REQUEST_REENTRY_LIMIT = 5
@@ -60,7 +60,7 @@ const MCP_CHECK_TIMEOUT_MS = 5_000
 
 export async function runDoctorCommand(args: readonly string[], options: CliOptions): Promise<number> {
   const businessId = args[0]?.trim()
-  if (args.length > 1 || (businessId !== undefined && (businessId.length === 0 || options.supplier !== true))) {
+  if (args.length > 1 || (businessId !== undefined && (businessId.length === 0 || options.provider !== true))) {
     throw usageFailure('doctor', 'doctor-usage')
   }
   const checks: DoctorCheck[] = [{
@@ -76,11 +76,11 @@ export async function runDoctorCommand(args: readonly string[], options: CliOpti
       { id: 'mcp', state: 'warn', summary: 'MCP initialization was not checked because server identity is unavailable.' },
       { id: 'buyer', state: 'warn', summary: 'Buyer credential was not sent because server identity is unavailable.' },
       { id: 'balance', state: 'warn', summary: 'Balance was not checked because server identity is unavailable.' },
-      { id: 'invocation', state: 'warn', summary: 'Invocation recovery was not checked because server identity is unavailable.' },
-      ...(options.supplier === true
+      { id: 'call', state: 'warn', summary: 'Call recovery was not checked because server identity is unavailable.' },
+      ...(options.provider === true
         ? [
-            { id: 'supplier', state: 'warn' as const, summary: 'Supplier credential was not sent because server identity is unavailable.' },
-            { id: 'supplier.readiness', state: 'warn' as const, summary: 'Supplier readiness was not checked because server identity is unavailable.' },
+            { id: 'provider', state: 'warn' as const, summary: 'Provider credential was not sent because server identity is unavailable.' },
+            { id: 'provider.readiness', state: 'warn' as const, summary: 'Provider readiness was not checked because server identity is unavailable.' },
           ]
         : []),
     )
@@ -94,7 +94,7 @@ export async function runDoctorCommand(args: readonly string[], options: CliOpti
     checks.push(
       {
         id: 'buyer', state: 'warn',
-        summary: 'No buyer credential is selected for this origin; anonymous search and inspection remain available.',
+        summary: 'No buyer credential is selected for this origin; anonymous search and describe remain available.',
         nextCommand: connectCommand(options.baseUrl, 'buyer'),
       },
       {
@@ -102,15 +102,15 @@ export async function runDoctorCommand(args: readonly string[], options: CliOpti
         summary: 'Balance is unavailable until a buyer credential is connected.',
       },
       {
-        id: 'invocation', state: 'warn',
-        summary: 'Invocation recovery is unavailable until a buyer credential is connected.',
+        id: 'call', state: 'warn',
+        summary: 'Call recovery is unavailable until a buyer credential is connected.',
       },
     )
   } else {
     checks.push(...await checkBuyer(options.baseUrl, buyer))
   }
-  if (options.supplier === true) {
-    checks.push(...await checkSupplier(options.baseUrl, businessId))
+  if (options.provider === true) {
+    checks.push(...await checkProvider(options.baseUrl, businessId))
   }
 
   const result: DoctorResult = {
@@ -121,21 +121,21 @@ export async function runDoctorCommand(args: readonly string[], options: CliOpti
   return !options.json && result.kind === 'degraded' ? 1 : 0
 }
 
-async function checkSupplier(baseUrl: string, businessId: string | undefined): Promise<readonly DoctorCheck[]> {
+async function checkProvider(baseUrl: string, businessId: string | undefined): Promise<readonly DoctorCheck[]> {
   const credential = resolveAgentAccessCredential(baseUrl, MARKET_SUPPLY_MANAGE_SCOPE)
   if (credential === undefined) {
     return [
       {
-        id: 'supplier', state: 'warn',
-        summary: 'No supplier credential is configured for this origin.',
-        nextCommand: connectCommand(baseUrl, 'supplier'),
+        id: 'provider', state: 'warn',
+        summary: 'No provider credential is configured for this origin.',
+        nextCommand: connectCommand(baseUrl, 'provider'),
       },
-      { id: 'supplier.readiness', state: 'warn', summary: 'Supplier readiness is unavailable until supplier access is connected.' },
+      { id: 'provider.readiness', state: 'warn', summary: 'Provider readiness is unavailable until provider access is connected.' },
     ]
   }
-  const originFailure = credentialOriginFailure(baseUrl, credential.origin, 'supplier')
+  const originFailure = credentialOriginFailure(baseUrl, credential.origin, 'provider')
   if (originFailure !== undefined) {
-    return [originFailure, { id: 'supplier.readiness', state: 'warn', summary: 'Supplier readiness was not checked because origin binding failed.' }]
+    return [originFailure, { id: 'provider.readiness', state: 'warn', summary: 'Provider readiness was not checked because origin binding failed.' }]
   }
   const headers = { Authorization: `Bearer ${credential.accessToken}` }
   try {
@@ -146,48 +146,48 @@ async function checkSupplier(baseUrl: string, businessId: string | undefined): P
     const account = agentAccountSelfResultSchema.safeParse(accountOutcome.body)
     if (!accountOutcome.ok || !account.success) {
       return [
-        ...credentialRefusedChecks(baseUrl, 'supplier'),
-        { id: 'supplier.readiness', state: 'warn', summary: 'Supplier readiness was not checked because authentication failed.' },
+        ...credentialRefusedChecks(baseUrl, 'provider'),
+        { id: 'provider.readiness', state: 'warn', summary: 'Provider readiness was not checked because authentication failed.' },
       ]
     }
     if (!account.data.scopes.includes(MARKET_SUPPLY_MANAGE_SCOPE)) {
       return [
         {
-          id: 'supplier', state: 'fail',
-          summary: `Supplier credential is missing ${MARKET_SUPPLY_MANAGE_SCOPE}.`,
-          nextCommand: connectCommand(baseUrl, 'supplier'),
+          id: 'provider', state: 'fail',
+          summary: `Provider credential is missing ${MARKET_SUPPLY_MANAGE_SCOPE}.`,
+          nextCommand: connectCommand(baseUrl, 'provider'),
         },
-        { id: 'supplier.readiness', state: 'warn', summary: 'Supplier readiness was not checked because supplier scope is missing.' },
+        { id: 'provider.readiness', state: 'warn', summary: 'Provider readiness was not checked because provider scope is missing.' },
       ]
     }
-    const supplier: DoctorCheck = {
-      id: 'supplier', state: 'pass',
-      summary: `Supplier credential is origin-bound, authenticated, and has ${MARKET_SUPPLY_MANAGE_SCOPE}.`,
+    const provider: DoctorCheck = {
+      id: 'provider', state: 'pass',
+      summary: `Provider credential is origin-bound, authenticated, and has ${MARKET_SUPPLY_MANAGE_SCOPE}.`,
     }
     if (businessId === undefined) {
-      return [supplier, {
-        id: 'supplier.readiness', state: 'warn',
-        summary: 'Supplier access is ready; add a business ID to check Operation and provider readiness.',
+      return [provider, {
+        id: 'provider.readiness', state: 'warn',
+        summary: 'Provider access is ready; add a business ID to check Tool and provider readiness.',
       }]
     }
-    return [supplier, await checkSupplierReadiness(baseUrl, headers, businessId)]
+    return [provider, await checkProviderReadiness(baseUrl, headers, businessId)]
   } catch {
     return [
-      ...credentialRefusedChecks(baseUrl, 'supplier'),
-      { id: 'supplier.readiness', state: 'warn', summary: 'Supplier readiness could not be read.' },
+      ...credentialRefusedChecks(baseUrl, 'provider'),
+      { id: 'provider.readiness', state: 'warn', summary: 'Provider readiness could not be read.' },
     ]
   }
 }
 
-async function checkSupplierReadiness(
+async function checkProviderReadiness(
   baseUrl: string,
   headers: Readonly<Record<string, string>>,
   businessId: string,
 ): Promise<DoctorCheck> {
   try {
     const [statusOutcome, connectionsOutcome] = await Promise.all([
-      callJson(baseUrl, SUPPLY_ACTION_ROUTE_CONTRACTS.operationsList.path, {
-        method: SUPPLY_ACTION_ROUTE_CONTRACTS.operationsList.method,
+      callJson(baseUrl, SUPPLY_ACTION_ROUTE_CONTRACTS.toolsList.path, {
+        method: SUPPLY_ACTION_ROUTE_CONTRACTS.toolsList.method,
         headers,
         body: JSON.stringify({ businessRef: businessId, limit: 100 }),
       }),
@@ -197,34 +197,34 @@ async function checkSupplierReadiness(
         body: JSON.stringify({ businessId, limit: 100 }),
       }),
     ])
-    const status = supplyOperationsListAction.outputSchema.safeParse(statusOutcome.body)
+    const status = supplyToolsListAction.outputSchema.safeParse(statusOutcome.body)
     const connections = supplyConnectionListAction.outputSchema.safeParse(connectionsOutcome.body)
     if (!statusOutcome.ok || !connectionsOutcome.ok || !status.success || !connections.success
       || status.data.kind !== 'available' || connections.data.kind !== 'available') {
       return {
-        id: 'supplier.readiness', state: 'fail',
-        summary: 'Supplier Operation or provider readiness is unavailable.',
+        id: 'provider.readiness', state: 'fail',
+        summary: 'Provider Tool or provider readiness is unavailable.',
         nextCommand: `ae supply operations ${businessId}`,
       }
     }
-    const operationCount = status.data.page.length
-    const liveCount = status.data.page.filter((operation) => operation.routeability.available).length
+    const toolCount = status.data.page.length
+    const liveCount = status.data.page.filter((tool) => tool.routeability.available).length
     const connectionCount = connections.data.connections.length
     const readyConnectionCount = connections.data.connections.filter((connection) => connection.available).length
-    const unreadyCount = operationCount - liveCount
+    const unreadyCount = toolCount - liveCount
     const attentionCount = connectionCount - readyConnectionCount
-    const summary = `Supplier business has ${operationCount} Operations (${liveCount} live, ${unreadyCount} unready) and ${connectionCount} provider connections (${readyConnectionCount} ready, ${attentionCount} needing attention).`
+    const summary = `Provider business has ${toolCount} Tools (${liveCount} live, ${unreadyCount} unready) and ${connectionCount} provider connections (${readyConnectionCount} ready, ${attentionCount} needing attention).`
     if (unreadyCount === 0 && attentionCount === 0) {
-      return { id: 'supplier.readiness', state: 'pass', summary }
+      return { id: 'provider.readiness', state: 'pass', summary }
     }
     return {
-      id: 'supplier.readiness', state: 'warn', summary,
+      id: 'provider.readiness', state: 'warn', summary,
       nextCommand: `ae supply operations ${businessId}`,
     }
   } catch {
     return {
-      id: 'supplier.readiness', state: 'fail',
-      summary: 'Supplier Operation or provider readiness could not be read.',
+      id: 'provider.readiness', state: 'fail',
+      summary: 'Provider Tool or provider readiness could not be read.',
       nextCommand: `ae supply operations ${businessId}`,
     }
   }
@@ -239,7 +239,7 @@ async function checkBuyer(
     return [
       originFailure,
       { id: 'balance', state: 'warn', summary: 'Balance was not checked because buyer origin binding failed.' },
-      { id: 'invocation', state: 'warn', summary: 'Invocation recovery was not checked because buyer origin binding failed.' },
+      { id: 'call', state: 'warn', summary: 'Call recovery was not checked because buyer origin binding failed.' },
     ]
   }
   const headers = { Authorization: `Bearer ${credential.accessToken}` }
@@ -252,30 +252,30 @@ async function checkBuyer(
     if (!accountOutcome.ok || !account.success) {
       return credentialRefusedChecks(baseUrl, 'buyer')
     }
-    if (!account.data.scopes.includes(MARKET_OPERATIONS_INVOKE_SCOPE)) {
+    if (!account.data.scopes.includes(MARKET_TOOLS_CALL_SCOPE)) {
       return [
         {
           id: 'buyer', state: 'fail',
-          summary: `Buyer credential is missing ${MARKET_OPERATIONS_INVOKE_SCOPE}.`,
+          summary: `Buyer credential is missing ${MARKET_TOOLS_CALL_SCOPE}.`,
           nextCommand: connectCommand(baseUrl, 'buyer'),
         },
         { id: 'balance', state: 'warn', summary: 'Balance was not checked because buyer scope is missing.' },
-        { id: 'invocation', state: 'warn', summary: 'Invocation recovery was not checked because buyer scope is missing.' },
+        { id: 'call', state: 'warn', summary: 'Call recovery was not checked because buyer scope is missing.' },
       ]
     }
     const balance = await checkBalance(baseUrl, headers)
-    const invocation = await checkInvocation(baseUrl, headers)
+    const call = await checkCall(baseUrl, headers)
     const marketRequests = await checkMarketRequests(baseUrl, headers)
-    const repeatUse = invocation.recentCompletedOperationRef === undefined
+    const repeatUse = call.recentCompletedToolRef === undefined
       ? undefined
-      : await checkRepeatUse(baseUrl, invocation.recentCompletedOperationRef)
+      : await checkRepeatUse(baseUrl, call.recentCompletedToolRef)
     return [
       {
         id: 'buyer', state: 'pass',
-        summary: `Buyer credential is origin-bound, authenticated, and has ${MARKET_OPERATIONS_INVOKE_SCOPE}.`,
+        summary: `Buyer credential is origin-bound, authenticated, and has ${MARKET_TOOLS_CALL_SCOPE}.`,
       },
       balance,
-      invocation.check,
+      call.check,
       marketRequests,
       ...(repeatUse === undefined ? [] : [repeatUse]),
     ]
@@ -319,13 +319,13 @@ async function checkMarketRequests(
       }
     }))
     const matched = statuses.filter((status) => status?.kind === 'matched')
-    const firstOperation = matched[0]?.operations[0]
-    if (firstOperation !== undefined) {
+    const firstTool = matched[0]?.tools[0]
+    if (firstTool !== undefined) {
       const checked = list.data.items.length
       return {
         id: 'market_requests', state: 'pass',
-        summary: `${matched.length} of ${checked} recent private market ${checked === 1 ? 'request now has' : 'requests now have'} matching Operations.`,
-        nextCommand: continuationCommand(['ae', 'describe', firstOperation.operationRef]),
+        summary: `${matched.length} of ${checked} recent private market ${checked === 1 ? 'request now has' : 'requests now have'} matching Tools.`,
+        nextCommand: continuationCommand(['ae', 'describe', firstTool.toolRef]),
       }
     }
     if (statuses.some((status) => status === undefined || status.kind === 'error' || status.kind === 'not_found')) {
@@ -334,7 +334,7 @@ async function checkMarketRequests(
     const checked = list.data.items.length
     return {
       id: 'market_requests', state: 'pass',
-      summary: `No current Operation matches the ${checked} most recent private market ${checked === 1 ? 'request' : 'requests'} yet.`,
+      summary: `No current Tool matches the ${checked} most recent private market ${checked === 1 ? 'request' : 'requests'} yet.`,
     }
   } catch {
     return marketRequestUnavailable('Private market request matches could not be rechecked.')
@@ -348,12 +348,12 @@ function marketRequestUnavailable(summary: string): DoctorCheck {
   }
 }
 
-function credentialRefusedChecks(baseUrl: string, profile: 'buyer' | 'supplier'): readonly DoctorCheck[] {
+function credentialRefusedChecks(baseUrl: string, profile: 'buyer' | 'provider'): readonly DoctorCheck[] {
   const connect = connectCommand(baseUrl, profile)
-  if (profile === 'supplier') {
+  if (profile === 'provider') {
     return [{
-      id: 'supplier', state: 'fail',
-      summary: 'Supplier credential could not be authenticated for this origin.',
+      id: 'provider', state: 'fail',
+      summary: 'Provider credential could not be authenticated for this origin.',
       nextCommand: connect,
     }]
   }
@@ -364,14 +364,14 @@ function credentialRefusedChecks(baseUrl: string, profile: 'buyer' | 'supplier')
       nextCommand: connect,
     },
     { id: 'balance', state: 'warn', summary: 'Balance was not checked because buyer authentication failed.' },
-    { id: 'invocation', state: 'warn', summary: 'Invocation recovery was not checked because buyer authentication failed.' },
+    { id: 'call', state: 'warn', summary: 'Call recovery was not checked because buyer authentication failed.' },
   ]
 }
 
 function credentialOriginFailure(
   baseUrl: string,
   credentialOrigin: string,
-  profile: 'buyer' | 'supplier',
+  profile: 'buyer' | 'provider',
 ): DoctorCheck | undefined {
   try {
     const selected = new URL(baseUrl)
@@ -388,16 +388,16 @@ function credentialOriginFailure(
   }
   return {
     id: profile, state: 'fail',
-    summary: `${profile === 'buyer' ? 'Buyer' : 'Supplier'} credential is not safely bound to the configured origin.`,
+    summary: `${profile === 'buyer' ? 'Buyer' : 'Provider'} credential is not safely bound to the configured origin.`,
     nextCommand: connectCommand(baseUrl, profile),
   }
 }
 
-function connectCommand(baseUrl: string, profile: 'buyer' | 'supplier'): string {
+function connectCommand(baseUrl: string, profile: 'buyer' | 'provider'): string {
   return continuationCommand([
     'ae',
     'connect',
-    ...(profile === 'supplier' ? ['--supplier'] : []),
+    ...(profile === 'provider' ? ['--provider'] : []),
     '--base-url',
     new URL(baseUrl).origin,
   ])
@@ -429,60 +429,60 @@ async function checkBalance(
   }
 }
 
-async function checkInvocation(
+async function checkCall(
   baseUrl: string,
   headers: Readonly<Record<string, string>>,
-): Promise<InvocationDoctorResult> {
+): Promise<CallDoctorResult> {
   try {
-    const path = `${OPERATION_INVOKE_ROUTE_CONTRACT.list.path}?limit=100`
+    const path = `${CALL_ROUTE_CONTRACT.list.path}?limit=100`
     const outcome = await callJson(baseUrl, path, {
-      method: OPERATION_INVOKE_ROUTE_CONTRACT.list.method,
+      method: CALL_ROUTE_CONTRACT.list.method,
       headers,
     })
-    const parsed = operationListResultSchema.safeParse(outcome.body)
+    const parsed = callListResultSchema.safeParse(outcome.body)
     if (!outcome.ok || !parsed.success) {
       return {
-        check: { id: 'invocation', state: 'fail', summary: 'Invocation recovery state is unavailable.', nextCommand: 'ae history' },
+        check: { id: 'call', state: 'fail', summary: 'Call recovery state is unavailable.', nextCommand: 'ae history' },
       }
     }
     const attention = parsed.data.items.find((item) => item.state === 'reconciliation_required' || item.state === 'pending')
     if (attention === undefined) {
-      const recentCompletedOperationRef = parsed.data.items.find((item) => item.state === 'completed')?.operationRef
+      const recentCompletedToolRef = parsed.data.items.find((item) => item.state === 'completed')?.toolRef
       return {
-        check: { id: 'invocation', state: 'pass', summary: 'No pending or reconciliation-required invocation needs attention.' },
-        ...(recentCompletedOperationRef === undefined ? {} : { recentCompletedOperationRef }),
+        check: { id: 'call', state: 'pass', summary: 'No pending or reconciliation-required Call needs attention.' },
+        ...(recentCompletedToolRef === undefined ? {} : { recentCompletedToolRef }),
       }
     }
     return {
       check: {
-        id: 'invocation', state: 'warn',
+        id: 'call', state: 'warn',
         summary: attention.state === 'reconciliation_required'
-          ? 'A reconciliation-required invocation needs attention.'
-          : 'A nonterminal invocation is still pending.',
+          ? 'A reconciliation-required Call needs attention.'
+          : 'A nonterminal Call is still pending.',
         nextCommand: attention.state === 'reconciliation_required'
-          ? `ae status ${attention.invocationRef}`
-          : `ae wait ${attention.invocationRef}`,
+          ? `ae status ${attention.callRef}`
+          : `ae wait ${attention.callRef}`,
       },
     }
   } catch {
     return {
-      check: { id: 'invocation', state: 'fail', summary: 'Invocation recovery state could not be read.', nextCommand: 'ae history' },
+      check: { id: 'call', state: 'fail', summary: 'Call recovery state could not be read.', nextCommand: 'ae history' },
     }
   }
 }
 
-async function checkRepeatUse(baseUrl: string, operationRef: string): Promise<DoctorCheck | undefined> {
+async function checkRepeatUse(baseUrl: string, toolRef: string): Promise<DoctorCheck | undefined> {
   try {
-    const outcome = await callJson(baseUrl, OPERATION_MARKET_DESCRIBE_PATH, {
+    const outcome = await callJson(baseUrl, TOOL_MARKET_DESCRIBE_PATH, {
       method: 'POST',
-      body: JSON.stringify({ operationRef }),
+      body: JSON.stringify({ toolRef }),
     })
-    const parsed = operationChoiceDescribeOutputSchema.safeParse(outcome.body)
+    const parsed = toolChoiceDescribeOutputSchema.safeParse(outcome.body)
     if (!outcome.ok || !parsed.success || parsed.data.kind !== 'found') return undefined
     return {
       id: 'repeat_use', state: 'pass',
-      summary: 'A previously successful Operation is still in the current catalog.',
-      nextCommand: continuationCommand(['ae', 'describe', parsed.data.operation.operationRef]),
+      summary: 'A previously successful Tool is still in the current catalog.',
+      nextCommand: continuationCommand(['ae', 'describe', parsed.data.tool.toolRef]),
     }
   } catch {
     return undefined
@@ -545,13 +545,13 @@ async function checkMcp(baseUrl: string): Promise<DoctorCheck> {
 
 async function checkDeployment(baseUrl: string): Promise<readonly DoctorCheck[]> {
   const [readiness, release] = await Promise.all([
-    checkOperationalReadiness(baseUrl),
+    checkToolalReadiness(baseUrl),
     checkReleaseIdentity(baseUrl),
   ])
   return [readiness, release]
 }
 
-async function checkOperationalReadiness(baseUrl: string): Promise<DoctorCheck> {
+async function checkToolalReadiness(baseUrl: string): Promise<DoctorCheck> {
   try {
     const outcome = await callJson(baseUrl, '/api/ready')
     if (outcome.ok && isRecord(outcome.body) && outcome.body.status === 'ready') {
