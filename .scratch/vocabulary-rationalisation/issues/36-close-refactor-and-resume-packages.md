@@ -37,7 +37,15 @@ to turn planning completion into product delivery.
   entries and 122 untracked entries at capture. The private source archive and
   checksums remain at
   `/Users/joelchan/.codex/backups/agentic-economy/vocabulary-20260905-073915/`.
-  Do not silently stage or commit that pre-existing work.
+  Joel subsequently authorised **all dirty work** to be committed. Local
+  checkpoints `971660119a80a58013c67e2dafee5e47fe7edca8` and
+  `645a348421479510432db4bdc630ed306acd18d8` preserve that work, including
+  retained screenshots and blueprint artifacts. The coordinator verified a
+  completely clean worktree after the second commit. Use the second checkpoint
+  as the pre-source-refactor Git boundary; the original private archive remains
+  separate recovery evidence. No push or deployment occurred. Later refactor
+  commits still stage only their explicitly owned changes; this checkpoint
+  approval is not blanket permission to absorb future unrelated work.
 
 ## Finite evidence and write allowlist
 
@@ -173,4 +181,3 @@ changed-path classification against the baseline archive, local commit and
 candidate deployment identities, final naming-exception list, rollback record,
 Package 6/7 handoff and coordinator acceptance. Keep this issue open if a
 required proof, ownership boundary or handoff is missing.
-

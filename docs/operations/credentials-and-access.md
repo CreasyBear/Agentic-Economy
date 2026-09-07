@@ -153,7 +153,7 @@ Use CDP credential and wallet policy generations. Bind expected address,
 account/project policy IDs, custody limits, and generation in the environment.
 Prove Base Sepolia first. Revoke the predecessor only after the new generation
 passes identity, balance, policy, signing, and redaction checks. Possible
-payment submission is reconciled by existing Invocation reference.
+payment submission is reconciled by the existing Call reference.
 
 ### Source-write and server-function keys
 

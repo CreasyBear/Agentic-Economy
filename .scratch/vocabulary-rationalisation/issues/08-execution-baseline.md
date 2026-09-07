@@ -194,8 +194,8 @@ database, deployment or financial-history work is complete.
   without deleting or altering, the 23 generated visual critique/review
   artifacts under `.impeccable/` and the 10 generated PDF-render artifacts
   under `tmp/pdfs/agentic-blueprint-review/`. At that point they remained
-  visible as untracked work pending Joel's later explicit all-dirty checkpoint
-  authorization. The exact paths remain at
+  visible as untracked work. The coordinator corrected that incomplete scope
+  under Joel's existing explicit all-dirty checkpoint authorization. The exact paths remain at
   `/Users/joelchan/.codex/backups/agentic-economy/vocabulary-20260905-073915/local-checkpoint-20260905/excluded.paths`.
   The tracked `.env.example` template is included in the first candidate set;
   ignored environment files, private backups, Terraform state/provider
@@ -226,7 +226,7 @@ database, deployment or financial-history work is complete.
 
 ### Second local artifact checkpoint receipt — 2026-09-05
 
-Joel then authorised committing all current nonignored dirty work. The prior
+Joel's same instruction authorised all current nonignored dirty work. The prior
 33-path exclusion was reviewed as a staging boundary only, not a disposal or
 privacy determination. The 33 paths were inspected before staging and retained
 unchanged:

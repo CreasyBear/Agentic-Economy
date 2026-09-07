@@ -3,8 +3,8 @@
 Type: task
 Label: wayfinder:task
 Mode: AFK
-Status: open
-Assignee: Luna Max / Historical-evidence owner
+Status: resolved
+Assignee:
 Assigned role: Luna Max / dated research, package evidence and Package 6/7 cross-reference owner
 Parent: ../map.md
 Blocked by: 08, 09, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 27, 29, 30

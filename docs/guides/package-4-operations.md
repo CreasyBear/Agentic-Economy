@@ -2,8 +2,8 @@
 
 This runbook covers sandbox Account-AUD funding and managed-x402 Calls after
 the Formance cutover. Formance is the sole authority for balances,
-reservations, postings and reversals. Convex owns policy, Commitments,
-Invocations, evidence, documents and operator cases.
+reservations, postings and reversals. Convex owns spending policy, Quotes,
+Calls, evidence, documents and operator cases.
 
 Production funding and mainnet settlement remain disabled unless every
 effective-dated approval and infrastructure control is current.
@@ -13,16 +13,16 @@ owned by `../operations/aws-foundation.md`. This runbook does not override them.
 
 ## Operating invariants
 
-- Diagnose with durable `commandRef`, `transactionRef`, `commitmentRef`,
-  `invocationRef`, `documentRef` and `caseRef` values. Never copy provider,
+- Diagnose with durable `commandRef`, `transactionRef`, `quoteRef`,
+  `callRef`, `documentRef` and `caseRef` values. Never copy provider,
   Stripe, CDP, wallet or Cloudflare credentials into a case.
 - Read exact Formance transaction references after an uncertain write. Never
   infer success from error text or metadata search.
-- After x402 dispatch may have started, use status or reconciliation for the
-  existing Invocation. Never create a replacement Invocation.
+- After x402 dispatch may have started, use `call.status` or
+  `call.reconcile` for the existing Call. Never create a replacement Call.
 - Formance transactions and issued documents are immutable. Corrections append
   a named adjustment/reversal and a replacement document.
-- Suspend only the affected Account, legal customer, treasury pool, Operation
+- Suspend only the affected Account, legal customer, treasury pool, Tool
   or obligation. Search and authoritative readback remain available.
 - A Provider obligation settled by managed x402 is permanently ineligible for
   payout.
@@ -32,7 +32,7 @@ owned by `../operations/aws-foundation.md`. This runbook does not override them.
 Signal: Gateway health fails, the Node Action reports
 `formance_read_unavailable`, or Cloudflare rejects the service token.
 
-1. Stop new funding, Commitments and managed dispatch. Preserve public search,
+1. Stop new funding, Quotes and managed dispatch. Preserve public search,
    status and exact-reference recovery.
 2. Check Gateway, Ledger API, Ledger worker and PostgreSQL health through their
    private operational endpoints. Do not bypass Gateway or expose an origin.
@@ -60,7 +60,7 @@ template digest differs from the pinned application requirement.
 
 Signal: Funds, Spend or a document preview labels its Formance snapshot stale.
 
-1. Do not use the snapshot to admit funding, inspection or invocation.
+1. Do not use the snapshot to admit funding, Quote or Call.
 2. Refresh through the official Formance SDK cursor/balance read.
 3. If live readback is unavailable, retain the last snapshot with its observed
    time and keep consequential entry suspended.
@@ -83,23 +83,23 @@ the Node Action.
 Signal: a Call reports `outcome_unknown` or `reconciliation_required` after the
 submission fence.
 
-1. Read current status for the existing `invocationRef`.
+1. Read current status for the existing `callRef`.
 2. Verify its Formance reservation references and the persisted x402 attempt.
 3. Independent settlement evidence may settle the existing reservation. Only
    proven pre-submission absence may release it.
 4. Otherwise retain Account, Agent, exposure, treasury and obligation
    reservations and keep the case open.
 
-## Stale price, challenge or Commitment
+## Stale price, challenge or Quote
 
-Signal: the Commitment expired or its Operation, authority, policy, x402
+Signal: the Quote expired or its Tool, authority, policy, x402
 challenge, rate or ceiling digest changed.
 
 1. Retain the refusal and original reference.
-2. Reinspect the same Operation and input.
+2. Request a new `tool.quote` for the same Tool and input.
 3. Present the replacement AUD price, source requirement, expiry and material
    unknowns.
-4. Invoke only with the new Commitment. Never edit or extend the old one.
+4. Call only with the new `quoteRef`. Never edit or extend the old Quote.
 
 ## Low or stale treasury
 

@@ -1,10 +1,14 @@
 # Update money and business-record screens
 
+## Money SOURCE ACCEPTED — 2026-09-07
+
+Independent oversight accepted the corrected immutable Money candidate after reviewing the complete42path boundary and exact2file readBooking correction. Current accepted baseline `/tmp/ae-money-review-corrected-candidate-20260907/manifest.json`. No remaining Money finding; protected v1 digest/claims and historical receipt mapping accepted. Seven of ten source groups formally accepted. Mandatory storage return29/29PASS is retained; Group9 shared discovery/callhelper defects remain separately owned. Public implementation now advances from completed inventory. No global/compiler or225/29 repeats required solely for the two-field correction. Integrated checks, artifacts/docs, localcommits and parked runtime work remain open.
+
 Type: task
 Label: wayfinder:task
 Mode: AFK
-Status: open
-Assignee: Luna Max / Money and business-record screen owner
+Status: resolved
+Assignee:
 Assigned role: Luna Max / Account credit, Call charges, Provider earnings, payout and document presentation owner
 Parent: ../map.md
 Blocked by: 08, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 25, 29, 30
@@ -58,7 +62,7 @@ presentation pass and focused screen assertions after those handoffs.
 - `src/components/ae/console/AeOwnerCredit.tsx`
 - `src/components/ae/supply/AeSupplyEarningsCard.tsx`
 - `src/components/ae/services/money.ts`
-- `src/components/ae/offerings/AeOwnerOperationsWorkspace.tsx` — issue 26 owns
+- `src/components/ae/offerings/AeProviderWorkspace.tsx` — issue 26 owns
   only the `earnings`/payout-readiness and money/business-record summary
   section after issue 25's Provider lifecycle section is handed off. Do not
   edit Provider setup, connections, publication, availability or offboarding
@@ -95,7 +99,7 @@ account/security/navigation surfaces; only consume their links and labels.
 
 `tests/unit/ui/demand-console.test.tsx` is shared with issue 23: issue 26
 owns only the Credit-panel assertions after the Agent/assistant section is
-handed off. `tests/unit/ui/owner-operations-workspace.test.tsx` is shared with
+handed off. `tests/unit/ui/provider-workspace.test.tsx` is shared with
 issue 25: issue 26 owns only its earnings/payout assertions after issue 25's
 Provider assertions are complete. No two workers may edit either shared test
 at the same time.

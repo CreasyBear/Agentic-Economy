@@ -27,26 +27,24 @@ a renamed product term.
 | --- | --- | --- |
 | Customer | Business Principal | The person or legal entity buying and granting authority, not necessarily the signed-in administrator. |
 | Agent | Agent Principal | Durable technical identity; replacing a credential does not replace the agent or reset its spending history. |
-| Spending policy | Mandate | Versioned purchase permissions, permitted Tools and per-Call/aggregate limits; not the account balance or a one-off approval. |
-| Tool | Callable Operation | One versioned, callable supply unit from a Provider, not the Provider's whole product, portfolio Service or an unverified directory entry. |
-| Tool version | Operation revision | The identified revision of a Tool's contract and material terms. |
+| Spending policy | Mandate (historical AE name) | Versioned purchase permissions, permitted Tools and per-Call/aggregate limits; not the account balance or a one-off approval. |
+| Tool | Callable Operation (historical AE name) | One versioned, callable supply unit from a Provider, not the Provider's whole product, portfolio Service or an unverified directory entry. |
+| Tool version | Operation revision (historical AE name) | The identified revision of a Tool's contract and material terms. |
 | Service request | Market intent | The outside contribution needed and its constraints, not the customer's larger task or a transport-level HTTP request. |
 | Service comparison | Resolution | The considered Tool versions, exclusions and reasons, not an unexplained ranking. |
-| Quote | Commitment | An expiring, customer-bound price and terms decision with spending checks, inputs, effects and retry rules; not merely a price estimate. |
-| Call | Invocation | One accepted use of a Tool version and its stable identity, not a new execution record alongside Invocation. |
+| Quote | Commitment (historical/evidence name) | An expiring, customer-bound price and terms decision with spending checks, inputs, effects and retry rules; not merely a price estimate. |
+| Call | Invocation (historical/evidence name) | One accepted use of a Tool version and its stable identity, not a second execution record alongside the Call. |
 | Suggested next action | Continuation | The safe, supported action from the current state; not an invitation to retry a possibly dispatched purchase. |
 | Outcome records | Outcome evidence | Attributed observations and any explicitly supported customer reports, not a universal quality score. |
 | Purchase resolution | Commercial closure | The final explainable purchase outcome; not proof that payment, delivery and accounting finality are the same. |
 
-During Phase 0, before the approved contract and storage cutover, current API
-methods, payloads, enum values, events, database tables and source identifiers
-still expose their existing compatibility names. The target contract will move
-AE-owned names together; it will not add aliases or duplicate records. The
-following is a current-not-yet-cut-over compatibility example: `operation.inspect`
-returns the Quote under `commitmentRef`; `operation.invoke` accepts that
-reference and an `idempotencyKey`; `invocationRef` identifies the Call. Use
-these exact old names only when describing the current implementation, and use
-the familiar target terms everywhere else.
+The checked-in source and accepted public source receipts now use
+`registry.tools.*`, `tool.quote`, `tool.call`, `call.list`, `call.status`,
+`call.cancel` and `call.reconcile`, with `toolRef`, `quoteRef` and `callRef` in
+the current AE contracts. This is a source cutover, not a hosted deployment or
+installed-package acceptance claim. Earlier names remain only where required by
+historical evidence, protected protocol/hash material, opaque encodings or
+document filenames; they are not aliases to preserve in current examples.
 
 Generic IAM `Principal`, `Account`, `Business`, `User`, `Credential` and
 `DelegationGrant` remain distinct concepts; Customer and Agent are product roles,
@@ -295,13 +293,14 @@ The Provider act of admitting and sealing a callable Tool version.
 _Do not confuse with_: listing, registry import
 
 **Recovery**:
-Caller-facing status, cancel, and reconcile of a Call.
+Caller-facing `call.status`, `call.cancel` and `call.reconcile` actions for a
+Call.
 _Do not confuse with_: expire_authorization, sweep, expiry as Recovery modes
 
 **Expiry sweep**:
 Background x402 authorization expiry that observes the control plane and queues expiry; it is not a Recovery mode.
-_Do not confuse with_: recover mode, `OperationInvokeRecoveryPort` (the current
-pre-cutover source port), expiry as Recovery modes
+_Do not confuse with_: recover mode, payment or delivery status, expiry as
+Recovery modes
 
 ### Design references
 

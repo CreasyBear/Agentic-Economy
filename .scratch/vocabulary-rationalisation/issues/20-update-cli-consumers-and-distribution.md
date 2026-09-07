@@ -1,10 +1,19 @@
+## Source and artifact evidence accepted; compatibility pending — 2026-09-07
+
+The source cutover is independently accepted and committed in `3770b43ba`.
+The rebuilt archive passes artifact-integrity checks. Its unchanged Node 20/22
+compatibility matrix remains unrun pending Joel's explicit test-only runtime
+exception decision. This issue stays open for that proof; source, hosted and
+installed-package acceptance remain distinct. Final source checks and limitations
+are recorded in issue 32 and the existing work record.
+
 # Update CLI consumers and package-facing distribution language
 
 Type: task
 Label: wayfinder:task
 Mode: AFK
 Status: open
-Assignee: Luna Max / CLI consumer implementation owner
+Assignee:
 Assigned role: Installed `ae` CLI and package consumer owner
 Parent: ../map.md
 Blocked by: 08, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 29, 30
@@ -180,3 +189,61 @@ public tarball and hosted/live proof pending issue 22 and later verification.
   correction. This ticket must preserve the CLI verbs while consuming issue
   19's target public contract; it must not turn anonymous `describe` into a
   Quote action.
+
+## Queue correction: Call command filename and direct CLI propagation — 2026-09-05
+
+The CLI's paid-call implementation had been listed only as an old consumer
+path. Its exact mechanical file and symbol move is now explicit. This issue
+owns the CLI implementation and its direct tests; it does not change command
+verbs, add aliases or redesign the action hierarchy.
+
+### Exact Call command mapping
+
+- `tools/ae/commands/invoke.ts` → `tools/ae/commands/call.ts`
+- `runInvokeCommand` → `runCallCommand`
+- `invokeCommandDescriptor` → `callCommandDescriptor`
+- `invokeCommands` → `callCommands`
+
+The retained CLI verb remains `call`. The implementation consumes the
+caller-specific Quote and then the `tool.call` action; it must not expose an
+`invoke` alias. `describe` remains anonymous Tool detail and `history` remains
+the `call.list` presentation. Opaque `operation:v1:`/`quote`/`call` reference
+bytes, `--input`, idempotency, OAuth, x402 fields, status and recovery behavior
+remain protected by the existing tests.
+
+### Direct command importers and tests
+
+Update these literal callers to import from `commands/call.ts` and the renamed
+symbols in the same source/test pass:
+
+- `tools/ae/cli.ts`
+- `tools/ae/commands/action-adapters.ts`
+- `tests/imports/tool-surface-conformance.test.ts` (post-13 path for
+  `tests/imports/operation-surface-conformance.test.ts`)
+- `tests/unit/market-terminal/invoke.test.ts` →
+  `tests/unit/market-terminal/call.test.ts`
+- `tests/unit/market-terminal/recovery.test.ts`
+- `tests/unit/market-terminal/cold-loop.test.ts`
+
+Coordinator resolution: this issue moves
+`tools/ae/commands/market-operations.ts` to `tools/ae/commands/market-tools.ts`.
+Rename `MARKET_OPERATION_COMMAND_DESCRIPTORS` to
+`MARKET_TOOL_COMMAND_DESCRIPTORS`, `marketOperationCommands` to
+`marketToolCommands`, and `marketOperationRunners` to `marketToolRunners`.
+Update the exact consumers `tools/ae/commands/action-adapters.ts`,
+`tools/ae/cli.ts` and post-13
+`tests/imports/tool-surface-conformance.test.ts` in the same patch. This is the
+existing four-command catalogue descriptor list, not generic runtime execution;
+retain `list`, `search`, `describe` and `compare`, with no alias or new command.
+The existing cold-loop/compare tests and serialized import check must pass.
+The CLI `--supplier` → `--provider` flag mapping
+and all human-facing command output remain this issue's mechanical/copy
+ownership across the original finite allowlist.
+
+### Root manifest boundary
+
+`packages/cli/package.json` remains this issue's package-facing metadata
+surface. Root `package.json` is not editable here: issue 22 is the sole root
+manifest writer at the early generator checkpoint and final integration. No
+root script, dependency, lockfile entry or compatibility alias is added by
+this ticket.

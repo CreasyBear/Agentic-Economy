@@ -111,7 +111,7 @@ missing identity from naming similarity.
 4. Use exact environment/project/deployment identifiers. Do not rely on a CLI's
    ambient default project.
 5. Read health and release identity after every change. For financial paths,
-   also use exact Formance, Stripe, or Invocation references.
+   also use exact Formance, Stripe, or Call references.
 6. Possible external submission is never retried blindly. Read the durable
    reference; otherwise retain `outcome_unknown`.
 7. Do not destroy, clear, import-replace, or restore over an authoritative

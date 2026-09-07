@@ -1,3 +1,10 @@
+> **Current-source cross-reference — 2026-09-07.** This historical record retains
+> its original vocabulary, evidence, dates and release status. For current source
+> Tool/Quote/Call contracts, see [PRODUCT.md](../../PRODUCT.md),
+> [CONTEXT.md](../../CONTEXT.md) and the [current operating guide](./package-4-operations.md).
+> The 7 September source and documentation handoffs do not establish hosted or data
+> cutover, Package 6 publication, Package 7 implementation, or production readiness.
+
 # Package 5 release evidence
 
 **Status:** source implementation complete; external release proof open

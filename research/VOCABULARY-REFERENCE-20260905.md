@@ -1,3 +1,18 @@
+> **Current refactor mapping — 2026-09-07 (source only).** This dated research
+> retains its original recommendation and approval status. The 7 September source
+> and current-documentation handoffs use [PRODUCT.md](../PRODUCT.md) and
+> [CONTEXT.md](../CONTEXT.md) as current authority.
+>
+> Historical admitted Operation, purchase Commitment and purchased invocation map
+> to Tool, Quote and Call. `registry.tools.describe` / `ae describe` remain anonymous
+> Tool detail; `tool.quote` is caller-specific, and `call.list` is Call history.
+> Generic IAM Principal, Account, Business, User, Credential and DelegationGrant;
+> Customer, Agent, Provider, AE Seller and payment recipient; Charge, Provider
+> obligation, payable amount and Payout; and upstream OpenAPI/MCP/OAuth/x402 fields
+> retain distinct protected meanings, not historical synonyms. Opaque identifiers,
+> hashes, signatures and external financial namespaces remain unchanged. This
+> cross-reference does not establish hosted cutover or package release approval.
+
 # Vocabulary reference research — 2026-09-05
 
 Status: research recommendation; glossary and migration cutover remain unapproved.

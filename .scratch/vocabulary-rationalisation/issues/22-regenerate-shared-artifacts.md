@@ -1,10 +1,139 @@
+## Source and artifact evidence accepted; compatibility pending — 2026-09-07
+
+The source cutover is independently accepted and committed in `3770b43ba`.
+The rebuilt archive passes artifact-integrity checks. Its unchanged Node 20/22
+compatibility matrix remains unrun pending Joel's explicit test-only runtime
+exception decision. This issue stays open for that proof; source, hosted and
+installed-package acceptance remain distinct. Final source checks and limitations
+are recorded in issue 32 and the existing work record.
+
+## Stable Public source candidate; integrated dependencies remain — 2026-09-07
+
+Immutable `/tmp/ae-public-review-candidate-20260907/manifest.json`:1800files,
+zerochangedDuringCapture,83netPublicpaths. Independentoversightreceivedthe
+completeexistingPublicinventory plusallcontinuation/rootreceipts; reviewis
+pending, notPublicorartifactacceptance. Fullcompiler67diagnostics16earlierowner
+files,zeroPublic; log `/tmp/ae-public-final-coherent-checkpoint-20260907.log`.
+Lasttwoassertion-onlytests23/23PASSafterthatmeasurement. Candidateincludes
+package/rootartifactevidence andqualifiedsupplementalREADME/pluginpreimages.
+
+`pack:cli:public`PASS (existingCLIbuild+threefilearchive). Existing
+assertCliPackIntegritywithfreshnpmreportPASS; actualarchiveSHA1/SHA512match.
+ArchiveSHA256fe6499e06f0a9d2f1f5d5d0eb2d6ae661549c70ce8f2e4c3fbbbfab770d708d6.
+CompiledbundlehelpJSONPASS. Node20/22package-matrixNOTRUN,pendingexplicitpolicy;
+thesechecksarenotafullinstalled-packageharnesspass.
+
+Importbatch46PASS3FAIL; twoexistingmanifestpathupdatesresolveToolviewmodeland
+unrestricted-test-onlyreferences. Narrowmodule-boundaries9PASS2FAIL nowonly
+Connectionagent-access-console→capability-supplytypeedge andCallidentitytest
+privatecall-admitimport. RootdidnotaddDAGedges/entries/exceptions; sourceowners
+mustreturntheboundaryreceipt. Conformance388PASS3FAIL; Publicmanifestassertion
+fixedby23/23return, remaining2Providerfailures initsrecordedreturnpaths.
+No fullimports/conformanceacceptance claimed. Exactlogs inpriorentries.
+
+Publicsourcewriterreturned; samePolicyowner startsits2consumerreturn while
+oversightreviewsPublic. Earlierexistingownersretainall67errorsandtwoimport
+findings. Thisisdependencyresolutionthroughsameownership, notanewqueue orroot
+fallback. DocsheldacceptedPublic/artifactreceipts; commits/integratedacceptance
+andparkedruntimeworkremainopen.
+
+## Public native checkpoint — passed, 2026-09-07
+
+The completed Public04 source handoff released the serialized native slot.
+Exact approved process-scoped Convex analysis target dry-run and generation
+both exited0. Native route generation also exited0; all120route source hashes
+were unchanged. AllfiveConvex generated outputs and routeTree match the
+pre-checkpoint baseline `/tmp/ae-root-public-artifact-before-20260907/manifest.json`.
+Logs `/tmp/ae-public-convex-dry-run-20260907.log`,
+`/tmp/ae-public-convex-generation-20260907.log`, and
+`/tmp/ae-public-route-generation-20260907.log`; native route hash report
+`/tmp/ae-route-generation-public-20260907.json`.
+
+Types4/4PASS; scopedPublic+rootsharedOxlintPASS; existing `audit:actions`PASS
+with35actions andzero findings. Root globalcompiler86/29 requires19Public
+consumerdiagnostics plus67earliermoduleconsumerreturns; issue32 owns the exact
+attribution and source owners retain corrections. CLIbuild/publicpack/imports
+remain pending coherentPubliccorrection; no artifact acceptance yet. No
+manualgeneratededit,backendstart,data,deployorNode20matrixrun occurred.
+
 # Regenerate shared artifacts and verify packaged public surfaces
+
+## Public integration preparation — 2026-09-07
+
+The existing `scripts/audit-action-surfaces.mjs` now calls the actual
+`listCallRouteDescriptors` export and uses corresponding local names. No audit
+logic or assertions changed; baseline is preserved beside the manifest baseline
+below. Scoped whitespace passed. Its existing `audit:actions` runtime check
+remains pending the complete Public source receipt.
+
+Root updated exactly three existing white-box importer paths in
+`src/modules/module-boundaries.ts` to the accepted Call test filenames:
+`capability-operation-workpool` → `capability-call-workpool`,
+`operation-receipt-contract` → `call-receipt-contract`, and
+`mcp-api-operation-recovery` → `mcp-api-call-recovery`. All target files exist;
+exception IDs, targets and permitted entries are unchanged. Baseline preserved
+at `/tmp/ae-root-public-shared-baseline-20260907/module-boundaries.ts`;
+scoped whitespace check passed. Final import verification waits for the complete
+Public source receipt and serialized CLI artifact slot. No new exception,
+build, generation, compiler check or source commit occurred in this preparation.
+
+
+## Catalogue native Convex checkpoint — passed
+
+Catalogue source is paused for its precise implementation handoff, with no
+writer active. Canonical Tool reads pass20 tests and registered mapping/schema
+checks pass34. Parent now handles the reported offeringToolMap/function return
+shape dependency using the exact approved non-deploying target below. All
+Convex generated files and the route tree are hash-snapshotted; the five allowed
+Convex outputs are copied for rollback. Run dry-run first, native generation
+only on success, and compare outputs. No source repair, target substitution,
+secret retrieval, backend start, deploy or manual generated edit. Catalogue
+verification continues from its same owner handoff; this is not module or
+artifact final acceptance.
+
+
+### Catalogue native result
+
+Approved dry-run and native generation both exit0. Hash comparison of all
+Convex generated files and routeTree shows no changed paths. The source exports
+are already reflected through native generated declarations. Report:
+`/tmp/ae-catalogue-generation-result-20260906.json`. No target/config change,
+manual output edit, backend start or deployment occurred. This satisfies the
+catalogue generation dependency, not final artifact/package acceptance.
+
+## Active native route checkpoint — connection module dependency
+
+The coherent connection checkpoint finds four Tool-link typing errors in
+AeAgentOperatorConsole because generated routing still names deleted Operation
+routes. Current src/routes/tools.tsx and tools.$toolRef.tsx already exist.
+Coordinator owns one native local route generation, using the installed
+TanStack Start default config parser and Start footer builder with the installed
+Router Generator. Vite config has tanstackStart() without router overrides.
+Snapshot every route source and the old generated tree first; expect only
+src/routeTree.gen.ts to change. Inspect native output and report any route-source
+mutation. No manual generated edits, dependency install, full build, Convex
+operation, listener, live call or deployment. Source owner retains module
+completion and does not edit generated files or route registration keys.
+
+
+### Native route result
+
+Native generation exited0 using the installed Start config/footer builders and
+Router Generator. All120 route source hashes were unchanged. Only the generated
+src/routeTree.gen.ts changed (313 insertions/329 deletions); whitespace passed.
+Current /tools/$toolRef registrations replace the deleted Operation path. Native
+Start footer/type augmentation is preserved. Report and source-hash snapshot:
+/tmp/ae-route-generation-connection-20260906.json and
+/tmp/ae-route-files-before-connection-20260906.json. The prior tree is retained
+as /tmp/ae-route-tree-before-connection-20260906.ts. Full compiler verification
+follows the remaining same-module source corrections, not another dispatch.
+
 
 Type: task
 Label: wayfinder:task
 Mode: AFK
 Status: open
-Assignee: Luna Max / shared artifact integration owner
+Assignee:
 Assigned role: Generator, route-tree and CLI distribution integration owner
 Parent: ../map.md
 Blocked by: 08, 09, 29, 30
@@ -14,6 +143,44 @@ non-deploying target receipt below. Early, serialized generation checkpoints may
 claimed before those source issues close; they are not final closure of 22.
 
 ## Outcome
+
+### Storage-group native checkpoint — returned, 2026-09-06
+
+Run only after the storage source writers have returned and root has reviewed
+their exact results. This is the storage group's generator dependency, not
+another source batch or permission to deploy. The existing process-scoped
+non-deploying target below remains unchanged. Record dry-run and generator
+results separately; if dry-run fails, skip generation and return the concrete
+analysis blocker. Do not fetch secrets, choose a different target, start a
+backend or repair source from this generator slot.
+
+Capture hashes/status of the five approved Convex generated files before and
+after. Run the approved dry-run, then `generate:convex` only if it passes.
+Only these five outputs may change: `convex/_generated/api.js`, `api.d.ts`,
+`server.js`, `server.d.ts`, `dataModel.d.ts`. No manual edits. Run the same
+whole-repository typecheck and record diagnostic headings/unique files, plus
+`test:types`, after the checkpoint. A generation success is not an integrated
+compiler/test pass. Root updates the verification issue's baseline table and
+group result; final artifact/packaging acceptance stays open.
+
+Result: dry-run exit 0; generator exit 0. Only `convex/_generated/api.d.ts`
+changed (hash prefix `115a0604` to `24adf52b`); `api.js`, `server.js`,
+`server.d.ts` and `dataModel.d.ts` were unchanged. The generated API now refers
+to `capabilityCalls`, not the removed module. Typecheck exit 2: 1,090
+diagnostics/207 files; `test:types` passed 4/4. The verification issue owns the
+comparison and remaining failures. Worker cumulative compactions 0, no active
+process or source claim. No deployment/data operation, alternate target or
+manual generated edit occurred. This checkpoint is accepted as native
+generation proof, **not** final closure of this artifact issue.
+
+### Source command receipt — 2026-09-06
+
+`vocab_command_paths_01` returned the sole-file `package.json` command update:
+27 mapped targets exist, JSON parsing and exact HEAD-plus-approved-transform
+comparison passed, dependencies/metadata remain unchanged, whitespace passed.
+The original dated Package 5 filenames were restored. Zero compactions.
+No script, test, build or generator was executed. This is command-source
+readiness only; generated and packaged acceptance remains open.
 
 After the serialized core owners and the disjoint public-surface consumers land,
 regenerate the existing Convex and route-tree outputs, rebuild the installed
@@ -62,12 +229,40 @@ shortcut.
 - `tools/release/release-integrity.ts`
 - `.nvmrc` (read-only runtime pin)
 - `convex.json` (read-only action-runtime pin)
-- `package.json` (read-only command definitions; issue 20 owns package-facing
-  metadata changes)
+- `package.json` (sole root-package writer for the exact existing command
+  keys/path portions below; preserve all dependencies, versions and unrelated
+  metadata. `packages/cli/package.json` remains issue 20's contract.)
 - `packages/cli/package.json` (read-only package contract; issue 20 owns any
   consumer-language change)
 
-### Generated outputs
+### Serialized root command handoffs
+
+Issue 22 applies these fixed producer receipts at each early checkpoint,
+**before** the source owner's accepting checks. This does not wait for final
+issue-22 closure and does not add source-issue header dependencies to issue 22.
+Other workers inspect root `package.json` but do not edit it. No command is
+added; the four evidence command keys are renamed without aliases.
+
+| Existing key | Exact owned change / receipt source |
+| --- | --- |
+| `test:conformance` | Only paths moved by 11 (generic Action execution), 16 (Call) and 19 (Call API). Apply each producer's literal move map in sequence. |
+| `test:imports` | Only the Action-execution boundary path from 11 and Tool-surface conformance path from 13. Keep CLI build and scan settings. |
+| `test:release:architecture` | Only the canonical Tool reads and current Tool snapshot test paths from 13. |
+| `test:chat:conformance` | Only the exact chat test filename moves from 24. Keep all flags/output behavior. |
+| `smoke:gateway:production` | Target `tools/release/tool-gateway-production-smoke.ts` after 21. |
+| `validate:release:gateway` | Target `tools/release/validate-tool-gateway-production-smoke-receipt.ts` after 21. |
+| `evidence:action-invocation:development` | Rename key to `evidence:action-execution:development`; target `tools/dev/action-execution-development-evidence.ts` after 11. |
+| `evidence:bounded-mandate:development` | Rename key to `evidence:spending-policy:development`; target `tools/dev/spending-policy-evidence-packet.ts` after 12. |
+| `evidence:full-yolo:development` | Rename key to `evidence:unrestricted-test-only:development`; target `tools/dev/unrestricted-test-only-evidence-packet.ts` after 12. |
+| `evidence:operation:development` | Rename key to `evidence:tool:development`; target `tools/dev/development-provider-tool-evidence.ts` after 14. |
+
+Preserve the dated Package 5 command keys and script filenames. Issue 15 has
+no direct root command path in this baseline and supplies a no-change receipt.
+No lockfile or dependency change is authorised. Check each target exists and
+run the affected existing checks within the safe environment boundaries;
+source command updates do not authorise executing live payment/release scripts.
+
+### Generated file allowlist
 
 - `convex/_generated/api.js`
 - `convex/_generated/api.d.ts`
@@ -262,3 +457,69 @@ or live proof from this artifact ticket.
 - 2026-09-05 — Prepared as the shared generator and packaged-artifact owner
   after the bounded DX review. Generation is serialized after issues 19–21;
   the Node 20/22 package-matrix question remains with the coordinator.
+
+- 2026-09-05 — First serialized source10 checkpoint after the coordinator's
+  release: Node `v22.22.0`/npm `11.5.1`; the exact approved
+  `dev:fastidious-barracuda-66` process-scoped dry-run
+  (`check:convex-codegen`) and native `generate:convex` both exited 0. The
+  five Convex generated files and `src/routeTree.gen.ts` had no diff; route
+  generation was not needed because source10 changed no route sources. The
+  root command manifest received an explicit no-change receipt for source10;
+  no package or lockfile edit was made. `typecheck` exited 0 and
+  `test:types` passed 1 file/4 tests. The serialized `test:imports` slot built
+  `packages/cli/dist/ae.js` successfully, then failed 1 of 11 import files
+  (48/49 tests): `tests/imports/module-boundaries.test.ts:51` reported the
+  new untracked `tests/unit/agent-access/agent-audit.test.ts` import of
+  `@/modules/agent-access/agent-audit` lacks an exact
+  `module-unowned-test-import` exception. This is returned to source10; issue
+  22 does not alter that source/test or its manifest. No public archive was
+  built, and no deployment, backend restart, schema push, data or financial
+  operation, temporary runtime, staging or commit occurred. Issue 22 remains
+  open for later producer checkpoints.
+
+- 2026-09-05 — After source10 added its single exact test-only manifest entry
+  (`test-whitebox-73`) and released the fix checkpoint, the serialized
+  `test:imports` command was rerun under Node `v22.22.0`/npm `11.5.1` and
+  passed: 11 test files and 49 tests. Its CLI build completed successfully.
+  The five Convex generated files, `src/routeTree.gen.ts`,
+  `packages/cli/dist/ae.js`, the public archive path, `package.json` and
+  `package-lock.json` all remained without Git diffs; the CLI output was
+  rebuilt in place and was content-identical. No public archive was built in
+  this early checkpoint. Issue 22 remains open for later producer checkpoints.
+
+- 2026-09-05 — Issue11 integration checkpoint released. Under Node
+  `v22.22.0`/npm `11.5.1`, the sole root-package writer applied exactly three
+  receipts: the six generic Action execution test paths in `test:conformance`,
+  `tests/imports/action-invocation-host-boundaries.test.ts` to
+  `tests/imports/action-execution-host-boundaries.test.ts` in `test:imports`,
+  and `evidence:action-invocation:development` to
+  `evidence:action-execution:development` targeting
+  `tools/dev/action-execution-development-evidence.ts`. No other script,
+  dependency or lockfile changed.
+
+  The exact approved process-scoped dry-run targeting
+  `dev:fastidious-barracuda-66` exited 0 and reported only stale
+  `convex/_generated/api.d.ts`; the same-prefix native `generate:convex` exited
+  0, and the exact-prefix dry-run then exited 0 without a pending write. The
+  generated diff is limited to `convex/_generated/api.d.ts` (2 insertions/2
+  deletions: `actionInvocationControl` import/map to `actionExecutionControl`);
+  no other Convex generated file, route tree, CLI bundle or public archive
+  changed.
+
+  `typecheck` was run under the same runtime and exited 2 on source-owned
+  issue11 follow-up mismatches: `tests/eval/adr009-transfer-comparison.test.ts`
+  (stale `invocationRef`/`invocationVersion` and `action_invocation`),
+  `tests/unit/capability-supply/supplied-candidate-quote-reconciliation.test.ts`
+  (missing `InvocationDecision` export), and
+  `tests/unit/provider-operation-fixture/development-provider-operation.test.ts`
+  (stale `invocationRef`). `test:types` passed 1 file/4 tests.
+
+  The issue11 focused command, with the two supplied-candidate quote
+  disclosure/qualification tests included, ran 21 files/219 tests: 211 passed
+  and 8 failed across 5 source-owned files (`capability-operation-workpool`,
+  `capability-operation-recovery`, `action-execution/standing-mandate`,
+  `source-write-admission`, and `durable-action-execution-result`). Failures
+  are returned to issue11; issue22 made no source/test edits. The serialized
+  `test:imports` command (including its existing CLI build) passed 11 files/49
+  tests. No public tarball, Node20 matrix, broad conformance, deployment,
+  backend start, data/financial operation, staging or commit was performed.

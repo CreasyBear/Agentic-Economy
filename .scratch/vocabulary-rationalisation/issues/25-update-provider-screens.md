@@ -3,11 +3,22 @@
 Type: task
 Label: wayfinder:task
 Mode: AFK
-Status: open
-Assignee: Luna Max / Provider screen owner
+Status: resolved
+Assignee:
 Assigned role: Luna Max / Provider identity, connection, publication and offboarding presentation owner
 Parent: ../map.md
 Blocked by: 08, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 29, 30
+
+## Source acceptance — 2026-09-06
+
+Provider lifecycle presentation is SOURCE ACCEPTED with the complete issue14
+module and its passed independent correction review. Issue14's current receipt
+owns the exact path, test, protected-evidence and shared-workspace handoff.
+Provider listing return links now target the existing Tool section; setup,
+connection, publication/readiness, retry and offboarding behavior is retained.
+Financial workspace sections remain issue26; public/installed producer cutovers
+and final integrated/hosted proof remain their existing owners. This closure
+records source acceptance, not deployment or a fully green integrated release.
 
 ## Outcome
 
@@ -58,21 +69,21 @@ copyable setup guidance in those consumers.
 - `src/components/ae/provider-facts.exports.ts`
 - `src/components/ae/provider-facts.tsx`
 - `src/components/ae/settings/AeWorkspaceGeneral.tsx`
-- `src/components/ae/supply/AeSupplierOperationDetail.tsx`
+- `src/components/ae/supply/AeProviderToolDetail.tsx`
 - `src/components/ae/supply/AeSupplyAgentProof.tsx`
 - `src/components/ae/supply/AeSupplyLanding.tsx`
 - `src/components/ae/supply/AeSupplySourceNativeStart.tsx`
 - `src/components/ae/supply/AeOwnerProviderConnections.tsx`
 - `src/components/ae/supply/provider-connection-target.ts`
 - `src/components/ae/offerings/AeOwnerOfferings.tsx`
-- `src/components/ae/offerings/AeOwnerOperationsWorkspace.tsx` — issue 25
+- `src/components/ae/offerings/AeProviderWorkspace.tsx` — issue 25
   owns Provider lifecycle, setup, connection, publication, availability,
   withdrawal and offboarding sections only. Issue 26 owns the financial
   `earnings`/payout section after this Provider pass.
 - `src/components/ae/offerings/offering-presentation.ts`
-- `src/components/ae/offerings/owner-operations-projection.ts`
-- `src/components/ae/offerings/owner-operations.functions.ts`
-- `src/components/ae/offerings/supplier-identity.functions.ts`
+- `src/components/ae/offerings/provider-workspace-projection.ts`
+- `src/components/ae/offerings/provider-workspace.functions.ts`
+- `src/components/ae/offerings/provider-identity.functions.ts`
 
 The three offering helper paths are shared presentation consumers: issue 14
 owns their mechanical Provider/Tool type and field propagation; this issue
@@ -109,22 +120,22 @@ literal route-link handoff if its target changes.
 ### Focused existing behaviour tests
 
 - `tests/unit/ui/listing-first-screen.test.tsx`
-- `tests/unit/ui/owner-operations-workspace.test.tsx`
+- `tests/unit/ui/provider-workspace.test.tsx`
 - `tests/unit/ui/owner-provider-connections.test.tsx`
-- `tests/unit/ui/supplier-operation-detail.test.tsx`
+- `tests/unit/ui/provider-tool-detail.test.tsx`
 - `tests/unit/ui/supply-funnel-landing.test.tsx`
 - `tests/unit/ui/supply-funnel-publisher-home.test.tsx`
 - `tests/unit/ui/supply-source-native-start.test.tsx`
 - `tests/unit/catalog/public-business-page-not-found.test.tsx`
-- `tests/unit/routes/owner-operations-compatibility-routes.test.ts`
-- `tests/unit/routes/owner-operations-route.test.ts`
+- `tests/unit/routes/provider-workspace-compatibility-routes.test.ts`
+- `tests/unit/routes/provider-workspace-route.test.ts`
 - `tests/unit/routes/owner-provider-connection-handoff-route.test.ts`
-- `tests/unit/routes/owner-supplier-identity-outcome.test.tsx`
+- `tests/unit/routes/owner-provider-identity-outcome.test.tsx`
 - `tests/unit/routes/provider-connection-cleanup-route.test.ts`
 - `tests/unit/routes/supply-owner-routes.test.ts`
 - `tests/unit/routes/privacy-removal-outcome.test.tsx`
 
-`tests/unit/ui/owner-operations-workspace.test.tsx` is the shared workspace
+`tests/unit/ui/provider-workspace.test.tsx` is the shared workspace
 evidence test. Issue 25 owns Provider lifecycle assertions; issue 26 may run
 it and owns only its earnings/payout assertions after the file handoff. No
 two workers may edit the shared assertions at the same time.
@@ -184,17 +195,17 @@ NODE_VERSION=22 "$HOME/.nvm/nvm-exec" node --version
 NODE_VERSION=22 "$HOME/.nvm/nvm-exec" npm --version
 NODE_VERSION=22 "$HOME/.nvm/nvm-exec" npx vitest run --no-file-parallelism \
   tests/unit/ui/listing-first-screen.test.tsx \
-  tests/unit/ui/owner-operations-workspace.test.tsx \
+  tests/unit/ui/provider-workspace.test.tsx \
   tests/unit/ui/owner-provider-connections.test.tsx \
-  tests/unit/ui/supplier-operation-detail.test.tsx \
+  tests/unit/ui/provider-tool-detail.test.tsx \
   tests/unit/ui/supply-funnel-landing.test.tsx \
   tests/unit/ui/supply-funnel-publisher-home.test.tsx \
   tests/unit/ui/supply-source-native-start.test.tsx \
   tests/unit/catalog/public-business-page-not-found.test.tsx \
-  tests/unit/routes/owner-operations-compatibility-routes.test.ts \
-  tests/unit/routes/owner-operations-route.test.ts \
+  tests/unit/routes/provider-workspace-compatibility-routes.test.ts \
+  tests/unit/routes/provider-workspace-route.test.ts \
   tests/unit/routes/owner-provider-connection-handoff-route.test.ts \
-  tests/unit/routes/owner-supplier-identity-outcome.test.tsx \
+  tests/unit/routes/owner-provider-identity-outcome.test.tsx \
   tests/unit/routes/provider-connection-cleanup-route.test.ts \
   tests/unit/routes/supply-owner-routes.test.ts \
   tests/unit/routes/privacy-removal-outcome.test.tsx

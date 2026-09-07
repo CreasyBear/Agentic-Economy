@@ -6,6 +6,10 @@ identities are in `deployment-registry.yaml`; current evidence and gaps are in
 `deployment-maturity.md`. The account baseline, recovery proof and production
 gate are in `aws-foundation.md`.
 
+The checked-in source uses the current Tool/Quote/Call contracts described below.
+That source fact does not establish hosted route availability, installed-client
+compatibility or production readiness.
+
 ## System boundary
 
 ```text
@@ -19,7 +23,7 @@ Vercel Node application
   │
   ▼
 Convex deployment
-  │  Account + Principal + authority + Commitment + Invocation + recovery
+  │  Account + Principal + authority + Quote + Call + recovery
   │
   ├── Stripe ── settlement evidence for Account AUD funding
   ├── CDP/x402 ── custody, signing, paid Provider call, settlement evidence
@@ -42,7 +46,7 @@ Convex deployment
 | --- | --- | --- |
 | Human identity, session, factors | Clerk | Canonical Principal and Account binding |
 | Agent identity and delegated grant | Clerk key plus Convex authority records | Redacted use evidence |
-| Product policy, Commitment, Invocation, recovery | Convex | Vercel response projections |
+| Product policy, Quote, Call, recovery | Convex | Vercel response projections |
 | AUD/USDC balances, reservations, postings, reversals | Formance | Timestamped display snapshots and references |
 | Funding settlement | Stripe | Verified event and command evidence |
 | x402 submission and settlement | CDP/x402 plus Provider evidence | Submission fence and durable readback |
@@ -79,24 +83,24 @@ identities, policy digest, and release evidence together.
 7. Exact Formance reference readback finalizes the Account projection and
    document work.
 
-### Managed Operation call
+### Managed Tool Call
 
-1. Search returns compact candidate Operations.
-2. Inspection resolves Account, Agent Principal, authority, live price,
-   Formance capacity, x402 requirement, and policy into an expiring Commitment.
-3. Invoke consumes only the Commitment reference and idempotency key.
-4. Convex prepares the durable Invocation.
+1. Search returns compact candidate Tools.
+2. `tool.quote` resolves Account, Agent Principal, authority, live price,
+   Formance capacity, x402 requirement, and policy into an expiring Quote.
+3. `tool.call` consumes only the `quoteRef` and idempotency key.
+4. Convex prepares the durable Call.
 5. Formance atomically decides the AUD/USDC reservations.
 6. Convex persists the possible-submission fence before CDP signing.
 7. Official x402/CDP code makes the paid Provider request.
-8. Settlement, release, or `outcome_unknown` is finalized by durable reference.
+8. Settlement, release, or `outcome_unknown` is finalized by the durable `callRef`.
 
 ### Recovery
 
 Search and authoritative readback remain available when new financial entry is
 suspended. Formance writes recover by exact transaction reference. Possible
-x402 submission recovers through the existing Invocation and never offers a
-new invoke action.
+x402 submission recovers through the existing Call and never offers a new
+`tool.call` action.
 
 ## Deployment definition
 

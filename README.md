@@ -15,19 +15,19 @@ checks the price and terms, and makes a Call within its spending policy. AE does
 not own the agent's larger project, planning, memory or orchestration.
 
 Read [PRODUCT.md](./PRODUCT.md) for the active direction,
-[CONTEXT.md](./CONTEXT.md) for familiar product terms and their existing code/API
-names, and the [Australian whitepaper](./AGENTIC_ECONOMY_AUSTRALIA_WHITEPAPER.md)
+[CONTEXT.md](./CONTEXT.md) for familiar product terms, source contracts and
+compatibility names, and the [Australian whitepaper](./AGENTIC_ECONOMY_AUSTRALIA_WHITEPAPER.md)
 for the institutional thesis.
 
 ## The product loop
 
 ```text
-find and compare services -> quote and spending checks -> Call
+find and compare Tools -> Quote and spending checks -> Call
     -> result or pending outcome -> recovery or refund if required
     -> resolved purchase -> agent continues
 ```
 
-A quote binds the customer, agent, spending policy, exact service, Provider,
+A Quote binds the customer, agent, spending policy, exact Tool version, Provider,
 Seller, inputs, price ceiling, terms, data use, effects and retry rule before a
 paid Call. Calls with uncertain delivery or payment remain open for recovery;
 a successful payment alone does not establish delivery.
@@ -37,16 +37,20 @@ performs the service, and the amount AE owes the Provider is recorded separately
 from the customer's charge. AUD customer credit is not a crypto wallet.
 
 One shared account balance can serve several agents under separate hard limits.
-Authentication resolves the account. The supported machine path remains
-`registry.operations.search -> operation.inspect -> operation.invoke -> result`.
+Authentication resolves the account. The accepted source machine path is
+`registry.tools.search -> tool.quote -> tool.call -> result`.
 Status and recovery appear only when needed. Public detail, comparison, whoami
 and balance are optional reads. Agents do not coordinate treasury, calculate
 foreign exchange, write ledger entries or guess whether payment can be retried.
 
+The source cutover is accepted in the checkout and its focused receipts. That
+source evidence does not establish a hosted deployment or installed-package
+compatibility; both remain separate release gates.
+
 ## Current stage
 
-The implemented foundation includes canonical services, comparison,
-quotes, brokered Calls, prepaid buyer credit, Charges, Provider
+The implemented foundation includes canonical Tools, comparison, Quotes,
+brokered Calls, prepaid buyer credit, Charges, Provider
 earnings, refunds, status and recovery.
 
 The complete Australian principal-reseller record is the next product milestone.
@@ -55,23 +59,25 @@ facts, business-document evidence and purchase resolution are not yet one
 explicit production record. Source and tests remain the authority for current
 behaviour.
 
-## Current product entrances
+## Current source entrances
 
 - `/market` exposes the public service catalogue and comparison flow.
 - `/t/new` provides a thin natural-language entrance to the same market.
-- `/api/v1/market-operations/*` exposes canonical discovery and inspection.
-- `/api/v1/operations/call` accepts paid or consequential Calls.
-- `/mcp`, `/llms.txt` and `/SKILL.md` support machine discovery.
-- `@agentic-economy/cli` supports search, inspection, Calls, status and
-  recovery.
-- `/for-providers` admits and publishes Provider services.
+- `/api/v1/market-tools/*` exposes canonical Tool discovery and comparison.
+- `/api/v1/tools/quote` and `/api/v1/tools/call` define paid or consequential Calls.
+- `/api/v1/calls` and `/api/v1/calls/{callRef}/*` define Call history and recovery.
+- `/mcp`, `/llms.txt` and `/SKILL.md` are the accepted source discovery/plugin
+  surfaces; this does not claim that they are hosted.
+- The CLI source supports search, `describe`, `call`, `history`, status, wait,
+  cancel and `recover`; installed-package compatibility remains pending.
+- `/for-providers` admits and publishes Provider Tools in source.
 
-Chat exposes only search, detail, comparison, inspection and eligible keyless
+Chat exposes only search, detail, comparison, description and eligible keyless
 execution. Paid or consequential work remains on the authenticated HTTP, MCP
 and CLI purchase plane.
 
 The external registry discovers possible supply at metadata authority only. An
-imported record is not a service and cannot be invoked until Agentic Economy
+imported record is not a Tool and cannot be called until Agentic Economy
 admits and publishes it.
 
 ## Documentation authority
@@ -91,9 +97,9 @@ admits and publishes it.
 Dated research, comparison papers, gauntlets and working ledgers inform the
 product but do not override these documents.
 
-<a id="publish-an-x402-operation"></a>
+<a id="publish-an-x402-tool"></a>
 
-## Publish an x402 service
+## Publish an x402 Tool
 
 Use the [x402 Provider onboarding guide](./X402_SELLER_ONBOARDING.md) to admit a
 hosted x402 service. The guide covers an unpaid protocol inspection, Provider
@@ -160,16 +166,17 @@ npm run test:release:source
 
 ## Machine quickstart
 
-Install the pinned CLI archive served by the deployment. Replace the MCP agent
-placeholder with one current harness: `codex`, `claude-code` or `cursor`.
+The following documents the accepted source CLI contract. It is not a hosted
+deployment, plugin-installation, or installed-package acceptance claim. The
+packaged guide remains [packages/cli/README.md](./packages/cli/README.md).
 
 ```sh
-export AE_ORIGIN="https://<your-agentic-economy-deployment>"
-npm install --global "$AE_ORIGIN/downloads/agentic-economy-cli-0.1.0.tgz"
-ae --version
-ae search "weather forecast" --base-url "$AE_ORIGIN" --limit 5
-npx --yes add-mcp@2.3.0 "$AE_ORIGIN/mcp" --name agentic-economy --transport http --global --agent "<codex|claude-code|cursor>" --yes
-ae doctor --base-url "$AE_ORIGIN" --json
-ae describe <operationRef> --base-url "$AE_ORIGIN"
-ae call <operationRef> --input '{"city":"Perth"}' --base-url "$AE_ORIGIN"
+npm run -s ae -- manifest
+npm run -s ae -- search "weather forecast" --limit 5
+npm run -s ae -- describe <toolRef>
+npm run -s ae -- call <toolRef> --input '{"city":"Perth"}'
 ```
+
+Against an explicitly verified origin, pass `--base-url "$AE_ORIGIN"` to the
+same source commands. Do not treat an origin, archive, `/mcp`, `/llms.txt` or
+`/SKILL.md` read as hosted-release proof.

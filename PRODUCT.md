@@ -70,13 +70,12 @@ not an optional translation of a required customer vocabulary. "Service" remains
 ordinary explanatory language and the capitalised portfolio Service record is a
 distinct concept.
 
-Before the approved contract and storage cutover lands, existing source and
-wire names such as `Mandate`, `Operation`, `Commitment`, `Invocation`,
-`commitmentRef` and `invocationRef` remain current compatibility names. The
-selected refactor plan replaces AE-owned names together with their callers and
-stored models; it does not create parallel product APIs or records. Technical
-examples below label any pre-cutover contract explicitly and must not be read as
-the target names already being accepted by the current implementation.
+The checked-in source now uses the accepted Tool/Quote/Call contract and its
+spending-policy and recovery vocabulary. Historical evidence, protected
+protocol/hash material, opaque reference encodings and document filenames may
+still retain earlier names; those are not current AE API aliases. The source
+receipts establish source behaviour only. Installed-package compatibility,
+hosted deployment and production proof remain separate holds.
 
 Reference entry points:
 [Locus](https://paywithlocus.com/developers),
@@ -279,7 +278,7 @@ or payment movement.
 
 - The public catalogue exposes searchable canonical Tools.
 - Thin chat translates natural-language needs into search, detail, comparison,
-  inspection and eligible execution against the same market.
+  Quote and eligible execution against the same market.
 - HTTP, MCP and CLI expose the same canonical Tools to software agents.
 - The authenticated purchase interface owns quotes, controlled Calls,
   idempotency, payment, receipts, status, cancellation and reconciliation.
@@ -313,16 +312,13 @@ approved target path is deliberately short:
 registry.tools.search -> tool.quote -> tool.call -> result
 ```
 
-Until the owning public-contract issue lands, the current implementation path
-is still `registry.operations.search -> operation.inspect -> operation.invoke ->
-result`; this is a current-not-yet-cut-over compatibility example, not the
-target product language. The target recovery actions are `call.status`,
-`call.cancel` and `call.reconcile`, and appear only when a Call does not return a
-terminal result. The current implementation still exposes `operation.status`
-and `operation.reconcile` in that same pre-cutover state. Public detail, comparison,
-`agentAccess.whoami` and `agentAccess.balance` remain available for browsing,
-diagnosis and explicit accounting reads; they are not prerequisite calls. The
-agent must not coordinate Agentic Economy's internal subsystems.
+This is the accepted source action path. Recovery uses `call.status`,
+`call.cancel` and `call.reconcile` only when a Call does not return a terminal
+result. Public detail, comparison, `agentAccess.whoami` and
+`agentAccess.balance` remain available for browsing, diagnosis and explicit
+accounting reads; they are not prerequisite calls. The agent must not coordinate
+Agentic Economy's internal subsystems. These source contracts are not a hosted
+deployment or installed-package acceptance claim.
 
 Authentication resolves the customer, Account, agent,
 credential and active spending policy. The caller never supplies an `accountRef` to a
@@ -331,17 +327,17 @@ several agents, while each agent has hard per-Call and
 aggregate limits that survive credential rotation. A credential is access and
 audit evidence; it is not the budget owner.
 
-Before a consequential Call, the target authenticated `tool.quote` action is
-the one caller-specific decision packet. It combines the selected Tool's
+Before a consequential Call, the current authenticated source action,
+`tool.quote`, is the one caller-specific decision packet. It combines the selected Tool's
 material detail with its exact version, normalised input, effects, data use,
 Provider, Seller, exact or maximum all-in AUD price, expiry, current authority
 fit, agent budget impact, permitted shared-balance viability, evidence and
-material unknowns. A successful `tool.quote` request returns an expiring Quote. Execution
+material unknowns. A successful `tool.quote` request returns an expiring Quote.
+Execution
 revalidates the same facts before the Call takes effect. Drift fails before
-reservation, signing or Provider effect. Until that cutover, the current
-`operation.inspect` action is the equivalent source contract; this is a
-current-not-yet-cut-over compatibility example, not an assertion that the
-target action is already live.
+reservation, signing or Provider effect. This is accepted source behaviour;
+installed-package compatibility, hosted deployment and production release are
+separate gates.
 
 Machine responses are action-specific tagged results rather than one universal
 envelope. Each response contains only the facts required for its decision. A
@@ -461,16 +457,12 @@ separate Provider obligation, tax position, business document issuance and
 purchase resolution are not yet one explicit production record. Source and tests
 remain the authority for what works today.
 
-The complete agent operating contract is also a target, not an implementation
-claim. The source already has action descriptors, generated machine discovery,
-authenticated self/balance reads, Call recovery and Suggested next action
-metadata. Package 4 must still add authenticated target `tool.quote`,
-Quote-based `tool.call`, agent-level budget aggregation,
-action-specific compact results, version-aware status and permitted Call
-projections.
-Until the public-contract cutover, the current source names for those two
-actions remain `operation.inspect` and `operation.invoke`; these are
-current-not-yet-cut-over compatibility names, not the target product language.
+The complete agent operating contract remains a release target, not a claim of
+hosted or production completion. The source has action descriptors, generated
+machine discovery, authenticated self/balance reads, `tool.quote`,
+Quote-based `tool.call`, Call recovery and Suggested next action metadata.
+Installed-client compatibility, hosted route proof, and the remaining full
+Australian principal-reseller record stay outside this source acceptance.
 
 The next milestone is one complete managed x402 purchase: confirmed AUD
 funding, an all-in AUD Quote, reserve-before-payment, corporate USDC settlement,
@@ -497,7 +489,7 @@ services. A possible later advantage is joining the records across the
 full sequence:
 
 ```text
-need -> services -> permitted purchase -> Call -> delivery -> use -> recovery
+need -> Tools -> Quote -> Call -> delivery -> use -> recovery
 ```
 
 Payment providers see transfers. Providers see their own calls. Harnesses see
@@ -514,7 +506,7 @@ through the same boundary. Transaction volume alone is not an advantage.
 The compounding loop is therefore operational rather than rhetorical:
 
 ```text
-compact search -> inspected choice -> controlled Call -> bounded outcome records
+compact search -> Quote -> controlled Call -> bounded outcome records
        ^                                                   |
        |---------------------------------------------------|
 ```

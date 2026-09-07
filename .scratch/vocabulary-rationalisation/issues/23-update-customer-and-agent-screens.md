@@ -1,15 +1,46 @@
 # Update Customer and Agent screens
 
+## Connection/consent source boundary — accepted
+
+The complete connection/consent lifecycle and its Customer/Agent presentation
+are accepted for source delivery under issue12's consolidated module record.
+Behavioral and independent review evidence is complete; the final compiler
+checkpoint has zero module errors. Broader issue23 screens, public-consumer
+integration and hosted criteria remain open. No separate screen micro-review
+or new inventory is required.
+
+
 Type: task
 Label: wayfinder:task
 Mode: AFK
-Status: open
-Assignee: Luna Max / Customer and Agent screen owner
+Status: resolved
+Assignee:
 Assigned role: Luna Max / Customer identity, Agent access and onboarding presentation owner
 Parent: ../map.md
 Blocked by: 08, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 29, 30
 
 ## Outcome
+
+### Current bounded permissions-display claim — 2026-09-05
+
+Handoff: two-file permissions batch passed 9/10 UI tests; the sole failure was
+the already-targeted `Search Tools` expectation against the excluded credit
+screen's old label. Fresh `vocab_credit_copy_01` changed only that label in
+`src/components/ae/console/AeOwnerCredit.tsx` and repeated the suite: 10/10
+passed, narrow lint/whitespace passed, zero compactions. The earlier broad
+React Doctor attempt could not score the migration-heavy branch; integrated
+React verification remains open, not waived by this focused test pass.
+
+`vocab_agent_permissions_ui_02` owns exactly
+`src/components/ae/console/AeAgentOperatorConsole.tsx` and
+`tests/unit/ui/agent-access-owner-console.test.tsx`. Update existing mode switches,
+Tool-selection fields, per-Call limits, Tool labels and the `/tools/$toolRef`
+link to canonical policy names. Preserve authority behavior and existing mode
+descriptions, IAM identities, rates, amounts, layout and interactions. The test
+router mock and corresponding fixtures receive the same fixed fields.
+Run the existing UI suite and narrow checks. Other activity/presentation fields
+and broad React verification remain separately owned work; no redesign or
+backend operation is assigned.
 
 Update the existing Customer, Agent access, agent setup, sign-in/sign-up and
 account/security screens after issues 10-22 have established the source and

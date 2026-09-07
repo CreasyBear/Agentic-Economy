@@ -1,13 +1,17 @@
-# Publish a Provider's x402 Operation
+# Publish a Provider's x402 Tool
 
 **Status:** active Provider runbook
+
+The checked-in Tool publication and `tool.quote`/`tool.call` source contracts
+are current. This runbook does not establish installed-client compatibility,
+hosted deployment or production release.
 
 **Terminology note:** this filename and the protocol field `seller claim` are
 retained for compatibility. In the Agentic Economy commercial model, the hosted
 service operator is the Provider and Agentic Economy is the buyer-facing Seller
 for supported principal-reseller purchases.
 
-This is the public path for turning a live x402 endpoint into a callable Agentic Economy Operation. A listing or a successful unpaid probe is not a callable Operation.
+This is the public path for turning a live x402 endpoint into a callable Agentic Economy Tool. A listing or a successful unpaid probe is not a callable Tool.
 
 ## Before you start
 
@@ -25,7 +29,7 @@ Keep the resource URL, HTTP method, payee address, input example, and current so
 
 The protocol inspection and readiness check can reach your configured endpoint.
 Use an example that is safe there and assume it may consume the endpoint's
-normal quota or cost. A successful check does not publish the Operation, create
+normal quota or cost. A successful check does not publish the Tool, create
 Provider earnings, or prove delivery. Agentic Economy does not promise a review
 or publication time: read the current status after submission.
 
@@ -36,7 +40,7 @@ party. Agentic Economy records those roles separately.
 ## Onboard in the app
 
 1. Open `/for-providers` and sign in as the business owner.
-2. Choose **Add Operation** and enter the public x402 resource URL and method.
+2. Choose **Add Tool** and enter the public x402 resource URL and method.
 3. Review the unpaid protocol inspection. Agentic Economy shows the exact network, asset, amount, payee, and contract it observed.
 4. Sign the displayed `seller claim` with the payee wallet. The compatibility
    name comes from the x402 admission flow. The claim binds the resource,
@@ -44,7 +48,7 @@ party. Agentic Economy records those roles separately.
    nor proof that the payee is the buyer-facing Seller.
 5. Complete the explicitly disclosed testnet verification. It does not charge a buyer or create Provider earnings.
 6. Submit the sealed revision, then wait for settlement and output validation.
-7. Read the returned Operation status. Only a current **Published** and routeable
+7. Read the returned Tool status. Only a current **Published** and routeable
    revision is ready to share with agents. Submission, a successful check, or
    publication does not itself guarantee demand, delivery, earnings, or payout.
 
@@ -53,11 +57,12 @@ If verification has an uncertain outcome, use the supplied status or reconciliat
 ## Agent and CLI access
 
 Provider commands require a separately approved credential with
-`market_supply:manage`. The `--supplier` flag remains the current CLI
-compatibility spelling:
+`market_supply:manage`. The current CLI flag is `--provider`; the retained
+provider-supply verb is `ae supply operations`:
 
 ```sh
-ae connect --supplier --base-url "$AE_ORIGIN"
+ae connect --provider --base-url "$AE_ORIGIN"
+ae supply operations <businessId> --base-url "$AE_ORIGIN" --json
 ae supply status <businessId> --base-url "$AE_ORIGIN" --json
 ```
 

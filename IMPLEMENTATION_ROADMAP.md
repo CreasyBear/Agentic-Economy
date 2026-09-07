@@ -71,11 +71,15 @@ References:
 
 ### Terminology and preserved evidence
 
-Product prose uses customer, agent, spending policy, service, quote and Call,
-as defined in [CONTEXT.md](./CONTEXT.md). Existing identifiers such as
-`operation.inspect`, `commitmentRef` and `invocationRef` are unchanged. No
-parallel records, public API rename or storage migration is authorised by this
-wording change.
+Product prose uses customer, agent, spending policy, service, Tool, Quote and
+Call, as defined in [CONTEXT.md](./CONTEXT.md). The checked-in source currently
+uses `registry.tools.*`, `tool.quote`, `tool.call`, `call.list`, `call.status`,
+`call.cancel` and `call.reconcile`, with `toolRef`, `quoteRef` and `callRef` as
+the current references. This source acceptance does not establish installed-
+package compatibility, hosted deployment or production release. Historical
+identifiers remain only where they are protected protocol, evidence or
+document names; no parallel records, storage migration or new API is authorised
+by this wording change.
 
 Dated progress assessments, linked research and the historical engineering
 review below retain their original terminology and evidence status. They are
@@ -89,7 +93,7 @@ requirements.
 The **packages** describe durable platform capabilities:
 
 ```text
-application -> workspace -> authority -> records and money -> suppliers
+application -> workspace -> authority -> records and money -> Providers
             -> onboarding -> trust -> operations -> integrations -> quality
 ```
 
@@ -106,7 +110,7 @@ renumber the packages.
 ## Roadmap rules
 
 1. **Mature platform first.** The destination includes complete buyer, Agent,
-   supplier, operator and integration journeys, not only the starting-line
+   Provider, operator and integration journeys, not only the starting-line
    wedge.
 2. **Prove value before broadening inputs.** Package 4 begins with one
    deterministic managed x402 path rather than a catalogue of evidence or
@@ -123,7 +127,7 @@ renumber the packages.
 6. **Explicit truth.** Source-reported, Agentic Economy-observed, derived,
    buyer-supplied, stale and unresolved facts remain distinguishable.
 7. **No package completes on a feature list alone.** Every package has an
-   observable buyer, supplier, integrator or operator outcome.
+   observable buyer, Provider, integrator or operator outcome.
 8. **Quality is continuous.** Failure containment, recovery, accessibility,
    responsive behaviour, performance and operational references apply to every
    package even where Package 10 owns the platform-wide audit.
@@ -148,12 +152,12 @@ this reconciliation.
 
 | Package | Implemented progress | Verification and remaining boundary |
 | --- | --- | --- |
-| Foundation before Package 1 | Existing Operation, Invocation, money and recovery foundations underpin the numbered packages. | This roadmap has no numbered Package 0; the foundation is a baseline, not a newly declared completed package. |
+| Foundation before Package 1 | Existing Tool, Call, money and recovery foundations underpin the numbered packages. | This roadmap has no numbered Package 0; the foundation is a baseline, not a newly declared completed package. |
 | 1 — Application shell | Failure containment, shared states and navigation safety are built. | The dated [Whop side-surface re-audit](./.planning/whop-docs/WHOP-SCAVENGE-PAPERCUTS.md#side-surface-recovery-re-audit--2026-08-31) records the verified scope at `9d95b4030`; it is not proof of every later route or external journey. |
-| 2 — Human workspace | Workspace restructuring, Supplier workspace consolidation and navigation cleanup are built. | The [Package 2 design](./research/PACKAGE-2-HUMAN-WORKSPACE-IA.md) is reflected in the [owner Operations workspace](./src/components/ae/offerings/AeOwnerOperationsWorkspace.tsx) and its [existing tests](./tests/unit/ui/owner-operations-workspace.test.tsx); no fresh full-workspace acceptance run is claimed here. |
-| 3 — Identity, access and authority | Account/Principal boundaries, selected-Operation access, consequential-action proof and durable credential lifecycle are built. | [Package 3 gauntlet evidence](./research/PACKAGE-3-GAUNTLET-PROGRESS.md) records scoped tests and live Clerk proof. Broader installed-client and concurrent spending proof remains bounded by the relevant release records. |
-| 4 — Managed Calls and financial operations | Formance-backed funding/reservations, inspection and Commitment-based invocation, recovery, Calls and document/obligation machinery are substantially implemented. | [Package 4 release evidence](./docs/guides/package-4-release-evidence.md) records local checks and real hosted sandbox funding. Managed-x402 success/refusal/recovery, refund/replay, documents/close, parity, strict recovery and external canary proof remain open; production remains gated. |
-| 5 — Supplier operations | Source-native preview, admission, the shared Operation lifecycle, health and durable offboarding have landed on `main`. | [Package 5 implementation and test record](./PACKAGE-5-ATOMIC-FEATURE-BUILD-PLAN.md) records the local baseline. Complete deployed Provider-to-buyer journeys, credential lifecycle, active-case restore and supported-client proof remain open. Later handoff corrections in the dirty tree are not release evidence. |
+| 2 — Human workspace | Workspace restructuring, Provider workspace consolidation and navigation cleanup are built. | The [Package 2 design](./research/PACKAGE-2-HUMAN-WORKSPACE-IA.md) is reflected in the [owner Operations workspace](./src/components/ae/offerings/AeOwnerOperationsWorkspace.tsx) and its [existing tests](./tests/unit/ui/owner-operations-workspace.test.tsx); no fresh full-workspace acceptance run is claimed here. |
+| 3 — Identity, access and authority | Account/Principal boundaries, selected-Tool access, consequential-action proof and durable credential lifecycle are built. | [Package 3 gauntlet evidence](./research/PACKAGE-3-GAUNTLET-PROGRESS.md) records scoped tests and live Clerk proof. Broader installed-client and concurrent spending proof remains bounded by the relevant release records. |
+| 4 — Managed Calls and financial operations | Formance-backed funding/reservations, caller-specific Quote, Quote-based `tool.call`, recovery, Calls and document/obligation machinery are substantially implemented. | [Package 4 release evidence](./docs/guides/package-4-release-evidence.md) records local checks and real hosted sandbox funding. Managed-x402 success/refusal/recovery, refund/replay, documents/close, parity, strict recovery and external canary proof remain open; production remains gated. |
+| 5 — Provider operations | Source-native preview, admission, the shared Tool lifecycle, health and durable offboarding have landed on `main`. | [Package 5 implementation and test record](./PACKAGE-5-ATOMIC-FEATURE-BUILD-PLAN.md) records the local baseline. Complete deployed Provider-to-buyer journeys, credential lifecycle, active-case restore and supported-client proof remain open. Later handoff corrections in the dirty tree are not release evidence. |
 
 Package 4 should connect and complete those capabilities, not replace them with
 a parallel record system.
@@ -212,7 +216,7 @@ Organise the human product around:
 
 Remove duplicated projections of credit, keys, services and settings.
 
-### Package 2B — Supplier workspace consolidation
+### Package 2B — Provider workspace consolidation
 
 - Merge services and Publish.
 - Present one service lifecycle.
@@ -224,7 +228,7 @@ Remove duplicated projections of credit, keys, services and settings.
 - Rename or remove ambiguous Activity.
 - Hide unfinished Members functionality.
 - Clarify Account versus workspace.
-- Separate buyer and supplier navigation.
+- Separate buyer and Provider navigation.
 - Simplify mobile navigation.
 
 ## 3. Identity, access and authority — built
@@ -238,7 +242,7 @@ Remove duplicated projections of credit, keys, services and settings.
 - Handle expiration and compromise.
 - Preserve an audit history.
 
-### Package 3B — Supplier connections
+### Package 3B — Provider connections
 
 - Connect and test supported upstream Providers.
 - Show connection health.
@@ -287,7 +291,7 @@ is recorded as verified and does not justify a refactor.
 
 **Progress reconciliation — 2026-09-05:** the verification questions above
 remain unchanged. The dated 2026-09-03 connection re-audits and current source
-establish selected-Operation enforcement, owner-bound activation/recovery,
+establish selected-Tool enforcement, owner-bound activation/recovery,
 refresh-family rotation and revocation. Owner-selected timed overlap for
 arbitrary keys remains absent. Fresh per-command Clerk proof exists for
 consequential actions, but `funding.top_up` currently selects no fresh-proof
@@ -318,7 +322,7 @@ Package 4 is implemented from these checked-in references:
    defines the machine-facing control loop, response semantics and accretive
    evidence boundary.
 6. [`Agentic Economy as a context-efficient source`](./docs/research/agentic-economy-context-efficient-source.md)
-   defines progressive discovery and inspection without loading the whole
+   defines progressive discovery and Quote without loading the whole
    market into agent context.
 
 Where they differ, `PRODUCT.md` remains authoritative. Package 4 produces one
@@ -348,12 +352,12 @@ the first.
 The agent sees one short Call path, not these subsystems:
 
 ```text
-registry.operations.search
-  -> operation.inspect -> quote
-  -> operation.invoke -> result
+registry.tools.search
+  -> tool.quote -> Quote
+  -> tool.call -> result
 
 only when required:
-  operation.status | operation.cancel | operation.reconcile
+  call.status | call.cancel | call.reconcile
 
 optional reads:
   public detail | compare | agentAccess.whoami | agentAccess.balance
@@ -363,9 +367,9 @@ market | authority | AUD ledger | treasury | x402 | Provider obligation
 ```
 
 The public interface is deliberately shallower than the implementation.
-`operation.inspect` accepts the chosen service, literal input and bounded
-constraints, merges the caller-specific material detail and returns a
-quote. `operation.invoke` accepts that quote and idempotency identity.
+`tool.quote` accepts the chosen Tool, literal input and bounded constraints,
+merges the caller-specific material detail and returns a Quote. `tool.call`
+accepts that Quote and idempotency identity.
 The Call returns an action-specific tagged result with authoritative state,
 exact money, material unknowns and at most one executable machine continuation
 plus an optional owner handoff. It never asks the agent to supply an Account,
@@ -384,8 +388,8 @@ change and must pass its deployment gate before the next begins.
 | 1 — commercial gate | Versioned commercial policy, Australian production gates, strict authority for policy changes, closed audit events and fixed rate-limit policies. | Missing or expired approval refuses before external production I/O. |
 | 2 — AUD ledger and Funding | Balanced single-asset postings, rebuildable projections, Account-level AUD Funding, agent budget windows and ported payout economics; delete legacy credit/ledger/budget paths. | Stripe replay, journal balance, Account pooling and concurrent Agent-budget proofs pass. |
 | 3 — treasury and pricing evidence | Corporate USDC positions, commitments, buffers, maintained CDP observation and bounded sandbox FX evidence. | Stale evidence or insufficient buffered capacity fails closed; no custody material reaches buyer surfaces. |
-| 4 — inspection and quote | Pricing v3, one-to-three compact search, caller-specific `operation.inspect`, quote consumption and cross-surface inspect/invoke parity; delete pricing v2. | Successful, blocked and drift journeys meet the payload and caller-input budgets. |
-| 5 — managed x402 Call | One atomic Account/budget/treasury/Provider-obligation reservation before signing, payment release fence, paid retry, settlement/release/reconciliation and sandbox activation. | Mutation-before-sign, duplicate, crash and unknown-outcome journeys pass; possible dispatch exposes no invoke continuation. |
+| 4 — Quote | Pricing v3, one-to-three compact search, caller-specific `tool.quote`, Quote consumption and cross-surface Quote/Call parity; delete pricing v2. | Successful, blocked and drift journeys meet the payload and caller-input budgets. |
+| 5 — managed x402 Call | One atomic Account/budget/treasury/Provider-obligation reservation before signing, payment release fence, paid retry, settlement/release/reconciliation and sandbox activation. | Mutation-before-sign, duplicate, crash and unknown-outcome journeys pass; possible dispatch exposes no `tool.call` continuation. |
 | 6 — Calls, Usage and Spend | Indexed Call projections, Agent/Account pagination, version-aware status and automatically observed operational evidence; replace activity fan-out. | Unchanged status is bounded, cross-Account reads return no rows and browser/CLI/MCP recovery needs no dashboard. |
 | 7 — documents and reconciliation | Versioned Funding/period/adjustment documents, exact rounding, append-only corrections and external reconciliation. | Documents rebuild from journal facts and no tax document exists without active policy. |
 | 8 — Provider obligations | Immediate x402 settlement and later payable/payout states remain distinct and attributable. | Settled x402 obligations cannot be paid twice through the payout lane. |
@@ -424,8 +428,8 @@ forward; prior postings are never discarded or rewritten.
 
 **Gate:** the contracts, UI language, configuration and storage all express the
 same fact pattern; production money paths fail closed while a required approval
-is absent or expired; and `operation.inspect` resolves the material caller
-context without mandatory self or balance round trips.
+is absent or expired; and `tool.quote` resolves the material caller context
+without mandatory self or balance round trips.
 
 ### Package 4B — AUD product ledger
 
@@ -520,44 +524,44 @@ duplicate, reversal and threshold-boundary cases.
 
 ### Package 4D — Managed x402 Call
 
-Use the existing execution record (`Invocation`) as the durable Call identity.
-Customer views project that same record. Do not introduce an acquisition record,
-finance-ready purchase or universal receipt object.
+Use the existing Call record as the durable Call identity. Customer views
+project that same record. Do not introduce an acquisition record, finance-ready
+purchase or universal receipt object.
 
-Expose one deep managed-Call module through the existing market and operation
+Expose one deep managed-Call module through the existing Tool, Quote and Call
 actions. Its recommended public flow is:
 
 ```text
-registry.operations.search
-  -> operation.inspect -> quote
-  -> operation.invoke -> result
+registry.tools.search
+  -> tool.quote -> Quote
+  -> tool.call -> result
 
 only when required:
-  operation.status | operation.cancel | operation.reconcile
+  call.status | call.cancel | call.reconcile
 ```
 
 Search returns one to three compact candidates with no full schemas, repeated
 navigation or caller-specific money state. Public detail, comparison, whoami and
-balance remain optional reads. Authenticated `operation.inspect` accepts the
-service reference, literal input and bounded caller constraints, then combines
-the selected service's material detail with current caller viability, effects,
+balance remain optional reads. Authenticated `tool.quote` accepts the
+Tool reference, literal input and bounded caller constraints, then combines
+the selected Tool's material detail with current caller viability, effects,
 data use, Seller and Provider, exact or maximum all-in AUD price, expiry, agent budget and permitted shared-balance impact, evidence provenance,
 material unknowns and the quote bound to the normalised input digest. It
 uses bounded readiness evidence and performs no search-time Provider fan-out.
-Stale evidence blocks quote and returns one bound reinspection or status
+Stale evidence blocks a Quote and returns one bound re-quote or status
 continuation with a recommended next observation time. Call accepts the
-quote and caller idempotency key. It does not
+Quote and caller idempotency key. It does not
 accept an `accountRef`, wallet, treasury pool, exchange rate, ledger instruction
 or x402 payment payload from the customer.
 
 The controlled path is:
 
 ```text
-inspect exact service and normalized input
+quote exact Tool and normalized input
   -> receive and validate x402 challenge
   -> calculate one expiring all-in AUD Call price
   -> bind the quote
-  -> accept that quote and revalidate material facts
+  -> accept that Quote and revalidate material facts
   -> atomically reserve agent budget, customer-wide exposure and AUD
   -> create/sign upstream payment from corporate USDC
   -> retry the exact paid request once under the Call
@@ -590,11 +594,11 @@ settlement retains an explicit unknown reservation until reconciliation proves
 capture or release. Retry never creates a second upstream payment or Charge.
 
 Every action has one compact result shape authoritative for its observation
-time. Invoke returns literal output when available; otherwise it returns the
-durable `invocationRef`, current public state, recommended next observation time
+time. `tool.call` returns literal output when available; otherwise it returns
+the durable `callRef`, current public state, recommended next observation time
 and at most one exact continuation. `reconciliation_required` never offers
-`operation.invoke`. Status accepts `afterVersion`; an unchanged read returns
-only `invocationRef`, version and retry timing, while a changed read returns the
+`tool.call`. Status accepts `afterVersion`; an unchanged read returns only
+`callRef`, version and retry timing, while a changed read returns the
 current bounded delta rather than full history.
 
 **Gate:** one deterministic end-to-end sandbox path proves funding, quote,
@@ -669,9 +673,9 @@ Build Account-scoped, rebuildable operational evidence from facts Package 4
 already observes: delivery and paid-non-delivery counts, latency, realised AUD
 charge, payment state and recovery incidence. Keep facts provenance-labelled;
 do not collapse them into a quality score or use them for automatic allocation
-in Package 4. `operation.outcome.report` and outcome-derived allocation
-aggregates remain deferred until a demonstrated repeat-selection or evaluation
-consumer justifies the additional action and retention.
+in Package 4. Outcome reporting and outcome-derived allocation aggregates
+remain deferred until a demonstrated repeat-selection or evaluation consumer
+justifies the additional action and retention.
 
 Technical completion, upstream settlement, purchase resolution and usefulness
 remain separate. Metrics are recalculable; they are not additional ledger
@@ -680,7 +684,7 @@ entries or a second source of truth.
 **Gate:** every displayed value traces to retained source facts and projection
 rebuilds are deterministic, replay-safe and paginated for large histories;
 another Account's activity cannot leak, and no unproved usefulness claim enters
-inspection or ranking.
+Quote or ranking.
 
 ### Package 4G — Documents, adjustments and reconciliation
 
@@ -737,7 +741,7 @@ Call, ledger or service identities.
 | Floating-point contamination | Property tests find non-integral or drifting units | `bigint` at rest and in domain operations; `decimal.js` only at named conversion boundaries; search guard for money arithmetic. |
 | FX rate inverted, stale or mismatched | Quote recomputation and bounds checks fail | Typed base/quote units, executable-rate source, timestamp, expiry and sanity bounds; golden vectors for both rate directions. |
 | Wrong token decimals or network | Challenge validation differs from admitted service | Official x402 parsing plus allowlisted network/asset/decimals; reject before reservation or signing. |
-| Challenge changes between inspect and pay | Material digest or amount differs | Bind the accepted challenge and all-in price to the quote; require a fresh decision. |
+| Challenge changes between Quote and Call | Material digest or amount differs | Bind the accepted challenge and all-in price to the Quote; require a fresh decision. |
 | Minimum-fee threshold rounds incorrectly | Boundary vectors disagree by one cent | Central fee policy using decimal arithmetic; test below, at and above the crossover and half-cent boundaries. |
 | Service fee reduces credit | Funding reconciliation differs from requested principal | Separate principal, fee and total fields and postings; invariant that settled credit equals principal exactly. |
 | Per-Call rounding loses or creates money | Document total differs from ledger sum | Store six-decimal AUD Calls, sum exactly, round only at approved document/payment boundaries, post explicit residual. |
@@ -756,9 +760,9 @@ Call, ledger or service identities.
 
 | Failure | Consequence | Required control and proof |
 | --- | --- | --- |
-| Agent must join identity, balance, budget and Call state itself | More context, more round trips and inconsistent decisions | Auth resolves the Account; inspection returns the material caller snapshot. Self and balance remain optional diagnostics. |
+| Agent must join identity, balance, budget and Call state itself | More context, more round trips and inconsistent decisions | Auth resolves the Account; `tool.quote` returns the material caller snapshot. Self and balance remain optional diagnostics. |
 | Credential rotation resets spend | An agent evades limits and loses continuity | Budget and history aggregate by agent; credential remains evidence only; rotation test preserves exposure and Calls. |
-| Inspection is stale at effect time | Agent acts on a price, service or spending policy that no longer applies | quote digest and expiry plus consequence-time revalidation; drift refuses before effect and returns a fresh-inspection continuation. |
+| Quote is stale at effect time | Agent acts on a price, Tool or spending policy that no longer applies | Quote digest and expiry plus consequence-time revalidation; drift refuses before effect and returns a fresh-Quote continuation. |
 | Response says what failed but not what is safe next | Agent guesses, retries blindly or needs a human | Closed reason codes plus at most one bound machine continuation and one optional owner handoff. Manifest-owned consequence metadata is not repeated. |
 | Status polling repeatedly returns full history | Context and bandwidth grow with Call age | `afterVersion`, a bounded unchanged response, current-state delta and recommended next observation time. |
 | Treasury detail leaks into buyer decisions | Agent becomes coupled to custody and protocol implementation | Expose `ready`, `not_ready` or `stale` plus remediation; keep wallet, pool and signing detail operator-only. |
@@ -804,10 +808,10 @@ The source change map is:
 | `src/modules/money/{public,server,money.functions}.ts` | Publish the new funding, balance, Call and recovery contracts only. Breaking replacement is intentional; no compatibility export remains. |
 | `src/modules/agent-access/account.actions.ts` | Replace USD credit/activity shapes with authenticated operating context: resolved Account, durable agent, spending policy generation, caller-visible AUD balance, own remaining limits and funding handoff. Never accept an Account override. |
 | `src/modules/money/internal/credential-budget.ts` and authority admission | Move aggregate reservation identity from credential to durable agent and add principal-wide exposure; retain credential and spending policy generation as evidence. |
-| `src/modules/capability-execution/operation-invoke-entry.ts`, action and recovery descriptors | Add authenticated `operation.inspect`; keep invoke/status/cancel/reconcile; define one compact tagged result per action, one bound continuation, optional owner handoff and version-aware status. Do not add outcome reporting in Package 4. |
-| `src/modules/discovery/internal/{agent-skill,page-markdown,site-manifest}.ts` | Generate the exact Package 4 action sequence, response versions, retry rules and human-handoff semantics from canonical descriptors rather than maintaining separate prose. |
+| `src/modules/capability-execution/{call-entry.ts,quote.actions.ts,call.actions.ts,call-recovery.actions.ts}` | Current source implements `tool.quote`, `tool.call` and Call status/cancel/reconcile descriptors with one compact result, bound continuation, optional owner handoff and version-aware status. Package 4 release gates still cover the managed financial and recovery journeys; outcome reporting remains deferred. |
+| `src/modules/discovery/internal/{agent-skill,page-markdown,site-manifest}.ts` | Generate the accepted Tool/Quote/Call action sequence, response versions, retry rules and human-handoff semantics from canonical descriptors rather than maintaining separate prose. Served discovery is source evidence, not hosted deployment proof. |
 | `src/modules/capability-execution/managed-call/` | Add the deep application module that coordinates existing market, authority, Call, money, treasury, x402 and evidence interfaces. Keep each state machine in its owning module; this coordinator contains ordering, not duplicated truth. |
-| `src/routes/api.v1.operations.call.ts` | Remain a thin authenticated HTTP entry into the managed-Call module; own no policy, money arithmetic, protocol semantics or lifecycle transitions. |
+| `src/routes/{api.v1.tools.quote.ts,api.v1.tools.call.ts,api.v1.calls.ts,api.v1.calls.$callRef.ts,api.v1.calls.$callRef.cancel.ts,api.v1.calls.$callRef.reconcile.ts}` | Current source provides thin authenticated Quote, Call and Call-recovery HTTP entries into the managed-Call module; these routes own no policy, money arithmetic, protocol semantics or lifecycle transitions. |
 | `src/routes/_operator/activity.tsx` and `src/routes/api.v1.account.activity.ts` | Replace the derived activity feed with paginated Logs, Usage and Spend queries over the dedicated Call read model. |
 | Existing money, x402 and route tests | Preserve acceptance intent; rewrite fixtures and expectations around the new schema and add exact-money, dual-reservation, fresh-process continuation, credential-rotation, context-bounded response, reconstruction and document proofs. |
 
@@ -844,13 +848,13 @@ four journeys: cheapest successful Call, insufficient balance or authority,
 material terms drift before effect and unknown payment/delivery after
 submission. For each journey record round trips, serialized bytes,
 caller-supplied fields and stale-state windows. A fresh process must resume from
-`invocationRef`, and every refusal must expose no more than one valid machine
+`callRef`, and every refusal must expose no more than one valid machine
 continuation plus an optional owner handoff. Do not couple interface tests to
 internal ledger or x402 record layout.
 
 The contract budgets, excluding literal service output and the generated
-manifest, are: search with three candidates at most 3 KB JSON; inspection at
-most 4 KB; unchanged status at most 512 bytes; refusal or uncertain result at
+manifest, are: search with three candidates at most 3 KB JSON; Quote at most
+4 KB; unchanged status at most 512 bytes; refusal or uncertain result at
 most 1 KB. Generated tool schemas may grow by no more than 20% over the measured
 pre-Package 4 baseline; exceeding that budget requires deleting optional fields
 or choices before adding another response mode.
@@ -902,7 +906,7 @@ Package 4 completes when the managed x402 start line passes as one system:
 
 1. a sandbox customer funds an AUD Prepaid balance and pays a separately stated
    top-up service fee without reducing the credited principal;
-2. `operation.inspect` produces a caller-bound quote with an expiring
+2. `tool.quote` produces a caller-bound Quote with an expiring
    all-in AUD Call price, and Call reserves agent budget,
    principal-wide exposure, AUD and corporate USDC capacity before dispatch;
 3. one controlled Call completes an x402 paid retry and returns a usable
@@ -920,15 +924,15 @@ Package 4 completes when the managed x402 start line passes as one system:
 10. a fresh agent process can operate and recover the complete Call from stable
     contracts and references without a dashboard, wallet, `accountRef`, treasury
     choice or blind retry;
-11. search, inspection, invoke and recovery remain within the recorded
+11. search, Quote, Call and recovery remain within the recorded
     round-trip, payload and caller-input budgets without requiring self, balance,
     public detail or comparison on the successful path; and
 12. every production money path remains disabled until its Australian legal,
    tax, accounting and operational approval is current.
 
-## 5. Supplier operations — implemented locally, release gated
+## 5. Provider operations — implemented locally, release gated
 
-Package 5's source implementation is complete on `main`: source-native preview for OpenAPI, MCP, Agent Plugins 1.0 and x402; durable Provider connections; one admission-controlled publication path; one eight-state Supplier Operation projection; current health/delivery/Qualified Use evidence; and paged, routeability-first Provider offboarding. The former Offering-first editor, manual source JSON, separate readiness/test/promotion ceremonies and 100-Offering fleet ceiling have been removed from the golden path.
+Package 5's source implementation is complete on `main`: source-native preview for OpenAPI, MCP, Agent Plugins 1.0 and x402; durable Provider connections; one admission-controlled publication path; one eight-state Tool lifecycle projection; current health/delivery/Qualified Use evidence; and paged, routeability-first Provider offboarding. The former Offering-first editor, manual source JSON, separate readiness/test/promotion ceremonies and 100-Offering fleet ceiling have been removed from the golden path.
 
 This describes the landed Package 5 core baseline, not a claim that every
 connection-return branch is correct. Subsequent review found handoff and resume
@@ -939,11 +943,11 @@ The recorded 2026-09-04 changed-cone run was 505 passed and 3 failed across 61
 files, with the failures attributed in the Package 5 plan to concurrent work.
 It is historical local evidence, not a fresh green repository or staging run.
 
-Release credit remains gated on one staging revision proving all four source families through normal Provider admission and buyer `search → inspect → invoke`, deployed Infisical-backed credential rotation/revocation, active-case backup restoration, packaged CLI and actual supported clients. Production paid supply also remains gated by Package 4.
+Release credit remains gated on one staging revision proving all four source families through normal Provider admission and buyer `registry.tools.search → tool.quote → tool.call`, deployed Infisical-backed credential rotation/revocation, active-case backup restoration, packaged CLI and actual supported clients. Production paid supply also remains gated by Package 4.
 
 
 
-### Package 5A — Supplier onboarding
+### Package 5A — Provider onboarding
 
 - Eligibility and fit check.
 - Supported source types.
@@ -971,13 +975,13 @@ Release credit remains gated on one staging revision proving all four source fam
 - Publication blockers.
 - Stale service data.
 - Corrective actions.
-- Supplier-facing incident information.
+- Provider-facing incident information.
 - Verified paid non-delivery and useful-outcome records with sample size,
   recency and provenance.
 - Removal from routeability when current contract, authority, readiness or
   evidence expires, fails, is withdrawn or materially drifts.
 
-### Package 5D — Supplier offboarding
+### Package 5D — Provider offboarding
 
 - Unpublish services.
 - Revoke connections.
@@ -986,8 +990,8 @@ Release credit remains gated on one staging revision proving all four source fam
 - Explain retained records.
 
 Package 5 consumes Package 4 evidence for health, delivery, earnings and payout
-visibility. Observed external demand may guide which supplier lanes are
-prioritised, but it does not replace self-serve supplier operations.
+visibility. Observed external demand may guide which Provider lanes are
+prioritised, but it does not replace self-serve Provider operations.
 
 If an admitted service streams, its lifecycle must distinguish upstream
 acceptance, Charge capture, bytes or units delivered, completion, disconnect and
@@ -1004,9 +1008,9 @@ streaming platform is required before such a service exists.
 - Progressive disclosure for alternatives.
 - Troubleshooting and verification.
 
-### Package 6B — Supplier onboarding content
+### Package 6B — Provider onboarding content
 
-- Simplify the public supplier page.
+- Simplify the public Provider page.
 - Move protocol details into documentation.
 - Explain time, requirements and outcomes.
 - Continue onboarding after sign-in.
@@ -1017,15 +1021,15 @@ Apply the familiar canonical terms in [CONTEXT.md](./CONTEXT.md):
 
 - customer, agent and account;
 - spending policy, permissions and limits;
-- service, tool or API operation as appropriate to the context;
+- service or Tool as appropriate to the context;
 - quote, price and terms;
 - Call, result and purchase status;
 - Provider, Seller and payment recipient where responsibility matters; and
 - credit, charges, refunds, earnings and payouts.
 
 Use direct actions such as connect, add credit, publish, pause and check status.
-Do not require users to learn Mandate, Commitment, Invocation or commercial
-closure. Preserve the underlying distinctions and existing technical identifiers;
+Do not require users to learn commercial closure or protected protocol terms.
+Preserve the underlying distinctions and existing technical identifiers;
 language work is not permission to weaken controls or introduce a second API.
 
 ### Package 6D — Contextual guidance
@@ -1054,7 +1058,7 @@ language work is not permission to weaken controls or introduce a second API.
 ### Package 7B — Terms maturity
 
 - Agent-authorised spending.
-- Supplier responsibilities.
+- Provider responsibilities.
 - External execution boundaries.
 - Payments, refunds and disputes.
 - Platform responsibility.
@@ -1067,7 +1071,7 @@ language work is not permission to weaken controls or introduce a second API.
 - Data handling.
 - Subprocessor list.
 - Payment model.
-- Supplier verification.
+- Provider verification.
 - Incident contact.
 - Vulnerability reporting.
 
@@ -1121,7 +1125,7 @@ Trace important events across:
 - service;
 - Call;
 - payment;
-- supplier connection; and
+- Provider connection; and
 - external execution.
 
 Provide one joined operational view over the complete journey:
@@ -1168,7 +1172,7 @@ support and operators can diagnose one problem without rebuilding its history.
 - Receipts.
 - Versioning.
 - Supported evidence ingestion and export profiles.
-- The exact inspect-to-invoke contract, including drift and expiry refusal.
+- The exact Quote-to-Call contract, including drift and expiry refusal.
 - Explicit sandbox limitations and the production evidence required for claims
   about payment, delivery, payout and recovery.
 - Generated API, MCP and CLI examples from the same action descriptors and
@@ -1199,7 +1203,7 @@ tracing, billing or invoice contract or a transport-specific lifecycle.
 - Fix current mobile market overflow.
 - Audit tables and filters.
 - Audit inspectors and dialogs.
-- Audit settings and supplier management.
+- Audit settings and Provider management.
 - Reduce excessive public-page length.
 
 ### Package 10B — Accessibility
@@ -1221,7 +1225,7 @@ Establish budgets for:
 - authenticated navigation;
 - market search;
 - large Call and record histories;
-- supplier workspace; and
+- Provider workspace; and
 - slow-network behaviour.
 
 ### Package 10D — Visual consistency
@@ -1244,7 +1248,7 @@ The modes help check capability coverage without changing the roadmap:
 | --- | --- |
 | Observe | Authority and attribution from Package 3; records and analytics from Package 4; onboarding, data handling, support, integrations and quality from Packages 6–10. |
 | Control | Package 3 authority; Package 4 records and money; Package 8 recovery; Package 9 integration contracts; Package 10 quality. |
-| Broker | Packages 3–5 for authority, records, money and suppliers; Packages 8–10 for recovery, integration and experience. |
+| Broker | Packages 3–5 for authority, records, money and Providers; Packages 8–10 for recovery, integration and experience. |
 | Resell | Packages 3–5 and 7–10, including separate buyer and Provider financial legs, documents, remedies, payouts and governance. |
 
 A capability can support more than one mode. An observed acquisition does not
@@ -1257,9 +1261,9 @@ The roadmap reaches its destination when:
 
 1. a buyer can connect an Agent, observe or acquire outside services, understand
    the resulting activity and recover from supported failures;
-2. a fresh agent process can discover, inspect, invoke, monitor and recover from
+2. a fresh agent process can discover, obtain a Quote, Call, monitor and recover from
    stable machine contracts while minimising context, external calls and spend;
-3. a supplier can connect, publish, maintain and withdraw services, resolve
+3. a Provider can connect, publish, maintain and withdraw Tools, resolve
    delivery issues and receive attributable payouts;
 4. an external integrator can discover and use supported contracts without
    founder guidance;

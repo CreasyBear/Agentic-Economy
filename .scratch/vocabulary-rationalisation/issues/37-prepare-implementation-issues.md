@@ -3,10 +3,10 @@
 Type: task
 Label: wayfinder:task
 Mode: AFK
-Status: claimed
+Status: resolved
 Assignee: Luna Max / Phase 0 issue-preparation subagent
 Parent: ../map.md
-Blocked by: 03, 05, 06, 07, 08
+Blocked by:
 
 ## Outcome
 
@@ -22,7 +22,8 @@ held until their dependencies are satisfied.
 The queue prepared by this ticket is:
 
 1. `09-consolidate-canonical-language.md` — current product/contributor
-   authorities (open/unassigned; coordinator assigns separately).
+   authorities (resolved as the canonical documentation task; any later
+   implementation dispatch remains separately assigned by the coordinator).
 2. `10-rationalise-customer-agent-terminology.md` — Customer/Agent boundaries.
 3. `11-rename-generic-action-execution.md` — ActionInvocation -> ActionExecution
    family, without turning generic execution into paid Calls.
@@ -83,7 +84,8 @@ not permission to bypass a blocking edge.
 Do not edit `01-reference-language.md`, `map.md`, `docs/workflow/work/WF-20260905-vocabulary.md`,
 `docs/designs/vocabulary-rationalisation.md`, issue 08, application source,
 tests, generated output, deployment state or Git index. The coordinator owns
-map/work-record/plan integration and assignment; issue 09 remains unassigned.
+map/work-record/plan integration and assignment; issue 09's canonical document
+work is resolved independently of this queue-preparation ticket.
 
 ## Mapping and protection policy
 
@@ -109,8 +111,9 @@ specified by the accepted plan; they are not compatibility exceptions.
 
 ## Acceptance
 
-- [ ] Issue 09 is ready, open and unassigned; this claimed ticket is the only
-      active preparation ownership.
+- [ ] Issue 09's canonical definitions are saved and resolved; its
+      implementation-independent document ownership is separate from this
+      preparation record and the coordinator dispatches it explicitly.
 - [ ] Every concrete Phase 0–5 implementation/review/verification/cutover/
       closeout task in the accepted plan has exactly one child issue with a
       finite literal allowlist and no whole-directory wildcard assignment.
@@ -171,3 +174,84 @@ preparing tickets.
   requests. The prior "non-reusable" wording was corrected as a documentation
   clarification only; no implementation behavior or historical evidence was
   changed.
+
+## Queue correction receipt — 2026-09-05
+
+The all-dirty baseline is checkpointed at
+`645a348421479510432db4bdc630ed306acd18d8`. Issues `01`–`37` exist as
+individual local-Markdown records. The following corrections are now saved in
+their owning tickets and are prerequisites for dispatch; no source worker may
+infer a path or split a shared rename into independently green halves:
+
+- Issue 13 consumes post-11 `src/modules/action-execution/*` paths, owns the
+  complete five-file `operation-ledger` → `tool-ledger` move, icon/read-helper
+  mappings and their finite direct callers. Its Tool path moves are the sole
+  filename owner; the supply inventory route is handed to issue 19, CLI doctor
+  to issue 20 and discovery to issue 21.
+- Issue 14 uses post-13 `convex/capabilitySupplyToolPorts.ts` and owns the
+  exact Provider workspace/detail source moves and symbol mappings. Its
+  post-14 test targets are `provider-workspace.test.tsx`,
+  `provider-workspace-compatibility-routes.test.ts`,
+  `provider-workspace-route.test.ts`, `provider-workspace-functions.test.ts`,
+  `provider-tool-detail.test.tsx` and
+  `owner-provider-identity-outcome.test.tsx`; issue 25/26 consume these
+  literal paths.
+- Issue 16 no longer owns duplicate issue-13 Tool file moves. It consumes
+  post-13 `tool-*` files for Call fields, owns
+  `operation-approval-source.ts` → `call-approval-source.ts`,
+  `x402-invocation-policy.ts` → `x402-call-policy.ts`, Call budget names and
+  their finite callers/tests. Its pre-move release producer slice is fields
+  only; issue 21 owns the active release-tooling filename moves.
+- Issue 20 owns `tools/ae/commands/invoke.ts` →
+  `tools/ae/commands/call.ts` and the direct CLI/test propagation while
+  retaining existing verbs and replacing only `--supplier` with `--provider`.
+- Issue 24 consumes `tools.$toolRef.tsx` and `calls.$callRef.tsx` and owns the
+  complete finite market, Tool-detail, command-panel and
+  `operation-chat` → `chat` file/symbol/import/test propagation. It keeps
+  anonymous Tool detail distinct from Quote and ChatHistory distinct from Call
+  history.
+- Issue 21 is the sole active discovery/release filename/import owner;
+  issues 13/16 may update only pre-move Tool/Call fields. Issue 22 is the sole
+  root `package.json` writer and has two generator gates: an early
+  non-deploying checkpoint after source table/function names, then final
+  generation after public contracts. Source owners provide exact key/path
+  receipts and do not edit the root manifest.
+
+### Required gate interpretation
+
+The dependency audit treats issue 22's early generator checkpoint as an
+approved staged gate. Its header dependencies need not be expanded to all
+issues 10–21: the early non-deploying generation is permitted after its
+declared source/table checkpoint, while final issue-22 acceptance consumes the
+completed 10–21 contracts and packages. This staged interpretation is required
+for an acyclic queue and does not waive final generation or verification.
+
+Issue 29/30 review closure remains the implementation dispatch gate, and issue
+31 remains the operational backup/restore, pending-funding reconciliation and
+callback/workpool isolation gate. Package 6 and Package 7 remain held; no
+association with this queue marks their requirements complete.
+
+### Preparation closure — 2026-09-05
+
+The bounded preparation outcome is complete and this ticket is resolved. The
+issue set is present, the current inventory receipt in issue 03 is resolved,
+and the queue corrections above give implementation workers finite ownership
+and post-predecessor paths for the assigned 13, 14, 16, 20 and 24 slices. The
+shared writers are serialized: issue 21 owns active release/discovery
+filename moves, issue 22 owns root `package.json` and staged generation, and
+issues 29/30 remain independent review gates. Issue 31 remains the operational
+cutover gate; it is not a missing preparation deliverable.
+
+Closure checks completed without source or Git changes:
+
+- `01`–`37` issue files are present exactly once.
+- The strict `Blocked by:` links form an acyclic graph.
+- The issue diff has no whitespace errors.
+- The bounded overlap audit confirms issue 13 is the sole Tool filename
+  owner, issue 16 consumes post-13 Tool paths for Call fields only, issue 14
+  consumes post-13 supply paths, issue 24 consumes post-13/post-16 web routes,
+  issue 21 owns active release filename moves, and issue 22 is the sole root
+  manifest writer.
+
+No application implementation, generated artifact, test data, deployment,
+dependency, tracker or Git operation was performed by this preparation ticket.

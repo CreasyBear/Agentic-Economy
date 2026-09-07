@@ -3,7 +3,7 @@
 Type: task
 Label: wayfinder:task
 Mode: AFK
-Status: open
+Status: resolved
 Assignee: Luna Max / refactor_dx_review
 Assigned role: Luna Max / independent developer-experience review subagent
 Parent: ../map.md
@@ -171,10 +171,12 @@ the owning issue without expanding acceptance:
       current-vs-target examples and user-facing error/accessibility states.
 - [x] Exact mappings, protected protocol values and command/flag constraints
       are checked without inventing terms or aliases.
-- [ ] Each consequential finding has one owning implementation/docs issue and
+- [x] Each consequential finding has one owning implementation/docs issue and
       the four dispatch tickets carry its finite correction, verification path
       and any explicit coordinator decision; implementation/live proof remains
-      with later owners.
+      with later owners. Issues 19–22 and 27 now carry the DX-01 through DX-08
+      corrections; the Node 20/22 matrix remains explicitly assigned to Joel/
+      issue 22 and is unrun and unwaived.
 - [x] No source, plan, map, deployment or data mutation is included; Package
       6/7 remain held.
 
@@ -186,8 +188,11 @@ findings and the focused command receipts. The report records DX-01 through
 DX-08, including the installed `describe`/`inspect` mismatch, exact current
 MCP/action/path output, three error traces, the `/api/v1/registry` boundary,
 the Node 20/22 verification decision and the non-weather x402 journey gate.
-Keep the ticket open while the dispatch corrections or decisions are missing;
-post-cutover implementation and hosted/UI proof belong to their owning issues.
+The Phase 0 assignment gate is resolved: each consequential finding is now
+owned by a finite implementation/docs ticket. The Node 20/22 compatibility
+choice remains explicitly open with Joel/issue 22 and must not be waived or
+run by this review; post-cutover implementation and hosted/UI proof belong to
+their owning issues.
 
 ## Comments
 
@@ -195,10 +200,22 @@ post-cutover implementation and hosted/UI proof belong to their owning issues.
   independent DX review. Issue 08 is resolved. Issue 09's canonical document
   is available; root's minor final-diff checks remain separate and are not a
   dispatch blocker under the coordinator's Phase 0 direction.
-- 2026-09-05 — Review completed in the owned report. Findings remain open for
-  issues 19, 20, 21, 22 and 27. Issue 09's canonical document is available;
+- 2026-09-05 — Initial review completed in the owned report. Findings were open
+  for issues 19, 20, 21, 22 and 27. Issue 09's canonical document is available;
   root's minor final-diff checks remain separate and are not a dispatch blocker.
-  No source, generated artifact, plan or external state was changed. Issue
-  remains open for finite ticket corrections and the coordinator's Node 20
-  compatibility-matrix decision; implementation/live proof is not required for
-  this plan-review closure.
+  No source, generated artifact, plan or external state was changed. The
+  assignment gate was then pending finite ticket corrections and the
+  coordinator's Node 20 compatibility-matrix decision; implementation/live
+  proof was not required for this plan-review closure.
+- 2026-09-05 — Re-review after the clean checkpoint and coordinator/queue
+  corrections. DX-01 through DX-08 are now assigned with finite corrections:
+  issue 20 owns the anonymous `describe`/mediated `call` CLI boundary and
+  `--provider`; issue 19 owns the exact HTTP/MCP/action/ref/scope/error map,
+  including the `supply.tools.list` inventory route; issue 21 owns derived
+  discovery producers, the `tool-contract.ts` move and active release-tooling
+  filename propagation; issue 22 owns serialized generation/package parity and
+  the explicit Node 20/22 decision; issue 27 consumes the selected useful
+  existing x402 fixture without a weather proxy. No unassigned consequential
+  planning finding remains. Issue 30 is resolved as the Phase 0 assignment
+  gate only; implementation, generated, hosted, UI and x402 runtime proof are
+  not claimed.

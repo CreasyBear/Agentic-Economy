@@ -58,15 +58,17 @@ metadata becomes a callable Tool only after admission and publication.
 The product charter is forward-looking. Do not represent the complete Australian
 principal-reseller record as implemented until source and tests establish it.
 The current foundation includes brokered Calls, prepaid credit, Charges,
-Provider earnings, refunds and recovery. Seller identity, separate Provider
-obligation, attributed tax facts, business-document evidence and purchase
-resolution remain explicit implementation work.
+Provider earnings, refunds and recovery. The accepted source cutover also
+defines Tool/Quote/Call actions and Call recovery contracts. Seller identity,
+separate Provider obligation, attributed tax facts, business-document evidence
+and purchase resolution remain explicit implementation work.
 
-When AE-owned source identifiers still use old terms such as `supplier`,
-preserve them as current compatibility names until their owning cutover issue
-lands. The upstream protocol name `seller` is a protected external vocabulary
-and remains unchanged after the AE cutover. New product language must use the
-definitions in `CONTEXT.md`.
+Earlier AE-owned terms may remain in historical evidence, protected protocol or
+hash material, opaque encodings and document filenames. They are not current API
+aliases after the accepted source cutover. The upstream protocol name `seller`
+is protected external vocabulary and remains unchanged. New product language
+must use the definitions in `CONTEXT.md`. Source acceptance does not establish
+installed-package compatibility, hosted deployment, or production proof.
 
 Generic IAM `Principal`, `Account`, `Business`, `User`, `Credential` and
 `DelegationGrant` remain distinct from the Customer and Agent product roles.
@@ -77,6 +79,33 @@ action remain distinct from a purchased Call. Upstream OpenAPI `operationId`,
 MCP methods, OAuth fields, x402 payment fields, opaque identifier prefixes,
 canonical hash material, signatures and external financial namespaces retain
 their exact protocol or evidence meaning.
+
+## File naming
+
+Use a consistent filename convention within each area, not one casing style
+for the entire repository. Canonical vocabulary comes from `CONTEXT.md`;
+filename casing follows these rules:
+
+| Area | Convention | Example |
+| --- | --- | --- |
+| Domain modules, utilities, scripts and standalone tests | `kebab-case` | `call-authority.ts`, `call-authority.test.ts` |
+| AE-owned Convex backend files, including internal helpers | `camelCase` | `capabilityCallIdentity.ts`, `authorityHandlers.ts` |
+| AE-owned React component files | `PascalCase` | `ToolCard.tsx`, `AeAgentOperatorConsole.tsx` |
+| Tests colocated with their source | Match the source stem | `agentAccessPolicy.test.ts` |
+| Routes, framework entry points and generated files | Preserve framework/generator naming | `__root.tsx`, `_operator.tsx`, `api.v1.tools.quote.ts` |
+| Maintained component-library or vendored files | Preserve upstream naming | `button-variants.ts`, `radio-group.tsx` |
+
+Retain established role suffixes such as `.actions.ts`, `.functions.ts`,
+`.test.ts` and `.spec.ts`. React helpers that are not component files follow
+the utility convention. Underscores required by a framework or protocol are
+not a reason to introduce `snake_case` for ordinary AE-owned source files.
+
+Existing outliers are cleanup candidates, not additional conventions. Correct
+them only through an explicit bounded assignment covering imports, tests and
+any affected backend function references or generated outputs. A filename
+change does not authorize changing public contracts, protected identifiers or
+historical evidence. These rules do not authorize a directory reorganisation,
+manual edits to generated files or an unplanned repository-wide rename.
 
 ## Node and command startup
 

@@ -25,7 +25,7 @@ remain visible.
 Every consequential view answers five questions without forcing the reader to
 reconstruct the transaction:
 
-1. What exact Operation is being considered or purchased?
+1. What exact Tool is being considered or purchased?
 2. Who is the Business Principal, acting Agent Principal, Provider and Seller?
 3. What authority, money, information and external effects are exposed?
 4. What has Agentic Economy observed, and what remains claimed or unknown?
@@ -40,9 +40,9 @@ relevant, but it must not replace the Seller or Provider.
 1. **Public.** The category and institutional argument. Generous composition,
    one serif display line, mono uppercase actions and sparse construction marks.
 2. **Market.** Compact search, optional public detail/comparison and the
-   authenticated Operation inspection that creates a Commitment. Use structural
+   authenticated Tool Quote that creates a Quote. Use structural
    rows, aligned numbers, progressive disclosure and visible provenance.
-3. **Operator.** Quiet work areas for Accounts, Mandates, Provider publication,
+3. **Operator.** Quiet work areas for Accounts, spending policies, Provider publication,
    purchases, recovery and records. Use compact controls and persistent
    navigation. Display type does not enter forms, tables or status views.
 
@@ -106,37 +106,37 @@ millisecond ink wash.
 Do not add decorative page-load animation, shimmer, orbit or perpetual motion.
 Respect `prefers-reduced-motion`.
 
-## Canonical Operation composition
+## Canonical Tool composition
 
-Every public Operation view should read in this order:
+Every public Tool view should read in this order:
 
-1. Operation identity, revision and bounded contribution.
+1. Tool identity, version and bounded contribution.
 2. Provider identity, evidence and readiness.
 3. Fixed buyer-facing Seller and total buyer consideration.
 4. Exact inputs, outputs, terms, data use and possible external effects.
 5. Decision evidence, provenance, freshness and exclusions.
 6. Authority required and the next valid action.
 
-Do not show one blended "supplier" row. The Provider performs the Operation.
+Do not show one blended "Provider" row. The Provider performs the Tool.
 Agentic Economy is the Seller for supported principal-reseller purchases. If the
 current implementation cannot establish a role, show it as unresolved rather
 than inferring it.
 
-## Inspection and Commitment composition
+## Quote composition
 
-`operation.inspect` is the one caller-specific decision view before
-consequential action. It combines the selected Operation's material detail with
-current caller viability and, when admitted, returns a Commitment. It must show:
+`tool.quote` is the one caller-specific decision view before consequential
+action. It combines the selected Tool's material detail with current caller
+viability and, when admitted, returns a Quote. It must show:
 
-- Business Principal, Account, Agent Principal and Mandate version;
-- exact Operation and Provider revision;
+- Business Principal, Account, Agent Principal and spending-policy version;
+- exact Tool and Provider version;
 - fixed Seller;
 - total buyer consideration, currency and expiry;
 - information destinations and external effects;
 - accepted terms and evidence standard; and
 - retry, cancellation and recovery consequences.
 
-The primary action names the consequence. "Commit and invoke" is preferable to
+The primary action names the consequence. "Quote and Call" is preferable to
 "Continue" when the action reserves funds and releases information.
 
 ## Purchase and closure composition
@@ -146,7 +146,7 @@ state:
 
 - buyer consideration and Charge;
 - Provider obligation and Payout state;
-- Invocation and Provider delivery observation;
+- Call and Provider delivery observation;
 - payment-rail settlement evidence;
 - current commercial state;
 - adjustment, refund or recovery history; and
@@ -172,7 +172,7 @@ at most one machine continuation plus an optional owner handoff. The human view
 may expand explanation; it may not create a different lifecycle, a menu of
 invalid actions or an unnamed transition.
 
-An Agent Principal view shows its own Mandate, remaining limits, permitted
+An Agent Principal view shows its own spending policy, remaining limits, permitted
 shared-balance facts, Calls and recovery. A Business Principal view shows the
 whole Account and attribution by Agent Principal. Credential identity is audit
 evidence, never the owner of a budget or balance.

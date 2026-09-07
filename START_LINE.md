@@ -11,10 +11,10 @@ complete Call record without operating a crypto wallet
 ## Decision
 
 Agentic Economy will enter as the managed commercial and payment boundary for
-one admitted x402 Operation.
+one admitted x402 Tool.
 
 The Business Principal funds an AUD prepaid balance. Agentic Economy is the
-buyer-facing Seller, invokes the Operation and settles its separate upstream
+buyer-facing Seller, Calls the Tool and settles its separate upstream
 obligation from a pooled corporate USDC treasury. The customer does not acquire
 USD, USDC, a wallet, an address or a right to direct the upstream transfer.
 
@@ -24,9 +24,9 @@ reserves that amount, pays the Provider from corporate USDC and then captures,
 releases or retains the reservation according to the observed outcome.
 
 The product presents the result through familiar Logs, Usage and Spend views.
-Internally, one Invocation remains the stable identity for the Call. Attempts,
+Internally, one Call remains the stable identity for the purchase. Attempts,
 AUD postings, x402 settlement evidence, delivery, recovery and invoice lines
-remain separate records linked to that Invocation.
+remain separate records linked to that Call.
 
 This start line changes the implementation sequence, not the whitepaper's
 institutional thesis. Reconstructing purchases made outside Agentic Economy
@@ -41,26 +41,26 @@ The start line passes when one Australian business can complete this sequence:
 2. Complete one supported funding flow. Confirmed settlement creates exactly the
    requested AUD credit once; the service fee never reduces the credit balance.
 3. Authenticate with a replaceable credential. Agentic Economy resolves the
-   Business Principal, Account, Agent Principal, Mandate, permitted shared
+   Business Principal, Account, Agent Principal, spending policy, permitted shared
    balance and Agent Principal limits without accepting an `accountRef`, wallet
    or customer-selected payment address. Standalone `whoami` and balance reads
    remain optional diagnostics rather than Call prerequisites.
-4. Search one admitted x402 Operation through a compact, versioned response of
+4. Search one admitted x402 Tool through a compact, versioned response of
    one to three candidates. Search repeats no full input schema, navigation set
    or caller-specific money state. Public detail and comparison remain optional
    reads. Public discovery spends no customer money and triggers no Provider
    work.
-5. Use `operation.inspect` as the one caller-specific detail and viability read.
-   Create an expiring Commitment for the exact Operation revision, normalised
+5. Use `tool.quote` as the one caller-specific detail and viability read.
+   Create an expiring Quote for the exact Tool version, normalised
    literal input and caller constraints. Receive and validate the current x402
    challenge; reject
    unsupported asset, network, recipient or amount; calculate one all-in AUD
    Call price from executable exchange-rate evidence and versioned pricing; and
    show required input, effects, data use, Provider, Seller, evidence,
    unknowns, expiry, balance after and Agent Principal budget after. Bind the
-   quote and challenge digest to the Commitment.
-6. Invoke that `commitmentRef` once with a caller-supplied idempotency key.
-   Revalidate Operation revision, input digest, challenge, authority, Agent
+   Quote and challenge digest to the Quote.
+6. Call that `quoteRef` once through `tool.call` with a caller-supplied
+   idempotency key. Revalidate Tool version, input digest, challenge, authority, Agent
    Principal budget, principal-wide exposure, shared Account funds and pricing
    at the consequence boundary. Material drift refuses before any reservation,
    signature or Provider effect and returns an executable safe continuation.
@@ -80,16 +80,17 @@ The start line passes when one Australian business can complete this sequence:
    the separate USDC settlement evidence. On a known pre-submission failure,
    release it. When submission, settlement or delivery is uncertain, retain the
    reservation for explicit reconciliation rather than retrying blindly.
-11. Return literal output or one durable Invocation state. A non-terminal
+11. Return literal output or one durable Call state. A non-terminal
     response contains at most one executable machine continuation and one
     optional owner handoff. Status, cancel and reconcile appear only where the
-    current state permits them; possible dispatch never exposes invoke as a
-    retry. Version-aware status returns a bounded unchanged response or current
-    delta with the recommended next observation time, so a fresh process can
+    current state permits them; possible dispatch never exposes a fresh
+    `tool.call` as a blind retry. Version-aware status returns a bounded unchanged
+    response or current delta with the recommended next observation time, so a
+    fresh process can
     continue without conversation history or repeated full history.
-12. Show the same Call in Logs, Usage and Spend with Operation, Provider,
+12. Show the same Call in Logs, Usage and Spend with Tool, Provider,
     timestamps, status, consumed units, exact AUD charge, upstream settlement
-    state, acting Agent Principal, Mandate use and recoverable exception where
+    state, acting Agent Principal, spending-policy use and recoverable exception where
     relevant. The agent can see its own permitted history; the Business
     Principal can see the whole Account and spend by Agent Principal.
 13. Produce invoice-ready period detail that includes each captured Call and
@@ -101,30 +102,30 @@ The start line passes when one Australian business can complete this sequence:
 
 The Package 4 machine contract has one response shape per action. It does not
 add a universal envelope, selectable detail levels or arbitrary field groups.
-Excluding literal Operation output and the generated action manifest, the proof
+Excluding literal Tool output and the generated action manifest, the proof
 budgets are:
 
 | Response | Maximum serialized JSON |
 | --- | ---: |
 | Search with three candidates | 3 KB |
-| Successful or blocked inspection | 4 KB |
+| Successful or blocked Quote | 4 KB |
 | Unchanged status poll | 512 bytes |
 | Refusal or uncertain result | 1 KB |
 
 The start line includes four agent-journey proofs:
 
-1. **Cheapest successful Call:** `search -> operation.inspect ->
-   operation.invoke -> result`; no mandatory self, balance, public-detail or
+1. **Cheapest successful Call:** `search -> tool.quote ->
+   tool.call -> result`; no mandatory self, balance, public-detail or
    comparison call.
-2. **Insufficient balance or authority:** inspection returns no Commitment, the
+2. **Insufficient balance or authority:** `tool.quote` returns no Quote, the
    exact bounded reason and one safe continuation or owner handoff; no treasury
    or x402 internals leak into the response.
-3. **Terms drift before effect:** invoke refuses before reservation, signing or
-   Provider effect and binds the next inspection to the prior Commitment so the
-   caller need not resend full normalised input.
-4. **Unknown after submission:** the Invocation reference remains stable;
+3. **Terms drift before effect:** `tool.call` refuses before reservation, signing
+   or Provider effect and binds the next Quote so the caller need not resend
+   full normalised input.
+4. **Unknown after submission:** the Call reference remains stable;
    version-aware status and reconcile are the only machine continuations, and a
-   fresh invoke is absent.
+   fresh `tool.call` is absent.
 
 The proof does not pass if support must reconcile the Call from unrelated
 screens, if an external timeout can pay twice, if a displayed balance cannot be
@@ -152,7 +153,7 @@ The working product boundary remains:
 
 - Australian business customers only;
 - Agentic Economy is the sole buyer-facing Seller and payee;
-- credit pays only Agentic Economy for admitted Operations;
+- credit pays only Agentic Economy for admitted Tools;
 - no customer cash-out, transfer, assignment, yield or crypto entitlement;
 - no postpaid or negative-balance Calls;
 - Agentic Economy owns and controls the pooled upstream USDC treasury; and
@@ -169,12 +170,12 @@ The detailed perimeter and unresolved advice questions are recorded in
 - One supported AUD funding method and one separately disclosed top-up service
   fee policy.
 - One AUD prepaid balance with available and reserved positions.
-- One admitted x402 Operation and one managed corporate USDC custody pool.
+- One admitted x402 Tool and one managed corporate USDC custody pool.
 - One all-in AUD quote, one controlled paid Call and explicit success, release
   and unknown-outcome recovery paths.
 - One customer Calls surface with Logs, Usage and Spend views.
 - One compact, versioned agent contract across self-inspection, balance,
-  Operation inspection, invoke, status, cancel, reconcile and bounded outcome
+  Tool Quote, Call, status, cancel, reconcile and bounded outcome
   reporting, with executable safe continuations.
 - One invoice-ready period projection and reconciliation view.
 - Deterministic tests for all money paths plus one external x402 testnet canary.
@@ -204,6 +205,6 @@ service procurement requires commercial closure and why Australia is the first
 worked institutional environment.
 
 The first release deliberately begins in the Resell mode for one narrow class of
-admitted x402 Operations. Observe, Control, Broker and Resell remain progressive
+admitted x402 Tools. Observe, Control, Broker and Resell remain progressive
 responsibility modes across the mature platform; they are not a mandatory
 chronological funnel for every implementation.

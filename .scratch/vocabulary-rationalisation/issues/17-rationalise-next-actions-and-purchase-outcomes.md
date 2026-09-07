@@ -1,15 +1,50 @@
 # Rationalise next actions and purchase outcomes
 
+## Call SOURCE ACCEPTED — independent correction review resolved
+
+Oversight acceptedwholeCallandfivefilecorrection2026-09-06. Correctedsnapshot /tmp/ae-call-review-corrected-candidate-20260906/manifest.json1789fileszerochangedDuringCapture; correctionpaths /tmp/ae-call-review-correction-paths-20260906.txt. Reviewedhashesmatchworkerreceipt /tmp/ae-call-oversight-correction-result-20260906.txt. BothP2sresolved: explicituncertaintybeforecompletion/refund,released/refundedrefusalexposesfact, separatedeliveryandpayment; currentownedCall/Toolcopycutoverprotectedprotocolnamesunchanged. Focused7receipt+18routePASS; scopedlintdiffPASS; priorroot13runtimePASSretained,no duplicatererun. Oversightfreshcompiler230errors57files,zeroCallowned.6/10groupsaccepted. Moneygroup8implementationreleased,publicgroup9readOnlyinventoryheldforMoney. Integrated/sourcecommits/deploy/fullplanacceptanceremainopen.
+
+
+## Stable whole Call candidate — ready for independent oversight
+
+2026-09-06 root verification: global compiler235errors58files, ZEROin67Callchangedpaths (beforeCall332/74; previous240/60with5Callerrors). Root doctor11+fullWorkpool2:13/13PASS includinginstalledCLI andasynchronouslifecycle. Runtime /tmp/ae-call-root-final-runtime-20260906.log; compiler /tmp/ae-call-final-coherent-checkpoint-20260906.log. Rootall67scopedOxlint+diffcheckPASS, logs /tmp/ae-call-final-scoped-lint-20260906.log and /tmp/ae-call-final-scoped-diffcheck-20260906.log. Worker07 focused5suites50PASS; prior93/authority80/MCP6/recoveryprojection18PASS overlap. No inflatedsum.
+
+Stablecandidate /tmp/ae-call-review-candidate-20260906/manifest.json:1789files,zerochangedDuringCapture,67netCallpaths againstacceptedQuote /tmp/ae-quote-review-corrected-candidate-20260906/manifest.json. Exactownership /tmp/ae-call-module-owned-paths-20260906.txt. Worker07receipt /tmp/ae-call-continuation07-result-20260906.txt. JournalqueriesrestoredoriginalboundedfilterusingcurrentcallRef, nonewindex; Callrowpatchtype exact. Currentdoctorchain/fixturesfixedwithoutchangingopaque/evidencekeys. SourceownerCLI01a0773f-0f40-7cd2-93df-41e4183c981b DONE0compactions194364input, mayresumeSameOwnerforconsolidatedfindings. Rootownsindex/nativegeneration; noadditionalneedsreported.
+
+Independent review is being requested from the existing oversight task only. Acceptance remains5/10 until decision. MoneyheldpendingacceptedCall. No sourcecommits/deploy/live/data/recovery.
+
+
 Type: task
 Label: wayfinder:task
 Mode: AFK
-Status: open
-Assignee: Luna Max / refactor_next_actions
+Status: resolved
+Assignee:
 Assigned role: Luna Max / next-action and purchase-outcome implementation owner
 Parent: ../map.md
 Blocked by: 08, 10, 11, 12, 13, 14, 15, 16, 29, 30
 
 ## Outcome
+
+### Current bounded export claim — 2026-09-05
+
+Handoff received: eight-file batch complete; two suites / 40 tests passed,
+narrow lint/whitespace passed, zero compactions. Structured card property and
+remaining CLI helper/file names are still separate open work below.
+
+`vocab_next_action_exports_01` owns exactly the shared
+`src/modules/market/suggested-next-action.ts`, `src/modules/chat/tool-card.ts`,
+`src/components/ae/console/AeOwnerCredit.tsx`,
+`src/components/ae/console/AeAgentOperatorConsole.tsx`,
+`src/components/ae/supply/AeOwnerProviderConnections.tsx`,
+`tools/ae/lib/suggested-continuation-adapter.ts`,
+`tests/unit/market/suggested-next-action.test.ts` and
+`tests/unit/market-terminal/suggested-continuation-adapter.test.ts`.
+Apply the fixed shared exports and Tool/Call/Provider subject vocabulary,
+including the adapter's outer `callRef`. Preserve states, conditions and actions.
+The three UI files only receive direct helper/local-variable propagation.
+Structured card `continuation` and remaining CLI helper/file names stay with
+their separately sequenced consumer batches. Run the two assigned suites and
+narrow checks; broad React/module verification remains at integration.
 
 After the Tool, Provider, Quote and Call checkpoints, replace the AE-owned
 structured continuation family with Suggested next action and align the

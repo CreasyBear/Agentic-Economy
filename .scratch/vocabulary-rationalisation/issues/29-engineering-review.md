@@ -3,7 +3,7 @@
 Type: task
 Label: wayfinder:task
 Mode: AFK
-Status: claimed
+Status: resolved
 Assignee: Luna Max / refactor engineering-review subagent
 Assigned role: Luna Max / independent engineering-review subagent
 Parent: ../map.md
@@ -191,38 +191,43 @@ bounded findings for the issue owners:
 
 ## Acceptance
 
-- [ ] The report evaluates all seven review areas above against the accepted
+- [x] The report evaluates all seven review areas above against the accepted
       plan and the materialized queue, with each consequential finding linked
       to its owning issue.
-- [ ] Concept, permission, money, persistence, public-contract, generated
+- [x] Concept, permission, money, persistence, public-contract, generated
       output, deployment and rollback invariants are either evidenced or
       explicitly marked as a blocking gap.
-- [ ] Shared writers and dependency order are shown to be acyclic; no core
+- [x] Shared writers and dependency order are shown to be acyclic; no core
       issue is described as independently green while its consumers remain on
       old contracts.
-- [ ] Any structural change is justified by the necessity rule; optional
+- [x] Any structural change is justified by the necessity rule; optional
       cleanup is not admitted into acceptance.
-- [ ] The report contains no source, shared-plan, deployment or tracker
+- [x] The report contains no source, shared-plan, deployment or tracker
       mutation and does not alter accepted vocabulary or Package 6/7 status.
 
 ## Closure evidence
 
 Attach `.scratch/vocabulary-rationalisation/reports/29-engineering-review.md`,
 the read-only evidence paths used, the dependency/ownership matrix, the list of
-resolved findings and any remaining blockers. Keep the ticket open until the
-report is complete and consequential findings are corrected by their owners.
+resolved findings and any remaining blockers. The report is complete and the
+bounded F9–F15 planning findings are corrected by their owners; later source,
+generated-output, backup/restore, local-data, live-QA and hosted-cutover proof
+remain downstream gates.
 
 ## Review receipt
 
-Report completed by Luna Max / refactor engineering-review subagent:
+Initial report updated by Luna Max / refactor engineering-review subagent:
 `.scratch/vocabulary-rationalisation/reports/29-engineering-review.md`.
-The review found the accepted architecture conditionally feasible, with F1–F8
-requiring existing-owner correction or evidence before the relevant gate:
-MCP target-ID classification, protected canonical byte vectors, generic
-execution versus paid Call field ownership, qualified AgentAccessPrincipal
-IAM exclusion, omitted durable journals, external-registry exclusion,
-provisional queue ownership, and hosted-only backup/restore readiness.
+The accepted architecture remains conditionally feasible. The initial F9–F15
+owner/path findings are retained in the report as evidence and are resolved by
+the bounded recheck recorded there.
 
-Issue 29 remains claimed/open. No source, plan, map, work record, generated
-output, deployment state, backup archive or financial record was mutated. The
-hosted reset findings do not block separately proven local source work or QA.
+Resolution receipt: after checkpoint
+`645a348421479510432db4bdc630ed306acd18d8`, the Node 22 read-only header check
+found 37 issue files, no missing blockers and no dependency cycles. Issues 03
+and 37 provide the finite disposition and staged issue-22 generator-gate
+interpretation; issues 13/14/16/20/21/22/24 provide the exact path, filename,
+field-only and root-package ownership receipts. Issue 29 is resolved as the
+implementation-dispatch planning gate. This review made no source,
+generated-output, deployment-state, backup-archive or financial-record change;
+hosted reset and later live-proof gates remain with issues 31–35.

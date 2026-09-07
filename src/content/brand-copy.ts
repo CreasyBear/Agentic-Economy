@@ -19,12 +19,12 @@ export const HOME = {
   heroHeading: 'The marketplace built for agents.',
   heroSubhead:
     'Search first. Inspect the price and access terms. Connect only when the selected call needs it.',
-  catalogHeading: 'Current Operations',
+  catalogHeading: 'Current Tools',
   catalogBody: 'Price and readiness are shown before you choose.',
-  catalogUnavailable: 'The Operation catalog is temporarily unavailable',
-  catalogUnavailableBody: 'Try again shortly. Existing Operation links continue to work.',
-  catalogEmpty: 'No Operations are published yet',
-  catalogEmptyBody: 'Publish the first bounded job, or check again after suppliers finish setup.',
+  catalogUnavailable: 'The Tool catalog is temporarily unavailable',
+  catalogUnavailableBody: 'Try again shortly. Existing Tool links continue to work.',
+  catalogEmpty: 'No Tools are published yet',
+  catalogEmptyBody: 'Publish the first bounded job, or check again after Providers finish setup.',
 } as const
 
 export type AgentPasteInstruction = {
@@ -48,7 +48,7 @@ export const AGENT_INSTRUCTION: AgentPasteInstruction = {
 /** Agent/Runtime door on `/` (routes to /for-agents). */
 export const AGENT_DOOR = {
   heading: 'For your agent',
-  body: 'Browse public Operations. Connect your account when you are ready to make a Call.',
+  body: 'Browse public Tools. Connect your account when you are ready to make a Call.',
   cta: 'Connect your agent',
   href: '/for-agents',
 } as const
@@ -66,9 +66,9 @@ export const AGENT_PAGE = {
 
 /** Supplier door on `/` (routes to the existing supply mode). */
 export const BUSINESS_DOOR = {
-  heading: 'Publish an Operation',
+  heading: 'Publish a Tool',
   body: 'Publish one bounded job, its price, readiness, and access terms. Agents inspect before they call.',
-  cta: 'Publish an Operation',
+  cta: 'Publish a Tool',
   href: '/for-providers',
 } as const
 
@@ -79,14 +79,14 @@ export const ABOUT = {
   eyebrow: 'About',
   heading: 'Who this market is for.',
   subhead:
-    'Agents find, compare, and call. Suppliers publish the job, the price, and the access terms, and get paid after delivery.',
-  doorsHeading: 'Agents and suppliers',
+    'Agents find, compare, and call. Providers publish the job, the price, and the access terms, and get paid after delivery.',
+  doorsHeading: 'Agents and Providers',
   settlementHeading: 'Pay per call',
   settlementBody:
-    'Browse and inspect without a provider account. The price sits on the card before a call. Suppliers are paid when the job is delivered.',
-  suppliersHeading: 'Listed suppliers',
-  suppliersBody:
-    'A supplier is listed when it publishes a job agents can inspect in the live catalog.',
+    'Browse and inspect without a Provider account. The price sits on the card before a Call. Providers are paid when the job is delivered.',
+  providersHeading: 'Listed Providers',
+  providersBody:
+    'A Provider is listed when it publishes a Tool agents can inspect in the current catalogue.',
   machinesHeading: 'Files for agents',
   machinesBody: 'The same facts the site shows: an index, a skill file, and a handshake.',
 } as const

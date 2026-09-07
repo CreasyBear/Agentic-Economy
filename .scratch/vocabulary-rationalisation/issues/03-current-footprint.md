@@ -3,7 +3,7 @@
 Type: task
 Label: wayfinder:task
 Mode: AFK
-Status: open
+Status: resolved
 Parent: ../map.md
 Blocked by:
 
@@ -30,9 +30,10 @@ a raw occurrence count presented as a migration map.
 
 This receipt consolidates the completed baseline and review evidence rather than
 re-running a repository-wide occurrence search. It is intentionally a read-only
-boundary record. Issues 17, 18, 27 and 28 are not yet present in the local issue
-directory; their missing ownership records are called out below and keep this
-inventory open.
+boundary record. At the time of the initial receipt, issues 17, 18, 27 and 28
+were not yet present in the local issue directory; that absence and the then
+missing ownership records are retained as historical evidence below. The
+current queue correction at the end of this file supersedes that snapshot.
 
 ### Evidence basis
 
@@ -49,7 +50,11 @@ this inventory issue.
 ### Recoverable baseline boundary
 
 - Working branch: `codex/vocabulary-rationalisation`.
-- Baseline `HEAD`: `91a4fff6f68fecd63ac39bbbd4509de0bc0d5b0d`.
+- Pre-checkpoint baseline `HEAD`: `91a4fff6f68fecd63ac39bbbd4509de0bc0d5b0d`.
+- All-dirty checkpoint `HEAD`: `645a348421479510432db4bdc630ed306acd18d8`.
+  This checkpoint preserves the captured baseline and is the reproducible
+  starting point for refactor dispatch; it does not retroactively classify
+  every pre-existing change as refactor-owned.
 - The captured checkout had an empty index, 131 modified/staged tracked-path
   entries and 122 untracked entries. They include pre-existing work and must be
   classified before any closeout commit; they are not an implicit refactor
@@ -190,13 +195,13 @@ The following are retained exceptions, not missing source ownership:
   with the current vectors retained. External evidence, historical payments,
   webhooks and durable financial references are preserved.
 
-### Missing move or symbol ownership (not retained exceptions)
+### Initially missing move or symbol ownership (superseded by queue correction)
 
-The file-name audit is evidence for this finite follow-up list, not a migration
-scope count. These paths contain AE-owned vocabulary but have no final filename
-or exported-symbol owner recorded in the currently saved issues. They must be
-assigned explicitly before implementation dispatch; do not classify them as
-protected merely because they are UI or helper files.
+The file-name audit was evidence for the finite follow-up list at the time of
+the initial receipt, not a migration scope count. The list below is retained as
+historical evidence; the current ownership and exact target disposition are in
+the queue-correction receipt that follows. No path is classified as protected
+merely because it is UI or a helper.
 
 - Presentation family currently associated with issue 24 but lacking a final
   move/symbol map: `src/components/ae/market/AeOperationCard.tsx`;
@@ -286,9 +291,140 @@ Closeout 36 must preserve the dirty baseline, distinguish a refactor-only
 commit from `HEAD`, and hold Package 6 and Package 7 until their own
 dependencies and acceptance evidence are satisfied.
 
-Issue 03 remains `open`: issues 17, 18, 27 and 28 are absent and the presentation,
-CLI and helper ownership gaps above are not yet resolved. Once those issue
-records and their finite path mappings are saved and linked, the coordinator
-can close this inventory with a final old-name exception list. No source,
-database, generated artifact, deployment target or historical financial record
-was changed by this receipt.
+Issue 03 is `resolved` for source inventory and dispatch preparation: issues
+17, 18, 27 and 28 are now present, and the presentation, CLI and helper
+ownership gaps are resolved by the finite queue receipt below. Hosted backup/
+restore and pending-funding/callback gates remain operational work under issue
+31/35, not missing source inventory. No source, database, generated artifact,
+deployment target or historical financial record was changed by this issue.
+
+## Current queue correction and finite disposition — 2026-09-05
+
+The all-dirty checkpoint is now `645a348421479510432db4bdc630ed306acd18d8`.
+Issues 17, 18, 27 and 28 are present, and the initial absence note above is
+historical only. The following finite queue receipt supersedes the initial
+missing-owner list and is the dispatch boundary; it does not authorize source
+implementation in this inventory issue.
+
+### Assigned AE-owned families
+
+- **Issue 13 — Tool catalogue:** after issue 11, the direct Action-execution
+  consumers are `src/modules/action-execution/canonical-claim.ts`,
+  `contracts.ts`, `execution-public.ts`, `reconciliation-evidence.ts` and
+  `x402-payment-attempt.ts`; issue 11 retains generic `executionRef` and
+  Action-execution semantics. Issue 13 owns the five-file
+  `operation-ledger` → `tool-ledger` move (`index.ts`, `commands.ts`,
+  `replay.ts`, `types.ts`, `policy.ts`), `operation-icons.ts` →
+  `tool-icons.ts`, the server `operation-read-problem.ts`/
+  `operation-read-request.ts` → `tool-read-problem.ts`/
+  `tool-read-request.ts` helpers, and registry
+  `operation-read-problem.ts` → `tool-read-problem.ts`. No registry
+  `operation-read-request.ts` exists in the baseline. Its direct fixture,
+  action-contract, execution-entry/admit, module-boundary, CLI-read-helper,
+  route-helper and test callers are listed literally in issue 13.
+- **Issue 14 — Provider supply:** `convex/capabilitySupplyToolPorts.ts` is the
+  post-13 editable path (the old `capabilitySupplyOperationPorts.ts` is only
+  lineage). Provider workspace ownership is explicit:
+  `AeOwnerOperationsWorkspace.tsx` → `AeProviderWorkspace.tsx`,
+  `owner-operations-projection.ts` → `provider-workspace-projection.ts`,
+  `owner-operations.functions.ts` → `provider-workspace.functions.ts`,
+  `supplier-identity.functions.ts` → `provider-identity.functions.ts` and
+  `AeSupplierOperationDetail.tsx` → `AeProviderToolDetail.tsx`. Its exact
+  downstream test paths are `provider-workspace.test.tsx`,
+  `provider-workspace-compatibility-routes.test.ts`,
+  `provider-workspace-route.test.ts`, `provider-workspace-functions.test.ts`,
+  `provider-tool-detail.test.tsx` and
+  `owner-provider-identity-outcome.test.tsx`; issue 25/26 consume these
+  names for their surface-owned assertions.
+- **Issue 16 — paid Calls:** the original Tool path moves are removed as
+  duplicate ownership; Call updates consume issue 13's post-move
+  `tool-*` paths. The exact helper moves are
+  `operation-approval-source.ts` → `call-approval-source.ts` and
+  `x402-invocation-policy.ts` → `x402-call-policy.ts`, with their matching
+  tests and direct callers. Its public Call budget names are
+  `maximumSpendPerCall`, `maximumConcurrentCalls` and
+  `per_call_exceeds_daily`; the existing policy digest maps them to the old
+  canonical keys before hashing. Generic Action execution remains issue 11's
+  post-11 `executionRef` family.
+- **Issue 20 — installed CLI:** `tools/ae/commands/invoke.ts` →
+  `tools/ae/commands/call.ts`, with `runCallCommand`,
+  `callCommandDescriptor` and `callCommands`; `tools/ae/cli.ts`, action
+  adapters, post-13 surface-conformance test and the market-terminal call,
+  recovery and cold-loop tests are direct consumers. CLI verbs remain
+  `describe`, `search`, `history`, `call`, `status`, `wait`, `cancel` and
+  `recover`; `--supplier` becomes `--provider` with no alias.
+- **Issue 24 — product UI:** exact market, Tool detail, command-panel and
+  `operation-chat` → `chat` file/symbol mappings, plus all direct importers and
+  test-stem moves, are recorded in issue 24. It consumes
+  `tools.$toolRef.tsx` and `calls.$callRef.tsx`; anonymous Tool detail remains
+  distinct from Quote, and ChatHistory remains conversation history.
+
+### Contract, discovery and generated handoffs
+
+- **Issue 19** owns the public `registry.tools`/`tool.quote`/`tool.call`/
+  `call.*` and market-tools HTTP routes, including the exact supply inventory
+  mapping `src/routes/api.v1.supply.operations.list.ts` →
+  `src/routes/api.v1.supply.tools.list.ts`, `operationsList` → `toolsList`,
+  `supply.operations.list` → `supply.tools.list`, and
+  `/api/v1/supply/operations/list` → `/api/v1/supply/tools/list`; contract
+  version suffix remains `v1`. Issue 13 carries the Tool fields, issue 20 the
+  CLI doctor consumer and issue 21 the derived discovery output.
+- **Issue 21** owns the active discovery/release filename moves:
+  `src/modules/discovery/internal/operation-contract.ts` →
+  `src/modules/discovery/internal/tool-contract.ts`; the
+  `operation-gateway-production-smoke.ts` family moves to the exact
+  `tool-gateway-production-smoke*` names, with its invocation subfile becoming
+  `tool-gateway-production-smoke-call.ts` and all six matching release tests
+  moving by the fixed prefix map. Issues 13 and 16 may update only Tool/Call
+  fields/imports in the pre-move release producers; issue 21 owns filenames,
+  imports and package producer paths.
+- **Issue 22** is the sole root `package.json` writer. It applies exact
+  existing script-key path receipts at two stages: an early non-deploying
+  generator checkpoint after source table/function names and a final package
+  regeneration after public contracts. No source owner edits the root
+  manifest, adds a dependency or waits for final generation before its own
+  source acceptance.
+
+### Retained exceptions and resolved residuals
+
+The remaining old-term filename occurrences in the audited set have explicit
+dispositions rather than a blanket search exception:
+
+- `src/modules/capability-supply/internal/openapi-import/operation.ts` is the
+  upstream OpenAPI operation-analysis boundary and retains its protocol
+  meaning; its `operationId` field is protected.
+- `src/modules/observability/internal/operation-keys.ts` and its tests retain
+  generic `OperationKey`/`operationKeys` evidence semantics.
+- `convex/secretLifecycleOperations.ts` and its tests retain the generic secret
+  lifecycle mutation namespace.
+- `tests/fixtures/module-boundaries/src/modules/registry/internal/operation-secret.ts`
+  is a private-boundary fixture name and remains unchanged with its test-only
+  responsibility.
+- `tools/release/package5-provider-operations.ts` and
+  `tests/unit/release/package5-provider-operations.test.ts` retain dated
+  Package 5 history; only current Tool-link fields may be updated through
+  their owning issue.
+- `/api/v1/registry`, `marketExternalRegistry`, `api-registry:v1`, portfolio
+  `Service`/`Offering`/`Publication`/`Listing`/`Source`, generic IAM names,
+  OAuth/x402/MCP protocol fields, opaque prefixes and canonical hash/signature
+  bytes remain protected.
+
+The current queue therefore has no unassigned member of the previously
+identified ledger/icon/read-helper, Provider-workspace, approval/x402-policy,
+CLI-call or catalogue/Call UI families. A future owner must not sweep other
+old-term filenames without a literal mapping in its issue; any genuinely
+ambiguous occurrence is returned to the coordinator rather than renamed by
+inference.
+
+### Inventory closure evidence
+
+All issue files `01`–`37` exist as individual local-Markdown records. The
+current issue graph has no dependency cycle, and shared writers are serialized:
+core source/schema `13 → 14 → 15 → 16`, public contracts after core, discovery
+and active release moves after their contract handoff, generated output via
+issue 22's early and final checkpoints, then verification/local data/live QA/
+hosted cutover/closeout. The initial 26 standards findings remain baseline
+evidence. This issue changed no source, test, generated artifact, deployment,
+data, backup or financial record; its inventory is ready for coordinator
+closure while hosted backup/restore, pending-funding reconciliation and
+callback isolation remain operational gates under issue 31/35.

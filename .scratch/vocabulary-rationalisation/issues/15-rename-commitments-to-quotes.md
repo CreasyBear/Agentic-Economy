@@ -1,15 +1,526 @@
 # Rename Commitments to Quotes
 
+
+## SOURCE ACCEPTED — independent correction review 2026-09-06
+
+Oversight accepted the whole Quote module plus its exact two-file correction delta. Real preparation/issuance/read test verifies current policy and persistence, generation/per-Call refusals, expiry and protected full identities. Final correction receipts:4files33testsPASS, scoped lint and whitespacePASS. Corrected immutable candidate `/tmp/ae-quote-review-corrected-candidate-20260906/manifest.json`; no capture changes. Total5/10accepted. Call implementation released. Overall and hosted acceptance remain open.
+
+## Consolidated independent correction pass — 2026-09-06
+
+Whole-module review requires two corrections in the same Quote assignment: preserve historical Quote/funding canonical hash keys while retaining current DTO/storage names, and directly verify real Quote issuance, policy refusals, TTL/expiry and fixed protected identities using existing test facilities. Receipt: `/tmp/ae-quote-independent-review-20260906.md`. Same owner continues in a fresh context, sole source writer. Call implementation remains held; 4/10 groups accepted. Independent readForCall boundary checks passed 19/19; existing 156 tests passed but do not close issuance coverage.
+
+## Historical candidate — superseded by SOURCE ACCEPTED record above
+
+The complete Quote source candidate is with oversight for one consolidated
+independent evaluation. The source owner returned before a second compaction;
+no Quote source writer remains active. The completed inventory below remains
+authoritative and is not restarted.
+
+- Exact net Quote paths: `/tmp/ae-quote-module-owned-paths-20260906.txt` (13).
+- Baseline: `/tmp/ae-quote-review-baseline-20260906/manifest.json`.
+- Immutable candidate: `/tmp/ae-quote-review-candidate-20260906/manifest.json`,
+  1,788 files, zero capture changes, with accepted Provider corrections excluded.
+- Source handoff: `/tmp/ae-quote-return-before-second-result-20260906.txt`.
+- Current Quote/readiness/schema/chat/server/reservation/replay evidence passes
+  18 files/156 tests. Earlier 45/105 groups overlap. Scoped lint/whitespace pass.
+- Coherent compiler: 332 diagnostics/74 files, no Quote-attributed diagnostics.
+  The 18 diagnostics in the changed Money test are later Call RPC arguments;
+  its Quote-row fields are corrected.
+- Protected chat digest keys were restored before this candidate and are locked
+  by fixed identity assertions; `convex/chatTools.ts` matches the baseline.
+- Direct Convex Quote issuance/refusal/expiry runtime remains unverified because
+  broader fixtures fail earlier in Call setup. Oversight is explicitly assessing
+  this gap. Call worker, Money, public/installed-client and registry failures
+  remain assigned to their existing owners; no integrated green is claimed.
+
+Root's two Quote filename index entries are included. No generated changes were
+needed. The complete read-only Call inventory is prepared, with implementation
+held until Quote acceptance. Provider's signed bytes and Package5 historical
+receipt fields remain accepted and unchanged.
+
+Earlier held/preparation receipts below are historical.
+
+## Complete Quote inventory — prepared, implementation held
+
+The complete read-only inventory below returned with one actual compaction and
+no source/test/runtime activity. Continue it without a new conceptual inventory.
+Provider-dependent producer/shared files remain serialized. Independent review
+is now owned by the oversight task, not another root reviewer.
+
+Coordinator reconciliation: direct Quote schema/export/authority callers remain
+within the complete module even if stored in another area. Consume the accepted
+policy/connection grant contract consistently in Quote creation; old current
+fields are not hash exceptions. Package5 current imports/Tool/Quote/Call fields
+are active Provider ownership, so coordinate rather than duplicate. Protected
+operation.invoke/commitment literals below mean exact hash/protocol/evidence
+material only; they do not permit obsolete current action contracts or aliases.
+Generic Action taxonomies remain separate and their later owning issue decides
+any current taxonomy cutover. Physical Quote storage consistency includes the
+consumed-Call link and its direct reader/writers, coordinated with the Call owner.
+
+## Read-only issue15 receipt — Quote module
+
+Implementation remains **HELD pending Provider acceptance**. Provider remains the sole source writer. No source/tracker files were changed; no tests, compiler, generation, installs, runtime/backend/data/deploy actions, commits, subagents, or AgentMux were used.
+
+Authoritative inputs were [PRODUCT.md](</Users/joelchan/Documents/Coding/App-Dev/live/01. Pre-Implementation/Agentic-Economy/PRODUCT.md:1>), [CONTEXT.md](</Users/joelchan/Documents/Coding/App-Dev/live/01. Pre-Implementation/Agentic-Economy/CONTEXT.md:1>), [map.md](</Users/joelchan/Documents/Coding/App-Dev/live/01. Pre-Implementation/Agentic-Economy/.scratch/vocabulary-rationalisation/map.md:1>), and [issue15](</Users/joelchan/Documents/Coding/App-Dev/live/01. Pre-Implementation/Agentic-Economy/.scratch/vocabulary-rationalisation/issues/15-rename-commitments-to-quotes.md:74>).
+
+Checkout and runtime verified:
+
+- `/Users/joelchan/Documents/Coding/App-Dev/live/01. Pre-Implementation/Agentic-Economy`
+- branch `codex/vocabulary-rationalisation`
+- Node `v22.22.0`
+- npm `11.5.1`
+
+The worktree was already broadly dirty from prior vocabulary work. The `a19f` comparison worktree was checked read-only; both point at `fe09a6463`. Quote contract/action/backend/schema/HTTP/chat files were byte-equivalent; Provider Tool files, generated route tree, and planning files differed. Current checkout remains authoritative.
+
+### Boundary
+
+`Tool` is the admitted callable supply. `Quote` is the caller-bound, input-bound, price/authority/current-version-bound expiring purchase precondition. `Call` is accepted use. `SuppliedQuote` remains a qualified upstream supply quote. None are interchangeable.
+
+### Quote-owned definitions and codecs
+
+Current paths:
+
+- `src/modules/capability-execution/quote.ts`
+  - `TOOL_QUOTE_ACTION_ID = 'tool.quote'`
+  - `TOOL_QUOTE_PATH = '/api/v1/tools/quote'`
+  - `toolQuoteInputSchema`, `ToolQuoteInput`
+  - refusal-code union
+  - committed/refused `toolQuoteResultSchema`, `ToolQuoteResult`
+  - continuation and required-action schemas
+  - `projectToolQuoteRefusal`
+- `src/modules/capability-execution/quote.actions.ts`
+  - `toolQuoteAction`
+  - `TOOL_QUOTE_ROUTE_CONTRACT`
+  - `tool.quote:v2`
+  - HTTP/MCP/CLI/chat surfaces
+  - no Call, reservation, signature, payment, or Provider effect
+- `src/modules/capability-execution/current-tool-quote.ts`
+  - `currentToolDigest`
+  - `currentToolDigestFromSnapshot`
+  - `currentToolQuotesMatch`
+- `convex/capabilityQuotes.ts`
+  - private Convex validators: refusal codes, exact AUD/USDC amounts, continuations, required actions, result, financial snapshot, prepared financial subjects, Call material
+  - exported RPC functions:
+    - `quote` action
+    - `prepareFinancialSubjects` internal mutation
+    - `issueQuote` internal mutation
+    - `readForCall` internal query
+    - `admitCall` internal mutation
+- `src/modules/capability-execution/index.ts`
+  - currently exports seller-canary symbols only; no new Quote barrel is authorized
+- `src/modules/capability-execution/convex.ts`
+  - Call validators/serializers only; Quote RPC validators remain local to `convex/capabilityQuotes.ts`
+- `src/modules/capability-execution/schema.ts`
+  - exports aggregate `capabilityCallTables`; this aggregate must not be split speculatively
+
+JSON boundaries use existing bounded JSON validation, `JSON.stringify`/`JSON.parse`, `materializeRuntimePublishedTool`, `parsePublishedToolSnapshot`, and `canonicalDigest`.
+
+### Quote creation and behavior
+
+Current chain:
+
+```text
+HTTP/chat/CLI tool.quote
+  -> source-write admission
+  -> capabilityQuotes.quote
+  -> live x402 observation
+  -> prepareFinancialSubjects
+  -> Formance capacity/balance reads where required
+  -> issueQuote
+  -> capabilityQuotes row
+  -> tool.call continuation
+```
+
+`issueQuoteHandler` preserves:
+
+- current Agent authority via `resolveCurrentAgentAuthority`
+- principal, Account, credential, application, environment binding
+- grant reference, generation, policy digest, expiry
+- current published Tool lookup and Provider offboarding freeze
+- exact runtime Tool input validation
+- `toolRef`, Tool publication revision/version, Tool material digest, current Tool digest, durable Tool snapshot
+- normalized input and input digest
+- fixed AUD or managed x402 pricing
+- source USDC requirement, x402 requirement/rate evidence
+- per-Call price ceiling, account balance, period budget, legal exposure, treasury capacity
+- legal Customer and attributed buyer revenue/tax facts
+- commercial policy references/digest
+- Quote TTL bounded by policy TTL, authority expiry, and rate-evidence expiry
+- evidence digest and deterministic opaque Quote reference
+- replay/conflict behavior for an existing Quote row
+
+There is no separate Quote refresh record or endpoint. Refresh is a new `tool.quote` request. Refusal continuations preserve retry delays of 5 seconds or 30 seconds, Tool list/search/describe, funding handoff, and required-action behavior.
+
+`readForCall` rejects missing, expired, principal-mismatched, Account-mismatched, credential-mismatched, application-mismatched, environment-mismatched, non-issued, malformed, or corrupted Quotes. A consumed Quote is only reusable when its linked Call and idempotency identity match.
+
+Uncertain outcomes belong to Call/recovery, not Quote.
+
+### Durable storage
+
+[internal/convex-schema.ts](</Users/joelchan/Documents/Coding/App-Dev/live/01. Pre-Implementation/Agentic-Economy/src/modules/capability-execution/internal/convex-schema.ts:327>) defines `capabilityQuotes`.
+
+Fields:
+
+- Identity/authority: `quoteRef`, `principalId`, `accountRef`, `credentialId`, `applicationRef`, `environment`, `grantRef`, `grantGeneration`, `grantPolicyDigest`, `grantExpiresAt`
+- Tool binding: `toolRef`, `toolVersion`, `toolMaterialDigest`, `currentToolDigest`, `toolJson`
+- Input/pricing: `normalizedInputJson`, `inputDigest`, `pricingJson`, `pricingDigest`, `decisionAudUnits`, optional `sourceUsdcUnits`
+- x402/rate evidence: optional `x402RequirementDigest`, `x402RequirementJson`, `x402RequirementObservedAt`, `rateEvidenceJson`, `rateEvidenceDigest`
+- Budget/policy: `budgetPolicyRef`, `budgetGeneration`, `maximumSpendPerCallUnits`, `formanceSchemaVersion`, `policyGeneration`
+- Commercial/tax: `legalCustomerRef`, `legalCustomerGeneration`, `buyerRevenueUnits`, `buyerTaxUnits`
+- Availability: `accountAvailableUnits`, `budgetAvailableUnits`, `legalExposureAvailableUnits`, `balanceUnits`
+- Treasury: optional `treasuryCustodyRef`, `treasuryCustodyGeneration`, `treasuryVersion`, `treasuryEvidenceRef`, `treasuryEvidenceDigest`, `treasurySpendableUnits`
+- Evidence/lifecycle: `commercialPolicyRefs`, `commercialPolicyDigest`, `evidenceDigest`, `state`, optional `consumedInvocationRef`, `expiresAt`, `createdAt`, `updatedAt`
+
+State is `issued | consumed | expired`.
+
+Existing indexes only:
+
+- `by_quoteRef: ['quoteRef']`
+- `by_credentialId_and_createdAt: ['credentialId', 'createdAt']`
+- `by_state_and_expiresAt: ['state', 'expiresAt']`
+
+No `toolRef` index is authorized.
+
+Writer/readers:
+
+- Quote insert: `convex/capabilityQuotes.ts:524`
+- Quote dedup read: `convex/capabilityQuotes.ts:515`
+- Call material read: `convex/capabilityQuotes.ts:800`
+- Call reservation read: `convex/lib/callLifecycle/admission.ts:386`
+- Call reservation marks Quote `consumed`: `convex/lib/callLifecycle/admission.ts:463`
+- Call abandonment reopens an eligible consumed Quote: `convex/lib/callLifecycle/admission.ts:517`
+- Money reads: `convex/moneyManagedCall.ts`, `convex/moneyManagedCallLifecycle.ts`
+
+The schema permits `expired`, but current source enforces expiry at read/admission time; no separate Quote expiry sweep writer was found. Do not invent one.
+
+### Provider-owned Tool producer seam to await
+
+Quote consumes, but does not write, the current Tool:
+
+- `convex/capabilitySupplyCurrentTool.ts`
+  - `readCurrentPublishedTool`
+  - `readCurrentPublishedToolSnapshotHandler`
+  - current publication, Offering, transport binding, registered contract, qualification, readiness, connection authority, and exact Tool-ref reconstruction
+- `src/modules/capability-supply/current-tool.ts`
+  - `CurrentToolQuote`
+  - `createCurrentToolQuote`
+  - `createCurrentToolQuoteFromMaterial`
+  - current digest and Provider-authority validation
+- `src/modules/capability-supply/published-tool.ts`
+  - `PublishedTool`
+  - `RuntimePublishedToolDescriptor`
+  - `parsePublishedToolSnapshot`
+  - `materializeRuntimePublishedTool`
+  - `publishedToolIdentityDigest`
+  - `publishedToolMaterialMatches`
+- `src/modules/capability-supply/public.ts`
+  - Tool projection serializers/deserializers
+  - Tool reference creation and published Tool exports
+- Provider source writers/readers:
+  - `convex/capabilitySupplyPublish.ts`
+  - `convex/capabilityProviderTools.ts`
+  - Provider connection/admission/lifecycle modules
+
+Provider acceptance must settle publication revision, binding, readiness, connection authority, routeability/offboarding, and exact Tool material. Quote implementation must wait for that acceptance and consume the seam; it must not duplicate or modify Provider fields.
+
+### Direct caller and handoff inventory
+
+HTTP/action:
+
+- `src/routes/api.v1.tools.quote.ts`
+- `src/lib/server/call-api.ts`
+  - `createCallService.quoteTool`
+  - `handleToolQuotePost`
+  - `sourceAction('capabilityQuotes:quote')`
+  - protected `operationKeyFor` projection
+- `src/modules/actions/index.ts`
+  - registers `toolQuoteAction`
+- `tools/ae/commands/action-adapters.ts`
+  - registers the Quote route contract
+
+Chat:
+
+- `convex/chatTools.ts`
+  - `chatToolQuoteContract`
+  - `api.capabilityQuotes.quote`
+  - Quote-before-Call sequencing
+- `src/modules/chat/tool-card.ts`
+  - Quote price, Account balance, budget ceiling, expiry, Quote reference projection
+
+CLI:
+
+- `tools/ae/commands/call.ts`
+  - validates `toolQuoteInputSchema`
+  - POSTs `TOOL_QUOTE_PATH`
+  - validates `toolQuoteResultSchema`
+  - forwards `quoteRef` and idempotency key to Call
+- `tools/ae/commands/describe.ts`
+- `tools/ae/commands/manifest.ts`
+  - textual Quote handoffs
+
+Call consumers, owned by issue16:
+
+- `src/modules/capability-execution/call-contracts.ts`
+- `call-admit.ts`
+- `call-entry.ts`
+- `call-authority.ts`
+- `call-material.ts`
+- `call-recovery-contracts.ts`
+- `call-worker/*`
+- `convex/capabilityCalls.ts`
+- `convex/capabilityCallIdentity.ts`
+- `convex/capabilityCallProjection.ts`
+- `convex/capabilityCallProjections.ts`
+- `convex/capabilityCallWorker.ts`
+- `convex/capabilityCallLiveX402.ts`
+- `convex/capabilityCallX402AuthorizationExpiry.ts`
+- `convex/lib/callLifecycle/admission.ts`
+- `authorityHandlers.ts`
+- `contracts.ts`
+- `dispatch.ts`
+- `callActions.ts`
+- `reconciliation.ts`
+- `workComplete.ts`
+
+The critical handoff is `authorityHandlers.ts:511-523`:
+
+```text
+capabilityQuotes.admitCall
+  -> capabilityQuotes.readForCall
+  -> Call authority/reservation/dispatch
+```
+
+Later consumers:
+
+- `src/modules/market/suggested-next-action.ts`
+- `src/modules/market/tool-view-model.ts`
+- `src/modules/registry/tool-action-contracts.ts`
+- `tool-choice-contracts.ts`
+- `tool-detail-route.functions.ts`
+- `tools.actions.ts`
+- `registry.actions.ts`
+- `src/modules/discovery/internal/tool-contract.ts`
+- `src/modules/discovery/internal/site-manifest.ts`
+- `src/lib/server/mcp-api.ts`
+- `convex/moneyFormance.ts`
+- `src/modules/money/formance-workflows.ts`
+- `convex/moneyManagedCall.ts`
+- `convex/moneyManagedCallLifecycle.ts`
+- `convex/moneyProviderObligations.ts`
+- `convex/providerConsequenceHttp.ts`
+
+These consume Quote/Tool fields but remain later-module ownership. Do not pull broad Call, money, public, installed-client, or Provider-obligation implementation into Quote.
+
+### Fixtures and tests
+
+Quote/current-Tool behavior groups:
+
+- `tests/unit/capability-execution/current-tool-quote.test.ts`
+- `tests/unit/capability-execution/quote-inspect-continuations.test.ts`
+- `tests/unit/capability-supply/current-tool-contract.test.ts`
+- `tests/integration/current-tool-snapshot-stability.test.ts`
+- `tests/integration/canonical-tool-reads.test.ts`
+- `tests/unit/schema/convex-schema.test.ts`
+
+Call handoff and durable behavior:
+
+- `tests/unit/capability-execution/call-admit.test.ts`
+- `call-authority.test.ts`
+- `call-dispatch.test.ts`
+- `call-receipt-contract.test.ts`
+- `call-recover.test.ts`
+- `call-recovery-actions.test.ts`
+- `tests/unit/convex/capability-call-approval.test.ts`
+- `capability-call-authority-boundary.test.ts`
+- `capability-call-identity.test.ts`
+- `capability-call-reservation.test.ts`
+- `capability-call-worker-*.test.ts`
+- `tests/integration/capability-call-workpool.test.ts`
+
+Public/chat/discovery consumers:
+
+- `tests/unit/server/call-api.test.ts`
+- `tests/unit/server/call-recovery-api.test.ts`
+- `tests/unit/server/mcp-api-operation-invoke.test.ts`
+- `tests/unit/server/mcp-api-official-client.test.ts`
+- `tests/unit/chat/chat-agent-tools.test.ts`
+- `tests/unit/actions/registry.test.ts`
+- `tests/unit/discovery/site-discovery-manifest.test.ts`
+- `tests/unit/market-terminal/call.test.ts`
+- `cold-loop.test.ts`
+- `recovery.test.ts`
+
+Money/Provider consumers:
+
+- `tests/unit/convex/money-managed-call.test.ts`
+- `tests/integration/money-formance-boundary.test.ts`
+- `tests/unit/release/package5-provider-operations.test.ts`
+
+Fixtures/evidence:
+
+- `tests/unit/convex/capability-call-worker-harness.ts`
+- `tests/integration/capability-call-workpool.test.ts`
+- `tools/dev/action-execution-evidence-packet.ts`
+- `tools/dev/fixtures/capability-supply/development-evidence-continuity.ts`
+- `tools/dev/fixtures/capability-supply/development-evidence-executions.ts`
+- `tools/release/package5-provider-operations.ts`
+- `src/modules/discovery/internal/tool-contract.ts`
+
+Keep distinct:
+
+- `src/modules/capability-supply/supplied-quote.ts`
+- `supplied-quote.actions.ts`
+- all `supplied-candidate-quote-*` tests
+- `src/modules/money/internal/funding-quote.ts`
+
+### Exact vocabulary mappings
+
+| Existing | Quote target |
+|---|---|
+| `operation-commitment.ts` | `quote.ts` |
+| `operation-commitment.actions.ts` | `quote.actions.ts` |
+| `current-operation-commitment.ts` | `current-tool-quote.ts` |
+| `capabilityOperationCommitments` | `capabilityQuotes` |
+| `commitmentRef` | `quoteRef` |
+| Quote `operationRef` | `toolRef` |
+| `operationRevision` | `toolVersion` |
+| `operationMaterialDigest` | `toolMaterialDigest` |
+| `currentOperationDigest` | `currentToolDigest` |
+| `operationJson` | `toolJson` |
+| `by_commitmentRef` | `by_quoteRef` |
+
+Current physical Quote files/table/indexes already use the target names. Old Quote source files are deleted and target files are present in the broad dirty worktree. This is not closure evidence.
+
+### Protected exceptions
+
+Do not rename or re-encode:
+
+- `ae.operation-commitment:v1` evidence format and canonical field order
+- `current_operation_commitment:v1`
+- current digest key `operationRef`
+- opaque Quote prefix `operation-commitment:v1:<digest>`
+- opaque Tool prefix `operation:v1:<digest>`
+- OpenAPI/protocol `operationId`
+- `operationKey`
+- generic Action execution and `invocationRef`
+- `operation-invoke-authority:v1`
+- `operation-invocation-attempt:v1`
+- protected `operation.invoke` contract literal
+- `commitmentRef`/`operationRef` keys inside the canonical `operationKeyFor` hash envelope
+- nested Tool/Provider payload keys inside `input.input`
+- Seller, OAuth, MCP, x402, stored evidence, and external financial namespaces
+
+Current `quote.actions.ts` also retains action/evidence taxonomy such as effect class `commitment` and expected evidence `operation_commitment`; generic Action taxonomy is outside this issue.
+
+### Concrete remaining coverage
+
+1. Await Provider acceptance for the current Tool publication/connection/readiness/routeability seam.
+
+2. Quote owner must reconcile the complete current boundary against issue15:
+
+   - stale `operation-commitment.ts` and `operation-commitment.actions.ts` entries remain in `src/modules/module-boundaries.ts`
+   - current `quote.ts` still exposes `operation_*` refusal labels
+   - `quote.actions.ts` still contains `operation_inspect_service_unavailable`
+   - `tests/unit/discovery/site-discovery-manifest.test.ts` still imports `OPERATION_INSPECT_ROUTE_CONTRACT`
+   - `tests/unit/actions/registry.test.ts` still expects `commitmentRef`
+   - `tools/release/package5-provider-operations.ts` still imports the deleted old Quote module and expects old inspection fields
+
+   These are direct source/test/Provider handoffs found by source inventory, not compiler-selected work. Resolve only through existing issue mappings; do not invent aliases, APIs, indexes, records, or new refusal designs.
+
+3. Preserve and verify fail-closed behavior for:
+
+   - changed input
+   - expired authority or Quote
+   - stale grant/policy/budget generation
+   - Tool publication/version/material/current digest drift
+   - price/rate/x402/treasury drift
+   - malformed Tool or normalized-input snapshots
+   - Quote replay/conflict and Call idempotency
+   - consumed/reopened Quote state
+   - protected digest and opaque-prefix vectors
+
+4. Later ownership remains explicit:
+
+   - issue16: Call lifecycle and purchased Call records
+   - issue17: suggested next actions and purchase outcomes
+   - issue18: money, durable financial records, Provider obligation/Payout
+   - issue19: public action IDs, HTTP/MCP contracts and routes
+   - issue20: CLI and installed consumers
+   - issue21: discovery/plugin output
+   - issue22: generated artifacts
+   - issue14/Package5: Provider release/source fixtures and Provider-owned fields
+   - issues23–26: UI/provider/money presentation
+
+### Minimal targeted reads at implementation start
+
+Only after Provider acceptance:
+
+- `convex/capabilitySupplyCurrentTool.ts`
+- `src/modules/capability-supply/current-tool.ts`
+- `src/modules/capability-supply/published-tool.ts`
+- `src/modules/capability-supply/public.ts`
+- `convex/capabilitySupplyPublish.ts`
+- `convex/capabilityProviderTools.ts`
+- `convex/sourceWriteAdmission.ts`
+- `src/lib/server/source-write-admission.ts`
+- `convex/capabilityQuotes.ts`
+- `src/modules/capability-execution/internal/convex-schema.ts`
+- `convex/lib/callLifecycle/admission.ts`
+- `convex/lib/callLifecycle/authorityHandlers.ts`
+- `convex/lib/callLifecycle/contracts.ts`
+- current `src/lib/server/call-api.ts`
+- protected MCP/API vector tests
+- `tools/release/package5-provider-operations.ts` only for coordination
+- generated `convex/_generated/api.d.ts`, `dataModel.d.ts`, and `src/routeTree.gen.ts` as read-only dependency checks
+
+No broad Call/money/public implementation read is required to start Quote work.
+
+**Final status: inventory complete; implementation remains held; Provider acceptance is the next gate.**
+
+## Earlier issue15 history
+
+## Current Quote module — read-only inventory, implementation held
+
+One Luna Max owner prepares the complete existing Quote boundary while Provider
+is the sole source writer. Definitions, schema/storage, serialization, exports,
+direct callers/fixtures/tests and generated dependencies are inventoried from
+current source. Earlier microslice receipts below are historical. No Quote
+source edits or tests until Provider acceptance; the resulting inventory is
+carried into implementation without a new conceptual inventory.
+
 Type: task
 Label: wayfinder:task
 Mode: AFK
-Status: open
+Status: resolved
 Assignee:
 Assigned role: Luna Max / Quote contract and storage implementation owner
 Parent: ../map.md
 Blocked by: 08, 10, 11, 12, 13, 14, 29, 30
 
 ## Outcome
+
+### Source batch receipts and claim — 2026-09-06
+
+`vocab_quote_continuations_03` returned the two-file continuation update
+(`convex/capabilityQuotes.ts` and the existing Quote continuation test): 12/12
+tests, narrow lint and static parity passed, zero compactions. Backend RPC
+names remain a queued source rename; this does not close the parent issue.
+
+`vocab_quote_budget_04` claims only `maximumPerInvocation` → `maximumPerCall`
+in `convex/capabilityQuotes.ts`, `src/modules/capability-execution/quote.ts`,
+`src/modules/chat/tool-card.ts` and these nine exact test consumers:
+`tests/unit/release/package5-provider-operations.test.ts`,
+`tests/unit/chat/chat-system.test.ts`, `tests/unit/chat/chat-agent-tools.test.ts`,
+`tests/unit/server/call-api.test.ts`, `tests/unit/market-terminal/cold-loop.test.ts`,
+`tests/unit/server/mcp-api-official-client.test.ts`,
+`tests/unit/market-terminal/call.test.ts`,
+`tests/unit/market-terminal/recovery.test.ts`, and
+`tests/unit/server/call-recovery-api.test.ts`.
+Verification: the two existing server suites plus Quote continuation suite,
+narrow lint, whitespace and remaining-field search. Other fixture failures
+must be returned, not repaired outside this fixed mapping. No generation,
+deployment, data operation or broader acceptance is assigned.
 
 Rename the AE-owned purchasing Commitment contract and storage family to
 Quote. A customer Quote remains caller-bound, input-bound, price/terms-bound,
@@ -61,7 +572,7 @@ ticket closes.
 - `convex/schema.ts`
 - `convex/convex.config.ts`
 - `src/modules/module-boundaries.ts`
-- `package.json` (only affected existing command/source paths; no new script or dependency)
+- `package.json` (read-only; issue 22 is the sole root-package writer. No direct Quote command path exists in this baseline: provide a no-change receipt, not a speculative script edit.)
 
 In the Convex schema, rename the complete `capabilityOperationCommitments`
 definition to `capabilityQuotes`, including its validators, indexes,
@@ -270,20 +781,20 @@ and are not fixed or reclassified here. Issue 22 separately runs
 
 ## Acceptance
 
-- [ ] Quote source files, exports, validators, codecs, Convex table/indexes,
+- [x] Quote source files, exports, validators, codecs, Convex table/indexes,
       direct callers, fixtures and tests use the fixed Quote/Tool vocabulary in
       one coherent cutover, with no definition-only half.
-- [ ] `capabilityOperationCommitments` → `capabilityQuotes`, all Quote indexes,
+- [x] `capabilityOperationCommitments` → `capabilityQuotes`, all Quote indexes,
       readers and writers, and `commitmentRef` → `quoteRef` fields are complete;
       Call tables remain issue 16's separate ownership.
-- [ ] Quote expiry, bound input, Tool version/material/current digest, pricing,
+- [x] Quote expiry, bound input, Tool version/material/current digest, pricing,
       permissions, limits and retry/refusal behaviour are unchanged.
-- [ ] `SuppliedQuote` stays qualified and distinct; Quote is not a Call, and
+- [x] `SuppliedQuote` stays qualified and distinct; Quote is not a Call, and
       Provider/Seller/payment/delivery facts remain separate.
-- [ ] `ae.operation-commitment:v1`, `current_operation_commitment:v1`,
+- [x] `ae.operation-commitment:v1`, `current_operation_commitment:v1`,
       `operation-invoke-authority:v1`, `operation-invocation-attempt:v1`,
       opaque prefixes, canonical hash material and vectors remain byte-stable.
-- [ ] Public route/action changes are handed to issue 19, generated output is
+- [x] Public route/action changes are handed to issue 19, generated output is
       handed to issue 22 at its intermediate checkpoint, and no alias,
       compatibility engine, migration, dependency, deployment or data reset is
       introduced.

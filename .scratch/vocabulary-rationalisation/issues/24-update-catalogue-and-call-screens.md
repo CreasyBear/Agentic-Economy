@@ -3,13 +3,27 @@
 Type: task
 Label: wayfinder:task
 Mode: AFK
-Status: open
-Assignee: Luna Max / Catalogue and Call screen owner
+Status: resolved
+Assignee:
 Assigned role: Luna Max / Tool discovery, Quote, Call history and recovery presentation owner
 Parent: ../map.md
 Blocked by: 08, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 29, 30
 
 ## Outcome
+
+### Bounded Tool-card claim — 2026-09-05
+
+`vocab_chat_card_02` owns exactly `src/modules/chat/tool-card.ts`,
+`src/components/ae/chat/ToolCard.tsx`, `src/components/ae/chat/presentation.ts`,
+`convex/chatShares.ts`, `src/lib/public/chat-ia.ts` and
+`tests/unit/chat/operation-call-handback.test.tsx`. Rename Tool card/choice/fact
+types and projectors, use `CallResultState` for the existing result-kind alias,
+map AE stored `operation-card` to `tool-card`, and choice `supplier` to
+`provider`. The structured execute-card field becomes `suggestedNextAction`;
+explanatory `nextAction` remains text and shares still regenerate the action
+instead of persisting a new field. The two direct public-copy helpers become
+`chatShowingTools`/`chatViewTool`. Preserve card kinds, behavior, SDK fields,
+privacy and opaque evidence; run the existing handback UI test and narrow checks.
 
 Update the existing public market, catalogue, command-panel, Tool detail,
 Quote/Call, activity, chat and recovery screens after the core and
@@ -53,15 +67,18 @@ human-facing snippets after those checkpoints.
 
 - `src/routes/index.tsx`
 - `src/routes/market.tsx`
-- `src/routes/operations.$operationRef.tsx`
-- `src/routes/operations.invocations.$invocationRef.tsx`
+- `src/routes/tools.$toolRef.tsx` (post-13 Tool detail route; issue 13 owns
+  the filename/route move, issue 24 owns only presentation)
+- `src/routes/calls.$callRef.tsx` (post-16 Call receipt route; issue 16 owns
+  the filename/route move, issue 24 owns only presentation)
 - `src/routes/_operator/activity.tsx`
 - `src/routes/t.$threadId.tsx`
 - `src/routes/t.new.tsx`
 - `src/routes/s.$shareToken.tsx`
 
-The current web route filenames above are presentation anchors, not permission
-to invent target filenames. The public API target routes from issue 19 are
+The web route filenames above are the exact post-13/post-16 presentation
+anchors; this issue does not make a second route decision. The public API target
+routes from issue 19 are
 consumed but not owned here: `src/routes/api.v1.tools.quote.ts`,
 `src/routes/api.v1.tools.call.ts`, `src/routes/api.v1.calls.ts`,
 `src/routes/api.v1.calls.$callRef.ts`,
@@ -78,45 +95,61 @@ consumed but not owned here: `src/routes/api.v1.tools.quote.ts`,
 - `src/components/ae/command-panel/CommandPanelProvider.tsx`
 - `src/components/ae/command-panel/command-panel-state.ts`
 - `src/components/ae/command-panel/index.ts`
-- `src/components/ae/command-panel/market-operations-client.ts`
-- `src/components/ae/command-panel/pages/OperationInspectPage.tsx`
-- `src/components/ae/command-panel/pages/OperationsSearchPage.tsx`
-- `src/components/ae/command-panel/recent-operations.ts`
+- `src/components/ae/command-panel/market-tools-client.ts` (post-13 Tool
+  client path; issue 24 owns presentation only)
+- `src/components/ae/command-panel/pages/ToolDetailPage.tsx` (post-13
+  `OperationInspectPage.tsx` path; anonymous Tool detail, not Quote)
+- `src/components/ae/command-panel/pages/ToolsSearchPage.tsx` (post-13
+  `OperationsSearchPage.tsx` path)
+- `src/components/ae/command-panel/recent-tools.ts` (post-13
+  `recent-operations.ts` path)
 - `src/components/ae/command-panel/useCommandPanelHotKeys.ts`
 - `src/components/ae/market/AeCapabilityTile.tsx`
 - `src/components/ae/market/AeCompareTray.tsx`
 - `src/components/ae/market/AeMarketComparisonView.tsx`
 - `src/components/ae/market/AeMarketPage.tsx`
 - `src/components/ae/market/AeMarketToolbar.tsx`
-- `src/components/ae/market/AeOperationCard.tsx`
-- `src/components/ae/market/AeOperationPrice.tsx`
-- `src/components/ae/market/AeOperationTable.tsx`
+- `src/components/ae/market/AeToolCard.tsx` (post-13
+  `AeOperationCard.tsx` path)
+- `src/components/ae/market/AeToolPrice.tsx` (post-13
+  `AeOperationPrice.tsx` path)
+- `src/components/ae/market/AeToolTable.tsx` (post-13
+  `AeOperationTable.tsx` path)
 - `src/components/ae/market/market-return-context.ts`
-- `src/components/ae/market/operation-detail/AeOperationCompactDecision.tsx`
-- `src/components/ae/market/operation-detail/AeOperationContinuation.tsx`
-- `src/components/ae/market/operation-detail/AeOperationContractSections.tsx`
-- `src/components/ae/market/operation-detail/AeOperationDecision.tsx`
-- `src/components/ae/market/operation-detail/AeOperationEconomics.tsx`
-- `src/components/ae/market/operation-detail/AeOperationFacts.tsx`
-- `src/components/ae/market/operation-detail/AeOperationIdentity.tsx`
-- `src/components/ae/market/operation-detail/AeOperationInspector.tsx`
-- `src/components/ae/market/operation-detail/AeOperationLatencyChart.tsx`
-- `src/components/ae/market/operation-detail/AeOperationPosition.tsx`
-- `src/components/ae/market/operation-detail/AeOperationTrackRecord.tsx`
-- `src/components/ae/market/operation-detail/index.ts`
-- `src/components/ae/market/operation-detail/operation-inspector-model.ts`
+- `src/components/ae/market/tool-detail/AeToolCompactDecision.tsx`
+- `src/components/ae/market/tool-detail/AeToolNextAction.tsx` (post-13
+  `AeOperationContinuation.tsx`; this is a Suggested next action, not a Call)
+- `src/components/ae/market/tool-detail/AeToolContractSections.tsx`
+- `src/components/ae/market/tool-detail/AeToolDecision.tsx`
+- `src/components/ae/market/tool-detail/AeToolEconomics.tsx`
+- `src/components/ae/market/tool-detail/AeToolFacts.tsx`
+- `src/components/ae/market/tool-detail/AeToolIdentity.tsx`
+- `src/components/ae/market/tool-detail/AeToolInspector.tsx`
+- `src/components/ae/market/tool-detail/AeToolLatencyChart.tsx`
+- `src/components/ae/market/tool-detail/AeToolPosition.tsx`
+- `src/components/ae/market/tool-detail/AeToolTrackRecord.tsx`
+- `src/components/ae/market/tool-detail/index.ts`
+- `src/components/ae/market/tool-detail/tool-inspector-model.ts`
 
 ### Operation-chat and shared route states
 
-- `src/components/ae/operation-chat/ChatTranscript.tsx`
-- `src/components/ae/operation-chat/OperationCard.tsx`
-- `src/components/ae/operation-chat/OperationChat.tsx`
-- `src/components/ae/operation-chat/OperationChatHeader.tsx`
-- `src/components/ae/operation-chat/OperationComposer.tsx`
-- `src/components/ae/operation-chat/OperationHistory.tsx`
-- `src/components/ae/operation-chat/SharedOperationChat.tsx`
-- `src/components/ae/operation-chat/index.ts`
-- `src/components/ae/operation-chat/presentation.ts`
+- `src/components/ae/chat/ChatTranscript.tsx` (post-move stem retained)
+- `src/components/ae/chat/ToolCard.tsx` (post-move
+  `OperationCard.tsx` and `OperationCard` → `ToolCard`)
+- `src/components/ae/chat/Chat.tsx` (post-move `OperationChat.tsx` and
+  `OperationChat` → `Chat`)
+- `src/components/ae/chat/ChatHeader.tsx` (post-move
+  `OperationChatHeader.tsx` and `OperationChatHeader` → `ChatHeader`)
+- `src/components/ae/chat/ChatComposer.tsx` (post-move
+  `OperationComposer.tsx` and `OperationComposer` → `ChatComposer`)
+- `src/components/ae/chat/ChatHistory.tsx` (post-move
+  `OperationHistory.tsx` and `OperationHistory` → `ChatHistory`; this is
+  conversation history, not Call history)
+- `src/components/ae/chat/SharedChat.tsx` (post-move
+  `SharedOperationChat.tsx` and `SharedOperationChat` → `SharedChat`)
+- `src/components/ae/chat/index.ts` (post-move index stem retained)
+- `src/components/ae/chat/presentation.ts` (post-move presentation stem
+  retained)
 - `src/components/ae/home/AeHomeLanding.tsx`
 - `src/components/ae/feedback/AeObservabilityErrorBoundary.tsx`
 - `src/components/ae/layout/AeOperatorRouteStates.tsx`
@@ -143,11 +176,14 @@ issue 21's ownership.
 - `tests/unit/routes/home-catalogue.test.tsx`
 - `tests/unit/routes/home-search-error.test.tsx`
 - `tests/unit/routes/market-search.test.ts`
-- `tests/unit/routes/operation-detail-route.test.tsx`
-- `tests/unit/routes/invocation-status-route.test.tsx`
-- `tests/unit/routes/operation-chat-routes.test.tsx`
-- `tests/unit/chat/operation-chat-header.test.tsx`
-- `tests/unit/operation-chat-ui/chat-presence.test.tsx`
+- `tests/unit/routes/tool-detail-route.test.tsx` (post-13 Tool detail test)
+- `tests/unit/routes/call-status-route.test.tsx` (post-16 Call status test)
+- `tests/unit/routes/chat-routes.test.tsx` (post-move
+  `operation-chat-routes.test.tsx`)
+- `tests/unit/chat/chat-header.test.tsx` (post-move
+  `operation-chat-header.test.tsx`)
+- `tests/unit/chat-ui/chat-presence.test.tsx` (post-move
+  `operation-chat-ui/chat-presence.test.tsx`)
 - `tests/unit/routes/public-route-states.test.tsx`
 - `tests/unit/routes/operator-side-surface-recovery.test.tsx`
 
@@ -182,12 +218,11 @@ not infer them from a directory scan:
 
 ## Explicit exclusions and sequencing
 
-- Do not edit `src/routes/operations.tsx` until the coordinator resolves the
-  web-route handoff. The accepted plan specifies public API route replacements
-  but does not specify whether this internal redirect is retained or what the
-  final web Tool/Call route filenames are. Do not invent
-  `tools.$toolRef.tsx`, `calls.$callRef.tsx`, aliases or a new hierarchy; issue
-  19/core owners must hand an exact target or explicitly retain these anchors.
+- Consume the exact post-core web targets supplied by issues 13 and 16:
+  `src/routes/tools.$toolRef.tsx`, `src/routes/tools.tsx` and
+  `src/routes/calls.$callRef.tsx`. Those issues own the filename/route moves;
+  this issue owns only presentation and direct UI imports. Do not add an old
+  web-route alias, a new Calls index or another route hierarchy.
 - Do not edit API/MCP route producers, CLI verbs, package/dist/public bundles,
   llms/SKILL/plugin machine instructions, core modules, Convex schema,
   generated output, deployment state or documentation owned by issue 27/28.
@@ -197,9 +232,9 @@ not infer them from a directory scan:
 - Do not recursively rewrite customer Tool input, external registry metadata,
   `operationId`, MCP methods, OAuth/x402 fields, opaque identifiers, hashes or
   signatures.
-- Preserve the existing CLI verbs (`describe`, `search`, `history`, `invoke`)
-  until their owning issue supplies the final installed-client behavior; this
-  ticket does not add aliases or choose a CLI compatibility exception.
+- Consume issue 20's retained CLI verbs (`describe`, `search`, `history`,
+  `call`) and target fields; this ticket does not add aliases, rename verbs or
+  choose a CLI compatibility exception.
 - No UI redesign, new filters, new recovery operations, new SDK, dependency or
   infrastructure. Existing comparison, chat, Call status and recovery
   workflows remain intact.
@@ -221,11 +256,11 @@ NODE_VERSION=22 "$HOME/.nvm/nvm-exec" npx vitest run --no-file-parallelism \
   tests/unit/routes/home-catalogue.test.tsx \
   tests/unit/routes/home-search-error.test.tsx \
   tests/unit/routes/market-search.test.ts \
-  tests/unit/routes/operation-detail-route.test.tsx \
-  tests/unit/routes/invocation-status-route.test.tsx \
-  tests/unit/routes/operation-chat-routes.test.tsx \
-  tests/unit/chat/operation-chat-header.test.tsx \
-  tests/unit/operation-chat-ui/chat-presence.test.tsx \
+  tests/unit/routes/tool-detail-route.test.tsx \
+  tests/unit/routes/call-status-route.test.tsx \
+  tests/unit/routes/chat-routes.test.tsx \
+  tests/unit/chat/chat-header.test.tsx \
+  tests/unit/chat-ui/chat-presence.test.tsx \
   tests/unit/routes/public-route-states.test.tsx \
   tests/unit/routes/operator-side-surface-recovery.test.tsx
 NODE_VERSION=22 "$HOME/.nvm/nvm-exec" npm run typecheck
@@ -269,14 +304,216 @@ failures are recorded, not hidden by changing protocol or status assertions.
 Attach the focused test and typecheck output, the final literal changed-path
 list, and a short state-matrix note covering catalogue unavailable/empty,
 Quote required/denied, Call pending/succeeded/uncertain/failed, and
-cancel/reconcile recovery. Include the exact post-core web-route decision or
-handoff for the current `operations.$operationRef` and
-`operations.invocations.$invocationRef` anchors. Confirm that no API/MCP/CLI/
-generated producer or unlisted screen was edited.
+cancel/reconcile recovery. Confirm consumption of the post-core web routes
+`tools.$toolRef.tsx` and `calls.$callRef.tsx`; no API/MCP/CLI/generated
+producer or unlisted screen was edited.
 
 ## Comments
 
 This is a downstream presentation task, not implementation proof for the
-rename. Pre-cutover `operation-*` source names in these anchors are expected
-until issues 13-19 land; the screen worker must not score them as failures or
-silently choose a route target.
+rename. Issues 13 and 16 supply the exact Tool/Call route and field paths
+before this worker starts; this issue must not make a second route decision or
+silently add an alias.
+
+## Queue correction: complete mechanical UI file and symbol propagation — 2026-09-05
+
+The presentation worker must consume the exact post-13/post-16 source paths and
+must not leave a type/import half behind. The mappings below are finite and
+mechanical; no visual interaction redesign or new screen model is admitted.
+Issues 13 and 16 may first update Tool/Quote/Call fields in these existing UI
+callers; after those checkpoints this issue is the sole owner of the UI
+filename/symbol move and its importer/test propagation. The slices are
+serialized and do not promise independent green halves.
+
+### Exact market and Tool-detail file/symbol mappings
+
+- `src/components/ae/market/AeOperationCard.tsx` →
+  `src/components/ae/market/AeToolCard.tsx`; `AeOperationCard` → `AeToolCard`
+- `src/components/ae/market/AeOperationPrice.tsx` →
+  `src/components/ae/market/AeToolPrice.tsx`; `AeOperationPrice` → `AeToolPrice`
+- `src/components/ae/market/AeOperationTable.tsx` →
+  `src/components/ae/market/AeToolTable.tsx`; `AeOperationTable` → `AeToolTable`
+- `src/components/ae/market/operation-detail/AeOperationCompactDecision.tsx`
+  → `src/components/ae/market/tool-detail/AeToolCompactDecision.tsx`;
+  `AeOperationCompactDecision` → `AeToolCompactDecision`
+- `src/components/ae/market/operation-detail/AeOperationContinuation.tsx` →
+  `src/components/ae/market/tool-detail/AeToolNextAction.tsx`;
+  `AeOperationContinuation` → `AeToolNextAction`
+- `src/components/ae/market/operation-detail/AeOperationContractSections.tsx`
+  → `src/components/ae/market/tool-detail/AeToolContractSections.tsx`;
+  `AeOperationContractSections` → `AeToolContractSections`
+- `src/components/ae/market/operation-detail/AeOperationDecision.tsx` →
+  `src/components/ae/market/tool-detail/AeToolDecision.tsx`;
+  `AeOperationDecision` → `AeToolDecision`
+- `src/components/ae/market/operation-detail/AeOperationEconomics.tsx` →
+  `src/components/ae/market/tool-detail/AeToolEconomics.tsx`;
+  `AeOperationEconomics` → `AeToolEconomics`
+- `src/components/ae/market/operation-detail/AeOperationFacts.tsx` →
+  `src/components/ae/market/tool-detail/AeToolFacts.tsx`;
+  `AeOperationFacts` → `AeToolFacts`
+- `src/components/ae/market/operation-detail/AeOperationIdentity.tsx` →
+  `src/components/ae/market/tool-detail/AeToolIdentity.tsx`;
+  `AeOperationIdentity` → `AeToolIdentity`
+- `src/components/ae/market/operation-detail/AeOperationInspector.tsx` →
+  `src/components/ae/market/tool-detail/AeToolInspector.tsx`;
+  `AeOperationInspector` → `AeToolInspector`
+- `src/components/ae/market/operation-detail/AeOperationLatencyChart.tsx` →
+  `src/components/ae/market/tool-detail/AeToolLatencyChart.tsx`;
+  `AeOperationLatencyChart` → `AeToolLatencyChart`
+- `src/components/ae/market/operation-detail/AeOperationPosition.tsx` →
+  `src/components/ae/market/tool-detail/AeToolPosition.tsx`;
+  `AeOperationPosition` → `AeToolPosition`
+- `src/components/ae/market/operation-detail/AeOperationTrackRecord.tsx` →
+  `src/components/ae/market/tool-detail/AeToolTrackRecord.tsx`;
+  `AeOperationTrackRecord` → `AeToolTrackRecord`
+- `src/components/ae/market/operation-detail/index.ts` →
+  `src/components/ae/market/tool-detail/index.ts` (index stem retained)
+- `src/components/ae/market/operation-detail/operation-inspector-model.ts` →
+  `src/components/ae/market/tool-detail/tool-inspector-model.ts`;
+  `operationInspectorModel`/`OperationInspectorModel` →
+  `toolInspectorModel`/`ToolInspectorModel`
+
+The same direct Tool type/symbol propagation applies to the post-13
+`src/modules/market/tool-view-model.ts` and its `ToolCardViewModel` exports;
+issue 13 owns that module move, while this issue owns the UI imports and
+presentation labels. Tool detail is anonymous catalogue detail and remains
+distinct from caller-specific Quote.
+
+### Exact command-panel file/symbol mappings
+
+- `src/components/ae/command-panel/market-operations-client.ts` →
+  `src/components/ae/command-panel/market-tools-client.ts`;
+  `OperationChoiceSearchResult` → `ToolChoiceSearchResult`,
+  `MarketOperationSearchInput` → `MarketToolSearchInput`,
+  `OPERATION_SEARCH_RESULT_LIMIT` → `TOOL_SEARCH_RESULT_LIMIT`,
+  `searchMarketOperations` → `searchMarketTools`
+- `src/components/ae/command-panel/recent-operations.ts` →
+  `src/components/ae/command-panel/recent-tools.ts`;
+  `useRecentOperationRefs`/`readRecentOperationRefs`/
+  `rememberRecentOperationRef` →
+  `useRecentToolRefs`/`readRecentToolRefs`/`rememberRecentToolRef`, with the
+  associated `RecentOperations`/`Operation` constants and event names changed
+  mechanically to `RecentTools`/`Tool` (the opaque `operation:v1:` identifier
+  pattern remains unchanged)
+- `src/components/ae/command-panel/pages/OperationInspectPage.tsx` →
+  `src/components/ae/command-panel/pages/ToolDetailPage.tsx`;
+  `OperationInspectPage` → `ToolDetailPage`
+- `src/components/ae/command-panel/pages/OperationsSearchPage.tsx` →
+  `src/components/ae/command-panel/pages/ToolsSearchPage.tsx`;
+  `OperationsSearchPage` → `ToolsSearchPage`
+
+`ToolDetailPage` is an anonymous Tool detail page, not a Quote page. The
+existing command-panel inspect/search state, keyboard behavior and recovery
+copy are preserved while imports and visible catalogue terms are updated.
+
+### Exact chat directory/file/symbol mappings
+
+- `src/components/ae/operation-chat/` → `src/components/ae/chat/`
+- `src/components/ae/operation-chat/ChatTranscript.tsx` →
+  `src/components/ae/chat/ChatTranscript.tsx` (stem retained)
+- `src/components/ae/operation-chat/OperationCard.tsx` →
+  `src/components/ae/chat/ToolCard.tsx`; `OperationCard` → `ToolCard`
+- `src/components/ae/operation-chat/OperationChat.tsx` →
+  `src/components/ae/chat/Chat.tsx`; `OperationChat`/`OperationChatProps` →
+  `Chat`/`ChatProps`
+- `src/components/ae/operation-chat/OperationChatHeader.tsx` →
+  `src/components/ae/chat/ChatHeader.tsx`; `OperationChatHeader` → `ChatHeader`
+- `src/components/ae/operation-chat/OperationComposer.tsx` →
+  `src/components/ae/chat/ChatComposer.tsx`; `OperationComposer` →
+  `ChatComposer`
+- `src/components/ae/operation-chat/OperationHistory.tsx` →
+  `src/components/ae/chat/ChatHistory.tsx`; `OperationHistory` → `ChatHistory`
+  (conversation history, never Call history)
+- `src/components/ae/operation-chat/SharedOperationChat.tsx` →
+  `src/components/ae/chat/SharedChat.tsx`; `SharedOperationChat` → `SharedChat`
+- `src/components/ae/operation-chat/index.ts` →
+  `src/components/ae/chat/index.ts` (index stem retained)
+- `src/components/ae/operation-chat/presentation.ts` →
+  `src/components/ae/chat/presentation.ts` (presentation stem retained)
+
+### Exact test-stem mappings and direct UI importers
+
+Move and update the existing focused tests with these exact target names:
+
+- `tests/unit/routes/operation-detail-route.test.tsx` →
+  `tests/unit/routes/tool-detail-route.test.tsx`
+- `tests/unit/routes/invocation-status-route.test.tsx` →
+  `tests/unit/routes/call-status-route.test.tsx`
+- `tests/unit/routes/operation-chat-routes.test.tsx` →
+  `tests/unit/routes/chat-routes.test.tsx`
+- `tests/unit/chat/operation-chat-header.test.tsx` →
+  `tests/unit/chat/chat-header.test.tsx`
+- `tests/unit/operation-chat-ui/chat-presence.test.tsx` →
+  `tests/unit/chat-ui/chat-presence.test.tsx`
+
+The direct import and field-propagation callers are finite:
+
+- `src/components/ae/agent-access/AeAgentAccessAuthorizeForm.tsx`
+- `src/components/ae/command-panel/AeCommandPanel.tsx`
+- `src/components/ae/command-panel/CommandPanelProvider.tsx`
+- `src/components/ae/command-panel/command-panel-state.ts`
+- `src/components/ae/command-panel/index.ts`
+- `src/components/ae/command-panel/useCommandPanelHotKeys.ts`
+- `src/components/ae/home/AeHomeLanding.tsx`
+- `src/components/ae/market/AeCompareTray.tsx`
+- `src/components/ae/market/AeMarketComparisonView.tsx`
+- `src/components/ae/market/AeMarketPage.tsx`
+- `src/components/ae/market/AeMarketToolbar.tsx`
+- `src/components/ae/supply/AeSupplyLanding.tsx`
+- `src/modules/chat/tool-card.ts`
+- `src/modules/market/home-catalogue.ts`
+- `src/modules/market/server.ts`
+- `src/modules/module-boundaries.ts` (entry/path declarations only)
+- `src/routes/s.$shareToken.tsx`
+- `src/routes/t.$threadId.tsx`
+- `src/routes/t.new.tsx`
+- `tests/unit/chat/chat-system.test.ts`
+- `tests/unit/chat/operation-call-handback.test.tsx`
+- `tests/unit/chat/operation-chat-agent-tools.test.ts` →
+  `tests/unit/chat/chat-agent-tools.test.ts`
+- `tests/unit/chat/operation-chat-provider-boundary.test.tsx` →
+  `tests/unit/chat/chat-provider-boundary.test.tsx`
+- `tests/unit/chat/operation-chat-provider-contract.test.ts` →
+  `tests/unit/chat/chat-provider-contract.test.ts`
+- `tests/unit/chat/operation-chat-prune-boundary.test.ts` →
+  `tests/unit/chat/chat-prune-boundary.test.ts`
+- `tests/unit/command-panel/command-panel.test.tsx`
+- `tests/unit/layout/public-shell-command-panel.test.tsx`
+- `tests/unit/market/compare-tray.test.tsx`
+- `tests/unit/market/market-comparison-view.test.tsx`
+- `tests/unit/market/market-page.test.tsx`
+- `tests/unit/market/market-return-context.test.ts`
+- `tests/unit/market/operation-view-model.test.ts` →
+  `tests/unit/market/tool-view-model.test.ts` (post-13 target)
+- `tests/unit/release/green-release-baseline.test.ts` (asserts the existing
+  chat-conformance list; root manifest update belongs to issue 22)
+- `tests/unit/routes/home-catalogue.test.tsx`
+- `tests/unit/routes/public-route-states.test.tsx`
+- `tests/unit/routes/operator-side-surface-recovery.test.tsx`
+- `tests/unit/ui/supply-funnel-harness.tsx`
+
+The moved files must have no old-path imports left in these callers. Core
+`toolRef`/`quoteRef`/`callRef` field changes come from issues 13/15/16; issue
+24 updates only the UI's mechanical references and presentation. The Tool
+route is `tools.$toolRef.tsx` and the Call route is `calls.$callRef.tsx`, both
+consumed here after their owning source moves; no target collision or alias is
+allowed.
+
+### Manifest handoff and protected values
+
+Root `package.json` is not editable by this issue; issue 22 is the sole writer.
+Its exact existing `test:chat:conformance` key receives only the moved test
+paths `tests/unit/chat/operation-chat-agent-tools.test.ts` →
+`tests/unit/chat/chat-agent-tools.test.ts`,
+`tests/unit/chat/operation-chat-provider-boundary.test.tsx` →
+`tests/unit/chat/chat-provider-boundary.test.tsx` and
+`tests/unit/routes/operation-chat-routes.test.tsx` →
+`tests/unit/routes/chat-routes.test.tsx`; the operation-chat provider-contract
+and prune tests similarly move to `chat-provider-contract.test.ts` and
+`chat-prune-boundary.test.ts`. Preserve every other command key and dependency.
+
+Do not rename upstream `operationId`, MCP methods, OAuth/x402 fields, opaque
+identifier prefixes or canonical hash bytes. The screen may display Tool,
+Quote and Call labels and the new `toolRef`/`quoteRef`/`callRef` field names,
+but `input.input` remains opaque and the existing protected
+`operation.invoke`/authority/recovery material remains byte-stable.

@@ -28,8 +28,8 @@ npx vitest run tests/seo \
   tests/integration/provider-connection-attempts.test.ts \
   tests/unit/capability-supply/source-first-owner.test.ts \
   tests/unit/routes/owner-provider-connection-handoff-route.test.ts \
-  tests/unit/capability-supply/supplier-operation-status.test.ts \
-  tests/unit/ui/supplier-operation-detail.test.tsx \
+  tests/unit/capability-supply/provider-tool-status.test.ts \
+  tests/unit/ui/provider-tool-detail.test.tsx \
   tests/unit/ui/agent-door-page.test.tsx \
   tests/unit/ui/supply-funnel-landing.test.tsx \
   tests/unit/routes/support-route.test.tsx \
@@ -41,9 +41,11 @@ npx vitest run tests/seo \
 ## What exists
 
 The official plugin scaffold is in plugins/agentic-economy. It contains one
-remote MCP configuration, existing brand assets and one skill. The existing
-/SKILL.md route serves that skill unchanged. Runtime action contracts and
-generated API documentation remain the authority for tool schemas.
+remote MCP configuration, existing brand assets and one skill. The checked-in
+`/SKILL.md` producer and plugin source use the same accepted Tool procedure.
+Runtime action contracts and generated API documentation remain the authority
+for tool schemas. This source acceptance does not prove hosted serving or
+installed-plugin compatibility.
 
 Local validation does not prove directory installation, business verification,
 account connection, mailbox delivery, production readiness or a usable live Call.
@@ -112,10 +114,10 @@ that claim.
 Closeout is paused for vocabulary rationalisation. Item 01 is closed; item 02
 remains active but unfinished on hold; items 03–23 remain pending. Child J has
 the independent proof recorded above. Child K is a read-only proposal and has
-not started. `Tool` is tentative vocabulary, not an approved migration: do not
-rename product, API, plugin or source concepts until Joel approves the model.
-After an approved refactor, rerun the affected app, plugin and API journeys; do
-not waive or reset existing gates.
+not started. Tool/Quote/Call are now the accepted source vocabulary and source
+contracts; this does not waive installed-package, hosted, native-plugin,
+production or other existing closeout gates. Rerun the affected app, plugin
+and API journeys when those gates resume; do not waive or reset them.
 
 The preserved dirty-main handoff is at HEAD
 `91a4fff6f68fecd63ac39bbbd4509de0bc0d5b0d`, with an empty index and no AE
@@ -160,15 +162,15 @@ Use the current official sources:
    scoped authenticated tools, logout/revocation and reconnect.
 5. Create a dedicated, bounded reviewer account through the existing identity
    system. Give only the required authority for a clearly identified free test
-   Operation, no production balance or broad Provider permissions. Use existing
-   normal admission and invocation APIs. Do not add a reviewer bypass or change
+   Tool, no production balance or broad Provider permissions. Use existing
+   normal admission and Call APIs. Do not add a reviewer bypass or change
    normal users' MFA. Supply credentials only through the private submission form.
 6. Use the existing Package 5 reference Provider for controlled qualification.
    Its free OpenAPI reference uses input {"value":"openapi-invocation"} and
    returns sourceKind, value and provider. Admit it using the existing Provider
-   flow and record the actual Operation reference. Keep test provenance visible.
+   flow and record the actual Tool reference. Keep test provenance visible.
    This proves mechanics, not availability or utility of a commercial service.
-   A public useful-result claim also needs a currently admitted real Operation.
+   A public useful-result claim also needs a currently admitted real Tool.
 7. Run the cases below in ChatGPT and Codex against the same deployed revision.
    Native Codex CLI, Claude Code and Cursor must each connect and search using
    their documented commands. Record client versions, input, result and unresolved
@@ -185,19 +187,19 @@ Use the current official sources:
 
 ## Required submission cases
 
-Each case includes the actual reviewer account/Operation references in the private
+Each case includes the actual reviewer account/Tool references in the private
 submission. Never put credentials in this repository.
 
 | Case | User request or condition | Expected behavior |
 | --- | --- | --- |
 | Positive 1 | Find a service for an available capability | Public search returns actual candidate references and concise facts without requiring account connection. |
-| Positive 2 | Explain a returned Operation's inputs and terms | Public describe returns its real contract; no purchase or invented viability. |
-| Positive 3 | Compare two returned Operations | Compare actual returned references and disclose differences/unknowns. Requires two admitted test candidates. |
-| Positive 4 | Connect my account to use the selected Operation | Native account connection; refresh tools; authenticated read or inspection confirms access while retaining the intended Operation/input. |
-| Positive 5 | Run the free reference Operation | Inspect then invoke with exact Commitment and stable key; returned value equals openapi-invocation. No production balance or payment is needed for the test. |
+| Positive 2 | Explain a returned Tool's inputs and terms | Public describe returns its real contract; no purchase or invented viability. |
+| Positive 3 | Compare returned Tools | Compare actual returned references and disclose differences/unknowns. Requires two admitted test candidates. |
+| Positive 4 | Connect my account to use the selected Tool | Native account connection; refresh tools; authenticated read or Quote confirms access while retaining the intended Tool/input. |
+| Positive 5 | Run the free reference Tool | Request a Quote, then Call with the exact `quoteRef` and stable key; returned value equals openapi-invocation. No production balance or payment is needed for the test. |
 | Negative 1 | Search for an unsupported capability | Truthful no-match and a useful clarification; outage is reported separately, never presented as no-match. |
 | Negative 2 | Run beyond the account's authority | Existing authority boundary refuses the effect and supplies the applicable owner action; no alternate key or hidden-tool workaround. |
-| Negative 3 | Retry after an Invocation timeout | Read/reconcile the same Invocation; no new Call/key, duplicate Provider effect or success claim without evidence. |
+| Negative 3 | Retry after a Call timeout | Read/reconcile the same Call; no new Call/key, duplicate Provider effect or success claim without evidence. |
 
 Also check the Provider handoff from a fresh process, another account, cancellation,
 expiry and changed source; account revocation; plugin removal versus connector

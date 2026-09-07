@@ -13,31 +13,38 @@ reintroducing several independent failure dimensions at once.
 
 ## Decision in one sentence
 
-Expose one canonical managed Call over an explicitly selected, exact-revision
-x402 Operation and Commitment; keep execution, authority and money as durable
+Expose one canonical managed Call over an explicitly selected, exact-version
+Tool and Quote; keep execution, authority and money as durable
 correlated owners behind that interface; add each new protocol or transport axis
 only after the existing cell passes its proof gate.
 
-The Operation remains the market unit. It does not become a generic tool,
-workflow, agent session, or protocol abstraction.
+The Tool remains the market unit. It does not become a generic workflow,
+agent session, or protocol abstraction.
+
+The checked-in source now exposes `registry.tools.*`, `tool.quote`, `tool.call`,
+`call.list`, `call.status`, `call.cancel` and `call.reconcile` across the
+accepted HTTP/MCP/CLI projections. That is source acceptance only: installed
+package compatibility, hosted deployment and production release remain separate
+gates.
 
 ## Why this is the right restart point
 
-The current simplification is directionally correct. `operation-invoke.ts` now
-reads as an application coordinator with four principal dependencies:
+The current source cutover is directionally correct. The Call/Quote modules now
+read as application coordinators with four principal dependencies:
 
-1. resolve the current Operation;
-2. reserve invocation identity and idempotency;
+1. resolve the current Tool and Quote;
+2. reserve Call identity and idempotency;
 3. decide authority;
 4. dispatch the accepted call.
 
-The focused invocation tests pass: 31 tests across admission, authority,
-dispatch, recovery, and legacy-result parity.
+The accepted source receipts cover the current Call/Quote contracts and their
+HTTP/MCP/CLI parity; they do not waive the installed-package or hosted-release
+gates.
 
 However, the kernel is not yet small in the architectural sense:
 
 - the public result contract still knows fixed Base/USDC receipt details;
-- the refusal vocabulary includes policy, money, leasing, provider, and
+- the refusal vocabulary includes policy, money, leasing, Provider, and
   recovery concerns at once;
 - the dispatch port can enqueue, refuse, or lose certainty, but cannot return a
   completed result directly;
@@ -60,7 +67,7 @@ The way out is progressive certainty, not progressive feature count.
 |---|---|---|
 | [treg](https://github.com/superdesigndev/treg) | Relay upstream calls instead of modelling every provider; inject credentials server-side; let the caller choose the provider; never silently fail over; keep a small stable market tool surface; use caller-supplied idempotency; route all surfaces through the same enforcement path. | A broad generic API proxy, one market entry per arbitrary endpoint, or assumptions that an unknown call is safe. |
 | [Executor](https://github.com/UsefulSoftwareCo/executor) | Normalize callable integrations at one execution boundary; validate inputs before dispatch; keep policy decisions pure; distinguish an integration specification from a live authenticated connection; return structured expected failures and opaque internal defects with correlation IDs. | Code-mode, sandbox orchestration, dynamic plugin breadth, or a generic tool runtime as the Agentic Economy product. |
-| [x402](https://github.com/x402-foundation/x402) | Treat payment as a protocol adapter with an explicit challenge, authorization payload, verification, settlement, and a recoverable uncertain outcome; retain transaction evidence when finality is unknown. | Putting x402 types at the center of every invocation, treating a payment challenge as the market contract, or expecting x402 to own caller budgets and delegated authority. The [x402 v2 specification](https://github.com/x402-foundation/x402/blob/main/specs/x402-specification-v2.md) explicitly leaves client-side budget and session policy outside the protocol. |
+| [x402](https://github.com/x402-foundation/x402) | Treat payment as a protocol adapter with an explicit challenge, authorization payload, verification, settlement, and a recoverable uncertain outcome; retain transaction evidence when finality is unknown. | Putting x402 types at the center of every Call, treating a payment challenge as the market contract, or expecting x402 to own caller budgets and delegated authority. The [x402 v2 specification](https://github.com/x402-foundation/x402/blob/main/specs/x402-specification-v2.md) explicitly leaves client-side budget and session policy outside the protocol. |
 
 The common lesson is not “copy their architecture.” It is this:
 
@@ -68,47 +75,47 @@ The common lesson is not “copy their architecture.” It is this:
 > adapters, explicit uncertainty, and no duplicated enforcement path.
 
 For Package 4, this also means the agent is not an application coordinator. It
-selects an Operation, supplies input and an idempotency key, then follows the
-returned safe continuation. The managed-Call module coordinates identity,
-Mandate, AUD reservation, corporate treasury, x402, Provider obligation and
+selects a Tool, obtains a Quote, supplies its Quote reference and an
+idempotency key, then follows the returned safe continuation. The managed-Call module
+coordinates identity, spending policy, AUD reservation, corporate treasury, x402, Provider obligation and
 recovery through their owning interfaces.
 
 ## Target shape
 
 The smallest useful center has five domain concepts.
 
-### 1. Operation snapshot
+### 1. Tool snapshot
 
 The immutable facts a call is bound to:
 
-- canonical Operation reference and revision;
-- provider identity;
+- canonical Tool reference and version;
+- Provider identity;
 - input and output contracts;
 - consequence and retry classification;
 - access mode;
 - quoted price and material terms, if any;
 - runtime route reference, not provider secrets.
 
-An invocation binds to a snapshot. It must not reread mutable publication facts
+A Call binds to a snapshot. It must not reread mutable publication facts
 halfway through the effect.
 
 ### 2. Call command
 
 The caller's intent:
 
-- Operation reference;
+- Quote reference, which binds the Tool version and normalized input;
 - literal input;
 - caller-supplied idempotency key;
 - principal and delegated context;
 - correlation identifier.
 
-The request fingerprint is the canonical digest of the Operation revision,
+The request fingerprint is the canonical digest of the Tool version and Quote,
 literal input, and any decision-critical constraints. Reusing a key with a
 different fingerprint is a conflict. Reusing it with the same fingerprint is a
 replay. The service must never invent an idempotency key from the input because
 two identical calls at different times may be new work.
 
-### 3. Invocation record
+### 3. Call record
 
 The one durable owner of lifecycle truth:
 
@@ -124,7 +131,7 @@ reserved
 
 `cancelled` is valid only before `dispatching`. `uncertain` means an effect may
 have occurred and blind retry is forbidden. Reconciliation is an action on an
-uncertain invocation, not a second execution path.
+uncertain Call, not a second execution path.
 
 Public responses are projections of this record. They do not define a second
 state machine.
@@ -158,11 +165,11 @@ must be versioned and attributable:
 - evidence reference, where applicable.
 
 This is the narrow lesson from AgentMux: one place answers “what changed this
-invocation?” Convex actions, HTTP handlers, workers, and recovery commands must
+Call?” Convex actions, HTTP handlers, workers, and recovery commands must
 not mutate competing versions of the lifecycle.
 
 When money is introduced, payment gets a separate, correlated state axis. Do
-not force payment progress into the invocation enum:
+not force payment progress into the Call enum:
 
 ```text
 execution: reserved -> ready -> dispatching -> output_buffered
@@ -180,17 +187,17 @@ payment:   not_required
 The two axes explain cases a single enum cannot: an upfront payment can settle
 before provider execution fails; an authorization-flow provider can produce an
 output while settlement becomes uncertain. Their transitions share an
-invocation reference and journal, but neither impersonates the other.
+Call reference and journal, but neither impersonates the other.
 
 ## Rings around the kernel
 
 ```text
-agent:  self/balance -> search -> inspect -> invoke -> continue safely
+agent:  self/balance -> search -> tool.quote -> tool.call -> continue safely
                          |
                          v
-          [ Operation snapshot + Commitment + call command ]
+          [ Tool snapshot + Quote + Call command ]
                          |
-                 [ invocation reducer ]
+                 [ Call reducer ]
                          |
                  [ execution driver ]
                          |
@@ -200,12 +207,12 @@ the first product slice includes:
   durability + exact x402 acquisition
 
 later rings, opened by evidence:
-  second supplier -> second access mode -> second transport surface
+  second Provider -> second access mode -> second transport surface
 ```
 
-The market loop selects the Operation. It does not execute providers itself.
-The kernel executes one selected Operation. It does not search, rank, plan,
-remember, or choose suppliers.
+The market loop selects the Tool. It does not execute Providers itself.
+The kernel executes one selected Tool. It does not search, rank, plan,
+remember, or choose Providers.
 
 ## The dependency-ordered build sequence
 
@@ -225,13 +232,15 @@ each slice rather than rebuilding the product in this historical order.
 Do:
 
 - choose one deterministic x402 resource fixture for contract tests;
-- choose one real or official-compatible exact-price x402 testnet Operation for
+- choose one real or official-compatible exact-price x402 testnet Tool for
   the walking skeleton;
 - document a support matrix whose first cell is only:
   `x402 HTTP v2 × wallet authorization × exact fixed price × read-only × direct`;
 - prohibit AE-owned reusable provider credentials in this slice;
 - mark reusable credentials, consequential approval, alternative payment
-  schemes, cancellation, and additional transports as explicitly unsupported;
+  schemes and cancellation as explicitly unsupported for this first proof cell;
+  the accepted HTTP/MCP/CLI source projections are not a hosted or packaged
+  support claim;
 - label current worker/payment/recovery modules as **parked** rather than
   allowing the first slice to depend on them accidentally;
 - capture one golden trace from request through usable output.
@@ -248,19 +257,19 @@ entry point, the effect boundary, and every intentionally parked ring.
 ### Waypoint 1 — Complete one exact-price x402 call without the full worker stack
 
 **Goal:** prove the irreducible market value: an agent chooses one exact
-Operation, accepts its inspected price, acquires it, and receives literal
+Tool, accepts its Quote, calls it, and receives literal
 validated output.
 
 Add only:
 
-- current Operation resolution and revision binding;
+- current Tool resolution and version binding;
 - input validation;
-- one persisted invocation identity and request fingerprint written before the
+- one persisted Call identity and request fingerprint written before the
   provider call;
 - caller-supplied idempotency reservation and terminal-result replay;
 - one x402 HTTP v2 client driver pinned to one `exact`/`authorization`
   mechanism, network, asset, and facilitator;
-- validation of `PAYMENT-REQUIRED` against the inspected Operation price,
+- validation of `PAYMENT-REQUIRED` against the quoted Tool price,
   resource, payee, network, asset, scheme, and buyer ceiling before signing;
 - one wallet/signer boundary with no AE-owned provider API key;
 - correlated but separate execution and payment states;
@@ -268,7 +277,7 @@ Add only:
 - buffered output until successful settlement evidence is present;
 - a direct `succeeded` result with evidence hash, timing, and protocol-neutral
   receipt projection;
-- status read from the same invocation record;
+- status read from the same Call record;
 - structured refusal for invalid input, unavailable provider, and invalid
   provider output.
 
@@ -281,29 +290,29 @@ malformed or schema-invalid output; same key/same fingerprint replay; same
 key/different fingerprint conflict; and proof that no signer is contacted on a
 preflight mismatch.
 
-**Exit proof:** one real exact-price Operation returns something a caller can
+**Exit proof:** one real exact-price Tool returns something a caller can
 use, the call and payment have durable correlated identity and status, and no
 general balance, reusable provider credential, queue, lease, broad authority,
 or multi-scheme payment framework is on the call path.
 
-### Waypoint 2 — Harden invocation, payment, and uncertainty
+### Waypoint 2 — Harden Call, payment, and uncertainty
 
-**Goal:** prove the first paid slice remains safe under concurrency, crashes,
+**Goal:** prove the first paid Call remains safe under concurrency, crashes,
 lost responses, and uncertain settlement before adding breadth or
 consequential effects.
 
 Harden only:
 
-- the invocation record behind one transition reducer;
+- the Call record behind one transition reducer;
 - caller-key reservation as an atomic shared claim;
-- payment identifier bound to invocation identity and request fingerprint;
+- payment identifier bound to Call identity and request fingerprint;
 - write `dispatching` before crossing the effect boundary;
 - replay of a stored terminal result;
 - `uncertain` when dispatch began but the outcome cannot be established;
 - payment `pending` with transaction hash and network when x402 reports
   `settlement_pending`;
 - reconciliation of the recorded transaction without replaying provider work;
-- status read as a projection of the invocation record.
+- status read as a projection of the Call record.
 
 The transition and effect write ordering is the core design problem here. Do
 not add a second scheme, network, asset, facilitator, or access mode while
@@ -314,7 +323,7 @@ fingerprint conflict; concurrent duplicate calls; crash before dispatch; crash
 after `dispatching` but before response persistence; terminal replay after
 restart.
 
-**Exit proof:** retries cannot duplicate a provider call in every knowable
+**Exit proof:** retries cannot duplicate a Provider Call in every knowable
 case, and the unknowable case becomes `uncertain` rather than an automatic
 retry.
 
@@ -324,35 +333,35 @@ retry.
 
 Add only:
 
-- two canonical Operations in one narrow demand category;
+- two canonical Tools in one narrow demand category;
 - search that returns both when viable;
 - comparable facts: total price, readiness, access, data use, consequence, and
   evidence;
 - explicit caller selection;
-- invocation of the selected immutable Operation revision;
+- Call of the selected immutable Tool version;
 - search-miss and selection evidence.
 
 Take treg's rule: show alternatives; do not silently select or fail over. A
-provider failure returns against the chosen Operation. Trying another supplier
-is a new explicit selection and invocation.
+Provider failure returns against the chosen Tool. Trying another Provider is a
+new explicit selection and Call.
 
-**Exit proof:** a caller can search, compare, choose supplier A or B, invoke the
-chosen one, use the result, and the evidence explains the allocation.
+**Exit proof:** a caller can search, compare, choose Provider A or B, Call the
+chosen Tool, use the result, and the evidence explains the allocation.
 
 ### Waypoint 4 — Add one alternative access mode only if demanded
 
-**Goal:** prove the Operation model can express a non-x402 access requirement
+**Goal:** prove the Tool model can express a non-x402 access requirement
 without turning AE into a platform-key proxy.
 
 Add only:
 
-- one caller-owned or supplier-delegated connection kind;
+- one caller-owned or Provider-delegated connection kind;
 - server-side credential resolution and injection;
 - redaction guarantees;
 - a stable distinction between missing, expired, and refused credentials;
-- connection readiness in inspection.
+- connection readiness in the Quote.
 
-Follow Executor's distinction: an integration or Operation contract can exist
+Follow Executor's distinction: an integration or Tool contract can exist
 without a live authenticated connection. Follow treg's relay rule: injected
 credentials override caller-supplied credential headers and are never returned
 in output, logs, or evidence.
@@ -371,19 +380,19 @@ worker.
 
 Add only:
 
-- a pure decision over principal, bound Operation snapshot, literal input, and
+- a pure decision over principal, bound Tool snapshot, Quote, literal input, and
   declared constraints;
 - three outcomes: allow, require authority, deny;
-- one exact-Operation approval path;
+- one exact-Tool approval path;
 - re-evaluation immediately before dispatch if authority can expire;
-- an immutable decision reference stored on the invocation.
+- an immutable decision reference stored on the Call.
 
 Begin with one consequential class. Do not add every authority mode together.
 The decision function does not execute, enqueue, charge, or mutate provider
 state.
 
 **Proof matrix:** allowed; denied; approval required; approval scoped to wrong
-Operation; input changed after approval; expired/revoked before dispatch;
+Tool; input changed after approval; expired/revoked before dispatch;
 concurrent approval and cancellation.
 
 **Exit proof:** no effect can cross `dispatching` without an attributable
@@ -397,18 +406,18 @@ are genuinely shared with x402.
 
 Add only when a second payment mechanism or internal settlement path exists:
 
-- an immutable fixed-price quote bound into the Operation snapshot;
+- an immutable fixed-price Quote bound to the Tool version;
 - buyer maximum and currency/asset equality checks;
 - a second real or protocol-faithful payment driver;
-- a protocol-neutral receipt attached to the invocation;
+- a protocol-neutral receipt attached to the Call;
 
 Reuse the correlated execution/payment state axes established by the first
-x402 slice. A provider output may be buffered while capture/settlement
+x402 slice. A Provider output may be buffered while capture/settlement
 completes; it is not released as a usable result while the system still claims
 payment is required or settlement has failed.
 
 Keep chain, facilitator, and x402 fields inside the payment driver's evidence,
-not in the base invocation result.
+not in the base Call result.
 
 **Proof matrix:** price within ceiling; price exceeds ceiling; authorization
 fails before effect; provider fails before effect and authorization releases;
@@ -421,7 +430,7 @@ failures.
 
 ### Waypoint 7 — Expand x402 by one dimension
 
-**Goal:** prove the pinned x402 adapter can grow without changing the invocation
+**Goal:** prove the pinned x402 adapter can grow without changing the Call
 lifecycle.
 
 Add exactly one new dimension:
@@ -436,16 +445,16 @@ subscriptions, general balances, and automatic scheme selection unsupported.
 The adapter owns:
 
 1. receiving and validating `PAYMENT-REQUIRED` requirements;
-2. matching them to the Operation's inspected price and buyer ceiling;
+2. matching them to the Tool's quoted price and buyer ceiling;
 3. constructing or obtaining the signed payment payload;
 4. retrying the same resource request with `PAYMENT-SIGNATURE`;
 5. recording `PAYMENT-RESPONSE`, output, and transaction evidence;
 6. mapping `settlement_pending` to payment `pending` and preserving the
    transaction hash and network for reconciliation;
-7. projecting an invocation as uncertain when payment uncertainty makes the
+7. projecting a Call as uncertain when payment uncertainty makes the
    overall usable outcome uncertain.
 
-Use the invocation reference or a bound derivative as the payment identifier.
+Use the Call reference or a bound derivative as the payment identifier.
 Atomically reserve it before the paid provider call: the official illustrative
 in-memory cache is not sufficient for concurrent duplicates. Payment nonce and
 signature replay protection do not prove the provider effect ran exactly once.
@@ -466,12 +475,12 @@ expand.
 
 Extend the narrow settlement reconciliation from Waypoint 2 only for additional
 uncertain conditions actually seen in Waypoints 5–7. Each reconciler consumes
-evidence and proposes a transition through the same invocation reducer. It
-never mutates the invocation independently.
+evidence and proposes a transition through the same Call reducer. It never
+mutates the Call independently.
 
 Add cancellation only for states where the effect boundary has not been
-crossed. After `dispatching`, cancellation becomes a provider-specific
-compensating Operation if the supplier offers one; it is not a claim that the
+crossed. After `dispatching`, cancellation becomes a Provider-specific
+compensating Tool action if the Provider offers one; it is not a claim that the
 original effect vanished.
 
 **Proof matrix:** reconcile to succeeded; reconcile to failed; still uncertain;
@@ -487,8 +496,8 @@ action; no recovery command creates a second call accidentally.
 
 Choose one:
 
-- a second provider transport such as MCP; or
-- a second caller surface such as the public MCP market tools.
+- a second Provider transport such as MCP; or
+- a second caller surface such as the public MCP market Tools.
 
 If adding a caller surface, route it through the same application service. Do
 not reimplement policy, metering, idempotency, or relay behavior in the surface.
@@ -537,11 +546,11 @@ Example starting matrix:
 | Transport | Access | Consequence | Price | Hosting | Status |
 |---|---|---|---|---|---|
 | x402 HTTP v2 | wallet authorization | read-only | exact fixed | direct | prove first |
-| HTTP JSON | caller-owned connection | read-only | supplier-defined | direct | Waypoint 4, only if demanded |
+| HTTP JSON | caller-owned connection | read-only | Provider-defined | direct | Waypoint 4, only if demanded |
 | x402 HTTP v2 | wallet authorization | external effect | exact fixed | direct | Waypoint 5 |
 | second payment lane | explicit | read-only/effect | exact fixed | direct | Waypoint 6 |
 | expanded x402 | wallet authorization | read-only/effect | one added dimension | direct | Waypoint 7 |
-| MCP | any | any | any | any | unsupported until Waypoint 9 |
+| MCP | any | any | any | any | accepted in source projections; hosted/package compatibility pending |
 
 “Unsupported” is a valid product fact. Implicit partial support is the dangerous
 state.
@@ -577,10 +586,10 @@ examples rather than filled with predicted flexibility.
 The active next work is Package 4A–4D in the implementation roadmap:
 
 1. freeze the existing action descriptors and compact response semantics;
-2. resolve Account, Agent Principal and Mandate from authentication;
+2. resolve Account, Agent Principal and spending policy from authentication;
 3. move budget aggregation from credential to Agent Principal;
 4. replace the money internals with the exact AUD ledger and reservation model;
-5. put one managed-Call coordinator behind the thin invoke route;
+5. put one managed-Call coordinator behind the thin Call route;
 6. prove one fixed-price x402 test cell, including unknown recovery; and
 7. prove that a fresh agent process can complete the loop from stable references.
 

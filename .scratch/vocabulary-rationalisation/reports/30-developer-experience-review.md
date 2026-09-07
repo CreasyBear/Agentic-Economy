@@ -1,6 +1,6 @@
 # Developer-experience review report — vocabulary rationalisation
 
-Status: findings open; do not close issue 30 yet
+Status: Phase 0 assignment gate resolved; implementation/live proof pending
 Ticket: [Review the vocabulary refactor for developer and installed-client usability](../issues/30-developer-experience-review.md)
 Reviewer: Luna Max / refactor_dx_review
 Reviewed at: 2026-09-05 (Australia/Perth)
@@ -293,9 +293,35 @@ not claimed as passes.
 | 7. Familiar maturity / outside references | 6/10 | Product correctly prioritises familiar Locus/Nevermined/Whop behaviour and existing official protocols. No new SDK, hierarchy, onboarding design or free tier is justified by this refactor. |
 | 8. Evidence / feedback | 4/10 | Existing conformance, official-client, cold-loop and package integrity tests are strong maintained patterns. No live hosted/x402 proof or TTHW measurement was in this bounded Phase 0 review; issue 34/35 must own that later. |
 
-The overall result is “dispatch corrections required”: the implementation plan
-is coherent, but DX-01 through DX-05 need finite acceptance/ownership in issues
-19–21 and DX-06/07 need explicit later artifact/runtime gates in issue 22.
+The original review result was “dispatch corrections required”: the
+implementation plan was coherent, but DX-01 through DX-08 still needed finite
+ticket assignment. That assignment state is superseded by the bounded
+re-review below; the finding text remains the evidence for the later owners.
+
+## Phase 0 re-review — assignment receipt
+
+Reviewed after clean checkpoint `645a348421479510432db4bdc630ed306acd18d8`
+and the coordinator/queue corrections. This pass checks only whether each
+consequential planning finding has a finite owner and verification path. It
+does not re-review source, generated artifacts, hosted execution, UI runtime or
+live x402 proof.
+
+| Finding | Assigned finite correction and verification | Re-review result |
+| --- | --- | --- |
+| DX-01 | Issue 20 owns anonymous Tool `describe`, mediated Quote -> Call `call`, `--provider` with no alias, and README/manifest/help/archive parity; use the existing CLI-distribution/package checks. | Assigned |
+| DX-02 | Issue 19 owns the fixed HTTP/MCP/action/ref map, derived MCP names, stable methods/auth/problem envelopes and existing official-client/conformance checks. Its coordinator assignment also covers `supply.tools.list:v1`, `/api/v1/supply/tools/list`, the matching route filename and `toolsList` dispatch key, while preserving supply verbs, count, auth and envelope behavior. | Assigned |
+| DX-03 | Issue 21 owns derived discovery/plugin producers, the `tool-contract.ts` move and active release-tooling filename/import propagation; its producer paths are handed to issue 22's sole root-package writer. Existing discovery/typecheck/release checks remain the verification path, and `/api/v1/registry` stays metadata-only. | Assigned |
+| DX-04 | Issue 19 owns the exact authority mode/scope map, preservation of `market_supply:manage`, and protected OAuth/MCP/x402 values; existing scope and MCP/CLI checks are the verification path. | Assigned |
+| DX-05 | Issue 19 owns Quote/Call/recovery errors, target refs, stable idempotency and no-duplicate-Call behavior while retaining the existing problem envelope; existing cold-loop, recovery and conformance cases are the verification path. | Assigned |
+| DX-06 | Issue 22 owns serialized generation/build/pack, source/dist/public-package parity and the finite import/conformance/discovery receipts; it is the sole root `package.json` writer and does not hand-edit generated output. | Assigned |
+| DX-07 | Issue 22 and Joel own the explicit installed-client Node 20/22 compatibility decision. `test:cli-package` remains unrun, unwaived and unweakened; ordinary project commands remain on Node 22/npm 11.5.1. | Explicit open decision; not unassigned |
+| DX-08 | Issue 27 owns current documentation consuming one useful existing x402 fixture; issues 20/21/22 carry the no-weather constraint and issue 24 owns screen copy. Later owners provide runtime/live proof; no new fixture or behavior is invented here. | Assigned; fixture/runtime proof pending |
+
+The assignment gate is therefore resolved: no unassigned consequential DX-01
+through DX-08 planning finding remains. The Node 20/22 choice is intentionally
+still open with Joel/issue 22, not silently waived. The queue's independent
+residual path/topology corrections remain with their stated owners and are not
+reopened by this review.
 
 ## Deliberately out of scope
 
@@ -331,11 +357,14 @@ records remain protected.
 
 ## Closure conditions
 
-Keep issue 30 open until issues 19–22 carry the finite allowlists, owner-linked
-acceptance corrections, staged generator checks and unresolved decisions from
-this report. The coordinator's minor issue 09 final-diff checks should also be
-complete before closing the Phase 0 review. Do not require implementation,
-generated/live proof or hosted/UI execution to close issue 30; those belong to
-the owning implementation and later verification/cutover issues. The Node20
-compatibility-matrix decision remains explicit and must not weaken assertions
-or violate the Node22 project-runtime rule.
+Issue 30 is resolved for the Phase 0 assignment gate because issues 19–22 and
+27 now carry the finite owner-linked corrections and verification paths. This
+does not claim implementation, generated parity, hosted/UI execution or live
+x402 proof; those remain with the owning implementation and later
+verification/cutover issues. The Node 20/22 compatibility-matrix decision must
+remain explicit and must not weaken assertions or violate the Node 22 project
+runtime rule.
+
+**UNRESOLVED DECISIONS:**
+- Joel/coordinator must decide whether the scoped installed-client Node 20/22
+  compatibility matrix is allowed; it remains unrun and unwaived.
