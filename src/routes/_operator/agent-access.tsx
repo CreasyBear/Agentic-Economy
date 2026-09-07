@@ -121,6 +121,12 @@ function AgentAccessHome() {
       setDirectory((current) => ({
         items: [...current.items, ...next.items],
         details: [...current.details, ...next.details],
+        ...(next.accountBalance === undefined && current.accountBalance === undefined
+          ? {}
+          : { accountBalance: next.accountBalance ?? current.accountBalance }),
+        activityCoverage: current.activityCoverage === 'recent' || next.activityCoverage === 'recent'
+          ? 'recent'
+          : 'complete',
         ...(next.nextCursor === undefined ? {} : { nextCursor: next.nextCursor }),
       }))
       setDirectoryError(undefined)

@@ -19,7 +19,7 @@ export function deserializeToolDescriptor(
 ): PublicToolDescriptor {
   return {
     toolRef: tool.toolRef,
-    operationId: tool.operationId,
+    toolId: tool.toolId,
     callVia: tool.callVia,
     paymentLane: tool.paymentLane,
     contract: {

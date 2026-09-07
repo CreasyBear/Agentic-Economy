@@ -1,17 +1,12 @@
-import { canonicalDigest } from '@/modules/common/canonical-digest'
-import type { StableHashValue } from '@/modules/common/stable-hash'
 import { readTrimmedEnv, type StringEnvironment } from '@/lib/server/read-trimmed-env'
 import { isProviderConnectionCredentialRef } from '../provider-connection'
-import {
-  x402PaymentProfileForEnvironment,
-  type X402AeEnvironment,
-} from './x402-payment-profile'
 import {
   cdpX402CustodyConfigurationFromEnvironment as parseCdpX402CustodyConfiguration,
   type CdpX402CustodyConfiguration,
 } from './x402-custody-configuration'
 
 export type { CdpX402CustodyConfiguration } from './x402-custody-configuration'
+export { cdpX402CustodyBudgetRef } from './x402-custody-configuration'
 
 export const X402_PAYMENT_CREDENTIAL_REF_ENV = 'AE_X402_PAYMENT_CREDENTIAL_REF'
 
@@ -33,17 +28,4 @@ export function cdpX402CustodyConfigurationFromEnvironment(
   environment: StringEnvironment = process.env,
 ): CdpX402CustodyConfiguration | undefined {
   return parseCdpX402CustodyConfiguration(environment)
-}
-
-export function cdpX402CustodyBudgetRef(
-  configuration: CdpX402CustodyConfiguration,
-  aeEnvironment: X402AeEnvironment = 'production',
-): string {
-  const profile = x402PaymentProfileForEnvironment(aeEnvironment)
-  if (profile === undefined) throw new Error('x402_payment_profile_invalid')
-  return canonicalDigest({
-    kind: 'ae.x402.custody-budget:v1',
-    network: profile.network,
-    expectedEvmAddress: configuration.expectedEvmAddress.toLowerCase(),
-  } as StableHashValue)
 }

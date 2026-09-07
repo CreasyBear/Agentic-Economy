@@ -285,7 +285,7 @@ async function recordLateObservationHandler(
   args: LateObservationArgs,
 ): Promise<Infer<typeof persistControlResult>> {
   const commandDigest = canonicalDigest({
-    callRef: args.executionRef, effectGeneration: args.effectGeneration,
+    invocationRef: args.executionRef, effectGeneration: args.effectGeneration,
     actorRef: args.actorRef, sourceEvidenceRef: args.sourceEvidenceRef,
     release: args.release, evidenceDigest: args.evidenceDigest,
   })

@@ -12,6 +12,69 @@ import {
 } from './capability-supply-owner-funnel-harness'
 
 describe('owner supply funnel read', () => {
+  it('returns the canonical Tool detail through real owner readback and refuses other scopes', async () => {
+    const backend = convexTest(schema, modules)
+    const { businessId, owner } = await createPublishedBusinessOwner(
+      backend,
+      'owner-tool-detail-readback',
+    )
+    const { owner: foreignOwner } = await createPublishedBusinessOwner(
+      backend,
+      'owner-tool-detail-readback-foreign',
+    )
+    const offeringRef = 'catalog-offering:owner-tool-detail-readback'
+    const sourceHash = 'catalog-source:owner-tool-detail-readback:v1'
+    await seedCatalogOffering(backend, businessId, offeringRef, 1, 1, sourceHash)
+    const prepared = await prepareOwnerPublicationCommand(
+      backend,
+      businessId,
+      offeringRef,
+      1,
+      sourceHash,
+      openApiSource('owner.tool-detail-readback'),
+      'owner-supply:owner-tool-detail-readback',
+      { kind: 'catalog_offering', offeringRef, offeringRevision: 1, offeringSourceHash: sourceHash },
+    )
+    if (prepared.kind === 'refused') throw new Error(`tool_detail_prepare_failed:${prepared.reason}`)
+    const published = await owner.mutation(api.capabilitySupply.publishPreparedCapability, prepared.command)
+    if (published.kind === 'refused') throw new Error(`tool_detail_publish_failed:${published.reason}`)
+
+    const readback = await owner.query(api.capabilityProviderTools.readOwner, {
+      businessId,
+      offeringRef,
+      now: Date.now(),
+    })
+    expect(readback).toMatchObject({
+      kind: 'available',
+      tool: {
+        offeringRef,
+        name: 'Owner lookup service',
+        status: 'published',
+      },
+    })
+    expect(readback).not.toHaveProperty('operation')
+    expect(readback.kind === 'available' ? JSON.parse(readback.statusJson) : readback).toMatchObject({
+      schemaVersion: 'provider_tools:v1',
+      toolRef: published.toolRef,
+    })
+
+    await expect(owner.query(api.capabilityProviderTools.readOwner, {
+      businessId,
+      offeringRef: 'catalog-offering:missing',
+      now: Date.now(),
+    })).resolves.toEqual({ kind: 'not_found' })
+    await expect(backend.query(api.capabilityProviderTools.readOwner, {
+      businessId,
+      offeringRef,
+      now: Date.now(),
+    })).resolves.toEqual({ kind: 'not_found' })
+    await expect(foreignOwner.query(api.capabilityProviderTools.readOwner, {
+      businessId,
+      offeringRef,
+      now: Date.now(),
+    })).resolves.toEqual({ kind: 'not_found' })
+  })
+
   it('returns exact Tool-scoped delivery and Qualified Use evidence', async () => {
     const backend = convexTest(schema, modules)
     const { businessId, owner } = await createPublishedBusinessOwner(

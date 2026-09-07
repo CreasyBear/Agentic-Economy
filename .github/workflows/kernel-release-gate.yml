@@ -80,7 +80,7 @@ jobs:
       - name: Run focused provider and recovery conformance
         run: npm run test:conformance
 
-      - name: Run deterministic operation chat conformance
+      - name: Run deterministic Tool chat conformance
         run: npm run test:chat:conformance
 
       - name: Prove committed Convex source with an isolated anonymous local backend
@@ -110,7 +110,7 @@ jobs:
 
   chat-staging-proof:
     if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.confirm_chat_staging_smoke == true
-    name: Opt-in exact-revision operation chat staging smoke
+    name: Opt-in exact-revision Tool chat staging smoke
     needs: source-proof
     runs-on: ubuntu-latest
     timeout-minutes: 15

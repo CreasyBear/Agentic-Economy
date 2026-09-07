@@ -23,6 +23,7 @@ vi.mock('@/lib/server/source-write-admission', async (importOriginal) => ({
 }))
 
 import { agentAccountActivityAction, createAccountManagementService } from '@/modules/agent-access/account.actions'
+import { findAction, listMcpActionDescriptors } from '@/modules/actions'
 import type { AgentAccessPrincipal } from '@/modules/agent-access/agent-access'
 
 const principal: AgentAccessPrincipal = {
@@ -106,5 +107,18 @@ describe('account management action service', () => {
   it('describes the account activity currency as AUD', () => {
     expect(agentAccountActivityAction.parameters.find(({ name }) => name === 'currency'))
       .toMatchObject({ description: 'Activity currency, default AUD.' })
+  })
+
+  it('publishes the current Call status continuation through the registered MCP descriptor', () => {
+    const registered = findAction('agentAccess.activity')
+    expect(registered).toBe(agentAccountActivityAction)
+    expect(registered?.invocationContract.safeContinuations).toEqual(['call.status'])
+    expect(registered?.boundaries.join(' ')).toContain('Call inputs')
+    expect(registered?.boundaries.join(' ')).not.toContain('operation.status')
+
+    const descriptor = listMcpActionDescriptors().find(({ id }) => id === 'agentAccess.activity')
+    expect(descriptor).toMatchObject({ id: 'agentAccess.activity' })
+    expect(descriptor).not.toHaveProperty('invocationContract')
+    expect(JSON.stringify(descriptor)).not.toContain('operation.status')
   })
 })

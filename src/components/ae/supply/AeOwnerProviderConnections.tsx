@@ -1,8 +1,8 @@
-import { Link, useRouter } from '@tanstack/react-router'
+import { Link, useNavigate, useRouter } from '@tanstack/react-router'
 import { useReverification } from '@clerk/tanstack-react-start'
 import { isReverificationCancelledError } from '@clerk/tanstack-react-start/errors'
 import { useServerFn } from '@tanstack/react-start'
-import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from 'react'
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { AeConfirmDialog } from '@/components/ae/feedback/AeConfirmDialog'
@@ -23,17 +23,35 @@ import { providerConnectionTargetId } from './provider-connection-target'
 import { suggestNextAction } from '@/modules/market/suggested-next-action'
 import { formatRelativeTime, formatTimestamp, timestampIso } from '@/lib/ui/format-time'
 import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
+import type { OwnerToolsX402ConnectionIntent } from '@/lib/operator/supply-compatibility'
+
+type X402HandoffIdentity = Readonly<{
+  draft: string
+  resourceUrl: string
+  method: 'GET' | 'POST'
+  environment: 'sandbox' | 'production'
+}>
+
+type PendingX402Return = Readonly<{
+  draft: string
+  connection: string
+  environment: 'sandbox' | 'production'
+  handoff: X402HandoffIdentity
+}>
 
 export function AeOwnerProviderConnections({
   businessId,
   connections,
   readOnly = false,
+  x402Handoff,
 }: Readonly<{
   businessId?: string
   connections: readonly OwnerProviderConnection[]
   readOnly?: boolean
+  x402Handoff?: OwnerToolsX402ConnectionIntent
 }>) {
   const router = useRouter()
+  const navigate = useNavigate()
   const connectX402Request = useServerFn(connectOwnerX402Server)
   const connectX402 = useReverification(connectX402Request)
   const checkX402 = useServerFn(checkOwnerX402Server)
@@ -65,6 +83,21 @@ export function AeOwnerProviderConnections({
   const revokeTriggerRef = useRef<HTMLButtonElement>(null)
   const revokeInFlightRef = useRef(false)
   const commandIdsRef = useRef(new Map<string, string>())
+  const pendingX402ReturnRef = useRef<PendingX402Return | undefined>(undefined)
+  const reauthorizingConnection = reauthorizingConnectionRef === undefined
+    ? undefined
+    : connections.find(({ connectionRef }) => connectionRef === reauthorizingConnectionRef)
+  const environment = reauthorizingConnection?.sourceEnvironment ?? x402Handoff?.environment ?? 'production'
+  const handoffDraft = x402Handoff?.draft
+  const handoffResourceUrl = x402Handoff?.resourceUrl
+  const handoffMethod = x402Handoff?.method
+  const handoffEnvironment = x402Handoff?.environment
+  const currentHandoffRef = useRef<X402HandoffIdentity | undefined>(undefined)
+  useLayoutEffect(() => {
+    currentHandoffRef.current = handoffDraft === undefined || handoffResourceUrl === undefined || handoffMethod === undefined || handoffEnvironment === undefined
+      ? undefined
+      : { draft: handoffDraft, resourceUrl: handoffResourceUrl, method: handoffMethod, environment: handoffEnvironment }
+  }, [handoffDraft, handoffEnvironment, handoffMethod, handoffResourceUrl])
   const canConnect = !readOnly && businessId !== undefined && businessId.length > 0
   const missingConnectionNextAction = suggestNextAction({
     subject: 'connection',
@@ -101,6 +134,21 @@ export function AeOwnerProviderConnections({
   }, [])
 
   useEffect(() => {
+    const pendingReturn = pendingX402ReturnRef.current
+    if (pendingReturn !== undefined && !sameX402Handoff(pendingReturn.handoff, currentHandoffRef.current)) {
+      pendingX402ReturnRef.current = undefined
+    }
+    setRefreshRequired(false)
+    if (handoffDraft === undefined || handoffResourceUrl === undefined || handoffMethod === undefined || handoffEnvironment === undefined) return
+    setResourceUrl(handoffResourceUrl)
+    setMethod(handoffMethod)
+    setReauthorizingConnectionRef(undefined)
+    setInspection(undefined)
+    setClaimSignature(undefined)
+    setNotice({ kind: 'status', text: 'Review the exact source endpoint, then inspect its live x402 payment lane.' })
+  }, [handoffDraft, handoffEnvironment, handoffMethod, handoffResourceUrl])
+
+  useEffect(() => {
     if (refreshedForRebind === undefined) return
     rebindLinkRef.current?.focus()
   }, [refreshedForRebind])
@@ -114,17 +162,55 @@ export function AeOwnerProviderConnections({
   }
 
   async function refresh(): Promise<boolean> {
+    const refreshHandoff = currentHandoffRef.current
+    let navigationAttempted = false
     try {
       await router.invalidate()
+      const currentHandoff = currentHandoffRef.current
+      const pendingReturn = pendingX402ReturnRef.current
+      if (!sameX402Handoff(refreshHandoff, currentHandoff)) {
+        if (pendingReturn !== undefined && !sameX402Handoff(pendingReturn.handoff, currentHandoff)) {
+          pendingX402ReturnRef.current = undefined
+        }
+        return false
+      }
+      if (pendingReturn !== undefined) {
+        if (!sameX402Handoff(pendingReturn.handoff, currentHandoff)) {
+          pendingX402ReturnRef.current = undefined
+        } else {
+          navigationAttempted = true
+          await navigate({
+            to: '/owner/offerings/new',
+            search: {
+              draft: pendingReturn.draft,
+              connection: pendingReturn.connection,
+              environment: pendingReturn.environment,
+            },
+            replace: true,
+          })
+          if (!sameX402Handoff(refreshHandoff, currentHandoffRef.current)) {
+            if (pendingX402ReturnRef.current === pendingReturn) pendingX402ReturnRef.current = undefined
+            return false
+          }
+          pendingX402ReturnRef.current = undefined
+          setResourceUrl('')
+          setReauthorizingConnectionRef(undefined)
+          setInspection(undefined)
+          setClaimSignature(undefined)
+        }
+      }
       setRefreshRequired(false)
       setNotice({ kind: 'status', text: 'Provider connections updated.' })
       return true
     } catch (cause) {
+      if (!sameX402Handoff(refreshHandoff, currentHandoffRef.current)) return false
       captureClientExceptionOnClient(cause)
       setRefreshRequired(true)
       setNotice({
         kind: 'error',
-        text: 'The change was accepted, but current connections could not be reloaded. Reload before starting another action.',
+        text: navigationAttempted
+          ? 'The connection was accepted, but AE could not return to the saved Tool. Reload current connections to try again.'
+          : 'The change was accepted, but current connections could not be reloaded. Reload before starting another action.',
       })
       return false
     }
@@ -150,7 +236,7 @@ export function AeOwnerProviderConnections({
           businessId,
           resourceUrl,
           method,
-          environment: 'production',
+          environment,
           claimExpiresAt: inspection.claimExpiresAt,
           claimSignature,
           commandId,
@@ -167,11 +253,34 @@ export function AeOwnerProviderConnections({
         return
       }
       commandIdsRef.current.delete(commandKey)
-      setResourceUrl('')
-      setReauthorizingConnectionRef(undefined)
+      const pendingReturn = reauthorizationRef === undefined
+        && x402Handoff !== undefined
+        && result.connection.connectionRef.length > 0
+        ? {
+            draft: x402Handoff.draft,
+            connection: result.connection.connectionRef,
+            environment: x402Handoff.environment,
+            handoff: {
+              draft: x402Handoff.draft,
+              resourceUrl: x402Handoff.resourceUrl,
+              method: x402Handoff.method,
+              environment: x402Handoff.environment,
+            },
+          }
+        : undefined
+      if (pendingReturn !== undefined) {
+        pendingX402ReturnRef.current = pendingReturn
+      }
+      if (x402Handoff === undefined) {
+        setResourceUrl('')
+        setReauthorizingConnectionRef(undefined)
+      }
       setInspection(undefined)
       setClaimSignature(undefined)
       const refreshed = await refresh()
+      if (refreshed && reauthorizationRef !== undefined) {
+        setReauthorizingConnectionRef(undefined)
+      }
       if (refreshed && reauthorizationRef !== undefined && rebindOfferingRef !== undefined) {
         setRefreshedForRebind(reauthorizationRef)
         setNotice({
@@ -203,7 +312,7 @@ export function AeOwnerProviderConnections({
     setClaimSignature(undefined)
     try {
       const result = await inspectX402({
-        data: { businessId, resourceUrl, method, environment: 'production' },
+        data: { businessId, resourceUrl, method, environment },
       })
       if (result.kind === 'refused') {
         setNotice({ kind: 'error', text: result.action })
@@ -326,6 +435,10 @@ export function AeOwnerProviderConnections({
       setNotice({ kind: 'error', text: 'This connection does not have a complete x402 authority record. Revoke it and connect the endpoint again.' })
       return
     }
+    if (x402Handoff !== undefined && !matchesX402Handoff(connection, x402Handoff)) {
+      setNotice({ kind: 'error', text: 'This connection does not match the saved source. The exact source handoff remains selected.' })
+      return
+    }
     setReauthorizingConnectionRef(connection.connectionRef)
     setResourceUrl(exactResource)
     setMethod(connection.x402Method)
@@ -355,7 +468,7 @@ export function AeOwnerProviderConnections({
           commandId: commandIdFor(commandKey),
           expectedAuthorityGeneration: connection.authorityGeneration,
           expectedAuthorityDigest: connection.authorityDigest,
-          environment: 'production',
+          environment: connection.sourceEnvironment ?? environment,
         },
       })
       if (result.kind === 'refused') {
@@ -547,7 +660,7 @@ export function AeOwnerProviderConnections({
               maxLength={2_048}
               placeholder="https://api.example.com/paid-operation"
               value={resourceUrl}
-              readOnly={reauthorizingConnectionRef !== undefined}
+              readOnly={reauthorizingConnectionRef !== undefined || x402Handoff !== undefined}
               onChange={(event) => {
                 setResourceUrl(event.target.value)
                 setInspection(undefined)
@@ -564,7 +677,7 @@ export function AeOwnerProviderConnections({
               id="provider-x402-method"
               className="h-10 rounded-md border border-input bg-background px-3 text-sm"
               value={method}
-              disabled={busy !== undefined || reauthorizingConnectionRef !== undefined}
+              disabled={busy !== undefined || reauthorizingConnectionRef !== undefined || x402Handoff !== undefined}
               onChange={(event) => {
                 setMethod(event.currentTarget.value === 'GET' ? 'GET' : 'POST')
                 setInspection(undefined)
@@ -575,6 +688,7 @@ export function AeOwnerProviderConnections({
               <option value="GET">GET</option>
             </select>
           </div>
+          <p className="text-sm text-muted-foreground">Environment: {environment}</p>
           {inspection === undefined ? null : (
             <Alert>
               <AlertTitle>Exact payment lane observed</AlertTitle>
@@ -664,6 +778,36 @@ export function AeOwnerProviderConnections({
 
 function providerConnectionResource(connection: OwnerProviderConnection): string {
   return connection.grantedResources[0] ?? connection.providerAccountRef
+}
+
+function matchesX402Handoff(
+  connection: OwnerProviderConnection,
+  handoff: OwnerToolsX402ConnectionIntent,
+): boolean {
+  return connection.adapterId === 'x402-fetch:v2'
+    && connection.grantedResources.length === 1
+    && canonicalResourceUrl(connection.grantedResources[0] ?? '') === canonicalResourceUrl(handoff.resourceUrl)
+    && connection.x402Method === handoff.method
+    && (connection.sourceEnvironment === undefined || connection.sourceEnvironment === handoff.environment)
+}
+
+function canonicalResourceUrl(resourceUrl: string): string {
+  try {
+    return new URL(resourceUrl).toString()
+  } catch {
+    return resourceUrl
+  }
+}
+
+function sameX402Handoff(
+  left: X402HandoffIdentity | undefined,
+  right: X402HandoffIdentity | undefined,
+): boolean {
+  if (left === undefined || right === undefined) return left === right
+  return left.draft === right.draft
+    && left.resourceUrl === right.resourceUrl
+    && left.method === right.method
+    && left.environment === right.environment
 }
 
 function providerConnectionStatus(connection: OwnerProviderConnection): string {

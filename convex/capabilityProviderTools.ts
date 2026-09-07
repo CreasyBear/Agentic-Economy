@@ -24,7 +24,7 @@ const ownerReadResultValue = v.union(
   v.object({
     kind: v.literal('available'),
     statusJson: v.string(),
-    operation: v.object({
+    tool: v.object({
       offeringRef: v.string(),
       currentRevision: v.number(),
       name: v.string(),
@@ -246,7 +246,7 @@ export const readOwner = query({
     return {
       kind: 'available' as const,
       statusJson: JSON.stringify(status),
-      operation: {
+      tool: {
         offeringRef: offering.offeringRef,
         currentRevision: offering.currentRevision,
         name: revision.name,

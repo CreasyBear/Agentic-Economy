@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 
 import { AGENT_ACCESS_OAUTH_DEVICE_CLIENT_REGISTRATION_REQUEST } from '@/modules/agent-access/contract'
-import { listCallRouteDescriptors } from '@/modules/actions'
+import { findAction, listCallRouteDescriptors, listMcpActionDescriptors } from '@/modules/actions'
 import { TOOL_MARKET_ACTION_ENTRIES } from '@/modules/registry/tool-entry'
 import {
   AGENT_ACCESS_OAUTH_ERROR_VALUES,
@@ -122,6 +122,40 @@ describe('market terminal manifest OAuth contract', () => {
     }
     const response = await handleOAuthRegisterPost(request, { store: oauthStore(), now: () => 1_000 })
     expect(response.status).toBe(201)
+  })
+
+  it('serializes registered Call and funding continuations without adding contracts to MCP descriptors', async () => {
+    const manifest = await manifestJson()
+    const account = manifest.account as JsonRecord
+    const moneyRoutes = account.moneyRoutes as readonly JsonRecord[]
+    const activity = moneyRoutes.find((route) => (route.action as JsonRecord).id === 'agentAccess.activity')
+
+    expect(activity?.action).toMatchObject({
+      id: 'agentAccess.activity',
+      invocationContract: { safeContinuations: ['call.status'] },
+    })
+    expect(JSON.stringify(activity)).not.toContain('operation.status')
+
+    const fundingStatus = findAction('funding.handoff.status')
+    expect(fundingStatus?.invocationContract.safeContinuations).toEqual([
+      'funding.handoff.status',
+      'agentAccess.balance',
+      'tool.quote',
+    ])
+    expect(fundingStatus?.boundaries.join(' ')).toMatch(/authority|Call/u)
+    expect(fundingStatus?.boundaries.join(' ')).not.toMatch(/Mandate|Operation/u)
+
+    for (const continuationId of [
+      ...((findAction('agentAccess.activity')?.invocationContract.safeContinuations ?? [])),
+      ...(fundingStatus?.invocationContract.safeContinuations ?? []),
+    ]) {
+      expect(findAction(continuationId), `${continuationId} continuation registration`).toBeDefined()
+    }
+
+    const fundingMcpDescriptor = listMcpActionDescriptors().find(({ id }) => id === 'funding.handoff.status')
+    expect(fundingMcpDescriptor).toMatchObject({ id: 'funding.handoff.status' })
+    expect(fundingMcpDescriptor).not.toHaveProperty('invocationContract')
+    expect(JSON.stringify(fundingMcpDescriptor)).not.toMatch(/operation\.invoke|Mandate/u)
   })
 
   it('keeps connect registration bytes and polling semantics equal to the manifest', async () => {

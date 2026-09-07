@@ -210,7 +210,7 @@ export type ToolProjectionNavigationContract = Readonly<{
 }>;
 export type PublicToolDescriptor = Readonly<{
   toolRef: PublicToolRef;
-  operationId: string;
+  toolId: string;
   callVia: typeof CURRENT_TOOL_CALL_VIA;
   paymentLane: "brokered";
   contract: Readonly<{

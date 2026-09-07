@@ -143,14 +143,14 @@ function toolNextAction(
 }
 
 function callableAlternativesCommand(searchQuery: string): string {
-  const escaped = searchQuery.replaceAll("'", "'\\''")
+  const escaped = normalizedAlternativeSearchQuery(searchQuery).replaceAll("'", "'\\''")
   return `ae search '${escaped}' --filters '{"availability":["routeable"]}'`
 }
 
-function callableAlternativesHref(searchQuery: string): string {
+export function callableAlternativesHref(searchQuery: string): string {
   const query = new URLSearchParams({
     window: '30d',
-    query: searchQuery,
+    query: normalizedAlternativeSearchQuery(searchQuery),
     availability: 'routeable',
   })
   return `/market?${query.toString()}`

@@ -1,7 +1,8 @@
 import { v, type Infer } from 'convex/values'
 
 import { internal } from './_generated/api'
-import { action, internalMutation, internalQuery, type MutationCtx } from './_generated/server'
+import type { Doc } from './_generated/dataModel'
+import { action, env, internalMutation, internalQuery, type MutationCtx } from './_generated/server'
 import { readCurrentPublishedTool } from './capabilitySupplyCurrentTool'
 import { readCommercialPolicyGate } from './moneyCommercialPolicy'
 import { principalAndSourceArgs, principalValue } from './lib/callLifecycle/contracts'
@@ -12,8 +13,14 @@ import {
   materializeRuntimePublishedTool,
   type PublishedTool,
 } from '@/modules/capability-supply/public'
+import {
+  cdpX402CustodyBudgetRef,
+  cdpX402CustodyConfigurationFromEnvironment,
+  x402PaymentProfileForEnvironment,
+} from '@/modules/capability-supply/convex'
+import type { StringEnvironment } from '@/lib/server/read-trimmed-env'
 import { isBoundedJsonValue, type JsonValue } from '@/modules/capability-contract/public'
-import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { canonicalDigest, isCanonicalDigest } from '@/modules/common/canonical-digest'
 import { currentToolDigest } from '@/modules/capability-execution/current-tool-quote'
 import {
   TOOL_MARKET_DESCRIBE_PATH,
@@ -185,6 +192,57 @@ const financialSubjectsResult = v.union(
 
 type FinancialSubjectsResult = Infer<typeof financialSubjectsResult>
 
+const TREASURY_REF_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,499}$/u
+const TREASURY_UNITS_PATTERN = /^(?:0|[1-9]\d{0,15})$/u
+
+function cdpX402CustodyEnvironment(): StringEnvironment {
+  return {
+    CDP_API_KEY_ID: env.CDP_API_KEY_ID,
+    CDP_API_KEY_SECRET: env.CDP_API_KEY_SECRET,
+    CDP_WALLET_SECRET: env.CDP_WALLET_SECRET,
+    AE_X402_CDP_ACCOUNT_NAME: env.AE_X402_CDP_ACCOUNT_NAME,
+    AE_X402_CDP_EXPECTED_EVM_ADDRESS: env.AE_X402_CDP_EXPECTED_EVM_ADDRESS,
+    AE_X402_CDP_ACCOUNT_POLICY_ID: env.AE_X402_CDP_ACCOUNT_POLICY_ID,
+    AE_X402_CDP_PROJECT_POLICY_ID: env.AE_X402_CDP_PROJECT_POLICY_ID,
+    AE_X402_CDP_POLICY_RULES_DIGEST: env.AE_X402_CDP_POLICY_RULES_DIGEST,
+    AE_X402_CDP_CREDENTIAL_GENERATION: env.AE_X402_CDP_CREDENTIAL_GENERATION,
+    AE_X402_CUSTODY_ENABLED: env.AE_X402_CUSTODY_ENABLED,
+    AE_X402_CUSTODY_MAX_ATOMIC: env.AE_X402_CUSTODY_MAX_ATOMIC,
+    AE_X402_CUSTODY_DAILY_MAX_ATOMIC: env.AE_X402_CUSTODY_DAILY_MAX_ATOMIC,
+  }
+}
+
+function treasurySpendableUnits(
+  observation: Doc<'moneyTreasuryObservations'>,
+  expected: Readonly<{
+    environment: 'sandbox' | 'production'
+    custodyRef: string
+    custodyGeneration: number
+    network: string
+  }>,
+): string | undefined {
+  if (
+    observation.environment !== expected.environment
+    || observation.custodyRef !== expected.custodyRef
+    || observation.custodyGeneration !== expected.custodyGeneration
+    || observation.network !== expected.network
+    || observation.asset !== 'USDC'
+    || observation.exponent !== 6
+    || !TREASURY_REF_PATTERN.test(observation.custodyRef)
+    || !TREASURY_REF_PATTERN.test(observation.observationRef)
+    || !TREASURY_REF_PATTERN.test(observation.evidenceRef)
+    || !isCanonicalDigest(observation.evidenceDigest)
+    || !TREASURY_UNITS_PATTERN.test(observation.totalUnits)
+    || !TREASURY_UNITS_PATTERN.test(observation.bufferUnits)
+  ) return undefined
+  try {
+    const spendableUnits = BigInt(observation.totalUnits) - BigInt(observation.bufferUnits)
+    return spendableUnits > 0n ? spendableUnits.toString() : undefined
+  } catch {
+    return undefined
+  }
+}
+
 const refuse = (
   args: Pick<QuoteArgs, 'toolRef' | 'input' | 'correlationId'>,
   code: ToolQuoteRefusalCode,
@@ -283,20 +341,40 @@ async function prepareFinancialSubjectsHandler(
   if (binding === null || binding.legalCustomerRef !== legalCustomer.legalCustomerRef) {
     return { kind: 'refused', code: 'commercial_policy_unavailable' }
   }
-  const observations = await ctx.db.query('moneyTreasuryObservations')
-    .withIndex('by_environment_and_observedAt', (query) => query
-      .eq('environment', authority.principal.environment))
-    .order('desc')
-    .take(2)
-  const observation = observations.length === 1 ? observations[0] : undefined
+  const environment = authority.principal.environment
+  const custodyConfiguration = cdpX402CustodyConfigurationFromEnvironment(
+    cdpX402CustodyEnvironment(),
+  )
+  const paymentProfile = x402PaymentProfileForEnvironment(environment)
+  const custodyRef = custodyConfiguration === undefined || paymentProfile === undefined
+    ? undefined
+    : cdpX402CustodyBudgetRef(custodyConfiguration, environment)
+  const custodyGeneration = custodyConfiguration?.credentialGeneration
+  const observation = custodyRef === undefined || custodyGeneration === undefined
+    ? undefined
+    : (await ctx.db.query('moneyTreasuryObservations')
+        .withIndex('by_custody_and_observedAt', (query) => query
+          .eq('environment', environment)
+          .eq('custodyRef', custodyRef)
+          .eq('custodyGeneration', custodyGeneration))
+        .order('desc')
+        .take(1))[0]
+  const treasuryTarget = observation === undefined
+    || custodyRef === undefined
+    || custodyGeneration === undefined
+    || paymentProfile === undefined
+    ? undefined
+    : treasurySpendableUnits(observation, {
+        environment,
+        custodyRef,
+        custodyGeneration,
+        network: paymentProfile.network,
+      })
   const fundingPolicy = audFundingPolicyFromCommercialControls(policy.controls)
   const monthly = grantReadback.budget.maximumMonthlySpend
   if (monthly.currency !== 'AUD' || monthly.exponent !== 6) {
     return { kind: 'refused', code: 'budget_exceeded' }
   }
-  const treasuryTarget = observation === undefined
-    ? undefined
-    : (BigInt(observation.totalUnits) - BigInt(observation.bufferUnits)).toString()
   return {
     kind: 'prepared',
     accountRef: authority.principal.ownerId,
@@ -312,7 +390,7 @@ async function prepareFinancialSubjectsHandler(
     financialMode: pricing.config.kind === 'fixed_aud' && pricing.price.units === '0'
       ? 'none'
       : 'formance',
-    ...(observation === undefined || treasuryTarget === undefined || BigInt(treasuryTarget) <= 0n
+    ...(observation === undefined || treasuryTarget === undefined
       ? {}
       : {
           treasury: {

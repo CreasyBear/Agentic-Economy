@@ -10,7 +10,7 @@ export const loadSupplyLandingReadbackServer = createServerFn({ method: 'GET' })
       .filter((action) => (
         action.readOnly
         && action.credentialAdmission === undefined
-        && action.id.startsWith('registry.operations.')
+        && action.id.startsWith('registry.tools.')
       ))
       .map(describeActionForAgent),
     listListings: async () => {

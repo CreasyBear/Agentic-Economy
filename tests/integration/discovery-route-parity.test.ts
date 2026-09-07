@@ -276,7 +276,7 @@ type MarketToolRouteCase = Readonly<{
 const MARKET_TOOL_DETAIL_REF = `operation:v1:${'f'.repeat(64)}`
 const MARKET_TOOL_DETAIL_WIRE_DESCRIPTOR = {
   toolRef: MARKET_TOOL_DETAIL_REF,
-  operationId: 'reference-operation',
+  toolId: 'reference-operation',
   callVia: CALL_ROUTE_CONTRACT.call.path,
   paymentLane: 'brokered',
   contract: {

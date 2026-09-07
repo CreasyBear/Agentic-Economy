@@ -117,6 +117,8 @@ describe('Site discovery manifest', () => {
       '/api/v1/market-tools/describe',
       '/api/v1/market-tools/compare',
     ])
+    expect(pathsByKind.get('quote')).toEqual(['/api/v1/tools/quote'])
+    expect(pathsByKind.get('call')).toEqual(['/api/v1/tools/call'])
     expect(pathsByKind.get('funding_preflight')).toEqual([
       '/api/v1/funding/constraints',
       '/api/v1/funding/quote',
@@ -125,6 +127,30 @@ describe('Site discovery manifest', () => {
     expect(manifest).not.toHaveProperty('businessTools')
     expect(pathsByKind.get('site_entry_point')).toEqual(['/.well-known/ucp'])
     expect(JSON.stringify(manifest)).not.toMatch(/\/api\/answer|answer_turn|\/api\/chat\/anonymous/u)
+  })
+
+  it('classifies the generated Quote endpoint as quote in full and compact projections', () => {
+    const fullQuote = manifest.endpoints.find((endpoint) => endpoint.path === TOOL_QUOTE_ROUTE_CONTRACT.path)
+    const compact = projectCompactSiteDiscoveryManifest(manifest)
+    const compactQuote = compact.endpoints.find((endpoint) => endpoint.path === TOOL_QUOTE_ROUTE_CONTRACT.path)
+    const nestedQuote = manifest.toolGateway.routes.find((route) => route.actionId === TOOL_QUOTE_ROUTE_CONTRACT.actionId)
+
+    expect(fullQuote).toMatchObject({
+      kind: 'quote',
+      path: TOOL_QUOTE_ROUTE_CONTRACT.path,
+    })
+    expect(compactQuote).toMatchObject({
+      kind: 'quote',
+      path: TOOL_QUOTE_ROUTE_CONTRACT.path,
+    })
+    expect(nestedQuote).toMatchObject({
+      actionId: TOOL_QUOTE_ROUTE_CONTRACT.actionId,
+      path: TOOL_QUOTE_ROUTE_CONTRACT.path,
+    })
+    expect(fullQuote?.kind).not.toBe('call')
+    expect(fullQuote?.kind).not.toBe('tool_read')
+    expect(compactQuote?.kind).not.toBe('call')
+    expect(compactQuote?.kind).not.toBe('tool_read')
   })
 
   it('states the authentication each endpoint actually enforces', () => {

@@ -75,7 +75,7 @@ describe('operator navigation', () => {
       'Calls',
       'Agents',
       'Credit',
-      'Operations',
+      'Tools',
       'Account & security',
     ])
   })
@@ -124,8 +124,8 @@ describe('operator navigation', () => {
   })
 
   it('resolves the owning sidebar item for operator page headers', () => {
-    expect(resolveOperatorNavItem('owner', '/owner/offerings')?.label).toBe('Operations')
-    expect(resolveOperatorNavItem('owner', '/owner/settings/connections')?.label).toBe('Operations')
+    expect(resolveOperatorNavItem('owner', '/owner/offerings')?.label).toBe('Tools')
+    expect(resolveOperatorNavItem('owner', '/owner/settings/connections')?.label).toBe('Tools')
     expect(resolveOperatorNavItem('owner', '/owner/settings')?.label).toBe('Account & security')
     expect(resolveOperatorNavItem('owner', '/owner/settings/unknown')).toBeUndefined()
     expect(resolveOperatorNavItem('owner', '/activity')?.label).toBe('Calls')

@@ -44,7 +44,7 @@ export const amount = { currency: "AUD", units: "750000", exponent: 6 };
 export const digest = (letter: string) => `sha256:${letter.repeat(64)}`;
 export const tool = {
   toolRef,
-  operationId: "operation:provider:paid",
+  toolId: "operation:provider:paid",
   callVia: CALL_ROUTE_CONTRACT.call.path,
   paymentLane: "brokered",
   contract: {

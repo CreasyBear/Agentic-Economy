@@ -157,9 +157,10 @@ export const fundingHandoffCreateAction = defineAction<CreateFundingHandoffInput
   name: 'Create a human funding handoff',
   summary: 'Create one durable Stripe-hosted funding session and return the direct payer URL.',
   boundaries: [
-    'The payer receives no AE identity, ownership, Mandate, credential, or reusable payment authority.',
+    'The payer receives no AE identity, Account ownership, Agent credential, Spending policy, or reusable payment authority.',
     'Persist fundingSessionId and poll status after handing checkoutUrl to the payer.',
-    'Creating a session does not retry the blocked Operation.',
+    'Funding adds prepaid credit to the Agent’s Account after signed payment fulfilment; it grants no spending authority.',
+    'Creating a session does not retry a blocked Call or create a new Call.',
   ],
   schema: createFundingHandoffInputSchema, outputSchema: createFundingHandoffResultSchema,
   parameters: [
@@ -185,7 +186,11 @@ export const fundingHandoffStatusAction = defineAction<FundingHandoffStatusInput
   id: FUNDING_HANDOFF_STATUS_ACTION_ID,
   name: 'Read a funding handoff',
   summary: 'Poll the same funding session until signed payment fulfilment makes Account credit usable.',
-  boundaries: ['Only the requesting Agent may read private status.', 'Polling and browser redirects never credit the Account.'],
+  boundaries: [
+    'Only the requesting Agent may read private status.',
+    'Polling and browser redirects never credit the Account.',
+    'Funding status grants no spending authority, retries no Call, and creates no new Call; inspect the Account balance and a Quote before any separate Call.',
+  ],
   schema: fundingHandoffStatusInputSchema, outputSchema: fundingHandoffStatusResultSchema,
   parameters: [{ name: 'fundingSessionId', type: 'string', description: 'Stripe Checkout Session ID returned by create.', required: true }],
   readOnly: true,
@@ -194,7 +199,8 @@ export const fundingHandoffStatusAction = defineAction<FundingHandoffStatusInput
   credentialAdmission: { scope: 'market_tools:call', authority: 'descriptor_classified' },
   invocationContract: {
     version: 'funding-handoff-status:v1', consequenceClass: 'read_only', materialInputPaths: ['fundingSessionId'], authorityRequirement: 'principal',
-    retryClass: 'replayable', expectedEvidence: ['funding_lifecycle', 'usable_balance'], safeContinuations: ['operation.invoke'],
+    retryClass: 'replayable', expectedEvidence: ['funding_lifecycle', 'usable_balance'],
+    safeContinuations: [FUNDING_HANDOFF_STATUS_ACTION_ID, 'agentAccess.balance', 'tool.quote'],
     invalidationConditions: ['credential_revoked', 'session_expired'],
   },
   run: async ({ data, context }) => service(context).status({

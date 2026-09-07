@@ -45,6 +45,7 @@ import { readOwnerProviderEarningsServer } from '@/modules/capability-supply/sup
 import { readOwnerConnectReadinessServer } from '@/modules/money/money.functions'
 import type { OwnerProviderEarningsReadback } from '@/modules/capability-supply/supply-funnel.functions'
 import type { OwnerConnectReadinessReadback } from '@/modules/money/server'
+import { parseOwnerToolsCompatibilitySearch, parseOwnerToolsX402ConnectionSearch } from '@/lib/operator/supply-compatibility'
 
 type WorkspaceProps = Readonly<{
   inventory: ProviderWorkspaceInventoryResult
@@ -130,6 +131,11 @@ function AvailableWorkspace({
   const [earningsUnavailable, setEarningsUnavailable] = useState(false)
   const [earningsDetail, setEarningsDetail] = useState<Readonly<{ earnings: OwnerProviderEarningsReadback; connect: OwnerConnectReadinessReadback }>>()
   const compatibilitySearch = location.search as Record<string, unknown>
+  const validatedCompatibilitySearch = parseOwnerToolsCompatibilitySearch(compatibilitySearch)
+  const x402Handoff = parseOwnerToolsX402ConnectionSearch(compatibilitySearch)
+  const hasX402Handoff = x402Handoff !== undefined
+  const compatibilityConnect = validatedCompatibilitySearch.connect
+  const compatibilityCursor = validatedCompatibilitySearch.cursor
   const pendingRows = inventory.tools.map((row): ProviderWorkspaceProjectionRow => ({
     ...row,
     lifecycleLabel: 'Loading',
@@ -210,9 +216,10 @@ function AvailableWorkspace({
 
   useEffect(() => {
     if (location.hash.startsWith('provider-connection-')) openConnections()
-    if (location.hash === 'earnings' || compatibilitySearch.connect === 'return' || compatibilitySearch.connect === 'refresh') openEarnings()
+    if (hasX402Handoff) openConnections()
+    if (location.hash === 'earnings' || compatibilityConnect === 'return' || compatibilityConnect === 'refresh') openEarnings()
     if (location.hash === 'provider-identity') openIdentity()
-  }, [compatibilitySearch.connect, location.hash, openConnections, openEarnings, openIdentity])
+  }, [compatibilityConnect, hasX402Handoff, location.hash, openConnections, openEarnings, openIdentity])
 
   useEffect(() => {
     if (!connectionsOpen || connectionsDetail?.kind !== 'available' || !location.hash.startsWith('provider-connection-')) return
@@ -275,9 +282,9 @@ function AvailableWorkspace({
             }}</Await>
           </Suspense>
         )}
-        {inventory.isDone && compatibilitySearch.cursor === undefined ? null : (
+        {inventory.isDone && compatibilityCursor === undefined ? null : (
           <nav aria-label="Tool pages" className="flex flex-wrap gap-intra">
-            {compatibilitySearch.cursor === undefined ? null : (
+            {compatibilityCursor === undefined ? null : (
               <Button asChild variant="secondary" className="min-h-touch">
                 <a href="/owner/offerings">First 50 Tools</a>
               </Button>
@@ -299,7 +306,7 @@ function AvailableWorkspace({
           </DeferredSection>
           <DeferredSection promise={publicStatus} loadingLabel="Loading public status" unavailableTitle="Public status unavailable">
             {(result) => result.kind === 'available' ? (
-              <SummaryCard title="Public status" detail={`${result.value.catalog.offerings.length} public Tools`} action="Review public status" onAction={() => focusSection('provider-status')} />
+              <SummaryCard title="Public status" detail={`${result.value.catalog.offerings.length} public offerings`} action="Review public status" onAction={() => focusSection('provider-status')} />
             ) : <SecondarySummary result={result} subject="Public status" notApplicableTitle="Public status not published" unavailableTitle="Public status unavailable" />}
           </DeferredSection>
         </div>
@@ -307,7 +314,11 @@ function AvailableWorkspace({
           <div className="grid gap-related">
             {connectionTargetMissing ? <Alert variant="destructive"><AlertTitle>Connection target unavailable</AlertTitle><AlertDescription>The requested connection is not in the current provider readback. No connection was changed.</AlertDescription></Alert> : null}
             {connectionsPending ? <div aria-busy="true"><Skeleton className="h-24 w-full" /></div> : connectionsDetail?.kind === 'available' ? (
-              <AeOwnerProviderConnections businessId={connectionsDetail.businessId} connections={connectionsDetail.connections} />
+              <AeOwnerProviderConnections
+                businessId={connectionsDetail.businessId}
+                connections={connectionsDetail.connections}
+                {...(x402Handoff === undefined ? {} : { x402Handoff })}
+              />
             ) : connectionsDetail?.kind === 'conflict' ? (
               <OwnershipConflict title="Connection ownership conflict" />
             ) : connectionsDetail?.kind === 'not_applicable' ? (

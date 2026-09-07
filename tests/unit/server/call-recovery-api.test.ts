@@ -39,6 +39,14 @@ const authenticate = async () => ({
   scopes: principal.scopes,
 })
 
+const unauthenticated = async () => ({
+  isAuthenticated: false as const,
+  tokenType: null,
+  id: null,
+  subject: null,
+  scopes: null,
+})
+
 function service(): CallService {
   return {
     callTool: vi.fn(),
@@ -64,6 +72,20 @@ function service(): CallService {
       state: 'terminal',
     }),
   } as unknown as CallService
+}
+
+function recoveryPost(
+  path: string,
+  body: unknown,
+  contentType?: string,
+): Request {
+  const request = new Request(`https://ae.example${path}`, {
+    method: 'POST',
+    ...(contentType === undefined ? {} : { headers: { 'content-type': contentType } }),
+    body: JSON.stringify(body),
+  })
+  if (contentType === undefined) request.headers.delete('content-type')
+  return request
 }
 
 function reconciliationEvidence() {
@@ -109,6 +131,95 @@ function x402ReconciliationEvidence() {
 }
 
 describe('operation recovery HTTP adapters', () => {
+  it.each([
+    ['missing', undefined],
+    ['text/plain', 'text/plain'],
+    ['malformed', 'application/json nonsense'],
+  ] as const)('rejects $0 media for Call cancellation before service dispatch', async (_label, contentType) => {
+    const executor = service()
+    const response = await handleCallCancelPost(
+      recoveryPost(`/api/v1/calls/${callRef}/cancel`, { idempotencyKey: 'media-cancel' }, contentType),
+      callRef,
+      { authenticate, resolvePrincipal: resolveCanonicalPrincipal, callService: executor },
+    )
+
+    expect(response.status).toBe(415)
+    await expect(response.json()).resolves.toMatchObject({
+      kind: 'UNSUPPORTED_MEDIA_TYPE',
+      code: 'invalid_content_type',
+    })
+    expect(executor.cancelCall).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['missing', undefined],
+    ['text/plain', 'text/plain'],
+    ['malformed', 'application/json nonsense'],
+  ] as const)('rejects $0 media for Call reconciliation before service dispatch', async (_label, contentType) => {
+    const executor = service()
+    const response = await handleCallReconcilePost(
+      recoveryPost(`/api/v1/calls/${callRef}/reconcile`, { idempotencyKey: 'media-reconcile', evidence: reconciliationEvidence() }, contentType),
+      callRef,
+      { authenticate, resolvePrincipal: resolveCanonicalPrincipal, callService: executor },
+    )
+
+    expect(response.status).toBe(415)
+    await expect(response.json()).resolves.toMatchObject({
+      kind: 'UNSUPPORTED_MEDIA_TYPE',
+      code: 'invalid_content_type',
+    })
+    expect(executor.reconcileCall).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['missing', undefined],
+    ['text/plain', 'text/plain'],
+  ] as const)('preserves unauthenticated cancellation refusal for $0 media', async (_label, contentType) => {
+    const executor = service()
+    const response = await handleCallCancelPost(
+      recoveryPost(`/api/v1/calls/${callRef}/cancel`, { idempotencyKey: 'unauthenticated-cancel' }, contentType),
+      callRef,
+      { authenticate: unauthenticated, resolvePrincipal: resolveCanonicalPrincipal, callService: executor },
+    )
+
+    expect(response.status).toBe(401)
+    expect(executor.cancelCall).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['missing', undefined],
+    ['text/plain', 'text/plain'],
+  ] as const)('preserves unauthenticated reconciliation refusal for $0 media', async (_label, contentType) => {
+    const executor = service()
+    const response = await handleCallReconcilePost(
+      recoveryPost(`/api/v1/calls/${callRef}/reconcile`, { idempotencyKey: 'unauthenticated-reconcile', evidence: reconciliationEvidence() }, contentType),
+      callRef,
+      { authenticate: unauthenticated, resolvePrincipal: resolveCanonicalPrincipal, callService: executor },
+    )
+
+    expect(response.status).toBe(401)
+    expect(executor.reconcileCall).not.toHaveBeenCalled()
+  })
+
+  it('accepts mixed-case parameterized JSON media for cancellation and reconciliation', async () => {
+    const executor = service()
+    const cancelResponse = await handleCallCancelPost(
+      recoveryPost(`/api/v1/calls/${callRef}/cancel`, { idempotencyKey: 'mixed-cancel' }, 'Application/JSON;charset=UTF-8'),
+      callRef,
+      { authenticate, resolvePrincipal: resolveCanonicalPrincipal, callService: executor },
+    )
+    const reconcileResponse = await handleCallReconcilePost(
+      recoveryPost(`/api/v1/calls/${callRef}/reconcile`, { idempotencyKey: 'mixed-reconcile', evidence: reconciliationEvidence() }, 'Application/JSON;charset=UTF-8'),
+      callRef,
+      { authenticate, resolvePrincipal: resolveCanonicalPrincipal, callService: executor },
+    )
+
+    expect(cancelResponse.status).toBe(200)
+    expect(reconcileResponse.status).toBe(200)
+    expect(executor.cancelCall).toHaveBeenCalledOnce()
+    expect(executor.reconcileCall).toHaveBeenCalledOnce()
+  })
+
   it('signs only the neutral internal admission command for status, cancel, and reconcile', async () => {
     installTestSourceWriteSecret()
     const calls: Array<{ path: string; args: [Record<string, unknown>] }> = []

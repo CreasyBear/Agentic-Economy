@@ -21,6 +21,6 @@ test.describe('authenticated operator shell accessibility', () => {
     await recover.press('Space')
     await expect.poll(() => new URL(page.url()).searchParams.has('caller')).toBe(false)
     expect(new URL(page.url()).pathname).toBe('/agent-access')
-    await expect(page.getByRole('heading', { name: 'Add Agentic Economy' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Connect with Codex' })).toBeVisible()
   })
 })

@@ -125,6 +125,18 @@ describe('AE CLI provider Tool lifecycle', () => {
     expect(output).not.toContain('hidden-provider-secret')
   })
 
+  it('requires a Tool reference for status and refuses before any external fetch', async () => {
+    const fetch = vi.fn()
+    vi.stubGlobal('fetch', fetch)
+
+    await expect(runSupplyCommand(['status', 'business:one'], baseOptions)).rejects.toMatchObject({
+      code: 'supply-status-usage',
+      message: 'Usage: ae supply status <businessRef> <toolRef>',
+      nextCommand: 'ae help supply status',
+    })
+    expect(fetch).not.toHaveBeenCalled()
+  })
+
   it('reads Provider offboarding without granting the CLI authority to start or resume it', async () => {
     const fetch = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
       expect(String(url)).toBe('https://market.example/api/v1/supply/offboarding/status')
@@ -209,12 +221,22 @@ describe('AE CLI provider Tool lifecycle', () => {
     vi.stubGlobal('fetch', fetch)
     const write = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
 
-    await runSupplyCommand(['operations', 'business:one'], { ...baseOptions, json: false })
+    await runSupplyCommand(['tools', 'business:one'], { ...baseOptions, json: false })
 
     const output = write.mock.calls.flat().join('')
     expect(output).toContain('next  supply.status')
     expect(output).toContain('4/5 delivered; 1 not delivered; 0 unknown')
     expect(output).toContain('Qualified Use  3')
+  })
+
+  it('rejects the retired supply operations command without a compatibility alias', async () => {
+    const fetch = vi.fn()
+    vi.stubGlobal('fetch', fetch)
+
+    await expect(runSupplyCommand(['operations', 'business:one'], baseOptions)).rejects.toMatchObject({
+      code: 'supply-usage',
+    })
+    expect(fetch).not.toHaveBeenCalled()
   })
 
   it('uses the shared missing-provider-connection guidance for an empty connection list', async () => {

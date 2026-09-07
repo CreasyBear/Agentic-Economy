@@ -15,15 +15,17 @@ Use ordinary language in product documents, the roadmap, navigation, onboarding,
 help and agent instructions. Precise records do not require unusual vocabulary.
 
 The terms below are the canonical product language, not optional UI aliases.
-Older research and existing implementations retain their names through the
-compatibility mapping. Do not create a second concept, record or lifecycle for
-a renamed product term.
+Historical evidence, protected protocol or hash material, opaque reference
+encodings and document filenames may retain earlier names only where that exact
+boundary requires them. The mapping below explains those retained meanings; it
+is not a list of current AE aliases. Do not create a second concept, record or
+lifecycle for a renamed product term.
 
 <a id="customer-language-and-internal-definitions"></a>
 
 ### Compatibility with current source and APIs
 
-| Product term | Existing implementation or historical term | Meaning retained |
+| Product term | Retained historical/protected term (where applicable) | Meaning retained |
 | --- | --- | --- |
 | Customer | Business Principal | The person or legal entity buying and granting authority, not necessarily the signed-in administrator. |
 | Agent | Agent Principal | Durable technical identity; replacing a credential does not replace the agent or reset its spending history. |
@@ -60,8 +62,10 @@ evidence meaning.
 
 An implementation rename must be a separately scoped change with affected
 callers and stored data checked. Do not add speculative aliases, duplicate
-endpoints or dual records. Until then, an old identifier is a compatibility
-constraint, not a reason to reintroduce its vocabulary into ordinary prose.
+endpoints or dual records. Where a retained identifier remains, it is a
+compatibility or evidence constraint for that specific source, protocol, hash,
+encoding or filename boundary—not blanket permission to add an AE alias or
+reintroduce the old vocabulary into current examples and ordinary prose.
 
 <a id="market-roles"></a>
 

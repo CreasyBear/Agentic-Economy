@@ -1,6 +1,7 @@
 import type { ZodType } from 'zod'
 
 import { readBoundedRequestJson } from '@/lib/server/bounded-request-body'
+import { isJsonContentType } from '@/lib/server/json-content-type'
 import { problem } from '@/lib/server/problem'
 
 export type ToolReadRequestResult<T> =
@@ -16,7 +17,7 @@ export async function readToolReadRequest<T>(
   maximumBodyBytes: number,
   schema: ZodType<T>,
 ): Promise<ToolReadRequestResult<T>> {
-  if (!request.headers.get('content-type')?.toLowerCase().includes('application/json')) {
+  if (!(await isJsonContentType(request.headers.get('content-type')))) {
     return {
       ok: false,
       response: problem({

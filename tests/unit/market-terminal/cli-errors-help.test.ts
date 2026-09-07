@@ -4,7 +4,7 @@ import { parseArgs } from '../../../tools/ae/lib/args'
 import { spawnCliSync } from './cli-errors-harness'
 
 describe('market-terminal CLI error contracts', () => {
-  it('exposes one operation command family and rejects removed legacy namespaces', () => {
+  it('exposes one Tool command family and rejects removed legacy namespaces', () => {
     const help = spawnCliSync(['help', '--json'])
     expect(help.status).toBe(0)
     expect(help.stderr).toBe('')
@@ -324,12 +324,23 @@ describe('market-terminal CLI error contracts', () => {
     expect(JSON.parse(supplyHelp.stdout)).toMatchObject({
       kind: 'HELP',
       command: 'supply status',
-      usage: 'ae supply status <businessRef> [toolRef]',
+      usage: 'ae supply status <businessRef> <toolRef>',
       auth: {
         scope: 'market_supply:manage',
         deviceFlow: expect.stringContaining('connect --provider'),
       },
     })
+    const supplyToolsHelp = spawnCliSync(['help', 'supply', 'tools', '--json'])
+    expect(supplyToolsHelp.status).toBe(0)
+    expect(JSON.parse(supplyToolsHelp.stdout)).toMatchObject({
+      kind: 'HELP',
+      command: 'supply tools',
+      usage: 'ae supply tools <businessRef>',
+      summary: expect.stringMatching(/inventory/iu),
+    })
+    const retiredSupply = spawnCliSync(['supply', 'operations', 'business:one', '--json'])
+    expect(retiredSupply.status).toBe(1)
+    expect(JSON.parse(retiredSupply.stdout)).toMatchObject({ kind: 'INVALID_ARGUMENT', code: 'supply-usage' })
     const doctorHelp = spawnCliSync(['help', 'doctor', '--json'])
     expect(doctorHelp.status).toBe(0)
     expect(JSON.parse(doctorHelp.stdout)).toMatchObject({

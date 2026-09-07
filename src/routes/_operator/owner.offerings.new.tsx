@@ -47,12 +47,14 @@ export const Route = createFileRoute('/_operator/owner/offerings/new')({
           businessId: identity.businessId,
           draftRef: deps.draftRef,
           connectionRef: connection.connectionRef,
+          ...(deps.environment === undefined ? {} : { environment: deps.environment }),
         } })
       }
     } else if (!sourceUnavailable && identity.kind === 'available' && deps.draftRef !== undefined) {
       resume = await resumeOwnerSupplySourceDraftServer({ data: {
         businessId: identity.businessId,
         draftRef: deps.draftRef,
+        ...(deps.environment === undefined ? {} : { environment: deps.environment }),
       } })
     } } catch { sourceUnavailable = true }
     return { identity, connections, resume, resumeRequested: deps.draftRef !== undefined, sourceUnavailable }
@@ -63,6 +65,7 @@ export const Route = createFileRoute('/_operator/owner/offerings/new')({
 
 function NewOwnerOfferingRoute() {
   const { identity, connections, resume, resumeRequested, sourceUnavailable } = Route.useLoaderData()
+  const currentSearch = Route.useSearch()
   const navigate = Route.useNavigate()
   const preview = useServerFn(previewOwnerSupplySourceServer)
   const connect = useServerFn(startOwnerSupplySourceConnectionServer)
@@ -90,6 +93,7 @@ function NewOwnerOfferingRoute() {
               search: {
                 draft: candidateRef,
                 ...(connectionRef === undefined ? {} : { connection: connectionRef }),
+                ...(currentSearch.environment === undefined ? {} : { environment: currentSearch.environment }),
               },
               replace: true,
             })

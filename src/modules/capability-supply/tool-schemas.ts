@@ -115,7 +115,7 @@ const priceEvidence = z.strictObject({
   validUntil: z.number().optional(),
 })
 const descriptor = z.strictObject({
-  toolRef, operationId: z.string(),
+  toolRef, toolId: z.string(),
   callVia: z.literal(CURRENT_TOOL_CALL_VIA),
   paymentLane: z.literal('brokered'),
   contract: z.strictObject({

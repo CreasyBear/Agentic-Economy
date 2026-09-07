@@ -28,7 +28,7 @@ export function isPublicFooterHrefLink(link: PublicFooterLink): link is PublicFo
 export const publicPrimaryNavItems: readonly PublicFooterRouteLink[] = [
   { label: 'Discover', to: '/market', search: { window: '30d' } },
   { label: 'For agents', to: '/for-agents' },
-  { label: 'For suppliers', to: '/for-providers' },
+  { label: 'For Providers', to: '/for-providers' },
   { label: 'Calls', to: '/activity' },
 ]
 

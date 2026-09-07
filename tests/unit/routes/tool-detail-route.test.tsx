@@ -22,6 +22,10 @@ import {
   projectMarketListingEvidence,
   type MarketListingEvidenceProjection,
 } from '@/modules/market/listing-evidence'
+import {
+  callableAlternativesHref,
+  nextActionForToolFacts,
+} from '@/modules/market/suggested-next-action'
 
 const readDetailMock = vi.hoisted(() => vi.fn())
 
@@ -178,6 +182,7 @@ function renderWithRouter(
 function renderInspectorWithRouter(
   variant: 'compact' | 'full',
   evidence?: MarketListingEvidenceProjection,
+  inspectedTool = tool,
 ) {
   const rootRoute = createRootRoute()
   const routeTree = rootRoute.addChildren([
@@ -188,12 +193,20 @@ function renderInspectorWithRouter(
   return render(
     <RouterContextProvider router={router}>
         <AeToolInspector
-          tool={tool}
+          tool={inspectedTool}
         {...(evidence === undefined ? {} : { evidence })}
         variant={variant}
       />
     </RouterContextProvider>,
   )
+}
+
+function expectRenderedHrefToMatchProducer(renderedHref: string | null, producerHref: string): void {
+  expect(renderedHref).not.toBeNull()
+  const rendered = new URL(renderedHref ?? '', 'https://market.example')
+  const produced = new URL(producerHref, 'https://market.example')
+  expect(rendered.pathname).toBe(produced.pathname)
+  expect([...rendered.searchParams.entries()]).toEqual([...produced.searchParams.entries()])
 }
 
 afterEach(() => {
@@ -284,6 +297,47 @@ describe('/tools/$toolRef', () => {
     expect(fullView.getAllByText('documentUrl').length).toBeGreaterThan(0)
     expect(fullView.getByText('reconcile required')).toBeTruthy()
     expect(fullView.getByText(/evidence:line-items/)).toBeTruthy()
+  })
+
+  it('uses the shared bounded callable alternatives href in both inspector forms', () => {
+    const summary = `Find provider's invoice & tax/line-item lookup 100% current status ${'with evidence '.repeat(30)}`
+    const unavailableTool = {
+      ...tool,
+      summary,
+      availability: {
+        ...tool.availability,
+        posture: 'setup_required' as const,
+        reason: 'setup_required' as const,
+      },
+    }
+    const expectedHref = callableAlternativesHref(summary)
+    const sharedAction = nextActionForToolFacts({
+      toolRef: unavailableTool.toolRef,
+      searchQuery: summary,
+      availabilityPosture: 'setup_required',
+      requiresBuyerCredential: false,
+      hasBuyerCredential: false,
+    })
+    expect(sharedAction.href).toBe(expectedHref)
+    const expectedUrl = new URL(expectedHref, 'https://market.example')
+    expect(expectedUrl.searchParams.get('query')?.length).toBe(200)
+    expect(expectedHref).toContain('query=Find+provider%27s')
+    expect(expectedHref).toContain('%26')
+    expect(expectedHref).toContain('%2F')
+    expect(expectedHref).toContain('%25')
+
+    renderInspectorWithRouter('compact', undefined, unavailableTool)
+    expectRenderedHrefToMatchProducer(
+      screen.getByRole('link', { name: 'Find Tool alternatives' }).getAttribute('href'),
+      expectedHref,
+    )
+
+    cleanup()
+    renderInspectorWithRouter('full', undefined, unavailableTool)
+    expectRenderedHrefToMatchProducer(
+      screen.getByRole('link', { name: 'Find Tool alternatives' }).getAttribute('href'),
+      expectedHref,
+    )
   })
 
   it('keeps one safe continuation beside switchable research views and focuses each full record', () => {

@@ -20,7 +20,7 @@ export function AeAssistantInstallFunnel({
   return (
     <AeSection
       title="Connect with Codex"
-      description="Use Codex's native connection to add Agentic Economy. You can browse Operations before connecting."
+      description="Use Codex's native connection to add Agentic Economy. You can browse Tools before connecting."
     >
       <div className="grid max-w-3xl gap-related">
         <AeCopyCommand
@@ -30,7 +30,7 @@ export function AeAssistantInstallFunnel({
         />
         <p className="text-sm leading-6 text-muted-foreground">{recommended.authenticationInstruction}</p>
         <p className="text-sm leading-6 text-muted-foreground">
-          Return to Codex and ask it to find an Operation for your task. A live result confirms the connection;
+          Return to Codex and ask it to find a Tool for your task. A live result confirms the connection;
           installing it alone does not. Account connection does not grant spending permission.
         </p>
       </div>

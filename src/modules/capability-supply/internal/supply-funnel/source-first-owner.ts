@@ -19,6 +19,7 @@ import {
 import {
   previewSupplySource,
   supplySourceInputSchema,
+  type SupplyToolCandidate,
   type SupplySourceInput,
   type SupplySourcePreview,
   type SupplySourcePreviewDependencies,
@@ -79,6 +80,7 @@ type CandidateDraftResult =
       kind: 'available'
       draft: Readonly<{
         sourceDescriptorJson: string
+        sourceDigest: string
         candidateRef: string
       }>
     }>
@@ -249,11 +251,33 @@ export async function startOwnerSupplySourceConnection({
   context: unknown
 }): Promise<SupplySourcePreview> {
   const readback = await callSourceQuery(readOwnerSupplyQuery, { businessId: data.businessId })
-  if (readback.kind !== 'available' || data.source.kind !== 'openapi') return unavailablePreview()
+  if (readback.kind !== 'available') return unavailablePreview()
   const preview = await previewSupplySource(data.source)
   if (preview.kind !== 'ready' || preview.sourceDigest !== data.expectedSourceDigest) return unavailablePreview()
   const candidate = preview.candidates.find(({ candidateRef }) => candidateRef === data.candidateRef)
-  if (candidate === undefined
+  if (candidate === undefined) return unavailablePreview()
+  if (data.source.kind === 'x402') {
+    if (!isSupportedX402Candidate(candidate, data.source)) return unavailablePreview()
+    return {
+      kind: 'action_required',
+      requiredAction: {
+        action: 'supply.source.preview',
+        blockedCapabilities: ['supply.publish'],
+        cta: x402ConnectionCta({
+          candidateRef: data.candidateRef,
+          resourceUrl: data.source.resourceUrl,
+          method: data.source.method,
+          environment: data.source.environment,
+        }),
+        ctaLabel: 'Connect service',
+        description: 'Inspect the exact x402 payment lane, prove payee control with your wallet, then AE will return to this Tool.',
+        iconUrl: null,
+        status: 'required',
+        title: 'Connect service',
+      },
+    }
+  }
+  if (data.source.kind !== 'openapi'
     || candidate.disposition.kind !== 'supported'
     || (candidate.authentication.kind !== 'api_key' && candidate.authentication.kind !== 'http_bearer')) {
     return unavailablePreview()
@@ -368,7 +392,12 @@ export type OwnerSupplySourceResumeResult =
 export async function resumeOwnerSupplySourceDraft({
   data,
 }: {
-  data: Readonly<{ businessId: string; draftRef: string; connectionRef?: string | undefined }>
+  data: Readonly<{
+    businessId: string
+    draftRef: string
+    connectionRef?: string | undefined
+    environment?: 'sandbox' | 'production' | undefined
+  }>
 }): Promise<OwnerSupplySourceResumeResult> {
   const selectedSource = await callSourceQuery(readSourceSelectionDraftQuery, { draftRef: data.draftRef })
   if (selectedSource.kind === 'available') {
@@ -423,7 +452,17 @@ export async function resumeOwnerSupplySourceDraft({
   }
   const parsed = supplySourceInputSchema.safeParse(rawSource)
   if (!parsed.success) return { kind: 'source_changed' }
-  const preview = data.connectionRef === undefined
+  if (data.environment !== undefined && parsed.data.environment !== data.environment) {
+    return { kind: 'source_changed' }
+  }
+  if (parsed.data.kind === 'x402' && data.connectionRef !== undefined) {
+    const connection = (await readOwnerProviderConnectionsForPublication()).find((candidate) => (
+      candidate.connectionRef === data.connectionRef
+      && candidate.businessId === data.businessId
+    ))
+    if (!isMatchingX402Connection(connection, parsed.data)) return { kind: 'not_found' }
+  }
+  const preview = parsed.data.kind === 'x402' || data.connectionRef === undefined
     ? await previewSupplySource(parsed.data)
     : parsed.data.kind === 'openapi'
       ? await previewSupplySource(parsed.data, {
@@ -453,6 +492,7 @@ export async function resumeOwnerSupplySourceDraft({
         : undefined
   if (preview === undefined) return { kind: 'source_changed' }
   if (preview.kind !== 'ready'
+    || preview.sourceDigest !== saved.draft.sourceDigest
     || !preview.candidates.some(({ candidateRef }) => candidateRef === saved.draft.candidateRef)) {
     return { kind: 'source_changed' }
   }
@@ -662,5 +702,55 @@ function unavailablePreview(): SupplySourcePreview {
       status: 'required',
       title: 'Business unavailable',
     },
+  }
+}
+
+function isSupportedX402Candidate(
+  candidate: SupplyToolCandidate,
+  source: Extract<SupplySourceInput, { kind: 'x402' }>,
+): boolean {
+  if (candidate.disposition.kind !== 'supported' || candidate.authentication.kind !== 'x402_wallet') return false
+  if (!('resourceUrl' in candidate.sourceSelector)) return false
+  return canonicalResourceUrl(candidate.sourceSelector.resourceUrl) === canonicalResourceUrl(source.resourceUrl)
+    && candidate.sourceSelector.method === source.method
+}
+
+function isMatchingX402Connection(
+  connection: ProviderConnectionOwnerProjection | undefined,
+  source: Extract<SupplySourceInput, { kind: 'x402' }>,
+): boolean {
+  if (connection === undefined
+    || !connection.available
+    || connection.lifecycle !== 'active'
+    || connection.adapterId !== 'x402-fetch:v2'
+    || connection.x402Method !== source.method
+    || connection.grantedResources.length !== 1
+    || canonicalResourceUrl(connection.grantedResources[0] ?? '') !== canonicalResourceUrl(source.resourceUrl)) {
+    return false
+  }
+  return connection.sourceEnvironment === undefined || connection.sourceEnvironment === source.environment
+}
+
+function x402ConnectionCta(input: Readonly<{
+  candidateRef: string
+  resourceUrl: string
+  method: 'GET' | 'POST'
+  environment: 'sandbox' | 'production'
+}>): string {
+  const search = new URLSearchParams({
+    connect: 'x402',
+    draft: input.candidateRef,
+    resourceUrl: input.resourceUrl,
+    method: input.method,
+    environment: input.environment,
+  })
+  return `/owner/offerings?${search.toString()}`
+}
+
+function canonicalResourceUrl(resourceUrl: string): string {
+  try {
+    return new URL(resourceUrl).toString()
+  } catch {
+    return resourceUrl
   }
 }

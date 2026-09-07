@@ -76,7 +76,7 @@ export function OperatorRouteError({ error }: { error: unknown }) {
     <Alert variant="destructive">
       <AlertTitle>Couldn’t load this page</AlertTitle>
       <AlertDescription>
-        <p>Try loading it again. If it still fails, check system status before repeating an Operation call.</p>
+        <p>Try loading it again. If it still fails, check system status before repeating a Call.</p>
         {correlationRef === undefined
           ? null
           : <AeCopyReference label="support reference" value={correlationRef} />}

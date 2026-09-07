@@ -1,7 +1,18 @@
-import { mkdtempSync, rmSync } from 'node:fs'
+import * as childProcess from 'node:child_process'
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { createServer } from 'node:http'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { delimiter, join, resolve } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+
+const childProcessMockState = vi.hoisted(() => ({
+  realSpawn: undefined as typeof import('node:child_process').spawn | undefined,
+}))
+vi.mock('node:child_process', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:child_process')>()
+  childProcessMockState.realSpawn = actual.spawn
+  return { ...actual, spawn: vi.fn(actual.spawn) }
+})
 
 import { runConnectCommand } from '../../../tools/ae/commands/connect'
 import { runCompareCommand } from '../../../tools/ae/commands/compare'
@@ -34,7 +45,7 @@ function operationDescriptor(toolRef: string, summary = 'Current reference looku
     toolRef,
     callVia: CALL_ROUTE_CONTRACT.call.path,
     paymentLane: 'brokered',
-    operationId: 'reference.lookup',
+    toolId: 'reference.lookup',
     contract: {
       capabilityId: 'reference.lookup',
       version: 1,
@@ -129,6 +140,25 @@ function connectedAccount() {
   }
 }
 
+function connectFlowFetch(verificationUri?: string, expiresIn = 600, interval = 1) {
+  const deviceRecord: Record<string, unknown> = {
+    device_code: 'device-code',
+    user_code: 'ABCD-EFGH',
+    expires_in: expiresIn,
+    interval,
+  }
+  if (verificationUri !== undefined) deviceRecord.verification_uri = verificationUri
+  return vi.fn<typeof fetch>()
+    .mockResolvedValueOnce(Response.json({ client_id: 'ae_client' }, { status: 201 }))
+    .mockResolvedValueOnce(Response.json(deviceRecord))
+    .mockResolvedValueOnce(Response.json({
+      access_token: 'ae-issued-secret',
+      token_type: 'Bearer',
+      scope: 'market_tools:call customer_requests:spending_policy',
+    }))
+    .mockResolvedValueOnce(responseJson(connectedAccount()))
+}
+
 function operationInspection(
   toolRef: string,
   input: Record<string, unknown>,
@@ -184,6 +214,39 @@ function captureStderr(): { read: () => string; restore: () => void } {
   })
   return { read: () => writes.join(''), restore: () => spy.mockRestore() }
 }
+function forceStdoutTTY(value: boolean): () => void {
+  const descriptor = Object.getOwnPropertyDescriptor(process.stdout, 'isTTY')
+  Object.defineProperty(process.stdout, 'isTTY', { configurable: true, value })
+  return () => {
+    if (descriptor === undefined) {
+      Reflect.deleteProperty(process.stdout, 'isTTY')
+    } else {
+      Object.defineProperty(process.stdout, 'isTTY', descriptor)
+    }
+  }
+}
+function runFreshShell(
+  command: string,
+  env: NodeJS.ProcessEnv,
+): Promise<{ exitCode: number | null; signal: NodeJS.Signals | null; stdout: string; stderr: string }> {
+  const child = childProcess.spawn('/bin/sh', ['-c', command], {
+    cwd: process.cwd(),
+    env,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  })
+  let stdout = ''
+  let stderr = ''
+  child.stdout?.on('data', (chunk: Buffer | string) => {
+    stdout += String(chunk)
+  })
+  child.stderr?.on('data', (chunk: Buffer | string) => {
+    stderr += String(chunk)
+  })
+  return new Promise((resolve, reject) => {
+    child.once('error', reject)
+    child.once('close', (exitCode, signal) => resolve({ exitCode, signal, stdout, stderr }))
+  })
+}
 function setApiKey(value: string, origin = options.baseUrl): void {
   process.env.AE_API_KEY = value
   process.env.AE_API_KEY_ORIGIN = new URL(origin).origin
@@ -199,6 +262,9 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.restoreAllMocks()
+  if (childProcessMockState.realSpawn !== undefined) {
+    vi.mocked(childProcess.spawn).mockImplementation(childProcessMockState.realSpawn)
+  }
   vi.unstubAllGlobals()
   delete process.env.AE_API_KEY
   delete process.env.AE_API_KEY_ORIGIN
@@ -293,6 +359,52 @@ describe('external-agent Market Tool cold loop', () => {
     expect(filteredHumanOutput.read()).toContain('Browse matching filters: ae list --filters \'{"healthStatus":["degraded"]}\'')
     expect(filteredHumanOutput.read()).not.toContain('Remember this missing job')
   })
+  it('qualifies filtered no-candidate pages and keeps exhausted notes health-neutral', async () => {
+    const operationRef = `operation:v1:${'c'.repeat(64)}`
+    const rawPage = toolSearchOutputSchema.parse({
+      kind: 'ok',
+      schemaVersion: 'registry-tools:v1',
+      query: 'reference lookup',
+      items: [operationDescriptor(operationRef)],
+      matchedCount: 2,
+      ranking: [{ toolRef: operationRef, rank: 1, score: 1 }],
+      pagination: { limit: 1, nextCursor: 'opaque-page-cursor', hasMore: true },
+      navigation: [],
+    })
+    const rawExhausted = toolSearchOutputSchema.parse({
+      ...rawPage,
+      pagination: { limit: 1, hasMore: false },
+    })
+    const pageResult = projectToolSearchChoices(rawPage, { healthStatus: ['degraded'] })
+    const exhaustedResult = projectToolSearchChoices(rawExhausted, { healthStatus: ['degraded'] })
+
+    expect(pageResult).toMatchObject({
+      kind: 'no_candidates',
+      note: 'No Tools match this search on this page.',
+      pagination: { hasMore: true, nextCursor: 'opaque-page-cursor' },
+    })
+    expect(exhaustedResult).toMatchObject({
+      kind: 'no_candidates',
+      note: 'No Tools match this search.',
+      pagination: { hasMore: false },
+    })
+
+    const output = captureStdout()
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>().mockResolvedValue(responseJson(pageResult)))
+    try {
+      await runSearchCommand(['reference lookup'], {
+        ...options,
+        json: false,
+        filters: JSON.stringify({ healthStatus: ['degraded'] }),
+      })
+    } finally {
+      output.restore()
+    }
+    expect(output.read()).toContain('No matching Tools on this page.')
+    expect(output.read()).not.toContain('No current Tools match')
+    expect(output.read()).toContain('More results:')
+  })
+
   it('browses all current Tools when no job is supplied', async () => {
     const operationRef = `operation:v1:${'b'.repeat(64)}`
     const result = operationListResult([operationDescriptor(operationRef)])
@@ -1001,6 +1113,10 @@ describe('external-agent Market Tool cold loop', () => {
   it('hands a non-TTY JSON caller the safe approval details before polling completes', async () => {
     const output = captureStdout()
     const diagnostics = captureStderr()
+    const browserOpen = vi.mocked(childProcess.spawn)
+    browserOpen.mockImplementation(() => {
+      throw new Error('browser opener should be suppressed')
+    })
     let resolveToken: ((response: Response) => void) | undefined
     const deferredToken = new Promise<Response>((resolve) => {
       resolveToken = resolve
@@ -1060,6 +1176,7 @@ describe('external-agent Market Tool cold loop', () => {
         apiKeyOrigin: 'https://market.example',
       })
       expect(diagnostics.read()).toBe(expectedHandoff)
+      expect(browserOpen).not.toHaveBeenCalled()
       for (const forbidden of [
         'private-client-id',
         'private-device-code',
@@ -1103,6 +1220,8 @@ describe('external-agent Market Tool cold loop', () => {
       expect(output.read()).toContain('user code     ABCD-EFGH')
       expect(output.read()).toContain('Approve the request, then this command will poll for the one-time credential.')
       expect(output.read()).toContain('Your agent is connected.')
+      expect(output.read()).toContain('Next: ae search \'what you need\'\n')
+      expect(output.read()).not.toContain('Next: ae search \'what you need\'.')
       expect(output.read()).toContain('ready_to_buy')
       expect(output.read()).toContain('https://market.example/agent-access?caller=principal%3Abuyer')
       expect(output.read()).not.toContain('ae-issued-secret')
@@ -1111,6 +1230,129 @@ describe('external-agent Market Tool cold loop', () => {
     } finally {
       output.restore()
       diagnostics.restore()
+    }
+  })
+
+  it('prints the exact selected IPv6 origin in the human continuation', async () => {
+    const selectedOrigin = 'http://[::1]:3210'
+    const expectedCommand = "ae search 'what you need' --base-url 'http://[::1]:3210'"
+    const output = captureStdout()
+    const diagnostics = captureStderr()
+    const restoreTTY = forceStdoutTTY(false)
+    const browserOpen = vi.mocked(childProcess.spawn)
+    browserOpen.mockImplementation(() => {
+      throw new Error('non-TTY human guidance should not open a browser')
+    })
+    vi.stubGlobal('fetch', connectFlowFetch('https://auth.example/authorize?flow=connect'))
+
+    try {
+      await runConnectCommand([], {
+        ...options,
+        baseUrl: selectedOrigin,
+        baseUrlSource: 'flag',
+        json: false,
+      })
+      expect(output.read()).toContain('Next: ' + expectedCommand + '\n')
+      expect(output.read()).not.toContain('Next: ' + expectedCommand + '.')
+      expect(browserOpen).not.toHaveBeenCalled()
+    } finally {
+      output.restore()
+      diagnostics.restore()
+      restoreTTY()
+      vi.unstubAllGlobals()
+      browserOpen.mockClear()
+      if (childProcessMockState.realSpawn !== undefined) {
+        browserOpen.mockImplementation(childProcessMockState.realSpawn)
+      }
+    }
+  })
+
+  it.each([
+    ['valid HTTPS verification URI', 'https://auth.example/authorize?flow=connect'],
+    ['valid loopback HTTP verification URI', 'http://127.0.0.1:4321/authorize'],
+  ] as const)('accepts %s without imposing a same-origin rule', async (_label, uri) => {
+    const output = captureStdout()
+    const fetchMock = connectFlowFetch(uri)
+    vi.stubGlobal('fetch', fetchMock)
+
+    try {
+      await runConnectCommand([], options)
+    } finally {
+      output.restore()
+    }
+
+    expect(JSON.parse(output.read())).toMatchObject({
+      kind: 'connected',
+      verificationUri: uri,
+    })
+  })
+
+  it.each([
+    ['missing verification_uri', undefined],
+    ['malformed verification_uri', 'not-a-url'],
+    ['relative verification_uri', '/authorize'],
+    ['opaque HTTPS verification_uri', 'https:opaque'],
+    ['empty-authority HTTPS verification_uri', 'https:///authorize'],
+    ['non-web verification_uri', 'file:///tmp/authorize'],
+  ] as const)('rejects %s before attempting to open a browser', async (_label, uri) => {
+    const output = captureStdout()
+    const restoreTTY = forceStdoutTTY(true)
+    const previousDisableOpen = process.env.AE_DISABLE_BROWSER_OPEN
+    delete process.env.AE_DISABLE_BROWSER_OPEN
+    const browserOpen = vi.mocked(childProcess.spawn)
+    browserOpen.mockImplementation(() => {
+      throw new Error('invalid verification URI must not open a browser')
+    })
+    vi.stubGlobal('fetch', connectFlowFetch(uri))
+
+    try {
+      await expect(runConnectCommand([], { ...options, json: false })).rejects.toMatchObject({
+        kind: 'UNAVAILABLE',
+        code: 'connect-response-invalid',
+      } satisfies Partial<CliFailure>)
+      expect(output.read()).toBe('')
+      expect(browserOpen).not.toHaveBeenCalled()
+    } finally {
+      output.restore()
+      restoreTTY()
+      if (previousDisableOpen === undefined) delete process.env.AE_DISABLE_BROWSER_OPEN
+      else process.env.AE_DISABLE_BROWSER_OPEN = previousDisableOpen
+    }
+  })
+
+  it.each([
+    ['JSON + TTY + browser enabled', true, true, undefined],
+    ['human + non-TTY + browser enabled', false, false, undefined],
+    ['human + TTY + browser disabled', false, true, '1'],
+  ] as const)('suppresses validated browser opening for %s', async (_label, json, tty, disableOpen) => {
+    const output = captureStdout()
+    const diagnostics = captureStderr()
+    const restoreTTY = forceStdoutTTY(tty)
+    const previousDisableOpen = process.env.AE_DISABLE_BROWSER_OPEN
+    if (disableOpen === undefined) delete process.env.AE_DISABLE_BROWSER_OPEN
+    else process.env.AE_DISABLE_BROWSER_OPEN = disableOpen
+    const browserOpen = vi.mocked(childProcess.spawn)
+    browserOpen.mockImplementation(() => {
+      throw new Error('browser opening should be suppressed')
+    })
+    vi.stubGlobal('fetch', connectFlowFetch('https://auth.example/authorize?flow=connect'))
+
+    try {
+      await runConnectCommand([], { ...options, json })
+      expect(browserOpen).not.toHaveBeenCalled()
+      if (json) expect(JSON.parse(output.read())).toMatchObject({ kind: 'connected' })
+      else expect(output.read()).toContain('Your agent is connected.')
+    } finally {
+      output.restore()
+      diagnostics.restore()
+      restoreTTY()
+      vi.unstubAllGlobals()
+      browserOpen.mockClear()
+      if (childProcessMockState.realSpawn !== undefined) {
+        browserOpen.mockImplementation(childProcessMockState.realSpawn)
+      }
+      if (previousDisableOpen === undefined) delete process.env.AE_DISABLE_BROWSER_OPEN
+      else process.env.AE_DISABLE_BROWSER_OPEN = previousDisableOpen
     }
   })
 
@@ -1217,6 +1459,168 @@ describe('external-agent Market Tool cold loop', () => {
       accountRef: 'account:buyer',
       apiKeyOrigin: 'https://market.example',
     })
+  })
+
+  it.each([
+    [false, "ae search 'what you need' --base-url 'http://[::1]:3210' --json"],
+    [true, "ae supply tools '<businessRef>' --base-url 'http://[::1]:3210' --json"],
+  ] as const)('emits a shell-safe origin-preserving %s continuation for an existing key', async (provider, expectedCommand) => {
+    const selectedOrigin = 'http://[::1]:3210'
+    setApiKey('ae-existing-secret', selectedOrigin)
+    const output = captureStdout()
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>().mockResolvedValueOnce(responseJson(
+      provider ? { ...connectedAccount(), scopes: ['market_supply:manage'] } : connectedAccount(),
+    )))
+
+    try {
+      await runConnectCommand([], {
+        ...options,
+        baseUrl: selectedOrigin,
+        baseUrlSource: 'flag',
+        provider,
+      })
+    } finally {
+      output.restore()
+    }
+
+    const result = JSON.parse(output.read()) as Record<string, unknown>
+    expect(result).toMatchObject({
+      kind: 'connected',
+      nextCommand: expectedCommand,
+    })
+    expect(result.nextAction).toBe('Run ' + expectedCommand + '.')
+  })
+
+  it('emits an origin-preserving JSON continuation when OAuth approval times out', async () => {
+    const selectedOrigin = 'http://[::1]:3210'
+    const output = captureStdout()
+    const diagnostics = captureStderr()
+    let tokenFetchReached: (() => void) | undefined
+    const tokenFetch = new Promise<void>((resolveTokenFetch) => {
+      tokenFetchReached = resolveTokenFetch
+    })
+    const fetchMock = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(Response.json({ client_id: 'ae_client' }, { status: 201 }))
+      .mockResolvedValueOnce(Response.json({
+        device_code: 'device-code',
+        user_code: 'ABCD-EFGH',
+        verification_uri: 'https://auth.example/authorize?flow=connect',
+        expires_in: 1,
+        interval: 1,
+      }))
+      .mockImplementationOnce(async () => {
+        tokenFetchReached?.()
+        return Response.json({ error: 'authorization_pending' }, { status: 400 })
+      })
+    vi.stubGlobal('fetch', fetchMock)
+    vi.useFakeTimers()
+    vi.setSystemTime(0)
+
+    try {
+      const connect = runConnectCommand([], {
+        ...options,
+        baseUrl: selectedOrigin,
+        baseUrlSource: 'flag',
+        provider: true,
+      })
+      await tokenFetch
+      await vi.advanceTimersByTimeAsync(1_000)
+      await connect
+    } finally {
+      vi.useRealTimers()
+      output.restore()
+      diagnostics.restore()
+      vi.unstubAllGlobals()
+    }
+
+    expect(JSON.parse(output.read())).toMatchObject({
+      kind: 'pending',
+      nextCommand: "ae connect --provider --base-url 'http://[::1]:3210' --json",
+    })
+  })
+
+  it('follows a connected continuation to the selected IPv6 loopback origin in a fresh process', async () => {
+    const requests: Array<{ method: string; url: string; body: string }> = []
+    const server = createServer((request, response) => {
+      const chunks: Buffer[] = []
+      request.on('data', (chunk: Buffer | string) => chunks.push(Buffer.from(chunk)))
+      request.on('end', () => {
+        requests.push({
+          method: request.method ?? '',
+          url: request.url ?? '',
+          body: Buffer.concat(chunks).toString('utf8'),
+        })
+        if (request.url === '/api/v1/account') {
+          response.writeHead(200, { 'content-type': 'application/json' })
+          response.end(JSON.stringify(connectedAccount()))
+          return
+        }
+        if (request.url === '/api/v1/market-tools/search') {
+          response.writeHead(200, { 'content-type': 'application/json' })
+          response.end(JSON.stringify(operationSearchResult('what you need', [])))
+          return
+        }
+        response.writeHead(404, { 'content-type': 'application/json' })
+        response.end(JSON.stringify({ kind: 'not_found' }))
+      })
+    })
+    let listening = false
+
+    await new Promise<void>((resolveListen, reject) => {
+      server.once('error', reject)
+      server.listen(0, '::1', resolveListen)
+    })
+    listening = true
+
+    try {
+      const address = server.address()
+      if (typeof address !== 'object' || address === null) throw new Error('fresh continuation server did not expose an address')
+      const selectedOrigin = 'http://[::1]:' + address.port
+      setApiKey('fresh-process-key', selectedOrigin)
+      writeFileSync(
+        join(testConfigDirectory, 'ae'),
+        '#!/bin/sh\nexec "$AE_TEST_NODE" --import tsx "$AE_TEST_CLI" "$@"\n',
+        { mode: 0o755 },
+      )
+
+      const output = captureStdout()
+      vi.stubGlobal('fetch', vi.fn<typeof fetch>().mockResolvedValueOnce(responseJson(connectedAccount())))
+      try {
+        await runConnectCommand([], {
+          ...options,
+          baseUrl: selectedOrigin,
+          baseUrlSource: 'flag',
+        })
+      } finally {
+        output.restore()
+      }
+
+      const connected = JSON.parse(output.read()) as { nextCommand: string }
+      expect(connected.nextCommand).toBe("ae search 'what you need' --base-url '" + selectedOrigin + "' --json")
+
+      const child = await runFreshShell(connected.nextCommand, {
+        ...process.env,
+        AE_TEST_CLI: resolve('tools/ae/cli.ts'),
+        AE_TEST_NODE: process.execPath,
+        PATH: testConfigDirectory + delimiter + (process.env.PATH ?? ''),
+      })
+      expect(child).toMatchObject({ exitCode: 0, signal: null, stderr: '' })
+      expect(JSON.parse(child.stdout)).toMatchObject({
+        kind: 'no_candidates',
+        query: 'what you need',
+      })
+      expect(requests).toContainEqual({
+        method: 'POST',
+        url: '/api/v1/market-tools/search',
+        body: JSON.stringify({ query: 'what you need', limit: 10 }),
+      })
+    } finally {
+      if (listening) {
+        await new Promise<void>((resolveClose, reject) => {
+          server.close((error) => error === undefined ? resolveClose() : reject(error))
+        })
+      }
+    }
   })
 
   it('refuses a fake configured key instead of claiming connected', async () => {

@@ -328,16 +328,18 @@ aggregate limits that survive credential rotation. A credential is access and
 audit evidence; it is not the budget owner.
 
 Before a consequential Call, the current authenticated source action,
-`tool.quote`, is the one caller-specific decision packet. It combines the selected Tool's
-material detail with its exact version, normalised input, effects, data use,
-Provider, Seller, exact or maximum all-in AUD price, expiry, current authority
-fit, agent budget impact, permitted shared-balance viability, evidence and
-material unknowns. A successful `tool.quote` request returns an expiring Quote.
-Execution
-revalidates the same facts before the Call takes effect. Drift fails before
-reservation, signing or Provider effect. This is accepted source behaviour;
-installed-package compatibility, hosted deployment and production release are
-separate gates.
+`tool.quote`, is the one caller-specific decision packet. Its successful DTO
+binds the `toolRef` and `toolVersion`, normalised input, expiring price,
+Account reference and available balance, budget ceiling, applicable policy
+references and an evidence digest. The current Tool material is checked through
+the Tool reference, version and evidence projections; the DTO does not yet
+establish explicit Provider or Seller fields or the complete buyer-facing
+principal-reseller terms. A successful `tool.quote` request returns an expiring
+Quote. Execution revalidates the same Tool, input, authority, budget, balance,
+pricing and evidence-related facts before the Call takes effect. Drift fails
+before reservation, signing or Provider effect. This is accepted source
+behaviour; installed-package compatibility, hosted deployment and production
+release are separate gates.
 
 Machine responses are action-specific tagged results rather than one universal
 envelope. Each response contains only the facts required for its decision. A

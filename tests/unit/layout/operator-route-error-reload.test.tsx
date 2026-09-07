@@ -67,7 +67,7 @@ describe('OperatorRouteError router recovery', () => {
     expect(statusLink.getAttribute('href')).toBe('/status')
     expect(statusLink.classList.contains('min-h-touch')).toBe(true)
     expect(alert.textContent).not.toContain('private upstream credential')
-    expect(alert.textContent).toContain('check system status before repeating an Operation call')
+    expect(alert.textContent).toContain('check system status before repeating a Call')
   })
 
   it('retains nested parent chrome with one Settings heading', () => {

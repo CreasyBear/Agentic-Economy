@@ -57,13 +57,20 @@ If verification has an uncertain outcome, use the supplied status or reconciliat
 ## Agent and CLI access
 
 Provider commands require a separately approved credential with
-`market_supply:manage`. The current CLI flag is `--provider`; the retained
-provider-supply verb is `ae supply operations`:
+`market_supply:manage`. The current CLI flag is `--provider`. Use
+`ae supply tools` to inventory admitted Tools and `ae supply status` with both
+the business and Tool references to inspect one exact lifecycle:
 
 ```sh
+AE_ORIGIN="https://replace-with-your-ae-origin"
+BUSINESS_REF="business:replace-with-your-business-ref"
+TOOL_REF="tool:replace-with-your-tool-ref"
+
+# Replace the quoted values above with the exact origin, businessRef, and
+# toolRef returned by your AE deployment; keep the shell quotes unchanged.
 ae connect --provider --base-url "$AE_ORIGIN"
-ae supply operations <businessId> --base-url "$AE_ORIGIN" --json
-ae supply status <businessId> --base-url "$AE_ORIGIN" --json
+ae supply tools "$BUSINESS_REF" --base-url "$AE_ORIGIN" --json
+ae supply status "$BUSINESS_REF" "$TOOL_REF" --base-url "$AE_ORIGIN" --json
 ```
 
 The status result provides the exact next command, including revision, generation, and digest preconditions when they are required. Execute that command unchanged. Use `ae doctor --base-url "$AE_ORIGIN" --json` before consequential work.

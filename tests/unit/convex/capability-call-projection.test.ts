@@ -130,6 +130,202 @@ describe('Account Call projection', () => {
 
   })
 
+  it('reads owner Agent Calls for the created UTC period and keeps settled spend evidence explicit', async () => {
+    const backend = convexTestWithMarketComponents()
+    const fixture = await publishedBusinessOwner(backend, 'call-projection-owner-readback')
+    const foreignAccountRef = 'account:foreign-owner-readback'
+    const principalRef = 'principal:owner-readback'
+    const completePrincipalRef = 'principal:complete-readback'
+    const periodStartAt = Date.UTC(2026, 8, 1)
+    const periodEndAt = Date.UTC(2026, 9, 1)
+    const base = {
+      accountRef: fixture.canonicalAccountRef,
+      applicationRef: 'application:owner-readback',
+      toolRef: 'tool:owner-readback',
+      providerRef: 'provider:owner-readback',
+      toolLabel: 'Owner readback Tool',
+      latencyMs: 10,
+      updatedAt: periodStartAt + 10,
+    }
+    await backend.run(async (ctx) => {
+      const rows = [
+        {
+          ...base, callRef: 'call:owner-settled', principalRef, credentialRef: 'credential:old',
+          state: 'completed' as const, deliveryState: 'delivered' as const, paymentState: 'settled' as const,
+          audAmountUnits: '2000000', createdAt: periodStartAt,
+        },
+        {
+          ...base, callRef: 'call:owner-released', principalRef, credentialRef: 'credential:old',
+          state: 'completed' as const, deliveryState: 'delivered' as const, paymentState: 'released' as const,
+          audAmountUnits: '8000000', createdAt: periodStartAt + 1,
+        },
+        {
+          ...base, callRef: 'call:owner-unknown', principalRef, credentialRef: 'credential:new',
+          state: 'outcome_unknown' as const, deliveryState: 'unknown' as const, paymentState: 'unknown' as const,
+          audAmountUnits: '7000000', recoveryRef: 'call:owner-unknown', createdAt: periodStartAt + 2,
+        },
+        {
+          ...base, callRef: 'call:owner-fallback-usage', principalRef, credentialRef: 'credential:new',
+          state: 'completed' as const, deliveryState: 'delivered' as const, paymentState: 'not_applicable' as const,
+          audAmountUnits: '3000000', createdAt: periodStartAt + 3,
+        },
+        {
+          ...base, callRef: 'call:owner-missing-amount', principalRef, credentialRef: 'credential:new',
+          state: 'completed' as const, deliveryState: 'delivered' as const, paymentState: 'settled' as const,
+          createdAt: periodStartAt + 4,
+        },
+        {
+          ...base, callRef: 'call:owner-at-end', principalRef, credentialRef: 'credential:new',
+          state: 'completed' as const, deliveryState: 'delivered' as const, paymentState: 'settled' as const,
+          audAmountUnits: '9000000', createdAt: periodEndAt,
+        },
+        {
+          ...base, accountRef: foreignAccountRef, callRef: 'call:foreign', principalRef, credentialRef: 'credential:foreign',
+          state: 'completed' as const, deliveryState: 'delivered' as const, paymentState: 'settled' as const,
+          audAmountUnits: '11000000', createdAt: periodStartAt + 5,
+        },
+        {
+          ...base, callRef: 'call:complete-settled', principalRef: completePrincipalRef, credentialRef: 'credential:complete-old',
+          state: 'completed' as const, deliveryState: 'delivered' as const, paymentState: 'settled' as const,
+          audAmountUnits: '2000000', createdAt: periodStartAt + 6,
+        },
+        {
+          ...base, callRef: 'call:complete-released', principalRef: completePrincipalRef, credentialRef: 'credential:complete-new',
+          state: 'completed' as const, deliveryState: 'delivered' as const, paymentState: 'released' as const,
+          audAmountUnits: '8000000', createdAt: periodStartAt + 7,
+        },
+      ]
+      for (const row of rows) await ctx.db.insert('capabilityCallProjections', row)
+    })
+
+    const readOwnerAgentReadback = anyApi.capabilityCallProjections?.readOwnerAgentReadback
+    if (readOwnerAgentReadback === undefined) throw new Error('Owner Agent readback query missing')
+    const readback = await fixture.owner.query(readOwnerAgentReadback, {
+      principalRef,
+      periodStartAt,
+      periodEndAt,
+      paginationOpts: { numItems: 50, cursor: null },
+    })
+    expect(readback.activity.page.map((call: { callRef: string }) => call.callRef)).toEqual([
+      'call:owner-missing-amount',
+      'call:owner-fallback-usage',
+      'call:owner-unknown',
+      'call:owner-released',
+      'call:owner-settled',
+    ])
+    expect(readback.activity.page.every((call: { accountRef: string; principalRef: string; createdAt: number }) => (
+      call.accountRef === fixture.canonicalAccountRef
+      && call.principalRef === principalRef
+      && call.createdAt >= periodStartAt
+      && call.createdAt < periodEndAt
+    ))).toBe(true)
+    expect(readback.activity.page.find((call: { callRef: string }) => call.callRef === 'call:owner-unknown'))
+      .toMatchObject({ paymentState: 'unknown', recoveryRef: 'call:owner-unknown' })
+    expect(readback.usage).toMatchObject({
+      kind: 'available',
+      dimensionKind: 'agent',
+      dimensionRef: principalRef,
+      periodStartAt,
+      periodEndAt,
+      callCountUnits: '5',
+      completedCountUnits: '4',
+      outcomeUnknownCountUnits: '1',
+      amountCoverage: 'incomplete',
+    })
+    expect(readback.usage).not.toHaveProperty('settledSpendUnits')
+
+    await expect(fixture.owner.query(readOwnerAgentReadback, {
+      principalRef: completePrincipalRef,
+      periodStartAt,
+      periodEndAt,
+      paginationOpts: { numItems: 50, cursor: null },
+    })).resolves.toMatchObject({
+      usage: {
+        kind: 'available',
+        callCountUnits: '2',
+        completedCountUnits: '2',
+        outcomeUnknownCountUnits: '0',
+        amountCoverage: 'complete',
+        settledSpendUnits: '2000000',
+      },
+    })
+
+    const stranger = await publishedBusinessOwner(backend, 'call-projection-stranger-readback')
+    await expect(stranger.owner.query(readOwnerAgentReadback, {
+      principalRef,
+      periodStartAt,
+      periodEndAt,
+      paginationOpts: { numItems: 50, cursor: null },
+    })).resolves.toMatchObject({
+      activity: { page: [] },
+      usage: { kind: 'empty', dimensionKind: 'agent', dimensionRef: principalRef, periodStartAt, periodEndAt },
+    })
+    await expect(backend.query(readOwnerAgentReadback, {
+      principalRef,
+      periodStartAt,
+      periodEndAt,
+      paginationOpts: { numItems: 50, cursor: null },
+    })).rejects.toThrow('call_history_authentication_required')
+    await expect(fixture.owner.query(readOwnerAgentReadback, {
+      principalRef,
+      periodStartAt,
+      periodEndAt,
+      paginationOpts: { numItems: 51, cursor: null },
+    })).rejects.toThrow('call_history_page_size_invalid')
+  })
+
+  it('keeps Agent activity at 50 rows with an opaque continuation separate from directory paging', async () => {
+    const backend = convexTestWithMarketComponents()
+    const fixture = await publishedBusinessOwner(backend, 'call-projection-agent-page')
+    const principalRef = 'principal:page-readback'
+    const periodStartAt = Date.UTC(2026, 8, 1)
+    const periodEndAt = Date.UTC(2026, 9, 1)
+    await backend.run(async (ctx) => {
+      for (let index = 0; index < 51; index += 1) {
+        await ctx.db.insert('capabilityCallProjections', {
+          callRef: `call:page:${index}`,
+          accountRef: fixture.canonicalAccountRef,
+          principalRef,
+          credentialRef: index < 25 ? 'credential:page-old' : 'credential:page-new',
+          applicationRef: 'application:page',
+          toolRef: 'tool:page',
+          providerRef: 'provider:page',
+          toolLabel: 'Page Tool',
+          state: 'completed',
+          deliveryState: 'delivered',
+          paymentState: 'settled',
+          audAmountUnits: '1000000',
+          latencyMs: 1,
+          createdAt: periodStartAt + index,
+          updatedAt: periodStartAt + index,
+        })
+      }
+    })
+    const readOwnerAgentReadback = anyApi.capabilityCallProjections?.readOwnerAgentReadback
+    if (readOwnerAgentReadback === undefined) throw new Error('Owner Agent readback query missing')
+    const firstPage = await fixture.owner.query(readOwnerAgentReadback, {
+      principalRef,
+      periodStartAt,
+      periodEndAt,
+      paginationOpts: { numItems: 50, cursor: null },
+    })
+    expect(firstPage.activity.page).toHaveLength(50)
+    expect(firstPage.activity.isDone).toBe(false)
+    expect(firstPage.activity.continueCursor).toBeTruthy()
+    expect(firstPage.activity.page[0]?.createdAt).toBe(periodStartAt + 50)
+    expect(firstPage.usage).toMatchObject({ callCountUnits: '51', settledSpendUnits: '51000000', amountCoverage: 'complete' })
+
+    const secondPage = await fixture.owner.query(readOwnerAgentReadback, {
+      principalRef,
+      periodStartAt,
+      periodEndAt,
+      paginationOpts: { numItems: 50, cursor: firstPage.activity.continueCursor },
+    })
+    expect(secondPage.activity.page).toHaveLength(1)
+    expect(secondPage.activity.isDone).toBe(true)
+    expect(secondPage.activity.page[0]?.createdAt).toBe(periodStartAt)
+  })
+
   it('pages a 10,000-Call fixture through the Account index without exposing another Account', async () => {
     const backend = convexTestWithMarketComponents()
     const fixture = await publishedBusinessOwner(backend, 'call-projection-volume')

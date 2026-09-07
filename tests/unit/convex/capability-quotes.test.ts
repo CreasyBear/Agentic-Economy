@@ -16,6 +16,11 @@ import {
   splitInclusiveAudTax,
 } from '@/modules/money/public'
 import {
+  cdpX402CustodyBudgetRef,
+  cdpX402CustodyConfigurationFromEnvironment,
+  x402PaymentProfileForEnvironment,
+} from '@/modules/capability-supply/convex'
+import {
   convexTestWithMarketComponents,
   publishedBusinessOwner,
   type ConvexFixtureBackend,
@@ -72,7 +77,117 @@ type PreparedSubjects = Readonly<{
   policyDigest: string
   policyGeneration: number
   buyerTaxBps: number
+  treasury?: Readonly<{
+    custodyRef: string
+    custodyGeneration: number
+    network: string
+    targetUnits: string
+    evidenceRef: string
+    evidenceDigest: string
+  }>
 }>
+
+const validCustodyEnvironment = Object.freeze({
+  AE_X402_CUSTODY_ENABLED: 'true',
+  AE_X402_CUSTODY_MAX_ATOMIC: '10000',
+  AE_X402_CUSTODY_DAILY_MAX_ATOMIC: '100000',
+  CDP_API_KEY_ID: 'key-id',
+  CDP_API_KEY_SECRET: 'key-secret',
+  CDP_WALLET_SECRET: 'wallet-secret',
+  AE_X402_CDP_ACCOUNT_NAME: 'agentic-economy-x402',
+  AE_X402_CDP_EXPECTED_EVM_ADDRESS: '0x0000000000000000000000000000000000000001',
+  AE_X402_CDP_ACCOUNT_POLICY_ID: '11111111-1111-4111-8111-111111111111',
+  AE_X402_CDP_PROJECT_POLICY_ID: '22222222-2222-4222-8222-222222222222',
+  AE_X402_CDP_POLICY_RULES_DIGEST: `sha256:${'a'.repeat(64)}`,
+  AE_X402_CDP_CREDENTIAL_GENERATION: '7',
+})
+const validCustodyConfiguration = cdpX402CustodyConfigurationFromEnvironment(validCustodyEnvironment)
+if (validCustodyConfiguration === undefined) throw new Error('quote_test_custody_configuration_invalid')
+const activeCustodyRef = cdpX402CustodyBudgetRef(validCustodyConfiguration, 'production')
+const activeCustodyGeneration = validCustodyConfiguration.credentialGeneration
+const activeCustodyNetwork = (() => {
+  const network = x402PaymentProfileForEnvironment('production')?.network
+  if (network === undefined) throw new Error('quote_test_payment_profile_invalid')
+  return network
+})()
+
+async function withCustodyEnvironment<T>(
+  callback: () => Promise<T>,
+  overrides: Readonly<Record<string, string | undefined>> = {},
+): Promise<T> {
+  const environment = { ...validCustodyEnvironment, ...overrides }
+  const previous = new Map<string, string | undefined>()
+  for (const [name, value] of Object.entries(environment)) {
+    previous.set(name, process.env[name])
+    if (value === undefined) delete process.env[name]
+    else process.env[name] = value
+  }
+  try {
+    return await callback()
+  } finally {
+    for (const [name, value] of previous) {
+      if (value === undefined) delete process.env[name]
+      else process.env[name] = value
+    }
+  }
+}
+
+async function recordTreasuryObservation(
+  backend: ConvexFixtureBackend,
+  suffix: string,
+  overrides: Readonly<{
+    custodyRef?: string
+    custodyGeneration?: number
+    network?: string
+    totalUnits?: string
+    bufferUnits?: string
+    observedAt?: number
+  }> = {},
+): Promise<void> {
+  const observedAt = overrides.observedAt ?? 1_800_000_000_000
+  const result = await backend.mutation(internal.moneyTreasury.recordObservation, {
+    environment: 'production',
+    custodyRef: overrides.custodyRef ?? activeCustodyRef,
+    custodyGeneration: overrides.custodyGeneration ?? activeCustodyGeneration,
+    network: overrides.network ?? activeCustodyNetwork,
+    asset: 'USDC',
+    exponent: 6,
+    observationRef: `treasury-observation:quote:${suffix}`,
+    totalUnits: overrides.totalUnits ?? '10000000',
+    bufferUnits: overrides.bufferUnits ?? '1000000',
+    evidenceRef: `cdp-balance:quote:${suffix}`,
+    evidenceDigest: canonicalDigest({ observedAt, suffix }),
+    observedAt,
+  })
+  expect(result).toMatchObject({
+    kind: 'accepted',
+    replayed: false,
+  })
+}
+
+async function insertMalformedTreasuryObservation(
+  backend: ConvexFixtureBackend,
+  suffix: string,
+  observedAt: number,
+): Promise<void> {
+  await backend.run(async (ctx) => {
+    await ctx.db.insert('moneyTreasuryObservations', {
+      environment: 'production',
+      custodyRef: activeCustodyRef,
+      custodyGeneration: activeCustodyGeneration,
+      network: activeCustodyNetwork,
+      asset: 'USDC',
+      exponent: 6,
+      observationRef: `treasury-observation:quote:${suffix}`,
+      totalUnits: 'not-units',
+      bufferUnits: '1000000',
+      evidenceRef: `cdp-balance:quote:${suffix}`,
+      evidenceDigest: 'not-a-digest',
+      observedAt,
+      recordedAt: observedAt,
+    })
+  })
+}
 
 function testRef(kind: string, material: string): string {
   return `${kind}_${canonicalDigest({ format: 'quote-handler-test-ref:v1', kind, material }).slice(7, 39)}`
@@ -522,5 +637,184 @@ describe('direct Quote handlers', () => {
       code: 'budget_exceeded',
       reason: 'per_call_limit',
     })
+  })
+
+  it('selects the newest observation for the configured active custody', async () => {
+    const backend = convexTestWithMarketComponents()
+    const suffix = 'treasury-same-custody'
+    const fixture = await publishCurrentTool(backend, suffix)
+    await seedCommercialPolicies(backend, suffix, Date.now())
+    const agent = await seedAgent(backend, { canonicalAccountRef: fixture.accountRef }, fixture.toolRef, suffix, '20000000')
+    await backend.finishAllScheduledFunctions(() => undefined)
+    await observeHealthyReadiness(backend, fixture, suffix)
+    await recordTreasuryObservation(backend, `${suffix}-old`, {
+      totalUnits: '10000000',
+      bufferUnits: '1000000',
+      observedAt: 1_800_000_000_000,
+    })
+    await recordTreasuryObservation(backend, `${suffix}-new`, {
+      totalUnits: '20000000',
+      bufferUnits: '3000000',
+      observedAt: 1_800_000_000_001,
+    })
+
+    const subjects = await withCustodyEnvironment(() => prepareSubjects(
+      backend,
+      agent,
+      fixture.toolRef,
+      { request: 'Perth' },
+      suffix,
+    ))
+    expect(subjects.treasury).toMatchObject({
+      custodyRef: activeCustodyRef,
+      custodyGeneration: activeCustodyGeneration,
+      network: activeCustodyNetwork,
+      targetUnits: '17000000',
+      evidenceRef: `cdp-balance:quote:${suffix}-new`,
+    })
+  })
+
+  it('ignores old generations and other custody rows without an environment fallback', async () => {
+    const backend = convexTestWithMarketComponents()
+    const suffix = 'treasury-identity-filter'
+    const fixture = await publishCurrentTool(backend, suffix)
+    await seedCommercialPolicies(backend, suffix, Date.now())
+    const agent = await seedAgent(backend, { canonicalAccountRef: fixture.accountRef }, fixture.toolRef, suffix, '20000000')
+    await backend.finishAllScheduledFunctions(() => undefined)
+    await observeHealthyReadiness(backend, fixture, suffix)
+    await recordTreasuryObservation(backend, `${suffix}-active`, {
+      totalUnits: '10000000',
+      bufferUnits: '1000000',
+      observedAt: 1_800_000_000_000,
+    })
+    await recordTreasuryObservation(backend, `${suffix}-old-generation`, {
+      custodyGeneration: activeCustodyGeneration - 1,
+      totalUnits: '90000000',
+      bufferUnits: '1000000',
+      observedAt: 1_800_000_000_002,
+    })
+    await recordTreasuryObservation(backend, `${suffix}-other-custody`, {
+      custodyRef: 'custody:quote:other',
+      totalUnits: '80000000',
+      bufferUnits: '1000000',
+      observedAt: 1_800_000_000_003,
+    })
+
+    const subjects = await withCustodyEnvironment(() => prepareSubjects(
+      backend,
+      agent,
+      fixture.toolRef,
+      { request: 'Perth' },
+      suffix,
+    ))
+    expect(subjects.treasury).toMatchObject({
+      targetUnits: '9000000',
+      evidenceRef: `cdp-balance:quote:${suffix}-active`,
+    })
+  })
+
+  it('fails closed when no observation matches the active custody tuple', async () => {
+    const backend = convexTestWithMarketComponents()
+    const suffix = 'treasury-no-active-match'
+    const fixture = await publishCurrentTool(backend, suffix)
+    await seedCommercialPolicies(backend, suffix, Date.now())
+    const agent = await seedAgent(backend, { canonicalAccountRef: fixture.accountRef }, fixture.toolRef, suffix, '20000000')
+    await backend.finishAllScheduledFunctions(() => undefined)
+    await observeHealthyReadiness(backend, fixture, suffix)
+    await recordTreasuryObservation(backend, `${suffix}-old-generation`, {
+      custodyGeneration: activeCustodyGeneration - 1,
+      observedAt: 1_800_000_000_000,
+    })
+    await recordTreasuryObservation(backend, `${suffix}-other-custody`, {
+      custodyRef: 'custody:quote:other',
+      observedAt: 1_800_000_000_001,
+    })
+
+    const subjects = await withCustodyEnvironment(() => prepareSubjects(
+      backend,
+      agent,
+      fixture.toolRef,
+      { request: 'Perth' },
+      suffix,
+    ))
+    expect(subjects.treasury).toBeUndefined()
+  })
+
+  it.each([
+    ['missing custody configuration', { AE_X402_CUSTODY_ENABLED: undefined }],
+    ['invalid custody generation', { AE_X402_CDP_CREDENTIAL_GENERATION: 'not-a-number' }],
+  ] as const)('fails closed with %s', async (_label, overrides) => {
+    const backend = convexTestWithMarketComponents()
+    const suffix = `treasury-invalid-config-${_label.replaceAll(' ', '-')}`
+    const fixture = await publishCurrentTool(backend, suffix)
+    await seedCommercialPolicies(backend, suffix, Date.now())
+    const agent = await seedAgent(backend, { canonicalAccountRef: fixture.accountRef }, fixture.toolRef, suffix, '20000000')
+    await backend.finishAllScheduledFunctions(() => undefined)
+    await observeHealthyReadiness(backend, fixture, suffix)
+    await recordTreasuryObservation(backend, suffix)
+
+    const subjects = await withCustodyEnvironment(
+      () => prepareSubjects(backend, agent, fixture.toolRef, { request: 'Perth' }, suffix),
+      overrides,
+    )
+    expect(subjects.treasury).toBeUndefined()
+  })
+
+  it.each([
+    ['malformed newest evidence', 'malformed'],
+    ['negative newest capacity', 'negative'],
+  ] as const)('does not fall back from %s to older evidence', async (_label, kind) => {
+    const backend = convexTestWithMarketComponents()
+    const suffix = `treasury-no-fallback-${kind}`
+    const fixture = await publishCurrentTool(backend, suffix)
+    await seedCommercialPolicies(backend, suffix, Date.now())
+    const agent = await seedAgent(backend, { canonicalAccountRef: fixture.accountRef }, fixture.toolRef, suffix, '20000000')
+    await backend.finishAllScheduledFunctions(() => undefined)
+    await observeHealthyReadiness(backend, fixture, suffix)
+    await recordTreasuryObservation(backend, `${suffix}-old`, {
+      totalUnits: '10000000',
+      bufferUnits: '1000000',
+      observedAt: 1_800_000_000_000,
+    })
+    if (kind === 'malformed') {
+      await insertMalformedTreasuryObservation(backend, `${suffix}-new`, 1_800_000_000_001)
+    } else {
+      await recordTreasuryObservation(backend, `${suffix}-new`, {
+        totalUnits: '100',
+        bufferUnits: '200',
+        observedAt: 1_800_000_000_001,
+      })
+    }
+
+    const subjects = await withCustodyEnvironment(() => prepareSubjects(
+      backend,
+      agent,
+      fixture.toolRef,
+      { request: 'Perth' },
+      suffix,
+    ))
+    expect(subjects.treasury).toBeUndefined()
+  })
+
+  it('rejects an active observation with an unexpected payment network', async () => {
+    const backend = convexTestWithMarketComponents()
+    const suffix = 'treasury-network-mismatch'
+    const fixture = await publishCurrentTool(backend, suffix)
+    await seedCommercialPolicies(backend, suffix, Date.now())
+    const agent = await seedAgent(backend, { canonicalAccountRef: fixture.accountRef }, fixture.toolRef, suffix, '20000000')
+    await backend.finishAllScheduledFunctions(() => undefined)
+    await observeHealthyReadiness(backend, fixture, suffix)
+    await recordTreasuryObservation(backend, suffix, {
+      network: 'eip155:1',
+    })
+
+    const subjects = await withCustodyEnvironment(() => prepareSubjects(
+      backend,
+      agent,
+      fixture.toolRef,
+      { request: 'Perth' },
+      suffix,
+    ))
+    expect(subjects.treasury).toBeUndefined()
   })
 })

@@ -126,7 +126,7 @@ export function SourceAuthorityReviewPanel({ review }: { review: SourceAuthority
   return (
     <AeSection
       title="Review source authority"
-      description="Confirm this exact publication only after independently verifying that the Business controls the source."
+      description="Confirm this exact publication only after independently verifying that the Provider controls the source."
     >
       <div className="grid gap-4">
         <dl className="grid gap-2 text-sm">
@@ -145,7 +145,7 @@ export function SourceAuthorityReviewPanel({ review }: { review: SourceAuthority
             <dd><code className="break-all text-xs text-muted-foreground">{review.publicationRef} · revision {review.expectedRevision}</code></dd>
           </div>
           <div className="grid gap-1">
-            <dt className="font-medium text-foreground">Operation</dt>
+            <dt className="font-medium text-foreground">Tool reference</dt>
             <dd><code className="break-all text-xs text-muted-foreground">{review.operationRef}</code></dd>
           </div>
         </dl>

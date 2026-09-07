@@ -155,7 +155,7 @@ describe('capability Tool search ranking', () => {
 
     expect(result.kind).toBe('ok')
     if (result.kind !== 'ok') return
-    expect(result.items.map(({ operationId }) => operationId)).toEqual(['capability:bitcoin.price'])
+    expect(result.items.map(({ toolId }) => toolId)).toEqual(['capability:bitcoin.price'])
   })
 
   it('treats an unmatched place as call input rather than a second capability requirement', async () => {
@@ -167,7 +167,7 @@ describe('capability Tool search ranking', () => {
 
     expect(result.kind).toBe('ok')
     if (result.kind !== 'ok') return
-    expect(result.items.map(({ operationId }) => operationId)).toEqual([
+    expect(result.items.map(({ toolId }) => toolId)).toEqual([
       'capability:weather.current',
     ])
     expect(result.ranking[0]?.score).toBeGreaterThan(0)
@@ -197,7 +197,7 @@ describe('capability Tool search ranking', () => {
 
     expect(result.kind).toBe('ok')
     if (result.kind !== 'ok') return
-    expect(result.items.map(({ operationId }) => operationId)).toEqual([
+    expect(result.items.map(({ toolId }) => toolId)).toEqual([
       'capability:flight.award-availability',
     ])
   })

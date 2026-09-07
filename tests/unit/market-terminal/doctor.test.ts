@@ -1,7 +1,8 @@
+import { spawn } from 'node:child_process'
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { delimiter, join, resolve } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { listMcpActions, mcpToolName } from '@/modules/actions'
@@ -19,6 +20,7 @@ describe('ae doctor', () => {
   it('routes an unreachable remote origin to configuration truth instead of doctor recursion', async () => {
     const origin = 'https://ae-unreachable.invalid'
     const configContinuation = `ae config --base-url ${origin} --json`
+    const humanConfigContinuation = `ae config --base-url ${origin}`
     const directory = makeConfigDirectory()
 
     const json = await spawnCli(['doctor', '--base-url', origin, '--json'], {
@@ -44,20 +46,40 @@ describe('ae doctor', () => {
     expect(json.stdout).not.toContain('ae doctor')
     expect(json.stdout).not.toContain('npm run')
 
+    const diagnosis = JSON.parse(json.stdout) as { checks: readonly { id: string; nextCommand?: string }[] }
+    const printedContinuation = diagnosis.checks.find((check) => check.id === 'server')?.nextCommand
+    expect(printedContinuation).toBe(configContinuation)
+    expect(printedContinuation?.match(/--base-url/gu)).toHaveLength(1)
+
+    installAeShim(directory)
+    const continued = await runShell(printedContinuation ?? '', {
+      ...cleanEnvironment(directory),
+      AE_TEST_CLI: resolve('tools/ae/cli.ts'),
+      AE_TEST_NODE: process.execPath,
+      PATH: `${directory}${delimiter}${process.env.PATH ?? ''}`,
+    })
+    expect(continued.status).toBe(0)
+    expect(continued.stderr).toBe('')
+    expect(JSON.parse(continued.stdout)).toMatchObject({
+      kind: 'config',
+      baseUrl: { origin },
+    })
+
     const human = await spawnCli(['doctor', '--base-url', origin], {
       env: cleanEnvironment(directory),
     })
     expect(human.status).toBe(1)
     expect(human.stderr).toBe('')
     expect(human.stdout).toContain('✗ AE server is not reachable.')
-    expect(human.stdout).toContain(`Next: ${configContinuation}`)
+    expect(human.stdout).toContain(`Next: ${humanConfigContinuation}`)
     expect(human.stdout).not.toContain('Next: ae doctor')
     expect(human.stdout).not.toContain('npm run')
   })
 
   it('routes an unreachable loopback origin through the installed CLI to hosted AE', async () => {
     const origin = 'http://127.0.0.1:1'
-    const hostedDoctor = 'ae doctor --base-url https://agentic-economy-phi.vercel.app'
+    const hostedDoctorJson = 'ae doctor --base-url https://agentic-economy-phi.vercel.app --json'
+    const hostedDoctorHuman = 'ae doctor --base-url https://agentic-economy-phi.vercel.app'
     const directory = makeConfigDirectory()
 
     const json = await spawnCli(['doctor', '--base-url', origin, '--json'], {
@@ -70,7 +92,7 @@ describe('ae doctor', () => {
       kind: 'degraded',
       checks: expect.arrayContaining([{
         id: 'server', state: 'fail', summary: 'AE server is not reachable.',
-        nextCommand: hostedDoctor,
+        nextCommand: hostedDoctorJson,
       }]),
     })
     expect(json.stdout).not.toContain('npm run')
@@ -80,7 +102,7 @@ describe('ae doctor', () => {
     })
     expect(human.status).toBe(1)
     expect(human.stderr).toBe('')
-    expect(human.stdout).toContain(`Next: ${hostedDoctor}`)
+    expect(human.stdout).toContain(`Next: ${hostedDoctorHuman}`)
     expect(human.stdout).not.toContain('npm run')
   })
 
@@ -111,7 +133,7 @@ describe('ae doctor', () => {
         { id: 'mcp', state: 'pass', summary: 'MCP initialization and 4 public tools passed.' },
         { id: 'readiness', state: 'pass', summary: 'Server operational readiness passed.' },
         { id: 'release', state: 'pass', summary: `Release identity is ${'a'.repeat(40)}.` },
-        { id: 'buyer', state: 'warn', summary: 'No buyer credential is selected for this origin; anonymous search and describe remain available.', nextCommand: `ae connect --base-url ${origin}` },
+        { id: 'buyer', state: 'warn', summary: 'No buyer credential is selected for this origin; anonymous search and describe remain available.', nextCommand: `ae connect --base-url ${origin} --json` },
         { id: 'balance', state: 'warn', summary: 'Balance is unavailable until a buyer credential is connected.' },
         { id: 'call', state: 'warn', summary: 'Call recovery is unavailable until a buyer credential is connected.' },
       ],
@@ -194,7 +216,7 @@ describe('ae doctor', () => {
         {
           id: 'call', state: 'warn',
           summary: 'A reconciliation-required Call needs attention.',
-          nextCommand: `ae status ${callRef}`,
+          nextCommand: `ae status ${callRef} --base-url ${origin} --json`,
         },
         { id: 'market_requests', state: 'pass', summary: 'No private market requests need rechecking.' },
       ],
@@ -213,7 +235,7 @@ describe('ae doctor', () => {
     expect(human.stdout).toContain('AE doctor: degraded')
     expect(human.stdout).toContain('! A reconciliation-required Call needs attention.')
     expect(human.stdout.match(/^Next: /gmu)).toEqual([`Next: `])
-    expect(human.stdout).toContain(`Next: ae status ${callRef}`)
+    expect(human.stdout).toContain(`Next: ae status ${callRef} --base-url ${origin}`)
     expect(human.stdout).not.toContain(buyerSecret)
 
     callState = 'pending'
@@ -225,7 +247,7 @@ describe('ae doctor', () => {
         id: 'call',
         state: 'warn',
         summary: 'A nonterminal Call is still pending.',
-        nextCommand: `ae wait ${callRef}`,
+        nextCommand: `ae wait ${callRef} --base-url ${origin} --json`,
       }]),
     })
   }, 20_000)
@@ -316,10 +338,10 @@ describe('ae doctor', () => {
       checks: expect.arrayContaining([expect.objectContaining({
         id: 'market_requests', state: 'pass',
         summary: '1 of 1 recent private market request now has matching Tools.',
-        nextCommand: `ae describe ${toolRef}`,
+        nextCommand: `ae describe ${toolRef} --base-url ${origin} --json`,
       }), expect.objectContaining({
         id: 'repeat_use', state: 'pass',
-        nextCommand: `ae describe ${priorToolRef}`,
+        nextCommand: `ae describe ${priorToolRef} --base-url ${origin} --json`,
       })]),
     })
 
@@ -329,7 +351,7 @@ describe('ae doctor', () => {
     expect(human.stdout).toContain('AE doctor: ready')
     expect(human.stdout).toContain('✓ 1 of 1 recent private market request now has matching Tools.')
     expect(human.stdout.match(/^Next: /gmu)).toEqual(['Next: '])
-    expect(human.stdout).toContain(`Next: ae describe ${toolRef}`)
+    expect(human.stdout).toContain(`Next: ae describe ${toolRef} --base-url ${origin}`)
     expect(human.stdout).not.toContain(savedQuery)
     expect(human.stdout).not.toContain(requestRef)
     expect(statusBodies).toEqual([{ requestRef }, { requestRef }])
@@ -411,7 +433,7 @@ describe('ae doctor', () => {
       checks: expect.arrayContaining([{
         id: 'repeat_use', state: 'pass',
         summary: 'A previously successful Tool is still in the current catalog.',
-        nextCommand: `ae describe ${toolRef}`,
+        nextCommand: `ae describe ${toolRef} --base-url ${origin} --json`,
       }]),
     })
 
@@ -420,7 +442,7 @@ describe('ae doctor', () => {
     expect(human.stderr).toBe('')
     expect(human.stdout).toContain('✓ A previously successful Tool is still in the current catalog.')
     expect(human.stdout.match(/^Next: /gmu)).toEqual(['Next: '])
-    expect(human.stdout).toContain(`Next: ae describe ${toolRef}`)
+    expect(human.stdout).toContain(`Next: ae describe ${toolRef} --base-url ${origin}`)
     expect(human.stdout).not.toContain(callRef)
     expect(human.stdout).not.toContain(evidenceHash)
 
@@ -532,7 +554,7 @@ describe('ae doctor', () => {
         {
           id: 'provider.readiness', state: 'warn',
           summary: 'Provider business has 2 Tools (1 live, 1 unready) and 2 provider connections (1 ready, 1 needing attention).',
-          nextCommand: 'ae supply operations business:one',
+          nextCommand: `ae supply tools business:one --base-url ${origin} --json`,
         },
       ],
     })
@@ -569,7 +591,7 @@ describe('ae doctor', () => {
       expect.objectContaining({
           id: 'buyer', state: 'fail',
           summary: 'Buyer credential is not safely bound to the configured origin.',
-          nextCommand: `ae connect --base-url ${origin}`,
+          nextCommand: `ae connect --base-url ${origin} --json`,
       }),
     ]))
     expect(requests).toEqual(['/.well-known/ucp'])
@@ -742,7 +764,7 @@ describe('ae doctor', () => {
         {
           id: 'buyer', state: 'warn',
           summary: 'No buyer credential is selected for this origin; anonymous search and describe remain available.',
-          nextCommand: `ae connect --base-url ${origin}`,
+          nextCommand: `ae connect --base-url ${origin} --json`,
         },
         { id: 'balance', state: 'warn', summary: 'Balance is unavailable until a buyer credential is connected.' },
         { id: 'call', state: 'warn', summary: 'Call recovery is unavailable until a buyer credential is connected.' },
@@ -846,6 +868,36 @@ function makeConfigDirectory(): string {
   writeFileSync(join(directory, 'sentinel.txt'), 'unchanged')
   return directory
 }
+
+function installAeShim(directory: string): void {
+  writeFileSync(join(directory, 'ae'), '#!/bin/sh\nexec "$AE_TEST_NODE" --import tsx "$AE_TEST_CLI" "$@"\n', { mode: 0o755 })
+}
+
+async function runShell(command: string, environment: NodeJS.ProcessEnv): Promise<ProcessResult> {
+  const { promise, resolve: resolveResult, reject } = Promise.withResolvers<ProcessResult>()
+  const child = spawn('/bin/sh', ['-c', command], {
+    cwd: process.cwd(),
+    env: environment,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  })
+  const stdout: Buffer[] = []
+  const stderr: Buffer[] = []
+  child.stdout.on('data', (chunk: Buffer) => stdout.push(chunk))
+  child.stderr.on('data', (chunk: Buffer) => stderr.push(chunk))
+  child.once('error', reject)
+  child.once('close', (status) => resolveResult({
+    status,
+    stderr: Buffer.concat(stderr).toString('utf8'),
+    stdout: Buffer.concat(stdout).toString('utf8'),
+  }))
+  return promise
+}
+
+type ProcessResult = Readonly<{
+  status: number | null
+  stderr: string
+  stdout: string
+}>
 
 function writeStoredConfig(directory: string, origin: string, buyerSecret: string, providerSecret?: string): void {
   writeFileSync(join(directory, 'config.json'), JSON.stringify({

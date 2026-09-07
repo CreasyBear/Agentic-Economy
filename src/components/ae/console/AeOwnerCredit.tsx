@@ -19,12 +19,11 @@ import type { AccountFundingBalance } from '@/modules/money/server'
 import type { AgentActivityView, AgentDetail, AgentDirectoryProjection } from '@/modules/agent-access/agent-operator-view-model'
 import { formatTimestamp } from '@/lib/ui/format-time'
 import type { MoneyDocumentView, MoneyProviderObligationView, MoneyReconciliationCaseView } from '@/lib/server/money-documents.functions'
-import { suggestNextAction } from '@/modules/market/suggested-next-action'
 import { AeAccountFundingPanel, type AccountFundingPort } from './AeCreditTopUpPanel'
 
 export type AeOwnerCreditProps = Readonly<{
   directory: AgentDirectoryProjection
-  accountBalance: AccountFundingBalance
+  accountBalance?: AccountFundingBalance
   loading: boolean
   accountFundingPort?: AccountFundingPort
   onCreditRefresh?: () => void | Promise<void>
@@ -44,7 +43,7 @@ type CreditChargeRow = Readonly<{
 
 export function AeOwnerCredit({
   directory,
-  accountBalance,
+  accountBalance: suppliedAccountBalance,
   loading,
   accountFundingPort,
   onCreditRefresh,
@@ -56,27 +55,28 @@ export function AeOwnerCredit({
   onSignDailyClose,
   onOpenDocument,
 }: AeOwnerCreditProps) {
+  const accountBalance = suppliedAccountBalance ?? directory.accountBalance ?? unavailableAccountBalance
   const items = directory.details
   const balance = accountBalance.kind === 'available' ? accountBalance.balance : undefined
   const balanceUnavailable = accountBalance.kind === 'refused'
   const balanceLocked = accountBalance.kind === 'available' && accountBalance.locked
   const activity = items
     .flatMap((item) => item.activity.map((entry) => ({ item, entry })))
-    .sort((left, right) => right.entry.observedAt - left.entry.observedAt)
+    .sort((left, right) => right.entry.createdAt - left.entry.createdAt)
+  const activityCoverageIncomplete = items.some(({ dataState }) => dataState === 'unavailable' || dataState === 'partial')
   const firstLoadPending = useFirstLoadPending(loading)
-  const chargesPhase = stagedListPhase({ firstLoadPending, rows: activity })
+  const activityPhase = stagedListPhase({ firstLoadPending, rows: activity })
   const [selected, setSelected] = useState<CreditChargeRow>()
   const [documentAction, setDocumentAction] = useState<'idle' | 'creating' | 'opening' | 'signing' | 'saved' | 'failed'>('idle')
-  const insufficientCreditNextAction = suggestNextAction({ subject: 'credit', state: 'insufficient' })
   const columns = useMemo<ColumnDef<CreditChargeRow, unknown>[]>(
     () => [
       {
-        id: 'task',
-        accessorFn: (row) => row.entry.tool?.label ?? activityLabel(row.entry),
-        header: ({ column }) => <AeOperatorSortableHeader label="Task" column={column} />,
+        id: 'tool',
+        accessorFn: (row) => row.entry.tool?.label ?? row.entry.toolLabel,
+        header: ({ column }) => <AeOperatorSortableHeader label="Tool" column={column} />,
         cell: ({ row }) => (
           <span className="font-medium text-foreground">
-            {row.original.entry.tool?.label ?? activityLabel(row.original.entry)}
+            {row.original.entry.tool?.label ?? row.original.entry.toolLabel}
           </span>
         ),
       },
@@ -88,19 +88,19 @@ export function AeOwnerCredit({
       },
       {
         id: 'amount',
-        accessorFn: (row) => formatCreditAmount(row.entry.grossAmount),
+        accessorFn: (row) => formatActivityAmount(row.entry),
         header: ({ column }) => <AeOperatorSortableHeader label="Amount" column={column} />,
         cell: ({ row }) => (
-          <span className="font-medium font-mono tabular-nums">{formatCreditAmount(row.original.entry.grossAmount)}</span>
+          <span className="font-medium font-mono tabular-nums">{formatActivityAmount(row.original.entry)}</span>
         ),
       },
       {
         id: 'when',
-        accessorFn: (row) => row.entry.observedAt,
-        header: ({ column }) => <AeOperatorSortableHeader label="When" column={column} />,
+        accessorFn: (row) => row.entry.createdAt,
+        header: ({ column }) => <AeOperatorSortableHeader label="Created" column={column} />,
         cell: ({ row }) => (
           <time className="font-mono text-xs tabular-nums text-muted-foreground">
-            {formatTimestamp(row.original.entry.observedAt)}
+            {formatTimestamp(row.original.entry.createdAt)}
           </time>
         ),
       },
@@ -113,7 +113,7 @@ export function AeOwnerCredit({
       <AeSection
         id="fund"
         title="Account balance"
-        description="Browsing is free. Paid Calls reserve AUD from this Account and the durable Agent budget."
+        description="Browsing is free. Paid Calls reserve AUD from this Account and remain subject to each Agent’s spending policy."
       >
         <AeFactList
           facts={[
@@ -294,36 +294,56 @@ export function AeOwnerCredit({
       </AeSection>
 
       <AeSection
-        title="Recent charges"
-        description="Calls and credit changes for each agent. Open Calls for the full table."
+        title="Recent activity"
+        description={directory.activityCoverage === 'recent'
+          ? 'Showing the latest 50 Calls for one or more Agents in the current UTC month. Older activity is not shown here.'
+          : 'Showing Calls created in the current UTC month. Amounts marked unknown are not included in settled-charge summaries.'}
       >
-        {chargesPhase === 'unloaded' ? (
-          <div className="grid gap-intra" aria-busy="true" aria-label="Loading recent charges">
+        {directory.nextCursor === undefined ? null : <p className="text-sm text-muted-foreground">Activity covers the first directory page only; more Agents are available in Agents.</p>}
+        {activityCoverageIncomplete ? <p className="text-sm text-muted-foreground">Some Agent activity or usage is unavailable. Coverage is incomplete.</p> : null}
+        {activityPhase === 'unloaded' ? (
+          <div className="grid gap-intra" aria-busy="true" aria-label="Loading recent activity">
             <Skeleton className="h-touch w-full" />
             <Skeleton className="h-touch w-full" />
             <Skeleton className="h-touch w-full" />
           </div>
-        ) : chargesPhase === 'cached-rows' ? (
+        ) : activityPhase === 'cached-rows' ? (
           <AeRecordTable
             columns={columns}
             data={activity}
-            caption="Recent charges"
-            countLabel="charges"
-            filterPlaceholder="Filter charges…"
+            caption="Recent activity"
+            countLabel="activities"
+            filterPlaceholder="Filter activity…"
             hideFilter={activity.length <= 1}
-            getRowId={(item) => item.entry.activityRef}
+            getRowId={(item) => item.entry.callRef}
             rowAction={{
               kind: 'button',
               label: 'View',
               onOpen: setSelected,
               getAccessibleLabel: (item) =>
-                `View ${item.entry.tool?.label ?? activityLabel(item.entry)}`,
+                `View ${item.entry.tool?.label ?? item.entry.toolLabel}`,
             }}
+          />
+        ) : activity.length === 0 && activityCoverageIncomplete ? (
+          <AeEmptyState
+            title="Activity unavailable"
+            description="Activity could not be read right now. Refresh to try again."
+            action={onCreditRefresh === undefined ? undefined : (
+              <Button
+                type="button"
+                variant="secondary"
+                className="min-h-touch"
+                disabled={loading}
+                onClick={() => { void onCreditRefresh() }}
+              >
+                {loading ? 'Refreshing activity…' : 'Refresh activity'}
+              </Button>
+            )}
           />
         ) : activity.length === 0 ? (
           <AeEmptyState
-            title="No charges yet"
-            description="Browsing does not create paid-call charges."
+            title="No activity yet"
+            description="Browsing does not create a Call."
             action={
               <Button asChild className="min-h-touch">
                 <a href="/market?window=30d">Search Tools</a>
@@ -331,7 +351,7 @@ export function AeOwnerCredit({
             }
           />
         ) : (
-          <p className="text-sm text-muted-foreground">Some charge details are temporarily unavailable.</p>
+          <p className="text-sm text-muted-foreground">Some activity details are temporarily unavailable.</p>
         )}
       </AeSection>
 
@@ -340,18 +360,14 @@ export function AeOwnerCredit({
         onOpenChange={(open) => {
           if (!open) setSelected(undefined)
         }}
-        title={selected === undefined ? 'Charge' : (selected.entry.tool?.label ?? activityLabel(selected.entry))}
+        title={selected === undefined ? 'Activity' : (selected.entry.tool?.label ?? selected.entry.toolLabel)}
         {...(selected === undefined ? {} : { facts: chargeFacts(selected) })}
         {...(selected === undefined
           ? {}
           : {
               action: (
                 <Button asChild className="min-h-touch">
-                  {selected.entry.chargeState === 'insufficient_credit' ? (
-                    <a href={insufficientCreditNextAction.href}>{insufficientCreditNextAction.label}</a>
-                  ) : (
-                    <a href={`/calls/${selected.entry.callRef}`}>View receipt</a>
-                  )}
+                  <a href={`/calls/${selected.entry.callRef}`}>View Call</a>
                 </Button>
               ),
             })}
@@ -375,33 +391,64 @@ function chargeFacts(row: CreditChargeRow): readonly { label: string; value: str
   return [
     { label: 'Outcome', value: activityLabel(row.entry) },
     { label: 'Agent', value: row.item.agent.displayName },
-    { label: 'Amount', value: formatCreditAmount(row.entry.grossAmount), mono: true },
+    { label: 'Amount', value: formatActivityAmount(row.entry), mono: true },
+    { label: 'Payment', value: paymentStateLabel(row.entry.paymentState) },
+    { label: 'Delivery', value: deliveryStateLabel(row.entry.deliveryState) },
     ...(row.entry.tool === undefined
       ? []
       : [{ label: 'Provider', value: row.entry.tool.provider }]),
-    { label: 'When', value: formatTimestamp(row.entry.observedAt), mono: true },
+    { label: 'When', value: formatTimestamp(row.entry.createdAt), mono: true },
   ]
 }
 
 function activityLabel(entry: AgentActivityView): string {
-  switch (entry.chargeState) {
-    case 'free_tier':
-      return 'Free call'
-    case 'paid':
-      return 'Paid call'
-    case 'refunded':
-      return 'Refunded call'
-    case 'outcome_unknown':
-      return 'Paid call needs checking'
-    case 'insufficient_credit':
-      return 'Call declined for insufficient credit'
+  if (entry.state === 'outcome_unknown') return 'Call outcome needs checking'
+  if (entry.state === 'refused') return 'Call refused'
+  if (entry.deliveryState === 'not_delivered') return 'Call not delivered'
+  if (entry.deliveryState === 'unknown') return 'Call delivery needs checking'
+  if (entry.paymentState === 'released') return 'Refunded Call'
+  if (entry.paymentState === 'unknown') return 'Call payment needs checking'
+  return 'Completed Call'
+}
+
+function paymentStateLabel(state: AgentActivityView['paymentState']): string {
+  switch (state) {
+    case 'settled': return 'Settled'
+    case 'released': return 'Released / refunded'
+    case 'unknown': return 'Unknown'
+    case 'not_applicable': return 'Not applicable'
     default: {
-      const exhaustive: never = entry.chargeState
+      const exhaustive: never = state
+      return exhaustive
+    }
+  }
+}
+
+function deliveryStateLabel(state: AgentActivityView['deliveryState']): string {
+  switch (state) {
+    case 'delivered': return 'Delivered'
+    case 'not_delivered': return 'Not delivered'
+    case 'unknown': return 'Unknown'
+    default: {
+      const exhaustive: never = state
       return exhaustive
     }
   }
 }
 
 function formatCreditAmount(amount: ExactAmount | undefined): string {
-  return amount === undefined ? '—' : formatCurrencyAmount(amount)
+  return amount === undefined ? 'Amount unknown' : formatCurrencyAmount(amount)
 }
+
+function formatActivityAmount(entry: AgentActivityView): string {
+  if (entry.audAmountUnits === undefined || !/^(?:0|[1-9]\d*)$/u.test(entry.audAmountUnits)) {
+    return 'Amount unknown'
+  }
+  return formatCreditAmount({ currency: 'AUD', exponent: 6, units: entry.audAmountUnits })
+}
+
+const unavailableAccountBalance: AccountFundingBalance = Object.freeze({
+  kind: 'refused',
+  code: 'billing_identity_missing',
+  retryable: true,
+})

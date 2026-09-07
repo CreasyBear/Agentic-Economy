@@ -15,6 +15,7 @@ import { runRecoverCommand } from '../../../tools/ae/commands/recover'
 import { requireAgentAccessKey } from '../../../tools/ae/commands/status'
 import type { CliOptions } from '../../../tools/ae/lib/args'
 import { CliFailure } from '../../../tools/ae/lib/output'
+import { spawnCliSync } from './cli-errors-harness'
 
 const baseOptions: CliOptions = {
   baseUrl: 'https://market.example',
@@ -101,7 +102,7 @@ afterEach(() => {
   delete process.env.AE_API_KEY_ORIGIN
 })
 
-describe('CLI operation recovery projections', () => {
+describe('CLI Call recovery projections', () => {
 
   it('inspects existing connections before authorizing a recovery identity', () => {
     for (const [scope, nextCommand] of [
@@ -173,7 +174,7 @@ describe('CLI operation recovery projections', () => {
     expect(manifest.commands.recover.summary).toContain('not a replay')
     expect(manifest.commands.recover.guidance.join(' ')).toContain('genuinely uncertain')
     expect(manifest.commands.recover.guidance.join(' ')).toContain('canonical evidence')
-    expect(manifest.coldLoop).toEqual(['search', 'describe', 'connect', 'call', 'history', 'wait', 'receipt', 'reuse'])
+    expect(manifest.coldLoop).toEqual(['search', 'describe', 'connect', 'call', 'history', 'status', 'wait'])
     expect(manifest.payment).toMatchObject({
       providerQuotedAmount: { field: 'commercial.priceBreakdown.providerQuotedAmount', exact: true },
       agenticEconomyFee: { field: 'commercial.priceBreakdown.agenticEconomyFee', rate: '10%', feeBps: 1_000 },
@@ -217,6 +218,32 @@ describe('CLI operation recovery projections', () => {
     expect(manifest.gateway.oauth.apiKey.originBinding).toContain('new URL(--base-url).origin')
     expect(manifest.gateway.oauth.revocation).toContain('/agent-access#revoke')
     expect(manifest.gateway.oauth.revocation).toContain('does not revoke through an agent credential')
+  })
+
+  it('keeps every advertised cold-loop step on an actually registered CLI root', async () => {
+    const output = capture(process.stdout)
+    try {
+      await runManifestCommand([], { ...baseOptions, technical: true })
+    } finally {
+      output.restore()
+    }
+    const technical = JSON.parse(output.read()) as { coldLoop: readonly string[] }
+
+    const compactOutput = capture(process.stdout)
+    try {
+      await runManifestCommand([], baseOptions)
+    } finally {
+      compactOutput.restore()
+    }
+    const compact = JSON.parse(compactOutput.read()) as { coldLoop: readonly string[] }
+
+    expect(compact.coldLoop).toEqual(['search', 'describe', 'call', 'history', 'status', 'wait'])
+    for (const step of new Set([...technical.coldLoop, ...compact.coldLoop])) {
+      const help = spawnCliSync(['help', step, '--json'])
+      expect(help.status, `${step} CLI help exit`).toBe(0)
+      expect(help.stderr, `${step} CLI help stderr`).toBe('')
+      expect(JSON.parse(help.stdout)).toMatchObject({ kind: 'HELP', command: step })
+    }
   })
   it('runs accepted -> status -> terminal with canonical JSON and one stdout value per command', async () => {
     setApiKey('ae-test-caller-key')

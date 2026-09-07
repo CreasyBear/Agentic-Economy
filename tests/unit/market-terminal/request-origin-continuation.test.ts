@@ -130,6 +130,80 @@ describe('request list origin continuations', () => {
     expect(existsSync(privateQueryMarker)).toBe(false)
   })
 
+  it('follows a created request status command in a fresh shell without executing a hostile opaque reference', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'ae-request-create-origin-'))
+    temporaryDirectories.push(directory)
+    const requestRefMarker = join(directory, 'request-ref-was-executed')
+    const requestRef = `market-request:v1:opaque'; touch ${requestRefMarker}; #`
+    const bearer = 'FAKE_CREATE_REQUEST_BEARER_3821'
+    const originRequests: Array<{ body: unknown; path: string }> = []
+    const server = createServer((request, response) => {
+      const chunks: Buffer[] = []
+      request.on('data', (chunk: Buffer) => chunks.push(chunk))
+      request.on('end', () => {
+        const body = JSON.parse(Buffer.concat(chunks).toString('utf8')) as unknown
+        originRequests.push({ body, path: request.url ?? '' })
+        response.writeHead(200, { 'content-type': 'application/json' })
+        if (request.url === '/api/v1/market-requests') {
+          response.end(JSON.stringify({
+            kind: 'recorded',
+            requestRef,
+            query: 'private acquisition',
+            createdAt: 10,
+          }))
+          return
+        }
+        if (request.url === '/api/v1/market-requests/status') {
+          response.end(JSON.stringify({ kind: 'not_found' }))
+          return
+        }
+        response.end(JSON.stringify({ kind: 'unexpected' }))
+      })
+    })
+    servers.push(server)
+    await new Promise<void>((resolveListen, reject) => {
+      server.once('error', reject)
+      server.listen(0, '::1', resolveListen)
+    })
+    const address = server.address()
+    if (address === null || typeof address === 'string') throw new Error('Expected an IPv6 test server address')
+    const origin = `http://[::1]:${address.port}`
+    const environment = {
+      ...process.env,
+      AE_API_KEY: bearer,
+      AE_API_KEY_ORIGIN: origin,
+      AE_CONFIG_DIR: directory,
+    }
+
+    const first = await runCli(['request', 'create', 'private', 'acquisition', '--base-url', origin, '--json'], environment)
+    expect(first.status).toBe(0)
+    expect(first.stderr).toBe('')
+    const firstJson = JSON.parse(first.stdout) as { nextCommand: string }
+    expect(firstJson.nextCommand).toContain(`--base-url '${origin}' --json`)
+    expect(firstJson.nextCommand).toContain(`'market-request:v1:opaque'"'"'; touch ${requestRefMarker}; #'`)
+    expect(firstJson.nextCommand.match(/--base-url/gu)).toHaveLength(1)
+
+    installAeShim(directory)
+    const continued = await runShell(firstJson.nextCommand, {
+      ...environment,
+      AE_TEST_CLI: resolve('tools/ae/cli.ts'),
+      AE_TEST_NODE: process.execPath,
+      PATH: `${directory}${delimiter}${process.env.PATH ?? ''}`,
+    })
+
+    expect(continued.status).toBe(0)
+    expect(continued.stderr).toBe('')
+    expect(JSON.parse(continued.stdout)).toEqual({ kind: 'not_found' })
+    expect(originRequests).toEqual([
+      {
+        body: expect.objectContaining({ query: 'private acquisition' }),
+        path: '/api/v1/market-requests',
+      },
+      { body: { requestRef }, path: '/api/v1/market-requests/status' },
+    ])
+    expect(existsSync(requestRefMarker)).toBe(false)
+  })
+
   it('preserves a selected origin for human output without inventing JSON mode', async () => {
     const origin = 'http://[::1]:3024'
     const output = await renderRequestList({

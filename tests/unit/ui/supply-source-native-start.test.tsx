@@ -83,6 +83,63 @@ describe('source-native Provider start', () => {
     expect(screen.queryByLabelText(/api key|bearer token|secret/i)).toBeNull()
   })
 
+  it('hands a selected x402 source to the bounded workspace connection CTA', async () => {
+    const x402Candidate = {
+      candidateRef: `sha256:${'b'.repeat(64)}`,
+      sourceSelector: { resourceUrl: 'https://seller.example/paid', method: 'POST' as const },
+      title: 'Paid lookup',
+      description: 'Looks up one paid reference.',
+      authentication: { kind: 'x402_wallet' as const },
+      validationExampleAvailable: false,
+      disposition: { kind: 'supported' as const },
+    }
+    const onConnect = vi.fn().mockResolvedValue({
+      kind: 'action_required',
+      requiredAction: {
+        action: 'supply.source.preview',
+        blockedCapabilities: ['supply.publish'],
+        cta: '/owner/offerings?connect=x402',
+        ctaLabel: 'Connect service',
+        description: 'Inspect the exact x402 payment lane, prove payee control with your wallet, then AE will return to this Tool.',
+        iconUrl: null,
+        status: 'required',
+        title: 'Connect service',
+      },
+    })
+    render(
+      <AeSupplySourceNativeStart
+        businessRef="business:one"
+        initial={{
+          source: { kind: 'x402', resourceUrl: 'https://seller.example/paid', method: 'POST', environment: 'sandbox' },
+          preview: {
+            kind: 'ready',
+            sourceDigest: `sha256:${'c'.repeat(64)}`,
+            sourceRevision: `x402:sha256:${'c'.repeat(64)}`,
+            provenance: { sourceKind: 'x402', sourceUrl: 'https://seller.example/paid', authority: 'observed_external' },
+            authentication: [{ kind: 'x402_wallet' }],
+            candidates: [x402Candidate],
+          },
+          candidateRef: x402Candidate.candidateRef,
+        }}
+        onPreview={vi.fn()}
+        onConnect={onConnect}
+        onSelectCandidate={vi.fn()}
+        onPublish={vi.fn()}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Connect service' }))
+    const handoff = await screen.findByRole('link', { name: 'Connect service' })
+    expect(handoff.getAttribute('href')).toBe('/owner/offerings?connect=x402')
+    expect(onConnect).toHaveBeenCalledWith({
+      businessId: 'business:one',
+      source: { kind: 'x402', resourceUrl: 'https://seller.example/paid', method: 'POST', environment: 'sandbox' },
+      expectedSourceDigest: `sha256:${'c'.repeat(64)}`,
+      candidateRef: x402Candidate.candidateRef,
+      idempotencyKey: expect.stringMatching(/^owner-supply-connection:/u),
+    })
+  })
+
   it('restores a selected source candidate after a browser refresh without repeating discovery', async () => {
     const onPreview = vi.fn()
     const onSelectCandidate = vi.fn()

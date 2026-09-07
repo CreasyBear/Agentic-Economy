@@ -4,6 +4,7 @@ export {
 } from './internal/convex-schema'
 export { dereferenceLocalSchema } from './internal/schema-deref-shared'
 export {
+  cdpX402CustodyBudgetRef,
   cdpX402CustodyConfigurationFromEnvironment,
   type CdpX402CustodyConfiguration,
 } from './internal/x402-custody-configuration'

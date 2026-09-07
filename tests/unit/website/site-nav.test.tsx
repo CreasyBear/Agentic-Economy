@@ -36,7 +36,7 @@ describe('Twenty-style public nav', () => {
     const nav = screen.getByRole('navigation', { name: 'Primary' })
     expect(within(nav).getByRole('link', { name: 'Discover' }).getAttribute('href')).toBe('/market?window=30d')
     expect(within(nav).getByRole('link', { name: 'For agents' }).getAttribute('href')).toBe('/for-agents')
-    expect(within(nav).getByRole('link', { name: 'For suppliers' }).getAttribute('href')).toBe('/for-providers')
+    expect(within(nav).getByRole('link', { name: 'For Providers' }).getAttribute('href')).toBe('/for-providers')
     expect(within(nav).getByRole('link', { name: 'Calls' }).getAttribute('href')).toBe('/activity')
     expect(within(nav).getByRole('link', { name: 'Discover' }).getAttribute('aria-current')).toBe('page')
     expect(within(nav).getByRole('link', { name: 'For agents' }).getAttribute('aria-current')).toBeNull()

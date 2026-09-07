@@ -824,7 +824,7 @@ export function detailFixture(toolRef: string = TEST_OPERATION_REF): PublicToolD
     schemaVersion: 'registry-tools:v1',
     tool: {
       toolRef,
-      operationId: 'op_test_a',
+      toolId: 'op_test_a',
       callVia: '/api/v1/tools/call',
       paymentLane: 'brokered',
       contract: {

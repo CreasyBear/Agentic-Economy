@@ -174,6 +174,43 @@ describe('public Tool read contract', () => {
       actionId: 'registry.tools.describe',
     })
   })
+  it('projects toolId through the wire roundtrip and rejects the retired public alias', () => {
+    const projected = projectCapabilityTool(operationRecord, 2_000)
+    expect(projected.toolRef).toBe('operation:v1:e44c003644675cf77edbadbfa296976d2cb0bc82d7d20445df92af940bc18f6b')
+    expect(projected.toolId).toBe(operationRecord.operationId)
+    expect(projected).not.toHaveProperty('operationId')
+
+    const wire = serializeToolDescriptor(projected)
+    expect(wire.toolId).toBe(projected.toolId)
+    expect(wire).not.toHaveProperty('operationId')
+
+    const roundTripped = deserializeToolDescriptor(wire)
+    expect(roundTripped.toolId).toBe(projected.toolId)
+    expect(roundTripped).not.toHaveProperty('operationId')
+
+    const parsed = toolDetailOutputSchema.parse({
+      kind: 'found',
+      schemaVersion: 'registry-tools:v1',
+      tool: roundTripped,
+    })
+    expect(parsed.kind).toBe('found')
+    if (parsed.kind !== 'found') return
+    expect(parsed.tool.toolId).toBe(projected.toolId)
+    expect(parsed.tool).not.toHaveProperty('operationId')
+
+    const { toolId, ...withoutToolId } = roundTripped
+    const oldOnly = { ...withoutToolId, operationId: toolId }
+    expect(toolDetailOutputSchema.safeParse({
+      kind: 'found',
+      schemaVersion: 'registry-tools:v1',
+      tool: oldOnly,
+    }).success).toBe(false)
+    expect(toolDetailOutputSchema.safeParse({
+      kind: 'found',
+      schemaVersion: 'registry-tools:v1',
+      tool: { ...roundTripped, operationId: toolId },
+    }).success).toBe(false)
+  })
   it('refuses an injected call path that drifts from the descriptor callVia contract', () => {
     const drifted = {
       ...CURRENT_TOOL_PROJECTION_NAVIGATION,

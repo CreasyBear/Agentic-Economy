@@ -235,13 +235,16 @@ export function projectToolSearchChoices(result: ToolSearchResult, filters?: unk
   }
   const items = result.kind === 'ok' ? visibleTools(result.items, filters) : []
   if (result.kind === 'no_candidates' || items.length === 0) {
+    const hasMore = result.kind === 'ok' && result.pagination.hasMore
     return toolChoiceSearchOutputSchema.parse({
       kind: 'no_candidates',
       schemaVersion: 'registry-tools:v3',
       query: result.query,
       count: 0,
       items: [],
-      note: 'No operational Tools matched this search.',
+      note: hasMore
+        ? 'No Tools match this search on this page.'
+        : 'No Tools match this search.',
       pagination: result.kind === 'ok' ? result.pagination : { limit: 10, hasMore: false },
     })
   }

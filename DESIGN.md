@@ -26,7 +26,7 @@ Every consequential view answers five questions without forcing the reader to
 reconstruct the transaction:
 
 1. What exact Tool is being considered or purchased?
-2. Who is the Business Principal, acting Agent Principal, Provider and Seller?
+2. Who is the Customer, acting Agent, Provider and Seller?
 3. What authority, money, information and external effects are exposed?
 4. What has Agentic Economy observed, and what remains claimed or unknown?
 5. What action is valid next, and what will it change?
@@ -128,7 +128,7 @@ than inferring it.
 action. It combines the selected Tool's material detail with current caller
 viability and, when admitted, returns a Quote. It must show:
 
-- Business Principal, Account, Agent Principal and spending-policy version;
+- Customer, Account, Agent and spending-policy version;
 - exact Tool and Provider version;
 - fixed Seller;
 - total buyer consideration, currency and expiry;
@@ -172,10 +172,10 @@ at most one machine continuation plus an optional owner handoff. The human view
 may expand explanation; it may not create a different lifecycle, a menu of
 invalid actions or an unnamed transition.
 
-An Agent Principal view shows its own spending policy, remaining limits, permitted
-shared-balance facts, Calls and recovery. A Business Principal view shows the
-whole Account and attribution by Agent Principal. Credential identity is audit
-evidence, never the owner of a budget or balance.
+An Agent view shows its own spending policy, remaining limits, permitted
+shared-balance facts, Calls and recovery. A Customer view shows the whole
+Account and attribution by Agent. Credential identity is audit evidence, never
+the owner of a budget or balance.
 
 Treasury remains operator-only detail. Buyer and agent views show whether a Call
 is currently supportable and what is safe next, not wallet addresses, pool

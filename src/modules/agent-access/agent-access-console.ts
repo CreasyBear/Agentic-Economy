@@ -1,23 +1,18 @@
-import { createAuthenticatedSourceTransport, sourceQuery } from '@/lib/server/convex-source'
-import { createConvexMoneyQueryPort, MoneyQueryError } from '@/lib/server/money-query'
-import {
-  addExactAmounts,
-  listCreditActivity,
-  readCreditAccount,
-  readKeyUsage,
-  type ExactAmount,
-  type MoneyQueryPort,
-} from '@/modules/money/public'
+import { createAuthenticatedSourceTransport, sourceAction, sourceQuery } from '@/lib/server/convex-source'
 import { listAgentAccessKeysServer } from '@/modules/agent-access/agent-access.functions'
 import type { AgentAccessKeyInventoryItem } from '@/modules/agent-access/agent-access'
 import type { AgentAccessOwnerGrantReadback } from '@/modules/agent-access/policy'
 import type { AgentConnectionReadback } from '@/modules/agent-access/agent-connection'
+import type { AccountFundingBalance } from '@/modules/money/server'
 import type {
+  AgentActivityView,
   AgentCredentialSummary,
   AgentCredentialSource,
   AgentDetail,
   AgentDirectoryItem,
   AgentDirectoryProjection,
+  AgentOwnerReadback,
+  AgentUsageSummary,
 } from '@/modules/agent-access/agent-operator-view-model'
 
 const listOwnerGrantReadbacksQuery = sourceQuery<Record<string, never>, readonly AgentAccessOwnerGrantReadback[]>(
@@ -71,6 +66,64 @@ const listOwnerReconnectCandidatesQuery = sourceQuery<Readonly<{
 }>, readonly Readonly<{ principalRef: string; principalRevision: number }>[]>(
   'agentAccessOAuth:listOwnerReconnectCandidates',
 )
+const readOwnerAccountBalanceAction = sourceAction<Record<string, never>, AccountFundingBalance>(
+  'moneyAccountFundingFormance:readBalance',
+)
+type OwnerAgentCallReadback = Readonly<{
+  callRef: string
+  accountRef: string
+  principalRef: string
+  credentialRef: string
+  applicationRef: string
+  toolRef: string
+  providerRef: string
+  toolLabel: string
+  state: 'completed' | 'refused' | 'outcome_unknown'
+  deliveryState: 'delivered' | 'not_delivered' | 'unknown'
+  paymentState: 'settled' | 'released' | 'unknown' | 'not_applicable'
+  providerObligationState?: 'accrued' | 'held' | 'payable' | 'settled' | 'reversed' | 'disputed'
+  providerAmountUnits?: string
+  audAmountUnits?: string
+  receiptRef?: string
+  recoveryRef?: string
+  latencyMs: number
+  createdAt: number
+  updatedAt: number
+}>
+type OwnerAgentUsageReadback = Readonly<{
+  kind: 'available'
+  dimensionKind: 'agent'
+  dimensionRef: string
+  periodStartAt: number
+  periodEndAt: number
+  callCountUnits: string
+  completedCountUnits: string
+  outcomeUnknownCountUnits: string
+  settledSpendUnits?: string
+  amountCoverage: 'complete' | 'incomplete'
+  updatedAt: number
+  source: 'convex_call_evidence'
+}> | Readonly<{
+  kind: 'empty'
+  dimensionKind: 'agent'
+  dimensionRef: string
+  periodStartAt: number
+  periodEndAt: number
+}> | Readonly<{ kind: 'unavailable'; code: 'usage_window_too_large' }>
+type OwnerAgentReadback = Readonly<{
+  activity: Readonly<{
+    page: readonly OwnerAgentCallReadback[]
+    isDone: boolean
+    continueCursor: string
+  }>
+  usage: OwnerAgentUsageReadback
+}>
+const readOwnerAgentReadbackQuery = sourceQuery<Readonly<{
+  principalRef: string
+  periodStartAt: number
+  periodEndAt: number
+  paginationOpts: Readonly<{ numItems: number; cursor: string | null }>
+}>, OwnerAgentReadback>('capabilityCallProjections:readOwnerAgentReadback')
 
 export async function loadOwnerReconnectCandidates(
   clientId: string,
@@ -87,29 +140,146 @@ export async function loadAgentDirectoryReadback(
   tools: AgentAccessToolActivityPort,
   cursor: string | null = null,
 ): Promise<AgentDirectoryProjection> {
+  const now = Date.now()
+  const { periodStartAt, periodEndAt } = currentUtcMonthBounds(now)
   const [keys, source] = await Promise.all([
     listAgentAccessKeysServer(),
     createAuthenticatedSourceTransport(),
   ])
-  const [grants, canonicalAgents] = await Promise.all([
+  const [grants, canonicalAgents, accountBalance] = await Promise.all([
     source.query(listOwnerGrantReadbacksQuery, {}),
     source.query(listOwnedAgentDirectoryQuery, {
-      now: Date.now(),
+      now,
       paginationOpts: { numItems: 25, cursor },
     }),
+    source.action(readOwnerAccountBalanceAction, {}),
   ])
-  const sources = await readAgentCredentialSources(keys, createConvexMoneyQueryPort(), grants)
-  const connections = canonicalAgents.page.length === 0
-    ? []
-    : await source.query(listOwnerConnectionReadbacksQuery, {
-        principalRefs: canonicalAgents.page.map(({ principalRef }) => principalRef),
-        now: Date.now(),
-      })
-  const projection = projectAgentDirectory(sources, canonicalAgents.page, connections)
+  const principalRefs = canonicalAgents.page.map(({ principalRef }) => principalRef)
+  const [ownerAgentReadbacks, connections] = await Promise.all([
+    Promise.all(canonicalAgents.page.map(async ({ principalRef }) => {
+      try {
+        const readback = await source.query(readOwnerAgentReadbackQuery, {
+          principalRef,
+          periodStartAt,
+          periodEndAt,
+          paginationOpts: { numItems: 50, cursor: null },
+        })
+        return { principalRef, readback: mapOwnerAgentReadback(principalRef, readback) }
+      } catch {
+        return {
+          principalRef,
+          readback: {
+            principalRef,
+            activity: [],
+            activityIsDone: true,
+            dataState: 'unavailable' as const,
+          },
+        }
+      }
+    })),
+    principalRefs.length === 0
+      ? Promise.resolve([] as readonly AgentConnectionReadback[])
+      : source.query(listOwnerConnectionReadbacksQuery, {
+          principalRefs,
+          now,
+        }),
+  ])
+  const sources = readAgentCredentialSources(keys, grants)
+  const projection = projectAgentDirectory(sources, canonicalAgents.page, connections, ownerAgentReadbacks.map(({ readback }) => readback))
   const enriched = await enrichAgentDirectoryActivity(projection, tools)
+  const withAccount = {
+    ...enriched,
+    accountBalance,
+    activityCoverage: enriched.details.some(({ activityTruncated }) => activityTruncated)
+      ? 'recent' as const
+      : 'complete' as const,
+  }
   return canonicalAgents.isDone
-    ? enriched
-    : { ...enriched, nextCursor: canonicalAgents.continueCursor }
+    ? withAccount
+    : { ...withAccount, nextCursor: canonicalAgents.continueCursor }
+}
+
+export function currentUtcMonthBounds(now: number = Date.now()): Readonly<{
+  periodStartAt: number
+  periodEndAt: number
+}> {
+  const date = new Date(now)
+  const periodStartAt = Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1)
+  return {
+    periodStartAt,
+    periodEndAt: Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 1),
+  }
+}
+
+function mapOwnerAgentReadback(
+  principalRef: string,
+  readback: OwnerAgentReadback,
+): AgentOwnerReadback {
+  const activity = readback.activity.page.map(({ callRef, credentialRef, toolRef, toolLabel, providerRef, state, deliveryState, paymentState, audAmountUnits, receiptRef, recoveryRef, createdAt, updatedAt }): AgentActivityView => ({
+    callRef,
+    credentialRef,
+    toolRef,
+    toolLabel,
+    providerRef,
+    state,
+    deliveryState,
+    paymentState,
+    ...(audAmountUnits === undefined ? {} : { audAmountUnits }),
+    ...(receiptRef === undefined ? {} : { receiptRef }),
+    ...(recoveryRef === undefined ? {} : { recoveryRef }),
+    createdAt,
+    updatedAt,
+  }))
+  const usage = readback.usage.kind === 'available'
+    ? {
+        periodStartAt: readback.usage.periodStartAt,
+        periodEndAt: readback.usage.periodEndAt,
+        callCount: countUnits(readback.usage.callCountUnits),
+        completedCallCount: countUnits(readback.usage.completedCountUnits),
+        outcomeUnknownCallCount: countUnits(readback.usage.outcomeUnknownCountUnits),
+        ...(readback.usage.settledSpendUnits === undefined
+          ? {}
+          : {
+              settledSpend: {
+                currency: 'AUD' as const,
+                exponent: 6 as const,
+                units: readback.usage.settledSpendUnits,
+              },
+            }),
+        amountCoverage: readback.usage.amountCoverage,
+        updatedAt: readback.usage.updatedAt,
+      } satisfies AgentUsageSummary
+    : readback.usage.kind === 'empty'
+      ? {
+          periodStartAt: readback.usage.periodStartAt,
+          periodEndAt: readback.usage.periodEndAt,
+          callCount: 0,
+          completedCallCount: 0,
+          outcomeUnknownCallCount: 0,
+          settledSpend: { currency: 'AUD', exponent: 6, units: '0' },
+          amountCoverage: 'complete' as const,
+          updatedAt: readback.usage.periodStartAt,
+        }
+      : undefined
+  const dataState = readback.usage.kind === 'unavailable'
+    ? activity.length === 0 ? 'unavailable' as const : 'partial' as const
+    : activity.length === 0 && readback.usage.kind === 'empty'
+      ? 'empty' as const
+      : 'source' as const
+  return {
+    principalRef,
+    activity,
+    activityIsDone: readback.activity.isDone,
+    ...(readback.activity.isDone ? {} : { activityContinueCursor: readback.activity.continueCursor }),
+    ...(usage === undefined ? {} : { usage }),
+    dataState,
+  }
+}
+
+function countUnits(value: string): number {
+  const count = Number(value)
+  if (!Number.isSafeInteger(count) || count < 0) throw new Error('owner_agent_usage_count_invalid')
+  return count
 }
 
 /**
@@ -121,6 +291,7 @@ export function projectAgentDirectory(
   readbacks: readonly AgentCredentialSource[],
   canonicalAgents: readonly CanonicalAgentDirectoryRecord[],
   connections: readonly AgentConnectionReadback[] = [],
+  ownerReadbacks: readonly AgentOwnerReadback[] = [],
 ): AgentDirectoryProjection {
   const byPrincipal = new Map<string, AgentCredentialSource[]>()
   for (const readback of readbacks) {
@@ -135,6 +306,7 @@ export function projectAgentDirectory(
       canonical,
       sources,
       connections.filter(({ principalRef }) => principalRef === canonical.principalRef),
+      ownerReadbacks.find(({ principalRef }) => principalRef === canonical.principalRef),
     )]
   }).toSorted((left, right) => (
     right.agent.lastSeenAt === left.agent.lastSeenAt
@@ -152,6 +324,7 @@ function projectAgentDetail(
   canonical: CanonicalAgentDirectoryRecord,
   readbacks: readonly AgentCredentialSource[],
   connections: readonly AgentConnectionReadback[],
+  ownerReadback?: AgentOwnerReadback,
 ): AgentDetail {
   const ordered = [...readbacks].toSorted((left, right) => (
     (left.key.createdAt ?? 0) - (right.key.createdAt ?? 0)
@@ -178,14 +351,24 @@ function projectAgentDetail(
   }))
   const hasUnavailable = ordered.some(({ dataState }) => dataState === 'unavailable')
   const allUnavailable = ordered.every(({ dataState }) => dataState === 'unavailable')
-  const status: AgentDirectoryItem['status'] = canonical.status === 'connected' && hasUnavailable
+  const ownerUnavailable = ownerReadback?.dataState === 'unavailable'
+    || ownerReadback?.dataState === 'partial'
+  const status: AgentDirectoryItem['status'] = canonical.status === 'connected' && (hasUnavailable || ownerUnavailable)
     ? 'attention'
     : canonical.status
+  const activityReadback = ownerReadback?.activity ?? ordered.flatMap(({ activity }) => activity)
+  const activityByCallRef = new Map<string, AgentActivityView>()
+  for (const entry of activityReadback) {
+    if (!activityByCallRef.has(entry.callRef)) activityByCallRef.set(entry.callRef, entry)
+  }
+  const activity = [...activityByCallRef.values()]
+    .toSorted((left, right) => right.createdAt - left.createdAt)
   const lastSeenAt = Math.max(
     ...ordered.flatMap(({ key, activity }) => [
       ...(key.createdAt === undefined ? [] : [key.createdAt]),
-      ...activity.map(({ observedAt }) => observedAt),
+      ...activity.map(({ updatedAt }) => updatedAt),
     ]),
+    ...activity.map(({ updatedAt }) => updatedAt),
     0,
   )
   const agent: AgentDirectoryItem = {
@@ -204,20 +387,16 @@ function projectAgentDetail(
     connectorDisplayNames: [...new Set(connections.map(({ connectorDisplayName }) => connectorDisplayName))],
     authorityMode: current?.key.authorityMode ?? canonical.authorityMode,
   }
-  const activity = ordered
-    .flatMap((readback) => readback.activity)
-    .toSorted((left, right) => right.observedAt - left.observedAt)
-  const usageRows = ordered.flatMap(({ usage }) => usage === undefined ? [] : [usage])
-  const grossSpend = usageRows.reduce<ExactAmount | undefined>((total, row, index) => (
-    index === 0 ? row.grossSpend : total === undefined ? undefined : addExactAmounts(total, row.grossSpend)
-  ), undefined)
-  const usage = usageRows.length === 0 || grossSpend === undefined ? undefined : {
-    callCount: usageRows.reduce((total, row) => total + row.callCount, 0),
-    paidCallCount: usageRows.reduce((total, row) => total + row.paidCallCount, 0),
-    freeCallCount: usageRows.reduce((total, row) => total + row.freeCallCount, 0),
-    grossSpend,
-    states: [...new Set(usageRows.flatMap((row) => row.states))],
-  }
+  const usage = ownerReadback === undefined ? ordered.find(({ usage }) => usage !== undefined)?.usage : ownerReadback.usage
+  const dataState = ownerReadback === undefined
+    ? ordered.length === 0 || allUnavailable
+      ? 'unavailable' as const
+      : hasUnavailable
+        ? 'partial' as const
+        : ordered.every(({ dataState }) => dataState === 'empty')
+          ? 'empty' as const
+          : 'source' as const
+    : ownerReadback.dataState
   return {
     agent,
     connections,
@@ -226,17 +405,11 @@ function projectAgentDetail(
     authorityMode: current?.key.authorityMode ?? canonical.authorityMode,
     scopes: current?.key.scopes ?? canonical.scopes,
     ...(current?.grant === undefined ? {} : { grant: current.grant }),
-    ...(current?.account === undefined ? {} : { account: current.account }),
     activity,
     ...(usage === undefined ? {} : { usage }),
-    dataState: ordered.length === 0 || allUnavailable
-      ? 'unavailable'
-      : hasUnavailable
-        ? 'partial'
-        : ordered.every(({ dataState }) => dataState === 'empty')
-          ? 'empty'
-          : 'source',
+    dataState,
     ...(canonical.credentialHistoryTruncated ? { credentialHistoryTruncated: true } : {}),
+    ...(ownerReadback?.activityIsDone === false ? { activityTruncated: true } : {}),
   }
 }
 
@@ -266,9 +439,9 @@ export async function enrichAgentDirectoryActivity(
 ): Promise<AgentDirectoryProjection> {
   const recentActivity = directory.details
     .flatMap(({ activity }) => activity)
-    .toSorted((left, right) => right.observedAt - left.observedAt)
-  const toolRefs = [...new Set(recentActivity.reduce<string[]>((refs, { operationKey }) => {
-    if (tools.isToolRef(operationKey)) refs.push(operationKey)
+    .toSorted((left, right) => right.updatedAt - left.updatedAt)
+  const toolRefs = [...new Set(recentActivity.reduce<string[]>((refs, { toolRef }) => {
+    if (tools.isToolRef(toolRef)) refs.push(toolRef)
     return refs
   }, []))]
     .slice(0, 40)
@@ -297,8 +470,8 @@ export async function enrichAgentDirectoryActivity(
     details: directory.details.map((detail) => ({
       ...detail,
       activity: detail.activity.map((entry) => {
-        const tool = tools.isToolRef(entry.operationKey)
-          ? labels.get(entry.operationKey)
+        const tool = tools.isToolRef(entry.toolRef)
+          ? labels.get(entry.toolRef)
           : undefined
         return tool === undefined ? entry : { ...entry, tool }
       }),
@@ -306,28 +479,23 @@ export async function enrichAgentDirectoryActivity(
   }
 }
 
-export async function readAgentCredentialSources(
+export function readAgentCredentialSources(
   keys: readonly AgentAccessKeyInventoryItem[],
-  port: MoneyQueryPort,
   grants: readonly AgentAccessOwnerGrantReadback[] = [],
-): Promise<readonly AgentCredentialSource[]> {
+): readonly AgentCredentialSource[] {
   const grantsByCredential = new Map(grants.map((grant) => [grant.credentialId, grant]))
   const boundKeys = keys.flatMap((key) => {
     const grant = grantsByCredential.get(key.keyId)
     return grant === undefined ? [] : [{ key, grant }]
   })
-  return await Promise.all(boundKeys.map(async ({ key, grant }) => {
+  return boundKeys.map(({ key, grant }) => {
     const { principalId } = grant
-    try {
-      const [account, activity, usage] = await Promise.all([
-        readCreditAccount({ port, query: { principalId, currency: 'USD' } }),
-        listCreditActivity({ port, query: { principalId, credentialId: key.keyId, currency: 'USD', paginationOpts: { numItems: 50, cursor: null } } }),
-        readKeyUsage({ port, query: { principalId, credentialId: key.keyId, currency: 'USD' } }),
-      ])
-      return { key, grant, principalId, account, activity: activity.page, usage, dataState: 'source' as const }
-    } catch (error) {
-      const dataState = error instanceof MoneyQueryError && error.code === 'billing_identity_missing' ? 'empty' as const : 'unavailable' as const
-      return { key, grant, principalId, activity: [], dataState }
+    return {
+      key,
+      grant,
+      principalId,
+      activity: [],
+      dataState: 'source' as const,
     }
-  }))
+  })
 }

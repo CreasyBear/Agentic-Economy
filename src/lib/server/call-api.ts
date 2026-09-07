@@ -1,6 +1,7 @@
 import { bearerChallenge } from '@/lib/http/oauth-challenge'
 import { gatewayFailureToProblem } from '@/lib/errors'
 import { readBoundedRequestText } from '@/lib/server/bounded-request-body'
+import { isJsonContentType } from '@/lib/server/json-content-type'
 import {
   authenticateAgentAccess,
   resolveAgentAccessPrincipal,
@@ -420,6 +421,14 @@ function gatewayErrorResponse(
   }), correlationId)
 }
 
+function invalidContentTypeResponse(correlationId: string): Response {
+  return withRequestCorrelationHeader(problem({
+    status: 415,
+    kind: 'UNSUPPORTED_MEDIA_TYPE',
+    code: 'invalid_content_type',
+  }), correlationId)
+}
+
 export async function authenticateCallGateway(
   request: Request,
   correlationId: string,
@@ -461,6 +470,9 @@ export async function handleToolQuotePost(
     }
     const admitted = await authenticateCallGateway(request, correlationId, options, bounded.text)
     if (admitted instanceof Response) return admitted
+    if (!(await isJsonContentType(request.headers.get('content-type')))) {
+      return invalidContentTypeResponse(correlationId)
+    }
     let rawBody: unknown
     try {
       rawBody = JSON.parse(bounded.text) as unknown
@@ -514,6 +526,9 @@ export async function handleToolCallPost(
     }
     const admitted = await authenticateCallGateway(request, correlationId, options, bounded.text)
     if (admitted instanceof Response) return admitted
+    if (!(await isJsonContentType(request.headers.get('content-type')))) {
+      return invalidContentTypeResponse(correlationId)
+    }
     const principal = admitted.principal
     const telemetry = (event: Omit<GatewayTelemetryEvent, 'correlationId' | 'durationMs'>): void => {
       recordGatewayTelemetry(options.timing, {
@@ -772,6 +787,9 @@ export async function handleCallCancelPost(
     if (!parsed.ok) return parsed.response
     const admitted = await authenticateCallGateway(request, correlationId, options, parsed.bodyText)
     if (admitted instanceof Response) return admitted
+    if (!(await isJsonContentType(request.headers.get('content-type')))) {
+      return invalidContentTypeResponse(correlationId)
+    }
     const principal = admitted.principal
     const telemetry = (event: Omit<GatewayTelemetryEvent, 'correlationId' | 'durationMs'>): void => {
       recordGatewayTelemetry(options.timing, {
@@ -824,6 +842,9 @@ export async function handleCallReconcilePost(
     if (!parsed.ok) return parsed.response
     const admitted = await authenticateCallGateway(request, correlationId, options, parsed.bodyText)
     if (admitted instanceof Response) return admitted
+    if (!(await isJsonContentType(request.headers.get('content-type')))) {
+      return invalidContentTypeResponse(correlationId)
+    }
     const principal = admitted.principal
     const telemetry = (event: Omit<GatewayTelemetryEvent, 'correlationId' | 'durationMs'>): void => {
       recordGatewayTelemetry(options.timing, {

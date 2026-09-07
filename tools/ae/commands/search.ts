@@ -57,12 +57,13 @@ export async function runSearchCommand(args: readonly string[], options: CliOpti
   const filtersContinuation = options.filters === undefined
     ? []
     : ['--filters', JSON.stringify(parsedInput.data.filters)]
-  const nextPageCommand = result.kind === 'ok' && result.pagination.hasMore && result.pagination.nextCursor !== undefined
+  const pagination = result.pagination
+  const nextPageCommand = pagination?.hasMore === true && pagination.nextCursor !== undefined
     ? continuationCommand([
         'ae', 'search', result.query,
         ...(options.limit === undefined ? [] : ['--limit', options.limit]),
         ...filtersContinuation,
-        '--cursor', result.pagination.nextCursor,
+        '--cursor', pagination.nextCursor,
         ...originContinuation,
         ...outputContinuation,
         ...technicalContinuation,
@@ -91,14 +92,15 @@ export async function runSearchCommand(args: readonly string[], options: CliOpti
     ...technicalContinuation,
   ])
   const hasSearchFilters = options.filters !== undefined
-  const requestCommand = result.kind === 'no_candidates' && result.query.length > 0 && !hasSearchFilters
+  const exhausted = pagination?.hasMore !== true
+  const requestCommand = result.kind === 'no_candidates' && exhausted && result.query.length > 0 && !hasSearchFilters
     ? continuationCommand([
         'ae', 'request', 'create', result.query,
         ...originContinuation,
         ...outputContinuation,
       ])
     : undefined
-  const broadenSearchCommand = result.kind === 'no_candidates' && result.query.length > 0 && hasSearchFilters
+  const broadenSearchCommand = result.kind === 'no_candidates' && exhausted && result.query.length > 0 && hasSearchFilters
     ? continuationCommand([
         'ae', 'list',
         ...filtersContinuation,
@@ -112,11 +114,14 @@ export async function runSearchCommand(args: readonly string[], options: CliOpti
     : undefined
   if (options.json) {
     const jsonResult = result
+    const nextCommand = result.kind === 'no_candidates'
+      ? nextPageCommand ?? requestCommand ?? broadenSearchCommand
+      : requestCommand ?? broadenSearchCommand ?? nextActionCommand
     printJson({
       ...jsonResult,
-      ...(nextActionCommand === undefined && requestCommand === undefined && broadenSearchCommand === undefined
+      ...(nextCommand === undefined
         ? {}
-        : { nextCommand: requestCommand ?? broadenSearchCommand ?? nextActionCommand }),
+        : { nextCommand }),
       ...(nextPageCommand === undefined ? {} : { nextPageCommand }),
       ...(result.kind === 'no_candidates' ? { browseCommand } : {}),
       ...(nextHref === undefined ? {} : { nextHref }),
@@ -126,9 +131,12 @@ export async function runSearchCommand(args: readonly string[], options: CliOpti
 
   heading(`Market Tools for "${result.query}" (${outcome.durationMs}ms)`)
   if (result.kind === 'no_candidates') {
-    line(hasSearchFilters
-      ? '  No current Tools match these filters.'
-      : '  No current Tools match this job.')
+    line(pagination?.hasMore === true
+      ? '  No matching Tools on this page.'
+      : hasSearchFilters
+        ? '  No current Tools match these filters.'
+        : '  No current Tools match this job.')
+    if (nextPageCommand !== undefined) line(`  More results: ${nextPageCommand}`)
     if (requestCommand !== undefined) line(`  Remember this missing job: ${requestCommand}`)
     if (broadenSearchCommand !== undefined) line(`  Browse matching filters: ${broadenSearchCommand}`)
     line(`  Browse all: ${browseCommand}`)

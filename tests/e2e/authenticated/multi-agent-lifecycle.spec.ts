@@ -291,7 +291,7 @@ async function beginDeviceGrant(request: APIRequestContext, name: string) {
       grant_types: ['urn:ietf:params:oauth:grant-type:device_code'],
       response_types: [],
       token_endpoint_auth_method: 'none',
-      scope: 'market_operations:invoke customer_requests:inspect_only',
+      scope: 'market_tools:call customer_requests:read_only',
     },
   })
   expect(registration.status()).toBe(201)
@@ -299,7 +299,7 @@ async function beginDeviceGrant(request: APIRequestContext, name: string) {
   const authorization = await request.post('/oauth/device_authorization', {
     form: {
       client_id: client.client_id,
-      scope: 'market_operations:invoke customer_requests:inspect_only',
+      scope: 'market_tools:call customer_requests:read_only',
     },
   })
   expect(authorization.ok()).toBe(true)
@@ -344,7 +344,7 @@ async function exchangeAuthorizationCode(
   expect(tokens).toMatchObject({
     access_token: expect.stringMatching(/^ak_/u),
     refresh_token: expect.any(String),
-    scope: 'market_operations:invoke customer_requests:approve_each offline_access',
+    scope: 'market_tools:call customer_requests:approval_required offline_access',
   })
   return { accessToken: tokens.access_token!, refreshToken: tokens.refresh_token! }
 }
@@ -409,10 +409,10 @@ async function callOfficialPublicSearch(baseURL: string): Promise<Record<string,
   try {
     await client.connect(transport as unknown as Parameters<Client['connect']>[0])
     const response = await client.callTool({
-      name: 'ae_registry_operations_search',
+      name: 'ae_registry_tools_search',
       arguments: { query: 'research' },
     })
-    if (response.isError) throw new Error('public_operation_search_rejected')
+    if (response.isError) throw new Error('public_tool_search_rejected')
     return response.structuredContent as Record<string, unknown>
   } finally {
     await client.close().catch(() => undefined)

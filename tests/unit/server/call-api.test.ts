@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 import {
   handleToolCallPost as handleCallPostImpl,
+  handleToolQuotePost,
   type CallHandlerOptions,
 } from '@/lib/server/call-api'
 import type { AgentAccessPrincipalResolver } from '@/lib/server/agent-access-auth'
@@ -55,11 +56,152 @@ function post(body: unknown, path = '/api/v1/tools/call'): Request {
   })
 }
 
+function postWithContentType(
+  body: unknown,
+  path: string,
+  contentType?: string,
+): Request {
+  const request = new Request(`https://ae.example${path}`, {
+    method: 'POST',
+    ...(contentType === undefined ? {} : { headers: { 'content-type': contentType } }),
+    body: JSON.stringify(body),
+  })
+  if (contentType === undefined) request.headers.delete('content-type')
+  return request
+}
+
 function invokeBody(idempotencyKey = 'key-1') {
   return { quoteRef: commitmentRef, idempotencyKey }
 }
 
 describe('operation.invoke HTTP adapter', () => {
+  it.each([
+    ['missing', undefined],
+    ['text/plain', 'text/plain'],
+    ['malformed', 'application/json nonsense'],
+  ] as const)('rejects $0 media for Tool Call before service dispatch', async (_label, contentType) => {
+    const executor = service({ kind: 'completed' })
+    const response = await handleCallPostImpl(
+      postWithContentType(invokeBody(), '/api/v1/tools/call', contentType),
+      { authenticate, resolvePrincipal: resolveCanonicalPrincipal, callService: executor },
+    )
+
+    expect(response.status).toBe(415)
+    await expect(response.json()).resolves.toMatchObject({
+      kind: 'UNSUPPORTED_MEDIA_TYPE',
+      code: 'invalid_content_type',
+    })
+    expect(executor.callTool).not.toHaveBeenCalled()
+  })
+
+  it('accepts mixed-case parameterized JSON media for Tool Call', async () => {
+    const executor = service({
+      kind: 'completed',
+      callRef: 'invocation:mixed-case-media',
+      toolRef: operationRef,
+      output: { ok: true },
+      evidenceHash: 'evidence:mixed-case-media',
+      usage: {
+        usageRef: 'usage:mixed-case-media',
+        observedAt: 1_700_000_000_000,
+        chargeState: 'free_tier',
+        priceDigest: 'price:mixed-case-media',
+        amount: { currency: 'USD', units: '0', exponent: 2 },
+      },
+    })
+    const response = await handleCallPostImpl(
+      postWithContentType(invokeBody('mixed-case-media'), '/api/v1/tools/call', 'Application/JSON;charset=UTF-8'),
+      { authenticate, resolvePrincipal: resolveCanonicalPrincipal, callService: executor },
+    )
+
+    expect(response.status).toBe(200)
+    expect(executor.callTool).toHaveBeenCalledOnce()
+  })
+
+  it('preserves malformed JSON and over-limit body failures for Tool Call', async () => {
+    const executor = service({ kind: 'completed' })
+    const malformed = await handleCallPostImpl(
+      new Request('https://ae.example/api/v1/tools/call', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: '{',
+      }),
+      { authenticate, resolvePrincipal: resolveCanonicalPrincipal, callService: executor },
+    )
+    const oversized = await handleCallPostImpl(
+      postWithContentType({ quoteRef: commitmentRef, idempotencyKey: 'x'.repeat(256 * 1024) }, '/api/v1/tools/call', 'application/json'),
+      { authenticate, resolvePrincipal: resolveCanonicalPrincipal, callService: executor },
+    )
+
+    expect(malformed.status).toBe(400)
+    await expect(malformed.json()).resolves.toMatchObject({ code: 'invalid_json' })
+    expect(oversized.status).toBe(413)
+    expect(executor.callTool).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['missing', undefined],
+    ['text/plain', 'text/plain'],
+    ['malformed', 'application/json nonsense'],
+  ] as const)('rejects $0 media for Tool Quote before service dispatch', async (_label, contentType) => {
+    const executor = service({ kind: 'completed' })
+    const response = await handleToolQuotePost(
+      postWithContentType({ toolRef: operationRef, input: {} }, '/api/v1/tools/quote', contentType),
+      { authenticate, resolvePrincipal: resolveCanonicalPrincipal, callService: executor },
+    )
+
+    expect(response.status).toBe(415)
+    await expect(response.json()).resolves.toMatchObject({
+      kind: 'UNSUPPORTED_MEDIA_TYPE',
+      code: 'invalid_content_type',
+    })
+    expect(executor.quoteTool).not.toHaveBeenCalled()
+  })
+
+  it('accepts mixed-case parameterized JSON media for Tool Quote', async () => {
+    const executor = service({ kind: 'completed' })
+    vi.mocked(executor.quoteTool).mockResolvedValue({
+      kind: 'committed',
+      quoteRef: commitmentRef,
+      toolRef: operationRef,
+      toolVersion: 42,
+      expiresAt: 1_900_000_000_000,
+      normalizedInput: { query: 'bounded current input' },
+      price: { currency: 'AUD', units: '1234567', exponent: 6 },
+      sourceRequirement: { currency: 'USDC', units: '765432', exponent: 6 },
+      account: {
+        accountRef: 'account:machine-budget',
+        available: { currency: 'AUD', units: '9000000', exponent: 6 },
+      },
+      budget: {
+        principalRef: 'principal:machine-budget',
+        maximumPerCall: { currency: 'AUD', units: '5000000', exponent: 6 },
+      },
+      policyRefs: [
+        'policy:commercial',
+        'policy:tax',
+        'policy:accounting',
+        'policy:privacy',
+        'policy:treasury',
+        'policy:operations',
+      ],
+      evidenceDigest: `sha256:${'c'.repeat(64)}`,
+      continuation: {
+        action: 'tool.call',
+        method: 'POST',
+        path: '/api/v1/tools/call',
+        input: { quoteRef: commitmentRef, idempotencyKey: 'replace-with-stable-command-id' },
+      },
+    })
+    const response = await handleToolQuotePost(
+      postWithContentType({ toolRef: operationRef, input: {} }, '/api/v1/tools/quote', 'Application/JSON;charset=UTF-8'),
+      { authenticate, resolvePrincipal: resolveCanonicalPrincipal, callService: executor },
+    )
+
+    expect(response.status).toBe(200)
+    expect(executor.quoteTool).toHaveBeenCalledOnce()
+  })
+
   it('passes the protected operation scope into canonical production-style resolution', async () => {
     const executor = service({
       kind: 'completed',

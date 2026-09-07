@@ -168,7 +168,7 @@ describe('operator shell nested chrome', () => {
     expect(heading.parentElement?.previousElementSibling).toBeNull()
     expect(screen.getByText('AECON')).toBeTruthy()
     expect(document.querySelector(`img[src="${AECON_MARK_SRC}"]`)).toBeTruthy()
-    expect(screen.getByRole('link', { name: 'Operations home' })).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Tools home' })).toBeTruthy()
     expect(screen.getAllByText('Buy and supply').length).toBeGreaterThan(0)
   })
 
@@ -176,16 +176,16 @@ describe('operator shell nested chrome', () => {
     renderAt(
       <AeOperatorShell
         operatorRole="owner"
-        title="Operations"
+        title="Tools"
         description="Publish the exact tools agents can inspect and call."
         currentPath="/owner/offerings"
       >
-        <div>Operations body</div>
+        <div>Tools body</div>
       </AeOperatorShell>,
       '/owner/offerings',
     )
 
-    const heading = await screen.findByRole('heading', { level: 1, name: 'Operations' })
+    const heading = await screen.findByRole('heading', { level: 1, name: 'Tools' })
     expect(heading.parentElement?.previousElementSibling).toBeNull()
   })
 
@@ -193,7 +193,7 @@ describe('operator shell nested chrome', () => {
     renderAt(
       <AeOperatorShell
         operatorRole="owner"
-        title="Operations"
+        title="Tools"
         description="Publish the exact tools agents can inspect and call."
         currentPath="/owner/offerings"
       >
@@ -202,7 +202,7 @@ describe('operator shell nested chrome', () => {
       '/owner/settings/workspace',
     )
 
-    expect(await screen.findByRole('heading', { level: 1, name: 'Operations' })).toBeTruthy()
+    expect(await screen.findByRole('heading', { level: 1, name: 'Tools' })).toBeTruthy()
     expect(screen.queryByRole('heading', { name: 'Loading workspace' })).toBeNull()
     expect(screen.getByLabelText('Loading workspace')).toBeTruthy()
   })
@@ -211,7 +211,7 @@ describe('operator shell nested chrome', () => {
     renderAt(
       <AeOperatorShell
         operatorRole="owner"
-        title="Operations"
+        title="Tools"
         description="Publish the exact tools agents can inspect and call."
         currentPath="/owner/offerings"
       >
@@ -220,7 +220,7 @@ describe('operator shell nested chrome', () => {
       '/owner/settings/connections',
     )
 
-    expect(await screen.findByRole('heading', { level: 1, name: 'Operations' })).toBeTruthy()
+    expect(await screen.findByRole('heading', { level: 1, name: 'Tools' })).toBeTruthy()
     expect(screen.queryByRole('heading', { name: 'Couldn’t load this page' })).toBeNull()
     expect(screen.getByText('Couldn’t load this page')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Try again' })).toBeTruthy()
@@ -301,14 +301,14 @@ describe('owner mobile navigation', () => {
     const mobileNav = await screen.findByRole('navigation', { name: 'Owner primary navigation' })
     const links = within(mobileNav).getAllByRole('link')
 
-    expect(links.map((link) => link.textContent)).toEqual(['Calls', 'Agents', 'Operations'])
+    expect(links.map((link) => link.textContent)).toEqual(['Calls', 'Agents', 'Tools'])
     expect(links.map((link) => link.getAttribute('href'))).toEqual([
       '/activity',
       '/agent-access',
       '/owner/offerings',
     ])
     expect(links.filter((link) => link.getAttribute('aria-current') === 'page').map((link) => link.textContent))
-      .toEqual(['Operations'])
+      .toEqual(['Tools'])
     expect(mobileNav.querySelectorAll('svg[aria-hidden="true"]')).toHaveLength(3)
   })
 
@@ -319,7 +319,7 @@ describe('owner mobile navigation', () => {
     expect(within(descendantNav).getAllByRole('link')
       .filter((link) => link.getAttribute('aria-current') === 'page')
       .map((link) => link.textContent))
-      .toEqual(['Operations'])
+      .toEqual(['Tools'])
 
     descendant.unmount()
     renderOperatorShell('owner', '/owner/settings')
@@ -334,7 +334,7 @@ describe('owner mobile navigation', () => {
     const owner = renderOperatorShell('owner', '/owner/offerings')
     const sidebarNav = await screen.findByRole('navigation', { name: 'Operator navigation' })
 
-    expect(within(sidebarNav).getByRole('link', { name: 'Operations' })).toBeTruthy()
+    expect(within(sidebarNav).getByRole('link', { name: 'Tools' })).toBeTruthy()
     expect(within(sidebarNav).getByRole('link', { name: 'Catalog' })).toBeTruthy()
     expect(within(sidebarNav).getByRole('link', { name: 'Calls' })).toBeTruthy()
     expect(within(sidebarNav).getByRole('link', { name: 'Agents' })).toBeTruthy()
@@ -499,11 +499,11 @@ function FocusTransitionHarness() {
       <Link to="/owner/offerings" hash="earnings">Open earnings</Link>
       <AeOperatorShell
         operatorRole="owner"
-        title={calls ? 'Calls' : 'Operations'}
-        description={calls ? 'Review calls.' : 'Manage Operations.'}
+        title={calls ? 'Calls' : 'Tools'}
+        description={calls ? 'Review calls.' : 'Manage Tools.'}
         currentPath={pathname}
       >
-        <div>{calls ? 'Calls content' : 'Operations content'}</div>
+        <div>{calls ? 'Calls content' : 'Tools content'}</div>
       </AeOperatorShell>
     </AeOperatorShell>
   )

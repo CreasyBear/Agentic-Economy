@@ -108,11 +108,11 @@ describe('/status', () => {
 
     await waitFor(() => expect(screen.getByRole('button', { name: 'Refresh status' })).toHaveProperty('disabled', false))
     const degradedStatus = screen.getByText(
-      /^Status checked\. 1 of 4 systems needs attention: Operation API\. Last checked .+\.$/,
+      /^Status checked\. 1 of 4 systems needs attention: Tool API\. Last checked .+\.$/,
     )
     expect(degradedStatus.getAttribute('role')).toBe('status')
     expect(degradedStatus.textContent).not.toBe(initialCheckedAt)
-    expect(screen.getByText('New Operation calls may fail (HTTP 503). Check existing calls before retrying.')).toBeTruthy()
+    expect(screen.getByText('New Calls may fail (HTTP 503). Check existing Calls before retrying.')).toBeTruthy()
     expect(screen.getByText('Degraded')).toBeTruthy()
     expect(screen.getAllByText('Operational')).toHaveLength(3)
     expect(screen.getByRole('heading', { level: 1 }).textContent).toContain('Some systems are degraded.')
@@ -124,10 +124,10 @@ describe('/status', () => {
     expect(screen.getByText(requestRef).tagName).toBe('CODE')
     const writeText = vi.fn().mockResolvedValue(undefined)
     Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })
-    fireEvent.click(screen.getByRole('button', { name: 'Copy Operation API request reference' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Copy Tool API request reference' }))
     await waitFor(() => expect(writeText).toHaveBeenCalledWith(requestRef))
     expect(screen.getByText('Copied').getAttribute('role')).toBe('status')
-    expect(screen.getByRole('button', { name: 'Operation API request reference copied' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Tool API request reference copied' })).toBeTruthy()
 
     const recovered = queueDeferredBatch()
     fireEvent.click(screen.getByRole('button', { name: 'Refresh status' }))
@@ -157,7 +157,7 @@ describe('/status', () => {
     batch[3]?.reject(new Error('network unavailable'))
 
     await waitFor(() => expect(screen.getByRole('button', { name: 'Refresh status' })).toHaveProperty('disabled', false))
-    expect(screen.getByText('Release identity could not be reached. New Operation calls should wait.')).toBeTruthy()
+    expect(screen.getByText('Release identity could not be reached. New Calls should wait.')).toBeTruthy()
     expect(screen.getByText('Degraded')).toBeTruthy()
     expect(screen.getByRole('status').textContent).toMatch(
       /^Status checked\. 1 of 4 systems needs attention: Release identity\. Last checked .+\.$/,
@@ -178,7 +178,7 @@ describe('/status', () => {
     batch[3]?.resolve(responseForProbe(3))
 
     await waitFor(() => expect(screen.getByRole('button', { name: 'Refresh status' })).toHaveProperty('disabled', false))
-    expect(screen.getByText('The Operation API returned an invalid readiness result. Check existing calls before retrying.')).toBeTruthy()
+    expect(screen.getByText('The Tool API returned an invalid readiness result. Check existing Calls before retrying.')).toBeTruthy()
     expect(screen.getAllByText('Operational')).toHaveLength(3)
     expect(screen.getByText('Degraded')).toBeTruthy()
     expect(screen.getByText('request:invalid-ready-contract')).toBeTruthy()

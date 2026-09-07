@@ -1,7 +1,7 @@
 {
   "name": "agentic-economy",
   "version": "0.1.0",
-  "description": "Find an outside service, review its terms, and make an authorized Call through Agentic Economy.",
+  "description": "Find a Tool, review its terms, and make an authorized Call through Agentic Economy.",
   "author": {
     "name": "Agentic Economy",
     "email": "support@aecon.ai",
@@ -13,8 +13,8 @@
   "license": "UNLICENSED",
   "interface": {
     "displayName": "Agentic Economy",
-    "shortDescription": "Find and use outside services for your task.",
-    "longDescription": "Search public Operations, connect your account, review the selected service and make a Call within your authority. Read the result or continue recovery from the same Call.",
+    "shortDescription": "Find and use Tools for your task.",
+    "longDescription": "Search public Tools, connect your account, review the selected Tool and make a Call within your authority. Read the result or continue recovery from the same Call.",
     "developerName": "Agentic Economy",
     "category": "Productivity",
     "capabilities": ["Read", "Write"],
@@ -24,8 +24,8 @@
     "composerIcon": "./assets/mark-128.png",
     "logo": "./assets/mark.png",
     "defaultPrompt": [
-      "Find an Operation for the capability my task is missing.",
-      "Compare the terms of these Operations.",
+      "Find a Tool for the capability my task is missing.",
+      "Compare the terms of these Tools.",
       "Check the status of my existing Call."
     ]
   },

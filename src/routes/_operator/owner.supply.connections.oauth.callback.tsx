@@ -69,7 +69,7 @@ function OwnerMcpOAuthCallbackRoute() {
       description="Return to Add service after the source confirms authentication."
       currentPath="/owner/offerings/new"
       breadcrumbs={[
-        { label: 'Operations', href: '/owner/offerings' },
+        { label: 'Tools', href: '/owner/offerings' },
         { label: 'Add service', href: '/owner/offerings/new' },
         { label: 'Service connection' },
       ]}

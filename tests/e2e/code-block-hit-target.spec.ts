@@ -18,7 +18,7 @@ test('native setup copy and alternatives work by pointer and keyboard', async ({
 
   const manifestCopyButton = page.getByRole('button', { name: 'Copy Codex MCP command' })
 
-  await expect(page.getByRole('link', { name: 'Browse Operations', exact: true })).toBeVisible()
+  await expect(page.getByRole('link', { name: 'Browse Tools', exact: true })).toBeVisible()
   await manifestCopyButton.scrollIntoViewIfNeeded()
   await expectInitialHitTarget(page, manifestCopyButton)
 

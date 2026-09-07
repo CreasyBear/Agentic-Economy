@@ -342,7 +342,7 @@ export const agentAccountActivityAction = defineAction<AgentAccountActivityInput
   summary: 'List the authenticated buyer credential’s own bounded charge activity, newest first.',
   boundaries: [
     'Rows are bound to the exact authenticated principal and credential, not every credential owned by the account.',
-    'Returns charge evidence and invocation references without operation inputs, outputs, bearer secrets, or payment-provider data.',
+    'Returns Charge evidence and Call references without Call inputs, outputs, bearer secrets, or payment-provider data.',
     'The cursor is opaque and remains bound to the same credential and currency.',
   ],
   schema: agentAccountActivityInputSchema,
@@ -362,7 +362,7 @@ export const agentAccountActivityAction = defineAction<AgentAccountActivityInput
   invocationContract: {
     version: AGENT_ACCOUNT_MONEY_ROUTE_CONTRACTS.activity.contractVersion,
     consequenceClass: 'read_only', materialInputPaths: ['currency', 'limit', 'cursor'], authorityRequirement: 'principal',
-    retryClass: 'replayable', expectedEvidence: ['credential_charge_activity'], safeContinuations: ['operation.status'],
+    retryClass: 'replayable', expectedEvidence: ['credential_charge_activity'], safeContinuations: ['call.status'],
     invalidationConditions: ['credential_revoked', 'currency_changed', 'cursor_changed'],
   },
   run: async ({ data, context }) => {

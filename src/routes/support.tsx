@@ -40,7 +40,7 @@ function SupportRoute() {
         <AeSection
           id="message-troubleshooting"
           title="Continue from the current status"
-          description="The original Call or Operation shows its current state and next action. If the result is uncertain, check that record before trying again."
+          description="The original Call shows its current status and next action. If the result is uncertain, check that Call before trying again."
         >
           <div className="flex flex-wrap gap-related">
             <Button asChild className="min-h-touch"><Link to="/activity">Open Calls</Link></Button>

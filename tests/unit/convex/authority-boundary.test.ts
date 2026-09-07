@@ -162,6 +162,65 @@ describe('canonical agent authority boundary', () => {
     expect(result?.ownerId).not.toBe(OTHER_ACCOUNT_REF)
   })
 
+  it.each([
+    ['expired', NOW - 1, false],
+    ['equal-time', NOW, false],
+    ['current', NOW + 1, true],
+  ] as const)(
+    'enforces normalized access-grant expiry at the Self consequence boundary for a %s grant',
+    async (_state, accessGrantExpiresAt, shouldResolve) => {
+      const backend = testBackend()
+      await seedCanonicalChain(backend, {
+        credential: { expiresAt: NOW + 60_000 },
+        admission: { expiresAt: NOW + 60_000 },
+        grant: { expiresAt: NOW + 30_000, resourceRefs: ['*'] },
+        parentGrant: { expiresAt: NOW + 40_000, resourceRefs: ['*'] },
+        accessGrant: { expiresAt: accessGrantExpiresAt },
+      })
+
+      const result = await runResolver(backend, {
+        operationKey: 'surface:http:account-self',
+        correlationId: `correlation:account-self:access-grant:${_state}`,
+      })
+      if (!shouldResolve) {
+        expect(result).toBeNull()
+        return
+      }
+      expect(result).toMatchObject({
+        principalId: PRINCIPAL_REF,
+        ownerId: ACCOUNT_REF,
+        grantRef: GRANT_REF,
+      })
+    },
+  )
+
+  it.each([
+    ['crossed expiry', NOW + 500, NOW + 1_000],
+    ['equal-time expiry', NOW + 1_000, NOW + 1_000],
+  ] as const)(
+    'rechecks normalized access-grant expiry at the final Self consequence boundary for %s',
+    async (_state, accessGrantExpiresAt, finalNow) => {
+      const backend = testBackend()
+      await seedCanonicalChain(backend, {
+        credential: { expiresAt: NOW + 60_000 },
+        admission: { expiresAt: NOW + 60_000 },
+        grant: { expiresAt: NOW + 30_000, resourceRefs: ['*'] },
+        parentGrant: { expiresAt: NOW + 40_000, resourceRefs: ['*'] },
+        accessGrant: { expiresAt: accessGrantExpiresAt },
+      })
+      vi.spyOn(Date, 'now')
+        .mockReturnValueOnce(NOW)
+        .mockReturnValueOnce(NOW)
+        .mockReturnValueOnce(NOW)
+        .mockReturnValueOnce(finalNow)
+
+      await expect(runResolver(backend, {
+        operationKey: 'surface:http:account-self',
+        correlationId: `correlation:account-self:final-access-grant:${_state}`,
+      })).resolves.toBeNull()
+    },
+  )
+
   it('coarsens successful credential evidence to one timestamp and audit event per 15 minutes', async () => {
     const backend = testBackend()
     await seedCanonicalChain(backend, {

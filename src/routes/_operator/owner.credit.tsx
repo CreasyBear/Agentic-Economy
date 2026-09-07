@@ -27,7 +27,6 @@ import {
 import type { AgentDirectoryProjection } from '@/modules/agent-access/agent-operator-view-model'
 import {
   beginAccountFundingServer,
-  readAccountFundingBalanceServer,
   readAccountFundingServer,
 } from '@/modules/money/money.functions'
 import type { AccountFundingBalance } from '@/modules/money/server'
@@ -48,7 +47,6 @@ function OwnerCreditRoute() {
   const localE2E = isLocalE2EAuthBypassEnabled()
   const beginAccountFunding = useServerFn(beginAccountFundingServer)
   const readAccountFunding = useServerFn(readAccountFundingServer)
-  const readAccountBalance = useServerFn(readAccountFundingBalanceServer)
   const readDocuments = useServerFn(readOwnerMoneyDocumentsServer)
   const readReconciliation = useServerFn(readOwnerMoneyReconciliationServer)
   const readObligations = useServerFn(readOwnerProviderObligationsServer)
@@ -61,7 +59,6 @@ function OwnerCreditRoute() {
     read: (data) => readAccountFunding({ data }),
   }), [beginAccountFunding, readAccountFunding])
   const [directory, setDirectory] = useState<AgentDirectoryProjection>(emptyAgentDirectory)
-  const [accountBalance, setAccountBalance] = useState<AccountFundingBalance>(emptyAccountBalance)
   const [documents, setDocuments] = useState<readonly MoneyDocumentView[]>([])
   const [reconciliationCases, setReconciliationCases] = useState<readonly MoneyReconciliationCaseView[]>([])
   const [providerObligations, setProviderObligations] = useState<readonly MoneyProviderObligationView[]>([])
@@ -71,15 +68,13 @@ function OwnerCreditRoute() {
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const [nextDirectory, nextBalance, nextDocuments, nextReconciliation, nextObligations] = await Promise.all([
+      const [nextDirectory, nextDocuments, nextReconciliation, nextObligations] = await Promise.all([
         readDirectory(),
-        readAccountBalance(),
         readDocuments({ data: {} }),
         readReconciliation({ data: {} }),
         readObligations({ data: {} }),
       ])
       setDirectory(nextDirectory)
-      setAccountBalance(nextBalance)
       setDocuments(nextDocuments.page)
       setReconciliationCases(nextReconciliation.page)
       setProviderObligations(nextObligations.page)
@@ -90,12 +85,11 @@ function OwnerCreditRoute() {
     } finally {
       setLoading(false)
     }
-  }, [readAccountBalance, readDirectory, readDocuments, readObligations, readReconciliation])
+  }, [readDirectory, readDocuments, readObligations, readReconciliation])
 
   useEffect(() => {
     if (localE2E) {
       setDirectory(emptyAgentDirectory)
-      setAccountBalance(emptyAccountBalance)
       setError(undefined)
       setLoading(false)
       return
@@ -107,7 +101,7 @@ function OwnerCreditRoute() {
     <AeOperatorShell
       operatorRole="owner"
       title="Funding"
-      description="Fund the Account in AUD, then control each Agent's spending through its durable budget."
+      description="Fund the Account in AUD, then control each Agent's spending through its spending policy."
       currentPath="/owner/credit"
       actions={
         <Button asChild variant="secondary">
@@ -138,7 +132,6 @@ function OwnerCreditRoute() {
         )}
         <AeOwnerCredit
           directory={directory}
-          accountBalance={accountBalance}
           loading={loading}
           accountFundingPort={accountFundingPort}
           onCreditRefresh={load}
@@ -184,12 +177,11 @@ function OwnerCreditRoute() {
 const emptyAgentDirectory: AgentDirectoryProjection = Object.freeze({
   items: Object.freeze([]),
   details: Object.freeze([]),
-})
-
-const emptyAccountBalance: AccountFundingBalance = Object.freeze({
-  kind: 'available',
-  accountRef: 'local-preview',
-  balance: Object.freeze({ currency: 'AUD', units: '0', exponent: 6 }),
-  locked: false,
-  version: 0,
+  accountBalance: Object.freeze({
+    kind: 'available',
+    accountRef: 'local-preview',
+    balance: Object.freeze({ currency: 'AUD', units: '0', exponent: 6 }),
+    locked: false,
+    version: 0,
+  } satisfies AccountFundingBalance),
 })

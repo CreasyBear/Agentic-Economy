@@ -69,7 +69,7 @@ describe('private market request CLI', () => {
       requestRef,
       query: 'translate a handwritten invoice',
       createdAt: 1_700_000_000_000,
-      nextCommand: `ae request status ${requestRef}`,
+      nextCommand: `ae request status ${requestRef} --json`,
     })
     expect(output.read()).not.toContain('missing-job:one')
     expect(output.read()).not.toContain('hidden-buyer-key')
@@ -124,7 +124,38 @@ describe('private market request CLI', () => {
 
     expect(JSON.parse(output.read())).toMatchObject({
       kind: 'matched',
-      nextCommand: `ae describe ${toolRef}`,
+      nextCommand: `ae describe ${toolRef} --json`,
+    })
+  })
+
+  it('quotes a hostile current-match query and preserves selected origin and JSON mode', async () => {
+    const query = 'private lookup; touch request-refusal-marker; #'
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>().mockResolvedValue(responseJson({
+      kind: 'refused',
+      code: 'current_match_exists',
+    })))
+
+    await expect(runRequestCommand(['create', 'private', 'lookup;', 'touch', 'request-refusal-marker;', '#'], {
+      ...options,
+      baseUrlSource: 'flag',
+    })).rejects.toMatchObject({
+      code: 'current_match_exists',
+      nextCommand: `ae search '${query}' --base-url ${options.baseUrl} --json`,
+    })
+  })
+
+  it('uses a shell-safe idempotency replacement command with selected origin and JSON mode', async () => {
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>().mockResolvedValue(responseJson({
+      kind: 'refused',
+      code: 'idempotency_conflict',
+    })))
+
+    await expect(runRequestCommand(['create', 'missing', 'job'], {
+      ...options,
+      baseUrlSource: 'flag',
+    })).rejects.toMatchObject({
+      code: 'idempotency_conflict',
+      nextCommand: "ae request create '<job>' --idempotency-key '<new-key>' --base-url https://market.example --json",
     })
   })
 })

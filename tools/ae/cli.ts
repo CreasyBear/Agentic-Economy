@@ -111,7 +111,7 @@ const SUPPLY_AUTH_HELP = {
   scope: MARKET_SUPPLY_MANAGE_SCOPE,
   deviceFlow: 'Run ae connect --provider to request a separate owner-approved provider credential; ordinary ae connect remains buyer-scoped.',
   existingKey: 'Use an owner-issued AE key whose exact origin and market_supply:manage scope have already been established.',
-  next: 'Use supply status for Tools and supply connections for provider authority before lifecycle writes; preserve returned revisions, generations, and digests.',
+  next: 'Use supply tools <businessRef> to inventory Provider Tools, then supply status <businessRef> <toolRef> to inspect one exact Tool; use supply connections for provider authority before lifecycle writes and preserve returned revisions, generations, and digests.',
 } as const
 
 function commandHelpName(command: string | undefined, positionals: readonly string[]): string | undefined {

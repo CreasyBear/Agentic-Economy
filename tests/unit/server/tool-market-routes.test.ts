@@ -51,7 +51,7 @@ describe('public market Tool routes', () => {
     setHttpRateLimitAdmissionForTests(async () => ({ ok: true }))
     const response = await handleMarketToolSearchRequest(new Request('https://ae.test/api/v1/market-tools/search', {
       method: 'POST',
-      headers: { 'content-type': 'application/json', 'x-ae-request-id': 'route-test' },
+      headers: { 'content-type': 'Application/JSON;charset=UTF-8', 'x-ae-request-id': 'route-test' },
       body: JSON.stringify({ query: 'reference lookup', limit: 1 }),
     }))
 
@@ -63,7 +63,7 @@ describe('public market Tool routes', () => {
       query: 'reference lookup',
       count: 0,
       items: [],
-      note: 'No operational Tools matched this search.',
+      note: 'No Tools match this search.',
       pagination: { limit: 10, hasMore: false },
     })
   })
@@ -91,12 +91,26 @@ describe('public market Tool routes', () => {
     setHttpRateLimitAdmissionForTests(admit)
     const endpoint = `https://ae.test/api/v1/market-tools/${route}`
 
-    const unsupported = await handler(new Request(endpoint, { method: 'POST', body: '{}' }))
-    expect(unsupported.status).toBe(415)
-    await expect(unsupported.json()).resolves.toMatchObject({
-      kind: 'UNSUPPORTED_MEDIA_TYPE',
-      code: 'invalid_content_type',
-    })
+    for (const request of [
+      new Request(endpoint, { method: 'POST', body: '{}' }),
+      new Request(endpoint, {
+        method: 'POST',
+        headers: { 'content-type': 'text/plain;note=application/json' },
+        body: '{}',
+      }),
+      new Request(endpoint, {
+        method: 'POST',
+        headers: { 'content-type': 'application/jsonp' },
+        body: '{}',
+      }),
+    ]) {
+      const unsupported = await handler(request)
+      expect(unsupported.status).toBe(415)
+      await expect(unsupported.json()).resolves.toMatchObject({
+        kind: 'UNSUPPORTED_MEDIA_TYPE',
+        code: 'invalid_content_type',
+      })
+    }
 
     const malformed = await handler(new Request(endpoint, {
       method: 'POST',

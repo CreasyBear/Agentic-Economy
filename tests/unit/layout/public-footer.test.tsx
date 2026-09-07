@@ -29,7 +29,7 @@ describe('public website footer', () => {
         column.links.map((link) => link.label),
       ]),
     ).toEqual([
-      ['Market', ['Discover', 'For agents', 'For suppliers', 'Calls', 'About']],
+      ['Market', ['Discover', 'For agents', 'For Providers', 'Calls', 'About']],
       ['Help', ['Get help', 'System status']],
       ['Legal', ['Privacy', 'Terms', 'Remove a listing']],
       ['Machines', ['llms.txt', 'SKILL.md', '.well-known/ucp']],
@@ -78,7 +78,7 @@ describe('public primary navigation', () => {
     expect(publicPrimaryNavItems.map((item) => item.label)).toEqual([
       'Discover',
       'For agents',
-      'For suppliers',
+      'For Providers',
       'Calls',
     ])
     expect(publicPrimaryNavItems.map((item) => item.to)).toEqual([

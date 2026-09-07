@@ -1,10 +1,11 @@
 /**
- * Durable Call lifecycle seam.
+ * Generic Action execution kernel.
  *
- * capability-execution owns the public Call application. This file exposes
- * only the claim/fence/attempt/result/reconcile kernel it coordinates. Paid UI,
- * development hosts, supplier adapters, and compatibility nouns deliberately
- * stay on their existing non-runtime surfaces.
+ * capability-execution uses this claim/fence/attempt/result/reconcile kernel
+ * for its purchased Call lifecycle. Generic Action execution remains distinct
+ * from a purchased Call. Paid UI, development hosts, Provider adapters, and
+ * compatibility nouns deliberately stay on their existing non-runtime
+ * surfaces.
  */
 export {
   acceptedAuthorityValue,

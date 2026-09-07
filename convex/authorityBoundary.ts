@@ -205,7 +205,8 @@ export async function resolveCanonicalAgentBinding(
   const consequenceNow = Date.now()
   if (!currentServerTime(consequenceNow)) return null
   if (credential.expiresAt <= consequenceNow
-    || (admission.expiresAt !== undefined && admission.expiresAt <= consequenceNow)) {
+    || (admission.expiresAt !== undefined && admission.expiresAt <= consequenceNow)
+    || normalizedAccessGrant.expiresAt <= consequenceNow) {
     return await denyKnownCredential('authentication_required', consequenceNow)
   }
   const grants = candidates.filter((grant) => grant.grantRef === accessGrant.grantRef
@@ -265,6 +266,7 @@ export async function resolveCanonicalAgentBinding(
   if (!currentServerTime(finalNow)) return null
   if (credential.expiresAt <= finalNow
     || (admission.expiresAt !== undefined && admission.expiresAt <= finalNow)
+    || normalizedAccessGrant.expiresAt <= finalNow
     || snapshot.expiresAt <= finalNow
     || snapshot.actorPrincipalRef !== canonicalPrincipalRef
     || snapshot.grantRef !== canonicalGrantRef

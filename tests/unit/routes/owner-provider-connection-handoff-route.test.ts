@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   readIdentity: vi.fn(),
   readConnections: vi.fn(),
   resumeDraft: vi.fn(),
+  sourceStart: vi.fn(),
 }))
 
 vi.mock('@/modules/capability-supply/supply-funnel.functions', () => ({
@@ -32,6 +33,18 @@ vi.mock('@/modules/capability-supply/supply-funnel.functions', () => ({
 }))
 vi.mock('@/components/ae/offerings/provider-workspace.functions', () => ({ readProviderWorkspaceIdentityDetailServer: mocks.readIdentity }))
 vi.mock('@/components/ae/layout/AeOperatorShell', () => ({ AeOperatorShell: ({ children }: { children: unknown }) => children }))
+vi.mock('@/components/ae/supply/AeSupplySourceNativeStart', async () => {
+  const React = await import('react')
+  return {
+    AeSupplySourceNativeStart: (props: { onDraftSaved: (candidateRef: string, connectionRef?: string) => Promise<void> }) => {
+      mocks.sourceStart(props)
+      return React.createElement('button', {
+        type: 'button',
+        onClick: () => void props.onDraftSaved(`sha256:${'a'.repeat(64)}`, 'connection:x402'),
+      }, 'Save draft')
+    },
+  }
+})
 vi.mock('@tanstack/react-start', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@tanstack/react-start')>()),
   useServerFn: (fn: unknown) => fn,
@@ -72,6 +85,33 @@ describe('Provider connection handoff route', () => {
     expect(mocks.readAttempt).not.toHaveBeenCalled()
   })
 
+  it('preserves the requested environment when a saved draft navigation completes', async () => {
+    vi.spyOn(DestinationRoute, 'useLoaderData').mockReturnValue({
+      identity: { kind: 'available', businessId: 'business:one' },
+      connections: [],
+      resume: { kind: 'not_found' },
+      resumeRequested: false,
+      sourceUnavailable: false,
+    } as never)
+    vi.spyOn(DestinationRoute, 'useSearch').mockReturnValue({ environment: 'sandbox' } as never)
+    const navigate = vi.fn().mockResolvedValue(undefined)
+    vi.spyOn(DestinationRoute, 'useNavigate').mockReturnValue(navigate as never)
+    const Component = DestinationRoute.options.component
+    if (Component === undefined) throw new Error('destination_component_missing')
+
+    render(createElement(Component))
+    fireEvent.click(screen.getByRole('button', { name: 'Save draft' }))
+
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith({
+      search: {
+        draft: `sha256:${'a'.repeat(64)}`,
+        connection: 'connection:x402',
+        environment: 'sandbox',
+      },
+      replace: true,
+    }))
+  })
+
   it('returns a consumed MCP attempt through the exact saved-source destination resume', async () => {
     vi.spyOn(Route, 'useLoaderData').mockReturnValue({
       kind: 'available',
@@ -108,6 +148,7 @@ describe('Provider connection handoff route', () => {
       businessId: 'business:one',
       draftRef: 'sds_exact_source',
       connectionRef: 'connection:mcp',
+      environment: 'production',
     } })
   })
 

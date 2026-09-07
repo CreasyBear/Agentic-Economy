@@ -9,7 +9,7 @@ const calls = vi.hoisted(() => ({
 }))
 const tokens = vi.hoisted(() => ({ connections: Symbol('connections'), earnings: Symbol('earnings'), connect: Symbol('connect'), identity: Symbol('identity'), ensure: Symbol('ensure'), rename: Symbol('rename') }))
 const routeState = vi.hoisted(() => ({ location: { pathname: '/owner/offerings', hash: '', search: {} as Record<string, unknown> } }))
-const rendered = vi.hoisted(() => ({ status: vi.fn(), capabilities: vi.fn(), identity: vi.fn() }))
+const rendered = vi.hoisted(() => ({ status: vi.fn(), capabilities: vi.fn(), identity: vi.fn(), connections: vi.fn() }))
 
 vi.mock('@tanstack/react-start', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@tanstack/react-start')>()),
@@ -43,7 +43,7 @@ vi.mock('@/modules/capability-supply/supply-funnel.functions', () => ({ readOwne
 vi.mock('@/modules/money/money.functions', () => ({ readOwnerConnectReadinessServer: tokens.connect }))
 vi.mock('@/components/ae/layout/AeOperatorShell', () => ({ AeOperatorShell: ({ children }: { children: ReactNode }) => <main>{children}</main> }))
 vi.mock('@/components/ae/offerings/AeOwnerOfferings', () => ({ AeOwnerOfferingsList: () => <div data-testid="tools-list" /> }))
-vi.mock('@/components/ae/supply/AeOwnerProviderConnections', () => ({ AeOwnerProviderConnections: () => <div data-testid="connection-controls" /> }))
+vi.mock('@/components/ae/supply/AeOwnerProviderConnections', () => ({ AeOwnerProviderConnections: (props: unknown) => { rendered.connections(props); return <div data-testid="connection-controls" /> } }))
 vi.mock('@/components/ae/supply/AeSupplyEarningsCard', () => ({ AeSupplyEarningsCard: () => <div data-testid="earnings-controls" /> }))
 vi.mock('@/components/ae/status/AeStatusCard', () => ({ AeStatusCard: (props: unknown) => { rendered.status(props); return <div data-testid="provider-status-card" /> } }))
 vi.mock('@/components/ae/status/AeCapabilityList', () => ({ AeCapabilityList: (props: unknown) => { rendered.capabilities(props); return <div data-testid="provider-capability-list" /> } }))
@@ -172,6 +172,23 @@ describe('Tools management disclosure', () => {
     await waitFor(() => expect(calls.earnings).toHaveBeenCalledTimes(1))
     expect(calls.connect).toHaveBeenCalledTimes(1)
     expect(await screen.findByTestId('earnings-controls')).toBeTruthy()
+  })
+
+  it('opens provider connections and carries the exact x402 source handoff from the CTA', async () => {
+    const handoff = {
+      connect: 'x402',
+      draft: `sha256:${'a'.repeat(64)}`,
+      resourceUrl: 'https://seller.example/paid',
+      method: 'GET',
+      environment: 'sandbox',
+    } as const
+    routeState.location = { pathname: '/owner/offerings', hash: '', search: handoff }
+    calls.connections.mockResolvedValue({ kind: 'available', businessId: 'biz:one', connections: [] })
+    render(<AeProviderWorkspace inventory={inventory} lifecycle={unavailable} connections={unavailable} payouts={unavailable} publicStatus={unavailable} />)
+
+    expect(await screen.findByTestId('connection-controls')).toBeTruthy()
+    await waitFor(() => expect(rendered.connections).toHaveBeenCalledWith(expect.objectContaining({ x402Handoff: handoff })))
+    expect(calls.connections).toHaveBeenCalledTimes(1)
   })
 
   it('retries a failed earnings detail read in place', async () => {

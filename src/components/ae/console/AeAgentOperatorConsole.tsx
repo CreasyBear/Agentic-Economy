@@ -219,7 +219,7 @@ export function AeAgentOperatorConsole({
   return (
     <div className="grid gap-8">
       <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">{approvalStatus ?? ''}</p>
-      <AeSection title="Credit" description="Paid calls use the credit assigned to each agent.">
+      <AeSection title="Credit" description="Paid Calls use shared Account credit within each Agent’s spending policy.">
         <Button asChild variant="secondary" className="w-fit min-h-touch">
           <a href="/owner/credit">Open Credit</a>
         </Button>
@@ -242,7 +242,7 @@ export function AeAgentOperatorConsole({
       <AeSection
         id="revoke"
         title="Agents"
-        description="Review each independent agent, its current credential generation, activity, and connection state. Historical credentials stay attached to the same durable agent."
+        description="Review each independent agent, its current credential generation, activity, and connection state. Historical credentials stay attached to the same Agent."
       >
         {agentsPhase === 'unloaded' ? (
           <AeRecordTable
@@ -311,6 +311,8 @@ export function AeAgentOperatorConsole({
             {agentRecoveryCopy(selected) === undefined ? null : (
               <p className="text-sm text-muted-foreground">{agentRecoveryCopy(selected)}</p>
             )}
+            <p className="text-sm text-muted-foreground">Counts and settled charges cover Calls created in the current UTC calendar month. Released or refunded payments are excluded. This is not a net-spend statement.</p>
+            {selected.activityTruncated ? <p className="text-sm text-muted-foreground">Recent activity shows only the latest 50 Calls by creation time; monthly counts cover the full period when available.</p> : null}
             <AuthorizedTools detail={selected} />
             <ConnectionReceipts
               detail={selected}
@@ -482,8 +484,12 @@ function approvalFacts(approval: PendingCallApproval): readonly AeFact[] {
 }
 
 function agentFacts(detail: AgentDetail): readonly AeFact[] {
-  const accountBalance = detail.account?.balance
-  const zeroBalance = accountBalance === undefined ? undefined : { ...accountBalance, units: '0' }
+  const usage = detail.usage
+  const settledCharges = usage === undefined
+    ? 'Unavailable'
+    : usage.amountCoverage === 'complete' && usage.settledSpend !== undefined
+      ? formatAmount(usage.settledSpend)
+      : 'Amount coverage incomplete'
   return [
     { label: 'Environment', value: environmentLabel(detail.agent.environment) },
     { label: 'Last used', value: detail.agent.lastSeenAt === undefined
@@ -497,11 +503,12 @@ function agentFacts(detail: AgentDetail): readonly AeFact[] {
     { label: 'Concurrency', value: detail.grant === undefined ? 'Unavailable' : String(detail.grant.budget.maximumConcurrentCalls), mono: true},
     { label: 'Authority', value: scopeLabel(detail.authorityMode) },
     { label: 'Tools', value: toolAccessLabel(detail) },
-    { label: 'Balance', value: formatAmount(accountBalance), mono: true},
-    { label: 'Calls', value: String(detail.usage?.callCount ?? 0), mono: true},
-    { label: 'Spend', value: formatAmount(detail.usage?.grossSpend ?? zeroBalance), mono: true},
-    { label: 'Unknown', value: detail.usage?.states.includes('outcome_unknown') ? 'Needs review' : 'None' },
-    { label: 'Usage and balance', value: dataLabel(detail.dataState), muted: true },
+    { label: 'Calls this month', value: usage === undefined ? 'Unavailable' : String(usage.callCount), mono: true },
+    { label: 'Completed', value: usage === undefined ? 'Unavailable' : String(usage.completedCallCount), mono: true },
+    { label: 'Needs checking', value: usage === undefined ? 'Unavailable' : String(usage.outcomeUnknownCallCount) },
+    { label: 'Settled charges', value: settledCharges, mono: true },
+    { label: 'Amount coverage', value: usage === undefined ? 'Unavailable' : usage.amountCoverage === 'complete' ? 'Complete' : 'Incomplete' },
+    { label: 'Usage data', value: dataLabel(detail.dataState), muted: true },
   ]
 }
 
@@ -649,7 +656,7 @@ function agentRecoveryCopy(detail: AgentDetail): string | undefined {
   if (detail.agent.status === 'attention' || detail.grant === undefined) {
     return 'This agent needs attention. Review its current credential before allowing new work.'
   }
-  if (detail.usage?.states.includes('outcome_unknown')) {
+  if (detail.usage !== undefined && detail.usage.outcomeUnknownCallCount > 0) {
     return 'One or more calls needs checking. Reconcile the recorded outcome before retrying.'
   }
   return undefined

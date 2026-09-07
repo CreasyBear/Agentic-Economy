@@ -169,7 +169,7 @@ export const startOwnerSupplySourceConnectionServer = createServerFn({
   method: 'POST',
 })
   .validator((data) => ownerSourceConnectionInputSchema.parse(data))
-  .handler(async (input) => package5RolloutDecision('httpCredentials').enabled
+  .handler(async (input) => input.data.source.kind === 'x402' || package5RolloutDecision('httpCredentials').enabled
     ? await startOwnerSupplySourceConnection(input)
     : disabledProviderConnectionPreview())
 
@@ -180,6 +180,7 @@ export const resumeOwnerSupplySourceDraftServer = createServerFn()
         businessId: z.string().trim().min(1),
         draftRef: z.string().trim().min(1).max(300),
         connectionRef: z.string().trim().min(1).max(300).optional(),
+        environment: z.enum(['sandbox', 'production']).optional(),
       })
       .parse(data),
   )

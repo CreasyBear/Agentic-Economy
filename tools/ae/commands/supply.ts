@@ -36,7 +36,7 @@ import { requireAgentAccessKey } from './status'
 
 export const SUPPLY_COMMAND_DESCRIPTORS = Object.freeze([
   { actionId: supplySourcePreviewAction.id, command: 'supply', subcommand: 'preview', route: SUPPLY_ACTION_ROUTE_CONTRACTS.sourcePreview, action: supplySourcePreviewAction },
-  { actionId: supplyToolsListAction.id, command: 'supply', subcommand: 'operations', route: SUPPLY_ACTION_ROUTE_CONTRACTS.toolsList, action: supplyToolsListAction },
+  { actionId: supplyToolsListAction.id, command: 'supply', subcommand: 'tools', route: SUPPLY_ACTION_ROUTE_CONTRACTS.toolsList, action: supplyToolsListAction },
   { actionId: supplyStatusAction.id, command: 'supply', subcommand: 'status', route: SUPPLY_ACTION_ROUTE_CONTRACTS.status, action: supplyStatusAction },
   { actionId: supplyPublishAction.id, command: 'supply', subcommand: 'publish', route: SUPPLY_ACTION_ROUTE_CONTRACTS.publish, action: supplyPublishAction },
   { actionId: supplyWithdrawAction.id, command: 'supply', subcommand: 'withdraw', route: SUPPLY_ACTION_ROUTE_CONTRACTS.withdraw, action: supplyWithdrawAction },
@@ -89,10 +89,10 @@ function writeInput(options: CliOptions): Record<string, unknown> {
 }
 
 function inputFor(subcommand: string, args: readonly string[], options: CliOptions): unknown {
-  if (subcommand === 'operations') {
+  if (subcommand === 'tools') {
     const businessRef = args[1]
     if (businessRef === undefined || args.length > 2) {
-      throw usageFailure('supply operations', 'supply-operations-usage')
+      throw usageFailure('supply tools', 'supply-tools-usage')
     }
     return { businessRef }
   }

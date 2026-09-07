@@ -114,7 +114,7 @@ export function AeOperatorSidebar({ operatorRole, operatorContext, currentPath, 
               <SidebarMenuButton asChild size="lg" tooltip="Agentic Economy workspace" className="h-14 rounded-none border-b border-sidebar-border px-1 hover:bg-transparent active:bg-transparent">
                 <Link
                   to={roleHomeHref[operatorRole]}
-                  aria-label={operatorRole === 'owner' ? 'Operations home' : `${roleLabel[operatorRole]} home`}
+                  aria-label={operatorRole === 'owner' ? 'Tools home' : `${roleLabel[operatorRole]} home`}
                   onClick={closeMobileNavigation}
                 >
                   <img

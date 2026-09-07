@@ -6,11 +6,23 @@ import { delimiter, join, resolve } from 'node:path'
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import { createPublicSourceTransport, setPublicSourceTransportForTests } from '@/lib/server/convex-source'
+import { CURRENT_TOOL_PROJECTION_NAVIGATION } from '@/modules/actions/contract'
+import { isRecord } from '@/modules/common/is-record'
+import {
+  searchCapabilityTools,
+  serializeToolSearchResult,
+  toolSearchInputSchema,
+  type CapabilityToolSourcePort,
+  type CapabilityToolSourceRecord,
+} from '@/modules/capability-supply/public'
+import { handleMarketToolSearchRequest } from '@/routes/api.v1.market-tools.search'
 import { runSearchCommand } from '../../../tools/ae/commands/search'
 import type { CliOptions } from '../../../tools/ae/lib/args'
 
 type SearchInput = Readonly<{
   cursor?: string
+  filters?: Readonly<Record<string, unknown>>
   limit?: number
   query: string
 }>
@@ -27,6 +39,155 @@ afterEach(async () => {
   for (const directory of temporaryDirectories.splice(0)) {
     rmSync(directory, { recursive: true, force: true })
   }
+})
+
+describe('search health-filter continuation', () => {
+  it('follows the real producer cursor through an empty filtered page', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'ae-search-health-'))
+    temporaryDirectories.push(directory)
+    const degraded = sourceRecord(
+      'capability:reference.lookup.degraded',
+      'Reference lookup stale degraded',
+      { observedAt: 1, validUntil: 1, lastHealthyAt: 1 },
+    )
+    const routeable = sourceRecord(
+      'capability:reference.lookup.routeable',
+      'Reference lookup ready',
+      { observedAt: 1, validUntil: Number.MAX_SAFE_INTEGER },
+    )
+    const records = [degraded, routeable] as const
+    const sourcePort: CapabilityToolSourcePort = {
+      navigation: CURRENT_TOOL_PROJECTION_NAVIGATION,
+      listCurrent: async () => ({
+        tools: records,
+        sourceCount: records.length,
+        snapshotKey: 'snapshot:c07-health-filter',
+      }),
+      loadCurrent: async () => null,
+    }
+    const rawResults: unknown[] = []
+    const restoreSourceTransport = setPublicSourceTransportForTests(createPublicSourceTransport({
+      env: { CONVEX_URL: 'http://local-tool-search.test' },
+      fetch: async (_input, init) => {
+        const payload: unknown = JSON.parse(String(init?.body ?? '{}'))
+        if (
+          !isRecord(payload)
+          || payload.path !== 'capabilitySupplyTools:search'
+          || !Array.isArray(payload.args)
+          || !isRecord(payload.args[0])
+        ) {
+          throw new Error('health_filter_source_request_invalid')
+        }
+        const result = await searchCapabilityTools(
+          sourcePort,
+          toolSearchInputSchema.parse(payload.args[0]),
+          Date.now(),
+        )
+        rawResults.push(result)
+        return Response.json({ status: 'success', value: serializeToolSearchResult(result) })
+      },
+    }))
+
+    try {
+      const requests: SearchInput[] = []
+      const server = createServer((request, response) => {
+        void (async () => {
+          const chunks: Buffer[] = []
+          for await (const chunk of request) chunks.push(Buffer.from(chunk))
+          const body = Buffer.concat(chunks).toString('utf8')
+          requests.push(JSON.parse(body) as SearchInput)
+          const routeResponse = await handleMarketToolSearchRequest(new Request(
+            'http://market.test/api/v1/market-tools/search',
+            {
+              method: request.method ?? 'POST',
+              headers: { 'content-type': 'application/json' },
+              body,
+            },
+          ))
+          response.writeHead(routeResponse.status, Object.fromEntries(routeResponse.headers.entries()))
+          response.end(Buffer.from(await routeResponse.arrayBuffer()))
+        })().catch((error: unknown) => {
+          response.writeHead(500, { 'content-type': 'text/plain' })
+          response.end(String(error))
+        })
+      })
+      servers.push(server)
+      await new Promise<void>((resolveListen, reject) => {
+        server.once('error', reject)
+        server.listen(0, '127.0.0.1', () => resolveListen())
+      })
+      const address = server.address()
+      if (address === null || typeof address === 'string') throw new Error('health_filter_test_server_missing')
+      const origin = `http://127.0.0.1:${address.port}`
+      const query = 'reference lookup stale ready degraded'
+      const filters = JSON.stringify({ healthStatus: ['operational'] })
+
+      const first = await runCli([
+        'search', query,
+        '--limit', '1',
+        '--filters', filters,
+        '--base-url', origin,
+        '--json',
+      ])
+      expect(first.status).toBe(0)
+      expect(first.stderr).toBe('')
+      const firstResult = JSON.parse(first.stdout) as Readonly<{
+        kind: string
+        note: string
+        nextCommand?: string
+        nextPageCommand?: string
+        pagination: Readonly<{ hasMore: boolean; nextCursor?: string }>
+      }>
+      expect(rawResults[0]).toMatchObject({
+        kind: 'ok',
+        items: [{ availability: { posture: 'setup_required' } }],
+        pagination: { hasMore: true, nextCursor: expect.any(String) },
+      })
+      expect(firstResult).toMatchObject({
+        kind: 'no_candidates',
+        note: 'No Tools match this search on this page.',
+        pagination: { hasMore: true, nextCursor: expect.any(String) },
+      })
+      expect(firstResult.nextPageCommand).toBeTypeOf('string')
+      expect(firstResult.nextCommand).toBe(firstResult.nextPageCommand)
+      expect(first.stdout).not.toContain('request create')
+      const nextPageCommand = firstResult.nextPageCommand
+      const nextCursor = firstResult.pagination.nextCursor
+      if (nextPageCommand === undefined || nextCursor === undefined) throw new Error('health_filter_continuation_missing')
+      expect(nextPageCommand).toContain(`--base-url ${origin}`)
+      expect(nextPageCommand).toContain(`--filters '${filters}'`)
+      expect(nextPageCommand).toContain(`--cursor ${nextCursor}`)
+      expect(nextPageCommand).toContain('--json')
+
+      installAeShim(directory)
+      const continued = await runShell(nextPageCommand, {
+        ...process.env,
+        AE_TEST_CLI: resolve('tools/ae/cli.ts'),
+        AE_TEST_NODE: process.execPath,
+        PATH: `${directory}${delimiter}${process.env.PATH ?? ''}`,
+      })
+
+      expect(continued.status).toBe(0)
+      expect(continued.stderr).toBe('')
+      expect(JSON.parse(continued.stdout)).toMatchObject({
+        kind: 'ok',
+        count: 1,
+        items: [{ healthStatus: 'operational' }],
+        pagination: { hasMore: false },
+      })
+      expect(rawResults[1]).toMatchObject({
+        kind: 'ok',
+        items: [{ availability: { posture: 'routeable' } }],
+        pagination: { hasMore: false },
+      })
+      expect(requests).toEqual([
+        { query, limit: 1, filters: { healthStatus: ['operational'] } },
+        { query, limit: 1, cursor: nextCursor, filters: { healthStatus: ['operational'] } },
+      ])
+    } finally {
+      restoreSourceTransport()
+    }
+  })
 })
 
 describe('search origin continuations', () => {
@@ -160,6 +321,50 @@ describe('search origin continuations', () => {
     expect(output.read()).not.toContain('--json')
   })
 })
+
+function sourceRecord(
+  operationId: string,
+  summary: string,
+  readiness: CapabilityToolSourceRecord['readiness'],
+): CapabilityToolSourceRecord {
+  const capabilityId = operationId.replace(/^capability:/u, '')
+  return {
+    operationId,
+    publicationRef: `publication:${capabilityId}`,
+    publicationRevision: 1,
+    networkId: 'ae:public',
+    contract: {
+      contractFormat: 'ae.capability-contract:v2',
+      capabilityId,
+      version: 1,
+      name: summary,
+      ref: { capabilityId, version: 1, contractDigest: `digest:${capabilityId}` },
+      description: summary,
+      inputSchema: { type: 'object', properties: {} },
+      outputSchema: { type: 'object', properties: {} },
+      customerAnnotations: [],
+      dataUse: [],
+      effects: [],
+      evidence: [],
+      lifecycle: { idempotency: 'required', recovery: 'retry_safe' },
+    },
+    business: { businessId: 'business:reference', slug: 'reference', name: 'Reference Services' },
+    offering: { offeringRef: `offering:${capabilityId}`, revision: 1, label: summary, summary },
+    price: { kind: 'fixed', amount: { currency: 'USD', units: '0', exponent: 2 } },
+    priceEvidence: { priceDigest: `digest:price:${capabilityId}`, evidenceRefs: [] },
+    materialTerms: [],
+    commercialRelationship: { kind: 'none', summary: 'No commercial relationship.' },
+    cancellation: { kind: 'unsupported' },
+    authentication: { kind: 'ae_api_key' },
+    transport: { method: 'GET', pathTemplate: '/lookup', requestTimeoutMs: 5_000 },
+    provenance: { publisher: 'provider_owned', sourceKind: 'openapi_http' },
+    integrated: true,
+    routeable: true,
+    readiness,
+    searchTerms: ['reference', 'lookup'],
+    snapshotKey: `publication:${capabilityId}:1`,
+  }
+}
 
 function captureStdout(): { read: () => string; restore: () => void } {
   const writes: string[] = []

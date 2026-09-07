@@ -50,7 +50,7 @@ describe('agent door page', () => {
     expect(writeText).toHaveBeenNthCalledWith(3, `cursor --add-mcp '{"name":"agentic-economy","url":"https://ae.example/mcp"}'`)
 
     const pageText = document.body.textContent ?? ''
-    expect(pageText).toContain('browse Operations before connecting')
+    expect(pageText).toContain('browse Tools before connecting')
     expect(pageText).toContain('Account connection does not grant spending permission')
     expect(pageText).toContain('Enable agentic-economy in Cursor, then follow its OAuth prompt.')
     expect(pageText).not.toMatch(/whoami|Agent Principal|token exchange|bearer|api key|ae connect|npm install|add-mcp@/iu)

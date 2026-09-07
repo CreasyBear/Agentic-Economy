@@ -61,7 +61,7 @@ const ownerNavGroups: readonly OperatorNavGroup[] = [
     id: 'supply',
     label: 'Supply',
     items: [
-      { href: '/owner/offerings', label: 'Operations', icon: Boxes, tier: 'core', mobilePrimary: true, mobileOrder: 30 },
+      { href: '/owner/offerings', label: 'Tools', icon: Boxes, tier: 'core', mobilePrimary: true, mobileOrder: 30 },
     ],
   },
   {
@@ -279,7 +279,7 @@ export function resolveOperatorListCrumb(
   currentPath: string,
 ): OperatorBreadcrumbItem | undefined {
   if (role === 'owner' && ownerWorkspaceOwnerForPath(currentPath) === 'operations' && currentPath !== '/owner/offerings') {
-    return { label: 'Operations', href: '/owner/offerings' }
+    return { label: 'Tools', href: '/owner/offerings' }
   }
   for (const group of baseNavGroupsForRole(role)) {
     for (const item of group.items) {

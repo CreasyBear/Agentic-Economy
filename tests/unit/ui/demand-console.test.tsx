@@ -53,25 +53,16 @@ const keyReadback: AgentCredentialSource = {
     rate: { maximumCallsPerMinute: 30, maximumCallsPerHour: 300 },
   },
   principalId: 'clerk_api_key:key_ui_1',
-  account: {
-    principalId: 'clerk_api_key:key_ui_1',
-    accountId: 'owner:key_ui_1',
-    balance: { currency: 'USD', units: '1250', exponent: 2 },
-    autoRecharge: {
-      enabled: false,
-      threshold: { currency: 'USD', units: '0', exponent: 2 },
-      rechargeAmount: { currency: 'USD', units: '0', exponent: 2 },
-    },
-    evidence: 'labelled_local_dev',
-  },
   activity: [],
   usage: {
-    credentialId: 'key_ui_1',
+    periodStartAt: Date.UTC(2026, 8, 1),
+    periodEndAt: Date.UTC(2026, 9, 1),
     callCount: 2,
-    paidCallCount: 1,
-    freeCallCount: 1,
-    grossSpend: { currency: 'USD', units: '5005', exponent: 3 },
-    states: ['paid', 'free_tier'],
+    completedCallCount: 2,
+    outcomeUnknownCallCount: 0,
+    settledSpend: { currency: 'AUD', units: '5005000', exponent: 6 },
+    amountCoverage: 'complete',
+    updatedAt: Date.UTC(2026, 8, 2),
   },
   dataState: 'source',
 }
@@ -92,22 +83,20 @@ afterEach(() => {
 })
 
 describe('owner credit target', () => {
-  it('uses the shared funding continuation after an insufficient-credit call', () => {
+  it('preserves refused Call state and unknown amount in activity details', () => {
     const source = {
         ...keyReadback,
         activity: [{
-          activityRef: 'activity:insufficient',
-          credentialId: 'key_ui_1',
-          serviceRef: 'service:weather',
-          offeringRef: 'offering:weather',
-          businessId: 'business:weather',
-          operationKey: 'weather.lookup',
-          callRef: 'invocation:insufficient',
-          attemptRef: 'attempt:insufficient',
-          grossAmount: { currency: 'USD', units: '500', exponent: 2 },
-          chargeState: 'insufficient_credit',
-          priceDigest: `sha256:${'a'.repeat(64)}`,
-          observedAt: 2,
+          callRef: 'call:refused',
+          credentialRef: 'credential:key_ui_1',
+          toolRef: 'tool:weather',
+          toolLabel: 'Weather lookup',
+          providerRef: 'provider:weather',
+          state: 'refused' as const,
+          deliveryState: 'not_delivered' as const,
+          paymentState: 'not_applicable' as const,
+          createdAt: 2,
+          updatedAt: 2,
         }],
       } as const
     render(<AeOwnerCredit
@@ -116,28 +105,27 @@ describe('owner credit target', () => {
       loading={false}
     />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'View Call declined for insufficient credit' }))
-    const continuation = screen.getByRole('link', { name: 'Add credit' })
-    expect(continuation.getAttribute('href')).toBe('/owner/credit#fund')
+    fireEvent.click(screen.getByRole('button', { name: 'View Weather lookup' }))
+    expect(screen.getByText('Call refused')).toBeTruthy()
+    expect(screen.getAllByText('Amount unknown').length).toBeGreaterThan(0)
+    expect(screen.getByText('Not applicable')).toBeTruthy()
   })
 
   it('reads the current Tool Provider from the charge detail sheet', () => {
     const source: AgentCredentialSource = {
       ...keyReadback,
       activity: [{
-        activityRef: 'activity:tool-provider',
-        credentialId: 'key_ui_1',
-        serviceRef: 'service:invoice-fields',
-        offeringRef: 'offering:invoice-fields',
-        businessId: 'business:ledger-labs',
-        operationKey: `operation:v1:${'a'.repeat(64)}`,
-        callRef: 'invocation:tool-provider',
-        attemptRef: 'attempt:tool-provider',
-        priceDigest: `sha256:${'b'.repeat(64)}`,
-        chargeState: 'paid',
-        grossAmount: { currency: 'USD', units: '500', exponent: 2 },
-        transactionRef: 'transaction:tool-provider',
-        observedAt: 3,
+        callRef: 'call:tool-provider',
+        credentialRef: 'credential:key_ui_1',
+        toolRef: `operation:v1:${'a'.repeat(64)}`,
+        toolLabel: 'Extract invoice fields',
+        providerRef: 'provider:ledger-labs',
+        state: 'completed' as const,
+        deliveryState: 'delivered' as const,
+        paymentState: 'settled' as const,
+        audAmountUnits: '500000',
+        createdAt: 3,
+        updatedAt: 3,
         tool: { label: 'Extract invoice fields', provider: 'Ledger Labs' },
       }],
     }
@@ -216,7 +204,7 @@ describe('assistant access components', () => {
     expect(screen.getByRole('heading', { name: 'Connect with Codex' })).toBeTruthy()
     expect(document.body.textContent).toContain('codex mcp add agentic-economy --url "https://ae.example/mcp"')
     expect(document.body.textContent).toContain('codex mcp login agentic-economy')
-    expect(screen.getByText(/browse Operations before connecting/u)).toBeTruthy()
+    expect(screen.getByText(/browse Tools before connecting/u)).toBeTruthy()
     expect(screen.getByText(/A live result confirms the connection; installing it alone does not/u)).toBeTruthy()
     expect(screen.queryByText('claude mcp add --transport http --scope user agentic-economy "https://ae.example/mcp"')).toBeNull()
 
@@ -348,7 +336,7 @@ describe('assistant access components', () => {
     expect(screen.queryByText(/payment succeeded|credit added/i)).toBeNull()
   })
 
-  it('renders per-assistant balance, spend, and permission without internal identifiers', () => {
+  it('renders Agent usage without presenting a per-credential balance', () => {
     render(
       <AeAgentOperatorConsole
         directory={keyDirectory}
@@ -366,13 +354,85 @@ describe('assistant access components', () => {
     expect(screen.queryByText('Rotate, replace, or recover a key')).toBeNull()
     expect(screen.queryByText('Provider reauthorization required')).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'View UI assistant' }))
-    expect(screen.getAllByText(/USD 12\.5/u).length).toBeGreaterThan(0)
-    expect(screen.getByText(/USD 5\.005/u)).toBeTruthy()
+    expect(screen.queryByText(/USD 12\.5/u)).toBeNull()
+    expect(screen.getByText(/AUD 5\.005/u)).toBeTruthy()
+    expect(screen.queryByText('Balance')).toBeNull()
     expect(screen.getAllByText('Browse only').length).toBeGreaterThan(0)
     expect(screen.getAllByText('Sandbox').length).toBeGreaterThan(0)
     expect(screen.getByText('30/min · 300/hour')).toBeTruthy()
     expect(screen.getByText('USD 25.00')).toBeTruthy()
     expect(screen.queryByText(/scope:|data:|principal|clerk_api_key/u)).toBeNull()
+  })
+
+  it('shows a known empty UTC period as zero Calls instead of an unavailable read', () => {
+    const emptyPeriodDirectory = projectAgentDirectory(
+      [keyReadback],
+      [canonicalAgentRecord([keyReadback])],
+      [],
+      [{
+        principalRef: keyReadback.principalId,
+        activity: [],
+        activityIsDone: true,
+        usage: {
+          periodStartAt: Date.UTC(2026, 8, 1),
+          periodEndAt: Date.UTC(2026, 9, 1),
+          callCount: 0,
+          completedCallCount: 0,
+          outcomeUnknownCallCount: 0,
+          settledSpend: { currency: 'AUD', units: '0', exponent: 6 },
+          amountCoverage: 'complete' as const,
+          updatedAt: Date.UTC(2026, 8, 1),
+        },
+        dataState: 'empty' as const,
+      }],
+    )
+    render(
+      <AeAgentOperatorConsole
+        directory={emptyPeriodDirectory}
+        loading={false}
+        onRevokeCredential={() => undefined}
+        onDisconnectAgent={() => undefined}
+        approvals={[]}
+        approvalsLoading={false}
+        onRetryApprovals={() => undefined}
+        onDecideApproval={() => undefined}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'View UI assistant' }))
+    expect(screen.getByText('Calls this month').nextElementSibling?.textContent).toBe('0')
+    expect(screen.getAllByText('AUD 0.000000').length).toBeGreaterThan(0)
+    expect(screen.getByText('No usage yet')).toBeTruthy()
+    expect(screen.queryByText('Usage details are temporarily unavailable')).toBeNull()
+  })
+
+  it('shows failed owner activity as unavailable instead of a known empty period', () => {
+    const unavailablePeriodDirectory = projectAgentDirectory(
+      [keyReadback],
+      [canonicalAgentRecord([keyReadback])],
+      [],
+      [{
+        principalRef: keyReadback.principalId,
+        activity: [],
+        activityIsDone: true,
+        dataState: 'unavailable' as const,
+      }],
+    )
+    const onCreditRefresh = vi.fn()
+    render(
+      <AeOwnerCredit
+        directory={unavailablePeriodDirectory}
+        accountBalance={accountBalance}
+        loading={false}
+        onCreditRefresh={onCreditRefresh}
+      />,
+    )
+    expect(screen.getByText('Some Agent activity or usage is unavailable. Coverage is incomplete.')).toBeTruthy()
+    expect(screen.getByText('Activity unavailable')).toBeTruthy()
+    expect(screen.getByText('Activity could not be read right now. Refresh to try again.')).toBeTruthy()
+    expect(screen.queryByText('No activity yet')).toBeNull()
+    expect(screen.queryByText('Browsing does not create a Call.')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh activity' }))
+    expect(onCreditRefresh).toHaveBeenCalledTimes(1)
   })
 
   it('shows only safe approval facts and guards concurrent decisions', () => {

@@ -13,6 +13,7 @@ import { retry } from 'es-toolkit'
 
 import type { CliOptions } from '../lib/args'
 import { resolveAgentAccessCredential, storeConnection } from '../lib/config'
+import { continuationCommand } from '../lib/continuation-command'
 import { CliFailure, callJson, heading, line, printJson, requireOk, table } from '../lib/output'
 import { usageFailure } from '../lib/help'
 import { requireAgentAccessKey } from './status'
@@ -40,6 +41,22 @@ type ConnectDetails = Readonly<{
   provider: boolean
 }>
 
+function continuationFlags(options: Pick<CliOptions, 'baseUrl' | 'baseUrlSource' | 'json'>): readonly string[] {
+  return [
+    ...(options.baseUrlSource === undefined || options.baseUrlSource === 'hosted_default'
+      ? []
+      : ['--base-url', options.baseUrl]),
+    ...(options.json ? ['--json'] : []),
+  ]
+}
+
+function connectContinuation(
+  options: Pick<CliOptions, 'baseUrl' | 'baseUrlSource' | 'json'>,
+  tokens: readonly (string | number | undefined)[],
+): string {
+  return continuationCommand([...tokens, ...continuationFlags(options)])
+}
+
 function oauthForm(values: Record<string, string>): { body: string; headers: HeadersInit } {
   const form = new URLSearchParams(values)
   return { body: form.toString(), headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
@@ -65,20 +82,56 @@ function positiveSeconds(value: unknown, field: string, fallback: number): numbe
   }
   return value
 }
-function connectPending(details: ConnectDetails): JsonRecord {
-  const nextAction = `Approve ${details.verificationUri} with user code ${details.userCode}, then run ae connect${details.provider ? ' --provider' : ''} again if this wait expires.`
+
+function verificationUri(value: unknown): string {
+  const uri = textField(value, 'verification_uri')
+  let parsed: URL
+  try {
+    parsed = new URL(uri)
+  } catch {
+    throw new CliFailure('OAuth verification_uri response field must be an absolute HTTP(S) URL with an authority.', {
+      kind: 'UNAVAILABLE',
+      code: 'connect-response-invalid',
+    })
+  }
+
+  const protocol = parsed.protocol
+  const hasWebAuthority = (protocol === 'http:' || protocol === 'https:')
+    && uri.toLowerCase().startsWith(`${protocol}//`)
+    && parsed.host.length > 0
+    && uri.slice(`${protocol}//`.length).charAt(0) !== '/'
+  if (!hasWebAuthority) {
+    throw new CliFailure('OAuth verification_uri response field must be an absolute HTTP(S) URL with an authority.', {
+      kind: 'UNAVAILABLE',
+      code: 'connect-response-invalid',
+    })
+  }
+  return uri
+}
+
+function connectPending(details: ConnectDetails, options: CliOptions): JsonRecord {
+  const nextCommand = connectContinuation(options, [
+    'ae', 'connect',
+    ...(details.provider ? ['--provider'] : []),
+  ])
+  const nextAction = `Approve ${details.verificationUri} with user code ${details.userCode}, then run ${nextCommand} again if this wait expires.`
   return {
     kind: 'pending',
     clientId: details.clientId,
     verificationUri: details.verificationUri,
     userCode: details.userCode,
     nextAction,
+    nextCommand,
   }
 }
 
-function connectedNextAction(provider: boolean): string {
-  if (provider) return 'Run ae supply operations <businessRef>.'
-  return 'Run ae search "what you need".'
+function connectedNextCommand(provider: boolean, options: CliOptions): string {
+  if (provider) return connectContinuation(options, ['ae', 'supply', 'tools', '<businessRef>'])
+  return connectContinuation(options, ['ae', 'search', 'what you need'])
+}
+
+function connectedNextAction(provider: boolean, options: CliOptions): string {
+  return `Run ${connectedNextCommand(provider, options)}.`
 }
 
 function ownerConnectionHref(baseUrl: string, principalRef: string): string {
@@ -105,9 +158,10 @@ function printConnectResult(value: JsonRecord, options: CliOptions): void {
   ])
   if (value.kind === 'connected') {
     line('Your agent is connected. The origin-bound key is stored with user-only file permissions.')
-    line(`Next: ${value.profile === 'provider'
-      ? 'ae supply operations <businessRef>.'
-      : 'ae search "what you need", then ae describe <tool> and ae call <tool> --input \'{...}\'.'}`)
+    const nextCommand = typeof value.nextCommand === 'string'
+      ? value.nextCommand
+      : connectedNextCommand(value.profile === 'provider', options)
+    line(`Next: ${nextCommand}`)
   } else if (typeof value.nextAction === 'string') {
     line(value.nextAction)
   }
@@ -192,7 +246,8 @@ export async function runConnectCommand(args: readonly string[], options: CliOpt
         scopes: account.scopes,
         ownerConnectionHref: ownerConnectionHref(options.baseUrl, account.principalRef),
         source: `validated_${configuredCredential.source}`,
-        nextAction: connectedNextAction(provider),
+        nextAction: connectedNextAction(provider, options),
+        nextCommand: connectedNextCommand(provider, options),
       }, options)
       return
     } catch (error) {
@@ -221,7 +276,7 @@ export async function runConnectCommand(args: readonly string[], options: CliOpt
     clientId,
     deviceCode: textField(deviceRecord?.device_code, 'device_code'),
     userCode: textField(deviceRecord?.user_code, 'user_code'),
-    verificationUri: textField(deviceRecord?.verification_uri, 'verification_uri'),
+    verificationUri: verificationUri(deviceRecord?.verification_uri),
     expiresIn: positiveSeconds(deviceRecord?.expires_in, 'expires_in', 600),
     intervalMs: Math.min(MAX_POLL_DELAY_MS, Math.max(MIN_POLL_DELAY_MS, positiveSeconds(deviceRecord?.interval, 'interval', DEFAULT_POLL_DELAY_MS / 1000) * 1_000)),
     provider,
@@ -245,7 +300,7 @@ export async function runConnectCommand(args: readonly string[], options: CliOpt
   for (;;) {
     const remainingMs = deadline - Date.now()
     if (remainingMs <= 0) {
-      printConnectResult(connectPending(details), options)
+      printConnectResult(connectPending(details, options), options)
       return
     }
 
@@ -291,7 +346,8 @@ export async function runConnectCommand(args: readonly string[], options: CliOpt
         ownerConnectionHref: ownerConnectionHref(options.baseUrl, account.principalRef),
         credentialStored: true,
         configPath: storedAt,
-        nextAction: connectedNextAction(provider),
+        nextAction: connectedNextAction(provider, options),
+        nextCommand: connectedNextCommand(provider, options),
       }, options)
       return
     }

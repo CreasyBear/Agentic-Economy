@@ -24,8 +24,8 @@ import {
 
 /**
  * Spending-policy decisions retain their v1 canonical bytes. The
- * storage-facing executionRef is projected back to the protected v1
- * callRef key only at this existing digest boundary.
+ * storage-facing executionRef is projected back to the established protected
+ * v1 invocationRef key only at this existing digest boundary.
  */
 export function canonicalPolicyDecisionMaterial(
   decision: Omit<SpendingPolicyDecision, 'digest'>,

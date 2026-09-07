@@ -1,5 +1,16 @@
+import { convexTest } from 'convex-test'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type * as TanstackReactStartModule from '@tanstack/react-start'
+
+import { api } from '../../../convex/_generated/api'
+import schema from '../../../convex/schema'
+import { convexModules as modules } from '../../helpers/convex-fixtures'
+import {
+  createPublishedBusinessOwner,
+  openApiSource,
+  prepareOwnerPublicationCommand,
+  seedCatalogOffering,
+} from '../../integration/capability-supply-owner-funnel-harness'
 
 const mocks = vi.hoisted(() => ({
   identity: vi.fn(),
@@ -51,6 +62,7 @@ import {
   readProviderWorkspacePayoutSummaryThroughSource,
   readProviderWorkspacePublicStatusServer,
   readProviderWorkspacePublicStatusThroughSource,
+  readProviderToolStatusServer,
   startOwnerProviderOffboardingServer,
 } from '@/components/ae/offerings/provider-workspace.functions'
 
@@ -66,6 +78,55 @@ afterEach(() => {
 })
 
 describe('narrow owner Tools inventory read', () => {
+  it('passes real Convex Tool readback through the server consumer and keeps refusal states closed', async () => {
+    const backend = convexTest(schema, modules)
+    const { businessId, owner } = await createPublishedBusinessOwner(
+      backend,
+      'server-tool-detail-readback',
+    )
+    const { owner: foreignOwner } = await createPublishedBusinessOwner(
+      backend,
+      'server-tool-detail-readback-foreign',
+    )
+    const offeringRef = 'catalog-offering:server-tool-detail-readback'
+    const sourceHash = 'catalog-source:server-tool-detail-readback:v1'
+    await seedCatalogOffering(backend, businessId, offeringRef, 1, 1, sourceHash)
+    const prepared = await prepareOwnerPublicationCommand(
+      backend,
+      businessId,
+      offeringRef,
+      1,
+      sourceHash,
+      openApiSource('server.tool-detail-readback'),
+      'owner-supply:server-tool-detail-readback',
+      { kind: 'catalog_offering', offeringRef, offeringRevision: 1, offeringSourceHash: sourceHash },
+    )
+    if (prepared.kind === 'refused') throw new Error(`server_tool_detail_prepare_failed:${prepared.reason}`)
+    const published = await owner.mutation(api.capabilitySupply.publishPreparedCapability, prepared.command)
+    if (published.kind === 'refused') throw new Error(`server_tool_detail_publish_failed:${published.reason}`)
+
+    const through = (client: Pick<typeof owner, 'query'>) => {
+      mocks.identity.mockImplementationOnce((query, args) => client.query(query, args))
+    }
+
+    through(owner)
+    await expect(readProviderToolStatusServer({ data: { businessId, offeringRef } })).resolves.toMatchObject({
+      kind: 'available',
+      tool: { offeringRef, name: 'Owner lookup service', status: 'published' },
+      status: { toolRef: published.toolRef, schemaVersion: 'provider_tools:v1' },
+    })
+
+    through(owner)
+    await expect(readProviderToolStatusServer({ data: { businessId, offeringRef: 'catalog-offering:missing' } }))
+      .resolves.toEqual({ kind: 'not_found' })
+    through(backend)
+    await expect(readProviderToolStatusServer({ data: { businessId, offeringRef } }))
+      .resolves.toEqual({ kind: 'not_found' })
+    through(foreignOwner)
+    await expect(readProviderToolStatusServer({ data: { businessId, offeringRef } }))
+      .resolves.toEqual({ kind: 'not_found' })
+  })
+
   it('fails closed for no provider, duplicate ownership, and source rejection', async () => {
     mocks.identity.mockResolvedValueOnce({ kind: 'not_found' })
     await expect(readProviderWorkspacePageThroughSource()).resolves.toEqual({ inventory: { kind: 'not_found' } })

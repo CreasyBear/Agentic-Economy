@@ -137,7 +137,7 @@ const publicDescriptor = v.object({
   toolRef: v.string(),
   callVia: v.literal(CURRENT_TOOL_CALL_VIA),
   paymentLane: v.literal('brokered'),
-  operationId: v.string(),
+  toolId: v.string(),
   contract: v.object({
     capabilityId: v.string(),
     version: v.number(),

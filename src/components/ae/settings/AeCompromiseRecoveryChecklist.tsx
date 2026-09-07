@@ -14,12 +14,12 @@ const recoveryChecks = [
     href: '/agent-access',
   },
   {
-    title: 'Revoke or reauthorize provider connections',
-    description: 'Review x402 wallet-control authority and its current generation separately from Operation readiness.',
+    title: 'Revoke or reauthorize Provider connections',
+    description: 'Review x402 wallet-control authority and its current generation separately from Tool readiness.',
     href: '/owner/offerings#provider-connections',
   },
   {
-    title: 'Review payout authority',
+    title: 'Review Provider payout authority',
     description: 'Check the current Stripe-hosted payout destination and readiness before allowing another transfer.',
     href: '/owner/offerings#earnings',
   },
@@ -40,7 +40,7 @@ export function AeCompromiseRecoveryChecklist() {
       <Alert>
         <AlertTitle>This page does not mark the Account contained</AlertTitle>
         <AlertDescription>
-          Resetting MFA alone does not revoke existing sessions, Agent credentials, provider authority, or payout authority.
+          Resetting MFA alone does not revoke existing sessions, Agent credentials, Provider connection authority, or Provider payout authority.
         </AlertDescription>
       </Alert>
       <ol className="grid gap-intra" aria-label="Compromise recovery checks">

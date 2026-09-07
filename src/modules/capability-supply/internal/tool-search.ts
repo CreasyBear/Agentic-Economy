@@ -622,7 +622,7 @@ function toolSearchText(
   searchTerms: readonly string[],
 ): readonly string[] {
   return [
-    tool.operationId,
+    tool.toolId,
     tool.contract.capabilityId,
     tool.summary,
     tool.business.slug,

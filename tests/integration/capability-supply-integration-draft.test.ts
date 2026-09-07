@@ -61,6 +61,57 @@ describe('Provider source integration draft', () => {
     )).resolves.toEqual({ kind: 'refused', reason: 'authorization_denied' })
   })
 
+  it('persists the existing owner-bound x402 draft with its source digest and candidate reference', async () => {
+    const backend = convexTest(schema, modules)
+    const { businessId, owner } = await createPublishedBusinessOwner(
+      backend,
+      'integration-draft-x402-owner',
+    )
+    const source = {
+      kind: 'x402' as const,
+      resourceUrl: 'https://seller.example/paid',
+      method: 'POST' as const,
+      environment: 'sandbox' as const,
+    }
+    const selector = { resourceUrl: source.resourceUrl, method: source.method }
+    const sourceDigest = canonicalDigest({ source: 'provider-x402-browser-v1' })
+    const candidateRef = canonicalDigest({ sourceDigest, selector })
+    const command = {
+      businessId,
+      title: 'Paid lookup',
+      description: 'Looks up one paid reference.',
+      category: 'Research',
+      sourceKind: source.kind,
+      sourceDescriptorJson: stableStringify(source),
+      sourceDigest,
+      sourceRevision: `x402:${sourceDigest}`,
+      candidateRef,
+      sourceSelectorJson: stableStringify(selector),
+      operationKey: 'supply-integration-draft:x402-owner',
+      correlationId: 'supply-integration-draft:x402-owner',
+    }
+
+    await expect(owner.mutation(
+      api.capabilitySupplyOwnerFunnel.saveOwnerSupplyIntegrationDraft,
+      await withSourceWrite('catalog_publish', command),
+    )).resolves.toMatchObject({ kind: 'saved', candidateRef, sourceDigest })
+
+    await expect(owner.query(
+      api.capabilitySupplyOwnerFunnel.readOwnerSupplyIntegrationDraft,
+      { businessId, candidateRef },
+    )).resolves.toMatchObject({
+      kind: 'available',
+      draft: {
+        sourceKind: 'x402',
+        sourceDescriptorJson: stableStringify(source),
+        sourceDigest,
+        sourceRevision: `x402:${sourceDigest}`,
+        candidateRef,
+        sourceSelectorJson: stableStringify(selector),
+      },
+    })
+  })
+
   it('persists one credential-free candidate on the existing Offering boundary and resumes only for its owner', async () => {
     const backend = convexTest(schema, modules)
     const { businessId, canonicalAccountRef, owner } = await createPublishedBusinessOwner(

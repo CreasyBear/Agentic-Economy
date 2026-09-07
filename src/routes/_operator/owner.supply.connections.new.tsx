@@ -96,7 +96,7 @@ function OwnerProviderConnectionHandoffRoute() {
           <Alert>
             <AlertTitle>Service connected</AlertTitle>
           <AlertDescription>
-            <p>Return to Add service. AE will resume the saved Operation.</p>
+            <p>Return to Add service. AE will resume the saved Tool draft.</p>
             <ReturnToAddService
               connectionRef={loaded.attempt.connectionRef}
               environment={loaded.attempt.environment}
@@ -264,7 +264,7 @@ function McpOAuthHandoff({ attempt, onCancel, cancelBusy, cancelError }: Readonl
     <Shell>
       <div className="grid max-w-xl gap-5">
         <p className="text-sm text-muted-foreground">
-          Sign in to {attempt.sourceOrigin}. The service controls its consent screen; AE stores the resulting connection securely and returns you to Add service.
+          Sign in to {attempt.sourceOrigin}. The Provider controls its consent screen; AE stores the resulting connection securely and returns you to Add service.
         </p>
         {(error ?? cancelError) === undefined ? null : (
           <Alert variant="destructive" role="alert">
@@ -290,7 +290,7 @@ function Shell({ children }: Readonly<{ children: React.ReactNode }>) {
       title="Connect service"
       description="Connect the credential required by this Provider source."
       currentPath="/owner/offerings/new"
-      breadcrumbs={[{ label: 'Operations', href: '/owner/offerings' }, { label: 'Add service', href: '/owner/offerings/new' }, { label: 'Connect service' }]}
+      breadcrumbs={[{ label: 'Tools', href: '/owner/offerings' }, { label: 'Add service', href: '/owner/offerings/new' }, { label: 'Connect service' }]}
     >
       <AeSettingsStack>{children}</AeSettingsStack>
     </AeOperatorShell>

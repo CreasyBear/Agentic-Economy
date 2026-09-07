@@ -3,7 +3,7 @@ import { expect, test } from '@playwright/test'
 test.describe('owner Operations compatibility', () => {
   test('direct Operations entry keeps the signed-in shell during a source outage', async ({ page }) => {
     await page.goto('/owner/offerings', { waitUntil: 'networkidle' })
-    await expect(page.getByRole('heading', { level: 1, name: 'Operations' })).toBeVisible()
+    await expect(page.getByRole('heading', { level: 1, name: 'Tools' })).toBeVisible()
     const navigationName = (page.viewportSize()?.width ?? 1440) < 768
       ? 'Owner primary navigation'
       : 'Operator navigation'
@@ -66,7 +66,7 @@ test.describe('owner Operations compatibility', () => {
     test.skip((page.viewportSize()?.width ?? 1440) >= 768, 'compact navigation only')
     await page.goto('/owner/offerings', { waitUntil: 'networkidle' })
     const nav = page.getByRole('navigation', { name: 'Owner primary navigation' })
-    await expect(nav.getByRole('link').allTextContents()).resolves.toEqual(['Calls', 'Agents', 'Operations'])
+    await expect(nav.getByRole('link').allTextContents()).resolves.toEqual(['Calls', 'Agents', 'Tools'])
 
     await nav.getByRole('link', { name: 'Calls' }).click()
     await expect.poll(() => new URL(page.url()).pathname).toBe('/activity')

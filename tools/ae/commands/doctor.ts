@@ -58,6 +58,22 @@ type CallDoctorResult = Readonly<{
 const MARKET_REQUEST_REENTRY_LIMIT = 5
 const MCP_CHECK_TIMEOUT_MS = 5_000
 
+function continuationFlags(options: Pick<CliOptions, 'baseUrl' | 'baseUrlSource' | 'json'>): readonly string[] {
+  return [
+    ...(options.baseUrlSource === undefined || options.baseUrlSource === 'hosted_default'
+      ? []
+      : ['--base-url', options.baseUrl]),
+    ...(options.json ? ['--json'] : []),
+  ]
+}
+
+function doctorContinuation(
+  options: Pick<CliOptions, 'baseUrl' | 'baseUrlSource' | 'json'>,
+  tokens: readonly (string | number | undefined)[],
+): string {
+  return continuationCommand([...tokens, ...continuationFlags(options)])
+}
+
 export async function runDoctorCommand(args: readonly string[], options: CliOptions): Promise<number> {
   const businessId = args[0]?.trim()
   if (args.length > 1 || (businessId !== undefined && (businessId.length === 0 || options.provider !== true))) {
@@ -69,7 +85,7 @@ export async function runDoctorCommand(args: readonly string[], options: CliOpti
     summary: `Configured origin is ${new URL(options.baseUrl).origin}.`,
   }]
 
-  const server = await checkServer(options.baseUrl)
+  const server = await checkServer(options)
   checks.push(server)
   if (server.state === 'fail') {
     checks.push(
@@ -95,7 +111,7 @@ export async function runDoctorCommand(args: readonly string[], options: CliOpti
       {
         id: 'buyer', state: 'warn',
         summary: 'No buyer credential is selected for this origin; anonymous search and describe remain available.',
-        nextCommand: connectCommand(options.baseUrl, 'buyer'),
+        nextCommand: connectCommand(options, 'buyer'),
       },
       {
         id: 'balance', state: 'warn',
@@ -107,10 +123,10 @@ export async function runDoctorCommand(args: readonly string[], options: CliOpti
       },
     )
   } else {
-    checks.push(...await checkBuyer(options.baseUrl, buyer))
+    checks.push(...await checkBuyer(options, buyer))
   }
   if (options.provider === true) {
-    checks.push(...await checkProvider(options.baseUrl, businessId))
+    checks.push(...await checkProvider(options, businessId))
   }
 
   const result: DoctorResult = {
@@ -121,19 +137,20 @@ export async function runDoctorCommand(args: readonly string[], options: CliOpti
   return !options.json && result.kind === 'degraded' ? 1 : 0
 }
 
-async function checkProvider(baseUrl: string, businessId: string | undefined): Promise<readonly DoctorCheck[]> {
+async function checkProvider(options: CliOptions, businessId: string | undefined): Promise<readonly DoctorCheck[]> {
+  const { baseUrl } = options
   const credential = resolveAgentAccessCredential(baseUrl, MARKET_SUPPLY_MANAGE_SCOPE)
   if (credential === undefined) {
     return [
       {
         id: 'provider', state: 'warn',
         summary: 'No provider credential is configured for this origin.',
-        nextCommand: connectCommand(baseUrl, 'provider'),
+        nextCommand: connectCommand(options, 'provider'),
       },
       { id: 'provider.readiness', state: 'warn', summary: 'Provider readiness is unavailable until provider access is connected.' },
     ]
   }
-  const originFailure = credentialOriginFailure(baseUrl, credential.origin, 'provider')
+  const originFailure = credentialOriginFailure(options, credential.origin, 'provider')
   if (originFailure !== undefined) {
     return [originFailure, { id: 'provider.readiness', state: 'warn', summary: 'Provider readiness was not checked because origin binding failed.' }]
   }
@@ -146,7 +163,7 @@ async function checkProvider(baseUrl: string, businessId: string | undefined): P
     const account = agentAccountSelfResultSchema.safeParse(accountOutcome.body)
     if (!accountOutcome.ok || !account.success) {
       return [
-        ...credentialRefusedChecks(baseUrl, 'provider'),
+        ...credentialRefusedChecks(options, 'provider'),
         { id: 'provider.readiness', state: 'warn', summary: 'Provider readiness was not checked because authentication failed.' },
       ]
     }
@@ -155,7 +172,7 @@ async function checkProvider(baseUrl: string, businessId: string | undefined): P
         {
           id: 'provider', state: 'fail',
           summary: `Provider credential is missing ${MARKET_SUPPLY_MANAGE_SCOPE}.`,
-          nextCommand: connectCommand(baseUrl, 'provider'),
+          nextCommand: connectCommand(options, 'provider'),
         },
         { id: 'provider.readiness', state: 'warn', summary: 'Provider readiness was not checked because provider scope is missing.' },
       ]
@@ -170,20 +187,21 @@ async function checkProvider(baseUrl: string, businessId: string | undefined): P
         summary: 'Provider access is ready; add a business ID to check Tool and provider readiness.',
       }]
     }
-    return [provider, await checkProviderReadiness(baseUrl, headers, businessId)]
+    return [provider, await checkProviderReadiness(options, headers, businessId)]
   } catch {
     return [
-      ...credentialRefusedChecks(baseUrl, 'provider'),
+      ...credentialRefusedChecks(options, 'provider'),
       { id: 'provider.readiness', state: 'warn', summary: 'Provider readiness could not be read.' },
     ]
   }
 }
 
 async function checkProviderReadiness(
-  baseUrl: string,
+  options: CliOptions,
   headers: Readonly<Record<string, string>>,
   businessId: string,
 ): Promise<DoctorCheck> {
+  const { baseUrl } = options
   try {
     const [statusOutcome, connectionsOutcome] = await Promise.all([
       callJson(baseUrl, SUPPLY_ACTION_ROUTE_CONTRACTS.toolsList.path, {
@@ -204,7 +222,7 @@ async function checkProviderReadiness(
       return {
         id: 'provider.readiness', state: 'fail',
         summary: 'Provider Tool or provider readiness is unavailable.',
-        nextCommand: `ae supply operations ${businessId}`,
+        nextCommand: doctorContinuation(options, ['ae', 'supply', 'tools', businessId]),
       }
     }
     const toolCount = status.data.page.length
@@ -219,22 +237,23 @@ async function checkProviderReadiness(
     }
     return {
       id: 'provider.readiness', state: 'warn', summary,
-      nextCommand: `ae supply operations ${businessId}`,
+      nextCommand: doctorContinuation(options, ['ae', 'supply', 'tools', businessId]),
     }
   } catch {
     return {
       id: 'provider.readiness', state: 'fail',
       summary: 'Provider Tool or provider readiness could not be read.',
-      nextCommand: `ae supply operations ${businessId}`,
+      nextCommand: doctorContinuation(options, ['ae', 'supply', 'tools', businessId]),
     }
   }
 }
 
 async function checkBuyer(
-  baseUrl: string,
+  options: CliOptions,
   credential: Readonly<{ accessToken: string; origin: string }>,
 ): Promise<readonly DoctorCheck[]> {
-  const originFailure = credentialOriginFailure(baseUrl, credential.origin, 'buyer')
+  const { baseUrl } = options
+  const originFailure = credentialOriginFailure(options, credential.origin, 'buyer')
   if (originFailure !== undefined) {
     return [
       originFailure,
@@ -250,25 +269,25 @@ async function checkBuyer(
     })
     const account = agentAccountSelfResultSchema.safeParse(accountOutcome.body)
     if (!accountOutcome.ok || !account.success) {
-      return credentialRefusedChecks(baseUrl, 'buyer')
+      return credentialRefusedChecks(options, 'buyer')
     }
     if (!account.data.scopes.includes(MARKET_TOOLS_CALL_SCOPE)) {
       return [
         {
           id: 'buyer', state: 'fail',
           summary: `Buyer credential is missing ${MARKET_TOOLS_CALL_SCOPE}.`,
-          nextCommand: connectCommand(baseUrl, 'buyer'),
+          nextCommand: connectCommand(options, 'buyer'),
         },
         { id: 'balance', state: 'warn', summary: 'Balance was not checked because buyer scope is missing.' },
         { id: 'call', state: 'warn', summary: 'Call recovery was not checked because buyer scope is missing.' },
       ]
     }
-    const balance = await checkBalance(baseUrl, headers)
-    const call = await checkCall(baseUrl, headers)
-    const marketRequests = await checkMarketRequests(baseUrl, headers)
+    const balance = await checkBalance(options, headers)
+    const call = await checkCall(options, headers)
+    const marketRequests = await checkMarketRequests(options, headers)
     const repeatUse = call.recentCompletedToolRef === undefined
       ? undefined
-      : await checkRepeatUse(baseUrl, call.recentCompletedToolRef)
+      : await checkRepeatUse(options, call.recentCompletedToolRef)
     return [
       {
         id: 'buyer', state: 'pass',
@@ -280,14 +299,15 @@ async function checkBuyer(
       ...(repeatUse === undefined ? [] : [repeatUse]),
     ]
   } catch {
-    return credentialRefusedChecks(baseUrl, 'buyer')
+    return credentialRefusedChecks(options, 'buyer')
   }
 }
 
 async function checkMarketRequests(
-  baseUrl: string,
+  options: CliOptions,
   headers: Readonly<Record<string, string>>,
 ): Promise<DoctorCheck> {
+  const { baseUrl } = options
   try {
     const listOutcome = await callJson(baseUrl, MARKET_REQUEST_ROUTE_CONTRACTS.list.path, {
       method: MARKET_REQUEST_ROUTE_CONTRACTS.list.method,
@@ -296,7 +316,7 @@ async function checkMarketRequests(
     })
     const list = marketRequestListAction.outputSchema.safeParse(listOutcome.body)
     if (!listOutcome.ok || !list.success || list.data.kind !== 'available') {
-      return marketRequestUnavailable('Private market request matches are unavailable.')
+      return marketRequestUnavailable(options, 'Private market request matches are unavailable.')
     }
     if (list.data.items.length === 0) {
       return {
@@ -325,11 +345,11 @@ async function checkMarketRequests(
       return {
         id: 'market_requests', state: 'pass',
         summary: `${matched.length} of ${checked} recent private market ${checked === 1 ? 'request now has' : 'requests now have'} matching Tools.`,
-        nextCommand: continuationCommand(['ae', 'describe', firstTool.toolRef]),
+        nextCommand: doctorContinuation(options, ['ae', 'describe', firstTool.toolRef]),
       }
     }
     if (statuses.some((status) => status === undefined || status.kind === 'error' || status.kind === 'not_found')) {
-      return marketRequestUnavailable('Some recent private market requests could not be rechecked.')
+      return marketRequestUnavailable(options, 'Some recent private market requests could not be rechecked.')
     }
     const checked = list.data.items.length
     return {
@@ -337,19 +357,19 @@ async function checkMarketRequests(
       summary: `No current Tool matches the ${checked} most recent private market ${checked === 1 ? 'request' : 'requests'} yet.`,
     }
   } catch {
-    return marketRequestUnavailable('Private market request matches could not be rechecked.')
+    return marketRequestUnavailable(options, 'Private market request matches could not be rechecked.')
   }
 }
 
-function marketRequestUnavailable(summary: string): DoctorCheck {
+function marketRequestUnavailable(options: CliOptions, summary: string): DoctorCheck {
   return {
     id: 'market_requests', state: 'warn', summary,
-    nextCommand: 'ae request list',
+    nextCommand: doctorContinuation(options, ['ae', 'request', 'list']),
   }
 }
 
-function credentialRefusedChecks(baseUrl: string, profile: 'buyer' | 'provider'): readonly DoctorCheck[] {
-  const connect = connectCommand(baseUrl, profile)
+function credentialRefusedChecks(options: CliOptions, profile: 'buyer' | 'provider'): readonly DoctorCheck[] {
+  const connect = connectCommand(options, profile)
   if (profile === 'provider') {
     return [{
       id: 'provider', state: 'fail',
@@ -369,10 +389,11 @@ function credentialRefusedChecks(baseUrl: string, profile: 'buyer' | 'provider')
 }
 
 function credentialOriginFailure(
-  baseUrl: string,
+  options: CliOptions,
   credentialOrigin: string,
   profile: 'buyer' | 'provider',
 ): DoctorCheck | undefined {
+  const { baseUrl } = options
   try {
     const selected = new URL(baseUrl)
     const bound = new URL(credentialOrigin)
@@ -389,24 +410,23 @@ function credentialOriginFailure(
   return {
     id: profile, state: 'fail',
     summary: `${profile === 'buyer' ? 'Buyer' : 'Provider'} credential is not safely bound to the configured origin.`,
-    nextCommand: connectCommand(baseUrl, profile),
+    nextCommand: connectCommand(options, profile),
   }
 }
 
-function connectCommand(baseUrl: string, profile: 'buyer' | 'provider'): string {
-  return continuationCommand([
+function connectCommand(options: CliOptions, profile: 'buyer' | 'provider'): string {
+  return doctorContinuation(options, [
     'ae',
     'connect',
     ...(profile === 'provider' ? ['--provider'] : []),
-    '--base-url',
-    new URL(baseUrl).origin,
   ])
 }
 
 async function checkBalance(
-  baseUrl: string,
+  options: CliOptions,
   headers: Readonly<Record<string, string>>,
 ): Promise<DoctorCheck> {
+  const { baseUrl } = options
   try {
     const outcome = await callJson(baseUrl, AGENT_ACCOUNT_MONEY_ROUTE_CONTRACTS.balance.path, {
       method: AGENT_ACCOUNT_MONEY_ROUTE_CONTRACTS.balance.method,
@@ -415,24 +435,25 @@ async function checkBalance(
     })
     const parsed = agentAccountBalanceAction.outputSchema.safeParse(outcome.body)
     if (!outcome.ok || !parsed.success || parsed.data.kind !== 'available') {
-      return { id: 'balance', state: 'fail', summary: 'Buyer balance is not available.', nextCommand: 'ae account balance' }
+      return { id: 'balance', state: 'fail', summary: 'Buyer balance is not available.', nextCommand: doctorContinuation(options, ['ae', 'account', 'balance']) }
     }
     if (parsed.data.accountState !== 'active') {
       return { id: 'balance', state: 'fail', summary: 'Buyer account is locked.' }
     }
     if (parsed.data.balance.units === '0') {
-      return { id: 'balance', state: 'warn', summary: 'Buyer balance is empty.', nextCommand: 'ae fund' }
+      return { id: 'balance', state: 'warn', summary: 'Buyer balance is empty.', nextCommand: doctorContinuation(options, ['ae', 'fund']) }
     }
     return { id: 'balance', state: 'pass', summary: 'Buyer balance is available and the account is active.' }
   } catch {
-    return { id: 'balance', state: 'fail', summary: 'Buyer balance could not be read.', nextCommand: 'ae account balance' }
+    return { id: 'balance', state: 'fail', summary: 'Buyer balance could not be read.', nextCommand: doctorContinuation(options, ['ae', 'account', 'balance']) }
   }
 }
 
 async function checkCall(
-  baseUrl: string,
+  options: CliOptions,
   headers: Readonly<Record<string, string>>,
 ): Promise<CallDoctorResult> {
+  const { baseUrl } = options
   try {
     const path = `${CALL_ROUTE_CONTRACT.list.path}?limit=100`
     const outcome = await callJson(baseUrl, path, {
@@ -442,7 +463,7 @@ async function checkCall(
     const parsed = callListResultSchema.safeParse(outcome.body)
     if (!outcome.ok || !parsed.success) {
       return {
-        check: { id: 'call', state: 'fail', summary: 'Call recovery state is unavailable.', nextCommand: 'ae history' },
+        check: { id: 'call', state: 'fail', summary: 'Call recovery state is unavailable.', nextCommand: doctorContinuation(options, ['ae', 'history']) },
       }
     }
     const attention = parsed.data.items.find((item) => item.state === 'reconciliation_required' || item.state === 'pending')
@@ -460,18 +481,19 @@ async function checkCall(
           ? 'A reconciliation-required Call needs attention.'
           : 'A nonterminal Call is still pending.',
         nextCommand: attention.state === 'reconciliation_required'
-          ? `ae status ${attention.callRef}`
-          : `ae wait ${attention.callRef}`,
+          ? doctorContinuation(options, ['ae', 'status', attention.callRef])
+          : doctorContinuation(options, ['ae', 'wait', attention.callRef]),
       },
     }
   } catch {
     return {
-      check: { id: 'call', state: 'fail', summary: 'Call recovery state could not be read.', nextCommand: 'ae history' },
+      check: { id: 'call', state: 'fail', summary: 'Call recovery state could not be read.', nextCommand: doctorContinuation(options, ['ae', 'history']) },
     }
   }
 }
 
-async function checkRepeatUse(baseUrl: string, toolRef: string): Promise<DoctorCheck | undefined> {
+async function checkRepeatUse(options: CliOptions, toolRef: string): Promise<DoctorCheck | undefined> {
+  const { baseUrl } = options
   try {
     const outcome = await callJson(baseUrl, TOOL_MARKET_DESCRIBE_PATH, {
       method: 'POST',
@@ -482,31 +504,32 @@ async function checkRepeatUse(baseUrl: string, toolRef: string): Promise<DoctorC
     return {
       id: 'repeat_use', state: 'pass',
       summary: 'A previously successful Tool is still in the current catalog.',
-      nextCommand: continuationCommand(['ae', 'describe', parsed.data.tool.toolRef]),
+      nextCommand: doctorContinuation(options, ['ae', 'describe', parsed.data.tool.toolRef]),
     }
   } catch {
     return undefined
   }
 }
 
-async function checkServer(baseUrl: string): Promise<DoctorCheck> {
+async function checkServer(options: CliOptions): Promise<DoctorCheck> {
+  const { baseUrl } = options
   try {
     const outcome = await callJson(baseUrl, '/.well-known/ucp')
     if (!outcome.ok || !isRecord(outcome.body)) {
-      return serverFailure(baseUrl, 'AE server did not return its discovery manifest.')
+      return serverFailure(options, 'AE server did not return its discovery manifest.')
     }
     if (outcome.body.schemaVersion !== SiteDiscoveryManifestSchemaVersion) {
-      return serverFailure(baseUrl, 'AE server manifest is not compatible with this CLI.')
+      return serverFailure(options, 'AE server manifest is not compatible with this CLI.')
     }
     if (outcome.body.origin !== new URL(baseUrl).origin) {
-      return serverFailure(baseUrl, 'AE server manifest origin does not match the configured origin.')
+      return serverFailure(options, 'AE server manifest origin does not match the configured origin.')
     }
     return {
       id: 'server', state: 'pass',
       summary: `AE server is reachable and manifest ${SiteDiscoveryManifestSchemaVersion} is compatible.`,
     }
   } catch {
-    return serverFailure(baseUrl, 'AE server is not reachable.')
+    return serverFailure(options, 'AE server is not reachable.')
   }
 }
 
@@ -623,13 +646,20 @@ async function checkReleaseIdentity(baseUrl: string): Promise<DoctorCheck> {
   }
 }
 
-function serverFailure(baseUrl: string, summary: string): DoctorCheck {
+function serverFailure(options: CliOptions, summary: string): DoctorCheck {
+  const { baseUrl } = options
   const safeOrigin = safeOriginForDiagnostics(baseUrl)
   return {
     id: 'server', state: 'fail', summary,
     nextCommand: isLoopbackCliBaseUrl(baseUrl)
-      ? `ae doctor --base-url ${HOSTED_DEFAULT_BASE_URL}`
-      : continuationCommand(['ae', 'config', '--base-url', safeOrigin, '--json']),
+      ? continuationCommand([
+          'ae', 'doctor', '--base-url', HOSTED_DEFAULT_BASE_URL,
+          ...(options.json ? ['--json'] : []),
+        ])
+      : continuationCommand([
+          'ae', 'config', '--base-url', safeOrigin,
+          ...(options.json ? ['--json'] : []),
+        ]),
   }
 }
 

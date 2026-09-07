@@ -4,6 +4,7 @@ import type * as TanstackReactStartModule from "@tanstack/react-start";
 
 const sourceMocks = vi.hoisted(() => ({
   callSourceQuery: vi.fn(),
+  startOwnerSupplySourceConnection: vi.fn(),
 }));
 
 vi.mock("@tanstack/react-start", async (importOriginal) => ({
@@ -16,6 +17,10 @@ vi.mock("@tanstack/react-start", async (importOriginal) => ({
 vi.mock("@/lib/server/convex-source", async (importOriginal) => ({
   ...(await importOriginal<typeof ConvexSourceModule>()),
   callSourceQuery: sourceMocks.callSourceQuery,
+}));
+vi.mock("@/modules/capability-supply/source-first-owner", async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/modules/capability-supply/source-first-owner')>()),
+  startOwnerSupplySourceConnection: sourceMocks.startOwnerSupplySourceConnection,
 }));
 
 import {
@@ -172,6 +177,44 @@ describe("Package 5 owner connection rollout", () => {
       },
     });
     expect(sourceMocks.callSourceQuery).not.toHaveBeenCalled();
+    vi.unstubAllEnvs();
+  });
+
+  it("lets supported x402 follow its own guards while static HTTP credentials remain disabled", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("AE_PACKAGE5_WRITES_ENABLED", "true");
+    vi.stubEnv("AE_SUPPLY_HTTP_CREDENTIALS_ENABLED", undefined);
+    sourceMocks.startOwnerSupplySourceConnection.mockResolvedValue({
+      kind: "action_required",
+      requiredAction: {
+        action: "supply.source.preview",
+        blockedCapabilities: ["supply.publish"],
+        cta: "/owner/offerings?connect=x402",
+        ctaLabel: "Connect service",
+        description: "Inspect the exact x402 lane.",
+        iconUrl: null,
+        status: "required",
+        title: "Connect service",
+      },
+    });
+
+    const result = await startOwnerSupplySourceConnectionServer({
+      data: {
+        businessId: "business:one",
+        source: {
+          kind: "x402",
+          resourceUrl: "https://provider.example/paid",
+          method: "POST",
+          environment: "sandbox",
+        },
+        expectedSourceDigest: `sha256:${"1".repeat(64)}`,
+        candidateRef: `sha256:${"2".repeat(64)}`,
+        idempotencyKey: "x402-source-enabled",
+      },
+    });
+
+    expect(result).toMatchObject({ kind: "action_required", requiredAction: { title: "Connect service" } });
+    expect(sourceMocks.startOwnerSupplySourceConnection).toHaveBeenCalledTimes(1);
     vi.unstubAllEnvs();
   });
 });

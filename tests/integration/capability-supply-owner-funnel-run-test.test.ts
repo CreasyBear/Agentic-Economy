@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { api, internal } from '../../convex/_generated/api'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
@@ -13,6 +13,9 @@ import {
 import { installProviderConnectionFixture } from './capability-publication-harness'
 
 describe('owner supply test', () => {
+  beforeEach(() => vi.useFakeTimers())
+  afterEach(() => vi.useRealTimers())
+
   it('does not turn an exact fresh no-payment challenge into a paid canary or publication authority', async () => {
     const backend = convexTestWithMarketComponents()
     const { businessId, owner } = await createPublishedBusinessOwner(
@@ -68,6 +71,7 @@ describe('owner supply test', () => {
     )
     if (published.kind !== 'published')
       throw new Error(`owner_x402_publish_failed:${published.kind}`)
+    await backend.finishAllScheduledFunctions(vi.runAllTimers)
     const targetResult = await backend.query(
       internal.capabilitySupply.readCapabilityProbeTarget,
       {

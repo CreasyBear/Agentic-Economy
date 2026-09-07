@@ -95,11 +95,16 @@ submission fence.
 Signal: the Quote expired or its Tool, authority, policy, x402
 challenge, rate or ceiling digest changed.
 
-1. Retain the refusal and original reference.
-2. Request a new `tool.quote` for the same Tool and input.
-3. Present the replacement AUD price, source requirement, expiry and material
-   unknowns.
-4. Call only with the new `quoteRef`. Never edit or extend the old Quote.
+1. Retain the refusal and original reference. Expiry before an accepted Call is
+   still enforced; never edit or extend the old Quote.
+2. If no Call was accepted, request a new `tool.quote` for the same Tool and
+   input.
+3. If no Call was accepted, present the replacement AUD price, source
+   requirement, expiry and material unknowns.
+4. Use the new `quoteRef` only when no Call was accepted. If a Call was accepted
+   or dispatch may have begun, use `call.status` or `call.reconcile` for that
+   known `callRef`; do not create a replacement Call or recover by an unknown
+   reference.
 
 ## Low or stale treasury
 
@@ -107,8 +112,13 @@ Signal: `treasury_capacity_unavailable` or custody evidence is stale.
 
 1. Verify custody environment, generation, network, asset, evidence reference
    and observed time.
-2. Record a fresh custody observation through the existing adapter.
-3. Sync the named Formance treasury-capacity template from that evidence.
+2. Do not treat the available observation helper as an activated production
+   pipeline. No production invocation, buffer policy, freshness/TTL policy,
+   scheduler, service or operator command is established here; do not invent
+   one or claim a new observation.
+3. If an authorized fresh observation is independently available, compare it
+   with recorded Formance treasury capacity; otherwise keep entry
+   suspended and the case open.
 4. If custody and Formance differ, open a treasury-scoped case. Do not invent
    capacity or reduce the policy buffer.
 

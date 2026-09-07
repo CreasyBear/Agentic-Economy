@@ -24,7 +24,7 @@ type StatusCheck = Readonly<{
 
 const probes = [
   { id: 'site', label: 'Website', path: '/api/health', operationalDetail: 'Public pages are responding.' },
-  { id: 'market', label: 'Operation API', path: '/api/ready', operationalDetail: 'Search and new Operation calls are ready.' },
+  { id: 'market', label: 'Tool API', path: '/api/ready', operationalDetail: 'Tool search and new Calls are ready.' },
   { id: 'discovery', label: 'Machine discovery', path: '/.well-known/ucp', operationalDetail: 'Agents can discover the current AE interfaces.' },
   { id: 'release', label: 'Release identity', path: '/api/v1/release', operationalDetail: 'Deployment identity is available.' },
 ] as const
@@ -33,7 +33,7 @@ export const Route = createFileRoute('/status')({
   head: () => buildPublicPageHead({
     path: '/status',
     title: 'System status | Agentic Economy',
-    description: 'Current Agentic Economy website, Operation API, machine discovery, and release identity status.',
+    description: 'Current Agentic Economy website, Tool API, machine discovery, and release identity status.',
   }),
   component: StatusRoute,
 })
@@ -93,7 +93,7 @@ function StatusRoute() {
         : degraded
           ? 'Some systems are degraded.'
           : 'All systems operational.'}
-      description="Live checks for the public site and shared agent interfaces. Individual Operation readiness is shown in the catalogue and on each Operation page."
+      description="Live checks for the public site and shared agent interfaces. Individual Tool readiness is shown in the catalogue and on each Tool page."
       actions={
         <Button
           type="button"
@@ -217,11 +217,11 @@ function failedResponseDetail(id: ProbeId, status: number): string {
     case 'site':
       return `Public pages may be unavailable (HTTP ${status}).`
     case 'market':
-      return `New Operation calls may fail (HTTP ${status}). Check existing calls before retrying.`
+      return `New Calls may fail (HTTP ${status}). Check existing Calls before retrying.`
     case 'discovery':
       return `Agent discovery and setup may fail (HTTP ${status}).`
     case 'release':
-      return `New Operation calls should wait (HTTP ${status}). Existing calls may still need review.`
+      return `New Calls should wait (HTTP ${status}). Existing Calls may still need review.`
   }
 }
 
@@ -230,11 +230,11 @@ function invalidContractDetail(id: ProbeId): string {
     case 'site':
       return 'The website returned an invalid health result.'
     case 'market':
-      return 'The Operation API returned an invalid readiness result. Check existing calls before retrying.'
+      return 'The Tool API returned an invalid readiness result. Check existing Calls before retrying.'
     case 'discovery':
       return 'The machine-discovery contract is invalid. Agent setup may fail.'
     case 'release':
-      return 'The release identity is invalid. New Operation calls should wait.'
+      return 'The release identity is invalid. New Calls should wait.'
   }
 }
 
@@ -243,11 +243,11 @@ function unreachableDetail(id: ProbeId): string {
     case 'site':
       return 'The website could not be reached.'
     case 'market':
-      return 'The Operation API could not be reached. Check existing calls before retrying.'
+      return 'The Tool API could not be reached. Check existing Calls before retrying.'
     case 'discovery':
       return 'Machine discovery could not be reached. Agent setup may fail.'
     case 'release':
-      return 'Release identity could not be reached. New Operation calls should wait.'
+      return 'Release identity could not be reached. New Calls should wait.'
   }
 }
 
@@ -261,7 +261,7 @@ function recoveryGuidance(checks: readonly StatusCheck[]): Readonly<{
   return callSafetyAffected
     ? {
         title: 'Check existing calls before retrying',
-        description: 'Do not repeat an uncertain Operation call. Open Calls to inspect its current status or receipt.',
+        description: 'Do not repeat an uncertain Call. Open Calls to inspect its current status or receipt.',
         href: '/activity',
         label: 'Open Calls',
       }

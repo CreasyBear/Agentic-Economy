@@ -33,7 +33,7 @@ export function AccountSettingsSection({
               title="Sign out"
               titleId="owner-sign-out"
               titleAs="h3"
-              body="This browser returns to the public site. Operations, credit, and listed tools stay as they are."
+              body="This browser returns to the public site. Tools, credit, and listed services stay as they are."
             >
               <SignOutButton redirectUrl="/">
                 <AeSiteAuthSubmit>Sign out</AeSiteAuthSubmit>

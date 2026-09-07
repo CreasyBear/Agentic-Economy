@@ -42,4 +42,9 @@ describe('private Convex Action Execution transaction contract', () => {
     expect(handler).toContain('export const readHistoryCommand = internalQuery({')
     expect(handler).toContain("withIndex('by_executionRef_and_commandId'")
   })
+
+  it('preserves the protected invocationRef late-observation digest key', () => {
+    expect(handler).toContain('invocationRef: args.executionRef')
+    expect(handler).not.toContain('callRef: args.executionRef')
+  })
 })

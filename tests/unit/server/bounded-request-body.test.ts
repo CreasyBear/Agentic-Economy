@@ -1,6 +1,19 @@
 import { describe, expect, it } from 'vitest'
 
+import { isJsonContentType } from '@/lib/server/json-content-type'
 import { readBoundedRequestText } from '@/lib/server/bounded-request-body'
+
+describe('isJsonContentType', () => {
+  it.each([
+    ['application/json', true],
+    ['Application/JSON;charset=UTF-8', true],
+    ['text/plain', false],
+    ['application/json nonsense', false],
+    [null, false],
+  ] as const)('classifies %j as %s without substring acceptance', async (contentType, expected) => {
+    await expect(isJsonContentType(contentType)).resolves.toBe(expected)
+  })
+})
 
 describe('readBoundedRequestText', () => {
   it('bounds response bodies through the same streaming contract', async () => {

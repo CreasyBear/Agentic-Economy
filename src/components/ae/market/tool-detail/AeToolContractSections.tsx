@@ -183,7 +183,7 @@ export function AeToolTechnicalContract({
         <Fact label="Tool reference">
           <AeCopyReference label="reference" value={tool.toolRef} />
         </Fact>
-        <Fact label="Operation ID" value={tool.operationId} />
+        <Fact label="Tool ID" value={tool.toolId} />
         <Fact
           label="Capability"
           value={`${tool.contract.capabilityId} · version ${tool.contract.version}`}

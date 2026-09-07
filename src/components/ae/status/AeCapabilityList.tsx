@@ -21,7 +21,7 @@ export function AeCapabilityList({ catalog }: AeCapabilityListProps) {
       {
         id: 'name',
         accessorFn: (item) => item.name,
-        header: ({ column }) => <AeOperatorSortableHeader label="Operation" column={column} />,
+        header: ({ column }) => <AeOperatorSortableHeader label="Offering" column={column} />,
         cell: ({ row }) => (
           <div className="grid min-w-[12rem] gap-0.5">
             <span className="font-medium">{row.original.name}</span>
@@ -50,11 +50,11 @@ export function AeCapabilityList({ catalog }: AeCapabilityListProps) {
   if (catalog.offerings.length === 0) {
     return (
       <AeEmptyState
-        title="No published Operations yet"
-        description="Add an Operation so agents can inspect the tool and its price."
+        title="No published offerings yet"
+        description="Add a service offering so visitors can inspect its published facts and price."
         action={
           <Button asChild className="min-h-touch">
-            <a href="/owner/offerings/new">Add Operation</a>
+            <a href="/owner/offerings/new">Add service</a>
           </Button>
         }
       />
@@ -65,9 +65,9 @@ export function AeCapabilityList({ catalog }: AeCapabilityListProps) {
     <AeRecordTable
       columns={columns}
       data={catalog.offerings}
-      caption="Published Operations"
-      countLabel="Operations"
-      filterPlaceholder="Filter Operations…"
+      caption="Published offerings"
+      countLabel="Offerings"
+      filterPlaceholder="Filter offerings…"
       hideFilter={catalog.offerings.length <= 1}
       getRowId={(item) => item.offeringRef}
       rowAction={{

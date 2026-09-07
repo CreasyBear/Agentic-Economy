@@ -28,13 +28,13 @@ test.describe('market product accessibility', () => {
     })
     await expect(primary.getByRole('link', { name: 'Discover' })).toBeVisible()
     await expect(primary.getByRole('link', { name: 'For agents' })).toBeVisible()
-    await expect(primary.getByRole('link', { name: 'For suppliers' })).toBeVisible()
+    await expect(primary.getByRole('link', { name: 'For Providers' })).toBeVisible()
     await expect(primary.getByRole('link', { name: 'Calls' })).toBeVisible()
   })
 
-  test('browse Operations continues into the market catalog', async ({ page }) => {
+  test('browse Tools continues into the market catalog', async ({ page }) => {
     await gotoSettled(page, '/')
-    await page.getByRole('link', { name: 'Browse Operations' }).first().click()
+    await page.getByRole('link', { name: 'Browse Tools' }).first().click()
     await page.waitForURL((url) => (
       url.pathname === '/market'
       && url.searchParams.get('window') === '30d'
@@ -58,7 +58,7 @@ test.describe('market product accessibility', () => {
     await footer.getByRole('link', { name: 'About' }).click()
     await page.waitForURL('**/about', { timeout: 15_000 })
     await expect(page.getByRole('heading', { level: 1, name: 'Who this market is for.' })).toBeVisible()
-    await expect(page.getByRole('heading', { name: 'Listed suppliers' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Listed Providers' })).toBeVisible()
     await expect(page.getByRole('link', { name: 'Browse the live catalog' })).toBeVisible()
     const compact = (page.viewportSize()?.width ?? 1280) < 768
     if (compact) {

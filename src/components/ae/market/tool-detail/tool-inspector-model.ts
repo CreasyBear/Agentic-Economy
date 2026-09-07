@@ -8,7 +8,10 @@ import {
   formatToolReadiness,
 } from '@/modules/market/tool-view-model'
 import { formatCurrencyAmount } from '@/modules/money/public'
-import type { SuggestedNextAction } from '@/modules/market/suggested-next-action'
+import {
+  callableAlternativesHref,
+  type SuggestedNextAction,
+} from '@/modules/market/suggested-next-action'
 
 export type ToolInspectorModel = Readonly<{
   toolRef: string
@@ -50,7 +53,7 @@ export function toToolInspectorModel(
     : {
         label: 'Find Tool alternatives',
         kind: 'navigate',
-        href: `/market?${new URLSearchParams({ query: tool.summary }).toString()}`,
+        href: callableAlternativesHref(catalogSummary(tool)),
         warning: 'This Tool is not operational. Choose an operational alternative.',
       }
   const inputExample = tool.contract.inputExamples?.[0]

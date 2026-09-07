@@ -27,7 +27,7 @@ import type {
 
 export type ToolSurfaceWireDescriptor = {
   toolRef: PublicToolRef;
-  operationId: string;
+  toolId: string;
   callVia: PublicToolDescriptor["callVia"];
   paymentLane: PublicToolDescriptor["paymentLane"];
   contract: {

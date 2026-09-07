@@ -59,6 +59,7 @@ export const SiteDiscoveryEndpointKindValues = [
   'discovery_file',
   'discovery_artifact',
   'tool_read',
+  'quote',
   'call',
   'call_status',
   'call_cancel',
@@ -445,6 +446,7 @@ function kindFor(path: string, callRoutes: readonly SiteDiscoveryCallRouteSummar
   if (FUNDING_PREFLIGHT_ROUTE_CONTRACTS.some((route) => route.path === path)) return 'funding_preflight'
   if (TOOL_MARKET_ACTION_ENTRIES.some((entry) => entry.pathTemplate === path)) return 'tool_read'
   const callRoute = callRoutes.find((route) => route.path === path)
+  if (callRoute?.actionId === TOOL_QUOTE_ACTION_ID) return 'quote'
   if (callRoute?.actionId === CALL_ROUTE_CONTRACT.call.actionId) return 'call'
   if (callRoute?.actionId === CALL_ROUTE_CONTRACT.status.actionId) return 'call_status'
   if (callRoute?.actionId === CALL_ROUTE_CONTRACT.cancel.actionId) return 'call_cancel'

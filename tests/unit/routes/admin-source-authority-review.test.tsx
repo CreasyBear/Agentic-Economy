@@ -59,6 +59,8 @@ describe('admin source authority review', () => {
     render(<Component />)
 
     expect(screen.getByRole('heading', { name: 'Review source authority' })).toBeTruthy()
+    expect(screen.getByText('Tool reference')).toBeTruthy()
+    expect(screen.getByText(/Provider controls the source/u)).toBeTruthy()
     expect(document.body.textContent).toContain(mocks.search.sourceUrl)
     expect(document.body.textContent).toContain(mocks.search.expectedSourceDigest)
     fireEvent.change(screen.getByLabelText('Authority evidence reference'), {

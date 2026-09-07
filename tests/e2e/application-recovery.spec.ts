@@ -11,11 +11,11 @@ test.describe('application recovery', () => {
     returnContext.searchParams.set('availability', 'routeable')
     returnContext.searchParams.set('category', 'data-research')
     returnContext.searchParams.set('compare', comparison)
-    returnContext.hash = 'operations'
+    returnContext.hash = 'tools'
     const expectedContext = `${returnContext.pathname}${returnContext.search}${returnContext.hash}`
 
     await page.goto(
-      `/operations/${encodeURIComponent(firstRef)}?from=${encodeURIComponent(expectedContext)}`,
+      `/tools/${encodeURIComponent(firstRef)}?from=${encodeURIComponent(expectedContext)}`,
       { waitUntil: 'networkidle' },
     )
     const back = page.getByRole('link', { name: 'Back to comparison' })
@@ -28,11 +28,11 @@ test.describe('application recovery', () => {
       availability: 'routeable',
       category: 'data-research',
       compare: comparison,
-      hash: '#operations',
+      hash: '#tools',
     })
 
     await page.goBack({ waitUntil: 'networkidle' })
-    await expect(page).toHaveURL(/\/operations\/operation%3Av1%3A|\/operations\/operation:v1:/)
+    await expect(page).toHaveURL(/\/tools\/operation%3Av1%3A|\/tools\/operation:v1:/)
     await expect(page.getByRole('link', { name: 'Back to comparison' })).toBeVisible()
 
     await page.goForward({ waitUntil: 'networkidle' })
@@ -43,7 +43,7 @@ test.describe('application recovery', () => {
       availability: 'routeable',
       category: 'data-research',
       compare: comparison,
-      hash: '#operations',
+      hash: '#tools',
     })
 
     await page.reload({ waitUntil: 'networkidle' })
@@ -54,7 +54,7 @@ test.describe('application recovery', () => {
       availability: 'routeable',
       category: 'data-research',
       compare: comparison,
-      hash: '#operations',
+      hash: '#tools',
     })
   })
 })

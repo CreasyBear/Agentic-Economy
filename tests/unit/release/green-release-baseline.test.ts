@@ -236,7 +236,7 @@ describe('green release baseline', () => {
     const sourceGate = source?.steps?.find((step) => step.name === 'Run source release contract without deployment credentials')
     expect(sourceGate?.run).toBe('npm run test:release:source:after-codegen')
     expect(sourceGate?.env).toBeUndefined()
-    const chatGate = source?.steps?.find((step) => step.name === 'Run deterministic operation chat conformance')
+    const chatGate = source?.steps?.find((step) => step.name === 'Run deterministic Tool chat conformance')
     expect(chatGate?.run).toBe('npm run test:chat:conformance')
 
     const authenticated = workflow.jobs?.['authenticated-platform-proof']

@@ -194,7 +194,7 @@ export const COMMANDS: Readonly<Record<string, RootCommandManifestEntry>> = {
   },
   supply: {
     summary: 'Inspect and manage owner-bound provider Tools, provider connections, earnings, and recovery with an owner-issued provider credential.',
-    args: '<preview|operations|status|publish|withdraw|recheck|republish|earnings|connections|connection|connect|reconnect|revoke|offboarding>',
+    args: '<preview|tools|status|publish|withdraw|recheck|republish|earnings|connections|connection|connect|reconnect|revoke|offboarding>',
     json: true,
     group: 'supply',
     rootOrder: 1,
@@ -204,7 +204,8 @@ export const COMMANDS: Readonly<Record<string, RootCommandManifestEntry>> = {
     ],
     commands: {
       preview: { summary: 'Discover candidate Tools from one native Provider source without publishing or calling.', args: "--input '<json>'", json: true },
-      status: { summary: 'List Provider Tools or read one exact Tool lifecycle.', args: '<businessRef> [toolRef]', json: true },
+      tools: { summary: 'Inventory the Provider’s admitted Tools for one business.', args: '<businessRef>', json: true },
+      status: { summary: 'Read one exact Provider Tool lifecycle.', args: '<businessRef> <toolRef>', json: true },
       publish: { summary: 'Publish one admitted provider Tool artifact.', args: "--input '<json>' [--idempotency-key <key>]", json: true },
       withdraw: { summary: 'Withdraw one exact current provider publication.', args: "--input '<json>' [--idempotency-key <key>]", json: true },
       recheck: { summary: 'Schedule readiness revalidation for one exact publication.', args: "--input '<json>' [--idempotency-key <key>]", json: true },
@@ -312,9 +313,9 @@ export async function runManifestCommand(_args: readonly string[], options: CliO
   const manifest = {
     $schema: 'https://agentic-economy/market-terminal/manifest:v3',
     protocol: 'agentic-economy.tool-terminal.v1',
-    about: 'Discover exact current work, inspect terms, connect one agent key, call idempotently, preserve the receipt, and reuse successful work.',
+    about: 'Discover exact current Tools, inspect terms, connect one agent key, call idempotently, and recover each Call through durable history and status.',
     commands: COMMANDS,
-    coldLoop: ['search', 'describe', 'connect', 'call', 'history', 'wait', 'receipt', 'reuse'],
+    coldLoop: ['search', 'describe', 'connect', 'call', 'history', 'status', 'wait'],
     payment: {
       providerQuotedAmount: {
         field: 'commercial.priceBreakdown.providerQuotedAmount',
@@ -492,7 +493,7 @@ export async function runManifestCommand(_args: readonly string[], options: CliO
     protocol: manifest.protocol,
     about: manifest.about,
     commands: manifest.commands,
-    coldLoop: ['search', 'describe', 'call', 'wait', 'receipt', 'reuse'],
+    coldLoop: ['search', 'describe', 'call', 'history', 'status', 'wait'],
     access: {
       anonymous: 'List, search, describe, and compare current Tools without connecting.',
       connected: 'Run ae connect once; authenticated Calls cover free and paid Tools, and consequential Tools require approval.',
@@ -508,7 +509,7 @@ export async function runManifestCommand(_args: readonly string[], options: CliO
     },
     supply: {
       connect: 'ae connect --provider',
-      operations: 'ae supply operations <businessRef>',
+      tools: 'ae supply tools <businessRef>',
       status: 'ae supply status <businessRef> <toolRef>',
       connections: 'ae supply connections <businessId>',
       connection: 'ae supply connection <connectionRef>',

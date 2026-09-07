@@ -1,5 +1,10 @@
-import { isCanonicalDigest } from '@/modules/common/canonical-digest'
+import { canonicalDigest, isCanonicalDigest } from '@/modules/common/canonical-digest'
 import { readTrimmedEnv, type StringEnvironment } from '@/lib/server/read-trimmed-env'
+import {
+  x402PaymentProfileForEnvironment,
+  type X402AeEnvironment,
+} from './x402-payment-profile'
+import type { StableHashValue } from '@/modules/common/stable-hash'
 
 export const X402_CDP_API_KEY_ID_ENV = 'CDP_API_KEY_ID'
 export const X402_CDP_API_KEY_SECRET_ENV = 'CDP_API_KEY_SECRET'
@@ -92,6 +97,19 @@ export function cdpX402CustodyConfigurationFromEnvironment(
   } catch {
     return undefined
   }
+}
+
+export function cdpX402CustodyBudgetRef(
+  configuration: CdpX402CustodyConfiguration,
+  aeEnvironment: X402AeEnvironment = 'production',
+): string {
+  const profile = x402PaymentProfileForEnvironment(aeEnvironment)
+  if (profile === undefined) throw new Error('x402_payment_profile_invalid')
+  return canonicalDigest({
+    kind: 'ae.x402.custody-budget:v1',
+    network: profile.network,
+    expectedEvmAddress: configuration.expectedEvmAddress.toLowerCase(),
+  } as StableHashValue)
 }
 
 function isUuid(value: string): boolean {
