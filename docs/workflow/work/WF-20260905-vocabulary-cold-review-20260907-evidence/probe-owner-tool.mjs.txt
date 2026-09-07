@@ -1,0 +1,26 @@
+import { startVitest } from '/Users/joelchan/Documents/Coding/App-Dev/live/01. Pre-Implementation/Agentic-Economy/node_modules/vitest/dist/node.js'
+const probe = `
+it('cold audit owner tool readback mismatch', async () => {
+  const { readProviderToolStatusServer } = await import('@/components/ae/offerings/provider-workspace.functions')
+  mocks.identity.mockResolvedValueOnce({
+    kind: 'available',
+    operation: { offeringRef: 'offering:one', currentRevision: 3, status: 'published', name: 'Search', category: 'tools', summary: 'Search safely', accessPathCount: 1 },
+    statusJson: JSON.stringify({
+      schemaVersion: 'provider_tools:v1', businessRef: 'biz:one', providerRef: 'provider:one', toolRef: 'operation:one', revision: 3,
+      state: 'Published', reasonCodes: [], observedAt: 1, source: { kind: 'openapi' }, routeability: { available: true, reasonCodes: [] }, authority: { kind: 'public' },
+      health: { connection: 'not_required', validation: 'passed', publication: 'published', freshness: 'current', delivery: { kind: 'unobserved', provenance: 'canonical_call_receipts' }, usefulOutcome: { kind: 'unobserved', provenance: 'qualified_use_receipts' }, operationalConditions: [] },
+    }),
+  })
+  const result = await readProviderToolStatusServer({ data: { businessId: 'biz:one', offeringRef: 'offering:one' } })
+  console.log('COLD_OWNER_TOOL_RESULT', JSON.stringify({ kind: result.kind, hasTool: result.tool !== undefined }))
+  expect(result.kind).toBe('available')
+  expect(result.tool).toBeUndefined()
+  expect(() => result.tool.offeringRef).toThrow(TypeError)
+})
+`
+const context = await startVitest('test', ['tests/unit/server/provider-workspace-functions.test.ts'], {
+ watch: false, fileParallelism: false, testNamePattern: 'cold audit owner tool readback mismatch', reporters: ['default'],
+}, { plugins: [{ name: 'cold-audit-memory-only-owner-tool-probe', enforce: 'pre', transform(code, id) {
+ if (id.endsWith('/tests/unit/server/provider-workspace-functions.test.ts')) return { code: code + probe, map: null }
+} }] })
+await context.close()

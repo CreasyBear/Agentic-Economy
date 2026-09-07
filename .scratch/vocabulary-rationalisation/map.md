@@ -1,3 +1,24 @@
+## Completed cold-review source repair — 2026-09-08
+
+The authoritative current acceptance and release-readiness receipt is at the top
+of `docs/workflow/work/WF-20260905-vocabulary.md`. C01–C19, all thirteen discovery
+gaps and the final test-consumer/Provider-label supplements are independently
+accepted. Source/current documentation/package checkpoint: `5f313129775c91de88e6cef819800bd116e31168`.
+The separate governance commit records this map and retained audit evidence.
+
+Final evidence includes 4,200 unit, 1,109 integration (four existing skips),
+402 conformance, 55 chat-conformance, 28 public browser (two viewport skips) and
+14 accessibility passes; focused final deltas, typecheck, lint, codegen,
+isolated generated-source equality, installed CLI Node 20/22 help/package
+integrity and final build checks pass. TypeScript standards still fails on its
+unchanged 26-finding baseline. Final changed-source Doctor finds no new issues;
+the advisory commit hook reports 30 warnings. No aggregate-green claim.
+
+All 47 unrelated dirty paths and 36 original audit files remain preserved.
+Recovery, dataset rebuilding, deployment, operational G02 policy/ingestion,
+Package 6/7 and full hosted/live commercial acceptance remain parked and open.
+The earlier queue and evidence below are dated history, not current pending work.
+
 ## Current source closeout — 2026-09-07
 
 All ten module groups, their material corrections, current documentation and

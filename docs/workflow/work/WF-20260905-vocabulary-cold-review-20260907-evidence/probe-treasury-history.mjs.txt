@@ -1,0 +1,35 @@
+import { startVitest } from '/Users/joelchan/Documents/Coding/App-Dev/live/01. Pre-Implementation/Agentic-Economy/node_modules/vitest/dist/node.js'
+
+const probe = `
+it('cold audit treasury observation history', async () => {
+  const backend = convexTestWithMarketComponents()
+  const suffix = 'cold-treasury-history'
+  const fixture = await publishCurrentTool(backend, suffix)
+  await seedCommercialPolicies(backend, suffix, Date.now())
+  const agent = await seedAgent(backend, { canonicalAccountRef: fixture.accountRef }, fixture.toolRef, suffix, '20000000')
+  await backend.finishAllScheduledFunctions(() => undefined)
+  await observeHealthyReadiness(backend, fixture, suffix)
+  const observation = {
+    environment: 'production', custodyRef: 'custody:cold-audit', custodyGeneration: 1,
+    network: 'eip155:8453', asset: 'USDC', exponent: 6,
+    observationRef: 'observation:cold-audit:1', totalUnits: '10000000', bufferUnits: '2000000',
+    evidenceRef: 'evidence:cold-audit:1', evidenceDigest: canonicalDigest({ n: 1 }), observedAt: Date.now(),
+  }
+  await backend.mutation(internal.moneyTreasury.recordObservation, observation as never)
+  const first = await prepareSubjects(backend, agent, fixture.toolRef, { request: 'Perth' }, suffix + '-1')
+  await backend.mutation(internal.moneyTreasury.recordObservation, {
+    ...observation, observationRef: 'observation:cold-audit:2', evidenceRef: 'evidence:cold-audit:2',
+    evidenceDigest: canonicalDigest({ n: 2 }), observedAt: observation.observedAt + 1,
+  } as never)
+  const second = await prepareSubjects(backend, agent, fixture.toolRef, { request: 'Perth' }, suffix + '-2')
+  console.log('COLD_TREASURY_HISTORY_RESULT', JSON.stringify({ sameCustody: true, firstHasTreasury: 'treasury' in first, secondHasTreasury: 'treasury' in second }))
+  expect('treasury' in first).toBe(true)
+  expect('treasury' in second).toBe(false)
+})
+`
+const context = await startVitest('test', ['tests/unit/convex/capability-quotes.test.ts'], {
+  watch: false, fileParallelism: false, testNamePattern: 'cold audit treasury observation history', reporters: ['default'],
+}, { plugins: [{ name: 'cold-audit-memory-only-treasury-probe', enforce: 'pre', transform(code, id) {
+  if (id.endsWith('/tests/unit/convex/capability-quotes.test.ts')) return { code: code + probe, map: null }
+} }] })
+await context.close()

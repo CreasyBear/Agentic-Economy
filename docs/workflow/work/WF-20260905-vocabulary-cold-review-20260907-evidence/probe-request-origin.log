@@ -1,0 +1,13 @@
+
+ RUN  v4.1.9 /Users/joelchan/Documents/Coding/App-Dev/live/01. Pre-Implementation/Agentic-Economy
+
+stdout | tests/unit/market-terminal/request-origin-continuation.test.ts > cold audit request status loses origin
+COLD_REQUEST_ORIGIN_RESULT {"origin":"http://[::1]:3024","nextCommand":"ae request status request:cold"}
+
+ ✓ tests/unit/market-terminal/request-origin-continuation.test.ts (4 tests | 3 skipped) 7ms
+
+ Test Files  1 passed (1)
+      Tests  1 passed | 3 skipped (4)
+   Start at  15:53:43
+   Duration  2.31s (transform 1.15s, setup 546ms, import 1.66s, tests 7ms, environment 0ms)
+

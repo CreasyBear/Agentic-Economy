@@ -1,0 +1,25 @@
+{
+  "runtime": "Node 22.22.0 / npm 11.5.1",
+  "commands": [
+    {
+      "command": "npm run -s ae -- receipt --json",
+      "exitCode": 1,
+      "kind": "INVALID_ARGUMENT",
+      "code": "unknown-command"
+    },
+    {
+      "command": "npm run -s ae -- reuse --json",
+      "exitCode": 1,
+      "kind": "INVALID_ARGUMENT",
+      "code": "unknown-command"
+    },
+    {
+      "command": "npm run -s ae -- supply status business:cold-audit --json",
+      "exitCode": 1,
+      "kind": "INVALID_ARGUMENT",
+      "code": "supply-status-usage",
+      "message": "Usage: ae supply status <businessRef> [toolRef]",
+      "networkReached": false
+    }
+  ]
+}

@@ -1,0 +1,56 @@
+{
+  "sourceRevision": "a51e17b221c6b73851c5873502d8150120ef3aad",
+  "commandsUsed": [
+    "npm run -s ae -- manifest",
+    "npm run -s ae -- manifest --technical --json"
+  ],
+  "compactColdLoop": [
+    "search",
+    "describe",
+    "call",
+    "wait",
+    "receipt",
+    "reuse"
+  ],
+  "technicalColdLoop": [
+    "search",
+    "describe",
+    "connect",
+    "call",
+    "history",
+    "wait",
+    "receipt",
+    "reuse"
+  ],
+  "technicalAccountActivity": {
+    "id": "agentAccess.activity",
+    "boundaries": [
+      "Rows are bound to the exact authenticated principal and credential, not every credential owned by the account.",
+      "Returns charge evidence and invocation references without operation inputs, outputs, bearer secrets, or payment-provider data.",
+      "The cursor is opaque and remains bound to the same credential and currency."
+    ],
+    "invocationContract": {
+      "version": "agent-account-activity:v1",
+      "consequenceClass": "read_only",
+      "materialInputPaths": [
+        "currency",
+        "limit",
+        "cursor"
+      ],
+      "authorityRequirement": "principal",
+      "retryClass": "replayable",
+      "expectedEvidence": [
+        "credential_charge_activity"
+      ],
+      "safeContinuations": [
+        "operation.status"
+      ],
+      "invalidationConditions": [
+        "credential_revoked",
+        "currency_changed",
+        "cursor_changed"
+      ]
+    }
+  },
+  "qualification": "Compact manifest does not emit the account action invocationContract. Standard MCP tools/list also omits that contract; public boundary prose is emitted."
+}

@@ -1,0 +1,13 @@
+
+ RUN  v4.1.9 /Users/joelchan/Documents/Coding/App-Dev/live/01. Pre-Implementation/Agentic-Economy
+
+stdout | tests/unit/convex/authority-boundary.test.ts > cold audit access-only expiry boundary
+COLD_ACCESS_EXPIRY_RESULT {"expiredAccessGrant":true,"bindingAccepted":true,"selfKind":"authenticated","downstreamMoneyAdmission":"refused"}
+
+ ✓ tests/unit/convex/authority-boundary.test.ts (56 tests | 55 skipped) 99ms
+
+ Test Files  1 passed (1)
+      Tests  1 passed | 55 skipped (56)
+   Start at  15:24:23
+   Duration  944ms (transform 537ms, setup 242ms, import 527ms, tests 99ms, environment 0ms)
+

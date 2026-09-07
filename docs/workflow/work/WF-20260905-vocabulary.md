@@ -1,3 +1,735 @@
+## Cold-review source closeout — 2026-09-08
+
+**Status: source repairs and verification independently accepted with the retained
+standards baseline; owned source checkpoint committed.**
+This dated receipt supersedes earlier pending statements, not their historical
+outputs. C01–C19, all thirteen discovery gaps and the subsequent bounded
+verification repairs are accounted for below and in the existing plan. This is
+source acceptance, not an aggregate-green or production-release claim.
+
+Owned source/current-documentation/package checkpoint:
+`5f313129775c91de88e6cef819800bd116e31168` — `fix: complete vocabulary cutover journeys and contract consumers`
+(**136 paths**). The subsequent serialized governance commit contains this
+receipt, the maintained coverage map and the unchanged cold-review register and
+raw evidence. No remote push, deployment, data activation or publication occurred.
+Final evidence review accepted the complete requirement/discovery-gap coverage,
+check scope and retained holds. All **47 unrelated dirty paths** match their
+preserved bytes/deletions; all **36 original audit files** remain byte-identical.
+
+### Final source verification
+
+Project commands used Node **22.22.0 / npm 11.5.1** in the original
+`codex/vocabulary-rationalisation` checkout. The expressly authorized existing
+CLI compatibility harness separately exercised Node 20 and Node 22 subprocesses.
+
+| Check / exact command family | Result and scope |
+| --- | --- |
+| `npm run test:unit -- --no-file-parallelism` | **463 files / 4,200 tests pass** after C19. Subsequent test-render and navigation-copy deltas have their focused passes below. |
+| `npm run test:integration` | **113 files / 1,109 tests pass; one file / four existing skips**, after deterministic probe scheduling repair. |
+| `npm run test:conformance` | **42 files / 402 tests pass** on the repaired integration state. |
+| `npm run test:chat:conformance` | **11 files / 55 tests pass**. |
+| `npm run test:release:architecture` | **2 files / 21 tests pass**. |
+| `npm run typecheck` | **Pass**, including the final JSX test rename. Later changes are reviewed copy/selector literals with focused browser/unit verification. |
+| `npm run test:types` | **4 tests pass**. |
+| `npm run gate:anatomy` | **5 parity/envelope tests, 49 import tests and 2 UI contract tests pass**. |
+| `npm run test:seo` | **5 files / 28 tests pass**. |
+| `npm run lint` | **Pass** after correcting the two children-prop errors with JSX, without suppressions. |
+| `npm run test:ts-standards` | **Fails on the same 26 baseline findings**, with zero additions/removals comparing file, rule and excerpt independently of line numbers. No clean aggregate is claimed. |
+| `npm run check:convex-codegen` | **Pass** after C19. |
+| `npm run verify:convex-generated:anonymous` | **Pass: seven generated files byte-identical** after regenerating current source in an isolated anonymous local backend; shared deployment/data unchanged. |
+| `npm run pack:cli:public` and `npm run test:cli-package` | **Pass**. Actual installed `--help` checks pass on Node **20.20.2 / 22.23.2**; package imports remain blocked. Packed and public archives match SHA-256 `99aaeac6f9b065ba0526e8746bf0f3f8b934632b1b87dc8dc4855bc0d1781fce`. |
+| `npm run verify:release-integrity` | **Final build passes** after the Provider navigation label; generated protected paths and pinned Nitro integrity unchanged. Existing chunk-size/browser-externalization/WASM fallback warnings are retained. |
+| Local Playwright public browser set | **28 pass / two viewport-specific skips**, across compact and wide Chromium. Exact five-file invocation below; no authenticated/hosted test bodies were run. |
+| `env -u PLAYWRIGHT_BASE_URL npm run test:e2e:a11y` | **14/14 pass**, both viewports, one worker, after two stale heading assertions were corrected. |
+| Installed offline React Doctor | Final staged/changed-source scan exits **0**, newCount **0**, baseTotalCount **30** after the renamed test is staged. The advisory commit hook reports **72/100 and 30 warnings** and exits successfully; no clean full-project health claim. |
+
+Exact public browser command (through the pinned NVM runner):
+
+```sh
+env -u PLAYWRIGHT_BASE_URL npm exec --offline -- node tools/dev/run-with-cleanup.mjs playwright test tests/e2e/application-recovery.spec.ts tests/e2e/code-block-hit-target.spec.ts tests/e2e/developer-discovery.spec.ts tests/e2e/local-auth-boundary.spec.ts tests/e2e/owner-operations-compatibility.spec.ts
+```
+
+The browser runs started their own local Vite server with Clerk disabled and
+terminated it normally. The configured local catalogue backend was unavailable;
+retained `fetch failed`, missing-auth and safe error-boundary output therefore
+qualify the result as navigation, keyboard, layout, local-auth and outage-path
+proof, not populated/live catalogue or authenticated account proof. The CLI
+matrix proves package integrity and installed help, not complete cross-harness
+hosted commercial execution. Production money, deployment, recovery, dataset
+rebuilding, operational ingestion/freshness/buffer policy (G02), Package 6/7 and
+full-plan hosted/live acceptance remain **parked and open**.
+
+### Final verification repairs and retained failures
+
+- **Probe test scheduling:** the first final integration run had 1,108 passes
+  and one failure: an automatically scheduled inactive probe could overwrite
+  its manual healthy observation. The unchanged isolated test passed. The
+  existing test now uses the established fake-timer hooks and awaits all
+  scheduled work before seeding the intended observation, restoring real timers
+  afterward. All admission, no-paid-canary and refusal assertions remain.
+  Focused 1, related owner-funnel 21, architecture 21, full integration 1,109 and
+  conformance 402 pass. No production scheduling behavior changed.
+- **Owner route lint:** the two previously advisory children-prop findings were
+  actual lint errors. `supply-owner-routes.test.ts` became `.test.tsx`; two
+  equivalent JSX provider renders replace children props, with all guards,
+  mocks and assertions preserved. **4 focused tests, lint and typecheck pass**.
+- **Public browser consumers:** initial public browser results were 24 passes,
+  two viewport skips and four failures. Two tests still used the removed
+  `/operations` route/anchor or old installation heading. They now use `/tools`
+  and `#tools`, preserve opaque `operation:v1:` references and complete
+  query/history/refresh checks, and expect `Connect with Codex`. **10 focused
+  browser cases**, then the complete **28-case public set**, pass.
+- **Provider navigation copy:** the shared public navigation/footer label was
+  an omitted canonical-role correction, not a retained marketing exception.
+  `For Providers` and its three test consumers retain `/for-providers`, shared
+  navigation semantics and every assertion. **Two files / eight unit tests pass**.
+- **Accessibility consumers:** initial a11y results were 10 passes/four failures
+  at the two stale headings. Exact assertions now use `Listed Providers` and
+  `Connect with Codex`; keyboard, focus, route and compact layout checks remain.
+  **All 14 a11y cases pass**. No production changes were needed.
+
+The first direct public-browser invocation also failed before tests because the
+wrapper could not find Playwright outside npm's executable path. The corrected
+installed/offline invocation above passes; no package was downloaded or runner
+changed. All failed checkpoints remain retained alongside successful reruns.
+
+Evidence: `/tmp/ae-cold-final-checks-20260907.json` and its named logs;
+`/tmp/ae-cold-react-doctor-staged-final-20260908.json`;
+`/tmp/ae-cold-final-commit-preparation-20260908.json`;
+`/tmp/ae-cold-final-ts-standards-baseline-comparison-20260907.json`;
+`/tmp/ae-cold-fix-probe-race-review-20260907`,
+`/tmp/ae-cold-fix-route-lint-review-20260907`,
+`/tmp/ae-cold-fix-public-browser-review-20260907`,
+`/tmp/ae-cold-fix-provider-nav-review-20260907` and
+`/tmp/ae-cold-fix-a11y-labels-review-20260907` contain exact snapshots, hashes,
+complete deltas and actual check output. Browser failure contexts/screenshots
+are retained under `/tmp/ae-cold-public-e2e-failure-evidence-20260907` and
+`/tmp/ae-cold-a11y-failure-evidence-20260907`. These are deliberate audit records;
+transient browser output is not a source deliverable.
+
+## Integrated completion finding C19 — 2026-09-08
+
+**Status: source correction independently accepted; final integrated checks running.**
+The completion audit disproved an earlier blanket OpenAPI exception:
+`PublicToolDescriptor.operationId` is an AE-generated capability identity, not
+an upstream OpenAPI field. The surrounding public DTO has no exact retained-name
+exception. Correcting it is within the approved whole-source vocabulary cutover.
+The earlier reports remain dated evidence, including this classification error.
+
+Rename only this public descriptor field to `toolId` through its type, strict
+schema, producer, wire serializer/deserializer, search/UI consumers and actual
+HTTP/MCP/CLI/test fixtures. `toolId` names the stable capability identity;
+`toolRef` remains the version-bound callable reference. No compatibility alias.
+Preserve `CapabilityToolSourceRecord.operationId`, PublishedTool identity,
+`createPublicToolRef` input/material, `current_operation_commitment:v1` material,
+upstream OpenAPI fields, opaque prefixes and exact hash bytes. Those are separate
+protected boundaries; their protection does not extend to the surrounding DTO.
+No persisted schema, data, deployment, endpoint or dependency change is included.
+
+Exact production seam: `tool-projection-types.ts` PublicToolDescriptor only;
+`tool-project.ts` returned descriptor; wire types/serializer/deserializer;
+`tool-schemas.ts` strict descriptor; `tool-search.ts` descriptor search text;
+`AeToolContractSections.tsx` existing Tool ID value. Source-record fixtures keep
+their protected names; returned public-descriptor fixtures use `toolId`.
+
+Acceptance: actual projection → wire roundtrip → strict schema retains `toolId`
+and rejects the old public alias; HTTP/MCP/CLI/UI consumers continue to work;
+Tool reference golden value and commitment/digest tests remain unchanged.
+Pre-change golden fixture (`capability:reference.lookup`, publication
+`publication:reference.lookup` revision 3, contract `reference.lookup` version 1,
+digest `digest:contract`) yields
+`operation:v1:e44c003644675cf77edbadbfa296976d2cb0bc82d7d20445df92af940bc18f6b`.
+A single bounded Luna Max owner implements; root reviews, runs installed Doctor,
+rebuilds affected artifacts and completes integrated acceptance. Previous green
+checks are retained as checkpoints, not proof of this pending DTO correction.
+
+C19 source receipt: complete **15-file** producer/type/wire/schema/Convex return
+validator/search/UI/test correction independently reviewed, with all final
+hashes matching. **14 existing test files / 234 tests pass**, including the
+added strict-alias/golden regression; coherent typecheck and diff check pass.
+The initial six canonical-read failures were real Convex return-validator
+mismatches; correcting that public validator produced **20/20** canonical-read
+passes. No stored schema or protected hash/source-record field changed.
+Final installed offline Doctor exited 0: two previously accepted route-test
+children-prop findings, baseTotalCount 30, no C19-attributable diagnostic.
+Candidate: `/tmp/ae-cold-fix-tool-descriptor-id-review-20260907`;
+Doctor: `/tmp/ae-cold-react-doctor-tool-descriptor-id-20260907.json`.
+
+## Cold-review repair plan — 2026-09-07
+
+**Status: independent review accepted; implementation authorized (2026-09-07).**
+This plan supersedes the repair-order suggestions below, not the retained audit
+or earlier dated verification. It covers all eighteen consolidated findings and
+all thirteen discovery gaps in the [cold-review register](./WF-20260905-vocabulary-cold-review-20260907.md).
+Raw reports and bad-behavior probes remain unchanged. Passing those probes proves
+the old defects; it is not regression acceptance.
+
+### Outcome, authority and boundaries
+
+Restore complete journeys across actual producers, validators, consumers and
+human/agent guidance. Validate meaning against `PRODUCT.md` and `CONTEXT.md`, not
+only spelling. Implement only in the original dirty checkout on
+`codex/vocabulary-rationalisation`; a19f remains outside the write boundary.
+Preserve all pre-existing unrelated edits, protected identifiers, protocol
+vocabulary, hash material, evidence and historical records. No deployment,
+publishing, dataset rebuild, migration, new service or dependency is included.
+
+Root owns sequencing, integration, evidence and serialized owned local commits.
+Bounded Luna Max owners implement one complete boundary at a time; independent
+read-only preparation/review may overlap, source ownership may not. Each owner
+reads PRODUCT, CONTEXT, the qualified finding and relevant project/skill rules.
+Convex writers additionally read the generated project guidelines and Convex
+expert guidance. Relevant frontend checks include the installed React Doctor;
+reuse existing components, SDKs, validators and test infrastructure. The separate
+oversight task reviews this plan and final evidence without competing edits.
+
+Reference-product research supports reuse of current scoped Agent connection,
+Account/budget and recovery boundaries: [Locus agent connections](https://docs.paywithlocus.com/locus-pro/connect-agents)
+and [Nevermined API documentation](https://nevermined.ai/docs/api-reference/introduction).
+It does not authorize copying their services or adding orchestration to AE.
+
+### Decisions surfaced before implementation
+
+1. **C15:** add the canonical `quote` endpoint discriminator. No current kind
+   correctly describes a Quote; `call` and discovery `tool_read` would conflate
+   distinct stages. Update both manifest projections and exhaustive consumers.
+   This is a narrow public discriminator correction, not a new endpoint.
+2. **C10/C18:** atomically cut `ae supply operations` over to `ae supply tools`
+   across registration, help, examples, tests and packaged surfaces. No alias;
+   protected external operation names and hash fields remain exact.
+3. **C04:** add a bounded owner-only read projection using existing owner
+   authorization and Call indexes, with shared Account AUD balance. Use the
+   current UTC calendar month explicitly for usage (the activity page precedent),
+   recent paginated activity, and explicit incomplete amount coverage. Do not
+   manufacture all-time totals or revive the retired USD ledger. This extends
+   an internal owner read contract; no new persisted schema is proposed.
+4. **C08:** select evidence against trusted active custody identity/generation,
+   not arbitrary newest environment rows. Retain append-only history and fail
+   closed on genuine conflicts. Bounded discovery confirms the V8-safe existing custody config parser and
+   budget-ref helper can be exposed through capability-supply/convex.ts; use
+   Convex env and the existing custody/generation index descending for one row.
+   No persisted-treasury TTL/future-clock tolerance is established; do not invent
+   one from unrelated 15-second evidence rules. G02 retains those policies and
+   ingestion/activation as explicit operational work.
+5. **G03, retained contract:** PRODUCT requires an unexpired Quote. Expiry is
+   checked before consumed replay; retain this behavior and document existing
+   Call status recovery when the Call reference is available. Extending replay
+   retention is optional future contract work, not a blocker or confirmed defect.
+6. Joel authorized running the existing installed CLI Node 20/22 matrix. Project
+   commands remain Node 22/npm 11.5.1; only that unchanged script's established
+   compatibility subprocesses use its Node 20 path. No temporary runtime workaround.
+
+### Dependency and ownership queue
+
+| Wave / bounded owner | Responsibility | Dependency / acceptance |
+| --- | --- | --- |
+| A1 producer | C01 owner Tool readback | First P1; real backend-to-server-to-route projection passes |
+| A2 evidence | C16 durable late-observation digest | Exact established digest/replay and conflict behavior pass |
+| A3 authority | C09 independently expired grant | Shared authorization refuses expired/equal-boundary grants |
+| B1 owner money | C04 owner Agent activity/credit | Current AUD producer and both UI journeys agree |
+| B2 treasury | C08 active custody evidence selection | Trusted identity/freshness contract reviewed; history retained |
+| B3 Provider handoff | C05 x402 source-first connection | After A1; existing wallet proof and draft return path work |
+| C1 discovery | C02, C06, C07 | Correct inventory, bounded links and empty-page continuation |
+| C2 agent surfaces | C03, C12, C13, C18 plus C10 CLI verb | Producers stable; all advertised continuations execute |
+| C3 HTTP manifests | C14, C15 | Reviewed discriminator; authenticated request/parser contracts |
+| D1 semantic/UI/docs | Remaining C10, C17, ubiquitous-language findings | Stable names/contracts; current copy, docs and semantic claims agree |
+| D2 browser consumers | C11 | Updated actions, scopes, selectors; substantive assertions preserved |
+| E root integration | Cross-surface checks, independent review, fixes, owned commits | Every row has evidence or explicit justified runtime/decision hold |
+
+Global tests/builds run after source ownership. A larger boundary’s sole owner
+may be assigned one coherent typecheck at stable handoff; root never runs a
+concurrent compiler. Owners run narrow behavioral checks first; root runs final
+integrated checks against the coherent complete state. New evidence can adjust file ownership within the same boundary; material
+contract, storage, dependency or activation expansion must be surfaced first.
+
+### Changed flows and failure outcomes
+
+```mermaid
+flowchart LR
+  O[Owner session] --> A[Resolve canonical Account]
+  A --> D[Owned durable Agent directory]
+  D --> C[Principal-filtered Call history and period usage]
+  A --> B[One shared AUD Account balance]
+  C --> V[Agent access and owner credit Activity]
+  B --> V
+  O -->|foreign or absent session| R[Refuse]
+  C -->|missing amounts| U[Unknown amount coverage]
+  C -->|more rows| P[Recent page with cursor and coverage]
+```
+
+```mermaid
+flowchart LR
+  S[Selected x402 source candidate] --> D[Preserved integration draft]
+  D --> I[Inspect and select payment option]
+  I --> W[Wallet signs bound payee proof]
+  W --> C[Guarded owner connection]
+  C --> R[Resume same draft for publication]
+  W -->|cancelled or expired proof| K[Keep draft and allow retry]
+  C -->|foreign session or changed binding| F[Refuse connection]
+```
+
+Discovery pagination separately preserves continuation through a health-filtered
+empty page whenever later raw pages remain; only exhaustion permits the no-Tool
+fallback. Proof cancellation never implies publication; shared Account funds
+never imply Agent authority.
+
+### Finding implementation and regression matrix
+
+| ID | Concrete repair / reuse | Observable acceptance and failure coverage |
+| --- | --- | --- |
+| C01 | In `convex/capabilityProviderTools.ts`, align validator/response `tool` with `provider-workspace.functions.ts` and owner supply route. Complete the actual producer/consumer chain. | Extend provider workspace tests through real Convex readback and actual server consumer/route guard; ready Tool renders, missing/refused/foreign-owner states remain truthful. Do not merely replace a successful mock field. |
+| C02 | Replace retired `registry.operations` inventory prefix in `supply-landing.functions.ts` with actual `registry.tools` descriptors. | Existing supply-landing route test uses real registered action IDs; `/for-providers` presents the current callable surface. |
+| C03 | Correct stale `operation.status` in account safe continuations and latent `operation.invoke` in funding handoff. Use current registered status/balance/Quote guidance appropriate to state; funding never automatically authorizes a new Call. | Assert actual manifest/MCP descriptions and serialized outputs refer to real actions; preserve deliberate compact projection omissions. Funding-unavailable/pending/success guidance remains semantically correct. |
+| C04 | Replace `MoneyQueryPort`/USD retired-ledger caller in `agent-access-console.ts`. Reuse `resolveBusinessActor`, owned directory/grants, `moneyAccountFundingFormance` Account balance and `capabilityCallProjections`. Extend owner projection with principal-filtered paginated current Call DTO and explicit period usage. Update view model and both Agent access/owner credit consumers. | Real owner/stranger/anonymous authorization tests; canonical Account from session, Agent principal from owned directory. AUD exponent 6 integer amounts; missing amounts never zero. Preserve credential attribution, delivery/payment/Call state separation and `toolRef`. Activity max 50/cursor, directory max 25 separately; label recent/truncated if continuation unavailable. Usage `[start,end)` retains 366-day cap, initial UTC month, settled-charge amount only with explicit complete coverage: sum valid settled rows, exclude released/refunded, and mark unknown/not_applicable/missing amounts uncovered. Denominator/counts describe Calls created in the selected UTC period, not charges settled during it or net/final-accounting spend. Mixed payment states and fallback usage amounts must not manufacture complete spend. Agent bearer reads remain separately tested. Canonical Agent activity/usage must survive an empty or unmatched provider-key/grant inventory: attach owner readback by principal directly, using credentials only for attribution/control enrichment. |
+| C05 | Connect source-first x402 handoff to existing inspect/payment-selection/payee-proof/wallet-signing/`connectOwnerX402` path; preserve durable source draft and return to publication. Reuse source-first-owner.ts, supply-funnel.functions.ts, supply-compatibility.ts and existing AeProviderWorkspace/AeOwnerProviderConnections panel; carry exact URL/method/environment and return existing owner.offerings.new draft/connection route. Existing x402 integration draft already supports owner-bound storage; do not expand HTTP/MCP attempt model. Keep httpCredentials rollout flag HTTP-only while preserving all x402 rollout/authorization/payment-profile/write/proof guards; no deployed flag change. Test HTTP refusal with its flag disabled while supported x402 follows its own guards. | Existing route/connection/publication tests cover valid selected option, cancellation, invalid or changed candidate, wrong wallet/claim, foreign owner, expired payee claim and resumed draft. Resume must refuse another owner’s draft or mismatched connection/environment. x402 integration draft itself has no cancellation/TTL state: abandonment preserves it; changed source/candidate refuses with source_changed. Do not apply HTTP/MCP attempt expiry to x402. No fake OpenAPI branch, bypassed payee proof or generic unavailable fallback. Exact publication authorization remains enforced; G08 governs eligibility. |
+| C06 | Reuse shared bounded `callableAlternativesHref` projection from `suggested-next-action.ts` in full/compact Tool inspector. | Rendered href checks for long query (>200), encoding and routeable filter match producer. Preserve existing default `window=30d`; it was not the defect. |
+| C07 | Preserve cursor/continuation when health filtering yields an empty raw page with more pages. Suggest a Service request only after exhaustion. Reuse current opaque cursor and shell-safe origin builder. Qualify empty-page CLI copy and the existing JSON note by page versus exhaustion; the note remains health-neutral for explicit health filters. | Real producer empty first page → later routeable page → executable CLI continuation. Cursor, filters, selected origin and JSON survive. Final empty page offers legitimate fallback. No speculative cursor-corruption redesign. |
+| C08 | Replace newest-two-environment/length-one shortcut in `capabilityQuotes.prepareFinancialSubjects`. Reuse existing `by_custody_and_observedAt` index and trusted active custody/generation; select newest applicable authoritative observation with bounded reads, then validate existing shape/network/capacity rules. Treasury TTL/future-clock policy remains explicitly unimplemented under G02. Never fall back to older healthy evidence when the newest applicable observation is invalid or negative. Keep `moneyTreasury.recordObservation` append-only. | Real Convex rows: one valid observation; two same-custody historical observations; old generation/other custody; conflicting identity; malformed/missing evidence; correct newest applicable evidence and refusal behavior. No unbounded scan, deleted history or arbitrary first-row acceptance. Do not import CDP Node SDK into query isolate. Derive active tuple from existing V8-safe config/budget-ref helper exposed through capability-supply/convex.ts; no new treasury freshness policy. Test invalid/missing config and no active match fail closed. |
+| C09 | Check normalized grant expiry independently at existing consequenceNow and finalNow decision points in shared `authorityBoundary.ts` authorization before Self acceptance, preserving downstream admission controls and the post-async recheck. | Real live credential with expired/equal-time grant refuses at both decision points, including expiry crossed during async snapshot work; current grant succeeds; revoked/stale generation/other bindings refuse. Normal issuance often aligns expiries; make no unproved spending-bypass claim. |
+| C10 | Finish ordinary product/operator navigation, accessibility copy, install/help/status/support/privacy, plugin descriptions, current DESIGN/START_LINE prose and workflow labels. Atomic CLI `supply tools` cutover as above. Include AeCompromiseRecoveryChecklist, AeCapabilityList, AeOperatorRouteStates, admin.index-health and owner.supply.connections.new. | Semantic cross-surface pass plus relevant rendered UI/CLI/plugin/help tests. Provider replaces supplier-role prose only when that is the actual role; Service/Offering/Source/Publication remain distinct. Preserve upstream OpenAPI operationId, x402 seller and exact protected identifiers. Do not rename artifact paths merely to change workflow display text. |
+| C11 | Repair deploy-smoke actions, current card selectors and invalid negative selector; update authenticated lifecycle actions/scopes/token assertions to actual registry/contracts. | Existing browser/source fixture checks retain auth refusal, idempotency and negative assertions. Local public browser checks use existing isolated setup. Hosted/authenticated execution only in separately authorized environment; test discovery or source inspection is not runtime proof. |
+| C12 | Align cold-loop recipe receipt/reuse steps in manifest to actual registered runners (status/history as applicable); do not invent commands to satisfy stale prose. | Every advertised executable step resolves to real registration and appropriate purpose; happy and recovery recipes remain usable. |
+| C13 | Use shared `continuationCommand` and baseUrlSource behavior for request/doctor/connect results, including creation, list/status, refusal, timeout and reuse. | Fresh CLI process follows printed command at non-default origin with JSON retained; shell-hostile opaque values, IPv6/loopback and quoted origin remain safe. No unsupported origin-data-leak claim. |
+| C14 | Enforce declared JSON Content-Type for Quote/Call/recovery through Node 22 built-in MIMEType where compatible with this server boundary, reusing the existing bounded JSON reader. Preserve authentication order. Avoid copying weak substring acceptance. | Authenticated text/plain JSON and missing/invalid media type return 415 without effects; valid mixed-case application/json with charset accepted; malformed JSON 400 and over-limit body 413; unauthenticated behavior and valid Quote/Call/recovery preserved. No CSRF/auth-bypass claim. |
+| C15 | Add `quote` to endpoint-kind contract/classifier using actual TOOL_QUOTE_ACTION_ID; update top-level and nested projections plus exhaustive consumers. | Quote is classified consistently, never Call/discovery; all remaining kinds stay correct; intentional compact MCP `{result: output}` envelope unchanged. |
+| C16 | Restore protected established `invocationRef` digest key in Convex generic Action execution late observation, matching development durable port. | Shared exact digest vector plus real both-port late replay: same material idempotent, legitimately changed material conflicts. No alias, migration or new canonical digest format. |
+| C17 | Repair two current roadmap file links to AeProviderWorkspace and provider workspace test. | Links resolve to real files; historic claims remain dated and qualified. |
+| C18 | Make supply.status businessRef/toolRef requirements truthful in help, onboarding and examples. Inventory is existing renamed `supply tools`; no optional-status fallback. | Advertised commands parse with concrete refs, missing Tool gives current useful help; quoted variables include explicit substitution instructions. Properly substituted commands were not broken by placeholder syntax. |
+
+### Ubiquitous-language acceptance
+
+Validate complete meaning in definitions, source comments, DTOs, product screens,
+CLI/HTTP/MCP/plugin instructions and current documentation. The callable supply
+unit is Tool; portfolio Service, Offering, Publication, Listing, Source and
+Provider connection remain distinct. Generic Action execution is not a purchased
+Call. Customer/Agent product roles are not generic IAM Principal/Account/User.
+Provider, fixed buyer-facing Seller and payment recipient remain separate.
+Funding is not authority; settlement is not delivery; delivery is not Purchase
+resolution/status. The host owns the larger task and memory.
+
+Qualify CONTEXT's opening compatibility/“Until then” statements against the
+accepted source cutover: historical/protected mappings are retained, not blanket
+permission for new old-name aliases. Qualify PRODUCT's accepted-implementation
+Quote paragraph against the real DTO: do not claim explicit Provider/Seller and
+full commercial terms are implemented where source only proves version/input,
+price/Account/budget/policy bindings and evidence digest. Preserve the target
+principal-reseller direction and explicit remaining implementation work.
+
+Correct the misleading protected `callRef` comment in
+`spending-policy-evaluation.ts` to established `invocationRef`; no hash change.
+Clarify the generic Action execution kernel header in `action-execution/runtime.ts`
+and its use by the Call lifecycle; no export rename. Preserve the already-correct
+protected operationRef projection explanation in contracts. The Tool ID displayed in AeToolContractSections is an AE-generated identity;
+C19 corrects its surrounding public DTO field to `toolId`. Only actual upstream
+OpenAPI fields and the exact protected source/hash keys retain `operationId`.
+
+### Discovery-gap dispositions (separate from confirmed fixes)
+
+| Gap | Evidence / disposition / closure condition |
+| --- | --- |
+| G01 installed/hosted/client matrix | Run Joel-authorized existing Node 20/22 installed package matrix after build. Hosted revision, deployed schema/data and live client acceptance stay explicit existing 31/35 release gates; local success does not prove them. |
+| G02 treasury ingestion/activation | Repository search finds no runtime caller of observer/recordObservation. Bounded discovery confirms no production observation caller or activation path, and observer does not supply bufferUnits. Separate operational decisions are invocation boundary, buffer policy and persisted-treasury max age/future-clock tolerance/stale behavior; unrelated 15-second evidence rules do not establish these. No scheduler/service or activation inferred. C08 source selection can close independently; production treasury evidence remains a release hold until authorized ingestion evidence exists. D1 qualifies the existing package-4-operations runbook’s observation step so helper availability is not presented as an activated pipeline. |
+| G03 consumed Quote expiry replay | Investigated and retained: PRODUCT requires an unexpired Quote; readForCall checks expiry before consumed replay. Document current Call status recovery when reference is available; qualify package-4-operations stale-Quote steps to avoid a replacement Call after dispatch may have begun. Future replay retention extension is outside this refactor, not a blocker. |
+| G04 grant expiry | Adversarial persisted state covered by C09; distinguish independently expired grant from normally aligned issuance. No extra finding or inflated severity. |
+| G05 SKILL origin | Packaged public skill intentionally shares canonical production instructions regardless of origin. Retain documented invariant and test non-default-origin parity; no templating without a product requirement. |
+| G06 chat recovery/context | Host owns project/task memory. Verify current six-tool/CLI/HTTP/MCP continuations via C12/C13; do not add orchestration, persistence or new recovery tools to fill this gap. |
+| G07 legacy money schema leads | `CreditAccountView.accountId` has no current successful producer; current owner/Agent balance uses accountRef. ProviderEarningsView.truncated has no live semantics from unavailable/stub producer. Record latent unsupported boundary, do not fabricate a C04 Provider earnings fix. |
+| G08 x402 connection eligibility | Investigated: UI lists same-Business available x402 adapter connections broadly; exact connection path re-inspects URL/method/payee/expiry/signature and staging verifies endpoint/payment/evidence/catalog target. No wrong-connection acceptance established; preserve these checks and no speculative eligibility-helper change. Generic source-first publisher versus stricter staging remains a runtime evidence distinction, not proof of a bypass. |
+| G09 source-write gateway path | `/api/v1/release/operation-gateway` participates in exact request-binding evidence; path validation alone does not establish deployed route. Preserve protected material; document meaning, do not lexical-rename or claim actual route existence. |
+| G10 example copyability | C18 improves explicit quoted variable setup/substitution. Ignored tools/ae/README is not a tracked finding, and correct substitution already worked. |
+| G11 device URI/transport recovery | Inspected connect.ts: verification_uri receives text-only validation; interactive TTY opens it through the platform opener, suppressed for JSON/non-TTY/disable flag. No exploit demonstrated and no scheme/origin validation proved. Accepted bounded C13 repair: built-in URL parsing requires absolute HTTP(S) before opening; allow loopback HTTP and legitimate cross-origin OAuth verification. Invalid/missing/unparseable/non-web values produce clear protocol failure and no launch. Test HTTPS/loopback, bad schemes and existing JSON/non-TTY suppression. No exploit claim, same-origin restriction, new dependency or framework. |
+| G12 Quote routes/MCP envelope | Literal routes and compact `{result: output}` projection are intentional and matched. Retain wire envelope; C15 fixes semantic classification only. |
+| G13 baseline diagnostics | Preserve 26 standards failures, seven parallel CLI failures and React Doctor 116 advisory baseline as dated failed/advisory evidence. Run relevant checks sequentially and compare affected frontend findings; fix attributable regressions, never claim aggregate green by waiver or perform blanket cleanup. |
+
+### Execution receipts
+
+- **C01 implemented; independent scoped review accepted.** Only production changes are
+  owner readback validator and producer keys `operation` → `tool` in
+  `convex/capabilityProviderTools.ts`. Existing server consumer and route already
+  require Tool. Real Convex owner publication/readback, actual server consumer
+  and route render/refusal regressions cover published, missing, anonymous and
+  foreign-owner results. Node 22.22.0/npm 11.5.1:
+  `npm exec -- vitest run tests/integration/capability-supply-owner-funnel-read.test.ts tests/unit/server/provider-workspace-functions.test.ts tests/unit/routes/supply-owner-routes.test.ts --no-file-parallelism`
+  passed **3 files / 17 tests**; `git diff --check` passed. Initial new-test fixture
+  expectation failures were corrected and remain in the retained test receipt.
+  No broad compiler, deployed browser or global check is implied. Coherent typecheck must validate the new server test query-helper assignability; resolve actual diagnostics at integration without rerunning unchanged tests. Review candidate
+  retained at `/tmp/ae-cold-fix-c01-review-20260907`.
+- **C16 implemented; independent scoped review accepted.** Restored established protected
+  `invocationRef` digest key in Convex; fixed literal digest vector exercises
+  actual Convex and development ports for applied/duplicate/material-conflict
+  outcomes and stored digest equality.
+  `npm exec -- vitest run tests/unit/action-execution/durable-action-execution-observation.test.ts tests/unit/action-execution/convex-handler-contract.test.ts --no-file-parallelism`
+  passed **2 files / 6 tests**; `git diff --check` passed. Review candidate
+  `/tmp/ae-cold-fix-c16-review-20260907`. No migration or hash format change.
+- **C09 implemented; independent scoped review accepted.** Added normalized grant expiry
+  checks at both existing consequenceNow and post-async finalNow decision points.
+  Real shared authorization tests cover expired/equal/current and expiry crossing
+  the async snapshot boundary.
+  `npm exec -- vitest run convex/agentAccessPrincipals.test.ts tests/unit/convex/authority-boundary.test.ts tests/unit/server/agent-access-auth.test.ts tests/unit/server/agent-account-api.test.ts --no-file-parallelism`
+  passed **4 files / 99 tests**; scoped `git diff --check` passed. A read-only
+  follow-up attempt wrote no files and ran zero tests; the final write-enabled
+  rerun supplied the passing receipt. Candidate `/tmp/ae-cold-fix-c09-review-20260907`.
+
+- **A-wave coherent typecheck:** initial run failed with seven diagnostics in
+  three new test fixtures: widened readonly control (C16), required router
+  children props (C01) and typed query-helper assignability (C01). No production
+  diagnostics. Bounded test-only correction now passes coherent `npm run typecheck`
+  and all three affected files (2 + 4 + 8 tests). It uses a narrow `satisfies`
+  fixture, explicit router children props and the actual typed query contract;
+  no casts/suppressions or production changes. Initial failed receipt remains
+  retained. Supplement `/tmp/ae-cold-fix-wave-a-types-review-20260907`; independent
+  supplement review accepted. Already-run affected-test outputs are attached. C04 is now the sole source owner.
+
+- **C04 implementation and final supplement independently accepted.** The
+  owner readback now uses canonical Account AUD funding and principal-filtered
+  Call history, independently of surviving credentials/grants. Created-period
+  pagination, rotation deduplication, mixed payment/amount coverage and known
+  empty usage are covered. Candidate `/tmp/ae-cold-fix-c04-review-20260907`
+  contains ten files; independent review confirmed all hashes and the passing
+  six-file **45-test** receipt plus coherent `npm run typecheck` (exit 0).
+  Earlier stale fixtures failed before correction. The worker lost completed
+  compiler metadata and started a redundant second run; root stopped it without
+  further source edits. No second-pass result is claimed. An intermediate resume
+  incorrectly selected Astra; those direct-principal/order edits were retained
+  and tested, while original and final source work used Luna Max. Subsequent
+  launch/resume commands explicitly pin model, reasoning, runtime and write mode.
+  Final review required the zero-row unavailable Activity UI to remain distinct
+  from known empty, and restoration of the existing two-independent-Agents test
+  assertion alongside rotation. The accepted supplement below resolves both.
+- **C04 frontend diagnostic:** installed React Doctor 0.7.7, offline, without
+  supply-chain or remote-score checks, compared the current tree with
+  `a51e17b221c6b73851c5873502d8150120ef3aad`. It analyzed 30 files in the changed
+  scope (42 changed paths reported), with ten base diagnostics and four new
+  warnings. Two C04 unnecessary sequential waits are assigned to the same
+  supplement. Two route-test `no-children-prop` warnings are independently
+  accepted advisory false positives: `React.createElement` supplies the required
+  Router children prop without competing nested children. No suppression or
+  file rename is needed. Report `/tmp/ae-cold-react-doctor-c04-20260907.json`.
+  This scoped result does not relabel the earlier 116-advisory whole-tree result.
+
+- **C04 supplement independently accepted; source acceptance complete.** The five-file
+  supplement `/tmp/ae-cold-fix-c04-doctor-review-20260907` removes both unnecessary
+  waits, distinguishes unavailable zero-row Activity with the existing refresh
+  action, and restores the independent-Agent grouping assertion alongside
+  rotation. Three affected files / **23 tests** and coherent `npm run typecheck`
+  pass; scoped diff check passes. Final installed React Doctor report
+  `/tmp/ae-cold-react-doctor-c04-final-20260907.json` contains only the two accepted
+  route-test advisories, with no C04 diagnostics. Original and supplement failed
+  attempts remain retained. C08 is now the sole source owner; no global-suite,
+  deployed-runtime or treasury-activation acceptance is implied.
+
+- **C08 independently accepted; source preparation boundary complete.** Candidate
+  `/tmp/ae-cold-fix-c08-review-20260907` contains five files. The preparation
+  boundary derives the trusted active custody reference/generation from current
+  Convex configuration and selects only its newest indexed observation, then
+  validates network, USDC/exponent, units, evidence and positive post-buffer
+  capacity. Older healthy evidence is never a fallback. The existing budget-ref
+  helper moved to the V8-safe configuration module with its hash material and
+  Node export preserved; append-only storage/writer behavior is unchanged.
+  Real preparation/observation regressions and existing Quote/config checks
+  passed **3 files / 34 tests**; observer checks passed **1 file / 29 tests**.
+  Final coherent `npm run typecheck` and scoped diff check pass. Two earlier
+  compiler attempts found three then one attributable undefined-narrowing/test
+  fixture diagnostics; fixes and affected reruns are retained. These are local
+  source/preparation receipts, not deployed managed-Quote or ingestion proof.
+  G02 buffer/freshness/activation decisions remain explicit. C05 is now the sole
+  source owner.
+
+- **C05 independently accepted; source scope complete.**
+  The source-first x402 draft now opens the existing Provider connection panel,
+  carries the saved endpoint/method/environment through inspection and wallet
+  proof, and returns the confirmed connection to that draft. HTTP rollout is
+  HTTP-only; x402 authorization, payment-profile and live proof checks remain.
+  Route search uses a truthful discriminated union. Refresh/navigation failures
+  retain the accepted connection for retry; handoff changes discard obsolete
+  pending returns. Canonical URL comparison agrees with backend normalization.
+  Original candidate `/tmp/ae-cold-fix-c05-review-20260907` (14 files), correction
+  `/tmp/ae-cold-fix-c05-corrections-review-20260907` (7 delta files), and evidence
+  `/tmp/ae-cold-fix-c05-evidence-review-20260907` (3 delta files) were independently
+  reviewed. Original **11 files / 80 tests** and correction **5 files / 56 tests**
+  passed; a later route environment edit was not covered by the original run,
+  and the correction added its regression. The final evidence command
+  `npm run test -- tests/unit/ui/owner-provider-connections.test.tsx tests/unit/capability-supply/source-first-owner.test.ts`
+  passed **2 files / 27 tests**, followed by coherent `npm run typecheck` exit 0.
+  Actual assertions now cover invalidate and navigation rejection retries with
+  wallet/connect each once, handoff replacement during an in-flight refresh,
+  cancelled/refused wallet proof, and resume with explicit or omitted environment
+  metadata plus mismatched/foreign/changed-source refusals. The original panel
+  test count alone did not establish all those cases. x402 drafts have no new
+  expiry/cancellation storage; abandonment preserves the draft.
+  Final installed Doctor `/tmp/ae-cold-react-doctor-c05-bound-20260907.json`
+  failed with one new panel render-time ref mutation and the two already accepted
+  route-test advisories (base total 15). The independently accepted one-file correction
+  `/tmp/ae-cold-fix-c05-render-review-20260907` moves ref synchronization into a
+  layout effect with the same primitive identity dependencies. The affected panel
+  passed **9 tests** and final coherent typecheck exited 0. Final installed Doctor
+  `/tmp/ae-cold-react-doctor-c05-render-20260907.json` exited 0 with only the two
+  accepted route-test advisories and no C05 diagnostics. Failed receipts remain
+  retained. All correction/resume turns were verified as explicit Luna Max.
+  C1 discovery (C02/C06/C07) is now the sole source owner.
+  No live wallet, hosted publication, global-suite or deployment proof is implied.
+
+- **C02/C06/C07 independently accepted; discovery source scope complete.**
+  Candidate `/tmp/ae-cold-fix-discovery-review-20260907` contains nine files.
+  Supply landing selects actual `registry.tools` descriptors; the regression
+  checks the four registered public IDs. Both inspector layouts use the shared
+  normalized, 200-character alternative-search projection while preserving
+  `window=30d`, routeable filtering and equivalent rendered URL semantics.
+  Empty health-filtered pages retain the real producer cursor through transport,
+  HTTP route and a fresh CLI process; the printed continuation preserves origin,
+  filters and JSON mode and reaches a later routeable Tool. CLI/JSON copy is
+  page-qualified and health-neutral; existing exhausted fallback assertions remain.
+  `npm run test -- tests/unit/capability-supply/supply-landing-authority.test.ts tests/unit/routes/supply-landing.test.ts tests/unit/routes/tool-detail-route.test.tsx tests/unit/market-terminal/search-origin-continuation.test.ts tests/unit/market/suggested-next-action.test.ts tests/unit/market-terminal/cold-loop.test.ts`
+  passed **6 files / 88 tests**, then final coherent typecheck and scoped diff
+  check passed. Initial tests had two new expectation failures (router-normalized
+  apostrophe encoding and safely unquoted origin); initial typecheck had four
+  attributable fixture/result-narrowing diagnostics. Corrections and successful
+  reruns are retained. The newly introduced whole-transport double cast was
+  removed using the existing typed transport/fetch seam. Final installed Doctor
+  `/tmp/ae-cold-react-doctor-discovery-20260907.json` exited 0 with only the two
+  accepted route-test advisories (base total 17), no discovery findings. These
+  are local source/CLI receipts; hosted acceptance remains separate. C2 agent
+  surfaces is now the sole source owner.
+
+- **C2a independently accepted; coherent C2 typecheck completed below.**
+  The initial broad C2 owner performed inspection only and was stopped at the
+  agreed context guard. Implementation was split into sequential registry,
+  request/doctor, and connection groups without dropping accepted scope.
+  Candidate `/tmp/ae-cold-fix-agent-registry-review-20260907` contains twelve files.
+  C03 account activity advertises registered `call.status`; funding metadata
+  points to existing funding status, balance and Quote reads and explicitly
+  separates credit from authority or a new Call. Serialized manifest and actual
+  registry regressions retain the intentional compact MCP omission of
+  `invocationContract`. C12 recipes use registered history/status/wait steps;
+  subprocess tests establish help availability and independent source inspection
+  confirms the actual runner registration. They do not claim executed purchases.
+  C10 CLI/C18 atomically replace `supply operations` with `supply tools`, with no
+  alias, and align help/current examples with the pre-existing requirement for
+  both status references. Missing Tool input gives canonical usage/help without
+  fetching; quoted examples give explicit substitution directions.
+  Sequential `npm exec -- vitest run <file> --reporter=default` receipts cover
+  `tests/unit/agent-access/account-actions.test.ts` (**5**), and
+  `tests/unit/market-terminal/{manifest-oauth,recovery,supply,cli-errors-help}.test.ts`
+  (**4/19/11/16** respectively): latest per-file **55 passing tests**, not one
+  combined run. Initial help assertions had one capitalization mismatch (15
+  passed/1 failed); its correction and successful rerun are retained. The final
+  supplement reran supply and manifest tests (11/4 passing); two intervening
+  edits changed only test titles. Scoped diff checking passed. Independent review
+  verified all twelve final hashes, source and evidence. C2b request/doctor is
+  now the sole source owner; coherent C2 typechecking follows connection fixes.
+  No global-suite, installed-package or hosted acceptance is claimed here.
+
+- **C2b independently accepted; coherent C2 typecheck completed below.**
+  Candidate `/tmp/ae-cold-fix-cli-guidance-review-20260907` contains request and
+  doctor source plus three existing test files. Creation, refusal, list and
+  status guidance preserves selected nondefault origin and JSON mode through
+  the existing shell-safe continuation builder. Doctor passes the same options
+  through supply/request/balance/Call/reuse diagnostics; recorded uncertain
+  Calls continue through status/wait and Provider inventory uses `supply tools`.
+  Review caught an introduced duplicate `--base-url` in the nonloopback config
+  fallback, which the actual CLI parser rejects. The same owner corrected it to
+  one sanitized origin plus the original output mode. The intentional existing
+  loopback-to-hosted diagnostic remains explicit. Its regression follows the
+  printed config command in a fresh shell; request creation separately follows
+  an IPv6 continuation carrying a hostile opaque reference unchanged without
+  executing its marker command.
+  Sequential `npm exec -- vitest run <file> --no-file-parallelism` passed
+  `tests/unit/market-terminal/request-origin-continuation.test.ts` (**4**),
+  `request-memory.test.ts` (**5**) and `doctor.test.ts` (**11**): **20 tests**.
+  Initial receipts are retained: request origin 3 passed, request memory
+  1 passed/2 failed, doctor 2 passed/9 failed, before expected guidance was
+  updated and the reviewed correction applied. Final scoped diff check passed;
+  independent review verified all five hashes and complete source/test evidence.
+  Both implementation turns were explicit Luna Max. C2c connection/URL repairs
+  are now the sole source work. Global, compiler, package and hosted checks are
+  not included in this bounded receipt.
+
+- **C2c and the complete C2 group independently accepted; source scope complete.**
+  Final candidate `/tmp/ae-cold-fix-cli-connect-review-20260907` contains only
+  `tools/ae/commands/connect.ts` and its existing cold-loop test. Connection
+  results and human guidance use exact shell-safe continuations with selected
+  nondefault origin and original output mode, including Provider inventory and
+  timeout. The device response validates an absolute HTTP(S) verification URL
+  before output/opener; valid cross-origin HTTPS and loopback HTTP remain
+  accepted. Missing, malformed, relative and non-web values refuse before a
+  browser launch. Independent suppression cases cover JSON with a TTY, human
+  output without a TTY, and explicit browser disabling. Fresh IPv6 CLI
+  follow-through reaches the selected server; the human command line is exact,
+  with no appended punctuation or bare secondary examples.
+  Early review corrected an initially unwired validator and residual human
+  suffix before testing. The first cold-loop run had **32 passing/11 failing**
+  cases from new test setup (ESM mock, Provider option placement and empty-result
+  expectation); corrections passed **43** tests plus unchanged manifest/OAuth
+  **4**. Root's coherent C2 typecheck then found one TS2790 fixture deletion
+  error. Final polish uses `Reflect.deleteProperty`, removes command-line
+  punctuation, and advances timeout-test time at the token-fetch boundary rather
+  than counting internal clock reads. The final
+  `npm exec -- vitest run tests/unit/market-terminal/cold-loop.test.ts --no-file-parallelism`
+  passed **46 tests**; assigned coherent `npm run typecheck` exited **0** against
+  all C2 changes. Failed receipts and scoped diff checks are retained. Independent
+  review verified both final hashes, complete source and raw evidence, and
+  accepted C2a/C2b/C2c together. All five connection owner turn-context records
+  were verified as explicit Luna Max. All 47 unrelated dirty paths were checked
+  against the pre-repair baseline and remained unchanged, including deletions.
+  C3 HTTP contracts are now the sole source work. No hosted OAuth/browser launch,
+  deployment, global-suite or rebuilt-package acceptance is implied.
+
+- **C14/C15 independently accepted; HTTP contract source scope complete.**
+  Candidate `/tmp/ae-cold-fix-http-manifests-review-20260907` contains nine files.
+  The shared Node 22 `MIMEType` predicate accepts JSON media types with valid
+  case/parameters and refuses substring lookalikes. Quote/Call and both recovery
+  handlers enforce the declared media contract without service dispatch on
+  authenticated unsupported media. Review corrected the first recovery placement:
+  cancel/reconcile already parsed before authentication, so media validation now
+  runs after the authentication result while preserving their existing bounded
+  body/JSON/schema order. Four new unauthenticated wrong/missing-media cases retain
+  401/no service; authenticated cases return 415. Valid mixed-case parameterized
+  Quote/Call/cancel/reconcile requests pass; existing body-limit and malformed-JSON
+  behavior remains covered. The public Tool-read parser reuses the same predicate:
+  actual list/search/describe/compare routes reject misleading JSON substrings
+  before remote admission and a valid mixed-case request still succeeds.
+  C15 adds the approved `quote` endpoint discriminator using the registered
+  `TOOL_QUOTE_ACTION_ID`; full/compact endpoints distinguish Quote from Call or
+  discovery and the already-correct nested gateway route is preserved.
+  Final `npm exec --offline -- vitest run tests/unit/server/tool-market-routes.test.ts tests/unit/server/call-recovery-api.test.ts tests/unit/server/call-api.test.ts tests/unit/server/bounded-request-body.test.ts tests/unit/discovery/site-discovery-manifest.test.ts --no-file-parallelism`
+  passed **5 files / 69 tests**; coherent
+  `npm run typecheck -- --pretty false` exited **0**. Initial four-file results
+  had 54 passing/2 failing new fixture assertions, then 56 passing after using a
+  valid Quote DTO and the correct manifest field location. Root's added public
+  route run had 8 passing/1 failing stale C1 empty-search-note expectation; the
+  final supplement aligns that expectation with accepted C1 copy. Those receipts
+  and the reviewed auth-order correction remain retained. Independent review
+  verified all nine final hashes and complete source/test evidence. All four
+  owner turn-context records were explicit Luna Max. No persisted schema,
+  dependency, deployment or hosted proof was introduced. D1 language/documents
+  is now the sole source work.
+
+- **D1 semantic/UI/docs (C10 remainder, C17 and G02/G03) independently
+  accepted.** The complete 36-file candidate updates current navigation,
+  onboarding, status, support, privacy, plugin descriptions, workflow display
+  labels and product documentation. Public status counts remain Offerings;
+  generic Action execution, purchased Call, Provider/Seller/payment recipient,
+  Agent budget, Customer-wide exposure and Account funds remain distinct.
+  PRODUCT qualifies the actual Quote DTO against the fuller commercial target;
+  CONTEXT no longer presents retained historical/protected names as current AE
+  aliases. Two roadmap links resolve. The current runbook retains known-Call
+  recovery after possible dispatch and explicitly leaves treasury ingestion,
+  buffer and freshness activation unimplemented. Hash/protocol values and
+  artifact paths remain unchanged.
+  `npm exec vitest run -- tests/unit/operator-navigation.test.ts tests/unit/operator-shell-chrome.test.tsx tests/unit/ui/agent-door-page.test.tsx tests/unit/ui/demand-console.test.tsx tests/unit/routes/status-route.test.tsx tests/seo/agent-skill.test.ts tests/unit/routes/admin-source-authority-review.test.tsx`
+  passed **7 files / 60 tests**; coherent typecheck, roadmap/link/plugin checks
+  and diff check passed. Independent review corrected Customer-wide exposure,
+  Call status wording, the AE-generated Tool ID label, recorded treasury
+  capacity wording and Tool reference label. The final five-file supplement
+  passed **1 file / 2 tests**, another coherent typecheck and scoped diff check.
+  An initial shell-quoted string check failed before its corrected replacement
+  passed; no source failure is concealed. Final installed offline Doctor exited
+  0 with only the two previously accepted route-test children-prop findings
+  (newCount 2, baseTotalCount 27), no D1-attributable diagnostic. Full 36-file
+  and final five-file hashes/source/tests independently accepted. Candidates:
+  `/tmp/ae-cold-fix-semantics-review-20260907` and
+  `/tmp/ae-cold-fix-semantics-reviewfix-review-20260907`; final Doctor:
+  `/tmp/ae-cold-react-doctor-semantics-final-20260907.json`.
+- **D2 browser consumers (C11) independently source-accepted.** Exactly the
+  staging chat and authenticated lifecycle test files now use registered Tool
+  actions, current OAuth scopes/MCP name and actual `data-tool-card` markup;
+  malformed negative selectors are valid and still assert zero purchased Calls.
+  Exactly-once search, shared privacy, auth refusal, credential lifecycle and
+  idempotency assertions remain. Coherent typecheck and diff check passed.
+  Owner discovery listed **4 authenticated project entries**; its initial
+  deploy-smoke discovery used the default configuration and selected no tests.
+  Root's corrected
+  `npm exec --offline -- playwright test --config=playwright.chat-staging.config.ts chat-browser-staging.spec.ts --list`
+  exited 0 and listed **1 staging test**. These are parse/discovery receipts,
+  not hosted/authenticated runtime passes. Both final hashes and complete diff
+  independently accepted at `/tmp/ae-cold-fix-browser-consumers-review-20260907`;
+  corrected discovery log `/tmp/ae-cold-browser-smoke-discovery-20260907.log`.
+- **Integrated checks begun; completion remains unproven.** Complete-state
+  typecheck passed. Existing Convex codegen dry-run then failed because C14's
+  Node MIME parser import entered the shared portable body-reader module used
+  by non-Node Convex bundles. Same C3 owner is isolating that Node dependency
+  at its actual HTTP callers; no parser weakening or backend runtime change is
+  authorized. Failure retained in
+  `/tmp/ae-cold-final-convex-codegen-20260907.log`. Full integrated suites,
+  artifact/package/browser checks, final review and owned commits remain open.
+
+- **Integrated C14 runtime corrections independently accepted.** The strict
+  MIME predicate is unchanged in meaning but now lives in the narrow
+  `json-content-type.ts` server helper, loaded through a call-time dynamic
+  Node import. Portable bounded readers have neither a Node import nor a
+  re-export of the predicate. Both async HTTP consumers await their five
+  checks in the existing authentication/body/dispatch order. This fixed the
+  actual Convex bundle failure; the first codegen retry passed. The full unit
+  suite then exposed eleven client-route module-scope Node import failures,
+  so the call-time import correction was required as well. Its **5 files /
+  176 tests** (55 HTTP cases plus 121 route graph checks) and coherent
+  typecheck pass. Final codegen retry also passes. Candidates
+  `/tmp/ae-cold-fix-http-runtime-review-20260907` and
+  `/tmp/ae-cold-fix-http-lazy-review-20260907` were fully reviewed; root
+  normalized only two incidental indentation slips before final hash review.
+- **Integrated semantic assertion supplement independently accepted.** The
+  first complete sequential unit run finished **458 files / 4,184 tests
+  passing**, **5 files / 15 tests failing**. Eleven failures were the Node
+  route import issue above; four cases expected stale Provider/recovery/workflow
+  labels. Five expected strings across four existing test files now match the
+  independently accepted copy, preserving all links, independent controls,
+  confidentiality, credential-free release and ordering assertions. Affected
+  checks pass **7 + 3 + 9 + 4 = 23 tests**. Full four-file diff and hashes
+  accepted at `/tmp/ae-cold-fix-semantic-assertions-review-20260907`.
+  The original failed full suite remains at
+  `/tmp/ae-cold-final-unit-sequential-20260907.log`; the complete-state rerun
+  and remaining integrated gates are still required. Current check receipts
+  accumulate at `/tmp/ae-cold-final-checks-20260907.json`.
+
+- **Integrated C16 import correction independently accepted.** The import
+  guard found the observation test importing `DurableControlRow` from a private
+  module. The identical type was already exported by the approved runtime
+  facade. One erased type-only import now uses that facade; no production,
+  manifest, exception or export change. Observation **2 tests**, module guard
+  **11 tests**, and coherent typecheck pass. Full imports then passed **49
+  tests** through `gate:anatomy`, whose discovery/envelope **5 tests** and UI
+  contract **2 tests** also passed. Candidate
+  `/tmp/ae-cold-fix-c16-import-review-20260907`; initial import failure retained
+  at `/tmp/ae-cold-final-imports-20260907.log`. These are pre-C19 checkpoints;
+  final public-descriptor acceptance remains separately required.
+
+### Verification and closeout
+
+For each owner, record files, concrete behavior, exact narrow commands/results,
+new failures and limitations in this existing work record. Use actual Convex
+producers and real registered contracts where they were previously hidden by
+mocks. Await async effects before assertions. Check affected refusal/recovery
+paths as well as happy paths. Tests for copy/link edits need only existing
+appropriate checks, not ceremonial new infrastructure.
+
+Root then runs the existing typecheck, Convex codegen check, full unit and
+integration suites sequentially, type/import/conformance/release architecture,
+anatomy, SEO/UI contracts, lint/standards, build/package and authorized installed
+CLI matrix as applicable to the final changes. Use package.json's existing
+commands and retain exact results; known failures remain visible. React Doctor
+uses installed offline tooling. Browser checks use existing local public setup
+where applicable; report authenticated/hosted/live checks as unrun unless their
+environment is authorized and actually executed. No tool-list-only receipt is a
+browser acceptance result.
+
+Completion requires a per-C01–C18 implementation/test disposition, per-gap
+investigated disposition, cross-surface semantic review, independent scoped
+review resolved, generated/package consistency, and serialized commits containing
+only owned changes. Restore/retain unrelated dirty edits exactly. Remove task
+scratch artifacts except deliberate rollback/evidence records. Report source
+readiness separately from outstanding commercial implementation, G02 activation
+and parked runtime release gates. Never carry earlier green receipts forward as
+proof of these later repairs.
+
+## Cold audit follow-up — 2026-09-07
+
+Five waves of three independent cold Luna Max reviewers and parent validation
+identified eighteen open finding groups (1 P1, 13 P2, 4 P3). The
+[consolidated audit](./WF-20260905-vocabulary-cold-review-20260907.md) records the evidence,
+deduplication, limits and proposed repair order. Fixes remain pending. Earlier
+source-review and verification receipts below remain dated evidence; they do
+not establish that these subsequently identified findings are resolved.
+
 ## Current source closeout — 2026-09-07
 
 All ten module groups, their material corrections, current documentation and
