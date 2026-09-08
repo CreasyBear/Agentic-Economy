@@ -1,11 +1,13 @@
+import { fileURLToPath } from 'node:url'
 import { defineConfig, devices } from '@playwright/test'
-import { authenticatedE2EEnvironment, requireAuthenticatedE2EEnvironment } from './tests/e2e/authenticated/environment'
+import { authenticatedE2EEnvironment, requireAuthenticatedE2EEnvironment } from '../e2e/authenticated/environment'
 
 const environment = authenticatedE2EEnvironment
 if (environment.required) requireAuthenticatedE2EEnvironment()
 
 export default defineConfig({
-  testDir: './tests/e2e/authenticated',
+  testDir: '../e2e/authenticated',
+  outputDir: fileURLToPath(new URL('../../test-results', import.meta.url)),
   fullyParallel: false,
   workers: 1,
   retries: process.env.CI ? 1 : 0,
@@ -42,10 +44,10 @@ export default defineConfig({
       }],
   ...(environment.configured && environment.externalBaseUrl === undefined ? {
     webServer: {
+      cwd: fileURLToPath(new URL('../../', import.meta.url)),
       command: 'npm run dev -- --port 3021 --strictPort --host 127.0.0.1',
       url: 'http://127.0.0.1:3021',
       env: {
-        ...process.env,
         AE_CANONICAL_BASE_URL: environment.baseURL,
       },
       reuseExistingServer: false,

@@ -80,7 +80,7 @@ the Codex IDE extension does not currently provide the same plugin path.
 This is a reference for familiarity, not an instruction to copy OpenAI's
 labels, directory or permission model.
 
-The [whole-product papercut register](../.planning/audits/product-papercut-register-2026-09-03.md)
+The whole-product papercut register (local reference: `.planning/audits/product-papercut-register-2026-09-03.md`)
 is point-in-time evidence. Its old score is not a current score. Its relevant
 journeys must be rerun against one Package 6 revision.
 
@@ -248,9 +248,9 @@ The joins are incomplete:
   another component.
 
 Relevant source:
-[Provider status](../src/modules/capability-supply/supplier-operation-status.ts),
-[shared continuations](../src/modules/market/suggested-continuation.ts),
-[Provider status view](../src/components/ae/supply/AeSupplierOperationDetail.tsx),
+Provider status (historical reference; unavailable: `src/modules/capability-supply/supplier-operation-status.ts`),
+shared continuations (historical reference; unavailable: `src/modules/market/suggested-continuation.ts`),
+Provider status view (historical reference; unavailable: `src/components/ae/supply/AeSupplierOperationDetail.tsx`),
 and [support](../src/routes/support.tsx).
 
 ## Inverse premortem: what made success feel inevitable

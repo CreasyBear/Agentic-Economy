@@ -54,8 +54,8 @@ the core transaction.
 ## Evidence base
 
 The decision-atomic authority for this research is the
-[120-item Nevermined Scavenge Papercuts ledger](../.planning/nevermined-docs/NEVERMINED-SCAVENGE-PAPERCUTS.md),
-with an explicit [corpus coverage and proof-boundary map](../.planning/nevermined-docs/NEVERMINED-CORPUS-COVERAGE.md).
+120-item Nevermined Scavenge Papercuts ledger (local reference: `.planning/nevermined-docs/NEVERMINED-SCAVENGE-PAPERCUTS.md`),
+with an explicit corpus coverage and proof-boundary map (local reference: `.planning/nevermined-docs/NEVERMINED-CORPUS-COVERAGE.md`).
 It exceeds the current Whop and Locus inventories by item count and adds exact
 AE opportunity class, current maturity, gap, acceptance test, priority,
 disposition and evidence semantics to every stable `NVM-NNN` decision. This
@@ -66,11 +66,11 @@ website and application surfaces, public GitHub source, OpenAPI contracts,
 releases, CI, tests, examples, package metadata, live Catalog/ARD endpoints,
 status configuration and public legal/security claims:
 
-- [Product and application](../.planning/nevermined-docs/01-PRODUCT-AND-APP.md)
-- [API and protocol](../.planning/nevermined-docs/02-API-AND-PROTOCOL.md)
-- [TypeScript SDK](../.planning/nevermined-docs/03-TYPESCRIPT-SDK.md)
-- [Python SDK and integrations](../.planning/nevermined-docs/04-PYTHON-AND-INTEGRATIONS.md)
-- [Maturity and opportunities](../.planning/nevermined-docs/05-MATURITY-AND-OPPORTUNITIES.md)
+- Product and application (local reference: `.planning/nevermined-docs/01-PRODUCT-AND-APP.md`)
+- API and protocol (local reference: `.planning/nevermined-docs/02-API-AND-PROTOCOL.md`)
+- TypeScript SDK (local reference: `.planning/nevermined-docs/03-TYPESCRIPT-SDK.md`)
+- Python SDK and integrations (local reference: `.planning/nevermined-docs/04-PYTHON-AND-INTEGRATIONS.md`)
+- Maturity and opportunities (local reference: `.planning/nevermined-docs/05-MATURITY-AND-OPPORTUNITIES.md`)
 
 The canonical public docs index contained **274 entries** across product,
 integration, solution, API, SDK, CLI and specification material. The active docs

@@ -1,7 +1,7 @@
 # Workflow lessons
 
 Curated guidance for new work. Product and architecture authorities take
-precedence. Existing historical lessons remain at `.superstack/learnings.md`;
+precedence. Existing historical lessons remain at `docs/workflow/history/superstack-learnings.md`;
 consult relevant entries without copying the whole ledger here.
 
 ## WF-L-001 — Prove the promised environment

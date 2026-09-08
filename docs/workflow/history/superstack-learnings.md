@@ -1,6 +1,8 @@
 # Project Learnings
 
-> Managed by `/learn`. Append-only — latest entry wins on conflicts.
+> Historical learning record, filed on 2026-09-08. Current guidance is in
+> `PRODUCT.md`, `CONTEXT.md` and `docs/workflow/lessons.md`; dated entries below
+> are preserved as evidence and do not override them.
 
 ## Patterns
 

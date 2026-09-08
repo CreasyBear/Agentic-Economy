@@ -27,7 +27,7 @@ Package 6 should close at **controlled maturity (L1)** for all onboarding and gu
 
 ## Authority and method
 
-Product meaning came from [PRODUCT.md](../PRODUCT.md), [CONTEXT.md](../CONTEXT.md), [the Package 6 roadmap](../IMPLEMENTATION_ROADMAP.md#6-onboarding-content-and-language--planned) and [DESIGN.md](../DESIGN.md). Current source and tests were used only to identify the local baseline. The [Package 5 atomic plan](../docs/designs/package-5-atomic-feature-build-plan.md), [Package 5 maturity comparison](./PACKAGE-5-MATURE-SCAVENGE-COMPARISON.md), AE/Locus/Whop/Nevermined/TREG maturity papers and the [whole-product papercut register](../.planning/audits/product-papercut-register-2026-09-03.md) supplied candidate patterns.
+Product meaning came from [PRODUCT.md](../PRODUCT.md), [CONTEXT.md](../CONTEXT.md), [the Package 6 roadmap](../IMPLEMENTATION_ROADMAP.md#6-onboarding-content-and-language--planned) and [DESIGN.md](../DESIGN.md). Current source and tests were used only to identify the local baseline. The [Package 5 atomic plan](../docs/designs/package-5-atomic-feature-build-plan.md), [Package 5 maturity comparison](./PACKAGE-5-MATURE-SCAVENGE-COMPARISON.md), AE/Locus/Whop/Nevermined/TREG maturity papers and the whole-product papercut register (local reference: `.planning/audits/product-papercut-register-2026-09-03.md`) supplied candidate patterns.
 
 Current wire and vendor mechanics were checked against first-party sources only:
 
@@ -163,7 +163,7 @@ No live production, paid Call, real Provider publication or external account mut
 #### P6-C2 — One owning source per claim or action
 
 - **Requirement:** Brand claims come from the existing brand-copy authority; functional labels/errors remain with the owning feature; machine instructions and schemas project from the existing action/discovery contracts. Repeated text must not become separately editable truth.
-- **Evidence:** [COPY-MAP.md](../.planning/COPY-MAP.md) already defines these ownership lanes. DESIGN requires human/machine parity. OpenAPI exists specifically to let human and machine tooling derive understanding from one interface description.
+- **Evidence:** COPY-MAP.md (local reference: `.planning/COPY-MAP.md`) already defines these ownership lanes. DESIGN requires human/machine parity. OpenAPI exists specifically to let human and machine tooling derive understanding from one interface description.
 - **Current AE baseline/gap:** Central brand copy and generated discovery parity exist. The Provider landing and support page still contain substantial local product/technical language, and some public claims have drifted from PRODUCT.
 - **Acceptance proof:** Every changed string is assigned an owner. Cross-surface contract tests compare roles, states, action names, price semantics and retry language. No same claim is maintained independently in multiple route components.
 - **No-handroll boundary:** Refactor into existing owners only when a second real consumer exists. Do not create a generic content engine, copy database or universal presentation envelope.

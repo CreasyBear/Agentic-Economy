@@ -399,3 +399,10 @@ Agentic-Economy/
 ---
 
 *Structure analysis: 2026-09-04*
+
+## Filing update — 2026-09-08
+
+The `diagrams/` directory was retired. Its old application-primitives diagram is
+now `research/architecture/legacy-application-primitives.mmd`; it depicts a
+historical model, not current source architecture. Specialist Playwright profiles
+are under `tests/config/`. The source-path inventory above remains a dated snapshot.

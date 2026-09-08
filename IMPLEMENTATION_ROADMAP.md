@@ -64,10 +64,12 @@ or a demonstrated reference weakness and a clear customer benefit. "AE is
 different" is not a reason. SDKs and ordinary platform features need not prove
 novelty; reuse supported libraries and generate shared contracts where suitable.
 
-References:
-[Locus scavenger](./.planning/locus-docs/LOCUS-SCAVENGE-PAPERCUTS.md),
-[Nevermined scavenger](./.planning/nevermined-docs/NEVERMINED-SCAVENGE-PAPERCUTS.md),
-[Whop scavenger](./.planning/whop-docs/WHOP-SCAVENGE-PAPERCUTS.md).
+Retained reference summaries:
+[Locus](./research/LOCUS-AE-MATURITY.md),
+[Nevermined](./research/NEVERMINED-AE-OPPORTUNITY-AND-STRUCTURE.md),
+[Whop](./research/WHOP-AE-MATURITY.md).
+Detailed local scavenger ledgers cited below are historical evidence and are not
+included in a clean checkout.
 
 ### Terminology and preserved evidence
 
@@ -153,7 +155,7 @@ this reconciliation.
 | Package | Implemented progress | Verification and remaining boundary |
 | --- | --- | --- |
 | Foundation before Package 1 | Existing Tool, Call, money and recovery foundations underpin the numbered packages. | This roadmap has no numbered Package 0; the foundation is a baseline, not a newly declared completed package. |
-| 1 — Application shell | Failure containment, shared states and navigation safety are built. | The dated [Whop side-surface re-audit](./.planning/whop-docs/WHOP-SCAVENGE-PAPERCUTS.md#side-surface-recovery-re-audit--2026-08-31) records the verified scope at `9d95b4030`; it is not proof of every later route or external journey. |
+| 1 — Application shell | Failure containment, shared states and navigation safety are built. | The dated Whop side-surface re-audit (local reference: `.planning/whop-docs/WHOP-SCAVENGE-PAPERCUTS.md#side-surface-recovery-re-audit--2026-08-31`) records the verified scope at `9d95b4030`; it is not proof of every later route or external journey. |
 | 2 — Human workspace | Workspace restructuring, Provider workspace consolidation and navigation cleanup are built. | The [Package 2 design](./research/PACKAGE-2-HUMAN-WORKSPACE-IA.md) is reflected in the [owner Provider workspace](./src/components/ae/offerings/AeProviderWorkspace.tsx) and its [existing Provider workspace tests](./tests/unit/ui/provider-workspace.test.tsx); no fresh full-workspace acceptance run is claimed here. |
 | 3 — Identity, access and authority | Account/Principal boundaries, selected-Tool access, consequential-action proof and durable credential lifecycle are built. | [Package 3 gauntlet evidence](./research/PACKAGE-3-GAUNTLET-PROGRESS.md) records scoped tests and live Clerk proof. Broader installed-client and concurrent spending proof remains bounded by the relevant release records. |
 | 4 — Managed Calls and financial operations | Formance-backed funding/reservations, caller-specific Quote, Quote-based `tool.call`, recovery, Calls and document/obligation machinery are substantially implemented. | [Package 4 release evidence](./docs/guides/package-4-release-evidence.md) records local checks and real hosted sandbox funding. Managed-x402 success/refusal/recovery, refund/replay, documents/close, parity, strict recovery and external canary proof remain open; production remains gated. |
@@ -299,7 +301,7 @@ requirement; that does not satisfy the broader Funding question above. Managed
 Calls now reserve Formance Agent-budget and legal-customer exposure capacity;
 the existing concurrency proof does not cover two credentials and two routes.
 OAuth resource/audience binding also remains an acceptance gap despite the
-earlier local connection smoke. The [current Locus assessment](./.planning/locus-docs/LOCUS-SCAVENGE-PAPERCUTS.md#packages-05-progress-reconciliation--2026-09-05)
+earlier local connection smoke. The current Locus assessment (local reference: `.planning/locus-docs/LOCUS-SCAVENGE-PAPERCUTS.md#packages-05-progress-reconciliation--2026-09-05`)
 records these bounded findings without reopening implemented mechanisms.
 
 
@@ -321,9 +323,10 @@ Package 4 is implemented from these checked-in references:
 5. [`Agent operating contract`](./docs/designs/agent-operating-contract.md)
    defines the machine-facing control loop, response semantics and accretive
    evidence boundary.
-6. [`Agentic Economy as a context-efficient source`](./docs/research/agentic-economy-context-efficient-source.md)
-   defines progressive discovery and Quote without loading the whole
-   market into agent context.
+
+The earlier context-efficient source proposal is unavailable in this repository.
+The agent operating contract above is the maintained source for the bounded
+discovery, Quote and Call sequence.
 
 Where they differ, `PRODUCT.md` remains authoritative. Package 4 produces one
 coherent product: an Australian business funds an AUD Prepaid balance, its agent
@@ -836,8 +839,9 @@ The source change map is:
                     -> statement -> reconciliation
 ```
 
-The durable test plan is
-[`joelchan-main-eng-review-test-plan-20260901-230934.md`](/Users/joelchan/.gstack/projects/CreasyBear-Agentic-Economy/joelchan-main-eng-review-test-plan-20260901-230934.md).
+The historical local test plan is
+`~/.gstack/projects/CreasyBear-Agentic-Economy/joelchan-main-eng-review-test-plan-20260901-230934.md`
+(local reference; not included in a clean checkout).
 Execute the narrowest tests per slice, then the full money invariant,
 concurrency and end-to-end suite. Keep the external testnet canary separate from
 deterministic CI; it proves integration health and must never be the only proof

@@ -3,7 +3,10 @@
 **Status:** Accepted; hosted production proof remains open
 **Date:** 2026-08-09
 **Reconciled:** 2026-08-25
-**Product authority:** [ADR-036](ADR-036-agent-tool-market-foundation.md)
+**Historical authority:** ADR-036 (local reference: `.planning/adr/ADR-036-agent-tool-market-foundation.md`)
+
+Current product authority is [PRODUCT.md](../../PRODUCT.md). This dated decision
+does not establish aliases for the current Tool/Quote/Call source contract.
 
 ## Decision
 

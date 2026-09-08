@@ -189,7 +189,7 @@ describe('green release baseline', () => {
       'tsx tools/release/verify-release-integrity.ts -- npm run build',
     )
     expect(scripts['smoke:chat:staging']).toBe(
-      'node tools/dev/run-with-cleanup.mjs playwright test --config=playwright.chat-staging.config.ts',
+      'node tools/dev/run-with-cleanup.mjs playwright test --config=tests/config/playwright.chat-staging.config.ts',
     )
     expect(scripts['test:release:source:after-codegen']).toContain('npm run test:e2e')
     expect(scripts['test:release:source:after-codegen']).toContain('npm run test:e2e:a11y')

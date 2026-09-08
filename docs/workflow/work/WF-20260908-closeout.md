@@ -179,3 +179,45 @@ Remaining non-housekeeping work is explicit in `TODOS.md`: fresh desktop skill
 exposure observation, source-grounded architecture review, paused design/hardening
 work and existing package/runtime/commercial proof. This pass does not alter global
 skill configuration or call a paused or unimplemented feature complete.
+
+## External-share layout cleanup — 2026-09-08
+
+The read-only housekeeping challenge against `f61cb58e9` found current tooling
+mixed with orphan scaffolds and historical material. Joel approved the cleanup.
+
+- Filed the two maintained specialist Playwright profiles under `tests/config/`;
+  preserved test discovery, authenticated server working directory, inherited
+  environment, and CI's staging report path. The default config remains at root.
+- Retired the unwired Phase 1 deployment profile and its obsolete smoke test.
+  Current source checks cover headers, public metadata/discovery and admin
+  boundaries. **Hosted middleware, deployed HTML metadata and real owner/admin
+  browser-session isolation still require release proof.** Retirement is not
+  a claim that source tests replace that hosted qualification.
+- Removed the three orphan root Claude/Cursor metadata files. Native MCP
+  connection commands and the maintained `plugins/agentic-economy/` bundle remain.
+- Filed strategy papers under `docs/strategy/`, earlier learning history under
+  `docs/workflow/history/`, and the obsolete analytics inventory/application
+  diagram under `research/architecture/`. The JSON inventory is preserved verbatim.
+- Replaced non-portable active-reference links with maintained summaries where
+  appropriate. Local corpora, installed-dependency citations and unavailable
+  historical source are labelled explicitly rather than presented as clone-local
+  links. Raw cold-review evidence remains unchanged.
+
+The tracked root falls from 51 entries to 41, including 12 to 10 Markdown files.
+Five obsolete files were retired and seven files relocated; originals remain in
+Git history at the base revision. No dependencies, application contracts, data,
+credentials or deployment settings changed. The active marketing record remains
+outside this commit. Source-sharing cleanup does not establish public release,
+installed-client compatibility or production acceptance.
+
+Validation: `npm run typecheck`, targeted Oxlint and 11 focused test files
+(70 tests) passed. Playwright `--list` preserved all discovered specs and resolved
+project settings: authenticated 4, staging 2, default 52. The same comparison
+passed against an extracted candidate Git tree using the existing pinned local
+dependencies. A configured, synthetic environment check also preserved the
+authenticated server command/cwd/environment and staging report destination.
+No authenticated or hosted browser session was run. The extracted tree contains
+no missing relative Markdown targets or absolute machine-file links; strategy
+paper content, the raw analytics inventory, cold-review corpus and active marketing
+record were checked for preservation. Raw historical/local evidence stays explicitly
+local; a fresh dependency installation was not repeated for script-path changes.

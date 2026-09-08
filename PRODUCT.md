@@ -80,7 +80,7 @@ hosted deployment and production proof remain separate holds.
 Reference entry points:
 [Locus](https://paywithlocus.com/developers),
 [Nevermined](https://nevermined.ai/docs/api-reference/introduction) and the
-[Whop maturity record](./.planning/whop-docs/WHOP-SCAVENGE-PAPERCUTS.md).
+[Whop maturity summary](./research/WHOP-AE-MATURITY.md).
 Reference behaviour and limitations are recorded in the existing scavenger docs;
 a reference's published feature is not proof of AE implementation.
 

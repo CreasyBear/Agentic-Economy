@@ -56,7 +56,7 @@ established root conventions and route filenames.
 Existing active package and Wayfinder plans continue in place. Adopt them by
 reference when resuming that work. The retired `PAPERCUTS.md` ledger (archived),
 `.planning/audits/product-papercut-register-2026-09-03.md` (dated local evidence),
-and [older lessons](../../.superstack/learnings.md) are evidence to consult, not
+and [older lessons](history/superstack-learnings.md) are evidence to consult, not
 inventories to copy wholesale. Revalidate an old finding before promoting it to
 TODOS; keep its ID and provenance. If an old active record retains ownership,
 link to it without creating another status. On explicit adoption, mark the old

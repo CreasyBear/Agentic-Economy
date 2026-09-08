@@ -4,8 +4,8 @@
 
 **Revised:** 2026-09-01
 
-**Basis:** [the product charter](./PRODUCT.md) and
-[the Australian whitepaper](./AGENTIC_ECONOMY_AUSTRALIA_WHITEPAPER.md)
+**Basis:** [the product charter](../../PRODUCT.md) and
+[the Australian whitepaper](../../AGENTIC_ECONOMY_AUSTRALIA_WHITEPAPER.md)
 
 ## Investment proposition
 

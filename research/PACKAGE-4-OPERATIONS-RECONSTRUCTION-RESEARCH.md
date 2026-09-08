@@ -297,7 +297,7 @@ official x402 packages in [`package.json`](../package.json), verifies EIP-712 or
 JWS offers and receipts in
 [`x402-offer-receipt.ts`](../src/modules/capability-supply/internal/x402-offer-receipt.ts),
 and validates digest-bound settlement observations in
-[`x402-payment-reconciliation-evidence.ts`](../src/modules/action-invocation/x402-payment-reconciliation-evidence.ts).
+`x402-payment-reconciliation-evidence.ts` (historical reference; unavailable: `src/modules/action-invocation/x402-payment-reconciliation-evidence.ts`).
 Package 4 should expose those artifacts through the reconstruction boundary,
 not reimplement their wire schemas or cryptography.
 

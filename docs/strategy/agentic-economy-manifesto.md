@@ -5,8 +5,8 @@
 **Revised:** 2026-09-01
 
 **Relationship to the product:** this document states the future the company is
-built to serve. [PRODUCT.md](./PRODUCT.md) defines the active product and the
-[whitepaper](./AGENTIC_ECONOMY_AUSTRALIA_WHITEPAPER.md) supplies the full
+built to serve. [PRODUCT.md](../../PRODUCT.md) defines the active product and the
+[whitepaper](../../AGENTIC_ECONOMY_AUSTRALIA_WHITEPAPER.md) supplies the full
 institutional argument.
 
 ## The future thesis

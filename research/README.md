@@ -35,3 +35,15 @@ Git history also retains previously tracked files. Paused design/hardening work
 is archived for recovery, not reported as delivered. Active package research,
 source-pinned spike qualification and benchmark/scavenger summaries remain here
 or under `.planning/` where current plans consume them.
+
+## Historical supporting files
+
+The [legacy analytics inventory](architecture/legacy-posthog-events.json) and
+[legacy application diagram](architecture/legacy-application-primitives.mmd) are
+preserved evidence from earlier product iterations. Nine of the ten inventory
+entries refer to source files that no longer exist; neither file describes the
+current implementation.
+
+Citations labelled local reference refer to supporting material kept outside Git.
+Installed-dependency citations require the pinned dependencies. Historical references
+labelled unavailable do not point to current source or supply current proof.

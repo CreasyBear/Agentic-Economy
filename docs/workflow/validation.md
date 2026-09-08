@@ -46,12 +46,13 @@ From the repository root:
 
 ```sh
 python3 docs/workflow/install-skill.py --check
-PYTHONPATH=/Users/joelchan/.cache/uv/archive-v0/03rfnUuprQPtnZJEsA66x python3 /Users/joelchan/.codex/skills/.system/skill-creator/scripts/quick_validate.py docs/workflow/wayfinder-delivery
+python3 "${CODEX_HOME:-$HOME/.codex}/skills/.system/skill-creator/scripts/quick_validate.py" docs/workflow/wayfinder-delivery
 git log --oneline --fixed-strings --grep=WF-20260905-workflow
 ```
 
-The cached Python path is this machine's existing environment, not a project
-dependency; use another available PyYAML environment if that cache is removed.
+The optional skill validator requires a local Codex skill-creator installation
+and a Python environment with PyYAML. Those are local development tools, not
+project dependencies; the repository's own installation check is the first command.
 Validate changed behavior with realistic forward cases when revising the skill,
 including a held-out case for evolution. Do not add a test suite of wording
 assertions merely to preserve the template's headings.

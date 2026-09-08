@@ -53,9 +53,9 @@ Product scope comes from [`PRODUCT.md`](../PRODUCT.md), canonical language from 
 
 The local scavenges remain useful because they preserve previously inspected vendor behavior and gaps:
 
-- [Whop scavenge](../.planning/whop-docs/WHOP-SCAVENGE-PAPERCUTS.md)
-- [Locus scavenge](../.planning/locus-docs/LOCUS-SCAVENGE-PAPERCUTS.md)
-- [Nevermined scavenge](../.planning/nevermined-docs/NEVERMINED-SCAVENGE-PAPERCUTS.md)
+- Whop scavenge (local reference: `.planning/whop-docs/WHOP-SCAVENGE-PAPERCUTS.md`)
+- Locus scavenge (local reference: `.planning/locus-docs/LOCUS-SCAVENGE-PAPERCUTS.md`)
+- Nevermined scavenge (local reference: `.planning/nevermined-docs/NEVERMINED-SCAVENGE-PAPERCUTS.md`)
 - [Whop maturity study](./WHOP-AE-MATURITY.md)
 - [Locus maturity study](./LOCUS-AE-MATURITY.md)
 - [Nevermined opportunity/structure study](./NEVERMINED-AE-OPPORTUNITY-AND-STRUCTURE.md)

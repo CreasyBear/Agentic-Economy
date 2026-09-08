@@ -104,6 +104,12 @@ The [Package 6 review and companion evidence](./docs/reviews/package-6-review.md
 are under `docs/reviews/`; the [Twenty component quality record](./docs/designs/twenty-component-gauntlet.md)
 is under `docs/designs/`.
 
+The [manifesto](./docs/strategy/agentic-economy-manifesto.md) and
+[investment thesis](./docs/strategy/investment-thesis.md) are supporting strategy.
+Browser test profiles live under `tests/config/`; `playwright.config.ts` remains
+the default local entry point. Use `npm run test:e2e:authenticated` or
+`npm run smoke:chat:staging` for the specialist profiles and their required environments.
+
 <a id="publish-an-x402-tool"></a>
 
 ## Publish an x402 Tool
@@ -196,3 +202,10 @@ language and [IMPLEMENTATION_ROADMAP.md](IMPLEMENTATION_ROADMAP.md) for delivery
 [research](research/README.md); current work and recovery evidence are linked from
 [workflow](docs/workflow/README.md). Completed scratch queues and earlier candidate
 plans have been archived; they do not define a parallel active roadmap.
+
+Share a Git checkout or an export of a reviewed commit, rather than a copy of the
+working directory. Ignored environment files, local databases, credentials and
+operator outputs are not part of the repository. Research documents identify
+local-only or historical citations explicitly; those records are not prerequisites
+for building the source. Public deployment and installed-client acceptance remain
+separate from sharing this source.

@@ -400,4 +400,5 @@ state from a correlation reference.
 - [Svix webhook delivery](https://docs.svix.com/introduction)
 - [Svix retries and replay](https://docs.svix.com/retries)
 - [Svix consumer portal](https://docs.svix.com/app-portal)
-- [Context-efficient source design](../research/agentic-economy-context-efficient-source.md)
+- Historical context-efficient source proposal: unavailable in this repository;
+  its former citation does not add a separate maintained design authority.

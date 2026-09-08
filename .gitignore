@@ -76,3 +76,5 @@ eval/parity/results.tsv
 !/docs/designs/*.md
 !/docs/reviews/
 !/docs/reviews/*.md
+!/docs/strategy/
+!/docs/strategy/*.md

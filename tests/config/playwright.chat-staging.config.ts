@@ -1,9 +1,11 @@
+import { fileURLToPath } from 'node:url'
 import { defineConfig } from '@playwright/test'
 
 export default defineConfig({
   fullyParallel: false,
   forbidOnly: Boolean(process.env.CI),
-  testDir: './tests/deploy-smoke',
+  testDir: '../deploy-smoke',
+  outputDir: fileURLToPath(new URL('../../test-results', import.meta.url)),
   testMatch: [
     'chat-anonymous-streaming-smoke.spec.ts',
     'chat-browser-staging.spec.ts',
@@ -11,7 +13,7 @@ export default defineConfig({
   retries: 0,
   reporter: [
     ['list'],
-    ['json', { outputFile: 'output/release/playwright-chat-staging-smoke.json' }],
+    ['json', { outputFile: fileURLToPath(new URL('../../output/release/playwright-chat-staging-smoke.json', import.meta.url)) }],
   ],
   timeout: 45_000,
   expect: { timeout: 5_000 },
