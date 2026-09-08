@@ -3,10 +3,15 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import { tmpdir } from 'node:os'
 import { delimiter, join, resolve } from 'node:path'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { listMcpActions, mcpToolName } from '@/modules/actions'
 import { spawnCli } from './cli-errors-harness'
+
+// Every case here spawns the real CLI under tsx, which costs roughly a second
+// per process before any assertion runs. Under a loaded parallel suite that
+// exceeds the 5s default, so allow real wall-clock rather than trimming spawns.
+vi.setConfig({ testTimeout: 30_000 })
 
 const temporaryDirectories: string[] = []
 const servers: ReturnType<typeof createServer>[] = []

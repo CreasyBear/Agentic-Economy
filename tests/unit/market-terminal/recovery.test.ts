@@ -20,6 +20,11 @@ import type { CliOptions } from '../../../tools/ae/lib/args'
 import { CliFailure } from '../../../tools/ae/lib/output'
 import { spawnCliSync } from './cli-errors-harness'
 
+// The cold-loop case spawns the real CLI once per advertised step to prove each
+// one is actually registered, at roughly a second per process under tsx. Keep
+// the per-step spawns and allow the wall-clock they need.
+vi.setConfig({ testTimeout: 30_000 })
+
 const baseOptions: CliOptions = {
   baseUrl: 'https://market.example',
   json: true,
