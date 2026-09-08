@@ -72,7 +72,7 @@ describe('search health-filter continuation', () => {
         const payload: unknown = JSON.parse(String(init?.body ?? '{}'))
         if (
           !isRecord(payload)
-          || payload.path !== 'capabilitySupplyTools:search'
+          || payload.path !== 'capabilityToolCatalog:search'
           || !Array.isArray(payload.args)
           || !isRecord(payload.args[0])
         ) {

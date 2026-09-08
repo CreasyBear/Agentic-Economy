@@ -1,5 +1,5 @@
 import { filter } from 'convex-helpers/server/filter'
-import { usesSelectedRequestReadiness } from './lib/selectedRequestReadiness'
+import { usesSelectedRequestReadiness } from '@/modules/capability-supply/convex'
 import { v, type Infer } from 'convex/values'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
@@ -684,11 +684,6 @@ export async function recordCapabilityProbeResultHandler(
   },
 ) {
   const ownerStagedBusinessId = args.ownerStagedBusinessId
-  const publicationBeforeWrite = await ctx.db.query('capabilityPublications')
-    .withIndex('by_publicationRef_and_revision', q => q.eq('publicationRef', args.publicationRef).eq('revision', args.expectedRevision)).unique()
-  if (publicationBeforeWrite !== null && usesSelectedRequestReadiness(publicationBeforeWrite)) {
-    return { kind: 'refused' as const, reason: 'target_changed' as const }
-  }
   const currentAuthority = await readCurrentCapabilityProbeAuthority(ctx, {
     publicationRef: args.publicationRef,
     expectedRevision: args.expectedRevision,

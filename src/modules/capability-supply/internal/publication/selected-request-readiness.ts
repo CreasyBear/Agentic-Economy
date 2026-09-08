@@ -1,10 +1,11 @@
-import { FACILITATOR_DISCOVERY_PUBLISHER_REF } from '@/modules/capability-supply/convex'
 import { normalizePricingConfig } from '@/modules/money/public'
+
+import { FACILITATOR_DISCOVERY_PUBLISHER_REF } from '../facilitator-discovery-ingest'
 
 /** Imported managed requests are checked with customer input at Quote time. */
 export function usesSelectedRequestReadiness(publication: Readonly<{
   authorityMode?: string | undefined
-  publisherRef: string
+  publisherRef?: string | undefined
   sourceKind: string
   pricingConfigJson?: string | undefined
 }>): boolean {

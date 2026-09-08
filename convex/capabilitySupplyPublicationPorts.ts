@@ -5,7 +5,7 @@ import {
   type OperationLedgerPorts,
 } from '@/modules/capability-supply/public'
 
-import { usesSelectedRequestReadiness } from './lib/selectedRequestReadiness'
+import { usesSelectedRequestReadiness } from '@/modules/capability-supply/convex'
 import { internal } from './_generated/api'
 import type { Id } from './_generated/dataModel'
 import type { MutationCtx } from './_generated/server'

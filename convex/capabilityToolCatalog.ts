@@ -12,6 +12,7 @@ import {
   type ToolSearchResult, type ToolSearchWireResult, type ToolSearchInput,
   type PublicToolDescriptor, type ToolDetailWireResult, type ToolCompareWireResult,
 } from '@/modules/capability-supply/public'
+import { defaultDnsResolver, isPublicHttpTarget } from '@/modules/network-guard/public'
 import { fetchCoinbaseReferenceRate } from '@/modules/money/reference-rate'
 import { quoteManagedX402BuyerAud } from '@/modules/money/public'
 import { api, internal } from './_generated/api'
@@ -50,6 +51,9 @@ export async function fetchCatalogPage(input: ToolSearchInput): Promise<Readonly
   const url = new URL('https://facilitator.payai.network/discovery/resources')
   url.searchParams.set('limit', String(limit))
   url.searchParams.set('offset', String(offset))
+  // The host is a fixed literal, but the shared guard still runs so a hijacked or
+  // re-pointed discovery hostname cannot resolve this Call onto a private address.
+  if (!(await isPublicHttpTarget(url, defaultDnsResolver))) throw new Error('catalog_source_unavailable')
   const response = await fetch(url, { redirect: 'error', headers: { accept: 'application/json' }, signal: AbortSignal.timeout(TIMEOUT_MS) })
   if (!response.ok) throw new Error('catalog_source_unavailable')
   const body = await readBoundedRequestJson(response, 2_097_152)

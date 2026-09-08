@@ -11,6 +11,7 @@ import {
   type CapabilityReadinessOutcome,
   type PublicationLifecycle,
 } from '../publication/lifecycle'
+import { usesSelectedRequestReadiness } from '../publication/selected-request-readiness'
 import { validEvidenceRefs } from '../shared/command-envelope'
 
 import type { CapabilityGraphPorts } from './ports'
@@ -55,6 +56,11 @@ export async function recordCapabilityProbeResult(
   const publication = await ports.loadPublicationAtRevision(args.publicationRef, args.expectedRevision)
   if (publication === null || publication.disposition !== 'current') {
     return { kind: 'refused', reason: 'revision_changed' }
+  }
+  // Selected-request publications are only exercisable with customer input at Quote
+  // time, so no probe observation describes a target we can attribute to them.
+  if (usesSelectedRequestReadiness(publication)) {
+    return { kind: 'refused', reason: 'target_changed' }
   }
   const [binding, offering, business, contract] = await Promise.all([
     ports.loadBindingByBindingId(publication.bindingId),

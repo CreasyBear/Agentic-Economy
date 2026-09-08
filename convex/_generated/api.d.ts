@@ -128,7 +128,6 @@ import type * as lib_qualifiedUsePayout_index from "../lib/qualifiedUsePayout/in
 import type * as lib_rateLimit from "../lib/rateLimit.js";
 import type * as lib_secretLifecyclePersistence from "../lib/secretLifecyclePersistence.js";
 import type * as lib_secretPointerPersistence from "../lib/secretPointerPersistence.js";
-import type * as lib_selectedRequestReadiness from "../lib/selectedRequestReadiness.js";
 import type * as lib_workloadCron_context from "../lib/workloadCron/context.js";
 import type * as lib_x402DirectoryIndex_analytics from "../lib/x402DirectoryIndex/analytics.js";
 import type * as lib_x402DirectoryIndex_contracts from "../lib/x402DirectoryIndex/contracts.js";
@@ -321,7 +320,6 @@ declare const fullApi: ApiFromModules<{
   "lib/rateLimit": typeof lib_rateLimit;
   "lib/secretLifecyclePersistence": typeof lib_secretLifecyclePersistence;
   "lib/secretPointerPersistence": typeof lib_secretPointerPersistence;
-  "lib/selectedRequestReadiness": typeof lib_selectedRequestReadiness;
   "lib/workloadCron/context": typeof lib_workloadCron_context;
   "lib/x402DirectoryIndex/analytics": typeof lib_x402DirectoryIndex_analytics;
   "lib/x402DirectoryIndex/contracts": typeof lib_x402DirectoryIndex_contracts;

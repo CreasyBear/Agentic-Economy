@@ -253,7 +253,6 @@ export const DEPLOYMENT_MANIFEST = Object.freeze({
         'refresh Agentic Market snapshots',
         'refresh capability supply readiness',
         'refresh current market presence',
-        'refresh facilitator discovery',
       ]),
     }),
   ]),
