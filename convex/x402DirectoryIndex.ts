@@ -25,31 +25,34 @@ type SearchRow = Doc<'marketDirectorySearchEntries'>
 function orderedDirectoryRows(ctx: QueryCtx, generation: string, input: X402DirectoryIndexInput) {
   const network = input.network === undefined ? '*' : directoryNetwork(input.network)
   const rows = ctx.db.query('marketDirectorySearchEntries')
-  if (input.query) {
+  // Read the narrowed selectors once: the index builders below are closures, so
+  // reading input inside them loses the narrowing these branches established.
+  const { query, provider, category } = input
+  if (query) {
     return rows.withSearchIndex('search_text_by_generation_network_category_provider', q => {
-      let search = q.search('searchText', input.query!).eq('generation', generation).eq('network', network)
-      if (input.category !== undefined) search = search.eq('category', input.category)
-      if (input.provider !== undefined) search = search.eq('provider', input.provider)
+      let search = q.search('searchText', query).eq('generation', generation).eq('network', network)
+      if (category !== undefined) search = search.eq('category', category)
+      if (provider !== undefined) search = search.eq('provider', provider)
       return search
     })
   }
   if (input.sort === 'adoption') {
-    if (input.provider !== undefined) return rows.withIndex('by_generation_and_network_and_provider_and_payersOrder', q => q.eq('generation', generation).eq('network', network).eq('provider', input.provider!)).order('desc')
-    if (input.category !== undefined) return rows.withIndex('by_generation_and_network_and_category_and_payersOrder', q => q.eq('generation', generation).eq('network', network).eq('category', input.category!)).order('desc')
+    if (provider !== undefined) return rows.withIndex('by_generation_and_network_and_provider_and_payersOrder', q => q.eq('generation', generation).eq('network', network).eq('provider', provider)).order('desc')
+    if (category !== undefined) return rows.withIndex('by_generation_and_network_and_category_and_payersOrder', q => q.eq('generation', generation).eq('network', network).eq('category', category)).order('desc')
     return rows.withIndex('by_generation_and_network_and_payersOrder', q => q.eq('generation', generation).eq('network', network)).order('desc')
   }
   if (input.sort === 'price_asc') {
-    if (input.provider !== undefined) return rows.withIndex('by_generation_and_network_and_provider_and_priceOrder', q => q.eq('generation', generation).eq('network', network).eq('provider', input.provider!)).order('asc')
-    if (input.category !== undefined) return rows.withIndex('by_generation_and_network_and_category_and_priceOrder', q => q.eq('generation', generation).eq('network', network).eq('category', input.category!)).order('asc')
+    if (provider !== undefined) return rows.withIndex('by_generation_and_network_and_provider_and_priceOrder', q => q.eq('generation', generation).eq('network', network).eq('provider', provider)).order('asc')
+    if (category !== undefined) return rows.withIndex('by_generation_and_network_and_category_and_priceOrder', q => q.eq('generation', generation).eq('network', network).eq('category', category)).order('asc')
     return rows.withIndex('by_generation_and_network_and_priceOrder', q => q.eq('generation', generation).eq('network', network)).order('asc')
   }
   if (input.sort === 'updated') {
-    if (input.provider !== undefined) return rows.withIndex('by_generation_and_network_and_provider_and_updatedOrder', q => q.eq('generation', generation).eq('network', network).eq('provider', input.provider!)).order('desc')
-    if (input.category !== undefined) return rows.withIndex('by_generation_and_network_and_category_and_updatedOrder', q => q.eq('generation', generation).eq('network', network).eq('category', input.category!)).order('desc')
+    if (provider !== undefined) return rows.withIndex('by_generation_and_network_and_provider_and_updatedOrder', q => q.eq('generation', generation).eq('network', network).eq('provider', provider)).order('desc')
+    if (category !== undefined) return rows.withIndex('by_generation_and_network_and_category_and_updatedOrder', q => q.eq('generation', generation).eq('network', network).eq('category', category)).order('desc')
     return rows.withIndex('by_generation_and_network_and_updatedOrder', q => q.eq('generation', generation).eq('network', network)).order('desc')
   }
-  if (input.provider !== undefined) return rows.withIndex('by_generation_and_network_and_provider_and_popularOrder', q => q.eq('generation', generation).eq('network', network).eq('provider', input.provider!)).order('desc')
-  if (input.category !== undefined) return rows.withIndex('by_generation_and_network_and_category_and_popularOrder', q => q.eq('generation', generation).eq('network', network).eq('category', input.category!)).order('desc')
+  if (provider !== undefined) return rows.withIndex('by_generation_and_network_and_provider_and_popularOrder', q => q.eq('generation', generation).eq('network', network).eq('provider', provider)).order('desc')
+  if (category !== undefined) return rows.withIndex('by_generation_and_network_and_category_and_popularOrder', q => q.eq('generation', generation).eq('network', network).eq('category', category)).order('desc')
   return rows.withIndex('by_generation_and_network_and_popularOrder', q => q.eq('generation', generation).eq('network', network)).order('desc')
 }
 
@@ -58,8 +61,9 @@ function matchesRemainingConstraints(row: SearchRow, input: X402DirectoryIndexIn
   if (input.provider !== undefined && row.provider !== input.provider) return false
   if (input.maxUsdPrice !== undefined && (row.minimumUsdPrice === undefined || new Decimal(row.minimumUsdPrice).gt(input.maxUsdPrice))) return false
   if (input.minUsdPrice !== undefined && (row.minimumUsdPrice === undefined || new Decimal(row.minimumUsdPrice).lt(input.minUsdPrice))) return false
-  if (input.minPayers30d !== undefined && (row.payersOrder ?? -1) < input.minPayers30d) return false
-  if (input.maxPayers30d !== undefined && ((row.payersOrder ?? -1) < 0 || row.payersOrder! > input.maxPayers30d)) return false
+  const payersOrder = row.payersOrder ?? -1
+  if (input.minPayers30d !== undefined && payersOrder < input.minPayers30d) return false
+  if (input.maxPayers30d !== undefined && (payersOrder < 0 || payersOrder > input.maxPayers30d)) return false
   if (input.curatedOnly === true && row.curated !== true) return false
   if (input.priceBand !== undefined && row.priceBand !== input.priceBand) return false
   if (input.adoptionBand !== undefined && row.adoptionBand !== input.adoptionBand) return false
@@ -141,7 +145,11 @@ export const selectedSource = internalQuery({
     if (row === null) return { kind: 'not_found' as const }
     const entry = storedDirectoryEntry(row)
     if (!directoryEntryMatchesFilters(entry, parsed.data)) return { kind: 'unavailable' as const, reason: 'resource_filters_mismatch' }
-    return { kind: 'found' as const, sourceJson: row.directorySourceJson!, entry }
+    // The stored source snapshot is optional on the row, and the caller is asking
+    // for exactly that snapshot, so a row without one has nothing to return.
+    const sourceJson = row.directorySourceJson
+    if (sourceJson === undefined) return { kind: 'not_found' as const }
+    return { kind: 'found' as const, sourceJson, entry }
   },
 })
 
@@ -151,7 +159,10 @@ async function readFacets(ctx: QueryCtx, generation: string, kind: 'category' | 
   const rows = await ctx.db.query('marketDirectoryFacets')
     .withIndex('by_generation_and_kind_and_key', q => q.eq('generation', generation).eq('kind', kind)).take(limit)
   const counts = await directoryFacets.countBatch(ctx, rows.map(row => ({ namespace: kind === 'tag' || kind === 'bundle' ? analyticsNamespace(generation) : generation, bounds: { prefix: [kind, row.key] } })))
-  return rows.flatMap((row, index) => (counts[index] ?? 0) === 0 ? [] : [{ key: row.key, label: row.label, count: counts[index]!, ...(row.iconUrl === undefined ? {} : { iconUrl: row.iconUrl }) }])
+  return rows.flatMap((row, index) => {
+    const count = counts[index] ?? 0
+    return count === 0 ? [] : [{ key: row.key, label: row.label, count, ...(row.iconUrl === undefined ? {} : { iconUrl: row.iconUrl }) }]
+  })
 }
 
 /** Cursor traversal of every declared facet; overview is only a bounded sample. */
@@ -167,7 +178,10 @@ export const facets = query({
     const counts = await directoryFacets.countBatch(ctx, page.page.map(row => ({ namespace: args.kind === 'tag' || args.kind === 'bundle' ? analyticsNamespace(generation.generation) : generation.generation, bounds: { prefix: [args.kind, row.key] } })))
     return {
       kind: 'ok' as const, coverage: directoryCoverage(generation), ...page,
-      page: page.page.flatMap((row, index) => (counts[index] ?? 0) === 0 ? [] : [{ key: row.key, label: row.label, count: counts[index]!, ...(row.iconUrl === undefined ? {} : { iconUrl: row.iconUrl }) }]),
+      page: page.page.flatMap((row, index) => {
+        const count = counts[index] ?? 0
+        return count === 0 ? [] : [{ key: row.key, label: row.label, count, ...(row.iconUrl === undefined ? {} : { iconUrl: row.iconUrl }) }]
+      }),
     }
   },
 })
@@ -252,11 +266,11 @@ export const analytics = query({
       readFacets(ctx, generation.generation, 'category', 128), readFacets(ctx, generation.generation, 'network', 32),
       ctx.db.query('marketDirectorySearchEntries').withIndex('by_generation_and_network_and_curated_and_payersOrder', q => q.eq('generation', generation.generation).eq('network', '*').eq('curated', true)).order('desc').take(6),
     ])
-    const adoption = DIRECTORY_ADOPTION_BANDS.map((key, i) => ({ key, label: adoptionLabels[i]!, count: counts[i]! }))
-    const metadata = metadataKeys.map((key, i) => ({ key, label: metadataLabels[key], count: counts[DIRECTORY_ADOPTION_BANDS.length + i]! }))
-    const bands = DIRECTORY_PRICE_BANDS.map((key, i) => ({ key, label: priceLabels[i]!, count: counts[DIRECTORY_ADOPTION_BANDS.length + metadataKeys.length + i]! }))
+    const adoption = DIRECTORY_ADOPTION_BANDS.map((key, i) => ({ key, label: adoptionLabels[i] ?? key, count: counts[i] ?? 0 }))
+    const metadata = metadataKeys.map((key, i) => ({ key, label: metadataLabels[key], count: counts[DIRECTORY_ADOPTION_BANDS.length + i] ?? 0 }))
+    const bands = DIRECTORY_PRICE_BANDS.map((key, i) => ({ key, label: priceLabels[i] ?? key, count: counts[DIRECTORY_ADOPTION_BANDS.length + metadataKeys.length + i] ?? 0 }))
     const totalTools = bands.reduce((total, band) => total + band.count, 0)
-    const unknownPriceTools = bands.find(band => band.key === 'unknown')!.count
+    const unknownPriceTools = bands.find(band => band.key === 'unknown')?.count ?? 0
     const knownPriceTools = totalTools - unknownPriceTools
     let quantiles: { minimum: string; p25: string; median: string; p75: string; maximum: string } | undefined
     if (knownPriceTools > 0) {
@@ -264,8 +278,10 @@ export const analytics = query({
       const ranks = [0, Math.max(0, Math.ceil(knownPriceTools * 0.25) - 1), Math.max(0, Math.ceil(knownPriceTools * 0.5) - 1), Math.max(0, Math.ceil(knownPriceTools * 0.75) - 1), knownPriceTools - 1]
       const items = await directoryFacets.atBatch(ctx, ranks.map(offset => ({ namespace, offset, bounds: { prefix: [`price:${network}`] } })))
       const rows = await Promise.all(items.map(item => ctx.db.query('marketDirectorySearchEntries').withIndex('by_generation_and_network_and_resource', q => q.eq('generation', generation.generation).eq('network', network).eq('resource', item.id)).unique()))
-      const amounts = rows.map(row => row?.minimumUsdPrice)
-      if (amounts.every((amount): amount is string => amount !== undefined)) quantiles = { minimum: amounts[0]!, p25: amounts[1]!, median: amounts[2]!, p75: amounts[3]!, maximum: amounts[4]! }
+      const [minimum, p25, median, p75, maximum] = rows.map(row => row?.minimumUsdPrice)
+      if (minimum !== undefined && p25 !== undefined && median !== undefined && p75 !== undefined && maximum !== undefined) {
+        quantiles = { minimum, p25, median, p75, maximum }
+      }
     }
     const curated = (await Promise.all(curatedRows.map(row => ctx.db.get(row.entryId)))).flatMap(row => row === null ? [] : [indexedDirectoryEntry(row)])
     return {

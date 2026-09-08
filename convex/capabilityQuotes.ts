@@ -941,7 +941,7 @@ export const readForCall = internalQuery({
       const input = JSON.parse(row.normalizedInputJson) as unknown
       return isBoundedJsonValue(input) && typeof input === 'object' && input !== null && !Array.isArray(input)
         ? {
-            ...(row.state === 'consumed' ? { consumedCallRef: row.consumedCallRef! } : {}),
+            ...(row.state === 'consumed' && row.consumedCallRef !== undefined ? { consumedCallRef: row.consumedCallRef } : {}),
             toolRef: row.toolRef,
             input: input as Record<string, Infer<typeof jsonObject>[string]>,
             decisionPrice: { currency: 'AUD' as const, exponent: 6 as const, units: row.decisionAudUnits },

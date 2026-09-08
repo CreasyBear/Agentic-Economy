@@ -31,12 +31,17 @@ export async function nativeSubmissionBusiness(ctx: ReadContext, businessId: Id<
 
 async function exactNativeDraft(ctx: ReadContext, businessId: Id<'businesses'>, origin: CatalogOrigin) {
   if (origin.declaredAccessPathRef === undefined) return null
+  // An origin that declares no access path has nothing to look up, and querying
+  // the index with undefined would fail at runtime rather than refuse cleanly.
+  const declaredAccessPathRef = origin.declaredAccessPathRef
   const [offering, revision, path] = await Promise.all([
     ctx.db.query('businessOfferings').withIndex('by_offeringRef', q => q.eq('offeringRef', origin.offeringRef)).unique(),
     ctx.db.query('businessOfferingRevisions').withIndex('by_offeringRef_and_revision', q =>
       q.eq('offeringRef', origin.offeringRef).eq('revision', origin.offeringRevision)).unique(),
-    ctx.db.query('offeringAccessPaths').withIndex('by_accessPathRef', q =>
-      q.eq('accessPathRef', origin.declaredAccessPathRef!)).unique(),
+    declaredAccessPathRef === undefined
+      ? Promise.resolve(null)
+      : ctx.db.query('offeringAccessPaths').withIndex('by_accessPathRef', q =>
+        q.eq('accessPathRef', declaredAccessPathRef)).unique(),
   ])
   if (offering === null || revision === null || path === null
     || offering.businessId !== businessId || revision.businessId !== businessId || path.businessId !== businessId

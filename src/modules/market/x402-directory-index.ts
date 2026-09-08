@@ -74,7 +74,8 @@ export function minimumDirectoryUsdPrice(entry: X402DirectoryEntry, network?: st
 
 export function directoryEntryMatchesFilters(entry: X402DirectoryEntry, filters: X402DirectoryFilters): boolean {
   if (filters.provider !== undefined && entry.provider.toLowerCase() !== filters.provider.toLowerCase()) return false
-  if (filters.network !== undefined && !entry.prices.some(price => directoryNetwork(price.network) === directoryNetwork(filters.network!))) return false
+  const network = filters.network
+  if (network !== undefined && !entry.prices.some(price => directoryNetwork(price.network) === directoryNetwork(network))) return false
   if (filters.maxUsdPrice !== undefined) {
     const price = minimumDirectoryUsdPrice(entry, filters.network)
     if (price === undefined || new Decimal(price).gt(filters.maxUsdPrice)) return false

@@ -94,6 +94,7 @@ export function toToolCardViewModel(
     tool.offering.label,
     summary,
   );
+  const priceAmount = toolPriceAmount(tool);
 
   return {
     toolRef: tool.toolRef,
@@ -106,7 +107,7 @@ export function toToolCardViewModel(
     capability,
     category: evidence.category,
     price: toolPrice(tool),
-    ...(toolPriceAmount(tool) === undefined ? {} : { priceAmount: toolPriceAmount(tool)! }),
+    ...(priceAmount === undefined ? {} : { priceAmount }),
     ...(tool.commercial.displayPrice?.kind === "indicative" ? { priceValidUntil: tool.commercial.displayPrice.validUntil } : {}),
     authentication: formatToolAuthentication(tool.authentication),
     ...(tool.payment === undefined ? {} : { paymentNetwork: formatPaymentNetwork(tool.payment.network) }),
@@ -170,8 +171,10 @@ export function capabilityFromPrice(
     && (tool.priceValidUntil === undefined || tool.priceValidUntil > Date.now()));
   if (priced.length === 0) return tools.some((tool) => tool.priceValidUntil !== undefined && tool.priceValidUntil <= Date.now())
     ? "AUD estimate temporarily unavailable" : tools[0]?.price ?? "Price on request";
-  if (new Set(priced.map((tool) => tool.priceAmount!.currency)).size > 1) return "Prices vary";
-  const floor = [...priced].sort(compareToolPrices)[0]!;
+  const currencies = new Set(priced.flatMap((tool) => tool.priceAmount === undefined ? [] : [tool.priceAmount.currency]));
+  if (currencies.size > 1) return "Prices vary";
+  const [floor] = [...priced].sort(compareToolPrices);
+  if (floor === undefined) return "Price on request";
   return priced.length === tools.length && tools.every((tool) => tool.price === floor.price)
     ? floor.price : `from ${floor.price}`;
 }

@@ -78,8 +78,16 @@ export const x402DirectoryFilterSchema = z.strictObject({
   // Accept official CAIP-2 identifiers and the SDK's legacy network aliases.
   network: z.string().trim().min(1).max(100).regex(/^[a-zA-Z0-9][a-zA-Z0-9:_-]*$/u).optional(),
   provider: z.string().trim().min(3).max(253)
-    .refine((value) => canonicalProviderHost(value) !== undefined, 'Enter a Provider hostname.')
-    .transform((value) => canonicalProviderHost(value)!).optional(),
+    // Canonicalise once and report the refusal from the same place, so the
+    // parsed value never depends on re-running the check.
+    .transform((value, ctx) => {
+      const host = canonicalProviderHost(value)
+      if (host === undefined) {
+        ctx.addIssue({ code: 'custom', message: 'Enter a Provider hostname.' })
+        return z.NEVER
+      }
+      return host
+    }).optional(),
   maxUsdPrice: z.number().finite().nonnegative().max(Number.MAX_SAFE_INTEGER).optional(),
 })
 export type X402DirectoryFilters = z.infer<typeof x402DirectoryFilterSchema>

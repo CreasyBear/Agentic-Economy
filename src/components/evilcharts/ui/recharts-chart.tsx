@@ -152,21 +152,23 @@ function distributeColors(colorsArray: string[], maxCount: number): string[] {
     return colorsArray.slice(0, maxCount);
   }
 
-  const result: string[] = [];
+  const distributed: string[] = [];
   const baseSlots = Math.floor(maxCount / availableCount);
   const extraSlots = maxCount % availableCount;
 
   // First (availableCount - extraSlots) colors get baseSlots each
   // Last extraSlots colors get (baseSlots + 1) each
   for (let colorIdx = 0; colorIdx < availableCount; colorIdx++) {
+    const color = colorsArray[colorIdx];
+    if (color === undefined) continue;
     const isExtraColor = colorIdx >= availableCount - extraSlots;
     const slotsForThisColor = baseSlots + (isExtraColor ? 1 : 0);
     for (let j = 0; j < slotsForThisColor; j++) {
-      result.push(colorsArray[colorIdx]!);
+      distributed.push(color);
     }
   }
 
-  return result;
+  return distributed;
 }
 
 const ChartStyle = ({ id, config }: { id: string; config: ChartConfig }) => {

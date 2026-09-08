@@ -147,14 +147,17 @@ export function toMarketReturnNavigation(
   const compare = url.searchParams.get('compare')
   const offset = url.searchParams.get('offset')
   const resource = url.searchParams.get('resource')
+  const directoryCategory = url.searchParams.get('directoryCategory')
+  const indexCursor = url.searchParams.get('indexCursor')
+  const providerCursor = url.searchParams.get('providerCursor')
 
   return {
     search: {
       window,
       ...readDirectoryFilters(url.searchParams),
-      ...(url.searchParams.has('directoryCategory') ? { directoryCategory: url.searchParams.get('directoryCategory')! } : {}),
-      ...(url.searchParams.has('indexCursor') ? { indexCursor: url.searchParams.get('indexCursor')! } : {}),
-      ...(url.searchParams.has('providerCursor') ? { providerCursor: url.searchParams.get('providerCursor')! } : {}),
+      ...(directoryCategory === null ? {} : { directoryCategory }),
+      ...(indexCursor === null ? {} : { indexCursor }),
+      ...(providerCursor === null ? {} : { providerCursor }),
       ...(url.searchParams.has('sort') ? { sort: url.searchParams.get('sort') as MarketReturnSearch['sort'] } : {}),
       ...(["overview", "discover", "tools", "providers", "saved", "leaderboard"].includes(url.searchParams.get("view") ?? "") ? { view: url.searchParams.get("view") as NonNullable<MarketReturnSearch['view']> } : {}),
       ...(url.searchParams.has('layout') ? { layout: url.searchParams.get('layout') as 'table' | 'grid' } : {}),

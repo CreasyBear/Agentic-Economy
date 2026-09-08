@@ -1226,8 +1226,9 @@ export async function openDispatchHandler(
     || row.toolJson === undefined
     || row.inputJson === undefined
   ) return null
-  const quote = row.quoteRef === undefined ? null : await ctx.db.query('capabilityQuotes')
-    .withIndex('by_quoteRef', (query) => query.eq('quoteRef', row.quoteRef!)).unique()
+  const rowQuoteRef = row.quoteRef
+  const quote = rowQuoteRef === undefined ? null : await ctx.db.query('capabilityQuotes')
+    .withIndex('by_quoteRef', (query) => query.eq('quoteRef', rowQuoteRef)).unique()
   if (quote !== null && (quote.accountRef !== row.ownerId || quote.principalId !== row.principalId || quote.toolRef !== row.toolRef)) return null
   return {
     ...(quote?.x402PaymentRequiredJson === undefined ? {} : { committedPaymentRequiredJson: quote.x402PaymentRequiredJson }),

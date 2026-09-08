@@ -219,7 +219,9 @@ export const cleanup = internalMutation({
     if (rows.length > 0) {
       for (const row of rows) {
         if (row.source !== 'coinbase') throw new Error('directory_cleanup_source_conflict')
-        for (const key of facetKeys(row)) await directoryFacets.delete(ctx, { namespace: args.generation, key, id: row.endpointUrl! })
+        const endpointUrl = row.endpointUrl
+        if (endpointUrl === undefined) throw new Error('directory_cleanup_endpoint_missing')
+        for (const key of facetKeys(row)) await directoryFacets.delete(ctx, { namespace: args.generation, key, id: endpointUrl })
         await ctx.db.delete(row._id)
       }
       await ctx.scheduler.runAfter(0, internal.x402DirectoryIndexStore.cleanup, args)

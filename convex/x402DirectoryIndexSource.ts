@@ -52,16 +52,20 @@ export const page = internalAction({
     if (checkpoint.nextOffset > args.offset) return { kind: 'advanced', generation: args.generation, nextOffset: checkpoint.nextOffset, indexedTotal: checkpoint.indexedTotal }
     if (checkpoint.nextOffset !== args.offset) throw new Error('directory_scan_position_invalid')
     const response = await listX402DiscoveryResources({ limit: PAGE_SIZE, offset: args.offset })
+    const reportedTotal = response.pagination.total
     if (response.pagination.offset !== args.offset || response.pagination.limit !== PAGE_SIZE
-      || !Number.isSafeInteger(response.pagination.total) || response.pagination.total! < 0
+      || reportedTotal === undefined || !Number.isSafeInteger(reportedTotal) || reportedTotal < 0
       || !Array.isArray(response.items) || response.items.length > PAGE_SIZE) throw new Error('directory_source_page_invalid')
-    const items = response.items.map(item => prepareIndexedDirectorySource(item as unknown as Readonly<Record<string, unknown>>))
+    const items = response.items.map(item => {
+      if (!isRecord(item)) throw new Error('directory_source_page_invalid')
+      return prepareIndexedDirectorySource(item)
+    })
     let progress: IndexProgress = { kind: 'advanced', generation: args.generation, nextOffset: args.offset, indexedTotal: checkpoint.indexedTotal }
     // Aggregate maintains its native tree transactionally; bounded sub-batches
     // keep its read budget independent of upstream page size and catalog depth.
     for (let startItem = 0; startItem < Math.max(1, items.length); startItem += 5) {
       progress = await ctx.runMutation(internal.x402DirectoryIndexStore.applyPage, {
-        generation: args.generation, offset: args.offset, reportedTotal: response.pagination.total!,
+        generation: args.generation, offset: args.offset, reportedTotal,
         items: items.slice(startItem, startItem + 5), startItem, totalItems: items.length,
         observedAt: Date.now(), workload: args.workload,
       })

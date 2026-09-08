@@ -20,10 +20,10 @@ export function x402DefaultAssetFacts(assetId: string, network: string): Readonl
 }
 
 /** Reads pre-Bazaar discovery metadata. Malformed optional legacy metadata never hides a Tool. */
-export function x402LegacyDiscoveryInfo(accepted: Readonly<Record<string, unknown>> | undefined): unknown {
-  if (accepted === undefined) return undefined
+export function x402LegacyDiscoveryInfo(accepted: unknown): unknown {
+  if (accepted === undefined || accepted === null) return undefined
   try {
-    return extractDiscoveryInfoV1(accepted as unknown as PaymentRequirementsV1)
+    return extractDiscoveryInfoV1(accepted as PaymentRequirementsV1)
   } catch {
     return undefined
   }

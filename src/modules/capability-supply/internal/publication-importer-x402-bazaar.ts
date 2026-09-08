@@ -110,7 +110,7 @@ export function admitBazaarDiscoveryInfo(
   const outputSchema = outputSchemaFromExtension(extension, info.output);
   if (outputSchema === undefined) return { kind: "refused", reason: "schema_missing" };
   const pathNames = typeof extension.routeTemplate === "string"
-    ? [...extension.routeTemplate.matchAll(/:([A-Za-z_][A-Za-z0-9_]*)/g)].map(match => match[1]!) : [];
+    ? [...extension.routeTemplate.matchAll(/:([A-Za-z_][A-Za-z0-9_]*)/g)].flatMap(match => match[1] === undefined ? [] : [match[1]]) : [];
   if (pathNames.length > 32 || new Set(pathNames).size !== pathNames.length
     || (isRecord(input.pathParams) && Object.keys(input.pathParams).some(name => !pathNames.includes(name)))) {
     return { kind: "refused", reason: "transport_unsupported" };

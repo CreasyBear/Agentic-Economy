@@ -11,8 +11,11 @@ export function DirectoryProviderHeader({ provider, entries, totalTools }: Props
   const tools = [...new Map(entries.filter(entry => entry.provider === provider).map(entry => [entry.resource, entry])).values()]
   const labels = [...new Set(tools.flatMap(tool => [...(tool.category === undefined ? [] : [tool.category]), ...(tool.tags ?? [])]))].slice(0, 6)
   const networks = [...new Set(tools.flatMap(tool => tool.prices.map(price => price.networkLabel ?? price.network)))]
-  const reporting = tools.filter(tool => tool.activity?.calls30d !== undefined && Number.isSafeInteger(tool.activity.calls30d) && tool.activity.calls30d >= 0)
-  const calls = reporting.reduce((sum, tool) => sum + BigInt(tool.activity!.calls30d!), 0n)
+  const reportedCalls = tools.flatMap(tool => {
+    const calls30d = tool.activity?.calls30d
+    return calls30d !== undefined && Number.isSafeInteger(calls30d) && calls30d >= 0 ? [calls30d] : []
+  })
+  const calls = reportedCalls.reduce((sum, value) => sum + BigInt(value), 0n)
   const validHost = x402DirectoryFilterSchema.safeParse({ provider })
   const total = totalTools !== undefined && Number.isSafeInteger(totalTools) && totalTools >= tools.length ? totalTools : undefined
   const updates = tools.flatMap(tool => {
@@ -40,9 +43,9 @@ export function DirectoryProviderHeader({ provider, entries, totalTools }: Props
         </li>)}</ul>
       </div>}
     </div>
-    {(networks.length > 0 || reporting.length > 0 || latestUpdate !== undefined) && <div className="grid gap-4 border-t border-border px-6 py-5 text-xs text-muted-foreground sm:px-8 md:grid-cols-3">
+    {(networks.length > 0 || reportedCalls.length > 0 || latestUpdate !== undefined) && <div className="grid gap-4 border-t border-border px-6 py-5 text-xs text-muted-foreground sm:px-8 md:grid-cols-3">
       {networks.length > 0 && <div><p className="mb-1 font-medium text-foreground">Payment networks in these results</p><p>{networks.join(' · ')}</p></div>}
-      {reporting.length > 0 && <div><p className="mb-1 font-medium text-foreground">{calls.toLocaleString()} reported Calls in 30 days</p><p>Across {reporting.length} {reporting.length === 1 ? 'Tool' : 'Tools'} in these results · Coinbase Bazaar</p></div>}
+      {reportedCalls.length > 0 && <div><p className="mb-1 font-medium text-foreground">{calls.toLocaleString()} reported Calls in 30 days</p><p>Across {reportedCalls.length} {reportedCalls.length === 1 ? 'Tool' : 'Tools'} in these results · Coinbase Bazaar</p></div>}
       {latestUpdate !== undefined && <div><p className="mb-1 font-medium text-foreground">Latest directory update</p><p>{latestUpdate} · among these results</p></div>}
     </div>}
   </section>

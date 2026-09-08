@@ -57,6 +57,11 @@ export default defineConfig({
   },
   ssr: {
     external: ["@clerk/tanstack-react-start"],
+    // @visx/responsive's ESM build re-exports "./components/ParentSize" without
+    // a file extension, which a bundler tolerates but Node's native ESM
+    // resolution rejects, so the SSR dev server fails to boot. Bundle it here
+    // instead of leaving it to Node.
+    noExternal: ["@visx/responsive"],
   },
   resolve: {
     tsconfigPaths: true,
