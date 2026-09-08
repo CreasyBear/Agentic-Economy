@@ -1,0 +1,1101 @@
+{
+  "status": "archived for rebaseline preparation; not a new source or release acceptance",
+  "base_commit": "7265d803daf42966d9b90be7fc48f04300b2876a",
+  "archive_location": "local: Backups/Agentic-Economy/closeout-2026-09-08/rebaseline-preparation",
+  "archive_sha256": "ae564230d01413a0aefb1ae2259bbed3f7dda7d7e652e1aa21a985e927258445",
+  "original_manifest_sha256": "4f6f94cc0e3620ec682f0a45dfb2f187c9a70b963df92c51272085887f8f28ef",
+  "entries": [
+    {
+      "path": ".planning/BRAND.md",
+      "bytes": 5252,
+      "sha256": "211b47a81ccc53c279767e673fdab29ca32cf23cc29cee2174df67429eada260",
+      "mode": 420,
+      "tracked": false
+    },
+    {
+      "path": ".planning/COPY-MAP.md",
+      "bytes": 8163,
+      "sha256": "ad31513c4ec542a4cf1e39707431a7afda5194607a461d32cc00339368b16904",
+      "mode": 420,
+      "tracked": false
+    },
+    {
+      "path": ".planning/ENTITY-TENANCY-SPEC.md",
+      "bytes": 27418,
+      "sha256": "3947e443e9c298a4376defea9c2177f31691c08414fb96998e25bf22c3988619",
+      "mode": 420,
+      "tracked": false
+    },
+    {
+      "path": ".planning/README.md",
+      "bytes": 909,
+      "sha256": "ba7f9ff10b7cec73d00a19708ad9c20607088e77bdf7c9f8623fd56d5db0de06",
+      "mode": 420,
+      "tracked": true
+    },
+    {
+      "path": ".planning/adr/ADR-027-comparable-published-price.md",
+      "bytes": 3718,
+      "sha256": "910a0e7380e6953335f8733695a4e239c9ae15a25e25cd8abd15876f936edbee",
+      "mode": 420,
+      "tracked": false
+    },
+    {
+      "path": ".planning/adr/ADR-028-executable-capability-registry-admission.md",
+      "bytes": 16654,
+      "sha256": "7689af20f82de1c48199092f88b6f207df64250769eb4e564fc393cf861d310d",
+      "mode": 420,
+      "tracked": false
+    },
+    {
+      "path": ".planning/adr/ADR-029-capability-publication-provenance-readiness.md",
+      "bytes": 19013,
+      "sha256": "e1bbfe092f3f737281c8d734e1612dc8992ba84780cbd9232714da5c5320dcee",
+      "mode": 420,
+      "tracked": false
+    },
+    {
+      "path": ".planning/adr/ADR-030-registry-engine-machine-contract.md",
+      "bytes": 16772,
+      "sha256": "b8cb1dc9ad1d405211e4c5550c9245a742ab8b3ee90972a83dfc8dc6a6b21352",
+      "mode": 420,
+      "tracked": false
+    },
+    {
+      "path": ".planning/adr/ADR-033-durable-answer-turn-lifecycle.md",
+      "bytes": 1128,
+      "sha256": "8e2663fd0b78ae6e6c46d0e1ea083c2b012bfe8ce373d882d1adc4cba5885674",
+      "mode": 420,
+      "tracked": false
+    },
+    {
+      "path": ".planning/adr/ADR-034-supplier-usage-qualified-use-and-payout-spine.md",
+      "bytes": 13881,
+      "sha256": "a50c23c10f39183f7b6a0a112eaa487a04e13cab9872057604c8ac6a199ce829",
+      "mode": 420,
+      "tracked": false
+    },
+    {
+      "path": ".planning/adr/ADR-035-single-key-capability-gateway.md",
+      "bytes": 2122,
+      "sha256": "f8f33d5c70922597d8518b6c866c1c37aacb982ccbaed3a70784b1607811635b",
+      "mode": 420,
+      "tracked": true
+    },
+    {
+      "path": ".planning/adr/ADR-036-agent-tool-market-foundation.md",
+      "bytes": 3001,
+      "sha256": "7f972993316e3069eac21520a392df789d62044e93956326709a4188bfbf6fbe",
+      "mode": 420,
+      "tracked": false
+    },
+    {
+      "path": ".planning/audits/product-papercut-register-2026-09-03.md",
+      "bytes": 28780,
+      "sha256": "a499afb0b1cfaa6a8bdf131a3ae26ccce1a15f8dffd1c306a62fcef2450c47ea",
+      "mode": 420,
+      "tracked": false
+    },
+    {
+      "path": ".planning/codebase/ARCHITECTURE.md",
+      "bytes": 36413,
+      "sha256": "3c159b3a4740d04a66b68917fd22a26d014266f5fc8ec816f3a848bc43fbde8b",
+      "mode": 420,
+      "tracked": true
+    },
+    {
+      "path": ".planning/codebase/CONCERNS.md",
+      "bytes": 24653,
+      "sha256": "8777b787b3922145972389b0d33c5f557c081c65d74aac0c6b0079c8d770b263",
+      "mode": 420,
+      "tracked": true
+    },
+    {
+      "path": ".planning/codebase/CONVENTIONS.md",
+      "bytes": 18523,
+      "sha256": "9c4ab48ce4ce1dabbf7ef05b88d36da23900a0736a40a80a8f8887cfb1c1853a",
+      "mode": 420,
+      "tracked": true
+    },
+    {
+      "path": ".planning/codebase/INTEGRATIONS.md",
+      "bytes": 19465,
+      "sha256": "e648d0387ff2640a58675c7815205ded5079a228958fae6cb05add237bc3465f",
+      "mode": 420,
+      "tracked": true
+    },
+    {
+      "path": ".planning/codebase/STACK.md",
+      "bytes": 12570,
+      "sha256": "2e222fa70201cbf2a41799a3ac61d25c8d67b1536ea20936d1e75de545b39561",
+      "mode": 420,
+      "tracked": true
+    },
+    {
+      "path": ".planning/codebase/STRUCTURE.md",
+      "bytes": 31596,
+      "sha256": "a8324a3bc3936199c104f7c084dd4ed917922c7c6a7a9430925cd6fb3e7f3284",
+      "mode": 420,
+      "tracked": true
+    },
+    {
+      "path": ".planning/codebase/TESTING.md",
+      "bytes": 20959,
+      "sha256": "3e273b6174ddede26382772a72d683e1241ebc14669d1afa41243d01734c8854",
+      "mode": 420,
+      "tracked": true
+    },
+    {
+      "path": ".planning/design-system/ACCESSIBILITY.md",
+      "bytes": 24387,
+      "sha256": "9806b2de7e0acefd57ab12cdcedfbadffd953c6c4037e7c96a69040736c8ff81",
+      "mode": 420,
+      "tracked": true
+    },
+    {
+      "path": ".planning/design-system/COMPONENTS.md",
+      "bytes": 33230,
+      "sha256": "262e73e808532a7ec7f4deefa87616937d38d3076cbf33533eee599e1d37d178",
+      "mode": 420,
+      "tracked": true
+    },
+    {
+      "path": ".planning/design-system/CONCERNS.md",
+      "bytes": 16855,
+      "sha256": "191e9860efd7d9edda867479ff62e46ef72c83460dcd12495b330876f722d3f6",
+      "mode": 420,
+      "tracked": true
+    },
+    {
+      "path": ".planning/design-system/CONVENTIONS.md",
+      "bytes": 18102,
+      "sha256": "cdecf1bae45ccf5f48b56438999276b3c892c4276042456c5816ff7b1c050f48",
+      "mode": 420,
+      "tracked": true
+    },
+    {
+      "path": ".planning/design-system/FOUNDATIONS.md",
+      "bytes": 28077,
+      "sha256": "09509b05bc9074bef9be7cb6673e47673210667e9809908146d59996b8052220",
+      "mode": 420,
+      "tracked": true
+    },
+    {
+      "path": ".planning/design-system/LAYOUT.md",
+      "bytes": 19451,
+      "sha256": "41977cb9638c3c8bd4f2f1b44b2be1c820acf0748f96ade7ccb8d3b692652b49",
+      "mode": 420,
+      "tracked": true
+    },
+    {
+      "path": ".planning/design-system/PATTERNS.md",
+      "bytes": 22746,
+      "sha256": "bb353caebcfd92984671585dca51046d7e1e2fba713e39474d48a0e1ddb1eaa3",
+      "mode": 420,
+      "tracked": true
+    },
+    {
+      "path": ".planning/evidence/product-frontier-baseline/product-frontier-manifest.json",
+      "bytes": 12293,
+      "sha256": "d82a7760b763718731fbe652abe89f05cee7047c53794df77c0f9a7df8a930e2",
+      "mode": 420,
+      "tracked": false
+    },
+    {
+      "path": ".planning/forensics/report-20260826-190606.md",
+      "bytes": 37933,
+      "sha256": "c42fd4bfa904f4059723c7331d9a017a394f1f14f2abe96f4d430d60395a4247",
+      "mode": 420,
+      "tracked": true
+    },
+    {
+      "path": ".planning/locus-docs/LOCUS-SCAVENGE-PAPERCUTS.md",
+      "bytes": 110407,
+      "sha256": "1f7a282157f75bced6754dc9e3428382365e5f61156e42f7d73448ac5b0f4137",
+      "mode": 420,
+      "tracked": false
+    },
+    {
+      "path": ".planning/locus-docs/README.md",
+      "bytes": 3016,
+      "sha256": "03a910cdbd23d0c7894a05c1b18cffd0a6cae4b174802268efc3be346fa18993",
+      "mode": 420,
+      "tracked": false
+    },
+    {
+      "path": ".planning/locus-docs/comparison/FINANCIAL-CONTROLS-AE-COMPARISON.md",
+      "bytes": 15742,
+      "sha256": "a56ed17b61997f88fbc1d7c3f298a1f4a3e7e44329c0a301f33682cf97b69afb",
+      "mode": 420,
+      "tracked": false
+    },
+    {
+      "path": ".planning/locus-docs/comparison/LEGACY-AE-COMPARISON.md",
+      "bytes": 14104,
+      "sha256": "98c65f315b79f283b0171cdb0ea0e9989556b42e3dba59e19afad6778c65b7b7",
+      "mode": 420,
+      "tracked": false
+    },
+    {
+      "path": ".planning/locus-docs/comparison/PRO-EXECUTION-AE-COMPARISON.md",
+      "bytes": 19909,
+      "sha256": "32dff37d007375eadaa927c5e62ee940b46eecb8d85912aa1d2ba25cb039d23b",
+      "mode": 420,
+      "tracked": false
+    },
+    {
+      "path": ".planning/locus-docs/parity/FINANCIAL-PARITY-REQUIREMENTS.md",
+      "bytes": 27848,
+      "sha256": "2ecfcdce092503d88cc89f6ffe6fe400ce23b6db1fac5798092846a7ef72d80b",
+      "mode": 420,
+      "tracked": false
+    },
+    {
+      "path": ".planning/locus-docs/parity/LEGACY-PARITY-REQUIREMENTS.md",
+      "bytes": 24839,
+      "sha256": "7e0cf83537ede0c7b6a3cc595548f18cf8f8d22194e80d58fa610fd09b81205d",
+      "mode": 420,
+      "tracked": false
+    },
+    {
+      "path": ".planning/locus-docs/parity/PRO-EXECUTION-PARITY-REQUIREMENTS.md",
+      "bytes": 39272,
+      "sha256": "7315d37b75dc93c119f548a6d3cd73a7531457370a0c4a42e11885ee227fd753",
+      "mode": 420,
+      "tracked": false
+    },
+    {
+      "path": ".planning/locus-docs/sources/FINANCIAL-CONTROLS-FINDINGS.md",
+      "bytes": 24820,
+      "sha256": "e11df5ee24ddd53ecfc63aa88cd8b95d082b5e5e8baae9c5850fd895c667f1fb",
+      "mode": 420,
+      "tracked": false
+    },
+    {
+      "path": ".planning/locus-docs/sources/FINANCIAL-CONTROLS-PAGE-LEDGER.md",
+      "bytes": 34994,
+      "sha256": "b342d202978e14cfb64339a7cd02ff10d5167ee49483518e2483cf8df15909b2",
+      "mode": 420,
+      "tracked": false
+    },
+    {
+      "path": ".planning/locus-docs/sources/LEGACY-PRODUCT-FINDINGS.md",
+      "bytes": 21368,
+      "sha256": "5fffc93cfc9c7890509a7ae4f397da4cbdff08c8fa8b27e678c3a5b9801782ad",
+      "mode": 420,
+      "tracked": false
+    },
+    {
+      "path": ".planning/locus-docs/sources/LEGACY-PRODUCT-PAGE-LEDGER.md",
+      "bytes": 15066,
+      "sha256": "e74e20f8ca526dd1cf473529caf087e616907adcc611c650561c66741b140d5e",
+      "mode": 420,
+      "tracked": false
+    },
+    {
+      "path": ".planning/locus-docs/sources/PRO-EXECUTION-FINDINGS.md",
+      "bytes": 45467,
+      "sha256": "4d56dcf97d9e5b65b47ba88593b78111083c820626203703c2b54a80b9c6fa17",
+      "mode": 420,
+      "tracked": false
+    },
+    {
+      "path": ".planning/locus-docs/sources/PRO-EXECUTION-PAGE-LEDGER.md",
+      "bytes": 37689,
+      "sha256": "c3cc8052bde54f8fb321085d77a470ebe665d5f7bcc8064524c87a9b2da04b9d",
+      "mode": 420,
+      "tracked": false
+    },
+    {
+      "path": ".planning/nevermined-docs/01-PRODUCT-AND-APP.md",
+      "bytes": 70371,
+      "sha256": "ad104d9c3c2b9c29c42a16605bd84f098fb04ad1bd81021ef6c1bd62d663a54e",
+      "mode": 420,
+      "tracked": false
+    },
+    {
+      "path": ".planning/nevermined-docs/02-API-AND-PROTOCOL.md",
+      "bytes": 48798,
+      "sha256": "dba483fcb196f4f1794dd471bd0b0df1bd02534e4f6fdb99d412150091ab90cf",
+      "mode": 420,
+      "tracked": false
+    },
+    {
+      "path": ".planning/nevermined-docs/03-TYPESCRIPT-SDK.md",
+      "bytes": 42676,
+      "sha256": "5ed85be268ab855d03073963841e71f8d95ce6853043e13e6f2dc573d1f8bbef",
+      "mode": 420,
+      "tracked": false
+    },
+    {
+      "path": ".planning/nevermined-docs/04-PYTHON-AND-INTEGRATIONS.md",
+      "bytes": 31823,
+      "sha256": "69cc0a0aa16bf3ebc7fd32e54a6b7fd68257c5e90270742dde9cb81df86c5bce",
+      "mode": 420,
+      "tracked": false
+    },
+    {
+      "path": ".planning/nevermined-docs/05-MATURITY-AND-OPPORTUNITIES.md",
+      "bytes": 33669,
+      "sha256": "aeebcecd0712e35c9f9b47ad911e51473c1bcd7cf2cc2071977537b596b0a319",
+      "mode": 420,
+      "tracked": false
+    },
+    {
+      "path": ".planning/nevermined-docs/NEVERMINED-CORPUS-COVERAGE.md",
+      "bytes": 13046,
+      "sha256": "4c7c53aee136c99dee32ca5d87c5e980cf7d2892ccfae87f85f548d9d50bc3e2",
+      "mode": 420,
+      "tracked": false
+    },
+    {
+      "path": ".planning/nevermined-docs/NEVERMINED-SCAVENGE-PAPERCUTS.md",
+      "bytes": 290214,
+      "sha256": "b743fd76d80648172f7d70cf30fb1da26aed93ea2d39324e280ebdb42ab4bcce",
+      "mode": 420,
+      "tracked": false
+    },
+    {
+      "path": ".planning/nevermined-docs/README.md",
+      "bytes": 2650,
+      "sha256": "a4793a078bfffdb9ada93bb028a194c79435182b5ffafcaa0176165180643776",
+      "mode": 420,
+      "tracked": false
+    },
+    {
+      "path": ".planning/nevermined-docs/papercuts/CROSS-RANGE-AUDIT-001-095.md",
+      "bytes": 10158,
+      "sha256": "60b24364e786341b5e59b32097205a46be9ecbf807abb250669eddd2abcc7603",
+      "mode": 420,
+      "tracked": false
+    },
+    {
+      "path": ".planning/nevermined-docs/papercuts/NVM-001-025-PRODUCT.md",
+      "bytes": 45144,
+      "sha256": "8500eb77566973a89939af2b66e191503889b6edbd9b9242aebef8f9496b3149",
+      "mode": 420,
+      "tracked": false
+    },
+    {
+      "path": ".planning/nevermined-docs/papercuts/NVM-026-055-API.md",
+      "bytes": 66729,
+      "sha256": "c13391cbf967e5ca296bbb98c989e036b607e792f7f0de25d36343f5a4f4931f",
+      "mode": 420,
+      "tracked": false
+    },
+    {
+      "path": ".planning/nevermined-docs/papercuts/NVM-056-075-TYPESCRIPT.md",
+      "bytes": 41176,
+      "sha256": "ee8e2cc95f80e07c08564a969008986177c376e48a2538ceee337f7484e26d0a",
+      "mode": 420,
+      "tracked": false
+    },
+    {
+      "path": ".planning/nevermined-docs/papercuts/NVM-076-095-PYTHON.md",
+      "bytes": 47345,
+      "sha256": "d6d7a498002e01f78f03184c91e2a5d27d7de456550afa398e7bfa301b5caf73",
+      "mode": 420,
+      "tracked": false
+    },
+    {
+      "path": ".planning/nevermined-docs/papercuts/NVM-096-120-MATURITY.md",
+      "bytes": 50660,
+      "sha256": "9d95bc5afb99bc3fa2e2f284930f04430a7a568a05582eab857afd30fff401c4",
+      "mode": 420,
+      "tracked": false
+    },
+    {
+      "path": ".planning/reference/treg/ARCHITECTURE.md",
+      "bytes": 14327,
+      "sha256": "0d3a487cbae006c22674b156cc6b966221a1f099efb120b148f1fb950b2282a9",
+      "mode": 420,
+      "tracked": false
+    },
+    {
+      "path": ".planning/reference/treg/ENGINEERING.md",
+      "bytes": 16439,
+      "sha256": "4736a76c2ef8317d63c2d8d45bd6607586ab8aef17e5e01e096256eb13a87b24",
+      "mode": 420,
+      "tracked": false
+    },
+    {
+      "path": ".planning/reference/treg/INTERACTIONS.md",
+      "bytes": 17297,
+      "sha256": "962f3e53f079fb3a99d701c27b26cf9c37432bf80d7d82680874e41e121f5629",
+      "mode": 420,
+      "tracked": false
+    },
+    {
+      "path": ".planning/reference/treg/SURFACES.md",
+      "bytes": 21247,
+      "sha256": "f2fbfe6d3d8ac29fef059baba58536c858dd7ed69b8e9e306a9daafb5ab7321d",
+      "mode": 420,
+      "tracked": false
+    },
+    {
+      "path": ".planning/reference/treg/TREG-OX-PORTFOLIO-REVIEW.md",
+      "bytes": 9763,
+      "sha256": "303fd9fa798d07e6104d43ffcfc5007ffb8e8e05e21027484a3de35be5adebfb",
+      "mode": 420,
+      "tracked": false
+    },
+    {
+      "path": ".planning/reference/treg/TREG-SCAVENGE-OX-LOG.jsonl",
+      "bytes": 37964,
+      "sha256": "7c0b59641f3b8f8831dab5b517b9277b254737841926a957ba8d6d1fb79e27c7",
+      "mode": 420,
+      "tracked": false
+    },
+    {
+      "path": ".planning/reference/treg/TREG-SCAVENGE-PAPERCUTS.md",
+      "bytes": 173076,
+      "sha256": "12679fcb3bfa7bc0c8e85da7a8a3495fbe481d9c62d84125cebb0a2e788015b4",
+      "mode": 420,
+      "tracked": false
+    },
+    {
+      "path": ".planning/research/2026-08-23-agentic-market-full-registry-contract.md",
+      "bytes": 20911,
+      "sha256": "9ae7fdefb03eab0efe27aba17d3c50990d20debdfb260f542dcc832dc834308f",
+      "mode": 420,
+      "tracked": false
+    },
+    {
+      "path": ".planning/research/2026-08-23-familiar-market-single-feature-map.md",
+      "bytes": 18563,
+      "sha256": "073b15db9f7285314c7ccf9df48eabd37f28e836d148dd126b33ecd85e361aed",
+      "mode": 420,
+      "tracked": false
+    },
+    {
+      "path": ".planning/research/2026-08-23-market-interface-validation.md",
+      "bytes": 23635,
+      "sha256": "be6659cd8af3f66a21f40928b5610277246c727333a656de4c6549e0e7f1d3a3",
+      "mode": 420,
+      "tracked": false
+    },
+    {
+      "path": ".planning/research/2026-08-23-treg-full-registry-contract.md",
+      "bytes": 19864,
+      "sha256": "a4152e1eea135446b1fd80b483fbf011f493b3670e4ec1d8369faa58bc87c0b1",
+      "mode": 420,
+      "tracked": false
+    },
+    {
+      "path": ".planning/research/2026-08-23-treg-product-market-frame.md",
+      "bytes": 37741,
+      "sha256": "ed146336accdc52a5359bd471d5436ed7419ad3c83eb214662444adf5aa7cc4f",
+      "mode": 420,
+      "tracked": false
+    },
+    {
+      "path": ".planning/research/2026-08-25-australian-loyalty-microtransaction-flywheels.md",
+      "bytes": 44359,
+      "sha256": "7c8b05d3119979259c245d53a3e46a971370a0dd5bb9c914b6869e3e35c4d92f",
+      "mode": 420,
+      "tracked": true
+    },
+    {
+      "path": ".planning/research/2026-08-25-external-incentive-flywheels.md",
+      "bytes": 32599,
+      "sha256": "58b6486e6f36ce10edc1e02a52bbcb10677974547c5ced66bdcb9c789f4fbe98",
+      "mode": 420,
+      "tracked": true
+    },
+    {
+      "path": ".planning/research/2026-08-25-platform-maturity-rubric.md",
+      "bytes": 35564,
+      "sha256": "48b3ddd8f09dcb00a81813af92c07bced5662d6a5aab2ee3d41370df397892a0",
+      "mode": 420,
+      "tracked": false
+    },
+    {
+      "path": ".planning/research/2026-08-26-executor-managed-tools-and-ae-wedge.md",
+      "bytes": 23929,
+      "sha256": "017a1f8d7adfd4829d1a1d6850ee7d5cb24a5bc8dcbe456df50fda7d8ebf0226",
+      "mode": 420,
+      "tracked": false
+    },
+    {
+      "path": ".planning/research/2026-08-27-donor-alpha-mining.md",
+      "bytes": 15540,
+      "sha256": "bfbe2aec85b18159f5e28dc7febf0607cebedf95040c161d1886685bd4565d24",
+      "mode": 420,
+      "tracked": false
+    },
+    {
+      "path": ".planning/research/ARCHITECTURE.md",
+      "bytes": 51415,
+      "sha256": "2364a5b8ced970a3b88807001d8cbe97140957c34f7ba32dd578f951c527f0d8",
+      "mode": 420,
+      "tracked": true
+    },
+    {
+      "path": ".planning/research/CROSS-HARNESS-MARKET-LOOP-PREREGISTRATION.md",
+      "bytes": 8127,
+      "sha256": "1df029d3a4b0018f0e1f19756a322a5a87b493881a72ce420f991feaa9ffc9a6",
+      "mode": 420,
+      "tracked": false
+    },
+    {
+      "path": ".planning/research/FEATURES.md",
+      "bytes": 35103,
+      "sha256": "006ebd742af546e137e499aa65dee72d445d5703a81f2e8ae22c2ad9f99a5326",
+      "mode": 420,
+      "tracked": true
+    },
+    {
+      "path": ".planning/research/PITFALLS.md",
+      "bytes": 72064,
+      "sha256": "9aad209c90335212a212198a7b20f5596da945ca8bd66033dbaaf27940049a87",
+      "mode": 420,
+      "tracked": true
+    },
+    {
+      "path": ".planning/research/POST-CALL-AGENT-EXPERIENCE-PRIMARY-SOURCES.md",
+      "bytes": 40780,
+      "sha256": "4fe46ba228c5ec46a24b506bda4a151d39e0aa270a77cdcc251ba37b7c89da6a",
+      "mode": 420,
+      "tracked": false
+    },
+    {
+      "path": ".planning/research/STACK.md",
+      "bytes": 33925,
+      "sha256": "90285132dc5021ffa7798635fc601d361c8cd22ebc7a7b6c887e95a4cc0800ed",
+      "mode": 420,
+      "tracked": true
+    },
+    {
+      "path": ".planning/research/SUMMARY.md",
+      "bytes": 33057,
+      "sha256": "6bef502cae70b063407daada4d164b6c9599bfaae40b5e4c0484393ddb632646",
+      "mode": 420,
+      "tracked": true
+    },
+    {
+      "path": ".planning/research/whitepaper-academic-architecture.md",
+      "bytes": 44325,
+      "sha256": "7669cb1f133afed03d74df880cba9d7b4e2500b97cee0627314d4a875817d60d",
+      "mode": 420,
+      "tracked": false
+    },
+    {
+      "path": ".planning/research/whitepaper-gold-standard-patterns.md",
+      "bytes": 21797,
+      "sha256": "c120732b8a8f02bc1d3333c151ada5eb18d9b0c02b334aa7071dcc771112d60e",
+      "mode": 420,
+      "tracked": false
+    },
+    {
+      "path": ".planning/research/whitepaper-institutional-economics.md",
+      "bytes": 41850,
+      "sha256": "fa7157a1e0d9c37d58a505cd642c386b9a7cc29ade0b0bf76f74326af3ef5a47",
+      "mode": 420,
+      "tracked": false
+    },
+    {
+      "path": ".planning/whop-docs/ARCHITECTURE.md",
+      "bytes": 38307,
+      "sha256": "0b1d6e9bcd14dddb2a7767bbdad06db2be20c74850ff22bd12de467bd23327fd",
+      "mode": 420,
+      "tracked": false
+    },
+    {
+      "path": ".planning/whop-docs/CONCERNS.md",
+      "bytes": 76473,
+      "sha256": "ae799a971485e96a0aac8990a0526e0be3f5306c7750c47350b1262d48e05e53",
+      "mode": 420,
+      "tracked": false
+    },
+    {
+      "path": ".planning/whop-docs/CONVENTIONS.md",
+      "bytes": 33287,
+      "sha256": "18fa0f79f84c8d782333942e4e2c529e5fb6fa2914e3bacfc5f7bbf5f78b51fb",
+      "mode": 420,
+      "tracked": false
+    },
+    {
+      "path": ".planning/whop-docs/INTEGRATIONS.md",
+      "bytes": 41127,
+      "sha256": "a165db7e12a7592837e45a2c7f98027d8723a2549a4fd9b462484bf1977f9ba8",
+      "mode": 420,
+      "tracked": false
+    },
+    {
+      "path": ".planning/whop-docs/STACK.md",
+      "bytes": 33038,
+      "sha256": "abca9257d1ba5b5a011d1e4f88703d60dccbadaa5bbd84182705bf159a810168",
+      "mode": 420,
+      "tracked": false
+    },
+    {
+      "path": ".planning/whop-docs/STRUCTURE.md",
+      "bytes": 31828,
+      "sha256": "570ba135d1b7703028095957a85b9128a3258b590ee21fd5591b91fb600b8d4c",
+      "mode": 420,
+      "tracked": false
+    },
+    {
+      "path": ".planning/whop-docs/TESTING.md",
+      "bytes": 44949,
+      "sha256": "97ed9c475897e4e90df04a562ef717560dedf65987df6ad59518237c3e14398a",
+      "mode": 420,
+      "tracked": false
+    },
+    {
+      "path": ".planning/whop-docs/WHOP-SCAVENGE-OX-LOG.jsonl",
+      "bytes": 61308,
+      "sha256": "f02c29e103f69c66f97abeeca3790bfb2000d438b6e5cf09ec22f58a49151692",
+      "mode": 420,
+      "tracked": false
+    },
+    {
+      "path": ".planning/whop-docs/WHOP-SCAVENGE-PAPERCUTS.md",
+      "bytes": 343352,
+      "sha256": "49b159c350a132557256de57443a4dc18a9a4008378d7af6970311c66171acab",
+      "mode": 420,
+      "tracked": false
+    },
+    {
+      "path": ".planning/whop-docs/rescan/WHOP-001-035-AE-RESCAN.md",
+      "bytes": 43007,
+      "sha256": "3b0cd04648dcd0471fe99e125b7b3c2d251da3d42a71b5adb201355ed3cc0adf",
+      "mode": 420,
+      "tracked": false
+    },
+    {
+      "path": ".planning/whop-docs/rescan/WHOP-036-070-AE-RESCAN.md",
+      "bytes": 36079,
+      "sha256": "2807e8dd4779af816a79da6b958035f1f7d258eddf67252448fa35492b4af9c3",
+      "mode": 420,
+      "tracked": false
+    },
+    {
+      "path": ".planning/whop-docs/rescan/WHOP-071-105-AE-RESCAN.md",
+      "bytes": 38195,
+      "sha256": "8b1804c7a1936385025471434c72604a9e9d309b1943d71180fe949295c0e9ec",
+      "mode": 420,
+      "tracked": false
+    },
+    {
+      "path": "X402_SELLER_ONBOARDING.md",
+      "bytes": 4431,
+      "sha256": "e3c7773f8e968ddc468cfdec12824e2858f85b1dafc0dd4c5c2f9f4ad1d2bbd8",
+      "mode": 420,
+      "tracked": true
+    },
+    {
+      "path": "docs/designs/operation-kernel-wayfinder.md",
+      "bytes": 26261,
+      "sha256": "9505b0a64feb3adbfa61ac5d19e20b31a0de8cda0852e0b23229d2de268159cc",
+      "mode": 420,
+      "tracked": true
+    },
+    {
+      "path": "docs/designs/vocabulary-rationalisation.md",
+      "bytes": 32078,
+      "sha256": "86473c7addc613b0d5976d336b8af3982d374ba984d2c992d406768b0d0b0a24",
+      "mode": 420,
+      "tracked": true
+    },
+    {
+      "path": "docs/reviews/package-6-review-implementation.md",
+      "bytes": 20587,
+      "sha256": "56111716dff9c49ae9116479a302ab354f2b4d2764721f05cb6729b9b12ef24b",
+      "mode": 420,
+      "tracked": true
+    },
+    {
+      "path": "docs/reviews/package-6-review-native-challenge.md",
+      "bytes": 21272,
+      "sha256": "ad8c078a8ae79fc37798da8f7767779f790d02a44db681b04ae2346dc1ff54f0",
+      "mode": 420,
+      "tracked": true
+    },
+    {
+      "path": "docs/reviews/package-6-review-requirements.md",
+      "bytes": 33241,
+      "sha256": "b61227880fe3759b204ef5eb9f7a14c9c7046fe381c800bdae66c43c93067c30",
+      "mode": 420,
+      "tracked": true
+    },
+    {
+      "path": "docs/reviews/package-6-review.md",
+      "bytes": 28087,
+      "sha256": "d3708b3e95b184f5c1adbb334eb91fce43ed8a06720db16b2fd982b84c52a224",
+      "mode": 420,
+      "tracked": true
+    },
+    {
+      "path": "docs/workflow/README.md",
+      "bytes": 9015,
+      "sha256": "9a8e03f5719ceec62628cce41023427df5841a8e74419633abaf7803a14e0af3",
+      "mode": 420,
+      "tracked": true
+    },
+    {
+      "path": "docs/workflow/history/superstack-learnings.md",
+      "bytes": 6174,
+      "sha256": "f6da08a5c78d651b059fac37476623578640a104a5030b8ee5058aeec1c250f8",
+      "mode": 420,
+      "tracked": true
+    },
+    {
+      "path": "docs/workflow/install-skill.py",
+      "bytes": 3862,
+      "sha256": "b33e0d8a309e65943f0187eca1a24ca704c9f0fc1bcd45b6ba4040073e17eddb",
+      "mode": 420,
+      "tracked": true
+    },
+    {
+      "path": "docs/workflow/lessons.md",
+      "bytes": 1639,
+      "sha256": "4a9f67b532ce6297c5451e9ab56654b78bcc0ddaae0dfa9985aeb5484d508dc4",
+      "mode": 420,
+      "tracked": true
+    },
+    {
+      "path": "docs/workflow/validation.md",
+      "bytes": 4699,
+      "sha256": "77a71d3aa29b8eb7d59e6a0962fabcd122e733f36d11ef3eab5a2aeb575f5c56",
+      "mode": 420,
+      "tracked": true
+    },
+    {
+      "path": "docs/workflow/wayfinder-delivery/SKILL.md",
+      "bytes": 4764,
+      "sha256": "040fd43c244cddcd258059f0c01eb907ca4bd1f87ebee473ecd6f7e3007bc890",
+      "mode": 420,
+      "tracked": true
+    },
+    {
+      "path": "docs/workflow/wayfinder-delivery/agents/openai.yaml",
+      "bytes": 338,
+      "sha256": "9213f22f3c3ac08514d4a64723d3e80a5f19f2ab757e8998f5b5a0b3af34b257",
+      "mode": 420,
+      "tracked": true
+    },
+    {
+      "path": "docs/workflow/wayfinder-delivery/assets/experiment.md",
+      "bytes": 689,
+      "sha256": "f87872d3a08f2551cce71bb5c1d1b3c68b544e6c59ea65eff5a4fc2f6f35daa1",
+      "mode": 420,
+      "tracked": true
+    },
+    {
+      "path": "docs/workflow/wayfinder-delivery/assets/work.md",
+      "bytes": 1111,
+      "sha256": "b49eb274bbd7a8d293d9840726a28133fe53ad2a9817611f5731d1eca6ee1282",
+      "mode": 420,
+      "tracked": true
+    },
+    {
+      "path": "docs/workflow/wayfinder-delivery/references/delivery.md",
+      "bytes": 7412,
+      "sha256": "0fce71f8931eb88e55767e0010d9b53b32a23fdc0704c4ef71ca0b65790703cc",
+      "mode": 420,
+      "tracked": true
+    },
+    {
+      "path": "docs/workflow/wayfinder-delivery/references/evolution.md",
+      "bytes": 5637,
+      "sha256": "e6067ce541ccf2a88372c87e31e458a01b23d2da6fc09c19f63cfb590dc8f8c9",
+      "mode": 420,
+      "tracked": true
+    },
+    {
+      "path": "docs/workflow/wayfinder-delivery/references/records.md",
+      "bytes": 5811,
+      "sha256": "ddf6a7d5d40946edf042e4c0c79808797bd3674d1a6b003b745d97d371a28ef0",
+      "mode": 420,
+      "tracked": true
+    },
+    {
+      "path": "docs/workflow/work/WF-20260905-package-7.md",
+      "bytes": 8189,
+      "sha256": "256fb7639bee36db4700ea82feefc4c71f0177850c55b5b870038ee97fc2bcef",
+      "mode": 420,
+      "tracked": true
+    },
+    {
+      "path": "docs/workflow/work/WF-20260905-vocabulary-cold-review-20260907-evidence/README.md",
+      "bytes": 3952,
+      "sha256": "3d1b8687d3b09e01fdca1313417e64ab46754eb6c909ec872781c7ad760c7915",
+      "mode": 420,
+      "tracked": true
+    },
+    {
+      "path": "docs/workflow/work/WF-20260905-vocabulary-cold-review-20260907-evidence/dead-command-results.json",
+      "bytes": 648,
+      "sha256": "fed00b6315c25f6bef3d5b2e4eb6d665e9a19047d11078a1f4eafa6c2a6607dc",
+      "mode": 420,
+      "tracked": true
+    },
+    {
+      "path": "docs/workflow/work/WF-20260905-vocabulary-cold-review-20260907-evidence/manifest-excerpts.json",
+      "bytes": 1593,
+      "sha256": "4e4a0b3af7e0be0840ca0d836f8c696beee88e401f673aea9ce7b80eeb03fcad",
+      "mode": 420,
+      "tracked": true
+    },
+    {
+      "path": "docs/workflow/work/WF-20260905-vocabulary-cold-review-20260907-evidence/preservation-summary.json",
+      "bytes": 536,
+      "sha256": "4ebef8d05ce9696c38884403d87368fc54ead21e933213a0e67ff00154eee964",
+      "mode": 420,
+      "tracked": true
+    },
+    {
+      "path": "docs/workflow/work/WF-20260905-vocabulary-cold-review-20260907-evidence/probe-access-expiry.log",
+      "bytes": 599,
+      "sha256": "0da157715545ca213a4e3d29dead8d6d9d5b3d8cc728f6ce1ca285b16bfe663d",
+      "mode": 420,
+      "tracked": true
+    },
+    {
+      "path": "docs/workflow/work/WF-20260905-vocabulary-cold-review-20260907-evidence/probe-access-expiry.mjs.txt",
+      "bytes": 1867,
+      "sha256": "7abbe2b479615ec4a874104fb9835a12b19975ff6313bbbc49c51d9f8d8a44f7",
+      "mode": 420,
+      "tracked": true
+    },
+    {
+      "path": "docs/workflow/work/WF-20260905-vocabulary-cold-review-20260907-evidence/probe-health-pagination.log",
+      "bytes": 643,
+      "sha256": "72ef15fe92f7be13912ff01ceb2ed3a1baddf9f67d0ac94eca888ec8cc9b385b",
+      "mode": 420,
+      "tracked": true
+    },
+    {
+      "path": "docs/workflow/work/WF-20260905-vocabulary-cold-review-20260907-evidence/probe-health-pagination.mjs.txt",
+      "bytes": 1996,
+      "sha256": "867abba3b192cd7e25a8954e3f792e6163a99717407761aff0e793b782743299",
+      "mode": 420,
+      "tracked": true
+    },
+    {
+      "path": "docs/workflow/work/WF-20260905-vocabulary-cold-review-20260907-evidence/probe-late-digest.log",
+      "bytes": 658,
+      "sha256": "4ae0a5d3c2531e73ccaf86dae9a17f7d56457a25b424b0d82faaf72f3d53fb85",
+      "mode": 420,
+      "tracked": true
+    },
+    {
+      "path": "docs/workflow/work/WF-20260905-vocabulary-cold-review-20260907-evidence/probe-late-digest.mjs.txt",
+      "bytes": 2212,
+      "sha256": "61d7e83d8a66cd903827a7dc7ad77b7b51944aef4a307352f3b27b894e93c31f",
+      "mode": 420,
+      "tracked": true
+    },
+    {
+      "path": "docs/workflow/work/WF-20260905-vocabulary-cold-review-20260907-evidence/probe-media-type.log",
+      "bytes": 503,
+      "sha256": "8aa57a579f7d9ba4e83e71e76fd26f5e45276492b6214263dd042a8ccc6899b7",
+      "mode": 420,
+      "tracked": true
+    },
+    {
+      "path": "docs/workflow/work/WF-20260905-vocabulary-cold-review-20260907-evidence/probe-media-type.mjs.txt",
+      "bytes": 1228,
+      "sha256": "62d505ca9983649b29925225c0a9e9f6008fc01606817fa47c6850f255159525",
+      "mode": 420,
+      "tracked": true
+    },
+    {
+      "path": "docs/workflow/work/WF-20260905-vocabulary-cold-review-20260907-evidence/probe-owner-tool.log",
+      "bytes": 533,
+      "sha256": "d4d61646922025bca0331fe1f5820344251cc5cfc6d375eadde5ec6b58219e7b",
+      "mode": 420,
+      "tracked": true
+    },
+    {
+      "path": "docs/workflow/work/WF-20260905-vocabulary-cold-review-20260907-evidence/probe-owner-tool.mjs.txt",
+      "bytes": 2069,
+      "sha256": "fc59967ee5674d2d67861eff5a0a9f5d8542a6c6bd7b59b6345e7f3f22668172",
+      "mode": 420,
+      "tracked": true
+    },
+    {
+      "path": "docs/workflow/work/WF-20260905-vocabulary-cold-review-20260907-evidence/probe-request-origin.log",
+      "bytes": 593,
+      "sha256": "8f4aac6a2986833be6f15c947d407dd8a8326df9834b2f0af1edef1a89ecd612",
+      "mode": 420,
+      "tracked": true
+    },
+    {
+      "path": "docs/workflow/work/WF-20260905-vocabulary-cold-review-20260907-evidence/probe-request-origin.mjs.txt",
+      "bytes": 1513,
+      "sha256": "c43ed06827326cbe8e88aac4e9580127ba212133479a24ec7b8480ce922b9e69",
+      "mode": 420,
+      "tracked": true
+    },
+    {
+      "path": "docs/workflow/work/WF-20260905-vocabulary-cold-review-20260907-evidence/probe-treasury-history.log",
+      "bytes": 1166,
+      "sha256": "5d049cf0cfbc2f6e376af722074b90581dd0b3d464e6bbc13517b94cde6e9d2f",
+      "mode": 420,
+      "tracked": true
+    },
+    {
+      "path": "docs/workflow/work/WF-20260905-vocabulary-cold-review-20260907-evidence/probe-treasury-history.mjs.txt",
+      "bytes": 2344,
+      "sha256": "68cd44f4f7483be6c99bf45a5d727994921093004d7d20667b41c5d172acc6b1",
+      "mode": 420,
+      "tracked": true
+    },
+    {
+      "path": "docs/workflow/work/WF-20260905-vocabulary-cold-review-20260907-evidence/review-brief.md",
+      "bytes": 3141,
+      "sha256": "03a90ea63e97be9abe29e07689b5ce07e1f144089fcc2f70ef2e552e172de50b",
+      "mode": 420,
+      "tracked": true
+    },
+    {
+      "path": "docs/workflow/work/WF-20260905-vocabulary-cold-review-20260907-evidence/typecheck-summary.json",
+      "bytes": 105,
+      "sha256": "4935b04389473a5fe493eb65da01131e6aa144ff5f77961ba885df7f56aebb72",
+      "mode": 420,
+      "tracked": true
+    },
+    {
+      "path": "docs/workflow/work/WF-20260905-vocabulary-cold-review-20260907-evidence/w1-authority.md",
+      "bytes": 8350,
+      "sha256": "8c9df28e0fdfb498b7b84eee5ded53877fee764a4053b5b4602152c2d35f7bd3",
+      "mode": 420,
+      "tracked": true
+    },
+    {
+      "path": "docs/workflow/work/WF-20260905-vocabulary-cold-review-20260907-evidence/w1-market.md",
+      "bytes": 8065,
+      "sha256": "c3fef60a785770a66237098e1b91796631f6c3481a923bb71a8b55670753aed1",
+      "mode": 420,
+      "tracked": true
+    },
+    {
+      "path": "docs/workflow/work/WF-20260905-vocabulary-cold-review-20260907-evidence/w1-purchase.md",
+      "bytes": 6837,
+      "sha256": "4b19b431d8a7ccf10af17a48e44b2e271ffec49b489e30e515241fe4cf733d1e",
+      "mode": 420,
+      "tracked": true
+    },
+    {
+      "path": "docs/workflow/work/WF-20260905-vocabulary-cold-review-20260907-evidence/w2-human-ui.md",
+      "bytes": 10762,
+      "sha256": "ade7bed85bf61618487c49cc6565e92a30d33f9dfe0b039371509745465e9d41",
+      "mode": 420,
+      "tracked": true
+    },
+    {
+      "path": "docs/workflow/work/WF-20260905-vocabulary-cold-review-20260907-evidence/w2-money.md",
+      "bytes": 9127,
+      "sha256": "282f81eb93f61fd7480f9403145335a6a16ee72895bbda0e830f04aa299bb210",
+      "mode": 420,
+      "tracked": true
+    },
+    {
+      "path": "docs/workflow/work/WF-20260905-vocabulary-cold-review-20260907-evidence/w2-provider.md",
+      "bytes": 6329,
+      "sha256": "764c0ca4e512d7453cb1e599511c90de132cc61b4718c6b6861581313967e0b0",
+      "mode": 420,
+      "tracked": true
+    },
+    {
+      "path": "docs/workflow/work/WF-20260905-vocabulary-cold-review-20260907-evidence/w3-cli.md",
+      "bytes": 10064,
+      "sha256": "abcfa05c4ae60018b8fa269264ecc26dbe3e057477039434871011f8ecafe669",
+      "mode": 420,
+      "tracked": true
+    },
+    {
+      "path": "docs/workflow/work/WF-20260905-vocabulary-cold-review-20260907-evidence/w3-discovery.md",
+      "bytes": 7182,
+      "sha256": "556e5befae68f01b27f0e14f18c11e73c1abe14af992f2966702018d9813690b",
+      "mode": 420,
+      "tracked": true
+    },
+    {
+      "path": "docs/workflow/work/WF-20260905-vocabulary-cold-review-20260907-evidence/w3-http-mcp.md",
+      "bytes": 9271,
+      "sha256": "1f35d698d8fc96921cb5f16611fb71cfd24cb82301ff1629a826f72a46b93ada",
+      "mode": 420,
+      "tracked": true
+    },
+    {
+      "path": "docs/workflow/work/WF-20260905-vocabulary-cold-review-20260907-evidence/w4-distribution.md",
+      "bytes": 5910,
+      "sha256": "6ffb48f5a8dfb71c5ca883c4e8456e3ffef853710f1a6458ff7ea5af2e71e7d3",
+      "mode": 420,
+      "tracked": true
+    },
+    {
+      "path": "docs/workflow/work/WF-20260905-vocabulary-cold-review-20260907-evidence/w4-docs.md",
+      "bytes": 11015,
+      "sha256": "cc7d62d29b7b9a1d1f4931e242148027a1d7e8fe2058a133220af522e3ee2e1c",
+      "mode": 420,
+      "tracked": true
+    },
+    {
+      "path": "docs/workflow/work/WF-20260905-vocabulary-cold-review-20260907-evidence/w4-storage.md",
+      "bytes": 7704,
+      "sha256": "6aa4f50f87c93c274a813fd2eeeefeaa9c99464e038164f800aa09628434a375",
+      "mode": 420,
+      "tracked": true
+    },
+    {
+      "path": "docs/workflow/work/WF-20260905-vocabulary-cold-review-20260907-evidence/w5-journeys.md",
+      "bytes": 5865,
+      "sha256": "ee8fe98f9723f0fe70cdde941f1e30272ec1f0a36f562744f280a0b5eb0103d8",
+      "mode": 420,
+      "tracked": true
+    },
+    {
+      "path": "docs/workflow/work/WF-20260905-vocabulary-cold-review-20260907-evidence/w5-semantics.md",
+      "bytes": 7188,
+      "sha256": "50d4fc18f9ecc0fb88d2d7a02b549c12247cb580911c6aa8c999e539714c2c24",
+      "mode": 420,
+      "tracked": true
+    },
+    {
+      "path": "docs/workflow/work/WF-20260905-vocabulary-cold-review-20260907-evidence/w5-test-blindspots.md",
+      "bytes": 8875,
+      "sha256": "de89ea7e7cb9f3ca96790d237daf7f29f58fbd1d007218e48d970d964ba3653b",
+      "mode": 420,
+      "tracked": true
+    },
+    {
+      "path": "docs/workflow/work/WF-20260905-vocabulary-cold-review-20260907.md",
+      "bytes": 31914,
+      "sha256": "8999827526c27b3fa29393488380c32784f5b2c893aec051e760635646e54746",
+      "mode": 420,
+      "tracked": true
+    },
+    {
+      "path": "docs/workflow/work/WF-20260905-vocabulary.md",
+      "bytes": 37414,
+      "sha256": "0cf3376ada21591a6317ddecb2255c72971eb0e5d1eae73e88fa490e88cc710b",
+      "mode": 420,
+      "tracked": true
+    },
+    {
+      "path": "docs/workflow/work/WF-20260905-workflow.md",
+      "bytes": 4483,
+      "sha256": "8508b8640bb4f4ca149ea0bb3f713674ec5133242aac4957e9c9dd6bab9ce215",
+      "mode": 420,
+      "tracked": true
+    },
+    {
+      "path": "docs/workflow/work/WF-20260908-closeout-archives.json",
+      "bytes": 3790,
+      "sha256": "3e820daa77ae3ec077e4943848188ad721e8ba787d4219d769eead9777f017a8",
+      "mode": 420,
+      "tracked": true
+    },
+    {
+      "path": "docs/workflow/work/WF-20260908-closeout.md",
+      "bytes": 17167,
+      "sha256": "fd490ea1cc0d90547177a4d2a951e3fd00492488fa0ea90d76324d84ce11636e",
+      "mode": 420,
+      "tracked": true
+    }
+  ]
+}

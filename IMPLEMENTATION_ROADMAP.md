@@ -941,7 +941,7 @@ Package 5's source implementation is complete on `main`: source-native preview f
 This describes the landed Package 5 core baseline, not a claim that every
 connection-return branch is correct. Subsequent review found handoff and resume
 defects; their current working-tree corrections are uncommitted, with focused
-local verification recorded in the [transition review addendum](docs/reviews/package-6-review.md#provider-handoff-and-recovery-transitions-source-and-focused-tests-verified).
+local verification recorded in the [transition review addendum](docs/archive/README.md#package-6-reviews).
 That later local evidence is not a deployed or native-client release result.
 The recorded 2026-09-04 changed-cone run was 505 passed and 3 failed across 61
 files, with the failures attributed in the Package 5 plan to concurrent work.

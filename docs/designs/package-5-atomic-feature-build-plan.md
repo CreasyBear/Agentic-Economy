@@ -16,7 +16,7 @@ This document is the user-approved Package 5 execution authority. It authorises 
 
 **Reconciled 2026-09-05:** the core described below is present in `main` at
 `987cdec5085c207eb6b9024b66ef4a20de8a3da0`; later connection-handoff and resume
-corrections are uncommitted. The [transition review addendum](../reviews/package-6-review.md#provider-handoff-and-recovery-transitions-source-and-focused-tests-verified)
+corrections are uncommitted. The [transition review addendum](../archive/README.md#package-6-reviews)
 records their focused local verification (4 files / 27 tests, typecheck and
 narrow lint passing), while the repository import gate remains red on four
 baseline imports in two Package 5 test files. This is not deployed or native

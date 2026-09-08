@@ -14,8 +14,8 @@ Package 7 implementation approval remains outstanding after the accepted
 vocabulary source cutover. Scoping answers do not select a vendor or approve
 the final architecture.
 
-[PRODUCT](../../../PRODUCT.md) remains the product authority. The one current
-[Package 7 plan](../../designs/package-7-trust-and-lifecycle.md) contains the full
+[PRODUCT](../../PRODUCT.md) remains the product authority. The one current
+[Package 7 plan](package-7-trust-and-lifecycle.md) contains the full
 journeys, P7-01–12 acceptance matrix, surfaces, backend/database contracts,
 policy work, operating decisions and six implementation tasks.
 
@@ -32,9 +32,9 @@ and enablement precede uniqueness; the market opportunity is accepted. Preserve
 complete Package 7 scope and native reuse. Departures need an actual Australian,
 correctness/safety or demonstrated reference-weakness reason and customer benefit.
 
-[CONTEXT](../../../CONTEXT.md) is the accepted glossary. The
-[dated proposal](../../../research/VOCABULARY-PROPOSAL-20260905.md) is historical;
-Tool is agreed, and the [vocabulary source closeout](WF-20260905-vocabulary.md)
+[CONTEXT](../../CONTEXT.md) is the accepted glossary. The
+[dated proposal](../../research/VOCABULARY-PROPOSAL-20260905.md) is historical;
+Tool is agreed, and the [vocabulary source closeout](../archive/README.md#vocabulary-source-acceptance)
 records the completed source cutover. The old tentative-choice statement is
 superseded. This does not establish hosted deployment, installed commercial
 execution, retained-data cutover or Package 7 implementation approval.
@@ -50,8 +50,8 @@ or protocol rename is authorised, and no universal one-to-one mapping is assumed
 
 Package 6 remains open: checkpoint its bounded fix and carry the latest native
 integration, deployment/client, authenticated journey, support/accessibility and
-import-gate gaps into T1/T3/T5/T6. See [its review](../../reviews/package-6-review.md)
-and [follow-up](../../reviews/package-6-review-implementation.md); local remediation
+import-gate gaps into T1/T3/T5/T6. See [its review](../archive/README.md#package-6-reviews)
+and [follow-up](../archive/README.md#package-6-reviews); local remediation
 is not final closeout. This update does not freshly verify those gaps.
 
 Read-only research/reconciliation continues. Reconcile affected contracts and
@@ -59,7 +59,7 @@ records against the accepted source, perform focused re-review, then obtain the
 single Package 7 implementation direction approval. Regulatory inputs retain owners, next
 steps and specifically affected actions, rather than blocking every activity.
 
-Current dependency-reconciled design SHA-256: `6279d372f9c51b5c5739ffbabe7057f4512c151a84dac2a275eaf578484d0415`.
+Current dependency-reconciled design SHA-256: `ab9b4aa55c1193d4d2fa36a14b9fd3f0feaac3de37c2ee9984c2f93629409a34`.
 The prior 2026-09-05 candidate digest was `fb20640cab130fc68cf51c39043478e3e7c00921c7a3328221ba6d09ea8802f6`; it remains dated review evidence.
 
 ## Dated reviewed revision and handoffs

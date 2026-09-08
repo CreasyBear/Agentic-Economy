@@ -533,7 +533,7 @@ promotion platforms such as Upside.
   — why consumable service credit is preferable to a tradable reward asset.
 
 The full external research and mechanism comparison is in
-[`2026-08-25-external-incentive-flywheels.md`](../.planning/research/2026-08-25-external-incentive-flywheels.md).
+[`2026-08-25-external-incentive-flywheels.md`](../docs/archive/README.md#planning-snapshots).
 
 The Australian loyalty-system research is in
-[`2026-08-25-australian-loyalty-microtransaction-flywheels.md`](../.planning/research/2026-08-25-australian-loyalty-microtransaction-flywheels.md).
+[`2026-08-25-australian-loyalty-microtransaction-flywheels.md`](../docs/archive/README.md#planning-snapshots).

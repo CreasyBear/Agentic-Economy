@@ -32,6 +32,9 @@ graphify-out/
 /CLAUDE.md
 /RULES.MD
 /docs/*
+!/docs/README.md
+!/docs/archive/
+!/docs/archive/**
 !/docs/guides/
 /docs/guides/*
 !/docs/guides/package-6-plugin-release.md

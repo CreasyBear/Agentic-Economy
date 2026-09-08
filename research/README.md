@@ -30,11 +30,12 @@ Only relative links changed during relocation; their dated arguments remain.
 
 Completed scratch queues, earlier candidate phases, raw reference clones and
 superseded visual-review files are in the verified local
-[housekeeping archive](../docs/workflow/work/WF-20260908-closeout.md#remaining-housekeeping--2026-09-08).
+[housekeeping archive](../docs/archive/README.md#wayfinder-and-closeout).
 Git history also retains previously tracked files. Paused design/hardening work
 is archived for recovery, not reported as delivered. Active package research,
 source-pinned spike qualification and benchmark/scavenger summaries remain here
-or under `.planning/` where current plans consume them.
+with the adopted Formance qualification under `.planning/spikes/`; earlier
+planning/design corpora now live in the rebaseline archive.
 
 ## Historical supporting files
 
@@ -44,6 +45,8 @@ preserved evidence from earlier product iterations. Nine of the ten inventory
 entries refer to source files that no longer exist; neither file describes the
 current implementation.
 
-Citations labelled local reference refer to supporting material kept outside Git.
+Citations labelled local reference refer to supporting material kept outside Git;
+the former `.planning/` corpora are now in the
+[rebaseline archive](../docs/archive/README.md#planning-snapshots).
 Installed-dependency citations require the pinned dependencies. Historical references
 labelled unavailable do not point to current source or supply current proof.

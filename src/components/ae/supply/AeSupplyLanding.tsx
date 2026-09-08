@@ -112,7 +112,7 @@ export function AeSupplyLanding({
             A check may reach the configured upstream. Use an example that is safe there and assume it may consume provider quota or cost. A successful check does not publish the service, create earnings, or guarantee delivery. Timing depends on the source and current requirements; check the current status rather than relying on an estimate.
           </p>
           <p className="text-sm text-muted-foreground">
-            Creating the Provider business is an owner step. After that, an owner can approve a separate agent credential for maintenance. The source preview confirms the exact current contract. For x402, read the <a href="https://github.com/CreasyBear/Agentic-Economy/blob/main/X402_SELLER_ONBOARDING.md" className="font-medium text-foreground underline underline-offset-4">x402 Provider requirements</a> before you start.
+            Creating the Provider business is an owner step. After that, an owner can approve a separate agent credential for maintenance. The source preview confirms the exact current contract.
           </p>
           <div className="grid gap-related sm:grid-cols-3" aria-label="Supported source paths">
             {SUPPLY_SOURCE_FIT.map((source) => (

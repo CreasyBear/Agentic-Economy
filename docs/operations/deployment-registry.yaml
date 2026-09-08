@@ -268,7 +268,7 @@ vocabularyGenerationReadback:
   convexCodegenDryRun: passed_without_generated_file_changes
   deploymentOrDataMutation: false
   backupRestoreOrCutoverApproval: false
-  evidence: docs/workflow/work/WF-20260908-closeout.md
+  evidence: docs/archive/README.md#wayfinder-and-closeout
   # Original evidence: remaining-housekeeping/files.tar.gz, files/.scratch/vocabulary-rationalisation/issues/22-regenerate-shared-artifacts.md
 
 vocabularyBackupReadback:

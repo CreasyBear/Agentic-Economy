@@ -6,7 +6,7 @@ Prepared: 2026-09-05.
 
 Accepted current glossary: [CONTEXT.md](../CONTEXT.md). Selected implementation
 mappings, cutover boundaries and proof: [Mature vocabulary refactor —
-implementation plan](../docs/designs/vocabulary-rationalisation.md). This file
+implementation plan](../docs/archive/README.md#vocabulary-source-acceptance). This file
 is retained as the dated discussion asset and must not be treated as a second
 evolving glossary.
 
@@ -14,7 +14,7 @@ This proposal covers the familiar Australian platform described in
 [PRODUCT.md](../PRODUCT.md), not a new product model. [CONTEXT.md](../CONTEXT.md)
 owns the accepted definitions following the 2026-09-05 decision. Migration
 scope, implementation mappings and proof belong in the
-[work record](../docs/workflow/work/WF-20260905-vocabulary.md) and subsequent
+[work record](../docs/archive/README.md#vocabulary-source-acceptance) and subsequent
 Wayfinder decisions, not in the domain definitions.
 
 "Aliases to avoid" means avoid these as interchangeable product terms; it does

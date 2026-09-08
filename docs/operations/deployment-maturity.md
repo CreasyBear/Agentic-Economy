@@ -164,7 +164,7 @@ Native Convex codegen dry-run against `fastidious-barracuda-66` exited 0 without
 changing generated files. It provides a non-deploying source-analysis route for
 the refactor; it is not backup/restore, deployed refactor or live journey proof.
 Exact procedure and limitations are in the
-[generation issue (archived)](../workflow/work/WF-20260908-closeout.md#remaining-housekeeping--2026-09-08).
+[generation issue (archived)](../archive/README.md#wayfinder-and-closeout).
 No maturity state, release status, deployment or data was changed.
 
 ## Vocabulary backup capture — 5 September 2026, 10:21 UTC

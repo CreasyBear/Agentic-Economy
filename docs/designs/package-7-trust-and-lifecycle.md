@@ -4,7 +4,7 @@ Status: RECONCILED CANDIDATE — vocabulary source dependency accepted; Package 
 Date: 2026-09-05; dependency status reconciled 2026-09-08
 Owner: Package 7 delivery task; Joel owns product direction
 Audience: product, engineering and operations
-Work record: [WF-20260905-package-7](../workflow/work/WF-20260905-package-7.md)
+Work record: [WF-20260905-package-7](package-7-handoff.md)
 Authority: [PRODUCT](../../PRODUCT.md) and [Package 7 roadmap](../../IMPLEMENTATION_ROADMAP.md#7-trust-legal-and-data-governance--planned)
 
 ## Direction
@@ -44,7 +44,7 @@ and public pages. The full package remains 7A privacy, 7B terms, 7C trust and
 ## Accepted vocabulary and remaining implementation approval
 
 [CONTEXT](../../CONTEXT.md) defines the accepted Tool, Quote, Call and spending
-policy language. The [vocabulary source closeout](../workflow/work/WF-20260905-vocabulary.md)
+policy language. The [vocabulary source closeout](../archive/README.md#vocabulary-source-acceptance)
 records the completed source cutover and its verification at `5f3131297` /
 `d5fb0a220`. The [dated glossary proposal](../../research/VOCABULARY-PROPOSAL-20260905.md)
 is historical evidence. The earlier “tool probably” discussion is superseded;
@@ -81,8 +81,8 @@ on that reconciled revision before T1–T6 begins.
 
 ### Package 6 handoff remains open
 
-[Package 6 review](../reviews/package-6-review.md) and its
-[implementation follow-up](../reviews/package-6-review-implementation.md) record local
+[Package 6 review](../archive/README.md#package-6-reviews) and its
+[implementation follow-up](../archive/README.md#package-6-reviews) record local
 transition fixes and focused proof, not whole-package closure. Package 6 is to
 checkpoint its current bounded fix and hold final closeout. Carry forward its
 unresolved native OAuth/resource and tool-auth integration, canonical-origin and

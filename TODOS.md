@@ -9,7 +9,7 @@ Archived findings are not automatically current bugs or approval to expand scope
 | Existing ID / area | Status and next action | Current owner / evidence |
 | --- | --- | --- |
 | WF-20260905-workflow-04 — desktop skill exposure | Needs a fresh desktop-task observation. Compare the supplied skill catalogue with configured exposure before changing settings; a stale catalogue is not proof of a persistent platform defect. | Desktop/harness follow-up; original local receipts remain at `~/.codex/skill-cleanup/20260905T041516Z/`. |
-| WF-20260905-workflow-05 — responsibility hotspots | Not housekeeping. Revalidate source/caller evidence before proposing any split; preserve behavior and substantive authority/concurrency boundaries. | [Dated concern map](.planning/codebase/CONCERNS.md), [module ownership](src/modules/module-boundaries.ts). |
+| WF-20260905-workflow-05 — responsibility hotspots | Not housekeeping. Revalidate source/caller evidence before proposing any split; preserve behavior and substantive authority/concurrency boundaries. | [Dated concern map](docs/archive/README.md#planning-snapshots), [module ownership](src/modules/module-boundaries.ts). |
 | Phase 01.1 — ten-concern hardening | Earlier authorized planning context is archived, not implemented or cancelled. Reprioritize against current source before resuming its ten-item batch. | Supplemental archive: `files/.planning/phases/01.1-close-ten-low-hanging-codebase-concerns-with-bounded-hardeni/`. |
 | Impeccable C01–C06 | Paused design campaign remains paused; no visual pass inferred from cleanup. Restore its register/evidence before any approved resumption. | Supplemental archive: `files/.planning/gauntlet/IMPECCABLE-TASTE-MARKET-REGISTER.md`; first closeout preserves the linked visual outputs. |
 
@@ -17,11 +17,11 @@ Archived findings are not automatically current bugs or approval to expand scope
 
 | Area | Remaining boundary | Current owner |
 | --- | --- | --- |
-| Vocabulary release and G02 | Source is accepted. Installed commercial execution, hosted journeys, retained-data/restore proof and operational ingestion/freshness/buffer policy remain separate. | [Vocabulary acceptance](docs/workflow/work/WF-20260905-vocabulary.md), [cutover preflight](docs/operations/vocabulary-cutover-preflight.md). |
+| Vocabulary release and G02 | Source is accepted. Installed commercial execution, hosted journeys, retained-data/restore proof and operational ingestion/freshness/buffer policy remain separate. | [Vocabulary acceptance](docs/archive/README.md#vocabulary-source-acceptance), [cutover preflight](docs/operations/vocabulary-cutover-preflight.md). |
 | Package 4 and AWS pause | Complete existing commercial/recovery release gates. The dated pause record requires revisiting the RDS automatic restart before 13 September; no resume is authorized by housekeeping. | [Release evidence](docs/guides/package-4-release-evidence.md), [operations](docs/operations/aws-foundation.md). |
 | Package 5 | Source completion retains deployed Provider, connection, secrets and recovery proof requirements. | [Release evidence](docs/guides/package-5-release-evidence.md). |
-| Package 6 | Reconcile the latest source checkpoint with the remaining real-client, deployment and authenticated journey proof; do not treat old audit observations as freshly reproduced failures. | [Review](docs/reviews/package-6-review.md), [implementation follow-up](docs/reviews/package-6-review-implementation.md). |
-| Package 7 | Vocabulary/source dependency accepted. Reconcile proposed contracts with current source, perform focused re-review and obtain Package 7 implementation approval. | [Current work record](docs/workflow/work/WF-20260905-package-7.md). |
+| Package 6 | Reconcile the latest source checkpoint with the remaining real-client, deployment and authenticated journey proof; do not treat old audit observations as freshly reproduced failures. | [Current release guide](docs/guides/package-6-plugin-release.md), [archived reviews](docs/archive/README.md#package-6-reviews). |
+| Package 7 | Vocabulary/source dependency accepted. Reconcile proposed contracts with current source, perform focused re-review and obtain Package 7 implementation approval. | [Current work record](docs/designs/package-7-handoff.md). |
 
 ## WF-20260905-workflow-03 — historical papercut triage
 
@@ -52,11 +52,11 @@ owners when relevant, not copied wholesale into a new backlog.
 
 | Existing ID | Outcome | Evidence |
 | --- | --- | --- |
-| WF-20260905-workflow-01 | Classified and archived superseded queues/candidates; moved root studies into existing research; repaired maintained references. | [Closeout](docs/workflow/work/WF-20260908-closeout.md). |
-| WF-20260905-workflow-02 | Committed acceptance/recovery summaries and archive hashes; clean-checkout references explicitly distinguish local historical evidence. Full raw archives remain local. | [Archive inventory](docs/workflow/work/WF-20260908-closeout-archives.json). |
+| WF-20260905-workflow-01 | Classified and archived superseded queues/candidates; moved root studies into existing research; repaired maintained references. | [Closeout](docs/archive/README.md#wayfinder-and-closeout). |
+| WF-20260905-workflow-02 | Committed acceptance/recovery summaries and archive hashes; clean-checkout references explicitly distinguish local historical evidence. Full raw archives remain local. | [Archive inventory](docs/archive/README.md#wayfinder-and-closeout). |
 | WF-20260905-workflow-06 | Exact Formance SDK 7.0.0 moved to root vendor; root/spike clean installs preserve all versions/integrities. | [Vendor provenance](vendor/README.md). |
 | WF-20260905-workflow-07 | Local advisory hook distinguishes no relevant files, missing tool, successful scan, reported diagnostics and unavailable/incomplete scan. It uses the installed version and does not download a fallback. Advisory commit behavior is preserved. | Eight isolated boundary checks plus shell syntax; original hook and verification retained in the supplemental archive. This is local hook configuration, not an automatic clean-clone installation. |
 
-[Recovery location and retained limits](docs/workflow/work/WF-20260908-closeout.md#remaining-housekeeping--2026-09-08)
+[Recovery location and retained limits](docs/archive/README.md#wayfinder-and-closeout)
 cover the supplemental archive and paused work above. The active marketing
 workflow belongs to the separate website task and remains untouched.

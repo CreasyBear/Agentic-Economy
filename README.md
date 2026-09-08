@@ -100,7 +100,7 @@ product but do not override these documents.
 Package build plans are filed under `docs/designs/`: [Package 4](./docs/designs/package-4-atomic-feature-build-plan.md),
 [Package 5](./docs/designs/package-5-atomic-feature-build-plan.md) and
 [Package 6](./docs/designs/package-6-atomic-feature-build-plan.md).
-The [Package 6 review and companion evidence](./docs/reviews/package-6-review.md)
+The [Package 6 review and companion evidence](docs/archive/README.md#package-6-reviews)
 are under `docs/reviews/`; the [Twenty component quality record](./docs/designs/twenty-component-gauntlet.md)
 is under `docs/designs/`.
 
@@ -114,10 +114,9 @@ the default local entry point. Use `npm run test:e2e:authenticated` or
 
 ## Publish an x402 Tool
 
-Use the [x402 Provider onboarding guide](./X402_SELLER_ONBOARDING.md) to admit a
-hosted x402 service. The guide covers an unpaid protocol inspection, Provider
-ownership proof, service staging, one explicitly authorised Base Sepolia
-canary and reconciliation without duplicate payment.
+Start at `/for-providers` and follow the source preview and returned status for
+the selected endpoint. The earlier standalone onboarding runbook is now
+[historical evidence](docs/archive/README.md#onboarding-runbook).
 
 An x402 payee is a payment recipient. The wallet address does not, by itself,
 establish the commercial Seller or Provider.
@@ -199,9 +198,10 @@ same source commands. Do not treat an origin, archive, `/mcp`, `/llms.txt` or
 Use [PRODUCT.md](PRODUCT.md) for product direction, [CONTEXT.md](CONTEXT.md) for
 language and [IMPLEMENTATION_ROADMAP.md](IMPLEMENTATION_ROADMAP.md) for delivery.
 [TODOS.md](TODOS.md) is the concise admin/follow-up queue. Dated studies are in
-[research](research/README.md); current work and recovery evidence are linked from
-[workflow](docs/workflow/README.md). Completed scratch queues and earlier candidate
-plans have been archived; they do not define a parallel active roadmap.
+[research](research/README.md). The [documentation index](docs/README.md) identifies
+the retained plans, release records and archive for the next baseline. Completed
+Wayfinder/refactor records and earlier planning snapshots have been archived;
+they do not define a parallel active roadmap.
 
 Share a Git checkout or an export of a reviewed commit, rather than a copy of the
 working directory. Ignored environment files, local databases, credentials and

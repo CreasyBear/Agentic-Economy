@@ -5,7 +5,7 @@
 **Product authority:** [`PRODUCT.md`](../PRODUCT.md)  
 **Benchmark inputs:** [Locus maturity map](LOCUS-AE-MATURITY.md), Locus parity ledger (local benchmark record: `../.planning/locus-docs/LOCUS-SCAVENGE-PAPERCUTS.md`), [Whop maturity map](WHOP-AE-MATURITY.md), and Whop papercuts ledger (local benchmark record: `../.planning/whop-docs/WHOP-SCAVENGE-PAPERCUTS.md`).
 
-**Implemented planning response:** [Agent operating contract](../docs/designs/agent-operating-contract.md), [rebaselined requirements (archived)](../docs/workflow/work/WF-20260908-closeout.md#remaining-housekeeping--2026-09-08), and [agent-first roadmap (archived)](../docs/workflow/work/WF-20260908-closeout.md#remaining-housekeeping--2026-09-08).
+**Implemented planning response:** [Agent operating contract](../docs/designs/agent-operating-contract.md), [rebaselined requirements (archived)](../docs/archive/README.md#wayfinder-and-closeout), and [agent-first roadmap (archived)](../docs/archive/README.md#wayfinder-and-closeout).
 
 ## Executive judgment
 
@@ -231,7 +231,7 @@ Track B should harden the exact live loop being proved in Track A. It should not
 
 ## Implications for the current roadmap
 
-The current [maturity roadmap (archived)](../docs/workflow/work/WF-20260908-closeout.md#remaining-housekeeping--2026-09-08) contains valuable vertical-proof discipline, especially its direct consequence, paid recovery, canonical supply, and operated-release phases. The combined Locus/Whop map suggests five changes before treating it as a platform roadmap:
+The current [maturity roadmap (archived)](../docs/archive/README.md#wayfinder-and-closeout) contains valuable vertical-proof discipline, especially its direct consequence, paid recovery, canonical supply, and operated-release phases. The combined Locus/Whop map suggests five changes before treating it as a platform roadmap:
 
 1. **Add market behavior as an explicit acceptance spine.** Every relevant phase should preserve gap, candidates, allocation, useful continuation, repeat/switch, and supplier-demand evidence—not only authority and effect proof.
 2. **Pull inspect-to-invoke continuity and caller viability forward.** A live call without decision continuity or viable discovery proves execution, not the complete customer contract.
