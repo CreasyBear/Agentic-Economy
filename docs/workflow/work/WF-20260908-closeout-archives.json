@@ -57,6 +57,22 @@
       "uncompressed_bytes": 124361258,
       "archive_bytes": 25076769,
       "extraction_verified": true
+    },
+    {
+      "archive": "closeout-verification.tar.gz",
+      "sha256": "f48cc4ea5aec4455da8389594e4ec0054c636e2172dfa24f31e392b8ea1b31d2",
+      "files": 18,
+      "uncompressed_bytes": 4741,
+      "archive_bytes": 2670,
+      "extraction_verified": true
+    },
+    {
+      "archive": "historical-papercut-references.tar.gz",
+      "sha256": "49c98bb32c159cf83bc93137ef2dc2538daf0d7ceb36378408471884c96eb1fa",
+      "files": 2,
+      "uncompressed_bytes": 333345,
+      "archive_bytes": 114986,
+      "extraction_verified": true
     }
   ],
   "git_bundle": {

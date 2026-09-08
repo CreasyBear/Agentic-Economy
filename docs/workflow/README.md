@@ -54,8 +54,8 @@ established root conventions and route filenames.
 ## Existing sprawl: adoption without another migration mess
 
 Existing active package and Wayfinder plans continue in place. Adopt them by
-reference when resuming that work. The root [historical papercut ledger](../../PAPERCUTS.md),
-[September product audit](../../.planning/audits/product-papercut-register-2026-09-03.md),
+reference when resuming that work. The root `PAPERCUTS.md` (local historical evidence),
+`.planning/audits/product-papercut-register-2026-09-03.md` (local historical evidence),
 and [older lessons](../../.superstack/learnings.md) are evidence to consult, not
 inventories to copy wholesale. Revalidate an old finding before promoting it to
 TODOS; keep its ID and provenance. If an old active record retains ownership,
@@ -121,3 +121,7 @@ To remove this setup entirely, remove only its owned files and the marked
 Wayfinder discovery block in `.gitignore`; preserve all work records created
 since installation. Setup evidence and the original ignore file are retained at
 `~/.codex/workflow-build/20260905T044804Z/` outside discovery.
+
+The local-only papercut references above are preserved in
+`historical-papercut-references.tar.gz`; see [recovery availability](work/WF-20260908-closeout.md).
+They remain historical evidence, not newly adopted open findings.

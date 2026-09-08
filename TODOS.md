@@ -19,8 +19,8 @@ File counts do not establish which files are obsolete.
 **Effort:** M
 **Priority:** P2
 **Kind:** documentation debt
-**Status:** open
-**Owner:** unassigned
+**Status:** closed for the adopted closeout scope — 2026-09-08
+**Owner:** [closeout program](docs/workflow/work/WF-20260908-closeout.md)
 **Evidence:** [workflow discovery](docs/workflow/work/WF-20260905-workflow.md),
 [structure map](.planning/codebase/STRUCTURE.md).
 **Close when:** Every proposed move has an owner/authority classification and
@@ -38,8 +38,8 @@ are missing from version control.
 **Effort:** M
 **Priority:** P2
 **Kind:** evidence debt
-**Status:** open
-**Owner:** unassigned
+**Status:** closed for the adopted closeout scope — 2026-09-08
+**Owner:** [closeout program](docs/workflow/work/WF-20260908-closeout.md)
 **Evidence:** [.gitignore](.gitignore), [record policy](docs/workflow/README.md).
 **Close when:** An adopted goal's acceptance can be reviewed from a clean checkout
 and durable permitted evidence links without copying secrets or entire old ledgers.
@@ -58,8 +58,8 @@ preserve those distinctions and do not copy all 44 findings as currently open.
 **Kind:** process debt
 **Status:** open
 **Owner:** unassigned
-**Evidence:** [historical ledger](PAPERCUTS.md),
-[dated audit](.planning/audits/product-papercut-register-2026-09-03.md).
+**Evidence:** `PAPERCUTS.md` (local historical evidence),
+`.planning/audits/product-papercut-register-2026-09-03.md` (local historical evidence).
 **Close when:** Relevant active findings have one canonical status, historical
 provenance, a next action and appropriate proof; superseded entries remain traceable.
 
@@ -129,17 +129,27 @@ refactoring with behavior/boundary checks or records why current placement is so
 **Why:** A production dependency stored under a planning spike blurs lifecycle
 ownership and risks accidental removal during future planning cleanup.
 **Context:** `package.json` references
-`.planning/spikes/001-formance-ledger-package4/vendor/formance-formance-sdk-7.0.0.tgz`.
+`vendor/formance-formance-sdk-7.0.0.tgz` after the approved closeout relocation.
 The tarball is tracked; no missing-dependency failure was established here.
 **Effort:** S
 **Priority:** P2
 **Kind:** repository hygiene
-**Status:** open
-**Owner:** unassigned
+**Status:** closed for the adopted closeout scope — 2026-09-08
+**Owner:** [closeout program](docs/workflow/work/WF-20260908-closeout.md)
 **Evidence:** [package.json](package.json), the tracked tarball and lockfile.
 **Close when:** An approved relocation or packaging decision preserves the exact
 dependency, updates its references/lockfile and passes a clean-install check.
 
 ## Completed
 
-No cleanup candidate above has been implemented by the workflow setup.
+The closeout program resolved workflow-01 (bounded document ownership), workflow-02
+(adopted source acceptance evidence and recovery inventory), and workflow-06
+(exact SDK relocation). Original IDs and evidence remain above.
+
+Workflow-03 remains open: historical papercut triage was not expanded into this
+housekeeping task. Workflow-04, workflow-05 and workflow-07 retain their separate
+harness, architecture and hook-policy scope.
+
+The local-only papercut references above are preserved in
+`historical-papercut-references.tar.gz`; see [recovery availability](docs/workflow/work/WF-20260908-closeout.md).
+They remain historical evidence, not newly adopted open findings.

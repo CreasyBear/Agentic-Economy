@@ -352,34 +352,31 @@ A later ADR may admit Payments only when a maintained Community connector:
 
 That ADR is not a Package 4 completion dependency.
 
-## 8. Public product contracts retained
+## 8. Current public product contracts
 
-The previous Package 4 machine contract remains authoritative:
+The accepted source cutover uses `registry.tools.search` → `tool.quote` →
+`tool.call`. [CONTEXT.md](./CONTEXT.md) and the
+[agent operating contract](./docs/designs/agent-operating-contract.md) define the
+current action arguments, tagged results and canonical Tool/Quote/Call language.
+Earlier terms elsewhere in this dated implementation plan are historical design
+language, not callable compatibility aliases.
 
-- `pricing:v3` only;
-- compact `registry.operations.search` with one to three candidates;
-- authenticated `operation.inspect({ operationRef, input })`;
-- an expiring caller-bound Commitment;
-- `operation.invoke({ commitmentRef, idempotencyKey })`;
-- closed results: `completed | pending | refused | outcome_unknown`;
-- at most one machine continuation and one optional owner handoff;
-- version-aware status with `afterVersion`;
-- no invoke continuation after possible dispatch.
+- `pricing:v3` remains the price contract.
+- Search provides compact Tool candidates; authenticated `tool.quote` returns an
+  expiring caller-bound Quote before `tool.call` can acquire the Tool.
+- Non-terminal results provide at most one executable Suggested next action and
+  one optional owner handoff. Recovery uses `call.status`, `call.cancel` and
+  `call.reconcile`; possible dispatch never permits a fresh Call continuation.
+- Version-aware status accepts `afterVersion`.
 
-A managed-x402 Commitment binds:
+The managed-x402 release target continues to bind Account and Agent, exact Tool
+version and normalized input, authority and spending policy, current x402/FX
+facts, exact AUD/USDC units, applicable ceilings, ledger schema/template versions
+and expiry. Do not infer the complete commercial record or hosted acceptance
+from source cutover: the [Package 4 release evidence](./docs/guides/package-4-release-evidence.md)
+retains its outstanding gates.
 
-- Account and Agent Principal;
-- Operation reference and revision;
-- normalized-input digest;
-- authority and policy generations;
-- live x402 requirement digest;
-- executable FX evidence;
-- exact AUD and USDC units;
-- Account, Agent, legal-exposure and treasury ceilings;
-- Formance schema/template versions;
-- expiry and status-readback reference.
-
-Public inspection exposes buyer authority, price, budget, balance, readiness,
+Public Quote readback exposes buyer authority, price, budget, balance, readiness,
 material unknowns and expiry. It never exposes treasury balances, account paths
 or Formance infrastructure details.
 

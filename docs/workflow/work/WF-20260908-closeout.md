@@ -24,12 +24,14 @@ permissions and symlink targets. `RECOVERY.md` explains reconstruction.
 | The 24 already-deleted legacy files, recovered from pre-closeout HEAD | `retired-legacy-originals.tar.gz` |
 | Three superseded designs and complete vocabulary chronology before compaction | `superseded-document-originals.tar.gz` |
 | Referenced temporary evidence and recursively referenced supporting logs/snapshots | `vocabulary-temporary-evidence.tar.gz` |
+| Local-only papercut ledger and dated audit, retained without new triage | `historical-papercut-references.tar.gz` |
 | Complete research sets, release receipts, screenshots and design outputs | `research-and-output-artifacts.tar.gz`, `historical-qa-artifacts.tar.gz` |
 
 Every archive was extracted into a separate temporary directory and its file
 hashes, modes and symlinks checked before source removal. The old checkout was
 checked again against its snapshot before retirement. Recovery scratch was removed.
-Full raw evidence requires access to this local archive; it is not remotely
+`closeout-verification.tar.gz` preserves the focused check outputs, corrected
+install failures and first five commit logs. Full raw evidence requires access to this local archive; it is not remotely
 hosted. This committed record and the vocabulary acceptance receipt remain
 reviewable from a clean checkout without private transcripts or runtime state.
 
@@ -60,7 +62,8 @@ not maintained links or current execution instructions.
 - SDK: exact Formance 7.0.0 tarball moved to root `vendor/`; both consumers,
   generated lockfiles and provenance references updated. All package versions
   and integrity values are unchanged. npm 11 regenerated development/optional
-  metadata as well as the two location fields in the main lockfile.
+  metadata as well as the two location fields in the main lockfile. Commit
+  `22eb64033`; legacy retirement and recovery inventory are in `f93181b46`.
 - Queue: existing workflow-01, workflow-02 and workflow-06 closed for this adopted
   scope in [TODOS.md](../../../TODOS.md); other findings retain their own scope.
 
@@ -79,6 +82,8 @@ All project checks used Node `22.22.0` and npm `11.5.1`.
 | Removed-symbol search across `src`, `tests`, `tools` | No remaining callers |
 | Operations registry | YAML parses without duplicate keys; schema identifier and explicit synthetic/non-restoration boundaries pass |
 | Archive recovery | All extracted files match manifests; Git bundle verified |
+| `git diff --check` and changed-document links | Pass in a fresh committed-tree extraction; four pre-existing local-only papercut links labelled with archive recovery |
+| Protected review evidence and marketing file hashes | 89 files unchanged |
 | Protected local state/configuration | 5,928 file metadata records unchanged before/after cleanup |
 
 The source tests cover funding amount exactness, reservation/release/settlement
@@ -94,7 +99,7 @@ No version or integrity drift was accepted.
 The detailed local `cleanup-receipt.json` records each removed path and basis.
 About **4.56 GB of logical files** were removed from archived copies and idle
 caches, excluding the two retired worktrees. Recovery archives plus Git bundle
-occupy about **292 MB** before the small final verification-log archive. Logical
+occupy about **292 MB**, including final verification logs. Logical
 sizes are not a measurement of physical APFS free-space change.
 
 Removed: verified research/output copies, referenced temporary evidence copies,
