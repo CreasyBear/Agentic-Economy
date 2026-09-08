@@ -339,6 +339,7 @@ function isReviewedTransportSdkImport(violation: ScanViolation): boolean {
     "src/modules/capability-supply/internal/route-transport-call.ts",
     "src/modules/capability-supply/internal/route-transport-mcp.ts",
     "src/modules/capability-supply/internal/route-transport-x402.ts",
+    "src/modules/capability-supply/internal/x402-directory-protocol.ts",
     "src/modules/capability-supply/internal/x402-offer-receipt.ts",
     "src/modules/capability-supply/internal/x402-evm-protocol.ts",
     "src/modules/capability-supply/internal/x402-payment-signer.ts",

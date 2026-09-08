@@ -202,3 +202,9 @@ export type {
 } from './internal/supply-funnel/provider-connection-handoff-contract'
 
 export { prepareX402Request } from './internal/x402-request'
+
+export {
+  x402DefaultAssetFacts,
+  x402LegacyDiscoveryInfo,
+  x402NetworkLabel,
+} from './internal/x402-directory-protocol'

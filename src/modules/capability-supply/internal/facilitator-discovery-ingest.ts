@@ -418,7 +418,11 @@ export function admittedFacilitatorDiscoveryDraft(
     offering,
     binding,
     execution: {
-      endpoint: { url: decision.identity.resourceUrl },
+      // Identity is the bare callable endpoint. The full discovery resourceUrl,
+      // which may carry example parameter values, stays on the source import's
+      // resource and on the binding's endpointUrl for execution, and in the
+      // toolRef digest so distinct resources at one path never collide.
+      endpoint: { url: decision.identity.origin + decision.identity.path },
       method: decision.identity.method,
       ...(config.bodyPointer === undefined ? {} : { bodyPointer: config.bodyPointer }),
       ...(config.queryObjectPointer === undefined ? {} : { queryObjectPointer: config.queryObjectPointer }),

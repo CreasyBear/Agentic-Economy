@@ -1,12 +1,9 @@
 import { directorySourceLabels } from './x402-directory-metadata'
 import { listX402DiscoveryResources, searchX402Resources } from '@coinbase/cdp-sdk'
-import { findDefaultAsset } from '@x402/evm'
-import { extractDiscoveryInfoV1 } from '@x402/extensions/bazaar'
-import type { Network, PaymentRequirementsV1 } from '@x402/core/types'
-import { base, baseSepolia, mainnet, arbitrum, optimism, polygon, avalanche } from 'viem/chains'
 import Decimal from 'decimal.js'
 import { formatExactAmount } from '@/modules/money/public'
 import { normalizeToolSearchInput } from '@/modules/capability-supply/public'
+import { x402DefaultAssetFacts, x402LegacyDiscoveryInfo, x402NetworkLabel } from '@/modules/capability-supply/server'
 import { isRecord } from '@/modules/common/is-record'
 import { x402DirectoryInputSchema, type X402DirectoryContract, type X402DirectoryField, type X402DirectoryFilters, type X402DirectoryInput, type X402DirectoryEntry, type X402DirectoryPage } from './x402-directory'
 
@@ -70,20 +67,12 @@ function text(value: unknown, max = 240): string | undefined {
   return trimmed.length > max ? `${trimmed.slice(0, max - 1).trimEnd()}…` : trimmed
 }
 
-const namedChains = [base, baseSepolia, mainnet, arbitrum, optimism, polygon, avalanche]
-function networkLabel(network: string): string {
-  if (network === 'solana' || network === 'solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp') return 'Solana'
-  if (network === 'solana-devnet' || network === 'solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1') return 'Solana Devnet'
-  const chain = namedChains.find((candidate) => network === `eip155:${candidate.id}` || network === candidate.name.toLowerCase().replaceAll(' ', '-'))
-  return chain?.name ?? network
-}
-
 function priceFacts(price: Readonly<Record<string, unknown>>) {
   const units = text(price.amount ?? price.maxAmountRequired, 128)
   const assetId = text(price.asset, 160)
   const network = text(price.network, 100)
   if (units === undefined || assetId === undefined || network === undefined || !/^\d+$/u.test(units)) return { amount: 'Price not supplied' }
-  const asset = findDefaultAsset(assetId, network as Network)
+  const asset = x402DefaultAssetFacts(assetId, network)
   const formatted = asset === undefined ? undefined : formatExactAmount({ currency: asset.symbol, units, exponent: asset.decimals })
   return {
     amount: formatted === undefined ? `${units} atomic units (${assetId})` : `${formatted} ${asset?.symbol}`,
@@ -199,8 +188,7 @@ export function projectX402DirectoryEntry(resource: Resource | Readonly<Record<s
   const bazaar = schemaNode(record, 'extensions', 'bazaar')
   const legacy = Array.isArray(record.accepts) ? record.accepts.filter(isRecord).find(price => isRecord(price.outputSchema)) : undefined
   const legacySchema = schemaNode(legacy, 'outputSchema')
-  let legacyInfo: unknown
-  try { legacyInfo = legacy === undefined ? undefined : extractDiscoveryInfoV1(legacy as unknown as PaymentRequirementsV1) } catch { /* Malformed optional legacy metadata never hides a Tool. */ }
+  const legacyInfo = x402LegacyDiscoveryInfo(legacy)
   const input = schemaNode(bazaar, 'info', 'input') ?? schemaNode(legacyInfo, 'input')
   const output = schemaNode(bazaar, 'info', 'output') ?? schemaNode(legacyInfo, 'output')
   const method = text(input?.method, 16)?.toUpperCase()
@@ -256,7 +244,7 @@ export function projectX402DirectoryEntry(resource: Resource | Readonly<Record<s
     provider,
     prices: Array.isArray(record.accepts) ? record.accepts.filter(isRecord).map((price) => {
       const network = text(price.network, 100) ?? 'Unspecified network'
-      return { network, networkLabel: networkLabel(network), scheme: text(price.scheme, 64) ?? 'Unspecified scheme', ...priceFacts(price) }
+      return { network, networkLabel: x402NetworkLabel(network), scheme: text(price.scheme, 64) ?? 'Unspecified scheme', ...priceFacts(price) }
     }) : [],
     metadataJson: JSON.stringify(record, null, 2),
   }

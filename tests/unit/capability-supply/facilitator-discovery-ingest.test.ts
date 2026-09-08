@@ -221,9 +221,17 @@ describe("facilitator discovery ingest", () => {
       (draft) => draft.execution.endpoint.url,
     );
     expect(urls).toEqual([
-      "https://402timezones.vercel.app/api/convert-timezone?from=UTC&to=America%2FNew_York&time=12%3A00",
+      "https://402timezones.vercel.app/api/convert-timezone",
       "https://api.example.test/lookup",
     ]);
+    // Execution identity stays bare, but the discovery resourceUrl keeps its
+    // example parameter values so a paid Call still reaches the exact resource.
+    expect(JSON.parse(result.admitted[0]?.sourceImportJson ?? "{}"))
+      .toMatchObject({
+        resource: {
+          resourceUrl: "https://402timezones.vercel.app/api/convert-timezone?from=UTC&to=America%2FNew_York&time=12%3A00",
+        },
+      });
     expect(new Set(result.admitted.map((draft) => draft.offering.offeringId)).size).toBe(
       2,
     );
