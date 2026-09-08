@@ -7,13 +7,13 @@
 
 ## Evidence Vocabulary
 
-- **LOCKED — HIGH:** accepted constraint or requirement from [`PROJECT.md`](../PROJECT.md) and preserved project evidence.
+- **LOCKED — HIGH:** accepted constraint or requirement from [`PROJECT.md` (archived)](../../docs/workflow/work/WF-20260908-closeout.md#remaining-housekeeping--2026-09-08) and preserved project evidence.
 - **FACT — HIGH/MEDIUM:** repository fact or behavior supported by a primary/official source. Local exact-version and forensic findings are HIGH; externally retrieved current documentation is MEDIUM under the research confidence seam.
 - **RESEARCH INFERENCE — MEDIUM:** roadmap or implementation recommendation derived from locked constraints and sourced facts. It requires phase design and acceptance.
 - **COMPARATIVE — MEDIUM:** a mature platform or protocol pattern that informs AE but does not create an AE requirement.
 - **CURRENCY OBSERVATION — LOW:** registry-latest information used only to identify later upgrade candidates.
 
-These labels are not interchangeable. In particular, Whop, Bazaar/x402, Stripe, AWS, MCP, AgentMux/AgentMuxter, and MasterKey material is comparative evidence only. AgentMuxter and MasterKey were not authoritatively resolved and contribute no requirements. Where research recommendations conflict with [`PROJECT.md`](../PROJECT.md), the locked project default controls.
+These labels are not interchangeable. In particular, Whop, Bazaar/x402, Stripe, AWS, MCP, AgentMux/AgentMuxter, and MasterKey material is comparative evidence only. AgentMuxter and MasterKey were not authoritatively resolved and contribute no requirements. Where research recommendations conflict with [`PROJECT.md` (archived)](../../docs/workflow/work/WF-20260908-closeout.md#remaining-housekeeping--2026-09-08), the locked project default controls.
 
 ## Executive Summary
 
@@ -70,7 +70,7 @@ The dominant risks are unauthorized or cross-Account effects, stale authority in
 
 - Federated provider discovery (**D-02**) until AE catalogue provenance is mature and a supply gap is measured.
 - Evidence-qualified automated provider selection (**D-04**) until multiple compatible providers and safe non-effect/failover evidence exist.
-- Any enterprise, custody, marketplace-runtime, microservice, reputation, or broader financial-product expansion excluded by [`PROJECT.md`](../PROJECT.md).
+- Any enterprise, custody, marketplace-runtime, microservice, reputation, or broader financial-product expansion excluded by [`PROJECT.md` (archived)](../../docs/workflow/work/WF-20260908-closeout.md#remaining-housekeeping--2026-09-08).
 
 ### Explicit Anti-Features
 
@@ -230,7 +230,7 @@ Phases where broad research can usually be skipped after their prerequisites are
 
 ### Primary project evidence (HIGH confidence)
 
-- [`PROJECT.md`](../PROJECT.md) — locked product, authority, data, commerce, secret, evidence, execution, and exclusion defaults.
+- [`PROJECT.md` (archived)](../../docs/workflow/work/WF-20260908-closeout.md#remaining-housekeeping--2026-09-08) — locked product, authority, data, commerce, secret, evidence, execution, and exclusion defaults.
 - [`STACK.md`](./STACK.md), [`FEATURES.md`](./FEATURES.md), [`ARCHITECTURE.md`](./ARCHITECTURE.md), and [`PITFALLS.md`](./PITFALLS.md) — full research findings and source trails.
 - `.planning/forensics/report-20260826-190606.md` — Phase 1–2 failure history, repair churn, and rebaseline rules.
 - `.planning/maturity-execution/reviews/phase-2-foundation-checkpoint-assessment.md` — reproduced authority/checker gaps and withheld Phase 2 acceptance.

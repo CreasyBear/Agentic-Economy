@@ -219,11 +219,11 @@ Do not install `@convex-dev/workflow`, an external authorization engine, Redis/q
 
 ### Repository and accepted evidence — HIGH
 
-- [`PROJECT.md`](../PROJECT.md) — locked product, authority, data, secret, commerce and execution defaults.
+- [`PROJECT.md` (archived)](../../docs/workflow/work/WF-20260908-closeout.md#remaining-housekeeping--2026-09-08) — locked product, authority, data, secret, commerce and execution defaults.
 - [`codebase/STACK.md`](../codebase/STACK.md) — established package and runtime baseline.
 - [`codebase/ARCHITECTURE.md`](../codebase/ARCHITECTURE.md) and [`codebase/INTEGRATIONS.md`](../codebase/INTEGRATIONS.md) — current component and provider seams.
 - [`forensics/report-20260826-190606.md`](../forensics/report-20260826-190606.md) — accepted/rejected evidence boundary and mandatory rebaseline rules.
-- [`phase-2-foundation-checkpoint-assessment.md`](../maturity-execution/reviews/phase-2-foundation-checkpoint-assessment.md) — independent decision to use runtime seams, one adapter and actual-reference slices.
+- `phase-2-foundation-checkpoint-assessment.md` (historical record unavailable at `../maturity-execution/reviews/phase-2-foundation-checkpoint-assessment.md`) — independent decision to use runtime seams, one adapter and actual-reference slices.
 - [`package.json`](../../package.json), [`package-lock.json`](../../package-lock.json), and [`convex/_generated/ai/guidelines.md`](../../convex/_generated/ai/guidelines.md) — exact local versions and project-specific Convex rules.
 
 ### Official and primary documentation — MEDIUM through available research seam

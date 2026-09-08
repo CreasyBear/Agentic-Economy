@@ -268,7 +268,8 @@ vocabularyGenerationReadback:
   convexCodegenDryRun: passed_without_generated_file_changes
   deploymentOrDataMutation: false
   backupRestoreOrCutoverApproval: false
-  evidence: .scratch/vocabulary-rationalisation/issues/22-regenerate-shared-artifacts.md
+  evidence: docs/workflow/work/WF-20260908-closeout.md
+  # Original evidence: remaining-housekeeping/files.tar.gz, files/.scratch/vocabulary-rationalisation/issues/22-regenerate-shared-artifacts.md
 
 vocabularyBackupReadback:
   capturedAt: "2026-09-05T10:21:44Z"
@@ -313,7 +314,8 @@ vocabularyBackupReadback:
     deploymentDataMutation: false
   snapshotSkipsUnchanged: [aws, local_restricted_command_key, local_restricted_readback_key, stripe_destinations, cloudflare_alerts]
   cutoverGate: blocked_pending_isolated_restore_and_external_state_reconciliation
-  evidence: .scratch/vocabulary-rationalisation/reports/31-hosted-cutover-preflight.md
+  evidence: docs/operations/vocabulary-cutover-preflight.md
+  # Original report: remaining-housekeeping/files.tar.gz, files/.scratch/vocabulary-rationalisation/reports/31-hosted-cutover-preflight.md
 
 operatingPause:
   requestedBy: user

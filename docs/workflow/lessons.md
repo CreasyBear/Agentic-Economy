@@ -7,7 +7,7 @@ consult relevant entries without copying the whole ledger here.
 ## WF-L-001 — Prove the promised environment
 
 - **Applies to:** platform/client integration and harness configuration.
-- **Evidence:** the existing [native connection map](../../.planning/wayfinder/agent-connection/MAP.md)
+- **Evidence:** the existing [native connection map (archived)](work/WF-20260908-closeout.md#remaining-housekeeping--2026-09-08)
   explicitly separates source/SDK evidence from clean-profile client proof; the
   September audit keeps `SOURCE_RESOLVED` distinct from live closeout.
 - **Action:** name the required client/environment in each acceptance criterion;

@@ -180,3 +180,12 @@ npm run -s ae -- call <toolRef> --input '{"city":"Perth"}'
 Against an explicitly verified origin, pass `--base-url "$AE_ORIGIN"` to the
 same source commands. Do not treat an origin, archive, `/mcp`, `/llms.txt` or
 `/SKILL.md` read as hosted-release proof.
+
+## Project documents
+
+Use [PRODUCT.md](PRODUCT.md) for product direction, [CONTEXT.md](CONTEXT.md) for
+language and [IMPLEMENTATION_ROADMAP.md](IMPLEMENTATION_ROADMAP.md) for delivery.
+[TODOS.md](TODOS.md) is the concise admin/follow-up queue. Dated studies are in
+[research](research/README.md); current work and recovery evidence are linked from
+[workflow](docs/workflow/README.md). Completed scratch queues and earlier candidate
+plans have been archived; they do not define a parallel active roadmap.

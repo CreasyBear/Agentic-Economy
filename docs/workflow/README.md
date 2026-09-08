@@ -54,8 +54,8 @@ established root conventions and route filenames.
 ## Existing sprawl: adoption without another migration mess
 
 Existing active package and Wayfinder plans continue in place. Adopt them by
-reference when resuming that work. The root `PAPERCUTS.md` (local historical evidence),
-`.planning/audits/product-papercut-register-2026-09-03.md` (local historical evidence),
+reference when resuming that work. The retired `PAPERCUTS.md` ledger (archived),
+`.planning/audits/product-papercut-register-2026-09-03.md` (dated local evidence),
 and [older lessons](../../.superstack/learnings.md) are evidence to consult, not
 inventories to copy wholesale. Revalidate an old finding before promoting it to
 TODOS; keep its ID and provenance. If an old active record retains ownership,
@@ -63,8 +63,10 @@ link to it without creating another status. On explicit adoption, mark the old
 record as handed off to the canonical entry. Other ongoing tasks are not migrated
 by this setup.
 
-These legacy local links may be unavailable in a clean checkout. That is an
-explicit migration debt, not acceptable storage for new acceptance evidence.
+The original local ledger and audit are preserved in the verified closeout
+archive. [TODOS.md](../../TODOS.md) routes their relevant IDs to existing owners;
+archival does not establish current failures or fixes. Raw historical material
+requires archive access, while current acceptance remains reviewable in Git.
 New durable documents and non-sensitive evidence must be tracked or linked to a
 durable accessible artifact. Never commit raw credentials, personal transcripts,
 payment data or secret-bearing snapshots as evidence.

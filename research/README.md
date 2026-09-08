@@ -18,3 +18,20 @@ Research may describe an earlier market loop, call a Provider a "supplier" or
 Read each claim at its stated evidence date. Do not promote a recommendation
 into product scope without reconciling it against the root authorities and
 current source.
+
+## Historical papers and retired planning material
+
+Historical root papers now live here: [agent-commerce flywheel](AGENT_COMMERCE_FLYWHEEL.md),
+[last-mile services](LAST_MILE_AGENT_SERVICES.md), [Nautilus lessons](NAUTILUS_TRADER_HFT_LESSONS.md),
+[HftBacktest lessons](HFTBACKTEST_LESSONS_FOR_AGENT_MICROTRANSACTIONS.md),
+[their comparison](NAUTILUS_VS_HFTBACKTEST_FOR_AGENTIC_PAYMENTS.md), and the
+[2026-09-05 vocabulary proposal](VOCABULARY-PROPOSAL-20260905.md).
+Only relative links changed during relocation; their dated arguments remain.
+
+Completed scratch queues, earlier candidate phases, raw reference clones and
+superseded visual-review files are in the verified local
+[housekeeping archive](../docs/workflow/work/WF-20260908-closeout.md#remaining-housekeeping--2026-09-08).
+Git history also retains previously tracked files. Paused design/hardening work
+is archived for recovery, not reported as delivered. Active package research,
+source-pinned spike qualification and benchmark/scavenger summaries remain here
+or under `.planning/` where current plans consume them.

@@ -73,6 +73,15 @@
       "uncompressed_bytes": 333345,
       "archive_bytes": 114986,
       "extraction_verified": true
+    },
+    {
+      "archive": "remaining-housekeeping/files.tar.gz",
+      "manifest": "remaining-housekeeping/manifest.json",
+      "sha256": "eabc56a26ae36a7f009086d41ef62395acf53a13088042a873fb0cfb646b1f3b",
+      "files": 558,
+      "uncompressed_bytes": 30104164,
+      "archive_bytes": 20720715,
+      "extraction_verified": true
     }
   ],
   "git_bundle": {
@@ -85,5 +94,12 @@
     "/tmp/ae-vocabulary-source-extract.aEzWXp"
   ],
   "recovery_instructions": "RECOVERY.md",
-  "detail_manifests": "Each archive has a sibling .manifest.json with original paths, member names, modes and content hashes. Local archive access is required for full raw evidence; committed receipts summarize acceptance."
+  "detail_manifests": "Each archive has a sibling .manifest.json with original paths, member names, modes and content hashes. Local archive access is required for full raw evidence; committed receipts summarize acceptance.",
+  "supplemental_git_bundle": {
+    "file": "remaining-housekeeping/closeout-commits.bundle",
+    "sha256": "d2722a10636c6d0e906a0a84a453aaa1c804129e9e2b4445952ec6619bb7552a",
+    "bytes": 1102880,
+    "verified": true,
+    "prerequisite": "d5fb0a220 from the parent repository.bundle"
+  }
 }

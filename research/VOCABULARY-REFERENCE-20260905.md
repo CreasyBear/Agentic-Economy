@@ -22,7 +22,7 @@ Retrieved: 2026-09-05 (Australia/Perth). Scope: nine first-party pages, plus the
 
 **Tool is a defensible familiar name for AE's callable supply unit, but the references do not settle that choice.** Locus and MCP support it directly; Nevermined uses service more broadly and also sells agents. Preserve the proposal's precise distinctions around people, permission, execution and money. Familiar vocabulary is compatible with those distinctions; copying another platform's objects verbatim is not.
 
-This assessment uses the current, uncommitted [PRODUCT.md](../PRODUCT.md), [CONTEXT.md](../CONTEXT.md) and proposed [UBIQUITOUS_LANGUAGE.md](../UBIQUITOUS_LANGUAGE.md) from the main checkout, not the older product files in the isolated research branch. These links target the eventual main-checkout copy; the proposal is absent from the research branch's baseline. PRODUCT is active authority; CONTEXT is the accepted glossary. Joel's “tool probably” is tentative. The coordinated whole-platform migration scope is agreed; exact terminology and cutover are not.
+This assessment uses the current, uncommitted [PRODUCT.md](../PRODUCT.md), [CONTEXT.md](../CONTEXT.md) and proposed [UBIQUITOUS_LANGUAGE.md](VOCABULARY-PROPOSAL-20260905.md) from the main checkout, not the older product files in the isolated research branch. These links target the eventual main-checkout copy; the proposal is absent from the research branch's baseline. PRODUCT is active authority; CONTEXT is the accepted glossary. Joel's “tool probably” is tentative. The coordinated whole-platform migration scope is agreed; exact terminology and cutover are not.
 
 ## Documented vocabulary and its implications
 

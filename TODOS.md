@@ -1,155 +1,62 @@
-# TODOS
+# Follow-ups and administration
 
-Actionable findings for new Wayfinder work. Preserve existing IDs and link
-original evidence. These setup findings are investigation/cleanup candidates,
-not authorization for repository-wide changes. Existing active package plans
-and audit closeouts retain ownership until explicitly adopted.
+[PRODUCT.md](PRODUCT.md) owns direction; [IMPLEMENTATION_ROADMAP.md](IMPLEMENTATION_ROADMAP.md)
+owns delivery. This queue preserves existing IDs and points to the current owner.
+Archived findings are not automatically current bugs or approval to expand scope.
 
-## Documentation
+## Remaining work
 
-### WF-20260905-workflow-01 — Establish document ownership before moving the sprawl
+| Existing ID / area | Status and next action | Current owner / evidence |
+| --- | --- | --- |
+| WF-20260905-workflow-04 — desktop skill exposure | Needs a fresh desktop-task observation. Compare the supplied skill catalogue with configured exposure before changing settings; a stale catalogue is not proof of a persistent platform defect. | Desktop/harness follow-up; original local receipts remain at `~/.codex/skill-cleanup/20260905T041516Z/`. |
+| WF-20260905-workflow-05 — responsibility hotspots | Not housekeeping. Revalidate source/caller evidence before proposing any split; preserve behavior and substantive authority/concurrency boundaries. | [Dated concern map](.planning/codebase/CONCERNS.md), [module ownership](src/modules/module-boundaries.ts). |
+| Phase 01.1 — ten-concern hardening | Earlier authorized planning context is archived, not implemented or cancelled. Reprioritize against current source before resuming its ten-item batch. | Supplemental archive: `files/.planning/phases/01.1-close-ten-low-hanging-codebase-concerns-with-bounded-hardeni/`. |
+| Impeccable C01–C06 | Paused design campaign remains paused; no visual pass inferred from cleanup. Restore its register/evidence before any approved resumption. | Supplemental archive: `files/.planning/gauntlet/IMPECCABLE-TASTE-MARKET-REGISTER.md`; first closeout preserves the linked visual outputs. |
 
-**What:** Classify root and planning documents as active authority, active work,
-reference evidence, generated output or superseded history; then propose moves.
-**Why:** Similar planning/research records occupy several homes, making the
-current decision and next action difficult to find.
-**Context:** On 2026-09-05 the root had 27 Markdown files and `.planning` contained
-183. The existing PRODUCT/CONTEXT authority chain is clear and must be preserved.
-File counts do not establish which files are obsolete.
-**Effort:** M
-**Priority:** P2
-**Kind:** documentation debt
-**Status:** closed for the adopted closeout scope — 2026-09-08
-**Owner:** [closeout program](docs/workflow/work/WF-20260908-closeout.md)
-**Evidence:** [workflow discovery](docs/workflow/work/WF-20260905-workflow.md),
-[structure map](.planning/codebase/STRUCTURE.md).
-**Close when:** Every proposed move has an owner/authority classification and
-reference inventory; approved moves preserve active work and repair links.
+## Existing delivery holds
 
-### WF-20260905-workflow-02 — Make adopted evidence available in a clean checkout
+| Area | Remaining boundary | Current owner |
+| --- | --- | --- |
+| Vocabulary release and G02 | Source is accepted. Installed commercial execution, hosted journeys, retained-data/restore proof and operational ingestion/freshness/buffer policy remain separate. | [Vocabulary acceptance](docs/workflow/work/WF-20260905-vocabulary.md), [cutover preflight](docs/operations/vocabulary-cutover-preflight.md). |
+| Package 4 and AWS pause | Complete existing commercial/recovery release gates. The dated pause record requires revisiting the RDS automatic restart before 13 September; no resume is authorized by housekeeping. | [Release evidence](docs/guides/package-4-release-evidence.md), [operations](docs/operations/aws-foundation.md). |
+| Package 5 | Source completion retains deployed Provider, connection, secrets and recovery proof requirements. | [Release evidence](docs/guides/package-5-release-evidence.md). |
+| Package 6 | Reconcile the latest source checkpoint with the remaining real-client, deployment and authenticated journey proof; do not treat old audit observations as freshly reproduced failures. | [Review](PACKAGE-6-REVIEW.md), [implementation follow-up](PACKAGE-6-REVIEW-IMPLEMENTATION.md). |
+| Package 7 | Vocabulary/source dependency accepted. Reconcile proposed contracts with current source, perform focused re-review and obtain Package 7 implementation approval. | [Current work record](docs/workflow/work/WF-20260905-package-7.md). |
 
-**What:** Promote necessary non-sensitive acceptance evidence out of ignored-only
-storage when adopting an active goal.
-**Why:** A committed completion claim must not depend solely on local planning files.
-**Context:** Root ignore rules exclude much of `docs`, `.planning`, and
-`PAPERCUTS.md`; some legacy files remain tracked exceptions. Audit each needed
-artifact with Git rather than assuming all files under an ignored directory
-are missing from version control.
-**Effort:** M
-**Priority:** P2
-**Kind:** evidence debt
-**Status:** closed for the adopted closeout scope — 2026-09-08
-**Owner:** [closeout program](docs/workflow/work/WF-20260908-closeout.md)
-**Evidence:** [.gitignore](.gitignore), [record policy](docs/workflow/README.md).
-**Close when:** An adopted goal's acceptance can be reviewed from a clean checkout
-and durable permitted evidence links without copying secrets or entire old ledgers.
+## WF-20260905-workflow-03 — historical papercut triage
 
-## Workflow
+**Admin disposition:** routed by existing ID and owner; fresh product/runtime
+revalidation remains with those delivery owners. No duplicate 44-item bug queue
+is created and no unverified finding is marked fixed.
 
-### WF-20260905-workflow-03 — Triage historical papercuts without cloning their ledger
+The dated September audit supersedes earlier score/count summaries in the
+append-only ledger. Its explicit post-audit source closeouts remain valid as
+recorded; newer vocabulary acceptance supplies further source evidence without
+establishing live release proof. All 44 September IDs are accounted for below.
 
-**What:** Revalidate relevant historical findings, retaining IDs and one current owner.
-**Why:** The old append-only ledger repeats friction and can obscure unresolved work.
-**Context:** `PAPERCUTS.md` is 2,427 lines and warns that its historic logger does
-not deduplicate. The September audit has meaningful source-versus-live closeouts;
-preserve those distinctions and do not copy all 44 findings as currently open.
-**Effort:** M
-**Priority:** P2
-**Kind:** process debt
-**Status:** open
-**Owner:** unassigned
-**Evidence:** `PAPERCUTS.md` (local historical evidence),
-`.planning/audits/product-papercut-register-2026-09-03.md` (local historical evidence).
-**Close when:** Relevant active findings have one canonical status, historical
-provenance, a next action and appropriate proof; superseded entries remain traceable.
+| Existing audit IDs | Disposition / next action | Owner |
+| --- | --- | --- |
+| AE-PC-001, 004, 005 | Catalogue/chat availability and truthful readiness are runtime-proof candidates. Reproduce against the intended deployment before classifying current source. | Package 4 / operations |
+| AE-PC-002, 003, 006–010, 021–026, 041, 042, 044 | CLI, discovery and validation observations predate the accepted Tool/Quote/Call cutover. Compare current source/tests and installed-client release evidence before reopening any item. | Package 6 / vocabulary release |
+| AE-PC-011, 013, 017, 030–032 | Explicitly `SOURCE_RESOLVED` in the dated audit; preserve their remaining installed-client, funding and Provider staging proof requirements. | Packages 4–6 release evidence |
+| AE-PC-012, 014, 015, 018, 019, 027–029, 033–036, 043 | Account, recovery, support and navigation candidates need current-source/journey revalidation; no fresh failure or fix is asserted here. | Package 6; Package 7 for trust/lifecycle changes |
+| AE-PC-016 | Legal/privacy publication requires Package 7's actual entity, policy and operating decisions. | Package 7 |
+| AE-PC-020, 037–040 | Responsive, accessibility and loading observations need same-surface revalidation; the vocabulary browser/a11y passes have their recorded scope. | Package 6 / existing quality review |
 
-### WF-20260905-workflow-04 — Reconcile desktop skill exposure with runtime inventory
+Original bodies and IDs are preserved in `historical-papercut-references.tar.gz`;
+the later supplemental archive also captures the pre-cleanup ledger. Older
+campaign-specific IDs remain historical and must be deduplicated against these
+owners when relevant, not copied wholesale into a new backlog.
 
-**What:** Reproduce whether fresh desktop tasks respect disabled skill entries.
-**Why:** Configuration/catalogue probes alone do not prove the actual task sees
-the intended automatic skill set.
-**Context:** The earlier cleanup's native inventory checks passed, while this
-task's supplied catalogue still included disabled GSD entries and duplicates.
-Distinguish a stale task catalogue from a persistent discovery defect before fixing.
-**Effort:** S
-**Priority:** P2
-**Kind:** harness papercut
-**Status:** open
-**Owner:** unassigned
-**Evidence:** Local cleanup receipts at
-`~/.codex/skill-cleanup/20260905T041516Z/`; this task's supplied catalogue.
-**Close when:** A reloaded desktop/new-task observation agrees with intended
-enabled and implicit-invocation policy, or the remaining platform defect is isolated.
+## Completed housekeeping
 
-### WF-20260905-workflow-07 — Distinguish an unavailable pre-commit scan from regressions
+| Existing ID | Outcome | Evidence |
+| --- | --- | --- |
+| WF-20260905-workflow-01 | Classified and archived superseded queues/candidates; moved root studies into existing research; repaired maintained references. | [Closeout](docs/workflow/work/WF-20260908-closeout.md). |
+| WF-20260905-workflow-02 | Committed acceptance/recovery summaries and archive hashes; clean-checkout references explicitly distinguish local historical evidence. Full raw archives remain local. | [Archive inventory](docs/workflow/work/WF-20260908-closeout-archives.json). |
+| WF-20260905-workflow-06 | Exact Formance SDK 7.0.0 moved to root vendor; root/spike clean installs preserve all versions/integrities. | [Vendor provenance](vendor/README.md). |
+| WF-20260905-workflow-07 | Local advisory hook distinguishes no relevant files, missing tool, successful scan, reported diagnostics and unavailable/incomplete scan. It uses the installed version and does not download a fallback. Advisory commit behavior is preserved. | Eight isolated boundary checks plus shell syntax; original hook and verification retained in the supplemental archive. This is local hook configuration, not an automatic clean-clone installation. |
 
-**What:** Correct or configure the existing React pre-commit wrapper's handling
-of an unavailable scan without absorbing another task's configuration edits.
-**Why:** It labels inability to scan as “staged regressions” while still allowing
-the commit, obscuring what was actually checked.
-**Context:** During the workflow-only commit, React Doctor refused to scan because
-pre-existing `package.json` differed between index and worktree. The hook printed
-a regression message and exited successfully. No React files were in the commit.
-**Effort:** S
-**Priority:** P2
-**Kind:** tooling papercut
-**Status:** open
-**Owner:** unassigned
-**Evidence:** [setup validation](docs/workflow/validation.md), local `.git/hooks/pre-commit`,
-and commit `95564302c` output retained by this task.
-**Close when:** In the approved hook policy, no-relevant-files, scan-unavailable,
-actual failure and pass are accurately distinguished; unrelated staged/unstaged
-work remains untouched and the hook's blocking behavior is explicit.
-
-## Architecture
-
-### WF-20260905-workflow-05 — Review responsibility hotspots before splitting files
-
-**What:** Inspect frequently changed large files for mixed responsibilities and
-propose the smallest ownership correction supported by source/caller evidence.
-**Why:** Clear boundaries matter more than accumulating helpers or enforcing a
-cosmetic maximum file length.
-**Context:** Discovery found `src/lib/server/agent-access-oauth-api.ts` at 1,601
-lines, `convex/agentAccessOAuth.ts` at 1,910 and
-`src/modules/capability-supply/supply-actions.ts` at 1,374. These are candidates,
-not verified code-quality defects. Exclude generated route trees from this metric.
-**Effort:** M
-**Priority:** P2
-**Kind:** architecture investigation
-**Status:** open
-**Owner:** unassigned
-**Evidence:** [module boundary manifest](src/modules/module-boundaries.ts),
-[existing boundary checks](tests/imports/module-boundaries.test.ts).
-**Close when:** A source-grounded ownership review either justifies bounded
-refactoring with behavior/boundary checks or records why current placement is sound.
-
-### WF-20260905-workflow-06 — Move the production dependency out of a spike when scoped
-
-**What:** Evaluate a maintained canonical home for the Formance SDK tarball.
-**Why:** A production dependency stored under a planning spike blurs lifecycle
-ownership and risks accidental removal during future planning cleanup.
-**Context:** `package.json` references
-`vendor/formance-formance-sdk-7.0.0.tgz` after the approved closeout relocation.
-The tarball is tracked; no missing-dependency failure was established here.
-**Effort:** S
-**Priority:** P2
-**Kind:** repository hygiene
-**Status:** closed for the adopted closeout scope — 2026-09-08
-**Owner:** [closeout program](docs/workflow/work/WF-20260908-closeout.md)
-**Evidence:** [package.json](package.json), the tracked tarball and lockfile.
-**Close when:** An approved relocation or packaging decision preserves the exact
-dependency, updates its references/lockfile and passes a clean-install check.
-
-## Completed
-
-The closeout program resolved workflow-01 (bounded document ownership), workflow-02
-(adopted source acceptance evidence and recovery inventory), and workflow-06
-(exact SDK relocation). Original IDs and evidence remain above.
-
-Workflow-03 remains open: historical papercut triage was not expanded into this
-housekeeping task. Workflow-04, workflow-05 and workflow-07 retain their separate
-harness, architecture and hook-policy scope.
-
-The local-only papercut references above are preserved in
-`historical-papercut-references.tar.gz`; see [recovery availability](docs/workflow/work/WF-20260908-closeout.md).
-They remain historical evidence, not newly adopted open findings.
+[Recovery location and retained limits](docs/workflow/work/WF-20260908-closeout.md#remaining-housekeeping--2026-09-08)
+cover the supplemental archive and paused work above. The active marketing
+workflow belongs to the separate website task and remains untouched.

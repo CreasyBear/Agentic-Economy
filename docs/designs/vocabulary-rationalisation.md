@@ -550,8 +550,8 @@ the bounded assignments; they are not permission to redesign behaviour.
 
 | Review | Record | Current result |
 | --- | --- | --- |
-| Engineering | [Issue 29 report](../../.scratch/vocabulary-rationalisation/reports/29-engineering-review.md) | Planning gate resolved after exact field/format ownership, finite queue corrections and acyclic dependency recheck. Implementation/live proof remains downstream. |
-| Developer experience | [Issue 30 report](../../.scratch/vocabulary-rationalisation/reports/30-developer-experience-review.md) | Planning gate resolved; contract, installed-client and discovery findings have bounded owners and acceptance. Implementation/live proof remains downstream. |
+| Engineering | [Issue 29 report (archived)](../workflow/work/WF-20260908-closeout.md#remaining-housekeeping--2026-09-08) | Planning gate resolved after exact field/format ownership, finite queue corrections and acyclic dependency recheck. Implementation/live proof remains downstream. |
+| Developer experience | [Issue 30 report (archived)](../workflow/work/WF-20260908-closeout.md#remaining-housekeeping--2026-09-08) | Planning gate resolved; contract, installed-client and discovery findings have bounded owners and acceptance. Implementation/live proof remains downstream. |
 | Operations | [Current preflight](../operations/vocabulary-cutover-preflight.md) | Read-only inventory complete; hosted financial reconciliation, current Convex backup/restore and isolation proof outstanding. |
 
 Coordinator decisions applying the accepted boundaries:

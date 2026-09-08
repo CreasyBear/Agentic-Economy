@@ -1,7 +1,7 @@
 # Package 7: trust and account lifecycle
 
-Status: RECONCILED CANDIDATE — implementation approval/start held for shared glossary and migration boundaries
-Date: 2026-09-05
+Status: RECONCILED CANDIDATE — vocabulary source dependency accepted; Package 7 re-review and implementation approval remain
+Date: 2026-09-05; dependency status reconciled 2026-09-08
 Owner: Package 7 delivery task; Joel owns product direction
 Audience: product, engineering and operations
 Work record: [WF-20260905-package-7](../workflow/work/WF-20260905-package-7.md)
@@ -41,31 +41,28 @@ These are proposed extensions to existing Settings, Calls, money, Connections
 and public pages. The full package remains 7A privacy, 7B terms, 7C trust and
 7D lifecycle; delivery proceeds in usable increments.
 
-## Shared vocabulary dependency and implementation hold
+## Accepted vocabulary and remaining implementation approval
 
-[CONTEXT](../../CONTEXT.md) remains the accepted glossary.
-[UBIQUITOUS_LANGUAGE](../../UBIQUITOUS_LANGUAGE.md) and the
-[vocabulary work record](../workflow/work/WF-20260905-vocabulary.md) are proposals
-and migration planning. Joel's “tool probably” is a tentative choice for the
-individually callable catalogue unit, not approval of Tool, the remaining
-glossary or a migration. Spending policy, Quote and Call are familiar terms in
-current CONTEXT; their eventual implementation mappings remain under discussion.
+[CONTEXT](../../CONTEXT.md) defines the accepted Tool, Quote, Call and spending
+policy language. The [vocabulary source closeout](../workflow/work/WF-20260905-vocabulary.md)
+records the completed source cutover and its verification at `5f3131297` /
+`d5fb0a220`. The [dated glossary proposal](../../research/VOCABULARY-PROPOSAL-20260905.md)
+is historical evidence. The earlier “tool probably” discussion is superseded;
+there is no remaining glossary-choice gate.
 
-Vocabulary rationalisation covers code, tests, documentation, public interfaces,
-tables and retained database records. It is not a UI-copy pass. Hold Package 7
-implementation approval/start and final interface/schema naming until the shared
-glossary and affected migration boundaries are agreed. All proposed names below
-are working design references, not approved identifiers. Do not independently
-rename routes, schemas, IDs, immutable records or third-party protocol terms;
-old identifiers do not necessarily map one-to-one. The additive rollout below
-is a feature proposal, not approval of the vocabulary migration's data strategy.
+Package 7 still requires reconciliation of its proposed interfaces, exports,
+retained-record selectors and recovery behavior against that accepted source,
+focused review of affected portions, and its own implementation approval.
+The vocabulary sprint does not approve new Package 7 schemas, vendor selection,
+policy publication, deployment or retained-data migration. Its hosted, installed
+commercial-execution and data/restore proof limits remain explicit.
 
 Preserve login deletion, Account closure and Provider retirement as separate
 actions. Keep funding separate from permission, payment separate from delivery,
 and retained records separate from active access or content retention.
 Read-only research and plan reconciliation may continue during this hold.
 Regulatory decisions still have an owner, next step and specifically affected
-action; this naming dependency does not create a blanket regulatory halt.
+action; the Package 7 approval boundary does not create a blanket regulatory halt.
 
 | Task | Naming/migration dependency | Findings that remain valid unchanged |
 |---|---|---|
@@ -76,8 +73,8 @@ action; this naming dependency does not create a blanket regulatory halt.
 | T5 | Accepted product/policy terms, public and machine wording, acceptance schema and historical agreement references | Versioned acceptance, truthful disclosures, verified support; preserve previously accepted terms and their evidence |
 | T6 | Migrated fixtures, generated interfaces, consumer contracts, retained-record continuity and the final deployment revision | Full-journey behavioral proof, review/fixes, relevant documentation and scoped closeout |
 
-After migration approval, reconcile this candidate with the agreed glossary,
-affected callers/records and cutover sequence. Perform focused engineering/design
+Reconcile this candidate with the accepted glossary/source and the remaining
+retained-data and release boundaries. Perform focused engineering/design
 re-review of changed contracts, exports, policies, authority and recovery paths;
 reuse unaffected discovery. Then seek the single Package 7 direction approval
 on that reconciled revision before T1–T6 begins.
@@ -107,10 +104,10 @@ also remain; do not silently treat an upstream package as complete.
 | Nevermined research found product/terms drift at its research date | Plain terms describe the agent product people are actually using | Explain delegated spending, the buyer-facing Seller, data sent to Providers, refunds and exit; update terms with the corresponding product change |
 
 Source records: [Whop maturity](../../research/WHOP-AE-MATURITY.md),
-[Whop findings](../../.planning/whop-docs/WHOP-SCAVENGE-PAPERCUTS.md),
+Whop findings (local benchmark record: `../../.planning/whop-docs/WHOP-SCAVENGE-PAPERCUTS.md`),
 [Locus maturity](../../research/LOCUS-AE-MATURITY.md),
-[Locus findings](../../.planning/locus-docs/LOCUS-SCAVENGE-PAPERCUTS.md),
-[Nevermined maturity](../../.planning/nevermined-docs/05-MATURITY-AND-OPPORTUNITIES.md).
+Locus findings (local benchmark record: `../../.planning/locus-docs/LOCUS-SCAVENGE-PAPERCUTS.md`),
+Nevermined maturity (local benchmark record: `../../.planning/nevermined-docs/05-MATURITY-AND-OPPORTUNITIES.md`).
 These are dated mechanism studies, not fresh vendor audits or integration choices.
 Current AE source takes precedence over their historical parity assessments.
 The mechanism summaries above remain usable if the local research corpora are
@@ -626,8 +623,8 @@ Known operating decisions carried into implementation: actual entity/contacts,
 unused-credit rule, category retention/holds, independent recovery destination,
 terms/effective dates and Provider data commitments. Each has a concrete dependent
 action in the decision table; no single global policy-complete flag. These do not
-independently prevent architectural progress; the separate shared glossary and
-migration dependency above currently holds implementation approval/start.
+independently prevent architectural progress; the Package 7 contract re-review
+and implementation approval above remain outstanding.
 
 
 ## Review evidence and remaining limits
@@ -673,11 +670,11 @@ live checks or native plan reviews were rerun for this documentation update.
 | Dedicated devex review | 0 | Not selected | Existing installed clients retained; machine restriction/status parity included in engineering acceptance |
 
 **CURRENT DISPOSITION:** Earlier reviews remain historical evidence. This
-reconciled candidate is held for shared glossary/migration agreement, affected
-portion re-review and then the single Package 7 direction approval. No application
+reconciled candidate has accepted vocabulary/source dependencies; affected-portion
+re-review and the single Package 7 implementation direction approval remain. No application
 code, database migration, vendor signup or policy publication occurred.
 
 **UNRESOLVED DECISIONS:**
-- Agree the shared glossary and affected migration boundaries, reconcile/re-review the impacted plan, then obtain Package 7 direction approval. Self-service and native reuse remain selected.
+- Reconcile/re-review Package 7 against the accepted vocabulary source and remaining data/release boundaries, then obtain its implementation direction approval. Self-service and native reuse remain selected.
 - Select/configure the hosted support inbox; Help Scout is evaluated and recommended, not installed.
 - Resolve listed operating inputs before their affected production actions/publications.

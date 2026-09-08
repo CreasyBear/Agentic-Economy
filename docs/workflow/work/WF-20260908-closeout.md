@@ -94,7 +94,7 @@ through macOS's `/tmp` alias produced a malformed temporary lockfile and failed;
 rerunning from the physical clean directory regenerated valid metadata and passed.
 No version or integrity drift was accepted.
 
-## Cleanup and retained limits
+## First-pass cleanup and retained limits
 
 The detailed local `cleanup-receipt.json` records each removed path and basis.
 About **4.56 GB of logical files** were removed from archived copies and idle
@@ -114,7 +114,7 @@ idle, contained no ignored state, and were removed after recovery verification.
 Task history is retained. The former was compared against its complete manifest;
 the latter was clean and its base is retained in the Git bundle.
 
-Retained deliberately:
+Retained at the first checkpoint (later archival is recorded below):
 
 - Dirty Package 4 release checkout and Convex restore checkout, including export.
 - All Convex databases/exports, Terraform state/configuration/locks, Vercel
@@ -131,3 +131,51 @@ G02 operational policy, installed commercial execution, hosted release,
 production money, restore proof or Package 6/7 holds. No aggregate-green or
 production acceptance is claimed. The AWS pause's existing 13 September revisit
 requirement remains in the operations records; no resume or automation was added.
+
+## Remaining housekeeping — 2026-09-08
+
+Joel requested the remaining document, scratch and admin cleanup after the first
+six closeout commits. Base revision: `eac5a95f4`. This pass reduces active-file
+sprawl without changing application behavior, data, deployment or package scope.
+
+The supplemental recovery directory is `remaining-housekeeping/` under the archive
+location above. Its `files.tar.gz` and `manifest.json` preserve **558 original
+files**, exact hashes/modes and symlinks; extraction and mode restoration were
+verified before removal. `closeout-commits.bundle` preserves the six first-pass
+commits incrementally after `d5fb0a220`; restore the parent Git bundle first.
+Original source and private runtime state remain in their existing homes.
+
+| Disposition | Result / authority retained |
+| --- | --- |
+| Completed vocabulary and earlier connection scratch queues | Archived `.scratch/` in full. Current vocabulary acceptance stays in its work record; operational issues stay in the maintained cutover preflight. The earlier installer-based connection queue is historical; the later native-client map and its remaining real-client proof are preserved in the same archive. |
+| Earlier candidate roadmap / phase files | Archived `.planning/PROJECT.md`, `REQUIREMENTS.md`, `ROADMAP.md`, `STATE.md`, configuration and phase queues. A single `.planning/README.md` points to the active root delivery roadmap. Phase 01.1's approved planning context is parked for re-prioritization, not completed or cancelled. |
+| Raw reference and visual-review clutter | Archived sparse reference clones, obsolete design reviews/rebrand snapshots, paused gauntlet registers, `.impeccable/` and temporary PDF renders. Source-pinned spike qualification, active benchmark research/design foundations and the Twenty quality record remain. Sparse clones retain captured objects; uncached upstream blobs can still require the original remote. |
+| Root research sprawl | Six dated papers moved into existing `research/`, including the vocabulary proposal. Relative links were repaired; 18 former source links now target verified historical commit `66b7deb122743d6b56658eaa8677f04fe9d2f4c4` (two end-line anchors corrected to the actual file length). Two existing local incentive-research notes are tracked so the moved paper remains self-contained. Arguments and historical vocabulary were not rewritten. Root Markdown count falls from **28 to 21**. |
+| Superseded design pointers | Removed the three now-redundant stub files; originals and their earlier pointers remain recoverable. `docs/designs` falls from seven Markdown files to four active/supporting designs. |
+| Papercut administration | Retired the append-only root ledger. `TODOS.md` routes all **44** September IDs exactly once to existing owners, preserves the six explicit source-resolved dispositions and states what still needs revalidation. It does not claim old findings are current bugs or automatically fixed. |
+| Package 7 dependency correction | Replaced the obsolete tentative-glossary hold with accepted vocabulary/source status. Proposed-contract re-review, retained-data/release boundaries and Package 7 implementation approval remain. No feature, schema or vendor activation occurred. |
+| Local advisory hook | Corrected workflow-07. No relevant files, missing installed tool, success, reported diagnostics and unavailable/incomplete scans are distinguishable; tool unavailability is not called a regression. The hook uses the installed version, sends no score/telemetry request, downloads no fallback and preserves advisory commit behavior. Original hook is `files/local-hooks/pre-commit` in the archive. |
+
+**539 files** were removed after archival or as documentation-area OS metadata,
+including ignored reference-clone files; the six relocated studies are counted
+separately. Removed logical bytes: **29,591,765** (this is not physical free-space
+measurement). The supplemental compressed file archive is approximately **21 MB**.
+Tracked content remains recoverable through Git as well as the local archive.
+The active marketing workflow file and all 36 original cold-review audit files
+remain unchanged. Operational state, credentials, financial evidence and
+Package 4/5 release holds remain preserved.
+
+Validation: shell syntax and eight isolated hook boundary scenarios pass, all
+advisory exits remain zero, the papercut routing covers IDs 001–044 without gaps
+or duplicates, maintained links are checked in a fresh committed-tree extraction,
+and operations-registry changes are limited to evidence pointers/comments.
+Existing large benchmark records remain explicitly local references rather than
+broken clean-checkout links. One older Phase 2 assessment was already unavailable;
+its historical citation is labelled unavailable rather than reconstructed.
+Application tests are not rerun for documentation moves and a local advisory-hook
+configuration change. The earlier source verification and its limitations stand.
+
+Remaining non-housekeeping work is explicit in `TODOS.md`: fresh desktop skill
+exposure observation, source-grounded architecture review, paused design/hardening
+work and existing package/runtime/commercial proof. This pass does not alter global
+skill configuration or call a paused or unimplemented feature complete.
