@@ -39,7 +39,7 @@ Agentic-Economy/
 ├── public/                      # Browser assets and packaged CLI archive
 ├── docs/adr/                    # Committed architectural decisions
 ├── eval/                        # Product-foundry and surface parity evaluations
-├── gates/                       # Repository verification gate descriptions
+├── docs/workflow/               # Maintained workflow and closeout records
 ├── research/                    # Dated evidence; non-authoritative for current implementation
 ├── diagrams/                    # Source and rendered architecture diagrams
 ├── .agents/skills/              # Project-vendored agent skill packages
@@ -170,10 +170,10 @@ Agentic-Economy/
 - Contains: ADR markdown only; most other local `docs/` material is ignored by `.gitignore`.
 - Key files: `docs/adr/0001-principal-reseller-commercial-topology.md`.
 
-**`research/`, `eval/`, `gates/`, `diagrams/`:**
+**`research/`, `eval/`, `diagrams/`:**
 - Purpose: Preserve supporting evidence, model/product evaluation, repository gate descriptions, and architecture visuals.
-- Contains: Dated research in `research/`, executable TypeScript evaluation in `eval/product-foundry/`, gate descriptions in `gates/`, and Mermaid/Excalidraw/rendered diagrams in `diagrams/`.
-- Key files: `research/README.md`, `eval/product-foundry/public.ts`, `gates/module-boundaries.md`, `diagrams/ae-application-primitives.mmd`.
+- Contains: Dated research in `research/`, executable TypeScript evaluation in `eval/product-foundry/`, retained diagram sources in `diagrams/`. Legacy gates and superseded diagram variants were retired on 2026-09-08; recovery is documented in `docs/workflow/work/WF-20260908-closeout.md`.
+- Key files: `research/README.md`, `eval/product-foundry/public.ts`, `src/modules/module-boundaries.ts`, `diagrams/ae-application-primitives.mmd`.
 
 ## Key File Locations
 
