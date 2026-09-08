@@ -16,6 +16,94 @@ Locus, Nevermined and Whop—not a new product model.
 Track and execute the work through the existing Wayfinder issues. Ticket
 preparation and dispatch happen in Phase 0.
 
+### Dependency-ordered repair — latest Joel direction, 2026-09-06
+
+Stop reactive batch dispatch. Consolidate remaining failures by root cause and
+module into the single repair queue in the existing Wayfinder map. Existing
+child issues retain their fixed mappings, file ownership and acceptance; do not
+create another tracker or treat one missing export as an independent programme.
+
+Only one repair group is active. Its bounded atomic tasks cover definitions,
+exports, callers, validators and owned tests together. At most three Luna Max
+workers may operate on genuinely independent tasks within that group; shared
+files remain serialized. Finish and verify the group before advancing. Switch
+only for an identified dependency recorded on the current issue, not because
+another error is easier to fix. Workers have no naming or scope discretion.
+Report the first compaction; stop at the second or when the count is unknown.
+
+After each group, run its existing behavioral tests and the same integrated
+compiler check. Record exact diagnostic counts, failing test cases separately,
+the source checkpoint and generated-artifact state. A compiler diagnostic count
+is not a count of independent bugs and is not a substitute for test acceptance.
+Run other existing integrated checks when the group's boundary requires them;
+record blocked or unrun checks explicitly. Regenerate affected artifacts with
+their existing generators only; never hand-edit them to bypass analysis errors.
+
+Close an existing issue when its complete stated acceptance is satisfied,
+including caller/test propagation and relevant integrated proof. A passing
+atomic patch or smaller diagnostic count does not close a broader issue. Report
+completed boundaries and remaining blockers, not worker handoff activity.
+
+Recovery, data rebuilding, deployments and hosted cutover remain parked. This
+execution override changes ordering and verification, not vocabulary, product
+direction, protected bytes or eventual release acceptance.
+
+### Earlier bulk-rename direction — Joel, 2026-09-05
+
+Complete the bulk vocabulary changes first, then verify and repair module by
+module and package by package. Do not hold each naming family behind a complete
+test, review, evidence or commit cycle. This supersedes the earlier sequential
+per-issue implementation gates, not the fixed names, protected bytes, behaviour
+or final acceptance requirements.
+
+Use at most three disjoint Luna Max batches concurrently, taken from the
+existing issues. The areas below are coverage boundaries, not open-ended
+subagent assignments. Each dispatch names one outcome and a finite file list;
+the coordinator checks the result before assigning the next batch.
+
+1. Domain/backend: `src/modules/**` and non-generated `convex/**`.
+2. Interfaces/clients/tooling: remaining non-generated `src/**`, `tools/**`,
+   `scripts/**`, `eval/**`, package/discovery/plugin source and root command or
+   configuration references affected by the rename. This lane alone owns
+   `package.json` and later generator execution.
+3. Tests/current documentation: `tests/**`, current documentation and active
+   root product/contributor documents. Preserve dated evidence and research;
+   exclude the selected plan, vocabulary tracker and coordinator work record.
+
+Existing issues remain the mapping, coverage and later verification checklist.
+The coordinator owns their tracking during this bulk pass; workers report one
+concise handoff rather than repeatedly closing and reopening shared issues.
+Within each assigned file list, propagate the fixed mappings. Return outside
+callers to the coordinator for the next bounded batch rather than expanding
+the assignment. Fresh workers are used for new batches: report the first
+context compaction, hand off at the second, and never continue to a third. If
+the count is unavailable, hand off rather than assuming spare capacity. The
+coordinator stays active to manage progress, conflicts and integration. Ask only
+for a genuinely ambiguous concept, protected format or necessary structural
+change. Do not perform indiscriminate word replacement across opaque inputs,
+upstream protocols, financial namespaces or historical evidence.
+
+Finish the edits before broad checks. Local searches and syntax checks may
+catch obvious mistakes; cross-lane intermediate compilation failures are
+expected and do not block another lane. Once all lanes finish, generate affected
+artifacts together, run an integrated compiler check, then fix and verify each
+module/package through the existing issues. No failed check is waived or
+represented as passing. No new runtime, compatibility or migration framework.
+
+Recovery remains parked. One hosted cutover follows the completed source pass,
+integrated testing and the existing release requirements.
+
+### Earlier execution adjustment — Joel, 2026-09-05
+
+Complete source changes and their relevant tests incrementally. Regenerate
+Convex bindings only when affected; a source issue is not a deployment exercise.
+Further recovery work is parked until release unless a specific source blocker
+requires it. Preserve the completed data-only restoration evidence. Run
+integrated testing, then perform one coordinated hosted cutover of the complete
+change. This supersedes any per-issue instruction implying mandatory deployment,
+operational preflight or unaffected generation; it does not waive release safety
+or live acceptance.
+
 ### No handrolling
 
 - Reuse maintained SDKs, protocols, components, existing module patterns and
@@ -52,6 +140,15 @@ preparation and dispatch happen in Phase 0.
 
 Apply corresponding casing and naming conventions to AE-owned types, fields,
 files, functions, indexes, events and errors.
+
+For filenames, use the area-specific [file naming rules](../../AGENTS.md#file-naming):
+`kebab-case` for domain modules/utilities/standalone tests, `camelCase` for
+Convex backend files, and `PascalCase` for AE-owned React components. Preserve
+framework, generated and maintained-library exceptions. Vocabulary replacement
+does not imply flattening these conventions into one style. Any style-only
+filename correction needs an explicit bounded assignment with its callers;
+this clarification does not expand existing worker allowlists or authorize a
+separate folder-reorganisation programme.
 
 Explicitly retain:
 
@@ -453,8 +550,8 @@ the bounded assignments; they are not permission to redesign behaviour.
 
 | Review | Record | Current result |
 | --- | --- | --- |
-| Engineering | [Issue 29 report](../../.scratch/vocabulary-rationalisation/reports/29-engineering-review.md) | First pass complete; exact field/format ownership and full queue recheck outstanding. |
-| Developer experience | [Issue 30 report](../../.scratch/vocabulary-rationalisation/reports/30-developer-experience-review.md) | First pass complete; contract/installed-client assignments and queue recheck outstanding. |
+| Engineering | [Issue 29 report](../../.scratch/vocabulary-rationalisation/reports/29-engineering-review.md) | Planning gate resolved after exact field/format ownership, finite queue corrections and acyclic dependency recheck. Implementation/live proof remains downstream. |
+| Developer experience | [Issue 30 report](../../.scratch/vocabulary-rationalisation/reports/30-developer-experience-review.md) | Planning gate resolved; contract, installed-client and discovery findings have bounded owners and acceptance. Implementation/live proof remains downstream. |
 | Operations | [Current preflight](../operations/vocabulary-cutover-preflight.md) | Read-only inventory complete; hosted financial reconciliation, current Convex backup/restore and isolation proof outstanding. |
 
 Coordinator decisions applying the accepted boundaries:
@@ -481,8 +578,10 @@ Coordinator decisions applying the accepted boundaries:
   backup and isolation checks. Existing unrelated operations debt does not
   expand this refactor.
 
-**Not cleared for core dispatch yet:** issue 37 must finish the finite queue and
-issues 29/30 must recheck it. The existing installed-CLI Node 20/22 test matrix
-also needs a decision against the Node 22-only project rule; it has not been
-run or weakened. No source rename, database cutover or deployed refactor is
-established by these reviews.
+**Cleared for core dispatch — 2026-09-05 10:10 UTC:** inventory 03, queue
+preparation 37 and independent planning reviews 29/30 are resolved. Issue 10
+has been dispatched to Luna Max as the first application-source owner. The
+existing installed-CLI Node 20/22 test matrix still needs a decision against
+the Node 22-only project rule; it has not been run or weakened and remains an
+explicit later verification item. Source implementation, database cutover and
+deployed refactor acceptance are not established by planning-review closure.

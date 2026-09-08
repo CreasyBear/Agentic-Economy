@@ -2,15 +2,17 @@
 
 ## One place for each fact
 
-Use the working repository's established authorities. The work record is a
-resumable index, not a duplicate specification. Keep goal, approval, current
-status, acceptance/evidence, owned change boundary, native artifact links,
-remaining findings and next action there. Use a task-owned timestamped goal ID;
-reuse it across sessions, retries, commits and review findings.
+Use the existing issue, queue or work record as the single current status home.
+Do not add a work record when that home already supports resumption. Routine
+work can close in the response with its outcome, checks and remaining risk.
+For multi-session work, retain scope/approval, owned changes, acceptance evidence
+and the next action. Link plans and detailed findings instead of copying them.
+Reuse existing IDs across sessions and reviews.
 
-Link new active work from the workflow entry point. Keep status in the work
-record rather than duplicating it in the index. On closeout, retain a searchable
-link or archive entry so a later task can find the prior decision and receipt.
+Keep indexes as links, not another status ledger. Replace obsolete progress
+summaries in the owning record; do not append a running transcript of assignments,
+censuses or review receipts. Preserve unresolved facts and evidence needed to
+support acceptance claims. Do not consolidate another active task's records.
 
 Statuses: `scoping`, `awaiting-direction`, `active`, `blocked`, `complete`,
 `cancelled`, `superseded`. Keep release facts separate: local commit, pushed,
@@ -18,11 +20,10 @@ deployed and live-verified are different observations. `complete` means the
 approved goal's criteria are proved; a local-only goal can complete locally,
 whereas a live-delivery goal stays open while live proof is missing.
 
-At every material handoff, record the result, exact artifact/selected revision,
-open assumptions/findings and next action. Update after meaningful changes,
-not every tool call. On interruption, preserve partial edits, pending processes
-and how to await or safely stop task-owned work. Never declare a background
-review or test successful before collecting its result.
+At a material handoff, update only changed results, relevant revision/environment,
+open findings and next action in their owning record. On interruption, preserve
+partial edits and pending processes with how to await or stop task-owned work.
+Never declare a background review or test successful before collecting its result.
 
 ## Findings register
 
@@ -32,12 +33,12 @@ structural debt and workflow shortcomings in one canonical backlog. Original
 audits remain dated evidence; a current entry links them rather than cloning
 their complete content and status.
 
-For gstack `TODOS.md`, use its component headings and required fields: What,
-Why, Context, Effort, Priority. Add ID, Kind, Status, Owner, Evidence and Close
-when. An owner may be `unassigned`; do not invent someone's commitment. P0 is a
-release blocker, not a synonym for an untidy folder. Preserve source IDs during
-migration. A rejected finding includes the evidence/reason; a duplicate points
-to the retained ID; a deferral names the actual dependency or next decision.
+Use the existing backlog format. A finding needs enough context to act: the
+problem, evidence, acceptance condition and current disposition. Add ownership,
+priority or estimates only when useful for coordination; do not invent commitments.
+P0 is a release blocker, not an untidy folder. Preserve source IDs. A rejection
+has a reason, a duplicate links the retained ID, and a deferral names the actual
+dependency or next decision.
 
 Suggested states: `open`, `in-progress`, `blocked`, `source-resolved`, `verified`,
 `deferred`, `rejected`, `duplicate`. A source fix closes only a source-level
@@ -56,7 +57,7 @@ unless Joel actually approves the changed acceptance scope.
 | Deployment, credentials or runtime operations | Actual registry/runbook and maturity proof; credentials themselves stay out of docs |
 | File/module move or rename | Imports, boundaries, scripts, docs links and any generated map that now misdirects work |
 | Removed behavior | Remove or retire affected examples, links and claims; preserve required history |
-| Internal fix without documentation impact | A short `not applicable` reason in closeout; do not invent a document |
+| Internal fix without documentation impact | None; no document or `not applicable` receipt |
 
 Update an existing document before creating another. New documents need a named
 audience, purpose, owner and canonical location. Keep generated maps labelled
@@ -82,12 +83,11 @@ owners. Only archive genuinely superseded, owned documents in approved scope.
 Preserve historical identity and repair links. No `final-v2-new` document copies,
 new root-level plan for every phase, or speculative directory hierarchy.
 
-Write a short retrospective in the work record: what fell short, the evidence,
-causal explanation if known, what changed, and residual uncertainty. Do not invent
-a lesson for every run. Promote only reusable, evidence-supported lessons to the
-repo's curated lesson home. Each lesson has applicability, provenance, last
-validation and a narrow prevention action. Supersede contradictory/stale guidance;
-avoid repeated append-only essays or exporting everything into AGENTS.md.
+Close with the outcome, relevant check commands/results and remaining risk.
+Do not require a retrospective, lesson, separate closeout checklist or receipt
+for routine work. Record a lesson only when a demonstrated failure yields a
+reusable prevention action; link its evidence and applicability. Supersede stale
+guidance rather than appending repeated essays or exporting it into AGENTS.md.
 
 gstack `learn` can maintain its private learning cache, and `retro` can supply
 comparable trend evidence. Neither a cache entry nor a subjective score overrides

@@ -16,9 +16,9 @@ charter, architecture, deployment procedures, or existing active package plans.
 | Agree | Joel approves the resulting direction once | The approval and exact plan revision; already approved direction carries forward |
 | Implement | Native Codex execution with relevant stack guidance | Owned changes and progress against the accepted criteria |
 | Evaluate | Focused tests; `qa`/`qa-only`, real client or operator checks as relevant | Evidence for each criterion, with revision and environment |
-| Review and fix | `review`; specialist review where the change warrants it | Findings resolved or explicitly dispositioned; affected evidence rerun after fixes |
-| Close | Documentation, register updates, scoped housekeeping, local commit | Accurate docs, no lost findings, a reviewable commit, honest remaining limits |
-| Improve | Short retrospective; bounded `evolve` when supported by a real failure | A lesson or a tested workflow change; retaining the existing workflow is valid |
+| Review and fix | Inspect owned diff; separate review when requested or warranted by risk | Supported findings resolved; affected checks rerun after fixes |
+| Close | Update affected docs, scoped housekeeping, local commit | Outcome, relevant checks and remaining risk; no separate closeout certificate |
+| Improve, when requested | Bounded `evolve` supported by a real failure | A tested workflow change; retaining the existing workflow is valid |
 
 Select reviews for the decisions they can change. A clear, approved repair resumes
 at the needed stage. A novel product or platform choice needs scoping. Do not run
@@ -30,7 +30,7 @@ requested: its versioning, push and PR behavior exceeds a local-commit endpoint.
 | Record | Canonical home | Rule |
 |---|---|---|
 | Product and language | [PRODUCT.md](../../PRODUCT.md), [CONTEXT.md](../../CONTEXT.md) | Historical plans and lessons cannot override these |
-| Work, approval, acceptance, evidence and closeout | `docs/workflow/work/<goal-id>.md` | One maintained record per goal; link larger native artifacts |
+| Work, approval, acceptance and evidence | Existing issue/queue; `docs/workflow/work/<goal-id>.md` only when a resumable home is missing | One current status home; link plans/findings rather than copying them; routine work can close in the response |
 | Design and selected plan | `docs/designs/<topic>.md`, or an existing accepted plan | Keep the existing plan; no parallel Wayfinder specification |
 | Actionable findings, papercuts, debt and cleanup | [TODOS.md](../../TODOS.md) | Stable IDs; one current status per finding; link original evidence |
 | Durable architectural decisions | [docs/adr](../adr/) | ADR only for a consequential lasting decision; routine choices stay in the work record |
@@ -87,11 +87,12 @@ in `src/modules/module-boundaries.ts`; `tests/imports` exercises architectural
 boundaries. Read `package.json` before choosing the appropriate focused checks.
 Do not run the complete release suite merely to validate workflow Markdown.
 
-Each closeout records missed assumptions, review rework, recurring friction and
-what evidence was unavailable. A demonstrated recurring process defect can
-trigger one bounded improvement experiment. A check that passes only by weakening
-the requirement is a failed experiment. Improvements to global policy, product
-direction, gstack internals or shared instructions are separate goals.
+Routine closeout reports the outcome, checks and remaining risk. Retrospectives,
+lessons and improvement experiments are not mandatory stages. Record a lesson
+only when useful; run an experiment when requested for a demonstrated defect.
+Report headings, confidence scores and receipt presence are not correctness gates.
+A check that passes only by weakening the requirement is a failed experiment.
+Changes to product direction, gstack internals or shared policy remain separate goals.
 
 ## Current work and installation
 

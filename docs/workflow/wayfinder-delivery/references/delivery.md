@@ -30,8 +30,9 @@ record the blocker. Never install or upgrade tools incidentally to start a stage
 Do not load every row. Office-hours establishes the problem; a plan review should
 not relitigate an approved direction without contrary evidence. Do not use
 `autoplan` as a universal gate: it expands into several reviews. Use it only when
-that set is wanted and fits the goal's budget. A stage's internal subagents must
-be awaited; a failed reviewer is missing review, not a passing verdict.
+that set is wanted and fits the goal's budget. Await a test or review before
+claiming its result, but continue independent authorized work while it runs.
+A failed reviewer is missing review, not a passing verdict.
 
 ## Anchor the plan in the real destination
 
@@ -46,7 +47,7 @@ failure/cancellation/recovery. Enumerate only the dependencies needed to complet
 that bounded journey. Each acceptance criterion names an observable result and
 required environment. Do not reduce the promised outcome to match available tests.
 
-The work record links the selected native design/plan and its revision or digest.
+The existing tracking home links the selected plan and relevant revision.
 Use a small decision/evidence section in that record if no larger plan is needed.
 Office-hours private copies are snapshots. Update the selected repo plan when
 decisions change; never let two documents both claim to be the active plan.
@@ -65,16 +66,23 @@ file before proposing a split; arbitrary line-count limits and cosmetic renames
 do not establish better architecture. Dependency/import/route changes require the
 relevant existing boundary checks and caller/link verification.
 
-The acceptance matrix is the evaluation contract. Record test/probe, result,
+The agreed acceptance criteria are the evaluation contract; a matrix is optional.
+Record test/probe, result,
 revision, environment and limitations. Wait for background work before asserting
 results. Preserve raw failures sufficiently to diagnose them, with secrets removed.
 Do not waive missing live or client proof by increasing model review scores.
 
-Review after the implementation is exercisable. Use gstack `review` scoped to
-owned changes and relevant specialist review. If the native review would include
-unrelated branch changes, supply an isolated reviewable patch/workspace or label
-the manual scoped review honestly. Every reviewer concern gets evidence and a
-disposition; unsubstantiated criticism does not mandate code churn.
+Inspect the owned diff after the implementation is exercisable. Use a separate
+gstack or specialist review when requested or warranted by material risk, not as
+a gate on every edit. Scope it to owned changes and label a manual review honestly.
+Resolve supported findings and explain rejected concerns; unsubstantiated
+criticism does not mandate code churn. Do not add another review cycle when the
+relevant checks pass and no unresolved defect requires it.
+
+Report headings, confidence scores, status markers and receipt presence do not
+prove correctness or gate execution. Do not rerun unchanged work to regenerate
+them. Preserve substantive tests, revision/environment identity, product integrity,
+deployment approvals and financial evidence.
 
 Fix acceptance failures and introduced regressions within scope, then rerun the
 affected evidence. Two unchanged failing attempts trigger fresh diagnosis, not

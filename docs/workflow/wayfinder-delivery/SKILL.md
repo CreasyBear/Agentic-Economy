@@ -17,10 +17,11 @@ current acceptance evidence and next action, then verify against current source
 and Git state. A chat summary, stage label or successful command is not enough.
 Record owned paths and starting dirty/staged work before editing.
 
-If there is no established tracking home, use `docs/workflow/work/<goal-id>.md`
-and the repository's existing backlog, or `TODOS.md` if absent. Check that new
-durable records can be committed. Use the [work template](assets/work.md), dropping
-inapplicable rows. Keep the record small; link larger plans and native outputs.
+Reuse the established tracking home without adding a parallel work record.
+Only create `docs/workflow/work/<goal-id>.md` when multi-session work needs a
+resumable record and none exists. The [work template](assets/work.md) is optional;
+drop inapplicable sections and link larger plans and outputs. Routine work needs
+only an outcome, checks and remaining risk in the response.
 
 ## Scope, then agree
 
@@ -46,8 +47,10 @@ skill is a coordinator transition, not completion or new authorization.
 
 ## Deliver and close
 
-After approval, continue implementation → evaluation → review → fixes → scoped
-documentation and housekeeping → local commit. Read [records.md](references/records.md)
+After approval, implement and run focused checks, inspect the owned diff, fix
+supported defects, and update affected documentation before local commit.
+Separate reviews are risk-driven or requested, not universal stages.
+Read [records.md](references/records.md)
 for evidence, findings and closeout. Read only the applicable stack/specialist
 skills. `ship`, publishing and deployment require corresponding task scope.
 
@@ -76,7 +79,6 @@ for an installed-client or deployed journey. Preserve other work and the index.
   prompted by an evidenced failure. Preserve the incumbent when improvement is
   unproven. Never recursively invoke evolution on its own output.
 
-At closeout, capture useful lessons and process shortcomings. Automatically run
-at most one evolution experiment only for a reproduced process failure, within
-the approved work budget and permitted workflow files. Otherwise register the
-candidate. This skill creates no scheduler or unattended continuation.
+No retrospective or evolution experiment is required at closeout. Record a
+lesson only when useful and evidence-supported; run an evolution experiment only
+when requested. This skill creates no scheduler or unattended continuation.
