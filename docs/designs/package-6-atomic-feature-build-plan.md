@@ -66,7 +66,7 @@ claim, not unrelated implementation.
   native-client evidence. A local build or reference fixture is not that proof.
 
 Release procedure, reviewer cases and external blockers:
-[Package 6 plugin release](docs/guides/package-6-plugin-release.md).
+[Package 6 plugin release](../guides/package-6-plugin-release.md).
 
 ## Implementation handoff — 5 September 2026
 

@@ -27,7 +27,7 @@ Package 6 should close at **controlled maturity (L1)** for all onboarding and gu
 
 ## Authority and method
 
-Product meaning came from [PRODUCT.md](../PRODUCT.md), [CONTEXT.md](../CONTEXT.md), [the Package 6 roadmap](../IMPLEMENTATION_ROADMAP.md#6-onboarding-content-and-language--planned) and [DESIGN.md](../DESIGN.md). Current source and tests were used only to identify the local baseline. The [Package 5 atomic plan](../PACKAGE-5-ATOMIC-FEATURE-BUILD-PLAN.md), [Package 5 maturity comparison](./PACKAGE-5-MATURE-SCAVENGE-COMPARISON.md), AE/Locus/Whop/Nevermined/TREG maturity papers and the [whole-product papercut register](../.planning/audits/product-papercut-register-2026-09-03.md) supplied candidate patterns.
+Product meaning came from [PRODUCT.md](../PRODUCT.md), [CONTEXT.md](../CONTEXT.md), [the Package 6 roadmap](../IMPLEMENTATION_ROADMAP.md#6-onboarding-content-and-language--planned) and [DESIGN.md](../DESIGN.md). Current source and tests were used only to identify the local baseline. The [Package 5 atomic plan](../docs/designs/package-5-atomic-feature-build-plan.md), [Package 5 maturity comparison](./PACKAGE-5-MATURE-SCAVENGE-COMPARISON.md), AE/Locus/Whop/Nevermined/TREG maturity papers and the [whole-product papercut register](../.planning/audits/product-papercut-register-2026-09-03.md) supplied candidate patterns.
 
 Current wire and vendor mechanics were checked against first-party sources only:
 

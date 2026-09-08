@@ -109,7 +109,7 @@ Package 5 does not include:
 
 ## Package 4 inheritance and current release constraint
 
-The authoritative Package 4 plan is [`PACKAGE-4-ATOMIC-FEATURE-BUILD-PLAN.md`](../PACKAGE-4-ATOMIC-FEATURE-BUILD-PLAN.md), supported by the [operations reconstruction research](./PACKAGE-4-OPERATIONS-RECONSTRUCTION-RESEARCH.md), [Australian prepaid-ledger perimeter research](./PACKAGE-4-AUSTRALIAN-PREPAID-LEDGER-REGULATORY-PERIMETER.md), [cutover evidence](../docs/guides/package-4-cutover-evidence.md), [release evidence](../docs/guides/package-4-release-evidence.md), and [deployment maturity record](../docs/operations/deployment-maturity.md).
+The authoritative Package 4 plan is [`docs/designs/package-4-atomic-feature-build-plan.md`](../docs/designs/package-4-atomic-feature-build-plan.md), supported by the [operations reconstruction research](./PACKAGE-4-OPERATIONS-RECONSTRUCTION-RESEARCH.md), [Australian prepaid-ledger perimeter research](./PACKAGE-4-AUSTRALIAN-PREPAID-LEDGER-REGULATORY-PERIMETER.md), [cutover evidence](../docs/guides/package-4-cutover-evidence.md), [release evidence](../docs/guides/package-4-release-evidence.md), and [deployment maturity record](../docs/operations/deployment-maturity.md).
 
 The Package 4 lessons that constrain Package 5 are:
 

@@ -4,11 +4,11 @@
 
 **Date:** 2026-09-04
 
-**Scope authority:** [`IMPLEMENTATION_ROADMAP.md`](./IMPLEMENTATION_ROADMAP.md#L850-L899)
+**Scope authority:** [`IMPLEMENTATION_ROADMAP.md`](../../IMPLEMENTATION_ROADMAP.md#L850-L899)
 
-**Prerequisites:** Package 4 contracts may be consumed, but Package 5 production claims remain gated by the open Package 4 release evidence in [`docs/guides/package-4-release-evidence.md`](./docs/guides/package-4-release-evidence.md).
+**Prerequisites:** Package 4 contracts may be consumed, but Package 5 production claims remain gated by the open Package 4 release evidence in [`docs/guides/package-4-release-evidence.md`](../guides/package-4-release-evidence.md).
 
-**Research basis:** [`research/PACKAGE-5-SUPPLIER-OPERATIONS-PRIMITIVES-RESEARCH.md`](./research/PACKAGE-5-SUPPLIER-OPERATIONS-PRIMITIVES-RESEARCH.md)
+**Research basis:** [`research/PACKAGE-5-SUPPLIER-OPERATIONS-PRIMITIVES-RESEARCH.md`](../../research/PACKAGE-5-SUPPLIER-OPERATIONS-PRIMITIVES-RESEARCH.md)
 
 This document is the user-approved Package 5 execution authority. It authorises the additive dependencies, contracts, schema, migration code and local implementation described below. Production activation and destructive migration remain separately gated by signed release evidence.
 
@@ -16,7 +16,7 @@ This document is the user-approved Package 5 execution authority. It authorises 
 
 **Reconciled 2026-09-05:** the core described below is present in `main` at
 `987cdec5085c207eb6b9024b66ef4a20de8a3da0`; later connection-handoff and resume
-corrections are uncommitted. The [transition review addendum](./PACKAGE-6-REVIEW.md#provider-handoff-and-recovery-transitions-source-and-focused-tests-verified)
+corrections are uncommitted. The [transition review addendum](../reviews/package-6-review.md#provider-handoff-and-recovery-transitions-source-and-focused-tests-verified)
 records their focused local verification (4 files / 27 tests, typecheck and
 narrow lint passing), while the repository import gate remains red on four
 baseline imports in two Package 5 test files. This is not deployed or native
@@ -147,12 +147,12 @@ Package 5 consumes Package 4 evidence. It does not reopen Package 4's ledger, Pr
 
 ### Repository authority
 
-- [`PRODUCT.md`](./PRODUCT.md) owns the product and commercial boundary.
-- [`CONTEXT.md`](./CONTEXT.md) owns canonical domain language.
-- [`DESIGN.md`](./DESIGN.md) requires machine parity, visible provenance, separate commercial roles, and one valid next action.
-- [`IMPLEMENTATION_ROADMAP.md`](./IMPLEMENTATION_ROADMAP.md#L850-L899) owns Package 5 scope.
-- [`PACKAGE-4-ATOMIC-FEATURE-BUILD-PLAN.md`](./PACKAGE-4-ATOMIC-FEATURE-BUILD-PLAN.md) and its release evidence own inherited Package 4 decisions and gates.
-- [`convex/_generated/ai/guidelines.md`](./convex/_generated/ai/guidelines.md) owns project-specific Convex rules.
+- [`PRODUCT.md`](../../PRODUCT.md) owns the product and commercial boundary.
+- [`CONTEXT.md`](../../CONTEXT.md) owns canonical domain language.
+- [`DESIGN.md`](../../DESIGN.md) requires machine parity, visible provenance, separate commercial roles, and one valid next action.
+- [`IMPLEMENTATION_ROADMAP.md`](../../IMPLEMENTATION_ROADMAP.md#L850-L899) owns Package 5 scope.
+- [`docs/designs/package-4-atomic-feature-build-plan.md`](package-4-atomic-feature-build-plan.md) and its release evidence own inherited Package 4 decisions and gates.
+- [`convex/_generated/ai/guidelines.md`](../../convex/_generated/ai/guidelines.md) owns project-specific Convex rules.
 - Current source and black-box tests own implemented truth.
 
 ### Maintained primitives
@@ -175,7 +175,7 @@ No generic event bus, incident product, telemetry store, protocol parser, secret
 
 ## 5. Equivalent maturity references
 
-The broad evidence pass is in [`research/PACKAGE-5-SUPPLIER-OPERATIONS-PRIMITIVES-RESEARCH.md`](./research/PACKAGE-5-SUPPLIER-OPERATIONS-PRIMITIVES-RESEARCH.md). The feature-by-feature build/buy decision is in [`research/PACKAGE-5-MATURE-SCAVENGE-COMPARISON.md`](./research/PACKAGE-5-MATURE-SCAVENGE-COMPARISON.md). These products shape operating standards, not AE domain scope.
+The broad evidence pass is in [`research/PACKAGE-5-SUPPLIER-OPERATIONS-PRIMITIVES-RESEARCH.md`](../../research/PACKAGE-5-SUPPLIER-OPERATIONS-PRIMITIVES-RESEARCH.md). The feature-by-feature build/buy decision is in [`research/PACKAGE-5-MATURE-SCAVENGE-COMPARISON.md`](../../research/PACKAGE-5-MATURE-SCAVENGE-COMPARISON.md). These products shape operating standards, not AE domain scope.
 
 | Reference | Package 5 maturity it demonstrates | Reuse in AE | Explicit rejection |
 |---|---|---|---|
@@ -207,21 +207,21 @@ The only Package 5 code that may be bespoke is AE domain code: the eight-state p
 
 | Existing implementation | Evidence | Package 5 disposition |
 |---|---|---|
-| Five admitted source kinds and publication readiness/provenance | [`src/modules/capability-supply/internal/convex-schema.ts`](./src/modules/capability-supply/internal/convex-schema.ts#L175-L248) | Reuse. Package 5 documents exactly these source profiles and adds no source lane. |
-| Fail-closed publication lifecycle and 24-hour maximum readiness | [`src/modules/capability-supply/internal/publication/lifecycle.ts`](./src/modules/capability-supply/internal/publication/lifecycle.ts#L15-L128) | Reuse as an input authority. Do not rename it into the external lifecycle. |
-| Owner onboarding funnel and one UI CTA | [`AeSupplySourceNativeStart.tsx`](./src/components/ae/supply/AeSupplySourceNativeStart.tsx), assembled by [`owner.offerings.new.tsx`](./src/routes/_operator/owner.offerings.new.tsx) | Keep the user journey; replace inferred/ad hoc status with the shared contract and machine-equivalent start action. |
-| Current five-state management summary | [`src/modules/capability-supply/tool-health.ts`](./src/modules/capability-supply/tool-health.ts) | Supersede through an additive adapter, consumer migration and measured removal. |
-| Ad hoc owner labels | [`src/components/ae/offerings/provider-workspace-projection.ts`](./src/components/ae/offerings/provider-workspace-projection.ts) | Delete after every surface consumes the canonical projector. No second label map survives. |
-| Routeability quality gate and candidate qualification | [`src/modules/capability-supply/internal/graph/quality-gate.ts`](./src/modules/capability-supply/internal/graph/quality-gate.ts), [`qualify-candidate.ts`](./src/modules/capability-supply/internal/graph/qualify-candidate.ts) | Reuse without bypass. Add only required evidence freshness inputs supported by the roadmap. |
-| Provider connection authority, generation, leases, revoke and cleanup | [`src/modules/capability-supply/internal/provider-connection/types.ts`](./src/modules/capability-supply/internal/provider-connection/types.ts), [`convex/capabilityProviderConnectionCleanup.ts`](./convex/capabilityProviderConnectionCleanup.ts) | Reuse as child commands/readbacks in offboarding. |
-| x402 seller admission/canary/reconciliation | [`src/modules/capability-supply/internal/x402-seller-onboarding/lifecycle.ts`](./src/modules/capability-supply/internal/x402-seller-onboarding/lifecycle.ts) | Reuse as lane-specific admission and evidence input. Do not build another x402 lifecycle. |
-| Package 4 Call projection | [`src/modules/capability-execution/internal/convex-schema.ts`](./src/modules/capability-execution/internal/convex-schema.ts#L286-L324) | Reuse as paid non-delivery and drain authority; add provider/business bounded indexes before fleet reads. |
-| Immutable Qualified Use receipt | [`src/modules/money/internal/delivery.ts`](./src/modules/money/internal/delivery.ts#L1-L138) | Reuse as the only useful-outcome evidence. Repair missing Operation scoping in its market-evidence projection. |
-| Provider earnings and Payout readbacks | [`src/modules/money/public.ts`](./src/modules/money/public.ts), [`src/modules/money/internal/convex-schema.ts`](./src/modules/money/internal/convex-schema.ts) | Reuse. Offboarding observes and waits; it does not write balances or infer settlement. |
-| Durable command identities and exact replay/conflict | [`src/modules/capability-supply/supply-actions.ts`](./src/modules/capability-supply/supply-actions.ts), connection command model and Package 4 execution | Apply to submission, correction and offboarding commands. |
-| Hourly readiness refresh | [`convex/crons.ts`](./convex/crons.ts) | Keep as freshness maintenance, not completion authority. |
+| Five admitted source kinds and publication readiness/provenance | [`src/modules/capability-supply/internal/convex-schema.ts`](../../src/modules/capability-supply/internal/convex-schema.ts#L175-L248) | Reuse. Package 5 documents exactly these source profiles and adds no source lane. |
+| Fail-closed publication lifecycle and 24-hour maximum readiness | [`src/modules/capability-supply/internal/publication/lifecycle.ts`](../../src/modules/capability-supply/internal/publication/lifecycle.ts#L15-L128) | Reuse as an input authority. Do not rename it into the external lifecycle. |
+| Owner onboarding funnel and one UI CTA | [`AeSupplySourceNativeStart.tsx`](../../src/components/ae/supply/AeSupplySourceNativeStart.tsx), assembled by [`owner.offerings.new.tsx`](../../src/routes/_operator/owner.offerings.new.tsx) | Keep the user journey; replace inferred/ad hoc status with the shared contract and machine-equivalent start action. |
+| Current five-state management summary | [`src/modules/capability-supply/tool-health.ts`](../../src/modules/capability-supply/tool-health.ts) | Supersede through an additive adapter, consumer migration and measured removal. |
+| Ad hoc owner labels | [`src/components/ae/offerings/provider-workspace-projection.ts`](../../src/components/ae/offerings/provider-workspace-projection.ts) | Delete after every surface consumes the canonical projector. No second label map survives. |
+| Routeability quality gate and candidate qualification | [`src/modules/capability-supply/internal/graph/quality-gate.ts`](../../src/modules/capability-supply/internal/graph/quality-gate.ts), [`qualify-candidate.ts`](../../src/modules/capability-supply/internal/graph/qualify-candidate.ts) | Reuse without bypass. Add only required evidence freshness inputs supported by the roadmap. |
+| Provider connection authority, generation, leases, revoke and cleanup | [`src/modules/capability-supply/internal/provider-connection/types.ts`](../../src/modules/capability-supply/internal/provider-connection/types.ts), [`convex/capabilityProviderConnectionCleanup.ts`](../../convex/capabilityProviderConnectionCleanup.ts) | Reuse as child commands/readbacks in offboarding. |
+| x402 seller admission/canary/reconciliation | [`src/modules/capability-supply/internal/x402-seller-onboarding/lifecycle.ts`](../../src/modules/capability-supply/internal/x402-seller-onboarding/lifecycle.ts) | Reuse as lane-specific admission and evidence input. Do not build another x402 lifecycle. |
+| Package 4 Call projection | [`src/modules/capability-execution/internal/convex-schema.ts`](../../src/modules/capability-execution/internal/convex-schema.ts#L286-L324) | Reuse as paid non-delivery and drain authority; add provider/business bounded indexes before fleet reads. |
+| Immutable Qualified Use receipt | [`src/modules/money/internal/delivery.ts`](../../src/modules/money/internal/delivery.ts#L1-L138) | Reuse as the only useful-outcome evidence. Repair missing Operation scoping in its market-evidence projection. |
+| Provider earnings and Payout readbacks | [`src/modules/money/public.ts`](../../src/modules/money/public.ts), [`src/modules/money/internal/convex-schema.ts`](../../src/modules/money/internal/convex-schema.ts) | Reuse. Offboarding observes and waits; it does not write balances or infer settlement. |
+| Durable command identities and exact replay/conflict | [`src/modules/capability-supply/supply-actions.ts`](../../src/modules/capability-supply/supply-actions.ts), connection command model and Package 4 execution | Apply to submission, correction and offboarding commands. |
+| Hourly readiness refresh | [`convex/crons.ts`](../../convex/crons.ts) | Keep as freshness maintenance, not completion authority. |
 
-The current owner projection is not a foundation to extend blindly. [`convex/capabilitySupplyOwnerFunnelProjection.ts`](./convex/capabilitySupplyOwnerFunnelProjection.ts) has fixed-cap incomplete reads, per-publication connection/binding queries, query-time `Date.now()`, and empty activity/event inputs. Package 5 replaces those fleet joins with indexed paginated projections and materialized evidence windows.
+The current owner projection is not a foundation to extend blindly. [`convex/capabilitySupplyOwnerFunnelProjection.ts`](../../convex/capabilitySupplyOwnerFunnelProjection.ts) has fixed-cap incomplete reads, per-publication connection/binding queries, query-time `Date.now()`, and empty activity/event inputs. Package 5 replaces those fleet joins with indexed paginated projections and materialized evidence windows.
 
 ## 7. Authority and data ownership
 
@@ -371,7 +371,7 @@ Each `SupplierOperationHealth` contains independent dimensions rather than one b
 5. No rating or Provider claim becomes useful-outcome evidence.
 6. Evidence windows may become stale or incomplete; they never silently become zero.
 7. Required admission/readiness/canary evidence can fail routeability. Observational delivery/usefulness rates are information in Package 5, not an automatic quality or ranking policy.
-8. Repair [`convex/qualifiedUse.ts`](./convex/qualifiedUse.ts#L219-L224) so `ae_qualified_use` market evidence is scoped to the receipt's exact Operation. Existing rows are censused and rebuilt from immutable Qualified Use receipts; no synthetic counts are invented.
+8. Repair [`convex/qualifiedUse.ts`](../../convex/qualifiedUse.ts#L219-L224) so `ae_qualified_use` market evidence is scoped to the receipt's exact Operation. Existing rows are censused and rebuilt from immutable Qualified Use receipts; no synthetic counts are invented.
 
 ### Supplier-facing incidents
 

@@ -3,8 +3,8 @@
 **Status:** active implementation-quality record
 
 **Authority note:** this document governs component fidelity and interaction
-quality. [PRODUCT.md](./PRODUCT.md) governs product meaning and
-[DESIGN.md](./DESIGN.md) governs how commercial roles and closure are presented.
+quality. [PRODUCT.md](../../PRODUCT.md) governs product meaning and
+[DESIGN.md](../../DESIGN.md) governs how commercial roles and closure are presented.
 
 Last updated: 2026-08-31  
 Twenty reference: `twentyhq/twenty@60a46b2947cd71a52762af43d8474edf167bfa07`  

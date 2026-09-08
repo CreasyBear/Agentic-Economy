@@ -10,7 +10,7 @@ It still fails at the joins. Six Provider transition defects can misstate outage
 
 Green unit tests do not close those gaps. The reproduced focused result is 19 files and 105 tests. The repository import gate is still red. No real ChatGPT/Codex Account connection, complete purchase, authenticated Provider journey, published plugin or production Call was proved.
 
-Companion evidence: [requirements baseline](</Users/joelchan/Documents/Coding/App-Dev/live/01. Pre-Implementation/Agentic-Economy/PACKAGE-6-REVIEW-REQUIREMENTS.md>), [implementation review](</Users/joelchan/Documents/Coding/App-Dev/live/01. Pre-Implementation/Agentic-Economy/PACKAGE-6-REVIEW-IMPLEMENTATION.md>) and [native integration challenge](</Users/joelchan/Documents/Coding/App-Dev/live/01. Pre-Implementation/Agentic-Economy/PACKAGE-6-REVIEW-NATIVE-CHALLENGE.md>).
+Companion evidence: [requirements baseline](package-6-review-requirements.md), [implementation review](package-6-review-implementation.md) and [native integration challenge](package-6-review-native-challenge.md).
 
 ## Highest-impact findings
 
@@ -50,7 +50,7 @@ Manual completion preserves `source_unavailable`; MCP OAuth start maps a thrown 
 
 ### P2. Provider public outage also claimed the market was empty
 
-On loader failure, `/for-providers` returns an error and empty arrays (`src/routes/for-providers.tsx:20-31`). The proof component treats the empty array as authoritative absence and says no Operations are published (`src/components/ae/supply/AeSupplyAgentProof.tsx:26-28`). The local browser showed both messages together. This violates the explicit no-match/outage distinction (`PACKAGE-6-ATOMIC-FEATURE-BUILD-PLAN.md:51-54`; `docs/guides/package-6-plugin-release.md:132`).
+On loader failure, `/for-providers` returns an error and empty arrays (`src/routes/for-providers.tsx:20-31`). The proof component treats the empty array as authoritative absence and says no Operations are published (`src/components/ae/supply/AeSupplyAgentProof.tsx:26-28`). The local browser showed both messages together. This violates the explicit no-match/outage distinction (`docs/designs/package-6-atomic-feature-build-plan.md:51-54`; `docs/guides/package-6-plugin-release.md:132`).
 
 ### P2. Resume failure silently became a blank Add service form
 
@@ -175,7 +175,7 @@ The authorized transition changes use the existing attempt, source and connectio
 - MCP start read failures remain `source_unavailable` rather than `not_found`.
 - Manual completion uncertainty rereads the same attempt using stable keys. It redirects when authoritative state shows consumption and does not infer failure from a lost response. The OAuth callback heading is neutral when completion cannot be confirmed.
 
-Current source anchors: [owner cancellation mutation](</Users/joelchan/Documents/Coding/App-Dev/live/01. Pre-Implementation/Agentic-Economy/convex/capabilityProviderConnectionAttempts.ts:541>), [handoff cancellation and outage mapping](</Users/joelchan/Documents/Coding/App-Dev/live/01. Pre-Implementation/Agentic-Economy/src/modules/capability-supply/internal/supply-funnel/provider-connection-handoff.ts:237>), [route cancellation/readback](</Users/joelchan/Documents/Coding/App-Dev/live/01. Pre-Implementation/Agentic-Economy/src/routes/_operator/owner.supply.connections.new.tsx:52>), [explicit resume failure](</Users/joelchan/Documents/Coding/App-Dev/live/01. Pre-Implementation/Agentic-Economy/src/routes/_operator/owner.offerings.new.tsx:78>) and [neutral callback uncertainty](</Users/joelchan/Documents/Coding/App-Dev/live/01. Pre-Implementation/Agentic-Economy/src/routes/_operator/owner.supply.connections.oauth.callback.tsx:64>).
+Current source anchors: [owner cancellation mutation](../../convex/capabilityProviderConnectionAttempts.ts:541), [handoff cancellation and outage mapping](../../src/modules/capability-supply/internal/supply-funnel/provider-connection-handoff.ts:237), [route cancellation/readback](../../src/routes/_operator/owner.supply.connections.new.tsx:52), [explicit resume failure](../../src/routes/_operator/owner.offerings.new.tsx:78) and [neutral callback uncertainty](../../src/routes/_operator/owner.supply.connections.oauth.callback.tsx:64).
 
 Independent adversarial review confirmed the owner boundary still rejects foreign access and the restored inputs do not fabricate connected/readiness/candidate state. One bounded limitation remains: repeating MCP start may return a conflict rather than recover the earlier external OAuth redirect because each start creates fresh OAuth state. Reload alone does not restart external authentication. Cancellation ends AE finalization; it cannot revoke secret/token material already created by an external service.
 

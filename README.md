@@ -97,6 +97,13 @@ admits and publishes it.
 Dated research, comparison papers, gauntlets and working ledgers inform the
 product but do not override these documents.
 
+Package build plans are filed under `docs/designs/`: [Package 4](./docs/designs/package-4-atomic-feature-build-plan.md),
+[Package 5](./docs/designs/package-5-atomic-feature-build-plan.md) and
+[Package 6](./docs/designs/package-6-atomic-feature-build-plan.md).
+The [Package 6 review and companion evidence](./docs/reviews/package-6-review.md)
+are under `docs/reviews/`; the [Twenty component quality record](./docs/designs/twenty-component-gauntlet.md)
+is under `docs/designs/`.
+
 <a id="publish-an-x402-tool"></a>
 
 ## Publish an x402 Tool

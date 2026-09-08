@@ -81,8 +81,8 @@ on that reconciled revision before T1–T6 begins.
 
 ### Package 6 handoff remains open
 
-[Package 6 review](../../PACKAGE-6-REVIEW.md) and its
-[implementation follow-up](../../PACKAGE-6-REVIEW-IMPLEMENTATION.md) record local
+[Package 6 review](../reviews/package-6-review.md) and its
+[implementation follow-up](../reviews/package-6-review-implementation.md) record local
 transition fixes and focused proof, not whole-package closure. Package 6 is to
 checkpoint its current bounded fix and hold final closeout. Carry forward its
 unresolved native OAuth/resource and tool-auth integration, canonical-origin and

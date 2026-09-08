@@ -157,7 +157,7 @@ this reconciliation.
 | 2 — Human workspace | Workspace restructuring, Provider workspace consolidation and navigation cleanup are built. | The [Package 2 design](./research/PACKAGE-2-HUMAN-WORKSPACE-IA.md) is reflected in the [owner Provider workspace](./src/components/ae/offerings/AeProviderWorkspace.tsx) and its [existing Provider workspace tests](./tests/unit/ui/provider-workspace.test.tsx); no fresh full-workspace acceptance run is claimed here. |
 | 3 — Identity, access and authority | Account/Principal boundaries, selected-Tool access, consequential-action proof and durable credential lifecycle are built. | [Package 3 gauntlet evidence](./research/PACKAGE-3-GAUNTLET-PROGRESS.md) records scoped tests and live Clerk proof. Broader installed-client and concurrent spending proof remains bounded by the relevant release records. |
 | 4 — Managed Calls and financial operations | Formance-backed funding/reservations, caller-specific Quote, Quote-based `tool.call`, recovery, Calls and document/obligation machinery are substantially implemented. | [Package 4 release evidence](./docs/guides/package-4-release-evidence.md) records local checks and real hosted sandbox funding. Managed-x402 success/refusal/recovery, refund/replay, documents/close, parity, strict recovery and external canary proof remain open; production remains gated. |
-| 5 — Provider operations | Source-native preview, admission, the shared Tool lifecycle, health and durable offboarding have landed on `main`. | [Package 5 implementation and test record](./PACKAGE-5-ATOMIC-FEATURE-BUILD-PLAN.md) records the local baseline. Complete deployed Provider-to-buyer journeys, credential lifecycle, active-case restore and supported-client proof remain open. Later handoff corrections in the dirty tree are not release evidence. |
+| 5 — Provider operations | Source-native preview, admission, the shared Tool lifecycle, health and durable offboarding have landed on `main`. | [Package 5 implementation and test record](docs/designs/package-5-atomic-feature-build-plan.md) records the local baseline. Complete deployed Provider-to-buyer journeys, credential lifecycle, active-case restore and supported-client proof remain open. Later handoff corrections in the dirty tree are not release evidence. |
 
 Package 4 should connect and complete those capabilities, not replace them with
 a parallel record system.
@@ -937,7 +937,7 @@ Package 5's source implementation is complete on `main`: source-native preview f
 This describes the landed Package 5 core baseline, not a claim that every
 connection-return branch is correct. Subsequent review found handoff and resume
 defects; their current working-tree corrections are uncommitted, with focused
-local verification recorded in the [transition review addendum](./PACKAGE-6-REVIEW.md#provider-handoff-and-recovery-transitions-source-and-focused-tests-verified).
+local verification recorded in the [transition review addendum](docs/reviews/package-6-review.md#provider-handoff-and-recovery-transitions-source-and-focused-tests-verified).
 That later local evidence is not a deployed or native-client release result.
 The recorded 2026-09-04 changed-cone run was 505 passed and 3 failed across 61
 files, with the failures attributed in the Package 5 plan to concurrent work.

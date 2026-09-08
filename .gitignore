@@ -74,3 +74,5 @@ eval/parity/results.tsv
 !/docs/workflow/**
 !/docs/designs/
 !/docs/designs/*.md
+!/docs/reviews/
+!/docs/reviews/*.md

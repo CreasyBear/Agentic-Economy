@@ -4,9 +4,9 @@
 
 **Scope:** Package 4A–4H, delivered as ten sequential, independently reviewable PRs
 
-**Product authority:** [`PRODUCT.md`](./PRODUCT.md)
+**Product authority:** [`PRODUCT.md`](../../PRODUCT.md)
 
-**Architecture context:** [`IMPLEMENTATION_ROADMAP.md`](./IMPLEMENTATION_ROADMAP.md)
+**Architecture context:** [`IMPLEMENTATION_ROADMAP.md`](../../IMPLEMENTATION_ROADMAP.md)
 
 **Supersedes:** the custom Convex journal, balance-projection, and automated-reconciliation sections of the previous Package 4 plan
 
@@ -21,12 +21,12 @@ was integrated in `7865a0803` on 2026-09-03 and is present at `main`
 additional uncommitted funding, webhook and infrastructure changes, whose
 deployment status must be read separately.
 
-[Package 4 release evidence](./docs/guides/package-4-release-evidence.md)
+[Package 4 release evidence](../guides/package-4-release-evidence.md)
 records the dated local suites, real Formance checks and hosted Stripe sandbox
 funding of exactly AUD 5.000000. It explicitly leaves managed-x402
 success/refusal/recovery, refund/replay, documents and signed close, protocol
 parity, strict environment recovery and the external Base Sepolia canary open.
-[Deployment maturity](./docs/operations/deployment-maturity.md) records later
+[Deployment maturity](../operations/deployment-maturity.md) records later
 partial deployments and operating blockers. None of those checks was rerun for
 this documentation reconciliation. Package 4 is not closed and production
 funding/mainnet effects remain gated.
@@ -101,14 +101,14 @@ These are implementation inputs, not choices left to a PR author.
 
 | Source | Controls implementation |
 | --- | --- |
-| [`PRODUCT.md`](./PRODUCT.md) | AE owns bounded market authority and commercial closure, not general identity, custody, payment or accounting infrastructure. |
-| [`AGENTS.md`](./AGENTS.md) | Minimum sufficient change, direct inspection, dirty-tree protection and narrow proof. |
-| [`IMPLEMENTATION_ROADMAP.md`](./IMPLEMENTATION_ROADMAP.md) | Package sequencing and the 4A–4H maturity destination. |
-| [`CONTEXT.md`](./CONTEXT.md) | Meanings of Account, Agent Principal, Commitment, Invocation, Call and commercial closure. |
-| [`convex/_generated/ai/guidelines.md`](./convex/_generated/ai/guidelines.md) | Convex Node Actions, validators, transactions, indexes, pagination and generated-code rules. |
-| [`research/PACKAGE-4-AUSTRALIAN-PREPAID-LEDGER-REGULATORY-PERIMETER.md`](./research/PACKAGE-4-AUSTRALIAN-PREPAID-LEDGER-REGULATORY-PERIMETER.md) | Australian launch red lines, approval families and evidence perimeter. |
-| [`research/PACKAGE-4-OPERATIONS-RECONSTRUCTION-RESEARCH.md`](./research/PACKAGE-4-OPERATIONS-RECONSTRUCTION-RESEARCH.md) | Evidence provenance and reconstruction boundaries. |
-| [`docs/adr/0001-principal-reseller-commercial-topology.md`](./docs/adr/0001-principal-reseller-commercial-topology.md) | Buyer Charge and upstream Provider obligation remain separate. |
+| [`PRODUCT.md`](../../PRODUCT.md) | AE owns bounded market authority and commercial closure, not general identity, custody, payment or accounting infrastructure. |
+| [`AGENTS.md`](../../AGENTS.md) | Minimum sufficient change, direct inspection, dirty-tree protection and narrow proof. |
+| [`IMPLEMENTATION_ROADMAP.md`](../../IMPLEMENTATION_ROADMAP.md) | Package sequencing and the 4A–4H maturity destination. |
+| [`CONTEXT.md`](../../CONTEXT.md) | Meanings of Account, Agent Principal, Commitment, Invocation, Call and commercial closure. |
+| [`convex/_generated/ai/guidelines.md`](../../convex/_generated/ai/guidelines.md) | Convex Node Actions, validators, transactions, indexes, pagination and generated-code rules. |
+| [`research/PACKAGE-4-AUSTRALIAN-PREPAID-LEDGER-REGULATORY-PERIMETER.md`](../../research/PACKAGE-4-AUSTRALIAN-PREPAID-LEDGER-REGULATORY-PERIMETER.md) | Australian launch red lines, approval families and evidence perimeter. |
+| [`research/PACKAGE-4-OPERATIONS-RECONSTRUCTION-RESEARCH.md`](../../research/PACKAGE-4-OPERATIONS-RECONSTRUCTION-RESEARCH.md) | Evidence provenance and reconstruction boundaries. |
+| [`docs/adr/0001-principal-reseller-commercial-topology.md`](../adr/0001-principal-reseller-commercial-topology.md) | Buyer Charge and upstream Provider obligation remain separate. |
 
 ### Formance evidence and official mechanisms
 
@@ -355,8 +355,8 @@ That ADR is not a Package 4 completion dependency.
 ## 8. Current public product contracts
 
 The accepted source cutover uses `registry.tools.search` → `tool.quote` →
-`tool.call`. [CONTEXT.md](./CONTEXT.md) and the
-[agent operating contract](./docs/designs/agent-operating-contract.md) define the
+`tool.call`. [CONTEXT.md](../../CONTEXT.md) and the
+[agent operating contract](agent-operating-contract.md) define the
 current action arguments, tagged results and canonical Tool/Quote/Call language.
 Earlier terms elsewhere in this dated implementation plan are historical design
 language, not callable compatibility aliases.
@@ -373,7 +373,7 @@ The managed-x402 release target continues to bind Account and Agent, exact Tool
 version and normalized input, authority and spending policy, current x402/FX
 facts, exact AUD/USDC units, applicable ceilings, ledger schema/template versions
 and expiry. Do not infer the complete commercial record or hosted acceptance
-from source cutover: the [Package 4 release evidence](./docs/guides/package-4-release-evidence.md)
+from source cutover: the [Package 4 release evidence](../guides/package-4-release-evidence.md)
 retains its outstanding gates.
 
 Public Quote readback exposes buyer authority, price, budget, balance, readiness,
