@@ -1,4 +1,5 @@
 schemaVersion: ae.deployment-registry/v1
+# Current operating override: see operatingPause; the baseline below is dated.
 capturedAt: "2026-09-04T08:48:02Z"
 capturedFromRevision: "8621ef3f3017a0e2ebe19c6277da98f7d5488909"
 captureWorkingTree: dirty_preserved_user_and_infrastructure_changes
@@ -263,7 +264,88 @@ vocabularyGenerationReadback:
   unauthenticatedFormanceHttp: 401
   stripeInbox: {stalled: 0, failed: 0, reconciliationRequired: 0}
   snapshotResult: incomplete_with_five_explicit_skips
+  skippedChecks: [aws, local_restricted_command_key, local_restricted_readback_key, stripe_destinations, cloudflare_alerts]
   convexCodegenDryRun: passed_without_generated_file_changes
   deploymentOrDataMutation: false
   backupRestoreOrCutoverApproval: false
   evidence: .scratch/vocabulary-rationalisation/issues/22-regenerate-shared-artifacts.md
+
+vocabularyBackupReadback:
+  capturedAt: "2026-09-05T10:21:44Z"
+  scope: inventory_native_convex_export_read_only
+  environment: package4-release
+  authority: non_production_synthetic_release
+  deploymentSelector: dev:fastidious-barracuda-66
+  deploymentName: fastidious-barracuda-66
+  convexCliVersion: "1.45.0"
+  runtime: node_22.22.0_npm_11.5.1
+  targetReadback:
+    capturedAt: "2026-09-05T10:19Z"
+    canonicalTestUrl: https://agentic-economy-package4-release.vercel.app
+    healthHttp: 200
+    readyHttp: 200
+    observedSourceRevision: "6593dbe7b4b8f75304caeed5b468acc497b720f4"
+    stripeInbox: {stalled: 0, failed: 0, reconciliationRequired: 0}
+  archive:
+    privateDirectory: /Users/joelchan/.codex/backups/agentic-economy/convex-native-20260905-102139
+    fileName: snapshot_fastidious-barracuda-66_1788603701438628839.zip
+    directoryMode: "0700"
+    fileMode: "0600"
+    sizeBytes: 229603
+    sha256: 14a276d8b2d05caede5f155367cd0a8feffd8192d21c775fa5a721a38c3a9cbe
+    memberCount: 355
+    documentsJsonlMemberCount: 182
+    fileStorageMemberCount: 23
+  coverage:
+    exportScope: deployment_wide
+    includeFileStorage: true
+    declaredComponentMountCount: 11
+    componentSelector: unsupported_by_export_command
+    componentRestoreProof: not_performed
+    excludes: [code_configuration, environment_variables, pending_scheduled_functions]
+  checks:
+    nativeExportExit: 0
+    unzipTest: pass
+    zipTest: pass
+    archiveIntegrity: verified
+    restoration: not_performed
+    restorationTarget: not_resolved
+    deploymentDataMutation: false
+  snapshotSkipsUnchanged: [aws, local_restricted_command_key, local_restricted_readback_key, stripe_destinations, cloudflare_alerts]
+  cutoverGate: blocked_pending_isolated_restore_and_external_state_reconciliation
+  evidence: .scratch/vocabulary-rationalisation/reports/31-hosted-cutover-preflight.md
+
+operatingPause:
+  requestedBy: user
+  requestedAt: "2026-09-06T01:36:00Z"
+  reason: reduce_aws_compute_cost_during_vocabulary_refactor
+  environment: package4-release
+  authority: non_production_synthetic_release
+  accountId: "197716152388"
+  region: ap-southeast-2
+  checkoutRevision: "fe09a6463ebda5d259b947ef21d07ae9194e2b7b"
+  deployedApplicationRevision: "6593dbe7b4b8f75304caeed5b468acc497b720f4"
+  ec2: {id: i-063c00d935d85d74f, state: stopped}
+  rds:
+    - id: package4-release-formance
+      state: stopped
+      automaticRestartTime: "2026-09-13T01:48:37.882Z"
+    - id: package4-release-restore-20260904
+      state: stopped
+      automaticRestartTime: "2026-09-13T01:44:38.220Z"
+  finalStopReadback: confirmed
+  finalStopReadbackAt: "2026-09-06T01:48:50Z"
+  rdsAutomaticRestart: after_seven_days_stopped_revisit_before_2026_09_13
+  automaticRestopScheduled: false
+  deletedResources: []
+  retained: [database_data, ebs_volumes, recovery_drill, backups, credentials, network, audit, alarms]
+  remainingChargeableResources: [nat_gateway, public_ipv4, storage, backups, account_services]
+  natGatewayId: nat-0aabc2385d7704d2d
+  hostedMoneyAvailability: intentionally_unavailable
+  nonAwsProviderConfigurationChanged: false
+  preStopSnapshot: six_explained_existing_release_gaps_aws_controls_and_backups_verified
+  postStopRequestSnapshot: same_six_explained_release_gaps_no_new_failures
+  resumeVerified: false
+  observedMonthToDateCostUsd: "18.5614214555"
+  costForecast: insufficient_history
+  evidenceAndResume: docs/operations/aws-foundation.md

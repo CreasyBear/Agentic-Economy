@@ -6,6 +6,72 @@ observable, recoverable and bounded in cost. Live resource identifiers remain
 in `deployment-registry.yaml`; capability evidence remains in
 `deployment-maturity.md`.
 
+## Refactor pause — 6 September 2026
+
+Joel requested a reversible AWS pause during the vocabulary refactor. This
+operating state supersedes the running-state observations dated below; it does
+not change the declared infrastructure or authorize teardown.
+
+- Target: account `197716152388`, region `ap-southeast-2`, synthetic
+  `package4-release`; routine role `Package4ReleaseOpenTofu` verified live.
+- EC2 `i-063c00d935d85d74f`: **stopped**, confirmed before database stop requests.
+- RDS `package4-release-formance` and `package4-release-restore-20260904`:
+  stop requests accepted at approximately `2026-09-06T01:36Z`; both **stopped**,
+  confirmed by provider readback at `2026-09-06T01:48:50Z`.
+- Data, EBS/RDS storage, backups, recovery-drill evidence, credentials, network,
+  audit controls and alert configuration are retained. No resource was deleted.
+- Hosted Formance-dependent money operations are intentionally unavailable.
+  Vercel, Convex, Clerk, Stripe and Cloudflare configuration was not changed;
+  their independent work and charges are not suspended by this AWS pause.
+- This is not zero cost: NAT `nat-0aabc2385d7704d2d`, its public IPv4 allocation,
+  retained storage/backups and account services can continue charging.
+- RDS automatically restarts after seven days. Revisit this pause before
+  **13 September 2026, 09:44 Perth**; provider restart times are
+  `2026-09-13T01:44:38.220Z` for the drill and `2026-09-13T01:48:37.882Z` for
+  the main database. No automatic re-stop job was created. EC2 stays stopped
+  until explicitly started. Existing alarms and scheduled backups can report
+  the intentional outage; they have not been disabled.
+
+### Evidence and resume
+
+The pre-stop strict snapshot verified the AWS role, matching resource identities,
+completed primary backup and regional copy, account controls, telemetry and
+budgets. It exited 1 with six explained release gaps: unavailable cost forecast,
+two missing local restricted Stripe keys, two disabled staged Stripe destinations
+and unavailable Cloudflare alert inspection. These are not a clean release pass.
+Cost Explorer now returned USD `18.5614214555` month-to-date unblended cost;
+the historical statement that observed cost was unavailable is superseded.
+
+The same strict snapshot was rerun after the stop requests while RDS shutdown
+was completing. It showed EC2 stopped, the same six explained release gaps,
+completed backups, preserved account controls and zero unhealthy Stripe inbox
+counts. Subsequent exact database readback confirmed both stopped. Application
+health/readiness still returned 200 because those probes do not establish
+Formance availability; provider state is the pause evidence. Resume behavior has
+not been exercised during this pause.
+
+After explicit resume authorization, renew the named AWS login and verify the
+same role/account. Read current status first, start only stopped resources, and
+wait for both databases before starting the host:
+
+```sh
+aws rds start-db-instance --profile package4-release-deployer --region ap-southeast-2 --db-instance-identifier package4-release-formance --query 'DBInstance.{Id:DBInstanceIdentifier,Status:DBInstanceStatus}' --no-cli-pager
+aws rds start-db-instance --profile package4-release-deployer --region ap-southeast-2 --db-instance-identifier package4-release-restore-20260904 --query 'DBInstance.{Id:DBInstanceIdentifier,Status:DBInstanceStatus}' --no-cli-pager
+aws rds wait db-instance-available --profile package4-release-deployer --region ap-southeast-2 --db-instance-identifier package4-release-formance
+aws rds wait db-instance-available --profile package4-release-deployer --region ap-southeast-2 --db-instance-identifier package4-release-restore-20260904
+aws ec2 start-instances --profile package4-release-deployer --region ap-southeast-2 --instance-ids i-063c00d935d85d74f --query 'StartingInstances[].{Id:InstanceId,State:CurrentState.Name}' --no-cli-pager
+aws ec2 wait instance-status-ok --profile package4-release-deployer --region ap-southeast-2 --instance-ids i-063c00d935d85d74f
+```
+
+Then verify SSM and the existing Formance deployments, exact ledger readback,
+queued financial work, and the strict deployment snapshot. Starting instances
+alone is not application recovery proof. Do not deploy refactor source as part
+of resume or change the environment profile, secrets or commercial identities.
+
+AWS references: [RDS stop and seven-day restart](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/USER_StopInstance.html),
+[EC2 stop behavior](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/how-ec2-instance-stop-start-works.html),
+[NAT and IPv4 charges](https://aws.amazon.com/vpc/pricing/).
+
 ## Current position — 4 September 2026
 
 The synthetic `package4-release` environment is private, monitored and backed

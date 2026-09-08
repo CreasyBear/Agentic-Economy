@@ -90,10 +90,118 @@ The retained isolated RDS drill `package4-release-restore-20260904` was availabl
 
 The AWS/RDS backup and restore evidence does **not** prove that the current hosted Convex dataset can be safely reset. The existing dated Convex export reference (`1788295840323299000`) predates the current value-bearing funding census and is not a current backup proof. Before destructive test cutover, the owner must:
 
-1. Capture a fresh supported Convex export/snapshot of `fastidious-barracuda-66`, retain it, and demonstrate restoration into the existing project structure or an approved isolated recovery target.
+1. Retain the fresh supported Convex export recorded below and demonstrate restoration into the existing project structure or an approved isolated recovery target.
 2. Reconcile the 20 pending funding commands, especially the 18 with external/provider references, against Stripe and Formance using approved restricted readback access. Record exact references and a no-replay decision.
 3. Repeat or formally accept the isolated recovery drill with the RPO miss addressed; retain rollback evidence.
 4. Establish a maintenance-window inventory proving no callbacks, pending Calls, workflow/workpool jobs or scheduled work can act on the fresh dataset.
+
+### Fresh native Convex export — 2026-09-05 10:21 UTC
+
+This is a bounded inventory/backup-capture receipt. Immediately before the
+capture, the exact development/synthetic release target
+`dev:fastidious-barracuda-66` was read back with process-scoped Convex
+selection. Ambient deployment keys, deployment tokens, self-hosted selectors
+and verbose logging variables were blanked. The synthetic release health,
+readiness and release probes were HTTP 200; the hosted source revision remained
+`6593dbe7b4b8f75304caeed5b468acc497b720f4`; and the exact Convex Stripe inbox
+readback returned `stalled=0`, `failed=0` and `reconciliationRequired=0`.
+
+The installed official Convex CLI was `1.45.0`; runtime was Node `v22.22.0`
+and npm `11.5.1`. The native command was:
+
+```text
+CONVEX_DEPLOYMENT=dev:fastidious-barracuda-66
+CONVEX_DEPLOY_KEY=''
+CONVEX_DEPLOYMENT_TOKEN=''
+CONVEX_SELF_HOSTED_URL=''
+CONVEX_SELF_HOSTED_ADMIN_KEY=''
+CONVEX_VERBOSE=''
+NODE_VERSION=22 "$HOME/.nvm/nvm-exec" npx convex export \
+  --include-file-storage \
+  --path /Users/joelchan/.codex/backups/agentic-economy/convex-native-20260905-102139
+```
+
+The native export completed at `2026-09-05T10:21:44Z`. It produced
+`snapshot_fastidious-barracuda-66_1788603701438628839.zip` in the new private
+directory
+`/Users/joelchan/.codex/backups/agentic-economy/convex-native-20260905-102139/`.
+The directory is mode `0700`; the archive is mode `0600` and 229,603 bytes.
+SHA-256:
+`14a276d8b2d05caede5f155367cd0a8feffd8192d21c775fa5a721a38c3a9cbe`.
+Native export completion, `unzip -tq` and `zip -T` all exited 0. Metadata-only
+inspection found 355 archive members, 182 `documents.jsonl` members and 23
+file-storage members, including the native `_storage` area. No rows, file
+contents, credentials or raw provider payloads were emitted or retained in
+this record.
+
+The installed CLI/source exposes deployment-wide export and
+`--include-file-storage`; it has no export-specific `--component` selector.
+The deployment declares 11 mounted component instances. The archive therefore
+has deployment-wide component coverage only; no per-component export or
+per-component restore was selected or independently proved. Convex's official
+[backup contract](https://docs.convex.dev/database/backup-restore) states that
+the ZIP contains documents for all Convex tables and, when requested, `_storage`
+metadata/files, but excludes code/configuration, environment variables and
+pending scheduled functions. This archive is consequently not a backend,
+callback, queue or runtime backup.
+
+### Supported isolated Convex restoration proposal — not executed
+
+The official supported path is a native ZIP import (or dashboard restore) into
+another deployment. The import documentation confirms that ZIP imports retain
+document IDs/creation times and restore `_storage` when present; replacement
+flags are destructive. The following exact procedure is held for coordinator
+review only:
+
+1. Resolve an existing, non-authoritative empty development deployment in the
+   same Convex project and read it back. The exact selector is **NOT VERIFIED**
+   here; do not substitute `dev`, `fastidious-barracuda-66`, the project default
+   production deployment or a guessed name. If no isolated target exists, the
+   restoration gate remains blocked; this receipt does not create a project,
+   deployment or other infrastructure.
+2. Prove that target has no Vercel alias, Stripe destination, Provider callback,
+   Formance edge, CDP/x402 custody or customer identity bound to it. Keep
+   external credentials absent and account for target callbacks, pending Calls,
+   workpool/workflow rows and scheduled work. Reconcile the source's 20 pending
+   funding commands (18 with external/provider references) against Stripe and
+   Formance before any source reset or cutover.
+3. With separate coordinator authorization, establish the matching approved
+   source revision and all 11 component mounts on the isolated development
+   target using the existing `npx convex dev` procedure. Do not use
+   `convex deploy` with `CONVEX_DEPLOYMENT`; the installed CLI documents that
+   combination as the project default production target.
+4. Verify the isolated target is empty, then import the unchanged archive using
+   the explicit target and blank ambient selectors. Omit `--prod`,
+   `--replace`, `--replace-all`, `--append` and `--component` so a non-empty
+   target fails instead of being overwritten:
+
+   ```text
+   CONVEX_DEPLOYMENT=dev:<approved-isolated-reference>
+   CONVEX_DEPLOY_KEY=''
+   CONVEX_DEPLOYMENT_TOKEN=''
+   CONVEX_SELF_HOSTED_URL=''
+   CONVEX_SELF_HOSTED_ADMIN_KEY=''
+   CONVEX_VERBOSE=''
+   NODE_VERSION=22 "$HOME/.nvm/nvm-exec" npx convex import \
+     /Users/joelchan/.codex/backups/agentic-economy/convex-native-20260905-102139/snapshot_fastidious-barracuda-66_1788603701438628839.zip
+   ```
+
+5. Run only supported read-only `convex data` and `convex run --component`
+   queries after import. Compare bounded counts/digests for application data,
+   `_storage`, root scheduled/workpool/workflow state and every declared
+   component. Keep transient raw output in a mode-`0600` file and retain only
+   aggregate receipts; never print rows or file contents.
+6. Reopen only after the isolated data/component comparison passes, the 20
+   pending funding records have exact no-replay dispositions, callback/job
+   isolation is evidenced and matched application/backend/data rollback is
+   recorded. Any new external effect stops the procedure for reconciliation;
+   never import over the authoritative source.
+
+No import, restore, target creation, backend start, deployment, callback change,
+credential read, financial command or external effect was performed here. The
+fresh archive proves backup integrity, **not** database restoration. Ticket 31
+remains open pending an approved isolated target, restoration/isolation proof,
+pending funding reconciliation and callback/job accounting.
 
 ## Supported clean-environment and rollback method
 
@@ -112,5 +220,8 @@ Rollback is the matched previous application/backend configuration plus retained
 5. **Alert and cost evidence has gaps.** The Cloudflare account/alert target was not verifiable because the local account binding was a placeholder/missing and no token was supplied. Cost forecast was unavailable. These require operations follow-up; no workaround was introduced.
 6. **Recovery evidence needs one qualification.** The retained RDS drill passed verification and RTO but missed RPO by eight seconds. This is not a current Convex restore proof and must not be represented as one.
 
-No source, deployment registry, existing document, backup archive, database row, callback destination, credential, queue, payment or hosted resource was changed by this preflight. Ticket 31 is intentionally not edited here; the coordinator may attach this report and record the issue closure evidence.
-
+The original preflight changed no source, database row, callback destination,
+credential, queue, payment or hosted resource and did not alter existing
+backup archives. The later bounded native-export receipt above added only the
+new private archive and its allowlisted documentation evidence; it still did
+not perform restoration or cutover.
