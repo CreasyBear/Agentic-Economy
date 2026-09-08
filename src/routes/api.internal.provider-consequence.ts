@@ -2,6 +2,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import { Agent, fetch as guardedFetch } from 'undici'
 
 import { methodNotAllowed } from '@/lib/server/method-guard'
+import { response as noStore } from '@/lib/server/no-store-response'
 import { readTrimmedEnv, type StringEnvironment } from '@/lib/server/read-trimmed-env'
 import {
   type RouteTransportFetch,
@@ -93,10 +94,6 @@ export const Route = createFileRoute('/api/internal/provider-consequence')({
     },
   },
 })
-
-function noStore(body: unknown, status: number): Response {
-  return Response.json(body, { status, headers: { 'Cache-Control': 'no-store' } })
-}
 
 function exactKeys(value: Record<string, unknown>, expected: readonly string[]): boolean {
   const keys = Object.keys(value)

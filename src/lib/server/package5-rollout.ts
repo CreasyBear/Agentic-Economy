@@ -1,3 +1,5 @@
+import { isRecord } from '@/modules/common/is-record'
+
 import { readTrimmedEnv, type StringEnvironment } from './read-trimmed-env'
 
 export const PACKAGE5_ROLLOUT_FLAGS = Object.freeze({
@@ -80,8 +82,4 @@ function rolloutFlagEnabled(name: string, environment: StringEnvironment): boole
 function isControlledDeployment(environment: StringEnvironment): boolean {
   return readTrimmedEnv(environment, 'NODE_ENV') === 'production'
     || readTrimmedEnv(environment, 'AE_PACKAGE4_SANDBOX_DEPLOYMENT_PROFILE') === 'synthetic_vps_fixture'
-}
-
-function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }

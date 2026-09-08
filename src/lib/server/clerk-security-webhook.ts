@@ -6,6 +6,7 @@ import { response as jsonResponse } from '@/lib/server/no-store-response'
 import { problem } from '@/lib/server/problem'
 import { readTrimmedEnv } from '@/lib/server/read-trimmed-env'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { isRecord } from '@/modules/common/is-record'
 import { clerkUserProviderIdentifier } from '@/modules/principal-account/external-identity/public'
 import {
   recordClerkSecurityObservationThroughSource,
@@ -142,8 +143,4 @@ function supportedEventType(value: string): value is ClerkSecurityObservation['e
     || value === 'session.ended'
     || value === 'session.revoked'
     || value === 'user.updated'
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }

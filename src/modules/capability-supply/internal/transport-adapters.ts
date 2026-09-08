@@ -1,10 +1,4 @@
 import {
-  CallToolResultSchema,
-  InitializeResultSchema,
-  JSONRPCResponseSchema,
-  ListToolsResultSchema,
-} from '@modelcontextprotocol/sdk/types.js'
-import {
   NetworkSchemaV2,
   validatePaymentRequired,
 } from '@x402/core/schemas'
@@ -17,35 +11,6 @@ import type {
 } from '@/modules/capability-supply/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { stableStringify, type StableHashValue } from '@/modules/common/stable-hash'
-export function isMcpJsonRpcResult(value: unknown, expectedId: string): boolean {
-  const parsed = JSONRPCResponseSchema.safeParse(value)
-  return parsed.success && parsed.data.id === expectedId && 'result' in parsed.data
-}
-export function parseMcpJsonRpcResponse(value: unknown, expectedId: string): unknown | undefined {
-  const parsed = JSONRPCResponseSchema.safeParse(value)
-  return parsed.success && parsed.data.id === expectedId ? parsed.data : undefined
-}
-
-
-function mcpJsonRpcResult(value: unknown, expectedId: string): unknown {
-  const parsed = JSONRPCResponseSchema.safeParse(value)
-  return parsed.success && parsed.data.id === expectedId && 'result' in parsed.data ? parsed.data.result : undefined
-}
-
-export function parseMcpInitializeResult(value: unknown, expectedId: string) {
-  const parsed = InitializeResultSchema.safeParse(mcpJsonRpcResult(value, expectedId))
-  return parsed.success ? parsed.data : undefined
-}
-
-export function parseMcpListToolsResult(value: unknown, expectedId: string) {
-  const parsed = ListToolsResultSchema.safeParse(mcpJsonRpcResult(value, expectedId))
-  return parsed.success ? parsed.data : undefined
-}
-
-export function parseMcpCallToolResult(value: unknown, expectedId: string) {
-  const parsed = CallToolResultSchema.safeParse(mcpJsonRpcResult(value, expectedId))
-  return parsed.success ? parsed.data : undefined
-}
 
 export type X402CatalogPayment = Readonly<{
   network: string

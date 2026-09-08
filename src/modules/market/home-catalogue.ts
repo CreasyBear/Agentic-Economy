@@ -21,13 +21,6 @@ export type HomeCapabilityRead =
     }>
   | Readonly<{ kind: "unavailable" }>;
 
-/** Home never reads project authority. */
-export async function loadRootRoute(
-  _search: RootSearchParams,
-): Promise<undefined> {
-  return undefined;
-}
-
 export function validateRootSearch(
   search: Record<string, unknown>,
 ): RootSearchParams {
