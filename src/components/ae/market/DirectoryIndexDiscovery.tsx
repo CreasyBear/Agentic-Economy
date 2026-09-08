@@ -64,7 +64,7 @@ export function DirectoryIndexDiscovery({ overview, window, onSelect, onSave, is
       {overview.providers.length === 0 ? <p className="text-sm text-muted-foreground">No Provider hostnames are available for this selection.</p> : <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         {overview.providers.map(provider => <li key={provider.key} className="min-w-0">
           <Card className="h-full gap-0 border-border/70 py-0 shadow-none"><CardContent className="p-0">
-            <Link to="/market" search={{ window, view: 'tools', provider: provider.key }} aria-label={`View Tools from ${provider.label}`} className="flex min-w-0 items-center gap-3 rounded-[inherit] p-4 transition-colors hover:bg-muted/40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+            <Link to="/market" search={{ window, view: 'tools', provider: provider.key }} aria-label={`View Tools from ${provider.label}`} className="flex min-w-0 items-center gap-3 rounded-card p-4 transition-colors hover:bg-muted/40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
               <Avatar className="size-11 shrink-0 rounded-xl border border-border/60">
                 {provider.iconUrl === undefined ? null : <AvatarImage src={provider.iconUrl} alt="Published service icon" referrerPolicy="no-referrer" className="object-cover" />}
                 <AvatarFallback className="rounded-xl"><BracesIcon className="size-4" aria-hidden="true" /></AvatarFallback>

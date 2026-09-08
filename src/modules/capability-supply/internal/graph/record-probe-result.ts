@@ -11,8 +11,9 @@ import {
   type CapabilityReadinessOutcome,
   type PublicationLifecycle,
 } from '../publication/lifecycle'
-import { usesSelectedRequestReadiness } from '../publication/selected-request-readiness'
 import { validEvidenceRefs } from '../shared/command-envelope'
+
+import { usesSelectedRequestReadiness } from './selected-request-readiness'
 
 import type { CapabilityGraphPorts } from './ports'
 import { probeTargetDigest } from './probe-digest'

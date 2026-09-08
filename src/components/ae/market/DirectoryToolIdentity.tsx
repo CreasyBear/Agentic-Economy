@@ -7,6 +7,6 @@ import type { X402DirectoryEntry } from '@/modules/market/x402-directory'
 export function DirectoryToolIdentity({ entry, className }: Readonly<{ entry: X402DirectoryEntry; className?: string }>) {
   return <Avatar className={cn('size-12 rounded-xl border border-border/60 bg-card', className)}>
     {entry.iconUrl === undefined ? null : <AvatarImage src={entry.iconUrl} alt="" referrerPolicy="no-referrer" className="object-cover" />}
-    <AvatarFallback className="rounded-[inherit]"><BracesIcon className="size-5" aria-hidden="true" /></AvatarFallback>
+    <AvatarFallback className="rounded-xl"><BracesIcon className="size-5" aria-hidden="true" /></AvatarFallback>
   </Avatar>
 }

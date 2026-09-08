@@ -11,7 +11,7 @@ type Props = { result: X402DirectoryProvidersPage; window: MarketWindow }
 
 export function DirectoryProvidersIndex({ result, window }: Props) {
   if (result.kind === 'unavailable') return <div role="status" className="rounded-2xl border border-border p-8 text-sm text-muted-foreground">The Provider catalogue is unavailable. Try again shortly.</div>
-  return <section aria-label="Provider catalogue" className="space-y-6">
+  return <section aria-label="Provider catalogue" className="flex flex-col gap-6">
     <p className="text-sm text-muted-foreground">Provider hostnames from the indexed catalogue. Tool counts cover the completed directory scan.</p>
     {result.page.length === 0 ? <p role="status" className="rounded-2xl border border-border p-8 text-muted-foreground">No Providers on this page.</p> : <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
       {result.page.map(provider => <Card key={provider.key} className="gap-0 overflow-hidden border border-border bg-card py-0 shadow-none">

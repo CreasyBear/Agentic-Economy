@@ -42,6 +42,6 @@ export {
   type FacilitatorDiscoverySkip,
 } from './internal/facilitator-discovery-ingest'
 
-export { usesSelectedRequestReadiness } from './internal/publication/selected-request-readiness'
+export { usesSelectedRequestReadiness } from './internal/graph/selected-request-readiness'
 
 export { sourceRouteRef } from './internal/source-route-identity'
