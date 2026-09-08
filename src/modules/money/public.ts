@@ -39,8 +39,13 @@ export {
   quoteManagedX402BuyerAud,
   splitInclusiveAudTax,
   validateExecutableRateEvidence,
+  validateExecutableRateEvidenceIntegrity,
+  validReferenceRate,
 } from './internal/executable-rate'
 export type {
+  ReferenceRate,
+  ManagedReferenceRateEvidence,
+  LegacyExecutableRateEvidence,
   ExecutableRateEnvironment,
   ExecutableRateEvidence,
   ExecutableRatePort,
@@ -630,3 +635,5 @@ export type {
   QualifiedUseReceipt,
   QualifiedUseWriteDecision,
 } from "./internal/delivery";
+
+export { formatDisplayPrice } from './internal/display-price'

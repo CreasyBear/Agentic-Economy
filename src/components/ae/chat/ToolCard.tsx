@@ -75,7 +75,7 @@ function ChoiceRow({ choice }: { choice: ToolChoiceRow }) {
           )}
         </ItemContent>
         {choice.price === undefined ? null : (
-          <AeToolPrice price={choice.price} size="sm" className="basis-full sm:ms-auto sm:basis-auto" />
+          <AeToolPrice price={choice.price} {...(choice.priceValidUntil === undefined ? {} : { validUntil: choice.priceValidUntil })} size="sm" className="basis-full sm:ms-auto sm:basis-auto" />
         )}
       </a>
     </Item>

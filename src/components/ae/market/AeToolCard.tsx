@@ -68,6 +68,7 @@ export function AeToolCard({
 
           <AeToolPrice
             price={operation.price}
+            {...(operation.priceValidUntil === undefined ? {} : { validUntil: operation.priceValidUntil })}
             className="basis-full justify-self-start md:w-40 md:basis-auto md:shrink-0 md:place-items-end"
           />
           <Separator />
@@ -104,7 +105,7 @@ export function AeToolCard({
                   label: "Authentication",
                   value: operation.authentication,
                   definition:
-                    "Provider authentication required to call this capability.",
+                    "How this Tool uses your account or connection.",
                 },
                 {
                   label: "Last verified",

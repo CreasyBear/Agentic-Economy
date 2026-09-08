@@ -3,7 +3,7 @@ import { v, type Infer } from 'convex/values'
 import { internal } from './_generated/api'
 import type { Doc } from './_generated/dataModel'
 import { action, env, internalMutation, internalQuery, type MutationCtx } from './_generated/server'
-import { readCurrentPublishedTool } from './capabilitySupplyCurrentTool'
+import { readCurrentPublishedTool, readManagedX402InspectionTarget } from './capabilitySupplyCurrentTool'
 import { readCommercialPolicyGate } from './moneyCommercialPolicy'
 import { principalAndSourceArgs, principalValue } from './lib/callLifecycle/contracts'
 import { resolveCurrentAgentAuthority } from './lib/callLifecycle/authorityHandlers'
@@ -19,7 +19,7 @@ import {
   x402PaymentProfileForEnvironment,
 } from '@/modules/capability-supply/convex'
 import type { StringEnvironment } from '@/lib/server/read-trimmed-env'
-import { isBoundedJsonValue, type JsonValue } from '@/modules/capability-contract/public'
+import { isBoundedJsonValue, openCapabilityDecisionModel, type JsonValue } from '@/modules/capability-contract/public'
 import { canonicalDigest, isCanonicalDigest } from '@/modules/common/canonical-digest'
 import { currentToolDigest } from '@/modules/capability-execution/current-tool-quote'
 import {
@@ -36,8 +36,10 @@ import {
   normalizePricingConfig,
   PACKAGE4_FORMANCE_REQUIREMENTS,
   quoteManagedX402BuyerAud,
+  type ReferenceRate,
   splitInclusiveAudTax,
 } from '@/modules/money/public'
+import { fetchCoinbaseReferenceRate } from '@/modules/money/reference-rate'
 import { FUNDING_HANDOFF_CREATE_PATH } from '@/modules/money/funding-handoff.actions'
 import { jsonObject } from '@/modules/capability-execution/convex'
 import type { LiveX402Requirement } from '@/modules/capability-execution/live-x402-requirement'
@@ -139,9 +141,11 @@ type QuoteArgs = Readonly<{
   toolRef: string
   input: Record<string, JsonValue>
   liveX402Requirement?: LiveX402Requirement
+  referenceRate?: ReferenceRate
 }>
 
 const formanceFinancialSnapshot = v.object({
+  policyDigest: v.string(),
   accountRef: v.string(),
   accountAvailableUnits: v.string(),
   principalRef: v.string(),
@@ -264,7 +268,7 @@ const refuse = (
   ...options,
 }) as unknown as QuoteResult
 
-function toolPricing(tool: PublishedTool, now: number) {
+function toolPricing(tool: PublishedTool, now: number, live?: LiveX402Requirement, referenceRate?: ReferenceRate) {
   const normalized = normalizePricingConfig(tool.pricingConfig)
   if (normalized.kind === 'invalid') return undefined
   if (normalized.config.kind === 'fixed_aud') {
@@ -274,14 +278,18 @@ function toolPricing(tool: PublishedTool, now: number) {
       price: { currency: 'AUD' as const, exponent: 6 as const, units: normalized.config.amountUnits },
     }
   }
+  let sourceUnits: string
+  try { sourceUnits = live === undefined ? normalized.config.sourceRequirement.atomicUnits : JSON.parse(live.requirementJson).requirement.amountUnits } catch { return undefined }
+  if (typeof sourceUnits !== 'string' || !/^[1-9][0-9]{0,77}$/.test(sourceUnits)) return undefined
   const sourceRequirement = {
     currency: 'USDC' as const,
     exponent: 6 as const,
-    units: normalized.config.sourceRequirement.atomicUnits,
+    units: sourceUnits,
   }
   const quoted = quoteManagedX402BuyerAud({
     environment: tool.runtimeEnvironment,
     requiredUsdcAtomicUnits: sourceRequirement.units,
+    ...(referenceRate === undefined ? {} : { referenceRate }),
     observedAt: now,
   })
   return quoted.kind === 'refused'
@@ -313,10 +321,20 @@ async function prepareFinancialSubjectsHandler(
     return { kind: 'refused', code: 'tool_not_ready' }
   }
   const operation = await readCurrentPublishedTool(ctx, args.toolRef, now)
+    ?? await readManagedX402InspectionTarget(ctx, args.toolRef, now)
   if (operation === undefined) return { kind: 'refused', code: 'tool_not_found' }
-  const pricing = toolPricing(operation, now)
-  if (pricing === undefined) return { kind: 'refused', code: 'tool_unsupported' }
-  if (pricing.kind === 'refused') return { kind: 'refused', code: 'pricing_setup_required' }
+  if (operation.runtimeEnvironment !== authority.principal.environment) return {
+    kind: 'refused', code: 'tool_unsupported',
+    reason: `This Tool uses the ${operation.runtimeEnvironment} environment; your agent uses ${authority.principal.environment}. Connect an agent for ${operation.runtimeEnvironment} before calling it.`,
+  }
+  let descriptor
+  try { descriptor = openCapabilityDecisionModel(operation.contract) } catch { return { kind: 'refused', code: 'tool_unsupported' } }
+  if (!isBoundedJsonValue(args.input) || descriptor.validateInput(args.input).kind !== 'valid') return { kind: 'refused', code: 'input_invalid' }
+  const pricing = normalizePricingConfig(operation.pricingConfig)
+  if (pricing.kind !== 'valid') return { kind: 'refused', code: 'tool_unsupported' }
+  if (pricing.config.kind === 'managed_x402'
+    && authority.principal.authorityMode !== 'spending_policy'
+    && authority.principal.authorityMode !== 'unrestricted_test_only') return { kind: 'refused', code: 'grant_not_found' }
   const grantRow = await ctx.db.query('agentAccessGrants')
     .withIndex('by_grantRef', (query) => query.eq('grantRef', authority.grantRef))
     .unique()
@@ -332,7 +350,7 @@ async function prepareFinancialSubjectsHandler(
       ? { sandboxFixture: 'managed_x402_deterministic_v1' as const }
       : {}),
   })
-  if (policy.kind === 'refused') return { kind: 'refused', code: 'commercial_policy_unavailable' }
+  if (policy.kind === 'refused') return { kind: 'refused', code: 'commercial_policy_unavailable', reason: policy.code }
   const legalCustomer = await resolveAndBindLegalCustomer(ctx, authority.principal.ownerId, now)
   if (legalCustomer.kind === 'refused') return { kind: 'refused', code: 'commercial_policy_unavailable' }
   const binding = await ctx.db.query('moneyLegalCustomerBindings')
@@ -386,8 +404,8 @@ async function prepareFinancialSubjectsHandler(
     legalExposureUnits: fundingPolicy.legalCustomerMaximumAccessibleUnits.toString(),
     policyDigest: policy.policyDigest,
     policyGeneration: 1,
-    buyerTaxBps: policy.controls.tax.serviceFeeTaxBps,
-    financialMode: pricing.config.kind === 'fixed_aud' && pricing.price.units === '0'
+    buyerTaxBps: policy.controls.tax.callTaxBps ?? 0,
+    financialMode: pricing.config.kind === 'fixed_aud' && pricing.config.amountUnits === '0'
       ? 'none'
       : 'formance',
     ...(observation === undefined || treasuryTarget === undefined
@@ -462,13 +480,14 @@ async function issueQuoteHandler(
     || args.formance.principalRef !== authority.principal.principalId
     || args.formance.budgetGeneration !== grantReadback.budget.generation
     || args.formance.policyGeneration !== 1
+    || args.formance.policyDigest !== policyGate.policyDigest
     || args.formance.formanceSchemaVersion !== PACKAGE4_FORMANCE_REQUIREMENTS.schemaVersion
     || args.formance.observedAt > now
     || now - args.formance.observedAt > 15_000) {
     return refuse(args, 'inspection_unavailable', true)
   }
 
-  const pricing = toolPricing(operation, now)
+  const pricing = toolPricing(operation, now, args.liveX402Requirement, args.referenceRate)
   if (pricing === undefined) return refuse(args, 'tool_unsupported', false, {
     capabilityId: operation.contract.ref.capabilityId,
   })
@@ -544,6 +563,7 @@ async function issueQuoteHandler(
   const expiresAt = Math.min(
     now + policyGate.controls.operations.commitmentTtlMs,
     authority.expiresAt,
+    operation.readiness.validUntil,
     pricing.rateEvidence?.expiresAt ?? Number.MAX_SAFE_INTEGER,
   )
   const evidenceMaterial = {
@@ -565,6 +585,7 @@ async function issueQuoteHandler(
     ...(args.liveX402Requirement === undefined ? {} : {
       x402RequirementDigest: args.liveX402Requirement.requirementDigest,
       x402RequirementObservedAt: args.liveX402Requirement.observedAt,
+      x402PaymentRequiredJson: args.liveX402Requirement.paymentRequiredJson,
     }),
     ...(pricing.rateEvidence === undefined ? {} : { rateEvidenceDigest: pricing.rateEvidence.evidenceDigest }),
     budgetPolicyRef: grantReadback.budget.budgetPolicyRef,
@@ -628,6 +649,7 @@ async function issueQuoteHandler(
       x402RequirementDigest: args.liveX402Requirement.requirementDigest,
       x402RequirementJson: args.liveX402Requirement.requirementJson,
       x402RequirementObservedAt: args.liveX402Requirement.observedAt,
+      x402PaymentRequiredJson: args.liveX402Requirement.paymentRequiredJson,
     }),
     ...(pricing.rateEvidence === undefined ? {} : {
       rateEvidenceJson: JSON.stringify(pricing.rateEvidence),
@@ -697,8 +719,10 @@ export const issueQuote = internalMutation({
     liveX402Requirement: v.optional(v.object({
       requirementDigest: v.string(),
       requirementJson: v.string(),
+      paymentRequiredJson: v.string(),
       observedAt: v.number(),
     })),
+    referenceRate: v.optional(v.object({ source: v.literal('coinbase'), base: v.literal('USDC'), quote: v.literal('AUD'), rate: v.string(), fetchedAt: v.number() })),
     formance: formanceFinancialSnapshot,
   },
   returns: quoteResult,
@@ -722,7 +746,15 @@ export const quote = action({
   args: { ...principalAndSourceArgs, toolRef: v.string(), input: jsonObject },
   returns: quoteResult,
   handler: async (ctx, args): Promise<QuoteResult> => {
+    const subjects: FinancialSubjectsResult = await ctx.runMutation(
+      internal.capabilityQuotes.prepareFinancialSubjects,
+      args,
+    )
+    if (subjects.kind === 'refused') return refuse(args, subjects.code, subjects.code !== 'input_invalid' && subjects.code !== 'grant_not_found' && subjects.code !== 'tool_unsupported', {
+      ...(subjects.reason === undefined ? {} : { reason: subjects.reason }),
+    })
     const live = await ctx.runAction(inspectLiveX402RequirementRef, {
+      principal: args.principal,
       toolRef: args.toolRef,
       input: args.input,
     })
@@ -733,17 +765,13 @@ export const quote = action({
       return refuse(args, 'tool_unsupported', false)
     }
     if (live.kind === 'refused') return refuse(args, 'tool_not_ready', true)
-    const subjects: FinancialSubjectsResult = await ctx.runMutation(
-      internal.capabilityQuotes.prepareFinancialSubjects,
-      args,
-    )
-    if (subjects.kind === 'refused') return refuse(args, subjects.code, true, {
-      ...(subjects.reason === undefined ? {} : { reason: subjects.reason }),
-    })
+    const referenceRate = live.kind === 'observed' ? await fetchCoinbaseReferenceRate() : undefined
+    if (live.kind === 'observed' && referenceRate === undefined) return refuse(args, 'pricing_setup_required', true, { reason: 'AUD reference price temporarily unavailable' })
     if (subjects.financialMode === 'none') {
       return await ctx.runMutation(internal.capabilityQuotes.issueQuote, {
         ...args,
         formance: {
+          policyDigest: subjects.policyDigest,
           accountRef: subjects.accountRef,
           accountAvailableUnits: '0',
           principalRef: subjects.principalRef,
@@ -838,7 +866,9 @@ export const quote = action({
       {
         ...args,
         ...(live.kind === 'observed' ? { liveX402Requirement: live.requirement } : {}),
+        ...(referenceRate === undefined ? {} : { referenceRate }),
         formance: {
+          policyDigest: subjects.policyDigest,
           accountRef: subjects.accountRef,
           accountAvailableUnits: account.units,
           principalRef: subjects.principalRef,
@@ -870,6 +900,7 @@ export const quote = action({
 })
 
 const invocationMaterial = v.union(v.object({
+  consumedCallRef: v.optional(v.string()),
   toolRef: v.string(),
   input: jsonObject,
   decisionPrice: exactAud,
@@ -891,7 +922,6 @@ export const readForCall = internalQuery({
       .withIndex('by_quoteRef', (query) => query.eq('quoteRef', args.quoteRef))
       .unique()
     if (row === null
-      || row.expiresAt <= args.now
       || row.principalId !== args.principal.principalId
       || row.accountRef !== args.principal.ownerId
       || row.credentialId !== args.principal.credentialId
@@ -906,11 +936,12 @@ export const readForCall = internalQuery({
         || call.quoteRef !== row.quoteRef
         || call.credentialId !== args.principal.credentialId
         || call.idempotencyKey !== args.idempotencyKey) return null
-    } else if (row.state !== 'issued') return null
+    } else if (row.state !== 'issued' || row.expiresAt <= args.now) return null
     try {
       const input = JSON.parse(row.normalizedInputJson) as unknown
       return isBoundedJsonValue(input) && typeof input === 'object' && input !== null && !Array.isArray(input)
         ? {
+            ...(row.state === 'consumed' ? { consumedCallRef: row.consumedCallRef! } : {}),
             toolRef: row.toolRef,
             input: input as Record<string, Infer<typeof jsonObject>[string]>,
             decisionPrice: { currency: 'AUD' as const, exponent: 6 as const, units: row.decisionAudUnits },

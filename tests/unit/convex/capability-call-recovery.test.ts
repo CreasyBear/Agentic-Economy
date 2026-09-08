@@ -180,7 +180,7 @@ function recoveryContext(options: Readonly<{
   const runAction = vi.fn(async (_reference: unknown, _args: unknown) => options.workerResult)
   const runQuery = vi.fn(async (reference: unknown, queryArgs: unknown) => {
     switch (functionPath(reference)) {
-      case 'capabilityCalls:readRecovery': return options.row
+      case 'capabilityCalls:readOwnerRecovery': return options.row
       case 'agentAccessPolicy:readActiveGrant': {
         const requestedGeneration = typeof queryArgs === 'object'
           && queryArgs !== null
@@ -394,18 +394,20 @@ describe('capability operation recovery Convex adapters', () => {
     }
   })
 
-  it('recovers by stable principal identity after the original grant is absent or rotated', async () => {
+  it('hands status and remedies to the worker with original effect identity after credential replacement', async () => {
+    const successor = { ...principal, credentialId: 'credential:successor' }
     const statusContext = recoveryContext({
       row,
       grant: null,
       workerResult: { kind: 'found', callRef, toolRef: row.toolRef, state: 'in_progress' },
     })
-    await expect(handlerFor(readCallStatus)(statusContext, recoveryArgs())).resolves.toMatchObject({ state: 'in_progress' })
+    await expect(handlerFor(readCallStatus)(statusContext, recoveryArgs({ principal: successor }))).resolves.toMatchObject({ state: 'in_progress' })
     expect(statusContext.runAction).toHaveBeenCalledTimes(1)
     expect(statusContext.runAction.mock.calls[0]?.[1]).toEqual({
       callRef,
       principalId: principal.principalId,
       credentialId: principal.credentialId,
+      recoveryPrincipal: successor,
       mode: 'status',
     })
 
@@ -414,11 +416,12 @@ describe('capability operation recovery Convex adapters', () => {
       grant: { generation: row.grantGeneration + 1 },
       workerResult: { kind: 'found', callRef, toolRef: row.toolRef, state: 'cancelled' },
     })
-    await expect(handlerFor(cancelCall)(cancelContext, recoveryArgs({ idempotencyKey: 'cancel:one' }))).resolves.toMatchObject({ state: 'cancelled' })
+    await expect(handlerFor(cancelCall)(cancelContext, recoveryArgs({ principal: successor, idempotencyKey: 'cancel:one' }))).resolves.toMatchObject({ state: 'cancelled' })
     expect(cancelContext.runAction.mock.calls[0]?.[1]).toEqual({
       callRef,
       principalId: principal.principalId,
       credentialId: principal.credentialId,
+      recoveryPrincipal: successor,
       mode: 'cancel',
       idempotencyKey: 'cancel:one',
     })
@@ -428,11 +431,12 @@ describe('capability operation recovery Convex adapters', () => {
       grant: { generation: row.grantGeneration + 1 },
       workerResult: { kind: 'found', callRef, toolRef: row.toolRef, state: 'terminal' },
     })
-    await expect(handlerFor(reconcileCall)(reconcileContext, recoveryArgs({ idempotencyKey: 'reconcile:one', evidence }))).resolves.toMatchObject({ state: 'terminal' })
+    await expect(handlerFor(reconcileCall)(reconcileContext, recoveryArgs({ principal: successor, idempotencyKey: 'reconcile:one', evidence }))).resolves.toMatchObject({ state: 'terminal' })
     expect(reconcileContext.runAction.mock.calls[0]?.[1]).toEqual({
       callRef,
       principalId: principal.principalId,
       credentialId: principal.credentialId,
+      recoveryPrincipal: successor,
       mode: 'reconcile',
       evidence,
     })
@@ -441,7 +445,7 @@ describe('capability operation recovery Convex adapters', () => {
     expect(reconcileContext.runMutation).toHaveBeenCalledTimes(2)
     for (const context of [statusContext, cancelContext, reconcileContext]) {
       expect(context.runQuery).toHaveBeenCalledTimes(1)
-      expect(functionPath(context.runQuery.mock.calls[0]?.[0])).toBe('capabilityCalls:readRecovery')
+      expect(functionPath(context.runQuery.mock.calls[0]?.[0])).toBe('capabilityCalls:readOwnerRecovery')
     }
   })
   it('allows the owning Clerk session to continue status and reconciliation after agent revocation', async () => {
@@ -462,6 +466,7 @@ describe('capability operation recovery Convex adapters', () => {
       callRef,
       principalId: principal.principalId,
       credentialId: principal.credentialId,
+      recoverAsOwner: true,
       mode: 'status',
     })
     const cancelContext = ownerRecoveryContext(ownerIdentity, {
@@ -478,6 +483,7 @@ describe('capability operation recovery Convex adapters', () => {
       callRef,
       principalId: principal.principalId,
       credentialId: principal.credentialId,
+      recoverAsOwner: true,
       mode: 'cancel',
       idempotencyKey: 'cancel:owner:one',
     })
@@ -498,6 +504,7 @@ describe('capability operation recovery Convex adapters', () => {
       callRef,
       principalId: principal.principalId,
       credentialId: principal.credentialId,
+      recoverAsOwner: true,
       mode: 'reconcile',
       evidence,
     })
@@ -563,14 +570,16 @@ describe('capability operation recovery Convex adapters', () => {
     })
   })
 
-  it('keeps cross-principal and cross-credential recovery indistinguishable from not-found', async () => {
+  it('keeps another Agent, Account, application, or environment indistinguishable from not-found', async () => {
     const wrongPrincipals: readonly AgentAccessPrincipal[] = [
       { ...principal, principalId: 'principal:other' },
-      { ...principal, credentialId: 'credential:other' },
+      { ...principal, ownerId: 'account:other' },
+      { ...principal, applicationRef: 'application:other' },
+      { ...principal, environment: 'production' },
     ]
     for (const wrongPrincipal of wrongPrincipals) {
       const context = recoveryContext({
-        row: null,
+        row,
         grant: null,
         workerResult: { kind: 'found', callRef, toolRef: row.toolRef, state: 'in_progress' },
       })
@@ -585,7 +594,7 @@ describe('capability operation recovery Convex adapters', () => {
       })
       expect(context.runAction).not.toHaveBeenCalled()
       expect(context.runQuery).toHaveBeenCalledTimes(1)
-      expect(functionPath(context.runQuery.mock.calls[0]?.[0])).toBe('capabilityCalls:readRecovery')
+      expect(functionPath(context.runQuery.mock.calls[0]?.[0])).toBe('capabilityCalls:readOwnerRecovery')
     }
   })
   it('projects a persisted needs-authority result when no canonical control exists', async () => {

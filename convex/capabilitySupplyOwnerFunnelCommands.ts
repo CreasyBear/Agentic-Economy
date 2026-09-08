@@ -1,4 +1,5 @@
 import { v, type Infer } from 'convex/values'
+import { nativeSubmissionBusiness } from './capabilitySupplyNativeAdmission'
 
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
@@ -120,7 +121,7 @@ export async function reserveOwnerCapabilityPublicationHandler(
     const owned = admission?.kind === 'allowed'
       ? await ownsPublishedBusinessForOwnerId(ctx, args.businessId, admission.ownerId)
       : ownerActor?.kind === 'authenticated_owner'
-        && await ownsPublishedBusiness(ctx, args.businessId)
+        && (await nativeSubmissionBusiness(ctx, args.businessId))?.owningAccountRef === ownerActor.canonicalAccountRef
     if (!owned) {
       return { kind: 'refused', reason: 'authorization_denied' }
     }

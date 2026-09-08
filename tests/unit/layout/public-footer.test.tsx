@@ -5,7 +5,7 @@ import { cleanup, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { AeSiteFooter } from '@/components/ae/website'
-import { AECON_MARK_SRC } from '@/content/brand-assets'
+import { AECON_MARKETING_URL, AECON_MARK_SRC } from '@/content/brand-assets'
 import {
   isPublicPrimaryNavActive,
   publicFooterColumns,
@@ -61,15 +61,13 @@ describe('public website footer', () => {
     expect(within(machines).getByRole('link', { name: 'SKILL.md' }).getAttribute('href')).toBe('/SKILL.md')
   })
 
-  it('mounts the notched contentinfo card with its brand and copyright line', () => {
+  it('links the application brand to the separate marketing site and retains copyright', () => {
     render(<AeSiteFooter />)
     const footer = screen.getByRole('contentinfo')
-    expect(within(footer).getByRole('link', { name: 'About' }).getAttribute('href')).toBe('/about')
-    expect(within(footer).getByRole('link', { name: 'Calls' }).getAttribute('href')).toBe('/activity')
+    expect(within(footer).getByRole('link', { name: 'About AECON' }).getAttribute('href')).toBe(AECON_MARKETING_URL)
     expect(within(footer).getByText(publicFooterCopyright(new Date().getFullYear()))).toBeTruthy()
     expect(within(footer).getByText('AECON')).toBeTruthy()
     expect(footer.querySelector(`img[src="${AECON_MARK_SRC}"]`)).toBeTruthy()
-    expect(footer.querySelector('svg')).not.toBeNull()
   })
 })
 

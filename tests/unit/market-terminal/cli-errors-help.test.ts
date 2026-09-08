@@ -386,8 +386,9 @@ describe('market-terminal CLI error contracts', () => {
       expect(envelope.flags).toHaveProperty('--cursor')
       expect(envelope.flags).toHaveProperty('--filters')
       if (command === 'connect') {
-        expect(envelope.usage).toBe('ae connect [--provider]')
+        expect(envelope.usage).toBe('ae connect [--provider] [--environment sandbox|production]')
         expect(envelope.flags).toHaveProperty('--provider')
+        expect(envelope.flags).toHaveProperty('--environment')
         expect(envelope.flags).not.toHaveProperty('--mcp')
         expect(envelope.auth.guidance).toEqual(expect.arrayContaining([
           expect.stringContaining('verification URI'),
@@ -422,12 +423,33 @@ describe('market-terminal CLI error contracts', () => {
     expect(callHelp.stderr).toBe('')
     expect(JSON.parse(callHelp.stdout)).toMatchObject({
       command: 'call',
-      guidance: [expect.stringContaining('--input -')],
+      guidance: expect.arrayContaining([
+        expect.stringContaining('--input -'),
+        expect.stringContaining('saved Quote and idempotency key are reused'),
+      ]),
+      commands: {
+        resume: {
+          usage: 'ae call resume <recovery-ref> [--wait]',
+        },
+      },
       flags: {
         '--input': {
           description: expect.stringContaining('call alone accepts -'),
         },
       },
+    })
+
+    const resumeHelp = spawnCliSync(['help', 'call', 'resume', '--json'])
+    expect(resumeHelp.status).toBe(0)
+    expect(resumeHelp.stderr).toBe('')
+    expect(JSON.parse(resumeHelp.stdout)).toMatchObject({
+      kind: 'HELP',
+      command: 'call resume',
+      usage: 'ae call resume <recovery-ref> [--wait]',
+      guidance: expect.arrayContaining([
+        expect.stringContaining('same origin, Account and Agent principal'),
+        expect.stringContaining('No --input or new --idempotency-key'),
+      ]),
     })
 
     const supplyHelp = spawnCliSync(['help', 'supply', 'publish', '--json'])

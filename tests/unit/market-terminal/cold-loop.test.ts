@@ -422,6 +422,22 @@ describe('external-agent Market Tool cold loop', () => {
     expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({ limit: 50 })
     expect(output.read()).toContain('Current Tools')
   })
+  it('preserves source and filters when continuing an empty list page', async () => {
+    const result = { ...operationListResult([]), pagination: { limit: 1, nextCursor: '1', hasMore: true } }
+    const output = captureStdout()
+    const fetchMock = vi.fn<typeof fetch>().mockImplementation(async () => responseJson(result))
+    vi.stubGlobal('fetch', fetchMock)
+    const parsed = parseArgs(['list', '--source', 'payai', '--limit', '1', '--filters', '{"location":"NO MATCH"}', '--json'])
+    try {
+      await runListCommand([], { ...parsed.options, baseUrl: options.baseUrl })
+    } finally { output.restore() }
+    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({ source: 'payai', limit: 1, filters: { location: 'NO MATCH' } })
+    const { nextPageCommand } = JSON.parse(output.read())
+    expect(nextPageCommand).toContain('--source payai')
+    expect(nextPageCommand).toContain(`--filters '{"location":"NO MATCH"}'`)
+    expect(nextPageCommand).toContain('--cursor 1')
+  })
+
   it('rejects a malformed successful search body with a safe CLI error', async () => {
     const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
       kind: 'ok',
@@ -452,6 +468,7 @@ describe('external-agent Market Tool cold loop', () => {
     await runSearchCommand(['reference lookup'], {
       ...options,
       technical: true,
+      source: 'current',
       limit: '3',
       cursor: 'opaque-prior-cursor',
       filters: JSON.stringify({ healthStatus: ['operational'] }),
@@ -459,6 +476,7 @@ describe('external-agent Market Tool cold loop', () => {
 
     expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({
       query: 'reference lookup',
+      source: 'current',
       limit: 3,
       cursor: 'opaque-prior-cursor',
       filters: { healthStatus: ['operational'] },
@@ -466,7 +484,7 @@ describe('external-agent Market Tool cold loop', () => {
     expect(JSON.parse(output.read())).toEqual({
       ...result,
       nextCommand: `ae describe ${operationRef} --json --technical`,
-      nextPageCommand: `ae search 'reference lookup' --limit 3 --filters '{"healthStatus":["operational"]}' --cursor opaque-next-cursor --json --technical`,
+      nextPageCommand: `ae search 'reference lookup' --limit 3 --source current --filters '{"healthStatus":["operational"]}' --cursor opaque-next-cursor --json --technical`,
     })
   })
   it('returns decision-sized JSON by default and keeps the full contract behind technical mode', async () => {
@@ -751,6 +769,9 @@ describe('external-agent Market Tool cold loop', () => {
       if (route === '/api/v1/market-tools/compare') {
         return jsonResponse(unavailableRead)
       }
+      if (route === '/api/v1/account') {
+        return jsonResponse({ ...connectedAccount(), accountRef: 'account:cold-loop', principalRef: 'principal:cold-loop' })
+      }
       if (route === TOOL_QUOTE_PATH) {
         if (authorization !== 'Bearer ae-test-caller-key') {
           throw new Error('quote must be authenticated')
@@ -865,15 +886,15 @@ describe('external-agent Market Tool cold loop', () => {
       [toolRef],
       { ...invokeOptions, input: JSON.stringify(initialInput) },
     ))
-    expect(replay).toEqual(completedResult)
+    expect(replay).toEqual({ ...completedResult, recoveryRef: pending.recoveryRef })
     expect(status.result).toEqual(completedResult)
 
     await expect(runCallCommand(
       [toolRef],
       { ...invokeOptions, input: JSON.stringify(changedInput) },
     )).rejects.toMatchObject({
-      kind: 'ALREADY_EXISTS',
-      code: 'idempotency_conflict',
+      kind: 'FAILED_PRECONDITION',
+      code: 'call-recovery-input-conflict',
     } satisfies Partial<CliFailure>)
 
     expect(providerEffects).toBe(1)
@@ -884,17 +905,13 @@ describe('external-agent Market Tool cold loop', () => {
       { method: 'POST', url: `https://market.example${TOOL_QUOTE_PATH}` },
       { method: 'POST', url: 'https://market.example/api/v1/tools/call' },
       { method: 'GET', url: `https://market.example/api/v1/calls/${encodeURIComponent(callRef)}` },
-      { method: 'POST', url: `https://market.example${TOOL_QUOTE_PATH}` },
-      { method: 'POST', url: 'https://market.example/api/v1/tools/call' },
-      { method: 'POST', url: `https://market.example${TOOL_QUOTE_PATH}` },
-      { method: 'POST', url: 'https://market.example/api/v1/tools/call' },
+      { method: 'GET', url: 'https://market.example/api/v1/account' },
+      { method: 'GET', url: `https://market.example/api/v1/calls/${encodeURIComponent(callRef)}` },
     ])
     expect(requests.map(({ authorization }) => authorization)).toEqual([
       null,
       null,
       null,
-      'Bearer ae-test-caller-key',
-      'Bearer ae-test-caller-key',
       'Bearer ae-test-caller-key',
       'Bearer ae-test-caller-key',
       'Bearer ae-test-caller-key',
@@ -908,10 +925,8 @@ describe('external-agent Market Tool cold loop', () => {
       { toolRef, input: initialInput },
       { quoteRef: `operation-commitment:v1:${'1'.repeat(64)}`, idempotencyKey },
       undefined,
-      { toolRef, input: initialInput },
-      { quoteRef: `operation-commitment:v1:${'1'.repeat(64)}`, idempotencyKey },
-      { toolRef, input: changedInput },
-      { quoteRef: `operation-commitment:v1:${'2'.repeat(64)}`, idempotencyKey },
+      undefined,
+      undefined,
     ])
   })
 
@@ -975,6 +990,7 @@ describe('external-agent Market Tool cold loop', () => {
       toolRef: CURRENT_OPERATION_REF,
       retryAfterMs: 100,
       nextCommand: 'ae status invocation:current --base-url https://market.example --json',
+      recoveryRef: expect.stringMatching(/^[0-9a-f-]{36}$/u),
     })
     expect(output.read()).not.toContain('idem-stable')
     expect(fetchMock).toHaveBeenCalledTimes(2)

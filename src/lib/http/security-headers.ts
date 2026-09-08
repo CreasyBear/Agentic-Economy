@@ -57,6 +57,8 @@ const cspDirectives = {
     "'self'",
     'data:',
     'blob:',
+    // Coinbase Bazaar's moderated, rehosted service icons.
+    'https://res.cloudinary.com/bdb-prod/image/upload/',
     'https://*.clerk.accounts.dev',
     'https://*.clerk.com',
     'https://*.googleusercontent.com',

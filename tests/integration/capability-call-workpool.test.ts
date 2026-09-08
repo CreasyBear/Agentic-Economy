@@ -56,6 +56,7 @@ import {
 import { handleMarketToolSearchRequest } from '@/routes/api.v1.market-tools.search'
 import { handleMarketToolDescribeRequest } from '@/routes/api.v1.market-tools.describe'
 import { handleMarketToolCompareRequest } from '@/routes/api.v1.market-tools.compare'
+import { handleAgentAccountGet } from '@/lib/server/agent-account-api'
 import {
   handleToolQuotePost,
   handleToolCallPost,
@@ -423,6 +424,8 @@ async function serveCallRoutes(input: Readonly<{
         response = await handleMarketToolDescribeRequest(request)
       } else if (url.pathname === '/api/v1/market-tools/compare') {
         response = await handleMarketToolCompareRequest(request)
+      } else if (url.pathname === '/api/v1/account') {
+        response = await handleAgentAccountGet(request, { authenticate, resolvePrincipal })
       } else if (url.pathname === '/api/v1/tools/quote') {
         response = await handleToolQuotePost(request, { authenticate, resolvePrincipal })
       } else if (url.pathname === '/api/v1/tools/call') {

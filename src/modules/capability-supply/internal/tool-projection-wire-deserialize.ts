@@ -55,7 +55,7 @@ export function deserializeToolDescriptor(
     offering: tool.offering,
     summary: tool.summary,
     commercial: {
-      price: tool.commercial.price,
+      ...(tool.commercial.displayPrice === undefined ? {} : { displayPrice: structuredClone(tool.commercial.displayPrice) }),      price: tool.commercial.price,
       ...(tool.commercial.priceEvidence === undefined
         ? {}
         : { priceEvidence: tool.commercial.priceEvidence }),
@@ -94,7 +94,8 @@ export function deserializeToolSearchResult(
       schemaVersion: result.schemaVersion,
       query: result.query,
       items: result.items.map(deserializeToolDescriptor),
-      matchedCount: result.matchedCount,
+      ...(result.partialResults === undefined ? {} : { partialResults: result.partialResults }),
+      ...(result.matchedCount === undefined ? {} : { matchedCount: result.matchedCount }),
       ranking: result.ranking,
       pagination: result.pagination,
       navigation: deserializeNavigation(result.navigation),
@@ -106,7 +107,8 @@ export function deserializeToolSearchResult(
       schemaVersion: result.schemaVersion,
       query: result.query,
       appliedFilters: result.appliedFilters,
-      matchedCount: result.matchedCount,
+      ...(result.partialResults === undefined ? {} : { partialResults: result.partialResults }),
+      ...(result.matchedCount === undefined ? {} : { matchedCount: result.matchedCount }),
       ranking: result.ranking,
       navigation: deserializeNavigation(result.navigation),
     };

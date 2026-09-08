@@ -120,6 +120,16 @@ remedy.
 
 ## Active product
 
+### x402 endpoint clarification — 2026-09-08
+
+An x402 endpoint is a Tool. Discovery must expose the upstream directory without
+requiring AE publication, Provider onboarding or a stored readiness result.
+AE support for its payment network, request format and execution is assessed
+when the customer uses it. Internal import and version records support that
+Call; they do not determine whether the endpoint is a Tool or may be browsed.
+This clarification supersedes admission-as-definition language below for x402.
+It does not assert successful delivery or a completed financial record.
+
 The product is a service marketplace.
 
 A **Tool** is one versioned callable supply unit offered by one Provider. It

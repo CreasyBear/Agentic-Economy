@@ -1,9 +1,9 @@
 /// <reference types="vite/client" />
 import { anyApi, makeFunctionReference } from 'convex/server'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { internal } from '../../../convex/_generated/api'
-import { convexTestWithMarketComponents, publishedBusinessOwner } from '../../helpers/convex-fixtures'
+import { components, internal } from '../../../convex/_generated/api'
+import { convexTestWithMarketComponents, convexTestWithWorkers, publishedBusinessOwner } from '../../helpers/convex-fixtures'
 import { withSourceWrite } from '../../helpers/source-write-admission'
 import { createCustomerRequestServiceAssertion, toStableHashValue } from '@/modules/agent-access/service-auth-envelope'
 import { issuedAgentGrantRef } from '@/modules/agent-access/issued-agent-binding'
@@ -64,6 +64,7 @@ describe('Account AUD funding through Formance', () => {
   const previousServiceKey = process.env.AE_CONVEX_SERVER_FUNCTION_TOKEN
   beforeEach(() => { process.env.AE_CONVEX_SERVER_FUNCTION_TOKEN = SERVICE_KEY })
   afterEach(() => {
+    vi.useRealTimers()
     if (previousServiceKey === undefined) delete process.env.AE_CONVEX_SERVER_FUNCTION_TOKEN
     else process.env.AE_CONVEX_SERVER_FUNCTION_TOKEN = previousServiceKey
   })
@@ -115,7 +116,11 @@ describe('Account AUD funding through Formance', () => {
     expect(JSON.stringify(publicRead)).not.toMatch(/account|owner|checkoutUrl|serviceFee|tax|credential|commandRef/u)
   })
   it('prepares one exact booking and finalizes only the returned Formance reference', async () => {
-    const backend = convexTestWithMarketComponents()
+    vi.useFakeTimers()
+    const backend = convexTestWithWorkers()
+    await backend.run(async (ctx) => {
+      await ctx.runMutation(components.workpool.config.update, { maxParallelism: 1 })
+    })
     const fixture = await publishedBusinessOwner(backend, 'formance-account-funding')
     const base = {
       amountUnits: '5000000', environment: 'sandbox' as const,
@@ -177,6 +182,7 @@ describe('Account AUD funding through Formance', () => {
     )).resolves.toEqual({
       kind: 'accepted', status: 'replayed', appliedRef: formanceTransactionRef,
     })
+    await backend.finishAllScheduledFunctions(() => vi.advanceTimersByTime(1))
     const rows = await backend.run(async (ctx) => ({
       command: await ctx.db.query('moneyFundingCommands')
         .withIndex('by_commandRef', (query) => query.eq('commandRef', base.commandRef)).unique(),
@@ -191,6 +197,15 @@ describe('Account AUD funding through Formance', () => {
         expect.objectContaining({ kind: 'service_fee_document', sourceTransactionRefs: [formanceTransactionRef] }),
       ]),
     })
+    expect(rows.documents).toHaveLength(2)
+    for (const document of rows.documents) {
+      expect(document.state).toBe('issued')
+      if (document.fileId === undefined) throw new Error('funding_document_file_missing')
+      const fileId = document.fileId
+      const html = await backend.run(async (ctx) => (await ctx.storage.get(fileId))?.text())
+      expect(html).toContain(`<td>${document.amountUnits}</td>`)
+      expect(html).toContain(formanceTransactionRef)
+    }
   })
 
   it('refuses changed Stripe money before preparing a Formance booking', async () => {

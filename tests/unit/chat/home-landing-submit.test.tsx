@@ -43,9 +43,9 @@ vi.mock('@/components/ae/layout/AePublicShell', () => ({
   AePublicShell: ({ children }: { children: ReactNode }) => <div>{children}</div>,
 }))
 
-import '@/routes/index'
+import { AeHomeLanding } from '@/components/ae/home/AeHomeLanding'
 
-describe('catalogue-first home', () => {
+describe('retained landing component', () => {
   afterEach(() => {
     cleanup()
     routeState.search = { q: undefined }
@@ -114,7 +114,5 @@ describe('catalogue-first home', () => {
 
 function renderHomeRoute(q = '') {
   routeState.search = q.length === 0 ? { q: undefined } : { q }
-  const HomeComponent = routeState.HomeComponent
-  if (HomeComponent === null) throw new Error('Home route component was not captured by the router mock.')
-  render(<HomeComponent />)
+  render(<AeHomeLanding read={routeState.loaderData.read} />)
 }

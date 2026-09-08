@@ -46,6 +46,7 @@ import { clerkConsequenceProofValue } from './lib/consequenceProof'
 import { admitAgentPublicationConsequence } from './lib/agentPublicationConsequence'
 import { admitInteractiveOwnerConsequence } from './lib/ownerConsequence'
 import { providerRouteabilityIsFrozen } from './lib/providerOffboardingFreeze'
+import { isNativeSupplySource, nativeSubmissionBusiness, nativeSubmissionPorts } from './capabilitySupplyNativeAdmission'
 import { upsertProviderToolIdentity } from './capabilityProviderToolProjection'
 import {
   authorityValue,
@@ -567,9 +568,14 @@ export async function publishPreparedCapabilityHandler(
   const ownerActor = args.agentPrincipal === undefined
     ? await resolveBusinessActor(ctx)
     : undefined
+  const nativeSubmission = isNativeSupplySource(args.prepared.sourceKind)
+    && args.prepared.sourceAuthorityState !== undefined
+    && args.prepared.offering.origin?.kind === 'catalog_offering'
   const businessAuthorized = args.agentPrincipal === undefined
     ? ownerActor?.kind === 'authenticated_owner'
-      && await ownsPublishedBusiness(ctx, args.businessId)
+      && (nativeSubmission
+        ? (await nativeSubmissionBusiness(ctx, args.businessId))?.owningAccountRef === ownerActor.canonicalAccountRef
+        : await ownsPublishedBusiness(ctx, args.businessId))
     : agentAdmission?.kind === 'allowed'
       && await ownsPublishedBusinessForOwnerId(ctx, args.businessId, agentAdmission.ownerId)
   if (!validRegistrationContext(args) || !businessAuthorized) {
@@ -706,7 +712,7 @@ export async function publishPreparedCapabilityHandler(
       evidenceRefs: args.evidenceRefs,
       now: Date.now(),
     },
-    publicationPorts(ctx),
+    nativeSubmission ? nativeSubmissionPorts(ctx, args.businessId) : publicationPorts(ctx),
   )
   if (result.kind === 'refused')
     return convexPreparedPublicationResult(result)

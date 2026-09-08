@@ -6,6 +6,19 @@ import { Route } from '@/routes/index'
 
 const BAS_ASK = 'My BAS is overdue and my books are a mess'
 describe('root route readback', () => {
+  it('opens the application directly in the market', () => {
+    const beforeLoad = Route.options.beforeLoad
+    if (beforeLoad === undefined) throw new Error('root market redirect is unavailable')
+    let thrown: unknown
+    try {
+      beforeLoad({ search: {} } as never)
+    } catch (error) {
+      thrown = error
+    }
+    expect(isRedirect(thrown)).toBe(true)
+    if (!isRedirect(thrown)) return
+    expect(thrown.options).toMatchObject({ to: '/market', search: { window: '30d' }, replace: true })
+  })
   it('redirects a query to the market even when a project param is present', () => {
     const beforeLoad = Route.options.beforeLoad
     if (beforeLoad === undefined) throw new Error('root query redirect is unavailable')

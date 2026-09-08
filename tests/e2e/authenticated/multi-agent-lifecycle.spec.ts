@@ -48,8 +48,8 @@ test.describe('configured Clerk and Convex multi-agent lifecycle', () => {
     await openAgent(page, agentAName)
     await page.getByRole('button', { name: 'Technical details' }).click()
     await expect(page.getByText('Credential history', { exact: true })).toBeVisible()
-    await expect(page.getByText('Generation 1')).toBeVisible()
-    await expect(page.getByText('Generation 2')).toBeVisible()
+    await expect(page.getByText('Generation 1', { exact: true })).toBeVisible()
+    await expect(page.getByText('Generation 2', { exact: true })).toBeVisible()
     await expect(page.getByText('Revoked').first()).toBeVisible()
     const revoke = page.getByRole('button', { name: 'Revoke', exact: true })
     await expect(revoke).toBeVisible()
@@ -57,10 +57,11 @@ test.describe('configured Clerk and Convex multi-agent lifecycle', () => {
     const confirmRevoke = page.getByRole('button', { name: 'Revoke credential' })
     await expect(confirmRevoke).toBeVisible()
     await confirmRevoke.dispatchEvent('click')
+    await expect(page.getByRole('alertdialog')).toBeHidden()
     await expect(page.getByText('Disconnected', { exact: true }).first()).toBeVisible()
     await expect(page.getByText('Credential history', { exact: true })).toBeVisible()
-    await expect(page.getByText('Generation 1')).toBeVisible()
-    await expect(page.getByText('Generation 2')).toBeVisible()
+    await expect(page.getByText('Generation 1', { exact: true })).toBeVisible()
+    await expect(page.getByText('Generation 2', { exact: true })).toBeVisible()
     await expect(page.getByText('Revoked', { exact: true })).toHaveCount(2)
 
     const selectivelyRevoked = await page.request.get('/api/v1/account', {
@@ -77,9 +78,10 @@ test.describe('configured Clerk and Convex multi-agent lifecycle', () => {
     const confirmDisconnect = page.getByRole('button', { name: 'Remove agent everywhere' }).last()
     await expect(confirmDisconnect).toBeVisible()
     await confirmDisconnect.dispatchEvent('click')
+    await expect(page.getByRole('alertdialog')).toBeHidden()
     await expect(page.getByText('Disconnected', { exact: true }).first()).toBeVisible()
     await expect(page.getByText('Credential history', { exact: true })).toBeVisible()
-    await expect(page.getByText('Generation 1')).toBeVisible()
+    await expect(page.getByText('Generation 1', { exact: true })).toBeVisible()
     await expect(page.getByText('Revoked', { exact: true })).toBeVisible()
     const disconnected = await page.request.get('/api/v1/account', {
       headers: { Authorization: `Bearer ${agentB.secret}` },
@@ -122,7 +124,7 @@ test.describe('configured Clerk and Convex multi-agent lifecycle', () => {
 
     await page.goto(authorize.toString())
     await expect(page.getByRole('radio', { name: /Ask each time/ })).toBeChecked()
-    const redirectTo = await submitAgentApprovalRedirect(page)
+    const redirectTo = await submitAgentApprovalRedirect(page, callback)
     const callbackUrl = new URL(redirectTo)
     expect(callbackUrl.searchParams.get('state')).toBe(state)
     const code = callbackUrl.searchParams.get('code')
@@ -154,6 +156,8 @@ test.describe('configured Clerk and Convex multi-agent lifecycle', () => {
     const disconnect = page.getByRole('button', { name: 'Disconnect', exact: true })
     await disconnect.click()
     await page.getByRole('button', { name: 'Disconnect', exact: true }).last().click()
+    await expect(page.getByRole('alertdialog')).toBeHidden()
+    await expect(page.getByRole('dialog').getByText('Revoked', { exact: true }).first()).toBeVisible()
     const rejectedRefresh = await page.request.post('/oauth/token', {
       form: { grant_type: 'refresh_token', refresh_token: refreshed.refreshToken, client_id: clientId },
     })
@@ -162,7 +166,10 @@ test.describe('configured Clerk and Convex multi-agent lifecycle', () => {
     const protectedRead = await page.request.get('/api/v1/account', {
       headers: { Authorization: `Bearer ${refreshed.accessToken}` },
     })
-    expect(protectedRead.status()).toBe(401)
+    expect([401, 403]).toContain(protectedRead.status())
+    const deniedRead = await protectedRead.json() as { code?: string; accountRef?: string }
+    expect(['authentication_required', 'scope_required']).toContain(deniedRead.code)
+    expect(deniedRead.accountRef).toBeUndefined()
     await expect(callOfficialWhoami(configuredEnvironment.baseURL, refreshed.accessToken)).rejects.toThrow()
 
     const anonymous = await callOfficialPublicSearch(configuredEnvironment.baseURL)
@@ -238,17 +245,15 @@ async function submitAgentApproval(page: Page, actionName: 'Connect agent' | 'Re
   await expect(response.json()).resolves.toMatchObject({ kind: 'approved' })
 }
 
-async function submitAgentApprovalRedirect(page: Page): Promise<string> {
-  const responsePromise = page.waitForResponse((response) => {
-    const url = new URL(response.url())
-    return url.pathname === '/oauth/authorize' && response.request().method() === 'POST'
-  })
+async function submitAgentApprovalRedirect(page: Page, callback: string): Promise<string> {
+  // Model the external client's loopback listener while following the real browser redirect.
+  await page.route(`${callback}?**`, (route) => route.fulfill({
+    status: 200, contentType: 'text/plain', body: 'Authorization response received.',
+  }))
+  const redirected = page.waitForURL((url) => `${url.origin}${url.pathname}` === callback)
   await page.getByRole('button', { name: 'Connect agent', exact: true }).click()
-  const response = await responsePromise
-  const result = await response.json() as { kind?: string; redirectTo?: string }
-  expect(result.kind).toBe('approved')
-  expect(result.redirectTo).toBeTruthy()
-  return result.redirectTo!
+  await redirected
+  return page.url()
 }
 
 async function ensureAgentVisible(page: Page, name: string): Promise<void> {

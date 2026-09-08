@@ -348,6 +348,7 @@ export const capabilityCallTables = {
     sourceUsdcUnits: v.optional(v.string()),
     x402RequirementDigest: v.optional(v.string()),
     x402RequirementJson: v.optional(v.string()),
+    x402PaymentRequiredJson: v.optional(v.string()),
     x402RequirementObservedAt: v.optional(v.number()),
     rateEvidenceJson: v.optional(v.string()),
     rateEvidenceDigest: v.optional(v.string()),
@@ -450,6 +451,8 @@ export const capabilityCallTables = {
     .index('by_credentialId_and_state', ['credentialId', 'state'])
     .index('by_credentialId_and_state_and_grantExpiresAt', ['credentialId', 'state', 'grantExpiresAt'])
     .index('by_principalId_and_callRef', ['principalId', 'callRef'])
+    .index('by_principalId_and_createdAt', ['principalId', 'createdAt'])
+    .index('by_principalId_and_state', ['principalId', 'state'])
     .index('by_toolRef_and_state', ['toolRef', 'state'])
     .index('by_ownerId_and_state_and_createdAt', ['ownerId', 'state', 'createdAt'])
     .index('by_state_and_reconciliation_nextAttemptAt', ['state', 'reconciliation.nextAttemptAt']),

@@ -88,7 +88,6 @@ describe("facilitator discovery ingest", () => {
     const input = extension.info.input;
     const output = extension.info.output;
     for (const forbidden of [
-      { pathParams: {} },
       { headers: {} },
       { body: {} },
       { bodyType: "json" },
@@ -109,7 +108,7 @@ describe("facilitator discovery ingest", () => {
     expect(admitBazaarDiscoveryInfo(extension, {
       input,
       output: { type: "json", example: Object.fromEntries(Array.from({ length: 65 }, (_, index) => [`field${index}`, true])) },
-    })).toEqual({ kind: "refused", reason: "schema_missing" });
+    })).toMatchObject({ kind: "admitted" });
   });
 
   it("keeps a searchable offering when a v2 catalog row has a URL string resource and no tags", async () => {
@@ -126,6 +125,9 @@ describe("facilitator discovery ingest", () => {
     }]);
     expect(admission.skipped).toEqual([]);
     expect(admission.admitted[0]?.offering.searchTerms.length).toBeGreaterThan(0);
+    expect(admission.admitted[0]?.offering.presentation.materialTerms).toContainEqual({
+      termId: "buyer-total", label: "Buyer total", value: "Confirmed in AUD by a binding Quote for your input.",
+    });
   });
 
   it("normalizes x402 v2 catalog items whose resource is a URL string", () => {
@@ -219,7 +221,7 @@ describe("facilitator discovery ingest", () => {
       (draft) => draft.execution.endpoint.url,
     );
     expect(urls).toEqual([
-      "https://402timezones.vercel.app/api/convert-timezone",
+      "https://402timezones.vercel.app/api/convert-timezone?from=UTC&to=America%2FNew_York&time=12%3A00",
       "https://api.example.test/lookup",
     ]);
     expect(new Set(result.admitted.map((draft) => draft.offering.offeringId)).size).toBe(
@@ -244,8 +246,8 @@ describe("facilitator discovery ingest", () => {
       });
     expect(result.admitted[1]?.price).toMatchObject({
       provider: { units: "100", exponent: 6 },
-      platformFee: { units: "10", exponent: 6 },
-      total: { units: "110", exponent: 6 },
+      platformFee: { units: "0", exponent: 6 },
+      total: { units: "100", exponent: 6 },
     });
   });
 

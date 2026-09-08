@@ -96,6 +96,37 @@ function publicationInput(document = sourceDocument()): PublishSupplyToolV2Input
 }
 
 describe('supply.publish:v2 preparation', () => {
+  it('admits native OpenAPI schemas without dialect declarations and preserves their constraints', async () => {
+    const document = sourceDocument()
+    const inputSchema = document.paths['/lookup'].post.requestBody.content['application/json'].schema
+    const outputSchema = document.paths['/lookup'].post.responses['200'].content['application/json'].schema
+    Reflect.deleteProperty(inputSchema, '$schema')
+    Reflect.deleteProperty(outputSchema, '$schema')
+
+    const input = publicationInput(document)
+    delete input.validationInput
+    const result = await prepareSupplyPublicationV2(input, {
+      loadOpenApi: async () => document,
+    })
+    expect(result.kind).toBe('prepared')
+    if (result.kind !== 'prepared') throw new Error(result.reason)
+    const contract = JSON.parse(result.prepared.documentJson)
+    expect(contract.inputSchema).toEqual({ ...inputSchema, $schema: JSON_SCHEMA })
+    expect(contract.outputSchema).toEqual({ ...outputSchema, $schema: JSON_SCHEMA })
+    expect(inputSchema).not.toHaveProperty('$schema')
+    expect(outputSchema).not.toHaveProperty('$schema')
+    expect(result.validationInputJson).toBe(JSON.stringify({ query: 'example' }))
+    expect(contract.inputExamples).toEqual([{ label: 'Validation input', input: { query: 'example' } }])
+  })
+
+  it('does not relabel an explicitly incompatible schema dialect', async () => {
+    const document = sourceDocument()
+    document.paths['/lookup'].post.requestBody.content['application/json'].schema.$schema = 'http://json-schema.org/draft-07/schema#'
+    await expect(prepareSupplyPublicationV2(publicationInput(document), {
+      loadOpenApi: async () => document,
+    })).resolves.toMatchObject({ kind: 'refused' })
+  })
+
   it('uses only the selected active connection owned by the same Business', () => {
     const available = {
       connectionRef: 'connection:one',

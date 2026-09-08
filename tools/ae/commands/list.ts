@@ -12,6 +12,7 @@ import { throwToolReadFailure } from '../lib/tool-read-failure'
 export async function runListCommand(args: readonly string[], options: CliOptions): Promise<void> {
   if (args.length > 0) throw new CliFailure('List does not accept a search phrase.', { kind: 'INVALID_ARGUMENT', code: 'list-usage' })
   const input = listCommandDescriptor.inputSchema.safeParse({
+    ...(options.source === undefined ? {} : { source: options.source }),
     ...(options.limit === undefined ? {} : { limit: Number(options.limit) }),
     ...(options.cursor === undefined ? {} : { cursor: options.cursor }),
     ...(options.filters === undefined ? {} : { filters: parseFilters(options.filters) }),
@@ -23,7 +24,7 @@ export async function runListCommand(args: readonly string[], options: CliOption
   if (parsed.data.kind === 'unavailable') throwToolReadFailure({ reason: parsed.data.reason })
   const origin = options.baseUrlSource === undefined || options.baseUrlSource === 'hosted_default' ? [] : ['--base-url', options.baseUrl]
   const nextPageCommand = parsed.data.pagination.hasMore && parsed.data.pagination.nextCursor !== undefined
-    ? continuationCommand(['ae', 'list', '--limit', String(input.data.limit), '--cursor', parsed.data.pagination.nextCursor, ...origin, ...(options.json ? ['--json'] : [])])
+    ? continuationCommand(['ae', 'list', '--limit', String(input.data.limit), '--cursor', parsed.data.pagination.nextCursor, ...origin, ...(input.data.source === undefined ? [] : ['--source', input.data.source]), ...(input.data.filters === undefined ? [] : ['--filters', JSON.stringify(input.data.filters)]), ...(options.json ? ['--json'] : [])])
     : undefined
   if (options.json) {
     printJson({ ...parsed.data, ...(nextPageCommand === undefined ? {} : { nextPageCommand }) })

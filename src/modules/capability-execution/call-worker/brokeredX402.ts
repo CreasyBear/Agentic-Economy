@@ -33,6 +33,7 @@ export function buildBrokeredX402Receipt(input: Readonly<{
   toolRef: string
   state: CallReceipt['state']
   buyerCharge: ExactAmount
+  sourceUsdcUnits?: string
   evidenceHash: string
   issuedAt: string
   transactionRef?: string
@@ -66,7 +67,10 @@ export function buildBrokeredX402Receipt(input: Readonly<{
     || input.evidenceHash.trim().length === 0
     || input.issuedAt.trim().length === 0
   ) return undefined
-  const providerQuotedAmount = pricingConfigSourceAmount(identityPricing.config)
+  if (input.sourceUsdcUnits !== undefined && !/^[1-9][0-9]{0,77}$/.test(input.sourceUsdcUnits)) return undefined
+  const providerQuotedAmount = input.sourceUsdcUnits === undefined
+    ? pricingConfigSourceAmount(identityPricing.config)
+    : { currency: 'USDC' as const, exponent: 6 as const, units: input.sourceUsdcUnits }
   if (input.buyerCharge.currency !== 'AUD' || input.buyerCharge.exponent !== 6) return undefined
   const serviceFee = { currency: 'AUD' as const, units: '0', exponent: 6 as const }
   const receiptIdentity = {
@@ -227,6 +231,7 @@ async function projectManagedCall(
 ): Promise<void> {
   const managed = reservation as {
     decisionAudUnits: string
+    sourceUsdcUnits?: string
     journalTransactionRef: string
   }
   const evidenceHash = observation.responseDigest
@@ -235,6 +240,7 @@ async function projectManagedCall(
       : canonicalDigest(observation.outputJson))
   const receipt = buildBrokeredX402Receipt({
     operation: input.operation,
+    ...(managed.sourceUsdcUnits === undefined ? {} : { sourceUsdcUnits: managed.sourceUsdcUnits }),
     callRef: input.dispatch.callRef,
     toolRef: input.dispatch.toolRef,
     state: financialState === 'settled'

@@ -2,7 +2,21 @@
 
 **Status:** active product design contract
 
-**Revised:** 2026-09-02
+**Revised:** 2026-09-08
+
+## Current app and market direction
+
+The working platform is `app.aecon.ai`; `aecon.ai` is the separate marketing
+website. The app opens directly into the Tool market and uses a compact neutral
+footer. Approved AECON marks, Manrope type and the chalk/forest palette come from
+the maintained local marketing website.
+
+Discovery uses familiar Airbnb-style listing cards and responsive filters,
+with sourced MIT-licensed Spree Storefront patterns and installed UI components.
+Cards show useful service, Provider and price information; tables remain useful
+for comparison and operational records. This direction supersedes the older
+Twenty palette, typography, near-square shape and row-only market rules below.
+The requirements for truthful authority, money, provenance and recovery remain.
 
 Agentic Economy should look like the place where a consequential market decision
 can be inspected, made and recovered. The interface is a market terminal for one

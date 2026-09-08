@@ -14,6 +14,8 @@ import {
 } from '@/modules/capability-execution/call-runtime'
 import { internal } from './_generated/api'
 import { internalAction, type ActionCtx } from './_generated/server'
+import { principalValue } from './lib/callLifecycle/contracts'
+import { resolveBusinessActor } from './authz'
 import {
   bindWorkloadCronActionContext,
   parseWorkloadCronSnapshot,
@@ -101,11 +103,52 @@ export const run = internalAction({
   },
 })
 
+async function authorizeInteractiveRecovery(
+  ctx: ActionCtx,
+  args: Readonly<{
+    callRef: string
+    principalId: string
+    credentialId: string
+    mode: string
+    recoveryPrincipal?: Infer<typeof principalValue>
+    recoverAsOwner?: true
+  }>,
+): Promise<boolean> {
+  if (args.recoveryPrincipal === undefined && args.recoverAsOwner === undefined) {
+    return await reconcileCallWorkloadAuthority(ctx, args.callRef, args) !== null
+  }
+  if (args.mode !== 'status' && args.mode !== 'cancel' && args.mode !== 'reconcile') return false
+  if (args.recoverAsOwner === true) {
+    if (args.recoveryPrincipal !== undefined) return false
+    const actor = await resolveBusinessActor(ctx)
+    if (actor.kind !== 'authenticated_owner') return false
+    const row = await ctx.runQuery(internal.capabilityCalls.readRecovery, {
+      callRef: args.callRef,
+      principalId: args.principalId,
+      credentialId: args.credentialId,
+    })
+    return row !== null && row.ownerId === actor.canonicalAccountRef
+  }
+  return args.recoveryPrincipal !== undefined
+    && args.recoveryPrincipal.principalId === args.principalId
+    && await ctx.runMutation(internal.capabilityCalls.resolveCallAgentAuthority, {
+      principal: args.recoveryPrincipal,
+      callRef: args.callRef,
+    }) !== null
+}
+
 export const recover = internalAction({
-  args: recoveryArgs,
+  args: {
+    ...recoveryArgs,
+    recoveryPrincipal: v.optional(principalValue),
+    recoverAsOwner: v.optional(v.literal(true)),
+  },
   returns: recoveryResultValue,
   handler: async (ctx, args): Promise<RecoveryResult> => {
-    if (await reconcileCallWorkloadAuthority(ctx, args.callRef, args) === null) {
+    // Public recovery authenticates the current credential independently from
+    // the original identity retained on the Call and its effect evidence.
+    const authorized = await authorizeInteractiveRecovery(ctx, args)
+    if (!authorized) {
       return { kind: 'refused', callRef: args.callRef, code: 'invocation_not_found', retryable: false }
     }
     const result = await recoverCapabilityCall(ctx, args)

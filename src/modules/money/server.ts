@@ -191,3 +191,5 @@ export async function handleStripeWebhookRequest(
   }
   return await handleStripeWebhook({ request, verifier, ingester })
 }
+
+export { fetchCoinbaseReferenceRate } from './internal/reference-rate-fetch'

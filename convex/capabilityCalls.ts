@@ -262,6 +262,7 @@ export const readCallStatus = action({
 export const listAgentCallSummaries = internalQuery({
   args: {
     principalId: v.string(),
+    ownerId: v.string(),
     credentialId: v.string(),
     applicationRef: v.string(),
     environment: v.union(v.literal('sandbox'), v.literal('production')),

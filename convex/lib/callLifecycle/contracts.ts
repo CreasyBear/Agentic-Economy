@@ -103,6 +103,8 @@ export const dispatchArgs = {
   now: v.number(),
 } as const
 export const openDispatchValue = v.object({
+  committedPaymentRequiredJson: v.optional(v.string()),
+  sourceUsdcUnits: v.optional(v.string()),
   quoteRef: v.optional(v.string()),
   callRef: v.string(),
   principalId: v.string(),

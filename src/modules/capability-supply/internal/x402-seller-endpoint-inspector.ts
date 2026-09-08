@@ -1,4 +1,5 @@
 import { readBoundedRequestText } from '@/lib/server/bounded-request-body'
+import { stableStringify, type StableHashValue } from '@/modules/common/stable-hash'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { isBoundedJsonValue, type JsonValue } from '@/modules/common/bounded-json'
 import { isRecord } from '@/modules/common/is-record'
@@ -18,6 +19,7 @@ import {
 import {
   admitOfficialBazaarFromPaymentRequired,
 } from './facilitator-discovery-client'
+import { x402ResourceUrlBindsTarget } from './route-transport-x402-payment'
 import type { BazaarAdmission } from './publication-importer-x402-bazaar'
 
 const MAX_CHALLENGE_BODY_BYTES = 128 * 1024
@@ -93,6 +95,7 @@ export type X402SellerEndpointObservation = Readonly<{
     observedAt: number
   }>
   digest: string
+  paymentRequiredJson: string
 }>
 
 export type X402SellerEndpointInspectionRefusal = Readonly<{
@@ -123,6 +126,7 @@ export type X402SellerEndpointInspection =
 export type X402SellerEndpointInspectorDependencies = Readonly<{
   now?: () => number
   validatePublicTarget?: (target: URL) => Promise<boolean>
+  beforeSend?: () => Promise<boolean>
   send?: (request: Request) => Promise<Response>
 }>
 
@@ -131,6 +135,7 @@ export async function inspectX402SellerEndpoint(
     endpointUrl: string
     method: X402SellerEndpointMethod
     postBody?: JsonValue
+    queryMapped?: boolean
     aeEnvironment?: X402AeEnvironment
   }>,
   dependencies: X402SellerEndpointInspectorDependencies = {},
@@ -184,6 +189,10 @@ export async function inspectX402SellerEndpoint(
   }
   let response: Response
   try {
+    if (dependencies.beforeSend !== undefined && !await dependencies.beforeSend()) {
+      return refused('request_failed', observedAt, undefined,
+        'The request authority or Tool changed before inspection. Request a fresh Quote.')
+    }
     if (dependencies.send !== undefined) {
       response = await dependencies.send(request)
     } else {
@@ -212,7 +221,7 @@ export async function inspectX402SellerEndpoint(
   }
 
   const resource = publicHttpsUrl(challenge.value.resource.url)
-  if (resource === undefined || resource.href !== endpoint.href) {
+  if (resource === undefined || !x402ResourceUrlBindsTarget(resource.href, endpoint, input.method, input.queryMapped === true)) {
     return refused('challenge_resource_mismatch', observedAt, response.status,
       'Make the PaymentRequired resource URL exactly match the endpoint being onboarded.')
   }
@@ -229,7 +238,7 @@ export async function inspectX402SellerEndpoint(
         kind: discovery.kind,
         method: discovery.method,
         inputSchema: discovery.inputSchema,
-        inputExample: discovery.inputExample,
+        ...(discovery.inputExample === undefined ? {} : { inputExample: discovery.inputExample }),
         outputSchema: discovery.outputSchema,
         ...(discovery.query === undefined ? {} : { query: discovery.query }),
       }
@@ -268,6 +277,7 @@ export async function inspectX402SellerEndpoint(
       observedAt,
     },
     digest: canonicalDigest(stableObservation),
+    paymentRequiredJson: stableStringify(challenge.value as StableHashValue),
   }
 }
 
@@ -295,7 +305,7 @@ function inspectionRequest(
   let body: string | undefined
   if (method === 'POST') {
     headers.set('content-type', 'application/json')
-    body = JSON.stringify(postBody ?? {})
+    body = JSON.stringify(postBody === undefined ? {} : postBody)
   }
   for (const name of PAYMENT_HEADER_NAMES) headers.delete(name)
   return new Request(endpoint, {
@@ -379,13 +389,14 @@ async function readChallenge(response: Response): Promise<ChallengeReadResult> {
     return { kind: 'challenge', value: fromHeader }
   }
   if (fromHeader !== undefined) return { kind: 'challenge', value: fromHeader }
-  if (fromBody?.kind === 'challenge') return fromBody
+  // The pinned x402 SDK requires PAYMENT-REQUIRED for v2; its body fallback
+  // is v1-only. Do not admit a Quote that the execution transport cannot use.
   return {
     kind: 'refused',
     reason: fromBody?.kind === 'malformed' ? 'challenge_malformed' : 'challenge_missing',
     action: fromBody?.kind === 'malformed'
-      ? 'Return a valid official x402 v2 PaymentRequired document in the response body.'
-      : 'Return PaymentRequired in the official header or as a JSON response body.',
+      ? 'Return a valid official x402 v2 PAYMENT-REQUIRED header and remove the malformed challenge body.'
+      : 'Return PaymentRequired in the official x402 v2 PAYMENT-REQUIRED header.',
   }
 }
 

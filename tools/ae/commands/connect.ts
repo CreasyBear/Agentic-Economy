@@ -1,6 +1,7 @@
 import {
   AGENT_ACCESS_OAUTH_DEVICE_CLIENT_REGISTRATION_REQUEST,
   MARKET_SUPPLY_MANAGE_SCOPE,
+  MARKET_TOOLS_CALL_SCOPE,
 } from '@/modules/agent-access/contract'
 import {
   AGENT_ACCOUNT_SELF_ROUTE_CONTRACT,
@@ -113,6 +114,7 @@ function connectPending(details: ConnectDetails, options: CliOptions): JsonRecor
   const nextCommand = connectContinuation(options, [
     'ae', 'connect',
     ...(details.provider ? ['--provider'] : []),
+    ...(options.environment === undefined ? [] : ['--environment', options.environment]),
   ])
   const nextAction = `Approve ${details.verificationUri} with user code ${details.userCode}, then run ${nextCommand} again if this wait expires.`
   return {
@@ -182,8 +184,9 @@ async function validateAccessToken(options: CliOptions, key: string, provider: b
     headers: { Authorization: `Bearer ${key}` },
   })
   const account = agentAccountSelfResultSchema.safeParse(outcome.body)
-  const requiredScopes = (provider ? MARKET_SUPPLY_MANAGE_SCOPE : AGENT_ACCESS_OAUTH_DEVICE_CLIENT_REGISTRATION_REQUEST.scope).split(' ')
-  if (outcome.ok && account.success && requiredScopes.every((scope) => account.data.scopes.includes(scope))) {
+  const requiredScope = provider ? MARKET_SUPPLY_MANAGE_SCOPE : MARKET_TOOLS_CALL_SCOPE
+  if (outcome.ok && account.success && account.data.scopes.includes(requiredScope)
+    && (options.environment === undefined || account.data.environment === options.environment)) {
     return account.data
   }
   if (outcome.status === 401 || outcome.status === 403) {
@@ -219,6 +222,9 @@ export async function runConnectCommand(args: readonly string[], options: CliOpt
     throw usageFailure('connect', 'connect-usage')
   }
 
+  if (options.environment !== undefined && options.environment !== 'sandbox' && options.environment !== 'production') {
+    throw usageFailure('connect', 'connect-environment')
+  }
   const provider = options.provider === true
   const requestedScope = provider
     ? MARKET_SUPPLY_MANAGE_SCOPE
@@ -234,6 +240,9 @@ export async function runConnectCommand(args: readonly string[], options: CliOpt
   if (configuredCredential !== undefined) {
     try {
       const account = await validateConfiguredKey(options, provider)
+      if (options.environment !== undefined && account.environment !== options.environment) {
+        throw new CliFailure('The stored agent uses a different environment. Connect for the requested environment.', { kind: 'UNAUTHENTICATED', code: 'api_key_invalid' })
+      }
       printConnectResult({
         kind: 'connected',
         credential: 'origin_bound_agent_key',
@@ -264,7 +273,12 @@ export async function runConnectCommand(args: readonly string[], options: CliOpt
   const registration = requireOk(registrationOutcome, OAUTH_REGISTER_PATH)
   const clientId = textField(isRecord(registration) ? registration.client_id : undefined, 'registration.client_id')
 
-  const deviceRequest = oauthForm({ client_id: clientId, scope: requestedScope })
+  const deviceRequest = oauthForm({ client_id: clientId, scope: requestedScope,
+    ...(options.environment === undefined ? {} : { authorization_details: JSON.stringify([{
+      type: 'agentic_economy_market_tools', environment: options.environment,
+      tool_access: 'all_admitted', tool_refs: [], expires_in_seconds: 7 * 24 * 60 * 60,
+    }]) }),
+  })
   const deviceOutcome = await callJson(options.baseUrl, OAUTH_DEVICE_AUTHORIZATION_PATH, {
     method: 'POST',
     headers: deviceRequest.headers,

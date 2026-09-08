@@ -1,5 +1,7 @@
 'use client'
 
+import { ToolPriceText } from "@/components/ae/market/AeToolPrice"
+
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react'
 
 import { Button } from '@/components/ui/button'
@@ -348,7 +350,7 @@ export function ToolsSearchPage({
                         </span>
                       </span>
                       <span className="shrink-0 text-xs font-medium text-muted-foreground">
-                        {choice.item.priceLabel}
+                        <ToolPriceText price={choice.item.priceLabel} {...(choice.item.displayPrice?.kind === 'indicative' ? { validUntil: choice.item.displayPrice.validUntil } : {})} />
                       </span>
                     </>
                   )}

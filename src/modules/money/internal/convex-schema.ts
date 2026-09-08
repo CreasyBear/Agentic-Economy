@@ -73,6 +73,7 @@ export const commercialPolicyControlValue = v.union(
   v.object({
     family: v.literal('tax'),
     serviceFeeTaxBps: v.number(),
+    callTaxBps: v.optional(v.number()),
     taxInvoiceIssuance: v.union(
       v.literal('disabled_pending_approval'),
       v.literal('enabled'),

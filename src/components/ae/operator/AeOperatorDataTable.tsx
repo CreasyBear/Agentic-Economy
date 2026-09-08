@@ -189,8 +189,9 @@ export function AeRecordTable<TData>({
     [actionColumn, columns, selectionColumn],
   )
 
+  const tableData = useMemo(() => [...data], [data])
   const table = useReactTable({
-    data: [...data],
+    data: tableData,
     columns: resolvedColumns,
     state: {
       sorting,

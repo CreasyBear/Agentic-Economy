@@ -700,7 +700,7 @@ describe('capability operation canonical authority boundary', () => {
     ['credential expiry', { credential: { expiresAt: NOW } }],
     ['binding revocation', { binding: { lifecycle: 'revoked' } }],
     ['principal revocation', { principal: { lifecycle: 'revoked' } }],
-    ['stale generation', { delegation: { generation: 3 } }],
+    ['stale access generation', { accessGrant: { generation: 3 } }],
     ['cross-account grant', { delegation: { accountRef: `acc_${'9'.repeat(32)}` } }],
     ['inactive account', { account: { lifecycle: 'inactive' } }],
     ['expired durable agent principal', { storedAgent: { expiresAt: NOW } }],
@@ -836,7 +836,7 @@ describe('capability operation canonical authority boundary', () => {
     )).resolves.toBeNull()
   })
 
-  it('binds status, cancel, and reconcile admission to the persisted invocation operation and authority snapshot', async () => {
+  it('binds recovery to the durable Agent and current delegation while retaining prior Call authority evidence', async () => {
     await expect(resolveAgentBoundary(
       { db: new AuthorityMemoryDb(authorityRows()) },
       { principal: callerPrincipal, callRef: 'invocation:canonical' },
@@ -856,7 +856,7 @@ describe('capability operation canonical authority boundary', () => {
         invocation: { grantGeneration: 3 },
       })) },
       { principal: callerPrincipal, callRef: 'invocation:canonical' },
-    )).resolves.toBeNull()
+    )).resolves.toEqual(canonicalPrincipal)
 
     await expect(resolveAgentBoundary(
       { db: new AuthorityMemoryDb(authorityRows({
@@ -1024,6 +1024,14 @@ describe('capability operation canonical authority boundary', () => {
         expiresAt: NOW + 50_000,
       },
     })
+  })
+
+  it('validates new and persisted Calls when access and canonical delegation generations differ', async () => {
+    const ctx = { db: new AuthorityMemoryDb(authorityRows({ delegation: { generation: 1 } })) }
+    await expect(resolveAgentBoundary(ctx, { principal: callerPrincipal, toolRef: OPERATION_REF }))
+      .resolves.toEqual(canonicalPrincipal)
+    await expect(reconcileWorkloadBoundary(ctx, { callRef: 'invocation:canonical' }))
+      .resolves.toMatchObject({ kind: 'authorized', authority: { grantGeneration: 4 } })
   })
 
   it.each([

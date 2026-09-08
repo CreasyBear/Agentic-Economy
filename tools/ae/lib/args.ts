@@ -22,10 +22,12 @@ export type CliOptions = {
   snapshotName?: string
   updateSnapshot?: boolean
   limit?: string | number
+  source?: string
   cursor?: string
   state?: string
   filters?: string | Record<string, unknown>
   input?: string
+  environment?: string
   provider?: boolean
 }
 
@@ -146,10 +148,12 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
       'snapshot-name': { type: 'string' },
       'update-snapshot': { type: 'boolean' },
       limit: { type: 'string' },
+      source: { type: 'string' },
       cursor: { type: 'string' },
       state: { type: 'string' },
       filters: { type: 'string' },
       input: { type: 'string' },
+      environment: { type: 'string' },
       provider: { type: 'boolean' },
     },
     allowPositionals: true,
@@ -186,10 +190,12 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
     ...(parsed.values['snapshot-name'] === undefined ? {} : { snapshotName: parsed.values['snapshot-name'] }),
     ...(parsed.values['update-snapshot'] === undefined ? {} : { updateSnapshot: parsed.values['update-snapshot'] }),
     ...(parsed.values.limit === undefined ? {} : { limit: parsed.values.limit }),
+    ...(parsed.values.source === undefined ? {} : { source: parsed.values.source }),
     ...(parsed.values.cursor === undefined ? {} : { cursor: parsed.values.cursor }),
     ...(parsed.values.state === undefined ? {} : { state: parsed.values.state }),
     ...(parsed.values.filters === undefined ? {} : { filters: parsed.values.filters }),
     ...(parsed.values.input === undefined ? {} : { input: parsed.values.input }),
+    ...(parsed.values.environment === undefined ? {} : { environment: parsed.values.environment }),
     provider: parsed.values.provider ?? false,
   }
   const [command, ...positionals] = parsed.positionals

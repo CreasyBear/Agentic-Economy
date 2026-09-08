@@ -10,7 +10,8 @@ import {
   FALLBACK_MARKET_RETURN_CONTEXT,
   type MarketReturnContext,
 } from "@/components/ae/market/market-return-context";
-import type { ToolCardViewModel } from "@/modules/market/tool-view-model";
+import { ToolPriceText } from "./AeToolPrice";
+import { compareToolPrices, type ToolCardViewModel } from "@/modules/market/tool-view-model";
 
 const readinessVariants = {
   Routeable: "success",
@@ -42,6 +43,7 @@ export function AeToolTable({
               <span className="text-xs text-muted-foreground">
                 {row.original.providerName}
               </span>
+              {row.original.summary === "" ? null : <span className="max-w-md line-clamp-2 text-xs text-muted-foreground">{row.original.summary}</span>}
             </div>
           );
         },
@@ -50,8 +52,9 @@ export function AeToolTable({
         id: "price",
         accessorKey: "price",
         header: "Price",
+        sortingFn: (left, right) => compareToolPrices(left.original, right.original),
         cell: ({ row }) => (
-          <span className="font-mono text-sm tabular-nums">{row.original.price}</span>
+          <span className="font-mono text-sm tabular-nums"><ToolPriceText price={row.original.price} {...(row.original.priceValidUntil === undefined ? {} : { validUntil: row.original.priceValidUntil })} /></span>
         ),
       },
       {

@@ -335,6 +335,7 @@ function buildBrokeredRecoveryReceipt(
     toolRef: recovered.toolRef,
     state: args.state,
     buyerCharge: { currency: 'AUD', units: managedReservation.decisionAudUnits, exponent: 6 },
+    ...(managedReservation.sourceUsdcUnits === undefined ? {} : { sourceUsdcUnits: managedReservation.sourceUsdcUnits }),
     evidenceHash: args.evidenceHash,
     issuedAt: args.issuedAt,
   }

@@ -1,0 +1,100 @@
+{
+  "x402Version": 2,
+  "resource": {
+    "url": "https://api.onesource.io/api/chain/tx/:hash",
+    "description": "Full Ethereum transaction details by hash via eth_getTransactionByHash - from, to, value, calldata, block"
+  },
+  "accepts": [
+    {
+      "amount": "8000",
+      "asset": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+      "currency": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+      "extra": {
+        "credentialTypes": [
+          "authorization"
+        ],
+        "name": "USD Coin",
+        "version": "2"
+      },
+      "maxAmountRequired": "8000",
+      "maxTimeoutSeconds": 3600,
+      "network": "eip155:8453",
+      "payTo": "0x52E29e0d2Aa49bfBfC548C0A9F2196F4aa51f3ea",
+      "recipient": "0x52E29e0d2Aa49bfBfC548C0A9F2196F4aa51f3ea",
+      "scheme": "exact"
+    }
+  ],
+  "extensions": {
+    "bazaar": {
+      "routeTemplate": "/api/chain/tx/:hash",
+      "info": {
+        "input": {
+          "method": "GET",
+          "pathParams": {
+            "hash": "0x5c504ed432cb51138bcf09aa5e8a410dd4a1e204ef84bfed1be16dfba1b22060"
+          },
+          "queryParams": {
+            "network": "ethereum"
+          },
+          "type": "http"
+        }
+      },
+      "schema": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "additionalProperties": false,
+            "properties": {
+              "method": {
+                "enum": [
+                  "GET",
+                  "HEAD",
+                  "DELETE"
+                ],
+                "type": "string"
+              },
+              "pathParams": {
+                "properties": {
+                  "hash": {
+                    "pattern": "^0x[a-fA-F0-9]{64}$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "hash"
+                ],
+                "type": "object"
+              },
+              "queryParams": {
+                "properties": {
+                  "network": {
+                    "default": "ethereum",
+                    "enum": [
+                      "ethereum",
+                      "sepolia",
+                      "robinhood"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              },
+              "type": {
+                "const": "http",
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "method"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "input"
+        ]
+      }
+    }
+  }
+}

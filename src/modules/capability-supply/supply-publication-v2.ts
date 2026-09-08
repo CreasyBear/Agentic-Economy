@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-import { jsonValueSchema } from '@/modules/capability-contract/public'
+import { jsonValueSchema, validateJsonSchema } from '@/modules/capability-contract/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { isRecord } from '@/modules/common/is-record'
 import { stableStringify, type StableHashValue } from '@/modules/common/stable-hash'
@@ -9,6 +9,8 @@ import { exactAmountSchema } from '@/modules/money/public'
 import { preparePublicationDraft, type PreparedPublicationDraft } from './internal/publication'
 import { sourceRouteRef } from './internal/source-route-identity'
 import type { ValidOpenApiDocument } from './internal/openapi-import/validation'
+import { resolveOpenApiRecord } from './internal/openapi-import/document'
+import { dereferenceOpenApiSchema } from './internal/schema-deref'
 import type {
   CapabilityContractMetadata,
   CapabilityPublicationImport,
@@ -205,7 +207,8 @@ export async function prepareSupplyPublicationV2(
   }
 
   const authority: CapabilityTransportAuthority = dependencies.providerAuthority ?? { kind: 'public_upstream' }
-  const contract = contractMetadata(input, candidate)
+  const validationInput = input.validationInput ?? await sourceValidationInput(candidate, openApiDocument)
+  const contract = contractMetadata({ ...input, ...(validationInput === undefined ? {} : { validationInput }) }, candidate)
   if (contract === undefined) return refused('consequences_invalid')
   const source = publicationImport({
     input,
@@ -241,10 +244,31 @@ export async function prepareSupplyPublicationV2(
       || preview.provenance.authority === 'verified_registry'
       ? 'verified'
       : 'review_required',
-    ...(input.validationInput === undefined
+    ...(validationInput === undefined
       ? {}
-      : { validationInputJson: stableStringify(input.validationInput as StableHashValue) }),
+      : { validationInputJson: stableStringify(validationInput as StableHashValue) }),
   }
+}
+
+async function sourceValidationInput(candidate: SupplyToolCandidate, document: ValidOpenApiDocument | undefined) {
+  const selector = candidate.sourceSelector
+  if (document === undefined || !('path' in selector) || candidate.inputSchema === undefined) return undefined
+  const path = await resolveOpenApiRecord(document.paths[selector.path], document, dereferenceOpenApiSchema)
+  if (path.kind !== 'resolved' || path.value === undefined) return undefined
+  const operation = await resolveOpenApiRecord(path.value[selector.method], document, dereferenceOpenApiSchema)
+  if (operation.kind !== 'resolved' || operation.value === undefined) return undefined
+  const body = await resolveOpenApiRecord(operation.value.requestBody, document, dereferenceOpenApiSchema)
+  if (body.kind !== 'resolved' || body.value === undefined || !isRecord(body.value.content)) return undefined
+  const media = body.value.content['application/json']
+  if (!isRecord(media)) return undefined
+  const examples = [media.example, ...(isRecord(media.examples)
+    ? Object.values(media.examples).map(example => isRecord(example) ? example.value : undefined)
+    : [])]
+  for (const example of examples) {
+    const parsed = z.record(z.string(), jsonValueSchema).safeParse(example)
+    if (parsed.success && validateJsonSchema(candidate.inputSchema, parsed.data)) return parsed.data
+  }
+  return undefined
 }
 
 function contractMetadata(

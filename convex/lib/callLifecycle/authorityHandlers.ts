@@ -27,6 +27,7 @@ import {
   cancelCallHandler,
   cancelOwnerCallHandler,
   callHandler,
+  projectCallResult,
   listAgentCallsHandler,
   readCallStatusHandler,
   readOwnerCallStatusHandler,
@@ -42,6 +43,7 @@ import {
 } from './contracts'
 import { readExactSellerOnboardingCanaryPlatformGrantHandler } from '../../capabilitySupplyCanaryFunding'
 import { inspectLiveX402RequirementRef } from '../liveX402RequirementRef'
+import { callResultSchema } from '@/modules/capability-execution/call-contracts'
 
 export const resolveCallAgentAuthorityRef = makeFunctionReference<
   'mutation',
@@ -116,7 +118,15 @@ export async function resolveCallAgentAuthorityHandler(
     target.purpose,
   )
   if (current === null) return null
-  if (target.invocation !== null && !callMatchesCurrentAuthority(target.invocation, current)) return null
+  // Recovery is owned by the durable Agent and Account. Exact historical grant
+  // and credential matching remains mandatory for dispatch, not for readback or
+  // remedy through a currently authorised replacement credential.
+  if (target.invocation !== null && ![
+    target.invocation.principalId === current.principal.principalId,
+    target.invocation.ownerId === current.principal.ownerId,
+    target.invocation.applicationRef === current.principal.applicationRef,
+    target.invocation.environment === current.principal.environment,
+  ].every(Boolean)) return null
   return current.principal
 }
 
@@ -362,13 +372,19 @@ export async function resolveCurrentAgentAuthority(
 
   const scopes = uniqueSorted(candidate.scopes)
   if (scopes.length !== candidate.scopes.length) return null
+  // Credential replacement issues a new delegation, whose own generation can
+  // differ from the Agent access generation used in Call authority evidence.
+  const canonicalGrant = await ctx.db.query('authorityDelegationGrants')
+    .withIndex('by_grantRef', (query) => query.eq('grantRef', grant.grantRef))
+    .unique()
+  if (canonicalGrant === null) return null
   const delegation = await validateCanonicalAgentDelegation(ctx, {
     evidenceKind: purpose.kind === 'receipt_list' ? 'operation-receipt-list' : 'operation-public-admission',
     evidenceRef: resourceRef,
     principalRef: canonical.principalRef,
     accountRef: canonical.accountRef,
     grantRef: grant.grantRef,
-    grantGeneration: grant.generation,
+    grantGeneration: canonicalGrant.generation,
     requiredScopes: scopes,
     resourceRefs: [resourceRef],
     now,
@@ -403,13 +419,25 @@ export async function validatePersistedCallDelegation(
     grantGeneration: number
   }>,
 ): Promise<boolean> {
+  const accessGrant = await ctx.db.query('agentAccessGrants')
+    .withIndex('by_grantRef', (query) => query.eq('grantRef', input.grantRef))
+    .unique()
+  if (accessGrant === null
+    || accessGrant.lifecycle !== 'active'
+    || accessGrant.generation !== input.grantGeneration
+    || accessGrant.principalId !== input.principalId
+    || accessGrant.ownerId !== input.accountRef) return false
+  const canonicalGrant = await ctx.db.query('authorityDelegationGrants')
+    .withIndex('by_grantRef', (query) => query.eq('grantRef', input.grantRef))
+    .unique()
+  if (canonicalGrant === null) return false
   return await validateCanonicalAgentDelegation(ctx, {
     evidenceKind: 'operation-workload-reconciliation',
     evidenceRef: input.callRef,
     principalRef: input.principalId,
     accountRef: input.accountRef,
     grantRef: input.grantRef,
-    grantGeneration: input.grantGeneration,
+    grantGeneration: canonicalGrant.generation,
     requiredScopes: [MARKET_TOOLS_CALL_SCOPE],
     resourceRefs: [input.toolRef],
     now: Date.now(),
@@ -524,8 +552,26 @@ export async function canonicalAgentCallHandler(
   if (material === null) {
     return { kind: 'refused', code: 'operation_not_current', retryable: false }
   }
+  const principal = await canonicalAgentPrincipal(ctx, args.principal,
+    material.consumedCallRef === undefined
+      ? { toolRef: material.toolRef }
+      : { callRef: material.consumedCallRef })
+  if (principal === null) {
+    return { kind: 'refused', toolRef: material.toolRef, code: 'grant_not_found', retryable: false }
+  }
+  if (material.consumedCallRef !== undefined) {
+    const replay = await ctx.runQuery(internal.capabilityCalls.readReplay, {
+      callRef: material.consumedCallRef,
+      principalId: principal.principalId,
+      credentialId: principal.credentialId,
+    })
+    if (replay === null) return { kind: 'refused', code: 'operation_not_current', retryable: false }
+    if (replay.result !== undefined) return projectCallResult(callResultSchema.parse(replay.result))
+    return { kind: 'pending', callRef: material.consumedCallRef, toolRef: material.toolRef, retryAfterMs: 1_000 }
+  }
   if (material.x402RequirementDigest !== undefined) {
     const live = await ctx.runAction(inspectLiveX402RequirementRef, {
+      principal,
       toolRef: material.toolRef,
       input: material.input,
     })
@@ -539,10 +585,6 @@ export async function canonicalAgentCallHandler(
         nextAction: 'operation.inspect',
       }
     }
-  }
-  const principal = await canonicalAgentPrincipal(ctx, args.principal, { toolRef: material.toolRef })
-  if (principal === null) {
-    return { kind: 'refused', toolRef: material.toolRef, code: 'grant_not_found', retryable: false }
   }
   return await callHandler(ctx, {
     quoteRef: material.quoteRef,

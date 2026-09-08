@@ -1,13 +1,12 @@
 import type {
   PublicToolDescriptor,
-  PublicToolPrice,
 } from '@/modules/capability-supply/public'
 import {
   formatToolAuthentication,
   formatPaymentNetwork,
   formatToolReadiness,
+  toolPrice,
 } from '@/modules/market/tool-view-model'
-import { formatCurrencyAmount } from '@/modules/money/public'
 import {
   callableAlternativesHref,
   type SuggestedNextAction,
@@ -24,6 +23,7 @@ export type ToolInspectorModel = Readonly<{
   decisionLabel: string
   nextActionDescription: string
   totalPrice: string
+  priceValidUntil?: number
   lastVerifiedAt?: number
   inputExample?: NonNullable<PublicToolDescriptor['contract']['inputExamples']>[number]
   callInput: string
@@ -37,6 +37,7 @@ export type ToolInspectorModel = Readonly<{
 export function toToolInspectorModel(
   tool: PublicToolDescriptor,
 ): ToolInspectorModel {
+  const inspectionRequired = tool.availability.reason === 'inspection_required'
   const callNavigation = tool.navigation.find(({ relation }) => relation === 'call')
   const callable = tool.availability.posture === 'routeable' && callNavigation !== undefined
   const availabilityPosture: ToolInspectorModel['availabilityPosture'] = tool.availability.posture === 'routeable'
@@ -44,7 +45,7 @@ export function toToolInspectorModel(
     : tool.availability.posture === 'setup_required'
       ? 'setup_required'
       : 'unavailable'
-  const nextAction: SuggestedNextAction = availabilityPosture === 'routeable'
+  const nextAction: SuggestedNextAction = availabilityPosture === 'routeable' || inspectionRequired
     ? {
         label: 'Tool reference',
         kind: 'copy_command',
@@ -57,7 +58,7 @@ export function toToolInspectorModel(
         warning: 'This Tool is not operational. Choose an operational alternative.',
       }
   const inputExample = tool.contract.inputExamples?.[0]
-  const decisionLabel = availabilityPosture === 'routeable' ? 'Operational' : 'Not operational'
+  const decisionLabel = inspectionRequired ? 'Checked when quoting' : availabilityPosture === 'routeable' ? 'Operational' : 'Not operational'
   const lastVerifiedAt = tool.availability.observedAt
     ?? tool.commercial.priceEvidence?.observedAt
 
@@ -66,12 +67,13 @@ export function toToolInspectorModel(
     summary: catalogSummary(tool),
     nextAction,
     availabilityPosture,
-    readinessLabel: formatToolReadiness(availabilityPosture),
+    readinessLabel: inspectionRequired ? 'Checked when quoting' : formatToolReadiness(availabilityPosture),
     authenticationLabel: formatToolAuthentication(tool.authentication),
     ...(tool.payment === undefined ? {} : { paymentNetwork: formatPaymentNetwork(tool.payment.network) }),
     decisionLabel,
-    nextActionDescription: nextActionDescription(nextAction),
-    totalPrice: totalPrice(tool),
+    nextActionDescription: inspectionRequired ? 'Your agent checks availability and exact price for your input before requesting a binding Quote.' : nextActionDescription(nextAction),
+    totalPrice: toolPrice(tool),
+    ...(tool.commercial.displayPrice?.kind === 'indicative' ? { priceValidUntil: tool.commercial.displayPrice.validUntil } : {}),
     ...(lastVerifiedAt === undefined ? {} : { lastVerifiedAt }),
     ...(inputExample === undefined ? {} : { inputExample }),
     callInput: inputExample === undefined
@@ -99,16 +101,4 @@ function nextActionDescription(nextAction: SuggestedNextAction): string {
 function catalogSummary(tool: PublicToolDescriptor): string {
   const summary = tool.summary.trim()
   return summary === '' ? tool.offering.summary : summary
-}
-
-function formatPrice(price: PublicToolPrice): string {
-  if (price.kind === 'on_request') return 'On request'
-  if (price.kind === 'fixed') return formatCurrencyAmount(price.amount)
-  return `${formatCurrencyAmount(price.minimum)} to ${formatCurrencyAmount(price.maximum)}`
-}
-
-function totalPrice(tool: PublicToolDescriptor): string {
-  return tool.commercial.priceBreakdown === undefined
-    ? formatPrice(tool.commercial.price)
-    : formatCurrencyAmount(tool.commercial.priceBreakdown.totalBuyerAuthorization)
 }

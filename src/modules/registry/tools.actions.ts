@@ -45,6 +45,7 @@ export const registryToolsListAction = defineAction({
     return projectToolListChoices(await readCapabilityToolSearch({
       query: '',
       limit: data.limit,
+      ...(data.source === undefined ? {} : { source: data.source }),
       ...(data.cursor === undefined ? {} : { cursor: data.cursor }),
       ...(filters === undefined ? {} : { filters }),
     }), data.filters)
@@ -58,6 +59,7 @@ export const registryToolsSearchAction = defineAction({
     return projectToolSearchChoices(await readCapabilityToolSearch({
       query: data.query,
       limit: data.limit,
+      ...(data.source === undefined ? {} : { source: data.source }),
       ...(data.cursor === undefined ? {} : { cursor: data.cursor }),
       ...(filters === undefined ? {} : { filters }),
     }), data.filters)

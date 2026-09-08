@@ -39,6 +39,8 @@ import { internal } from './_generated/api'
 import type { SellerOnboardingCanaryExecutionEnvelope } from '@/modules/capability-execution'
 
 export type OpenDispatch = Readonly<{
+  committedPaymentRequiredJson?: string
+  sourceUsdcUnits?: string
   quoteRef?: string
   callRef: string
   principalId: string

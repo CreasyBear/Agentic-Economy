@@ -12,6 +12,7 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
 import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
+import { isRecord } from '@/modules/common/is-record'
 import type { ProviderConnectionOwnerProjection } from '@/modules/capability-supply/provider-connection'
 import type {
   SupplyToolCandidate,
@@ -266,12 +267,14 @@ export function AeSupplySourceNativeStart({
       },
       consequences: {
         effects,
-        dataUse: dataEffectIndex < 0 ? [] : [{
-          inputPointer: '/',
+        dataUse: dataEffectIndex < 0 ? [] : Object.keys(
+          isRecord(selected.inputSchema?.properties) ? selected.inputSchema.properties : {},
+        ).map((property) => ({
+          inputPointer: `/${property.replace(/~/g, '~0').replace(/\//g, '~1')}`,
           classification: dataClassification,
           phase: 'execution',
           purposes: ['Perform the Tool'],
-        }],
+        })),
         evidence: [{ outputPointer: '', purpose: 'completion' }],
       },
       pricing,

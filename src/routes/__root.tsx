@@ -46,7 +46,7 @@ export const Route = createRootRoute({
     ],
     links: [
       { rel: 'stylesheet', href: appCss },
-      { rel: 'icon', href: AECON_MARK_SRC, type: 'image/png' },
+      { rel: 'icon', href: AECON_MARK_SRC, type: 'image/svg+xml' },
       { rel: 'apple-touch-icon', href: AECON_MARK_SRC },
     ],
   }),

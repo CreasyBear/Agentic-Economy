@@ -458,7 +458,7 @@ function installMarketToolSource(): () => void {
       switch (payload.path) {
         case 'rateLimit:admitHttp':
           return Response.json({ status: 'success', value: { ok: true } })
-        case 'capabilitySupplyTools:search':
+        case 'capabilityToolCatalog:search':
           return Response.json({
             status: 'success',
             value: {
@@ -471,7 +471,7 @@ function installMarketToolSource(): () => void {
               navigation: [],
             },
           })
-        case 'capabilitySupplyTools:detail':
+        case 'capabilityToolCatalog:detail':
           return Response.json({
             status: 'success',
             value: {
@@ -480,7 +480,7 @@ function installMarketToolSource(): () => void {
               tool: MARKET_TOOL_DETAIL_WIRE_DESCRIPTOR,
             },
           })
-        case 'capabilitySupplyTools:compare':
+        case 'capabilityToolCatalog:compare':
           return Response.json({
             status: 'success',
             value: {

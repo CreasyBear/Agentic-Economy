@@ -49,6 +49,7 @@ const projection: MarketRouteProjection = {
           description: "Verification and compliance checks.",
         },
         price: "USD 0.25",
+        priceAmount: { currency: "USD", units: "25", exponent: 2 },
         authentication: "API key connection",
         lastVerifiedAt: Date.parse(generatedAt),
         callLabel: "Use capability",
@@ -92,6 +93,7 @@ const projection: MarketRouteProjection = {
           description: "Verification and compliance checks.",
         },
         price: "USD 0.18",
+        priceAmount: { currency: "USD", units: "18", exponent: 2 },
         authentication: "Bearer connection",
         lastVerifiedAt: Date.parse(generatedAt),
         callLabel: "Setup required",
@@ -126,6 +128,16 @@ const projection: MarketRouteProjection = {
 afterEach(cleanup);
 
 describe("market page", () => {
+  it("shows refinement guidance for truncated live search without a next page", () => {
+    if (projection.catalog.kind !== "ok") throw new Error("expected catalogue fixture")
+    renderMarket({ window: "30d", query: "company" }, {
+      ...projection,
+      catalog: { ...projection.catalog, partialResults: true, pagination: { limit: 20, hasMore: false } },
+    })
+    expect(screen.getByText("Refine your search for more results.")).toBeTruthy()
+    expect(screen.queryByRole("link", { name: "Next page" })).toBeNull()
+  })
+
   it("keeps the catalog workspace ahead of the editorial footer", () => {
     renderMarket({ window: "30d" });
 
@@ -164,7 +176,7 @@ describe("market page", () => {
     );
     expect(screen.queryByText("Market activity")).toBeNull();
     expect(screen.getByRole("link", { name: "Connect your agent" })).toBeTruthy();
-    expect(screen.getByRole("link", { name: "Publish a Tool" })).toBeTruthy();
+    expect(screen.queryByRole("link", { name: "Publish a Tool" })).toBeNull();
   });
 
   it("keeps admitted Tools separate once a capability is opened", () => {
@@ -625,7 +637,7 @@ describe("market page", () => {
       screen.getByRole("heading", { level: 1, name: "136 current Tools" }),
     ).toBeTruthy();
     expect(screen.getByRole("status").textContent).toContain("1 of 136");
-    expect(screen.getByRole("link", { name: "Next 12" }).getAttribute("href")).toContain(
+    expect(screen.getByRole("link", { name: "Next page" }).getAttribute("href")).toContain(
       "cursor=page-2",
     );
   });

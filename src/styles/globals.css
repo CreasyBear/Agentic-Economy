@@ -7,10 +7,6 @@
  */
 @layer reset, theme, base, clerk, components, utilities;
 
-@import "@fontsource-variable/host-grotesk";
-@import "@fontsource-variable/azeret-mono";
-@import "@fontsource/aleo/300.css";
-@import "@fontsource/aleo";
 @import "./base.css" layer(base);
 @import "tw-animate-css";
 
@@ -19,6 +15,16 @@
 @import "tailwindcss/utilities.css" layer(utilities);
 
 @source not "../../.planning";
+@source "../../node_modules/@rjsf/shadcn";
+
+/* The same licensed font shipped by aecon.ai; see docs/licenses/manrope.txt. */
+@font-face {
+  font-family: "Manrope Variable";
+  font-style: normal;
+  font-weight: 200 800;
+  font-display: swap;
+  src: url("/fonts/manrope-latin.woff2") format("woff2");
+}
 
 @theme inline {
   --color-background: var(--background);
@@ -75,22 +81,20 @@
   --font-display: var(--ae-font-display);
   --font-mono: var(--ae-font-mono);
 
-  --radius-card: 0.125rem;
-  --radius-nav: 0.125rem;
+  --radius-card: 0.875rem;
+  --radius-nav: 0.625rem;
   --shadow-soft: var(--shadow-low);
   --shadow-float: var(--shadow-med);
   --shadow-float-dark: var(--shadow-high);
   --shadow-overlay: var(--ae-shadow-overlay);
   --shadow-market-row-hover: var(--shadow-inset-market-row);
-  /* Collapse Tailwind's default radius/shadow scale onto the Twenty grammar
-     so components using rounded-* / shadow-* resolve to it centrally instead
-     of writing ad-hoc geometry. Controls 2px; larger surfaces 4px; nothing
-     above. Elevation is the donor four-level ladder. */
-  --radius-sm: 0.125rem;
-  --radius-md: 0.125rem;
-  --radius-lg: 0.25rem;
-  --radius-xl: 0.25rem;
-  --radius-2xl: 0.25rem;
+  /* Use the approved website's radius scale across maintained components. */
+  --radius-sm: 0.375rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.625rem;
+  --radius-xl: 0.875rem;
+  --radius-2xl: 1.125rem;
+  --radius-3xl: 1.375rem;
   --shadow-xs: 0 1px 3px 0 rgba(0, 0, 0, 0.06);
   --shadow-sm: 0 1px 3px 0 rgba(0, 0, 0, 0.06);
   --shadow-md: 0 12px 32px rgba(0, 0, 0, 0.08);
@@ -130,39 +134,34 @@
   --font-weight-semibold: 600;
   --font-weight-bold: 700;
   --font-family-body:
-    "Host Grotesk Variable", "Host Grotesk", ui-sans-serif, system-ui, sans-serif;
-  --font-family-display: "Aleo", Georgia, "Times New Roman", serif;
+    "Manrope Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-family-display: var(--font-family-body);
   --font-family-code:
-    "Azeret Mono Variable", "Azeret Mono", ui-monospace, "SFMono-Regular", Menlo,
-    monospace;
+    ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas, monospace;
   --ae-font-sans: var(--font-family-body);
   --ae-font-mono: var(--font-family-code);
   --ae-font-display: var(--font-family-display);
 
-  /* Twenty-website grammar (owner rebase 2026-09-01): neutral field behind
-     white data surfaces; near-black ink; hairlines black-10/20. */
-  --ae-bg: #f4f4f4;
-  --ae-fg: #1c1c1c;
-  /* black-70 delivers WCAG AA on light surfaces (black-60 is 4.48:1, FAIL —
-     the Twenty reference flags exactly this). Plain-text muted copy uses this. */
-  --ae-muted-fg: rgba(28, 28, 28, 0.7);
-  /* black-40: decorative/label-only, never body/supporting text. */
-  --ae-fg-subtle: rgba(28, 28, 28, 0.4);
-  --ae-surface: #ffffff;
-  --ae-surface-sunken: #f4f4f4;
+  /* Validated against aecon.ai and its local src/styles.css, 2026-09-08. */
+  --ae-bg: #e8e4da;
+  --ae-fg: #141414;
+  --ae-muted-fg: #595854;
+  --ae-fg-subtle: #595854;
+  --ae-surface: #f2efe7;
+  --ae-surface-sunken: #dedbd4;
   --ae-surface-raised: var(--ae-surface);
   /* Canvas vs work-well. Theme the well independently of page chrome. */
   --ae-container: var(--ae-surface);
-  --ae-border: rgba(28, 28, 28, 0.1);
-  --ae-border-strong: rgba(28, 28, 28, 0.2);
+  --ae-border: #c5c1b8;
+  --ae-border-strong: #918e87;
 
-  /* Ink is the action colour. Blue is reserved for links/focus/information. */
+  /* Neutral controls; forest belongs to identity and focus. */
   --ae-primary: var(--ae-fg);
-  --ae-primary-fg: #ffffff;
-  --ae-brand: #4a38f5;
-  --ae-brand-strong: #3b2bd8;
-  --ae-brand-muted: rgba(74, 56, 245, 0.12);
-  --ae-on-brand: #ffffff;
+  --ae-primary-fg: #e8e4da;
+  --ae-brand: #24543d;
+  --ae-brand-strong: #24543d;
+  --ae-brand-muted: rgba(36, 84, 61, 0.08);
+  --ae-on-brand: #e8e4da;
   --ae-ring: var(--ae-brand);
 
   --ae-success: oklch(0.5423 0.1222 157.98);
@@ -177,8 +176,8 @@
   --ae-danger-ring: oklch(0.53 0.18 28 / 0.32);
   --ae-danger-subtle: oklch(0.95 0.03 28);
   --ae-info: var(--ae-brand);
-  --ae-info-foreground: #2f22c9;
-  --ae-info-ring: rgba(74, 56, 245, 0.32);
+  --ae-info-foreground: #24543d;
+  --ae-info-ring: rgba(36, 84, 61, 0.32);
   --ae-info-subtle: var(--ae-brand-muted);
 
   --background: var(--ae-bg);
@@ -201,11 +200,11 @@
   --border: var(--ae-border);
   --input: var(--ae-border-strong);
   --ring: var(--ae-ring);
-  --radius: 0.125rem;
+  --radius: 0.625rem;
 
   /* Public layout. Pixel values keep the rail independent of the root type size. */
-  --ae-nav: 1160px;
-  --ae-rail: 1080px;
+  --ae-nav: 1440px;
+  --ae-rail: 1408px;
   --ae-gutter: 16px;
   --ae-gutter-lg: 26px;
   --ae-space-intra: 8px;

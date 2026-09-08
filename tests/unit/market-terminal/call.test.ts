@@ -1,8 +1,12 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Readable } from 'node:stream'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 
 import { runCallCommand } from '../../../tools/ae/commands/call'
 import type { CliOptions } from '../../../tools/ae/lib/args'
+import { TOOL_MARKET_DESCRIBE_PATH } from '@/modules/common/market-tool-paths'
 import { CliFailure } from '../../../tools/ae/lib/output'
 
 const options: CliOptions = {
@@ -14,6 +18,12 @@ const options: CliOptions = {
 }
 const toolRef = `operation:v1:${'a'.repeat(64)}`
 const quoteRef = `operation-commitment:v1:${'b'.repeat(64)}`
+let testConfigDirectory: string
+
+beforeEach(() => {
+  testConfigDirectory = mkdtempSync(join(tmpdir(), 'ae-call-test-'))
+  vi.stubEnv('AE_CONFIG_DIR', testConfigDirectory)
+})
 
 function toolQuote(input: Record<string, unknown> = {}) {
   return {
@@ -73,6 +83,8 @@ afterEach(() => {
   vi.unstubAllGlobals()
   delete process.env.AE_API_KEY
   delete process.env.AE_API_KEY_ORIGIN
+  vi.unstubAllEnvs()
+  rmSync(testConfigDirectory, { recursive: true, force: true })
 })
 
 function setApiKey(value: string, origin = options.baseUrl): void {
@@ -91,6 +103,27 @@ describe('market-terminal authenticated Tool Call', () => {
       nextCommand: 'ae connect',
     } satisfies Partial<CliFailure>)
     expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('returns an origin-bound reconnect command for an expired credential without dispatching', async () => {
+    setApiKey('ae-expired-key')
+    const send = vi.fn<typeof fetch>().mockResolvedValue(Response.json({ kind: 'UNAUTHENTICATED' }, { status: 401 }))
+    vi.stubGlobal('fetch', send)
+    await expect(runCallCommand([toolRef], { ...options, input: '{}' })).rejects.toMatchObject({
+      code: 'agent_access_key_invalid', nextCommand: 'ae connect --base-url https://market.example --json',
+    })
+    expect(send).toHaveBeenCalledOnce()
+  })
+
+  it('offers describe when the supplied input is invalid', async () => {
+    setApiKey('ae-test-key')
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>().mockResolvedValue(jsonResponse({
+      kind: 'refused', toolRef, code: 'input_invalid', retryable: false, correlationRef: 'correlation:invalid',
+      continuation: { action: 'registry.tools.describe', method: 'POST', path: TOOL_MARKET_DESCRIBE_PATH, input: { toolRef } },
+    })))
+    await expect(runCallCommand([toolRef], { ...options, input: '{}' })).rejects.toMatchObject({
+      retryable: false, nextCommand: `ae describe ${toolRef} --base-url https://market.example --json`,
+    })
   })
 
   it('preserves an actionable caller-specific Tool quote refusal', async () => {

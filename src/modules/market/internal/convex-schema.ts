@@ -9,8 +9,9 @@ export const marketTables = {
     snapshotJson: v.string(),
   }).index('by_window', ['window']),
   marketExternalRegistryState: defineTable({
-    key: v.literal('registry'),
+    key: v.union(v.literal('registry'), v.literal('coinbase')),
     activeGeneration: v.optional(v.string()),
+    refreshGeneration: v.optional(v.string()),
     lastAttemptAt: v.number(),
     lastAttemptStatus: v.union(
       v.literal('refreshing'),
@@ -21,6 +22,7 @@ export const marketTables = {
   }).index('by_key', ['key']),
   marketExternalRegistryGenerations: defineTable({
     generation: v.string(),
+    source: v.optional(v.literal('coinbase')),
     status: v.union(
       v.literal('refreshing'),
       v.literal('complete'),
@@ -31,6 +33,20 @@ export const marketTables = {
     failedAt: v.optional(v.number()),
     failureReason: v.optional(v.string()),
     ingestedCount: v.number(),
+    nextOffset: v.optional(v.number()),
+    pageItemCursor: v.optional(v.number()),
+    analyticsVersion: v.optional(v.number()),
+    analyticsCursor: v.optional(v.string()),
+    analyticsProcessed: v.optional(v.number()),
+    analyticsStatus: v.optional(v.union(v.literal('building'), v.literal('ready'))),
+    sourceReportedInitial: v.optional(v.number()),
+    sourceReportedLatest: v.optional(v.number()),
+    sourceReportedMinimum: v.optional(v.number()),
+    sourceReportedMaximum: v.optional(v.number()),
+    pagesFetched: v.optional(v.number()),
+    observations: v.optional(v.number()),
+    duplicateObservations: v.optional(v.number()),
+    terminalObserved: v.optional(v.boolean()),
     agenticMarketReported: v.optional(v.number()),
     agenticMarketFetched: v.optional(v.number()),
     tregReported: v.optional(v.number()),
@@ -39,7 +55,7 @@ export const marketTables = {
   marketExternalRegistryEntries: defineTable({
     generation: v.string(),
     documentId: v.string(),
-    source: v.union(v.literal('agentic_market'), v.literal('treg')),
+    source: v.union(v.literal('agentic_market'), v.literal('treg'), v.literal('coinbase')),
     upstreamServiceId: v.string(),
     upstreamEndpointId: v.string(),
     sourceUrl: v.string(),
@@ -90,6 +106,11 @@ export const marketTables = {
     sourceDigest: v.string(),
     searchText: v.string(),
     updatedAt: v.number(),
+    directoryEntryJson: v.optional(v.string()),
+    directorySourceJson: v.optional(v.string()),
+    directoryCategory: v.optional(v.string()),
+    directorySourceUpdatedAt: v.optional(v.number()),
+    directoryCalls30d: v.optional(v.number()),
   })
     .index('by_generation_and_documentId', ['generation', 'documentId'])
     .index('by_generation_source_and_documentId', [
@@ -106,6 +127,59 @@ export const marketTables = {
       searchField: 'searchText',
       filterFields: ['generation', 'source', 'access'],
     }),
+  // Compact native search projections: one all-network row and one row per
+  // supported network for each observed resource. No publication or admission.
+  marketDirectorySearchEntries: defineTable({
+    generation: v.string(),
+    resource: v.string(),
+    entryId: v.id('marketExternalRegistryEntries'),
+    network: v.string(),
+    category: v.string(),
+    provider: v.string(),
+    searchText: v.string(),
+    popularOrder: v.number(),
+    updatedOrder: v.number(),
+    minimumUsdPrice: v.optional(v.string()),
+    minimumUsdPriceOrder: v.number(),
+    payersOrder: v.optional(v.number()),
+    priceOrder: v.optional(v.number()),
+    priceBand: v.optional(v.string()),
+    adoptionBand: v.optional(v.string()),
+    curated: v.optional(v.boolean()),
+    tags: v.optional(v.array(v.string())),
+    bundleSlugs: v.optional(v.array(v.string())),
+    hasInputFields: v.optional(v.boolean()),
+    hasOutputFields: v.optional(v.boolean()),
+    hasInputSchema: v.optional(v.boolean()),
+    hasOutputSchema: v.optional(v.boolean()),
+    hasOutputExample: v.optional(v.boolean()),
+  })
+    .index('by_generation_and_resource', ['generation', 'resource'])
+    .index('by_generation_and_network_and_payersOrder', ['generation', 'network', 'payersOrder'])
+    .index('by_generation_and_network_and_category_and_payersOrder', ['generation', 'network', 'category', 'payersOrder'])
+    .index('by_generation_and_network_and_provider_and_payersOrder', ['generation', 'network', 'provider', 'payersOrder'])
+    .index('by_generation_and_network_and_priceOrder', ['generation', 'network', 'priceOrder'])
+    .index('by_generation_and_network_and_category_and_priceOrder', ['generation', 'network', 'category', 'priceOrder'])
+    .index('by_generation_and_network_and_provider_and_priceOrder', ['generation', 'network', 'provider', 'priceOrder'])
+    .index('by_generation_and_network_and_curated_and_payersOrder', ['generation', 'network', 'curated', 'payersOrder'])
+    .index('by_generation_and_network_and_resource', ['generation', 'network', 'resource'])
+    .index('by_generation_and_network_and_popularOrder', ['generation', 'network', 'popularOrder'])
+    .index('by_generation_and_network_and_updatedOrder', ['generation', 'network', 'updatedOrder'])
+    .index('by_generation_and_network_and_category_and_popularOrder', ['generation', 'network', 'category', 'popularOrder'])
+    .index('by_generation_and_network_and_category_and_updatedOrder', ['generation', 'network', 'category', 'updatedOrder'])
+    .index('by_generation_and_network_and_provider_and_popularOrder', ['generation', 'network', 'provider', 'popularOrder'])
+    .index('by_generation_and_network_and_provider_and_updatedOrder', ['generation', 'network', 'provider', 'updatedOrder'])
+    .searchIndex('search_text_by_generation_network_category_provider', {
+      searchField: 'searchText',
+      filterFields: ['generation', 'network', 'category', 'provider'],
+    }),
+  marketDirectoryFacets: defineTable({
+    generation: v.string(),
+    kind: v.union(v.literal('category'), v.literal('provider'), v.literal('network'), v.literal('tag'), v.literal('bundle')),
+    key: v.string(),
+    label: v.string(),
+    iconUrl: v.optional(v.string()),
+  }).index('by_generation_and_kind_and_key', ['generation', 'kind', 'key']),
   marketEvidenceFacts: defineTable({
     kind: v.union(
       v.literal('ae_invocation'),

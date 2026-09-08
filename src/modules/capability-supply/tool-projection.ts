@@ -62,6 +62,8 @@ export type {
 
 export {
   rankToolSearchText,
+  matchesToolFilters,
+  normalizeToolSearchInput,
   searchCapabilityTools,
   currentToolSearchFact,
   searchCurrentToolFacts,

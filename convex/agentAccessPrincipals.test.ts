@@ -13,7 +13,8 @@ import { issuedAgentCanonicalRefs, issuedAgentGrantRef } from '../src/modules/ag
 import { defaultSandboxAgentAccessPolicy } from '../src/modules/agent-access/sandbox-policy'
 import { normalizeStoredAgentAccessGrant } from '../src/modules/agent-access/policy'
 import schema from './schema'
-import { api } from './_generated/api'
+import { api, internal } from './_generated/api'
+import { withSourceWriteCommand } from '../tests/helpers/source-write-admission'
 import { resolveCanonicalAgentContext, validateCanonicalAgentDelegation } from './lib/canonicalAgentAuthority'
 import { canonicalAgentDelegationScopes } from './agentAccessPrincipals'
 import { resolveCanonicalAgentBinding } from './authorityBoundary'
@@ -313,12 +314,12 @@ describe('issued agent binding', () => {
     expect(JSON.stringify(renamedEvents)).not.toContain(command.displayName)
   })
 
-  it('issues and replaces selected-Operation access with the exact Delegation resources', async () => {
+  it('admits selected-Tool buyer routes while preserving exact purchased-Tool restrictions through replacement', async () => {
     const backend = convexTest(schema, modules)
     const owner = backend.withIdentity(identity('user_owner'))
     await owner.mutation(api.interactiveAuthority.materializeCurrentInteractiveAuthority, {})
     const firstOperationRef = `operation:v1:${'a'.repeat(64)}`
-    const operationRefs = [firstOperationRef, `operation:v1:${'b'.repeat(64)}`]
+    const operationRefs = [...Array.from({ length: 63 }, (_, index) => `operation:v1:${index.toString(16).padStart(64, '0')}`), firstOperationRef]
     const base = bindingInput()
     const input: IssuedAgentBindingRegistration = {
       ...base,
@@ -331,6 +332,27 @@ describe('issued agent binding', () => {
     const firstDelegation = await backend.run(async (ctx) => await ctx.db.query('authorityDelegationGrants')
       .withIndex('by_grantRef', (query) => query.eq('grantRef', input.grantRef)).unique())
     expect(firstDelegation?.resourceRefs).toEqual(operationRefs)
+    for (const operationKey of ['surface:http:tools-call', 'surface:http:account-self', 'surface:mcp:tool.quote', 'surface:mcp:call.status']) {
+      await expect(backend.run(async (ctx) => await resolveCanonicalAgentBinding(ctx, {
+        credentialId: input.credentialId, applicationRef: input.applicationRef,
+        environment: input.environment, scopes: input.scopes, requiredScopes: ['market_tools:call'],
+        authorityMode: input.authorityMode, operationKey, correlationId: `selected-${operationKey}`,
+      }))).resolves.toMatchObject({ credentialId: input.credentialId })
+    }
+    for (const resourceRef of [firstOperationRef, `operation:v1:${'c'.repeat(64)}`, 'surface:http:supply-publish']) {
+      const admitted = await backend.run(async (ctx) => {
+        const canonical = await resolveCanonicalAgentContext(ctx, input.credentialId, NOW + 1)
+        if (canonical === null) throw new Error('selected_agent_context_missing')
+        return await validateCanonicalAgentDelegation(ctx, {
+          evidenceKind: 'selected-tool-test', evidenceRef: resourceRef,
+          principalRef: canonical.principalRef, accountRef: canonical.accountRef,
+          grantRef: input.grantRef, grantGeneration: 1,
+          requiredScopes: ['market_tools:call'], resourceRefs: [resourceRef], now: NOW + 1,
+        })
+      })
+      if (resourceRef === firstOperationRef) expect(admitted).not.toBeNull()
+      else expect(admitted).toBeNull()
+    }
 
     const access = await backend.run(async (ctx) => await ctx.db.query('agentAccessPrincipals')
       .withIndex('by_credentialId', (query) => query.eq('credentialId', input.credentialId)).unique())
@@ -360,7 +382,7 @@ describe('issued agent binding', () => {
     })).resolves.toMatchObject({ kind: 'recorded' })
     const replacementDelegation = await backend.run(async (ctx) => await ctx.db.query('authorityDelegationGrants')
       .withIndex('by_grantRef', (query) => query.eq('grantRef', replacement.grantRef)).unique())
-    expect(replacementDelegation?.resourceRefs).toEqual(operationRefs)
+    expect(replacementDelegation?.resourceRefs).toEqual(firstDelegation?.resourceRefs)
 
     const mismatched = { ...replacement, issuanceKey: 'selected-mismatch-12345678', grantRef: issuedAgentGrantRef('user_owner', 'selected-mismatch-12345678'), toolRefs: [firstOperationRef] }
     await expect(owner.mutation(prepareReplacement, {
@@ -465,6 +487,137 @@ describe('issued agent binding', () => {
     })
 
     await expect(resolve('membership-ended')).resolves.toBeNull()
+  })
+
+  it('recovers prior Calls through a promoted credential while preserving original evidence and Account isolation', async () => {
+    const backend = convexTest(schema, modules)
+    const owner = backend.withIdentity(identity('user_owner'))
+    await owner.mutation(api.interactiveAuthority.materializeCurrentInteractiveAuthority, {})
+    const first = bindingInput()
+    await owner.mutation(registerIssuedBinding, { ...first, serviceAuth: await assertion(first) })
+    const access = await backend.run(async (ctx) => await ctx.db.query('agentAccessPrincipals')
+      .withIndex('by_credentialId', (query) => query.eq('credentialId', first.credentialId)).unique())
+    if (access === null) throw new Error('agent_access_missing')
+    const callRef = 'call:credential-continuity'
+    const original = {
+      callRef, principalId: access.principalId, ownerId: access.ownerId,
+      credentialId: first.credentialId, applicationRef: first.applicationRef,
+      environment: first.environment, toolRef: 'tool:credential-continuity',
+      idempotencyKey: 'purchase:original', grantRef: first.grantRef,
+      grantGeneration: access.grantGeneration, policyDigest: access.spendingPolicyDigest,
+      grantExpiresAt: first.expiresAt, inputDigest: 'sha256:original-input',
+      requestDigest: 'sha256:original-request', inputJson: '{"private":"input"}', toolJson: '{}',
+      state: 'refused' as const,
+      result: { kind: 'refused' as const, code: 'input_invalid' as const, retryable: false },
+      createdAt: NOW - 1, updatedAt: NOW,
+    }
+    const originalId = await backend.run(async (ctx) => await ctx.db.insert('capabilityCalls', original))
+    const replacement: AgentCredentialReplacementRegistration = {
+      principalRef: access.principalId, replacementMode: 'planned',
+      issuanceKey: 'call-continuity-replacement-12345678',
+      grantRef: issuedAgentGrantRef('user_owner', 'call-continuity-replacement-12345678'),
+      credentialId: 'key_call_continuity_successor', applicationRef: first.applicationRef,
+      environment: first.environment, scopes: first.scopes, authorityMode: first.authorityMode,
+      toolAccess: first.toolAccess, toolRefs: first.toolRefs, spendingPolicy: first.spendingPolicy,
+      createdAt: NOW, expiresAt: first.expiresAt,
+    }
+    const prepared = await owner.mutation(prepareReplacement, {
+      ...replacement,
+      serviceAuth: await operationAssertion('agentAccessPrincipals.prepareCredentialReplacementForServer', {
+        ...replacement, scopes: [...replacement.scopes], toolRefs: [...replacement.toolRefs],
+      }),
+    })
+    const transition = {
+      principalRef: access.principalId,
+      successorCredentialRef: String(prepared.successorCredentialRef),
+      successorGrantRef: replacement.grantRef,
+    }
+    await owner.mutation(promoteReplacement, {
+      ...transition,
+      serviceAuth: await operationAssertion('agentAccessPrincipals.promoteCredentialReplacementForServer', transition),
+    })
+    const successor = {
+      principalId: access.principalId, ownerId: access.ownerId,
+      credentialId: replacement.credentialId, applicationRef: first.applicationRef,
+      environment: first.environment, scopes: [...first.scopes], authorityMode: first.authorityMode,
+    }
+    await expect(backend.mutation(internal.capabilityCalls.resolveCallAgentAuthority, {
+      principal: successor, callRef,
+    })).resolves.toEqual(successor)
+    const status = async (principal = successor) => {
+      const args = { principal, callRef, operationKey: `status:${principal.credentialId}`, correlationId: 'credential-continuity' }
+      return await backend.action(api.capabilityCalls.readCallStatus, await withSourceWriteCommand('protected_action', args, {
+        operationKey: args.operationKey, correlationId: args.correlationId, principal,
+        toolRef: '', input: {}, idempotencyKey: `status:${callRef}`,
+      }))
+    }
+    await expect(status()).resolves.toMatchObject({
+      kind: 'found', callRef, state: 'terminal', result: original.result,
+    })
+    // A terminal result is replayed through the real worker without changing
+    // original credential, grant, input, or effect evidence.
+    await expect(status()).resolves.toMatchObject({ kind: 'found', callRef, result: original.result })
+    const listArgs = {
+      principal: successor, operationKey: 'list:credential-continuity', correlationId: 'credential-continuity',
+      paginationOpts: { numItems: 1, cursor: null },
+    }
+    const history = await backend.action(api.capabilityCalls.listCalls, await withSourceWriteCommand('protected_action', listArgs, {
+      operationKey: listArgs.operationKey, correlationId: listArgs.correlationId, principal: successor,
+      toolRef: '', input: {}, idempotencyKey: 'list:all:start:1',
+    }))
+    expect(history.page).toEqual([expect.objectContaining({ callRef, state: 'refused' })])
+    expect(JSON.stringify(history)).not.toContain('private')
+    await expect(backend.run(async (ctx) => await ctx.db.get(originalId))).resolves.toMatchObject(original)
+    await expect(status({ ...successor, credentialId: first.credentialId })).resolves.toMatchObject({
+      kind: 'refused', code: 'invocation_not_found',
+    })
+    await expect(status({ ...successor, ownerId: 'acc_00000000000000000000000000000000' })).resolves.toMatchObject({
+      kind: 'refused', code: 'invocation_not_found',
+    })
+    const siblingInput = {
+      ...first, issuanceKey: 'call-continuity-sibling-12345678', credentialId: 'key_call_continuity_sibling',
+      grantRef: issuedAgentGrantRef('user_owner', 'call-continuity-sibling-12345678'),
+    }
+    await owner.mutation(registerIssuedBinding, { ...siblingInput, serviceAuth: await assertion(siblingInput) })
+    const sibling = await backend.run(async (ctx) => await ctx.db.query('agentAccessPrincipals')
+      .withIndex('by_credentialId', (query) => query.eq('credentialId', siblingInput.credentialId)).unique())
+    if (sibling === null) throw new Error('sibling_agent_missing')
+    await expect(status({ ...successor, principalId: sibling.principalId, credentialId: sibling.credentialId }))
+      .resolves.toMatchObject({ kind: 'refused', code: 'invocation_not_found' })
+    // Internal worker/replay reads stay pinned to the original effect identity;
+    // only the authorised public recovery boundary translates to that identity.
+    await expect(backend.query(internal.capabilityCalls.readReplay, {
+      callRef, principalId: successor.principalId, credentialId: successor.credentialId,
+    })).resolves.toBeNull()
+    await expect(backend.query(internal.capabilityCalls.readReplay, {
+      callRef, principalId: successor.principalId, credentialId: first.credentialId,
+    })).resolves.toMatchObject({ result: original.result })
+    await expect(backend.mutation(internal.capabilityCalls.reconcileCallWorkloadAuthority, { callRef }))
+      .resolves.toEqual({ kind: 'refused' })
+
+    const disconnect = { principalRef: access.principalId, correlationRef: 'disconnect:call-continuity' }
+    await owner.mutation(disconnectAgentLifecycle, {
+      ...disconnect,
+      serviceAuth: await operationAssertion('agentAccessPrincipals.disconnectAgentForServer', disconnect),
+    })
+    await expect(status()).resolves.toMatchObject({ kind: 'refused', code: 'invocation_not_found' })
+    await expect(owner.action(api.capabilityCalls.readOwnerCallStatus, { callRef })).resolves.toMatchObject({
+      kind: 'found', callRef, state: 'terminal', result: original.result,
+      previousInput: { private: 'input' },
+    })
+    const foreignOwner = backend.withIdentity(identity('user_foreign'))
+    await foreignOwner.mutation(api.interactiveAuthority.materializeCurrentInteractiveAuthority, {})
+    await expect(foreignOwner.action(api.capabilityCalls.readOwnerCallStatus, { callRef }))
+      .resolves.toMatchObject({ kind: 'refused', code: 'invocation_not_found' })
+    const ownerWorkerArgs = {
+      callRef, principalId: access.principalId, credentialId: first.credentialId,
+      mode: 'status' as const, recoverAsOwner: true as const,
+    }
+    await expect(foreignOwner.action(internal.capabilityCallWorker.recover, ownerWorkerArgs))
+      .resolves.toMatchObject({ kind: 'refused', code: 'invocation_not_found' })
+    await expect(backend.action(internal.capabilityCallWorker.recover, ownerWorkerArgs))
+      .resolves.toMatchObject({ kind: 'refused', code: 'invocation_not_found' })
+    await expect(backend.run(async (ctx) => await ctx.db.get(originalId))).resolves.toMatchObject(original)
   })
 
   it('stages, promotes, replays, and cancels credential replacements without replacing the agent', async () => {

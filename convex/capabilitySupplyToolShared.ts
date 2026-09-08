@@ -28,6 +28,7 @@ import type { Doc } from './_generated/dataModel'
 import type { QueryCtx } from './_generated/server'
 import { getExactRegisteredCapabilityContract } from './capabilityContractDocuments'
 import { capabilitySupplyGraphPorts } from './capabilitySupplyGraphPorts'
+import { readManagedX402InspectionTarget } from './capabilitySupplyCurrentTool'
 import { toCapabilityBindingRow, toCapabilityOfferingRow } from './capabilitySupplyRowMappers'
 
 export const exactAmount = v.object({ currency: v.string(), units: v.string(), exponent: v.number() })
@@ -171,7 +172,9 @@ export async function toolRecordProjection(
     && bindingRow.admission === 'admitted'
     && bindingRow.conformance === 'conformant'
   const routeable = qualification.status === 'eligible'
-  const unavailableReason = routeable ? undefined : publicUnavailableReason(publication, qualification)
+  const awaitingInspection = !routeable && binding.adapter.adapterId === 'x402-fetch:v2'
+    && await readManagedX402InspectionTarget(ctx, publication.toolRef, now) !== undefined
+  const unavailableReason = routeable ? undefined : awaitingInspection ? 'inspection_required' as const : publicUnavailableReason(publication, qualification)
   const authorityMode = publication.authorityMode
   const sourcePrice = offering.presentation.price
   const transport = publicToolTransportFor(binding.endpointUrl, binding.adapter.adapterId, bindingRow.configJson)

@@ -280,6 +280,22 @@ describe('capability operation invocation worker charge/x402', () => {
     expect(paths).not.toContain('moneyX402PaymentAttempts:prepareX402PaymentAuthorization')
     expect(worker.state.payment.prepare).toBeUndefined()
   })
+  it('releases the reservation when the Provider requirement changes before payment', async () => {
+    const worker = createWorker('x402', { environment: 'production' })
+    mocks.invokePreparedRouteTransport.mockResolvedValueOnce({
+      transport: 'x402', disposition: 'refused', releaseStarted: false,
+      requestDigest: digest('c'), failureCode: 'payment_provider_requirement_stale',
+      paymentSubmissionStatus: 'not_submitted',
+    } satisfies RouteTransportObservation)
+    await expect(handler(worker.ctx, { callRef: invocationRef })).resolves.toEqual({ kind: 'recorded' })
+    const paths = worker.state.mutationCalls.map(({ path }) => path)
+    expect(paths).toContain('moneyManagedCallLifecycle:releaseBeforeSubmission')
+    expect(paths).not.toContain('moneyX402PaymentAttempts:recordX402PaymentSigningIntent')
+    expect(worker.state.payment.prepare).toBeUndefined()
+    expect(worker.state.unknownCharges).toHaveLength(0)
+    expect(worker.state.records.at(-1)).toMatchObject({ state: 'refused', result: { code: 'payment_provider_requirement_stale' } })
+  })
+
   it('releases the managed reservation when signing fails before submission', async () => {
     const worker = createWorker('x402', {
       environment: 'production',

@@ -1,3 +1,4 @@
+import { ToolPriceText } from "./AeToolPrice";
 import { Link } from "@tanstack/react-router";
 import { useEffect, useRef } from "react";
 import type { z } from "zod";
@@ -147,6 +148,7 @@ export function AeMarketComparisonView({
                       <ComparisonValue
                         field={field}
                         value={comparisonValue(comparison, field, tool.toolRef)}
+                        {...(tool.displayPrice?.kind === "indicative" ? { validUntil: tool.displayPrice.validUntil } : {})}
                       />
                     </TableCell>
                   ))}
@@ -160,12 +162,13 @@ export function AeMarketComparisonView({
   );
 }
 
-function ComparisonValue({ field, value }: { field: ComparisonField; value: unknown }) {
+function ComparisonValue({ field, value, validUntil }: { field: ComparisonField; value: unknown; validUntil?: number }) {
   if (typeof value !== "string") return <span className="text-muted-foreground">Not reported</span>;
   if (field === "healthStatus") {
     return <Badge variant={value === "operational" ? "success" : value === "degraded" ? "warning" : "outline"}>{value}</Badge>;
   }
-  return <span className={field === "priceLabel" ? "font-mono tabular-nums" : undefined}>{value}</span>;
+  if (field === "priceLabel") return <span className="font-mono tabular-nums"><ToolPriceText price={value} {...(validUntil === undefined ? {} : { validUntil })} /></span>;
+  return <span>{value}</span>;
 }
 
 function comparisonValue(

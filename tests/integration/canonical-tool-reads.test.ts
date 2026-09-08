@@ -361,7 +361,7 @@ describe('canonical Tool reads', () => {
   })
 
   it.each(['offering', 'binding', 'business', 'contract'] as const)(
-    'invalidates a pagination cursor when joined %s facts change',
+    'continues native pagination while rechecking current joined %s facts',
     async (joinedFact) => {
       const backend = convexTestWithMarketComponents()
       const first = await publishCurrentTool(backend, `cursor-${joinedFact}-first`)
@@ -417,11 +417,11 @@ describe('canonical Tool reads', () => {
         query: 'lookup',
         limit: 1,
         cursor: page.pagination.nextCursor,
-      })).resolves.toMatchObject({ kind: 'unavailable', reason: 'query_invalid' })
+      })).resolves.toMatchObject({ kind: 'ok' })
     },
   )
 
-  it('accepts 256 valid current Tools and refuses 257 with the typed capacity outcome', async () => {
+  it('paginates both 256 and 257 valid current Tools without a catalogue capacity refusal', async () => {
     const accepted = convexTestWithMarketComponents()
     const acceptedFixture = await publishCurrentTool(accepted, 'capacity-256')
     await cloneCurrentPublications(accepted, acceptedFixture, 256)
@@ -432,10 +432,10 @@ describe('canonical Tool reads', () => {
     const exceededFixture = await publishCurrentTool(exceeded, 'capacity-257')
     await cloneCurrentPublications(exceeded, exceededFixture, 257)
     await expect(exceeded.query(api.capabilitySupplyTools.search, { query: 'lookup' }))
-      .resolves.toMatchObject({ kind: 'unavailable', reason: 'source_capacity_exceeded' })
+      .resolves.toMatchObject({ kind: 'ok', pagination: { hasMore: true } })
   }, 30_000)
 
-  it('refuses a raw overflow when one of the first 257 publications is malformed', async () => {
+  it('omits malformed rows without refusing a large catalogue', async () => {
     const backend = convexTestWithMarketComponents()
     const fixture = await publishCurrentTool(backend, 'capacity-mixed-258')
     await cloneCurrentPublications(backend, fixture, 258)
@@ -453,7 +453,7 @@ describe('canonical Tool reads', () => {
     })
 
     await expect(backend.query(api.capabilitySupplyTools.search, { query: 'lookup' }))
-      .resolves.toMatchObject({ kind: 'unavailable', reason: 'source_capacity_exceeded' })
+      .resolves.toMatchObject({ kind: 'ok', pagination: { hasMore: true } })
   }, 30_000)
 
 })

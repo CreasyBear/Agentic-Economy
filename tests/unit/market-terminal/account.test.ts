@@ -35,6 +35,14 @@ afterEach(() => {
 })
 
 describe('AE CLI account interface', () => {
+  it.each(['balance', 'activity'])('fails %s when account state cannot be read', async (subcommand) => {
+    storeConnection({ baseUrl: options.baseUrl, accessToken: 'test-account-key' })
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>().mockResolvedValue(Response.json({ kind: 'error', code: 'source_unavailable' })))
+    await expect(runAccountCommand([subcommand], options)).rejects.toMatchObject({
+      kind: 'UNAVAILABLE', code: 'source_unavailable', retryable: true, exitCode: 1,
+    })
+  })
+
   it('explains anonymous use and gives one exact connect continuation when no buyer credential exists', async () => {
     const write = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
 

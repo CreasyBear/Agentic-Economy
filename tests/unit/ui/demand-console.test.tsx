@@ -292,6 +292,18 @@ describe('assistant access components', () => {
     })
     expect(window.sessionStorage.getItem('ae.account-funding.recovery.v1')).not.toContain('checkout.stripe.com')
     expect(read).not.toHaveBeenCalled()
+
+    const firstKey = begin.mock.calls[0]?.[0]?.idempotencyKey
+    cleanup()
+    read.mockResolvedValue({ ...session, evidence: { ...session.evidence, status: 'succeeded' } })
+    render(<AeAccountFundingPanel port={{ begin, read }} redirectToCheckout={redirectToCheckout} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Add more credit' }))
+    expect(window.sessionStorage.getItem('ae.account-funding.recovery.v1')).toBeNull()
+    fireEvent.change(screen.getByLabelText(/account funding amount/i), { target: { value: '5.00' } })
+    fireEvent.click(screen.getByRole('button', { name: /continue to stripe/i }))
+    await waitFor(() => expect(begin).toHaveBeenCalledTimes(2))
+    expect(begin.mock.calls[1]?.[0]?.idempotencyKey).not.toBe(firstKey)
+    expect(begin.mock.calls[1]?.[0]?.amount.units).toBe('5000000')
   })
 
   it('persists and reuses an outcome-unknown command locator without offering a retry', async () => {
@@ -315,6 +327,7 @@ describe('assistant access components', () => {
     expect(locator).toMatchObject({ commandRef: 'sha256:topup-command-unknown' })
     expect(locator?.idempotencyKey).toBe(begin.mock.calls[0]?.[0]?.idempotencyKey)
     expect(screen.queryByRole('button', { name: /continue to stripe/i })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Add more credit' })).toBeNull()
 
     cleanup()
     render(<AeAccountFundingPanel port={port} />)

@@ -83,6 +83,16 @@ describe('official Bazaar admission regressions', () => {
     expect(Object.hasOwn(admitted, 'query')).toBe(false)
   })
 
+  it('keeps a declared request schema callable when the SDK body example is empty', () => {
+    const extension = structuredClone(declaredBazaar())
+    const bazaar = extension.bazaar
+    if (bazaar === undefined) throw new Error('expected Bazaar extension')
+    Object.assign(bazaar.info.input, { body: {} })
+    const admitted = admitOfficialBazaarFromPaymentRequired({ extensions: extension })
+    expect(admitted).toMatchObject({ kind: 'admitted', inputSchema: { required: ['text'] } })
+    expect(admitted).not.toHaveProperty('inputExample')
+  })
+
   it('refuses a declared output schema that contradicts the published example', () => {
     const extension = structuredClone(declaredBazaar())
     const bazaar = extension.bazaar

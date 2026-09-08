@@ -24,6 +24,7 @@ export function AeToolDecision({
         </div>
         <AeToolPrice
           price={model.totalPrice}
+            {...(model.priceValidUntil === undefined ? {} : { validUntil: model.priceValidUntil })}
           size="lg"
           label="Indicative price"
           className="border-t border-border pt-4 sm:min-w-40 sm:border-s sm:border-t-0 sm:py-1 sm:ps-6 sm:text-end"

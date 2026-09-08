@@ -1,5 +1,4 @@
 import { LATEST_PROTOCOL_VERSION } from '@modelcontextprotocol/sdk/types.js'
-import { z } from 'zod'
 
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { parseBoundedJson } from '@/modules/common/bounded-json'
@@ -7,7 +6,7 @@ import { isRecord } from '@/modules/common/is-record'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 import type { ExactAmount } from '@/modules/money/public'
 import type { CapabilityTransportAuthority } from '../public'
-import { validPublicHttpsEndpoint } from './transport-adapters'
+import { validPublicHttpsEndpoint, parseX402FetchTransportConfiguration } from './transport-adapters'
 import {
   isProviderConnectionCredentialRef,
   type ProviderConnectionAuthorityValidation,
@@ -21,7 +20,6 @@ import {
   parseConfiguration,
   prepareHttpJsonRequest,
   providerAuthorityFailure,
-  requestTarget,
   invokeHttp,
   type HttpConfiguration,
   type PublicUpstreamRouteTransportAuthority,
@@ -38,6 +36,7 @@ import {
   type X402PreparedAuthorization,
   type X402RouteTransportRuntime,
 } from './route-transport-x402'
+import { prepareX402Request } from './x402-request'
 import { expectedX402Amount } from './route-transport-x402-payment'
 import type {
   RouteTransportCancellationInvocation,
@@ -65,6 +64,7 @@ export type PublicUpstreamRouteTransportInvocation = Readonly<{
   >
   authority: PublicUpstreamRouteTransportAuthority
   inputJson: string
+  committedPaymentRequiredJson?: string
 }>
 
 export type ProviderRouteTransportInvocation = Readonly<{
@@ -73,6 +73,7 @@ export type ProviderRouteTransportInvocation = Readonly<{
   >
   authority: ProviderRouteTransportAuthority
   inputJson: string
+  committedPaymentRequiredJson?: string
 }>
 
 export type RouteTransportInvocation =
@@ -166,61 +167,10 @@ export type RouteTransportRuntime = Readonly<{
 type RegisteredConfiguration =
   HttpConfiguration | McpConfiguration | X402Configuration
 
-const nonBlankString = z.string().superRefine((value, context) => {
-  if (value.trim().length === 0)
-    context.addIssue({ code: 'custom', message: 'must_not_be_blank' })
-})
-const requestTimeout = z.number().int().min(100).max(120_000)
-const amountExponent = z.number().int().min(0).max(18)
-const queryParameter = z.strictObject({
-  inputPointer: z.string().regex(/^\/(?:[^/~]|~[01])+(?:\/(?:[^/~]|~[01])+)*$/),
-  parameter: z.string().regex(/^[A-Za-z][A-Za-z0-9_.-]{0,99}$/),
-  required: z.boolean().optional(),
-  style: z.literal('form').optional(),
-  explode: z.boolean().optional(),
-})
-const queryParameters = z
-  .array(queryParameter)
-  .min(1)
-  .max(64)
-  .superRefine((items, context) => {
-    const pointers = new Set<string>()
-    const parameters = new Set<string>()
-    for (const [index, item] of items.entries()) {
-      if (pointers.has(item.inputPointer) || parameters.has(item.parameter)) {
-        context.addIssue({
-          code: 'custom',
-          path: [index],
-          message: 'query_mapping_duplicate',
-        })
-      }
-      pointers.add(item.inputPointer)
-      parameters.add(item.parameter)
-    }
-  })
-const x402Configuration = z
-  .strictObject({
-    method: z.enum(['GET', 'POST']),
-    query: queryParameters.optional(),
-    requestTimeoutMs: requestTimeout,
-    scheme: z.literal('exact'),
-    network: nonBlankString.max(100),
-    currency: nonBlankString.max(20),
-    routeAmountExponent: amountExponent,
-    assetAmountExponent: amountExponent,
-    asset: nonBlankString.max(200),
-    payTo: nonBlankString.max(200),
-    paymentRequiredJson: z.string().min(2).max(65_536),
-  })
-  .refine((value) => (
-    (value.method === 'GET' && value.query !== undefined)
-    || (value.method === 'POST' && value.query === undefined)
-  ), 'method_query_mismatch')
-
 function isX402Configuration(
   value: Readonly<Record<string, unknown>>,
 ): value is X402Configuration {
-  return x402Configuration.safeParse(value).success
+  return parseX402FetchTransportConfiguration(value) !== undefined
 }
 
 
@@ -450,15 +400,7 @@ export function prepareRegisteredRouteTransportInvocation(
           invocation.inputJson,
         )
       : invocation.binding.adapterId === 'x402-fetch:v2'
-        ? requestTarget(
-            endpoint,
-            (typedConfiguration as X402Configuration).method,
-            (typedConfiguration as X402Configuration).query,
-            undefined,
-            undefined,
-            undefined,
-            invocation.inputJson,
-          )
+        ? prepareX402Request(endpoint, typedConfiguration as X402Configuration, invocation.inputJson)
         : undefined
   const targetHeaders =
     targetResult?.kind === 'prepared' ? targetResult.headers : undefined

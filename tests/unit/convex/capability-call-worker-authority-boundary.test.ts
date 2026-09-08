@@ -127,4 +127,29 @@ describe('capability operation invocation worker authority boundary', () => {
     })
     expect(mocks.recover).toHaveBeenCalledTimes(1)
   })
+
+  it('revalidates replacement recovery authority and denies server-only recovery modes', async () => {
+    const recoveryPrincipal = {
+      principalId: PRINCIPAL_REF, ownerId: ACCOUNT_REF, credentialId: 'ak_successor',
+      applicationRef: 'agentic-economy', environment: 'production',
+      scopes: ['market_tools:call'], authorityMode: 'spending_policy',
+    }
+    const ctx = { runMutation: vi.fn(async (_reference: unknown, _args: unknown) => recoveryPrincipal as typeof recoveryPrincipal | null) }
+    const args = {
+      callRef: CALL_REF, principalId: PRINCIPAL_REF, credentialId: CREDENTIAL_REF,
+      mode: 'status', recoveryPrincipal,
+    }
+    await expect(recoverBoundary(ctx, args)).resolves.toMatchObject({ kind: 'found' })
+    expect(functionPath(ctx.runMutation.mock.calls[0]?.[0])).toBe('capabilityCalls:resolveCallAgentAuthority')
+    expect(mocks.recover).toHaveBeenCalledWith(ctx, expect.objectContaining({ credentialId: CREDENTIAL_REF }))
+    ctx.runMutation.mockResolvedValueOnce(null)
+    await expect(recoverBoundary(ctx, args)).resolves.toMatchObject({ kind: 'refused' })
+    for (const mode of ['reconcile_pre_submission', 'reconcile_managed_signing']) {
+      await expect(recoverBoundary(ctx, { ...args, mode })).resolves.toMatchObject({ kind: 'refused' })
+      await expect(recoverBoundary(ctx, { ...args, mode, recoveryPrincipal: undefined, recoverAsOwner: true }))
+        .resolves.toMatchObject({ kind: 'refused' })
+    }
+    await expect(recoverBoundary(ctx, { ...args, principalId: 'prn_foreign' })).resolves.toMatchObject({ kind: 'refused' })
+    expect(mocks.recover).toHaveBeenCalledTimes(1)
+  })
 })

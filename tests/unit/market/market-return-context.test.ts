@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   buildMarketReturnContext,
   readMarketReturnContext,
+  toMarketReturnNavigation,
 } from '@/components/ae/market/market-return-context'
 
 describe('market return context', () => {
@@ -33,6 +34,13 @@ describe('market return context', () => {
     expect(url.hash).toBe('#tools')
   })
 
+  it('keeps the native directory position and selected endpoint', () => {
+    const context = buildMarketReturnContext({ window: '30d', offset: 20, resource: 'https://example.com/tool/:id' })
+    expect(readMarketReturnContext(context)).toBe(context)
+    expect(new URL(context, 'https://example.com').searchParams.get('offset')).toBe('20')
+    expect(new URL(context, 'https://example.com').searchParams.get('resource')).toBe('https://example.com/tool/:id')
+  })
+
   it.each([
     'https://evil.example/market?window=30d',
     '//evil.example/market?window=30d',
@@ -45,3 +53,51 @@ describe('market return context', () => {
     expect(readMarketReturnContext(value)).toBeUndefined()
   })
 })
+
+it('retains native filters and refuses invalid filter values', async () => {
+  const { toMarketReturnNavigation } = await import('@/components/ae/market/market-return-context')
+  const search = { window: '30d' as const, network: 'eip155:8453', provider: 'example.com', maxUsdPrice: 0.001, view: 'saved' as const }
+  expect(toMarketReturnNavigation(buildMarketReturnContext(search)).search).toEqual(search)
+  expect(readMarketReturnContext('/market?window=30d&maxUsdPrice=-1')).toBeUndefined()
+  expect(readMarketReturnContext('/market?window=30d&maxUsdPrice=')).toBeUndefined()
+  expect(readMarketReturnContext('/market?window=30d&provider=https://example.com')).toBeUndefined()
+})
+
+
+it('round-trips index category, cursor and sort independently from canonical fields', () => {
+  const search = { window: '30d' as const, directoryCategory: 'creative', indexCursor: 'cursor:+/==&next', sort: 'updated' as const, resource: 'https://example.com/tool?output=json', provider: 'example.com' };
+  const context = buildMarketReturnContext(search);
+  expect(toMarketReturnNavigation(context).search).toEqual(search);
+  const parameters = new URL(context, 'https://example.com').searchParams;
+  expect(parameters.has('category')).toBe(false);
+  expect(parameters.has('cursor')).toBe(false);
+  expect(parameters.has('offset')).toBe(false);
+});
+
+it.each([
+  '/market?window=30d&directoryCategory=',
+  '/market?window=30d&directoryCategory=%20creative',
+  '/market?window=30d&indexCursor=',
+  '/market?window=30d&indexCursor=cursor&offset=20',
+  '/market?window=30d&indexCursor=one&indexCursor=two',
+  '/market?window=30d&sort=cheapest',
+  '/market?window=30d&query=image&sort=popular',
+  '/market?window=30d&query=image&sort=updated',
+])('rejects invalid indexed return context: %s', value => {
+  expect(readMarketReturnContext(value)).toBeUndefined();
+});
+
+it('round-trips exact bands, arrays and false metadata filters without losing zero bounds', () => {
+  const search = { window: '30d' as const, view: 'tools' as const, layout: 'table' as const, priceBand: '0_01_to_0_03' as const, adoptionBand: '0' as const, tags: ['search', 'a&b'], bundleSlugs: ['image-tools'], hasInputFields: true, hasOutputFields: false, hasInputSchema: false, hasOutputSchema: true, hasOutputExample: false, curatedOnly: false, minUsdPrice: 0, maxUsdPrice: 0.03, minPayers30d: 0, maxPayers30d: 4, indexCursor: 'next:+/=' };
+  const context = buildMarketReturnContext(search);
+  expect(readMarketReturnContext(context)).toBe(context);
+  expect(toMarketReturnNavigation(context).search).toEqual(search);
+});
+it.each([
+  'minUsdPrice=0.1&maxUsdPrice=0.01', 'minPayers30d=5&maxPayers30d=4',
+  'minPayers30d=0.5', 'hasInputSchema=0', 'hasOutputExample=',
+  'tags=search', 'tags=%5B%5D', 'tags=%5B%22search%22%5D&tags=%5B%22other%22%5D',
+  'priceBand=cheap', 'adoptionBand=none',
+])('rejects malformed or reversed explorer return filters: %s', filters => {
+  expect(readMarketReturnContext(`/market?window=30d&${filters}`)).toBeUndefined();
+});

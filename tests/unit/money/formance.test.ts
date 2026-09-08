@@ -166,6 +166,22 @@ describe('Package 4 official Formance boundary', () => {
     })
   })
 
+  it('accepts zero Call tax through reservation, release and the existing settlement template', () => {
+    const booking = { ...managedCallBooking(), buyerRevenueUnits: '2', buyerTaxUnits: '0' }
+    expect(prepareFormanceManagedCallReservation(booking).kind).toBe('prepared')
+    expect(prepareFormanceManagedCallRelease({ booking, externalEvidenceDigest: `sha256:${DIGEST_A}`, submissionProvenAbsent: true }).kind).toBe('prepared')
+    const settlement = prepareFormanceManagedCallSettlement({ booking, externalEvidenceDigest: `sha256:${DIGEST_A}` })
+    if (settlement.kind !== 'prepared') throw new Error(settlement.code)
+    const buyer = settlement.bulk.commands[0]!
+    expect(buyer.template).toBe('BUYER_SALE_SETTLED')
+    expect(buyer.variables.tax_amount).toBe('AUD/6 0')
+    expect(buyer.variables.revenue_amount).toBe('AUD/6 2')
+    expect(validateFormanceMoneyCommand(buyer)).toBeUndefined()
+    expect(validateFormanceMoneyCommand({ ...buyer, variables: { ...buyer.variables, budget_amount: 'AUD/6 0' } })).toBe('formance_variables_invalid')
+    expect(prepareFormanceManagedCallReservation({ ...booking, providerAmountUnits: '0' }).kind).toBe('refused')
+    expect(prepareFormanceManagedCallReservation({ ...booking, buyerRevenueUnits: '1' }).kind).toBe('refused')
+  })
+
   it('binds changed managed-call terms to the same references but different command digests', () => {
     const booking = managedCallBooking()
     const original = prepareFormanceManagedCallReservation(booking)

@@ -32,6 +32,8 @@ graphify-out/
 /CLAUDE.md
 /RULES.MD
 /docs/*
+!/docs/licenses/
+!/docs/licenses/*.txt
 !/docs/README.md
 !/docs/archive/
 !/docs/archive/**

@@ -28,6 +28,8 @@ type CallResultValue = Infer<typeof callResultValue>
 type Usage = Infer<typeof usageValue>
 
 export type OpenDispatchValue = Readonly<{
+  committedPaymentRequiredJson?: string
+  sourceUsdcUnits?: string
   callRef: string
   principalId: string
   ownerId: string
@@ -1224,7 +1226,12 @@ export async function openDispatchHandler(
     || row.toolJson === undefined
     || row.inputJson === undefined
   ) return null
+  const quote = row.quoteRef === undefined ? null : await ctx.db.query('capabilityQuotes')
+    .withIndex('by_quoteRef', (query) => query.eq('quoteRef', row.quoteRef!)).unique()
+  if (quote !== null && (quote.accountRef !== row.ownerId || quote.principalId !== row.principalId || quote.toolRef !== row.toolRef)) return null
   return {
+    ...(quote?.x402PaymentRequiredJson === undefined ? {} : { committedPaymentRequiredJson: quote.x402PaymentRequiredJson }),
+    ...(quote?.sourceUsdcUnits === undefined ? {} : { sourceUsdcUnits: quote.sourceUsdcUnits }),
     ...(row.quoteRef === undefined ? {} : { quoteRef: row.quoteRef }),
     callRef: row.callRef,
     principalId: row.principalId,

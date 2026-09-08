@@ -5,6 +5,8 @@ import {
   catalogJobLabel,
   catalogJobSummary,
   groupToolCards,
+  compareToolPrices,
+  capabilityFromPrice,
   type ToolCardViewModel,
 } from "@/modules/market/tool-view-model";
 
@@ -157,3 +159,29 @@ function card(
     ...overrides,
   };
 }
+
+
+describe("exact Tool price comparison", () => {
+  it("orders sub-cent and multi-dollar amounts numerically, with unknown prices last", () => {
+    const tools = [
+      card({ price: "About A$10.00", priceAmount: { currency: "AUD", exponent: 6, units: "10000000" } }),
+      card({ price: "Price on request" }),
+      card({ price: "About A$0.000001", priceAmount: { currency: "AUD", exponent: 6, units: "1" } }),
+      card({ price: "About A$2.00", priceAmount: { currency: "AUD", exponent: 2, units: "200" } }),
+    ];
+    expect([...tools].sort(compareToolPrices).map((tool) => tool.price)).toEqual([
+      "About A$0.000001", "About A$2.00", "About A$10.00", "Price on request",
+    ]);
+    expect(capabilityFromPrice(tools)).toBe("from About A$0.000001");
+  });
+  it("does not compare unrelated currencies or use expired estimates", () => {
+    expect(capabilityFromPrice([
+      card({ price: "AUD 1", priceAmount: { currency: "AUD", exponent: 0, units: "1" } }),
+      card({ price: "USD 1", priceAmount: { currency: "USD", exponent: 0, units: "1" } }),
+    ])).toBe("Prices vary");
+    expect(compareToolPrices(
+      card({ priceAmount: { currency: "AUD", exponent: 6, units: "1" }, priceValidUntil: 1 }),
+      card({ priceAmount: { currency: "AUD", exponent: 6, units: "2000000" } }),
+    )).toBe(1);
+  });
+});

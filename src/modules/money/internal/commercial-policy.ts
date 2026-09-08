@@ -35,6 +35,7 @@ export type CommercialPolicyControl =
   | Readonly<{
       family: 'tax'
       serviceFeeTaxBps: number
+      callTaxBps?: number
       taxInvoiceIssuance: 'disabled_pending_approval' | 'enabled'
     }>
   | Readonly<{
@@ -97,6 +98,7 @@ export const SANDBOX_COMMERCIAL_POLICY_CONTROLS: CommercialPolicyControls = Obje
   tax: Object.freeze({
     family: 'tax',
     serviceFeeTaxBps: 1_000,
+    callTaxBps: 0,
     taxInvoiceIssuance: 'disabled_pending_approval',
   }),
   accounting_client_money: Object.freeze({
@@ -330,6 +332,7 @@ export function validCommercialPolicyControl(control: CommercialPolicyControl): 
         && control.customerCryptoEntitlement === false
     case 'tax':
       return validBasisPoints(control.serviceFeeTaxBps)
+        && (control.callTaxBps === undefined || validBasisPoints(control.callTaxBps))
         && (control.taxInvoiceIssuance === 'disabled_pending_approval'
           || control.taxInvoiceIssuance === 'enabled')
     case 'accounting_client_money': {

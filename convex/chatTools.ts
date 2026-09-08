@@ -239,9 +239,10 @@ export function createChatAgent(
         const denied = reserve('registry.tools.list')
         if (denied !== null) return denied
         const filters = operationSourceFilters(data.filters)
-        const result = await ctx.runQuery(api.capabilitySupplyTools.search, {
+        const result = await ctx.runAction(api.capabilityToolCatalog.search, {
           query: '',
           limit: data.limit,
+          ...(data.source === undefined ? {} : { source: data.source }),
           ...(data.cursor === undefined ? {} : { cursor: data.cursor }),
           ...(filters === undefined ? {} : { filters }),
         })
@@ -260,11 +261,12 @@ export function createChatAgent(
         const denied = reserve('registry.tools.search')
         if (denied !== null) return denied
         const filters = operationSourceFilters(data.filters)
-        const result = await ctx.runQuery(
-          api.capabilitySupplyTools.search,
+        const result = await ctx.runAction(
+          api.capabilityToolCatalog.search,
           {
             query: data.query,
             limit: data.limit,
+            ...(data.source === undefined ? {} : { source: data.source }),
             ...(data.cursor === undefined ? {} : { cursor: data.cursor }),
             ...(filters === undefined ? {} : { filters }),
           },
@@ -282,7 +284,7 @@ export function createChatAgent(
       execute: async (ctx: ToolCtx, input: ToolDetailInput) => {
         const denied = reserve('registry.tools.describe')
         if (denied !== null) return denied
-        const result = await ctx.runQuery(api.capabilitySupplyTools.detail, input)
+        const result = await ctx.runAction(api.capabilityToolCatalog.detail, input)
         return projectedModelFacingOutput(
           'registry.tools.describe',
           describeContract.outputSchema,
@@ -296,9 +298,9 @@ export function createChatAgent(
       execute: async (ctx: ToolCtx, input: ToolCompareInput) => {
         const denied = reserve('registry.tools.compare')
         if (denied !== null) return denied
-        const result = await ctx.runQuery(
-          api.capabilitySupplyTools.compare,
-          structuredClone(input) as FunctionArgs<typeof api.capabilitySupplyTools.compare>,
+        const result = await ctx.runAction(
+          api.capabilityToolCatalog.compare,
+          structuredClone(input) as FunctionArgs<typeof api.capabilityToolCatalog.compare>,
         )
         return projectedModelFacingOutput(
           'registry.tools.compare',

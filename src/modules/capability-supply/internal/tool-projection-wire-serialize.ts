@@ -80,7 +80,7 @@ export function serializeToolDescriptor(
     },
     summary: tool.summary,
     commercial: {
-      price: serializePrice(tool.commercial.price),
+      ...(tool.commercial.displayPrice === undefined ? {} : { displayPrice: structuredClone(tool.commercial.displayPrice) }),      price: serializePrice(tool.commercial.price),
       ...(tool.commercial.priceEvidence === undefined
         ? {}
         : {
@@ -229,7 +229,8 @@ export function serializeToolSearchResult(
       schemaVersion: result.schemaVersion,
       query: result.query,
       items: result.items.map(serializeToolDescriptor),
-      matchedCount: result.matchedCount,
+      ...(result.partialResults === undefined ? {} : { partialResults: result.partialResults }),
+      ...(result.matchedCount === undefined ? {} : { matchedCount: result.matchedCount }),
       ranking: result.ranking.map((entry) => ({
         toolRef: entry.toolRef,
         rank: entry.rank,
@@ -251,7 +252,8 @@ export function serializeToolSearchResult(
       schemaVersion: result.schemaVersion,
       query: result.query,
       appliedFilters: serializeSearchFilters(result.appliedFilters),
-      matchedCount: result.matchedCount,
+      ...(result.partialResults === undefined ? {} : { partialResults: result.partialResults }),
+      ...(result.matchedCount === undefined ? {} : { matchedCount: result.matchedCount }),
       ranking: result.ranking.map((entry) => ({
         toolRef: entry.toolRef,
         rank: entry.rank,
@@ -547,6 +549,7 @@ function isPublicAvailability(
   return (
     value.reason === undefined ||
     value.reason === "setup_required" ||
+    value.reason === "inspection_required" ||
     value.reason === "temporarily_unavailable" ||
     value.reason === "readiness_expired" ||
     value.reason === "publisher_withdrew" ||

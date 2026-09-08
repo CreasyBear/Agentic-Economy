@@ -126,6 +126,104 @@ describe.runIf(integrationEnabled)('Package 4 real Formance boundary', () => {
     })
   })
 
+  it('settles zero-tax Calls with the existing template and conserves balances on release and replay', async () => {
+    const runDigest = digest(`managed-zero-tax:${Date.now()}:${process.pid}`)
+    const context = createFormanceContext({
+      environment: 'sandbox',
+      gatewayUrl: process.env.AE_FORMANCE_GATEWAY_URL ?? 'http://127.0.0.1:8080',
+      ledger: `ae-zero-tax-${runDigest.slice(0, 16)}`,
+      requestTimeoutMs: 10_000,
+    })
+    expect(await installPackage4FormanceSchema(context)).toMatchObject({ kind: 'completed' })
+    const policyDigest = `sha256:${digest('zero-call-tax-policy')}`
+    const externalEvidenceDigest = `sha256:${digest('zero-tax-sandbox-evidence')}`
+    const booking = {
+      ...managedCallBooking(0, policyDigest),
+      buyerAmountUnits: '3000000',
+      buyerRevenueUnits: '3000000',
+      buyerTaxUnits: '0',
+      providerAmountUnits: '2000000',
+    }
+    expect(await bookFormanceFundingSettlement(context, {
+      commandRef: 'zero-tax:funding',
+      idempotencyKey: 'zero-tax:funding',
+      accountRef: booking.accountRef,
+      processorRef: 'stripe:zero-tax-sandbox',
+      principalUnits: '100000000',
+      serviceFeeUnits: '5000000',
+      taxUnits: '500000',
+      totalUnits: '105500000',
+      policyDigest,
+      externalEvidenceDigest,
+    })).toMatchObject({ kind: 'completed', replayed: false })
+    for (const capacity of [
+      { kind: 'agent_budget' as const, subjectRef: booking.principalRef, targetUnits: '100000000' },
+      { kind: 'legal_customer_exposure' as const, subjectRef: booking.legalCustomerRef, targetUnits: '100000000' },
+      { kind: 'treasury_usdc' as const, subjectRef: booking.treasuryRef, targetUnits: '10000000' },
+    ]) {
+      expect(await syncFormanceCapacity(context, {
+        commandRef: `zero-tax:capacity:${capacity.kind}`,
+        idempotencyKey: `zero-tax:capacity:${capacity.kind}`,
+        ...capacity,
+        generation: 1,
+        policyDigest,
+        externalEvidenceDigest,
+      })).toMatchObject({ kind: 'completed' })
+    }
+    const gstBefore = await readFormanceAccount(context, 'platform:tax:gst')
+    expect(gstBefore).toMatchObject({ kind: 'completed', volumes: { 'AUD/6': { balanceUnits: '500000' } } })
+    expect(await readFormanceDisplayBalance(context, {
+      balanceKind: 'account_aud', subjectRef: booking.accountRef, now: Date.now(),
+    })).toMatchObject({ kind: 'available', units: '100000000' })
+
+    expect(await reserveFormanceManagedCall(context, booking)).toMatchObject({ kind: 'completed', replayed: false })
+    expect(await reserveFormanceManagedCall(context, booking)).toMatchObject({ kind: 'completed', replayed: true })
+    const settlementInput = { booking, externalEvidenceDigest }
+    const settled = await settleFormanceManagedCall(context, settlementInput)
+    expect(settled).toMatchObject({ kind: 'completed', replayed: false })
+    if (settled.kind !== 'completed' || settled.transactionRefs[0] === undefined) {
+      throw new Error('Zero-tax buyer settlement reference missing')
+    }
+    expect(await readFormanceTransactionByReference(context, settled.transactionRefs[0]))
+      .toMatchObject({ kind: 'found', template: 'BUYER_SALE_SETTLED' })
+    expect(await settleFormanceManagedCall(context, settlementInput)).toMatchObject({ kind: 'completed', replayed: true })
+    expect(await readFormanceAccount(context, 'platform:revenue:sales'))
+      .toMatchObject({ kind: 'completed', volumes: { 'AUD/6': { balanceUnits: '8000000' } } })
+    // Loading GST remains; neither the zero posting nor its replay changes its volumes.
+    expect(await readFormanceAccount(context, 'platform:tax:gst')).toEqual(gstBefore)
+
+    const releasedBooking = {
+      ...managedCallBooking(1, policyDigest),
+      buyerAmountUnits: booking.buyerAmountUnits,
+      buyerRevenueUnits: booking.buyerRevenueUnits,
+      buyerTaxUnits: '0',
+      providerAmountUnits: booking.providerAmountUnits,
+    }
+    expect(await reserveFormanceManagedCall(context, releasedBooking)).toMatchObject({ kind: 'completed', replayed: false })
+    const releaseInput = { booking: releasedBooking, externalEvidenceDigest, submissionProvenAbsent: true as const }
+    expect(await releaseFormanceManagedCall(context, releaseInput)).toMatchObject({ kind: 'completed', replayed: false })
+    expect(await releaseFormanceManagedCall(context, releaseInput)).toMatchObject({ kind: 'completed', replayed: true })
+    for (const balance of [
+      { balanceKind: 'account_aud' as const, subjectRef: booking.accountRef, units: '97000000' },
+      { balanceKind: 'agent_budget' as const, subjectRef: booking.principalRef, generation: 1, units: '97000000' },
+      { balanceKind: 'legal_customer_exposure' as const, subjectRef: booking.legalCustomerRef, generation: 1, units: '97000000' },
+      { balanceKind: 'treasury_usdc' as const, subjectRef: booking.treasuryRef, generation: 1, units: '8000000' },
+    ]) {
+      const { units, ...query } = balance
+      expect(await readFormanceDisplayBalance(context, { ...query, now: Date.now() }))
+        .toMatchObject({ kind: 'available', units })
+    }
+    for (const call of [booking, releasedBooking]) {
+      expect(await readFormanceAccount(context, `calls:${accountSegmentDigest('call', call.callRef)}:buyer_reserved`))
+        .toMatchObject({ kind: 'completed', volumes: { 'AUD/6': { balanceUnits: '0' } } })
+    }
+    expect(await readFormanceAccount(context, `providers:${accountSegmentDigest('provider', booking.providerRef)}:settlement`))
+      .toMatchObject({ kind: 'completed', volumes: { 'USDC/6': { balanceUnits: '2000000' } } })
+    expect(await readFormanceAccount(context, 'platform:tax:gst')).toEqual(gstBefore)
+    expect(await readFormanceAccount(context, 'platform:revenue:sales'))
+      .toMatchObject({ kind: 'completed', volumes: { 'AUD/6': { balanceUnits: '8000000' } } })
+  })
+
   it('refuses schema drift before a transaction can be submitted', async () => {
     const runDigest = digest(`package4-pr2-drift:${Date.now()}:${process.pid}`)
     const context = createFormanceContext({

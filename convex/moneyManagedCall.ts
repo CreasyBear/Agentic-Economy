@@ -3,7 +3,7 @@ import { v } from 'convex/values'
 import type { Doc } from './_generated/dataModel'
 import { internalMutation, internalQuery, type MutationCtx } from './_generated/server'
 import { canonicalDigest } from '../src/modules/common/canonical-digest'
-import { PACKAGE4_FORMANCE_REQUIREMENTS } from '../src/modules/money/public'
+import { PACKAGE4_FORMANCE_REQUIREMENTS, validateExecutableRateEvidenceIntegrity, type ExecutableRateEvidence } from '../src/modules/money/public'
 import { parsePublishedToolSnapshot } from '../src/modules/capability-supply/public'
 
 const transactionRefsValue = v.array(v.string())
@@ -51,6 +51,13 @@ function bookingFromRows(
     || quote.treasuryCustodyRef === undefined
     || quote.treasuryCustodyGeneration === undefined
     || quote.treasuryEvidenceDigest === undefined) return null
+  try {
+    const rate = JSON.parse(quote.rateEvidenceJson ?? 'null') as ExecutableRateEvidence
+    if (rate === null || !validateExecutableRateEvidenceIntegrity(rate)
+      || rate.evidenceDigest !== quote.rateEvidenceDigest
+      || rate.sourceAmount.units !== quote.decisionAudUnits
+      || (rate.version === 'ae.managed-reference-price:v1' && rate.targetAmount.units !== quote.sourceUsdcUnits)) return null
+  } catch { return null }
   return {
     callRef: call.callRef,
     quoteRef: quote.quoteRef,

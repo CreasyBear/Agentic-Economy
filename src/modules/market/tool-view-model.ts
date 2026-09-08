@@ -1,6 +1,8 @@
 import {
   formatCurrencyAmount,
   formatExactAmount,
+  formatDisplayPrice,
+  type ExactAmount,
 } from "@/modules/money/public";
 import type {
   PublicToolAuthentication,
@@ -31,6 +33,8 @@ export type ToolCardViewModel = Readonly<{
   capability: string;
   category: MarketCategory;
   price: string;
+  priceAmount?: ExactAmount;
+  priceValidUntil?: number;
   authentication: string;
   paymentNetwork?: string;
   lastVerifiedAt?: number;
@@ -102,13 +106,15 @@ export function toToolCardViewModel(
     capability,
     category: evidence.category,
     price: toolPrice(tool),
+    ...(toolPriceAmount(tool) === undefined ? {} : { priceAmount: toolPriceAmount(tool)! }),
+    ...(tool.commercial.displayPrice?.kind === "indicative" ? { priceValidUntil: tool.commercial.displayPrice.validUntil } : {}),
     authentication: formatToolAuthentication(tool.authentication),
     ...(tool.payment === undefined ? {} : { paymentNetwork: formatPaymentNetwork(tool.payment.network) }),
     ...(lastVerifiedAt === undefined ? {} : { lastVerifiedAt }),
-    callLabel: toolCallLabel(readiness),
+    callLabel: tool.availability.reason === "inspection_required" ? "Get a Quote" : toolCallLabel(readiness),
     readiness,
-    readinessLabel: readinessLabels[readiness],
-    trustFact: readinessFacts[readiness],
+    readinessLabel: tool.availability.reason === "inspection_required" ? "Checked when quoting" : readinessLabels[readiness],
+    trustFact: tool.availability.reason === "inspection_required" ? "Availability and exact price are checked for your request" : readinessFacts[readiness],
     rating: evidence.rating,
     popularity: evidence.popularity,
     latency: evidence.latency,
@@ -160,21 +166,14 @@ export function groupCapabilitiesByCategory(
 export function capabilityFromPrice(
   tools: readonly ToolCardViewModel[],
 ): string {
-  const prices = [...new Set(tools.map((tool) => tool.price))];
-  if (prices.length === 0) return "Price on request";
-  if (prices.includes("Free")) {
-    return prices.every(
-      (price) => price === "Free" || price === "Price on request",
-    ) && !prices.includes("Price on request")
-      ? "Free"
-      : "from Free";
-  }
-  const comparable = prices.filter((price) => price !== "Price on request");
-  const floor = [...comparable].sort((left, right) =>
-    left.localeCompare(right, undefined, { numeric: true }),
-  )[0];
-  if (floor === undefined) return "Price on request";
-  return `from ${floor}`;
+  const priced = tools.filter((tool) => tool.priceAmount !== undefined
+    && (tool.priceValidUntil === undefined || tool.priceValidUntil > Date.now()));
+  if (priced.length === 0) return tools.some((tool) => tool.priceValidUntil !== undefined && tool.priceValidUntil <= Date.now())
+    ? "AUD estimate temporarily unavailable" : tools[0]?.price ?? "Price on request";
+  if (new Set(priced.map((tool) => tool.priceAmount!.currency)).size > 1) return "Prices vary";
+  const floor = [...priced].sort(compareToolPrices)[0]!;
+  return priced.length === tools.length && tools.every((tool) => tool.price === floor.price)
+    ? floor.price : `from ${floor.price}`;
 }
 
 const marketFallbackCategory: MarketCategory = {
@@ -204,20 +203,43 @@ export function formatToolAuthentication(
   authentication: PublicToolAuthentication,
 ): string {
   if (authentication.kind === "ae_api_key") return "AE account invocation";
-  if (authentication.kind === "x402") return "x402 payment";
+  if (authentication.kind === "x402") return "Uses your AE balance";
   if (authentication.kind === "platform_credential") {
     return authentication.scheme === "bearer" ? "Bearer connection" : "API key connection";
   }
   return "Check access";
 }
 
-function toolPrice(tool: PublicToolDescriptor): string {
+export function toolPrice(tool: PublicToolDescriptor, now = Date.now()): string {
+  const display = formatDisplayPrice(tool.commercial.displayPrice, now);
+  if (display !== undefined) return display;
   if (tool.commercial.priceBreakdown !== undefined) {
     return exactIsZero(tool.commercial.priceBreakdown.totalBuyerAuthorization)
       ? "Free"
       : formatCurrencyAmount(tool.commercial.priceBreakdown.totalBuyerAuthorization);
   }
   return formatToolPrice(tool.commercial.price);
+}
+
+function toolPriceAmount(tool: PublicToolDescriptor): ExactAmount | undefined {
+  const display = tool.commercial.displayPrice;
+  if (display !== undefined) return display.kind === "indicative" && display.validUntil > Date.now()
+    ? display.amount : undefined;
+  if (tool.commercial.priceBreakdown !== undefined) return tool.commercial.priceBreakdown.totalBuyerAuthorization;
+  return tool.commercial.price.kind === "fixed" ? tool.commercial.price.amount
+    : tool.commercial.price.kind === "range" ? tool.commercial.price.minimum : undefined;
+}
+
+/** Compare exact quantities, never their formatted labels. Unknown prices sort last. */
+export function compareToolPrices(left: ToolCardViewModel, right: ToolCardViewModel): number {
+  const a = left.priceValidUntil !== undefined && left.priceValidUntil <= Date.now() ? undefined : left.priceAmount;
+  const b = right.priceValidUntil !== undefined && right.priceValidUntil <= Date.now() ? undefined : right.priceAmount;
+  if (a === undefined || b === undefined) return a === b ? 0 : a === undefined ? 1 : -1;
+  if (a.currency !== b.currency) return a.currency.localeCompare(b.currency);
+  const exponent = Math.max(a.exponent, b.exponent);
+  const au = BigInt(a.units) * 10n ** BigInt(exponent - a.exponent);
+  const bu = BigInt(b.units) * 10n ** BigInt(exponent - b.exponent);
+  return au < bu ? -1 : au > bu ? 1 : 0;
 }
 
 function toolCallLabel(readiness: ToolReadiness): string {

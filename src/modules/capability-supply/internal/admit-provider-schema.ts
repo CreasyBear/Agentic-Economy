@@ -119,12 +119,20 @@ export async function admitProviderSchema(
 
   return {
     kind: "normalized",
-    inputSchema: boundedInput,
-    outputSchema: outputPlan.outputSchema,
+    inputSchema: withDefaultSchemaDialect(boundedInput),
+    outputSchema: withDefaultSchemaDialect(outputPlan.outputSchema),
     contract,
     authority: input.authority,
     strippedParameters,
   };
+}
+
+function withDefaultSchemaDialect(schema: SchemaRecord): SchemaRecord {
+  // Provider schemas commonly omit the dialect. Keep explicit declarations so
+  // the canonical validator can still reject incompatible schemas.
+  return schema.$schema === undefined
+    ? { ...schema, $schema: "https://json-schema.org/draft/2020-12/schema" }
+    : schema;
 }
 
 // --- $ref / allOf / oneOf / anyOf dereferencing -----------------------------------------------
@@ -260,9 +268,6 @@ function planOutputEvidence(outputSchema: SchemaRecord): OutputPlan {
   const firstGuaranteed = firstGuaranteedOutputPointer(outputSchema);
   if (firstGuaranteed !== undefined) {
     return { kind: "ok", outputSchema, evidencePointer: firstGuaranteed };
-  }
-  if (outputSchema.type !== "object") {
-    return { kind: "refused", reason: "admit_output_no_guaranteed_field" };
   }
   // RFC 6901 names the whole document with the empty pointer. Preserve the
   // provider's raw dynamic-keyed object and ground completion in that root;

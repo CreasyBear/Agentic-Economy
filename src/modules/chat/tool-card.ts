@@ -1,5 +1,6 @@
 import { providerSafeActionToolName } from '@/modules/actions/tool-contract'
 import { isRecord } from '@/modules/common/is-record'
+import { publicToolDisplayPriceSchema } from '@/modules/capability-supply/tool-schemas'
 import { isPublicToolRef } from '@/modules/capability-supply/public'
 import type {
   PublicToolAuthentication,
@@ -24,7 +25,7 @@ import {
   suggestNextAction,
   type SuggestedNextAction,
 } from '@/modules/market/suggested-next-action'
-import { formatCurrencyAmount, readExactAmount } from '@/modules/money/public'
+import { formatCurrencyAmount, readExactAmount, formatDisplayPrice } from '@/modules/money/public'
 
 export const CHAT_TOOL_IDS = [
   'registry.tools.list',
@@ -64,6 +65,7 @@ export type ToolChoiceRow = Readonly<{
   title: string
   provider?: string
   price?: string
+  priceValidUntil?: number
   readiness?: string
   access?: string
 }>
@@ -225,7 +227,8 @@ function rowFromChoiceFields(value: unknown): ToolChoiceRow | null {
   const title = stringField(value.title)
   if (toolRef === undefined || title === undefined) return null
   const provider = isRecord(value.provider) ? stringField(value.provider.name) : undefined
-  const price = stringField(value.priceLabel)
+  const display = publicToolDisplayPriceSchema.safeParse(value.displayPrice)
+  const price = (display.success ? formatDisplayPrice(display.data) : undefined) ?? stringField(value.priceLabel)
   const healthStatus = stringField(value.healthStatus)
   const readiness = healthStatus === 'operational'
     ? 'Operational'
@@ -240,6 +243,7 @@ function rowFromChoiceFields(value: unknown): ToolChoiceRow | null {
     title,
     ...(provider === undefined ? {} : { provider }),
     ...(price === undefined ? {} : { price }),
+    ...(display.success && display.data.kind === 'indicative' ? { priceValidUntil: display.data.validUntil } : {}),
     ...(readiness === undefined ? {} : { readiness }),
     ...(authentication === undefined ? {} : { access: formatToolAuthentication(authentication) }),
   }
@@ -258,14 +262,17 @@ function rowFromDescriptorFields(value: unknown): ToolChoiceRow | null {
       ? stringField(value.business.name)
       : undefined
   const price = isRecord(value.commercial) ? readPrice(value.commercial.price) : undefined
+  const display = publicToolDisplayPriceSchema.safeParse(isRecord(value.commercial) ? value.commercial.displayPrice : undefined)
+  const priceLabel = (display.success ? formatDisplayPrice(display.data) : undefined) ?? (price === undefined ? undefined : formatToolPrice(price))
   const posture = readPosture(value.availability)
   const authentication = readAuthentication(value.authentication)
   return {
     toolRef,
     title,
     ...(provider === undefined ? {} : { provider }),
-    ...(price === undefined ? {} : { price: formatToolPrice(price) }),
-    ...(posture === undefined ? {} : { readiness: formatToolReadiness(posture) }),
+    ...(priceLabel === undefined ? {} : { price: priceLabel }),
+    ...(display.success && display.data.kind === 'indicative' ? { priceValidUntil: display.data.validUntil } : {}),
+    ...(posture === undefined ? {} : { readiness: isRecord(value.availability) && value.availability.reason === 'inspection_required' ? 'Checked when quoting' : formatToolReadiness(posture) }),
     ...(authentication === undefined ? {} : { access: formatToolAuthentication(authentication) }),
   }
 }

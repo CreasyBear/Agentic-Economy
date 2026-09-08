@@ -1,5 +1,6 @@
+import { canonicalDigest } from '@/modules/common/canonical-digest';
 import { isRecord } from "@/modules/common/is-record";
-import type { ExactAmount } from "@/modules/money/public";
+import { formatCurrencyAmount, type ExactAmount } from "@/modules/money/public";
 
 import type { BazaarAdmission } from "./publication-importer-x402-bazaar";
 import type {
@@ -40,8 +41,7 @@ export const FACILITATOR_DISCOVERY_MAX_ACCEPTS = 20 as const;
 
 export const FACILITATOR_DISCOVERY_EVIDENCE_REF = "source:facilitator-discovery";
 const MAX_ATOMIC_DIGITS = 78;
-const FEE_BPS = 1_000n;
-const BPS_DENOMINATOR = 10_000n;
+
 
 export type FacilitatorDiscoverySkipReason =
   | "bazaar_missing"
@@ -65,13 +65,13 @@ export type FacilitatorDiscoveryPriceBreakdown = Readonly<{
   provider: ExactAmount;
   platformFee: ExactAmount;
   total: ExactAmount;
-  feeBps: 1_000;
+  feeBps: 0;
 }>;
 
 export type FacilitatorDiscoveryAdmitCandidate = Readonly<{
   kind: "admit";
   import: Extract<CapabilityPublicationImport, { kind: "x402" }>;
-  identity: Readonly<{ method: "GET" | "POST"; origin: string; path: string }>;
+  identity: DiscoveryHttpIdentity;
   price: FacilitatorDiscoveryPriceBreakdown;
 }>;
 
@@ -99,6 +99,8 @@ export type FacilitatorDiscoveryAdmittedDraft = Readonly<
     execution: Readonly<{
         endpoint: Readonly<{ url: string }>;
         method: "GET" | "POST";
+        bodyPointer?: "/body";
+        queryObjectPointer?: "/query";
         query?: Readonly<{
           inputPointer: string;
           parameter: string;
@@ -166,9 +168,9 @@ export function decideFacilitatorDiscoveryItem(
   if (accept.kind === "refused") return { kind: "skip", reason: accept.reason };
   const price = priceBreakdown(accept.amount, accept.assetExponent);
   if (price === undefined) return { kind: "skip", reason: "amount_invalid" };
-  const identity = normalizedHttpIdentity(endpoint, bazaar.method);
+  const identity = normalizedHttpIdentity(endpoint, bazaar.method, accept.network, accept.asset);
   const providerPrice: ExactAmount = {
-    currency: "USD",
+    currency: "USDC",
     units: accept.amount,
     exponent: accept.assetExponent,
   };
@@ -192,19 +194,28 @@ export function decideFacilitatorDiscoveryItem(
       inputSchema: bazaar.inputSchema,
       outputSchema: bazaar.outputSchema,
       ...(bazaar.query === undefined ? {} : { query: bazaar.query }),
+      ...(bazaar.path === undefined ? {} : { path: bazaar.path }),
+      ...(bazaar.pathTemplate === undefined ? {} : { pathTemplate: bazaar.pathTemplate }),
+      ...(bazaar.bodyPointer === undefined ? {} : { bodyPointer: bazaar.bodyPointer }),
+      ...(bazaar.queryObjectPointer === undefined ? {} : { queryObjectPointer: bazaar.queryObjectPointer }),
     },
     contract: {
       capabilityId,
       version: 1,
       name: offeringLabel,
       description: offeringSummary,
-      inputExamples: [{
-        label: "Provider example",
-        input: bazaar.inputExample,
+      inputExamples: bazaar.inputExample === undefined ? [] : [{
+        label: "Provider example", input: bazaar.inputExample,
       }],
       customerAnnotations: [],
-      dataUse: [],
-      effects: [],
+      dataUse: Object.keys(bazaar.inputSchema.properties ?? {}).map((name) => ({
+        effectId: "provider_data_use", inputPointer: `/${name.replace(/~/g, "~0").replace(/\//g, "~1")}`,
+        classification: "public" as const, phase: "preparation" as const,
+        recipient: { kind: "selected_binding" as const }, purposes: ["Perform the requested Tool"],
+      })),
+      effects: Object.keys(bazaar.inputSchema.properties ?? {}).length === 0 ? [] : [{
+        effectId: "provider_data_use", class: "data_release", authority: "explicit", reversibility: "not_applicable",
+      }],
       evidence: [],
       lifecycle: { idempotency: "required", recovery: "reconcile_required" },
     },
@@ -357,13 +368,13 @@ function priceBreakdown(amount: string, exponent: number): FacilitatorDiscoveryP
   if (!/^[1-9][0-9]*$/.test(amount) || amount.length > MAX_ATOMIC_DIGITS) return undefined;
   try {
     const providerUnits = BigInt(amount);
-    const feeUnits = (providerUnits * FEE_BPS + BPS_DENOMINATOR - 1n) / BPS_DENOMINATOR;
+    const feeUnits = 0n;
     const provider = exactAtomicAmount(providerUnits, exponent);
     const platformFee = exactAtomicAmount(feeUnits, exponent);
     const total = exactAtomicAmount(providerUnits + feeUnits, exponent);
     return provider === undefined || platformFee === undefined || total === undefined
       ? undefined
-      : { provider, platformFee, total, feeBps: 1_000 };
+      : { provider, platformFee, total, feeBps: 0 };
   } catch {
     return undefined;
   }
@@ -373,7 +384,7 @@ function exactAtomicAmount(units: bigint, exponent: number): ExactAmount | undef
   const value = units.toString();
   return value.length > MAX_ATOMIC_DIGITS
     ? undefined
-    : { currency: "USD", units: value, exponent };
+    : { currency: "USDC", units: value, exponent };
 }
 
 export function admittedFacilitatorDiscoveryDraft(
@@ -383,9 +394,8 @@ export function admittedFacilitatorDiscoveryDraft(
 ): FacilitatorDiscoveryAdmittedDraft {
   const materialTerms = [
     ...normalized.offering.presentation.materialTerms,
-    { termId: "provider-amount", label: "Provider quote", value: `${decision.price.provider.units} atomic USDC units (exponent 6)` },
-    { termId: "platform-fee", label: "Platform fee", value: `${decision.price.platformFee.units} atomic USDC units (1000 bps)` },
-    { termId: "buyer-total", label: "Buyer total", value: `${decision.price.total.units} atomic USDC units` },
+    { termId: "provider-amount", label: "Listed Provider amount", value: formatCurrencyAmount(decision.price.provider) },
+    { termId: "buyer-total", label: "Buyer total", value: "Confirmed in AUD by a binding Quote for your input." },
   ].slice(0, 64);
   const offering: FacilitatorDiscoveryAdmittedDraft["offering"] = {
     ...normalized.offering,
@@ -408,8 +418,10 @@ export function admittedFacilitatorDiscoveryDraft(
     offering,
     binding,
     execution: {
-      endpoint: { url: decision.identity.origin + decision.identity.path },
+      endpoint: { url: decision.identity.resourceUrl },
       method: decision.identity.method,
+      ...(config.bodyPointer === undefined ? {} : { bodyPointer: config.bodyPointer }),
+      ...(config.queryObjectPointer === undefined ? {} : { queryObjectPointer: config.queryObjectPointer }),
       ...(query === undefined ? {} : { query }),
     },
     price: decision.price,
@@ -418,16 +430,16 @@ export function admittedFacilitatorDiscoveryDraft(
   };
 }
 
-function normalizedHttpIdentity(
-  endpoint: string,
-  method: "GET" | "POST",
-): Readonly<{ method: "GET" | "POST"; origin: string; path: string }> {
+type DiscoveryHttpIdentity = Readonly<{
+  method: "GET" | "POST"; origin: string; path: string; resourceUrl: string; network: string; asset: string;
+}>;
+function normalizedHttpIdentity(endpoint: string, method: "GET" | "POST", network: string, asset: string): DiscoveryHttpIdentity {
   const parsed = new URL(endpoint);
-  return { method, origin: parsed.origin, path: parsed.pathname || "/" };
+  return { method, origin: parsed.origin, path: parsed.pathname || "/", resourceUrl: parsed.href, network, asset: asset.toLowerCase() };
 }
 
 function capabilityIdFromIdentity(
-  identity: Readonly<{ method: "GET" | "POST"; origin: string; path: string }>,
+  identity: DiscoveryHttpIdentity,
 ): string {
   const host = new URL(identity.origin).hostname
     .replace(/^www\./u, "")
@@ -436,13 +448,13 @@ function capabilityIdFromIdentity(
     .toLowerCase();
   const path = identity.path.replace(/^\//u, "").replace(/[^a-z0-9]+/giu, "-")
     .replace(/^-|-$/gu, "").toLowerCase();
-  return `${identity.method.toLowerCase()}.${host || "endpoint"}.${path || "root"}`.slice(0, 190);
+  return `${`${identity.method.toLowerCase()}.${host || "endpoint"}.${path || "root"}`.slice(0, 115)}.${canonicalDigest({ method: identity.method, url: identity.resourceUrl, network: identity.network, asset: identity.asset }).slice(7)}`;
 }
 
 function admittedResourceUrl(resourceUrl: string): string | undefined {
   const parsed = validPublicHttpsEndpoint(resourceUrl);
   if (parsed === undefined || parsed.hash !== "") return undefined;
-  return `${parsed.origin}${parsed.pathname || "/"}`;
+  return parsed.href;
 }
 
 function boundedResourceText(value: unknown, maximum: number): string | undefined {
@@ -522,7 +534,7 @@ function discoveryOfferingLabel(
 }
 
 function humanizeDiscoveryCapabilityId(capabilityId: string): string {
-  const path = capabilityId.split(".").slice(2).join("-");
+  const path = capabilityId.replace(/\.[a-f0-9]{64}$/, "").split(".").slice(2).join("-");
   const tokens = path
     .split(/[-_]+/u)
     .map((token) => token.trim().toLowerCase())

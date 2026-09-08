@@ -45,6 +45,7 @@ export type ToolSurfaceWireDescriptor = {
   summary: string;
   commercial: {
     price: DeepWritable<PublicToolPrice>;
+    displayPrice?: DeepWritable<NonNullable<PublicCommercialTerms["displayPrice"]>>;
     priceEvidence?: DeepWritable<
       NonNullable<PublicCommercialTerms["priceEvidence"]>
     >;
@@ -93,7 +94,8 @@ export type ToolSearchWireResult =
       schemaVersion: PublicToolRegistrySchemaVersion;
       query: string;
       items: ToolSurfaceWireDescriptor[];
-      matchedCount: number;
+      matchedCount?: number;
+      partialResults?: boolean;
       ranking: DeepWritable<ToolSearchRanking>[];
       pagination: { limit: number; nextCursor?: string; hasMore: boolean };
       navigation: ToolSurfaceWireNavigation[];
@@ -103,7 +105,8 @@ export type ToolSearchWireResult =
       schemaVersion: PublicToolRegistrySchemaVersion;
       query: string;
       appliedFilters: ToolSearchWireFilters;
-      matchedCount: number;
+      matchedCount?: number;
+      partialResults?: boolean;
       ranking: DeepWritable<ToolSearchRanking>[];
       navigation: ToolSurfaceWireNavigation[];
     }

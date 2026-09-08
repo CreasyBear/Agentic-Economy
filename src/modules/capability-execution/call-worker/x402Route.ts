@@ -187,12 +187,14 @@ export function routeInvocation(
   readinessDigest: string,
   connectionAuthority: ConnectionAuthority | undefined,
   paymentMaximumSpend?: ExactAmount,
+  committedPaymentRequiredJson?: string,
 ): RouteTransportInvocation {
   const inputJson = JSON.stringify(input)
   if (baseBinding.authority.kind === 'public_upstream') {
     return {
       binding: baseBinding as KeylessRouteBinding,
       inputJson,
+      ...(committedPaymentRequiredJson === undefined ? {} : { committedPaymentRequiredJson }),
       authority: common,
     } as KeylessRouteInvocation
   }
@@ -203,6 +205,7 @@ export function routeInvocation(
     return {
       binding: baseBinding as ProviderRouteBinding,
       inputJson,
+      ...(committedPaymentRequiredJson === undefined ? {} : { committedPaymentRequiredJson }),
       authority: {
         ...common,
         ...(paymentMaximumSpend === undefined ? {} : { maximumSpend: paymentMaximumSpend }),
@@ -214,6 +217,7 @@ export function routeInvocation(
   return {
     binding: baseBinding as ProviderRouteBinding,
     inputJson,
+    ...(committedPaymentRequiredJson === undefined ? {} : { committedPaymentRequiredJson }),
     authority: {
       ...common,
       authorityGeneration: leaseAuthority.authorityGeneration,

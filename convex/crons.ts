@@ -13,12 +13,8 @@ crons.interval(
   {},
 )
 
-crons.interval(
-  'refresh facilitator discovery',
-  { hours: 12 },
-  internal.workloadCron.refreshFacilitatorDiscovery,
-  {},
-)
+// Bazaar pages are admitted on demand through capabilityToolCatalog.
+
 
 crons.interval(
   'refresh Agentic Market snapshots',

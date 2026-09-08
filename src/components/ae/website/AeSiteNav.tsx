@@ -13,7 +13,7 @@ export function AeSitePrimaryNav() {
   const { pathname } = useLocation()
 
   return (
-    <nav aria-label="Primary" className="hidden items-center md:flex">
+    <nav aria-label="Primary" className="hidden items-center lg:flex">
       {publicPrimaryNavItems.map((item, index) => (
         <Fragment key={item.to}>
           {index > 0 ? <AeVerticalHairline /> : null}
@@ -59,7 +59,7 @@ function PublicNavLink({
       {...(onNavigate === undefined ? {} : { onClick: onNavigate })}
       aria-current={active ? 'page' : undefined}
       className={cn(
-        'relative font-mono font-medium tracking-tight text-foreground no-underline transition-colors duration-200 ease-out hover:text-info focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none',
+        'relative font-sans font-medium tracking-tight text-foreground no-underline transition-colors duration-200 ease-out hover:text-info focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none',
         drawer
           ? 'flex min-h-touch items-center text-3xl font-light'
           : 'inline-flex min-h-touch items-center px-related text-sm',

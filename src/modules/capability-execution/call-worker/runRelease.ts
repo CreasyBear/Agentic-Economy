@@ -136,10 +136,11 @@ export async function releaseCallRun(
     operation.readiness.qualificationDigest,
     connectionAuthority,
     economicRail === 'brokered_x402'
-      ? pricingConfigSourceAmount(pricingConfig)
+      ? (dispatch.sourceUsdcUnits === undefined ? pricingConfigSourceAmount(pricingConfig) : { currency: 'USDC', exponent: 6, units: dispatch.sourceUsdcUnits })
       : isManagedCanary
         ? dispatch.sellerOnboardingCanary?.funding.requestedSpend
         : undefined,
+    dispatch.committedPaymentRequiredJson,
   )
   const preparation = prepareRegisteredRouteTransportInvocation(
     invocation,

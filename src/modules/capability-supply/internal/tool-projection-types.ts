@@ -41,8 +41,12 @@ export type PublicToolPriceBreakdown = Readonly<{
   network: "eip155:8453";
   asset: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
 }>;
+export type PublicToolDisplayPrice =
+  | Readonly<{ kind: "indicative"; amount: ExactAmount; rateObservedAt: number; validUntil: number }>
+  | Readonly<{ kind: "unavailable"; reason: "upstream_price_missing" | "fx_missing" | "fx_stale" | "unsupported_payment" }>;
 export type PublicCommercialTerms = Readonly<{
   price: PublicToolPrice;
+  displayPrice?: PublicToolDisplayPrice;
   priceEvidence?: PublicToolPriceEvidence;
   priceBreakdown?: PublicToolPriceBreakdown;
   materialTerms: readonly Readonly<{ label: string; value: string }>[];
@@ -80,6 +84,7 @@ export type PublicRecoveryPolicy = Readonly<{
 }>;
 export type PublicCapabilityUnavailableReason =
   | "setup_required"
+  | "inspection_required"
   | "temporarily_unavailable"
   | "readiness_expired"
   | "publisher_withdrew"

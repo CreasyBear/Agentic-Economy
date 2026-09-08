@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { admitFacilitatorDiscoveryItems } from '../../convex/facilitatorDiscoveryAction'
 import { api, internal } from '../../convex/_generated/api'
 import schema from '../../convex/schema'
+import { toolRecordProjection } from '../../convex/capabilitySupplyToolShared'
 import { admitRegistryPaymentRequiredItem } from '@/modules/capability-supply/internal/facilitator-discovery-admission'
 import timezoneFixture from '@/modules/capability-supply/internal/x402-bazaar-fixtures/timezone-payment-required-2026-08-19.json'
 import { convexModules } from '../helpers/convex-fixtures'
@@ -84,6 +85,52 @@ async function seedFacilitatorDiscoveryWorkload(backend: ReturnType<typeof conve
 }
 
 describe('facilitator discovery reconciliation', () => {
+  it('refreshes changed metadata without mutating old registrations and converges on repeat discovery', async () => {
+    const backend = convexTest(schema, convexModules)
+    const workload = await seedFacilitatorDiscoveryWorkload(backend)
+    const admission = await admitFacilitatorDiscoveryItems([timezoneFixture.paymentRequired])
+    const item = admission.admitted[0]
+    if (item === undefined) throw new Error('fixture_not_admitted')
+    const reconcile = (candidate: typeof item) => backend.mutation(internal.facilitatorDiscovery.reconcile, {
+      items: [candidate], complete: false, deadlineAt: Date.now() + 60_000, workload,
+    })
+    await reconcile(item)
+    const before = await backend.run(async (ctx) => ({
+      offering: await ctx.db.query('capabilityOfferings').unique(),
+      binding: await ctx.db.query('capabilityTransportBindings').unique(),
+      publication: await ctx.db.query('capabilityPublications').unique(),
+    }))
+    const changed = { ...item, sourceRevision: `${item.sourceRevision}:metadata`, offering: {
+      ...item.offering, presentation: { ...item.offering.presentation, summary: 'Updated Provider description' },
+    } }
+    const first = await reconcile(changed)
+    expect(first).toMatchObject({ published: 1, skipped: 0 })
+    const repeated = await reconcile(changed)
+    expect(repeated).toMatchObject({ published: 0, skipped: 1, toolRefs: first.toolRefs })
+    const after = await backend.run(async (ctx) => ({
+      offerings: await ctx.db.query('capabilityOfferings').collect(),
+      bindings: await ctx.db.query('capabilityTransportBindings').collect(),
+      publications: await ctx.db.query('capabilityPublications').collect(),
+    }))
+    expect(after.offerings).toHaveLength(2)
+    expect(after.bindings).toHaveLength(2)
+    expect(after.publications).toHaveLength(2)
+    expect(after.offerings.find(row => row.offeringId === before.offering?.offeringId)?.registrationHash).toBe(before.offering?.registrationHash)
+    expect(after.bindings.find(row => row.bindingId === before.binding?.bindingId)?.registrationHash).toBe(before.binding?.registrationHash)
+    const current = after.publications.find(row => row.disposition === 'current')
+    expect(current?.revision).toBe(2)
+    expect(current?.publicationRef).toBe(before.publication?.publicationRef)
+    expect(current?.offeringId).not.toBe(before.publication?.offeringId)
+    expect(current?.bindingId).not.toBe(before.publication?.bindingId)
+    const projection = await backend.run(async (ctx) => {
+      const publication = await ctx.db.get(current!._id)
+      const result = await toolRecordProjection(ctx, publication!, Date.now())
+      return result.kind === 'dropped' ? result : { kind: result.kind }
+    })
+    expect(projection).toMatchObject({ kind: 'projected' })
+    expect(await backend.query(api.capabilitySupplyTools.detail, { toolRef: first.toolRefs[0]! })).toMatchObject({ kind: 'found' })
+  })
+
   it('reconciles a captured x402 draft with next_token into public current Operation search', async () => {
     const backend = convexTest(schema, convexModules)
     const workload = await seedFacilitatorDiscoveryWorkload(backend)
@@ -181,7 +228,7 @@ describe('facilitator discovery reconciliation', () => {
     expect(persisted.businesses[0]?.owningAccountRef).toMatch(/^acc_[0-9a-f]{32}$/u)
     expect(persisted.connections[0]).toMatchObject({
       providerRef: 'provider:x402:402timezones.vercel.app',
-      providerAccountRef: 'x402:https://402timezones.vercel.app/api/convert-timezone',
+      providerAccountRef: `x402:${timezoneFixture.paymentRequired.resource.url}`,
       adapterId: 'x402-fetch:v2',
       credentialRef: null,
     })
@@ -216,7 +263,7 @@ describe('facilitator discovery reconciliation', () => {
       deadlineAt,
       workload,
     })
-    expect(withdrawn.withdrawn).toBe(1)
+    expect(withdrawn.withdrawn).toBe(0)
     await expect(backend.run(async (ctx) => ({
       business: await ctx.db.query('businesses').unique(),
       current: await ctx.db.query('capabilityPublications')
@@ -224,8 +271,8 @@ describe('facilitator discovery reconciliation', () => {
           query.eq('networkId', 'ae:public').eq('disposition', 'current')
         )).collect(),
     }))).resolves.toMatchObject({
-      business: { publicStatus: 'unpublished' },
-      current: [],
+      business: { publicStatus: 'published' },
+      current: [expect.objectContaining({ disposition: 'current' })],
     })
   })
 

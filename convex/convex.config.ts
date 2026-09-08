@@ -56,5 +56,6 @@ app.use(aggregate, { name: 'marketOperationEvidence' })
 app.use(aggregate, { name: 'marketToolRatings' })
 app.use(aggregate, { name: 'marketActiveTools' })
 app.use(aggregate, { name: 'marketActiveProviders' })
+app.use(aggregate, { name: 'marketDirectoryFacets' })
 
 export default app

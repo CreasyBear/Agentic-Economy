@@ -155,13 +155,14 @@ export const COMMANDS: Readonly<Record<string, RootCommandManifestEntry>> = {
   compare: { summary: 'Compare two to four exact current Tool references.', args: '<tool-ref> <tool-ref> [<tool-ref> ...]', json: true, group: 'discover_compare', rootOrder: 3 },
   connect: {
     summary: 'Register a public device client or validate one separately stored AE credential profile.',
-    args: '[--provider]',
+    args: '[--provider] [--environment sandbox|production]',
     json: true,
     group: 'connect_account',
     rootOrder: 1,
     guidance: [
       'Without --provider, request buyer access. With --provider, request a separate owner-approved market_supply:manage credential.',
       'Buyer and provider credentials are stored independently for the exact server origin.',
+      'Use --environment production for live-network Tools. The owner approves access; production spending defaults to zero.',
     ],
   },
   doctor: {
@@ -236,10 +237,15 @@ export const COMMANDS: Readonly<Record<string, RootCommandManifestEntry>> = {
     authentication: 'buyer',
     guidance: [
       'Pass --input - to read one bounded JSON object from standard input; literal JSON remains supported.',
+      'After an interrupted purchase, use ae call resume <recovery-ref> with the same --base-url. The saved Quote and idempotency key are reused; do not supply --input or a new key.',
     ],
+    commands: {
+      resume: { summary: 'Resume the exact saved purchase after an interrupted response.', args: '<recovery-ref> [--wait]', json: true,
+        guidance: ['Use the recoveryRef returned by call. Requires the same origin, Account and Agent principal; replacement credentials for that Agent are supported. No --input or new --idempotency-key.'] },
+    },
   },
   history: {
-    summary: 'List this credential profile’s own Call summaries, newest first.',
+    summary: 'List this Agent’s Call summaries, including those made before credential replacement, newest first.',
     args: '[--limit <1-100>] [--cursor <cursor>] [--state <state>]',
     json: true,
     group: 'call_recover',
@@ -357,7 +363,8 @@ export async function runManifestCommand(_args: readonly string[], options: CliO
       recordedWait: 'wait observes one existing Call through the status route until a durable result or bounded timeout; it never creates or retries a Call.',
     },
     recovery: {
-      history: 'Use root history to recover Call references owned by the current credential profile before reading exact status or waiting for a recorded result.',
+      history: 'Use root history to recover Call references owned by this Agent and Account, including earlier credentials, before reading exact status or waiting for a recorded result.',
+      resume: 'If an interrupted call returns recoveryRef, run ae call resume <recovery-ref> at the same origin to resume its exact saved Quote and idempotency identity. Do not supply new input or a new key.',
       statusFirst: true,
       cancel: 'Use root cancel with the same callRef and a stable idempotency key when cancellation is supported and the Call should stop.',
       reconcile: 'Use root recover only after a genuinely uncertain outcome, with canonical evidence for the same Call and the same idempotency identity; recover never replays a known result.',

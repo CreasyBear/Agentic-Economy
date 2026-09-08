@@ -127,11 +127,13 @@ Seller. Do not infer a commercial role from a wallet address or payment.
 **Service**:
 A portfolio record or broader offering that a Provider manages. It may describe
 multiple Tools or an offering around them, but it is not automatically a
-callable Tool. Only admitted and published Tools are available to buy; importing
-a directory entry does not make one executable.
+callable Tool. For x402, the endpoint is itself a Tool; importing its metadata
+does not establish successful execution or AE payment support.
 
 **Tool**:
-The exact, versioned callable supply unit with defined inputs, outputs, price,
+An x402 endpoint is a Tool and can be discovered before AE imports or publishes
+it. Payment support, request validation and availability are execution facts.
+For an AE Call, the exact, versioned callable supply unit with defined inputs, outputs, price,
 terms, access, data use, external effects, readiness and evidence. An API or
 other interface may expose a Tool. A Tool is not a portfolio Service, Offering,
 Publication, Listing, Source or Provider connection.

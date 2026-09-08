@@ -1,4 +1,5 @@
 import { v } from 'convex/values'
+import { filter } from 'convex-helpers/server/filter'
 
 import { CURRENT_TOOL_PROJECTION_NAVIGATION } from '@/modules/actions/contract'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
@@ -6,7 +7,12 @@ import {
   CURRENT_TOOL_CALL_VIA,
   compareCapabilityTools,
   detailCapabilityTool,
-  searchCapabilityTools,
+  projectCapabilityTool,
+  matchesToolFilters,
+  normalizeToolSearchInput,
+  noToolNavigation,
+  toolSearchInputSchema,
+  type PublicToolDescriptor,
   serializeToolCompareResult,
   serializeToolDetailResult,
   serializeToolSearchResult,
@@ -63,6 +69,7 @@ const publicAvailability = v.object({
   lastHealthyAt: v.optional(v.number()),
   reason: v.optional(v.union(
     v.literal('setup_required'),
+    v.literal('inspection_required'),
     v.literal('temporarily_unavailable'),
     v.literal('readiness_expired'),
     v.literal('publisher_withdrew'),
@@ -149,7 +156,7 @@ const publicDescriptor = v.object({
   business: v.object({ businessId: v.string(), slug: v.string(), name: v.string() }),
   offering: v.object({ offeringRef: v.string(), revision: v.number(), label: v.string(), summary: v.string() }),
   summary: v.string(),
-  commercial: v.object({ price: publicPrice, priceEvidence: v.optional(publicPriceEvidence), priceBreakdown: v.optional(publicPriceBreakdown), materialTerms: v.array(publicMaterialTerm), relationship: publicRelationship }),
+  commercial: v.object({ displayPrice: v.optional(v.union(v.object({ kind: v.literal('indicative'), amount: exactAmount, rateObservedAt: v.number(), validUntil: v.number() }), v.object({ kind: v.literal('unavailable'), reason: v.union(v.literal('upstream_price_missing'), v.literal('fx_missing'), v.literal('fx_stale'), v.literal('unsupported_payment')) }))), price: publicPrice, priceEvidence: v.optional(publicPriceEvidence), priceBreakdown: v.optional(publicPriceBreakdown), materialTerms: v.array(publicMaterialTerm), relationship: publicRelationship }),
   dataUse: v.array(publicDataUse),
   effects: v.array(publicEffect),
   evidence: v.array(publicEvidence),
@@ -225,7 +232,8 @@ export const publicSearchReturns = v.union(
     schemaVersion: v.literal('registry-tools:v1'),
     query: v.string(),
     items: v.array(publicDescriptor),
-    matchedCount: v.number(),
+    matchedCount: v.optional(v.number()),
+    partialResults: v.optional(v.boolean()),
     ranking: v.array(publicRanking),
     pagination: v.object({ limit: v.number(), nextCursor: v.optional(v.string()), hasMore: v.boolean() }),
     navigation: publicSearchNavigation,
@@ -235,7 +243,8 @@ export const publicSearchReturns = v.union(
     schemaVersion: v.literal('registry-tools:v1'),
     query: v.string(),
     appliedFilters: publicSearchFilters,
-    matchedCount: v.number(),
+    matchedCount: v.optional(v.number()),
+    partialResults: v.optional(v.boolean()),
     ranking: v.array(publicRanking),
     navigation: publicSearchNavigation,
   }),
@@ -254,6 +263,7 @@ export const publicDetailReturns = v.union(
     toolRef: v.string(),
     reason: v.union(
       v.literal('setup_required'),
+    v.literal('inspection_required'),
       v.literal('temporarily_unavailable'),
       v.literal('readiness_expired'),
       v.literal('publisher_withdrew'),
@@ -282,6 +292,7 @@ export const publicCompareReturns = v.union(
 )
 export const searchArgs = {
   query: v.string(),
+  source: v.optional(v.union(v.literal('current'), v.literal('coinbase'), v.literal('payai'))),
   limit: v.optional(v.number()),
   cursor: v.optional(v.string()),
   filters: v.optional(publicSearchFilters),
@@ -290,10 +301,55 @@ export const toolRefArgs = { toolRef: v.string() }
 export const compareArgs = { toolRefs: v.array(v.string()) }
 
 export async function searchHandler(ctx: QueryCtx, args: ToolSearchInput) {
+  const navigation = noToolNavigation(CURRENT_TOOL_PROJECTION_NAVIGATION)
+  const parsed = toolSearchInputSchema.safeParse(args)
+  const normalized = parsed.success ? normalizeToolSearchInput({ ...parsed.data, limit: parsed.data.limit ?? 20 }) : undefined
+  if (normalized === undefined || (args.source !== undefined && args.source !== 'current')) {
+    return serializeToolSearchResult({ kind: 'unavailable', schemaVersion: 'registry-tools:v1', reason: 'query_invalid', navigation })
+  }
+  args = { ...args, ...normalized }
   const now = Date.now()
-  return serializeToolSearchResult(
-    await searchCapabilityTools(capabilityToolSourcePort(ctx), args, now),
-  )
+  const query = args.query.trim()
+  const limit = args.limit ?? 20
+  const networkId = args.filters?.networkId
+  const source = query.length > 0
+    ? ctx.db.query('capabilityPublications').withSearchIndex('search_text', (q) => {
+        const search = q.search('searchText', query).eq('disposition', 'current')
+        return networkId === undefined ? search : search.eq('networkId', networkId)
+      })
+    : networkId === undefined
+      ? ctx.db.query('capabilityPublications').withIndex('by_disposition', (q) => q.eq('disposition', 'current'))
+      : ctx.db.query('capabilityPublications').withIndex('by_networkId_and_disposition', (q) => q.eq('networkId', networkId).eq('disposition', 'current'))
+  const hydrated = new Map<string, PublicToolDescriptor>()
+  const page = await filter(source, async (publication) => {
+    const record = await toolRecord(ctx, publication, now)
+    if (record === undefined) return false
+    const tool = projectCapabilityTool(record, now, CURRENT_TOOL_PROJECTION_NAVIGATION)
+    if (!matchesToolFilters(tool, args.filters ?? {})) return false
+    hydrated.set(publication.toolRef, tool)
+    return true
+  }).paginate({ cursor: args.cursor ?? null, numItems: limit }).catch((error: unknown) => {
+    // Let Convex validate its opaque cursor; classify only its cursor failures.
+    if (args.cursor !== undefined && error instanceof Error
+      && (error.message.includes('InvalidCursor') || error.message.includes('Failed to parse cursor'))) return undefined
+    throw error
+  })
+  if (page === undefined) return serializeToolSearchResult({ kind: 'unavailable', schemaVersion: 'registry-tools:v1', reason: 'query_invalid', navigation })
+  const items = page.page.flatMap((publication) => {
+    const tool = hydrated.get(publication.toolRef)
+    return tool === undefined ? [] : [tool]
+  })
+  if (items.length === 0 && page.isDone && args.cursor === undefined) {
+    return serializeToolSearchResult({
+      kind: 'no_candidates', schemaVersion: 'registry-tools:v1', query,
+      appliedFilters: args.filters ?? {}, matchedCount: 0, ranking: [], navigation,
+    })
+  }
+  return serializeToolSearchResult({
+    kind: 'ok', schemaVersion: 'registry-tools:v1', query, items, ranking: [],
+    pagination: { limit, hasMore: !page.isDone, ...(page.isDone ? {} : { nextCursor: page.continueCursor }) },
+    navigation,
+  })
 }
 export async function detailHandler(ctx: QueryCtx, args: ToolDetailInput) {
   return serializeToolDetailResult(await detailCapabilityTool(capabilityToolSourcePort(ctx), args))

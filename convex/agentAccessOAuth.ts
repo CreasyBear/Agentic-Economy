@@ -1,3 +1,4 @@
+import type { AgentConnectionReadback } from '@/modules/agent-access/agent-connection'
 import { ConvexError, v } from 'convex/values'
 import type { GenericDatabaseReader } from 'convex/server'
 import { brandNonEmpty } from '../src/modules/common/ids'
@@ -1172,7 +1173,7 @@ async function projectOwnerConnection(
     ...(family.revokedAt === undefined ? {} : { revokedAt: family.revokedAt }),
     ...(family.revocationReason === undefined ? {} : { revocationReason: family.revocationReason }),
     credentialGeneration: family.currentGeneration,
-  }
+  } satisfies AgentConnectionReadback
 }
 
 async function persistRefreshAudit(

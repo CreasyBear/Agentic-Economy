@@ -5,6 +5,7 @@ import {
   type OperationLedgerPorts,
 } from '@/modules/capability-supply/public'
 
+import { usesSelectedRequestReadiness } from './lib/selectedRequestReadiness'
 import { internal } from './_generated/api'
 import type { Id } from './_generated/dataModel'
 import type { MutationCtx } from './_generated/server'
@@ -150,7 +151,11 @@ export function capabilitySupplyPublicationPorts(
       if (binding.sourceRouteRef === undefined) {
         await ctx.db.patch(binding._id, { sourceRouteRef: input.sourceRouteRef })
       }
+      const offering = await ctx.db.query('capabilityOfferings')
+        .withIndex('by_offeringId', (q) => q.eq('offeringId', input.offeringId)).unique()
+      const business = await ctx.db.get(input.businessId as Id<'businesses'>)
       await ctx.db.insert('capabilityPublications', {
+        searchText: [input.capabilityId, offering?.presentation.label, offering?.presentation.summary, ...(offering?.searchTerms ?? []), business?.name].filter(Boolean).join(' '),
         toolRef: input.toolRef,
         publicationRef: input.publicationRef,
         revision: input.revision,
@@ -221,6 +226,9 @@ export function capabilitySupplyPublicationPorts(
     ),
     getExactRegisteredContract: (ref) => getExactRegisteredCapabilityContract(ctx.db, ref),
     scheduleReadinessProbe: async (publicationRef, expectedRevision) => {
+      const publication = await ctx.db.query('capabilityPublications')
+        .withIndex('by_publicationRef_and_revision', q => q.eq('publicationRef', publicationRef).eq('revision', expectedRevision)).unique()
+      if (publication !== null && usesSelectedRequestReadiness(publication)) return
       await ctx.scheduler.runAfter(0, internal.capabilitySupplyReadiness.probe, {
         publicationRef,
         expectedRevision,

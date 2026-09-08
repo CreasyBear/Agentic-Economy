@@ -156,6 +156,25 @@ export function AeAccountFundingPanel({
     }
   }
 
+  function startAnotherPayment() {
+    if (pending || checking || (paymentStatus !== 'succeeded' && paymentStatus !== 'failed')) return
+    idempotencyKey.current = undefined
+    setSession(undefined)
+    setRecovery(undefined)
+    setPaymentStatus(undefined)
+    setErrorMessage(undefined)
+    setAmountText('')
+    setAmountInvalid(false)
+    try {
+      window.sessionStorage.removeItem(recoveryStorageKey)
+      const url = new URL(window.location.href)
+      for (const key of ['funding', 'checkout_session_id', 'session_id']) url.searchParams.delete(key)
+      window.history.replaceState(window.history.state, '', url)
+    } catch {
+      // The current render can start a new payment even when browser storage is unavailable.
+    }
+  }
+
   async function refreshPayment() {
     if (recovery === undefined || pending || checking) return
     await readCanonicalPayment(recovery)
@@ -237,6 +256,10 @@ export function AeAccountFundingPanel({
           >
             {pending ? <Spinner data-icon="inline-start" /> : null}
             {pending ? 'Preparing secure payment…' : 'Continue to Stripe'}
+          </Button>
+        ) : paymentStatus === 'succeeded' || paymentStatus === 'failed' ? (
+          <Button type="button" variant="secondary" disabled={checking || pending} onClick={startAnotherPayment} className="min-h-touch">
+            Add more credit
           </Button>
         ) : recovery !== undefined && (paymentStatus === 'pending' || paymentStatus === 'outcome_unknown') ? (
           <Button type="button" variant="ghost" disabled={checking || pending} onClick={() => void refreshPayment()} className="min-h-touch">

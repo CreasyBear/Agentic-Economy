@@ -6,6 +6,7 @@ import { CALL_ROUTE_CONTRACT } from '@/modules/capability-execution/call-entry'
 import {
   callInputSchema,
   callMachineResultSchema,
+  projectCallMachineResult,
   type CallMachineResult,
 } from '@/modules/capability-execution/call-contracts'
 import {
@@ -14,8 +15,10 @@ import {
   toolQuoteResultSchema,
 } from '@/modules/capability-execution/quote'
 import type { CallStatusResult } from '@/modules/capability-execution/call-recovery-contracts'
+import { AGENT_ACCOUNT_SELF_ROUTE_CONTRACT, agentAccountSelfResultSchema } from '@/modules/agent-access/account.actions'
 import type { CliOptions } from '../lib/args'
 import { resolveAgentAccessCredential } from '../lib/config'
+import { acknowledgeCallRecovery, findCallRecovery, readCallRecovery, retainCallRecovery, type CallRecoveryRecord } from '../lib/call-recovery-journal'
 import { CliFailure, callJson, heading, line, printJson, requireOk, table } from '../lib/output'
 import { usageFailure } from '../lib/help'
 import { continuationCommand } from '../lib/continuation-command'
@@ -54,42 +57,41 @@ async function readBoundedStdin(stdin: Readable): Promise<string> {
 
 function parseCallResult(value: unknown): CallMachineResult {
   const parsed = callMachineResultSchema.safeParse(value)
-  if (parsed.success) return parsed.data
+  if (parsed.success && (!('callRef' in parsed.data) || parsed.data.callRef === undefined || parsed.data.callRef.length > 0)) return parsed.data
   throw new CliFailure('The gateway returned an invalid Call result.', {
     kind: 'UNAVAILABLE',
     code: 'call-result-invalid',
   })
 }
 
-function unknownCallTransport(
-  toolRef: string,
-  _idempotencyKey: string,
-  callRef?: string,
-): CliFailure {
+function resumeCommand(record: CallRecoveryRecord, options: CliOptions): string {
+  return continuationCommand(['ae', 'call', 'resume', record.recoveryRef, '--base-url', record.origin, ...(options.json ? ['--json'] : [])])
+}
+
+function unknownCallTransport(record: CallRecoveryRecord, options: CliOptions): CliFailure {
   const detail = {
-    toolRef,
-    recovery: callRef === undefined
-      ? 'Repeat call with the same idempotency identity.'
-      : 'Read Call status with the same Call identity.',
+    toolRef: record.toolRef,
+    recoveryRef: record.recoveryRef,
+    ...(record.callRef === undefined ? {} : { callRef: record.callRef }),
+    recovery: 'Resume the retained purchase; do not create a new Call.',
     identityPreserved: true,
   }
   return new CliFailure(
-    `Call transport is unknown for ${toolRef}; do not retry with a new identity.`,
+    `Call transport is unknown for ${record.toolRef}; resume the retained purchase.`,
     {
       kind: 'UNAVAILABLE',
       code: 'call-transport-unknown',
       detail,
+      nextCommand: resumeCommand(record, options),
     },
   )
 }
 
-function waitTimeoutFailure(
-  toolRef: string,
-  _idempotencyKey: string,
-  _callRef: string,
-): CliFailure {
+function waitTimeoutFailure(record: CallRecoveryRecord, options: CliOptions): CliFailure {
   const detail = {
-    toolRef,
+    toolRef: record.toolRef,
+    recoveryRef: record.recoveryRef,
+    callRef: record.callRef,
     recovery: 'Read Call status with the same Call identity before retrying.',
     identityPreserved: true,
   }
@@ -97,6 +99,7 @@ function waitTimeoutFailure(
     kind: 'UNAVAILABLE',
     code: 'call-wait-timeout',
     detail,
+    nextCommand: resumeCommand(record, options),
   })
 }
 
@@ -137,8 +140,7 @@ function callOutput(
 
 async function waitForCallResult(
   options: CliOptions,
-  toolRef: string,
-  idempotencyKey: string,
+  record: CallRecoveryRecord,
   pending: CallMachineResult,
 ): Promise<CallMachineResult | CallStatusResult> {
   if (pending.kind !== 'pending' || pending.callRef.length === 0) {
@@ -156,28 +158,129 @@ async function waitForCallResult(
       setTimeout(resolve, Math.min(delayMs, remainingMs))
     })
     if (!options.json) process.stderr.write('Waiting for the Call outcome.\n')
-    let status: unknown
+    let status: CallStatusResult
     try {
       status = await readCallStatus(options, callRef)
     } catch (error) {
       if (error instanceof CliFailure) throw error
-      throw unknownCallTransport(toolRef, idempotencyKey, callRef)
+      throw unknownCallTransport(record, options)
     }
+    if (status.callRef !== callRef) throw new CliFailure('The gateway changed the Call status identity.', { kind: 'UNAVAILABLE', code: 'call-recovery-identity-conflict' })
     const terminal = terminalResult(status)
     if (terminal !== undefined) {
+      observeResult(record, status)
+      if (status.kind === 'found' && status.result !== undefined) return projectCallMachineResult(status.result)
       return isRecord(terminal) && terminal.kind === 'found'
         ? terminal as CallStatusResult
         : parseCallResult(terminal)
     }
     delayMs = pendingDelay(status, delayMs)
   }
-  throw waitTimeoutFailure(toolRef, idempotencyKey, callRef)
+  throw waitTimeoutFailure(record, options)
 }
+
+function pendingRecoveryFailure(record: CallRecoveryRecord, options: CliOptions): CliFailure {
+  return new CliFailure('This request already has a retained purchase. Resume it before creating another Call.', {
+    kind: 'FAILED_PRECONDITION', code: 'call-recovery-required',
+    detail: { recoveryRef: record.recoveryRef, ...(record.callRef === undefined ? {} : { callRef: record.callRef }), identityPreserved: true },
+    nextCommand: resumeCommand(record, options),
+  })
+}
+
+function attachRecovery(error: unknown, record: CallRecoveryRecord, options: CliOptions): CliFailure {
+  if (!(error instanceof CliFailure)) return unknownCallTransport(record, options)
+  return new CliFailure(error.message, {
+    exitCode: error.exitCode, kind: error.kind,
+    ...(error.code === undefined ? {} : { code: error.code }),
+    ...(error.retryable === undefined ? {} : { retryable: error.retryable }),
+    ...(error.retryAfter === undefined ? {} : { retryAfter: error.retryAfter }),
+    detail: { cause: error.detail, recoveryRef: record.recoveryRef, ...(record.callRef === undefined ? {} : { callRef: record.callRef }), identityPreserved: true },
+    ...(error.suggestion === undefined ? {} : { suggestion: error.suggestion }), nextCommand: resumeCommand(record, options),
+  })
+}
+
+function observeResult(record: CallRecoveryRecord, result: CallMachineResult | CallStatusResult): CallRecoveryRecord {
+  if ('toolRef' in result && result.toolRef !== undefined && result.toolRef !== record.toolRef) {
+    throw new CliFailure('The gateway returned a result for a different Tool.', { kind: 'UNAVAILABLE', code: 'call-recovery-identity-conflict' })
+  }
+  return acknowledgeCallRecovery(record, {
+    ...('callRef' in result && result.callRef !== undefined ? { callRef: result.callRef } : {}),
+    terminal: (result.kind === 'completed' && result.usage.chargeState !== 'outcome_unknown')
+      || (result.kind === 'found' && (result.state === 'cancelled'
+        || (result.state === 'terminal' && result.result?.kind === 'refused'))),
+  })
+}
+
+async function submitOrReadCall(record: CallRecoveryRecord, options: CliOptions): Promise<void> {
+  const startedAt = Date.now()
+  try {
+    let result: CallMachineResult | CallStatusResult
+    if (record.callRef !== undefined) {
+      const status = await readCallStatus(options, record.callRef)
+      if (status.callRef !== record.callRef) throw new CliFailure('The gateway changed the Call status identity.', { kind: 'UNAVAILABLE', code: 'call-recovery-identity-conflict' })
+      record = observeResult(record, status)
+      const terminal = terminalResult(status)
+      result = terminal !== undefined && status.kind === 'found' && status.result !== undefined
+        ? projectCallMachineResult(status.result)
+        : terminal === undefined || (isRecord(terminal) && terminal.kind === 'found') ? status : parseCallResult(terminal)
+      // Status owns the known purchase. A missing/refused status never causes
+      // another submission, even if the original Quote has expired.
+      if (options.wait === true && result.kind === 'found' && result.state === 'in_progress') {
+        result = await waitForCallResult(options, record, { kind: 'pending', toolRef: record.toolRef, callRef: status.callRef, retryAfterMs: 100 })
+      }
+    } else {
+      const apiKey = requireAgentAccessKey('call', options)
+      const outcome = await callJson(options.baseUrl, callCommandDescriptor.path, {
+        method: callCommandDescriptor.method, headers: { Authorization: `Bearer ${apiKey}` }, body: JSON.stringify(record.command),
+      })
+      result = parseCallResult(requireOk(outcome, callCommandDescriptor.path))
+      record = observeResult(record, result)
+      if (result.kind === 'pending' && options.wait === true) result = await waitForCallResult(options, record, result)
+    }
+    record = observeResult(record, result)
+    const rendered: Record<string, unknown> = { ...callOutput(result, options), recoveryRef: record.recoveryRef }
+    if (options.json) { printJson(rendered); return }
+    heading(`Tool ${record.toolRef}`)
+    table([
+      ['status', result.kind], ['duration', `${Date.now() - startedAt}ms`],
+      ['recovery', resumeCommand(record, options)],
+      ...(rendered.nextCommand === undefined ? [] : [['next command', String(rendered.nextCommand)] as const]),
+    ])
+    line(JSON.stringify(rendered, undefined, 2))
+  } catch (error) { throw attachRecovery(error, record, options) }
+}
+
+async function resumeCall(args: readonly string[], options: CliOptions): Promise<void> {
+  if (args.length !== 2 || options.input !== undefined || options.idempotencyKey !== undefined) {
+    throw new CliFailure('Use ae call resume <recoveryRef> without input or a new idempotency identity.', { kind: 'INVALID_ARGUMENT', code: 'call-resume-usage' })
+  }
+  const record = readCallRecovery(args[1]!, options.baseUrl)
+  return resumeRetainedCall(record, options)
+}
+
+async function resumeRetainedCall(record: CallRecoveryRecord, options: CliOptions): Promise<void> {
+  try {
+    const apiKey = requireAgentAccessKey('call', options)
+    const outcome = await callJson(options.baseUrl, AGENT_ACCOUNT_SELF_ROUTE_CONTRACT.path, {
+      method: AGENT_ACCOUNT_SELF_ROUTE_CONTRACT.method, headers: { Authorization: `Bearer ${apiKey}` },
+    })
+    const self = agentAccountSelfResultSchema.safeParse(requireOk(outcome, 'account status'))
+    if (!self.success) throw new CliFailure('The gateway returned an invalid agent identity.', { kind: 'UNAVAILABLE', code: 'account-result-invalid' })
+    if (self.data.accountRef !== record.accountRef || self.data.principalRef !== record.principalRef) {
+      throw new CliFailure('This purchase belongs to a different Account or Agent. Reconnect the original Agent before resuming.', {
+        kind: 'PERMISSION_DENIED', code: 'call-recovery-owner-mismatch',
+      })
+    }
+    await submitOrReadCall(record, options)
+  } catch (error) { throw attachRecovery(error, record, options) }
+}
+
 export async function runCallCommand(
   args: readonly string[],
   options: CliOptions,
   stdin: Readable = process.stdin,
 ): Promise<void> {
+  if (args[0] === 'resume') return resumeCall(args, options)
   const toolRef = args[0]?.trim()
   if (
     args.length !== 1
@@ -223,11 +326,26 @@ export async function runCallCommand(
 
   const apiKey = requireAgentAccessKey('call', options)
 
+  const recoveryRequest = { origin: options.baseUrl, toolRef, input: quoteInput.data.input,
+    ...(options.idempotencyKey?.trim() ? { idempotencyKey: options.idempotencyKey.trim() } : {}),
+  }
+  const previous = findCallRecovery(recoveryRequest)
+  if (previous !== undefined) {
+    if (recoveryRequest.idempotencyKey === previous.command.idempotencyKey) return resumeRetainedCall(previous, options)
+    throw pendingRecoveryFailure(previous, options)
+  }
+
   const quoteOutcome = await callJson(options.baseUrl, TOOL_QUOTE_PATH, {
     method: 'POST',
     headers: { Authorization: `Bearer ${apiKey}` },
     body: JSON.stringify(quoteInput.data),
   })
+  if (quoteOutcome.status === 401) {
+    throw new CliFailure('Your AE connection is no longer valid. Reconnect, then repeat the call.', {
+      kind: 'UNAUTHENTICATED', code: 'agent_access_key_invalid',
+      nextCommand: continuationCommand(['ae', 'connect', '--base-url', options.baseUrl, ...(options.json ? ['--json'] : [])]),
+    })
+  }
   const quote = toolQuoteResultSchema.safeParse(requireOk(quoteOutcome, TOOL_QUOTE_PATH))
   if (!quote.success) {
     throw new CliFailure('The gateway returned an invalid Tool quote.', {
@@ -240,7 +358,15 @@ export async function runCallCommand(
       kind: 'FAILED_PRECONDITION',
       code: quote.data.code,
       detail: quote.data,
+      retryable: quote.data.retryable,
+      ...(quote.data.reason === undefined ? {} : { suggestion: quote.data.reason }),
+      ...(quote.data.continuation?.action !== 'registry.tools.describe' ? {} : {
+        nextCommand: continuationCommand(['ae', 'describe', toolRef, '--base-url', options.baseUrl, ...(options.json ? ['--json'] : [])]),
+      }),
     })
+  }
+  if (quote.data.toolRef !== toolRef) {
+    throw new CliFailure('The gateway returned a Quote for a different Tool.', { kind: 'UNAVAILABLE', code: 'tool-quote-result-invalid' })
   }
   const idempotencyKey = resolveIdempotencyKey(options)
   const parsedCall = callCommandDescriptor.inputSchema.safeParse({
@@ -248,46 +374,12 @@ export async function runCallCommand(
     idempotencyKey,
   })
   if (!parsedCall.success) throw new Error('tool_quote_projection_invalid')
-  if (!options.json) process.stderr.write(`Call committed: toolRef=${toolRef}. A durable retry identity has been retained.\n`)
-
-  const path = callCommandDescriptor.path
-  let outcome
-  try {
-    outcome = await callJson(options.baseUrl, path, {
-      method: callCommandDescriptor.method,
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify(parsedCall.data),
-    })
-  } catch (error) {
-    if (error instanceof CliFailure) throw error
-    throw unknownCallTransport(toolRef, idempotencyKey)
-  }
-  let acceptedBody: unknown
-  try {
-    acceptedBody = requireOk(outcome, path)
-  } catch (error) {
-    if (error instanceof CliFailure) throw error
-    throw unknownCallTransport(toolRef, idempotencyKey)
-  }
-  const accepted = parseCallResult(acceptedBody)
-  const result = accepted.kind === 'pending' && options.wait === true
-    ? await waitForCallResult(options, toolRef, idempotencyKey, accepted)
-    : accepted
-  const rendered = callOutput(result, options)
-
-  if (options.json) {
-    printJson(rendered)
-    return
-  }
-  heading(`Tool ${toolRef}`)
-  table([
-    ['status', result.kind],
-    ['duration', `${outcome.durationMs}ms`],
-    ...(rendered.nextCommand === undefined ? [] : [['next command', String(rendered.nextCommand)] as const]),
-  ])
-  line(JSON.stringify(rendered, undefined, 2))
+  const retained = retainCallRecovery(recoveryRequest, {
+    quoteRef: parsedCall.data.quoteRef, accountRef: quote.data.account.accountRef, principalRef: quote.data.budget.principalRef,
+  }, parsedCall.data.idempotencyKey)
+  if (!retained.created) throw pendingRecoveryFailure(retained.record, options)
+  if (!options.json) process.stderr.write(`Call prepared: toolRef=${toolRef}. Recovery: ${resumeCommand(retained.record, options)}\n`)
+  await submitOrReadCall(retained.record, options)
 }
 export const callCommandDescriptor = {
   command: 'call',

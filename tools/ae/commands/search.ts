@@ -17,6 +17,7 @@ export async function runSearchCommand(args: readonly string[], options: CliOpti
 
   const input = {
     query,
+    ...(options.source === undefined ? {} : { source: options.source }),
     ...(options.limit === undefined ? {} : { limit: parseSearchLimit(options.limit) }),
     ...(options.cursor === undefined ? {} : { cursor: options.cursor }),
     ...(options.filters === undefined ? {} : { filters: parseSearchFilters(options.filters) }),
@@ -57,11 +58,13 @@ export async function runSearchCommand(args: readonly string[], options: CliOpti
   const filtersContinuation = options.filters === undefined
     ? []
     : ['--filters', JSON.stringify(parsedInput.data.filters)]
+  const sourceContinuation = parsedInput.data.source === undefined ? [] : ['--source', parsedInput.data.source]
   const pagination = result.pagination
   const nextPageCommand = pagination?.hasMore === true && pagination.nextCursor !== undefined
     ? continuationCommand([
         'ae', 'search', result.query,
         ...(options.limit === undefined ? [] : ['--limit', options.limit]),
+        ...sourceContinuation,
         ...filtersContinuation,
         '--cursor', pagination.nextCursor,
         ...originContinuation,
@@ -86,6 +89,7 @@ export async function runSearchCommand(args: readonly string[], options: CliOpti
     : undefined
   const browseCommand = continuationCommand([
     'ae', 'list',
+    ...sourceContinuation,
     ...(options.limit === undefined ? [] : ['--limit', options.limit]),
     ...originContinuation,
     ...outputContinuation,
@@ -103,6 +107,7 @@ export async function runSearchCommand(args: readonly string[], options: CliOpti
   const broadenSearchCommand = result.kind === 'no_candidates' && exhausted && result.query.length > 0 && hasSearchFilters
     ? continuationCommand([
         'ae', 'list',
+        ...sourceContinuation,
         ...filtersContinuation,
         ...originContinuation,
         ...outputContinuation,

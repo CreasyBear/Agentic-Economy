@@ -106,7 +106,7 @@ export function AeMarketPage({
   const query = search.query;
   const isQuery = query !== undefined;
   const unavailable = catalog.kind === "unavailable";
-  const empty = !unavailable && matchedCount === 0;
+  const empty = !unavailable && tools.length === 0 && !(catalog.kind === "ok" && catalog.pagination.hasMore);
   const toolLabel = matchedCount === 1 ? "Tool" : "Tools";
   const shownCount = drilledGroup?.tools.length ?? tools.length;
   const currentRowSelection = useMemo(
@@ -149,6 +149,7 @@ export function AeMarketPage({
     ? "Catalogue unavailable"
     : catalog.kind === "ok" &&
         drilledGroup === undefined &&
+        matchedCount !== undefined &&
         (catalog.pagination.hasMore || matchedCount > shownCount)
       ? `${shownCount.toLocaleString()} of ${matchedCount.toLocaleString()}`
       : `${shownCount.toLocaleString()} shown`;
@@ -243,13 +244,10 @@ export function AeMarketPage({
   } else {
     title = unavailable
       ? "The Tool catalog"
-      : `${matchedCount.toLocaleString()} current ${toolLabel}`;
+      : matchedCount === undefined ? "The Tool catalog" : `${matchedCount.toLocaleString()} current ${toolLabel}`;
     description = CATALOG_DESCRIPTION;
     actions = (
       <>
-        <AeSiteButton asChild variant="outlined">
-          <Link to="/for-providers">Publish a Tool</Link>
-        </AeSiteButton>
         <AeSiteButton asChild>
           <Link to="/for-agents">{AGENT_DOOR.cta}</Link>
         </AeSiteButton>
@@ -285,6 +283,9 @@ export function AeMarketPage({
           : "ae-rail grid gap-section pb-96 sm:pb-72"}
       >
         <AeMarketToolbar search={search} />
+        {catalog.kind === "ok" && catalog.partialResults === true ? (
+          <p className="text-sm text-muted-foreground">Refine your search for more results.</p>
+        ) : null}
         {body}
         {onCompareTools === undefined ? null : (
           <AeCompareTray
@@ -539,7 +540,7 @@ function CatalogPagination({
                 cursor: pagination.nextCursor,
               }}
             >
-              Next {pagination.limit}
+              Next page
             </Link>
           </Button>
         </PaginationItem>

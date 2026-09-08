@@ -6,6 +6,7 @@ import { env, internalMutation, internalQuery, mutation, query } from './_genera
 import { resolveBusinessActor } from './authz'
 import { admitInteractiveOwnerConsequence } from './lib/ownerConsequence'
 import { readCommercialPolicyGate } from './moneyCommercialPolicy'
+import { enqueueDocumentRender } from './moneyDocuments'
 import { exactAmount, serverFunctionAuth, stripeMoneyWebhookEventArg } from './moneyLedgerValues'
 import { eventRowFields, eventRowMatches } from './moneyStripeEvents'
 import {
@@ -350,7 +351,7 @@ async function recordFundingDocuments(
     } as const satisfies StableHashValue
     const renderInputJson = stableStringify(renderInput)
     const renderInputDigest = canonicalDigest(renderInput)
-    await ctx.db.insert('moneyDocuments', {
+    const documentId = await ctx.db.insert('moneyDocuments', {
       documentRef,
       accountRef: command.accountRef,
       kind: definition.kind,
@@ -368,6 +369,8 @@ async function recordFundingDocuments(
       snapshotDigest: renderInputDigest,
       createdAt: occurredAt,
     })
+    const workId = await enqueueDocumentRender(ctx, documentRef)
+    await ctx.db.patch(documentId, { workId })
   }
 }
 

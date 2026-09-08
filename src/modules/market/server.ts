@@ -70,7 +70,8 @@ export type MarketCatalogProjection =
   | Readonly<{
       kind: "ok";
       items: readonly ToolCardViewModel[];
-      matchedCount: number;
+      matchedCount?: number;
+      partialResults?: boolean;
       pagination: Readonly<{
         limit: number;
         nextCursor?: string;
@@ -136,6 +137,7 @@ export async function readMarketRouteProjection(
   let catalog: ToolSearchResult;
   try {
     catalog = await readCapabilityToolSearch({
+      source: "coinbase",
       query: catalogQuery.query ?? "",
       limit: 12,
       ...(catalogQuery.cursor === undefined
@@ -377,7 +379,8 @@ async function projectCatalog(
             );
       return toToolCardViewModel(tool, projection);
     }),
-    matchedCount: catalog.matchedCount,
+    ...(catalog.matchedCount === undefined ? {} : { matchedCount: catalog.matchedCount }),
+    ...(catalog.partialResults === undefined ? {} : { partialResults: catalog.partialResults }),
     pagination: catalog.pagination,
   };
 }

@@ -11,8 +11,9 @@ import {
   publicToolAuthenticationSchema,
   publicToolParameterSchema,
   publicToolPaymentSchema,
+  publicToolDisplayPriceSchema,
 } from '@/modules/capability-supply/tool-schemas'
-import { exactAmountSchema, formatExactAmount } from '@/modules/money/public'
+import { exactAmountSchema, formatExactAmount, formatDisplayPrice } from '@/modules/money/public'
 import {
   projectToolHealth,
   type ToolHealthStatus,
@@ -37,14 +38,16 @@ export const toolCatalogFiltersSchema = z.strictObject({
 })
 
 export const toolListInputSchema = z.strictObject({
+  source: z.enum(['current', 'coinbase', 'payai']).optional(),
   limit: z.number().int().min(1).max(100).default(50),
-  cursor: z.string().max(512).optional(),
+  cursor: z.string().max(8192).optional(),
   filters: toolCatalogFiltersSchema.optional(),
 })
 export const toolCatalogSearchInputSchema = z.strictObject({
+  source: z.enum(['current', 'coinbase', 'payai']).optional(),
   query: z.string().trim().min(1).max(256),
   limit: z.number().int().min(1).max(20).default(10),
-  cursor: z.string().max(512).optional(),
+  cursor: z.string().max(8192).optional(),
   filters: toolCatalogFiltersSchema.optional(),
 })
 export const toolDescribeInputSchema = z.strictObject({
@@ -63,6 +66,7 @@ export const compactToolCandidateSchema = z.strictObject({
   description: z.string(),
   provider: z.strictObject({ name: z.string(), slug: z.string() }),
   priceLabel: z.string(),
+  displayPrice: publicToolDisplayPriceSchema.optional(),
   healthStatus: toolHealthStatusSchema,
   lastCheckedAt: z.number().optional(),
   lastHealthyAt: z.number().optional(),
@@ -80,6 +84,7 @@ export const toolChoiceListOutputSchema = z.union([
     kind: z.literal('ok'),
     schemaVersion: z.literal('registry-tools:v3'),
     count: z.number().int().nonnegative(),
+    partialResults: z.boolean().optional(),
     items: z.array(compactToolCandidateSchema).max(100),
     pagination: toolCatalogPaginationSchema,
   }),
@@ -91,6 +96,7 @@ export const toolChoiceSearchOutputSchema = z.union([
     schemaVersion: z.literal('registry-tools:v3'),
     query: z.string(),
     count: z.number().int().nonnegative(),
+    partialResults: z.boolean().optional(),
     items: z.array(compactToolCandidateSchema).max(20),
     pagination: toolCatalogPaginationSchema,
   }),
@@ -113,6 +119,7 @@ const toolDescriptionSchema = z.strictObject({
   description: z.string(),
   provider: z.strictObject({ name: z.string(), slug: z.string() }),
   priceLabel: z.string(),
+  displayPrice: publicToolDisplayPriceSchema.optional(),
   healthStatus: toolHealthStatusSchema,
   lastCheckedAt: z.number().optional(),
   lastHealthyAt: z.number().optional(),
@@ -174,6 +181,8 @@ export const toolChoiceCompareOutputSchema = z.union([
 ])
 
 function priceLabel(tool: PublicToolDescriptor): string {
+  const display = formatDisplayPrice(tool.commercial.displayPrice)
+  if (display !== undefined) return display
   const price = tool.commercial.price
   if (price.kind === 'on_request') return 'Price confirmed at inspection'
   if (price.kind === 'fixed') {
@@ -195,6 +204,7 @@ function projectCompactTool(tool: PublicToolDescriptor) {
     description: tool.summary,
     provider: { name: tool.business.name, slug: tool.business.slug },
     priceLabel: priceLabel(tool),
+    ...(tool.commercial.displayPrice === undefined ? {} : { displayPrice: tool.commercial.displayPrice }),
     ...projectToolHealth(tool.availability, Date.now()),
   })
 }
@@ -208,7 +218,12 @@ function admittedHealth(filters: unknown): Set<ToolHealthStatus> {
 
 function visibleTools(tools: readonly PublicToolDescriptor[], filters: unknown) {
   const admitted = admittedHealth(filters)
-  return tools.map(projectCompactTool).filter((tool) => admitted.has(tool.healthStatus))
+  const parsed = toolCatalogFiltersSchema.safeParse(filters)
+  const explicitHealthFilter = parsed.success && parsed.data.healthStatus !== undefined
+  return tools.flatMap((tool) => {
+    const compact = projectCompactTool(tool)
+    return admitted.has(compact.healthStatus) || (!explicitHealthFilter && tool.availability.reason === 'inspection_required') ? [compact] : []
+  })
 }
 
 export function projectToolListChoices(result: ToolSearchResult, filters?: unknown) {
@@ -222,6 +237,7 @@ export function projectToolListChoices(result: ToolSearchResult, filters?: unkno
     kind: 'ok',
     schemaVersion: 'registry-tools:v3',
     count: items.length,
+    ...(result.partialResults === undefined ? {} : { partialResults: result.partialResults }),
     items,
     pagination: result.kind === 'ok' ? result.pagination : { limit: 50, hasMore: false },
   })
@@ -253,6 +269,7 @@ export function projectToolSearchChoices(result: ToolSearchResult, filters?: unk
     schemaVersion: 'registry-tools:v3',
     query: result.query,
     count: items.length,
+    ...(result.partialResults === undefined ? {} : { partialResults: result.partialResults }),
     items,
     pagination: result.pagination,
   })
@@ -278,6 +295,7 @@ export function projectToolDescription(result: ToolDetailResult) {
       description: tool.summary,
       provider: { name: tool.business.name, slug: tool.business.slug },
       priceLabel: priceLabel(tool),
+    ...(tool.commercial.displayPrice === undefined ? {} : { displayPrice: tool.commercial.displayPrice }),
       ...projectToolHealth(tool.availability, Date.now()),
       inputJsonSchema: tool.contract.inputJsonSchema,
       outputJsonSchema: tool.contract.outputJsonSchema,

@@ -85,7 +85,7 @@ export function AeToolContractSections({
       <AeSection
         id="price-and-terms"
         title="Price and terms"
-        description="The exact buyer authorization and published commercial terms for this capability."
+        description="Published commercial terms. Your Quote confirms the exact price and authorization for your input."
       >
         <dl className="grid gap-3 sm:grid-cols-2">
           <Fact

@@ -607,7 +607,7 @@ export function validateFormanceMoneyCommand(command: FormanceMoneyCommand): str
       || value.length === 0
       || value.length > MAX_VARIABLE_VALUE_LENGTH
       || value !== value.trim()
-      || !validFormanceVariableValue(value)) return 'formance_variables_invalid'
+      || !validFormanceVariableValue(value, command.template === 'BUYER_SALE_SETTLED' && key === 'tax_amount')) return 'formance_variables_invalid'
   }
   if (!validFormanceMetadata(command.metadata)
     || command.metadata.idempotency_digest !== command.idempotencyKey) {
@@ -636,8 +636,9 @@ export function canonicalFormanceUnits(value: string, positive = true): string |
 export function formanceMonetaryVariable(
   asset: 'AUD' | 'USDC',
   units: string,
+  allowZeroTax = false,
 ): string | undefined {
-  const exact = canonicalFormanceUnits(units)
+  const exact = canonicalFormanceUnits(units, !(allowZeroTax && asset === 'AUD'))
   if (exact === undefined) return undefined
   return `${asset === 'AUD' ? AUD_ASSET : USDC_ASSET} ${exact}`
 }
@@ -655,11 +656,11 @@ export function formanceSafeUnitsFromSdk(value: bigint | number | string): strin
   return Number.isSafeInteger(number) && BigInt(number) === units ? units.toString() : undefined
 }
 
-function validFormanceVariableValue(value: string): boolean {
+function validFormanceVariableValue(value: string, allowZeroTax = false): boolean {
   const monetary = /^(AUD|USDC)\/6 (.+)$/u.exec(value)
   return monetary === null
     ? validFormanceAccountAddress(value)
-    : canonicalFormanceUnits(monetary[2] ?? '') !== undefined
+    : canonicalFormanceUnits(monetary[2] ?? '', !(allowZeroTax && monetary[1] === 'AUD')) !== undefined
 }
 
 export function validFormanceAccountAddress(address: string): boolean {

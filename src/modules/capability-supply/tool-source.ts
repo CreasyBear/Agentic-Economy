@@ -1,4 +1,4 @@
-import { callPublicSourceQuery, sourceQuery } from '@/lib/server/convex-source'
+import { callPublicSourceQuery, sourceQuery, callPublicSourceAction, sourceAction } from '@/lib/server/convex-source'
 
 import {
   deserializeToolCompareResult,
@@ -16,21 +16,21 @@ import {
   type ToolSearchWireResult,
 } from './tool-projection'
 
-const searchQuery = sourceQuery<ToolSearchInput, ToolSearchWireResult>('capabilitySupplyTools:search')
-const detailQuery = sourceQuery<ToolDetailInput, ToolDetailWireResult>('capabilitySupplyTools:detail')
-const compareQuery = sourceQuery<ToolCompareInput, ToolCompareWireResult>('capabilitySupplyTools:compare')
+const searchAction = sourceAction<ToolSearchInput, ToolSearchWireResult>('capabilityToolCatalog:search')
+const detailAction = sourceAction<ToolDetailInput, ToolDetailWireResult>('capabilityToolCatalog:detail')
+const compareAction = sourceAction<ToolCompareInput, ToolCompareWireResult>('capabilityToolCatalog:compare')
 const offeringToolMapQuery = sourceQuery<{ businessIds: string[] }, CatalogOfferingToolMapEntry[]>('capabilitySupplyTools:offeringToolMap')
 
 export function readCapabilityToolSearch(input: ToolSearchInput): Promise<ToolSearchResult> {
-  return callPublicSourceQuery(searchQuery, input).then(deserializeToolSearchResult)
+  return callPublicSourceAction(searchAction, input).then(deserializeToolSearchResult)
 }
 
 export function readCapabilityToolDetail(input: ToolDetailInput): Promise<ToolDetailResult> {
-  return callPublicSourceQuery(detailQuery, input).then(deserializeToolDetailResult)
+  return callPublicSourceAction(detailAction, input).then(deserializeToolDetailResult)
 }
 
 export function readCapabilityToolCompare(input: ToolCompareInput): Promise<ToolCompareResult> {
-  return callPublicSourceQuery(compareQuery, input).then(deserializeToolCompareResult)
+  return callPublicSourceAction(compareAction, input).then(deserializeToolCompareResult)
 }
 
 /**

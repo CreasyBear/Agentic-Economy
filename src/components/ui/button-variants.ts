@@ -3,11 +3,10 @@ import { cva } from "class-variance-authority"
 // AE: upstream ships `transition-all`, which animates every property including
 // layout ones. AE's UI contract bans it everywhere else for exactly that
 // reason, so this is narrowed to the properties the variants actually change.
-// Twenty-website button grammar (owner rebase 2026-09-01): mono uppercase
-// 12px, 40px regular / 32px small, 2px radius, ink fill, 1px blue focus
-// outline. NOTE: re-running `shadcn add --overwrite button` reverts this.
+// aecon.ai brand: Manrope, natural case, neutral controls and forest focus.
+// Re-running `shadcn add --overwrite button` reverts this theme adaptation.
 export const buttonVariants = cva(
-  "inline-flex shrink-0 items-center justify-center gap-2 rounded-md font-mono text-xs font-medium uppercase tracking-normal whitespace-nowrap transition-[color,background-color,border-color,box-shadow,opacity,scale] outline-none max-sm:min-h-touch max-sm:min-w-touch enabled:active:scale-[0.96] focus-visible:outline-1 focus-visible:outline-offset-1 focus-visible:outline-brand disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+  "inline-flex shrink-0 items-center justify-center gap-2 rounded-md font-sans text-sm font-medium tracking-normal whitespace-nowrap transition-[color,background-color,border-color,box-shadow,opacity,scale] outline-none max-sm:min-h-touch max-sm:min-w-touch enabled:active:scale-[0.98] motion-reduce:transition-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
   {
     variants: {
       variant: {

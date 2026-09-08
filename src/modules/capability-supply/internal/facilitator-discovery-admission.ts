@@ -3,6 +3,7 @@ import { isRecord } from "@/modules/common/is-record";
 
 import { importX402Capability, type CapabilityPublicationImport } from "../public";
 import { admitOfficialBazaarFromPaymentRequired } from "./facilitator-discovery-client";
+import { dereferenceOpenApiSchema } from "./schema-deref";
 import type { BazaarAdmission } from "./publication-importer-x402-bazaar";
 import {
   FACILITATOR_DISCOVERY_MAX_PAGE_SIZE,
@@ -50,7 +51,7 @@ async function admitItems(
     const sourceRevision = `${revisionNamespace}:v1:${canonicalDigest({
       route: {
         method: decision.identity.method,
-        resourceUrl: decision.identity.origin + decision.identity.path,
+        resourceUrl: decision.identity.resourceUrl,
       },
       source: JSON.stringify(decision.import),
     }).slice(7)}`;
@@ -62,7 +63,7 @@ async function admitItems(
     const sourceImport = materialized.source;
     let result;
     try {
-      result = await importX402Capability(sourceImport);
+      result = await importX402Capability(sourceImport, dereferenceOpenApiSchema);
     } catch {
       skipped.push({ kind: "skip", reason: "source_invalid" });
       continue;

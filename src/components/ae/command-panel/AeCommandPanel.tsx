@@ -58,12 +58,12 @@ export function AeCommandPanel() {
           type="button"
           variant="outline"
           size="sm"
-          className="min-h-touch justify-start rounded-none bg-background px-3 shadow-none sm:min-w-56"
+          className="min-h-touch justify-start rounded-full px-3 shadow-none sm:min-w-40"
           aria-label="Find Tools"
           aria-controls={PANEL_CONTENT_ID}
         >
           <SearchIcon aria-hidden="true" />
-          <span className="hidden font-mono text-xs font-medium uppercase tracking-wide sm:inline">Find Tools</span>
+          <span className="hidden text-sm font-medium sm:inline">Find Tools</span>
           <kbd className="ms-auto hidden border-s border-border ps-2 font-mono text-[0.6875rem] text-muted-foreground sm:inline">
             ⌘K
           </kbd>

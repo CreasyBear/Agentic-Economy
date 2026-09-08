@@ -15,7 +15,7 @@ export type AgentConnectionReadback = Readonly<{
   authorityMode: AgentAccessAuthorityMode
   toolAccess: AgentAccessToolAccess
   toolRefs: readonly string[]
-  policy: AgentAccessPolicy
+  spendingPolicy: AgentAccessPolicy
   commercialScopes: readonly string[]
   connectedAt: number
   lastRotatedAt: number

@@ -1,7 +1,8 @@
 import { z } from "zod";
 
 import type { ToolCardViewModel } from "@/modules/market/tool-view-model";
-import { readMarketRouteServer } from "@/modules/market/market.functions";
+import { readX402DirectoryServer } from "@/modules/market/x402-directory.functions";
+import type { X402DirectoryEntry } from './x402-directory';
 
 const HOME_CAPABILITY_LIMIT = 6;
 
@@ -14,10 +15,11 @@ export type RootSearchParams = {
 };
 
 export type HomeCapabilityRead =
+  | Readonly<{ kind: 'directory'; items: readonly X402DirectoryEntry[]; total?: number }>
   | Readonly<{
       kind: "ok";
       tools: readonly ToolCardViewModel[];
-      matchedCount: number;
+      matchedCount?: number;
     }>
   | Readonly<{ kind: "unavailable" }>;
 
@@ -33,21 +35,12 @@ export function validateRootSearch(
 
 export async function readHomeCapabilities(): Promise<HomeCapabilityRead> {
   try {
-    const projection = await readMarketRouteServer({
-      data: {
-        window: "30d",
-      },
-    });
-    if (projection.catalog.kind !== "ok") {
-      return projection.catalog.kind === "unavailable"
-        ? { kind: "unavailable" }
-        : { kind: "ok", tools: [], matchedCount: 0 };
-    }
-
+    const page = await readX402DirectoryServer({ data: {} });
+    if (page.kind !== 'ok') return { kind: 'unavailable' };
     return {
-      kind: "ok",
-      matchedCount: projection.catalog.matchedCount,
-      tools: projection.catalog.items.slice(0, HOME_CAPABILITY_LIMIT),
+      kind: 'directory',
+      ...(page.total === undefined ? {} : { total: page.total }),
+      items: page.items.slice(0, HOME_CAPABILITY_LIMIT),
     };
   } catch {
     return { kind: "unavailable" };

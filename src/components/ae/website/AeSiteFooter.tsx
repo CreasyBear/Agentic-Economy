@@ -1,71 +1,36 @@
-import { FOOTER } from '@/content/brand-copy'
-import { AECON_MARK_SRC, aeconMarkClassName } from '@/content/brand-assets'
+import { AECON_MARKETING_URL, AECON_MARK_SRC, aeconMarkClassName } from '@/content/brand-assets'
 import {
   isPublicFooterHrefLink,
   publicFooterColumns,
   publicFooterCopyright,
   type PublicFooterLink,
 } from '@/lib/public/website-nav'
-import { SiteMarker } from '@/components/ui/site-marker'
 
-import { AeNotchedCardShape } from './AeNotchedCard'
-import { AeMarkedDivider } from './AeSiteMarks'
+const applicationFooterColumns = publicFooterColumns.filter((column) => column.id !== 'footer-market')
 
 export function AeSiteFooter() {
-  const year = new Date().getFullYear()
-
   return (
-    <footer className="mt-auto bg-foreground text-background">
-      <div className="ae-rail relative flex min-h-[22rem] flex-col pt-hero pb-page md:min-h-[28rem] md:pt-band">
-        <div className="relative z-1 mt-auto text-foreground">
-          <AeNotchedCardShape />
-          <div className="relative px-6 pt-10 pb-page md:px-page md:pt-hero md:pb-page">
-            <div className="mb-page grid gap-intra font-mono text-sm">
-              <div className="flex items-center gap-2">
-                <img src={AECON_MARK_SRC} alt="" aria-hidden="true" className={aeconMarkClassName.dark} />
-                <span>AECON</span>
-              </div>
-              <p className="max-w-sm text-sm text-foreground/80">{FOOTER.tagline}</p>
-            </div>
-            <nav
-              aria-label="Footer"
-              className="grid gap-section md:grid-cols-[1fr_auto_1fr_auto_1fr_auto_1fr]"
-            >
-              {publicFooterColumns.map((column, index) => (
-                <div key={column.title} className="contents">
-                  {index > 0 ? (
-                    <div className="hidden md:block">
-                      <AeMarkedDivider orientation="vertical" />
-                    </div>
-                  ) : null}
-                  <section
-                    aria-labelledby={column.id}
-                    className="grid content-start gap-related"
-                  >
-                    {index > 0 ? (
-                      <div className="md:hidden">
-                        <AeMarkedDivider orientation="horizontal" />
-                      </div>
-                    ) : null}
-                    <h2 id={column.id} className="font-sans text-sm font-medium">
-                      {column.title}
-                    </h2>
-                    <ul className="grid gap-2">
-                      {column.links.map((link) => (
-                        <li key={link.label}>
-                          <FooterLink link={link} />
-                        </li>
-                      ))}
-                    </ul>
-                  </section>
-                </div>
-              ))}
-            </nav>
-            <p className="mt-section font-mono text-xs text-foreground">
-              {publicFooterCopyright(year)}
-            </p>
-          </div>
+    <footer className="mt-auto border-t border-border bg-background text-foreground">
+      <div className="ae-rail flex flex-col gap-4 py-6 lg:flex-row lg:items-start lg:justify-between">
+        <div className="shrink-0">
+          <a href={AECON_MARKETING_URL} aria-label="About AECON" className="inline-flex min-h-touch items-center gap-2 rounded-sm text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+            <img src={AECON_MARK_SRC} alt="" aria-hidden="true" className={aeconMarkClassName.light} />
+            AECON
+          </a>
+          <p className="mt-1 text-xs text-muted-foreground">{publicFooterCopyright(new Date().getFullYear())}</p>
         </div>
+        <nav aria-label="Footer" className="flex flex-wrap gap-x-8 gap-y-2">
+          {applicationFooterColumns.map((column) => (
+            <section key={column.id} aria-labelledby={column.id}>
+              <h2 id={column.id} className="text-xs font-medium text-muted-foreground">{column.title}</h2>
+              <ul className="flex flex-wrap gap-x-4">
+                {column.links.map((link) => (
+                  <li key={link.label}><FooterLink link={link} /></li>
+                ))}
+              </ul>
+            </section>
+          ))}
+        </nav>
       </div>
     </footer>
   )
@@ -79,11 +44,7 @@ function FooterLink({ link }: { link: PublicFooterLink }) {
       : `${link.to}?${new URLSearchParams(link.search).toString()}`
 
   return (
-    <a
-      href={href}
-      className="group inline-flex min-h-touch items-center gap-0 text-sm text-foreground no-underline transition-[gap] duration-200 ease-out hover:gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none"
-    >
-      <SiteMarker tone="fg" grow visible={false} />
+    <a href={href} className="inline-flex min-h-touch items-center rounded-sm text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
       {link.label}
     </a>
   )

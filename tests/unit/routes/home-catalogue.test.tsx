@@ -65,7 +65,7 @@ describe('catalogue-first home', () => {
     const row = screen.getByRole('listitem')
     expect(
       within(row).getByRole('link', {
-        name: 'Invoice extract, Ledger Labs, from USD 1.25',
+        name: 'Invoice extract, Ledger Labs, USD 1.25',
       }),
     ).toBeTruthy()
     expect(within(row).getByText('Extract line items and totals from a supplier invoice.')).toBeTruthy()
@@ -75,7 +75,7 @@ describe('catalogue-first home', () => {
     expect(screen.queryByRole('link', { name: 'Use Invoice extraction' })).toBeNull()
     expect(
       within(row).getByRole('link', {
-        name: 'Invoice extract, Ledger Labs, from USD 1.25',
+        name: 'Invoice extract, Ledger Labs, USD 1.25',
       }).getAttribute('href'),
     ).toContain('capability=invoice.extract')
   })

@@ -114,7 +114,7 @@ async function enqueueStatementPage(
   })
 }
 
-async function enqueueDocumentRender(
+export async function enqueueDocumentRender(
   ctx: MutationCtx,
   documentRef: string,
 ): Promise<string> {

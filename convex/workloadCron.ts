@@ -464,12 +464,11 @@ export async function refreshAgenticMarketSnapshotsHandler(ctx: WorkloadCronActi
 }
 
 export async function refreshAgenticEconomyApiRegistryHandler(ctx: WorkloadCronActionContext): Promise<null> {
-  return await runAdmittedAction(
-    ctx,
-    'refresh Agentic Economy API registry',
-    internal.marketExternalRegistryRefresh.run,
-    {},
-  )
+  await Promise.all([
+    runAdmittedAction(ctx, 'refresh Agentic Economy API registry', internal.marketExternalRegistryRefresh.run, {}),
+    runAdmittedAction(ctx, 'refresh Agentic Economy API registry', internal.x402DirectoryIndexRefresh.start, {}),
+  ])
+  return null
 }
 
 export async function refreshCurrentMarketPresenceHandler(

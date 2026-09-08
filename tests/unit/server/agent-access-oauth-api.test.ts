@@ -11,7 +11,7 @@ import {
   handleOAuthTokenPost,
   type OAuthApiOptions,
 } from '@/lib/server/agent-access-oauth-api'
-import { parseAuthorizationDetails } from '@/lib/server/agent-access-oauth/protocol'
+import { consentAccessSummary, parseAuthorizationDetails } from '@/lib/server/agent-access-oauth/protocol'
 import { createLocalE2EAgentAccessKeyApi } from '@/lib/server/local-e2e-agent-key'
 import { LOCAL_E2E_OPERATOR_PRINCIPAL } from '@/lib/server/local-e2e-bypass'
 import { defaultSandboxAgentAccessPolicy } from '@/modules/agent-access/sandbox-policy'
@@ -42,6 +42,16 @@ const strictAuthObject: NonNullable<OAuthApiOptions['authObject']> = {
 const allTools = { toolAccess: 'all_admitted' as const, toolRefs: [] as const }
 const toolRefA = `operation:v1:${'a'.repeat(64)}`
 const toolRefB = `operation:v1:${'b'.repeat(64)}`
+
+it('shows the effective default Sandbox spending limits before approval', () => {
+  const summary = consentAccessSummary({ environment: 'sandbox', expiresInSeconds: 3600, ...allTools })
+  expect(summary).toContain('AUD 1.000000')
+  expect(summary).toContain('AUD 5.000000')
+  expect(summary).toContain('AUD 20.000000')
+  expect(summary).toContain('Maximum concurrent Calls: 1')
+  expect(summary).toContain('Maximum calls per minute: 30')
+  expect(summary).not.toContain('No additional spend')
+})
 
 function consentSecurity(store: ReturnType<typeof storeFixture>, ownerId = 'user_local'): Pick<OAuthApiOptions, 'authObject' | 'reserveConsent'> {
   const authObject = { ...strictAuthObject, userId: ownerId }
@@ -1397,9 +1407,9 @@ describe('Customer Request OAuth HTTP adapter', () => {
     })
     expect(issued).toHaveLength(3)
     expect(issued[0]?.approvedAccess).toEqual({ environment: 'sandbox', ...allTools, expiresInSeconds: AGENT_ACCESS_KEY_TTL_SECONDS })
-    expect(issued[0]?.spendingPolicy).toEqual(defaultSandboxAgentAccessPolicy({ currency: 'USD', exponent: 2 }))
+    expect(issued[0]?.spendingPolicy).toEqual(defaultSandboxAgentAccessPolicy({ currency: 'AUD', exponent: 6 }))
     expect(issued[1]?.approvedAccess).toEqual({ environment: 'production', ...allTools, expiresInSeconds: 1_234 })
-    expect(issued[1]?.spendingPolicy).toEqual(defaultProductionAgentAccessPolicy({ currency: 'USD', exponent: 2 }))
+    expect(issued[1]?.spendingPolicy).toEqual(defaultProductionAgentAccessPolicy({ currency: 'AUD', exponent: 6 }))
     const spendingPolicyBase = buildProductionAgentAccessPolicy({
       currency: 'USD',
       exponent: 2,
@@ -1644,7 +1654,7 @@ describe('Customer Request OAuth HTTP adapter', () => {
     expect(store.grants.get('device:1')?.status).toBe('approved')
     expect(issuedInput?.authorityMode).toBe('read_only')
     expect(issuedInput?.approvedAccess).toEqual({ environment: 'sandbox', ...allTools, expiresInSeconds: AGENT_ACCESS_KEY_TTL_SECONDS })
-    expect(issuedInput?.spendingPolicy).toEqual(defaultSandboxAgentAccessPolicy({ currency: 'USD', exponent: 2 }))
+    expect(issuedInput?.spendingPolicy).toEqual(defaultSandboxAgentAccessPolicy({ currency: 'AUD', exponent: 6 }))
   })
   it('denies a pending grant without requiring approval proof or issuing a key', async () => {
     const store = storeFixture()

@@ -558,7 +558,7 @@ function ConnectionReceipts({
             <AeFactList density="compact" facts={[
               { label: 'Environment', value: environmentLabel(connection.environment) },
               { label: 'Authority', value: scopeLabel(connection.authorityMode) },
-              { label: 'Budget', value: formatCurrencyAmount(connection.policy.budget.maximumMonthlySpend), mono: true },
+              { label: 'Budget', value: formatCurrencyAmount(connection.spendingPolicy.budget.maximumMonthlySpend), mono: true },
               { label: 'Connected', value: formatTimestamp(connection.connectedAt), mono: true },
               { label: 'Last refresh', value: formatTimestamp(connection.lastRotatedAt), mono: true },
               { label: 'Connection expires', value: formatTimestamp(connection.connectionExpiresAt), mono: true },

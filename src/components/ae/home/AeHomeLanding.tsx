@@ -4,6 +4,7 @@ import { useMemo } from "react";
 
 import { AeEmptyState } from "@/components/ae/feedback/AeEmptyState";
 import { AeCapabilityTile } from "@/components/ae/market/AeCapabilityTile";
+import { X402DirectoryCards } from "@/components/ae/market/AeX402Directory";
 import {
   AeAgentInstructionCard,
   AeConnectingFrame,
@@ -28,16 +29,20 @@ type AeHomeLandingProps = Readonly<{
 }>;
 
 export function AeHomeLanding({ read }: AeHomeLandingProps) {
-  const toolCount = read.kind === "unavailable" ? 0 : read.matchedCount;
+  const toolCount = read.kind === "unavailable" ? 0 : read.kind === 'directory' ? read.total ?? read.items.length : read.matchedCount ?? read.tools.length;
   const toolLabel = toolCount === 1 ? "Tool" : "Tools";
   const meta =
     read.kind === "unavailable"
       ? "Catalogue unavailable"
-      : `${toolCount.toLocaleString()} current ${toolLabel}`;
+      : read.kind === 'directory'
+        ? `${toolCount.toLocaleString()} x402 Tools`
+      : read.matchedCount === undefined
+        ? `${toolCount.toLocaleString()} shown`
+        : `${toolCount.toLocaleString()} current ${toolLabel}`;
 
   return (
     <div className="flex flex-col">
-      <HomeHero meta={meta} showMeta={read.kind === "ok" && toolCount > 0} />
+      <HomeHero meta={meta} showMeta={read.kind !== "unavailable" && toolCount > 0} />
       <HomeCapabilityResults read={read} />
     </div>
   );
@@ -114,6 +119,11 @@ export function HomeCapabilityResults({
                 </AeSiteButton>
               }
             />
+          ) : read.kind === 'directory' && read.items.length > 0 ? (
+            <div className="grid gap-related">
+              <AeSiteBody muted>Explore the x402 catalogue from Coinbase Bazaar.</AeSiteBody>
+              <X402DirectoryCards entries={read.items} />
+            </div>
           ) : groups.length === 0 ? (
             <AeEmptyState
               icon={<SearchIcon />}

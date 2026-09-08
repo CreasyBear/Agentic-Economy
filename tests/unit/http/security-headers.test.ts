@@ -16,6 +16,7 @@ const staticSecurityHeaders = {
 
 const requiredCspAllowances = [
   "frame-ancestors 'none'",
+  "https://res.cloudinary.com/bdb-prod/image/upload/",
   'https://*.clerk.accounts.dev',
   'https://*.clerk.com',
   'wss://*.clerk.com',

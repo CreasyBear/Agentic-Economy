@@ -76,8 +76,9 @@ async function inspect(
 }
 
 describe('x402 seller endpoint inspector', () => {
-  it('binds the exact public requirement for a payment-before-effect Operation', async () => {
+  it('binds the actual request amount even when the listing amount differs', async () => {
     const operation = {
+      transport: { configJson: JSON.stringify({ method: 'POST', requestTimeoutMs: 10000, scheme: 'exact', network: BASE_MAINNET_NETWORK, currency: 'USD', routeAmountExponent: 6, assetAmountExponent: 6, asset: BASE_MAINNET_USDC_ADDRESS, payTo: supportedAccept().payTo, paymentRequiredJson: JSON.stringify(challenge()) }) },
       runtimeEnvironment: 'production',
       pricingConfig: {
         version: 'pricing:v3',
@@ -86,7 +87,7 @@ describe('x402 seller endpoint inspector', () => {
         sourceRequirement: {
           network: BASE_MAINNET_NETWORK,
           asset: BASE_MAINNET_USDC_ADDRESS,
-          atomicUnits: '1000',
+          atomicUnits: '100',
         },
         pricingPolicyRef: 'pricing-policy:managed-x402:v1',
         publicDisplay: 'on_request',
@@ -114,10 +115,13 @@ describe('x402 seller endpoint inspector', () => {
     })
     if (first.kind !== 'observed') throw new Error('live_requirement_fixture_missing')
     expect(first.requirement.requirementJson).not.toContain('payment-signature')
+    expect(JSON.parse(first.requirement.requirementJson).requirement.amountUnits).toBe('1000')
+    expect(JSON.parse(first.requirement.paymentRequiredJson).accepts[0].amount).toBe('1000')
   })
 
-  it('refuses requirement drift instead of issuing a stale managed quote', async () => {
+  it('refuses recipient drift before issuing a managed quote', async () => {
     const operation = {
+      transport: { configJson: JSON.stringify({ method: 'POST', requestTimeoutMs: 10000, scheme: 'exact', network: BASE_MAINNET_NETWORK, currency: 'USD', routeAmountExponent: 6, assetAmountExponent: 6, asset: BASE_MAINNET_USDC_ADDRESS, payTo: supportedAccept().payTo, paymentRequiredJson: JSON.stringify(challenge()) }) },
       runtimeEnvironment: 'production',
       pricingConfig: {
         version: 'pricing:v3',
@@ -142,7 +146,7 @@ describe('x402 seller endpoint inspector', () => {
     await expect(inspectLiveX402Requirement(operation, { query: 'Ada' }, {
       now: () => 1_000,
       validatePublicTarget: async () => true,
-      send: async () => paymentRequiredResponse(challenge([supportedAccept({ amount: '1001' })])),
+      send: async () => paymentRequiredResponse(challenge([supportedAccept({ payTo: '0x0000000000000000000000000000000000000003' })])),
     })).resolves.toEqual({ kind: 'refused' })
   })
 
@@ -201,15 +205,15 @@ describe('x402 seller endpoint inspector', () => {
     })
   })
 
-  it('decodes a valid PaymentRequired JSON body when the header is absent', async () => {
+  it('refuses a body-only v2 challenge that execution cannot consume', async () => {
     const result = await inspect(async () => new Response(JSON.stringify(challenge()), {
       status: 402,
       headers: { 'content-type': 'application/json' },
     }))
 
     expect(result).toMatchObject({
-      kind: 'observed',
-      payment: { selection: { kind: 'selected' } },
+      kind: 'refused',
+      reason: 'challenge_missing',
     })
   })
 

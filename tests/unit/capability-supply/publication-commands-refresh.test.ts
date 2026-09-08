@@ -23,11 +23,9 @@ import {
   bindingDraft,
   context,
   currentPublication,
-  digest,
   emptyPorts,
   encodedFor,
   offeringDraft,
-  preparedPublication,
   publicationFixture,
   publicationSource,
   supplyRows,
@@ -284,19 +282,9 @@ describe('capability-supply publication commands refresh', () => {
   })
 
   it('refreshes compatible and schedules readiness probe', async () => {
-    const publication = currentPublication({
-      connectionAuthority: {
-        connectionRef: 'connection:demo',
-        providerRef: 'provider:demo',
-        adapterId: 'http-json:v1',
-        authorityGeneration: 1,
-        authorityDigest: digest,
-        toolRef: currentPublication().toolRef,
-        grantedScopes: [],
-        grantedResources: [],
-      },
-    })
-    const prepared = await preparedPublication(publication.capabilityId, publication.version)
+    const fixture = await publicationFixture()
+    const publication = { ...fixture.publication, disposition: 'current' as const }
+    const prepared = fixture.prepared
     const encoded = encodedFor(publication.capabilityId, publication.version)
     const schedule = vi.fn(async () => {})
     const insertPublication = vi.fn(async () => {})
@@ -304,8 +292,8 @@ describe('capability-supply publication commands refresh', () => {
     const result = await refreshCapabilityCommand({
       publication,
       source: publicationSource(publication.capabilityId, publication.version),
-      offering: offeringDraft(),
-      binding: bindingDraft(),
+      offering: prepared.offering,
+      binding: prepared.binding,
       ...context,
       now: 10,
     }, emptyPorts({
@@ -314,7 +302,8 @@ describe('capability-supply publication commands refresh', () => {
         contract: encoded.contract,
         registeredAt: 1,
       }),
-      ...supplyRows(publication),
+      loadOfferingByOfferingId: async () => fixture.offering,
+      loadBindingByBindingId: async () => fixture.binding,
       scheduleReadinessProbe: schedule,
       insertPublication,
       rotateProviderConnectionBindingAuthority: rotate,

@@ -6,6 +6,7 @@ import {
   quoteManagedX402BuyerAud,
   splitInclusiveAudTax,
   validateExecutableRateEvidence,
+  validateExecutableRateEvidenceIntegrity,
 } from '../../../src/modules/money/internal/executable-rate'
 
 describe('executable AUD to USDC pricing evidence', () => {
@@ -85,13 +86,36 @@ describe('executable AUD to USDC pricing evidence', () => {
     for (let totalUnits = 1n; totalUnits <= 10_000n; totalUnits += 1n) {
       const split = splitInclusiveAudTax(totalUnits.toString(), 1_000)
       const expectedTaxUnits = (2n * totalUnits * 1_000n + 11_000n) / 22_000n
-      if (expectedTaxUnits === 0n) {
-        expect(split).toBeUndefined()
-        continue
-      }
       if (split === undefined) throw new Error(`GST split missing for ${totalUnits}`)
       expect(BigInt(split.taxUnits)).toBe(expectedTaxUnits)
       expect(BigInt(split.revenueUnits) + BigInt(split.taxUnits)).toBe(totalUnits)
     }
+  })
+})
+
+
+describe('managed reference prices', () => {
+  const referenceRate = { source: 'coinbase', base: 'USDC', quote: 'AUD', rate: '1.50', fetchedAt: 1_800_000_000_000 } as const
+  it('values exact upstream units directly without margin and rounds only the buyer up', () => {
+    for (const [upstream, aud] of [['2000000', '3000000'], ['1', '2']]) {
+      const quote = quoteManagedX402BuyerAud({ environment: 'production', requiredUsdcAtomicUnits: upstream!, observedAt: referenceRate.fetchedAt, referenceRate })
+      expect(quote).toMatchObject({ kind: 'quoted', evidence: { version: 'ae.managed-reference-price:v1', sourceAmount: { units: aud }, targetAmount: { units: upstream } } })
+    }
+  })
+  it('refuses stale or malformed rates and preserves integrity independently of expiry', () => {
+    const args = { environment: 'production' as const, requiredUsdcAtomicUnits: '250', observedAt: referenceRate.fetchedAt, referenceRate }
+    const quote = quoteManagedX402BuyerAud(args)
+    if (quote.kind !== 'quoted') throw new Error('quote missing')
+    expect(validateExecutableRateEvidence(quote.evidence, quote.evidence.expiresAt)).toBe(false)
+    expect(validateExecutableRateEvidenceIntegrity(quote.evidence)).toBe(true)
+    expect(validateExecutableRateEvidenceIntegrity({ ...quote.evidence, sourceAmount: { currency: 'AUD', exponent: 6, units: '1' } })).toBe(false)
+    expect(quoteManagedX402BuyerAud({ ...args, observedAt: quote.evidence.expiresAt }).kind).toBe('refused')
+    for (const rate of ['0', '-1', 'NaN', 'Infinity', '1e3', '01', '']) {
+      expect(quoteManagedX402BuyerAud({ ...args, referenceRate: { ...referenceRate, rate } }).kind).toBe('refused')
+    }
+  })
+  it('allows zero and rounded-zero tax without losing buyer units', () => {
+    expect(splitInclusiveAudTax('100000000', 0)).toEqual({ revenueUnits: '100000000', taxUnits: '0' })
+    expect(splitInclusiveAudTax('1', 1000)).toEqual({ revenueUnits: '1', taxUnits: '0' })
   })
 })

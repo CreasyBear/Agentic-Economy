@@ -200,3 +200,5 @@ export type {
   ProviderOAuthCleanupResult,
   SecretPointerInput,
 } from './internal/supply-funnel/provider-connection-handoff-contract'
+
+export { prepareX402Request } from './internal/x402-request'

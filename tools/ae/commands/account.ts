@@ -125,6 +125,12 @@ async function readAccountMoney(
       kind: 'UNAVAILABLE', code: `account-${subcommand}-result-invalid`,
     })
   }
+  if (parsed.data.kind === 'error') {
+    throw new CliFailure(`Account ${subcommand} is unavailable: ${parsed.data.code}.`, {
+      kind: parsed.data.code === 'unauthenticated' ? 'UNAUTHENTICATED' : 'UNAVAILABLE',
+      code: parsed.data.code, retryable: parsed.data.code === 'source_unavailable',
+    })
+  }
   const nextCursor = subcommand === 'activity'
     && parsed.data.kind === 'available'
     && 'nextCursor' in parsed.data

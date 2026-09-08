@@ -158,7 +158,11 @@ describe('market terminal manifest OAuth contract', () => {
     expect(JSON.stringify(fundingMcpDescriptor)).not.toMatch(/operation\.invoke|Mandate/u)
   })
 
-  it('keeps connect registration bytes and polling semantics equal to the manifest', async () => {
+  it.each([
+    { scopes: ['market_tools:call'], environment: undefined },
+    { scopes: ['market_tools:call', 'customer_requests:spending_policy'], environment: undefined },
+    { scopes: ['market_tools:call'], environment: 'production' },
+  ])('accepts the granted buyer scopes and requested environment $environment', async ({ scopes, environment }) => {
     const manifest = await manifestJson()
     const oauth = (manifest.gateway as JsonRecord).oauth as JsonRecord
     const flow = oauth.deviceFlow as readonly JsonRecord[]
@@ -183,8 +187,8 @@ describe('market terminal manifest OAuth contract', () => {
         accountRef: 'account:test-owner',
         credentialId: 'credential:test-agent',
         applicationRef: 'agentic-economy',
-        environment: 'sandbox',
-        scopes: ['market_tools:call', 'customer_requests:spending_policy'],
+        environment: environment ?? 'sandbox',
+        scopes,
         authorityMode: 'spending_policy',
       })
     })
@@ -193,7 +197,7 @@ describe('market terminal manifest OAuth contract', () => {
     vi.stubEnv('AE_API_KEY', '')
     vi.stubEnv('AE_CONFIG_DIR', configDirectory)
     try {
-      await runConnectCommand([], cliOptions)
+      await runConnectCommand([], { ...cliOptions, ...(environment === undefined ? {} : { environment }) })
     } finally {
       output.restore()
       fetch.mockRestore()
@@ -201,6 +205,11 @@ describe('market terminal manifest OAuth contract', () => {
       rmSync(configDirectory, { recursive: true, force: true })
     }
 
+    const deviceForm = new URLSearchParams(String(calls[1]?.init?.body))
+    if (environment === 'production') expect(JSON.parse(deviceForm.get('authorization_details') ?? 'null')).toEqual([{
+      type: 'agentic_economy_market_tools', environment: 'production', tool_access: 'all_admitted', tool_refs: [], expires_in_seconds: 604800,
+    }])
+    else expect(deviceForm.has('authorization_details')).toBe(false)
     const connectRequest = JSON.parse(String(calls[0]?.init?.body)) as unknown
     expect(connectRequest).toEqual(registration?.request)
     expect(JSON.stringify(connectRequest)).toBe(JSON.stringify(registration?.request))

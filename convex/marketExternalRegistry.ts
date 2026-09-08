@@ -37,6 +37,7 @@ export const begin = internalMutation({
         index.eq("generation", args.generation),
       )
       .unique();
+    if (existing?.source === 'coinbase') throw new Error("external_registry_generation_source_mismatch");
     if (existing === null) {
       await ctx.db.insert("marketExternalRegistryGenerations", {
         generation: args.generation,
@@ -80,6 +81,7 @@ export const writeBatch = internalMutation({
         index.eq("generation", args.generation),
       )
       .unique();
+    if (generation?.source === 'coinbase') throw new Error("external_registry_generation_source_mismatch");
     if (generation === null || generation.status !== "refreshing") {
       throw new Error("external_registry_generation_not_refreshing");
     }
@@ -108,7 +110,7 @@ export const writeBatch = internalMutation({
           ) {
             throw new Error("external_registry_generation_identity_conflict");
           }
-          if (resolveAgenticMarketRouteWinner(existing, entry) === "right") {
+          if (resolveAgenticMarketRouteWinner({ ...existing, source: 'agentic_market' }, entry) === "right") {
             await ctx.db.replace(existing._id, {
               generation: args.generation,
               ...entry,
@@ -155,6 +157,7 @@ export const finalize = internalMutation({
       .unique();
     if (
       generation === null ||
+      generation.source === 'coinbase' ||
       generation.status !== "refreshing" ||
       generation.ingestedCount !== args.expectedEntries ||
       !validCoverage(args)
@@ -211,6 +214,7 @@ export const fail = internalMutation({
         index.eq("generation", args.generation),
       )
       .unique();
+    if (generation?.source === 'coinbase') throw new Error("external_registry_generation_source_mismatch");
     const shouldCleanup = generation !== null && generation.status === "refreshing";
     if (shouldCleanup) {
       await ctx.db.patch(generation._id, {
@@ -246,6 +250,12 @@ export const deleteGenerationBatch = internalMutation({
   handler: async (ctx, args) => {
     const state = await registryState(ctx);
     if (state?.activeGeneration === args.generation) return null;
+
+    // Coinbase generations have their own search projections, facets and
+    // aggregate cleanup. The older registry must never delete those rows.
+    const selectedGeneration = await ctx.db.query('marketExternalRegistryGenerations')
+      .withIndex('by_generation', (index) => index.eq('generation', args.generation)).unique();
+    if (selectedGeneration?.source === 'coinbase') return null;
 
     const rows = await ctx.db
       .query("marketExternalRegistryEntries")

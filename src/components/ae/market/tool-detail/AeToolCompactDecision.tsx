@@ -47,6 +47,7 @@ export function AeToolCompactDecision({
           </div>
           <AeToolPrice
             price={model.totalPrice}
+            {...(model.priceValidUntil === undefined ? {} : { validUntil: model.priceValidUntil })}
             size="sm"
             label="Indicative price"
             className="shrink-0 place-items-end"

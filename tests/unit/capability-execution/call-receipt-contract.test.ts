@@ -240,6 +240,10 @@ describe('Call receipts', () => {
     }
     const first = buildBrokeredX402Receipt(input)
     const second = buildBrokeredX402Receipt({ ...input, state: 'refunded', evidenceHash: 'sha256:other' })
+    expect(buildBrokeredX402Receipt({ ...input, sourceUsdcUnits: '250' })).toMatchObject({
+      providerObligation: { amount: { currency: 'USDC', units: '250', exponent: 6 } },
+      providerSettlement: { amount: { currency: 'USDC', units: '250', exponent: 6 } },
+    })
     expect(first).toBeDefined()
     expect(second).toMatchObject({ receiptRef: first?.receiptRef })
     expect(first).toMatchObject({

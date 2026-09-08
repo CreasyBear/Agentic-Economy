@@ -1416,7 +1416,7 @@ function deriveOAuthGrantPolicy(requestedAccess: AgentAccessOAuthRequestedAccess
   const budgetCount = amounts.filter((amount) => amount !== undefined).length
   if (requestedAccess.environment === 'sandbox') {
     if (budgetCount !== 0 || controls.some((value) => value !== undefined)) throw new Error('invalid_requested_access')
-    const base = defaultSandboxAgentAccessPolicy({ currency: 'USD', exponent: 2 })
+    const base = defaultSandboxAgentAccessPolicy({ currency: 'AUD', exponent: 6 })
     return agentAccessPolicySchema.parse({
       ...base,
       toolAccess: requestedAccess.toolAccess,
@@ -1438,7 +1438,7 @@ function deriveOAuthGrantPolicy(requestedAccess: AgentAccessOAuthRequestedAccess
       maximumMonthlySpend,
     })
   } else {
-    base = defaultProductionAgentAccessPolicy({ currency: 'USD', exponent: 2 })
+    base = defaultProductionAgentAccessPolicy({ currency: 'AUD', exponent: 6 })
   }
   return agentAccessPolicySchema.parse({
     ...base,

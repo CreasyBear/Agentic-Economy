@@ -21,6 +21,7 @@ import {
 } from '../src/modules/agent-access/agent-access'
 import {
   AGENT_ACCESS_AUTHORITY_MODE_VALUES,
+  MARKET_TOOLS_CALL_SCOPE,
   type AgentAccessAuthorityMode,
 } from '../src/modules/agent-access/contract'
 import { normalizeStoredAgentAccessGrant } from '../src/modules/agent-access/policy'
@@ -41,6 +42,27 @@ const GRANT_REF_PATTERN = /^grt_[0-9a-f]{32}$/u
 const MAX_REQUIRED_SCOPES = 64
 const LAST_AUTHENTICATED_WRITE_INTERVAL_MS = 15 * 60 * 1_000
 const KNOWN_CREDENTIAL_DENIAL_BUCKET_MS = 5 * 60 * 1_000
+
+// Buyer transport authentication checks the live selected-Tool grant. The purchased
+// Tool is separately admitted at its consequence boundary. Route IDs do not consume
+// the 64 resources available for selected Tools.
+function isBuyerAuthenticationSurface(operationKey: string): boolean {
+  const httpSurfaces = [
+    'tools-call', 'account-self', 'account-balance', 'account-activity',
+    'market-request-create', 'market-request-list', 'market-request-status',
+    'funding-handoff-config', 'funding-handoff-create', 'funding-handoff-status',
+  ]
+  const mcpSurfaces = [
+    'tools-list', 'tool.quote', 'tool.call', 'call.list', 'call.status', 'call.cancel', 'call.reconcile',
+    'agent-access.whoami', 'agent-access.balance', 'agent-access.activity',
+    'market-demand.record', 'market-demand.list', 'market-demand.status',
+    'funding.handoff.config', 'funding.handoff.create', 'funding.handoff.status',
+  ]
+  return [
+    ...httpSurfaces.map((surface) => `surface:http:${surface}`),
+    ...mcpSurfaces.map((surface) => `surface:mcp:${surface}`),
+  ].includes(operationKey)
+}
 
 const environmentValue = v.union(v.literal('sandbox'), v.literal('production'))
 const authorityModeValue = v.union(
@@ -209,10 +231,15 @@ export async function resolveCanonicalAgentBinding(
     || normalizedAccessGrant.expiresAt <= consequenceNow) {
     return await denyKnownCredential('authentication_required', consequenceNow)
   }
+  const bindingResources = normalizedAccessGrant.toolAccess === 'selected_tools'
+    && requiredScopes.includes(MARKET_TOOLS_CALL_SCOPE)
+    && isBuyerAuthenticationSurface(input.operationKey)
+    ? normalizedAccessGrant.toolRefs
+    : [input.operationKey]
   const grants = candidates.filter((grant) => grant.grantRef === accessGrant.grantRef
     && grant.expiresAt > consequenceNow
     && requiredScopes.every((scope) => grant.scopes.includes(scope))
-    && (grant.resourceRefs.includes('*') || grant.resourceRefs.includes(input.operationKey)))
+    && (grant.resourceRefs.includes('*') || bindingResources.every(resource => grant.resourceRefs.includes(resource))))
   if (grants.length !== 1) {
     const hasCurrentAccountGrant = candidates.some((grant) => (
       grant.accountRef === admission.ownerId && grant.expiresAt > consequenceNow
@@ -253,7 +280,7 @@ export async function resolveCanonicalAgentBinding(
         idempotencyRef: input.correlationId,
       },
       requiredScopes,
-      resourceRefs: [input.operationKey],
+      resourceRefs: bindingResources,
       budgetAmount: 0,
     })
   } catch (error) {

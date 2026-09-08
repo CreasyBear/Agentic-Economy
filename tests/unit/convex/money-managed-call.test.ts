@@ -6,7 +6,7 @@ import schema from '../../../convex/schema'
 import { internal } from '../../../convex/_generated/api'
 import { buildDevelopmentPublishedToolEvidence } from '../../../tools/dev/fixtures/capability-supply/development-published-tool-evidence'
 import { canonicalDigest } from '../../../src/modules/common/canonical-digest'
-import { PACKAGE4_FORMANCE_REQUIREMENTS } from '../../../src/modules/money/public'
+import { PACKAGE4_FORMANCE_REQUIREMENTS, quoteManagedX402BuyerAud } from '../../../src/modules/money/public'
 import { convexTestWithMarketComponents, publishedBusinessOwner } from '../../helpers/convex-fixtures'
 import { withSourceWrite } from '../../helpers/source-write-admission'
 
@@ -27,6 +27,8 @@ const releaseRefs = ['formance:release-aud', 'formance:release-usdc']
 const settlementRefs = ['formance:settle-buyer', 'formance:settle-provider']
 
 function commitment() {
+  const priced = quoteManagedX402BuyerAud({ environment: 'sandbox', requiredUsdcAtomicUnits: '5000000', observedAt: now, referenceRate: { source: 'coinbase', base: 'USDC', quote: 'AUD', rate: '1.2', fetchedAt: now } })
+  if (priced.kind !== 'quoted') throw new Error('fixture_rate_invalid')
   return {
     quoteRef,
     principalId: principalRef,
@@ -52,8 +54,8 @@ function commitment() {
     x402RequirementDigest: 'sha256:live-requirement',
     x402RequirementJson: '{}',
     x402RequirementObservedAt: now - 1,
-    rateEvidenceJson: '{}',
-    rateEvidenceDigest: 'sha256:rate',
+    rateEvidenceJson: JSON.stringify(priced.evidence),
+    rateEvidenceDigest: priced.evidence.evidenceDigest,
     budgetPolicyRef: 'budget:managed-call',
     budgetGeneration: 1,
     maximumSpendPerCallUnits: '6000000',
@@ -123,7 +125,7 @@ async function seedReservationFixture(backend: ReturnType<typeof convexTest>) {
 }
 
 describe('Formance managed Call evidence', () => {
-  it('attaches one exact reservation and one payout-ineligible Provider obligation', async () => {
+  it('attaches one exact reservation from expired reference evidence and one payout-ineligible Provider obligation', async () => {
     const backend = convexTest(schema, convexModules)
     await expect(seedReservationFixture(backend)).resolves.toEqual({ kind: 'attached', replayed: false })
     await expect(backend.mutation(internal.moneyManagedCall.attachReservation, {
@@ -156,6 +158,17 @@ describe('Formance managed Call evidence', () => {
         evidenceRefs: [quoteRef, ...reservationRefs],
       })],
     })
+  })
+
+  it('refuses recovery evidence whose stored conversion or upstream amount was changed', async () => {
+    const backend = convexTest(schema, convexModules)
+    await seedReservationFixture(backend)
+    await backend.run(async (ctx) => {
+      const stored = await ctx.db.query('capabilityQuotes').withIndex('by_quoteRef', q => q.eq('quoteRef', quoteRef)).unique()
+      if (stored === null) throw new Error('quote_missing')
+      await ctx.db.patch(stored._id, { sourceUsdcUnits: '5000001' })
+    })
+    expect(await backend.query(internal.moneyManagedCall.readBooking, { callRef })).toEqual({ kind: 'not_found' })
   })
 
   it('retains possible submission and settles only from exact Formance references', async () => {

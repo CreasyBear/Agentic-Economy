@@ -5,12 +5,10 @@ import { MenuIcon, XIcon } from 'lucide-react'
 import { AeCommandPanel, CommandPanelProvider } from '@/components/ae/command-panel'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
 import { emitFunnelEventOnce } from '@/lib/observability/funnel-client'
-import {
-  AeSiteButton,
-} from '@/components/ae/website/AeSiteButton'
+import { Button } from '@/components/ui/button'
 import { AeSiteDrawerNav, AeSiteIconButton, AeSitePrimaryNav } from '@/components/ae/website/AeSiteNav'
 import { AeSiteFooter } from '@/components/ae/website/AeSiteFooter'
-import { AECON_MARK_SRC, aeconMarkClassName } from '@/content/brand-assets'
+import { AECON_MARK_SRC, AECON_MOBILE_LOCKUP_SRC, aeconMarkClassName } from '@/content/brand-assets'
 import { cn } from '@/lib/utils'
 
 function AeFunnelAttributionBoot() {
@@ -106,12 +104,12 @@ export function AePublicShell({ children, mode = 'page' }: AePublicShellProps) {
         Skip to content
       </a>
       <div ref={sentinelRef} aria-hidden="true" className="pointer-events-none absolute inset-x-0 top-0 h-2" />
-      <header className={cn('z-30 shrink-0 pt-3', mode === 'page' && 'sticky top-0')}>
+      <header className={cn('z-30 shrink-0 border-b border-border bg-background', mode === 'page' && 'sticky top-0')}>
         <Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
           <CloseDrawerOnDesktop onClose={setMobileNavOpen} />
           <div
             data-elevated={elevated ? '' : undefined}
-            className="ae-nav flex min-h-13 items-center gap-related rounded-nav border border-border bg-container px-3 shadow-none transition-shadow duration-200 ease-out data-[elevated]:shadow-float motion-reduce:transition-none sm:px-gutter"
+            className="ae-nav flex min-h-20 items-center gap-related px-1 shadow-none transition-shadow duration-200 ease-out data-[elevated]:shadow-soft motion-reduce:transition-none sm:px-2"
           >
             <PublicBrandLink />
             <AeSitePrimaryNav />
@@ -119,16 +117,16 @@ export function AePublicShell({ children, mode = 'page' }: AePublicShellProps) {
               <CommandPanelProvider open={commandOpen} onOpenChange={handleCommandOpenChange}>
                 <AeCommandPanel />
               </CommandPanelProvider>
-              <AeSiteButton asChild variant="outlined" className="hidden md:inline-flex">
+              <Button asChild variant="ghost" className="hidden lg:inline-flex">
                 <Link to="/sign-in/$" params={{ _splat: '' }}>Sign in</Link>
-              </AeSiteButton>
-              <AeSiteButton asChild>
+              </Button>
+              <Button asChild variant="outline" className="hidden sm:inline-flex">
                 <Link to="/for-providers">Publish</Link>
-              </AeSiteButton>
+              </Button>
               <SheetTrigger asChild>
                 <AeSiteIconButton
                   ariaLabel={mobileNavOpen ? 'Close public menu' : 'Open public menu'}
-                  className="md:hidden"
+                  className="lg:hidden"
                 >
                   <MenuIcon aria-hidden="true" />
                 </AeSiteIconButton>
@@ -147,12 +145,12 @@ export function AePublicShell({ children, mode = 'page' }: AePublicShellProps) {
             </SheetHeader>
             <AeSiteDrawerNav onNavigate={() => setMobileNavOpen(false)} />
             <div className="grid gap-intra border-t border-border p-gutter">
-              <AeSiteButton asChild variant="outlined">
+              <Button asChild variant="outline">
                 <Link to="/sign-in/$" params={{ _splat: '' }} onClick={() => setMobileNavOpen(false)}>Sign in</Link>
-              </AeSiteButton>
-              <AeSiteButton asChild>
+              </Button>
+              <Button asChild>
                 <Link to="/for-providers" onClick={() => setMobileNavOpen(false)}>Publish</Link>
-              </AeSiteButton>
+              </Button>
             </div>
           </SheetContent>
         </Sheet>
@@ -177,7 +175,7 @@ export function AePublicShell({ children, mode = 'page' }: AePublicShellProps) {
 
 function CloseDrawerOnDesktop({ onClose }: { onClose: (open: boolean) => void }) {
   useEffect(() => {
-    const mediaQuery = window.matchMedia('(min-width: 768px)')
+    const mediaQuery = window.matchMedia('(min-width: 1024px)')
     const handleChange = () => {
       if (mediaQuery.matches) onClose(false)
     }
@@ -191,10 +189,8 @@ function CloseDrawerOnDesktop({ onClose }: { onClose: (open: boolean) => void })
 function PublicBrandLink() {
   return (
     <Link to="/" aria-label="Agentic Economy home" className="flex min-h-touch min-w-touch items-center gap-related no-underline">
-      <img src={AECON_MARK_SRC} alt="" aria-hidden="true" className={aeconMarkClassName.light} />
-      <span className="hidden min-w-0 sm:block">
-        <span className="text-sm font-semibold tracking-tight text-foreground">AECON</span>
-      </span>
+      <img src={AECON_MARK_SRC} alt="" aria-hidden="true" className={cn(aeconMarkClassName.light, 'hidden sm:block')} />
+      <img src={AECON_MOBILE_LOCKUP_SRC} alt="" aria-hidden="true" className="h-7 w-auto max-w-32 sm:hidden" />
     </Link>
   )
 }

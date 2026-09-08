@@ -46,35 +46,39 @@ function context(rows: readonly Record<string, unknown>[], indexes: string[]) {
 }
 
 describe('capability Call history projection', () => {
-  it('uses the credential-time index, preserves native pagination, and strips private material', async () => {
+  it('preserves Agent history across credentials with native pagination and private material removed', async () => {
     const indexes: string[] = []
     const result = await listAgentCallSummariesHandler(context([
       row(),
+      row({ callRef: 'call:predecessor', credentialId: 'credential:predecessor' }),
       row({ callRef: 'call:other', principalId: 'principal:other' }),
+      row({ callRef: 'call:foreign-account', ownerId: 'owner:other' }),
     ], indexes) as never, {
       principalId: 'principal:one',
+      ownerId: 'owner:one',
       credentialId: 'credential:one',
       applicationRef: 'application:one',
       environment: 'sandbox',
       paginationOpts: { numItems: 20, cursor: null },
     })
 
-    expect(indexes).toEqual(['by_credentialId_and_createdAt'])
+    expect(indexes).toEqual(['by_principalId_and_createdAt'])
     expect(result).toMatchObject({ isDone: false, continueCursor: 'cursor:two' })
     expect(result.page).toEqual([expect.objectContaining({
       callRef: 'call:one',
       toolRef: 'tool:one',
       receiptRef: 'receipt:one',
       evidenceHash: 'evidence:one',
-    })])
+    }), expect.objectContaining({ callRef: 'call:predecessor' })])
     expect(JSON.stringify(result)).not.toContain('private')
     expect(JSON.stringify(result)).not.toContain('idempotencyKey')
   })
 
-  it('uses the exact credential-state index for filtered history', async () => {
+  it('uses the exact Agent-state index for filtered history', async () => {
     const indexes: string[] = []
     await listAgentCallSummariesHandler(context([row()], indexes) as never, {
       principalId: 'principal:one',
+      ownerId: 'owner:one',
       credentialId: 'credential:one',
       applicationRef: 'application:one',
       environment: 'sandbox',
@@ -82,6 +86,6 @@ describe('capability Call history projection', () => {
       paginationOpts: { numItems: 5, cursor: null },
     })
 
-    expect(indexes).toEqual(['by_credentialId_and_state'])
+    expect(indexes).toEqual(['by_principalId_and_state'])
   })
 })

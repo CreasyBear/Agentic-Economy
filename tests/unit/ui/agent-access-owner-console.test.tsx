@@ -71,7 +71,7 @@ const connection: AgentConnectionReadback = {
   authorityMode: 'read_only' as const,
   toolAccess: 'all_admitted' as const,
   toolRefs: [],
-  policy: {
+  spendingPolicy: {
     format: 'ae.agent-access-policy:v2' as const,
     toolAccess: 'all_admitted' as const,
     toolRefs: [],

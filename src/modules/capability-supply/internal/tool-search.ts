@@ -130,6 +130,7 @@ export type ToolSearchFilters = Readonly<{
 }>;
 export type ToolSearchInput = Readonly<{
   query: string;
+  source?: "current" | "coinbase" | "payai";
   limit?: number;
   cursor?: string;
   filters?: ToolSearchFilters;
@@ -140,7 +141,8 @@ export type ToolSearchResult =
       schemaVersion: PublicToolRegistrySchemaVersion;
       query: string;
       items: readonly PublicToolDescriptor[];
-      matchedCount: number;
+      matchedCount?: number;
+      partialResults?: boolean;
       ranking: readonly ToolSearchRanking[];
       pagination: Readonly<{
         limit: number;
@@ -154,7 +156,8 @@ export type ToolSearchResult =
       schemaVersion: PublicToolRegistrySchemaVersion;
       query: string;
       appliedFilters: ToolSearchFilters;
-      matchedCount: number;
+      matchedCount?: number;
+      partialResults?: boolean;
       ranking: readonly ToolSearchRanking[];
       navigation: readonly PublicToolNavigationRelation[];
     }>
@@ -235,7 +238,7 @@ export async function searchCapabilityTools(
   input: ToolSearchInput,
   now = Date.now(),
 ): Promise<ToolSearchResult> {
-  const normalized = normalizeSearch(input);
+  const normalized = normalizeToolSearchInput(input);
   if (normalized === undefined) return searchUnavailable("query_invalid", port.navigation);
   const source = await port.listCurrent({
     ...(normalized.filters.networkId === undefined
@@ -259,7 +262,7 @@ export async function searchCapabilityTools(
   > = [];
   for (const record of source.tools) {
     const tool = projectCapabilityTool(record, now, port.navigation);
-    if (matchesFilters(tool, normalized.filters)) {
+    if (matchesToolFilters(tool, normalized.filters)) {
       projectedMatches.push({
         value: tool,
         toolRef: tool.toolRef,
@@ -357,7 +360,7 @@ export async function searchCurrentToolFacts(
   expectedCount?: number,
   trustedCursorLastToolRef?: PublicToolRef,
 ): Promise<ToolSearchResult> {
-  const normalized = normalizeSearch(input);
+  const normalized = normalizeToolSearchInput(input);
   if (normalized === undefined) return searchUnavailable("query_invalid", navigation);
   if (expectedCount !== undefined && facts.length !== expectedCount)
     return searchUnavailable("source_unavailable", navigation);
@@ -450,7 +453,7 @@ function searchUnavailable(
     navigation: noToolNavigation(navigation),
   };
 }
-function normalizeSearch(input: ToolSearchInput):
+export function normalizeToolSearchInput(input: ToolSearchInput):
   | Readonly<{
       query: string;
       limit: number;
@@ -527,7 +530,7 @@ function containsConcreteSensitiveInput(query: string): boolean {
   const usSocialSecurityNumber = /\b\d{3}[- ]\d{2}[- ]\d{4}\b/;
   return emailAddress.test(query) || usSocialSecurityNumber.test(query);
 }
-function matchesFilters(
+export function matchesToolFilters(
   tool: PublicToolDescriptor,
   filters: ToolSearchFilters,
 ): boolean {

@@ -16,7 +16,7 @@ const candidate = {
   },
   title: 'Reference lookup',
   description: 'Looks up one public reference.',
-  inputSchema: { type: 'object', properties: { query: { type: 'string' } } },
+  inputSchema: { type: 'object', properties: { query: { type: 'string' }, 'path/~name': { type: 'string' } } },
   outputSchema: { type: 'object', properties: { result: { type: 'string' } } },
   authentication: { kind: 'public' as const },
   validationExampleAvailable: true,
@@ -244,6 +244,8 @@ describe('source-native Provider start', () => {
     fireEvent.click(screen.getByRole('checkbox', { name: 'I am authorised to publish this service' }))
     fireEvent.click(screen.getByRole('checkbox', { name: 'The information is accurate' }))
     fireEvent.click(screen.getByRole('checkbox', { name: 'Publish after validation succeeds' }))
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Send input data to the Provider' }))
+    fireEvent.click(screen.getByRole('radio', { name: 'Personal data' }))
     fireEvent.click(screen.getByRole('button', { name: 'Submit for validation' }))
 
     await waitFor(() => expect(onPublish).toHaveBeenCalledOnce())
@@ -262,6 +264,14 @@ describe('source-native Provider start', () => {
         category: 'Research',
       }),
       pricing: { kind: 'free' },
+      consequences: expect.objectContaining({
+        dataUse: ['/query', '/path~1~0name'].map((inputPointer) => ({
+          inputPointer,
+          classification: 'personal',
+          phase: 'execution',
+          purposes: ['Perform the Tool'],
+        })),
+      }),
       attestation: {
         authorisedToPublish: true,
         informationAccurate: true,

@@ -101,19 +101,19 @@ export function buildOwnerAgentAccessPolicy(input: Readonly<Pick<
   | 'authorityMode'
 >>): AgentAccessPolicy {
   const environment = input.environment ?? 'sandbox'
-  if (environment === 'sandbox') return defaultSandboxAgentAccessPolicy({ currency: 'USD', exponent: 2 })
+  if (environment === 'sandbox') return defaultSandboxAgentAccessPolicy({ currency: 'AUD', exponent: 6 })
   const hasBudget = input.maximumSpendPerCall !== undefined
     && input.maximumDailySpend !== undefined
     && input.maximumMonthlySpend !== undefined
   const base = hasBudget
     ? buildProductionAgentAccessPolicy({
-        currency: 'USD',
-        exponent: 2,
+        currency: input.maximumSpendPerCall.currency,
+        exponent: input.maximumSpendPerCall.exponent,
         maximumSpendPerCall: input.maximumSpendPerCall,
         maximumDailySpend: input.maximumDailySpend,
         maximumMonthlySpend: input.maximumMonthlySpend,
       })
-    : defaultProductionAgentAccessPolicy({ currency: 'USD', exponent: 2 })
+    : defaultProductionAgentAccessPolicy({ currency: 'AUD', exponent: 6 })
   return agentAccessPolicySchema.parse({
     ...base,
     budget: {

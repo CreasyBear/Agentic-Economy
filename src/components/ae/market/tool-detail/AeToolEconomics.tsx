@@ -8,7 +8,8 @@ export function AeToolEconomics({
 }: Readonly<{ tool: PublicToolDescriptor }>) {
   const breakdown = tool.commercial.priceBreakdown
   const priceEvidence = tool.commercial.priceEvidence
-  const pricing = tool.commercial.price.kind === 'fixed'
+  const managed = tool.authentication.kind === 'x402'
+  const pricing = tool.commercial.displayPrice?.kind === 'indicative' ? 'AUD estimate; confirmed in Quote' : tool.commercial.price.kind === 'fixed'
     ? 'Fixed price'
     : tool.commercial.price.kind === 'range'
       ? 'Price range'
@@ -22,10 +23,11 @@ export function AeToolEconomics({
       mono: breakdown !== undefined,
     },
     {
-      label: 'AE fee',
-      value: breakdown === undefined ? 'Not itemized' : formatCurrencyAmount(breakdown.agenticEconomyFee),
+      label: managed ? 'Call fee' : 'AE fee',
+      value: managed ? 'No Call markup' : breakdown === undefined ? 'Not itemized' : formatCurrencyAmount(breakdown.agenticEconomyFee),
       mono: breakdown !== undefined,
     },
+    ...(managed ? [{ label: 'Payment', value: 'Uses your AE balance' }, { label: 'Top-up fee', value: '5% fee + GST on the fee' }] : []),
     {
       label: 'Output evidence',
       value: evidenceFields === 0 ? 'None published' : `${evidenceFields} named`,

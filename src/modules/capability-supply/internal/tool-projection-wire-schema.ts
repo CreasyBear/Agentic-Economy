@@ -4,9 +4,8 @@ import {
 } from "@/modules/capability-contract/public";
 import { isRecord } from "@/modules/common/is-record";
 
-const MAX_SCHEMA_BYTES = 65_536;
-const MAX_SCHEMA_DEPTH = 24;
-const MAX_SCHEMA_PROPERTIES = 128;
+const MAX_SCHEMA_BYTES = 131_072;
+const MAX_SCHEMA_DEPTH = 64;
 const MAX_SCHEMA_REFS = 64;
 const SCHEMA_KEYS = new Set([
   "$defs",
@@ -84,7 +83,7 @@ export function decodePublicSchema(
 export function projectPublicSchema(
   schema: Readonly<Record<string, JsonValue>>,
 ): Readonly<Record<string, JsonValue>> {
-  const state = { depth: 0, properties: 0, refs: 0 };
+  const state = { depth: 0, refs: 0 };
   const projected = projectSchemaValue(schema, state);
   if (
     new TextEncoder().encode(JSON.stringify(projected)).byteLength >
@@ -95,7 +94,7 @@ export function projectPublicSchema(
 }
 function projectSchemaValue(
   value: JsonValue,
-  state: { depth: number; properties: number; refs: number },
+  state: { depth: number; refs: number },
 ): JsonValue {
   if (state.depth > MAX_SCHEMA_DEPTH)
     throw new Error("tool_public_schema_too_deep");
@@ -112,6 +111,11 @@ function projectSchemaValue(
   for (const [key, child] of Object.entries(object)) {
     if (!SCHEMA_KEYS.has(key))
       throw new Error("tool_public_schema_keyword_unsupported");
+    // These values are JSON data, not nested schemas with schema-key names.
+    if (key === "const" || key === "enum" || key === "default" || key === "examples") {
+      result[key] = child;
+      continue;
+    }
     if (key === "$ref") {
       state.refs += 1;
       if (
@@ -131,9 +135,6 @@ function projectSchemaValue(
       if (!isRecord(child))
         throw new Error("tool_public_schema_properties_invalid");
       const childObject = child as Readonly<Record<string, JsonValue>>;
-      state.properties += Object.keys(childObject).length;
-      if (state.properties > MAX_SCHEMA_PROPERTIES)
-        throw new Error("tool_public_schema_properties_exceeded");
       result[key] = Object.fromEntries(
         Object.entries(childObject).map(([childKey, childValue]) => [
           childKey,

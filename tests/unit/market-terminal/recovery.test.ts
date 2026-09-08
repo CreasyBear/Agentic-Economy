@@ -1,4 +1,7 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 
 import {
   AGENT_ACCESS_OAUTH_DEVICE_CLIENT_REGISTRATION_REQUEST,
@@ -27,6 +30,11 @@ const baseOptions: CliOptions = {
 
 const OPERATION_REF = `operation:v1:${'a'.repeat(64)}`
 const COMMITMENT_REF = `operation-commitment:v1:${'b'.repeat(64)}`
+let testConfigDirectory: string
+beforeEach(() => {
+  testConfigDirectory = mkdtempSync(join(tmpdir(), 'ae-recovery-test-'))
+  vi.stubEnv('AE_CONFIG_DIR', testConfigDirectory)
+})
 const inspection = {
   kind: 'committed' as const,
   quoteRef: COMMITMENT_REF,
@@ -96,6 +104,8 @@ function setApiKey(value: string, origin = baseOptions.baseUrl): void {
 
 
 afterEach(() => {
+  vi.unstubAllEnvs()
+  rmSync(testConfigDirectory, { recursive: true, force: true })
   vi.restoreAllMocks()
   vi.unstubAllGlobals()
   delete process.env.AE_API_KEY
@@ -274,7 +284,7 @@ describe('CLI Call recovery projections', () => {
       output.restore()
     }
 
-    expect(JSON.parse(output.read())).toEqual(completed)
+    expect(JSON.parse(output.read())).toEqual({ ...completed, recoveryRef: expect.stringMatching(/^[0-9a-f-]{36}$/u) })
     expect(fetchMock).toHaveBeenCalledTimes(3)
   })
 
@@ -453,7 +463,7 @@ describe('CLI Call recovery projections', () => {
       code: 'call-transport-unknown',
       detail: {
         toolRef: OPERATION_REF,
-        recovery: 'Repeat call with the same idempotency identity.',
+        recovery: 'Resume the retained purchase; do not create a new Call.',
         identityPreserved: true,
       },
     } satisfies Partial<CliFailure>)

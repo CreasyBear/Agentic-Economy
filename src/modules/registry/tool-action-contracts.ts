@@ -30,7 +30,7 @@ const readOnlyEffect = {
   class: 'observation', reversible: true, recipientKind: 'none', dataClasses: [], spendExposure: 'none', approval: 'none',
 } as const
 const boundaries = [
-  'Read-only public discovery. Does not create authority, a Quote, a Call, payment, disclosure, or external effect.',
+  'Public discovery may query the selected directory and refresh admitted Tool metadata. Does not create spending authority, a Quote, a Call or payment.',
   'Returns compact current Tool facts and public health only; caller authority and balance are decided by tool.quote.',
   'Opaque Tool references are current-version-bound and are never execution authority.',
 ] as const
@@ -48,15 +48,17 @@ function parameter(schema: z.ZodType, name: string, description: string): Action
 }
 
 const listParameters = [
+  parameter(toolListInputSchema, 'source', 'Current AE inventory by default; Coinbase and PayAI provide live paginated discovery.'),
   parameter(toolListInputSchema, 'limit', 'Maximum 100 compact Tools; defaults to 50.'),
   parameter(toolListInputSchema, 'cursor', 'Opaque cursor from the previous page.'),
-  parameter(toolListInputSchema, 'filters', 'Allowlisted Tool filters; Operational supply is the default.'),
+  parameter(toolListInputSchema, 'filters', 'Allowlisted Tool filters; Operational supply and admitted Tools checked when quoting are shown by default.'),
 ] as const
 const searchParameters = [
+  parameter(toolCatalogSearchInputSchema, 'source', 'Current AE inventory by default. Coinbase supports intent search up to 20 results; refine partial results. PayAI supports browsing only.'),
   parameter(toolCatalogSearchInputSchema, 'query', 'Capability phrase from 1 to 256 characters.'),
   parameter(toolCatalogSearchInputSchema, 'limit', 'Maximum 20 compact Tools; defaults to 10.'),
   parameter(toolCatalogSearchInputSchema, 'cursor', 'Opaque cursor from the previous page.'),
-  parameter(toolCatalogSearchInputSchema, 'filters', 'Allowlisted Tool filters; Operational supply is the default.'),
+  parameter(toolCatalogSearchInputSchema, 'filters', 'Allowlisted Tool filters; Operational supply and admitted Tools checked when quoting are shown by default.'),
 ] as const
 const describeParameters = [
   parameter(toolDescribeInputSchema, 'toolRef', 'Opaque current Tool reference.'),
@@ -70,7 +72,7 @@ export const registryToolsListContract = {
   name: 'List Tools', summary: 'Browse compact current Tool supply without a search phrase.',
   boundaries, outputSchema: toolChoiceListOutputSchema, parameters: listParameters, readOnly: true, effect: readOnlyEffect,
   invocationContract: {
-    version: 'registry.tools.list:v1', consequenceClass: 'read_only', materialInputPaths: ['limit', 'cursor', 'filters'],
+    version: 'registry.tools.list:v1', consequenceClass: 'read_only', materialInputPaths: ['source', 'limit', 'cursor', 'filters'],
     authorityRequirement: 'none', retryClass: 'replayable', expectedEvidence: ['public_tool_list_result'],
     safeContinuations: ['registry.tools.describe'],
     invalidationConditions: ['action_contract_version_changed', 'filters_changed', 'cursor_changed'],
@@ -82,7 +84,7 @@ export const registryToolsSearchContract = {
   name: 'Search Tools', summary: 'Search compact current Tool supply with a capability phrase.',
   boundaries, outputSchema: toolChoiceSearchOutputSchema, parameters: searchParameters, readOnly: true, effect: readOnlyEffect,
   invocationContract: {
-    version: 'registry.tools.search:v3', consequenceClass: 'read_only', materialInputPaths: ['query', 'limit', 'cursor', 'filters'],
+    version: 'registry.tools.search:v3', consequenceClass: 'read_only', materialInputPaths: ['source', 'query', 'limit', 'cursor', 'filters'],
     authorityRequirement: 'none', retryClass: 'replayable', expectedEvidence: ['public_tool_search_result'],
     safeContinuations: ['registry.tools.describe'],
     invalidationConditions: ['action_contract_version_changed', 'query_changed', 'filters_changed', 'cursor_changed'],

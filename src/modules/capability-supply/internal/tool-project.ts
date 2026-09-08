@@ -312,7 +312,9 @@ function projectAvailability(
       validUntil,
     };
   const reason =
-    validUntil !== undefined && validUntil <= now
+    record.unavailableReason === "inspection_required"
+      ? "inspection_required" as const
+      : validUntil !== undefined && validUntil <= now
       ? ("readiness_expired" as const)
       : (record.unavailableReason ?? "setup_required");
   return {

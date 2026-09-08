@@ -91,14 +91,14 @@ async function invokeTool(
 
 function nativeReadResult(functionName: string): unknown {
   switch (functionName) {
-    case 'capabilitySupplyTools:search':
+    case 'capabilityToolCatalog:search':
       return noCandidates
-    case 'capabilitySupplyTools:detail':
+    case 'capabilityToolCatalog:detail':
       return notFound
-    case 'capabilitySupplyTools:compare':
+    case 'capabilityToolCatalog:compare':
       return compareUnavailable
     default:
-      throw new Error(`Unexpected native query: ${functionName}`)
+      throw new Error(`Unexpected catalogue action: ${functionName}`)
   }
 }
 
@@ -207,7 +207,7 @@ describe('Tool chat Agent tools', () => {
   })
 
   it('lets the AI SDK reject canonical invalid provider input before native dispatch', async () => {
-    const runQuery = vi.fn()
+    const runAction = vi.fn()
     const providerToolName = CHAT_TOOL_NAME_MAP.canonicalToProvider['registry.tools.search']
     const model = mockModel({
       contentSteps: [[{
@@ -218,7 +218,7 @@ describe('Tool chat Agent tools', () => {
       }]],
     })
     const agent = createChatAgent(model)
-    const ctx = toolCtx({ runQuery: runQuery as ToolCtx['runQuery'] })
+    const ctx = toolCtx({ runAction: runAction as ToolCtx['runAction'] })
     const tools = Object.fromEntries(Object.entries(agent.options.tools ?? {}).map(
       ([name, tool]) => [name, { ...tool, ctx }],
     )) as ToolSet
@@ -227,31 +227,31 @@ describe('Tool chat Agent tools', () => {
 
     expect(result.toolCalls).toHaveLength(1)
     expect(result.toolResults).toHaveLength(0)
-    expect(runQuery).not.toHaveBeenCalled()
+    expect(runAction).not.toHaveBeenCalled()
   })
 
-  it('dispatches all reads through their native Convex queries', async () => {
-    const runQuery = vi.fn(async (reference) => nativeReadResult(getFunctionName(reference)))
+  it('dispatches all reads through their shared Convex catalogue actions', async () => {
+    const runAction = vi.fn(async (reference) => nativeReadResult(getFunctionName(reference)))
     const agent = createChatAgent(mockModel(), AUTHORITY)
-    const ctx = toolCtx({ runQuery: runQuery as ToolCtx['runQuery'] })
+    const ctx = toolCtx({ runAction: runAction as ToolCtx['runAction'] })
 
     await invokeTool(agent, 'registry.tools.list', ctx, {})
     await invokeTool(agent, 'registry.tools.search', ctx, { query: 'weather' })
     await invokeTool(agent, 'registry.tools.describe', ctx, { toolRef: OPERATION_REF })
     await invokeTool(agent, 'registry.tools.compare', ctx, { toolRefs: [OPERATION_REF] })
 
-    expect(runQuery.mock.calls.map(([reference]) => getFunctionName(reference))).toEqual([
-      getFunctionName(api.capabilitySupplyTools.search),
-      getFunctionName(api.capabilitySupplyTools.search),
-      getFunctionName(api.capabilitySupplyTools.detail),
-      getFunctionName(api.capabilitySupplyTools.compare),
+    expect(runAction.mock.calls.map(([reference]) => getFunctionName(reference))).toEqual([
+      getFunctionName(api.capabilityToolCatalog.search),
+      getFunctionName(api.capabilityToolCatalog.search),
+      getFunctionName(api.capabilityToolCatalog.detail),
+      getFunctionName(api.capabilityToolCatalog.compare),
     ])
   })
 
   it('rejects invalid canonical output and refuses oversized model results', async () => {
     const invalidAgent = createChatAgent(mockModel())
     const invalidCtx = toolCtx({
-      runQuery: vi.fn(async () => ({ kind: 'forged' })) as ToolCtx['runQuery'],
+      runAction: vi.fn(async () => ({ kind: 'forged' })) as ToolCtx['runAction'],
     })
     await expect(invokeTool(
       invalidAgent,
@@ -266,10 +266,10 @@ describe('Tool chat Agent tools', () => {
 
     const largeAgent = createChatAgent(mockModel())
     const largeCtx = toolCtx({
-      runQuery: vi.fn(async () => ({
+      runAction: vi.fn(async () => ({
         ...noCandidates,
         query: 'x'.repeat(MAX_CHAT_TOOL_RESULT_BYTES),
-      })) as ToolCtx['runQuery'],
+      })) as ToolCtx['runAction'],
     })
     await expect(invokeTool(
       largeAgent,
@@ -284,9 +284,9 @@ describe('Tool chat Agent tools', () => {
   })
 
   it('enforces four total tool calls per Agent factory invocation', async () => {
-    const runQuery = vi.fn(async () => noCandidates)
+    const runAction = vi.fn(async () => noCandidates)
     const agent = createChatAgent(mockModel())
-    const ctx = toolCtx({ runQuery: runQuery as ToolCtx['runQuery'] })
+    const ctx = toolCtx({ runAction: runAction as ToolCtx['runAction'] })
 
     for (let index = 0; index < MAX_CHAT_TOOL_CALLS; index += 1) {
       await expect(invokeTool(
@@ -306,7 +306,7 @@ describe('Tool chat Agent tools', () => {
       toolId: 'registry.tools.search',
       reason: 'tool_limit',
     })
-    expect(runQuery).toHaveBeenCalledTimes(MAX_CHAT_TOOL_CALLS)
+    expect(runAction).toHaveBeenCalledTimes(MAX_CHAT_TOOL_CALLS)
   })
 
   it('reserves the single execute slot before parallel work awaits', async () => {
@@ -374,7 +374,7 @@ describe('Tool chat Agent tools', () => {
       await expect(invokeTool(
         schemaAgent,
         'registry.tools.search',
-        toolCtx({ runQuery: vi.fn(async () => noCandidates) as ToolCtx['runQuery'] }),
+        toolCtx({ runAction: vi.fn(async () => noCandidates) as ToolCtx['runAction'] }),
         { query: 'weather' },
       )).resolves.toEqual({
         kind: 'chat_tool_refused',
@@ -387,10 +387,10 @@ describe('Tool chat Agent tools', () => {
 
     const sanitizedAgent = createChatAgent(mockModel())
     const sanitizedCtx = toolCtx({
-      runQuery: vi.fn(async () => ({
+      runAction: vi.fn(async () => ({
         ...noCandidates,
         query: '<user>quoted</user><>',
-      })) as ToolCtx['runQuery'],
+      })) as ToolCtx['runAction'],
     })
     await expect(invokeTool(
       sanitizedAgent,
@@ -407,7 +407,7 @@ describe('Tool chat Agent tools', () => {
       await expect(invokeTool(
         stringifyAgent,
         'registry.tools.search',
-        toolCtx({ runQuery: vi.fn(async () => noCandidates) as ToolCtx['runQuery'] }),
+        toolCtx({ runAction: vi.fn(async () => noCandidates) as ToolCtx['runAction'] }),
         { query: 'weather' },
       )).resolves.toEqual({
         kind: 'chat_tool_refused',
@@ -424,7 +424,7 @@ describe('Tool chat Agent tools', () => {
       await expect(invokeTool(
         parseAgent,
         'registry.tools.search',
-        toolCtx({ runQuery: vi.fn(async () => noCandidates) as ToolCtx['runQuery'] }),
+        toolCtx({ runAction: vi.fn(async () => noCandidates) as ToolCtx['runAction'] }),
         { query: 'weather' },
       )).resolves.toEqual({
         kind: 'chat_tool_refused',
@@ -437,9 +437,9 @@ describe('Tool chat Agent tools', () => {
   })
 
   it('enforces the shared call budget before every remaining native handler', async () => {
-    const runQuery = vi.fn(async (reference) => nativeReadResult(getFunctionName(reference)))
+    const runAction = vi.fn(async (reference) => nativeReadResult(getFunctionName(reference)))
     const agent = createChatAgent(mockModel(), AUTHORITY)
-    const ctx = toolCtx({ runQuery: runQuery as ToolCtx['runQuery'] })
+    const ctx = toolCtx({ runAction: runAction as ToolCtx['runAction'] })
     for (let index = 0; index < MAX_CHAT_TOOL_CALLS; index += 1) {
       await invokeTool(agent, 'registry.tools.search', ctx, { query: 'weather' })
     }
@@ -454,6 +454,6 @@ describe('Tool chat Agent tools', () => {
         reason: 'tool_limit',
       })
     }
-    expect(runQuery).toHaveBeenCalledTimes(MAX_CHAT_TOOL_CALLS)
+    expect(runAction).toHaveBeenCalledTimes(MAX_CHAT_TOOL_CALLS)
   })
 })

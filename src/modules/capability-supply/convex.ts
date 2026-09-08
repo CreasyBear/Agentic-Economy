@@ -41,3 +41,5 @@ export {
   type FacilitatorDiscoveryAdmissionResult,
   type FacilitatorDiscoverySkip,
 } from './internal/facilitator-discovery-ingest'
+
+export { sourceRouteRef } from './internal/source-route-identity'

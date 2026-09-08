@@ -1,6 +1,8 @@
 /**
  * @vitest-environment jsdom
  */
+
+import { toToolInspectorModel } from '@/components/ae/market/tool-detail/tool-inspector-model'
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { RouterContextProvider, createMemoryHistory, createRootRoute, createRoute, createRouter } from '@tanstack/react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -613,4 +615,19 @@ const x402Tool = projectCapabilityTool({
     expect(readDetailMock).toHaveBeenCalledWith({ data: { toolRef: tool.toolRef } })
   })
 
+})
+
+
+describe('selected-request inspection presentation', () => {
+  it('keeps an admitted unobserved Tool usable without claiming it is healthy', () => {
+    if (tool === undefined) throw new Error('Tool fixture missing')
+    const model = toToolInspectorModel({
+      ...tool,
+      availability: { posture: 'setup_required', reason: 'inspection_required' },
+    })
+    expect(model.readinessLabel).toBe('Checked when quoting')
+    expect(model.availabilityPosture).toBe('setup_required')
+    expect(model.nextAction.command).toBe(tool.toolRef)
+    expect(model.nextAction.warning).toBeUndefined()
+  })
 })

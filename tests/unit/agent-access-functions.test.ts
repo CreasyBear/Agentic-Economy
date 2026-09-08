@@ -109,14 +109,17 @@ describe('owner agent-access issuance policy', () => {
 
   it('keeps the production default fail-safe when no explicit budgets are supplied', () => {
     const policy = buildOwnerAgentAccessPolicy({ environment: 'production' })
-    expect(policy.budget.maximumSpendPerCall).toEqual(amount('0'))
-    expect(policy.budget.maximumDailySpend).toEqual(amount('0'))
-    expect(policy.budget.maximumMonthlySpend).toEqual(amount('0'))
+    const zero = { currency: 'AUD', units: '0', exponent: 6 }
+    expect(policy.budget.maximumSpendPerCall).toEqual(zero)
+    expect(policy.budget.maximumDailySpend).toEqual(zero)
+    expect(policy.budget.maximumMonthlySpend).toEqual(zero)
   })
 
   it('does not replace sandbox policy limits with production zero defaults', () => {
     const policy = buildOwnerAgentAccessPolicy({ environment: 'sandbox' })
-    expect(policy.budget.maximumSpendPerCall.units).not.toBe('0')
+    expect(policy.budget.maximumSpendPerCall).toEqual({ currency: 'AUD', units: '1000000', exponent: 6 })
+    expect(policy.budget.maximumDailySpend).toEqual({ currency: 'AUD', units: '5000000', exponent: 6 })
+    expect(policy.budget.maximumMonthlySpend).toEqual({ currency: 'AUD', units: '20000000', exponent: 6 })
   })
 
   it('requires canonical Convex authority before Clerk effects and keeps provider IDs as locators', async () => {

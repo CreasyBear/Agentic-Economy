@@ -54,6 +54,7 @@ export async function listAgentCallSummariesHandler(
   ctx: QueryCtx,
   args: Readonly<{
     principalId: string
+    ownerId: string
     credentialId: string
     applicationRef: string
     environment: 'sandbox' | 'production'
@@ -64,17 +65,17 @@ export async function listAgentCallSummariesHandler(
   const state = args.state
   const source = state === undefined
     ? ctx.db.query('capabilityCalls')
-        .withIndex('by_credentialId_and_createdAt', (query) => query.eq('credentialId', args.credentialId))
+        .withIndex('by_principalId_and_createdAt', (query) => query.eq('principalId', args.principalId))
         .order('desc')
     : ctx.db.query('capabilityCalls')
-        .withIndex('by_credentialId_and_state', (query) => query.eq('credentialId', args.credentialId).eq('state', state))
+        .withIndex('by_principalId_and_state', (query) => query.eq('principalId', args.principalId).eq('state', state))
         .order('desc')
   const page = await source.paginate(args.paginationOpts)
   return {
     ...page,
     page: page.page
       .filter((row) => row.principalId === args.principalId
-        && row.credentialId === args.credentialId
+        && row.ownerId === args.ownerId
         && row.applicationRef === args.applicationRef
         && row.environment === args.environment)
       .map((row) => {
@@ -165,7 +166,7 @@ function assertCallResultJson(value: CallResultValue): void {
   }
 }
 
-function projectCallResult(result: CallResult): CallResultValue {
+export function projectCallResult(result: CallResult): CallResultValue {
   if (result.kind !== 'needs_authority') return result
   return {
     ...result,
@@ -216,13 +217,12 @@ async function authorizeRecovery(
   callRef: string,
   principal: AgentAccessPrincipal,
 ): Promise<RecoveryAdmission> {
-  const row = await ctx.runQuery(internal.capabilityCalls.readRecovery, {
-    callRef,
-    principalId: principal.principalId,
-    credentialId: principal.credentialId,
-  })
+  // The outer authority boundary authenticates the current credential. A Call
+  // retains its original credential as effect evidence after replacement.
+  const row = await ctx.runQuery(internal.capabilityCalls.readOwnerRecovery, { callRef })
   if (
     row === null
+    || row.principalId !== principal.principalId
     || row.ownerId !== principal.ownerId
     || row.applicationRef !== principal.applicationRef
     || row.environment !== principal.environment
@@ -617,7 +617,7 @@ type RecoveryActionArgs = {
 
 export async function listAgentCallsHandler(
   ctx: ActionCtx,
-  args: RecoveryActionArgs & Readonly<{ state?: CallListState; paginationOpts: PaginationOptions }>,
+  args: Omit<RecoveryActionArgs, 'callRef'> & Readonly<{ state?: CallListState; paginationOpts: PaginationOptions }>,
 ) {
   await ctx.runMutation(internal.capabilityCalls.admit, {
     operationKey: args.operationKey,
@@ -631,6 +631,7 @@ export async function listAgentCallsHandler(
   })
   return await ctx.runQuery(internal.capabilityCalls.listAgentCallSummaries, {
     principalId: args.principal.principalId,
+    ownerId: args.principal.ownerId,
     credentialId: args.principal.credentialId,
     applicationRef: args.principal.applicationRef,
     environment: args.principal.environment,
@@ -663,8 +664,9 @@ export async function readCallStatusHandler(
   }
   const result = await ctx.runAction(internal.capabilityCallWorker.recover, {
     callRef: args.callRef,
-    principalId: args.principal.principalId,
-    credentialId: args.principal.credentialId,
+    principalId: admission.row.principalId,
+    credentialId: admission.row.credentialId,
+    recoveryPrincipal: args.principal,
     mode: 'status',
   })
   const projected = projectStatusRecoveryResult(result)
@@ -698,8 +700,9 @@ export async function cancelCallHandler(
   if (admission.kind !== 'authorized') return recoveryNotFound(args.callRef)
   return await ctx.runAction(internal.capabilityCallWorker.recover, {
     callRef: args.callRef,
-    principalId: args.principal.principalId,
-    credentialId: args.principal.credentialId,
+    principalId: admission.row.principalId,
+    credentialId: admission.row.credentialId,
+    recoveryPrincipal: args.principal,
     mode: 'cancel',
     idempotencyKey: args.idempotencyKey,
   })
@@ -723,8 +726,9 @@ export async function reconcileCallHandler(
   if (admission.kind !== 'authorized') return recoveryNotFound(args.callRef)
   return await ctx.runAction(internal.capabilityCallWorker.recover, {
     callRef: args.callRef,
-    principalId: args.principal.principalId,
-    credentialId: args.principal.credentialId,
+    principalId: admission.row.principalId,
+    credentialId: admission.row.credentialId,
+    recoveryPrincipal: args.principal,
     mode: 'reconcile',
     evidence: args.evidence,
   })
@@ -740,6 +744,7 @@ export async function readOwnerCallStatusHandler(
     callRef: args.callRef,
     principalId: row.principalId,
     credentialId: row.credentialId,
+    recoverAsOwner: true,
     mode: 'status',
   })
   const projected = projectStatusRecoveryResult(result)
@@ -772,6 +777,7 @@ export async function cancelOwnerCallHandler(
     callRef: args.callRef,
     principalId: row.principalId,
     credentialId: row.credentialId,
+    recoverAsOwner: true,
     mode: 'cancel',
     idempotencyKey: args.idempotencyKey,
   })
@@ -787,6 +793,7 @@ export async function reconcileOwnerCallHandler(
     callRef: args.callRef,
     principalId: row.principalId,
     credentialId: row.credentialId,
+    recoverAsOwner: true,
     mode: 'reconcile',
     evidence: args.evidence,
   })

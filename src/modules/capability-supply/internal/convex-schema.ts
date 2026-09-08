@@ -175,6 +175,7 @@ export { registeredToolMappingMaterialValue }
 
 export const capabilitySupplyTables = {
   capabilityPublications: defineTable({
+    searchText: v.optional(v.string()),
     publicationRef: v.string(),
     toolRef: v.string(),
     revision: v.number(),
@@ -242,6 +243,8 @@ export const capabilitySupplyTables = {
     updatedAt: v.number(),
     withdrawnAt: v.optional(v.number()),
   })
+    .searchIndex('search_text', { searchField: 'searchText', filterFields: ['disposition', 'networkId'] })
+    .index('by_disposition', ['disposition'])
     .index('by_publicationRef_and_revision', ['publicationRef', 'revision'])
     .index('by_toolRef_and_disposition', ['toolRef', 'disposition'])
     .index('by_networkId_and_disposition', ['networkId', 'disposition'])

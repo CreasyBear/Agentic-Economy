@@ -86,7 +86,7 @@ export async function prepareX402PaymentMaterial(
       kind: 'refused',
       observation: refused('x402', requestDigest, false, 'input_invalid'),
     }
-  const challenge = selection?.challenge ?? decodePinnedX402Challenge(configuration)
+  const challenge = selection?.challenge ?? decodePinnedX402Challenge(configuration, invocation.committedPaymentRequiredJson)
   if (challenge === undefined) {
     return {
       kind: 'refused',
@@ -122,7 +122,7 @@ export async function prepareX402PaymentMaterial(
       challenge.resource.url,
       target,
       configuration.method,
-      configuration.query !== undefined,
+      configuration.query !== undefined || configuration.queryObjectPointer !== undefined,
     )
     || Date.now() + requirement.maxTimeoutSeconds * 1_000 > invocation.authority.expiresAt
   ) {
@@ -330,13 +330,14 @@ export function decodeX402Challenge(header: string | null): X402Challenge | unde
   }
 }
 
-function decodePinnedX402Challenge(configuration: X402Configuration): X402Challenge | undefined {
+function decodePinnedX402Challenge(configuration: X402Configuration, committedPaymentRequiredJson?: string): X402Challenge | undefined {
   if (!('paymentRequiredJson' in configuration) || typeof configuration.paymentRequiredJson !== 'string') {
     return undefined
   }
+  if (committedPaymentRequiredJson !== undefined && committedPaymentRequiredJson.length > 65_536) return undefined
   try {
     return validateX402Challenge(
-      validateX402PaymentRequired(JSON.parse(configuration.paymentRequiredJson)),
+      validateX402PaymentRequired(JSON.parse(committedPaymentRequiredJson ?? configuration.paymentRequiredJson)),
     )
   } catch {
     return undefined

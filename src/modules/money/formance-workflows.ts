@@ -613,7 +613,7 @@ function managedCallAmounts(input: FormanceManagedCallBooking) {
   if (!managedCallSemantic(input)) return undefined
   const buyer = formanceMonetaryVariable('AUD', input.buyerAmountUnits)
   const revenue = formanceMonetaryVariable('AUD', input.buyerRevenueUnits)
-  const tax = formanceMonetaryVariable('AUD', input.buyerTaxUnits)
+  const tax = formanceMonetaryVariable('AUD', input.buyerTaxUnits, true)
   const provider = formanceMonetaryVariable('USDC', input.providerAmountUnits)
   return buyer === undefined || revenue === undefined || tax === undefined || provider === undefined
     ? undefined
@@ -650,13 +650,13 @@ function managedCallSemantic(input: FormanceManagedCallBooking): boolean {
   const amounts = [
     input.buyerAmountUnits,
     input.buyerRevenueUnits,
-    input.buyerTaxUnits,
     input.providerAmountUnits,
   ]
   return refs.every(boundedReference)
     && generations.every(positiveGeneration)
     && digests.every((digest) => SHA256.test(digest))
     && amounts.every((amount) => canonicalFormanceUnits(amount) !== undefined)
+    && canonicalFormanceUnits(input.buyerTaxUnits, false) !== undefined
     && BigInt(input.buyerRevenueUnits) + BigInt(input.buyerTaxUnits)
       === BigInt(input.buyerAmountUnits)
 }

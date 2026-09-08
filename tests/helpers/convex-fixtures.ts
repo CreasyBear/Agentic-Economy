@@ -41,6 +41,7 @@ export function convexTestWithMarketComponents() {
   registerAggregate(backend, 'marketToolRatings')
   registerAggregate(backend, 'marketActiveTools')
   registerAggregate(backend, 'marketActiveProviders')
+  registerAggregate(backend, 'marketDirectoryFacets')
   return backend
 }
 

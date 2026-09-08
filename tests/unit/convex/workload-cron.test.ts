@@ -69,11 +69,12 @@ describe('System workload cron boundary', () => {
     vi.setSystemTime(new Date('2026-08-26T00:00:00.000Z'))
   })
 
-  it('binds the exact eight cron registrations only to workload admission wrappers', () => {
-    expect(Object.keys(convexCrons.crons).sort()).toEqual(Object.keys(EXPECTED_BINDINGS).sort())
+  it('binds the seven periodic registrations to workload admission wrappers, retaining on-demand facilitator authority', () => {
+    const periodicBindings = Object.fromEntries(Object.entries(EXPECTED_BINDINGS).filter(([name]) => name !== 'refresh facilitator discovery'))
+    expect(Object.keys(convexCrons.crons).sort()).toEqual(Object.keys(periodicBindings).sort())
     expect(Object.fromEntries(
       Object.entries(convexCrons.crons).map(([name, job]) => [name, job.name]),
-    )).toEqual(EXPECTED_BINDINGS)
+    )).toEqual(periodicBindings)
     expect(Object.values(convexCrons.crons).every((job) => JSON.stringify(job.args) === '[{}]')).toBe(true)
   })
 
@@ -334,14 +335,14 @@ describe('System workload cron boundary', () => {
     for (const handler of ACTION_HANDLERS) await expect(handler(context.action())).resolves.toBeNull()
     for (const handler of MUTATION_HANDLERS) await expect(handler(context.mutation())).resolves.toBeNull()
 
-    expect(context.admissions).toEqual(WORKLOAD_CRON_DECLARATIONS.slice(0, 4).map(({ name }) => name))
-    expect(context.dispatches).toHaveLength(8)
-    expect(context.db.queries).toEqual(Array.from({ length: 8 }, () => [
+    expect(context.admissions).toEqual([...WORKLOAD_CRON_DECLARATIONS.slice(0, 4).map(({ name }) => name), 'refresh Agentic Economy API registry'])
+    expect(context.dispatches).toHaveLength(9)
+    expect([...context.db.queries].sort()).toEqual(Array.from({ length: 9 }, () => [
       'principals',
       'accounts',
       'accountOwnerships',
       'memberships',
-    ]).flat())
+    ]).flat().sort())
     expect(context.trace.every(([admission, dispatch]) => admission < dispatch)).toBe(true)
   })
 

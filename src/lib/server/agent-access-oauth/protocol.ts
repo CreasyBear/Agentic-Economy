@@ -18,6 +18,7 @@ import {
   AGENT_ACCESS_MAX_TTL_SECONDS,
   AGENT_ACCESS_MIN_TTL_SECONDS,
 } from '@/modules/agent-access/agent-access'
+import { defaultSandboxAgentAccessPolicy } from '@/modules/agent-access/sandbox-policy'
 import { buildProductionAgentAccessPolicy } from '@/modules/agent-access/production-policy'
 import { normalizeAgentAccessToolSelection } from '@/modules/agent-access/policy'
 import { exactAmountSchema, formatExactAmount, type ExactAmount } from '@/modules/money/public'
@@ -294,29 +295,41 @@ export function consentPermissionCopy(mode: AgentAccessAuthorityMode, profile: '
 }
 
 export function consentAccessSummary(requestedAccess: AgentAccessOAuthRequestedAccess): string {
+  const sandbox = requestedAccess.environment === 'sandbox'
+    ? defaultSandboxAgentAccessPolicy({ currency: 'AUD', exponent: 6 })
+    : undefined
+  const access = sandbox === undefined ? requestedAccess : {
+    ...requestedAccess,
+    maximumSpendPerCall: sandbox.budget.maximumSpendPerCall,
+    maximumDailySpend: sandbox.budget.maximumDailySpend,
+    maximumMonthlySpend: sandbox.budget.maximumMonthlySpend,
+    maximumConcurrentCalls: sandbox.budget.maximumConcurrentCalls,
+    maximumCallsPerMinute: sandbox.rate.maximumCallsPerMinute,
+    maximumCallsPerHour: sandbox.rate.maximumCallsPerHour,
+  }
   const controls: string[] = []
-  if (requestedAccess.maximumSpendPerCall !== undefined) {
-    controls.push(`Maximum spend per Call: ${formatConsentAmount(requestedAccess.maximumSpendPerCall)}.`)
+  if (access.maximumSpendPerCall !== undefined) {
+    controls.push(`Maximum spend per Call: ${formatConsentAmount(access.maximumSpendPerCall)}.`)
   }
-  if (requestedAccess.maximumDailySpend !== undefined) {
-    controls.push(`Maximum daily spend: ${formatConsentAmount(requestedAccess.maximumDailySpend)}.`)
+  if (access.maximumDailySpend !== undefined) {
+    controls.push(`Maximum daily spend: ${formatConsentAmount(access.maximumDailySpend)}.`)
   }
-  if (requestedAccess.maximumMonthlySpend !== undefined) {
-    controls.push(`Maximum monthly spend: ${formatConsentAmount(requestedAccess.maximumMonthlySpend)}.`)
+  if (access.maximumMonthlySpend !== undefined) {
+    controls.push(`Maximum monthly spend: ${formatConsentAmount(access.maximumMonthlySpend)}.`)
   }
-  if (requestedAccess.maximumConcurrentCalls !== undefined) {
-    controls.push(`Maximum concurrent Calls: ${requestedAccess.maximumConcurrentCalls}.`)
+  if (access.maximumConcurrentCalls !== undefined) {
+    controls.push(`Maximum concurrent Calls: ${access.maximumConcurrentCalls}.`)
   }
-  if (requestedAccess.maximumCallsPerMinute !== undefined) {
-    controls.push(`Maximum calls per minute: ${requestedAccess.maximumCallsPerMinute}.`)
+  if (access.maximumCallsPerMinute !== undefined) {
+    controls.push(`Maximum calls per minute: ${access.maximumCallsPerMinute}.`)
   }
-  if (requestedAccess.maximumCallsPerHour !== undefined) {
-    controls.push(`Maximum calls per hour: ${requestedAccess.maximumCallsPerHour}.`)
+  if (access.maximumCallsPerHour !== undefined) {
+    controls.push(`Maximum calls per hour: ${access.maximumCallsPerHour}.`)
   }
-  if (requestedAccess.environment === 'production'
-    && requestedAccess.maximumSpendPerCall === undefined
-    && requestedAccess.maximumDailySpend === undefined
-    && requestedAccess.maximumMonthlySpend === undefined) {
+  if (access.environment === 'production'
+    && access.maximumSpendPerCall === undefined
+    && access.maximumDailySpend === undefined
+    && access.maximumMonthlySpend === undefined) {
     controls.push('Spending is disabled by the zero default.')
   }
   if (controls.length === 0) controls.push('No additional spend or rate controls were supplied.')

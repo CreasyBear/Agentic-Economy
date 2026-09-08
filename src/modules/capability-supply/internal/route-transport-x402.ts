@@ -1,3 +1,4 @@
+import { prepareX402Request } from './x402-request'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 import { cancelResponseBody } from '@/lib/server/bounded-request-body'
@@ -100,25 +101,7 @@ export type X402RouteTransportRuntime = RouteTransportRuntime &
     ) => Promise<void> | void
   }>
 
-export type X402Configuration = Readonly<{
-  method: 'GET' | 'POST'
-  query?: readonly Readonly<{
-    inputPointer: string
-    parameter: string
-    required?: boolean
-    style?: 'form'
-    explode?: boolean
-  }>[]
-  requestTimeoutMs: number
-  scheme: 'exact'
-  network: string
-  currency: string
-  routeAmountExponent: number
-  assetAmountExponent: number
-  asset: string
-  payTo: string
-  paymentRequiredJson: string
-}>
+export type X402Configuration = import('./transport-adapters').X402FetchTransportConfiguration
 
 export async function invokeX402(
   endpoint: URL,
@@ -166,6 +149,7 @@ export async function invokeX402(
       paymentChallengeDigest: materialResult.material.paymentChallengeDigest,
       paymentAuthorizationStatus: 'not_created',
       paymentSubmissionStatus: 'not_submitted',
+      queryReleaseStatus: 'released',
       settlementEvidence: { kind: 'not_submitted' },
     }
   }
@@ -178,7 +162,7 @@ export async function invokeX402(
     target,
     freshSelection.selection,
   )
-  if (freshMaterialResult.kind === 'refused') return freshMaterialResult.observation
+  if (freshMaterialResult.kind === 'refused') return { ...freshMaterialResult.observation, queryReleaseStatus: 'released' }
   const {
     challenge,
     requirement,
@@ -205,6 +189,7 @@ export async function invokeX402(
       paymentChallengeDigest,
       paymentAuthorizationStatus: 'not_created',
       paymentSubmissionStatus: 'not_submitted',
+      queryReleaseStatus: 'released',
       settlementEvidence: { kind: 'not_submitted' },
     }
   }
@@ -221,6 +206,7 @@ export async function invokeX402(
         paymentChallengeDigest,
         paymentAuthorizationStatus: 'created',
         paymentSubmissionStatus: 'not_submitted',
+        queryReleaseStatus: 'released',
         settlementEvidence: { kind: 'not_submitted' },
       }
     }
@@ -234,6 +220,7 @@ export async function invokeX402(
       paymentChallengeDigest,
       paymentAuthorizationStatus: 'created',
       paymentSubmissionStatus: 'not_submitted',
+      queryReleaseStatus: 'released',
       settlementEvidence: { kind: 'not_submitted' },
       ...(verifiedOffer === undefined
         ? {}
@@ -251,6 +238,7 @@ export async function invokeX402(
       providerOfferDigest: verifiedOffer.offerDigest,
       paymentAuthorizationStatus: 'created',
       paymentSubmissionStatus: 'not_submitted',
+      queryReleaseStatus: 'released',
       settlementEvidence: { kind: 'not_submitted' },
     }
   }
@@ -286,6 +274,7 @@ export async function invokeX402(
       paymentChallengeDigest,
       paymentAuthorizationStatus: 'created',
       paymentSubmissionStatus: 'not_submitted',
+      queryReleaseStatus: 'released',
       settlementEvidence: { kind: 'not_submitted' },
       ...offerEvidence,
     }
@@ -304,6 +293,7 @@ export async function invokeX402(
       paymentChallengeDigest,
       paymentAuthorizationStatus: 'created',
       paymentSubmissionStatus: 'not_submitted',
+      queryReleaseStatus: 'released',
       settlementEvidence: { kind: 'not_submitted' },
       ...offerEvidence,
     }
@@ -321,6 +311,7 @@ export async function invokeX402(
         paymentChallengeDigest,
         paymentAuthorizationStatus: 'created',
         paymentSubmissionStatus: 'not_submitted',
+        queryReleaseStatus: 'released',
         settlementEvidence: { kind: 'not_submitted' },
         ...offerEvidence,
       }
@@ -336,6 +327,7 @@ export async function invokeX402(
       paymentChallengeDigest,
       paymentAuthorizationStatus: 'created',
       paymentSubmissionStatus: 'not_submitted',
+      queryReleaseStatus: 'released',
       settlementEvidence: { kind: 'not_submitted' },
       ...offerEvidence,
     }
@@ -347,7 +339,7 @@ export async function invokeX402(
       signal: AbortSignal.timeout(configuration.requestTimeoutMs),
       headers: { ...headers, 'Payment-Signature': paymentSignature },
       ...(configuration.method === 'POST'
-        ? { body: invocation.inputJson }
+        ? { body: x402RequestBody(target, configuration, invocation.inputJson) }
         : {}),
     })
     if (paid.status === 402) {
@@ -656,7 +648,7 @@ async function readFreshX402Challenge(
       signal: AbortSignal.timeout(configuration.requestTimeoutMs),
       headers,
       ...(configuration.method === 'POST'
-        ? { body: invocation.inputJson }
+        ? { body: x402RequestBody(target, configuration, invocation.inputJson) }
         : {}),
     })
   } catch (error) {
@@ -664,6 +656,7 @@ async function readFreshX402Challenge(
       kind: 'refused',
       observation: {
         ...refused('x402', requestDigest, false, `network_${errorName(error)}`),
+        queryReleaseStatus: 'unknown',
         paymentChallengeDigest: committedChallengeDigest,
         paymentAuthorizationStatus: 'not_created',
         paymentSubmissionStatus: 'not_submitted',
@@ -684,6 +677,7 @@ async function readFreshX402Challenge(
       kind: 'refused',
       observation: {
         ...refused('x402', requestDigest, false, 'payment_provider_requirement_stale'),
+        queryReleaseStatus: 'released',
         paymentChallengeDigest: committedChallengeDigest,
         paymentAuthorizationStatus: 'not_created',
         paymentSubmissionStatus: 'not_submitted',
@@ -802,4 +796,10 @@ async function x402SettlementCheck(
     response,
     digest,
   }
+}
+
+function x402RequestBody(target: URL, configuration: X402Configuration, inputJson: string): string {
+  const request = prepareX402Request(target, configuration, inputJson)
+  if (request.kind !== 'prepared' || request.body === undefined) throw new Error('x402_request_body_invalid')
+  return request.body
 }

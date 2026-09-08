@@ -47,6 +47,7 @@ import type * as capabilitySupplyGraph from "../capabilitySupplyGraph.js";
 import type * as capabilitySupplyGraphPorts from "../capabilitySupplyGraphPorts.js";
 import type * as capabilitySupplyIntegrationDrafts from "../capabilitySupplyIntegrationDrafts.js";
 import type * as capabilitySupplyLists from "../capabilitySupplyLists.js";
+import type * as capabilitySupplyNativeAdmission from "../capabilitySupplyNativeAdmission.js";
 import type * as capabilitySupplyOwnerCanary from "../capabilitySupplyOwnerCanary.js";
 import type * as capabilitySupplyOwnerFunnel from "../capabilitySupplyOwnerFunnel.js";
 import type * as capabilitySupplyOwnerFunnelAgentRead from "../capabilitySupplyOwnerFunnelAgentRead.js";
@@ -72,6 +73,8 @@ import type * as capabilitySupplyToolShared from "../capabilitySupplyToolShared.
 import type * as capabilitySupplyTools from "../capabilitySupplyTools.js";
 import type * as capabilitySupplyValues from "../capabilitySupplyValues.js";
 import type * as capabilitySupplyWriterPorts from "../capabilitySupplyWriterPorts.js";
+import type * as capabilityToolCatalog from "../capabilityToolCatalog.js";
+import type * as capabilityToolCatalogData from "../capabilityToolCatalogData.js";
 import type * as catalog from "../catalog.js";
 import type * as catalogOfferingMutations from "../catalogOfferingMutations.js";
 import type * as catalogPublicReads from "../catalogPublicReads.js";
@@ -125,7 +128,12 @@ import type * as lib_qualifiedUsePayout_index from "../lib/qualifiedUsePayout/in
 import type * as lib_rateLimit from "../lib/rateLimit.js";
 import type * as lib_secretLifecyclePersistence from "../lib/secretLifecyclePersistence.js";
 import type * as lib_secretPointerPersistence from "../lib/secretPointerPersistence.js";
+import type * as lib_selectedRequestReadiness from "../lib/selectedRequestReadiness.js";
 import type * as lib_workloadCron_context from "../lib/workloadCron/context.js";
+import type * as lib_x402DirectoryIndex_analytics from "../lib/x402DirectoryIndex/analytics.js";
+import type * as lib_x402DirectoryIndex_contracts from "../lib/x402DirectoryIndex/contracts.js";
+import type * as lib_x402DirectoryIndex_facets from "../lib/x402DirectoryIndex/facets.js";
+import type * as lib_x402DirectoryIndex_rows from "../lib/x402DirectoryIndex/rows.js";
 import type * as marketDemandSignals from "../marketDemandSignals.js";
 import type * as marketDispatchWorkpool from "../marketDispatchWorkpool.js";
 import type * as marketEvidence from "../marketEvidence.js";
@@ -179,6 +187,12 @@ import type * as serviceAssertion from "../serviceAssertion.js";
 import type * as sourceWriteAdmission from "../sourceWriteAdmission.js";
 import type * as stripeWebhookWorkpool from "../stripeWebhookWorkpool.js";
 import type * as workloadCron from "../workloadCron.js";
+import type * as x402Directory from "../x402Directory.js";
+import type * as x402DirectoryIndex from "../x402DirectoryIndex.js";
+import type * as x402DirectoryIndexBackfill from "../x402DirectoryIndexBackfill.js";
+import type * as x402DirectoryIndexRefresh from "../x402DirectoryIndexRefresh.js";
+import type * as x402DirectoryIndexSource from "../x402DirectoryIndexSource.js";
+import type * as x402DirectoryIndexStore from "../x402DirectoryIndexStore.js";
 
 import type {
   ApiFromModules,
@@ -226,6 +240,7 @@ declare const fullApi: ApiFromModules<{
   capabilitySupplyGraphPorts: typeof capabilitySupplyGraphPorts;
   capabilitySupplyIntegrationDrafts: typeof capabilitySupplyIntegrationDrafts;
   capabilitySupplyLists: typeof capabilitySupplyLists;
+  capabilitySupplyNativeAdmission: typeof capabilitySupplyNativeAdmission;
   capabilitySupplyOwnerCanary: typeof capabilitySupplyOwnerCanary;
   capabilitySupplyOwnerFunnel: typeof capabilitySupplyOwnerFunnel;
   capabilitySupplyOwnerFunnelAgentRead: typeof capabilitySupplyOwnerFunnelAgentRead;
@@ -251,6 +266,8 @@ declare const fullApi: ApiFromModules<{
   capabilitySupplyTools: typeof capabilitySupplyTools;
   capabilitySupplyValues: typeof capabilitySupplyValues;
   capabilitySupplyWriterPorts: typeof capabilitySupplyWriterPorts;
+  capabilityToolCatalog: typeof capabilityToolCatalog;
+  capabilityToolCatalogData: typeof capabilityToolCatalogData;
   catalog: typeof catalog;
   catalogOfferingMutations: typeof catalogOfferingMutations;
   catalogPublicReads: typeof catalogPublicReads;
@@ -304,7 +321,12 @@ declare const fullApi: ApiFromModules<{
   "lib/rateLimit": typeof lib_rateLimit;
   "lib/secretLifecyclePersistence": typeof lib_secretLifecyclePersistence;
   "lib/secretPointerPersistence": typeof lib_secretPointerPersistence;
+  "lib/selectedRequestReadiness": typeof lib_selectedRequestReadiness;
   "lib/workloadCron/context": typeof lib_workloadCron_context;
+  "lib/x402DirectoryIndex/analytics": typeof lib_x402DirectoryIndex_analytics;
+  "lib/x402DirectoryIndex/contracts": typeof lib_x402DirectoryIndex_contracts;
+  "lib/x402DirectoryIndex/facets": typeof lib_x402DirectoryIndex_facets;
+  "lib/x402DirectoryIndex/rows": typeof lib_x402DirectoryIndex_rows;
   marketDemandSignals: typeof marketDemandSignals;
   marketDispatchWorkpool: typeof marketDispatchWorkpool;
   marketEvidence: typeof marketEvidence;
@@ -358,6 +380,12 @@ declare const fullApi: ApiFromModules<{
   sourceWriteAdmission: typeof sourceWriteAdmission;
   stripeWebhookWorkpool: typeof stripeWebhookWorkpool;
   workloadCron: typeof workloadCron;
+  x402Directory: typeof x402Directory;
+  x402DirectoryIndex: typeof x402DirectoryIndex;
+  x402DirectoryIndexBackfill: typeof x402DirectoryIndexBackfill;
+  x402DirectoryIndexRefresh: typeof x402DirectoryIndexRefresh;
+  x402DirectoryIndexSource: typeof x402DirectoryIndexSource;
+  x402DirectoryIndexStore: typeof x402DirectoryIndexStore;
 }>;
 
 /**
@@ -398,4 +426,5 @@ export declare const components: {
   marketToolRatings: import("@convex-dev/aggregate/_generated/component.js").ComponentApi<"marketToolRatings">;
   marketActiveTools: import("@convex-dev/aggregate/_generated/component.js").ComponentApi<"marketActiveTools">;
   marketActiveProviders: import("@convex-dev/aggregate/_generated/component.js").ComponentApi<"marketActiveProviders">;
+  marketDirectoryFacets: import("@convex-dev/aggregate/_generated/component.js").ComponentApi<"marketDirectoryFacets">;
 };
