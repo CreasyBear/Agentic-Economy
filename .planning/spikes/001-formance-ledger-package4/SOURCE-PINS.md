@@ -64,7 +64,7 @@ npm pack
 ```
 
 The resulting official-source package is
-`vendor/formance-formance-sdk-7.0.0.tgz` with SHA-256
+`../../../vendor/formance-formance-sdk-7.0.0.tgz` with SHA-256
 `8caab624bddecebc5fed54dd7a39116279ee7c29e782cb0923e4f9aa00174104`.
 The isolated lockfile pins that local artifact. No SDK source or generated file
 was edited.

@@ -22,11 +22,10 @@
 - Impact: Callers can reach API-shaped paths that look implemented but cannot complete the economic workflow. Compatibility stubs increase the risk of confusing a deliberate refusal with a transient outage.
 - Fix approach: Keep refusals explicit while completing the Formance-backed replacement, then remove retired exports and routes in the same compatibility migration. Do not keep two monetary authorities alive.
 
-**Production dependency anchored in a planning spike:**
-- Issue: `@formance/formance-sdk` is installed from a checked-in tarball under `.planning/spikes/001-formance-ledger-package4/vendor/` rather than from a release-oriented vendor location or package registry.
-- Files: `package.json`, `package-lock.json`, `.planning/spikes/001-formance-ledger-package4/vendor/formance-formance-sdk-7.0.0.tgz`
-- Impact: Production installation depends on a planning-artifact path, which makes pruning `.planning/` or extracting the runtime package unsafe. Provenance and upgrade review are harder than for a normal pinned dependency.
-- Fix approach: Move the exact audited tarball to a release-owned vendor directory or publish an internally controlled package. Preserve its digest and pin while changing only the source location.
+**Production dependency location — resolved 2026-09-08:**
+- The exact Formance SDK 7.0.0 archive now lives at `vendor/formance-formance-sdk-7.0.0.tgz`.
+- Root and spike manifests/locks use that shared archive; clean installs preserve version and integrity.
+- Provenance remains in the spike's `SOURCE-PINS.md`; see `docs/workflow/work/WF-20260908-closeout.md` for verification and retained live-proof limits.
 
 **Compiler and framework escape hatches:**
 - Issue: TypeScript skips dependency declaration checking, Nitro uses a dated nightly build, and React Doctor is advisory rather than blocking.
@@ -168,9 +167,8 @@
 - Migration plan: Keep the exact pin until a stable Nitro version passes raw-body webhook, route suffix, Clerk SSR, build, and deploy-smoke tests; then replace the nightly alias in `package.json` and `package-lock.json`.
 
 **Vendored Formance SDK tarball:**
-- Risk: Dependency installation relies on a local 928-KB tarball stored in a planning spike.
-- Impact: Repository cleanup, partial checkout, or package extraction can break clean installation; automated vulnerability and provenance tooling has less package metadata context.
-- Migration plan: Move the audited artifact to a release-owned vendor path or controlled registry and keep its exact version/digest (`package.json`, `package-lock.json`, `.planning/spikes/001-formance-ledger-package4/vendor/formance-formance-sdk-7.0.0.tgz`).
+- The audited local artifact is maintained in root `vendor/`; keep it in runtime source distributions.
+- Changes require version/integrity review and clean-install verification for both consumers. Local vendoring does not replace upstream vulnerability or compatibility review.
 
 **Provider SDK/API coupling across high-consequence paths:**
 - Risk: Stripe, Convex Workpool, Formance, CDP, and x402 packages all participate in the managed Call and funding boundary.

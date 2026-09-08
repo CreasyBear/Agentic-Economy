@@ -13,7 +13,7 @@
     "ops:verify": "AE_FORMANCE_OPERATIONS_MODE=verify node sdk-operations-volume.mjs"
   },
   "dependencies": {
-    "@formance/formance-sdk": "file:vendor/formance-formance-sdk-7.0.0.tgz",
+    "@formance/formance-sdk": "file:../../../vendor/formance-formance-sdk-7.0.0.tgz",
     "convex": "1.45.0"
   },
   "engines": {
