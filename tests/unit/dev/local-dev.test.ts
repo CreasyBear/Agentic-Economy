@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  authModeLine,
   buildConvexDevArgs,
   buildConvexSelectArgs,
   buildStages,
@@ -309,6 +310,39 @@ describe('effective environment', () => {
       file: '.env.local',
     })
     expect(resolveConvexUrl({ CONVEX_URL: '  ' }, {})).toBeUndefined()
+  })
+
+  it('lets a process-owned value beat every file and records its source as process', () => {
+    const baseEnv = { PATH: '/usr/bin', SHARED: 'process-value', CONVEX_URL: 'http://127.0.0.1:9' }
+    const { env, sources } = effectiveEnv(baseEnv, files)
+    expect(env.SHARED).toBe('process-value')
+    expect(sources.SHARED).toBe('process')
+    expect(env.CONVEX_URL).toBe('http://127.0.0.1:9')
+    expect(sources.CONVEX_URL).toBe('process')
+    // A key the process never set still resolves from the files, later file still winning.
+    expect(env.VITE_CONVEX_URL).toBe('http://127.0.0.1:2')
+    expect(sources.VITE_CONVEX_URL).toBe('.env.local')
+  })
+})
+
+describe('local Clerk bypass startup line', () => {
+  it('reports ON, with no source, when unset or explicitly true', () => {
+    expect(authModeLine({}, {})).toBe(
+      'auth: local Clerk bypass ON (VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E=true; connect:local can approve)',
+    )
+    expect(authModeLine({ VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E: 'true' }, {})).toBe(
+      'auth: local Clerk bypass ON (VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E=true; connect:local can approve)',
+    )
+  })
+
+  it('reports OFF with its source when the value is anything other than true', () => {
+    expect(authModeLine(
+      { VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E: 'false' },
+      { VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E: '.env.local' },
+    )).toBe('auth: local Clerk bypass OFF (source: .env.local); ae connect needs browser approval')
+    expect(authModeLine({ VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E: 'false' }, {})).toBe(
+      'auth: local Clerk bypass OFF (source: process); ae connect needs browser approval',
+    )
   })
 })
 

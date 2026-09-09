@@ -32,6 +32,14 @@ type ApprovalResult =
     body: string
     requestedAuthorityMode?: AuthorityMode
   }
+  | {
+    kind: 'failed'
+    stage: 'clerk_bypass_off'
+    status: number
+    body: string
+    message: string
+    requestedAuthorityMode?: AuthorityMode
+  }
 
 type FetchLike = (
   url: string,
@@ -41,7 +49,11 @@ type FetchLike = (
     body?: string
     redirect?: string
   },
-) => Promise<{ status: number, text: () => Promise<string> }>
+) => Promise<{
+  status: number
+  text: () => Promise<string>
+  headers?: { get: (name: string) => string | null }
+}>
 
 type ConnectChildStream = {
   on: (event: 'data', listener: (chunk: unknown) => void) => unknown

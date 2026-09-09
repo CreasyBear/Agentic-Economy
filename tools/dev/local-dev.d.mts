@@ -90,6 +90,11 @@ export function resolveConvexUrl(
   sources?: Record<string, string | undefined>,
 ): { url: string, name: string, file: string } | undefined
 
+export function authModeLine(
+  env?: Record<string, string | undefined>,
+  sources?: Record<string, string | undefined>,
+): string
+
 export function viteLocalUrl(output: string): string | undefined
 export function convexPrintedUrl(output: string): string | undefined
 

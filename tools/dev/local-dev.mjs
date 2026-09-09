@@ -172,8 +172,17 @@ function readEnvFiles(names = ENV_FILES) {
 }
 
 /**
- * Merge the dotenv files the way Vite does (later file wins) and record which
- * file supplied each name. Only names are recorded, never values.
+ * Merge the dotenv files the way Vite's own `loadEnv` does: the process
+ * environment always wins. `node_modules/vite/dist/node/chunks/node.js`
+ * builds the parsed-file values first, then runs
+ * `for (const key in process.env) ... env[key] = process.env[key]` last,
+ * unconditionally overwriting anything a file set — matching the Vite docs
+ * note that "existing env variables have the highest priority and will not
+ * be overwritten by .env files". So here: a key already present in `baseEnv`
+ * (the process environment) is never touched by a file; a key absent from
+ * `baseEnv` is filled from the files, later file still winning. `sources`
+ * records `'process'` for a value that came from `baseEnv`, or the file name
+ * for a value that came from a file. Only names are recorded, never values.
  *
  * `CONVEX_DEPLOYMENT` is always dropped: a supervisor or a checked-in file can
  * carry a deployment choice from another checkout, and `convex dev` resolves
@@ -182,8 +191,12 @@ function readEnvFiles(names = ENV_FILES) {
 export function effectiveEnv(baseEnv = process.env, files = readEnvFiles()) {
   const env = { ...baseEnv }
   const sources = {}
+  for (const [key, value] of Object.entries(baseEnv)) {
+    if (value !== undefined) sources[key] = 'process'
+  }
   for (const { name, contents } of files) {
     for (const [key, value] of Object.entries(parseEnv(contents ?? ''))) {
+      if (sources[key] === 'process') continue
       env[key] = value
       sources[key] = name
     }
@@ -220,6 +233,23 @@ export function resolveConvexUrl(env = {}, sources = {}) {
     return { url: vite, name: 'VITE_CONVEX_URL', file: sources.VITE_CONVEX_URL ?? 'the environment' }
   }
   return undefined
+}
+
+const AUTH_BYPASS_ENV = 'VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E'
+
+/**
+ * One startup line naming whether the local Clerk bypass is on (the
+ * `dev:local` default) or off, and — when off — which file (or the process
+ * environment) set it, so a `local-connect` run that needs browser approval
+ * is traceable to its cause instead of a mysterious off-origin redirect.
+ */
+export function authModeLine(env = {}, sources = {}) {
+  const value = env[AUTH_BYPASS_ENV] ?? 'true'
+  if (value === 'true') {
+    return `auth: local Clerk bypass ON (${AUTH_BYPASS_ENV}=true; connect:local can approve)`
+  }
+  const source = sources[AUTH_BYPASS_ENV] ?? 'process'
+  return `auth: local Clerk bypass OFF (source: ${source}); ae connect needs browser approval`
 }
 
 export function viteLocalUrl(output) {
@@ -699,8 +729,9 @@ function convexRunner(supervisor, env) {
   }
 }
 
-async function runVite(viteArgs, supervisor, baseEnv) {
+async function runVite(viteArgs, supervisor, baseEnv, sources = {}) {
   const env = { ...baseEnv }
+  log(authModeLine(env, sources))
   const { secret, adminKey } = await configureLocalSourceWriteSecret({ env })
   const { token: serverFunctionToken } = await configureLocalConvexServerFunctionToken({ env })
   const appArgs = viteArgs.length > 0 ? viteArgs : DEFAULT_VITE_ARGS
@@ -860,7 +891,7 @@ async function runLocalStack({ viteArgs, skipScan, skipSeed, runDoctor }) {
 
     let vite
     try {
-      vite = await runVite(viteArgs, supervisor, env)
+      vite = await runVite(viteArgs, supervisor, env, sources)
     } catch (error) {
       supervisor.terminateAll('SIGINT', 'peer-failure')
       if (convex !== null) await convex.done

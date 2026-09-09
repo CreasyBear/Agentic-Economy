@@ -45,7 +45,7 @@ type FetchCall = {
   }
 }
 
-type StubResponse = { status: number, body: string }
+type StubResponse = { status: number, body: string, headers?: Record<string, string> }
 
 function fetchStub(responses: readonly StubResponse[]) {
   const calls: FetchCall[] = []
@@ -53,7 +53,12 @@ function fetchStub(responses: readonly StubResponse[]) {
   const fetchImpl = async (url: string, init: FetchCall['init'] = {}) => {
     calls.push({ url, init })
     const next = queue.shift() ?? { status: 500, body: 'no stubbed response' }
-    return { status: next.status, text: async () => next.body }
+    const headers = next.headers ?? {}
+    return {
+      status: next.status,
+      text: async () => next.body,
+      headers: { get: (name: string) => headers[name] ?? headers[name.toLowerCase()] ?? null },
+    }
   }
   return { calls, fetchImpl }
 }
@@ -302,13 +307,91 @@ describe('approveLocalConsent', () => {
     })
   })
 
-  it('reports the redirect body when the local bypass is off', async () => {
+  it('reports the redirect body when the local bypass is off and no Location header is given', async () => {
     const { calls, fetchImpl } = fetchStub([{ status: 302, body: '' }])
 
     const approval = await approveLocalConsent({ baseUrl: BASE_URL, userCode: 'WDJB-MJHT', fetchImpl })
 
     expect(approval).toEqual({ kind: 'failed', stage: 'consent_page', status: 302, body: '' })
     expect(calls).toHaveLength(1)
+  })
+
+  it('follows a same-origin redirect to the consent page and posts to its form action', async () => {
+    const { calls, fetchImpl } = fetchStub([
+      { status: 307, body: '', headers: { location: `${BASE_URL}/oauth/authorize?user_code=WDJB-MJHT&hop=1` } },
+      { status: 200, body: consentPage() },
+      { status: 200, body: JSON.stringify({ kind: 'approved', grantRef: 'device:grant-1' }) },
+    ])
+
+    const approval = await approveLocalConsent({ baseUrl: BASE_URL, userCode: 'WDJB-MJHT', fetchImpl })
+
+    expect(approval).toMatchObject({ kind: 'approved', grantRef: 'device:grant-1' })
+    expect(calls.map((call) => `${call.init.method} ${call.url}`)).toEqual([
+      `GET ${BASE_URL}/oauth/authorize?user_code=WDJB-MJHT`,
+      `GET ${BASE_URL}/oauth/authorize?user_code=WDJB-MJHT&hop=1`,
+      `POST ${BASE_URL}/oauth/authorize`,
+    ])
+  })
+
+  it('never follows a redirect off the base origin, and reports the Clerk bypass guidance when it is a Clerk handshake', async () => {
+    const { calls, fetchImpl } = fetchStub([
+      { status: 307, body: '', headers: { location: 'https://composed-stallion-40.clerk.accounts.dev/v1/client/handshake' } },
+    ])
+
+    const approval = await approveLocalConsent({ baseUrl: BASE_URL, userCode: 'WDJB-MJHT', fetchImpl })
+
+    expect(approval).toEqual({
+      kind: 'failed',
+      stage: 'clerk_bypass_off',
+      status: 307,
+      body: '',
+      message: `this server runs with the Clerk bypass OFF; approve in the browser with 'npm run ae -- connect --base-url ${BASE_URL}' or restart with 'VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E=true npm run dev:local'`,
+    })
+    expect(calls).toHaveLength(1)
+  })
+
+  it('also recognises the Clerk bypass from an x-clerk-auth-status header on an off-origin redirect', async () => {
+    const { fetchImpl } = fetchStub([
+      {
+        status: 307,
+        body: '',
+        headers: {
+          location: 'https://accounts.example.com/sign-in',
+          'x-clerk-auth-status': 'signed-out',
+        },
+      },
+    ])
+
+    const approval = await approveLocalConsent({ baseUrl: BASE_URL, userCode: 'WDJB-MJHT', fetchImpl })
+
+    expect(approval).toMatchObject({
+      stage: 'clerk_bypass_off',
+      message: expect.stringContaining("VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E=true npm run dev:local'"),
+    })
+  })
+
+  it('does not mistake an ordinary off-origin redirect for a Clerk handshake', async () => {
+    const { fetchImpl } = fetchStub([
+      { status: 307, body: '', headers: { location: 'https://other-service.example/redirect' } },
+    ])
+
+    const approval = await approveLocalConsent({ baseUrl: BASE_URL, userCode: 'WDJB-MJHT', fetchImpl })
+
+    expect(approval).toEqual({ kind: 'failed', stage: 'consent_page', status: 307, body: '' })
+  })
+
+  it('gives up after too many same-origin redirects instead of looping forever', async () => {
+    const responses = Array.from({ length: 7 }, (_unused, index) => ({
+      status: 307,
+      body: '',
+      headers: { location: `${BASE_URL}/oauth/authorize?user_code=WDJB-MJHT&hop=${index + 1}` },
+    }))
+    const { calls, fetchImpl } = fetchStub(responses)
+
+    const approval = await approveLocalConsent({ baseUrl: BASE_URL, userCode: 'WDJB-MJHT', fetchImpl })
+
+    expect(approval).toMatchObject({ kind: 'failed', stage: 'consent_page', status: 307 })
+    expect(calls).toHaveLength(6)
   })
 
   it('reports the server body when the approval is rejected', async () => {
@@ -466,6 +549,26 @@ describe('runLocalConnect', () => {
     await running
 
     expect(stderr.chunks.join('')).toContain('rerun with --authority-mode spending_policy')
+  })
+
+  it('prints the Clerk bypass guidance instead of the generic HTTP status when the bypass is off', async () => {
+    const { child, stderr, run } = harness([
+      { status: 307, body: '', headers: { location: 'https://composed-stallion-40.clerk.accounts.dev/v1/client/handshake' } },
+    ])
+
+    const running = run(['--json', '--base-url', BASE_URL])
+    child.stderr.emit('data', progressBlock())
+    await Promise.resolve()
+    await Promise.resolve()
+    child.finish(pendingResult)
+    const outcome = await running
+
+    expect(outcome.exitCode).toBe(1)
+    const errors = stderr.chunks.join('')
+    expect(errors).toContain(
+      `local-connect: this server runs with the Clerk bypass OFF; approve in the browser with 'npm run ae -- connect --base-url ${BASE_URL}' or restart with 'VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E=true npm run dev:local'`,
+    )
+    expect(errors).not.toContain('HTTP 307')
   })
 
   it('exits 1 when the child cannot be started', async () => {

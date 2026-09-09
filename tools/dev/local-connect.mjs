@@ -28,9 +28,13 @@ const LOG_PREFIX = 'local-connect'
 const USER_CODE_PATTERN = /^User code:[ \t]*(\S+)[ \t]*\r?\n/mu
 const VERIFICATION_URI_PATTERN = /^Approve:[ \t]*(\S+)[ \t]*\r?\n/mu
 const CONSENT_MARKER_PATTERN = /<main[^>]*\sdata-ae-consent[\s>]/u
+const FORM_ACTION_PATTERN = /<form\b[^>]*\baction="([^"]*)"/u
 const LOOPBACK_IPV4_PATTERN = /^127(?:\.(?:25[0-5]|2[0-4]\d|1?\d?\d)){3}$/u
 const HTML_ENTITIES = { '&amp;': '&', '&lt;': '<', '&gt;': '>', '&quot;': '"', '&#39;': "'" }
 const REDACTED_KEYS = new Set(['access_token', 'accessToken', 'secret', 'apiKey', 'api_key'])
+// A redirect chain that never lands within this many hops is treated as
+// broken rather than followed forever.
+const MAX_CONSENT_REDIRECTS = 5
 
 /** True when the URL is an http(s) loopback address safe for the local bypass. */
 export function isLoopback(url) {
@@ -93,6 +97,65 @@ export function parseConsentAttributes(html) {
       ? {}
       : { requestedAuthorityMode }),
   }
+}
+
+/**
+ * True when an off-origin redirect (or its response) is the Clerk hosted
+ * sign-in handshake rather than some other cross-origin hop: either the
+ * redirect target's host names Clerk, or the response already carries
+ * Clerk's own auth-status header.
+ */
+function isClerkRedirect(next, response) {
+  if (next.hostname.toLowerCase().includes('clerk.')) return true
+  const status = response.headers?.get?.('x-clerk-auth-status')
+  return status !== null && status !== undefined
+}
+
+/**
+ * GET the consent page, following same-origin redirects (a canonical-path
+ * hop, for example) up to `MAX_CONSENT_REDIRECTS` times. A redirect that
+ * leaves the base origin — Clerk's hosted sign-in handshake when the local
+ * bypass (`VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E`) is off, most commonly — is
+ * never followed: this tool only ever acts as that unauthenticated local
+ * bypass, never a browser completing a real sign-in, so it is returned
+ * as-is for `approveLocalConsent` to report as a failure. When that
+ * off-origin hop is identifiable as Clerk, `clerkRedirect: true` is set so
+ * the caller can give the specific bypass-is-off guidance instead of a bare
+ * HTTP status.
+ */
+async function fetchConsentPage(fetchImpl, baseUrl, userCode) {
+  const origin = new URL(baseUrl).origin
+  const initial = new URL(CONSENT_PATH, baseUrl)
+  initial.searchParams.set('user_code', userCode)
+  let target = initial
+  for (let hop = 0; hop <= MAX_CONSENT_REDIRECTS; hop += 1) {
+    const response = await fetchImpl(target.toString(), {
+      method: 'GET',
+      headers: { Accept: 'text/html' },
+      redirect: 'manual',
+    })
+    if (response.status < 300 || response.status >= 400) return { response, url: target.toString() }
+    const location = response.headers?.get?.('location')
+    if (location === null || location === undefined || location.length === 0) return { response, url: target.toString() }
+    let next
+    try {
+      next = new URL(location, target)
+    } catch {
+      return { response, url: target.toString() }
+    }
+    if (next.origin !== origin || hop === MAX_CONSENT_REDIRECTS) {
+      const clerkRedirect = next.origin !== origin && isClerkRedirect(next, response)
+      return { response, url: target.toString(), ...(clerkRedirect ? { clerkRedirect: true } : {}) }
+    }
+    target = next
+  }
+  throw new Error('unreachable')
+}
+
+/** Resolve the `action` of the landed page's consent form against its URL. */
+function formActionUrl(html, pageUrl) {
+  const action = FORM_ACTION_PATTERN.exec(html)?.[1]
+  return new URL(action === undefined ? CONSENT_PATH : unescapeHtml(action), pageUrl).toString()
 }
 
 /**
@@ -178,16 +241,19 @@ function redactSecrets(value) {
 export async function approveLocalConsent(input) {
   const { baseUrl, userCode, authorityMode = DEFAULT_AUTHORITY_MODE, fetchImpl = fetch } = input
   const origin = new URL(baseUrl).origin
-  const consentUrl = new URL(CONSENT_PATH, baseUrl)
-  consentUrl.searchParams.set('user_code', userCode)
-  const page = await fetchImpl(consentUrl.toString(), {
-    method: 'GET',
-    headers: { Accept: 'text/html' },
-    redirect: 'manual',
-  })
+  const { response: page, url: landedUrl, clerkRedirect } = await fetchConsentPage(fetchImpl, baseUrl, userCode)
   const html = await page.text()
   const attributes = page.status === 200 ? parseConsentAttributes(html) : undefined
   if (attributes === undefined) {
+    if (clerkRedirect === true) {
+      return {
+        kind: 'failed',
+        stage: 'clerk_bypass_off',
+        status: page.status,
+        body: html,
+        message: `this server runs with the Clerk bypass OFF; approve in the browser with 'npm run ae -- connect --base-url ${baseUrl}' or restart with 'VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E=true npm run dev:local'`,
+      }
+    }
     return {
       kind: 'failed',
       stage: 'consent_page',
@@ -196,7 +262,7 @@ export async function approveLocalConsent(input) {
     }
   }
   const body = buildApprovalBody({ ...attributes, authorityMode })
-  const response = await fetchImpl(new URL(CONSENT_PATH, baseUrl).toString(), {
+  const response = await fetchImpl(formActionUrl(html, landedUrl), {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded', Origin: origin },
     body,
@@ -351,9 +417,13 @@ export async function runLocalConnect(options = {}) {
     stderr(`${LOG_PREFIX}: ${error.message}\n`)
   }
   if (approval !== undefined && approval.kind === 'failed') {
-    stderr(`${LOG_PREFIX}: approval failed at ${approval.stage} (HTTP ${approval.status}).\n${approval.body}\n`)
-    if (approval.requestedAuthorityMode !== undefined && approval.requestedAuthorityMode !== flags.authorityMode) {
-      stderr(`${LOG_PREFIX}: the grant requested authority mode "${approval.requestedAuthorityMode}"; rerun with --authority-mode ${approval.requestedAuthorityMode}.\n`)
+    if (approval.message !== undefined) {
+      stderr(`${LOG_PREFIX}: ${approval.message}\n`)
+    } else {
+      stderr(`${LOG_PREFIX}: approval failed at ${approval.stage} (HTTP ${approval.status}).\n${approval.body}\n`)
+      if (approval.requestedAuthorityMode !== undefined && approval.requestedAuthorityMode !== flags.authorityMode) {
+        stderr(`${LOG_PREFIX}: the grant requested authority mode "${approval.requestedAuthorityMode}"; rerun with --authority-mode ${approval.requestedAuthorityMode}.\n`)
+      }
     }
   }
   if (approval === undefined && !connected) {
