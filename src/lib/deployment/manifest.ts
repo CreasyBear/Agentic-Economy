@@ -152,7 +152,7 @@ const optionalNames = Object.freeze([
   'AE_INFISICAL_PLATFORM_ORGANIZATION_SLUG',
 ])
 
-const fieldRules: readonly FieldRule[] = [
+export const fieldRules: readonly FieldRule[] = [
   { name: 'AE_CANONICAL_BASE_URL', kind: 'url' }, { name: 'AE_CANONICAL_HOST_ALLOWLIST', kind: 'host-list' },
   { name: 'CONVEX_URL', kind: 'url' }, { name: 'VITE_CONVEX_URL', kind: 'url' }, { name: 'CLERK_JWT_ISSUER_DOMAIN', kind: 'url' },
   { name: 'AE_GATEWAY_SMOKE_BASE_URL', kind: 'url' }, { name: 'AE_RELEASE_CONVEX_URL', kind: 'url' },
@@ -175,7 +175,7 @@ const fieldRules: readonly FieldRule[] = [
   { name: 'AE_INFISICAL_BASE_URL', kind: 'url' },
 ]
 
-const knownNames = Object.freeze([
+export const knownNames = Object.freeze([
   'OPENROUTER_API_KEY', 'AE_CONVEX_SERVER_FUNCTION_TOKEN', 'VITE_CLERK_PUBLISHABLE_KEY', 'CLERK_SECRET_KEY', 'CLERK_WEBHOOK_SIGNING_SECRET',
   'AE_CHAT_PROXY_SECRET', 'AE_CHAT_SHARE_SECRET', 'AE_CHAT_SHARE_KEY_ID',
   'AE_SOURCE_WRITE_SECRET',

@@ -7,6 +7,8 @@ import workpool from '@convex-dev/workpool/convex.config'
 import workflow from '@convex-dev/workflow/convex.config'
 
 const app = defineApp({
+  // Required = needed in every environment, including a fresh anonymous local deployment with nothing set.
+  // Everything else is environment-specific (Clerk/Stripe/CDP/OpenRouter/x402/feature flags), stays optional, and is surfaced by `ae doctor`.
   env: {
     OPENROUTER_API_KEY: v.optional(v.string()),
     AE_LLM_MODEL: v.optional(v.string()),
