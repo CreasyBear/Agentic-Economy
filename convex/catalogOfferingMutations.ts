@@ -1520,10 +1520,11 @@ export async function loadExactOfferingSourceState(
       ))
       .unique()
   const toolRefs = readCatalogOperationRefs(operationRow)
-  const explicitPath = target.accessPathRef === undefined
+  const accessPathRef = target.accessPathRef
+  const explicitPath = accessPathRef === undefined
     ? null
     : await db.query('offeringAccessPaths')
-      .withIndex('by_accessPathRef', (query) => query.eq('accessPathRef', target.accessPathRef!))
+      .withIndex('by_accessPathRef', (query) => query.eq('accessPathRef', accessPathRef))
       .unique()
   const replayRef = toolRefs[0]
   const replayOffering = target.offeringRef === undefined && explicitPath === null && replayRef !== undefined

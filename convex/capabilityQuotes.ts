@@ -259,14 +259,34 @@ const refuse = (
       idempotencyKey: string
     }>
   }> = {},
-): QuoteResult => projectToolQuoteRefusal({
-  toolRef: args.toolRef,
-  input: args.input,
-  code,
-  retryable,
-  correlationRef: args.correlationId,
-  ...options,
-}) as unknown as QuoteResult
+): QuoteResult => {
+  const { reason, continuation, requiredActions, ...rest } = projectToolQuoteRefusal({
+    toolRef: args.toolRef,
+    input: args.input,
+    code,
+    retryable,
+    correlationRef: args.correlationId,
+    ...options,
+  })
+  const base = {
+    ...rest,
+    ...(reason === undefined ? {} : { reason }),
+    ...(requiredActions === undefined ? {} : { requiredActions }),
+  }
+  if (continuation === undefined) return base
+  if (continuation.action !== 'funding.handoff.create') return { ...base, continuation }
+  const funding = options.funding
+  if (funding === undefined) throw new Error('capability_quote_refusal_funding_continuation_missing_funding')
+  return {
+    ...base,
+    continuation: {
+      action: 'funding.handoff.create',
+      method: 'POST',
+      path: continuation.path,
+      input: { principalAmount: funding.principalAmount, idempotencyKey: funding.idempotencyKey },
+    },
+  }
+}
 
 function toolPricing(tool: PublishedTool, now: number, live?: LiveX402Requirement, referenceRate?: ReferenceRate) {
   const normalized = normalizePricingConfig(tool.pricingConfig)
@@ -929,8 +949,9 @@ export const readForCall = internalQuery({
       || row.environment !== args.principal.environment) return null
     if (row.state === 'consumed') {
       if (row.consumedCallRef === undefined) return null
+      const consumedCallRef = row.consumedCallRef
       const call = await ctx.db.query('capabilityCalls')
-        .withIndex('by_callRef', (query) => query.eq('callRef', row.consumedCallRef!))
+        .withIndex('by_callRef', (query) => query.eq('callRef', consumedCallRef))
         .unique()
       if (call === null
         || call.quoteRef !== row.quoteRef

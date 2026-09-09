@@ -85,13 +85,16 @@ async function applyVerifiedEventCore(
       ? await ctx.runAction(internal.moneyFormance.bookFundingSettlement, prepared.booking)
       : await ctx.runAction(internal.moneyFormance.bookFundingReversal, prepared.booking)
     if (booked.kind === 'completed') {
-      if (booked.transactionRefs.length !== 1) return refused('formance_reference_invalid')
+      const [formanceTransactionRef] = booked.transactionRefs
+      if (booked.transactionRefs.length !== 1 || formanceTransactionRef === undefined) {
+        return refused('formance_reference_invalid')
+      }
       return prepared.bookingKind === 'settlement'
         ? await ctx.runMutation(internal.moneyAccountFunding.finalizeVerifiedEventFromInbox, {
-            ...args, formanceTransactionRef: booked.transactionRefs[0]!,
+            ...args, formanceTransactionRef,
           })
         : await ctx.runMutation(internal.moneyAccountFunding.finalizeVerifiedRefundFromInbox, {
-            ...args, formanceTransactionRef: booked.transactionRefs[0]!,
+            ...args, formanceTransactionRef,
           })
     }
     if (booked.kind === 'outcome_unknown') {

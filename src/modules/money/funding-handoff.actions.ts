@@ -147,9 +147,12 @@ export const fundingHandoffConfigAction = defineAction<Record<string, never>, Fu
     retryClass: 'replayable', expectedEvidence: ['funding_constraints'], safeContinuations: [FUNDING_HANDOFF_CREATE_ACTION_ID],
     invalidationConditions: ['commercial_policy_changed'],
   },
-  run: async ({ context }) => service(context).config({
-    input: {}, principal: context.agentAccessPrincipal!, correlationId: context.correlationId ?? crypto.randomUUID(),
-  }),
+  run: async ({ context }) => {
+    if (context.agentAccessPrincipal === undefined) throw new Error('agent_access_context_missing')
+    return await service(context).config({
+      input: {}, principal: context.agentAccessPrincipal, correlationId: context.correlationId ?? crypto.randomUUID(),
+    })
+  },
 })
 
 export const fundingHandoffCreateAction = defineAction<CreateFundingHandoffInput, CreateFundingHandoffResult>({
@@ -177,9 +180,12 @@ export const fundingHandoffCreateAction = defineAction<CreateFundingHandoffInput
     authorityRequirement: 'principal', retryClass: 'replayable', expectedEvidence: ['stripe_checkout_session'],
     safeContinuations: [FUNDING_HANDOFF_STATUS_ACTION_ID], invalidationConditions: ['amount_changed', 'idempotency_key_changed'],
   },
-  run: async ({ data, context }) => service(context).create({
-    input: data, principal: context.agentAccessPrincipal!, correlationId: context.correlationId ?? crypto.randomUUID(),
-  }),
+  run: async ({ data, context }) => {
+    if (context.agentAccessPrincipal === undefined) throw new Error('agent_access_context_missing')
+    return await service(context).create({
+      input: data, principal: context.agentAccessPrincipal, correlationId: context.correlationId ?? crypto.randomUUID(),
+    })
+  },
 })
 
 export const fundingHandoffStatusAction = defineAction<FundingHandoffStatusInput, FundingHandoffStatusResult>({
@@ -203,7 +209,10 @@ export const fundingHandoffStatusAction = defineAction<FundingHandoffStatusInput
     safeContinuations: [FUNDING_HANDOFF_STATUS_ACTION_ID, 'agentAccess.balance', 'tool.quote'],
     invalidationConditions: ['credential_revoked', 'session_expired'],
   },
-  run: async ({ data, context }) => service(context).status({
-    input: data, principal: context.agentAccessPrincipal!, correlationId: context.correlationId ?? crypto.randomUUID(),
-  }),
+  run: async ({ data, context }) => {
+    if (context.agentAccessPrincipal === undefined) throw new Error('agent_access_context_missing')
+    return await service(context).status({
+      input: data, principal: context.agentAccessPrincipal, correlationId: context.correlationId ?? crypto.randomUUID(),
+    })
+  },
 })

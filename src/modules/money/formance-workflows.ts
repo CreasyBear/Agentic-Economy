@@ -715,7 +715,8 @@ function balanceAccount(
   if (kind === 'account_aud') {
     return `accounts:${digestReference('account', subjectRef)}:available`
   }
-  return capacityAccount(kind, subjectRef, generation!)
+  if (generation === undefined) throw new Error('formance_balance_generation_missing')
+  return capacityAccount(kind, subjectRef, generation)
 }
 
 function capacityAccount(kind: FormanceCapacityKind, subjectRef: string, generation: number): string {

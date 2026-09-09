@@ -48,17 +48,21 @@ export const listOwnerCases = query({
     if (args.paginationOpts.numItems < 1 || args.paginationOpts.numItems > 50) {
       throw new Error('money_case_page_size_invalid')
     }
-    const page = args.status === undefined
-      ? await ctx.db.query('moneyReconciliationCases')
-          .withIndex('by_accountRef_and_createdAt', (index) => index.eq('accountRef', actor.canonicalAccountRef))
-          .order('desc')
-          .paginate(args.paginationOpts)
-      : await ctx.db.query('moneyReconciliationCases')
-          .withIndex('by_accountRef_and_status_and_createdAt', (index) => index
-            .eq('accountRef', actor.canonicalAccountRef)
-            .eq('status', args.status!))
-          .order('desc')
-          .paginate(args.paginationOpts)
+    let page
+    if (args.status === undefined) {
+      page = await ctx.db.query('moneyReconciliationCases')
+        .withIndex('by_accountRef_and_createdAt', (index) => index.eq('accountRef', actor.canonicalAccountRef))
+        .order('desc')
+        .paginate(args.paginationOpts)
+    } else {
+      const status = args.status
+      page = await ctx.db.query('moneyReconciliationCases')
+        .withIndex('by_accountRef_and_status_and_createdAt', (index) => index
+          .eq('accountRef', actor.canonicalAccountRef)
+          .eq('status', status))
+        .order('desc')
+        .paginate(args.paginationOpts)
+    }
     return {
       ...page,
       page: page.page.map(({ _id, _creationTime, ...row }) => row),

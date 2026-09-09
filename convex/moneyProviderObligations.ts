@@ -151,14 +151,16 @@ async function prepareProviderReversal(
     return reversalRefused('provider_obligation_not_found')
   }
   if (row.state === 'reversed') {
-    const sameRequest = row.reversalCommandRef === args.commandRef
+    const { reversalTransactionRef } = row
+    if (row.reversalCommandRef === args.commandRef
       && row.reversalIdempotencyKey === args.idempotencyKey
       && row.reversalEvidenceDigest === args.evidenceDigest
-      && row.reversalTransactionRef !== undefined
-    if (sameRequest) return {
-      kind: 'replayed',
-      obligationRef: row.obligationRef,
-      transactionRef: row.reversalTransactionRef!,
+      && reversalTransactionRef !== undefined) {
+      return {
+        kind: 'replayed',
+        obligationRef: row.obligationRef,
+        transactionRef: reversalTransactionRef,
+      }
     }
     await markProviderObligationDisputed(ctx, row, args)
     return reversalRefused('provider_reversal_conflict')
@@ -263,7 +265,8 @@ export const reverseOwnerSettlement = action({
       },
     )
     if (result.kind === 'completed') {
-      if (result.transactionRefs.length !== 1) {
+      const [reversalTransactionRef] = result.transactionRefs
+      if (result.transactionRefs.length !== 1 || reversalTransactionRef === undefined) {
         return reversalRefused('formance_reference_invalid')
       }
       return await ctx.runMutation(internal.moneyProviderObligations.finalizeOwnerReversal, {
@@ -274,7 +277,7 @@ export const reverseOwnerSettlement = action({
         evidenceRef: args.evidenceRef,
         evidenceDigest: args.evidenceDigest,
         settlementTransactionRef: args.settlementTransactionRef,
-        reversalTransactionRef: result.transactionRefs[0]!,
+        reversalTransactionRef,
       })
     }
     if (result.kind === 'outcome_unknown') {

@@ -278,7 +278,10 @@ export function evaluateCommercialPolicyGate(input: Readonly<{
         family,
       })
     }
-    const current = active[0]!
+    const [current] = active
+    if (current === undefined) {
+      return Object.freeze({ kind: 'refused', code: 'commercial_policy_conflict', family })
+    }
     if (current.control.family !== family || !validCommercialPolicyControl(current.control)) {
       return Object.freeze({ kind: 'refused', code: 'commercial_policy_conflict', family })
     }

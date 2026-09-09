@@ -2,6 +2,7 @@ import { paginationOptsValidator } from 'convex/server'
 import { v } from 'convex/values'
 
 import { internalMutation, internalQuery, mutation, query } from './_generated/server'
+import { agentAccessPrincipalValue } from './agentAccessPrincipals'
 import {
   authorizeConnectOnboardingArgs,
   authorizeConnectOnboardingHandler,
@@ -118,6 +119,6 @@ export const readOwnerProviderEarnings = query({
 })
 
 export const readAgentProviderEarnings = mutation({
-  args: { agentPrincipal: v.any(), currency: v.optional(v.string()) },
+  args: { agentPrincipal: agentAccessPrincipalValue, currency: v.optional(v.string()) },
   handler: async () => ({ kind: 'error' as const, code: 'source_unavailable' as const }),
 })

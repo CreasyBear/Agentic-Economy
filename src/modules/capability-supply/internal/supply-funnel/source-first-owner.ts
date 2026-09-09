@@ -180,6 +180,7 @@ export async function previewOwnerSupplySource({
   const readback = await callSourceQuery(readOwnerSupplyQuery, { businessId: data.businessId })
   if (readback.kind !== 'available') return unavailablePreview()
   if (data.connectionRef !== undefined) {
+    const connectionRef = data.connectionRef
     if (data.source.kind === 'mcp' || data.source.kind === 'agent_plugin') {
       const source = data.source
       return await previewSupplySource(source, {
@@ -187,7 +188,7 @@ export async function previewOwnerSupplySource({
         discoverMcp: async (discoveryInput) => {
           const { previewOwnerMcpProviderConnection } = await import('./provider-connection-handoff')
           return await previewOwnerMcpProviderConnection({
-            connectionRef: data.connectionRef!,
+            connectionRef,
             businessRef: data.businessId,
             ...(discoveryInput.serverUrl === undefined ? {} : { serverUrl: discoveryInput.serverUrl }),
             ...(discoveryInput.registryName === undefined ? {} : { registryName: discoveryInput.registryName }),
@@ -203,7 +204,7 @@ export async function previewOwnerSupplySource({
         loadOpenApi: async () => {
           const { loadOwnerConnectedOpenApi } = await import('./provider-connection-handoff')
           return await loadOwnerConnectedOpenApi({
-            connectionRef: data.connectionRef!,
+            connectionRef,
             businessRef: data.businessId,
             definitionUrl: source.definitionUrl,
             environment: source.environment,
@@ -462,14 +463,15 @@ export async function resumeOwnerSupplySourceDraft({
     ))
     if (!isMatchingX402Connection(connection, parsed.data)) return { kind: 'not_found' }
   }
-  const preview = parsed.data.kind === 'x402' || data.connectionRef === undefined
+  const connectionRef = data.connectionRef
+  const preview = parsed.data.kind === 'x402' || connectionRef === undefined
     ? await previewSupplySource(parsed.data)
     : parsed.data.kind === 'openapi'
       ? await previewSupplySource(parsed.data, {
           loadOpenApi: async () => {
             const { loadOwnerConnectedOpenApi } = await import('./provider-connection-handoff')
             return await loadOwnerConnectedOpenApi({
-              connectionRef: data.connectionRef!,
+              connectionRef,
               businessRef: data.businessId,
               definitionUrl: parsed.data.kind === 'openapi' ? parsed.data.definitionUrl : '',
               environment: parsed.data.environment,
@@ -482,7 +484,7 @@ export async function resumeOwnerSupplySourceDraft({
             discoverMcp: async () => {
               const { previewOwnerMcpProviderConnection } = await import('./provider-connection-handoff')
               return await previewOwnerMcpProviderConnection({
-                connectionRef: data.connectionRef!,
+                connectionRef,
                 businessRef: data.businessId,
                 serverUrl: parsed.data.kind === 'mcp' ? parsed.data.serverUrl! : '',
                 environment: parsed.data.environment,

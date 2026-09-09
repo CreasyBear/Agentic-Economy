@@ -702,13 +702,20 @@ async function readFundingHandler(
   if ((args.commandRef === undefined) === (args.externalRef === undefined)) {
     return refused('payment_binding_invalid')
   }
-  const command = args.commandRef !== undefined
-    ? await ctx.db.query('moneyFundingCommands')
-      .withIndex('by_commandRef', (builder) => builder.eq('commandRef', args.commandRef!))
+  let command
+  if (args.commandRef !== undefined) {
+    const commandRef = args.commandRef
+    command = await ctx.db.query('moneyFundingCommands')
+      .withIndex('by_commandRef', (builder) => builder.eq('commandRef', commandRef))
       .unique()
-    : await ctx.db.query('moneyFundingCommands')
-      .withIndex('by_externalRef', (builder) => builder.eq('externalRef', args.externalRef!))
+  } else if (args.externalRef !== undefined) {
+    const externalRef = args.externalRef
+    command = await ctx.db.query('moneyFundingCommands')
+      .withIndex('by_externalRef', (builder) => builder.eq('externalRef', externalRef))
       .unique()
+  } else {
+    return refused('payment_binding_invalid')
+  }
   return command === null
     || command.accountRef !== actor.canonicalAccountRef
     || (args.commandRef !== undefined && command.idempotencyKey !== args.idempotencyKey)

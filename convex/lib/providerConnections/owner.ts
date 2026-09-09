@@ -711,8 +711,10 @@ function isHttpRuntimeConnection(
 
 function httpRuntimeSource(connection: ProviderConnection, actor: AuthenticatedBusinessActor) {
   if (!isHttpRuntimeConnection(connection, actor)) return null
+  const [sourceUrl] = connection.grantedResources
+  if (sourceUrl === undefined) throw new Error('provider_connection_http_runtime_granted_resource_missing')
   return {
-    sourceUrl: connection.grantedResources[0]!,
+    sourceUrl,
     secret: connection.secretRef,
     sourceOrigin: connection.sourceOrigin,
     environment: connection.sourceEnvironment,

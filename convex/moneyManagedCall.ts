@@ -91,8 +91,9 @@ async function loadRows(ctx: MutationCtx, callRef: string) {
     .withIndex('by_callRef', (query) => query.eq('callRef', callRef))
     .unique()
   if (call === null || call.quoteRef === undefined) return null
+  const quoteRef = call.quoteRef
   const quote = await ctx.db.query('capabilityQuotes')
-    .withIndex('by_quoteRef', (query) => query.eq('quoteRef', call.quoteRef!))
+    .withIndex('by_quoteRef', (query) => query.eq('quoteRef', quoteRef))
     .unique()
   return quote === null ? null : { call, quote }
 }
@@ -120,8 +121,9 @@ export const readBooking = internalQuery({
       .withIndex('by_callRef', (query) => query.eq('callRef', args.callRef))
       .unique()
     if (call === null || call.quoteRef === undefined) return { kind: 'not_found' as const }
+    const quoteRef = call.quoteRef
     const quote = await ctx.db.query('capabilityQuotes')
-      .withIndex('by_quoteRef', (query) => query.eq('quoteRef', call.quoteRef!))
+      .withIndex('by_quoteRef', (query) => query.eq('quoteRef', quoteRef))
       .unique()
     if (quote === null) return { kind: 'not_found' as const }
     const booking = bookingFromRows(call, quote)

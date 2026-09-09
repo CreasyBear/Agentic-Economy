@@ -46,8 +46,9 @@ export const readReservation = internalQuery({
     if (call === null
       || call.quoteRef === undefined
       || call.formanceReservationRefs === undefined) return null
+    const quoteRef = call.quoteRef
     const quote = await ctx.db.query('capabilityQuotes')
-      .withIndex('by_quoteRef', (query) => query.eq('quoteRef', call.quoteRef!))
+      .withIndex('by_quoteRef', (query) => query.eq('quoteRef', quoteRef))
       .unique()
     if (quote === null) return null
     const [audRef, usdcRef] = call.formanceReservationRefs
@@ -156,7 +157,8 @@ export const finalizeSettlement = internalMutation({
     const row = await ctx.db.query('capabilityCalls')
       .withIndex('by_callRef', (query) => query.eq('callRef', args.callRef))
       .unique()
-    if (row === null || args.transactionRefs.length !== 2) {
+    const [, settlementTransactionRef] = args.transactionRefs
+    if (row === null || args.transactionRefs.length !== 2 || settlementTransactionRef === undefined) {
       return { kind: 'refused' as const, code: 'managed_call_settlement_invalid' }
     }
     if (row.formanceFinancialState === 'settled') {
@@ -179,7 +181,7 @@ export const finalizeSettlement = internalMutation({
     if (obligation !== null) {
       await ctx.db.patch(obligation._id, {
         state: 'settled',
-        settlementTransactionRef: args.transactionRefs[1]!,
+        settlementTransactionRef,
         evidenceRefs: [...new Set([...obligation.evidenceRefs, ...args.transactionRefs])].slice(-32),
         settledAt: args.now,
         updatedAt: args.now,

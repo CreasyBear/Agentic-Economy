@@ -1187,7 +1187,10 @@ async function readBulkReferences(
   const invalidRead = reads.find((read) => read.kind === 'setup_required')
   if (invalidRead?.kind === 'setup_required') return Object.freeze({ kind: 'refused', code: invalidRead.code })
   if (reads.every((read) => read.kind === 'absent')) return Object.freeze({ kind: 'absent' })
-  if (reads.every((read, index) => read.kind === 'found' && matchingCommand(read, commands[index]!))) {
+  if (commands.every((command, index) => {
+    const read = reads[index]
+    return read !== undefined && read.kind === 'found' && matchingCommand(read, command)
+  })) {
     return Object.freeze({
       kind: 'completed',
       result: completedMany(commands.map(({ commandRef }) => commandRef), true),
