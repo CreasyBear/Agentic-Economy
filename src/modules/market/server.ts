@@ -182,7 +182,7 @@ function externalProjection(
         ? "The latest bounded snapshot is current."
         : status === "delayed"
           ? "The last-known-good snapshot is more than ten minutes old."
-          : "No snapshot newer than sixty minutes is available.",
+          : "AEcon does not yet publish an x402 ecosystem snapshot; first-party counts below are live.",
     metrics: [],
     daily: [],
     recentActivity: [],

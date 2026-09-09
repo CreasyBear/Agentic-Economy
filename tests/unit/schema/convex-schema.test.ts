@@ -117,7 +117,6 @@ const durableTables = [
   'marketExternalRegistryEntries',
   'marketExternalRegistryGenerations',
   'marketExternalRegistryState',
-  'marketExternalSnapshots',
   'marketToolCategories',
   'marketToolRatings',
   'marketDemandSignals',
@@ -380,7 +379,7 @@ describe('Convex schema', () => {
   const exported = SchemaExport.parse(JSON.parse(String(exportSchema.call(schema))))
 
   it('contains exactly the source-owned durable tables', () => {
-    expect(durableTables).toHaveLength(91)
+    expect(durableTables).toHaveLength(90)
     expect(exported.tables.map((table) => table.tableName).sort()).toEqual([...durableTables].sort())
   })
 
