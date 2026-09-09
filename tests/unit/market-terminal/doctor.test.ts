@@ -924,9 +924,11 @@ describe('ae doctor', () => {
     const json = await spawnCli(['doctor', '--base-url', origin, '--json'], { env: cleanEnvironment(directory) })
 
     expect(json.status).toBe(0)
-    expect(JSON.parse(json.stdout).checks).toEqual(expect.arrayContaining([{
-      id: 'quote', group: 'quoting', state: 'fail',
-      summary: 'Quote for the sandbox Tool was refused (insufficient_balance).',
+    const result = JSON.parse(json.stdout) as { groups: unknown; checks: unknown[] }
+    expect(result.groups).toEqual(expect.objectContaining({ quoting: 'warn' }))
+    expect(result.checks).toEqual(expect.arrayContaining([{
+      id: 'quote', group: 'quoting', state: 'warn',
+      summary: 'Quote reached the funding gate (insufficient_balance); authority and commercial policy are ready.',
       nextCommand: `ae fund --base-url ${origin} --json`,
     }]))
   }, 20_000)

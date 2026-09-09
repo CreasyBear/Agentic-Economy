@@ -86,7 +86,9 @@ const SANDBOX_TOOL_CAPABILITY_ID = 'sandbox.aecon-reference'
 const SANDBOX_TOOL_QUOTE_INPUT = { request: 'ae doctor quote inspection' }
 const LOCAL_DEV_COMMAND = continuationCommand(['npm', 'run', 'dev:local'])
 const QUOTE_AUTHORITY_REFUSAL_CODES: readonly string[] = ['grant_not_found', 'budget_exceeded']
-const QUOTE_FUNDING_REFUSAL_CODES: readonly string[] = ['insufficient_balance']
+// A funding refusal means authority and commercial policy already admitted the sale, so it
+// only proves purchase is unfunded: quoting warns instead of failing on these codes.
+const QUOTE_FUNDING_REFUSAL_PATTERN = /^(insufficient_|funding_|balance_)/
 
 function originFlags(options: Pick<CliOptions, 'baseUrl' | 'baseUrlSource'>): readonly string[] {
   return options.baseUrlSource === undefined || options.baseUrlSource === 'hosted_default'
@@ -404,10 +406,19 @@ async function checkQuote(
     // An unreadable Quote proves nothing about a sale, so it skips instead of passing.
     if (!outcome.ok || !parsed.success) return skippedQuoteCheck('quote inspection timed out')
     if (parsed.data.kind === 'refused') {
+      const { code } = parsed.data
+      const nextCommand = quoteRefusalCommand(options, code)
+      if (QUOTE_FUNDING_REFUSAL_PATTERN.test(code)) {
+        return {
+          id: 'quote', state: 'warn',
+          summary: `Quote reached the funding gate (${code}); authority and commercial policy are ready.`,
+          nextCommand,
+        }
+      }
       return {
         id: 'quote', state: 'fail',
-        summary: `Quote for the sandbox Tool was refused (${parsed.data.code}).`,
-        nextCommand: quoteRefusalCommand(options, parsed.data.code),
+        summary: `Quote for the sandbox Tool was refused (${code}).`,
+        nextCommand,
       }
     }
     const { price } = parsed.data
@@ -424,7 +435,7 @@ function quoteRefusalCommand(options: CliOptions, code: string): string {
   // Sandbox authority is what a local refusal usually lacks: `ae connect` first,
   // then reseed the grant the Quote path resolves.
   if (QUOTE_AUTHORITY_REFUSAL_CODES.includes(code)) return LOCAL_DEV_COMMAND
-  if (QUOTE_FUNDING_REFUSAL_CODES.includes(code)) return doctorContinuation(options, ['ae', 'fund'])
+  if (QUOTE_FUNDING_REFUSAL_PATTERN.test(code)) return doctorContinuation(options, ['ae', 'fund'])
   return continuationCommand(['ae', 'doctor', ...originFlags(options), '--json'])
 }
 

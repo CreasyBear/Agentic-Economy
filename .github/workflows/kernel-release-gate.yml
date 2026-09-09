@@ -175,7 +175,11 @@ jobs:
             const fs = require("fs");
             const result = JSON.parse(fs.readFileSync("output/fresh-checkout/doctor.json", "utf8"));
             const groups = result.groups || {};
-            if (groups.discovery !== "pass" || groups.quoting !== "pass") {
+            const quote = (result.checks ?? []).find((c) => c.id === "quote");
+            const quoteState = quote?.state;
+            if (groups.discovery !== "pass" ||
+                (groups.quoting !== "pass" && groups.quoting !== "warn") ||
+                !quote || quoteState === "skipped" || quoteState === "fail") {
               console.error(JSON.stringify(result, null, 2));
               process.exit(1);
             }
