@@ -68,13 +68,15 @@ type ConnectChild = {
 
 type LocalConnectFlags = {
   baseUrl: string
-  authorityMode: AuthorityMode
+  authorityMode?: AuthorityMode
   json: boolean
+  provider: boolean
+  businessId?: string
 }
 
 type LocalConnectOptions = {
   argv?: readonly string[]
-  spawnImpl?: (baseUrl: string) => ConnectChild
+  spawnImpl?: (baseUrl: string, provider: boolean) => ConnectChild
   fetchImpl?: FetchLike
   stdout?: (text: string) => void
   stderr?: (text: string) => void
@@ -99,5 +101,5 @@ export function approveLocalConsent(input: {
   fetchImpl?: FetchLike
 }): Promise<ApprovalResult>
 export function parseFlags(argv?: readonly string[]): LocalConnectFlags
-export function buildConnectArgs(baseUrl: string): string[]
+export function buildConnectArgs(baseUrl: string, provider?: boolean): string[]
 export function runLocalConnect(options?: LocalConnectOptions): Promise<LocalConnectOutcome>

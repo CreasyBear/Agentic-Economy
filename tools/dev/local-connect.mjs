@@ -19,8 +19,17 @@ const DEFAULT_BASE_URL = 'http://127.0.0.1:3024'
 const CONSENT_PATH = '/oauth/authorize'
 // src/modules/agent-access/contract.ts:16 — AGENT_ACCESS_AUTHORITY_MODE_VALUES.
 const AUTHORITY_MODES = ['read_only', 'approval_required', 'spending_policy', 'unrestricted_test_only']
-// `ae connect` requests `customer_requests:spending_policy`, and approveGrant
-// refuses a mode that differs from the requested one.
+// The buyer flow (`ae connect`) requests `customer_requests:spending_policy`
+// (tools/ae/commands/connect.ts:229-231, buyer branch), and approveGrant
+// refuses a mode that differs from the requested one
+// (src/modules/agent-access/oauth-state.ts:452-454). The provider flow
+// (`ae connect --provider`) requests only `market_supply:manage`
+// (tools/ae/commands/connect.ts:229-231, provider branch), which
+// normalizeRequestedScopes special-cases to the same `spending_policy` mode
+// (src/modules/agent-access/oauth-state.ts:260-261) — so this default already
+// covers both profiles. Still, the consent page's own `data-authority-mode`
+// attribute is preferred over this default whenever it is present, since it
+// reflects what the pending grant actually requested.
 const DEFAULT_AUTHORITY_MODE = 'spending_policy'
 // src/lib/server/agent-access-oauth-api.ts:1345 — parseApprovedToolSelection.
 const TOOL_ACCESS_VALUES = ['all_admitted', 'selected_tools']
@@ -237,9 +246,15 @@ function redactSecrets(value) {
   )
 }
 
-/** Approve the pending device grant through the local auth bypass. */
+/**
+ * Approve the pending device grant through the local auth bypass. `authorityMode`
+ * is an explicit override; when omitted, the consent page's own
+ * `data-authority-mode` attribute (what the pending grant actually requested)
+ * is used, falling back to `DEFAULT_AUTHORITY_MODE` only if the page carries
+ * no recognised mode.
+ */
 export async function approveLocalConsent(input) {
-  const { baseUrl, userCode, authorityMode = DEFAULT_AUTHORITY_MODE, fetchImpl = fetch } = input
+  const { baseUrl, userCode, authorityMode, fetchImpl = fetch } = input
   const origin = new URL(baseUrl).origin
   const { response: page, url: landedUrl, clerkRedirect } = await fetchConsentPage(fetchImpl, baseUrl, userCode)
   const html = await page.text()
@@ -261,7 +276,8 @@ export async function approveLocalConsent(input) {
       body: html,
     }
   }
-  const body = buildApprovalBody({ ...attributes, authorityMode })
+  const chosenAuthorityMode = authorityMode ?? attributes.requestedAuthorityMode ?? DEFAULT_AUTHORITY_MODE
+  const body = buildApprovalBody({ ...attributes, authorityMode: chosenAuthorityMode })
   const response = await fetchImpl(formActionUrl(html, landedUrl), {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded', Origin: origin },
@@ -286,11 +302,15 @@ export async function approveLocalConsent(input) {
   }
 }
 
+const USAGE = 'Usage: node tools/dev/local-connect.mjs [--base-url <url>] [--provider [businessId]] [--authority-mode <mode>] [--json]'
+
 /** Parse the CLI flags. Throws with a usage message on anything unknown. */
 export function parseFlags(argv = []) {
   let baseUrl = DEFAULT_BASE_URL
-  let authorityMode = DEFAULT_AUTHORITY_MODE
+  let authorityMode
   let json = false
+  let provider = false
+  let businessId
   for (let index = 0; index < argv.length; index += 1) {
     const arg = String(argv[index])
     const [name, inlineValue] = arg.startsWith('--') && arg.includes('=')
@@ -306,25 +326,47 @@ export function parseFlags(argv = []) {
     if (name === '--base-url') baseUrl = readValue()
     else if (name === '--authority-mode') authorityMode = readValue()
     else if (name === '--json') json = true
-    else throw new Error(`Unknown option ${name}. Usage: node tools/dev/local-connect.mjs [--base-url <url>] [--authority-mode <mode>] [--json]`)
+    else if (name === '--provider') {
+      provider = true
+      // The business id is optional and, unlike --base-url/--authority-mode,
+      // is never required: a bare `--provider` followed by another flag (or
+      // nothing) must not swallow that flag as a value.
+      if (inlineValue !== undefined) {
+        businessId = inlineValue
+      } else if (argv[index + 1] !== undefined && !String(argv[index + 1]).startsWith('--')) {
+        index += 1
+        businessId = String(argv[index])
+      }
+    } else throw new Error(`Unknown option ${name}. ${USAGE}`)
   }
-  if (!AUTHORITY_MODES.includes(authorityMode)) {
+  if (authorityMode !== undefined && !AUTHORITY_MODES.includes(authorityMode)) {
     throw new Error(`--authority-mode must be one of ${AUTHORITY_MODES.join(', ')}.`)
   }
-  return { baseUrl, authorityMode, json }
+  return {
+    baseUrl,
+    json,
+    provider,
+    ...(businessId === undefined ? {} : { businessId }),
+    ...(authorityMode === undefined ? {} : { authorityMode }),
+  }
 }
 
 function repoRoot() {
   return resolvePath(dirname(fileURLToPath(import.meta.url)), '..', '..')
 }
 
-/** Argv for the child `ae connect` run. */
-export function buildConnectArgs(baseUrl) {
-  return ['run', '--silent', 'ae', '--', 'connect', '--base-url', baseUrl, '--json']
+/**
+ * Argv for the child `ae connect` run. `ae connect` (tools/ae/commands/connect.ts:221-223)
+ * refuses any positional argument, so there is nowhere to forward a business
+ * id even for the provider profile — only the bare `--provider` flag is
+ * passed through (tools/ae/cli.ts:47,65).
+ */
+export function buildConnectArgs(baseUrl, provider = false) {
+  return ['run', '--silent', 'ae', '--', 'connect', ...(provider ? ['--provider'] : []), '--base-url', baseUrl, '--json']
 }
 
-function defaultSpawn(baseUrl) {
-  return spawn('npm', buildConnectArgs(baseUrl), {
+function defaultSpawn(baseUrl, provider) {
+  return spawn('npm', buildConnectArgs(baseUrl, provider), {
     cwd: repoRoot(),
     env: { ...process.env, AE_DISABLE_BROWSER_OPEN: '1' },
     stdio: ['ignore', 'pipe', 'pipe'],
@@ -354,7 +396,7 @@ export async function runLocalConnect(options = {}) {
     return { exitCode: 2 }
   }
 
-  const child = spawnImpl(flags.baseUrl)
+  const child = spawnImpl(flags.baseUrl, flags.provider)
   let stdoutText = ''
   let stderrText = ''
   let approval
@@ -367,7 +409,8 @@ export async function runLocalConnect(options = {}) {
     if (located === undefined) return
     approving = true
     if (!flags.json) {
-      stderr(`${LOG_PREFIX}: approving user code ${located.userCode} as ${flags.authorityMode}.\n`)
+      const modeNote = flags.authorityMode === undefined ? '' : ` as ${flags.authorityMode}`
+      stderr(`${LOG_PREFIX}: approving user code ${located.userCode}${modeNote}.\n`)
     }
     pending.push((async () => {
       try {
@@ -421,7 +464,12 @@ export async function runLocalConnect(options = {}) {
       stderr(`${LOG_PREFIX}: ${approval.message}\n`)
     } else {
       stderr(`${LOG_PREFIX}: approval failed at ${approval.stage} (HTTP ${approval.status}).\n${approval.body}\n`)
-      if (approval.requestedAuthorityMode !== undefined && approval.requestedAuthorityMode !== flags.authorityMode) {
+      // Only worth suggesting a rerun when the user's own explicit
+      // --authority-mode conflicted with what the grant requested; when no
+      // explicit mode was given, the consent page's mode was already tried.
+      if (flags.authorityMode !== undefined
+        && approval.requestedAuthorityMode !== undefined
+        && approval.requestedAuthorityMode !== flags.authorityMode) {
         stderr(`${LOG_PREFIX}: the grant requested authority mode "${approval.requestedAuthorityMode}"; rerun with --authority-mode ${approval.requestedAuthorityMode}.\n`)
       }
     }

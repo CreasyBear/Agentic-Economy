@@ -227,17 +227,17 @@ describe('assertConnected', () => {
 })
 
 describe('parseFlags', () => {
-  it('defaults to the local dev server and spending policy', () => {
+  it('defaults to the local dev server with no authority mode override and a buyer (non-provider) run', () => {
     expect(parseFlags([])).toEqual({
       baseUrl: 'http://127.0.0.1:3024',
-      authorityMode: 'spending_policy',
       json: false,
+      provider: false,
     })
   })
 
   it('reads spaced and inline values', () => {
     expect(parseFlags(['--base-url', 'http://localhost:9', '--authority-mode', 'read_only', '--json']))
-      .toEqual({ baseUrl: 'http://localhost:9', authorityMode: 'read_only', json: true })
+      .toEqual({ baseUrl: 'http://localhost:9', authorityMode: 'read_only', json: true, provider: false })
     expect(parseFlags(['--base-url=http://localhost:9']).baseUrl).toBe('http://localhost:9')
   })
 
@@ -245,6 +245,24 @@ describe('parseFlags', () => {
     expect(() => parseFlags(['--wat'])).toThrow(/Unknown option/u)
     expect(() => parseFlags(['--base-url'])).toThrow(/requires a value/u)
     expect(() => parseFlags(['--authority-mode', 'root'])).toThrow(/authority-mode/u)
+  })
+
+  it('sets provider without a business id when none is given', () => {
+    expect(parseFlags(['--provider'])).toEqual({
+      baseUrl: 'http://127.0.0.1:3024',
+      json: false,
+      provider: true,
+    })
+  })
+
+  it('reads an optional business id after --provider without swallowing a following flag', () => {
+    expect(parseFlags(['--provider', 'biz-1'])).toMatchObject({ provider: true, businessId: 'biz-1' })
+    expect(parseFlags(['--provider=biz-1'])).toMatchObject({ provider: true, businessId: 'biz-1' })
+    expect(parseFlags(['--provider', '--json'])).toEqual({
+      baseUrl: 'http://127.0.0.1:3024',
+      json: true,
+      provider: true,
+    })
   })
 })
 
@@ -264,6 +282,12 @@ describe('buildConnectArgs', () => {
   it('runs the workspace ae CLI in JSON mode against the given base URL', () => {
     expect(buildConnectArgs(BASE_URL)).toEqual([
       'run', '--silent', 'ae', '--', 'connect', '--base-url', BASE_URL, '--json',
+    ])
+  })
+
+  it('forwards --provider to the child ae connect when requested', () => {
+    expect(buildConnectArgs(BASE_URL, true)).toEqual([
+      'run', '--silent', 'ae', '--', 'connect', '--provider', '--base-url', BASE_URL, '--json',
     ])
   })
 })
@@ -415,6 +439,47 @@ describe('approveLocalConsent', () => {
       requestedAuthorityMode: 'spending_policy',
     })
   })
+
+  it('uses the consent page authority mode (e.g. a provider grant) when no explicit override is given', async () => {
+    const { calls, fetchImpl } = fetchStub([
+      { status: 200, body: consentPage({ 'data-authority-mode': 'read_only' }) },
+      { status: 200, body: JSON.stringify({ kind: 'approved', grantRef: 'device:grant-1' }) },
+    ])
+
+    const approval = await approveLocalConsent({ baseUrl: BASE_URL, userCode: 'WDJB-MJHT', fetchImpl })
+
+    expect(approval).toMatchObject({ kind: 'approved', requestedAuthorityMode: 'read_only' })
+    expect(new URLSearchParams(calls[1]?.init.body ?? '').get('authority_mode')).toBe('read_only')
+  })
+
+  it('lets an explicit authorityMode override the consent page attribute', async () => {
+    const { calls, fetchImpl } = fetchStub([
+      { status: 200, body: consentPage({ 'data-authority-mode': 'read_only' }) },
+      { status: 200, body: JSON.stringify({ kind: 'approved', grantRef: 'device:grant-1' }) },
+    ])
+
+    const approval = await approveLocalConsent({
+      baseUrl: BASE_URL,
+      userCode: 'WDJB-MJHT',
+      authorityMode: 'approval_required',
+      fetchImpl,
+    })
+
+    expect(approval).toMatchObject({ kind: 'approved', requestedAuthorityMode: 'read_only' })
+    expect(new URLSearchParams(calls[1]?.init.body ?? '').get('authority_mode')).toBe('approval_required')
+  })
+
+  it('falls back to the default authority mode when the consent page carries none and no override is given', async () => {
+    const { calls, fetchImpl } = fetchStub([
+      { status: 200, body: consentPage({ 'data-authority-mode': undefined }) },
+      { status: 200, body: JSON.stringify({ kind: 'approved', grantRef: 'device:grant-1' }) },
+    ])
+
+    const approval = await approveLocalConsent({ baseUrl: BASE_URL, userCode: 'WDJB-MJHT', fetchImpl })
+
+    expect(approval).toEqual({ kind: 'approved', grantRef: 'device:grant-1' })
+    expect(new URLSearchParams(calls[1]?.init.body ?? '').get('authority_mode')).toBe('spending_policy')
+  })
 })
 
 describe('runLocalConnect', () => {
@@ -423,11 +488,11 @@ describe('runLocalConnect', () => {
     const stdout = recorder()
     const stderr = recorder()
     const { calls, fetchImpl } = fetchStub(responses)
-    const spawned: string[] = []
+    const spawned: Array<{ baseUrl: string, provider: boolean }> = []
     const run = (argv: readonly string[]) => runLocalConnect({
       argv,
-      spawnImpl: (baseUrl: string) => {
-        spawned.push(baseUrl)
+      spawnImpl: (baseUrl: string, provider: boolean) => {
+        spawned.push({ baseUrl, provider })
         return child as never
       },
       fetchImpl,
@@ -469,7 +534,7 @@ describe('runLocalConnect', () => {
     child.finish(connectedResult)
     const outcome = await running
 
-    expect(spawned).toEqual([BASE_URL])
+    expect(spawned).toEqual([{ baseUrl: BASE_URL, provider: false }])
     expect(outcome.exitCode).toBe(0)
     expect(outcome.approval).toMatchObject({ kind: 'approved', grantRef: 'device:grant-1' })
     expect(calls.map((call) => `${call.init.method} ${call.url}`)).toEqual([
@@ -479,6 +544,38 @@ describe('runLocalConnect', () => {
     expect(new URLSearchParams(calls[1]?.init.body ?? '').get('expected_target_revision')).toBe('2')
     expect(JSON.parse(stdout.chunks.join(''))).toEqual(connectedResult)
     expect(child.signals).toEqual([])
+  })
+
+  it('forwards --provider to the child and approves with the mode the provider consent page requests', async () => {
+    const { child, calls, spawned, run } = harness([
+      { status: 200, body: consentPage({ 'data-authority-mode': 'read_only' }) },
+      { status: 200, body: JSON.stringify({ kind: 'approved', grantRef: 'device:grant-1' }) },
+    ])
+
+    const running = run(['--base-url', BASE_URL, '--json', '--provider'])
+    child.stderr.emit('data', progressBlock())
+    await Promise.resolve()
+    child.finish({ ...connectedResult, profile: 'provider' })
+    const outcome = await running
+
+    expect(spawned).toEqual([{ baseUrl: BASE_URL, provider: true }])
+    expect(outcome.exitCode).toBe(0)
+    expect(new URLSearchParams(calls[1]?.init.body ?? '').get('authority_mode')).toBe('read_only')
+  })
+
+  it('lets an explicit --authority-mode win over the consent page even for a provider run', async () => {
+    const { child, calls, run } = harness([
+      { status: 200, body: consentPage({ 'data-authority-mode': 'read_only' }) },
+      { status: 200, body: JSON.stringify({ kind: 'approved', grantRef: 'device:grant-1' }) },
+    ])
+
+    const running = run(['--base-url', BASE_URL, '--json', '--provider', '--authority-mode', 'spending_policy'])
+    child.stderr.emit('data', progressBlock())
+    await Promise.resolve()
+    child.finish({ ...connectedResult, profile: 'provider' })
+    await running
+
+    expect(new URLSearchParams(calls[1]?.init.body ?? '').get('authority_mode')).toBe('spending_policy')
   })
 
   it('approves once even when the code arrives across several chunks', async () => {
