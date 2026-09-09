@@ -21,6 +21,7 @@ import {
   marketRequestStatusAction,
 } from '@/modules/market-demand/market-demand.actions'
 import { TOOL_MARKET_DESCRIBE_PATH } from '@/modules/registry/tool-entry'
+import { TOOL_QUOTE_PATH, toolQuoteResultSchema } from '@/modules/capability-execution/quote'
 import {
   SUPPLY_ACTION_ROUTE_CONTRACTS,
   supplyConnectionListAction,
@@ -37,34 +38,64 @@ import { resolveAgentAccessCredential } from '../lib/config'
 import { continuationCommand } from '../lib/continuation-command'
 import { callJson, line, printJson } from '../lib/output'
 import { usageFailure } from '../lib/help'
+import { searchCommandDescriptor } from './search'
+
+type DoctorGroup = 'discovery' | 'quoting' | 'purchase'
+type GroupState = 'pass' | 'warn' | 'fail' | 'skipped'
 
 export type DoctorResult = Readonly<{
   kind: 'ready' | 'degraded'
+  groups: Readonly<Record<DoctorGroup, GroupState>>
   checks: readonly DoctorCheck[]
 }>
 
 type DoctorCheck = Readonly<{
   id: string
-  state: 'pass' | 'warn' | 'fail'
+  group: DoctorGroup
+  state: 'pass' | 'warn' | 'fail' | 'skipped'
   summary: string
+  reason?: string
   nextCommand?: string
 }>
 
+/** Checks stay group-free so one table owns the discovery/quoting/purchase split. */
+type DoctorCheckDraft = Omit<DoctorCheck, 'group'>
+
 type CallDoctorResult = Readonly<{
-  check: DoctorCheck
+  check: DoctorCheckDraft
   recentCompletedToolRef?: string
 }>
 
+const CHECK_GROUPS: Readonly<Record<string, DoctorGroup>> = {
+  origin: 'discovery', server: 'discovery', mcp: 'discovery',
+  readiness: 'discovery', release: 'discovery', catalogue: 'discovery',
+  buyer: 'quoting', quote: 'quoting',
+  balance: 'purchase', call: 'purchase', market_requests: 'purchase',
+  repeat_use: 'purchase', provider: 'purchase', 'provider.readiness': 'purchase',
+}
+/** Skipping one of these proves nothing about its group, so it cannot roll up as a pass. */
+const REQUIRED_CHECK_IDS: readonly string[] = ['quote']
+
 const MARKET_REQUEST_REENTRY_LIMIT = 5
 const MCP_CHECK_TIMEOUT_MS = 5_000
+const QUOTE_CHECK_TIMEOUT_MS = 5_000
+const CATALOGUE_STATUS_PATH = '/api/v1/catalogue-status'
+// The Tool `npm run dev:local` (stage sandbox-tool) seeds and publishes.
+const SANDBOX_TOOL_BUSINESS_SLUG = 'sandbox-aecon-reference'
+const SANDBOX_TOOL_CAPABILITY_ID = 'sandbox.aecon-reference'
+const SANDBOX_TOOL_QUOTE_INPUT = { request: 'ae doctor quote inspection' }
+const LOCAL_DEV_COMMAND = continuationCommand(['npm', 'run', 'dev:local'])
+const QUOTE_AUTHORITY_REFUSAL_CODES: readonly string[] = ['grant_not_found', 'budget_exceeded']
+const QUOTE_FUNDING_REFUSAL_CODES: readonly string[] = ['insufficient_balance']
+
+function originFlags(options: Pick<CliOptions, 'baseUrl' | 'baseUrlSource'>): readonly string[] {
+  return options.baseUrlSource === undefined || options.baseUrlSource === 'hosted_default'
+    ? []
+    : ['--base-url', options.baseUrl]
+}
 
 function continuationFlags(options: Pick<CliOptions, 'baseUrl' | 'baseUrlSource' | 'json'>): readonly string[] {
-  return [
-    ...(options.baseUrlSource === undefined || options.baseUrlSource === 'hosted_default'
-      ? []
-      : ['--base-url', options.baseUrl]),
-    ...(options.json ? ['--json'] : []),
-  ]
+  return [...originFlags(options), ...(options.json ? ['--json'] : [])]
 }
 
 function doctorContinuation(
@@ -74,12 +105,57 @@ function doctorContinuation(
   return continuationCommand([...tokens, ...continuationFlags(options)])
 }
 
+function withGroup(check: DoctorCheckDraft): DoctorCheck {
+  const group = CHECK_GROUPS[check.id]
+  if (group === undefined) throw new Error('doctor_check_group_missing')
+  const { id, ...rest } = check
+  return { id, group, ...rest }
+}
+
+/**
+ * One failed check fails its group, and a skipped check never stands in for a
+ * pass: a skipped required check, or a group nothing reached, reports skipped.
+ */
+function groupState(checks: readonly DoctorCheck[], group: DoctorGroup): GroupState {
+  const members = checks.filter((check) => check.group === group)
+  if (members.some((check) => check.state === 'fail')) return 'fail'
+  if (members.some((check) => check.state === 'skipped' && REQUIRED_CHECK_IDS.includes(check.id))) return 'skipped'
+  // An empty group was never reached, so `every` reporting skipped is correct.
+  if (members.every((check) => check.state === 'skipped')) return 'skipped'
+  if (members.some((check) => check.state === 'warn')) return 'warn'
+  return 'pass'
+}
+
+function doctorResult(drafts: readonly DoctorCheckDraft[]): DoctorResult {
+  const checks = drafts.map(withGroup)
+  return {
+    // A skipped check reports an unproven step, not a broken one, so it leaves
+    // the overall diagnosis alone while its group still refuses a pass.
+    kind: checks.some((check) => check.state === 'fail' || check.state === 'warn') ? 'degraded' : 'ready',
+    groups: {
+      discovery: groupState(checks, 'discovery'),
+      quoting: groupState(checks, 'quoting'),
+      purchase: groupState(checks, 'purchase'),
+    },
+    checks,
+  }
+}
+
+/** A skipped Quote states why it could not run and never reports a pass. */
+function skippedQuoteCheck(reason: string, nextCommand?: string): DoctorCheckDraft {
+  return {
+    id: 'quote', state: 'skipped', reason,
+    summary: `Quote inspection was skipped: ${reason}.`,
+    ...(nextCommand === undefined ? {} : { nextCommand }),
+  }
+}
+
 export async function runDoctorCommand(args: readonly string[], options: CliOptions): Promise<number> {
   const businessId = args[0]?.trim()
   if (args.length > 1 || (businessId !== undefined && (businessId.length === 0 || options.provider !== true))) {
     throw usageFailure('doctor', 'doctor-usage')
   }
-  const checks: DoctorCheck[] = [{
+  const checks: DoctorCheckDraft[] = [{
     id: 'origin',
     state: 'pass',
     summary: `Configured origin is ${new URL(options.baseUrl).origin}.`,
@@ -100,7 +176,7 @@ export async function runDoctorCommand(args: readonly string[], options: CliOpti
           ]
         : []),
     )
-    renderDoctor({ kind: 'degraded', checks }, options)
+    renderDoctor(doctorResult(checks), options)
     return options.json ? 0 : 1
   }
   checks.push(await checkMcp(options.baseUrl))
@@ -113,6 +189,7 @@ export async function runDoctorCommand(args: readonly string[], options: CliOpti
         summary: 'No buyer credential is selected for this origin; anonymous search and describe remain available.',
         nextCommand: connectCommand(options, 'buyer'),
       },
+      skippedQuoteCheck('no buyer credential for this origin', connectCommand(options, 'buyer')),
       {
         id: 'balance', state: 'warn',
         summary: 'Balance is unavailable until a buyer credential is connected.',
@@ -129,15 +206,12 @@ export async function runDoctorCommand(args: readonly string[], options: CliOpti
     checks.push(...await checkProvider(options, businessId))
   }
 
-  const result: DoctorResult = {
-    kind: checks.every((check) => check.state === 'pass') ? 'ready' : 'degraded',
-    checks,
-  }
+  const result = doctorResult(checks)
   renderDoctor(result, options)
   return !options.json && result.kind === 'degraded' ? 1 : 0
 }
 
-async function checkProvider(options: CliOptions, businessId: string | undefined): Promise<readonly DoctorCheck[]> {
+async function checkProvider(options: CliOptions, businessId: string | undefined): Promise<readonly DoctorCheckDraft[]> {
   const { baseUrl } = options
   const credential = resolveAgentAccessCredential(baseUrl, MARKET_SUPPLY_MANAGE_SCOPE)
   if (credential === undefined) {
@@ -177,7 +251,7 @@ async function checkProvider(options: CliOptions, businessId: string | undefined
         { id: 'provider.readiness', state: 'warn', summary: 'Provider readiness was not checked because provider scope is missing.' },
       ]
     }
-    const provider: DoctorCheck = {
+    const provider: DoctorCheckDraft = {
       id: 'provider', state: 'pass',
       summary: `Provider credential is origin-bound, authenticated, and has ${MARKET_SUPPLY_MANAGE_SCOPE}.`,
     }
@@ -200,7 +274,7 @@ async function checkProviderReadiness(
   options: CliOptions,
   headers: Readonly<Record<string, string>>,
   businessId: string,
-): Promise<DoctorCheck> {
+): Promise<DoctorCheckDraft> {
   const { baseUrl } = options
   try {
     const [statusOutcome, connectionsOutcome] = await Promise.all([
@@ -251,7 +325,7 @@ async function checkProviderReadiness(
 async function checkBuyer(
   options: CliOptions,
   credential: Readonly<{ accessToken: string; origin: string }>,
-): Promise<readonly DoctorCheck[]> {
+): Promise<readonly DoctorCheckDraft[]> {
   const { baseUrl } = options
   const originFailure = credentialOriginFailure(options, credential.origin, 'buyer')
   if (originFailure !== undefined) {
@@ -282,6 +356,7 @@ async function checkBuyer(
         { id: 'call', state: 'warn', summary: 'Call recovery was not checked because buyer scope is missing.' },
       ]
     }
+    const quote = await checkQuote(options, headers)
     const balance = await checkBalance(options, headers)
     const call = await checkCall(options, headers)
     const marketRequests = await checkMarketRequests(options, headers)
@@ -293,6 +368,7 @@ async function checkBuyer(
         id: 'buyer', state: 'pass',
         summary: `Buyer credential is origin-bound, authenticated, and has ${MARKET_TOOLS_CALL_SCOPE}.`,
       },
+      quote,
       balance,
       call.check,
       marketRequests,
@@ -303,10 +379,85 @@ async function checkBuyer(
   }
 }
 
+/**
+ * Quote is the only check that proves a sale would be admitted. It runs the real
+ * tool.quote route with the credential the buyer check just origin-bound, so it
+ * is reached only from that guarded branch and never echoes credential material.
+ */
+async function checkQuote(
+  options: CliOptions,
+  headers: Readonly<Record<string, string>>,
+): Promise<DoctorCheckDraft> {
+  const sandbox = await resolveSandboxTool(options.baseUrl)
+  if (sandbox.kind === 'unavailable') return skippedQuoteCheck('quote inspection timed out')
+  if (sandbox.kind === 'absent') {
+    return skippedQuoteCheck('no sandbox Tool is published; run npm run dev:local (stage sandbox-tool)', LOCAL_DEV_COMMAND)
+  }
+  try {
+    const outcome = await callJson(options.baseUrl, TOOL_QUOTE_PATH, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ toolRef: sandbox.toolRef, input: SANDBOX_TOOL_QUOTE_INPUT }),
+      signal: AbortSignal.timeout(QUOTE_CHECK_TIMEOUT_MS),
+    })
+    const parsed = toolQuoteResultSchema.safeParse(outcome.body)
+    // An unreadable Quote proves nothing about a sale, so it skips instead of passing.
+    if (!outcome.ok || !parsed.success) return skippedQuoteCheck('quote inspection timed out')
+    if (parsed.data.kind === 'refused') {
+      return {
+        id: 'quote', state: 'fail',
+        summary: `Quote for the sandbox Tool was refused (${parsed.data.code}).`,
+        nextCommand: quoteRefusalCommand(options, parsed.data.code),
+      }
+    }
+    const { price } = parsed.data
+    return {
+      id: 'quote', state: 'pass',
+      summary: `Quote for the sandbox Tool was admitted at ${price.units} × 10^-${price.exponent} ${price.currency}.`,
+    }
+  } catch {
+    return skippedQuoteCheck('quote inspection timed out')
+  }
+}
+
+function quoteRefusalCommand(options: CliOptions, code: string): string {
+  // Sandbox authority is what a local refusal usually lacks: `ae connect` first,
+  // then reseed the grant the Quote path resolves.
+  if (QUOTE_AUTHORITY_REFUSAL_CODES.includes(code)) return LOCAL_DEV_COMMAND
+  if (QUOTE_FUNDING_REFUSAL_CODES.includes(code)) return doctorContinuation(options, ['ae', 'fund'])
+  return continuationCommand(['ae', 'doctor', ...originFlags(options), '--json'])
+}
+
+type SandboxToolLookup =
+  | Readonly<{ kind: 'found'; toolRef: string }>
+  | Readonly<{ kind: 'absent' }>
+  | Readonly<{ kind: 'unavailable' }>
+
+/** Resolves the seeded sandbox Tool through the CLI's own anonymous search contract. */
+async function resolveSandboxTool(baseUrl: string): Promise<SandboxToolLookup> {
+  const input = searchCommandDescriptor.inputSchema.safeParse({ query: SANDBOX_TOOL_BUSINESS_SLUG, limit: 10 })
+  if (!input.success) return { kind: 'unavailable' }
+  try {
+    const outcome = await callJson(baseUrl, searchCommandDescriptor.path, {
+      method: 'POST',
+      body: JSON.stringify(input.data),
+      signal: AbortSignal.timeout(QUOTE_CHECK_TIMEOUT_MS),
+    })
+    const parsed = searchCommandDescriptor.outputSchema.safeParse(outcome.body)
+    if (!outcome.ok || !parsed.success) return { kind: 'unavailable' }
+    if (parsed.data.kind !== 'ok') return parsed.data.kind === 'no_candidates' ? { kind: 'absent' } : { kind: 'unavailable' }
+    const tool = parsed.data.items.find((item) =>
+      item.provider.slug === SANDBOX_TOOL_BUSINESS_SLUG || item.capabilityId === SANDBOX_TOOL_CAPABILITY_ID)
+    return tool === undefined ? { kind: 'absent' } : { kind: 'found', toolRef: tool.toolRef }
+  } catch {
+    return { kind: 'unavailable' }
+  }
+}
+
 async function checkMarketRequests(
   options: CliOptions,
   headers: Readonly<Record<string, string>>,
-): Promise<DoctorCheck> {
+): Promise<DoctorCheckDraft> {
   const { baseUrl } = options
   try {
     const listOutcome = await callJson(baseUrl, MARKET_REQUEST_ROUTE_CONTRACTS.list.path, {
@@ -361,14 +512,14 @@ async function checkMarketRequests(
   }
 }
 
-function marketRequestUnavailable(options: CliOptions, summary: string): DoctorCheck {
+function marketRequestUnavailable(options: CliOptions, summary: string): DoctorCheckDraft {
   return {
     id: 'market_requests', state: 'warn', summary,
     nextCommand: doctorContinuation(options, ['ae', 'request', 'list']),
   }
 }
 
-function credentialRefusedChecks(options: CliOptions, profile: 'buyer' | 'provider'): readonly DoctorCheck[] {
+function credentialRefusedChecks(options: CliOptions, profile: 'buyer' | 'provider'): readonly DoctorCheckDraft[] {
   const connect = connectCommand(options, profile)
   if (profile === 'provider') {
     return [{
@@ -392,7 +543,7 @@ function credentialOriginFailure(
   options: CliOptions,
   credentialOrigin: string,
   profile: 'buyer' | 'provider',
-): DoctorCheck | undefined {
+): DoctorCheckDraft | undefined {
   const { baseUrl } = options
   try {
     const selected = new URL(baseUrl)
@@ -425,7 +576,7 @@ function connectCommand(options: CliOptions, profile: 'buyer' | 'provider'): str
 async function checkBalance(
   options: CliOptions,
   headers: Readonly<Record<string, string>>,
-): Promise<DoctorCheck> {
+): Promise<DoctorCheckDraft> {
   const { baseUrl } = options
   try {
     const outcome = await callJson(baseUrl, AGENT_ACCOUNT_MONEY_ROUTE_CONTRACTS.balance.path, {
@@ -492,7 +643,7 @@ async function checkCall(
   }
 }
 
-async function checkRepeatUse(options: CliOptions, toolRef: string): Promise<DoctorCheck | undefined> {
+async function checkRepeatUse(options: CliOptions, toolRef: string): Promise<DoctorCheckDraft | undefined> {
   const { baseUrl } = options
   try {
     const outcome = await callJson(baseUrl, TOOL_MARKET_DESCRIBE_PATH, {
@@ -511,7 +662,7 @@ async function checkRepeatUse(options: CliOptions, toolRef: string): Promise<Doc
   }
 }
 
-async function checkServer(options: CliOptions): Promise<DoctorCheck> {
+async function checkServer(options: CliOptions): Promise<DoctorCheckDraft> {
   const { baseUrl } = options
   try {
     const outcome = await callJson(baseUrl, '/.well-known/ucp')
@@ -533,7 +684,7 @@ async function checkServer(options: CliOptions): Promise<DoctorCheck> {
   }
 }
 
-async function checkMcp(baseUrl: string): Promise<DoctorCheck> {
+async function checkMcp(baseUrl: string): Promise<DoctorCheckDraft> {
   const expected = listMcpActions()
     .filter((action) => action.readOnly && action.credentialAdmission === undefined)
     .map(mcpToolName)
@@ -566,15 +717,35 @@ async function checkMcp(baseUrl: string): Promise<DoctorCheck> {
   }
 }
 
-async function checkDeployment(baseUrl: string): Promise<readonly DoctorCheck[]> {
-  const [readiness, release] = await Promise.all([
+async function checkDeployment(baseUrl: string): Promise<readonly DoctorCheckDraft[]> {
+  return await Promise.all([
     checkToolalReadiness(baseUrl),
     checkReleaseIdentity(baseUrl),
+    checkCatalogue(baseUrl),
   ])
-  return [readiness, release]
 }
 
-async function checkToolalReadiness(baseUrl: string): Promise<DoctorCheck> {
+const CATALOGUE_CHECK_STATES: Readonly<Record<string, DoctorCheckDraft>> = {
+  fresh: { id: 'catalogue', state: 'pass', summary: 'Market catalogue coverage is fresh.' },
+  stale: { id: 'catalogue', state: 'warn', summary: 'Market catalogue coverage is stale.' },
+  failed: { id: 'catalogue', state: 'fail', summary: 'Market catalogue refresh failed.' },
+  absent: { id: 'catalogue', state: 'warn', summary: 'Market catalogue coverage is absent.' },
+}
+const CATALOGUE_UNREADABLE: DoctorCheckDraft = {
+  id: 'catalogue', state: 'warn', summary: 'Market catalogue coverage could not be read.',
+}
+
+async function checkCatalogue(baseUrl: string): Promise<DoctorCheckDraft> {
+  try {
+    const outcome = await callJson(baseUrl, CATALOGUE_STATUS_PATH)
+    const status = isRecord(outcome.body) && typeof outcome.body.status === 'string' ? outcome.body.status : ''
+    return (outcome.ok ? CATALOGUE_CHECK_STATES[status] : undefined) ?? CATALOGUE_UNREADABLE
+  } catch {
+    return CATALOGUE_UNREADABLE
+  }
+}
+
+async function checkToolalReadiness(baseUrl: string): Promise<DoctorCheckDraft> {
   try {
     const outcome = await callJson(baseUrl, '/api/ready')
     if (outcome.ok && isRecord(outcome.body) && outcome.body.status === 'ready') {
@@ -616,7 +787,7 @@ function safeDiagnosticCode(value: unknown): string | undefined {
     : undefined
 }
 
-async function checkReleaseIdentity(baseUrl: string): Promise<DoctorCheck> {
+async function checkReleaseIdentity(baseUrl: string): Promise<DoctorCheckDraft> {
   try {
     const outcome = await callJson(baseUrl, '/api/v1/release')
     if (
@@ -646,7 +817,7 @@ async function checkReleaseIdentity(baseUrl: string): Promise<DoctorCheck> {
   }
 }
 
-function serverFailure(options: CliOptions, summary: string): DoctorCheck {
+function serverFailure(options: CliOptions, summary: string): DoctorCheckDraft {
   const { baseUrl } = options
   const safeOrigin = safeOriginForDiagnostics(baseUrl)
   return {
@@ -670,9 +841,10 @@ function renderDoctor(result: DoctorResult, options: CliOptions): void {
   }
   line(`AE doctor: ${result.kind}`)
   for (const check of result.checks) {
-    const marker = check.state === 'pass' ? '✓' : check.state === 'warn' ? '!' : '✗'
+    const marker = check.state === 'pass' ? '✓' : check.state === 'warn' ? '!' : check.state === 'skipped' ? '-' : '✗'
     line(`${marker} ${check.summary}`)
   }
+  line(`discovery: ${result.groups.discovery} | quoting: ${result.groups.quoting} | purchase: ${result.groups.purchase}`)
   const firstFailure = result.checks.find((check) => check.state === 'fail')
   const nextCommand = firstFailure === undefined
     ? result.checks.find((check) => check.state === 'warn' && check.nextCommand !== undefined)?.nextCommand

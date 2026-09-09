@@ -6,7 +6,28 @@ import { delimiter, join, resolve } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { listMcpActions, mcpToolName } from '@/modules/actions'
+import { TOOL_MARKET_SEARCH_PATH } from '@/modules/common/market-tool-paths'
+import { TOOL_QUOTE_PATH } from '@/modules/capability-execution/quote'
 import { spawnCli } from './cli-errors-harness'
+
+const SANDBOX_TOOL_SLUG = 'sandbox-aecon-reference'
+const SANDBOX_TOOL_REF = `operation:v1:${'e'.repeat(64)}`
+const NO_SANDBOX_TOOL_REASON = 'no sandbox Tool is published; run npm run dev:local (stage sandbox-tool)'
+const LOCAL_DEV_COMMAND = 'npm run dev:local'
+const FRESH_CATALOGUE_CHECK = { id: 'catalogue', group: 'discovery', state: 'pass', summary: 'Market catalogue coverage is fresh.' }
+const NO_SANDBOX_TOOL_CHECK = skippedQuoteCheck(NO_SANDBOX_TOOL_REASON, LOCAL_DEV_COMMAND)
+
+function skippedQuoteCheck(reason: string, nextCommand?: string) {
+  return {
+    id: 'quote', group: 'quoting', state: 'skipped', reason,
+    summary: `Quote inspection was skipped: ${reason}.`,
+    ...(nextCommand === undefined ? {} : { nextCommand }),
+  }
+}
+
+function unconnectedQuoteCheck(connectCommand: string) {
+  return skippedQuoteCheck('no buyer credential for this origin', connectCommand)
+}
 
 // Every case here spawns the real CLI under tsx, which costs roughly a second
 // per process before any assertion runs. Under a loaded parallel suite that
@@ -36,16 +57,17 @@ describe('ae doctor', () => {
     expect(json.stderr).toBe('')
     expect(JSON.parse(json.stdout)).toEqual({
       kind: 'degraded',
+      groups: { discovery: 'fail', quoting: 'warn', purchase: 'warn' },
       checks: [
-        { id: 'origin', state: 'pass', summary: `Configured origin is ${origin}.` },
+        { id: 'origin', group: 'discovery', state: 'pass', summary: `Configured origin is ${origin}.` },
         {
-          id: 'server', state: 'fail', summary: 'AE server is not reachable.',
+          id: 'server', group: 'discovery', state: 'fail', summary: 'AE server is not reachable.',
           nextCommand: configContinuation,
         },
-        { id: 'mcp', state: 'warn', summary: 'MCP initialization was not checked because server identity is unavailable.' },
-        { id: 'buyer', state: 'warn', summary: 'Buyer credential was not sent because server identity is unavailable.' },
-        { id: 'balance', state: 'warn', summary: 'Balance was not checked because server identity is unavailable.' },
-        { id: 'call', state: 'warn', summary: 'Call recovery was not checked because server identity is unavailable.' },
+        { id: 'mcp', group: 'discovery', state: 'warn', summary: 'MCP initialization was not checked because server identity is unavailable.' },
+        { id: 'buyer', group: 'quoting', state: 'warn', summary: 'Buyer credential was not sent because server identity is unavailable.' },
+        { id: 'balance', group: 'purchase', state: 'warn', summary: 'Balance was not checked because server identity is unavailable.' },
+        { id: 'call', group: 'purchase', state: 'warn', summary: 'Call recovery was not checked because server identity is unavailable.' },
       ],
     })
     expect(json.stdout).not.toContain('ae doctor')
@@ -96,7 +118,7 @@ describe('ae doctor', () => {
     expect(JSON.parse(json.stdout)).toMatchObject({
       kind: 'degraded',
       checks: expect.arrayContaining([{
-        id: 'server', state: 'fail', summary: 'AE server is not reachable.',
+        id: 'server', group: 'discovery', state: 'fail', summary: 'AE server is not reachable.',
         nextCommand: hostedDoctorJson,
       }]),
     })
@@ -132,15 +154,18 @@ describe('ae doctor', () => {
     expect(result.stderr).toBe('')
     expect(JSON.parse(result.stdout)).toEqual({
       kind: 'degraded',
+      groups: { discovery: 'pass', quoting: 'skipped', purchase: 'warn' },
       checks: [
-        { id: 'origin', state: 'pass', summary: `Configured origin is ${origin}.` },
-        { id: 'server', state: 'pass', summary: 'AE server is reachable and manifest ae-site-discovery:v2 is compatible.' },
-        { id: 'mcp', state: 'pass', summary: 'MCP initialization and 4 public tools passed.' },
-        { id: 'readiness', state: 'pass', summary: 'Server operational readiness passed.' },
-        { id: 'release', state: 'pass', summary: `Release identity is ${'a'.repeat(40)}.` },
-        { id: 'buyer', state: 'warn', summary: 'No buyer credential is selected for this origin; anonymous search and describe remain available.', nextCommand: `ae connect --base-url ${origin} --json` },
-        { id: 'balance', state: 'warn', summary: 'Balance is unavailable until a buyer credential is connected.' },
-        { id: 'call', state: 'warn', summary: 'Call recovery is unavailable until a buyer credential is connected.' },
+        { id: 'origin', group: 'discovery', state: 'pass', summary: `Configured origin is ${origin}.` },
+        { id: 'server', group: 'discovery', state: 'pass', summary: 'AE server is reachable and manifest ae-site-discovery:v2 is compatible.' },
+        { id: 'mcp', group: 'discovery', state: 'pass', summary: 'MCP initialization and 4 public tools passed.' },
+        { id: 'readiness', group: 'discovery', state: 'pass', summary: 'Server operational readiness passed.' },
+        { id: 'release', group: 'discovery', state: 'pass', summary: `Release identity is ${'a'.repeat(40)}.` },
+        FRESH_CATALOGUE_CHECK,
+        { id: 'buyer', group: 'quoting', state: 'warn', summary: 'No buyer credential is selected for this origin; anonymous search and describe remain available.', nextCommand: `ae connect --base-url ${origin} --json` },
+        unconnectedQuoteCheck(`ae connect --base-url ${origin} --json`),
+        { id: 'balance', group: 'purchase', state: 'warn', summary: 'Balance is unavailable until a buyer credential is connected.' },
+        { id: 'call', group: 'purchase', state: 'warn', summary: 'Call recovery is unavailable until a buyer credential is connected.' },
       ],
     })
     expect(requests).toEqual([{ method: 'GET', path: '/.well-known/ucp' }])
@@ -210,20 +235,23 @@ describe('ae doctor', () => {
     expect(json.stdout).not.toContain(buyerSecret)
     expect(JSON.parse(json.stdout)).toEqual({
       kind: 'degraded',
+      groups: { discovery: 'pass', quoting: 'skipped', purchase: 'warn' },
       checks: [
-        { id: 'origin', state: 'pass', summary: `Configured origin is ${origin}.` },
-        { id: 'server', state: 'pass', summary: 'AE server is reachable and manifest ae-site-discovery:v2 is compatible.' },
-        { id: 'mcp', state: 'pass', summary: 'MCP initialization and 4 public tools passed.' },
-        { id: 'readiness', state: 'pass', summary: 'Server operational readiness passed.' },
-        { id: 'release', state: 'pass', summary: `Release identity is ${'a'.repeat(40)}.` },
-        { id: 'buyer', state: 'pass', summary: 'Buyer credential is origin-bound, authenticated, and has market_tools:call.' },
-        { id: 'balance', state: 'pass', summary: 'Buyer balance is available and the account is active.' },
+        { id: 'origin', group: 'discovery', state: 'pass', summary: `Configured origin is ${origin}.` },
+        { id: 'server', group: 'discovery', state: 'pass', summary: 'AE server is reachable and manifest ae-site-discovery:v2 is compatible.' },
+        { id: 'mcp', group: 'discovery', state: 'pass', summary: 'MCP initialization and 4 public tools passed.' },
+        { id: 'readiness', group: 'discovery', state: 'pass', summary: 'Server operational readiness passed.' },
+        { id: 'release', group: 'discovery', state: 'pass', summary: `Release identity is ${'a'.repeat(40)}.` },
+        FRESH_CATALOGUE_CHECK,
+        { id: 'buyer', group: 'quoting', state: 'pass', summary: 'Buyer credential is origin-bound, authenticated, and has market_tools:call.' },
+        NO_SANDBOX_TOOL_CHECK,
+        { id: 'balance', group: 'purchase', state: 'pass', summary: 'Buyer balance is available and the account is active.' },
         {
-          id: 'call', state: 'warn',
+          id: 'call', group: 'purchase', state: 'warn',
           summary: 'A reconciliation-required Call needs attention.',
           nextCommand: `ae status ${callRef} --base-url ${origin} --json`,
         },
-        { id: 'market_requests', state: 'pass', summary: 'No private market requests need rechecking.' },
+        { id: 'market_requests', group: 'purchase', state: 'pass', summary: 'No private market requests need rechecking.' },
       ],
     })
     expect(observed).toEqual([
@@ -250,6 +278,7 @@ describe('ae doctor', () => {
       kind: 'degraded',
       checks: expect.arrayContaining([{
         id: 'call',
+        group: 'purchase',
         state: 'warn',
         summary: 'A nonterminal Call is still pending.',
         nextCommand: `ae wait ${callRef} --base-url ${origin} --json`,
@@ -436,7 +465,7 @@ describe('ae doctor', () => {
     expect(JSON.parse(json.stdout)).toMatchObject({
       kind: 'ready',
       checks: expect.arrayContaining([{
-        id: 'repeat_use', state: 'pass',
+        id: 'repeat_use', group: 'purchase', state: 'pass',
         summary: 'A previously successful Tool is still in the current catalog.',
         nextCommand: `ae describe ${toolRef} --base-url ${origin} --json`,
       }]),
@@ -545,19 +574,22 @@ describe('ae doctor', () => {
     expect(result.stdout).not.toContain(providerSecret)
     expect(JSON.parse(result.stdout)).toMatchObject({
       kind: 'degraded',
+      groups: { discovery: 'pass', quoting: 'skipped', purchase: 'warn' },
       checks: [
-        { id: 'origin', state: 'pass' },
-        { id: 'server', state: 'pass' },
-        { id: 'mcp', state: 'pass' },
-        { id: 'readiness', state: 'pass' },
-        { id: 'release', state: 'pass' },
-        { id: 'buyer', state: 'pass' },
-        { id: 'balance', state: 'pass' },
-        { id: 'call', state: 'pass' },
-        { id: 'market_requests', state: 'pass', summary: 'No private market requests need rechecking.' },
-        { id: 'provider', state: 'pass', summary: 'Provider credential is origin-bound, authenticated, and has market_supply:manage.' },
+        { id: 'origin', group: 'discovery', state: 'pass' },
+        { id: 'server', group: 'discovery', state: 'pass' },
+        { id: 'mcp', group: 'discovery', state: 'pass' },
+        { id: 'readiness', group: 'discovery', state: 'pass' },
+        { id: 'release', group: 'discovery', state: 'pass' },
+        FRESH_CATALOGUE_CHECK,
+        { id: 'buyer', group: 'quoting', state: 'pass' },
+        NO_SANDBOX_TOOL_CHECK,
+        { id: 'balance', group: 'purchase', state: 'pass' },
+        { id: 'call', group: 'purchase', state: 'pass' },
+        { id: 'market_requests', group: 'purchase', state: 'pass', summary: 'No private market requests need rechecking.' },
+        { id: 'provider', group: 'purchase', state: 'pass', summary: 'Provider credential is origin-bound, authenticated, and has market_supply:manage.' },
         {
-          id: 'provider.readiness', state: 'warn',
+          id: 'provider.readiness', group: 'purchase', state: 'warn',
           summary: 'Provider business has 2 Tools (1 live, 1 unready) and 2 provider connections (1 ready, 1 needing attention).',
           nextCommand: `ae supply tools business:one --base-url ${origin} --json`,
         },
@@ -656,16 +688,19 @@ describe('ae doctor', () => {
     expect(result.stderr).toBe('')
     expect(JSON.parse(result.stdout)).toEqual({
       kind: 'ready',
+      groups: { discovery: 'pass', quoting: 'skipped', purchase: 'pass' },
       checks: [
-        { id: 'origin', state: 'pass', summary: `Configured origin is ${origin}.` },
-        { id: 'server', state: 'pass', summary: 'AE server is reachable and manifest ae-site-discovery:v2 is compatible.' },
-        { id: 'mcp', state: 'pass', summary: 'MCP initialization and 4 public tools passed.' },
-        { id: 'readiness', state: 'pass', summary: 'Server operational readiness passed.' },
-        { id: 'release', state: 'pass', summary: `Release identity is ${'a'.repeat(40)}.` },
-        { id: 'buyer', state: 'pass', summary: 'Buyer credential is origin-bound, authenticated, and has market_tools:call.' },
-        { id: 'balance', state: 'pass', summary: 'Buyer balance is available and the account is active.' },
-        { id: 'call', state: 'pass', summary: 'No pending or reconciliation-required Call needs attention.' },
-        { id: 'market_requests', state: 'pass', summary: 'No private market requests need rechecking.' },
+        { id: 'origin', group: 'discovery', state: 'pass', summary: `Configured origin is ${origin}.` },
+        { id: 'server', group: 'discovery', state: 'pass', summary: 'AE server is reachable and manifest ae-site-discovery:v2 is compatible.' },
+        { id: 'mcp', group: 'discovery', state: 'pass', summary: 'MCP initialization and 4 public tools passed.' },
+        { id: 'readiness', group: 'discovery', state: 'pass', summary: 'Server operational readiness passed.' },
+        { id: 'release', group: 'discovery', state: 'pass', summary: `Release identity is ${'a'.repeat(40)}.` },
+        FRESH_CATALOGUE_CHECK,
+        { id: 'buyer', group: 'quoting', state: 'pass', summary: 'Buyer credential is origin-bound, authenticated, and has market_tools:call.' },
+        NO_SANDBOX_TOOL_CHECK,
+        { id: 'balance', group: 'purchase', state: 'pass', summary: 'Buyer balance is available and the account is active.' },
+        { id: 'call', group: 'purchase', state: 'pass', summary: 'No pending or reconciliation-required Call needs attention.' },
+        { id: 'market_requests', group: 'purchase', state: 'pass', summary: 'No private market requests need rechecking.' },
       ],
     })
 
@@ -754,25 +789,28 @@ describe('ae doctor', () => {
     expect(result.stdout).not.toContain(secret)
     expect(JSON.parse(result.stdout)).toEqual({
       kind: 'degraded',
+      groups: { discovery: 'fail', quoting: 'skipped', purchase: 'warn' },
       checks: [
-        { id: 'origin', state: 'pass', summary: `Configured origin is ${origin}.` },
-        { id: 'server', state: 'pass', summary: 'AE server is reachable and manifest ae-site-discovery:v2 is compatible.' },
-        { id: 'mcp', state: 'pass', summary: 'MCP initialization and 4 public tools passed.' },
+        { id: 'origin', group: 'discovery', state: 'pass', summary: `Configured origin is ${origin}.` },
+        { id: 'server', group: 'discovery', state: 'pass', summary: 'AE server is reachable and manifest ae-site-discovery:v2 is compatible.' },
+        { id: 'mcp', group: 'discovery', state: 'pass', summary: 'MCP initialization and 4 public tools passed.' },
         {
-          id: 'readiness', state: 'fail',
+          id: 'readiness', group: 'discovery', state: 'fail',
           summary: 'Server is reachable but operational readiness failed (deployment_manifest_invalid). The service operator must restore operational readiness before calls proceed; the caller should not continue or retry.',
         },
         {
-          id: 'release', state: 'fail',
+          id: 'release', group: 'discovery', state: 'fail',
           summary: 'Release identity is unavailable (source_revision_unconfigured). The service operator must configure a valid release identity before calls proceed; the caller should not continue or retry.',
         },
+        { id: 'catalogue', group: 'discovery', state: 'warn', summary: 'Market catalogue coverage could not be read.' },
         {
-          id: 'buyer', state: 'warn',
+          id: 'buyer', group: 'quoting', state: 'warn',
           summary: 'No buyer credential is selected for this origin; anonymous search and describe remain available.',
           nextCommand: `ae connect --base-url ${origin} --json`,
         },
-        { id: 'balance', state: 'warn', summary: 'Balance is unavailable until a buyer credential is connected.' },
-        { id: 'call', state: 'warn', summary: 'Call recovery is unavailable until a buyer credential is connected.' },
+        unconnectedQuoteCheck(`ae connect --base-url ${origin} --json`),
+        { id: 'balance', group: 'purchase', state: 'warn', summary: 'Balance is unavailable until a buyer credential is connected.' },
+        { id: 'call', group: 'purchase', state: 'warn', summary: 'Call recovery is unavailable until a buyer credential is connected.' },
       ],
     })
 
@@ -786,7 +824,227 @@ describe('ae doctor', () => {
     expect(human.stdout).not.toContain('Next: ae connect')
     expect(human.stdout).not.toContain(secret)
   })
+
+  it('passes quoting when the seeded sandbox Tool returns an admitted Quote', async () => {
+    const buyerSecret = 'FAKE_QUOTE_BUYER_SECRET_2210'
+    const observed: ObservedRequest[] = []
+    const origin = await startQuoteServer({ quote: committedQuote() }, observed)
+    const directory = makeConfigDirectory()
+    writeStoredConfig(directory, origin, buyerSecret)
+
+    const json = await spawnCli(['doctor', '--base-url', origin, '--json'], { env: cleanEnvironment(directory) })
+
+    expect(json.status).toBe(0)
+    expect(json.stderr).toBe('')
+    expect(json.stdout).not.toContain(buyerSecret)
+    const result = JSON.parse(json.stdout) as { kind: string; groups: unknown; checks: unknown[] }
+    expect(result.kind).toBe('ready')
+    expect(result.groups).toEqual({ discovery: 'pass', quoting: 'pass', purchase: 'pass' })
+    expect(result.checks).toEqual(expect.arrayContaining([{
+      id: 'quote', group: 'quoting', state: 'pass',
+      summary: 'Quote for the sandbox Tool was admitted at 1000000 × 10^-6 AUD.',
+    }]))
+    expect(observed).toEqual([
+      { path: TOOL_MARKET_SEARCH_PATH, body: { query: SANDBOX_TOOL_SLUG, limit: 10 } },
+      {
+        path: TOOL_QUOTE_PATH, authorization: `Bearer ${buyerSecret}`,
+        body: { toolRef: SANDBOX_TOOL_REF, input: { request: 'ae doctor quote inspection' } },
+      },
+    ])
+
+    const human = await spawnCli(['doctor', '--base-url', origin], { env: cleanEnvironment(directory) })
+    expect(human.status).toBe(0)
+    expect(human.stdout).toContain('✓ Quote for the sandbox Tool was admitted at 1000000 × 10^-6 AUD.')
+    expect(human.stdout).toContain('discovery: pass | quoting: pass | purchase: pass')
+    expect(human.stdout).not.toContain(buyerSecret)
+  }, 20_000)
+
+  it('fails quoting with the refusal code verbatim and routes to the sandbox authority stage', async () => {
+    const buyerSecret = 'FAKE_REFUSED_BUYER_SECRET_5540'
+    const origin = await startQuoteServer({ quote: refusedQuote('grant_not_found') }, [])
+    const directory = makeConfigDirectory()
+    writeStoredConfig(directory, origin, buyerSecret)
+
+    const json = await spawnCli(['doctor', '--base-url', origin, '--json'], { env: cleanEnvironment(directory) })
+
+    expect(json.status).toBe(0)
+    expect(json.stdout).not.toContain(buyerSecret)
+    const result = JSON.parse(json.stdout) as { kind: string; groups: unknown; checks: unknown[] }
+    expect(result.kind).toBe('degraded')
+    expect(result.groups).toEqual({ discovery: 'pass', quoting: 'fail', purchase: 'pass' })
+    expect(result.checks).toEqual(expect.arrayContaining([{
+      id: 'quote', group: 'quoting', state: 'fail',
+      summary: 'Quote for the sandbox Tool was refused (grant_not_found).',
+      nextCommand: LOCAL_DEV_COMMAND,
+    }]))
+
+    const human = await spawnCli(['doctor', '--base-url', origin], { env: cleanEnvironment(directory) })
+    expect(human.status).toBe(1)
+    expect(human.stdout).toContain('✗ Quote for the sandbox Tool was refused (grant_not_found).')
+    expect(human.stdout).toContain('discovery: pass | quoting: fail | purchase: pass')
+    expect(human.stdout.match(/^Next: /gmu)).toEqual(['Next: '])
+    expect(human.stdout).toContain(`Next: ${LOCAL_DEV_COMMAND}`)
+    expect(human.stdout).not.toContain(buyerSecret)
+  }, 20_000)
+
+  it('funds a quoting refusal that ran out of balance instead of reseeding authority', async () => {
+    const buyerSecret = 'FAKE_FUNDING_BUYER_SECRET_6611'
+    const origin = await startQuoteServer({ quote: refusedQuote('insufficient_balance') }, [])
+    const directory = makeConfigDirectory()
+    writeStoredConfig(directory, origin, buyerSecret)
+
+    const json = await spawnCli(['doctor', '--base-url', origin, '--json'], { env: cleanEnvironment(directory) })
+
+    expect(json.status).toBe(0)
+    expect(JSON.parse(json.stdout).checks).toEqual(expect.arrayContaining([{
+      id: 'quote', group: 'quoting', state: 'fail',
+      summary: 'Quote for the sandbox Tool was refused (insufficient_balance).',
+      nextCommand: `ae fund --base-url ${origin} --json`,
+    }]))
+  }, 20_000)
+
+  it('skips quoting without a buyer credential rather than reporting it as a pass', async () => {
+    const origin = await startQuoteServer({ quote: committedQuote() }, [])
+    const directory = makeConfigDirectory()
+
+    const json = await spawnCli(['doctor', '--base-url', origin, '--json'], { env: cleanEnvironment(directory) })
+
+    expect(json.status).toBe(0)
+    const result = JSON.parse(json.stdout) as { groups: { quoting: string }; checks: unknown[] }
+    expect(result.groups.quoting).toBe('skipped')
+    expect(result.checks).toEqual(expect.arrayContaining([
+      unconnectedQuoteCheck(`ae connect --base-url ${origin} --json`),
+    ]))
+
+    const human = await spawnCli(['doctor', '--base-url', origin], { env: cleanEnvironment(directory) })
+    expect(human.stdout).toContain('- Quote inspection was skipped: no buyer credential for this origin.')
+    expect(human.stdout).toContain('quoting: skipped')
+  }, 20_000)
+
+  it('skips quoting when no sandbox Tool is published and names the seeding stage', async () => {
+    const buyerSecret = 'FAKE_ABSENT_TOOL_SECRET_7724'
+    const observed: ObservedRequest[] = []
+    const origin = await startQuoteServer({ quote: committedQuote(), search: emptySearchResult() }, observed)
+    const directory = makeConfigDirectory()
+    writeStoredConfig(directory, origin, buyerSecret)
+
+    const json = await spawnCli(['doctor', '--base-url', origin, '--json'], { env: cleanEnvironment(directory) })
+
+    expect(json.status).toBe(0)
+    const result = JSON.parse(json.stdout) as { groups: { quoting: string }; checks: unknown[] }
+    expect(result.groups.quoting).toBe('skipped')
+    expect(result.checks).toEqual(expect.arrayContaining([NO_SANDBOX_TOOL_CHECK]))
+    // No Tool to quote means no Quote request is sent at all.
+    expect(observed.map((request) => request.path)).toEqual([TOOL_MARKET_SEARCH_PATH])
+  }, 20_000)
+
+  it('skips quoting instead of passing it when the Quote inspection cannot be read', async () => {
+    const buyerSecret = 'FAKE_UNREADABLE_QUOTE_SECRET_8836'
+    const origin = await startQuoteServer({ quote: committedQuote(), search: { unexpected: true } }, [])
+    const directory = makeConfigDirectory()
+    writeStoredConfig(directory, origin, buyerSecret)
+
+    const json = await spawnCli(['doctor', '--base-url', origin, '--json'], { env: cleanEnvironment(directory) })
+
+    expect(json.status).toBe(0)
+    const result = JSON.parse(json.stdout) as { kind: string; groups: { quoting: string }; checks: unknown[] }
+    // Buyer passes, so only the required skipped Quote keeps quoting off a pass.
+    expect(result.checks).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'buyer', group: 'quoting', state: 'pass' }),
+      skippedQuoteCheck('quote inspection timed out'),
+    ]))
+    expect(result.groups.quoting).toBe('skipped')
+    expect(result.kind).toBe('ready')
+  }, 20_000)
+
+  it('warns discovery on a stale catalogue and fails it on a failed refresh', async () => {
+    const buyerSecret = 'FAKE_CATALOGUE_BUYER_SECRET_9948'
+    const scenario: QuoteScenario = { quote: committedQuote(), catalogue: 'stale', balanceUnits: '0' }
+    const origin = await startQuoteServer(scenario, [])
+    const directory = makeConfigDirectory()
+    writeStoredConfig(directory, origin, buyerSecret)
+
+    const stale = await spawnCli(['doctor', '--base-url', origin, '--json'], { env: cleanEnvironment(directory) })
+    expect(stale.status).toBe(0)
+    const staleResult = JSON.parse(stale.stdout) as { groups: unknown; checks: unknown[] }
+    expect(staleResult.groups).toEqual({ discovery: 'warn', quoting: 'pass', purchase: 'warn' })
+    expect(staleResult.checks).toEqual(expect.arrayContaining([{
+      id: 'catalogue', group: 'discovery', state: 'warn', summary: 'Market catalogue coverage is stale.',
+    }]))
+
+    scenario.catalogue = 'failed'
+    const failed = await spawnCli(['doctor', '--base-url', origin, '--json'], { env: cleanEnvironment(directory) })
+    expect(failed.status).toBe(0)
+    const failedResult = JSON.parse(failed.stdout) as { groups: { discovery: string }; checks: unknown[] }
+    expect(failedResult.groups.discovery).toBe('fail')
+    expect(failedResult.checks).toEqual(expect.arrayContaining([{
+      id: 'catalogue', group: 'discovery', state: 'fail', summary: 'Market catalogue refresh failed.',
+    }]))
+  }, 20_000)
 })
+
+type ObservedRequest = Readonly<{ path: string; authorization?: string; body: unknown }>
+
+type QuoteScenario = {
+  quote: unknown
+  search?: unknown
+  catalogue?: 'fresh' | 'stale' | 'failed' | 'absent'
+  balanceUnits?: string
+}
+
+/**
+ * One healthy buyer origin that also serves the sandbox search, Quote, and
+ * catalogue answers each quoting case varies.
+ */
+async function startQuoteServer(scenario: QuoteScenario, observed: ObservedRequest[]): Promise<string> {
+  return await startServer((request, response) => {
+    const url = request.url ?? ''
+    if (url === TOOL_MARKET_SEARCH_PATH || url === TOOL_QUOTE_PATH) {
+      const chunks: Buffer[] = []
+      request.on('data', (chunk: Buffer) => chunks.push(chunk))
+      request.on('end', () => {
+        observed.push({
+          path: url,
+          ...(request.headers.authorization === undefined ? {} : { authorization: request.headers.authorization }),
+          body: JSON.parse(Buffer.concat(chunks).toString('utf8')),
+        })
+        respondJson(response, url === TOOL_QUOTE_PATH ? scenario.quote : scenario.search ?? sandboxSearchResult())
+      })
+      return
+    }
+    if (url === '/api/v1/catalogue-status') {
+      respondJson(response, catalogueStatus(scenario.catalogue ?? 'fresh'))
+      return
+    }
+    if (respondHealthyDeployment(request, response)) return
+    if (url === '/.well-known/ucp') {
+      respondJson(response, { schemaVersion: 'ae-site-discovery:v2', origin: `http://${request.headers.host}` })
+      return
+    }
+    if (url === '/api/v1/account') {
+      respondJson(response, {
+        kind: 'authenticated', principalRef: 'prn_buyer', accountRef: 'acc_owner',
+        credentialId: 'credential_buyer', applicationRef: 'agentic-economy', environment: 'sandbox',
+        scopes: ['market_tools:call'], authorityMode: 'spending_policy',
+      })
+      return
+    }
+    if (url === '/api/v1/account/balance') {
+      respondJson(response, {
+        kind: 'available', principalRef: 'prn_buyer', accountRef: 'acc_owner',
+        balance: { currency: 'AUD', units: scenario.balanceUnits ?? '25000000', exponent: 6 },
+        accountState: 'active', version: 1, updatedAt: 10,
+        funding: { kind: 'agent_funding_handoff', configAction: 'funding.handoff.config', createAction: 'funding.handoff.create', statusAction: 'funding.handoff.status' },
+      })
+      return
+    }
+    if (url === '/api/v1/calls?limit=100' || url === '/api/v1/market-requests/list') {
+      respondJson(response, { kind: 'available', items: [], hasMore: false })
+      return
+    }
+    respondJson(response, { error: 'unexpected' }, 404)
+  })
+}
 
 async function startServer(
   handler: (request: IncomingMessage, response: ServerResponse) => void,
@@ -864,7 +1122,65 @@ function respondHealthyDeployment(request: IncomingMessage, response: ServerResp
     respondJson(response, { kind: 'ok', sourceRevision: 'a'.repeat(40) })
     return true
   }
+  if (request.url === '/api/v1/catalogue-status') {
+    respondJson(response, catalogueStatus('fresh'))
+    return true
+  }
+  // A healthy deployment with an empty market: doctor finds no sandbox Tool to quote.
+  if (request.url === TOOL_MARKET_SEARCH_PATH) {
+    respondJson(response, emptySearchResult())
+    return true
+  }
   return false
+}
+
+function catalogueStatus(status: 'fresh' | 'stale' | 'failed' | 'absent') {
+  const completedAt = Date.now() - (status === 'stale' ? 40 * 60 * 60 * 1000 : 3_600_000)
+  return {
+    schemaVersion: 'catalogue-status:v1',
+    status,
+    refreshState: status === 'failed' ? 'failed' : 'complete',
+    ...(status === 'absent' ? {} : { generation: 'g1', completedAt, ageHours: status === 'stale' ? 40 : 1 }),
+  }
+}
+
+function emptySearchResult() {
+  return {
+    kind: 'no_candidates', schemaVersion: 'registry-tools:v3', query: SANDBOX_TOOL_SLUG, count: 0,
+    items: [], note: 'No Tools match this search.', pagination: { limit: 10, hasMore: false },
+  }
+}
+
+function sandboxSearchResult() {
+  return {
+    kind: 'ok', schemaVersion: 'registry-tools:v3', query: SANDBOX_TOOL_SLUG, count: 1,
+    items: [{
+      toolRef: SANDBOX_TOOL_REF, capabilityId: 'sandbox.aecon-reference',
+      title: 'AEcon sandbox reference Tool', description: 'Deterministic sandbox Tool.',
+      provider: { name: 'AEcon sandbox reference provider', slug: SANDBOX_TOOL_SLUG },
+      priceLabel: 'AUD 1.00', healthStatus: 'operational',
+    }],
+    pagination: { limit: 10, hasMore: false },
+  }
+}
+
+function committedQuote() {
+  return {
+    kind: 'committed', quoteRef: 'quote:v1:sandbox', toolRef: SANDBOX_TOOL_REF, toolVersion: 1,
+    expiresAt: 1, normalizedInput: { request: 'ae doctor quote inspection' },
+    price: { currency: 'AUD', units: '1000000', exponent: 6 },
+    account: { accountRef: 'acc_owner', available: { currency: 'AUD', units: '25000000', exponent: 6 } },
+    budget: { principalRef: 'prn_buyer', maximumPerCall: { currency: 'AUD', units: '5000000', exponent: 6 } },
+    policyRefs: [], evidenceDigest: 'sha256:sandbox-quote',
+    continuation: {
+      action: 'tool.call', method: 'POST', path: '/api/v1/tools/call',
+      input: { quoteRef: 'quote:v1:sandbox', idempotencyKey: 'idem-sandbox' },
+    },
+  }
+}
+
+function refusedQuote(code: string) {
+  return { kind: 'refused', toolRef: SANDBOX_TOOL_REF, code, retryable: false, correlationRef: 'corr_sandbox' }
 }
 
 function makeConfigDirectory(): string {
