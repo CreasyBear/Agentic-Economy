@@ -357,6 +357,24 @@ export function bindWorkloadCronActionContext(
   })
 }
 
+type ConsequenceHandler = (
+  ctx: MutationCtx,
+  payload: Readonly<Record<string, JsonValue>>,
+  current: WorkloadCronSnapshot,
+) => Promise<JsonValue>
+
+// Exhaustive by construction: removing an operation from CONSEQUENCE_OPERATIONS
+// makes its entry here a type error, and no operation can fall through.
+const CONSEQUENCE_HANDLERS: Record<ConsequenceOperation, ConsequenceHandler> = {
+  'capabilityCalls:cancelBeforeClaim': (ctx, payload) => ctx.runMutation(internal.capabilityCalls.cancelBeforeClaim, payload as never),
+  'capabilityCalls:claimAutomaticReconciliationCandidate': (ctx, payload) => ctx.runMutation(internal.capabilityCalls.claimAutomaticReconciliationCandidate, payload as never),
+  'capabilityCalls:finishAutomaticReconciliation': (ctx, payload) => ctx.runMutation(internal.capabilityCalls.finishAutomaticReconciliation, payload as never),
+  'capabilityCallX402AuthorizationExpiry:queueExpiredX402Authorization': (ctx, payload) => ctx.runMutation(internal.capabilityCallX402AuthorizationExpiry.queueExpiredX402Authorization, payload as never),
+  'capabilitySupply:recordCapabilityProbeResult': (ctx, payload) => ctx.runMutation(internal.capabilitySupply.recordCapabilityProbeResult, payload as never),
+  'facilitatorDiscovery:reconcile': (ctx, payload, current) => ctx.runMutation(internal.facilitatorDiscovery.reconcile, { ...payload, workload: current } as never),
+  'moneyX402PaymentAttempts:reconcileX402PaymentAttempt': (ctx, payload) => ctx.runMutation(internal.moneyX402PaymentAttempts.reconcileX402PaymentAttempt, payload as never),
+}
+
 export async function dispatchWorkloadCronConsequenceHandler(
   ctx: MutationCtx,
   args: Readonly<{
@@ -371,25 +389,7 @@ export async function dispatchWorkloadCronConsequenceHandler(
   if (args.resourceInvocationRef !== undefined) {
     await attributeInvocationResourceAccount(ctx, current, args.resourceInvocationRef)
   }
-  switch (args.operation) {
-    case 'capabilityCalls:cancelBeforeClaim':
-      return await ctx.runMutation(internal.capabilityCalls.cancelBeforeClaim, args.payload as never)
-    case 'capabilityCalls:claimAutomaticReconciliationCandidate':
-      return await ctx.runMutation(internal.capabilityCalls.claimAutomaticReconciliationCandidate, args.payload as never)
-    case 'capabilityCalls:finishAutomaticReconciliation':
-      return await ctx.runMutation(internal.capabilityCalls.finishAutomaticReconciliation, args.payload as never)
-    case 'capabilityCallX402AuthorizationExpiry:queueExpiredX402Authorization':
-      return await ctx.runMutation(internal.capabilityCallX402AuthorizationExpiry.queueExpiredX402Authorization, args.payload as never)
-    case 'capabilitySupply:recordCapabilityProbeResult':
-      return await ctx.runMutation(internal.capabilitySupply.recordCapabilityProbeResult, args.payload as never)
-    case 'facilitatorDiscovery:reconcile':
-      return await ctx.runMutation(internal.facilitatorDiscovery.reconcile, {
-        ...args.payload,
-        workload: current,
-      } as never)
-    case 'moneyX402PaymentAttempts:reconcileX402PaymentAttempt':
-      return await ctx.runMutation(internal.moneyX402PaymentAttempts.reconcileX402PaymentAttempt, args.payload as never)
-  }
+  return await CONSEQUENCE_HANDLERS[args.operation](ctx, args.payload, current)
 }
 
 export const dispatchConsequence = internalMutation({

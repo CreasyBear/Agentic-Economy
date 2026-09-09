@@ -6,6 +6,7 @@ import {
   sourceWriteKeyFamilyForScope,
 } from '@/modules/security/source-write-admission'
 import type { StableHashValue } from '@/modules/common/stable-hash'
+import { SCHEDULED_WORKLOAD_JOB_NAMES } from './scheduled-workloads'
 
 export type DeploymentEnvironment = 'production' | 'preview' | 'development' | 'test'
 export type DeploymentEnvironmentInput = Readonly<Record<string, string | undefined>>
@@ -245,14 +246,7 @@ export const DEPLOYMENT_MANIFEST = Object.freeze({
     Object.freeze({
       id: 'convex-scheduled-jobs',
       kind: 'convex-cron-set',
-      jobs: Object.freeze([
-        'cleanup expired agent access oauth grants',
-        'cleanup expired source write nonces',
-        'reconcile due facilitator invocations',
-        'refresh Agentic Economy API registry',
-        'refresh capability supply readiness',
-        'refresh current market presence',
-      ]),
+      jobs: Object.freeze([...SCHEDULED_WORKLOAD_JOB_NAMES]),
     }),
   ]),
   readinessProbes: Object.freeze([
