@@ -166,7 +166,7 @@ jobs:
           fi
 
       - name: Bind explicit test authority
-        run: npm run --silent ae -- connect --base-url http://127.0.0.1:3024 --json
+        run: npm run --silent connect:local -- --base-url http://127.0.0.1:3024 --json
 
       - name: Doctor
         run: |

@@ -162,14 +162,42 @@ describe('ae doctor', () => {
         { id: 'readiness', group: 'discovery', state: 'pass', summary: 'Server operational readiness passed.' },
         { id: 'release', group: 'discovery', state: 'pass', summary: `Release identity is ${'a'.repeat(40)}.` },
         FRESH_CATALOGUE_CHECK,
-        { id: 'buyer', group: 'quoting', state: 'warn', summary: 'No buyer credential is selected for this origin; anonymous search and describe remain available.', nextCommand: `ae connect --base-url ${origin} --json` },
-        unconnectedQuoteCheck(`ae connect --base-url ${origin} --json`),
+        { id: 'buyer', group: 'quoting', state: 'warn', summary: 'No buyer credential is selected for this origin; anonymous search and describe remain available.', nextCommand: `npm run connect:local -- --base-url ${origin}` },
+        unconnectedQuoteCheck(`npm run connect:local -- --base-url ${origin}`),
         { id: 'balance', group: 'purchase', state: 'warn', summary: 'Balance is unavailable until a buyer credential is connected.' },
         { id: 'call', group: 'purchase', state: 'warn', summary: 'Call recovery is unavailable until a buyer credential is connected.' },
       ],
     })
     expect(requests).toEqual([{ method: 'GET', path: '/.well-known/ucp' }])
     expect(readFileSync(join(directory, 'sentinel.txt'), 'utf8')).toBe(before)
+  })
+
+  it('keeps ae connect as the buyer-missing and quote-unconnected next command on a hosted origin', async () => {
+    const origin = await startServer((request, response) => {
+      if (respondHealthyDeployment(request, response)) return
+      respondJson(response, {
+        schemaVersion: 'ae-site-discovery:v2',
+        origin: `http://${request.headers.host}`,
+      })
+    }, '0.0.0.0')
+    const directory = makeConfigDirectory()
+
+    const result = await spawnCli(['doctor', '--base-url', origin, '--json'], {
+      env: cleanEnvironment(directory),
+    })
+
+    expect(result.status).toBe(0)
+    expect(result.stderr).toBe('')
+    const diagnosis = JSON.parse(result.stdout) as { checks: readonly { id: string; nextCommand?: string }[] }
+    expect(diagnosis.checks).toEqual(expect.arrayContaining([
+      {
+        id: 'buyer', group: 'quoting', state: 'warn',
+        summary: 'No buyer credential is selected for this origin; anonymous search and describe remain available.',
+        nextCommand: `ae connect --base-url ${origin} --json`,
+      },
+      unconnectedQuoteCheck(`ae connect --base-url ${origin} --json`),
+    ]))
+    expect(result.stdout).not.toContain('connect:local')
   })
 
   it('checks the buyer loop and points an uncertain invocation to status without exposing credentials', async () => {
@@ -806,9 +834,9 @@ describe('ae doctor', () => {
         {
           id: 'buyer', group: 'quoting', state: 'warn',
           summary: 'No buyer credential is selected for this origin; anonymous search and describe remain available.',
-          nextCommand: `ae connect --base-url ${origin} --json`,
+          nextCommand: `npm run connect:local -- --base-url ${origin}`,
         },
-        unconnectedQuoteCheck(`ae connect --base-url ${origin} --json`),
+        unconnectedQuoteCheck(`npm run connect:local -- --base-url ${origin}`),
         { id: 'balance', group: 'purchase', state: 'warn', summary: 'Balance is unavailable until a buyer credential is connected.' },
         { id: 'call', group: 'purchase', state: 'warn', summary: 'Call recovery is unavailable until a buyer credential is connected.' },
       ],
@@ -913,7 +941,7 @@ describe('ae doctor', () => {
     const result = JSON.parse(json.stdout) as { groups: { quoting: string }; checks: unknown[] }
     expect(result.groups.quoting).toBe('skipped')
     expect(result.checks).toEqual(expect.arrayContaining([
-      unconnectedQuoteCheck(`ae connect --base-url ${origin} --json`),
+      unconnectedQuoteCheck(`npm run connect:local -- --base-url ${origin}`),
     ]))
 
     const human = await spawnCli(['doctor', '--base-url', origin], { env: cleanEnvironment(directory) })
@@ -1048,13 +1076,16 @@ async function startQuoteServer(scenario: QuoteScenario, observed: ObservedReque
 
 async function startServer(
   handler: (request: IncomingMessage, response: ServerResponse) => void,
+  // '0.0.0.0' resolves to the loopback interface but is not itself a loopback
+  // hostname, so it stands in for a hosted origin without any real network.
+  host = '127.0.0.1',
 ): Promise<string> {
   const server = createServer(handler)
   servers.push(server)
-  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+  await new Promise<void>((resolve) => server.listen(0, host, resolve))
   const address = server.address()
   if (address === null || typeof address === 'string') throw new Error('doctor_test_server_missing')
-  return `http://127.0.0.1:${address.port}`
+  return `http://${host}:${address.port}`
 }
 
 function respondJson(response: ServerResponse, body: unknown, status = 200): void {

@@ -149,10 +149,12 @@ Open `http://127.0.0.1:3024/market` for the catalogue or
 → one sandbox Tool → Vite → `ae doctor`. Each stage stops with the exact fix
 on failure. Flags: `--skip-scan`, `--skip-seed`, `--no-doctor`.
 
-To enable explicit test authority, after startup run `npm run ae -- connect
---base-url http://127.0.0.1:3024` to bind the local buyer credential. Then
-`npm run ae -- doctor --json` shows three groups: discovery, quoting, purchase.
-Purchase will warn until the Account is funded.
+To enable explicit test authority, after startup run `npm run connect:local --
+--base-url http://127.0.0.1:3024` to bind the local buyer credential; it wraps
+`ae connect` and approves the device code through the local Clerk bypass, so
+no browser is needed. On a hosted origin use `ae connect` and approve in the
+browser instead. Then `npm run ae -- doctor --json` shows three groups:
+discovery, quoting, purchase. Purchase will warn until the Account is funded.
 
 Note: `npm run dev` starts Vite only and is not a valid start path.
 

@@ -489,7 +489,12 @@ describe('green release baseline', () => {
     expect(start?.run).toContain('GITHUB_ENV')
 
     const connect = fresh?.steps?.find((step) => step.name === 'Bind explicit test authority')
-    expect(connect?.run).toBe('npm run --silent ae -- connect --base-url http://127.0.0.1:3024 --json')
+    expect(connect?.run).toBe('npm run --silent connect:local -- --base-url http://127.0.0.1:3024 --json')
+    // The step must fail the job when the connect driver does not reach
+    // `kind: 'connected'` — no best-effort fallback that lets quoting run
+    // unauthenticated.
+    expect(connect?.run).not.toContain('|| true')
+    expect((connect as { 'continue-on-error'?: boolean } | undefined)?.['continue-on-error']).toBeUndefined()
 
     const doctor = fresh?.steps?.find((step) => step.name === 'Doctor')
     expect(doctor?.run).toContain('npm run --silent ae -- doctor --json --base-url http://127.0.0.1:3024 > output/fresh-checkout/doctor.json')

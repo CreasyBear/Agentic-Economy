@@ -187,9 +187,9 @@ export async function runDoctorCommand(args: readonly string[], options: CliOpti
       {
         id: 'buyer', state: 'warn',
         summary: 'No buyer credential is selected for this origin; anonymous search and describe remain available.',
-        nextCommand: connectCommand(options, 'buyer'),
+        nextCommand: connectNextCommand(options),
       },
-      skippedQuoteCheck('no buyer credential for this origin', connectCommand(options, 'buyer')),
+      skippedQuoteCheck('no buyer credential for this origin', connectNextCommand(options)),
       {
         id: 'balance', state: 'warn',
         summary: 'Balance is unavailable until a buyer credential is connected.',
@@ -571,6 +571,17 @@ function connectCommand(options: CliOptions, profile: 'buyer' | 'provider'): str
     'connect',
     ...(profile === 'provider' ? ['--provider'] : []),
   ])
+}
+
+/**
+ * A loopback origin can approve its own device code through the local Clerk
+ * bypass, so the buyer-missing and quote-unconnected next steps route through
+ * that wrapper instead of the browser-driven `ae connect`.
+ */
+function connectNextCommand(options: CliOptions): string {
+  return isLoopbackCliBaseUrl(options.baseUrl)
+    ? continuationCommand(['npm', 'run', 'connect:local', '--', '--base-url', options.baseUrl])
+    : connectCommand(options, 'buyer')
 }
 
 async function checkBalance(
