@@ -21,6 +21,9 @@ const analytics: Extract<X402DirectoryAnalytics, { kind: 'ok' }> = {
   networks: [{ key: 'eip155:8453', label: 'Base', count: 25 }, { key: 'solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp', label: 'Solana', count: 980 }],
   curated: [{ entry: curated, category: 'search', categorySource: 'provider_declared', observedAt: 1, sourceDigest: 'source-digest' }],
   price: { scope: 'network', network: 'eip155:8453', totalTools: 25, knownPriceTools: 20, unknownPriceTools: 5, basis: 'minimum_exact_usdc_per_tool', bands: [{ key: '0_01_to_0_03', label: '0.01–<0.03 USDC', count: 20 }, { key: 'unknown', label: 'Unknown price', count: 5 }], quantiles: { minimum: '0.01', p25: '0.01', median: '0.02', p75: '0.02', maximum: '0.025' } },
+  depth: [], recency: [], momentum: [],
+  concentration: { basis: 'declared_calls30d', categoryCount: 0, categories: [] },
+  rising: [], falling: [],
 }
 afterEach(cleanup)
 function show(value: X402DirectoryAnalytics | undefined = analytics) {

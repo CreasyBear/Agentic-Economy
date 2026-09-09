@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { directoryIndexRangesValid, x402DirectoryIndexInputSchema, type X402DirectoryIndexCoverage, type X402IndexedDirectoryEntry } from './x402-directory-index'
+import { directoryIndexRangesValid, x402DirectoryIndexInputSchema, type DirectoryDepthBand, type DirectoryMomentumBand, type DirectoryRecencyBand, type X402DirectoryIndexCoverage, type X402IndexedDirectoryEntry } from './x402-directory-index'
 import type { X402DirectoryPage } from './x402-directory'
 
 export const x402DirectoryCatalogueInputSchema = x402DirectoryIndexInputSchema.omit({ category: true }).extend({
@@ -44,6 +44,13 @@ export type X402DirectoryProvidersPage = X402DirectoryCatalogueUnavailable | Rea
   pageStatus?: 'SplitRecommended' | 'SplitRequired' | null; splitCursor?: string | null
 }>
 
+export type DirectoryPayerDepthAnalyticsBucket = Readonly<{ key: DirectoryDepthBand; label: string; count: number }>
+export type DirectoryRecencyAnalyticsBucket = Readonly<{ key: DirectoryRecencyBand; label: string; count: number }>
+export type DirectoryMomentumAnalyticsBucket = Readonly<{ key: DirectoryMomentumBand; label: string; count: number }>
+export type X402DirectoryCategoryConcentration = Readonly<{
+  key: string; label: string; toolCount: number; documentedPayers: number
+  totalCalls: number; totalPayers: number; top3Share: number; hhi: number
+}>
 export type X402DirectoryAnalytics = X402DirectoryCatalogueUnavailable | Readonly<{
   kind: 'ok'
   coverage: X402DirectoryIndexCoverage
@@ -64,4 +71,10 @@ export type X402DirectoryAnalytics = X402DirectoryCatalogueUnavailable | Readonl
     quantiles?: Readonly<{ minimum: string; p25: string; median: string; p75: string; maximum: string }>
     basis: 'minimum_exact_usdc_per_tool'
   }>
+  depth: readonly DirectoryPayerDepthAnalyticsBucket[]
+  recency: readonly DirectoryRecencyAnalyticsBucket[]
+  momentum: readonly DirectoryMomentumAnalyticsBucket[]
+  concentration: Readonly<{ basis: 'declared_calls30d'; categoryCount: number; categories: readonly X402DirectoryCategoryConcentration[] }>
+  rising: readonly X402IndexedDirectoryEntry[]
+  falling: readonly X402IndexedDirectoryEntry[]
 }>

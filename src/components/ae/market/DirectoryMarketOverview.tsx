@@ -9,10 +9,11 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectVa
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import type { X402DirectoryAnalytics, X402DirectoryCatalogueInput } from '@/modules/market/x402-directory-catalogue'
 import type { X402DirectoryEntry } from '@/modules/market/x402-directory'
-import { DirectoryAnalyticsCharts, type DirectoryAnalyticsChartCoverage } from './DirectoryAnalyticsCharts'
+import type { X402IndexedDirectoryEntry } from '@/modules/market/x402-directory-index'
+import { DirectoryAnalyticsCharts, type DirectoryAnalyticsChartCoverage, type DirectoryAnalyticsSignals, type DirectorySignalEntry } from './DirectoryAnalyticsCharts'
 import { DirectoryToolTable } from './DirectoryToolTable'
 import type { SavedDirectoryTool } from './DirectorySavedTools'
-import { directoryDate } from './directory-presentation'
+import { directoryDate, directoryTitle } from './directory-presentation'
 
 type Props = Readonly<{
   analytics?: X402DirectoryAnalytics
@@ -54,6 +55,8 @@ export function DirectoryMarketOverview({ analytics, widelyUsed, onExplore, onPr
     if (band) onExplore({ adoptionBand: band.key, sort: 'adoption' })
   }
   const selectCategory = (directoryCategory: string) => onExplore({ directoryCategory, sort: 'adoption' })
+  const toSignalEntry = (item: X402IndexedDirectoryEntry): DirectorySignalEntry => ({ resource: item.entry.resource, title: directoryTitle(item.entry), provider: item.entry.provider, ...(item.analytics?.payerDelta === undefined ? {} : { payerDelta: item.analytics.payerDelta }), ...(item.analytics?.momentumBand === undefined ? {} : { momentumBand: item.analytics.momentumBand }), item: { entry: item.entry, search: {} } })
+  const signals: DirectoryAnalyticsSignals = { depth: analytics.depth, recency: analytics.recency, rising: analytics.rising.map(toSignalEntry), falling: analytics.falling.map(toSignalEntry), concentration: analytics.concentration }
   const chartProps = { priceBuckets: analytics.price.bands, adoptionBuckets: analytics.adoption, categories: analytics.categories, coverage: chartCoverage, onSelectPriceBucket: selectPrice, onSelectAdoptionBucket: selectAdoption, onSelectCategory: selectCategory, priceDescription }
   const tableProps = { onSelect, onSave, isSaved, onCompare, isCompared, compareDisabled }
   const quantiles = analytics.price.quantiles
@@ -74,7 +77,7 @@ export function DirectoryMarketOverview({ analytics, widelyUsed, onExplore, onPr
           <SelectContent><SelectGroup><SelectItem value="__all">Prices: all networks</SelectItem>{analytics.networks.map(item => <SelectItem key={item.key} value={item.key}>{item.label}</SelectItem>)}</SelectGroup></SelectContent>
         </Select>
       </div>
-      <DirectoryAnalyticsCharts {...chartProps} sections={['price', 'adoption']} />
+      <DirectoryAnalyticsCharts {...chartProps} sections={['price', 'adoption']} signals={signals} onSelectSignal={onSelect} />
     </section>
 
     <section aria-label="Tools on the radar" className="grid min-w-0 gap-4">

@@ -50,7 +50,7 @@ export const marketTables = {
     agenticMarketReported: v.optional(v.number()),
     agenticMarketFetched: v.optional(v.number()),
     tregReported: v.optional(v.number()),
-    tregFetched: v.optional(v.number()),
+    analyticsStatsStatus: v.optional(v.union(v.literal('pending'), v.literal('ready'))),
   }).index('by_generation', ['generation']),
   marketExternalRegistryEntries: defineTable({
     generation: v.string(),
@@ -153,9 +153,18 @@ export const marketTables = {
     hasInputSchema: v.optional(v.boolean()),
     hasOutputSchema: v.optional(v.boolean()),
     hasOutputExample: v.optional(v.boolean()),
+    payerDepth: v.optional(v.number()),
+    depthBand: v.optional(v.string()),
+    lastActivatedAt: v.optional(v.number()),
+    lastCalledBand: v.optional(v.string()),
+    callDelta: v.optional(v.number()),
+    payerDelta: v.optional(v.number()),
+    momentumOrder: v.optional(v.number()),
+    momentumBand: v.optional(v.string()),
   })
     .index('by_generation_and_resource', ['generation', 'resource'])
     .index('by_generation_and_network_and_payersOrder', ['generation', 'network', 'payersOrder'])
+    .index('by_generation_and_network_and_momentumOrder', ['generation', 'network', 'momentumOrder'])
     .index('by_generation_and_network_and_category_and_payersOrder', ['generation', 'network', 'category', 'payersOrder'])
     .index('by_generation_and_network_and_provider_and_payersOrder', ['generation', 'network', 'provider', 'payersOrder'])
     .index('by_generation_and_network_and_priceOrder', ['generation', 'network', 'priceOrder'])
@@ -175,11 +184,19 @@ export const marketTables = {
     }),
   marketDirectoryFacets: defineTable({
     generation: v.string(),
-    kind: v.union(v.literal('category'), v.literal('provider'), v.literal('network'), v.literal('tag'), v.literal('bundle')),
+    kind: v.union(v.literal('category'), v.literal('provider'), v.literal('network'), v.literal('tag'), v.literal('bundle'), v.literal('depth'), v.literal('recency')),
     key: v.string(),
     label: v.string(),
     iconUrl: v.optional(v.string()),
   }).index('by_generation_and_kind_and_key', ['generation', 'kind', 'key']),
+  // Derived category concentration over the completed generation's '*' search
+  // projections. Replaced wholesale by finalizeCategoryStats after backfill.
+  marketDirectoryCategoryStats: defineTable({
+    generation: v.string(), network: v.string(), category: v.string(), label: v.string(),
+    toolCount: v.number(), documentedPayers: v.number(),
+    totalCalls: v.number(), totalPayers: v.number(),
+    top3Share: v.number(), hhi: v.number(), computedAt: v.number(),
+  }).index('by_generation_and_network', ['generation', 'network']),
   marketEvidenceFacts: defineTable({
     kind: v.union(
       v.literal('ae_invocation'),

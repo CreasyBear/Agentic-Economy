@@ -3,6 +3,7 @@ import { isRecord } from '@/modules/common/is-record'
 import { x402DirectoryFunctionalTitle } from '@/modules/market/x402-directory-title'
 import type { Doc } from '../../_generated/dataModel'
 import type { QueryCtx, MutationCtx } from '../../_generated/server'
+import type { DirectoryDepthBand, DirectoryMomentumBand, DirectoryRecencyBand } from '@/modules/market/x402-directory-index'
 import type { DirectoryEntry, IndexedEntry } from './contracts'
 import type { X402DirectoryIndexCoverage } from '@/modules/market/x402-directory-index'
 
@@ -59,11 +60,65 @@ export function storedDirectoryEntry(row: Doc<'marketExternalRegistryEntries'>):
   return { ...entry, ...directorySourceLabels(raw), title, metadataJson: row.directorySourceJson }
 }
 
-export function indexedDirectoryEntry(row: Doc<'marketExternalRegistryEntries'>): IndexedEntry {
+export type MomentumObservation = { calls?: number; payers?: number }
+
+export type MomentumSignal = { momentumOrder: number; callDelta?: number; payerDelta?: number; momentumBand: DirectoryMomentumBand }
+
+function reportedCount(value: number | undefined): number | undefined {
+  return value !== undefined && Number.isSafeInteger(value) && value >= 0 ? value : undefined
+}
+
+/**
+ * Momentum against the previous generation's reported activity. A missing
+ * previous observation means nothing is comparable ('unknown'); a previous
+ * observation without reported payers marks a resource that entered the
+ * directory with payers as 'new'. Bands: rising >= 2 payer delta,
+ * falling <= -2, otherwise flat.
+ */
+export function directoryMomentum(
+  current: MomentumObservation,
+  previous: MomentumObservation | undefined,
+): MomentumSignal {
+  if (previous === undefined) return { momentumOrder: -1, momentumBand: 'unknown' }
+  const currentPayers = reportedCount(current.payers)
+  const previousPayers = reportedCount(previous.payers)
+  if (previousPayers === undefined) return { momentumOrder: -1, momentumBand: currentPayers !== undefined && currentPayers > 0 ? 'new' : 'unknown' }
+  if (currentPayers === undefined) return { momentumOrder: -1, momentumBand: 'unknown' }
+  const payerDelta = currentPayers - previousPayers
+  const currentCalls = reportedCount(current.calls)
+  const previousCalls = reportedCount(previous.calls)
+  return {
+    momentumOrder: payerDelta,
+    payerDelta,
+    ...(currentCalls !== undefined && previousCalls !== undefined ? { callDelta: currentCalls - previousCalls } : {}),
+    momentumBand: payerDelta >= 2 ? 'rising' : payerDelta <= -2 ? 'falling' : 'flat',
+  }
+}
+
+/** Stored projection patch: undefined deltas are omitted, never zero-filled. */
+export function momentumPatch(momentum: MomentumSignal) {
+  return {
+    momentumOrder: momentum.momentumOrder, momentumBand: momentum.momentumBand,
+    ...(momentum.callDelta === undefined ? {} : { callDelta: momentum.callDelta }),
+    ...(momentum.payerDelta === undefined ? {} : { payerDelta: momentum.payerDelta }),
+  }
+}
+
+export function indexedDirectoryEntry(row: Doc<'marketExternalRegistryEntries'>, search?: Doc<'marketDirectorySearchEntries'>): IndexedEntry {
   const entry = storedDirectoryEntry(row)
+  const analytics = search === undefined || search.depthBand === undefined || search.lastCalledBand === undefined || search.momentumBand === undefined ? undefined : {
+    ...(search.payerDepth === undefined ? {} : { payerDepth: search.payerDepth }),
+    depthBand: search.depthBand as DirectoryDepthBand,
+    ...(search.lastActivatedAt === undefined ? {} : { lastActivatedAt: search.lastActivatedAt }),
+    lastCalledBand: search.lastCalledBand as DirectoryRecencyBand,
+    ...(search.callDelta === undefined ? {} : { callDelta: search.callDelta }),
+    ...(search.payerDelta === undefined ? {} : { payerDelta: search.payerDelta }),
+    momentumBand: search.momentumBand as DirectoryMomentumBand,
+  }
   return {
     entry, category: row.directoryCategory ?? 'uncategorized',
     categorySource: entry.category === undefined ? 'unclassified' : 'provider_declared',
     observedAt: row.updatedAt, sourceDigest: row.sourceDigest,
+    ...(analytics === undefined ? {} : { analytics }),
   }
 }

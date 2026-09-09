@@ -123,6 +123,7 @@ const durableTables = [
   'marketDemandSignals',
   'marketDirectoryFacets',
   'marketDirectorySearchEntries',
+  'marketDirectoryCategoryStats',
 ] as const
 
 const requiredIndexes = {
@@ -379,7 +380,7 @@ describe('Convex schema', () => {
   const exported = SchemaExport.parse(JSON.parse(String(exportSchema.call(schema))))
 
   it('contains exactly the source-owned durable tables', () => {
-    expect(durableTables).toHaveLength(90)
+    expect(durableTables).toHaveLength(91)
     expect(exported.tables.map((table) => table.tableName).sort()).toEqual([...durableTables].sort())
   })
 

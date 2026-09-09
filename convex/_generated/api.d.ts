@@ -130,6 +130,7 @@ import type * as lib_secretLifecyclePersistence from "../lib/secretLifecyclePers
 import type * as lib_secretPointerPersistence from "../lib/secretPointerPersistence.js";
 import type * as lib_workloadCron_context from "../lib/workloadCron/context.js";
 import type * as lib_x402DirectoryIndex_analytics from "../lib/x402DirectoryIndex/analytics.js";
+import type * as lib_x402DirectoryIndex_categoryStats from "../lib/x402DirectoryIndex/categoryStats.js";
 import type * as lib_x402DirectoryIndex_contracts from "../lib/x402DirectoryIndex/contracts.js";
 import type * as lib_x402DirectoryIndex_facets from "../lib/x402DirectoryIndex/facets.js";
 import type * as lib_x402DirectoryIndex_rows from "../lib/x402DirectoryIndex/rows.js";
@@ -189,6 +190,7 @@ import type * as workloadCron from "../workloadCron.js";
 import type * as x402Directory from "../x402Directory.js";
 import type * as x402DirectoryIndex from "../x402DirectoryIndex.js";
 import type * as x402DirectoryIndexBackfill from "../x402DirectoryIndexBackfill.js";
+import type * as x402DirectoryIndexCategoryStats from "../x402DirectoryIndexCategoryStats.js";
 import type * as x402DirectoryIndexRefresh from "../x402DirectoryIndexRefresh.js";
 import type * as x402DirectoryIndexSource from "../x402DirectoryIndexSource.js";
 import type * as x402DirectoryIndexStore from "../x402DirectoryIndexStore.js";
@@ -322,6 +324,7 @@ declare const fullApi: ApiFromModules<{
   "lib/secretPointerPersistence": typeof lib_secretPointerPersistence;
   "lib/workloadCron/context": typeof lib_workloadCron_context;
   "lib/x402DirectoryIndex/analytics": typeof lib_x402DirectoryIndex_analytics;
+  "lib/x402DirectoryIndex/categoryStats": typeof lib_x402DirectoryIndex_categoryStats;
   "lib/x402DirectoryIndex/contracts": typeof lib_x402DirectoryIndex_contracts;
   "lib/x402DirectoryIndex/facets": typeof lib_x402DirectoryIndex_facets;
   "lib/x402DirectoryIndex/rows": typeof lib_x402DirectoryIndex_rows;
@@ -381,6 +384,7 @@ declare const fullApi: ApiFromModules<{
   x402Directory: typeof x402Directory;
   x402DirectoryIndex: typeof x402DirectoryIndex;
   x402DirectoryIndexBackfill: typeof x402DirectoryIndexBackfill;
+  x402DirectoryIndexCategoryStats: typeof x402DirectoryIndexCategoryStats;
   x402DirectoryIndexRefresh: typeof x402DirectoryIndexRefresh;
   x402DirectoryIndexSource: typeof x402DirectoryIndexSource;
   x402DirectoryIndexStore: typeof x402DirectoryIndexStore;

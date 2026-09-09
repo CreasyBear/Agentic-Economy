@@ -4,13 +4,19 @@ import { x402DirectoryFilterSchema, type X402DirectoryEntry, type X402DirectoryF
 
 export const DIRECTORY_PRICE_BANDS = ['lt_0_01', '0_01_to_0_03', '0_03_to_0_10', '0_10_to_1', '1_to_10', '10_plus', 'unknown'] as const
 export const DIRECTORY_ADOPTION_BANDS = ['missing', '0', '1', '2_4', '5_9', '10_49', '50_plus'] as const
+export const DIRECTORY_RECENCY_BANDS = ['unknown', 'fresh', 'recent', 'stale'] as const
+export const DIRECTORY_DEPTH_BANDS = ['unknown', 'broad', 'repeat', 'concentrated', 'whale_heavy'] as const
+export const DIRECTORY_MOMENTUM_BANDS = ['new', 'rising', 'flat', 'falling', 'unknown'] as const
 export type DirectoryPriceBand = typeof DIRECTORY_PRICE_BANDS[number]
 export type DirectoryAdoptionBand = typeof DIRECTORY_ADOPTION_BANDS[number]
+export type DirectoryDepthBand = typeof DIRECTORY_DEPTH_BANDS[number]
+export type DirectoryRecencyBand = typeof DIRECTORY_RECENCY_BANDS[number]
+export type DirectoryMomentumBand = typeof DIRECTORY_MOMENTUM_BANDS[number]
 
 export const x402DirectoryIndexInputSchema = x402DirectoryFilterSchema.extend({
   query: z.string().trim().max(200).optional(),
   category: z.string().trim().min(1).max(80).transform(value => value.toLowerCase()).optional(),
-  sort: z.enum(['relevance', 'popular', 'updated', 'adoption', 'price_asc']).optional(),
+  sort: z.enum(['relevance', 'popular', 'updated', 'adoption', 'price_asc', 'momentum']).optional(),
   minUsdPrice: z.number().finite().nonnegative().optional(),
   priceBand: z.enum(DIRECTORY_PRICE_BANDS).optional(),
   adoptionBand: z.enum(DIRECTORY_ADOPTION_BANDS).optional(),
@@ -45,6 +51,15 @@ export type X402IndexedDirectoryEntry = Readonly<{
   categorySource: 'provider_declared' | 'unclassified'
   observedAt: number
   sourceDigest: string
+  analytics?: Readonly<{
+    payerDepth?: number
+    depthBand: DirectoryDepthBand
+    lastActivatedAt?: number
+    lastCalledBand: DirectoryRecencyBand
+    callDelta?: number
+    payerDelta?: number
+    momentumBand: DirectoryMomentumBand
+  }>
 }>
 
 const NETWORK_ALIASES: Readonly<Record<string, string>> = {

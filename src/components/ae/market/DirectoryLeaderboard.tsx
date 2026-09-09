@@ -12,6 +12,27 @@ import type { SavedDirectoryTool } from './DirectorySavedTools'
 import { DirectoryToolIdentity } from './DirectoryToolIdentity'
 import { directoryCount, directoryNetworkLabel, directoryPrice, directoryTitle } from './directory-presentation'
 
+type EntryAnalytics = Readonly<{ payerDelta?: number; depthBand?: string; momentumBand?: string }>
+const depthChipLabels: Readonly<Record<string, string>> = { broad: 'Broad', repeat: 'Repeat', concentrated: 'Concentrated', whale_heavy: 'Whale-heavy' }
+const momentumChips: Readonly<Record<string, { label: string; variant: 'success' | 'destructive' | 'info' | 'secondary'; sr: string }>> = {
+  rising: { label: '▲ Rising', variant: 'success', sr: 'Paying addresses rose by at least 2 compared with the previous 30 days.' },
+  falling: { label: '▼ Falling', variant: 'destructive', sr: 'Paying addresses fell by at least 2 compared with the previous 30 days.' },
+  new: { label: 'New', variant: 'info', sr: 'Reported paying addresses in the last 30 days with no previous period to compare.' },
+  flat: { label: 'Holding', variant: 'secondary', sr: 'Paying addresses changed by fewer than 2 compared with the previous 30 days.' },
+}
+function entryAnalytics(entry: X402DirectoryEntry): EntryAnalytics | undefined {
+  if (!('analytics' in entry)) return undefined
+  const value: unknown = entry.analytics
+  if (value === undefined || typeof value !== 'object') return undefined
+  // Structural pre-DTO read; Slice 1 owns the authoritative analytics type.
+  const parsed = value as EntryAnalytics
+  return parsed
+}
+function reportedPayers(entry: X402DirectoryEntry): number | undefined {
+  const payers = entry.activity?.payers30d
+  return payers !== undefined && Number.isFinite(payers) && payers >= 0 ? payers : undefined
+}
+
 type Props = Readonly<{
   /** First page of the catalogue ordered by reported calls30d; retain its rank order. */
   entries: readonly X402DirectoryEntry[]
@@ -41,6 +62,12 @@ export function DirectoryLeaderboard({ entries, window, onSelect, onSave, isSave
           const proportion = calls === undefined ? undefined : Math.min(100, calls / leadingCalls * 100)
           const item: SavedDirectoryTool = { entry, search: {} }
           const saved = isSaved(entry.resource)
+          const analytics = entryAnalytics(entry)
+          const payers = reportedPayers(entry)
+          const delta = analytics?.payerDelta
+          const depthLabel = analytics?.depthBand === undefined ? undefined : depthChipLabels[analytics.depthBand]
+          const momentumChip = analytics?.momentumBand === undefined ? undefined : momentumChips[analytics.momentumBand]
+          const showPayers = payers !== undefined || delta !== undefined
           return <li key={entry.resource} aria-label={`Rank ${rank}: ${title}`} className={cn('grid grid-cols-[2.25rem_minmax(0,1fr)] gap-3 p-4 sm:grid-cols-[2.75rem_minmax(0,1fr)] sm:gap-4 sm:p-5', rank === 1 && 'bg-brand-muted/50')}>
             <div className={cn('flex size-9 flex-col items-center justify-center rounded-xl text-sm font-semibold tabular-nums sm:size-11',
               rank === 1 && calls !== undefined && calls > 0 ? 'bg-warning-subtle text-warning-foreground' : rank === 2 && calls !== undefined && calls > 0 ? 'bg-muted text-foreground' : rank === 3 && calls !== undefined && calls > 0 ? 'bg-warning-subtle/60 text-warning' : 'text-muted-foreground')}
@@ -57,6 +84,11 @@ export function DirectoryLeaderboard({ entries, window, onSelect, onSave, isSave
                     <div className="h-full rounded-full bg-brand/65" style={{ width: `${proportion}%` }} />
                   </div>
                 </>}
+                {showPayers ? <p className="text-xs text-muted-foreground tabular-nums">{payers === undefined ? delta === undefined ? null : <><span aria-hidden="true">{delta === 0 ? 'No payer movement' : `${delta > 0 ? '▲' : '▼'} ${Math.abs(delta).toLocaleString('en-AU')} payers`}</span> · last 30d<span className="sr-only">{delta === 0 ? 'No change' : `${Math.abs(delta).toLocaleString('en-AU')} ${delta > 0 ? 'more' : 'fewer'} paying addresses`} compared with the previous 30 days</span></> : <><span aria-hidden="true">{directoryCount(payers)} payers · last 30d</span><span className="sr-only">{payers.toLocaleString('en-AU')} distinct paying addresses reported in the last 30 days</span></>}</p> : null}
+                {depthLabel === undefined && momentumChip === undefined ? null : <div className="flex flex-wrap items-center gap-1.5">
+                  {depthLabel === undefined ? null : <Badge variant="secondary" title="Calls per payer, last 30 days · reported">{depthLabel}</Badge>}
+                  {momentumChip === undefined ? null : <Badge variant={momentumChip.variant}><span aria-hidden="true">{momentumChip.label}</span><span className="sr-only">{momentumChip.sr}</span></Badge>}
+                </div>}
               </div>
               <div className="flex items-center gap-2">
                 <Button variant="outline" size="sm" className="min-w-0 flex-1 rounded-full md:flex-none" onClick={() => onSelect(item)} aria-label={`View Tool: ${title}`}>View Tool<ArrowUpRightIcon /></Button>
@@ -67,6 +99,7 @@ export function DirectoryLeaderboard({ entries, window, onSelect, onSave, isSave
         })}
       </ol></CardContent></Card>
       <p className="mt-3 text-xs text-muted-foreground">Activity bars compare reported Calls with the leading Tool.</p>
+      <p className="mt-1 text-xs text-muted-foreground">Depth and trend are derived from reported 30-day activity.</p>
     </>}
   </section>
 }

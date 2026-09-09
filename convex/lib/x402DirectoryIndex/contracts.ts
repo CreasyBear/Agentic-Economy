@@ -31,6 +31,15 @@ export const indexedEntryValue = v.object({
   entry: directoryEntryValue, category: v.string(),
   categorySource: v.union(v.literal('provider_declared'), v.literal('unclassified')),
   observedAt: v.number(), sourceDigest: v.string(),
+  analytics: v.optional(v.object({
+    payerDepth: v.optional(v.number()),
+    depthBand: v.string(),
+    lastActivatedAt: v.optional(v.number()),
+    lastCalledBand: v.string(),
+    callDelta: v.optional(v.number()),
+    payerDelta: v.optional(v.number()),
+    momentumBand: v.string(),
+  })),
 })
 export type IndexedEntry = Infer<typeof indexedEntryValue>
 export const coverageValue = v.object({

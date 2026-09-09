@@ -9,6 +9,8 @@ import type { X402DirectoryEntry } from '@/modules/market/x402-directory'
 function entry(index: number, calls30d: number | undefined = 123_456 / 2 ** index): X402DirectoryEntry {
   return { resource: `https://example.com/tool/${index}`, title: `Useful Tool ${index}`, provider: 'example.com', description: `Description ${index}`, protocol: 'http', prices: [{ amount: '0.01 USDC', symbol: 'USDC', decimalAmount: '0.01', network: 'eip155:8453', networkLabel: 'Base', scheme: 'exact' }], metadataJson: '{}', ...(calls30d === undefined ? {} : { activity: { calls30d } }) }
 }
+// Analytics rides on indexed entries (Slice 1); attach it in fixtures until the shared entry type carries it.
+const withAnalytics = (entry: X402DirectoryEntry, analytics: Record<string, unknown>) => Object.assign({ ...entry }, { analytics })
 const entries = Array.from({ length: 14 }, (_, index) => entry(index, Math.floor(123_456 / 2 ** index)))
 afterEach(() => { cleanup(); vi.resetAllMocks() })
 function show(items = entries) {
@@ -84,4 +86,25 @@ it.each(['empty', 'zero', 'missing'] as const)('shows an honest empty ranking fo
   expect(screen.queryByRole('meter')).toBeNull()
   expect(screen.queryByText(/^Top \d+/u)).toBeNull()
   expect(screen.getByRole('link', { name: 'Browse by usage' })).toBeTruthy()
+})
+it('renders payers line, depth and momentum chips only when entry.analytics carries them', () => {
+  show([
+    withAnalytics({ ...entry(0), activity: { calls30d: 500, payers30d: 120 } }, { payerDepth: 4.2, depthBand: 'concentrated', payerDelta: 6, momentumBand: 'rising' }),
+    withAnalytics({ ...entry(1), activity: { calls30d: 250, payers30d: 40 } }, { depthBand: 'broad', payerDelta: -5, momentumBand: 'falling' }),
+    withAnalytics({ ...entry(2), activity: { calls30d: 100 } }, { depthBand: 'unknown', momentumBand: 'unknown' }), entry(3),
+  ])
+  expect(screen.getAllByText(/payers · last 30d/u)).toHaveLength(2)
+  expect(screen.getByText('120 distinct paying addresses reported in the last 30 days')).toBeTruthy()
+  expect(screen.queryByText('Holding')).toBeNull()
+  expect(screen.queryByText('New')).toBeNull()
+  expect(screen.getByText('Paying addresses rose by at least 2 compared with the previous 30 days.')).toBeTruthy()
+  expect(screen.getByText('Broad')).toBeTruthy()
+  expect(screen.getByText('▼ Falling')).toBeTruthy()
+  expect(screen.queryByText('Whale-heavy')).toBeNull()
+  expect(screen.getByText('Depth and trend are derived from reported 30-day activity.')).toBeTruthy()
+})
+it('renders a signed payer movement when only the delta is known', () => {
+  show([withAnalytics(entry(0), { payerDelta: 3, momentumBand: 'rising' })])
+  expect(screen.getByText('▲ 3 payers')).toBeTruthy()
+  expect(screen.getByText('· last 30d')).toBeTruthy()
 })

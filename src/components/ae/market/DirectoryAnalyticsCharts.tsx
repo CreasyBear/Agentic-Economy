@@ -1,6 +1,10 @@
 import { useId, useMemo } from 'react'
+import { DirectoryConcentration } from './DirectoryConcentration'
+import type { DirectoryCategoryConcentration } from './DirectoryConcentration'
+import type { SavedDirectoryTool } from './DirectorySavedTools'
 import { Gauge } from '@/components/charts/gauge'
 import { EvilBarChart } from '@/components/evilcharts/charts/recharts-bar-chart'
+import { Badge } from '@/components/ui/badge'
 import type { ChartConfig } from '@/components/evilcharts/ui/recharts-chart'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -28,6 +32,17 @@ export type DirectoryAnalyticsChartsProps = Readonly<{
   onSelectPriceBucket?: (key: string) => void
   onSelectAdoptionBucket?: (key: string) => void
   onSelectCategory?: (key: string) => void
+  signals?: DirectoryAnalyticsSignals
+  onSelectDepthBand?: (key: string) => void
+  onSelectSignal?: (item: SavedDirectoryTool) => void
+}>
+export type DirectorySignalEntry = Readonly<{ resource: string; title: string; provider: string; payerDelta?: number; momentumBand?: string; item?: SavedDirectoryTool }>
+export type DirectoryAnalyticsSignals = Readonly<{
+  depth?: readonly Bucket[]
+  recency?: readonly Bucket[]
+  rising?: readonly DirectorySignalEntry[]
+  falling?: readonly DirectorySignalEntry[]
+  concentration?: Readonly<{ basis: 'declared_calls30d'; categoryCount: number; categories: readonly DirectoryCategoryConcentration[] }>
 }>
 const colors = {
   count: { label: 'Tools', colors: { light: ['var(--ae-brand)'], dark: ['var(--ae-brand)'] } },
@@ -36,10 +51,10 @@ const integers = new Intl.NumberFormat('en-AU')
 const percent = new Intl.NumberFormat('en-AU', { maximumFractionDigits: 1 })
 
 /** The caller supplies full-generation aggregates, never a paginated sample. */
-export function DirectoryAnalyticsCharts({ priceBuckets, priceDescription, adoptionBuckets, categories, coverage, sections = ['price', 'adoption', 'coverage', 'categories'], onSelectPriceBucket, onSelectAdoptionBucket, onSelectCategory }: DirectoryAnalyticsChartsProps) {
+export function DirectoryAnalyticsCharts({ priceBuckets, priceDescription, adoptionBuckets, categories, coverage, sections = ['price', 'adoption', 'coverage', 'categories'], onSelectPriceBucket, onSelectAdoptionBucket, onSelectCategory, signals, onSelectDepthBand, onSelectSignal }: DirectoryAnalyticsChartsProps) {
   const rankedCategories = useMemo(() => [...categories].sort((a, b) => b.count - a.count || a.label.localeCompare(b.label)), [categories])
   if (coverage.total === 0) return <Empty><EmptyHeader><EmptyTitle>No catalogue observations yet</EmptyTitle><EmptyDescription>Analytics will appear when a directory scan has completed.</EmptyDescription></EmptyHeader></Empty>
-  const signals = [
+  const coverageSignals = [
     { key: 'inputFields', label: 'Named input fields', value: coverage.inputFields },
     { key: 'outputFields', label: 'Named output fields', value: coverage.outputFields },
     { key: 'outputExample', label: 'Output example', value: coverage.outputExample },
@@ -55,7 +70,7 @@ export function DirectoryAnalyticsCharts({ priceBuckets, priceDescription, adopt
     {sections.includes('coverage') ? <Card className="min-w-0">
       <CardHeader><CardTitle>What the directory tells you</CardTitle><CardDescription>Published evidence across {integers.format(coverage.total)} Tools. These signals describe metadata coverage, not service quality.</CardDescription></CardHeader>
       <CardContent className="grid grid-cols-2 gap-x-5 gap-y-7 sm:grid-cols-3 xl:grid-cols-6">
-        {signals.map(signal => {
+        {coverageSignals.map(signal => {
           const percentage = coverage.total > 0 ? signal.value / coverage.total * 100 : 0
           return <div key={signal.key} className="flex min-w-0 flex-col gap-2 text-center">
             <div aria-hidden="true" className="min-w-0"><Gauge value={percentage} centerValue={percentage} suffix="%" defaultLabel="of Tools" minWidth={0} activeFill="var(--ae-brand)" inactiveFill="var(--border)" inactiveFillOpacity={0.5} totalNotches={40} spacing={18} notchCornerRadius={2} /></div>
@@ -66,6 +81,16 @@ export function DirectoryAnalyticsCharts({ priceBuckets, priceDescription, adopt
       </CardContent>
     </Card> : null}
     {sections.includes('categories') ? <Distribution title="Largest categories" description="Tool counts by declared category. Showing the eight largest groups; all categories are available below." rows={rankedCategories} chartLimit={8} horizontal {...(onSelectCategory === undefined ? {} : { onSelect: onSelectCategory })} /> : null}
+    {signals?.rising !== undefined || signals?.falling !== undefined ? <Card className="min-w-0">
+      <CardHeader><CardTitle>Momentum</CardTitle><CardDescription>Paying-address movement between 30-day generations, derived from reported activity.</CardDescription></CardHeader>
+      <CardContent className="grid gap-5 sm:grid-cols-2">
+        <MomentumList heading="Rising" entries={signals?.rising ?? []} onSelectSignal={onSelectSignal} />
+        <MomentumList heading="Falling" entries={signals?.falling ?? []} onSelectSignal={onSelectSignal} />
+      </CardContent>
+    </Card> : null}
+    {signals?.depth !== undefined ? <Distribution title="Payer depth" description="Tools by reported Calls per paying address in the last 30 days." rows={signals.depth} {...(onSelectDepthBand === undefined ? {} : { onSelect: onSelectDepthBand })} /> : null}
+    {signals?.recency !== undefined ? <Distribution title="Freshness" description="Reported last-called dates. Freshness reflects when the source last saw activity; it is not a quality score." rows={signals.recency} /> : null}
+    {signals?.concentration !== undefined ? <DirectoryConcentration concentration={signals.concentration} {...(onSelectCategory === undefined ? {} : { onSelectCategory })} /> : null}
   </div>
 }
 
@@ -98,3 +123,22 @@ function Distribution({ title, description, rows, chartLimit, horizontal = false
 }
 
 function shortenLabel(label: string, limit = 18): string { return label.length > limit ? `${label.slice(0, limit - 1)}…` : label }
+
+function MomentumList({ heading, entries, onSelectSignal }: Readonly<{ heading: string; entries: readonly DirectorySignalEntry[]; onSelectSignal?: ((item: SavedDirectoryTool) => void) | undefined }>) {
+  return <div className="min-w-0">
+    <h3 className="text-sm font-medium">{heading}</h3>
+    {entries.length === 0 ? <p role="status" className="py-4 text-sm text-muted-foreground">No Tools in this direction yet.</p> : <ul className="mt-2 grid gap-1.5">
+      {entries.map(entry => {
+        const delta = entry.payerDelta
+        const chip = entry.momentumBand === 'new' ? 'New' : delta === undefined || delta === 0 ? undefined : `${delta > 0 ? '▲' : '▼'} ${Math.abs(delta).toLocaleString('en-AU')} payers`
+        const sr = entry.momentumBand === 'new' ? 'New: reported paying addresses with no previous period to compare.' : delta === undefined ? 'Trend not comparable.' : delta > 0 ? `${Math.abs(delta).toLocaleString('en-AU')} more paying addresses than the previous 30 days` : `${Math.abs(delta).toLocaleString('en-AU')} fewer paying addresses than the previous 30 days`
+        const clickable = entry.item !== undefined && onSelectSignal !== undefined
+        const body = <>
+          <span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium">{entry.title}</span><span className="block truncate text-xs text-muted-foreground">{entry.provider}</span></span>
+          {chip === undefined ? null : <Badge variant={entry.momentumBand === 'new' ? 'info' : delta !== undefined && delta > 0 ? 'success' : 'destructive'} className="shrink-0 tabular-nums"><span aria-hidden="true">{chip}</span><span className="sr-only">{sr}</span></Badge>}
+        </>
+        return <li key={entry.resource}>{clickable ? <Button variant="ghost" className="h-auto w-full justify-start gap-3 whitespace-normal px-2 py-2 text-left" onClick={() => { if (entry.item !== undefined) onSelectSignal?.(entry.item) }} aria-label={`View Tool: ${entry.title}`}>{body}</Button> : <div className="flex items-center gap-3 px-2 py-2">{body}</div>}</li>
+      })}
+    </ul>}
+  </div>
+}
