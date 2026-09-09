@@ -1,21 +1,21 @@
 import { expect, test, type Page } from '@playwright/test'
 
 test.describe('market product accessibility', () => {
-  test('the retired engine entry resolves to the catalogue-first home', async ({ page }) => {
+  test('the retired engine entry resolves to the catalogue-first market', async ({ page }) => {
     await gotoSettled(page, '/engine')
-    await expect(page).toHaveURL('/')
-    await expect(page.getByRole('heading', { level: 1, name: 'The marketplace built for agents.' })).toBeVisible()
+    await page.waitForURL((url) => (url.pathname === '/market' && url.searchParams.get('window') === '30d'), { timeout: 15_000 })
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
   })
 
-  test('home skip link and primary actions are keyboard reachable', async ({ page }) => {
+  test('market skip link and primary actions are keyboard reachable', async ({ page }) => {
     await gotoSettled(page, '/')
     await page.keyboard.press('Tab')
     const skip = page.getByRole('link', { name: 'Skip to content' })
     await expect(skip).toBeFocused()
     await skip.press('Enter')
     await expect(page.locator('#main-content')).toBeFocused()
-    await expect(page.getByRole('heading', { name: 'Give this to your agent' }).first()).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Copy agent setup instruction' })).toBeVisible()
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
+    await expect(page.getByLabel('Search Tools').first()).toBeVisible()
     const compact = (page.viewportSize()?.width ?? 1280) < 768
     if (compact) {
       const menu = page.getByRole('button', { name: 'Open public menu' })
@@ -32,9 +32,8 @@ test.describe('market product accessibility', () => {
     await expect(primary.getByRole('link', { name: 'Calls' })).toBeVisible()
   })
 
-  test('browse Tools continues into the market catalog', async ({ page }) => {
+  test('the root resolves to the catalogue with the default window', async ({ page }) => {
     await gotoSettled(page, '/')
-    await page.getByRole('link', { name: 'Browse Tools' }).first().click()
     await page.waitForURL((url) => (
       url.pathname === '/market'
       && url.searchParams.get('window') === '30d'
@@ -50,21 +49,19 @@ test.describe('market product accessibility', () => {
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
   })
 
-  test('about is reachable from the footer and keeps public nav', async ({ page }) => {
+  test('about keeps public nav while the footer points at the marketing site', async ({ page }) => {
     await gotoSettled(page, '/')
     const footer = page.getByRole('contentinfo')
-    await expect(footer.getByRole('link', { name: 'About' })).toBeVisible()
-    await expect(footer.getByRole('link', { name: 'Calls' })).toBeVisible()
-    await footer.getByRole('link', { name: 'About' }).click()
-    await page.waitForURL('**/about', { timeout: 15_000 })
+    await expect(footer.getByRole('link', { name: 'About AECON' })).toBeVisible()
+    await expect(footer.getByRole('link', { name: 'System status' })).toBeVisible()
+    await gotoSettled(page, '/about')
     await expect(page.getByRole('heading', { level: 1, name: 'Who this market is for.' })).toBeVisible()
     await expect(page.getByRole('heading', { name: 'Listed Providers' })).toBeVisible()
     await expect(page.getByRole('link', { name: 'Browse the live catalog' })).toBeVisible()
     const compact = (page.viewportSize()?.width ?? 1280) < 768
     if (compact) {
       // The preceding keyboard-navigation test exercises the drawer itself.
-      // Here the footer's Calls link proves the route remains in public
-      // chrome, while the menu trigger proves compact navigation is retained.
+      // Here the menu trigger proves compact navigation is retained on /about.
       await expect(page.getByRole('button', { name: 'Open public menu' })).toBeVisible()
       return
     }
