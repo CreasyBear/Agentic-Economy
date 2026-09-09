@@ -268,7 +268,7 @@ function publicParameterFromSchema(
 
 /**
  * Project the exact executable price into a decimal-string catalog price
- * (agentic.market `pricing{scheme}`). `fixed` -> exact amount; `range`
+ * (catalogue `pricing{scheme}`). `fixed` -> exact amount; `range`
  * -> upto min/max; `on_request` has no derivable decimal amount -> absent.
  */
 function projectCatalogPrice(

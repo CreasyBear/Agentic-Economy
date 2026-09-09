@@ -16,7 +16,7 @@ import {
 /**
  * Read-only acceptance pre-flight for a capability publication.
  *
- * Mirrors agentic.market `/validate` and CDP `POST /v2/x402/validate`: it runs the SAME
+ * Mirrors CDP `POST /v2/x402/validate`: it runs the SAME
  * deterministic `normalizeCapabilityPublication` the admission path uses and reports
  * whether it *would* be accepted — without admitting, writing to any store, or
  * requiring a `businessId`. It is side-effect-free and idempotent.

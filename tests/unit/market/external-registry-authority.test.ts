@@ -12,7 +12,7 @@ describe("registry origin authority boundary", () => {
       source: "agentic_market",
       upstreamServiceId: "companies",
       upstreamEndpointId: "provider.search",
-      sourceUrl: "https://agentic.market/services/companies",
+      sourceUrl: "https://example.test/services/companies",
       providerUrl: "https://provider.example",
       endpointUrl: "https://api.provider.example/search",
       routeIdentity: "GET https://api.provider.example/search",

@@ -92,7 +92,7 @@ export type PublicCapabilityUnavailableReason =
   | "updated_terms_require_review"
   | "not_supported_by_ae";
 /**
- * Flat, self-describing catalog parameter (agentic.market `parameters[]`),
+ * Flat, self-describing catalog parameter (catalogue `parameters[]`),
  * additive to the execution contract's `inputJsonSchema`.
  */
 export type PublicToolParameter = Readonly<{

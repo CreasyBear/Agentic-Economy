@@ -12,7 +12,7 @@ const sourceDigest = canonicalDigest({ seed: 'observable-provenance-test' })
 
 const actor = (kind: SupplyCommandActor['kind']): SupplyCommandActor => ({ kind, ref: 'actor:1' })
 
-describe('capability publication provenance tri-state (agentic.market 1P/3P/observed, design §8.1)', () => {
+describe('capability publication provenance tri-state (1P/3P/observed, design §8.1)', () => {
   it('exposes all four authority modes', () => {
     expect(CAPABILITY_PUBLICATION_AUTHORITY_MODES).toEqual([
       'provider_owned',

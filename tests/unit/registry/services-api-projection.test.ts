@@ -9,7 +9,7 @@ import type {
 } from '@/modules/registry/public'
 import { projectPublicServicesPage, projectPublicServicesSearchPage } from '@/modules/registry/public'
 
-describe('agentic.market Service mapping', () => {
+describe('catalogue Services API Service mapping', () => {
   it('omits businesses without public offerings while preserving page and search cursors', () => {
     const source = mappingPage()
     const publishedBusiness = source.page[0]!
@@ -52,7 +52,7 @@ describe('agentic.market Service mapping', () => {
     const firstEndpoint = service.endpoints[0]!
     const secondEndpoint = service.endpoints[1]!
 
-    // Exact agentic.market Service core names. AE-only merchandising and
+    // Exact catalogue Services API Service core names. AE-only merchandising and
     // source data stay together under `ae`, never leak into the core.
     expect(Object.keys(service).sort()).toEqual([
       'ae',
@@ -122,7 +122,7 @@ describe('agentic.market Service mapping', () => {
     expect(service).not.toHaveProperty('source')
     expect(service).not.toHaveProperty('offerings')
 
-    // Exact agentic.market Endpoint core names. Legacy AE endpoint fields
+    // Exact catalogue Services API Endpoint core names. Legacy AE endpoint fields
     // (`summary`, `catalogPrice`, `offeringRef`, `toolRef`) are absent at
     // the top level; the linkage belongs under `ae`.
     expect(Object.keys(firstEndpoint).sort()).toEqual([
@@ -351,7 +351,7 @@ describe('agentic.market Service mapping', () => {
   })
 
 })
-describe('agentic.market payment network projection', () => {
+describe('catalogue Services API payment network projection', () => {
   it('deduplicates the payment network shared by two linked endpoints', () => {
     const network = 'eip155:84532'
     const toolMap: ServiceToolMap = {
@@ -540,7 +540,7 @@ describe('public services API projection', () => {
 
 })
 
-describe('agentic.market merchandising fields (CAVEAT 2)', () => {
+describe('catalogue Services API merchandising fields (CAVEAT 2)', () => {
   it('derives provider identity and domain from programmable-provider context', () => {
     const service = projectPublicServicesPage(mappingPage()).services[0]!
 
@@ -600,7 +600,7 @@ describe('sub-cent catalog price representation (CAVEAT 3)', () => {
     }
     const service = projectPublicServicesPage(mappingPage(), map).services[0]!
 
-    // Catalog pricing mirrors agentic.market's pricing shape; subCent is AE
+    // Catalog pricing mirrors catalogue Services API's pricing shape; subCent is AE
     // execution metadata, not a leaked core field.
     const endpoint = service.endpoints[0]!
     expect(endpoint.pricing).toEqual({ scheme: 'exact', amount: '0.007', currency: 'USDC' })
