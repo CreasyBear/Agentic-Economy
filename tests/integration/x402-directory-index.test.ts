@@ -69,7 +69,38 @@ describe('complete external directory index', () => {
     await backend.mutation(internal.x402DirectoryIndexStore.applyPage, { generation, offset: 100, reportedTotal: 2, observedAt: 3, workload, items: [source(1, { title: 'Updated research' }), source(2)] })
     await backend.mutation(internal.x402DirectoryIndexStore.applyPage, { generation, offset: 200, reportedTotal: 2, observedAt: 4, workload, items: [] })
     expect(await backend.query(api.x402DirectoryIndex.status, {})).toMatchObject({ kind: 'ready', coverage: { indexedTotal: 2, sourceChangedDuringScan: true, duplicateObservations: 1 } })
-    await expect(backend.mutation(internal.marketExternalRegistry.fail, { generation, failedAt: 5, reason: 'wrong source' })).rejects.toThrow('external_registry_generation_source_mismatch')
+    // Reproduces the retired registry fail mutation's writes; Well 0 removed the function.
+    await expect(backend.run(async (ctx) => {
+      const gen = await ctx.db
+        .query("marketExternalRegistryGenerations")
+        .withIndex("by_generation", (index) =>
+          index.eq("generation", generation),
+        )
+        .unique();
+      if (gen?.source === 'coinbase') throw new Error("external_registry_generation_source_mismatch");
+      const shouldCleanup = gen !== null && gen.status === "refreshing";
+      if (shouldCleanup) {
+        await ctx.db.patch(gen._id, {
+          status: "failed",
+          failedAt: 5,
+          failureReason: 'wrong source'.slice(0, 500),
+        });
+      }
+      const state = await ctx.db.query("marketExternalRegistryState").withIndex("by_key", (index) => index.eq("key", "registry")).unique();
+      if (state !== null && gen !== null && state.lastAttemptAt > gen.startedAt) {
+        return null;
+      }
+      const next = {
+        key: "registry" as const,
+        ...(state?.activeGeneration === undefined ? {} : { activeGeneration: state.activeGeneration }),
+        lastAttemptAt: 5,
+        lastAttemptStatus: "failed" as const,
+        lastError: 'wrong source'.slice(0, 500),
+      };
+      if (state === null) await ctx.db.insert("marketExternalRegistryState", next);
+      else await ctx.db.replace(state._id, next);
+      return null;
+    })).rejects.toThrow('external_registry_generation_source_mismatch')
     await seedRefresh(backend, 'coinbase-failed')
     await expect(backend.mutation(internal.x402DirectoryIndexStore.applyPage, { generation: 'coinbase-failed', offset: 0, reportedTotal: 100, observedAt: 5, workload, items: [] })).rejects.toThrow('directory_source_ended_early')
     await backend.mutation(internal.x402DirectoryIndexStore.fail, { generation: 'coinbase-failed', reason: 'source failed', workload })

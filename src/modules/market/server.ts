@@ -5,9 +5,6 @@ import type {
   PublicToolDescriptor,
 } from "@/modules/capability-supply/public";
 import {
-  MARKET_MAX_DAILY_POINTS,
-  MARKET_MAX_FEATURED_SERVICES,
-  MARKET_MAX_RECENT_ACTIVITY,
   marketSourceStatus,
   type AgenticEconomyProjection,
   type MarketMetricProjection,
@@ -15,10 +12,6 @@ import {
   type MarketWindow,
   type X402EcosystemProjection,
 } from "./contracts";
-import {
-  agenticMarketSnapshotSchema,
-  type AgenticMarketSnapshot,
-} from "./agentic-market-source";
 import {
   emptyMarketListingEvidence,
   projectMarketListingEvidence,
@@ -38,11 +31,7 @@ const compactNumberFormatter = new Intl.NumberFormat("en", {
 });
 
 type MarketSourceRead = Readonly<{
-  snapshot: null | Readonly<{
-    fetchedAt: number;
-    sourceTimestamp: string;
-    snapshotJson: string;
-  }>;
+  snapshot: null;
   generatedAt: number;
   firstPartyAvailable: boolean;
   firstParty: Readonly<{
@@ -182,11 +171,11 @@ function externalProjection(
   source: MarketSourceRead,
   now: number,
 ): X402EcosystemProjection {
-  const status = marketSourceStatus(source.snapshot?.fetchedAt, now);
-  const base = {
-    label: "Indexed x402 activity via Agentic Market" as const,
-    source: "Agentic Market" as const,
-    sourceUrl: "https://agentic.market/" as const,
+  const status = marketSourceStatus(undefined, now);
+  return {
+    label: "Indexed x402 activity via AEcon directory" as const,
+    source: "AEcon directory" as const,
+    sourceUrl: "/market" as const,
     status,
     statusDetail:
       status === "live"
@@ -194,37 +183,10 @@ function externalProjection(
         : status === "delayed"
           ? "The last-known-good snapshot is more than ten minutes old."
           : "No snapshot newer than sixty minutes is available.",
-  };
-  if (source.snapshot === null)
-    return {
-      ...base,
-      metrics: [],
-      daily: [],
-      recentActivity: [],
-      featuredExternalServices: [],
-    };
-  const parsed = parseSnapshot(source.snapshot.snapshotJson);
-  if (parsed === undefined)
-    return {
-      ...base,
-      status: "unavailable",
-      statusDetail: "The stored source snapshot could not be validated.",
-      metrics: [],
-      daily: [],
-      recentActivity: [],
-      featuredExternalServices: [],
-    };
-  return {
-    ...base,
-    fetchedAt: new Date(source.snapshot.fetchedAt).toISOString(),
-    sourceTimestamp: source.snapshot.sourceTimestamp,
-    metrics: parsed.metrics.slice(0, 4),
-    daily: parsed.daily.slice(-MARKET_MAX_DAILY_POINTS),
-    recentActivity: parsed.recentActivity.slice(0, MARKET_MAX_RECENT_ACTIVITY),
-    featuredExternalServices: parsed.featuredExternalServices.slice(
-      0,
-      MARKET_MAX_FEATURED_SERVICES,
-    ),
+    metrics: [],
+    daily: [],
+    recentActivity: [],
+    featuredExternalServices: [],
   };
 }
 
@@ -409,15 +371,6 @@ function firstPartyMetric(
     evidenceClass,
     definition,
   };
-}
-
-function parseSnapshot(value: string): AgenticMarketSnapshot | undefined {
-  try {
-    const parsed = agenticMarketSnapshotSchema.safeParse(JSON.parse(value));
-    return parsed.success ? parsed.data : undefined;
-  } catch {
-    return undefined;
-  }
 }
 
 function emptyMarketSource(now: number): MarketSourceRead {

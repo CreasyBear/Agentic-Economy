@@ -387,16 +387,6 @@ export async function dispatchWorkloadCronConsequenceHandler(
         ...args.payload,
         workload: current,
       } as never)
-    case 'marketExternalRegistry:begin':
-      return await ctx.runMutation(internal.marketExternalRegistry.begin, args.payload as never)
-    case 'marketExternalRegistry:fail':
-      return await ctx.runMutation(internal.marketExternalRegistry.fail, args.payload as never)
-    case 'marketExternalRegistry:finalize':
-      return await ctx.runMutation(internal.marketExternalRegistry.finalize, args.payload as never)
-    case 'marketExternalRegistry:writeBatch':
-      return await ctx.runMutation(internal.marketExternalRegistry.writeBatch, args.payload as never)
-    case 'marketExternalSnapshots:upsert':
-      return await ctx.runMutation(internal.marketExternalSnapshots.upsert, args.payload as never)
     case 'moneyX402PaymentAttempts:reconcileX402PaymentAttempt':
       return await ctx.runMutation(internal.moneyX402PaymentAttempts.reconcileX402PaymentAttempt, args.payload as never)
   }

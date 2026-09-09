@@ -5,7 +5,6 @@ import { admitFacilitatorDiscoveryItems } from '../../convex/facilitatorDiscover
 import { api, internal } from '../../convex/_generated/api'
 import schema from '../../convex/schema'
 import { toolRecordProjection } from '../../convex/capabilitySupplyToolShared'
-import { admitRegistryPaymentRequiredItem } from '@/modules/capability-supply/internal/facilitator-discovery-admission'
 import timezoneFixture from '@/modules/capability-supply/internal/x402-bazaar-fixtures/timezone-payment-required-2026-08-19.json'
 import { convexModules } from '../helpers/convex-fixtures'
 import {
@@ -320,37 +319,6 @@ describe('facilitator discovery reconciliation', () => {
     expect(withdrawalAttempt).toMatchObject({ withdrawn: 0 })
     await expect(backend.run(async (ctx) => await ctx.db.query('capabilityPublications').unique()))
       .resolves.toMatchObject({ disposition: 'current', authorityMode: 'ae_curated_external' })
-  })
-
-  it('does not withdraw a registry-graduated Operation during facilitator refresh', async () => {
-    const backend = convexTest(schema, convexModules)
-    const workload = await seedFacilitatorDiscoveryWorkload(backend)
-    const deadlineAt = Date.now() + 60_000
-    const admission = await admitRegistryPaymentRequiredItem(timezoneFixture.paymentRequired)
-    const item = admission.admitted[0]
-    expect(item).toBeDefined()
-    if (item === undefined) throw new Error('expected registry graduation admission')
-
-    await backend.mutation(internal.facilitatorDiscovery.reconcile, {
-      items: [item],
-      complete: false,
-      deadlineAt,
-      workload,
-    })
-    const refresh = await backend.mutation(internal.facilitatorDiscovery.reconcile, {
-      items: [],
-      complete: true,
-      seenPublicationRefs: [],
-      deadlineAt,
-      workload,
-    })
-
-    expect(refresh.withdrawn).toBe(0)
-    await expect(backend.run(async (ctx) => await ctx.db.query('capabilityPublications').unique()))
-      .resolves.toMatchObject({
-        disposition: 'current',
-        sourceRevision: expect.stringMatching(/^registry-graduation:/u),
-      })
   })
 
   it('reports admission and reconciliation skips in the action total', async () => {

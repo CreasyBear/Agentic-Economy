@@ -524,11 +524,6 @@ describe('System workload cron boundary', () => {
       'capabilityCallX402AuthorizationExpiry:queueExpiredX402Authorization',
       'capabilitySupply:recordCapabilityProbeResult',
       'facilitatorDiscovery:reconcile',
-      'marketExternalRegistry:begin',
-      'marketExternalRegistry:fail',
-      'marketExternalRegistry:finalize',
-      'marketExternalRegistry:writeBatch',
-      'marketExternalSnapshots:upsert',
       'moneyX402PaymentAttempts:reconcileX402PaymentAttempt',
     ] as const
     const context = new FakeRuntimeContext(canonicalDb())

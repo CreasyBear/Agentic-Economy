@@ -22,15 +22,9 @@ export async function admitFacilitatorDiscoveryItems(
   return admitItems(items, "facilitator-discovery");
 }
 
-export async function admitRegistryPaymentRequiredItem(
-  item: unknown,
-): Promise<FacilitatorDiscoveryAdmissionResult> {
-  return admitItems([item], "registry-graduation");
-}
-
 async function admitItems(
   items: readonly unknown[],
-  revisionNamespace: "facilitator-discovery" | "registry-graduation",
+  revisionNamespace: "facilitator-discovery",
 ): Promise<FacilitatorDiscoveryAdmissionResult> {
   const admitted: FacilitatorDiscoveryAdmittedDraft[] = [];
   const skipped: FacilitatorDiscoverySkip[] = [];

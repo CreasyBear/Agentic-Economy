@@ -57,9 +57,9 @@ export type FeaturedExternalService = Readonly<{
 }>;
 
 export type X402EcosystemProjection = Readonly<{
-  label: "Indexed x402 activity via Agentic Market";
-  source: "Agentic Market";
-  sourceUrl: "https://agentic.market/";
+  label: "Indexed x402 activity via AEcon directory";
+  source: "AEcon directory";
+  sourceUrl: "/market";
   status: MarketSourceStatus;
   fetchedAt?: string;
   sourceTimestamp?: string;

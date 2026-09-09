@@ -55,7 +55,6 @@ export {
 } from './internal/facilitator-discovery-client'
 export { admitOfficialBazaarFromPaymentRequired } from './internal/facilitator-discovery-client'
 export { admitFacilitatorDiscoveryItems } from './internal/facilitator-discovery-admission'
-export { admitRegistryPaymentRequiredItem } from './internal/facilitator-discovery-admission'
 export { materializeOfficialBazaarX402Import } from './internal/facilitator-discovery-admission'
 export { admitBazaarFromPaymentRequired } from './internal/publication-importer-x402-bazaar'
 export type { BazaarAdmission } from './internal/publication-importer-x402-bazaar'

@@ -183,11 +183,6 @@ export const CONSEQUENCE_OPERATIONS = [
   'capabilityCallX402AuthorizationExpiry:queueExpiredX402Authorization',
   'capabilitySupply:recordCapabilityProbeResult',
   'facilitatorDiscovery:reconcile',
-  'marketExternalRegistry:begin',
-  'marketExternalRegistry:fail',
-  'marketExternalRegistry:finalize',
-  'marketExternalRegistry:writeBatch',
-  'marketExternalSnapshots:upsert',
   'moneyX402PaymentAttempts:reconcileX402PaymentAttempt',
 ] as const
 export type ConsequenceOperation = typeof CONSEQUENCE_OPERATIONS[number]
@@ -199,11 +194,6 @@ export const consequenceOperationValue = v.union(
   v.literal('capabilityCallX402AuthorizationExpiry:queueExpiredX402Authorization'),
   v.literal('capabilitySupply:recordCapabilityProbeResult'),
   v.literal('facilitatorDiscovery:reconcile'),
-  v.literal('marketExternalRegistry:begin'),
-  v.literal('marketExternalRegistry:fail'),
-  v.literal('marketExternalRegistry:finalize'),
-  v.literal('marketExternalRegistry:writeBatch'),
-  v.literal('marketExternalSnapshots:upsert'),
   v.literal('moneyX402PaymentAttempts:reconcileX402PaymentAttempt'),
 )
 
