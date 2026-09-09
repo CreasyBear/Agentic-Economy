@@ -6,8 +6,10 @@ import {
   buildStages,
   childExitStatus,
   convexChildEnv,
+  convexExitFix,
   convexPrintedUrl,
   createSupervisor,
+  DEFAULT_LOCAL_BACKEND_STARTUP_TIMEOUT_SECS,
   doctorNextCommand,
   effectiveEnv,
   isCatalogueComplete,
@@ -69,6 +71,33 @@ describe('local development launcher', () => {
     expect(isConvexReadyOutput('✔ Convex functions ready!')).toBe(true)
     expect(isViteReadyOutput('Convex functions ready!')).toBe(false)
     expect(isViteReadyOutput('➜ Local: http://127.0.0.1:3024/')).toBe(true)
+  })
+
+  it('recognizes Vite v8\'s ANSI-decorated ready banner (raw captured bytes)', () => {
+    // Captured verbatim from a live `dev:local` run against Vite v8.2.2; the
+    // ANSI escapes split "Local" from ":" and "3024" from the URL's slash.
+    const banner =
+      '\u001b[32m\u001b[1mVITE\u001b[22m v8.2.2\u001b[39m  \u001b[2mready in \u001b[0m\u001b[1m873\u001b[22m\u001b[2m\u001b[0m ms\u001b[22m\n' +
+      '\n' +
+      '  \u001b[32m➜\u001b[39m  \u001b[1mLocal\u001b[22m:   \u001b[36mhttp://127.0.0.1:\u001b[1m3024\u001b[22m/\u001b[39m\n'
+
+    expect(isViteReadyOutput(banner)).toBe(true)
+    expect(viteLocalUrl(banner)).toBe('http://127.0.0.1:3024')
+  })
+
+  it('recognizes the same banner split across two output chunks', () => {
+    const chunkOne =
+      '\u001b[32m\u001b[1mVITE\u001b[22m v8.2.2\u001b[39m  \u001b[2mready in \u001b[0m\u001b[1m873\u001b[22m\u001b[2m\u001b[0m ms\u001b[22m\n\n'
+    const chunkTwo =
+      '  \u001b[32m➜\u001b[39m  \u001b[1mLocal\u001b[22m:   \u001b[36mhttp://127.0.0.1:\u001b[1m3024\u001b[22m/\u001b[39m\n'
+
+    // Readiness is evaluated over the accumulated output, so the first chunk
+    // alone must not be mistaken for the URL line, but the combined output
+    // (as `createManagedChild` accumulates it) must be recognized as ready.
+    expect(isViteReadyOutput(chunkOne)).toBe(true)
+    expect(viteLocalUrl(chunkOne)).toBeUndefined()
+    expect(isViteReadyOutput(chunkOne + chunkTwo)).toBe(true)
+    expect(viteLocalUrl(chunkOne + chunkTwo)).toBe('http://127.0.0.1:3024')
   })
 
   it('reports timeout and parent-signal statuses without masking child failures', () => {
@@ -144,15 +173,19 @@ describe('convex child env', () => {
       PATH: '/usr/bin',
       CLERK_JWT_ISSUER_DOMAIN: 'https://release-proof.invalid',
       CONVEX_AGENT_MODE: 'anonymous',
+      CONVEX_LOCAL_BACKEND_STARTUP_TIMEOUT_SECS: '180',
     })
     expect(lines).toEqual([
       'anonymous local deployment: using placeholder CLERK_JWT_ISSUER_DOMAIN (Clerk is not configured locally)',
     ])
   })
 
-  it('leaves an already-configured Clerk issuer domain untouched', () => {
+  it('leaves an already-configured Clerk issuer domain and timeout untouched', () => {
     const { lines, log } = recorder()
-    const env = { CLERK_JWT_ISSUER_DOMAIN: 'https://real-tenant.clerk.accounts.dev' }
+    const env = {
+      CLERK_JWT_ISSUER_DOMAIN: 'https://real-tenant.clerk.accounts.dev',
+      CONVEX_LOCAL_BACKEND_STARTUP_TIMEOUT_SECS: '600',
+    }
     expect(convexChildEnv(env, { anonymous: true, log })).toBe(env)
     expect(lines).toEqual([])
   })
@@ -160,8 +193,48 @@ describe('convex child env', () => {
   it('never leaks the placeholder into a real, non-anonymous deployment', () => {
     const { lines, log } = recorder()
     const env = { PATH: '/usr/bin' }
-    expect(convexChildEnv(env, { anonymous: false, log })).toBe(env)
+    const result = convexChildEnv(env, { anonymous: false, log })
+    expect(result).not.toBe(env)
+    expect(result).toEqual({ PATH: '/usr/bin', CONVEX_LOCAL_BACKEND_STARTUP_TIMEOUT_SECS: '180' })
     expect(lines).toEqual([])
+  })
+
+  it('sets the default local backend startup timeout when absent, in every mode', () => {
+    const { log } = recorder()
+    const anonymous = convexChildEnv({ PATH: '/usr/bin' }, { anonymous: true, log })
+    const named = convexChildEnv({ PATH: '/usr/bin' }, { anonymous: false, log })
+    expect(anonymous.CONVEX_LOCAL_BACKEND_STARTUP_TIMEOUT_SECS).toBe(String(DEFAULT_LOCAL_BACKEND_STARTUP_TIMEOUT_SECS))
+    expect(named.CONVEX_LOCAL_BACKEND_STARTUP_TIMEOUT_SECS).toBe(String(DEFAULT_LOCAL_BACKEND_STARTUP_TIMEOUT_SECS))
+  })
+
+  it('preserves an explicit local backend startup timeout', () => {
+    const { log } = recorder()
+    const env = { CONVEX_LOCAL_BACKEND_STARTUP_TIMEOUT_SECS: '45' }
+    const result = convexChildEnv(env, { log })
+    expect(result).toBe(env)
+    expect(result.CONVEX_LOCAL_BACKEND_STARTUP_TIMEOUT_SECS).toBe('45')
+  })
+})
+
+describe('convex exit fix', () => {
+  it('points at the startup timeout env var when the backend did not start in time', () => {
+    const output = 'Local backend did not start on port 3212 within 30 seconds.'
+    expect(convexExitFix(output, {})).toBe(
+      'the local backend took longer than CONVEX_LOCAL_BACKEND_STARTUP_TIMEOUT_SECS=180; rerun, or raise it for a large local database',
+    )
+    expect(convexExitFix(output, { CONVEX_LOCAL_BACKEND_STARTUP_TIMEOUT_SECS: '600' })).toBe(
+      'the local backend took longer than CONVEX_LOCAL_BACKEND_STARTUP_TIMEOUT_SECS=600; rerun, or raise it for a large local database',
+    )
+  })
+
+  it('points at CLERK_JWT_ISSUER_DOMAIN when that is the failure', () => {
+    const output = 'Error: CLERK_JWT_ISSUER_DOMAIN is required for Convex auth configuration'
+    expect(convexExitFix(output, {})).toMatch(/CLERK_JWT_ISSUER_DOMAIN/)
+  })
+
+  it('falls back to a generic hint for anything else', () => {
+    expect(convexExitFix('some unrelated failure trace', {})).toBe('read the Convex output above')
+    expect(convexExitFix('', {})).toBe('read the Convex output above')
   })
 })
 

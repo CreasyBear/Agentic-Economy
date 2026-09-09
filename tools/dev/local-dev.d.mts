@@ -16,10 +16,15 @@ export function isConvexReadyOutput(output: string): boolean
 export function isViteReadyOutput(output: string): boolean
 export function buildConvexSelectArgs(): string[]
 export function buildConvexDevArgs(): string[]
+export const DEFAULT_LOCAL_BACKEND_STARTUP_TIMEOUT_SECS: number
 export function convexChildEnv(
   env: Record<string, string | undefined>,
   options?: { anonymous?: boolean, log?: (message: string) => void },
 ): Record<string, string | undefined>
+export function convexExitFix(
+  output: string,
+  env?: Record<string, string | undefined>,
+): string
 export function readViteArgs(env?: Record<string, string | undefined>): string[]
 export function childExitStatus(input: ChildExitStatusInput): number
 export function signalProcessTree(

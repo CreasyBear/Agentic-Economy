@@ -10,6 +10,11 @@ import { configureLocalConvexServerFunctionToken, configureLocalSourceWriteSecre
 const DEFAULT_VITE_ARGS = ['--port', '3024', '--strictPort', '--host', '127.0.0.1']
 const DEFAULT_VITE_URL = 'http://127.0.0.1:3024'
 const LOCAL_STARTUP_TIMEOUT_MS = 120_000
+// A grown local database (tens of thousands of rows) can take well past the
+// Convex CLI's own 30s default to cold-start; a fresh clone never notices
+// this because its database is empty.
+export const DEFAULT_LOCAL_BACKEND_STARTUP_TIMEOUT_SECS = 180
+const CONVEX_LOCAL_BACKEND_STARTUP_TIMEOUT_SECS_ENV = 'CONVEX_LOCAL_BACKEND_STARTUP_TIMEOUT_SECS'
 const STAGE_TIMEOUT_MS = 90_000
 const DOCTOR_TIMEOUT_MS = 120_000
 const CHILD_KILL_GRACE_MS = 1_000
@@ -24,6 +29,10 @@ const ENV_FILES = ['.env', '.env.local', '.env.development', '.env.development.l
 const ANSI_PATTERN = /\u001B\[[0-9;]*m/gu
 const CONVEX_READY_PATTERN = /Convex functions ready!/u
 const VITE_READY_PATTERN = /\bLocal:\s+https?:\/\//u
+// Vite's own "ready in Nms" line lands in the same banner flush as `Local:`
+// in practice; accepting it too tolerates a chunk boundary that splits the
+// banner from the URL line.
+const VITE_READY_IN_PATTERN = /\bVITE\b[^\n]*\bready in\b/u
 const VITE_URL_PATTERN = /\bLocal:\s+(https?:\/\/\S+?)\/?\s*$/mu
 // `convex dev` only prints its URL on some paths, so the comparison is
 // conditional. The dashboard URL is a different port and must not be read as
@@ -37,7 +46,8 @@ export function isConvexReadyOutput(output) {
 }
 
 export function isViteReadyOutput(output) {
-  return VITE_READY_PATTERN.test(output)
+  const text = stripAnsi(output)
+  return VITE_READY_PATTERN.test(text) || VITE_READY_IN_PATTERN.test(text)
 }
 
 function stripAnsi(text) {
@@ -93,13 +103,40 @@ const ANONYMOUS_CLERK_JWT_ISSUER_DOMAIN = 'https://release-proof.invalid'
  * is returned unchanged.
  */
 export function convexChildEnv(env, { anonymous = false, log: write = log } = {}) {
-  if (!anonymous || env.CLERK_JWT_ISSUER_DOMAIN !== undefined) return env
-  write('anonymous local deployment: using placeholder CLERK_JWT_ISSUER_DOMAIN (Clerk is not configured locally)')
-  return {
-    ...env,
-    CLERK_JWT_ISSUER_DOMAIN: ANONYMOUS_CLERK_JWT_ISSUER_DOMAIN,
-    CONVEX_AGENT_MODE: 'anonymous',
+  const needsTimeout = env[CONVEX_LOCAL_BACKEND_STARTUP_TIMEOUT_SECS_ENV] === undefined
+  const needsClerkPlaceholder = anonymous && env.CLERK_JWT_ISSUER_DOMAIN === undefined
+  if (!needsTimeout && !needsClerkPlaceholder) return env
+
+  const next = { ...env }
+  if (needsTimeout) {
+    next[CONVEX_LOCAL_BACKEND_STARTUP_TIMEOUT_SECS_ENV] = String(DEFAULT_LOCAL_BACKEND_STARTUP_TIMEOUT_SECS)
   }
+  if (needsClerkPlaceholder) {
+    write('anonymous local deployment: using placeholder CLERK_JWT_ISSUER_DOMAIN (Clerk is not configured locally)')
+    next.CLERK_JWT_ISSUER_DOMAIN = ANONYMOUS_CLERK_JWT_ISSUER_DOMAIN
+    next.CONVEX_AGENT_MODE = 'anonymous'
+  }
+  return next
+}
+
+const CONVEX_TIMEOUT_FAILURE_PATTERN = /did not start on port/u
+const CONVEX_CLERK_FAILURE_PATTERN = /CLERK_JWT_ISSUER_DOMAIN/u
+
+/**
+ * Picks a `fix:` line for a `convex dev` child that exited before printing
+ * its ready pattern, by matching the captured output against the two known
+ * causes; anything else gets a generic pointer back at the output above.
+ */
+export function convexExitFix(output, env = {}) {
+  const text = stripAnsi(output ?? '')
+  if (CONVEX_TIMEOUT_FAILURE_PATTERN.test(text)) {
+    const used = env[CONVEX_LOCAL_BACKEND_STARTUP_TIMEOUT_SECS_ENV] ?? String(DEFAULT_LOCAL_BACKEND_STARTUP_TIMEOUT_SECS)
+    return `the local backend took longer than ${CONVEX_LOCAL_BACKEND_STARTUP_TIMEOUT_SECS_ENV}=${used}; rerun, or raise it for a large local database`
+  }
+  if (CONVEX_CLERK_FAILURE_PATTERN.test(text)) {
+    return `set CLERK_JWT_ISSUER_DOMAIN, or use an anonymous local deployment which sets the ${ANONYMOUS_CLERK_JWT_ISSUER_DOMAIN} placeholder automatically`
+  }
+  return 'read the Convex output above'
 }
 
 /**
@@ -729,10 +766,11 @@ async function startConvex(supervisor, env) {
     }
   }
 
+  const convexEnv = convexChildEnv(env, { anonymous })
   const convex = supervisor.add(createManagedChild(
     'npx',
     buildConvexDevArgs(),
-    convexChildEnv(env, { anonymous }),
+    convexEnv,
     { label: 'Convex dev', readyPattern: isConvexReadyOutput },
   ))
   const readiness = await convex.ready
@@ -740,6 +778,7 @@ async function startConvex(supervisor, env) {
     const result = readiness.result ?? await convex.done
     if (supervisor.parentSignal !== null) return { status: signalExitStatus(supervisor.parentSignal) }
     reportChildFailure('Convex dev', result)
+    log(`fix: ${convexExitFix(convex.output(), convexEnv)}`)
     supervisor.terminateAll('SIGINT', 'peer-failure')
     return { status: childExitStatus(result) }
   }
