@@ -1,16 +1,20 @@
 import { internalMutation, type MutationCtx } from './_generated/server'
-import type { Doc } from './_generated/dataModel'
+import type { Doc, Id } from './_generated/dataModel'
 import { internal } from './_generated/api'
 import { v } from 'convex/values'
+import type { UserIdentity } from 'convex/server'
 
 import {
   buildDevSeedCatalogState,
   DEV_SEED_BUSINESS_FIXTURES,
+  type DevSeedBusinessFixture,
 } from '../src/modules/dev/public'
+import { publishCapabilityForSeed } from './capabilitySupplyPublish'
+import { observeCapabilityReadinessHandler } from './capabilitySupplyProbes'
+import { ensureOwnerIdentityForAuthenticatedIdentity } from './interactiveAuthority'
+import { resolveAndBindLegalCustomer } from './lib/moneyLegalCustomer'
 import { persistDevSeedCatalogState } from './devSeedStore'
 import { canonicalDigest } from '../src/modules/common/canonical-digest'
-import { AGENT_ACCESS_DEFAULT_APPLICATION_REF } from '@/modules/agent-access/agent-access'
-import { MARKET_TOOLS_CALL_SCOPE } from '@/modules/agent-access/contract'
 import {
   MAX_ACCESS_PATHS_PER_OFFERING,
   type OfferingPrice,
@@ -157,46 +161,91 @@ export const provisionDevSeedCatalogIdentity = internalMutation({
   },
 })
 
-// Self-healing bootstrap for the local-E2E consent loop's fixed owner-side
-// agent credential (ak_local_e2e_owner). The bypass consent flow registers
-// per-consent grants for this credential through the normal serviceAuth'd
-// registerGrantForServer path, which requires this principal row to exist
-// beforehand (convex/agentAccessPolicy.ts). Insert-if-absent via the
-// by_principalId unique index, so it is safe to run on every bring-up.
-const LOCAL_E2E_OWNER_CREDENTIAL_ID = 'ak_local_e2e_owner'
-const LOCAL_E2E_OWNER_PRINCIPAL_ID = `clerk_api_key:${LOCAL_E2E_OWNER_CREDENTIAL_ID}`
-const LOCAL_E2E_OWNER_ACCOUNT_REF = 'acc_acce2e0000000000000000000000000'
+/*
+ * Local-E2E owner identity.
+ *
+ * Shape (a): the local Clerk-bypass `ae connect` already creates the canonical
+ * agent identity Quote needs. `src/lib/server/agent-access-oauth-api.ts`
+ * (issueGrantKey -> issueAgentAccessKey) calls
+ * `agentAccessPrincipals.registerIssuedAgentBindingForServer`, and that one
+ * mutation writes the whole chain in a single transaction: the `prn_` agent
+ * Principal, its Membership in the owner Account, the `clerk/api-key`
+ * externalIdentityBinding, the api_key Credential, the root
+ * authorityDelegationGrants row (DelegationService.issueRoot), the
+ * agentAccessGrants row and the agentAccessPrincipals row. It is the ONLY
+ * writer of an `agent` Principal in the product.
+ *
+ * So the seed must not mint an agent identity of its own:
+ *   - that mutation is public and gated on a verified Clerk identity plus an
+ *     HMAC service assertion, so an internal seed mutation cannot call it, and
+ *   - the bypass credential id is minted per consent
+ *     (`localKeyId`, src/lib/server/local-e2e-agent-key.ts), so there is no
+ *     fixed local credential to pre-bind.
+ * The previous fabricated `clerk_api_key:ak_local_e2e_owner` principal could
+ * never be admitted anyway: `candidateMatchesCanonical`
+ * (convex/lib/callLifecycle/authorityHandlers.ts) requires
+ * `principalId === canonical.principalRef`, and a principalRef must match the
+ * `prn_...` pattern.
+ *
+ * What the seed owns instead is the OWNER side that `ae connect` attaches to:
+ * the interactive owner identity for the fixed bypass session token
+ * (`src/lib/server/convex-source.ts` sets subject `dev-seed-owner-session`),
+ * provisioned through the same product helper the interactive path uses
+ * (`ensureOwnerIdentityForAuthenticatedIdentity`,
+ * convex/interactiveAuthority.ts), plus that account's legal-customer binding.
+ * Because provisioning is keyed on the provider token identifier, a later
+ * `ae connect` finds and reuses this exact Principal + Account rather than
+ * creating a second identity.
+ */
+const LOCAL_E2E_OPERATOR_SUBJECT = 'dev-seed-owner-session'
+const LOCAL_E2E_OWNER_IDENTITY: UserIdentity = Object.freeze({
+  subject: LOCAL_E2E_OPERATOR_SUBJECT,
+  issuer: 'https://convex.test',
+  tokenIdentifier: `https://convex.test|${LOCAL_E2E_OPERATOR_SUBJECT}`,
+  name: 'Dev Seed Owner',
+})
+
+type LocalE2EOwnerAuthority = Readonly<{ principalRef: string; accountRef: string }>
+
+/**
+ * Idempotently ensure the bypass owner's canonical interactive identity and
+ * return its current Principal + Account. Both sandbox seed commands below
+ * write only sandbox-scoped facts, so a deployment whose owner account already
+ * carries a production agent refuses instead of seeding into it.
+ */
+async function requireLocalE2EOwnerAuthority(ctx: MutationCtx): Promise<LocalE2EOwnerAuthority> {
+  const refs = await ensureOwnerIdentityForAuthenticatedIdentity(ctx, LOCAL_E2E_OWNER_IDENTITY)
+  if (refs === null) throw new Error('dev_seed_local_e2e_owner_identity_unavailable')
+  const accountRef = refs.accountRef ?? (await ctx.db.query('accountOwnerships')
+    .withIndex('by_ownerPrincipalRef_and_lifecycle', (query) => query
+      .eq('ownerPrincipalRef', refs.principalRef)
+      .eq('lifecycle', 'active'))
+    .unique())?.accountRef
+  if (accountRef === undefined) throw new Error('dev_seed_local_e2e_owner_account_missing')
+  const production = await ctx.db.query('agentAccessPrincipals')
+    .withIndex('by_ownerId_and_lifecycle', (query) => query
+      .eq('ownerId', accountRef)
+      .eq('lifecycle', 'active'))
+    .take(50)
+  const offending = production.find(({ environment }) => environment !== 'sandbox')
+  if (offending !== undefined) {
+    throw new Error(
+      `dev_seed_requires_sandbox_principal: ${offending.principalId} is ${offending.environment}, not sandbox`,
+    )
+  }
+  return { principalRef: refs.principalRef, accountRef }
+}
 
 export const ensureLocalE2EOwnerIdentity = internalMutation({
   args: {},
   returns: v.object({
     kind: v.literal('ensured'),
-    created: v.array(v.string()),
+    principalRef: v.string(),
+    accountRef: v.string(),
   }),
   handler: async (ctx) => {
-    const now = Date.now()
-    const created: string[] = []
-    const principal = await ctx.db.query('agentAccessPrincipals')
-      .withIndex('by_principalId', (query) => query.eq('principalId', LOCAL_E2E_OWNER_PRINCIPAL_ID))
-      .unique()
-    if (principal === null) {
-      await ctx.db.insert('agentAccessPrincipals', {
-        principalId: LOCAL_E2E_OWNER_PRINCIPAL_ID,
-        ownerId: LOCAL_E2E_OWNER_ACCOUNT_REF,
-        credentialId: LOCAL_E2E_OWNER_CREDENTIAL_ID,
-        applicationRef: AGENT_ACCESS_DEFAULT_APPLICATION_REF,
-        environment: 'sandbox',
-        scopes: [MARKET_TOOLS_CALL_SCOPE],
-        authorityMode: 'approval_required',
-        grantGeneration: 1,
-        spendingPolicyDigest: 'local-e2e-owner-key',
-        lifecycle: 'active',
-        recordedAt: now,
-        lastSeenAt: now,
-      })
-      created.push('agentAccessPrincipal')
-    }
-    return { kind: 'ensured' as const, created }
+    const owner = await requireLocalE2EOwnerAuthority(ctx)
+    return { kind: 'ensured' as const, ...owner }
   },
 })
 
@@ -402,3 +451,358 @@ export const DEV_SEED_PRICE_BY_SLUG: Readonly<Record<string, OfferingPrice>> = O
     return price === undefined ? [] : [[slug, price]]
   }),
 )
+
+/*
+ * Sandbox reference Tool.
+ *
+ * A fresh local deployment has no routeable supply, so nothing can be Quoted.
+ * This publishes exactly one named sandbox Tool through the real
+ * capability-supply publish command (publishCapabilityForSeed →
+ * publishBootstrapCapability → publishPreparedCapabilityCommand); no
+ * capabilityPublications row is ever written here directly. Every id, slug and
+ * price is fixed, so a rerun finds the existing publication through
+ * by_publicationRef_and_revision and reports `created: false`.
+ */
+const SANDBOX_TOOL_BUSINESS_SLUG = 'sandbox-aecon-reference'
+const SANDBOX_TOOL_LABEL = 'AEcon sandbox reference Tool'
+const SANDBOX_TOOL_CAPABILITY_ID = 'sandbox.aecon-reference'
+const SANDBOX_TOOL_OFFERING_ID = `capability-offering:${SANDBOX_TOOL_BUSINESS_SLUG}:v1`
+const SANDBOX_TOOL_BINDING_ID = `capability-binding:${SANDBOX_TOOL_BUSINESS_SLUG}:x402:v1`
+const SANDBOX_TOOL_ACCESS_PATH_REF = `access:${SANDBOX_TOOL_BUSINESS_SLUG}:x402`
+const SANDBOX_TOOL_ENDPOINT_URL = 'https://sandbox.aecon-reference.example/x402/reference'
+const SANDBOX_TOOL_METHOD = 'POST'
+const SANDBOX_TOOL_NETWORK_ID = 'ae:public'
+const SANDBOX_TOOL_SOURCE_REVISION = `seed:sandbox:${SANDBOX_TOOL_BUSINESS_SLUG}:v1`
+const SANDBOX_TOOL_EVIDENCE_REF = `private:evidence:dev-seed:${SANDBOX_TOOL_BUSINESS_SLUG}`
+// The sandbox commercial-policy fixture every sandbox money gate resolves to
+// (src/modules/money/internal/commercial-policy.ts). Declared on the seeded
+// Tool so the fixture the Quote path admits is visible in the seed itself.
+const SANDBOX_TOOL_COMMERCIAL_FIXTURE = 'managed_x402_deterministic_v1'
+// AUD 1.00 at the exponent every publication price uses.
+const SANDBOX_TOOL_PRICE_UNITS = '1000000'
+const SANDBOX_TOOL_READINESS_TTL_MS = 60 * 60 * 1000
+
+const SANDBOX_TOOL_FIXTURE: DevSeedBusinessFixture = {
+  requestedSlug: SANDBOX_TOOL_BUSINESS_SLUG,
+  businessName: 'AEcon sandbox reference provider',
+  category: 'API services',
+  suburb: 'Sandbox',
+  stateTerritory: 'External',
+  ownerMessage: 'Sandbox-only reference provider seeded for local Quote bring-up.',
+  sourceLabel: `Sandbox reference fixture ${SANDBOX_TOOL_COMMERCIAL_FIXTURE} https://sandbox.aecon-reference.example/`,
+  offerings: [{
+    name: SANDBOX_TOOL_LABEL,
+    category: 'API services',
+    summary: 'Deterministic sandbox Tool that returns one structured reference result.',
+    serviceAreaSummary: 'Sandbox network only',
+    availabilitySummary: 'Always available in the sandbox environment',
+    accessPaths: [],
+    firstRequestMode: 'not_available_yet',
+    publicDisclosure: 'This sandbox provider is reached programmatically, not by human request.',
+    noContactReason: 'Sandbox fixture provider publishes no human contact path.',
+  }],
+}
+
+function sandboxToolContractDocumentJson(): string {
+  return JSON.stringify({
+    contractFormat: 'ae.capability-contract:v2',
+    capabilityId: SANDBOX_TOOL_CAPABILITY_ID,
+    version: 1,
+    name: SANDBOX_TOOL_LABEL,
+    description: 'Return a deterministic sandbox reference result for a structured request.',
+    inputSchema: {
+      $schema: 'https://json-schema.org/draft/2020-12/schema',
+      type: 'object',
+      properties: { request: { type: 'string', minLength: 1 } },
+      required: ['request'],
+      additionalProperties: false,
+    },
+    outputSchema: {
+      $schema: 'https://json-schema.org/draft/2020-12/schema',
+      type: 'object',
+      properties: { result: { type: 'string' } },
+      required: ['result'],
+      additionalProperties: false,
+    },
+    customerAnnotations: [
+      { annotationId: 'request', document: 'input', pointer: '/request', label: 'Request', role: 'request' },
+      { annotationId: 'result', document: 'output', pointer: '/result', label: 'Result', role: 'completion_evidence' },
+    ],
+    dataUse: [{
+      effectId: 'request_release',
+      inputPointer: '/request',
+      classification: 'personal',
+      phase: 'execution',
+      recipient: { kind: 'selected_binding' },
+      purposes: ['return_requested_result'],
+    }],
+    effects: [{
+      effectId: 'request_release',
+      class: 'data_release',
+      authority: 'mandate_or_explicit',
+      reversibility: 'irreversible',
+    }],
+    evidence: [{ evidenceId: 'result', outputPointer: '/result', purpose: 'completion' }],
+    lifecycle: { idempotency: 'required', recovery: 'retry_safe' },
+  })
+}
+
+type SandboxToolCatalogOrigin = Readonly<{
+  kind: 'catalog_offering'
+  offeringRef: string
+  offeringRevision: number
+  offeringSourceHash: string
+  declaredAccessPathRef: string
+  accessPathSourceHash: string
+}>
+
+/**
+ * Publishes the catalog side of the sandbox Tool through the same system
+ * offering commands the dev catalog already uses, then returns the exact
+ * catalog origin the publication must bind to.
+ */
+async function ensureSandboxToolCatalogOrigin(
+  ctx: MutationCtx,
+  owningAccountRef: string,
+  now: number,
+): Promise<{ businessId: Id<'businesses'>; origin: SandboxToolCatalogOrigin }> {
+  const bundle = buildDevSeedCatalogState([SANDBOX_TOOL_FIXTURE], owningAccountRef)
+  const persisted = await persistDevSeedCatalogState(ctx.db, bundle, owningAccountRef)
+  const businessId = persisted.businessIdsBySlug[SANDBOX_TOOL_BUSINESS_SLUG]
+  if (businessId === undefined) throw new Error('dev_seed_sandbox_tool_business_missing')
+  const offeringRef = bundle.state.offerings[0]?.offeringRef
+  if (offeringRef === undefined) throw new Error('dev_seed_sandbox_tool_offering_missing')
+
+  const offering = await ctx.db.query('businessOfferings')
+    .withIndex('by_offeringRef', (query) => query.eq('offeringRef', offeringRef))
+    .unique()
+  if (offering === null) throw new Error('dev_seed_sandbox_tool_offering_missing')
+  const existingPath = await ctx.db.query('offeringAccessPaths')
+    .withIndex('by_accessPathRef', (query) => query.eq('accessPathRef', SANDBOX_TOOL_ACCESS_PATH_REF))
+    .unique()
+  if (existingPath === null
+    || existingPath.status !== 'published'
+    || existingPath.offeringRevision !== offering.currentRevision) {
+    const upserted = await upsertOfferingAccessPathCommand(ctx, {
+      businessId,
+      offeringRef,
+      accessPathRef: SANDBOX_TOOL_ACCESS_PATH_REF,
+      expectedRevision: offering.currentRevision,
+      operationKey: `seed:sandbox-tool-access-path:${SANDBOX_TOOL_BUSINESS_SLUG}:${offering.currentRevision}`,
+      descriptor: {
+        kind: 'external_operation',
+        name: SANDBOX_TOOL_LABEL,
+        summary: 'Sandbox x402 access path for the seeded reference Tool.',
+        url: SANDBOX_TOOL_ENDPOINT_URL,
+        method: SANDBOX_TOOL_METHOD,
+        authenticationSummary: `Sandbox x402 fixture ${SANDBOX_TOOL_COMMERCIAL_FIXTURE}.`,
+        provenance: 'business_declared',
+      },
+    }, now)
+    if (upserted.kind === 'error') {
+      throw new Error(`dev_seed_sandbox_tool_access_path_${upserted.code}`)
+    }
+  }
+
+  const [revision, accessPath] = await Promise.all([
+    ctx.db.query('businessOfferingRevisions')
+      .withIndex('by_offeringRef_and_revision', (query) => (
+        query.eq('offeringRef', offeringRef).eq('revision', offering.currentRevision)
+      ))
+      .unique(),
+    ctx.db.query('offeringAccessPaths')
+      .withIndex('by_accessPathRef', (query) => query.eq('accessPathRef', SANDBOX_TOOL_ACCESS_PATH_REF))
+      .unique(),
+  ])
+  if (revision === null) throw new Error('dev_seed_sandbox_tool_revision_missing')
+  if (accessPath === null) throw new Error('dev_seed_sandbox_tool_access_path_missing')
+  return {
+    businessId,
+    origin: {
+      kind: 'catalog_offering',
+      offeringRef,
+      offeringRevision: offering.currentRevision,
+      offeringSourceHash: revision.sourceHash,
+      declaredAccessPathRef: accessPath.accessPathRef,
+      accessPathSourceHash: accessPath.sourceHash,
+    },
+  }
+}
+
+export const publishSandboxTool = internalMutation({
+  args: {},
+  returns: v.object({
+    created: v.boolean(),
+    publicationId: v.string(),
+    publicationRevision: v.number(),
+    toolRef: v.string(),
+    businessSlug: v.string(),
+  }),
+  handler: async (ctx) => {
+    // Same deployment guard the money seed uses: never seed sandbox supply into
+    // a deployment whose bypass owner account already carries a production agent.
+    await requireLocalE2EOwnerAuthority(ctx)
+    const evidenceRefs = [SANDBOX_TOOL_EVIDENCE_REF]
+    const existing = await ctx.db.query('capabilityPublications')
+      .withIndex('by_publicationRef_and_revision', (query) => (
+        query.eq('publicationRef', SANDBOX_TOOL_OFFERING_ID).eq('revision', 1)
+      ))
+      .unique()
+
+    const target = existing !== null
+      ? {
+          created: false,
+          publicationRef: existing.publicationRef,
+          publicationRevision: existing.revision,
+          toolRef: existing.toolRef,
+        }
+      : await createSandboxToolPublication(ctx, evidenceRefs)
+
+    // The publish command only schedules a readiness probe, and the fixture
+    // endpoint is not reachable from a local stack: that probe can only ever
+    // land `unavailable` over the seeded fact, and the readiness window is
+    // shorter than the gap between two local boots. So re-assert the sandbox
+    // readiness fact on EVERY invocation - not just the run that created the
+    // publication - through the documented curated-seed helper, so each boot
+    // leaves the Tool routeable for Quote instead of `readiness_unobserved`.
+    const observed = await observeCapabilityReadinessHandler(ctx, {
+      publicationRef: target.publicationRef,
+      expectedRevision: target.publicationRevision,
+      credentialState: 'ready',
+      healthState: 'healthy',
+      validUntil: Date.now() + SANDBOX_TOOL_READINESS_TTL_MS,
+      operationKey: `seed:sandbox-tool-readiness:${SANDBOX_TOOL_BUSINESS_SLUG}:${target.publicationRevision}`,
+      correlationId: `seed:sandbox-tool:${SANDBOX_TOOL_BUSINESS_SLUG}`,
+      reasonCode: 'dev_seed_sandbox_tool_readiness',
+      evidenceRefs: [...evidenceRefs],
+    })
+    if (observed.kind === 'refused') {
+      throw new Error(`dev_seed_sandbox_tool_readiness_refused:${observed.reason}`)
+    }
+
+    return {
+      created: target.created,
+      publicationId: target.publicationRef,
+      publicationRevision: target.publicationRevision,
+      toolRef: target.toolRef,
+      businessSlug: SANDBOX_TOOL_BUSINESS_SLUG,
+    }
+  },
+})
+
+async function createSandboxToolPublication(
+  ctx: MutationCtx,
+  evidenceRefs: readonly string[],
+): Promise<{ created: true; publicationRef: string; publicationRevision: number; toolRef: string }> {
+  await provisionDevSeedCatalogIdentityRows(ctx)
+  const authority = await admitDevSeedCatalogAuthority(ctx, 'publishSandboxTool')
+  const now = Date.now()
+  const { businessId, origin } = await ensureSandboxToolCatalogOrigin(ctx, authority.accountRef, now)
+
+  const offering = {
+    offeringId: SANDBOX_TOOL_OFFERING_ID,
+    networkId: SANDBOX_TOOL_NETWORK_ID,
+    origin,
+    presentation: {
+      label: SANDBOX_TOOL_LABEL,
+      summary: 'Deterministic sandbox Tool that returns one structured reference result.',
+      price: {
+        kind: 'fixed' as const,
+        amount: { currency: 'AUD' as const, units: SANDBOX_TOOL_PRICE_UNITS, exponent: 6 },
+      },
+      materialTerms: [{
+        termId: 'sandbox-fixture',
+        label: 'Sandbox commercial fixture',
+        value: SANDBOX_TOOL_COMMERCIAL_FIXTURE,
+      }],
+      commercialRelationship: {
+        kind: 'none' as const,
+        summary: 'Sandbox fixture supply with no commercial influence.',
+        influencesEligibility: false,
+        influencesInclusion: false,
+        influencesOrder: false,
+        evidenceRefs: [...evidenceRefs],
+      },
+    },
+    searchTerms: ['sandbox', 'sandbox reference tool', SANDBOX_TOOL_COMMERCIAL_FIXTURE],
+    registrationEvidenceRefs: [...evidenceRefs],
+  }
+  const binding = {
+    bindingId: SANDBOX_TOOL_BINDING_ID,
+    endpointUrl: SANDBOX_TOOL_ENDPOINT_URL,
+    authority: { kind: 'public_upstream' as const },
+    continuation: { kind: 'single_response' as const, evidenceRefs: [...evidenceRefs] },
+    cancellation: { kind: 'unsupported' as const, evidenceRefs: [...evidenceRefs] },
+    adapter: {
+      adapterId: 'http-json:v1',
+      config: { method: SANDBOX_TOOL_METHOD, requestTimeoutMs: 10_000 },
+    },
+    registrationEvidenceRefs: [...evidenceRefs],
+  }
+  const published = await publishCapabilityForSeed(ctx, {
+    businessId: String(businessId),
+    runtimeEnvironment: 'sandbox',
+    source: {
+      kind: 'ae_envelope',
+      documentJson: sandboxToolContractDocumentJson(),
+      offering,
+      binding,
+      evidenceRefs: [...evidenceRefs],
+    },
+    sourceRevision: SANDBOX_TOOL_SOURCE_REVISION,
+    offering,
+    binding,
+    origin,
+    operationKey: `seed:sandbox-tool-publish:${SANDBOX_TOOL_BUSINESS_SLUG}:v1`,
+    correlationId: `seed:sandbox-tool:${SANDBOX_TOOL_BUSINESS_SLUG}`,
+    reasonCode: 'dev_seed_sandbox_tool',
+    evidenceRefs: [...evidenceRefs],
+    now,
+  })
+  if (published.kind === 'refused') {
+    throw new Error(`dev_seed_sandbox_tool_publish_refused:${published.reason}`)
+  }
+  return {
+    created: true,
+    publicationRef: published.publicationRef,
+    publicationRevision: published.publicationRevision,
+    toolRef: published.toolRef,
+  }
+}
+
+/*
+ * Sandbox money authority for the local bypass owner.
+ *
+ * The agent side of Quote authority belongs to `ae connect` (see the shape (a)
+ * note above `requireLocalE2EOwnerAuthority`): that flow writes the canonical
+ * agent Principal, its delegation root and its agentAccessGrants row, and Quote
+ * resolves all three live. The one fact `ae connect` never writes is the owning
+ * account's money identity, so this seeds exactly that - the
+ * moneyLegalCustomerBindings row `capabilityQuotes.prepareFinancialSubjects`
+ * reads - through its own command (`resolveAndBindLegalCustomer`,
+ * convex/lib/moneyLegalCustomer.ts). Nothing behind that command is patched,
+ * and no secret material is written.
+ */
+export const seedSandboxSpendingPolicy = internalMutation({
+  args: {},
+  returns: v.object({
+    created: v.boolean(),
+    accountRef: v.string(),
+    legalCustomerRef: v.string(),
+  }),
+  handler: async (ctx) => {
+    const owner = await requireLocalE2EOwnerAuthority(ctx)
+    const existing = await ctx.db.query('moneyLegalCustomerBindings')
+      .withIndex('by_accountRef', (query) => query.eq('accountRef', owner.accountRef))
+      .unique()
+    const bound = await resolveAndBindLegalCustomer(ctx, owner.accountRef, Date.now())
+    if (bound.kind === 'refused') {
+      throw new Error(`dev_seed_sandbox_legal_customer_${bound.code}`)
+    }
+    return {
+      created: existing === null,
+      accountRef: owner.accountRef,
+      legalCustomerRef: bound.legalCustomerRef,
+    }
+  },
+})
