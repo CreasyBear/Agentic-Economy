@@ -19,7 +19,6 @@ import {
   reconcileWorkloadCronSnapshot,
   reconcileWorkloadCronSnapshotHandler,
   refreshAgenticEconomyApiRegistryHandler,
-  refreshAgenticMarketSnapshotsHandler,
   refreshCapabilitySupplyReadinessHandler,
   refreshCapabilitySupplyReadiness,
   refreshCurrentMarketPresenceHandler,
@@ -43,7 +42,6 @@ const EXPECTED_BINDINGS = {
   'cleanup expired source write nonces': 'workloadCron:cleanupExpiredSourceWriteNonces',
   'reconcile due facilitator invocations': 'workloadCron:reconcileDueFacilitatorInvocations',
   'refresh Agentic Economy API registry': 'workloadCron:refreshAgenticEconomyApiRegistry',
-  'refresh Agentic Market snapshots': 'workloadCron:refreshAgenticMarketSnapshots',
   'refresh capability supply readiness': 'workloadCron:refreshCapabilitySupplyReadiness',
   'refresh current market presence': 'workloadCron:refreshCurrentMarketPresence',
   'refresh facilitator discovery': 'workloadCron:refreshFacilitatorDiscovery',
@@ -52,7 +50,6 @@ const EXPECTED_BINDINGS = {
 const ACTION_HANDLERS = [
   reconcileDueFacilitatorInvocationsHandler,
   refreshFacilitatorDiscoveryHandler,
-  refreshAgenticMarketSnapshotsHandler,
   refreshAgenticEconomyApiRegistryHandler,
 ] as const
 
@@ -79,7 +76,7 @@ describe('System workload cron boundary', () => {
   })
 
   it('declares every cron as one canonical workload Principal and Account with no exemption', () => {
-    expect(WORKLOAD_CRON_DECLARATIONS).toHaveLength(8)
+    expect(WORKLOAD_CRON_DECLARATIONS).toHaveLength(7)
     expect(WORKLOAD_CRON_DECLARATIONS.map(({ name }) => name).sort()).toEqual(Object.keys(EXPECTED_BINDINGS).sort())
     expect(WORKLOAD_CRON_DECLARATIONS.every((declaration) => (
       declaration.authority === 'canonical_workload'
@@ -335,9 +332,9 @@ describe('System workload cron boundary', () => {
     for (const handler of ACTION_HANDLERS) await expect(handler(context.action())).resolves.toBeNull()
     for (const handler of MUTATION_HANDLERS) await expect(handler(context.mutation())).resolves.toBeNull()
 
-    expect(context.admissions).toEqual([...WORKLOAD_CRON_DECLARATIONS.slice(0, 4).map(({ name }) => name), 'refresh Agentic Economy API registry'])
-    expect(context.dispatches).toHaveLength(9)
-    expect([...context.db.queries].sort()).toEqual(Array.from({ length: 9 }, () => [
+    expect(context.admissions).toEqual(WORKLOAD_CRON_DECLARATIONS.slice(0, 3).map(({ name }) => name))
+    expect(context.dispatches).toHaveLength(7)
+    expect([...context.db.queries].sort()).toEqual(Array.from({ length: 7 }, () => [
       'principals',
       'accounts',
       'accountOwnerships',

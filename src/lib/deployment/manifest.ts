@@ -250,7 +250,6 @@ export const DEPLOYMENT_MANIFEST = Object.freeze({
         'cleanup expired source write nonces',
         'reconcile due facilitator invocations',
         'refresh Agentic Economy API registry',
-        'refresh Agentic Market snapshots',
         'refresh capability supply readiness',
         'refresh current market presence',
       ]),

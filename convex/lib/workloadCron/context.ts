@@ -42,7 +42,6 @@ export const SYSTEM_WORKLOAD_MEMBERSHIP_REF = 'mem_f2000000000000000000000000000
 export const WORKLOAD_CRON_DECLARATIONS = [
   declaration('reconcile due facilitator invocations', 'reconciliation', 'reconcileDueFacilitatorInvocations'),
   declaration('refresh facilitator discovery', 'cron', 'refreshFacilitatorDiscovery'),
-  declaration('refresh Agentic Market snapshots', 'cron', 'refreshAgenticMarketSnapshots'),
   declaration('refresh Agentic Economy API registry', 'cron', 'refreshAgenticEconomyApiRegistry'),
   declaration('refresh current market presence', 'cron', 'refreshCurrentMarketPresence'),
   declaration('refresh capability supply readiness', 'cron', 'refreshCapabilitySupplyReadiness'),
@@ -83,7 +82,6 @@ export class WorkloadCronBoundaryError extends Error {
 export const workloadCronNameValue = v.union(
   v.literal('reconcile due facilitator invocations'),
   v.literal('refresh facilitator discovery'),
-  v.literal('refresh Agentic Market snapshots'),
   v.literal('refresh Agentic Economy API registry'),
   v.literal('refresh current market presence'),
   v.literal('refresh capability supply readiness'),

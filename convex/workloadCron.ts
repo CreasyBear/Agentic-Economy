@@ -454,20 +454,8 @@ export async function refreshFacilitatorDiscoveryHandler(ctx: WorkloadCronAction
   )
 }
 
-export async function refreshAgenticMarketSnapshotsHandler(ctx: WorkloadCronActionContext): Promise<null> {
-  return await runAdmittedAction(
-    ctx,
-    'refresh Agentic Market snapshots',
-    internal.marketExternalRefresh.run,
-    {},
-  )
-}
-
 export async function refreshAgenticEconomyApiRegistryHandler(ctx: WorkloadCronActionContext): Promise<null> {
-  await Promise.all([
-    runAdmittedAction(ctx, 'refresh Agentic Economy API registry', internal.marketExternalRegistryRefresh.run, {}),
-    runAdmittedAction(ctx, 'refresh Agentic Economy API registry', internal.x402DirectoryIndexRefresh.start, {}),
-  ])
+  await runAdmittedAction(ctx, 'refresh Agentic Economy API registry', internal.x402DirectoryIndexRefresh.start, {})
   return null
 }
 
@@ -523,12 +511,6 @@ export const refreshFacilitatorDiscovery = internalAction({
   args: {},
   returns: v.null(),
   handler: refreshFacilitatorDiscoveryHandler,
-})
-
-export const refreshAgenticMarketSnapshots = internalAction({
-  args: {},
-  returns: v.null(),
-  handler: refreshAgenticMarketSnapshotsHandler,
 })
 
 export const refreshAgenticEconomyApiRegistry = internalAction({

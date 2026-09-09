@@ -15,14 +15,6 @@ crons.interval(
 
 // Bazaar pages are admitted on demand through capabilityToolCatalog.
 
-
-crons.interval(
-  'refresh Agentic Market snapshots',
-  { hours: 6 },
-  internal.workloadCron.refreshAgenticMarketSnapshots,
-  {},
-)
-
 crons.interval(
   'refresh Agentic Economy API registry',
   { hours: 24 },
