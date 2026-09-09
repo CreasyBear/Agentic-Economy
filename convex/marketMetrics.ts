@@ -4,6 +4,10 @@ import { query } from "./_generated/server";
 import { countMarketEvidence } from "./marketEvidence";
 import { countMarketPresence } from "./marketPresence";
 
+// First-party market metrics read: aggregates Agentic Economy write-seam
+// evidence (invocations, settlements, qualified uses, presence) into the
+// counts the market page renders. There is no external/third-party snapshot
+// source; AEcon does not yet publish one.
 const marketWindowValue = v.union(
   v.literal("24h"),
   v.literal("7d"),
@@ -21,7 +25,6 @@ const firstPartyCountsValue = v.object({
 export const read = query({
   args: { window: marketWindowValue, now: v.number() },
   returns: v.object({
-    snapshot: v.null(),
     generatedAt: v.number(),
     firstPartyAvailable: v.boolean(),
     firstParty: firstPartyCountsValue,
@@ -47,7 +50,6 @@ export const read = query({
       countMarketPresence(ctx),
     ]);
     return {
-      snapshot: null,
       generatedAt: args.now,
       firstPartyAvailable: true,
       firstParty: {

@@ -18,6 +18,38 @@ const overview = sourceQuery<Record<string, never>, X402DirectoryCatalogueOvervi
 const resource = sourceQuery<{ resource: string }, X402DirectoryCatalogueResource>('x402DirectoryIndex:resource')
 const analytics = sourceQuery<{ network?: string }, X402DirectoryAnalytics>('x402DirectoryIndex:analytics')
 
+type DirectoryStatus = {
+  kind: 'unavailable' | 'ready'
+  coverage?: { generation: string; completedAt: number }
+  refreshState: 'none' | 'refreshing' | 'complete' | 'failed'
+  lastError?: string
+}
+const status = sourceQuery<Record<string, never>, DirectoryStatus>('x402DirectoryIndex:status')
+
+export const CATALOGUE_STALE_AFTER_MS = 36 * 60 * 60 * 1000
+
+export function catalogueFreshness(directoryStatus: DirectoryStatus, now: number) {
+  const completedAt = directoryStatus.coverage?.completedAt
+  const state = directoryStatus.kind === 'unavailable' || completedAt === undefined
+    ? 'absent' as const
+    : directoryStatus.refreshState === 'failed'
+      ? 'failed' as const
+      : now - completedAt > CATALOGUE_STALE_AFTER_MS
+        ? 'stale' as const
+        : 'fresh' as const
+  return {
+    schemaVersion: 'catalogue-status:v1' as const,
+    status: state,
+    refreshState: directoryStatus.refreshState,
+    ...(directoryStatus.coverage === undefined ? {} : { generation: directoryStatus.coverage.generation, completedAt: directoryStatus.coverage.completedAt, ageHours: Math.round((now - directoryStatus.coverage.completedAt) / 3_600_000) }),
+    ...(directoryStatus.lastError === undefined ? {} : { lastError: directoryStatus.lastError }),
+  }
+}
+export async function readCatalogueFreshness(now: number = Date.now()): Promise<ReturnType<typeof catalogueFreshness>> {
+  const result = await callPublicSourceQuery(status, {})
+  return catalogueFreshness(result, now)
+}
+
 export async function readX402DirectoryCatalogue(input: X402DirectoryCatalogueInput): Promise<X402DirectoryCatalogue> {
   const parsed = x402DirectoryCatalogueInputSchema.safeParse(input)
   if (!parsed.success) return { kind: 'unavailable', reason: 'query_invalid' }

@@ -5,7 +5,6 @@ import type {
   PublicToolDescriptor,
 } from "@/modules/capability-supply/public";
 import {
-  marketSourceStatus,
   type AgenticEconomyProjection,
   type MarketMetricProjection,
   type MarketPageProjection,
@@ -31,7 +30,6 @@ const compactNumberFormatter = new Intl.NumberFormat("en", {
 });
 
 type MarketSourceRead = Readonly<{
-  snapshot: null;
   generatedAt: number;
   firstPartyAvailable: boolean;
   firstParty: Readonly<{
@@ -48,7 +46,7 @@ type MarketSourceRead = Readonly<{
 const readMarket = sourceQuery<
   { window: MarketWindow; now: number },
   MarketSourceRead
->("marketExternalSnapshots:read");
+>("marketMetrics:read");
 
 const readListingEvidence = sourceQuery<
   { toolRefs: string[]; since: number },
@@ -162,27 +160,19 @@ export async function readMarketPageProjection(
   return {
     window,
     generatedAt,
-    x402Ecosystem: externalProjection(source, source.generatedAt),
+    x402Ecosystem: externalProjection(),
     agenticEconomy: firstPartyProjection(source, generatedAt),
   };
 }
 
-function externalProjection(
-  source: MarketSourceRead,
-  now: number,
-): X402EcosystemProjection {
-  const status = marketSourceStatus(undefined, now);
+function externalProjection(): X402EcosystemProjection {
   return {
     label: "Indexed x402 activity via AEcon directory" as const,
     source: "AEcon directory" as const,
     sourceUrl: "/market" as const,
-    status,
+    status: "unavailable",
     statusDetail:
-      status === "live"
-        ? "The latest bounded snapshot is current."
-        : status === "delayed"
-          ? "The last-known-good snapshot is more than ten minutes old."
-          : "AEcon does not yet publish an x402 ecosystem snapshot; first-party counts below are live.",
+      "AEcon does not yet publish an x402 ecosystem snapshot; first-party counts below are live.",
     metrics: [],
     daily: [],
     recentActivity: [],
@@ -375,7 +365,6 @@ function firstPartyMetric(
 
 function emptyMarketSource(now: number): MarketSourceRead {
   return {
-    snapshot: null,
     generatedAt: now,
     firstPartyAvailable: false,
     firstParty: {

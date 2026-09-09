@@ -2,7 +2,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { setPublicSourceTransportForTests } from '@/lib/server/convex-source'
 import { setHttpRateLimitAdmissionForTests } from '@/lib/server/rate-limit'
-import { handleCatalogueStatusRequest, catalogueFreshness, CATALOGUE_STALE_AFTER_MS } from '@/routes/api.v1.catalogue-status'
+import { catalogueFreshness, CATALOGUE_STALE_AFTER_MS } from '@/modules/market/x402-directory-index.server'
+import { handleCatalogueStatusRequest } from '@/routes/api.v1.catalogue-status'
 
 describe('catalogue-status route', () => {
   afterEach(() => {

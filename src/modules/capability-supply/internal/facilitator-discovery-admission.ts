@@ -19,12 +19,11 @@ import {
 export async function admitFacilitatorDiscoveryItems(
   items: readonly unknown[],
 ): Promise<FacilitatorDiscoveryAdmissionResult> {
-  return admitItems(items, "facilitator-discovery");
+  return admitItems(items);
 }
 
 async function admitItems(
   items: readonly unknown[],
-  revisionNamespace: "facilitator-discovery",
 ): Promise<FacilitatorDiscoveryAdmissionResult> {
   const admitted: FacilitatorDiscoveryAdmittedDraft[] = [];
   const skipped: FacilitatorDiscoverySkip[] = [];
@@ -42,7 +41,7 @@ async function admitItems(
       skipped.push(decision);
       continue;
     }
-    const sourceRevision = `${revisionNamespace}:v1:${canonicalDigest({
+    const sourceRevision = `facilitator-discovery:v1:${canonicalDigest({
       route: {
         method: decision.identity.method,
         resourceUrl: decision.identity.resourceUrl,

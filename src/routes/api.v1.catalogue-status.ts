@@ -1,20 +1,12 @@
 import { createFileRoute } from '@tanstack/react-router'
 
 import { kindForStatus } from '@/lib/errors'
-import { callPublicSourceQuery, ConvexSourceError, sourceQuery } from '@/lib/server/convex-source'
+import { ConvexSourceError } from '@/lib/server/convex-source'
 import { methodNotAllowed } from '@/lib/server/method-guard'
 import { problem } from '@/lib/server/problem'
 import { withHttpRateLimit } from '@/lib/server/rate-limit'
 import { runWithRequestCorrelation, withRequestCorrelationHeader } from '@/lib/server/request-correlation'
-
-type DirectoryStatus = {
-  kind: 'unavailable' | 'ready'
-  coverage?: { generation: string; completedAt: number }
-  refreshState: 'none' | 'refreshing' | 'complete' | 'failed'
-  lastError?: string
-}
-
-const directoryStatus = sourceQuery<Record<string, never>, DirectoryStatus>('x402DirectoryIndex:status')
+import { readCatalogueFreshness } from '@/modules/market/x402-directory-index.server'
 
 export const Route = createFileRoute('/api/v1/catalogue-status')({
   server: {
@@ -37,8 +29,7 @@ export async function handleCatalogueStatusRequest(request: Request, head = fals
     let response: Response
     try {
       response = await withHttpRateLimit(request, 'public-read', async () => {
-        const status = await callPublicSourceQuery(directoryStatus, {})
-        const body = catalogueFreshness(status, Date.now())
+        const body = await readCatalogueFreshness(Date.now())
         const headers = { 'Cache-Control': 'no-store' }
         return head ? new Response(null, { status: 200, headers }) : Response.json(body, { headers })
       })
@@ -47,26 +38,6 @@ export async function handleCatalogueStatusRequest(request: Request, head = fals
     }
     return withRequestCorrelationHeader(response, correlationId)
   })
-}
-
-export const CATALOGUE_STALE_AFTER_MS = 36 * 60 * 60 * 1000
-
-export function catalogueFreshness(status: DirectoryStatus, now: number) {
-  const completedAt = status.coverage?.completedAt
-  const state = status.kind === 'unavailable' || completedAt === undefined
-    ? 'absent' as const
-    : status.refreshState === 'failed'
-      ? 'failed' as const
-      : now - completedAt > CATALOGUE_STALE_AFTER_MS
-        ? 'stale' as const
-        : 'fresh' as const
-  return {
-    schemaVersion: 'catalogue-status:v1' as const,
-    status: state,
-    refreshState: status.refreshState,
-    ...(status.coverage === undefined ? {} : { generation: status.coverage.generation, completedAt: status.coverage.completedAt, ageHours: Math.round((now - status.coverage.completedAt) / 3_600_000) }),
-    ...(status.lastError === undefined ? {} : { lastError: status.lastError }),
-  }
 }
 
 function catalogueStatusError(error: unknown): Response {
