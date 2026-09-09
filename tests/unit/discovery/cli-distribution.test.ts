@@ -1,4 +1,4 @@
-import { access, readFile } from 'node:fs/promises'
+import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
@@ -19,7 +19,7 @@ import {
 
 describe('CLI distribution', () => {
   it('derives the versioned archive and setup commands from the CLI package', async () => {
-    const cliPackage = JSON.parse(await readFile(resolve('packages/cli/package.json'), 'utf8')) as { version: string }
+    const cliPackage = JSON.parse(await readFile(resolve('packages/cli/package.json'), 'utf8')) as { name: string; version: string }
 
     expect(AE_CLI_VERSION).toBe(cliPackage.version)
     expect(AE_CLI_ARCHIVE_FILENAME).toBe(`agentic-economy-cli-${cliPackage.version}.tgz`)
@@ -51,6 +51,8 @@ describe('CLI distribution', () => {
     expect(aeMcpListCommand('claude-code')).toBe('claude mcp get agentic-economy')
     expect(aeMcpListCommand('cursor')).toBe('cursor --status')
 
-    await expect(access(resolve('public/downloads', AE_CLI_ARCHIVE_FILENAME))).resolves.toBeUndefined()
+    // Artifact existence is proven by npm run test:cli-package (reproducible pack) and the deploy-time build, not by the unit suite.
+    const npmPackFileName = `${cliPackage.name.replace(/^@/, '').replace('/', '-')}-${cliPackage.version}.tgz`
+    expect(AE_CLI_ARCHIVE_FILENAME).toBe(npmPackFileName)
   })
 })

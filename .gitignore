@@ -65,6 +65,9 @@ eval/parity/results.tsv
 # local ae CLI session state
 /.ae-cli/
 
+# Public CLI tarball is built at deploy time, not committed
+public/downloads/*.tgz
+
 # Convex snapshot zips are secrets-bearing; never commit
 *.convex-export.zip
 

@@ -123,8 +123,8 @@ describe('green release baseline', () => {
     expect(`${preflight.stdout}\n${preflight.stderr}`).not.toContain('RUN  v')
   })
 
-  it('executes every required source sub-gate through gate:release', () => {
-    const chain = releaseCommandChain('gate:release')
+  it('executes every required source sub-gate through gate', () => {
+    const chain = releaseCommandChain('gate')
     expect(releaseCommandChain('test:release:source')).toContain('npm run verify:deployment-manifest -- --environment development')
     for (const subGate of [
       'test:conformance',
@@ -145,11 +145,12 @@ describe('green release baseline', () => {
       'test:cli-package',
       'build',
     ]) {
-      expect(chain, `gate:release must execute ${subGate}`).toContain(`npm run ${subGate}`)
+      expect(chain, `gate must execute ${subGate}`).toContain(`npm run ${subGate}`)
     }
     const sourceScript = scripts['test:release:source']!
     const orderedSourceGates = [
       'verify:deployment-manifest',
+      'env:example:check',
       'test:conformance',
       'test:chat:conformance',
       'verify:convex-generated:anonymous',
@@ -164,6 +165,10 @@ describe('green release baseline', () => {
     const nodeGuard = 'node tools/dev/require-supported-node.mjs --'
     expect(scripts['generate:convex']).toBe(`${nodeGuard} convex codegen --typecheck=disable`)
     expect(scripts['check:convex-codegen']).toBe(`${nodeGuard} convex codegen --dry-run --typecheck=disable`)
+    expect(scripts['gate']).toBe(`${nodeGuard} npm run test:release:source`)
+    expect(scripts['dev:local']).toBe(`${nodeGuard} node tools/dev/local-dev.mjs`)
+    expect(scripts['test:all']).toBeUndefined()
+    expect(scripts['gate:release']).toBeUndefined()
     expect(scripts['verify:convex-generated:anonymous']).toBe(
       'tsx tools/release/verify-convex-generated-anonymous.ts',
     )
@@ -258,6 +263,9 @@ describe('green release baseline', () => {
       } else if (artifactName.includes('chat-staging-smoke')) {
         expect(upload.if).toBe('always()')
         expect(upload.with?.path).toBe('output/release/playwright-chat-staging-smoke.json')
+      } else if (artifactName.includes('fresh-checkout-proof')) {
+        expect(upload.if).toBe('always()')
+        expect(upload.with?.path).toBe('output/fresh-checkout/')
       } else {
         expect(upload.if).toBe('always()')
         expect(artifactName).toContain('source-release-gate')
@@ -446,6 +454,64 @@ describe('green release baseline', () => {
     expect(live?.env?.AE_X402_CUSTODY_ENABLED).toBe('true')
     expect(live?.env?.AE_X402_CUSTODY_MAX_ATOMIC).toBe('${{ secrets.AE_X402_CUSTODY_MAX_ATOMIC }}')
     expect(live?.env?.AE_X402_RPC_URLS_JSON).toBe('${{ secrets.AE_X402_RPC_URLS_JSON }}')
+  })
+
+  it('proves a fresh checkout reaches a sellable local sandbox without secrets', () => {
+    const workflow = readWorkflow('.github/workflows/kernel-release-gate.yml')
+    const events = workflow.on ?? {}
+    const fresh = workflow.jobs?.['fresh-checkout-proof']
+    expect(fresh).toBeDefined()
+    expect(fresh?.if).toBeUndefined()
+    expect(fresh?.needs).toEqual([])
+    expect(fresh?.['timeout-minutes']).toBe(30)
+
+    const freshConfig = JSON.stringify(fresh ?? {})
+    expect(freshConfig).not.toContain('secrets.')
+
+    const source = workflow.jobs?.['source-proof']
+    // Same triggers as source-proof: neither job gates on an `if`, both run
+    // for every event this workflow listens for.
+    expect(source?.if).toBeUndefined()
+    expect(events).toHaveProperty('pull_request')
+    expect(events).toHaveProperty('merge_group')
+    expect(events.push).toEqual({ branches: ['main'] })
+
+    const start = fresh?.steps?.find((step) => step.name === 'Start local stack (anonymous)')
+    expect(start?.env).toMatchObject({
+      CONVEX_AGENT_MODE: 'anonymous',
+      CLERK_JWT_ISSUER_DOMAIN: 'https://release-proof.invalid',
+      CI: 'true',
+    })
+    expect(start?.run).toContain('npm run dev:local -- --skip-scan --no-doctor')
+    expect(start?.run).toContain('output/fresh-checkout/dev-local.log')
+    expect(start?.run).toContain('http://127.0.0.1:3024/api/ready')
+    expect(start?.run).toContain('DEV_LOCAL_PID=$!')
+    expect(start?.run).toContain('GITHUB_ENV')
+
+    const connect = fresh?.steps?.find((step) => step.name === 'Bind explicit test authority')
+    expect(connect?.run).toBe('npm run --silent ae -- connect --base-url http://127.0.0.1:3024 --json')
+
+    const doctor = fresh?.steps?.find((step) => step.name === 'Doctor')
+    expect(doctor?.run).toContain('npm run --silent ae -- doctor --json --base-url http://127.0.0.1:3024 > output/fresh-checkout/doctor.json')
+    expect(doctor?.run).toContain('groups.discovery !== "pass"')
+    expect(doctor?.run).toContain('groups.quoting !== "pass"')
+
+    const upload = fresh?.steps?.find((step) => step.name === 'Upload the fresh-checkout evidence')
+    expect(upload?.if).toBe('always()')
+    expect(upload?.with).toMatchObject({
+      path: 'output/fresh-checkout/',
+      'if-no-files-found': 'error',
+    })
+    expect(upload?.with?.name).toContain('${{ github.sha }}')
+    expect(upload?.with?.name).toContain('${{ github.run_id }}')
+
+    const stop = fresh?.steps?.find((step) => step.name === 'Stop local stack')
+    expect(stop?.if).toBe('always()')
+    expect(stop?.run).toContain('DEV_LOCAL_PID')
+
+    const cache = fresh?.steps?.find((step) => step.uses?.startsWith('actions/cache@'))
+    expect(cache?.with?.path).toBe('~/.cache/convex/binaries')
+    expect(cache?.with?.key).toContain('convex-backend-version.outputs.version')
   })
 
   it('keeps React Doctor explicitly advisory', () => {

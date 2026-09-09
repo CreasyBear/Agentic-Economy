@@ -108,6 +108,96 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+  fresh-checkout-proof:
+    name: Fresh checkout reaches a sellable local sandbox
+    needs: []
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: 'Announce deploy-guard target: local-anonymous'
+        run: "echo 'target: local-anonymous'"
+
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: npm
+
+      - name: Pin the repository package manager
+        run: npm install --global npm@11.5.1 --ignore-scripts
+
+      - name: Frozen dependency install
+        run: npm ci
+
+      - name: Resolve the Convex local backend binary version
+        id: convex-backend-version
+        run: |
+          version=$(node -e "console.log(require('./package-lock.json').packages['node_modules/convex'].version)")
+          echo "version=${version}" >> "${GITHUB_OUTPUT}"
+
+      - name: Cache the Convex local backend binary
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/convex/binaries
+          key: convex-local-backend-${{ runner.os }}-${{ steps.convex-backend-version.outputs.version }}
+
+      - name: Start local stack (anonymous)
+        env:
+          CONVEX_AGENT_MODE: anonymous
+          CLERK_JWT_ISSUER_DOMAIN: https://release-proof.invalid
+          CI: 'true'
+        run: |
+          mkdir -p output/fresh-checkout
+          npm run dev:local -- --skip-scan --no-doctor > output/fresh-checkout/dev-local.log 2>&1 &
+          echo "DEV_LOCAL_PID=$!" >> "${GITHUB_ENV}"
+          ready=''
+          for _ in $(seq 1 180); do
+            if curl -fsS http://127.0.0.1:3024/api/ready > /dev/null 2>&1; then
+              ready=1
+              break
+            fi
+            sleep 1
+          done
+          if [ -z "${ready}" ]; then
+            echo '::error::local stack did not answer http://127.0.0.1:3024/api/ready within 180s'
+            tail -n 200 output/fresh-checkout/dev-local.log || true
+            exit 1
+          fi
+
+      - name: Bind explicit test authority
+        run: npm run --silent ae -- connect --base-url http://127.0.0.1:3024 --json
+
+      - name: Doctor
+        run: |
+          npm run --silent ae -- doctor --json --base-url http://127.0.0.1:3024 > output/fresh-checkout/doctor.json
+          node -e '
+            const fs = require("fs");
+            const result = JSON.parse(fs.readFileSync("output/fresh-checkout/doctor.json", "utf8"));
+            const groups = result.groups || {};
+            if (groups.discovery !== "pass" || groups.quoting !== "pass") {
+              console.error(JSON.stringify(result, null, 2));
+              process.exit(1);
+            }
+            console.log("doctor groups pass:", JSON.stringify(groups));
+          '
+
+      - name: Upload the fresh-checkout evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ github.sha }}-${{ github.run_id }}-fresh-checkout-proof
+          path: output/fresh-checkout/
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Stop local stack
+        if: always()
+        run: |
+          if [ -n "${DEV_LOCAL_PID}" ]; then
+            kill -TERM -- -"${DEV_LOCAL_PID}" 2>/dev/null || kill -TERM "${DEV_LOCAL_PID}" 2>/dev/null || true
+          fi
+
   chat-staging-proof:
     if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.confirm_chat_staging_smoke == true
     name: Opt-in exact-revision Tool chat staging smoke
