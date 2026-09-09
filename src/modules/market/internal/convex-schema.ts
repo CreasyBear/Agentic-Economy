@@ -50,6 +50,7 @@ export const marketTables = {
     agenticMarketReported: v.optional(v.number()),
     agenticMarketFetched: v.optional(v.number()),
     tregReported: v.optional(v.number()),
+    tregFetched: v.optional(v.number()),
     analyticsStatsStatus: v.optional(v.union(v.literal('pending'), v.literal('ready'))),
   }).index('by_generation', ['generation']),
   marketExternalRegistryEntries: defineTable({

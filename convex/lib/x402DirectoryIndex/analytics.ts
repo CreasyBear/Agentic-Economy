@@ -54,6 +54,7 @@ function memberships(entry: X402DirectoryEntry, now: number): [string, string | 
   const keys: [string, string | number][] = [['adoption', directoryAdoptionBand(entry.activity?.payers30d)], ['depth', directoryDepthBand(entry.activity?.calls30d, entry.activity?.payers30d)], ['recency', directoryRecencyBand(entry.activity?.lastCalledAt, now)]]
   for (const tag of new Set(entry.tags ?? [])) keys.push(['tag', tag])
   for (const bundle of new Set(entry.bundleSlugs ?? [])) keys.push(['bundle', bundle])
+  for (const [flag, present] of Object.entries(directoryMetadataFlags(entry))) if (present) keys.push(['metadata', flag])
   if (entry.curated) keys.push(['metadata', 'curated'])
   for (const network of ['*', ...new Set(entry.prices.map(price => directoryNetwork(price.network)))]) {
     const price = minimumDirectoryUsdPrice(entry, network === '*' ? undefined : network)
