@@ -160,7 +160,7 @@ describe('public external registry route', () => {
       coverage: { entries: 2, completedAt: 1 },
       page: [{
         documentId: `registry:${'a'.repeat(64)}`,
-        sourceUrl: 'https://treg.to/catalog/endpoints/companies.search',
+        sourceUrl: 'https://example.test/catalog/endpoints/companies.search',
         name: 'Companies search',
         summary: 'Search company data.',
         provider: 'Treg provider',
@@ -189,7 +189,7 @@ describe('public external registry route', () => {
       'public, max-age=60, stale-while-revalidate=240',
     )
     await expect(get.json()).resolves.toMatchObject({
-      schemaVersion: 'api-registry:v1',
+      schemaVersion: 'api-registry:v2',
       query: 'companies',
       access: 'provider_account',
       kind: 'ok',
@@ -244,7 +244,7 @@ describe('public external registry route', () => {
     )
     expect(unavailable.status).toBe(200)
     await expect(unavailable.json()).resolves.toMatchObject({
-      schemaVersion: 'api-registry:v1',
+      schemaVersion: 'api-registry:v2',
       kind: 'unavailable',
     })
   })

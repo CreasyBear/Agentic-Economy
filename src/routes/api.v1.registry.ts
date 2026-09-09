@@ -97,7 +97,7 @@ export async function handleApiRegistryRequest(
           ? new Response(null, { status: 200, headers })
           : Response.json(
               {
-                schemaVersion: 'api-registry:v1',
+                schemaVersion: 'api-registry:v2',
                 query: parsed.data.query,
                 access: parsed.data.access,
                 ...projection,
