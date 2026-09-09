@@ -57,4 +57,42 @@ describe('scheduledFunctionRetirement.retireRegistrySources', () => {
     }))
     expect(remaining).toEqual({ state: ['coinbase'], generations: ['coinbase-a'], snapshots: 0 })
   })
+
+  it('walks retired sources by index so kept coinbase rows never stall the batch', async () => {
+    const t = convexTest(schema, modules)
+    const entry = (generation: string, source: 'coinbase' | 'treg' | 'agentic_market', n: number) => ({
+      generation,
+      documentId: `${source}-${n}`,
+      source,
+      upstreamServiceId: 's',
+      upstreamEndpointId: 'e',
+      sourceUrl: 'https://example.test',
+      name: 'n',
+      summary: 's',
+      provider: 'p',
+      category: 'c',
+      tags: [],
+      networks: [],
+      access: 'x402' as const,
+      authority: 'source_metadata_only' as const,
+      sourceDigest: 'd',
+      searchText: 't',
+      updatedAt: 1,
+    })
+    await t.run(async (ctx) => {
+      await ctx.db.insert('marketExternalRegistryGenerations', { generation: 'registry-1', status: 'complete', startedAt: 1, ingestedCount: 3 })
+      await ctx.db.insert('marketExternalRegistryGenerations', { generation: 'coinbase-a', source: 'coinbase', status: 'complete', startedAt: 2, ingestedCount: 200 })
+      for (let n = 0; n < 200; n += 1) await ctx.db.insert('marketExternalRegistryEntries', entry('coinbase-a', 'coinbase', n))
+      await ctx.db.insert('marketExternalRegistryEntries', entry('registry-1', 'treg', 0))
+      await ctx.db.insert('marketExternalRegistryEntries', entry('registry-1', 'treg', 1))
+      await ctx.db.insert('marketExternalRegistryEntries', entry('registry-1', 'agentic_market', 0))
+    })
+    const result = await t.mutation(internal.scheduledFunctionRetirement.retireRegistrySources, {})
+    expect(result).toEqual({ entries: 3, generations: 1, stateRows: 0, snapshots: 0, continued: false })
+    const sources = await t.run(async (ctx) =>
+      (await ctx.db.query('marketExternalRegistryEntries').collect()).map((row) => row.source),
+    )
+    expect(sources).toHaveLength(200)
+    expect(sources.every((source) => source === 'coinbase')).toBe(true)
+  })
 })
