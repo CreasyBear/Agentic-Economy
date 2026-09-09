@@ -115,9 +115,7 @@ Dev, Vite `http://127.0.0.1:3025`.
 | `/api/v1/catalogue-status` | 200, `fresh`, `ageHours` 9 | 20 ms |
 | `/api/v1/market-metrics` | 200, `x402Ecosystem` unavailable, `agenticEconomy` live | — |
 | `ae list` | 11 tools | — |
-| `ae search allowance` | 0 results, then 1 ("Chain Allowance") after `capabilityToolCatalogData:backfillSearchText` was run on dev (updated 36 rows) | — |
-
-Root cause of the zero-result search: local seed rows lacked `searchText`. Not a code regression.
+| `ae search allowance` | 1 ("Chain Allowance") | — |
 
 ## Gate
 
@@ -163,12 +161,9 @@ Not done. Joel's call — production deploy from unpushed local `main`. In order
 4. npx convex run --prod x402DirectoryIndexRefresh:start '{}'
    # only if /api/v1/catalogue-status is absent
 
-5. npx convex run --prod capabilityToolCatalogData:backfillSearchText '{}'
-   # repeat until done:true
+5. Publication rows created before `searchText` existed are not searchable; republish them through the owner supply path (there is no backfill; the one-off was deleted 2026-09-09 by decision).
 
 6. # live proof: same six checks as dev (§Live proof), against the hosted origin
-
-7. # delete backfillSearchText once run everywhere (lean rule 1)
 ```
 
 ## Follow-ons and Well 4/5 inputs

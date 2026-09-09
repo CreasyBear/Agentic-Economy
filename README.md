@@ -109,6 +109,7 @@ The [manifesto](./docs/strategy/agentic-economy-manifesto.md) and
 Browser test profiles live under `tests/config/`; `playwright.config.ts` remains
 the default local entry point. Use `npm run test:e2e:authenticated` or
 `npm run smoke:chat:staging` for the specialist profiles and their required environments.
+E2e/a11y Playwright specs are shell and accessibility checks, not product proof.
 
 <a id="publish-an-x402-tool"></a>
 
@@ -143,6 +144,18 @@ Restart existing terminals or select Node 22 explicitly after changing shell set
 Open `http://127.0.0.1:3024/market` for the catalogue or
 `http://127.0.0.1:3024/t/new` for chat.
 
+`npm run dev:local` is a staged launcher: toolchain → local Convex deployment
+→ URL probe → identities → sandbox authority grant → directory scan
+→ one sandbox Tool → Vite → `ae doctor`. Each stage stops with the exact fix
+on failure. Flags: `--skip-scan`, `--skip-seed`, `--no-doctor`.
+
+To enable explicit test authority, after startup run `npm run ae -- connect
+--base-url http://127.0.0.1:3024` to bind the local buyer credential. Then
+`npm run ae -- doctor --json` shows three groups: discovery, quoting, purchase.
+Purchase will warn until the Account is funded.
+
+Note: `npm run dev` starts Vite only and is not a valid start path.
+
 ## Stripe production setup
 
 Use one Stripe live-mode account for credit purchases and Provider payouts. Set
@@ -170,10 +183,9 @@ secret or webhook keys in browser configuration.
 Useful checks:
 
 ```sh
+npm run gate
 npm run test:chat:conformance
-npm run parity:check
 npm run test:cli-package
-npm run test:release:source
 ```
 
 ## Machine quickstart
