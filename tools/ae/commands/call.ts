@@ -21,7 +21,7 @@ import { resolveAgentAccessCredential } from '../lib/config'
 import { acknowledgeCallRecovery, findCallRecovery, readCallRecovery, retainCallRecovery, type CallRecoveryRecord } from '../lib/call-recovery-journal'
 import { CliFailure, callJson, heading, line, printJson, requireOk, table } from '../lib/output'
 import { usageFailure } from '../lib/help'
-import { continuationCommand } from '../lib/continuation-command'
+import { cliContinuation, continuationCommand } from '../lib/continuation-command'
 import {
   connectionContinuationForCli,
   creditContinuationForCli,
@@ -275,6 +275,33 @@ async function resumeRetainedCall(record: CallRecoveryRecord, options: CliOption
   } catch (error) { throw attachRecovery(error, record, options) }
 }
 
+type QuoteRefusalContinuation = Readonly<{ command: string; suggestion: string }>
+
+/**
+ * A refused Quote already names the one continuation the market expects. This
+ * maps that continuation onto the runnable CLI command for it, so the funding
+ * gate points at the same `ae fund` handoff doctor reports.
+ */
+function quoteRefusalContinuation(
+  action: string | undefined,
+  toolRef: string,
+  options: CliOptions,
+): QuoteRefusalContinuation | undefined {
+  if (action === 'registry.tools.describe') {
+    return {
+      command: continuationCommand(['ae', 'describe', toolRef, '--base-url', options.baseUrl, ...(options.json ? ['--json'] : [])]),
+      suggestion: 'Read the exact input contract for this Tool, then repeat the call.',
+    }
+  }
+  if (action === 'funding.handoff.create') {
+    return {
+      command: cliContinuation(options, ['ae', 'fund']),
+      suggestion: 'Add Account credit as the owner, then repeat this call.',
+    }
+  }
+  return undefined
+}
+
 export async function runCallCommand(
   args: readonly string[],
   options: CliOptions,
@@ -354,15 +381,15 @@ export async function runCallCommand(
     })
   }
   if (quote.data.kind === 'refused') {
+    const refusal = quoteRefusalContinuation(quote.data.continuation?.action, toolRef, options)
+    const suggestion = quote.data.reason ?? refusal?.suggestion
     throw new CliFailure(`Tool quote refused: ${quote.data.code}.`, {
       kind: 'FAILED_PRECONDITION',
       code: quote.data.code,
       detail: quote.data,
       retryable: quote.data.retryable,
-      ...(quote.data.reason === undefined ? {} : { suggestion: quote.data.reason }),
-      ...(quote.data.continuation?.action !== 'registry.tools.describe' ? {} : {
-        nextCommand: continuationCommand(['ae', 'describe', toolRef, '--base-url', options.baseUrl, ...(options.json ? ['--json'] : [])]),
-      }),
+      ...(suggestion === undefined ? {} : { suggestion }),
+      ...(refusal === undefined ? {} : { nextCommand: refusal.command }),
     })
   }
   if (quote.data.toolRef !== toolRef) {

@@ -6,7 +6,10 @@ import { TOOL_MARKET_DESCRIBE_PATH } from '@/modules/registry/tool-entry'
 
 import type { CliOptions } from '../lib/args'
 import { CliFailure, callJson, heading, line, printJson, requireOk } from '../lib/output'
+import { continuationFlags } from '../lib/continuation-command'
 import { usageFailure } from '../lib/help'
+import { toolCallCommand } from '../lib/tool-format'
+import { QUOTE_MCP_TOOL_NAME } from './manifest'
 import { throwToolReadFailure } from '../lib/tool-read-failure'
 
 /** Describe one exact current Market Tool without a caller credential. */
@@ -17,7 +20,7 @@ export async function runDescribeCommand(args: readonly string[], options: CliOp
   }
   const parsedInput = describeCommandDescriptor.inputSchema.safeParse({ toolRef })
   if (!parsedInput.success) {
-    throw new CliFailure('Tool reference must match tool:v1:<64 lowercase hex characters>.', {
+    throw new CliFailure('Tool reference must match operation:v1:<64 lowercase hex characters>.', {
       kind: 'INVALID_ARGUMENT', code: 'tool-ref-invalid',
     })
   }
@@ -30,7 +33,7 @@ export async function runDescribeCommand(args: readonly string[], options: CliOp
       kind: 'UNAVAILABLE', code: 'tool-describe-result-invalid',
     })
   }
-  if (parsed.data.kind === 'not_found') throwToolReadFailure({ reason: 'tool_not_found' })
+  if (parsed.data.kind === 'not_found') throwToolReadFailure({ reason: 'tool_not_found', options })
   if (parsed.data.kind === 'unavailable') {
     throwToolReadFailure({ reason: 'source_unavailable', toolRef })
   }
@@ -46,7 +49,8 @@ export async function runDescribeCommand(args: readonly string[], options: CliOp
   line(`  indicative price: ${tool.priceLabel}`)
   line(`  inputs: ${(tool.parameters ?? []).map((parameter) => `${parameter.name}${parameter.required ? '' : '?'}`).join(', ') || 'none'}`)
   line(`  Tool reference: ${tool.toolRef}`)
-  line('  Next: use tool.quote from your connected agent client.')
+  line(`  Next: ${[toolCallCommand(tool.toolRef), ...continuationFlags(options)].join(' ')}`)
+  line(`  From an MCP client: ${QUOTE_MCP_TOOL_NAME} with this Tool reference and input.`)
 }
 
 export const describeCommandDescriptor = {

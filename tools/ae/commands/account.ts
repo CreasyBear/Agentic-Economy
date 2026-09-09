@@ -19,6 +19,7 @@ import {
   callJson,
   heading,
   line,
+  maskCredential,
   printJson,
   requireOk,
   table,
@@ -64,7 +65,7 @@ function printAccount(result: AgentAccountSelfResult, options: CliOptions): void
   table([
     ['principal', result.principalRef],
     ['account', result.accountRef],
-    ['credential', result.credentialId],
+    ['credential', maskCredential(result.credentialId)],
     ['application', result.applicationRef],
     ['environment', result.environment],
     ['authority', result.authorityMode],

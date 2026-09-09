@@ -546,13 +546,14 @@ describe('external-agent Market Tool cold loop', () => {
     } satisfies Partial<CliFailure>)
     expect(fetchMock).not.toHaveBeenCalled()
   })
-  it('rejects an overlong search query before network work', async () => {
+  it.each([['x'.repeat(257)], ['']])('rejects an out-of-bounds search query before network work', async (query) => {
     const fetchMock = vi.fn<typeof fetch>()
     vi.stubGlobal('fetch', fetchMock)
 
-    await expect(runSearchCommand(['x'.repeat(257)], options)).rejects.toMatchObject({
+    await expect(runSearchCommand([query], options)).rejects.toMatchObject({
       kind: 'INVALID_ARGUMENT',
-      code: 'search-query-too-long',
+      code: 'query_invalid',
+      message: 'Search requires a capability phrase from 1 to 256 characters.',
     } satisfies Partial<CliFailure>)
     expect(fetchMock).not.toHaveBeenCalled()
   })
@@ -596,7 +597,7 @@ describe('external-agent Market Tool cold loop', () => {
 
     expect(JSON.parse(output.read())).toMatchObject({
       kind: 'found',
-      schemaVersion: 'registry-tools:v2',
+      schemaVersion: 'registry-tools:v3',
       tool: {
         toolRef: operationRef,
         capabilityId: 'reference.lookup',
@@ -657,7 +658,7 @@ describe('external-agent Market Tool cold loop', () => {
     expect(JSON.parse(technicalSerialized)).toEqual(defaultResult)
   })
 
-  it('keeps anonymous describe factual and sends execution to the connected agent client', async () => {
+  it('keeps anonymous describe factual and names the runnable CLI purchase path', async () => {
     const operationRef = `operation:v1:${'b'.repeat(64)}`
     const operation = {
       ...operationDescriptor(operationRef, 'Inspect-only continuation'),
@@ -675,8 +676,9 @@ describe('external-agent Market Tool cold loop', () => {
     }
 
     expect(output.read()).toContain('health: operational')
-    expect(output.read()).toContain('Next: use tool.quote from your connected agent client.')
-    expect(output.read()).not.toContain('ae call')
+    expect(output.read()).toContain(`Next: ae call ${operationRef} --input '<json>'`)
+    expect(output.read()).toContain('From an MCP client: ae_tool_quote')
+    expect(output.read()).not.toContain('tool.quote from your connected agent client')
     expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 
@@ -701,6 +703,7 @@ describe('external-agent Market Tool cold loop', () => {
     await expect(runDescribeCommand(['operation:v1:current'], options)).rejects.toMatchObject({
       kind: 'INVALID_ARGUMENT',
       code: 'tool-ref-invalid',
+      message: 'Tool reference must match operation:v1:<64 lowercase hex characters>.',
     } satisfies Partial<CliFailure>)
     expect(fetchMock).not.toHaveBeenCalled()
   })
@@ -727,7 +730,7 @@ describe('external-agent Market Tool cold loop', () => {
     }
     const unavailableRead = {
       kind: 'unavailable' as const,
-      schemaVersion: 'registry-tools:v2' as const,
+      schemaVersion: 'registry-tools:v3' as const,
       reason: 'tool_not_found' as const,
     }
     const requests: Array<{
@@ -861,7 +864,7 @@ describe('external-agent Market Tool cold loop', () => {
     } satisfies Partial<CliFailure>)
     setApiKey('ae-test-caller-key')
     const invokeOptions = { ...options, idempotencyKey, wait: false }
-    const readJsonOutput = async (run: () => Promise<void>): Promise<Record<string, unknown>> => {
+    const readJsonOutput = async (run: () => Promise<unknown>): Promise<Record<string, unknown>> => {
       const start = writes.length
       await run()
       return JSON.parse(writes.slice(start).join('')) as Record<string, unknown>

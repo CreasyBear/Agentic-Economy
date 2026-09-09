@@ -13,7 +13,7 @@ import type { CliOptions } from '../lib/args'
 import { resolveAgentAccessCredential } from '../lib/config'
 import { CliFailure, callJson, heading, line, printJson, requireOk, table } from '../lib/output'
 import { usageFailure } from '../lib/help'
-import { continuationCommand } from '../lib/continuation-command'
+import { continuationCommand, continuationFlags } from '../lib/continuation-command'
 import {
   connectionContinuationForCli,
   creditContinuationForCli,
@@ -205,38 +205,42 @@ export function recoveryTransportFailure(
   )
 }
 
+type StatusContinuation = Readonly<{ command?: string; warning?: string }>
+
+/** A refused status is a failure like every other refusal, so it must not exit 0. */
+export const STATUS_REFUSED_EXIT_CODE = 1
+
 export function renderStatusResult(
   title: string,
   callRef: string,
   body: unknown,
   options: CliOptions,
-): void {
+): number {
   const record = asRecord(body)
-  let continuation
+  let continuation: StatusContinuation | undefined
   if (record?.kind === 'found' || record?.kind === 'refused') {
     const parsedState = callStatusStateSchema.safeParse(record.state)
     const usage = asRecord(record.usage)
-    continuation = usage?.chargeState === 'insufficient_credit'
-      ? creditContinuationForCli()
-      : callNextActionForCli({
-          kind: record.kind,
-          callRef,
-          ...(parsedState.success ? { state: parsedState.data } : {}),
-          ...(typeof record.retryable === 'boolean' ? { retryable: record.retryable } : {}),
-        })
+    continuation = record.code === 'invocation_not_found'
+      // An unknown Call cannot become known by asking again for it.
+      ? { command: 'ae history' }
+      : usage?.chargeState === 'insufficient_credit'
+        ? creditContinuationForCli()
+        : callNextActionForCli({
+            kind: record.kind,
+            callRef,
+            ...(parsedState.success ? { state: parsedState.data } : {}),
+            ...(typeof record.retryable === 'boolean' ? { retryable: record.retryable } : {}),
+          })
   }
-  const continuationSuffix = continuationCommand([
-    ...(options.baseUrlSource === undefined || options.baseUrlSource === 'hosted_default'
-      ? []
-      : ['--base-url', options.baseUrl]),
-    ...(options.json ? ['--json'] : []),
-  ])
+  const continuationSuffix = continuationCommand(continuationFlags(options))
   const nextCommand = continuation?.command === undefined
     ? undefined
     : continuationSuffix.length === 0
       ? continuation.command
       : `${continuation.command} ${continuationSuffix}`
   const warning = continuation?.warning
+  const exitCode = record?.kind === 'refused' ? STATUS_REFUSED_EXIT_CODE : 0
   if (options.json) {
     printJson(record === undefined || nextCommand === undefined
       ? body
@@ -245,7 +249,7 @@ export function renderStatusResult(
           nextCommand,
           ...(warning === undefined ? {} : { warning }),
         })
-    return
+    return exitCode
   }
   heading(`${title} ${callRef}`)
   table([
@@ -255,6 +259,7 @@ export function renderStatusResult(
   if (nextCommand !== undefined) line(`  next: ${nextCommand}`)
   if (continuation?.warning !== undefined) line(`  warning: ${continuation.warning}`)
   line(JSON.stringify(body, undefined, 2))
+  return exitCode
 }
 
 export async function readCallStatus(
@@ -271,7 +276,7 @@ export async function readCallStatus(
   return parseStatusResult(requireOk(outcome, 'Call status'))
 }
 
-export async function runStatusCommand(args: readonly string[], options: CliOptions): Promise<void> {
+export async function runStatusCommand(args: readonly string[], options: CliOptions): Promise<number> {
   const callRef = args[0]?.trim()
   const parsedRef = callStatusInputSchema.safeParse({ callRef })
   if (!parsedRef.success || args.length > 1) {
@@ -285,5 +290,5 @@ export async function runStatusCommand(args: readonly string[], options: CliOpti
     if (error instanceof CliFailure && error.kind !== 'UNAVAILABLE') throw error
     throw statusTransportFailure(parsedRef.data.callRef)
   }
-  renderStatusResult('Call status', parsedRef.data.callRef, body, options)
+  return renderStatusResult('Call status', parsedRef.data.callRef, body, options)
 }

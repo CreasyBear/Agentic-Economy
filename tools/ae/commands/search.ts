@@ -9,9 +9,12 @@ import { throwToolReadFailure } from '../lib/tool-read-failure'
 export async function runSearchCommand(args: readonly string[], options: CliOptions): Promise<void> {
   const query = args.join(' ').trim()
   if (!searchCommandDescriptor.inputSchema.safeParse({ query }).success) {
+    // The shared search input schema bounds the phrase without naming a code,
+    // so this reuses the source-owned token the catalogue already emits for a
+    // rejected query instead of inventing a length-specific one.
     throw new CliFailure('Search requires a capability phrase from 1 to 256 characters.', {
       kind: 'INVALID_ARGUMENT',
-      code: 'search-query-too-long',
+      code: 'query_invalid',
     })
   }
 

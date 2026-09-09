@@ -46,7 +46,6 @@ describe('ae doctor', () => {
   it('routes an unreachable remote origin to configuration truth instead of doctor recursion', async () => {
     const origin = 'https://ae-unreachable.invalid'
     const configContinuation = `ae config --base-url ${origin} --json`
-    const humanConfigContinuation = `ae config --base-url ${origin}`
     const directory = makeConfigDirectory()
 
     const json = await spawnCli(['doctor', '--base-url', origin, '--json'], {
@@ -98,15 +97,14 @@ describe('ae doctor', () => {
     expect(human.status).toBe(1)
     expect(human.stderr).toBe('')
     expect(human.stdout).toContain('✗ AE server is not reachable.')
-    expect(human.stdout).toContain(`Next: ${humanConfigContinuation}`)
+    expect(human.stdout).toContain(`Next: ${configContinuation}`)
     expect(human.stdout).not.toContain('Next: ae doctor')
     expect(human.stdout).not.toContain('npm run')
   })
 
-  it('routes an unreachable loopback origin through the installed CLI to hosted AE', async () => {
-    const origin = 'http://127.0.0.1:1'
-    const hostedDoctorJson = 'ae doctor --base-url https://agentic-economy-phi.vercel.app --json'
-    const hostedDoctorHuman = 'ae doctor --base-url https://agentic-economy-phi.vercel.app'
+  it('sends an unreachable loopback origin to start the local stack instead of hosted AE', async () => {
+    const origin = 'http://127.0.0.1:3999'
+    const summary = `AE server is not reachable: nothing is listening at ${origin}; start the local stack or fix --base-url.`
     const directory = makeConfigDirectory()
 
     const json = await spawnCli(['doctor', '--base-url', origin, '--json'], {
@@ -118,19 +116,20 @@ describe('ae doctor', () => {
     expect(JSON.parse(json.stdout)).toMatchObject({
       kind: 'degraded',
       checks: expect.arrayContaining([{
-        id: 'server', group: 'discovery', state: 'fail', summary: 'AE server is not reachable.',
-        nextCommand: hostedDoctorJson,
+        id: 'server', group: 'discovery', state: 'fail', summary,
+        nextCommand: LOCAL_DEV_COMMAND,
       }]),
     })
-    expect(json.stdout).not.toContain('npm run')
+    expect(json.stdout).not.toContain('agentic-economy-phi.vercel.app')
 
     const human = await spawnCli(['doctor', '--base-url', origin], {
       env: cleanEnvironment(directory),
     })
     expect(human.status).toBe(1)
     expect(human.stderr).toBe('')
-    expect(human.stdout).toContain(`Next: ${hostedDoctorHuman}`)
-    expect(human.stdout).not.toContain('npm run')
+    expect(human.stdout).toContain(`✗ ${summary}`)
+    expect(human.stdout).toContain(`Next: ${LOCAL_DEV_COMMAND}`)
+    expect(human.stdout).not.toContain('agentic-economy-phi.vercel.app')
   })
 
   it('returns one degraded diagnosis and inspects connections before authorizing a new identity', async () => {
@@ -296,7 +295,7 @@ describe('ae doctor', () => {
     expect(human.stdout).toContain('AE doctor: degraded')
     expect(human.stdout).toContain('! A reconciliation-required Call needs attention.')
     expect(human.stdout.match(/^Next: /gmu)).toEqual([`Next: `])
-    expect(human.stdout).toContain(`Next: ae status ${callRef} --base-url ${origin}`)
+    expect(human.stdout).toContain(`Next: ae status ${callRef} --base-url ${origin} --json`)
     expect(human.stdout).not.toContain(buyerSecret)
 
     callState = 'pending'
@@ -378,7 +377,7 @@ describe('ae doctor', () => {
         }
         if (request.url === '/api/v1/market-tools/describe') {
           respondJson(response, {
-            kind: 'found', schemaVersion: 'registry-tools:v2', tool: currentTool(priorToolRef),
+            kind: 'found', schemaVersion: 'registry-tools:v3', tool: currentTool(priorToolRef),
           })
           return
         }
@@ -413,10 +412,81 @@ describe('ae doctor', () => {
     expect(human.stdout).toContain('AE doctor: ready')
     expect(human.stdout).toContain('✓ 1 of 1 recent private market request now has matching Tools.')
     expect(human.stdout.match(/^Next: /gmu)).toEqual(['Next: '])
-    expect(human.stdout).toContain(`Next: ae describe ${toolRef} --base-url ${origin}`)
+    expect(human.stdout).toContain(`Next: ae describe ${toolRef} --base-url ${origin} --json`)
     expect(human.stdout).not.toContain(savedQuery)
     expect(human.stdout).not.toContain(requestRef)
     expect(statusBodies).toEqual([{ requestRef }, { requestRef }])
+  }, 20_000)
+
+  it('warns instead of passing when no current Tool matches a recent private market request', async () => {
+    const buyerSecret = 'FAKE_UNMATCHED_BUYER_SECRET_3391'
+    const requestRef = `market-request:v1:${'e'.repeat(64)}`
+    const savedQuery = 'source a rare replacement part'
+    const origin = await startServer((request, response) => {
+      if (respondHealthyDeployment(request, response)) return
+      const chunks: Buffer[] = []
+      request.on('data', (chunk: Buffer) => chunks.push(chunk))
+      request.on('end', () => {
+        if (request.url === '/.well-known/ucp') {
+          respondJson(response, { schemaVersion: 'ae-site-discovery:v2', origin })
+          return
+        }
+        if (request.url === '/api/v1/account') {
+          respondJson(response, {
+            kind: 'authenticated', principalRef: 'prn_buyer', accountRef: 'acc_owner',
+            credentialId: 'credential_buyer', applicationRef: 'agentic-economy', environment: 'sandbox',
+            scopes: ['market_tools:call'], authorityMode: 'spending_policy',
+          })
+          return
+        }
+        if (request.url === '/api/v1/account/balance') {
+          respondJson(response, {
+            kind: 'available', principalRef: 'prn_buyer', accountRef: 'acc_owner',
+            balance: { currency: 'AUD', units: '25000000', exponent: 6 }, accountState: 'active',
+            version: 1, updatedAt: 10,
+            funding: { kind: 'agent_funding_handoff', configAction: 'funding.handoff.config', createAction: 'funding.handoff.create', statusAction: 'funding.handoff.status' },
+          })
+          return
+        }
+        if (request.url === '/api/v1/calls?limit=100') {
+          respondJson(response, { kind: 'available', hasMore: false, items: [] })
+          return
+        }
+        if (request.url === '/api/v1/market-requests/list') {
+          respondJson(response, {
+            kind: 'available', hasMore: false,
+            items: [{ requestRef, query: savedQuery, createdAt: 10, updatedAt: 10 }],
+          })
+          return
+        }
+        if (request.url === '/api/v1/market-requests/status') {
+          respondJson(response, { kind: 'open', requestRef, query: savedQuery, createdAt: 10, matchedCount: 0 })
+          return
+        }
+        respondJson(response, { error: 'unexpected' }, 404)
+      })
+    })
+    const directory = makeConfigDirectory()
+    writeStoredConfig(directory, origin, buyerSecret)
+
+    const json = await spawnCli(['doctor', '--base-url', origin, '--json'], { env: cleanEnvironment(directory) })
+
+    expect(json.status).toBe(0)
+    expect(json.stderr).toBe('')
+    expect(JSON.parse(json.stdout)).toMatchObject({
+      kind: 'degraded',
+      groups: expect.objectContaining({ purchase: 'warn' }),
+      checks: expect.arrayContaining([{
+        id: 'market_requests', group: 'purchase', state: 'warn',
+        summary: 'No current Tool matches the 1 most recent private market request yet.',
+      }]),
+    })
+
+    const human = await spawnCli(['doctor', '--base-url', origin], { env: cleanEnvironment(directory) })
+    expect(human.status).toBe(1)
+    expect(human.stderr).toBe('')
+    expect(human.stdout).toContain('AE doctor: degraded')
+    expect(human.stdout).toContain('! No current Tool matches the 1 most recent private market request yet.')
   }, 20_000)
 
   it('recalls the newest successful current Tool without replaying private Call material', async () => {
@@ -472,8 +542,8 @@ describe('ae doctor', () => {
             body: JSON.parse(Buffer.concat(chunks).toString('utf8')),
           })
           respondJson(response, current
-            ? { kind: 'found', schemaVersion: 'registry-tools:v2', tool: currentTool(toolRef) }
-            : { kind: 'not_found', schemaVersion: 'registry-tools:v2', toolRef })
+            ? { kind: 'found', schemaVersion: 'registry-tools:v3', tool: currentTool(toolRef) }
+            : { kind: 'not_found', schemaVersion: 'registry-tools:v3', toolRef })
           return
         }
         respondJson(response, { error: 'unexpected' }, 404)
@@ -504,7 +574,7 @@ describe('ae doctor', () => {
     expect(human.stderr).toBe('')
     expect(human.stdout).toContain('✓ A previously successful Tool is still in the current catalog.')
     expect(human.stdout.match(/^Next: /gmu)).toEqual(['Next: '])
-    expect(human.stdout).toContain(`Next: ae describe ${toolRef} --base-url ${origin}`)
+    expect(human.stdout).toContain(`Next: ae describe ${toolRef} --base-url ${origin} --json`)
     expect(human.stdout).not.toContain(callRef)
     expect(human.stdout).not.toContain(evidenceHash)
 
@@ -627,6 +697,92 @@ describe('ae doctor', () => {
       { path: '/api/v1/supply/connections/list', body: { businessId: 'business:one', limit: 100 } },
       { path: '/api/v1/supply/tools/list', body: { businessRef: 'business:one', limit: 100 } },
     ])
+  })
+
+  it('checks provider access without scoping to any business when --provider is given without a business ID', async () => {
+    const buyerSecret = 'FAKE_BUYER_SECRET_2231'
+    const providerSecret = 'FAKE_PROVIDER_SECRET_5567'
+    const providerRequests: string[] = []
+    const origin = await startServer((request, response) => {
+      if (respondHealthyDeployment(request, response)) return
+      if (request.url === '/.well-known/ucp') {
+        respondJson(response, { schemaVersion: 'ae-site-discovery:v2', origin })
+        return
+      }
+      if (request.url === '/api/v1/account') {
+        const provider = request.headers.authorization === `Bearer ${providerSecret}`
+        respondJson(response, {
+          kind: 'authenticated', principalRef: provider ? 'prn_provider' : 'prn_buyer', accountRef: 'acc_owner',
+          credentialId: provider ? 'credential_provider' : 'credential_buyer', applicationRef: 'agentic-economy',
+          environment: 'sandbox', scopes: [provider ? 'market_supply:manage' : 'market_tools:call'],
+          authorityMode: 'spending_policy',
+        })
+        return
+      }
+      if (request.url === '/api/v1/account/balance') {
+        respondJson(response, {
+          kind: 'available', principalRef: 'prn_buyer', accountRef: 'acc_owner',
+          balance: { currency: 'AUD', units: '25000000', exponent: 6 },
+          accountState: 'active', version: 1, updatedAt: 10,
+          funding: { kind: 'agent_funding_handoff', configAction: 'funding.handoff.config', createAction: 'funding.handoff.create', statusAction: 'funding.handoff.status' },
+        })
+        return
+      }
+      if (request.url === '/api/v1/calls?limit=100') {
+        respondJson(response, { kind: 'available', items: [], hasMore: false })
+        return
+      }
+      if (request.url === '/api/v1/market-requests/list') {
+        respondJson(response, { kind: 'available', items: [], hasMore: false })
+        return
+      }
+      // No handler for /api/v1/supply/tools/list or /api/v1/supply/connections/list: an
+      // unscoped `--provider` check must never reach them, so any call here is a bug.
+      providerRequests.push(request.url ?? '')
+      respondJson(response, { error: 'unexpected' }, 404)
+    })
+    const directory = makeConfigDirectory()
+    writeStoredConfig(directory, origin, buyerSecret, providerSecret)
+
+    const result = await spawnCli(['doctor', '--provider', '--base-url', origin, '--json'], {
+      env: cleanEnvironment(directory),
+    })
+
+    expect(result.status).toBe(0)
+    expect(result.stderr).toBe('')
+    expect(providerRequests).toEqual([])
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      checks: expect.arrayContaining([
+        { id: 'provider', group: 'purchase', state: 'pass', summary: 'Provider credential is origin-bound, authenticated, and has market_supply:manage.' },
+        {
+          id: 'provider.readiness', group: 'purchase', state: 'warn',
+          summary: 'Provider access is ready; add a business ID to check Tool and provider readiness.',
+        },
+      ]),
+    })
+  })
+
+  it('rejects a bare business ID without --provider and names --provider as the correct form', async () => {
+    const origin = 'https://ae-unreachable.invalid'
+    const directory = makeConfigDirectory()
+
+    const json = await spawnCli(['doctor', 'business:one', '--base-url', origin, '--json'], {
+      env: cleanEnvironment(directory),
+    })
+    expect(json.status).toBe(1)
+    expect(json.stderr).toBe('')
+    expect(JSON.parse(json.stdout)).toMatchObject({
+      kind: 'INVALID_ARGUMENT',
+      code: 'doctor-usage',
+      message: 'Usage: ae doctor [--provider [businessId]]',
+    })
+
+    const human = await spawnCli(['doctor', 'business:one', '--base-url', origin], {
+      env: cleanEnvironment(directory),
+    })
+    expect(human.status).toBe(1)
+    expect(human.stdout).toBe('')
+    expect(human.stderr).toContain('Usage: ae doctor [--provider [businessId]]')
   })
 
   it('never sends or echoes a credential whose configured origin does not match', async () => {

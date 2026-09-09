@@ -57,7 +57,7 @@ async function readWaitStatus(
   }
 }
 
-export async function runWaitCommand(args: readonly string[], options: CliOptions): Promise<void> {
+export async function runWaitCommand(args: readonly string[], options: CliOptions): Promise<number> {
   const callRef = args[0]?.trim()
   const parsedRef = callStatusInputSchema.safeParse({ callRef })
   if (!parsedRef.success || args.length > 1) {
@@ -80,7 +80,7 @@ export async function runWaitCommand(args: readonly string[], options: CliOption
     delayMs = pendingDelay(body, delayMs)
   }
 
-  renderStatusResult('Call result', recordedRef, body, options)
+  return renderStatusResult('Call result', recordedRef, body, options)
 }
 
 export const waitCommandDescriptor = {

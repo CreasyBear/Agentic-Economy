@@ -5,7 +5,7 @@ import { createServer } from 'node:http'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { isLoopbackCliBaseUrl, parseArgs } from '../../../tools/ae/lib/args'
-import { CliFailure, callJson, requireOk, type HttpOutcome } from '../../../tools/ae/lib/output'
+import { CliFailure, callJson, maskCredential, requireOk, type HttpOutcome } from '../../../tools/ae/lib/output'
 import { spawnCli, spawnCliSync } from './cli-errors-harness'
 
 describe('market-terminal CLI error contracts', () => {
@@ -495,6 +495,40 @@ describe('market-terminal CLI error contracts', () => {
     expect(thrown.message).toBe('/api/example returned 502')
     expect(thrown.detail).toBeUndefined()
     expect(thrown.message).not.toContain('credentials')
+  })
+
+  it('drops secret-bearing fields from failure detail while keeping the continuation honest', () => {
+    const failure = new CliFailure('Tool quote refused: insufficient_balance.', {
+      kind: 'FAILED_PRECONDITION',
+      code: 'insufficient_balance',
+      detail: {
+        continuation: {
+          action: 'funding.handoff.create',
+          method: 'POST',
+          path: '/api/v1/funding/handoffs',
+          input: { idempotencyKey: 'funding:one' },
+        },
+        headers: { authorization: 'Bearer FAKE_SENTINEL_TOKEN_dd47' },
+        apiKey: 'FAKE_SENTINEL_TOKEN_dd47',
+      },
+    })
+
+    expect(failure.detail).toEqual({
+      continuation: {
+        action: 'funding.handoff.create',
+        method: 'POST',
+        path: '/api/v1/funding/handoffs',
+        input: { idempotencyKey: 'funding:one' },
+      },
+    })
+    expect(JSON.stringify(failure.detail)).not.toContain('FAKE_SENTINEL_TOKEN_dd47')
+    expect(JSON.stringify(failure.detail)).not.toContain('<redacted>')
+  })
+
+  it('masks credential-shaped values instead of printing them', () => {
+    expect(maskCredential('ak_local_e2e_0d1aaad80714eec94c47848bc25d45a1860bbd7bdfbaa6f44517a15e36c79729'))
+      .toBe('ak_loc…9729')
+    expect(maskCredential('short-key')).toBe('<redacted>')
   })
 
   it('never copies arbitrary remote problem prose that misses secret-pattern redaction', () => {

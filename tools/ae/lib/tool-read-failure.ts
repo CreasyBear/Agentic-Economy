@@ -1,3 +1,4 @@
+import { cliContinuation, type ContinuationOptions } from './continuation-command'
 import { CliFailure } from './output'
 
 /**
@@ -26,6 +27,7 @@ export function throwToolReadFailure(input: {
   reason: ToolReadFailureReason
   cursorProvided?: boolean
   toolRef?: string
+  options?: ContinuationOptions
 }): never {
   const code = input.reason
   switch (input.reason) {
@@ -37,9 +39,14 @@ export function throwToolReadFailure(input: {
         { kind: 'INVALID_ARGUMENT', code },
       )
     case 'tool_not_found':
+      // A reference that names no Tool is a dead end: the only move left is
+      // finding a current one, so this carries the same continuation shape as
+      // its sibling refusals instead of stopping at the message.
       throw new CliFailure(`The requested Market Tool${input.toolRef === undefined ? '' : ` ${input.toolRef}`} was not found.`, {
         kind: 'NOT_FOUND',
         code,
+        suggestion: 'Search the current catalogue for a Tool that does this job.',
+        nextCommand: cliContinuation(input.options, ['ae', 'search', '<job>']),
         ...(input.toolRef === undefined ? {} : { detail: { toolRef: input.toolRef } }),
       })
     // Publication state: the tool exists but is not usable as published.

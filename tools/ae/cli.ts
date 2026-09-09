@@ -71,6 +71,7 @@ const COMMAND_OPTIONS: Readonly<Record<string, readonly string[]>> = {
   'request list': ['limit', 'cursor'],
   'request status': [],
   supply: [],
+  'supply preview': ['input'],
   'supply publish': ['input', 'idempotency-key'],
   'supply withdraw': ['input', 'idempotency-key'],
   'supply recheck': ['input', 'idempotency-key'],

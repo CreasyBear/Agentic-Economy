@@ -423,6 +423,32 @@ describe('CLI Call recovery projections', () => {
     })
   })
 
+  it('fails an unknown Call and points status at history instead of itself', async () => {
+    setApiKey('ae-test-caller-key')
+    const output = capture(process.stdout)
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
+      kind: 'refused',
+      callRef: 'invocation:missing',
+      code: 'invocation_not_found',
+      retryable: false,
+    }), { status: 200, headers: { 'content-type': 'application/json' } })))
+
+    let exitCode: number
+    try {
+      const { runStatusCommand } = await import('../../../tools/ae/commands/status')
+      exitCode = await runStatusCommand(['invocation:missing'], baseOptions)
+    } finally {
+      output.restore()
+    }
+
+    expect(exitCode).toBe(1)
+    expect(JSON.parse(output.read())).toMatchObject({
+      kind: 'refused',
+      code: 'invocation_not_found',
+      nextCommand: 'ae history --json',
+    })
+  })
+
   it('uses top-level status usage to point insufficient credit at account funding', async () => {
     setApiKey('ae-test-caller-key')
     const output = capture(process.stdout)

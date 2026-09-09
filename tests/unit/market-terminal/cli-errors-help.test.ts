@@ -180,6 +180,24 @@ describe('market-terminal CLI error contracts', () => {
     })
   }, 15_000)
 
+  it('accepts --input for supply preview instead of rejecting it as an unsupported option', () => {
+    const result = spawnCliSync([
+      'supply', 'preview', '--input', '{"kind":"openapi","environment":"sandbox"}', '--json',
+    ])
+
+    expect(result.status).toBe(1)
+    expect(result.stderr).toBe('')
+    // Never option-not-supported for --input: it must clear COMMAND_OPTIONS validation
+    // and fail only on the source-specific schema (missing definitionUrl for kind openapi),
+    // proving 'supply preview' is registered alongside the other supply subcommands.
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      kind: 'INVALID_ARGUMENT',
+      code: 'supply-input-invalid',
+      message: 'Input does not match supply.source.preview:v1. Missing or invalid field: definitionUrl.',
+      exitCode: 1,
+    })
+  }, 15_000)
+
   it('does not advertise or accept client-side truncation for provider connections', () => {
     const help = spawnCliSync(['help', 'supply', 'connections', '--json'])
     expect(help.status).toBe(0)
@@ -266,7 +284,7 @@ describe('market-terminal CLI error contracts', () => {
     expect(JSON.parse(help.stdout)).toMatchObject({
       command: 'describe',
       usage: 'ae describe <tool-ref> [--technical]',
-      guidance: [expect.stringContaining('tool.quote')],
+      guidance: [expect.stringContaining("ae call <tool-ref> --input '<json>'")],
       flags: {
         '--technical': {
           description: expect.stringContaining('describe results'),
@@ -346,7 +364,7 @@ describe('market-terminal CLI error contracts', () => {
     expect(JSON.parse(doctorHelp.stdout)).toMatchObject({
       kind: 'HELP',
       command: 'doctor',
-      usage: 'ae doctor [businessId] [--provider]',
+      usage: 'ae doctor [--provider [businessId]]',
       summary: expect.stringContaining('without changing'),
     })
 
@@ -470,6 +488,32 @@ describe('market-terminal CLI error contracts', () => {
     expect(searchText.status).toBe(0)
     expect(searchText.stdout).not.toContain('AE_API_KEY')
   }, 30_000)
+
+  it('documents each --input-based supply subcommand\'s required fields, derived from its own validation schema', () => {
+    const previewHelp = spawnCliSync(['help', 'supply', 'preview', '--json'])
+    expect(previewHelp.status).toBe(0)
+    const previewBody = JSON.parse(previewHelp.stdout) as { guidance?: string[] }
+    expect(previewBody.guidance?.[0]).toBe('Required input fields: kind, environment.')
+    expect(previewBody.guidance?.[1]).toMatch(/^Example: --input '\{.*"kind":"openapi".*"environment":"sandbox".*\}'$/)
+
+    const previewText = spawnCliSync(['help', 'supply', 'preview'])
+    expect(previewText.status).toBe(0)
+    expect(previewText.stdout).toContain('Required input fields: kind, environment.')
+
+    const publishHelp = spawnCliSync(['help', 'supply', 'publish', '--json'])
+    expect(publishHelp.status).toBe(0)
+    const publishBody = JSON.parse(publishHelp.stdout) as { guidance?: string[] }
+    expect(publishBody.guidance?.[0]).toBe(
+      'Required input fields: businessRef, source (kind, environment), candidateRef, expectedSourceDigest, '
+      + 'presentation (name, description, category), consequences (effects, dataUse, evidence), pricing (kind), '
+      + 'environment, idempotencyKey, attestation (authorisedToPublish, informationAccurate, publishAfterSuccessfulValidation).',
+    )
+    expect(JSON.parse(String(publishBody.guidance?.[1]?.slice('Example: --input \''.length, -1)))).toMatchObject({
+      businessRef: expect.any(String),
+      source: { kind: 'openapi', environment: 'sandbox' },
+      attestation: { authorisedToPublish: true, informationAccurate: true, publishAfterSuccessfulValidation: true },
+    })
+  }, 15_000)
 
   it('scopes valid command help, keeps text and JSON aligned, and rejects typo paths', () => {
     for (const [args, command] of [

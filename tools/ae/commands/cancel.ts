@@ -17,7 +17,7 @@ function cancelPath(callRef: string): string {
   )
 }
 
-export async function runCancelCommand(args: readonly string[], options: CliOptions): Promise<void> {
+export async function runCancelCommand(args: readonly string[], options: CliOptions): Promise<number> {
   const callRef = args[0]?.trim()
   if (callRef === undefined || callRef.length === 0 || args.length > 1) {
     throw usageFailure('cancel', 'cancel-usage')
@@ -60,5 +60,5 @@ export async function runCancelCommand(args: readonly string[], options: CliOpti
       code: 'call-cancel-result-invalid',
     })
   }
-  renderStatusResult('Call cancellation', parsedInput.data.callRef, parsedResult.data, options)
+  return renderStatusResult('Call cancellation', parsedInput.data.callRef, parsedResult.data, options)
 }

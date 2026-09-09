@@ -1,9 +1,10 @@
 # Agentic Economy project instructions
 
+**Revised:** 2026-09-10
+
 ## Read this first
 
-Before product reasoning, planning, documentation or implementation, read
-`PRODUCT.md`. It defines the active product and accepted commercial direction.
+For product behaviour and implementation changes, read `PRODUCT.md` first — it defines the active product and accepted commercial direction. For "run locally" tasks, follow README's "Run locally" section.
 
 Use each source for the question it can answer:
 

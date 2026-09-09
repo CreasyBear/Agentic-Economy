@@ -1,5 +1,7 @@
 # Agentic Economy
 
+**Revised:** 2026-09-10
+
 Agentic Economy helps Australian businesses connect their agents to paid tools
 and services through one account, with AUD credit, spending controls, clear usage
 and billing records, and recovery when something goes wrong. x402 services are
@@ -145,15 +147,15 @@ Open `http://127.0.0.1:3024/market` for the catalogue or
 `http://127.0.0.1:3024/t/new` for chat.
 
 `npm run dev:local` is a staged launcher: toolchain → local Convex deployment
-→ URL probe → identities → sandbox authority grant → directory scan
-→ one sandbox Tool → Vite → `ae doctor`. Each stage stops with the exact fix
+→ URL probe → identities → local Clerk sandbox (auth bypass) → directory scan
+→ one seeded fixture Tool → Vite → `ae doctor`. Each stage stops with the exact fix
 on failure. Flags: `--skip-scan`, `--skip-seed`, `--no-doctor`.
 
 To enable explicit test authority, after startup run `npm run connect:local --
 --base-url http://127.0.0.1:3024` to bind the local buyer credential; it wraps
 `ae connect` and approves the device code through the local Clerk bypass, so
 no browser is needed. On a hosted origin use `ae connect` and approve in the
-browser instead. Then `npm run ae -- doctor --json` shows three groups:
+browser instead. Then `npm run ae -- doctor --json --base-url http://127.0.0.1:3024` shows three groups:
 discovery, quoting, purchase. Purchase will warn until the Account is funded.
 
 Note: `npm run dev` starts Vite only and is not a valid start path.
@@ -196,16 +198,17 @@ The following documents the accepted source CLI contract. It is not a hosted
 deployment, plugin-installation, or installed-package acceptance claim. The
 packaged guide remains [packages/cli/README.md](./packages/cli/README.md).
 
+When running locally, include `--base-url http://127.0.0.1:3024` with each command; without it, the CLI defaults to the hosted AE origin.
+
 ```sh
-npm run -s ae -- manifest
-npm run -s ae -- search "weather forecast" --limit 5
-npm run -s ae -- describe <toolRef>
-npm run -s ae -- call <toolRef> --input '{"city":"Perth"}'
+npm run -s ae -- manifest --base-url http://127.0.0.1:3024
+npm run -s ae -- search "weather forecast" --limit 5 --base-url http://127.0.0.1:3024
+npm run -s ae -- describe <toolRef> --base-url http://127.0.0.1:3024
+npm run -s ae -- call <toolRef> --input '{"city":"Perth"}' --base-url http://127.0.0.1:3024
 ```
 
-Against an explicitly verified origin, pass `--base-url "$AE_ORIGIN"` to the
-same source commands. Do not treat an origin, archive, `/mcp`, `/llms.txt` or
-`/SKILL.md` read as hosted-release proof.
+Against a different explicitly verified origin, pass `--base-url "$AE_ORIGIN"` instead.
+Do not treat an origin, archive, `/mcp`, `/llms.txt` or `/SKILL.md` read as hosted-release proof.
 
 ## Project documents
 

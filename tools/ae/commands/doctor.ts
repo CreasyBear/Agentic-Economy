@@ -96,12 +96,17 @@ function originFlags(options: Pick<CliOptions, 'baseUrl' | 'baseUrlSource'>): re
     : ['--base-url', options.baseUrl]
 }
 
-function continuationFlags(options: Pick<CliOptions, 'baseUrl' | 'baseUrlSource' | 'json'>): readonly string[] {
-  return [...originFlags(options), ...(options.json ? ['--json'] : [])]
+/**
+ * A next command is always the machine-readable (`--json`) invocation, so the
+ * human renderer and the JSON `nextCommand` field print the identical string:
+ * one source of truth regardless of which mode this run itself used.
+ */
+function continuationFlags(options: Pick<CliOptions, 'baseUrl' | 'baseUrlSource'>): readonly string[] {
+  return [...originFlags(options), '--json']
 }
 
 function doctorContinuation(
-  options: Pick<CliOptions, 'baseUrl' | 'baseUrlSource' | 'json'>,
+  options: Pick<CliOptions, 'baseUrl' | 'baseUrlSource'>,
   tokens: readonly (string | number | undefined)[],
 ): string {
   return continuationCommand([...tokens, ...continuationFlags(options)])
@@ -153,6 +158,9 @@ function skippedQuoteCheck(reason: string, nextCommand?: string): DoctorCheckDra
 }
 
 export async function runDoctorCommand(args: readonly string[], options: CliOptions): Promise<number> {
+  // A business ID only ever scopes the provider check: `--provider` is the sole way to
+  // request it, so a bare positional without `--provider` is a usage error rather than
+  // a silently-ignored argument.
   const businessId = args[0]?.trim()
   if (args.length > 1 || (businessId !== undefined && (businessId.length === 0 || options.provider !== true))) {
     throw usageFailure('doctor', 'doctor-usage')
@@ -515,7 +523,7 @@ async function checkMarketRequests(
     }
     const checked = list.data.items.length
     return {
-      id: 'market_requests', state: 'pass',
+      id: 'market_requests', state: 'warn',
       summary: `No current Tool matches the ${checked} most recent private market ${checked === 1 ? 'request' : 'requests'} yet.`,
     }
   } catch {
@@ -702,7 +710,24 @@ async function checkServer(options: CliOptions): Promise<DoctorCheckDraft> {
       summary: `AE server is reachable and manifest ${SiteDiscoveryManifestSchemaVersion} is compatible.`,
     }
   } catch {
-    return serverFailure(options, 'AE server is not reachable.')
+    return serverUnreachableFailure(options)
+  }
+}
+
+/**
+ * A loopback origin that refuses the connection has nothing to point `ae
+ * config` or the hosted fallback at: the operator's own local stack is the
+ * fix, so this names the probed URL and starts it instead of routing away
+ * from the box the operator is actually sitting at.
+ */
+function serverUnreachableFailure(options: CliOptions): DoctorCheckDraft {
+  const { baseUrl } = options
+  if (!isLoopbackCliBaseUrl(baseUrl)) return serverFailure(options, 'AE server is not reachable.')
+  const safeOrigin = safeOriginForDiagnostics(baseUrl)
+  return {
+    id: 'server', state: 'fail',
+    summary: `AE server is not reachable: nothing is listening at ${safeOrigin}; start the local stack or fix --base-url.`,
+    nextCommand: LOCAL_DEV_COMMAND,
   }
 }
 
@@ -845,14 +870,8 @@ function serverFailure(options: CliOptions, summary: string): DoctorCheckDraft {
   return {
     id: 'server', state: 'fail', summary,
     nextCommand: isLoopbackCliBaseUrl(baseUrl)
-      ? continuationCommand([
-          'ae', 'doctor', '--base-url', HOSTED_DEFAULT_BASE_URL,
-          ...(options.json ? ['--json'] : []),
-        ])
-      : continuationCommand([
-          'ae', 'config', '--base-url', safeOrigin,
-          ...(options.json ? ['--json'] : []),
-        ]),
+      ? continuationCommand(['ae', 'doctor', '--base-url', HOSTED_DEFAULT_BASE_URL, '--json'])
+      : continuationCommand(['ae', 'config', '--base-url', safeOrigin, '--json']),
   }
 }
 

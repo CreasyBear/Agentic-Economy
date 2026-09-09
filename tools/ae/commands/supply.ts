@@ -1,3 +1,5 @@
+import type { z } from 'zod'
+
 import { isRecord } from '@/modules/common/is-record'
 import {
   SUPPLY_ACTION_ROUTE_CONTRACTS,
@@ -33,6 +35,7 @@ import {
   connectionContinuationForCli,
 } from '../lib/suggested-continuation-adapter'
 import { requireAgentAccessKey } from './status'
+import { requiredInputFieldsSummary } from './supply-input-help'
 
 export const SUPPLY_COMMAND_DESCRIPTORS = Object.freeze([
   { actionId: supplySourcePreviewAction.id, command: 'supply', subcommand: 'preview', route: SUPPLY_ACTION_ROUTE_CONTRACTS.sourcePreview, action: supplySourcePreviewAction },
@@ -57,27 +60,40 @@ function descriptorFor(subcommand: string): SupplyDescriptor | undefined {
   return SUPPLY_COMMAND_DESCRIPTORS.find((descriptor) => descriptor.subcommand === subcommand)
 }
 
-function parseInputJson(options: CliOptions): Record<string, unknown> {
+/** One `--input '<json>'` guidance line naming the schema's required fields and a matching example. */
+function acceptedInputForm(schema: z.ZodType): string {
+  const { fields, example } = requiredInputFieldsSummary(schema)
+  const fieldsText = fields.length === 0 ? '' : ` Required input fields: ${fields.join(', ')}.`
+  return `${fieldsText} Example: --input '${JSON.stringify(example)}'`
+}
+
+function parseInputJson(options: CliOptions, schema: z.ZodType): Record<string, unknown> {
   if (options.input === undefined) {
-    throw new CliFailure('This provider command requires --input with one JSON object.', {
-      kind: 'INVALID_ARGUMENT',
-      code: 'supply-input-required',
-    })
+    throw new CliFailure(
+      `This provider command requires --input with one JSON object.${acceptedInputForm(schema)}`,
+      {
+        kind: 'INVALID_ARGUMENT',
+        code: 'supply-input-required',
+      },
+    )
   }
   try {
     const parsed = JSON.parse(options.input) as unknown
     if (!isRecord(parsed)) throw new TypeError('not_object')
     return parsed
   } catch {
-    throw new CliFailure('Provider --input must be one valid JSON object.', {
-      kind: 'INVALID_ARGUMENT',
-      code: 'supply-input-invalid',
-    })
+    throw new CliFailure(
+      `Provider --input must be one valid JSON object.${acceptedInputForm(schema)}`,
+      {
+        kind: 'INVALID_ARGUMENT',
+        code: 'supply-input-invalid',
+      },
+    )
   }
 }
 
-function writeInput(options: CliOptions): Record<string, unknown> {
-  const input = parseInputJson(options)
+function writeInput(options: CliOptions, schema: z.ZodType): Record<string, unknown> {
+  const input = parseInputJson(options, schema)
   if (options.idempotencyKey === undefined) return input
   if (typeof input.idempotencyKey === 'string' && input.idempotencyKey !== options.idempotencyKey) {
     throw new CliFailure('The input idempotencyKey and --idempotency-key must match.', {
@@ -88,7 +104,7 @@ function writeInput(options: CliOptions): Record<string, unknown> {
   return { ...input, idempotencyKey: options.idempotencyKey }
 }
 
-function inputFor(subcommand: string, args: readonly string[], options: CliOptions): unknown {
+function inputFor(subcommand: string, args: readonly string[], options: CliOptions, schema: z.ZodType): unknown {
   if (subcommand === 'tools') {
     const businessRef = args[1]
     if (businessRef === undefined || args.length > 2) {
@@ -139,7 +155,7 @@ function inputFor(subcommand: string, args: readonly string[], options: CliOptio
   if (args.length !== 1) {
     throw usageFailure(`supply ${subcommand}`, 'supply-command-usage')
   }
-  return writeInput(options)
+  return writeInput(options, schema)
 }
 
 function printSupplyResult(subcommand: string, result: unknown, options: CliOptions): void {
@@ -238,13 +254,22 @@ export async function runSupplyCommand(args: readonly string[], options: CliOpti
   if (descriptor === undefined) {
     throw usageFailure('supply', 'supply-usage')
   }
-  const input = inputFor(subcommand, args, options)
+  const input = inputFor(subcommand, args, options, descriptor.action.schema)
   const parsedInput = descriptor.action.schema.safeParse(input)
   if (!parsedInput.success) {
-    throw new CliFailure(`Input does not match ${descriptor.action.invocationContract.version}.`, {
-      kind: 'INVALID_ARGUMENT',
-      code: 'supply-input-invalid',
-    })
+    const fields = [...new Set(
+      parsedInput.error.issues
+        .map((issue) => issue.path.join('.'))
+        .filter((path) => path.length > 0),
+    )]
+    const fieldsText = fields.length === 0 ? '' : ` Missing or invalid field${fields.length === 1 ? '' : 's'}: ${fields.join(', ')}.`
+    throw new CliFailure(
+      `Input does not match ${descriptor.action.invocationContract.version}.${fieldsText}`,
+      {
+        kind: 'INVALID_ARGUMENT',
+        code: 'supply-input-invalid',
+      },
+    )
   }
   const apiKey = requireAgentAccessKey(`supply ${subcommand}`, options, MARKET_SUPPLY_MANAGE_SCOPE)
   const outcome = await callJson(options.baseUrl, descriptor.route.path, {

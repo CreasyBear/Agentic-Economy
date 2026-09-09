@@ -32,7 +32,7 @@ function tool(toolRef: string, providerName = 'Reference Services') {
 
 const result = {
   kind: 'ok' as const,
-  schemaVersion: 'registry-tools:v2' as const,
+  schemaVersion: 'registry-tools:v3' as const,
   tools: [tool(refs[0]!)],
 }
 
@@ -93,7 +93,7 @@ describe('anonymous Tool compare CLI', () => {
     await runCompareCommand(refs, { ...options, json: false, technical: true })
     const technical = output.join('')
     expect(technical).toContain(refs[0]!)
-    expect(technical).toContain('schema: registry-tools:v2')
+    expect(technical).toContain('schema: registry-tools:v3')
     expect(technical).toContain('capability=reference.lookup')
   })
 

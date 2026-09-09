@@ -136,6 +136,23 @@ describe('AE CLI account interface', () => {
     expect(write.mock.calls.map(([value]) => String(value)).join('')).not.toContain('hidden-identity-secret')
   })
 
+  it('masks the credential value in human account status', async () => {
+    storeConnection({ baseUrl: options.baseUrl, accessToken: 'test-account-key' })
+    const credentialId = 'ak_local_e2e_0d1aaad80714eec94c47848bc25d45a1860bbd7bdfbaa6f44517a15e36c79729'
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>().mockResolvedValue(Response.json({
+      kind: 'authenticated', principalRef: 'prn_one', accountRef: 'acc_one',
+      credentialId, applicationRef: 'agentic-economy', environment: 'sandbox',
+      scopes: ['market_tools:call'], authorityMode: 'read_only',
+    })))
+    const write = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
+
+    await runAccountCommand([], { ...options, json: false })
+
+    const printed = write.mock.calls.map(([value]) => String(value)).join('')
+    expect(printed).not.toContain(credentialId)
+    expect(printed).toContain('ak_loc…9729')
+  })
+
   it('prints the one other-origin status command for humans', async () => {
     storeConnection({ baseUrl: 'https://identity.example', accessToken: 'hidden-identity-secret' })
     const write = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)

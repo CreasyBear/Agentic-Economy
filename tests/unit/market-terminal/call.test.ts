@@ -7,6 +7,7 @@ import { join } from 'node:path'
 import { runCallCommand } from '../../../tools/ae/commands/call'
 import type { CliOptions } from '../../../tools/ae/lib/args'
 import { TOOL_MARKET_DESCRIBE_PATH } from '@/modules/common/market-tool-paths'
+import { FUNDING_HANDOFF_CREATE_PATH } from '@/modules/money/funding-handoff.actions'
 import { CliFailure } from '../../../tools/ae/lib/output'
 
 const options: CliOptions = {
@@ -124,6 +125,38 @@ describe('market-terminal authenticated Tool Call', () => {
     await expect(runCallCommand([toolRef], { ...options, input: '{}' })).rejects.toMatchObject({
       retryable: false, nextCommand: `ae describe ${toolRef} --base-url https://market.example --json`,
     })
+  })
+
+  it('sends a funding refusal to the same fund handoff doctor reports, without placeholder fields', async () => {
+    setApiKey('ae-test-caller-key')
+    const funding = {
+      action: 'funding.handoff.create',
+      method: 'POST',
+      path: FUNDING_HANDOFF_CREATE_PATH,
+      input: {
+        principalAmount: { currency: 'AUD', units: '1000000', exponent: 6 },
+        idempotencyKey: 'funding:one',
+      },
+    }
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>().mockResolvedValue(jsonResponse({
+      kind: 'refused', toolRef, code: 'insufficient_balance', retryable: false,
+      correlationRef: 'correlation:funding', continuation: funding,
+    })))
+
+    let thrown: unknown
+    try {
+      await runCallCommand([toolRef], { ...options, baseUrlSource: 'flag', input: '{}' })
+    } catch (error) {
+      thrown = error
+    }
+
+    expect(thrown).toBeInstanceOf(CliFailure)
+    if (!(thrown instanceof CliFailure)) return
+    expect(thrown.code).toBe('insufficient_balance')
+    expect(thrown.nextCommand).toBe('ae fund --base-url https://market.example --json')
+    expect(thrown.suggestion).toBe('Add Account credit as the owner, then repeat this call.')
+    expect(thrown.detail).toMatchObject({ continuation: funding })
+    expect(JSON.stringify(thrown.detail)).not.toContain('<redacted>')
   })
 
   it('preserves an actionable caller-specific Tool quote refusal', async () => {

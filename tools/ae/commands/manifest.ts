@@ -19,14 +19,31 @@ import {
   callResultKindValues,
 } from '@/modules/capability-execution/call-contracts'
 import { CALL_ROUTE_CONTRACT } from '@/modules/capability-execution/call-entry'
-import { SUPPLY_ACTION_ROUTE_CONTRACTS } from '@/modules/capability-supply/supply-actions'
+import {
+  SUPPLY_ACTION_ROUTE_CONTRACTS,
+  supplyConnectionConnectAction,
+  supplyConnectionReconnectAction,
+  supplyConnectionRevokeAction,
+  supplyPublishAction,
+  supplyRecheckAction,
+  supplyRepublishAction,
+  supplySourcePreviewAction,
+  supplyWithdrawAction,
+} from '@/modules/capability-supply/supply-actions'
 import { describeActionForAgent } from '@/modules/common/action'
 import {
   TOOL_MARKET_ACTION_ENTRIES,
 } from '@/modules/registry/tool-entry'
 
+import { TOOL_QUOTE_ACTION_ID } from '@/modules/capability-execution/quote'
+
 import type { CliOptions } from '../lib/args'
 import { printJson } from '../lib/output'
+import { requiredInputFieldsGuidance } from './supply-input-help'
+import { toolCallCommand } from '../lib/tool-format'
+
+/** The exact quote tool an MCP client sees, taken from the server's own naming. */
+export const QUOTE_MCP_TOOL_NAME = mcpToolName(requireRegisteredAction(TOOL_QUOTE_ACTION_ID))
 
 const RECOVERY_EVIDENCE_MATERIAL = {
   kind: 'action_invocation_reconciliation' as const,
@@ -115,7 +132,7 @@ export const COMMANDS: Readonly<Record<string, RootCommandManifestEntry>> = {
     guidance: [
       'Filters: networkId, location, effects, dataUse, healthStatus, currency, and maximumPrice.',
       'Exact price example for at most USD 0.50: --filters \'{"currency":"USD","maximumPrice":{"currency":"USD","units":"50","exponent":2}}\'',
-      'Search returns compact catalog facts. Exact payable price and caller readiness are confirmed by tool.quote.',
+      `Search returns compact catalog facts. Exact payable price and caller readiness are confirmed by ${toolCallCommand()}, or by ${QUOTE_MCP_TOOL_NAME} from an MCP client.`,
     ],
   },
   list: {
@@ -149,7 +166,7 @@ export const COMMANDS: Readonly<Record<string, RootCommandManifestEntry>> = {
     group: 'discover_compare',
     rootOrder: 2,
     guidance: [
-      'Catalog health and price are indicative. Use tool.quote for caller-specific readiness and exact terms.',
+      `Catalog health and price are indicative. Run ${toolCallCommand()} for caller-specific readiness and exact terms, or ${QUOTE_MCP_TOOL_NAME} from an MCP client.`,
     ],
   },
   compare: { summary: 'Compare two to four exact current Tool references.', args: '<tool-ref> <tool-ref> [<tool-ref> ...]', json: true, group: 'discover_compare', rootOrder: 3 },
@@ -167,7 +184,7 @@ export const COMMANDS: Readonly<Record<string, RootCommandManifestEntry>> = {
   },
   doctor: {
     summary: 'Check this CLI connection across the Tool market loop without changing server or local state.',
-    args: '[businessId] [--provider]',
+    args: '[--provider [businessId]]',
     json: true,
     group: 'reference',
     rootOrder: 3,
@@ -175,7 +192,7 @@ export const COMMANDS: Readonly<Record<string, RootCommandManifestEntry>> = {
       'Uses existing read-only surfaces only; it never connects, funds, retries, reconciles, or changes provider state.',
       'Rechecks the five newest private market requests and points directly to the first current matching Tool without revealing the saved job phrase.',
       'When recovery is clear, confirms the newest previously successful Tool is still current and offers description without replaying prior inputs or effects.',
-      'Pass --provider to validate separately stored provider access; add a business ID to include Tool and provider readiness.',
+      '--provider is the only way to check provider readiness; a business ID is only accepted alongside --provider. Without a business ID, only provider credential access is checked. With one, Tool and connection readiness are scoped to that exact business.',
     ],
   },
   account: {
@@ -204,19 +221,19 @@ export const COMMANDS: Readonly<Record<string, RootCommandManifestEntry>> = {
       'Use status before lifecycle writes and preserve the exact offering and publication revisions it returns.',
     ],
     commands: {
-      preview: { summary: 'Discover candidate Tools from one native Provider source without publishing or calling.', args: "--input '<json>'", json: true },
+      preview: { summary: 'Discover candidate Tools from one native Provider source without publishing or calling.', args: "--input '<json>'", json: true, guidance: requiredInputFieldsGuidance(supplySourcePreviewAction.schema) },
       tools: { summary: 'Inventory the Provider’s admitted Tools for one business.', args: '<businessRef>', json: true },
       status: { summary: 'Read one exact Provider Tool lifecycle.', args: '<businessRef> <toolRef>', json: true },
-      publish: { summary: 'Publish one admitted provider Tool artifact.', args: "--input '<json>' [--idempotency-key <key>]", json: true },
-      withdraw: { summary: 'Withdraw one exact current provider publication.', args: "--input '<json>' [--idempotency-key <key>]", json: true },
-      recheck: { summary: 'Schedule readiness revalidation for one exact publication.', args: "--input '<json>' [--idempotency-key <key>]", json: true },
-      republish: { summary: 'Republish one exact withdrawn publication.', args: "--input '<json>' [--idempotency-key <key>]", json: true },
+      publish: { summary: 'Publish one admitted provider Tool artifact.', args: "--input '<json>' [--idempotency-key <key>]", json: true, guidance: requiredInputFieldsGuidance(supplyPublishAction.schema) },
+      withdraw: { summary: 'Withdraw one exact current provider publication.', args: "--input '<json>' [--idempotency-key <key>]", json: true, guidance: requiredInputFieldsGuidance(supplyWithdrawAction.schema) },
+      recheck: { summary: 'Schedule readiness revalidation for one exact publication.', args: "--input '<json>' [--idempotency-key <key>]", json: true, guidance: requiredInputFieldsGuidance(supplyRecheckAction.schema) },
+      republish: { summary: 'Republish one exact withdrawn publication.', args: "--input '<json>' [--idempotency-key <key>]", json: true, guidance: requiredInputFieldsGuidance(supplyRepublishAction.schema) },
       earnings: { summary: 'Read exact provider earnings and payout status for one currency.', args: '<currency>', json: true },
       connections: { summary: 'List the bounded provider-connection projection for one provider business, including non-active recovery states.', args: '<businessId> [lifecycle]', json: true },
       connection: { summary: 'Inspect one exact provider connection and its current concurrency identity.', args: '<connectionRef>', json: true },
-      connect: { summary: 'Connect one public credentialless x402 endpoint.', args: "--input '<json>' [--idempotency-key <key>]", json: true },
-      reconnect: { summary: 'Refresh one exact provider connection using its current generation and digest.', args: "--input '<json>' [--idempotency-key <key>]", json: true },
-      revoke: { summary: 'Begin revocation and cleanup for one exact provider connection.', args: "--input '<json>' [--idempotency-key <key>]", json: true },
+      connect: { summary: 'Connect one public credentialless x402 endpoint.', args: "--input '<json>' [--idempotency-key <key>]", json: true, guidance: requiredInputFieldsGuidance(supplyConnectionConnectAction.schema) },
+      reconnect: { summary: 'Refresh one exact provider connection using its current generation and digest.', args: "--input '<json>' [--idempotency-key <key>]", json: true, guidance: requiredInputFieldsGuidance(supplyConnectionReconnectAction.schema) },
+      revoke: { summary: 'Begin revocation and cleanup for one exact provider connection.', args: "--input '<json>' [--idempotency-key <key>]", json: true, guidance: requiredInputFieldsGuidance(supplyConnectionRevokeAction.schema) },
       offboarding: { summary: 'Read one durable Provider offboarding case. Starting and resuming remain owner-only.', args: '<businessRef>', json: true },
     },
   },
@@ -289,9 +306,14 @@ export const COMMANDS: Readonly<Record<string, RootCommandManifestEntry>> = {
   },
 } as const
 
-function describedAction(actionId: string) {
+function requireRegisteredAction(actionId: string) {
   const action = findAction(actionId)
   if (action === undefined) throw new Error(`Manifest action is not registered: ${actionId}`)
+  return action
+}
+
+function describedAction(actionId: string) {
+  const action = requireRegisteredAction(actionId)
   const described = describeActionForAgent(action)
   return {
     ...described,

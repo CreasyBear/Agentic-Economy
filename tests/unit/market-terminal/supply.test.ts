@@ -137,6 +137,50 @@ describe('AE CLI provider Tool lifecycle', () => {
     expect(fetch).not.toHaveBeenCalled()
   })
 
+  it('previews a native x402 source from a schema-matching --input payload without publishing or calling it', async () => {
+    const fetch = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      expect(String(url)).toBe('https://market.example/api/v1/supply/sources/preview')
+      expect(JSON.parse(String(init?.body))).toEqual({
+        kind: 'x402',
+        resourceUrl: 'https://example.com/pay',
+        method: 'GET',
+        environment: 'sandbox',
+      })
+      return Response.json({
+        kind: 'ready',
+        sourceDigest: `sha256:${'1'.repeat(64)}`,
+        sourceRevision: 'rev:one',
+        provenance: { sourceKind: 'x402', sourceUrl: 'https://example.com/pay', authority: 'unverified_public' },
+        authentication: [],
+        candidates: [],
+      })
+    })
+    vi.stubGlobal('fetch', fetch)
+    const write = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
+
+    await runSupplyCommand(['preview'], {
+      ...baseOptions,
+      input: JSON.stringify({ kind: 'x402', resourceUrl: 'https://example.com/pay', method: 'GET', environment: 'sandbox' }),
+    })
+
+    expect(fetch).toHaveBeenCalledOnce()
+    expect(JSON.parse(write.mock.calls.map(([value]) => String(value)).join(''))).toMatchObject({ kind: 'ready' })
+  })
+
+  it('rejects a malformed preview payload with a message naming the missing field, before any fetch', async () => {
+    const fetch = vi.fn()
+    vi.stubGlobal('fetch', fetch)
+
+    await expect(runSupplyCommand(['preview'], {
+      ...baseOptions,
+      input: JSON.stringify({ kind: 'x402', resourceUrl: 'https://example.com/pay', method: 'GET' }),
+    })).rejects.toMatchObject({
+      code: 'supply-input-invalid',
+      message: expect.stringContaining('environment'),
+    })
+    expect(fetch).not.toHaveBeenCalled()
+  })
+
   it('reads Provider offboarding without granting the CLI authority to start or resume it', async () => {
     const fetch = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
       expect(String(url)).toBe('https://market.example/api/v1/supply/offboarding/status')

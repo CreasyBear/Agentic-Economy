@@ -49,6 +49,25 @@ describe('Tool read failures', () => {
     expect(thrown.message).toContain('cursor')
   })
 
+  it('sends an unknown Tool reference back to search on the same origin', () => {
+    let thrown: unknown
+    try {
+      throwToolReadFailure({
+        reason: 'tool_not_found',
+        toolRef: `operation:v1:${'a'.repeat(64)}`,
+        options: { baseUrl: 'http://127.0.0.1:3024', baseUrlSource: 'flag', json: true },
+      })
+    } catch (error) {
+      thrown = error
+    }
+
+    expect(thrown).toBeInstanceOf(CliFailure)
+    if (!(thrown instanceof CliFailure)) return
+    expect(thrown.kind).toBe('NOT_FOUND')
+    expect(thrown.suggestion).toBe('Search the current catalogue for a Tool that does this job.')
+    expect(thrown.nextCommand).toBe("ae search '<job>' --base-url http://127.0.0.1:3024 --json")
+  })
+
   it.each(['setup_required', 'tool_unavailable'] as const)(
     'does not tell a buyer to retry or connect for Provider-owned %s state',
     (reason) => {
