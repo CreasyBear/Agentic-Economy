@@ -26,6 +26,26 @@ export function buildConvexSelectArgs() {
   return ['convex', 'deployment', 'select', 'local']
 }
 
+/**
+ * Anonymous local deployments have no parseable deployment name
+ * (`anonymous-agent` cannot be resolved against the Convex cloud API), so
+ * `convex deployment select local` hard-fails before `convex dev` runs.
+ * `convex dev` resolves the same local state file itself; skipping the
+ * select no-op restores the dev:local flow for anonymous sandboxes.
+
+ */
+export function isAnonymousLocalDeployment() {
+  const statePath = resolvePath('.convex/local/default/config.json')
+  if (!existsSync(statePath)) return false
+
+  try {
+    const state = JSON.parse(readFileSync(statePath, 'utf8'))
+    return state.deploymentName === 'anonymous-agent'
+  } catch {
+    return false
+  }
+}
+
 export function buildConvexDevArgs() {
   return ['convex', 'dev', '--typecheck', 'disable', '--local-force-upgrade']
 }
@@ -292,19 +312,23 @@ async function runLocalStack(viteArgs) {
   process.once('SIGTERM', onSigterm)
 
   try {
-    const selected = supervisor.add(createManagedChild(
-      'npx',
-      buildConvexSelectArgs(),
-      env,
-      { label: 'Convex deployment select' },
-    ))
-    const selectedResult = await selected.done
-    if (supervisor.parentSignal !== null) {
-      return signalExitStatus(supervisor.parentSignal)
-    }
-    if (childExitStatus(selectedResult) !== 0) {
-      reportChildFailure('Convex deployment select', selectedResult)
-      return childExitStatus(selectedResult)
+    if (!isAnonymousLocalDeployment()) {
+      const selected = supervisor.add(createManagedChild(
+        'npx',
+        buildConvexSelectArgs(),
+        env,
+        { label: 'Convex deployment select' },
+      ))
+      const selectedResult = await selected.done
+      if (supervisor.parentSignal !== null) {
+        return signalExitStatus(supervisor.parentSignal)
+      }
+      if (childExitStatus(selectedResult) !== 0) {
+        reportChildFailure('Convex deployment select', selectedResult)
+        return childExitStatus(selectedResult)
+      }
+    } else {
+      process.stderr.write('local-dev: anonymous local deployment — skipping `convex deployment select local`\n')
     }
 
     const convex = supervisor.add(createManagedChild(
