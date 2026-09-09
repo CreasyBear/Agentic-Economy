@@ -33,3 +33,28 @@ describe('scheduledFunctionRetirement.cancelByName', () => {
     expect(result).toEqual({ scanned: 0, cancelled: 0, byName: {} })
   })
 })
+
+describe('scheduledFunctionRetirement.retireRegistrySources', () => {
+  it('removes registry-sourced rows and third-party snapshots, keeps coinbase, and is idempotent', async () => {
+    const t = convexTest(schema, modules)
+    await t.run(async (ctx) => {
+      await ctx.db.insert('marketExternalRegistryState', { key: 'registry', lastAttemptAt: 1, lastAttemptStatus: 'failed', lastError: 'x' })
+      await ctx.db.insert('marketExternalRegistryState', { key: 'coinbase', lastAttemptAt: 2, lastAttemptStatus: 'complete', activeGeneration: 'coinbase-a' })
+      await ctx.db.insert('marketExternalRegistryGenerations', { generation: 'registry-1', status: 'complete', startedAt: 1, ingestedCount: 1 })
+      await ctx.db.insert('marketExternalRegistryGenerations', { generation: 'coinbase-a', source: 'coinbase', status: 'complete', startedAt: 2, ingestedCount: 1 })
+      await ctx.db.insert('marketExternalSnapshots', { window: '30d', fetchedAt: 1, sourceTimestamp: 't', snapshotJson: '{}' })
+    })
+    const dry = await t.mutation(internal.scheduledFunctionRetirement.retireRegistrySources, { dryRun: true })
+    expect(dry).toEqual({ entries: 0, generations: 1, stateRows: 1, snapshots: 1, continued: false })
+    const first = await t.mutation(internal.scheduledFunctionRetirement.retireRegistrySources, {})
+    expect(first).toEqual({ entries: 0, generations: 1, stateRows: 1, snapshots: 1, continued: false })
+    const second = await t.mutation(internal.scheduledFunctionRetirement.retireRegistrySources, {})
+    expect(second).toEqual({ entries: 0, generations: 0, stateRows: 0, snapshots: 0, continued: false })
+    const remaining = await t.run(async (ctx) => ({
+      state: (await ctx.db.query('marketExternalRegistryState').collect()).map((row) => row.key),
+      generations: (await ctx.db.query('marketExternalRegistryGenerations').collect()).map((row) => row.generation),
+      snapshots: (await ctx.db.query('marketExternalSnapshots').collect()).length,
+    }))
+    expect(remaining).toEqual({ state: ['coinbase'], generations: ['coinbase-a'], snapshots: 0 })
+  })
+})
