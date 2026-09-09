@@ -137,7 +137,6 @@ import type * as lib_x402DirectoryIndex_rows from "../lib/x402DirectoryIndex/row
 import type * as marketDemandSignals from "../marketDemandSignals.js";
 import type * as marketDispatchWorkpool from "../marketDispatchWorkpool.js";
 import type * as marketEvidence from "../marketEvidence.js";
-import type * as marketExternalRefresh from "../marketExternalRefresh.js";
 import type * as marketExternalRegistry from "../marketExternalRegistry.js";
 import type * as marketExternalRegistryRefresh from "../marketExternalRegistryRefresh.js";
 import type * as marketExternalSnapshots from "../marketExternalSnapshots.js";
@@ -175,6 +174,7 @@ import type * as qualifiedUse from "../qualifiedUse.js";
 import type * as rateLimit from "../rateLimit.js";
 import type * as recoveryBreakGlass from "../recoveryBreakGlass.js";
 import type * as registry from "../registry.js";
+import type * as scheduledFunctionRetirement from "../scheduledFunctionRetirement.js";
 import type * as secretLifecycleHttp from "../secretLifecycleHttp.js";
 import type * as secretLifecycleOperations from "../secretLifecycleOperations.js";
 import type * as security from "../security.js";
@@ -331,7 +331,6 @@ declare const fullApi: ApiFromModules<{
   marketDemandSignals: typeof marketDemandSignals;
   marketDispatchWorkpool: typeof marketDispatchWorkpool;
   marketEvidence: typeof marketEvidence;
-  marketExternalRefresh: typeof marketExternalRefresh;
   marketExternalRegistry: typeof marketExternalRegistry;
   marketExternalRegistryRefresh: typeof marketExternalRegistryRefresh;
   marketExternalSnapshots: typeof marketExternalSnapshots;
@@ -369,6 +368,7 @@ declare const fullApi: ApiFromModules<{
   rateLimit: typeof rateLimit;
   recoveryBreakGlass: typeof recoveryBreakGlass;
   registry: typeof registry;
+  scheduledFunctionRetirement: typeof scheduledFunctionRetirement;
   secretLifecycleHttp: typeof secretLifecycleHttp;
   secretLifecycleOperations: typeof secretLifecycleOperations;
   security: typeof security;
