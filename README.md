@@ -147,16 +147,23 @@ Open `http://127.0.0.1:3024/market` for the catalogue or
 `http://127.0.0.1:3024/t/new` for chat.
 
 `npm run dev:local` is a staged launcher: toolchain → local Convex deployment
-→ URL probe → identities → local Clerk sandbox (auth bypass) → directory scan
-→ one seeded fixture Tool → Vite → `ae doctor`. Each stage stops with the exact fix
-on failure. Flags: `--skip-scan`, `--skip-seed`, `--no-doctor`.
+→ URL probe → identities → owner authority (the bypass owner's canonical identity
+and legal-customer binding) → directory scan kickoff (skipped when a complete catalogue
+generation exists) → one seeded sandbox Tool → Vite → `ae doctor`. Each stage stops
+with the exact fix on failure. Flags: `--skip-scan`, `--skip-seed`, `--no-doctor`.
 
 To enable explicit test authority, after startup run `npm run connect:local --
 --base-url http://127.0.0.1:3024` to bind the local buyer credential; it wraps
 `ae connect` and approves the device code through the local Clerk bypass, so
-no browser is needed. On a hosted origin use `ae connect` and approve in the
-browser instead. Then `npm run ae -- doctor --json --base-url http://127.0.0.1:3024` shows three groups:
-discovery, quoting, purchase. Purchase will warn until the Account is funded.
+no browser is needed. Use `--provider` to bind a provider credential the same way.
+On a hosted origin use `ae connect` and approve in the browser instead.
+If your `.env.development.local` sets `VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E=false`
+(real Clerk locally), start with `VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E=true npm run dev:local`
+for the bypass, because the process environment now wins over dotenv files.
+Then `npm run ae -- doctor --json --base-url http://127.0.0.1:3024` shows three groups:
+discovery, quoting, purchase. After connecting, `ae doctor` reports quoting `warn`
+at the funding gate until the Account is funded (Well 2), which is the expected
+fresh-checkout state.
 
 Note: `npm run dev` starts Vite only and is not a valid start path.
 

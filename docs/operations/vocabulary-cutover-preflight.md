@@ -205,7 +205,7 @@ pending funding reconciliation and callback/job accounting.
 
 ## Supported clean-environment and rollback method
 
-The supported local path is `npm run dev:local`, which selects the local Convex deployment, starts Convex locally with the project’s normal procedure, and performs the existing idempotent development identity/catalogue setup. `npm run seed:dev` is the supported seed entry point. The local backend must be running before a local census or fresh seed can be verified.
+The supported local path is `npm run dev:local`, which selects the local Convex deployment, starts Convex locally with the project’s normal procedure, and performs the existing idempotent development identity/catalogue setup. Seeding is part of `npm run dev:local` (stages identities, authority, sandbox Tool); there is no standalone seed script. The local backend must be running before a local census or fresh seed can be verified.
 
 The supported hosted path is to pause new test activity, account for pending Calls/callbacks/scheduled work, verify backup and restore, establish a clean dataset in the existing `package4-release` Convex project using supported Convex operations and the updated seed, deploy the matching schema/backend/clients through the existing Vercel project, reconnect test identities, verify callback isolation, rerun acceptance, and reopen activity only after proof passes. Historical external financial records and evidence remain retained. No custom migration engine, backup-archive table rename, new Vercel project or production/mainnet rollout is in scope.
 
