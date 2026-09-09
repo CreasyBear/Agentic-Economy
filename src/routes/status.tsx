@@ -12,7 +12,7 @@ import { SiteDiscoveryManifestSchemaVersion } from '@/modules/discovery/public'
 import { buildPublicPageHead } from '@/modules/seo/public'
 
 type CheckState = 'checking' | 'operational' | 'degraded'
-type ProbeId = 'site' | 'market' | 'discovery' | 'release'
+type ProbeId = 'site' | 'market' | 'discovery' | 'release' | 'catalogue'
 type StatusCheck = Readonly<{
   id: ProbeId
   label: string
@@ -27,13 +27,14 @@ const probes = [
   { id: 'market', label: 'Tool API', path: '/api/ready', operationalDetail: 'Tool search and new Calls are ready.' },
   { id: 'discovery', label: 'Machine discovery', path: '/.well-known/ucp', operationalDetail: 'Agents can discover the current AE interfaces.' },
   { id: 'release', label: 'Release identity', path: '/api/v1/release', operationalDetail: 'Deployment identity is available.' },
+  { id: 'catalogue', label: 'Catalogue freshness', path: '/api/v1/catalogue-status', operationalDetail: 'The Tool catalogue was refreshed within the last 36 hours.' },
 ] as const
 
 export const Route = createFileRoute('/status')({
   head: () => buildPublicPageHead({
     path: '/status',
     title: 'System status | Agentic Economy',
-    description: 'Current Agentic Economy website, Tool API, machine discovery, and release identity status.',
+    description: 'Current Agentic Economy website, Tool API, machine discovery, release identity, and catalogue freshness status.',
   }),
   component: StatusRoute,
 })
@@ -209,6 +210,8 @@ function probeContractMatches(id: ProbeId, body: unknown): boolean {
       return body.kind === 'ok'
         && typeof body.sourceRevision === 'string'
         && /^[a-f0-9]{40}$/u.test(body.sourceRevision)
+    case 'catalogue':
+      return body.schemaVersion === 'catalogue-status:v1' && body.status === 'fresh'
   }
 }
 
@@ -222,6 +225,8 @@ function failedResponseDetail(id: ProbeId, status: number): string {
       return `Agent discovery and setup may fail (HTTP ${status}).`
     case 'release':
       return `New Calls should wait (HTTP ${status}). Existing Calls may still need review.`
+    case 'catalogue':
+      return `Catalogue freshness is unknown (HTTP ${status}). Tool listings may be out of date.`
   }
 }
 
@@ -235,6 +240,8 @@ function invalidContractDetail(id: ProbeId): string {
       return 'The machine-discovery contract is invalid. Agent setup may fail.'
     case 'release':
       return 'The release identity is invalid. New Calls should wait.'
+    case 'catalogue':
+      return 'The catalogue is stale, absent, or its last refresh failed. Tool listings may be out of date.'
   }
 }
 
@@ -248,6 +255,8 @@ function unreachableDetail(id: ProbeId): string {
       return 'Machine discovery could not be reached. Agent setup may fail.'
     case 'release':
       return 'Release identity could not be reached. New Calls should wait.'
+    case 'catalogue':
+      return 'Catalogue freshness could not be checked. Tool listings may be out of date.'
   }
 }
 

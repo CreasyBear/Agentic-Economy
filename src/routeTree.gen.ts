@@ -61,6 +61,7 @@ import { Route as ApiV1ReleaseRouteImport } from './routes/api.v1.release'
 import { Route as ApiV1RegistryRouteImport } from './routes/api.v1.registry'
 import { Route as ApiV1MarketRequestsRouteImport } from './routes/api.v1.market-requests'
 import { Route as ApiV1MarketMetricsRouteImport } from './routes/api.v1.market-metrics'
+import { Route as ApiV1CatalogueStatusRouteImport } from './routes/api.v1.catalogue-status'
 import { Route as ApiV1CallsRouteImport } from './routes/api.v1.calls'
 import { Route as ApiV1AccountRouteImport } from './routes/api.v1.account'
 import { Route as ApiStripeWebhookRouteImport } from './routes/api.stripe.webhook'
@@ -390,6 +391,11 @@ const ApiV1MarketRequestsRoute = ApiV1MarketRequestsRouteImport.update({
 const ApiV1MarketMetricsRoute = ApiV1MarketMetricsRouteImport.update({
   id: '/api/v1/market-metrics',
   path: '/api/v1/market-metrics',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiV1CatalogueStatusRoute = ApiV1CatalogueStatusRouteImport.update({
+  id: '/api/v1/catalogue-status',
+  path: '/api/v1/catalogue-status',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiV1CallsRoute = ApiV1CallsRouteImport.update({
@@ -829,6 +835,7 @@ export interface FileRoutesByFullPath {
   '/api/stripe/webhook': typeof ApiStripeWebhookRouteWithChildren
   '/api/v1/account': typeof ApiV1AccountRouteWithChildren
   '/api/v1/calls': typeof ApiV1CallsRouteWithChildren
+  '/api/v1/catalogue-status': typeof ApiV1CatalogueStatusRoute
   '/api/v1/market-metrics': typeof ApiV1MarketMetricsRoute
   '/api/v1/market-requests': typeof ApiV1MarketRequestsRouteWithChildren
   '/api/v1/registry': typeof ApiV1RegistryRoute
@@ -949,6 +956,7 @@ export interface FileRoutesByTo {
   '/api/stripe/webhook': typeof ApiStripeWebhookRouteWithChildren
   '/api/v1/account': typeof ApiV1AccountRouteWithChildren
   '/api/v1/calls': typeof ApiV1CallsRouteWithChildren
+  '/api/v1/catalogue-status': typeof ApiV1CatalogueStatusRoute
   '/api/v1/market-metrics': typeof ApiV1MarketMetricsRoute
   '/api/v1/market-requests': typeof ApiV1MarketRequestsRouteWithChildren
   '/api/v1/registry': typeof ApiV1RegistryRoute
@@ -1071,6 +1079,7 @@ export interface FileRoutesById {
   '/api/stripe/webhook': typeof ApiStripeWebhookRouteWithChildren
   '/api/v1/account': typeof ApiV1AccountRouteWithChildren
   '/api/v1/calls': typeof ApiV1CallsRouteWithChildren
+  '/api/v1/catalogue-status': typeof ApiV1CatalogueStatusRoute
   '/api/v1/market-metrics': typeof ApiV1MarketMetricsRoute
   '/api/v1/market-requests': typeof ApiV1MarketRequestsRouteWithChildren
   '/api/v1/registry': typeof ApiV1RegistryRoute
@@ -1193,6 +1202,7 @@ export interface FileRouteTypes {
     | '/api/stripe/webhook'
     | '/api/v1/account'
     | '/api/v1/calls'
+    | '/api/v1/catalogue-status'
     | '/api/v1/market-metrics'
     | '/api/v1/market-requests'
     | '/api/v1/registry'
@@ -1313,6 +1323,7 @@ export interface FileRouteTypes {
     | '/api/stripe/webhook'
     | '/api/v1/account'
     | '/api/v1/calls'
+    | '/api/v1/catalogue-status'
     | '/api/v1/market-metrics'
     | '/api/v1/market-requests'
     | '/api/v1/registry'
@@ -1434,6 +1445,7 @@ export interface FileRouteTypes {
     | '/api/stripe/webhook'
     | '/api/v1/account'
     | '/api/v1/calls'
+    | '/api/v1/catalogue-status'
     | '/api/v1/market-metrics'
     | '/api/v1/market-requests'
     | '/api/v1/registry'
@@ -1540,6 +1552,7 @@ export interface RootRouteChildren {
   ApiStripeWebhookRoute: typeof ApiStripeWebhookRouteWithChildren
   ApiV1AccountRoute: typeof ApiV1AccountRouteWithChildren
   ApiV1CallsRoute: typeof ApiV1CallsRouteWithChildren
+  ApiV1CatalogueStatusRoute: typeof ApiV1CatalogueStatusRoute
   ApiV1MarketMetricsRoute: typeof ApiV1MarketMetricsRoute
   ApiV1MarketRequestsRoute: typeof ApiV1MarketRequestsRouteWithChildren
   ApiV1RegistryRoute: typeof ApiV1RegistryRoute
@@ -1933,6 +1946,13 @@ declare module '@tanstack/react-router' {
       path: '/api/v1/market-metrics'
       fullPath: '/api/v1/market-metrics'
       preLoaderRoute: typeof ApiV1MarketMetricsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/catalogue-status': {
+      id: '/api/v1/catalogue-status'
+      path: '/api/v1/catalogue-status'
+      fullPath: '/api/v1/catalogue-status'
+      preLoaderRoute: typeof ApiV1CatalogueStatusRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/v1/calls': {
@@ -2704,6 +2724,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiStripeWebhookRoute: ApiStripeWebhookRouteWithChildren,
   ApiV1AccountRoute: ApiV1AccountRouteWithChildren,
   ApiV1CallsRoute: ApiV1CallsRouteWithChildren,
+  ApiV1CatalogueStatusRoute: ApiV1CatalogueStatusRoute,
   ApiV1MarketMetricsRoute: ApiV1MarketMetricsRoute,
   ApiV1MarketRequestsRoute: ApiV1MarketRequestsRouteWithChildren,
   ApiV1RegistryRoute: ApiV1RegistryRoute,
