@@ -183,7 +183,7 @@ Not done. Joel's call — production deploy from unpushed local `main`. In order
   reshape.
 - **Well 4 — directory naming.** Rename "External Registry" tables/modules to directory naming.
   Needs a real migration, not a rename-in-place.
-- **Well 5 candidate — module rationalisation.** Baseline measured 2026-09-09:
+- **Well 5 input — module rationalisation.** Widens Well 5 (authority and agent-access host files, structural) from host-file extraction to module shape. Baseline measured 2026-09-09:
 
   | Metric | Value |
   | --- | --- |
