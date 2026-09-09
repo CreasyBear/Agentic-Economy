@@ -723,25 +723,6 @@ export const publishSandboxTool = internalMutation({
       throw new Error(`dev_seed_sandbox_tool_readiness_refused:${observed.reason}`)
     }
 
-    // Nothing on the seed publish path writes this business's
-    // `registrySearchDocuments` rows: `publishCapabilityForSeed` goes straight
-    // to `publishPreparedCapabilityCommand` (only the owner-facing handler
-    // rebuilds), and `rebuildCapabilityOriginSupplyProjection` skips
-    // programmable providers - which the sandbox fixture is. Rebuild here,
-    // after readiness, through the same command every catalog write path uses,
-    // so `/api/businesses/search?q=sandbox` finds the Tool on every run.
-    const support = await deriveBusinessOfferingSupportFromCapabilitySupply(ctx.db, businessId, now)
-    const rebuilt = await rebuildBusinessSupplyProjectionSnapshotCommand({
-      db: ctx.db,
-      sourceDb: ctx.db,
-      businessId,
-      support,
-      now,
-    })
-    if (rebuilt.kind === 'error') {
-      throw new Error(`dev_seed_sandbox_tool_projection_${rebuilt.code}`)
-    }
-
     return {
       created: target.created,
       publicationId: target.publicationRef,
