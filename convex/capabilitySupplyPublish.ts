@@ -974,7 +974,34 @@ function mapBootstrapPreparationRefusal(
   return reason
 }
 
+/*
+ * `registrySearchDocuments` is the only table `/api/businesses/search` reads,
+ * and nothing under the publish command writes it. The owner-facing handler
+ * rebuilds after its own publish (see `publishPreparedCapabilityHandler`), so
+ * without the same rebuild here every business onboarded through a system
+ * publish - dev seed, curated bootstrap, facilitator discovery - stays
+ * invisible to business search until some unrelated catalog write happens to
+ * rebuild it. Same command every catalog write path uses; it diffs documents
+ * against the stored rows, so a replayed publish is a no-op rather than a
+ * duplicate row.
+ */
 export async function publishBootstrapCapability(
+  ctx: MutationCtx,
+  input: BootstrapCapabilityInput,
+  actor: SupplyCommandActor,
+) {
+  const result = await commitBootstrapCapability(ctx, input, actor)
+  if (result.kind !== 'refused') {
+    await rebuildCapabilityOriginSupplyProjection(
+      ctx,
+      input.businessId as Id<'businesses'>,
+      input.now,
+    )
+  }
+  return result
+}
+
+async function commitBootstrapCapability(
   ctx: MutationCtx,
   input: BootstrapCapabilityInput,
   actor: SupplyCommandActor,

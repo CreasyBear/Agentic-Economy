@@ -27,7 +27,7 @@ const secondRef = `operation:v1:${"b".repeat(64)}`;
 
 const comparison = toolChoiceCompareOutputSchema.parse({
   kind: "ok",
-  schemaVersion: "registry-tools:v2",
+  schemaVersion: "registry-tools:v3",
   tools: [
     tool(firstRef, "Registry search", "Registry Works", "USD 0.25", "operational"),
     tool(secondRef, "Company lookup", "Clear Ledger", "Price confirmed at inspection", "unverified"),
@@ -78,7 +78,7 @@ describe("market comparison view", () => {
     const onBack = vi.fn();
     renderComparison({
       kind: "unavailable",
-      schemaVersion: "registry-tools:v2",
+      schemaVersion: "registry-tools:v3",
       reason: "tool_unavailable",
     }, { onRetry, onEditSelection, onBack });
 

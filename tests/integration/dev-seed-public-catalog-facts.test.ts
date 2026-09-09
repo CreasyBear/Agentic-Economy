@@ -165,7 +165,110 @@ describe('dev-seeded public catalog decision facts', () => {
       expect(routeable.supplies.some(({ binding }) => binding.endpointUrl.includes('/api/sandbox/'))).toBe(false)
     }
   }, 300_000)
+
+  /**
+   * A Tool nobody can price and nobody can find is not seeded supply. The
+   * business page reads the catalog Offering's own `price`, and
+   * `/api/businesses/search` reads `registrySearchDocuments`: neither is
+   * written by the capability-supply publish command, so both have to be
+   * facts `publishSandboxTool` itself guarantees, on every run.
+   */
+  it('seeds the sandbox Tool with one price fact and a findable search document', async () => {
+    const backend = convexTestWithMarketComponents()
+    await seedDevCatalogAuthority(backend)
+
+    await backend.mutation(internal.devSeed.publishSandboxTool, {})
+    const seeded = await readSandboxPriceFacts(backend)
+
+    // One AUD 1.00: the publication price `/tools/<ref>` and `ae describe`
+    // read, and the catalog price twin the business page reads.
+    expect(seeded.publicationPrice).toEqual({ currency: 'AUD', units: '1000000', exponent: 6 })
+    expect(seeded.revisionPrice).toEqual({
+      kind: 'fixed',
+      amount: seeded.publicationPrice,
+      unit: 'call',
+      taxTreatment: 'unstated',
+    })
+
+    const detail = await readSandboxCatalogDetail(backend)
+    expect(detail.price).toEqual(seeded.revisionPrice)
+    expect(detail.pricingSummary).toBe('AUD 1.00 per Call (sandbox)')
+
+    expect(await searchSandboxSlugs(backend, 'sandbox')).toEqual([SANDBOX_TOOL_BUSINESS_SLUG])
+    expect(await searchSandboxSlugs(backend, 'AEcon sandbox reference provider'))
+      .toEqual([SANDBOX_TOOL_BUSINESS_SLUG])
+
+    const documents = await readSandboxSearchDocumentIds(backend)
+    expect(documents).toHaveLength(1)
+
+    // A second boot re-asserts both facts without minting a second Offering
+    // revision, search document or publication.
+    const replay = await backend.mutation(internal.devSeed.publishSandboxTool, {})
+    expect(replay.created).toBe(false)
+    expect(await readSandboxPriceFacts(backend)).toEqual(seeded)
+    expect(await readSandboxCatalogDetail(backend)).toEqual(detail)
+    expect(await readSandboxSearchDocumentIds(backend)).toEqual(documents)
+    expect(await searchSandboxSlugs(backend, 'sandbox')).toEqual([SANDBOX_TOOL_BUSINESS_SLUG])
+    expect(await searchSandboxSlugs(backend, 'AEcon sandbox reference provider'))
+      .toEqual([SANDBOX_TOOL_BUSINESS_SLUG])
+  }, 300_000)
 })
+
+async function readSandboxPriceFacts(backend: SeedBackend): Promise<{
+  publicationPrice: unknown
+  revisionPrice: unknown
+  revisionCount: number
+}> {
+  return await backend.run(async (ctx) => {
+    const business = await ctx.db.query('businesses')
+      .withIndex('by_slug', (query) => query.eq('slug', SANDBOX_TOOL_BUSINESS_SLUG))
+      .unique()
+    if (business === null) throw new Error('sandbox business missing')
+    const offering = await ctx.db.query('businessOfferings')
+      .withIndex('by_businessId_and_status', (query) => query.eq('businessId', business._id))
+      .unique()
+    if (offering === null) throw new Error('sandbox offering missing')
+    const revisions = await ctx.db.query('businessOfferingRevisions')
+      .withIndex('by_offeringRef_and_revision', (query) => query.eq('offeringRef', offering.offeringRef))
+      .collect()
+    const current = revisions.find(({ revision }) => revision === offering.currentRevision)
+    const supply = await ctx.db.query('capabilityOfferings')
+      .withIndex('by_businessId_and_status', (query) => query.eq('businessId', business._id).eq('status', 'active'))
+      .unique()
+    if (supply === null) throw new Error('sandbox capability offering missing')
+    const publicationPrice = supply.presentation.price
+    return {
+      publicationPrice: publicationPrice.kind === 'fixed' ? publicationPrice.amount : publicationPrice,
+      revisionPrice: current?.price,
+      revisionCount: revisions.length,
+    }
+  })
+}
+
+async function readSandboxCatalogDetail(backend: SeedBackend): Promise<{
+  price: unknown
+  pricingSummary: string | undefined
+}> {
+  const result = await backend.query(api.catalog.getPublicBusinessCatalogBySlug, {
+    slug: SANDBOX_TOOL_BUSINESS_SLUG,
+  })
+  if (result.kind !== 'available') throw new Error(`sandbox catalog unavailable: ${result.kind}`)
+  const offering = result.catalog.offerings[0]
+  return { price: offering?.price, pricingSummary: offering?.pricingSummary }
+}
+
+async function searchSandboxSlugs(backend: SeedBackend, query: string): Promise<readonly string[]> {
+  const page = await backend.query(api.registry.searchPublicBusinessOfferingSupply, { query })
+  return page.items.map(({ slug }) => slug)
+}
+
+async function readSandboxSearchDocumentIds(backend: SeedBackend): Promise<readonly string[]> {
+  return await backend.run(async (ctx) => (await ctx.db.query('registrySearchDocuments')
+    .withIndex('by_business', (query) => query.eq('businessSlug', SANDBOX_TOOL_BUSINESS_SLUG))
+    .collect())
+    .map(({ documentId }) => documentId)
+    .sort())
+}
 
 async function readSandboxSupply(backend: SeedBackend): Promise<SandboxSupplyFacts> {
   return await backend.run(async (ctx) => {

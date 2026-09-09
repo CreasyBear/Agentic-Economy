@@ -14,6 +14,7 @@ import {
   runWithRequestCorrelation,
   withRequestCorrelationHeader,
 } from '@/lib/server/request-correlation'
+import { isInvalidRegistryCursorError } from '@/routes/api.businesses'
 
 const requestQuery = z.strictObject({
   query: z.string().max(200).default(''),
@@ -118,6 +119,14 @@ function registryError(error: unknown): Response {
       status: error.status,
       kind: kindForStatus(error.status),
       code: error.code,
+    })
+  }
+  if (isInvalidRegistryCursorError(error)) {
+    return problem({
+      status: 400,
+      kind: 'INVALID_ARGUMENT',
+      code: 'invalid_cursor',
+      detail: 'The supplied pagination cursor is invalid or expired.',
     })
   }
   return problem({

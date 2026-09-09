@@ -139,7 +139,7 @@ describe('public market Tool routes', () => {
     expect(response.status).toBe(200)
     await expect(response.json()).resolves.toEqual({
       kind: 'unavailable',
-      schemaVersion: 'registry-tools:v2',
+      schemaVersion: 'registry-tools:v3',
       reason: 'tool_not_found',
     })
   })

@@ -376,7 +376,7 @@ describe("market page", () => {
       : projection;
     const unavailableComparison: MarketComparison = {
       kind: "unavailable",
-      schemaVersion: "registry-tools:v2",
+      schemaVersion: "registry-tools:v3",
       reason: "tool_unavailable",
     };
     const search = {

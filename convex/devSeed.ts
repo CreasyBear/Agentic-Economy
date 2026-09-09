@@ -416,6 +416,24 @@ export async function seedBusinessOfferings(
   return { kind: 'ok', seeded }
 }
 
+/*
+ * The sandbox Tool's single price fact.
+ *
+ * `/tools/<ref>` and `ae describe` read the capability-supply publication
+ * price; the business page reads the catalog Offering's `price` /
+ * `pricingSummary`. Both are published below from these three constants, so a
+ * reader can never be quoted two different numbers for the same Tool.
+ */
+const SANDBOX_TOOL_PRICING_SUMMARY = 'AUD 1.00 per Call (sandbox)'
+const SANDBOX_TOOL_PRICE_AMOUNT = { currency: 'AUD', units: '1000000', exponent: 6 } as const
+const SANDBOX_TOOL_OFFERING_PRICE: OfferingPrice = {
+  kind: 'fixed',
+  amount: { ...SANDBOX_TOOL_PRICE_AMOUNT },
+  unit: 'call',
+  // The sandbox fixture publishes no tax position, so neither does its twin.
+  taxTreatment: 'unstated',
+}
+
 const DEV_SEED_PRICING_BY_SLUG: Readonly<Record<string, string>> = Object.fromEntries(
   DEV_SEED_BUSINESS_FIXTURES.flatMap((fixture) => fixture.offerings.flatMap((offering) => (
     offering.pricingSummary === undefined ? [] : [[fixture.requestedSlug, offering.pricingSummary]]
@@ -443,6 +461,7 @@ const DEV_SEED_PRICE_BY_PRICING_SUMMARY: Readonly<Record<string, OfferingPrice>>
   'Demo price — publicly observed / development mock — AUD 150 check-up and clean': { kind: 'fixed', amount: { currency: 'AUD', units: '15000', exponent: 2 }, unit: 'visit', taxTreatment: 'inclusive' },
   'Demo price — publicly observed / development mock — AUD 199 check-up, scale and clean': { kind: 'fixed', amount: { currency: 'AUD', units: '19900', exponent: 2 }, unit: 'visit', taxTreatment: 'inclusive' },
   'Demo price — publicly observed / development mock — AUD 139 check-up and clean': { kind: 'fixed', amount: { currency: 'AUD', units: '13900', exponent: 2 }, unit: 'visit', taxTreatment: 'inclusive' },
+  [SANDBOX_TOOL_PRICING_SUMMARY]: SANDBOX_TOOL_OFFERING_PRICE,
 }
 
 export const DEV_SEED_PRICE_BY_SLUG: Readonly<Record<string, OfferingPrice>> = Object.fromEntries(
@@ -478,8 +497,6 @@ const SANDBOX_TOOL_EVIDENCE_REF = `private:evidence:dev-seed:${SANDBOX_TOOL_BUSI
 // (src/modules/money/internal/commercial-policy.ts). Declared on the seeded
 // Tool so the fixture the Quote path admits is visible in the seed itself.
 const SANDBOX_TOOL_COMMERCIAL_FIXTURE = 'managed_x402_deterministic_v1'
-// AUD 1.00 at the exponent every publication price uses.
-const SANDBOX_TOOL_PRICE_UNITS = '1000000'
 const SANDBOX_TOOL_READINESS_TTL_MS = 60 * 60 * 1000
 
 const SANDBOX_TOOL_FIXTURE: DevSeedBusinessFixture = {
@@ -496,6 +513,7 @@ const SANDBOX_TOOL_FIXTURE: DevSeedBusinessFixture = {
     summary: 'Deterministic sandbox Tool that returns one structured reference result.',
     serviceAreaSummary: 'Sandbox network only',
     availabilitySummary: 'Always available in the sandbox environment',
+    pricingSummary: SANDBOX_TOOL_PRICING_SUMMARY,
     accessPaths: [],
     firstRequestMode: 'not_available_yet',
     publicDisclosure: 'This sandbox provider is reached programmatically, not by human request.',
@@ -560,6 +578,11 @@ type SandboxToolCatalogOrigin = Readonly<{
  * Publishes the catalog side of the sandbox Tool through the same system
  * offering commands the dev catalog already uses, then returns the exact
  * catalog origin the publication must bind to.
+ *
+ * The price twin is seeded here, BEFORE the publication binds its origin: the
+ * revise that carries `price` mints a new Offering revision and source hash,
+ * so pricing afterwards would leave the publication bound to a revision that
+ * no longer exists and the Tool would stop qualifying as routeable.
  */
 async function ensureSandboxToolCatalogOrigin(
   ctx: MutationCtx,
@@ -572,6 +595,17 @@ async function ensureSandboxToolCatalogOrigin(
   if (businessId === undefined) throw new Error('dev_seed_sandbox_tool_business_missing')
   const offeringRef = bundle.state.offerings[0]?.offeringRef
   if (offeringRef === undefined) throw new Error('dev_seed_sandbox_tool_offering_missing')
+
+  const business = await ctx.db.get(businessId)
+  if (business === null) throw new Error('dev_seed_sandbox_tool_business_missing')
+  const priced = await seedBusinessOfferings(
+    ctx,
+    business,
+    now,
+    { [SANDBOX_TOOL_BUSINESS_SLUG]: SANDBOX_TOOL_PRICING_SUMMARY },
+    { [SANDBOX_TOOL_BUSINESS_SLUG]: SANDBOX_TOOL_OFFERING_PRICE },
+  )
+  if (priced.kind === 'error') throw new Error(`dev_seed_sandbox_tool_pricing_${priced.code}`)
 
   const offering = await ctx.db.query('businessOfferings')
     .withIndex('by_offeringRef', (query) => query.eq('offeringRef', offeringRef))
@@ -643,6 +677,15 @@ export const publishSandboxTool = internalMutation({
     // a deployment whose bypass owner account already carries a production agent.
     await requireLocalE2EOwnerAuthority(ctx)
     const evidenceRefs = [SANDBOX_TOOL_EVIDENCE_REF]
+    // Catalog side first, on EVERY invocation: the publication is created once,
+    // but the priced Offering revision it binds to and the business's search
+    // documents have to be re-asserted on each boot for the same reason the
+    // readiness fact below does.
+    await provisionDevSeedCatalogIdentityRows(ctx)
+    const authority = await admitDevSeedCatalogAuthority(ctx, 'publishSandboxTool')
+    const now = Date.now()
+    const { businessId, origin } = await ensureSandboxToolCatalogOrigin(ctx, authority.accountRef, now)
+
     const existing = await ctx.db.query('capabilityPublications')
       .withIndex('by_publicationRef_and_revision', (query) => (
         query.eq('publicationRef', SANDBOX_TOOL_OFFERING_ID).eq('revision', 1)
@@ -656,7 +699,7 @@ export const publishSandboxTool = internalMutation({
           publicationRevision: existing.revision,
           toolRef: existing.toolRef,
         }
-      : await createSandboxToolPublication(ctx, evidenceRefs)
+      : await createSandboxToolPublication(ctx, evidenceRefs, businessId, origin, now)
 
     // The publish command only schedules a readiness probe, and the fixture
     // endpoint is not reachable from a local stack: that probe can only ever
@@ -680,6 +723,25 @@ export const publishSandboxTool = internalMutation({
       throw new Error(`dev_seed_sandbox_tool_readiness_refused:${observed.reason}`)
     }
 
+    // Nothing on the seed publish path writes this business's
+    // `registrySearchDocuments` rows: `publishCapabilityForSeed` goes straight
+    // to `publishPreparedCapabilityCommand` (only the owner-facing handler
+    // rebuilds), and `rebuildCapabilityOriginSupplyProjection` skips
+    // programmable providers - which the sandbox fixture is. Rebuild here,
+    // after readiness, through the same command every catalog write path uses,
+    // so `/api/businesses/search?q=sandbox` finds the Tool on every run.
+    const support = await deriveBusinessOfferingSupportFromCapabilitySupply(ctx.db, businessId, now)
+    const rebuilt = await rebuildBusinessSupplyProjectionSnapshotCommand({
+      db: ctx.db,
+      sourceDb: ctx.db,
+      businessId,
+      support,
+      now,
+    })
+    if (rebuilt.kind === 'error') {
+      throw new Error(`dev_seed_sandbox_tool_projection_${rebuilt.code}`)
+    }
+
     return {
       created: target.created,
       publicationId: target.publicationRef,
@@ -693,12 +755,10 @@ export const publishSandboxTool = internalMutation({
 async function createSandboxToolPublication(
   ctx: MutationCtx,
   evidenceRefs: readonly string[],
+  businessId: Id<'businesses'>,
+  origin: SandboxToolCatalogOrigin,
+  now: number,
 ): Promise<{ created: true; publicationRef: string; publicationRevision: number; toolRef: string }> {
-  await provisionDevSeedCatalogIdentityRows(ctx)
-  const authority = await admitDevSeedCatalogAuthority(ctx, 'publishSandboxTool')
-  const now = Date.now()
-  const { businessId, origin } = await ensureSandboxToolCatalogOrigin(ctx, authority.accountRef, now)
-
   const offering = {
     offeringId: SANDBOX_TOOL_OFFERING_ID,
     networkId: SANDBOX_TOOL_NETWORK_ID,
@@ -708,7 +768,7 @@ async function createSandboxToolPublication(
       summary: 'Deterministic sandbox Tool that returns one structured reference result.',
       price: {
         kind: 'fixed' as const,
-        amount: { currency: 'AUD' as const, units: SANDBOX_TOOL_PRICE_UNITS, exponent: 6 },
+        amount: { ...SANDBOX_TOOL_PRICE_AMOUNT },
       },
       materialTerms: [{
         termId: 'sandbox-fixture',

@@ -25,6 +25,17 @@ export const Route = createFileRoute('/api/businesses')({
 })
 
 const LIST_QUERY_PARAMS = new Set(['cursor', 'limit'])
+const SEARCH_QUERY_PARAMS = new Set([
+  'q',
+  'mode',
+  'location',
+  'max_price_currency',
+  'max_price_units',
+  'max_price_exponent',
+  'has_price',
+  'cursor',
+  'limit',
+])
 
 /**
  * Browse takes no query term. Silently dropping one returns an arbitrary page
@@ -96,8 +107,11 @@ async function runRegistryAction<Input, Result extends ActionResult>(
   }
 }
 
-function isInvalidRegistryCursorError(error: unknown): boolean {
-  if (error instanceof Error && /(?:InvalidCursor|invalid[_ -]?cursor)/i.test(error.message)) {
+export function isInvalidRegistryCursorError(error: unknown): boolean {
+  if (
+    error instanceof Error
+    && /(?:InvalidCursor|invalid[_ -]?cursor|failed to parse cursor)/i.test(error.message)
+  ) {
     return true
   }
   if (typeof error !== 'object' || error === null || !('data' in error)) {
@@ -115,6 +129,17 @@ export async function runRegistrySearchRequest<Input, Result extends ActionResul
   action: RegistryRouteAction<Input, Result>,
 ): Promise<Response> {
   const url = new URL(request.url)
+  const unsupported = uniqueSorted([...url.searchParams.keys()].filter((key) => !SEARCH_QUERY_PARAMS.has(key)))
+  if (unsupported.length > 0) {
+    return problem({
+      status: 400,
+      kind: 'FAILED_PRECONDITION',
+      code: 'unsupported_query_parameter',
+      detail: `Unsupported query parameter(s): ${unsupported.join(', ')}. The search term parameter is 'q'. Accepted parameters: ${[...SEARCH_QUERY_PARAMS].join(', ')}.`,
+      extras: { unsupported, supported: [...SEARCH_QUERY_PARAMS] },
+    })
+  }
+
   const rawMode = url.searchParams.get('mode')
   const normalizedMode = optionalSearchMode(rawMode)
   if (rawMode !== null && rawMode.trim().length > 0 && normalizedMode.mode === undefined) {

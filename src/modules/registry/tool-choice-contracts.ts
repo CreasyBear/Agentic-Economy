@@ -152,17 +152,17 @@ const toolDescriptionSchema = z.strictObject({
 export const toolChoiceDescribeOutputSchema = z.union([
   z.strictObject({
     kind: z.literal('found'),
-    schemaVersion: z.literal('registry-tools:v2'),
+    schemaVersion: z.literal('registry-tools:v3'),
     tool: toolDescriptionSchema,
   }),
   z.strictObject({
     kind: z.literal('not_found'),
-    schemaVersion: z.literal('registry-tools:v2'),
+    schemaVersion: z.literal('registry-tools:v3'),
     toolRef: z.string(),
   }),
   z.strictObject({
     kind: z.literal('unavailable'),
-    schemaVersion: z.literal('registry-tools:v2'),
+    schemaVersion: z.literal('registry-tools:v3'),
     toolRef: z.string(),
     reason: z.string(),
   }),
@@ -170,12 +170,12 @@ export const toolChoiceDescribeOutputSchema = z.union([
 export const toolChoiceCompareOutputSchema = z.union([
   z.strictObject({
     kind: z.literal('ok'),
-    schemaVersion: z.literal('registry-tools:v2'),
+    schemaVersion: z.literal('registry-tools:v3'),
     tools: z.array(compactToolCandidateSchema).min(1).max(4),
   }),
   z.strictObject({
     kind: z.literal('unavailable'),
-    schemaVersion: z.literal('registry-tools:v2'),
+    schemaVersion: z.literal('registry-tools:v3'),
     reason: z.enum(['query_invalid', 'tool_not_found', 'tool_unavailable']),
   }),
 ])
@@ -279,7 +279,7 @@ export function projectToolDescription(result: ToolDetailResult) {
   if (result.kind !== 'found') {
     return toolChoiceDescribeOutputSchema.parse({
       kind: result.kind,
-      schemaVersion: 'registry-tools:v2',
+      schemaVersion: 'registry-tools:v3',
       toolRef: result.toolRef,
       ...(result.kind === 'unavailable' ? { reason: result.reason } : {}),
     })
@@ -287,7 +287,7 @@ export function projectToolDescription(result: ToolDetailResult) {
   const tool = result.tool
   return toolChoiceDescribeOutputSchema.parse({
     kind: 'found',
-    schemaVersion: 'registry-tools:v2',
+    schemaVersion: 'registry-tools:v3',
     tool: {
       toolRef: tool.toolRef,
       capabilityId: tool.contract.capabilityId,
@@ -314,8 +314,8 @@ export function projectToolCompareChoices(result: ToolCompareResult) {
   return toolChoiceCompareOutputSchema.parse(result.kind === 'ok'
     ? {
         kind: 'ok',
-        schemaVersion: 'registry-tools:v2',
+        schemaVersion: 'registry-tools:v3',
         tools: result.tools.map(projectCompactTool),
       }
-    : { kind: 'unavailable', schemaVersion: 'registry-tools:v2', reason: result.reason })
+    : { kind: 'unavailable', schemaVersion: 'registry-tools:v3', reason: result.reason })
 }

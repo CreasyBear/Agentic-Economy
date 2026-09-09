@@ -115,7 +115,7 @@ describe('hosted Tool gateway smoke call', () => {
     })
   })
 
-  it('reads a withdrawn Tool through the hosted public v2 describe contract', async () => {
+  it('reads a withdrawn Tool through the hosted public v3 describe contract', async () => {
     const requests: Array<{ url: string; method: string | undefined; body: unknown }> = []
     const fetchMock: typeof globalThis.fetch = async (input, init) => {
       requests.push({
@@ -125,7 +125,7 @@ describe('hosted Tool gateway smoke call', () => {
       })
       return Response.json(toolChoiceDescribeOutputSchema.parse({
         kind: 'unavailable',
-        schemaVersion: 'registry-tools:v2',
+        schemaVersion: 'registry-tools:v3',
         toolRef,
         reason: 'publisher_withdrew',
       }))

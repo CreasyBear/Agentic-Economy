@@ -151,7 +151,7 @@ function successfulFetch(requests: Request[]): typeof globalThis.fetch {
     }
     if (path.endsWith('/market-tools/describe')) {
       return json({
-        kind: 'found', schemaVersion: 'registry-tools:v2', tool: {
+        kind: 'found', schemaVersion: 'registry-tools:v3', tool: {
           toolRef: body.toolRef, capabilityId: 'fixture.execute', title: 'Fixture', description: 'fixture', provider: { name: 'Fixture', slug: 'fixture' },
           priceLabel: 'Free', healthStatus: 'operational', inputJsonSchema: { type: 'object' }, outputJsonSchema: { type: 'object' }, materialTerms: [], dataUse: [], effects: [], evidence: [], authentication: { kind: 'ae_api_key' },
         },
