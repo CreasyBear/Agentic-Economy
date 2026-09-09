@@ -67,12 +67,13 @@ describe('/status', () => {
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Checking system status.')
     expect(screen.queryByText(/Last checked/)).toBeNull()
     expect(screen.queryByText('Request reference')).toBeNull()
-    expect(fetchMock).toHaveBeenCalledTimes(4)
+    expect(fetchMock).toHaveBeenCalledTimes(5)
     expect(fetchMock.mock.calls.map(([path]) => path)).toEqual([
       '/api/health',
       '/api/ready',
       '/.well-known/ucp',
       '/api/v1/release',
+      '/api/v1/catalogue-status',
     ])
 
     initial[0]?.resolve(responseForProbe(0, 200, {
@@ -85,17 +86,17 @@ describe('/status', () => {
     expect(refreshButton.getAttribute('aria-busy')).toBe('false')
     expect(screen.getByRole('list').getAttribute('aria-busy')).toBe('false')
     expect(screen.getByRole('status').textContent).toMatch(
-      /^Status checked\. All 4 systems are operational\. Last checked .+\.$/,
+      /^Status checked\. All 5 systems are operational\. Last checked .+\.$/,
     )
     const initialCheckedAt = screen.getByRole('status').textContent
-    expect(screen.getAllByText('Operational')).toHaveLength(4)
+    expect(screen.getAllByText('Operational')).toHaveLength(5)
     expect(screen.queryByText('Request reference')).toBeNull()
 
     const manual = queueDeferredBatch()
     fireEvent.click(refreshButton)
     fireEvent.click(refreshButton)
 
-    expect(fetchMock).toHaveBeenCalledTimes(8)
+    expect(fetchMock).toHaveBeenCalledTimes(10)
     expect(screen.getByRole('button', { name: 'Checking status…' })).toHaveProperty('disabled', true)
     expect(screen.getByRole('status').textContent).toBe('Checking all systems…')
     expect(screen.queryByText(/Last checked/)).toBeNull()
@@ -108,13 +109,13 @@ describe('/status', () => {
 
     await waitFor(() => expect(screen.getByRole('button', { name: 'Refresh status' })).toHaveProperty('disabled', false))
     const degradedStatus = screen.getByText(
-      /^Status checked\. 1 of 4 systems needs attention: Tool API\. Last checked .+\.$/,
+      /^Status checked\. 1 of 5 systems needs attention: Tool API\. Last checked .+\.$/,
     )
     expect(degradedStatus.getAttribute('role')).toBe('status')
     expect(degradedStatus.textContent).not.toBe(initialCheckedAt)
     expect(screen.getByText('New Calls may fail (HTTP 503). Check existing Calls before retrying.')).toBeTruthy()
     expect(screen.getByText('Degraded')).toBeTruthy()
-    expect(screen.getAllByText('Operational')).toHaveLength(3)
+    expect(screen.getAllByText('Operational')).toHaveLength(4)
     expect(screen.getByRole('heading', { level: 1 }).textContent).toContain('Some systems are degraded.')
     expect(screen.getByRole('heading', { level: 2, name: 'Check existing calls before retrying' })).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Open Calls' }).getAttribute('href')).toBe('/activity')
@@ -133,14 +134,14 @@ describe('/status', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Refresh status' }))
     fireEvent.click(screen.getByRole('button', { name: 'Checking status…' }))
 
-    expect(fetchMock).toHaveBeenCalledTimes(12)
+    expect(fetchMock).toHaveBeenCalledTimes(15)
     expect(screen.queryByText('Request reference')).toBeNull()
     expect(screen.queryByText(requestRef)).toBeNull()
     recovered[0]?.resolve(responseForProbe(0))
     recovered[1]?.resolve(responseForProbe(1, 200, {
       'X-AE-Request-Id': 'request:ignored-after-recovery',
     }))
-    resolveBatch(recovered.slice(2), [200, 200], 2)
+    resolveBatch(recovered.slice(2), [200, 200, 200], 2)
 
     await waitFor(() => expect(screen.getByRole('button', { name: 'Refresh status' })).toHaveProperty('disabled', false))
     expect(screen.queryByText('Request reference')).toBeNull()
@@ -155,12 +156,13 @@ describe('/status', () => {
     batch[1]?.resolve(responseForProbe(1))
     batch[2]?.resolve(responseForProbe(2))
     batch[3]?.reject(new Error('network unavailable'))
+    batch[4]?.resolve(responseForProbe(4))
 
     await waitFor(() => expect(screen.getByRole('button', { name: 'Refresh status' })).toHaveProperty('disabled', false))
     expect(screen.getByText('Release identity could not be reached. New Calls should wait.')).toBeTruthy()
     expect(screen.getByText('Degraded')).toBeTruthy()
     expect(screen.getByRole('status').textContent).toMatch(
-      /^Status checked\. 1 of 4 systems needs attention: Release identity\. Last checked .+\.$/,
+      /^Status checked\. 1 of 5 systems needs attention: Release identity\. Last checked .+\.$/,
     )
     expect(screen.queryByText('Request reference')).toBeNull()
   })
@@ -176,10 +178,11 @@ describe('/status', () => {
     ))
     batch[2]?.resolve(responseForProbe(2))
     batch[3]?.resolve(responseForProbe(3))
+    batch[4]?.resolve(responseForProbe(4))
 
     await waitFor(() => expect(screen.getByRole('button', { name: 'Refresh status' })).toHaveProperty('disabled', false))
     expect(screen.getByText('The Tool API returned an invalid readiness result. Check existing Calls before retrying.')).toBeTruthy()
-    expect(screen.getAllByText('Operational')).toHaveLength(3)
+    expect(screen.getAllByText('Operational')).toHaveLength(4)
     expect(screen.getByText('Degraded')).toBeTruthy()
     expect(screen.getByText('request:invalid-ready-contract')).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Open Calls' }).getAttribute('href')).toBe('/activity')
@@ -189,11 +192,11 @@ describe('/status', () => {
     const batch = queueDeferredBatch()
     renderRoute()
 
-    resolveBatch(batch, [503, 200, 500, 200])
+    resolveBatch(batch, [503, 200, 500, 200, 200])
 
     await waitFor(() => expect(screen.getByRole('button', { name: 'Refresh status' })).toHaveProperty('disabled', false))
     expect(screen.getByRole('status').textContent).toMatch(
-      /^Status checked\. 2 of 4 systems need attention: Website, Machine discovery\. Last checked .+\.$/,
+      /^Status checked\. 2 of 5 systems need attention: Website, Machine discovery\. Last checked .+\.$/,
     )
     expect(screen.queryByText('Request reference')).toBeNull()
   })
@@ -206,7 +209,7 @@ function renderRoute() {
 }
 
 function queueDeferredBatch(): readonly DeferredResponse[] {
-  const batch = Array.from({ length: 4 }, deferredResponse)
+  const batch = Array.from({ length: 5 }, deferredResponse)
   for (const deferred of batch) fetchMock.mockImplementationOnce(() => deferred.promise)
   return batch
 }
@@ -247,6 +250,7 @@ function responseForProbe(
       toolGateway: {},
     },
     { kind: 'ok', sourceRevision: 'a'.repeat(40) },
+    { schemaVersion: 'catalogue-status:v1', status: 'fresh' },
   ] as const
   return Response.json(
     status >= 200 && status < 300 ? validBodies[index] : { code: 'probe_failed' },
