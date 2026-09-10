@@ -36,11 +36,15 @@ import {
   normalizePricingConfig,
   PACKAGE4_FORMANCE_REQUIREMENTS,
   quoteManagedX402BuyerAud,
+  type CommercialPolicyRefusalReason,
   type ReferenceRate,
   splitInclusiveAudTax,
 } from '@/modules/money/public'
 import { fetchCoinbaseReferenceRate } from '@/modules/money/reference-rate'
-import { FUNDING_HANDOFF_CREATE_PATH } from '@/modules/money/funding-handoff.actions'
+import {
+  FUNDING_HANDOFF_CONFIG_PATH,
+  FUNDING_HANDOFF_CREATE_PATH,
+} from '@/modules/money/funding-handoff.actions'
 import { jsonObject } from '@/modules/capability-execution/convex'
 import type { LiveX402Requirement } from '@/modules/capability-execution/live-x402-requirement'
 import {
@@ -50,6 +54,8 @@ import {
 } from '@/modules/capability-execution/quote'
 import { resolveAndBindLegalCustomer } from './lib/moneyLegalCustomer'
 import { toolProviderRouteabilityIsFrozen } from './lib/providerOffboardingFreeze'
+
+const LEGAL_CUSTOMER_REQUIRED: CommercialPolicyRefusalReason = 'legal_customer_required'
 
 const quoteRefusalCode = v.union(
   v.literal('tool_not_found'),
@@ -89,6 +95,10 @@ const quoteContinuation = v.union(
     action: v.literal('funding.handoff.create'), method: v.literal('POST'),
     path: v.literal(FUNDING_HANDOFF_CREATE_PATH),
     input: v.object({ principalAmount: exactAud, idempotencyKey: v.string() }),
+  }),
+  v.object({
+    action: v.literal('funding.handoff.config'), method: v.literal('GET'),
+    path: v.literal(FUNDING_HANDOFF_CONFIG_PATH), input: v.object({}),
   }),
 )
 const requiredAction = v.object({
@@ -372,12 +382,16 @@ async function prepareFinancialSubjectsHandler(
   })
   if (policy.kind === 'refused') return { kind: 'refused', code: 'commercial_policy_unavailable', reason: policy.code }
   const legalCustomer = await resolveAndBindLegalCustomer(ctx, authority.principal.ownerId, now)
-  if (legalCustomer.kind === 'refused') return { kind: 'refused', code: 'commercial_policy_unavailable' }
+  if (legalCustomer.kind === 'refused') return {
+    kind: 'refused', code: 'commercial_policy_unavailable', reason: LEGAL_CUSTOMER_REQUIRED,
+  }
   const binding = await ctx.db.query('moneyLegalCustomerBindings')
     .withIndex('by_accountRef', (query) => query.eq('accountRef', authority.principal.ownerId))
     .unique()
   if (binding === null || binding.legalCustomerRef !== legalCustomer.legalCustomerRef) {
-    return { kind: 'refused', code: 'commercial_policy_unavailable' }
+    return {
+      kind: 'refused', code: 'commercial_policy_unavailable', reason: LEGAL_CUSTOMER_REQUIRED,
+    }
   }
   const environment = authority.principal.environment
   const custodyConfiguration = cdpX402CustodyConfigurationFromEnvironment(

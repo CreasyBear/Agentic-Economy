@@ -36,6 +36,8 @@ type Env = {
   readonly AE_CONVEX_SERVER_FUNCTION_TOKEN: string | undefined;
   readonly AE_LLM_MODEL: string | undefined;
   readonly AE_PACKAGE4_SANDBOX_DEPLOYMENT_PROFILE: string | undefined;
+  readonly AE_PACKAGE5_FIXTURE_PUBLIC_ORIGIN: string | undefined;
+  readonly AE_PACKAGE5_FIXTURE_X402_PAY_TO: string | undefined;
   readonly AE_PACKAGE5_WRITES_ENABLED: string | undefined;
   readonly AE_PROVIDER_OFFBOARDING_ENABLED: string | undefined;
   readonly AE_RELEASE_SOURCE_REVISION: string | undefined;

@@ -21,10 +21,10 @@ import {
   stripeCreditIdempotencyKey,
   stripePayoutIdempotencyKey,
 } from "./stripe-idempotency";
+import { resolveStripeMoneyProviderContext } from "./stripe-money-client";
 import {
   readStripeMoneyProviderConfig,
   readStripeMoneyReadbackProviderConfig,
-  resolveStripeMoneyProviderContext,
   type StripeMoneyClient,
   type StripeMoneyMode,
   type StripeMoneyProviderConfig,

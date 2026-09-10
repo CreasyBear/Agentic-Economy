@@ -161,6 +161,7 @@ import type * as moneyStripeWebhookInbox from "../moneyStripeWebhookInbox.js";
 import type * as moneyStripeWebhookValues from "../moneyStripeWebhookValues.js";
 import type * as moneyStripeWebhookWorker from "../moneyStripeWebhookWorker.js";
 import type * as moneyTreasury from "../moneyTreasury.js";
+import type * as moneyTreasuryObservation from "../moneyTreasuryObservation.js";
 import type * as moneyX402PaymentAttempts from "../moneyX402PaymentAttempts.js";
 import type * as moneyX402PaymentAttemptsShared from "../moneyX402PaymentAttemptsShared.js";
 import type * as moneyX402PaymentAuthorization from "../moneyX402PaymentAuthorization.js";
@@ -353,6 +354,7 @@ declare const fullApi: ApiFromModules<{
   moneyStripeWebhookValues: typeof moneyStripeWebhookValues;
   moneyStripeWebhookWorker: typeof moneyStripeWebhookWorker;
   moneyTreasury: typeof moneyTreasury;
+  moneyTreasuryObservation: typeof moneyTreasuryObservation;
   moneyX402PaymentAttempts: typeof moneyX402PaymentAttempts;
   moneyX402PaymentAttemptsShared: typeof moneyX402PaymentAttemptsShared;
   moneyX402PaymentAuthorization: typeof moneyX402PaymentAuthorization;

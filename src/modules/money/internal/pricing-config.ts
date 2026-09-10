@@ -1,7 +1,6 @@
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 
 import {
-  addExactAmounts,
   exactAmountSchema,
   multiplyExactAmountByBps,
   subtractExactAmounts,
@@ -9,18 +8,6 @@ import {
 import { pricingConfigSchema } from './pricing-contract'
 import type { ExactAmount } from './exact-amount'
 import type { PricingConfig, PricingResolution, RakeConfig, RakeSplit } from '../public'
-
-export type ProviderFeeBreakdown = Readonly<{
-  providerAmount: ExactAmount
-  platformFee: ExactAmount
-  totalAmount: ExactAmount
-  feeBps: number
-}>
-
-type ProviderFeeBreakdownRefusal = Readonly<{
-  kind: 'refused'
-  code: 'rake_not_configured'
-}>
 
 export type NormalizePricingConfigResult =
   | Readonly<{ kind: 'valid'; config: PricingConfig }>
@@ -32,32 +19,6 @@ export type ResolveCallPriceInput = Readonly<{
   priceDigest: string
   expectedCurrency?: string
 }>
-
-export function computeProviderFeeBreakdown(
-  providerAmount: unknown,
-  feeBps = 1_000,
-): ProviderFeeBreakdown | ProviderFeeBreakdownRefusal {
-  const parsedProvider = exactAmountSchema.safeParse(providerAmount)
-  if (
-    !parsedProvider.success
-    || !Number.isSafeInteger(feeBps)
-    || feeBps < 0
-    || feeBps > 10_000
-  ) return { kind: 'refused', code: 'rake_not_configured' }
-  const platformFee = multiplyExactAmountByBps(parsedProvider.data, feeBps, 'ceil')
-  const totalAmount = platformFee === undefined
-    ? undefined
-    : addExactAmounts(parsedProvider.data, platformFee)
-  if (platformFee === undefined || totalAmount === undefined) {
-    return { kind: 'refused', code: 'rake_not_configured' }
-  }
-  return {
-    providerAmount: parsedProvider.data,
-    platformFee,
-    totalAmount,
-    feeBps,
-  }
-}
 
 export function normalizePricingConfig(config: unknown): NormalizePricingConfigResult {
   try {

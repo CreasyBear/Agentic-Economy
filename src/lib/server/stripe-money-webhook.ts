@@ -8,16 +8,16 @@ import {
   type StripeMoneyWebhookEvent,
 } from "@/modules/money/public";
 import { readCheckoutSessionMaterial } from "./stripe-checkout-evidence";
-import { refundMaterial } from "./stripe-refund-evidence";
+import { resolveStripeMoneyProviderContext } from "./stripe-money-client";
 import {
   refusal,
-  resolveStripeMoneyProviderContext,
   sessionMatchesMode,
   validBoundedWebhookBody,
   validIdentifier,
   type StripeMoneyProviderConfig,
   type StripeMoneyProviderInput,
 } from "./stripe-money-provider-config";
+import { refundMaterial } from "./stripe-refund-evidence";
 
 type CheckoutWebhookEventType =
   | "checkout.session.completed"

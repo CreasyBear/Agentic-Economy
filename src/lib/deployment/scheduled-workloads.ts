@@ -21,6 +21,7 @@ export const SCHEDULED_WORKLOADS = [
   { name: 'refresh capability supply readiness', workloadKind: 'cron', handler: 'refreshCapabilitySupplyReadiness', interval: { hours: 1 } },
   { name: 'cleanup expired source write nonces', workloadKind: 'cron', handler: 'cleanupExpiredSourceWriteNonces', interval: { hours: 1 } },
   { name: 'cleanup expired agent access oauth grants', workloadKind: 'cron', handler: 'cleanupExpiredAgentAccessOAuthGrants', interval: { hours: 1 } },
+  { name: 'observe x402 treasury', workloadKind: 'cron', handler: 'observeX402Treasury', interval: { minutes: 15 } },
 ] as const satisfies readonly ScheduledWorkload[]
 
 export type ScheduledWorkloadName = typeof SCHEDULED_WORKLOADS[number]['name']
@@ -29,6 +30,7 @@ export type ScheduledWorkloadName = typeof SCHEDULED_WORKLOADS[number]['name']
 export const SCHEDULED_WORKLOAD_JOB_NAMES = [
   'cleanup expired agent access oauth grants',
   'cleanup expired source write nonces',
+  'observe x402 treasury',
   'reconcile due facilitator invocations',
   'refresh Agentic Economy API registry',
   'refresh capability supply readiness',

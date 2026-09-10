@@ -11,12 +11,12 @@ import {
   type PayoutTransferRequest,
 } from "@/modules/money/public";
 import { stripePayoutIdempotencyKey } from "./stripe-idempotency";
+import { resolveStripeMoneyProviderContext } from "./stripe-money-client";
 import {
   digestMetadata,
   exponentForCurrency,
   readMetadata,
   refusal,
-  resolveStripeMoneyProviderContext,
   responseData,
   sessionMatchesMode,
   stripeMinorAmount,

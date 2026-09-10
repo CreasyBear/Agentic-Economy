@@ -2,10 +2,14 @@ import { describe, expect, it } from 'vitest'
 
 import {
   COMMERCIAL_POLICY_FAMILIES,
+  COMMERCIAL_POLICY_REFUSAL_REASONS,
+  commercialPolicyRefusalReasonSchema,
   evaluateCommercialPolicyGate,
   SANDBOX_COMMERCIAL_POLICY_CONTROLS,
   PACKAGE4_SYNTHETIC_VPS_CONTROLS,
   type CommercialPolicyApproval,
+  type CommercialPolicyGateResult,
+  type CommercialPolicyRefusalReason,
 } from '../../../src/modules/money/public'
 import { PRODUCTION_COMMERCIAL_POLICY_CONTROLS } from '../../helpers/commercial-policy-fixtures'
 
@@ -228,5 +232,94 @@ describe('commercial policy launch gate', () => {
       code: 'commercial_policy_conflict',
       family: 'operations',
     })
+  })
+})
+
+type GateRefusalCode = Extract<CommercialPolicyGateResult, { kind: 'refused' }>['code']
+type Exact<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false
+type Assert<T extends true> = T
+// Compile-time drift guard: the exported tuple is exactly the gate's refusal
+// codes plus the legal-customer binding reason.
+export type _RefusalReasonsCoverGate =
+  Assert<Exact<GateRefusalCode | 'legal_customer_required', CommercialPolicyRefusalReason>>
+
+describe('commercial policy refusal reasons', () => {
+  it('enumerates every gate refusal code plus the legal-customer binding reason', () => {
+    expect([...COMMERCIAL_POLICY_REFUSAL_REASONS]).toEqual([
+      'commercial_policy_fixture_required',
+      'commercial_policy_deployment_profile_invalid',
+      'commercial_policy_missing',
+      'commercial_policy_not_effective',
+      'commercial_policy_expired',
+      'commercial_policy_suspended',
+      'commercial_policy_superseded',
+      'commercial_policy_environment_mismatch',
+      'commercial_policy_conflict',
+      'legal_customer_required',
+    ] satisfies readonly CommercialPolicyRefusalReason[])
+    expect(commercialPolicyRefusalReasonSchema.options)
+      .toEqual([...COMMERCIAL_POLICY_REFUSAL_REASONS])
+    expect(commercialPolicyRefusalReasonSchema.safeParse('legal_customer_unavailable').success)
+      .toBe(false)
+  })
+
+  it.each([
+    ['sandbox without the fixture', { environment: 'sandbox', now: NOW, approvals: [] }],
+    ['a missing family', {
+      environment: 'production', now: NOW, approvals: completeProductionApprovals().slice(1),
+    }],
+    ['an approval that is not yet effective', {
+      environment: 'production',
+      now: NOW,
+      approvals: completeProductionApprovals().map((row, index) => index === 0
+        ? approval(row.family, { effectiveAt: NOW + 60_000 })
+        : row),
+    }],
+    ['an expired approval', {
+      environment: 'production',
+      now: NOW,
+      approvals: completeProductionApprovals().map((row, index) => index === 0
+        ? approval(row.family, { expiresAt: NOW })
+        : row),
+    }],
+    ['a suspended approval', {
+      environment: 'production',
+      now: NOW,
+      approvals: completeProductionApprovals().map((row, index) => index === 0
+        ? approval(row.family, { lifecycle: 'suspended' })
+        : row),
+    }],
+    ['a superseded approval', {
+      environment: 'production',
+      now: NOW,
+      approvals: completeProductionApprovals().map((row, index) => index === 0
+        ? approval(row.family, { lifecycle: 'superseded' })
+        : row),
+    }],
+    ['an approval from another environment', {
+      environment: 'production',
+      now: NOW,
+      approvals: completeProductionApprovals().map((row, index) => index === 0
+        ? approval(row.family, { environment: 'sandbox' })
+        : row),
+    }],
+    ['two active approvals for one family', {
+      environment: 'production',
+      now: NOW,
+      approvals: [
+        ...completeProductionApprovals(),
+        approval(COMMERCIAL_POLICY_FAMILIES[0], {
+          policyRef: 'commercial-policy:commercial_perimeter:2',
+          revision: 2,
+        }),
+      ],
+    }],
+  ] as const)('emits an enumerated reason for %s', (_label, input) => {
+    const result = evaluateCommercialPolicyGate(input)
+
+    expect(result.kind).toBe('refused')
+    expect(result.kind === 'refused'
+      ? commercialPolicyRefusalReasonSchema.safeParse(result.code).success
+      : false).toBe(true)
   })
 })

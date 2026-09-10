@@ -170,6 +170,7 @@ export const CONSEQUENCE_OPERATIONS = [
   'capabilityCallX402AuthorizationExpiry:queueExpiredX402Authorization',
   'capabilitySupply:recordCapabilityProbeResult',
   'facilitatorDiscovery:reconcile',
+  'moneyTreasury:recordObservation',
   'moneyX402PaymentAttempts:reconcileX402PaymentAttempt',
 ] as const
 export type ConsequenceOperation = typeof CONSEQUENCE_OPERATIONS[number]

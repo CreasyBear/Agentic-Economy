@@ -44,6 +44,8 @@ const app = defineApp({
     STRIPE_READBACK_KEY: v.optional(v.string()),
     STRIPE_AU_INCLUSIVE_GST_TAX_RATE_ID: v.optional(v.string()),
     STRIPE_CHECKOUT_HOST: v.optional(v.string()),
+    AE_PACKAGE5_FIXTURE_PUBLIC_ORIGIN: v.optional(v.string()),
+    AE_PACKAGE5_FIXTURE_X402_PAY_TO: v.optional(v.string()),
   },
 })
 

@@ -476,7 +476,6 @@ export {
   type SupplyCommandActor,
   type SupplyAuditEventRow,
 } from './internal/shared'
-export { defaultSupplyPricingConfig } from './internal/supply-funnel/pricing-port'
 export {
   paymentLaneAdmission,
   transportObservationDigest,

@@ -27,6 +27,13 @@ import {
   supplyConnectionListAction,
   supplyToolsListAction,
 } from '@/modules/capability-supply/supply-actions'
+import {
+  X402_CUSTODY_ENV_NAMES,
+  cdpX402CustodyConfigurationFromEnvironment,
+} from '@/modules/capability-supply/internal/x402-custody-configuration'
+import { isMoneyRefusal } from '@/modules/money/public'
+import { readTrimmedEnv } from '@/lib/server/read-trimmed-env'
+import { readStripeMoneyProviderConfig, STRIPE_MONEY_ENV_NAMES } from '@/lib/server/stripe-money-provider-config'
 
 import {
   HOSTED_DEFAULT_BASE_URL,
@@ -43,8 +50,11 @@ import { searchCommandDescriptor } from './search'
 type DoctorGroup = 'discovery' | 'quoting' | 'purchase'
 type GroupState = 'pass' | 'warn' | 'fail' | 'skipped'
 
+export type DoctorTier = Readonly<{ level: 0 | 1; missing: readonly string[] }>
+
 export type DoctorResult = Readonly<{
   kind: 'ready' | 'degraded'
+  tier: DoctorTier
   groups: Readonly<Record<DoctorGroup, GroupState>>
   checks: readonly DoctorCheck[]
 }>
@@ -70,8 +80,40 @@ const CHECK_GROUPS: Readonly<Record<string, DoctorGroup>> = {
   origin: 'discovery', server: 'discovery', mcp: 'discovery',
   readiness: 'discovery', release: 'discovery', catalogue: 'discovery',
   buyer: 'quoting', quote: 'quoting',
-  balance: 'purchase', call: 'purchase', market_requests: 'purchase',
+  balance: 'purchase', funding: 'purchase', call: 'purchase', market_requests: 'purchase',
   repeat_use: 'purchase', provider: 'purchase', 'provider.readiness': 'purchase',
+}
+const LOCAL_STRIPE_TEST_MODE_DOC = 'docs/operations/local-stripe-test-mode.md'
+
+function stripeTestModeConfigured(): boolean {
+  return !isMoneyRefusal(readStripeMoneyProviderConfig(process.env))
+}
+
+function x402SandboxConfigured(): boolean {
+  return cdpX402CustodyConfigurationFromEnvironment(process.env) !== undefined
+}
+
+function missingEnvNames(names: readonly string[]): readonly string[] {
+  return names.filter((name) => readTrimmedEnv(process.env, name) === undefined)
+}
+
+/**
+ * Tier 0 proves discovery/quoting refusal shape with no credentials; tier 1 proves the
+ * full loop once Stripe test mode and the CDP/x402 sandbox bundle are both configured.
+ * This reads the CLI's own local environment, which is what a swarm operator running
+ * the local stack against `ae doctor` actually controls.
+ */
+function computeTier(): DoctorTier {
+  const stripeReady = stripeTestModeConfigured()
+  const x402Ready = x402SandboxConfigured()
+  if (stripeReady && x402Ready) return { level: 1, missing: [] }
+  return {
+    level: 0,
+    missing: [
+      ...(stripeReady ? [] : missingEnvNames(STRIPE_MONEY_ENV_NAMES)),
+      ...(x402Ready ? [] : missingEnvNames(X402_CUSTODY_ENV_NAMES)),
+    ],
+  }
 }
 /** Skipping one of these proves nothing about its group, so it cannot roll up as a pass. */
 const REQUIRED_CHECK_IDS: readonly string[] = ['quote']
@@ -139,6 +181,7 @@ function doctorResult(drafts: readonly DoctorCheckDraft[]): DoctorResult {
     // A skipped check reports an unproven step, not a broken one, so it leaves
     // the overall diagnosis alone while its group still refuses a pass.
     kind: checks.some((check) => check.state === 'fail' || check.state === 'warn') ? 'degraded' : 'ready',
+    tier: computeTier(),
     groups: {
       discovery: groupState(checks, 'discovery'),
       quoting: groupState(checks, 'quoting'),
@@ -368,6 +411,7 @@ async function checkBuyer(
     }
     const quote = await checkQuote(options, headers)
     const balance = await checkBalance(options, headers)
+    const funding = checkFunding(options, balance)
     const call = await checkCall(options, headers)
     const marketRequests = await checkMarketRequests(options, headers)
     const repeatUse = call.recentCompletedToolRef === undefined
@@ -379,7 +423,8 @@ async function checkBuyer(
         summary: `Buyer credential is origin-bound, authenticated, and has ${MARKET_TOOLS_CALL_SCOPE}.`,
       },
       quote,
-      balance,
+      balance.check,
+      funding,
       call.check,
       marketRequests,
       ...(repeatUse === undefined ? [] : [repeatUse]),
@@ -401,6 +446,12 @@ async function checkQuote(
   const sandbox = await resolveSandboxTool(options.baseUrl)
   if (sandbox.kind === 'unavailable') return skippedQuoteCheck('quote inspection timed out')
   if (sandbox.kind === 'absent') {
+    if (isLoopbackCliBaseUrl(options.baseUrl)) {
+      return skippedQuoteCheck(
+        'no routeable sandbox Tool on this loopback origin. The readiness probe only reaches public HTTPS endpoints, so the seeded sandbox Tool is listed on hosted origins (preview or production), not on 127.0.0.1. Discover and connect are provable here; Quote is provable on a hosted origin.',
+        'ae doctor --base-url <hosted origin> --json',
+      )
+    }
     return skippedQuoteCheck('no sandbox Tool is published; run npm run dev:local (stage sandbox-tool)', LOCAL_DEV_COMMAND)
   }
   try {
@@ -603,10 +654,17 @@ function connectNextCommand(options: CliOptions): string {
     : connectCommand(options, 'buyer')
 }
 
+export type BalanceAmount = Readonly<{ currency: string; units: string; exponent: number }>
+
+export type BalanceDoctorResult = Readonly<{
+  check: DoctorCheckDraft
+  balance?: BalanceAmount
+}>
+
 async function checkBalance(
   options: CliOptions,
   headers: Readonly<Record<string, string>>,
-): Promise<DoctorCheckDraft> {
+): Promise<BalanceDoctorResult> {
   const { baseUrl } = options
   try {
     const outcome = await callJson(baseUrl, AGENT_ACCOUNT_MONEY_ROUTE_CONTRACTS.balance.path, {
@@ -616,17 +674,64 @@ async function checkBalance(
     })
     const parsed = agentAccountBalanceAction.outputSchema.safeParse(outcome.body)
     if (!outcome.ok || !parsed.success || parsed.data.kind !== 'available') {
-      return { id: 'balance', state: 'fail', summary: 'Buyer balance is not available.', nextCommand: doctorContinuation(options, ['ae', 'account', 'balance']) }
+      return { check: { id: 'balance', state: 'fail', summary: 'Buyer balance is not available.', nextCommand: doctorContinuation(options, ['ae', 'account', 'balance']) } }
     }
     if (parsed.data.accountState !== 'active') {
-      return { id: 'balance', state: 'fail', summary: 'Buyer account is locked.' }
+      return { check: { id: 'balance', state: 'fail', summary: 'Buyer account is locked.' } }
     }
     if (parsed.data.balance.units === '0') {
-      return { id: 'balance', state: 'warn', summary: 'Buyer balance is empty.', nextCommand: doctorContinuation(options, ['ae', 'fund']) }
+      return { check: { id: 'balance', state: 'warn', summary: 'Buyer balance is empty.', nextCommand: doctorContinuation(options, ['ae', 'fund']) } }
     }
-    return { id: 'balance', state: 'pass', summary: 'Buyer balance is available and the account is active.' }
+    return {
+      check: { id: 'balance', state: 'pass', summary: 'Buyer balance is available and the account is active.' },
+      balance: parsed.data.balance,
+    }
   } catch {
-    return { id: 'balance', state: 'fail', summary: 'Buyer balance could not be read.', nextCommand: doctorContinuation(options, ['ae', 'account', 'balance']) }
+    return { check: { id: 'balance', state: 'fail', summary: 'Buyer balance could not be read.', nextCommand: doctorContinuation(options, ['ae', 'account', 'balance']) } }
+  }
+}
+
+/**
+ * Balance alone cannot tell a swarm operator whether an empty Account is a Stripe
+ * test-mode gap (tier 0) or a fundable Account that simply has not been funded yet
+ * (tier 1): funding names that difference explicitly instead of leaving `insufficient_
+ * balance` to stand for both.
+ */
+export function checkFunding(options: CliOptions, balance: BalanceDoctorResult): DoctorCheckDraft {
+  const loopback = isLoopbackCliBaseUrl(options.baseUrl)
+  if (!stripeTestModeConfigured()) {
+    const missing = missingEnvNames(STRIPE_MONEY_ENV_NAMES)
+    return {
+      id: 'funding', state: 'fail',
+      summary: `Account funding is unavailable: Stripe test mode is not configured (missing: ${missing.join(', ')}).`,
+      ...(loopback ? { nextCommand: LOCAL_STRIPE_TEST_MODE_DOC } : {}),
+    }
+  }
+  if (balance.check.state === 'pass' && balance.balance !== undefined) {
+    const { units, exponent, currency } = balance.balance
+    return {
+      id: 'funding', state: 'pass',
+      summary: `Account funding is available; buyer balance is ${units} × 10^-${exponent} ${currency}.`,
+    }
+  }
+  if (balance.check.state === 'warn') {
+    const origin = new URL(options.baseUrl).origin
+    return loopback
+      ? {
+          id: 'funding', state: 'warn',
+          summary: `Buyer balance is empty; fund the Account as the owner at ${origin}/owner/credit (Stripe test mode).`,
+          nextCommand: `${origin}/owner/credit`,
+        }
+      : {
+          id: 'funding', state: 'warn',
+          summary: 'Buyer balance is empty; fund the Account (Stripe test mode).',
+          nextCommand: doctorContinuation(options, ['ae', 'fund']),
+        }
+  }
+  return {
+    id: 'funding', state: 'fail',
+    summary: 'Account funding could not be verified because the buyer balance could not be read.',
+    nextCommand: doctorContinuation(options, ['ae', 'account', 'balance']),
   }
 }
 
@@ -885,6 +990,7 @@ function renderDoctor(result: DoctorResult, options: CliOptions): void {
     const marker = check.state === 'pass' ? '✓' : check.state === 'warn' ? '!' : check.state === 'skipped' ? '-' : '✗'
     line(`${marker} ${check.summary}`)
   }
+  line(result.tier.level === 1 ? 'tier: 1' : `tier: 0 (missing: ${result.tier.missing.join(', ')})`)
   line(`discovery: ${result.groups.discovery} | quoting: ${result.groups.quoting} | purchase: ${result.groups.purchase}`)
   const firstFailure = result.checks.find((check) => check.state === 'fail')
   const nextCommand = firstFailure === undefined

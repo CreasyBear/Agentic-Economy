@@ -1,3 +1,5 @@
+import { z } from 'zod'
+
 import { canonicalDigest } from '../../common/canonical-digest'
 
 export const COMMERCIAL_POLICY_FAMILIES = Object.freeze([
@@ -178,6 +180,32 @@ export type CommercialPolicyApproval = Readonly<{
   suspendedAt?: number
 }>
 
+/**
+ * Every machine reason a commercial-policy refusal can carry. The first entries
+ * are exactly the codes the gate emits; `legal_customer_required` is the
+ * binding-site reason raised when the Account has no usable legal customer.
+ * Public refusals forward these verbatim, so the tuple is the single source of
+ * truth for both the schema and the exhaustive continuation switch.
+ */
+export const COMMERCIAL_POLICY_REFUSAL_REASONS = Object.freeze([
+  'commercial_policy_fixture_required',
+  'commercial_policy_deployment_profile_invalid',
+  'commercial_policy_missing',
+  'commercial_policy_not_effective',
+  'commercial_policy_expired',
+  'commercial_policy_suspended',
+  'commercial_policy_superseded',
+  'commercial_policy_environment_mismatch',
+  'commercial_policy_conflict',
+  'legal_customer_required',
+] as const)
+
+export type CommercialPolicyRefusalReason = typeof COMMERCIAL_POLICY_REFUSAL_REASONS[number]
+export type CommercialPolicyGateRefusalCode =
+  Exclude<CommercialPolicyRefusalReason, 'legal_customer_required'>
+
+export const commercialPolicyRefusalReasonSchema = z.enum(COMMERCIAL_POLICY_REFUSAL_REASONS)
+
 export type CommercialPolicyGateResult =
   | Readonly<{
       kind: 'admitted'
@@ -188,16 +216,7 @@ export type CommercialPolicyGateResult =
     }>
   | Readonly<{
       kind: 'refused'
-      code:
-        | 'commercial_policy_fixture_required'
-        | 'commercial_policy_deployment_profile_invalid'
-        | 'commercial_policy_missing'
-        | 'commercial_policy_not_effective'
-        | 'commercial_policy_expired'
-        | 'commercial_policy_suspended'
-        | 'commercial_policy_superseded'
-        | 'commercial_policy_environment_mismatch'
-        | 'commercial_policy_conflict'
+      code: CommercialPolicyGateRefusalCode
       family?: CommercialPolicyFamily
       missingFamilies?: readonly CommercialPolicyFamily[]
     }>

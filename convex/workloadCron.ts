@@ -372,6 +372,7 @@ const CONSEQUENCE_HANDLERS: Record<ConsequenceOperation, ConsequenceHandler> = {
   'capabilityCallX402AuthorizationExpiry:queueExpiredX402Authorization': (ctx, payload) => ctx.runMutation(internal.capabilityCallX402AuthorizationExpiry.queueExpiredX402Authorization, payload as never),
   'capabilitySupply:recordCapabilityProbeResult': (ctx, payload) => ctx.runMutation(internal.capabilitySupply.recordCapabilityProbeResult, payload as never),
   'facilitatorDiscovery:reconcile': (ctx, payload, current) => ctx.runMutation(internal.facilitatorDiscovery.reconcile, { ...payload, workload: current } as never),
+  'moneyTreasury:recordObservation': (ctx, payload) => ctx.runMutation(internal.moneyTreasury.recordObservation, payload as never),
   'moneyX402PaymentAttempts:reconcileX402PaymentAttempt': (ctx, payload) => ctx.runMutation(internal.moneyX402PaymentAttempts.reconcileX402PaymentAttempt, payload as never),
 }
 
@@ -491,6 +492,15 @@ export async function cleanupExpiredAgentAccessOAuthGrantsHandler(
   )
 }
 
+export async function observeX402TreasuryHandler(ctx: WorkloadCronActionContext): Promise<null> {
+  return await runAdmittedAction(
+    ctx,
+    'observe x402 treasury',
+    internal.moneyTreasuryObservation.observe,
+    {},
+  )
+}
+
 export const reconcileDueFacilitatorInvocations = internalAction({
   args: {},
   returns: v.null(),
@@ -531,4 +541,10 @@ export const cleanupExpiredAgentAccessOAuthGrants = internalMutation({
   args: { now: v.optional(v.number()), batchSize: v.optional(v.number()) },
   returns: v.null(),
   handler: cleanupExpiredAgentAccessOAuthGrantsHandler,
+})
+
+export const observeX402Treasury = internalAction({
+  args: {},
+  returns: v.null(),
+  handler: observeX402TreasuryHandler,
 })

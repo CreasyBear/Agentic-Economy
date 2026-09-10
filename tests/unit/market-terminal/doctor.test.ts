@@ -8,14 +8,61 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { listMcpActions, mcpToolName } from '@/modules/actions'
 import { TOOL_MARKET_SEARCH_PATH } from '@/modules/common/market-tool-paths'
 import { TOOL_QUOTE_PATH } from '@/modules/capability-execution/quote'
+import { STRIPE_MONEY_ENV_NAMES } from '@/lib/server/stripe-money-provider-config'
+import {
+  X402_CDP_ACCOUNT_NAME_ENV,
+  X402_CDP_ACCOUNT_POLICY_ID_ENV,
+  X402_CDP_API_KEY_ID_ENV,
+  X402_CDP_API_KEY_SECRET_ENV,
+  X402_CDP_CREDENTIAL_GENERATION_ENV,
+  X402_CDP_EXPECTED_EVM_ADDRESS_ENV,
+  X402_CDP_POLICY_RULES_DIGEST_ENV,
+  X402_CDP_PROJECT_POLICY_ID_ENV,
+  X402_CDP_WALLET_SECRET_ENV,
+  X402_CUSTODY_DAILY_MAX_ATOMIC_ENV,
+  X402_CUSTODY_ENABLED_ENV,
+  X402_CUSTODY_ENV_NAMES,
+  X402_CUSTODY_MAX_ATOMIC_ENV,
+} from '@/modules/capability-supply/internal/x402-custody-configuration'
+import { checkFunding } from '../../../tools/ae/commands/doctor'
 import { spawnCli } from './cli-errors-harness'
 
 const SANDBOX_TOOL_SLUG = 'sandbox-aecon-reference'
 const SANDBOX_TOOL_REF = `operation:v1:${'e'.repeat(64)}`
-const NO_SANDBOX_TOOL_REASON = 'no sandbox Tool is published; run npm run dev:local (stage sandbox-tool)'
 const LOCAL_DEV_COMMAND = 'npm run dev:local'
+const LOOPBACK_NO_SANDBOX_TOOL_REASON = 'no routeable sandbox Tool on this loopback origin. The readiness probe only reaches public HTTPS endpoints, so the seeded sandbox Tool is listed on hosted origins (preview or production), not on 127.0.0.1. Discover and connect are provable here; Quote is provable on a hosted origin.'
+const LOOPBACK_DOCTOR_COMMAND = 'ae doctor --base-url <hosted origin> --json'
 const FRESH_CATALOGUE_CHECK = { id: 'catalogue', group: 'discovery', state: 'pass', summary: 'Market catalogue coverage is fresh.' }
-const NO_SANDBOX_TOOL_CHECK = skippedQuoteCheck(NO_SANDBOX_TOOL_REASON, LOCAL_DEV_COMMAND)
+
+// A fully configured local environment: Stripe test mode plus the CDP/x402 sandbox
+// bundle, so the default test double proves tier 1 (the full loop) rather than tier 0.
+const TIER1_ENV: NodeJS.ProcessEnv = {
+  STRIPE_SECRET_KEY: 'sk_test_doctor00000000000000000000',
+  STRIPE_WEBHOOK_SECRET: 'whsec_doctor000000000000000000000',
+  STRIPE_V2_WEBHOOK_SECRET: 'whsec_doctorv2_00000000000000000000',
+  STRIPE_AU_INCLUSIVE_GST_TAX_RATE_ID: 'txr_doctor00000000000000000000000',
+  STRIPE_CHECKOUT_HOST: 'checkout.doctor.test',
+  [X402_CUSTODY_ENABLED_ENV]: 'true',
+  [X402_CDP_API_KEY_ID_ENV]: 'key-id',
+  [X402_CDP_API_KEY_SECRET_ENV]: 'key-secret',
+  [X402_CDP_WALLET_SECRET_ENV]: 'wallet-secret',
+  [X402_CDP_ACCOUNT_NAME_ENV]: 'agentic-economy-x402',
+  [X402_CDP_EXPECTED_EVM_ADDRESS_ENV]: '0x0000000000000000000000000000000000000001',
+  [X402_CDP_ACCOUNT_POLICY_ID_ENV]: '11111111-1111-4111-8111-111111111111',
+  [X402_CDP_PROJECT_POLICY_ID_ENV]: '22222222-2222-4222-8222-222222222222',
+  [X402_CDP_POLICY_RULES_DIGEST_ENV]: `sha256:${'a'.repeat(64)}`,
+  [X402_CDP_CREDENTIAL_GENERATION_ENV]: '7',
+  [X402_CUSTODY_MAX_ATOMIC_ENV]: '10000',
+  [X402_CUSTODY_DAILY_MAX_ATOMIC_ENV]: '100000',
+}
+const TIER0_MISSING_NAMES = [...STRIPE_MONEY_ENV_NAMES, ...X402_CUSTODY_ENV_NAMES]
+const TIER1_RESULT = { level: 1, missing: [] }
+const LOCAL_STRIPE_TEST_MODE_DOC = 'docs/operations/local-stripe-test-mode.md'
+
+function tier0Environment(directory: string): NodeJS.ProcessEnv {
+  const blanked = Object.fromEntries(Object.keys(TIER1_ENV).map((name) => [name, '']))
+  return { ...cleanEnvironment(directory), ...blanked }
+}
 
 function skippedQuoteCheck(reason: string, nextCommand?: string) {
   return {
@@ -56,6 +103,7 @@ describe('ae doctor', () => {
     expect(json.stderr).toBe('')
     expect(JSON.parse(json.stdout)).toEqual({
       kind: 'degraded',
+      tier: TIER1_RESULT,
       groups: { discovery: 'fail', quoting: 'warn', purchase: 'warn' },
       checks: [
         { id: 'origin', group: 'discovery', state: 'pass', summary: `Configured origin is ${origin}.` },
@@ -153,6 +201,7 @@ describe('ae doctor', () => {
     expect(result.stderr).toBe('')
     expect(JSON.parse(result.stdout)).toEqual({
       kind: 'degraded',
+      tier: TIER1_RESULT,
       groups: { discovery: 'pass', quoting: 'skipped', purchase: 'warn' },
       checks: [
         { id: 'origin', group: 'discovery', state: 'pass', summary: `Configured origin is ${origin}.` },
@@ -262,6 +311,7 @@ describe('ae doctor', () => {
     expect(json.stdout).not.toContain(buyerSecret)
     expect(JSON.parse(json.stdout)).toEqual({
       kind: 'degraded',
+      tier: TIER1_RESULT,
       groups: { discovery: 'pass', quoting: 'skipped', purchase: 'warn' },
       checks: [
         { id: 'origin', group: 'discovery', state: 'pass', summary: `Configured origin is ${origin}.` },
@@ -271,8 +321,12 @@ describe('ae doctor', () => {
         { id: 'release', group: 'discovery', state: 'pass', summary: `Release identity is ${'a'.repeat(40)}.` },
         FRESH_CATALOGUE_CHECK,
         { id: 'buyer', group: 'quoting', state: 'pass', summary: 'Buyer credential is origin-bound, authenticated, and has market_tools:call.' },
-        NO_SANDBOX_TOOL_CHECK,
+        skippedQuoteCheck(LOOPBACK_NO_SANDBOX_TOOL_REASON, LOOPBACK_DOCTOR_COMMAND),
         { id: 'balance', group: 'purchase', state: 'pass', summary: 'Buyer balance is available and the account is active.' },
+        {
+          id: 'funding', group: 'purchase', state: 'pass',
+          summary: 'Account funding is available; buyer balance is 25000000 × 10^-6 AUD.',
+        },
         {
           id: 'call', group: 'purchase', state: 'warn',
           summary: 'A reconciliation-required Call needs attention.',
@@ -681,8 +735,9 @@ describe('ae doctor', () => {
         { id: 'release', group: 'discovery', state: 'pass' },
         FRESH_CATALOGUE_CHECK,
         { id: 'buyer', group: 'quoting', state: 'pass' },
-        NO_SANDBOX_TOOL_CHECK,
+        skippedQuoteCheck(LOOPBACK_NO_SANDBOX_TOOL_REASON, LOOPBACK_DOCTOR_COMMAND),
         { id: 'balance', group: 'purchase', state: 'pass' },
+        { id: 'funding', group: 'purchase', state: 'pass' },
         { id: 'call', group: 'purchase', state: 'pass' },
         { id: 'market_requests', group: 'purchase', state: 'pass', summary: 'No private market requests need rechecking.' },
         { id: 'provider', group: 'purchase', state: 'pass', summary: 'Provider credential is origin-bound, authenticated, and has market_supply:manage.' },
@@ -872,6 +927,7 @@ describe('ae doctor', () => {
     expect(result.stderr).toBe('')
     expect(JSON.parse(result.stdout)).toEqual({
       kind: 'ready',
+      tier: TIER1_RESULT,
       groups: { discovery: 'pass', quoting: 'skipped', purchase: 'pass' },
       checks: [
         { id: 'origin', group: 'discovery', state: 'pass', summary: `Configured origin is ${origin}.` },
@@ -881,8 +937,12 @@ describe('ae doctor', () => {
         { id: 'release', group: 'discovery', state: 'pass', summary: `Release identity is ${'a'.repeat(40)}.` },
         FRESH_CATALOGUE_CHECK,
         { id: 'buyer', group: 'quoting', state: 'pass', summary: 'Buyer credential is origin-bound, authenticated, and has market_tools:call.' },
-        NO_SANDBOX_TOOL_CHECK,
+        skippedQuoteCheck(LOOPBACK_NO_SANDBOX_TOOL_REASON, LOOPBACK_DOCTOR_COMMAND),
         { id: 'balance', group: 'purchase', state: 'pass', summary: 'Buyer balance is available and the account is active.' },
+        {
+          id: 'funding', group: 'purchase', state: 'pass',
+          summary: 'Account funding is available; buyer balance is 10000 × 10^-6 AUD.',
+        },
         { id: 'call', group: 'purchase', state: 'pass', summary: 'No pending or reconciliation-required Call needs attention.' },
         { id: 'market_requests', group: 'purchase', state: 'pass', summary: 'No private market requests need rechecking.' },
       ],
@@ -973,6 +1033,7 @@ describe('ae doctor', () => {
     expect(result.stdout).not.toContain(secret)
     expect(JSON.parse(result.stdout)).toEqual({
       kind: 'degraded',
+      tier: TIER1_RESULT,
       groups: { discovery: 'fail', quoting: 'skipped', purchase: 'warn' },
       checks: [
         { id: 'origin', group: 'discovery', state: 'pass', summary: `Configured origin is ${origin}.` },
@@ -1107,7 +1168,7 @@ describe('ae doctor', () => {
     expect(human.stdout).toContain('quoting: skipped')
   }, 20_000)
 
-  it('skips quoting when no sandbox Tool is published and names the seeding stage', async () => {
+  it('skips quoting when no sandbox Tool is published on a loopback origin and names the hosted alternative', async () => {
     const buyerSecret = 'FAKE_ABSENT_TOOL_SECRET_7724'
     const observed: ObservedRequest[] = []
     const origin = await startQuoteServer({ quote: committedQuote(), search: emptySearchResult() }, observed)
@@ -1119,7 +1180,9 @@ describe('ae doctor', () => {
     expect(json.status).toBe(0)
     const result = JSON.parse(json.stdout) as { groups: { quoting: string }; checks: unknown[] }
     expect(result.groups.quoting).toBe('skipped')
-    expect(result.checks).toEqual(expect.arrayContaining([NO_SANDBOX_TOOL_CHECK]))
+    expect(result.checks).toEqual(expect.arrayContaining([
+      skippedQuoteCheck(LOOPBACK_NO_SANDBOX_TOOL_REASON, LOOPBACK_DOCTOR_COMMAND),
+    ]))
     // No Tool to quote means no Quote request is sent at all.
     expect(observed.map((request) => request.path)).toEqual([TOOL_MARKET_SEARCH_PATH])
   }, 20_000)
@@ -1167,6 +1230,109 @@ describe('ae doctor', () => {
       id: 'catalogue', group: 'discovery', state: 'fail', summary: 'Market catalogue refresh failed.',
     }]))
   }, 20_000)
+
+  it('fails funding and reports tier 0 with the missing names on a loopback origin without Stripe or CDP/x402 sandbox credentials', async () => {
+    const buyerSecret = 'FAKE_TIER0_LOOPBACK_BUYER_SECRET_3301'
+    const origin = await startQuoteServer({ quote: committedQuote() }, [])
+    const directory = makeConfigDirectory()
+    writeStoredConfig(directory, origin, buyerSecret)
+
+    const json = await spawnCli(['doctor', '--base-url', origin, '--json'], { env: tier0Environment(directory) })
+    expect(json.status).toBe(0)
+    const result = JSON.parse(json.stdout) as { tier: unknown; checks: unknown[] }
+    expect(result.tier).toEqual({ level: 0, missing: TIER0_MISSING_NAMES })
+    expect(result.checks).toEqual(expect.arrayContaining([{
+      id: 'funding', group: 'purchase', state: 'fail',
+      summary: `Account funding is unavailable: Stripe test mode is not configured (missing: ${STRIPE_MONEY_ENV_NAMES.join(', ')}).`,
+      nextCommand: LOCAL_STRIPE_TEST_MODE_DOC,
+    }]))
+
+    const human = await spawnCli(['doctor', '--base-url', origin], { env: tier0Environment(directory) })
+    expect(human.stdout).toContain(`tier: 0 (missing: ${TIER0_MISSING_NAMES.join(', ')})`)
+  }, 20_000)
+
+  it('reports tier 1 once Stripe test mode and the CDP/x402 sandbox bundle are configured', async () => {
+    const buyerSecret = 'FAKE_TIER1_BUYER_SECRET_3303'
+    const origin = await startQuoteServer({ quote: committedQuote() }, [])
+    const directory = makeConfigDirectory()
+    writeStoredConfig(directory, origin, buyerSecret)
+
+    const json = await spawnCli(['doctor', '--base-url', origin, '--json'], { env: cleanEnvironment(directory) })
+    expect(json.status).toBe(0)
+    const result = JSON.parse(json.stdout) as { tier: unknown }
+    expect(result.tier).toEqual(TIER1_RESULT)
+
+    const human = await spawnCli(['doctor', '--base-url', origin], { env: cleanEnvironment(directory) })
+    expect(human.stdout).toContain('tier: 1')
+  }, 20_000)
+
+  it('warns to fund the Account at the owner credit page on a loopback origin once test mode is configured', async () => {
+    const buyerSecret = 'FAKE_FUNDING_WARN_LOOPBACK_3304'
+    const origin = await startQuoteServer({ quote: committedQuote(), balanceUnits: '0' }, [])
+    const directory = makeConfigDirectory()
+    writeStoredConfig(directory, origin, buyerSecret)
+
+    const json = await spawnCli(['doctor', '--base-url', origin, '--json'], { env: cleanEnvironment(directory) })
+    expect(json.status).toBe(0)
+    const result = JSON.parse(json.stdout) as { checks: unknown[] }
+    expect(result.checks).toEqual(expect.arrayContaining([{
+      id: 'funding', group: 'purchase', state: 'warn',
+      summary: `Buyer balance is empty; fund the Account as the owner at ${origin}/owner/credit (Stripe test mode).`,
+      nextCommand: `${origin}/owner/credit`,
+    }]))
+  }, 20_000)
+
+  // A hosted origin can only carry a bound, authenticated buyer credential over https,
+  // which this suite's plain-http test servers cannot provide (see the loopback-only
+  // `secure` check in doctor.ts's credentialOriginFailure). These two cases exercise the
+  // funding check's loopback-vs-hosted branching directly instead of over the network.
+  it('omits a local fix command for a hosted origin missing Stripe test mode', () => {
+    for (const name of [...STRIPE_MONEY_ENV_NAMES, ...X402_CUSTODY_ENV_NAMES]) vi.stubEnv(name, '')
+    try {
+      const result = checkFunding(
+        { baseUrl: 'https://hosted.ae-doctor-test.invalid', json: false, help: false, allowWrite: false },
+        { check: { id: 'balance', state: 'pass', summary: 'Buyer balance is available and the account is active.' } },
+      )
+      expect(result).toEqual({
+        id: 'funding', state: 'fail',
+        summary: `Account funding is unavailable: Stripe test mode is not configured (missing: ${STRIPE_MONEY_ENV_NAMES.join(', ')}).`,
+      })
+    } finally {
+      vi.unstubAllEnvs()
+    }
+  })
+
+  it('continues with ae fund on a hosted origin when the buyer balance is empty', () => {
+    for (const [name, value] of Object.entries(TIER1_ENV)) vi.stubEnv(name, value as string)
+    try {
+      const result = checkFunding(
+        { baseUrl: 'https://hosted.ae-doctor-test.invalid', json: true, help: false, allowWrite: false, baseUrlSource: 'flag' },
+        { check: { id: 'balance', state: 'warn', summary: 'Buyer balance is empty.' } },
+      )
+      expect(result).toEqual({
+        id: 'funding', state: 'warn',
+        summary: 'Buyer balance is empty; fund the Account (Stripe test mode).',
+        nextCommand: 'ae fund --base-url https://hosted.ae-doctor-test.invalid --json',
+      })
+    } finally {
+      vi.unstubAllEnvs()
+    }
+  })
+
+  it('passes funding with the buyer balance once the Account is funded', async () => {
+    const buyerSecret = 'FAKE_FUNDING_PASS_BUYER_SECRET_3306'
+    const origin = await startQuoteServer({ quote: committedQuote(), balanceUnits: '2000000' }, [])
+    const directory = makeConfigDirectory()
+    writeStoredConfig(directory, origin, buyerSecret)
+
+    const json = await spawnCli(['doctor', '--base-url', origin, '--json'], { env: cleanEnvironment(directory) })
+    expect(json.status).toBe(0)
+    const result = JSON.parse(json.stdout) as { checks: unknown[] }
+    expect(result.checks).toEqual(expect.arrayContaining([{
+      id: 'funding', group: 'purchase', state: 'pass',
+      summary: 'Account funding is available; buyer balance is 2000000 × 10^-6 AUD.',
+    }]))
+  }, 20_000)
 })
 
 type ObservedRequest = Readonly<{ path: string; authorization?: string; body: unknown }>
@@ -1182,7 +1348,7 @@ type QuoteScenario = {
  * One healthy buyer origin that also serves the sandbox search, Quote, and
  * catalogue answers each quoting case varies.
  */
-async function startQuoteServer(scenario: QuoteScenario, observed: ObservedRequest[]): Promise<string> {
+async function startQuoteServer(scenario: QuoteScenario, observed: ObservedRequest[], host?: string): Promise<string> {
   return await startServer((request, response) => {
     const url = request.url ?? ''
     if (url === TOOL_MARKET_SEARCH_PATH || url === TOOL_QUOTE_PATH) {
@@ -1229,7 +1395,7 @@ async function startQuoteServer(scenario: QuoteScenario, observed: ObservedReque
       return
     }
     respondJson(response, { error: 'unexpected' }, 404)
-  })
+  }, host)
 }
 
 async function startServer(
@@ -1489,10 +1655,16 @@ function currentTool(toolRef: string) {
 function cleanEnvironment(directory: string): NodeJS.ProcessEnv {
   return {
     ...process.env,
+    ...TIER1_ENV,
     AE_CONFIG_DIR: directory,
     AE_API_KEY: '',
     AE_API_KEY_ORIGIN: '',
     AE_CLI_BASE_URL: '',
     AE_CANONICAL_BASE_URL: '',
+    // The doctor command now loads the Stripe SDK to check test-mode configuration.
+    // Stripe's SDK writes an unrelated agent hint to stderr when it sees these Claude
+    // Code session markers, which would otherwise pollute the CLI's own stderr checks.
+    CLAUDECODE: '',
+    CLAUDE_CODE_CHILD_SESSION: '',
   }
 }

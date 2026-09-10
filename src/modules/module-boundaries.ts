@@ -139,7 +139,6 @@ export const MODULE_BOUNDARY_MANIFEST: ModuleBoundaryManifest = {
     { id: 'test-whitebox-36', importers: ['tests/unit/capability-supply/quarantine-helpers.test.ts'], to: 'capability-supply', entry: 'internal/quarantine/index.ts', owner: 'source-tests' },
     { id: 'test-whitebox-37', importers: ['tests/unit/capability-supply/route-transport-x402.test.ts', 'tests/unit/capability-supply/server-credential.test.ts'], to: 'capability-supply', entry: 'internal/server-credential.ts', owner: 'source-tests' },
     { id: 'test-whitebox-38', importers: ['tests/unit/capability-supply/supplied-candidate-qualification.test.ts', 'tests/unit/capability-supply/supplied-candidate-quote-harness.ts'], to: 'capability-supply', entry: 'internal/graph/index.ts', owner: 'source-tests' },
-    { id: 'test-whitebox-39', importers: ['tests/unit/capability-supply/supply-funnel.test.ts'], to: 'capability-supply', entry: 'internal/supply-funnel/pricing-port.ts', owner: 'source-tests' },
     { id: 'test-whitebox-40', importers: ['tests/unit/capability-supply/supply-liquidity.test.ts'], to: 'capability-supply', entry: 'internal/liquidity.ts', owner: 'source-tests' },
     { id: 'test-whitebox-41', importers: ['tests/unit/capability-supply/x402-offer-receipt.test.ts'], to: 'capability-supply', entry: 'internal/x402-offer-receipt.ts', owner: 'source-tests' },
     { id: 'test-whitebox-42', importers: ['tests/unit/capability-supply/x402-payment-signer.test.ts'], to: 'capability-supply', entry: 'internal/x402-payment-signer.ts', owner: 'source-tests' },
@@ -169,5 +168,7 @@ export const MODULE_BOUNDARY_MANIFEST: ModuleBoundaryManifest = {
     { id: 'test-whitebox-76', importers: ['tests/unit/capability-supply/x402-path-request.test.ts'], to: 'capability-supply', entry: 'internal/x402-bazaar-fixtures/onesource-path-request-2026-09-08.json', owner: 'source-tests' },
     { id: 'test-whitebox-77', importers: ['tests/unit/capability-supply/x402-path-request.test.ts'], to: 'capability-supply', entry: 'internal/x402-bazaar-fixtures/onesource-union-request-2026-09-08.json', owner: 'source-tests' },
     { id: 'test-whitebox-78', importers: ['tests/unit/money/reference-rate-fetch.test.ts'], to: 'money', entry: 'internal/reference-rate-fetch.ts', owner: 'source-tests' },
+    { id: 'test-whitebox-79', importers: ['tests/unit/capability-execution/call-credential-rotation-dispatch.test.ts'], to: 'capability-execution', entry: 'call-worker/runPreparation.ts', owner: 'source-tests' },
+    { id: 'test-whitebox-80', importers: ['tests/unit/market-terminal/doctor.test.ts'], to: 'capability-supply', entry: 'internal/x402-custody-configuration.ts', owner: 'source-tests' },
   ],
 }

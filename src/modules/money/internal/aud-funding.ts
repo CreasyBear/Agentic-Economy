@@ -17,6 +17,7 @@ export type AudFundingPolicy = Readonly<{
   legalCustomerMaximumAccessibleUnits: bigint
 }>
 
+// The platform fee applies to Account loading (service fee + GST), never to Quote/Call usage; see commercial-policy controls.
 export function audFundingPolicyFromCommercialControls(
   controls: CommercialPolicyControls,
 ): AudFundingPolicy {

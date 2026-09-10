@@ -14,6 +14,7 @@ const HANDLERS: Record<ScheduledWorkloadName, FunctionReference<'mutation' | 'ac
   'refresh capability supply readiness': internal.workloadCron.refreshCapabilitySupplyReadiness,
   'cleanup expired source write nonces': internal.workloadCron.cleanupExpiredSourceWriteNonces,
   'cleanup expired agent access oauth grants': internal.workloadCron.cleanupExpiredAgentAccessOAuthGrants,
+  'observe x402 treasury': internal.workloadCron.observeX402Treasury,
 }
 
 const crons = cronJobs()

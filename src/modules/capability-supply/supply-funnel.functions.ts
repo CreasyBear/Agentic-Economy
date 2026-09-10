@@ -79,7 +79,6 @@ export {
 export { checkOwnerX402, connectOwnerX402, inspectOwnerX402 } from './internal/supply-funnel/connections'
 export { loadSupplyLandingReadback } from './internal/supply-funnel/landing'
 export { ownerSupplyActionContext } from './internal/supply-funnel/types'
-export { resolveSupplyPricing } from './internal/supply-funnel/pricing-port'
 
 export const readOwnerProviderConnectionsServer = createServerFn().handler(readOwnerProviderConnections)
 

@@ -23,6 +23,7 @@ import {
   refreshCapabilitySupplyReadiness,
   refreshCurrentMarketPresenceHandler,
   refreshFacilitatorDiscoveryHandler,
+  observeX402TreasuryHandler,
   dispatchWorkloadCronConsequenceHandler,
   reconcile,
   type WorkloadCronActionContext,
@@ -45,12 +46,21 @@ const EXPECTED_BINDINGS = {
   'refresh capability supply readiness': 'workloadCron:refreshCapabilitySupplyReadiness',
   'refresh current market presence': 'workloadCron:refreshCurrentMarketPresence',
   'refresh facilitator discovery': 'workloadCron:refreshFacilitatorDiscovery',
+  'observe x402 treasury': 'workloadCron:observeX402Treasury',
 } as const
 
 const ACTION_HANDLERS = [
   reconcileDueFacilitatorInvocationsHandler,
   refreshFacilitatorDiscoveryHandler,
   refreshAgenticEconomyApiRegistryHandler,
+  observeX402TreasuryHandler,
+] as const
+
+const ACTION_HANDLER_WORKLOAD_NAMES = [
+  'reconcile due facilitator invocations',
+  'refresh facilitator discovery',
+  'refresh Agentic Economy API registry',
+  'observe x402 treasury',
 ] as const
 
 const MUTATION_HANDLERS = [
@@ -66,7 +76,7 @@ describe('System workload cron boundary', () => {
     vi.setSystemTime(new Date('2026-08-26T00:00:00.000Z'))
   })
 
-  it('binds the seven periodic registrations to workload admission wrappers, retaining on-demand facilitator authority', () => {
+  it('binds the eight periodic registrations to workload admission wrappers, retaining on-demand facilitator authority', () => {
     const periodicBindings = Object.fromEntries(Object.entries(EXPECTED_BINDINGS).filter(([name]) => name !== 'refresh facilitator discovery'))
     expect(Object.keys(convexCrons.crons).sort()).toEqual(Object.keys(periodicBindings).sort())
     expect(Object.fromEntries(
@@ -76,7 +86,7 @@ describe('System workload cron boundary', () => {
   })
 
   it('declares every cron as one canonical workload Principal and Account with no exemption', () => {
-    expect(WORKLOAD_CRON_DECLARATIONS).toHaveLength(7)
+    expect(WORKLOAD_CRON_DECLARATIONS).toHaveLength(8)
     expect(WORKLOAD_CRON_DECLARATIONS.map(({ name }) => name).sort()).toEqual(Object.keys(EXPECTED_BINDINGS).sort())
     expect(WORKLOAD_CRON_DECLARATIONS.every((declaration) => (
       declaration.authority === 'canonical_workload'
@@ -327,14 +337,14 @@ describe('System workload cron boundary', () => {
       .rejects.toThrow('unique query returned more than one row')
   })
 
-  it('checks current workload authority before dispatch across all nine wrappers', async () => {
+  it('checks current workload authority before dispatch across every registered wrapper', async () => {
     const context = new FakeRuntimeContext(canonicalDb())
     for (const handler of ACTION_HANDLERS) await expect(handler(context.action())).resolves.toBeNull()
     for (const handler of MUTATION_HANDLERS) await expect(handler(context.mutation())).resolves.toBeNull()
 
-    expect(context.admissions).toEqual(WORKLOAD_CRON_DECLARATIONS.slice(0, 3).map(({ name }) => name))
-    expect(context.dispatches).toHaveLength(7)
-    expect([...context.db.queries].sort()).toEqual(Array.from({ length: 7 }, () => [
+    expect(context.admissions).toEqual([...ACTION_HANDLER_WORKLOAD_NAMES])
+    expect(context.dispatches).toHaveLength(8)
+    expect([...context.db.queries].sort()).toEqual(Array.from({ length: 8 }, () => [
       'principals',
       'accounts',
       'accountOwnerships',

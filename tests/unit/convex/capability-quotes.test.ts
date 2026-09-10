@@ -7,6 +7,7 @@ import { admitDiscoveredToolFixture } from '../../helpers/discovered-tool-fixtur
 import { inspectLiveX402Requirement } from '@/modules/capability-execution/live-x402-requirement'
 import { readManagedX402InspectionTarget } from '../../../convex/capabilitySupplyCurrentTool'
 import { quote } from '../../../convex/capabilityQuotes'
+import { projectToolQuoteRefusal } from '@/modules/capability-execution/quote'
 import { api, internal } from '../../../convex/_generated/api'
 import type { Id } from '../../../convex/_generated/dataModel'
 import {
@@ -467,6 +468,59 @@ function formanceSnapshot(
     observedAt: Date.now(),
   }
 }
+
+describe('legal customer binding refusals', () => {
+  it('forwards legal_customer_required when the legal customer cannot be bound', async () => {
+    const backend = convexTestWithMarketComponents()
+    const suffix = 'quote-legal-customer'
+    const fixture = await publishCurrentTool(backend, suffix)
+    await seedCommercialPolicies(backend, suffix, Date.now())
+    const owner = { canonicalAccountRef: fixture.accountRef }
+    const input = { request: 'Perth' }
+    const agent = await seedAgent(backend, owner, fixture.toolRef, suffix, '20000000')
+    await backend.finishAllScheduledFunctions(() => undefined)
+    await observeHealthyReadiness(backend, fixture, suffix)
+    await prepareSubjects(backend, agent, fixture.toolRef, input, suffix)
+
+    // Rebinding is blocked, so `resolveAndBindLegalCustomer` refuses.
+    await backend.run(async (ctx) => {
+      const binding = await ctx.db.query('moneyLegalCustomerBindings')
+        .withIndex('by_accountRef', (query) => query.eq('accountRef', fixture.accountRef))
+        .unique()
+      if (binding === null) throw new Error('quote_legal_customer_binding_missing')
+      await ctx.db.patch(binding._id, { legalCustomerRef: 'principal:someone-else' })
+    })
+
+    const refused = await backend.mutation(
+      internal.capabilityQuotes.prepareFinancialSubjects,
+      await withSourceWrite('protected_action', {
+        operationKey: `test:quote:prepare:${suffix}:blocked`,
+        correlationId: `test:quote:prepare:${suffix}:blocked`,
+        principal: agent.principal,
+        toolRef: fixture.toolRef,
+        input,
+      }),
+    )
+
+    expect(refused).toMatchObject({
+      kind: 'refused',
+      code: 'commercial_policy_unavailable',
+      reason: 'legal_customer_required',
+    })
+
+    const projected = projectToolQuoteRefusal({
+      toolRef: fixture.toolRef,
+      input,
+      code: 'commercial_policy_unavailable',
+      retryable: true,
+      correlationRef: `test:quote:prepare:${suffix}:blocked`,
+      ...(refused.kind === 'refused' && refused.reason !== undefined
+        ? { reason: refused.reason }
+        : {}),
+    })
+    expect(projected.continuation?.action).toBe('funding.handoff.config')
+  })
+})
 
 describe('direct Quote handlers', () => {
   it('issues current Quote material, projects policy, refuses stale budgets and per-Call limits, and preserves identities', async () => {

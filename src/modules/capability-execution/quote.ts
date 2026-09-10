@@ -1,8 +1,15 @@
 import { z } from 'zod'
 
 import { jsonValueSchema, type JsonValue } from '@/modules/capability-contract/public'
-import { exactAmountSchema } from '@/modules/money/public'
-import { FUNDING_HANDOFF_CREATE_PATH } from '@/modules/money/funding-handoff.actions'
+import {
+  commercialPolicyRefusalReasonSchema,
+  exactAmountSchema,
+  type CommercialPolicyRefusalReason,
+} from '@/modules/money/public'
+import {
+  FUNDING_HANDOFF_CONFIG_PATH,
+  FUNDING_HANDOFF_CREATE_PATH,
+} from '@/modules/money/funding-handoff.actions'
 import {
   TOOL_MARKET_DESCRIBE_PATH,
   TOOL_MARKET_LIST_PATH,
@@ -11,6 +18,8 @@ import {
 
 export const TOOL_QUOTE_ACTION_ID = 'tool.quote' as const
 export const TOOL_QUOTE_PATH = '/api/v1/tools/quote' as const
+/** Operator command that activates or replaces a commercial policy approval. */
+export const COMMERCIAL_POLICY_ADMIN_SURFACE = 'moneyCommercialPolicy.change' as const
 
 export const toolQuoteInputSchema = z.strictObject({
   toolRef: z.string().regex(/^operation:v1:[0-9a-f]{64}$/u),
@@ -83,6 +92,12 @@ const quoteContinuationSchema = z.discriminatedUnion('action', [
       idempotencyKey: z.string().min(1).max(255),
     }),
   }),
+  z.strictObject({
+    action: z.literal('funding.handoff.config'),
+    method: z.literal('GET'),
+    path: z.literal(FUNDING_HANDOFF_CONFIG_PATH),
+    input: z.strictObject({}),
+  }),
 ])
 
 const requiredActionSchema = z.strictObject({
@@ -122,6 +137,8 @@ export const toolQuoteResultSchema = z.union([
     kind: z.literal('refused'),
     toolRef: z.string(),
     code: z.enum(toolQuoteRefusalCodeValues),
+    // `commercial_policy_unavailable` forwards a `CommercialPolicyRefusalReason`
+    // verbatim; other codes carry free-text operator detail.
     reason: z.string().min(1).optional(),
     retryable: z.boolean(),
     correlationRef: z.string().min(1),
@@ -140,6 +157,7 @@ export function projectToolQuoteRefusal(input: Readonly<{
   code: ToolQuoteRefusalCode
   retryable: boolean
   correlationRef: string
+  /** For `commercial_policy_unavailable` this must be a `CommercialPolicyRefusalReason`. */
   reason?: string
   capabilityId?: string
   funding?: Readonly<{ principalAmount: z.infer<typeof exactAmountSchema>; idempotencyKey: string }>
@@ -177,6 +195,21 @@ export function projectToolQuoteRefusal(input: Readonly<{
     status: 'required' as const,
     title: support ? 'Contact support' : 'Review agent access',
   })
+  const operatorAction = (
+    action: string,
+    title: string,
+    description: string,
+    cta: '/agent-access' | '/support',
+  ) => ({
+    action,
+    blockedCapabilities: ['tool.call'] as ['tool.call'],
+    cta,
+    ctaLabel: cta === '/support' ? 'Contact support' : 'Review agent access',
+    description,
+    iconUrl: null,
+    status: 'required' as const,
+    title,
+  })
   switch (input.code) {
     case 'tool_not_ready':
       return { ...base, continuation: inspect(5000) }
@@ -208,8 +241,60 @@ export function projectToolQuoteRefusal(input: Readonly<{
     case 'grant_not_found':
     case 'budget_exceeded':
       return { ...base, requiredActions: [requiredAction(false)] }
-    case 'commercial_policy_unavailable':
-      return { ...base, requiredActions: [requiredAction(true)] }
+    case 'commercial_policy_unavailable': {
+      const parsed = commercialPolicyRefusalReasonSchema.safeParse(input.reason)
+      if (!parsed.success) return { ...base, requiredActions: [requiredAction(true)] }
+      const reason: CommercialPolicyRefusalReason = parsed.data
+      switch (reason) {
+        case 'legal_customer_required':
+          return {
+            ...base,
+            continuation: {
+              action: 'funding.handoff.config', method: 'GET',
+              path: FUNDING_HANDOFF_CONFIG_PATH, input: {},
+            },
+            requiredActions: [operatorAction(
+              'review_account_legal_customer',
+              'Review account ownership',
+              'The owner must confirm this Account’s legal customer on the AE Account page before this Agent can call Tools.',
+              '/agent-access',
+            )],
+          }
+        case 'commercial_policy_fixture_required':
+        case 'commercial_policy_deployment_profile_invalid':
+          return {
+            ...base,
+            continuation: inspect(30000),
+            requiredActions: [operatorAction(
+              'set_sandbox_deployment_profile',
+              'Contact support',
+              'An AE operator must set AE_PACKAGE4_SANDBOX_DEPLOYMENT_PROFILE to local_ci or synthetic_vps_fixture before this Tool can be quoted.',
+              '/support',
+            )],
+          }
+        case 'commercial_policy_missing':
+        case 'commercial_policy_environment_mismatch':
+        case 'commercial_policy_not_effective':
+        case 'commercial_policy_expired':
+        case 'commercial_policy_suspended':
+        case 'commercial_policy_superseded':
+        case 'commercial_policy_conflict':
+          return {
+            ...base,
+            continuation: inspect(30000),
+            requiredActions: [operatorAction(
+              'activate_commercial_policy',
+              'Contact support',
+              `An AE operator must resolve ${reason} on the ${COMMERCIAL_POLICY_ADMIN_SURFACE} admin surface before this Tool can be quoted.`,
+              '/support',
+            )],
+          }
+        default: {
+          const unreachable: never = reason
+          return unreachable
+        }
+      }
+    }
     case 'insufficient_balance':
       return input.funding === undefined
         ? {

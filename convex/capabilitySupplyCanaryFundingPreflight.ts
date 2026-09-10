@@ -26,7 +26,9 @@ import {
 const MAX_BALANCE_PAGES = 10
 const BALANCE_PAGE_SIZE = 100
 const EXPECTED_USDC_DECIMALS = 6
-const CDP_BASE_SEPOLIA_NETWORK = 'base-sepolia' as const
+/** CDP SDK network ids for the USDC lanes AE custodies (sandbox, production). */
+export type CdpUsdcNetwork = 'base-sepolia' | 'base'
+const CDP_BASE_SEPOLIA_NETWORK: CdpUsdcNetwork = 'base-sepolia'
 
 export type SellerOnboardingCanaryCdpPreflightCode =
   | 'authorization_denied'
@@ -87,7 +89,7 @@ type CdpPreflightClient = Readonly<{
     }>>
     listTokenBalances: (options: Readonly<{
       address: `0x${string}`
-      network: typeof CDP_BASE_SEPOLIA_NETWORK
+      network: CdpUsdcNetwork
       pageSize: number
       pageToken?: string
     }>) => Promise<Readonly<{
@@ -232,9 +234,16 @@ async function readConfiguredPolicy(
   }
 }
 
-async function readBaseSepoliaUsdcBalance(
-  client: CdpPreflightClient,
+/** The CDP read surface a USDC balance observation needs, and nothing more. */
+export type CdpUsdcBalanceReader = Readonly<{
+  listTokenBalances: CdpPreflightClient['evm']['listTokenBalances']
+}>
+
+/** Bounded, paginated USDC balance read for one CDP network/asset lane. */
+export async function readCdpUsdcBalance(
+  evm: CdpUsdcBalanceReader,
   address: `0x${string}`,
+  lane: Readonly<{ network: CdpUsdcNetwork; assetAddress: string }>,
 ): Promise<
   | Readonly<{ kind: 'read'; amount: bigint; pagesRead: number }>
   | Readonly<{ kind: 'failed' }>
@@ -247,9 +256,9 @@ async function readBaseSepoliaUsdcBalance(
   while (pagesRead < MAX_BALANCE_PAGES) {
     let page: Awaited<ReturnType<CdpPreflightClient['evm']['listTokenBalances']>>
     try {
-      page = await client.evm.listTokenBalances({
+      page = await evm.listTokenBalances({
         address,
-        network: CDP_BASE_SEPOLIA_NETWORK,
+        network: lane.network,
         pageSize: BALANCE_PAGE_SIZE,
         ...(pageToken === undefined ? {} : { pageToken }),
       })
@@ -259,11 +268,11 @@ async function readBaseSepoliaUsdcBalance(
     pagesRead += 1
     for (const balance of page.balances) {
       if (
-        balance.token.contractAddress.toLowerCase() !== BASE_SEPOLIA_USDC_ADDRESS.toLowerCase()
+        balance.token.contractAddress.toLowerCase() !== lane.assetAddress.toLowerCase()
       ) continue
       if (
         amount !== undefined
-        || balance.token.network !== CDP_BASE_SEPOLIA_NETWORK
+        || balance.token.network !== lane.network
         || balance.amount.decimals !== EXPECTED_USDC_DECIMALS
         || typeof balance.amount.amount !== 'bigint'
         || balance.amount.amount < 0n
@@ -373,9 +382,10 @@ export async function inspectSellerOnboardingCanaryCdpReadiness(
     configuration.maxAtomic.toString(),
   )) return notReady(checkedAt, 'cdp_seller_canary_policy_profile_mismatch')
 
-  const balance = await readBaseSepoliaUsdcBalance(
-    client,
+  const balance = await readCdpUsdcBalance(
+    client.evm,
     account.address as `0x${string}`,
+    { network: CDP_BASE_SEPOLIA_NETWORK, assetAddress: BASE_SEPOLIA_USDC_ADDRESS },
   )
   if (balance.kind === 'failed') return notReady(checkedAt, 'cdp_balance_read_failed')
   if (balance.kind === 'not_verifiable') {

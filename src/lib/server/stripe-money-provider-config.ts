@@ -1,9 +1,8 @@
-import Stripe from "stripe";
+import type Stripe from "stripe";
 
 import { canonicalDigest } from "@/modules/common/canonical-digest";
 import {
   exactAmountSchema,
-  isMoneyRefusal,
   rescaleExactAmount,
   type ExactAmount,
   type MoneyRefusal,
@@ -11,6 +10,15 @@ import {
 
 const MAX_WEBHOOK_BODY_BYTES = 256 * 1024;
 const MAX_PROVIDER_IDENTIFIER_LENGTH = 500;
+
+/** Stripe env names `readStripeMoneyProviderConfig` reads to build a money provider config. */
+export const STRIPE_MONEY_ENV_NAMES = [
+  "STRIPE_SECRET_KEY",
+  "STRIPE_WEBHOOK_SECRET",
+  "STRIPE_V2_WEBHOOK_SECRET",
+  "STRIPE_AU_INCLUSIVE_GST_TAX_RATE_ID",
+  "STRIPE_CHECKOUT_HOST",
+] as const;
 
 type Environment = Readonly<Record<string, string | undefined>>;
 
@@ -107,28 +115,6 @@ export function readStripeMoneyReadbackProviderConfig(
     },
     expectedMode,
   );
-}
-
-export function resolveStripeMoneyProviderContext(
-  input: StripeMoneyProviderInput,
-): StripeMoneyProviderContext | MoneyRefusal {
-  const configResult =
-    input.config === undefined
-      ? readStripeMoneyProviderConfig(input.env ?? process.env, input.mode)
-      : validateStripeMoneyProviderConfig(input.config, input.mode);
-  if (isMoneyRefusal(configResult)) return configResult;
-  return {
-    config: configResult,
-    client: input.client ?? createStripeMoneyClient(configResult.secretKey),
-  };
-}
-
-export function createStripeMoneyClient(secretKey: string): StripeMoneyClient {
-  return new Stripe(secretKey, {
-    apiVersion: Stripe.API_VERSION,
-    maxNetworkRetries: 2,
-    typescript: true,
-  });
 }
 
 export function refusal(
