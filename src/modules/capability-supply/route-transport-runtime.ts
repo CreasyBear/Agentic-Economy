@@ -27,15 +27,17 @@ export {
 } from './internal/route-transport-call'
 export type {
   PreparedRouteTransportInvocation,
-  ProviderConnectionAuthorityLookup,
   ProviderConnectionAuthorityReader,
-  ProviderConnectionAuthorityValidationResult,
   ProviderConnectionAuthorityValidator,
   RouteTransportCredentialPreflight,
-  RouteTransportInvocation,
   RouteTransportPreparation,
   RouteTransportRuntime,
 } from './internal/route-transport-call'
+export type {
+  ProviderConnectionAuthorityLookup,
+  ProviderConnectionAuthorityValidationResult,
+  RouteTransportInvocation,
+} from './internal/route-transport-invocation'
 
 export {
   normalizeResponseMediaType,
