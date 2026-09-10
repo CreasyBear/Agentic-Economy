@@ -59,7 +59,7 @@ import {
   callAttemptIdentityDigest,
   callAttemptIdentityMaterial,
 } from '../../../convex/capabilityCallWorker'
-import { admitCall, canonicalCallRef } from '@/modules/capability-execution/call-admit'
+import { admitCall, canonicalCallRef } from '@/modules/capability-execution/call-authority'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 
 const identity = {

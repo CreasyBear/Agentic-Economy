@@ -41,6 +41,17 @@ import {
 } from './internal/literals'
 
 export {
+  payloadHash,
+  redactPayload,
+} from './internal/redaction'
+
+export {
+  AuditEventTypeSchema,
+  AuditTargetTypeSchema,
+  FunnelEventTypeSchema,
+} from './internal/validators'
+
+export {
   ActivationStageValues,
   ActorKindValues,
   AuditSourceSystemValues,

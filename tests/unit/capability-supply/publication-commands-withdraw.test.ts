@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import { withdrawCapabilityCommand } from '@/modules/capability-supply/internal/publication'
+import { withdrawCapabilityCommand } from '@/modules/capability-supply/public'
 
 import {
   context,

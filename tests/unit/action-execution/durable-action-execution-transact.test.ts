@@ -4,7 +4,7 @@ import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
   createDevelopmentDurablePort,
   createDevelopmentDurableState,
-} from '@/modules/action-execution'
+} from '@/modules/action-execution/runtime'
 import { describe, expect, it } from 'vitest'
 
 describe('durable Action Execution transact', () => {

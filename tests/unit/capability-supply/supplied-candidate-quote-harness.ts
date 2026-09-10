@@ -2,24 +2,20 @@ import { vi } from 'vitest'
 
 import { defineCapabilityContract } from '@/modules/capability-contract/public'
 import {
-  connectionAuthoritySnapshotFromProviderConnection,
-  type CapabilityBindingRow,
-} from '@/modules/capability-supply/internal/binding'
-import type {
-  CapabilityGraphPorts,
-  GraphCatalogAccessPath,
-  GraphPublicationRow,
-} from '@/modules/capability-supply/internal/graph'
-import type { CapabilityOfferingRow } from '@/modules/capability-supply/internal/offering'
-import {
   capabilityBindingEligibilityHash,
   capabilityBindingRegistrationHash,
   capabilityToolId,
   capabilityOfferingEligibilityHash,
   capabilityOfferingRegistrationHash,
+  connectionAuthoritySnapshotFromProviderConnection,
   createPublicToolRef,
   defineCapabilityOfferingRegistration,
   defineCapabilityTransportBindingRegistration,
+  type CapabilityBindingRow,
+  type CapabilityGraphPorts,
+  type CapabilityOfferingRow,
+  type GraphCatalogAccessPath,
+  type GraphPublicationRow,
 } from '@/modules/capability-supply/public'
 import {
   createProviderConnection,
@@ -38,7 +34,7 @@ import {
   type ExecutionActor,
   createDevelopmentReleaseSignal,
   createInMemoryActionExecutionTracer,
-} from '@/modules/action-execution'
+} from '@/modules/action-execution/runtime'
 import { capabilityContractV2 } from '../../fixtures/capability-contract-v2'
 
 export const nowMs = Date.parse('2026-07-19T08:00:00.000Z')

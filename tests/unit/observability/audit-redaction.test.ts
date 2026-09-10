@@ -6,10 +6,12 @@ import {
   Package3AuditEventTypeValues,
   createPackage3AuditEvent,
   validateAuditEvent,
+  payloadHash,
+  redactPayload,
   type AuditEventInput,
-} from '@/modules/observability/internal/audit'
-import { payloadHash, redactPayload } from '@/modules/observability/internal/redaction'
-import type { AuditEventType, AuditTargetType } from '@/modules/observability/public'
+  type AuditEventType,
+  type AuditTargetType,
+} from '@/modules/observability/public'
 
 describe('audit and redaction contracts', () => {
   it('requires actor, target, operation key, correlation ID, event ID, and redacted payload hash', () => {

@@ -9,7 +9,7 @@ import {
   SpendingPolicyStore,
   type AuthorityUseMaterial,
   type SpendingPolicySnapshot,
-} from '@/modules/action-execution'
+} from '@/modules/action-execution/runtime'
 import { executeDevelopmentProviderToolAction } from '../../../tools/dev/fixtures/provider-tool/development-provider-tool.actions'
 import {
   providerToolActor,

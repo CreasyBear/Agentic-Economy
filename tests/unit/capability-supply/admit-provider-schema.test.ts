@@ -2,12 +2,12 @@ import { describe, expect, it } from "vitest";
 
 import {
   admitProviderSchema,
+  dereferenceOpenApiSchema,
   importOpenApiHttpCapability,
   type CapabilityContractMetadata,
   type CapabilityTransportAuthority,
 } from "@/modules/capability-supply/public";
 import type { JsonValue } from "@/modules/capability-contract/public";
-import { dereferenceOpenApiSchema } from "@/modules/capability-supply/internal/schema-deref";
 import { dereferenceLocalSchema } from "@/modules/capability-supply/convex";
 
 const JSON_SCHEMA = "https://json-schema.org/draft/2020-12/schema";

@@ -3,9 +3,9 @@ import { describe, expect, it } from 'vitest'
 import { prepareHttpJsonRequest } from '@/modules/capability-supply/route-transport-runtime'
 import {
   preflightOpenApiHttpDocument,
+  validateOpenApiDocument,
   type OpenApiOperationPreflightOutcome,
 } from '@/modules/capability-supply/public'
-import { validateOpenApiDocument } from '@/modules/capability-supply/internal/openapi-import/validation'
 const outputSchema = {
   type: 'object',
   properties: { result: { type: 'string' } },

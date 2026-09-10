@@ -2,7 +2,7 @@ import { createWorker } from '../convex/capability-call-worker-harness'
 import { describe, expect, it } from 'vitest'
 import { getFunctionName } from 'convex/server'
 
-import { prepareCallRun } from '@/modules/capability-execution/call-worker/runPreparation'
+import { prepareCallRun } from '@/modules/capability-execution/call-runtime'
 
 // A pending Call is keyed by the stable Principal tuple, so a credential
 // rotation must not strand the buyer's in-flight purchase. Dispatch may run

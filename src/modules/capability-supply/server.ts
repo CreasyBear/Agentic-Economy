@@ -1,4 +1,5 @@
 export { runCapabilityReadinessProbe } from './internal/readiness-probe'
+export { HEALTHY_TTL_MS, UNHEALTHY_TTL_MS } from './internal/readiness-probe-shared'
 
 export {
   cdpX402CustodyBudgetRef,
@@ -6,9 +7,26 @@ export {
   credentialFromEnvironment,
   x402PaymentCredentialRefFromEnvironment,
 } from './internal/server-credential'
+export {
+  X402_CDP_ACCOUNT_NAME_ENV,
+  X402_CDP_ACCOUNT_POLICY_ID_ENV,
+  X402_CDP_API_KEY_ID_ENV,
+  X402_CDP_API_KEY_SECRET_ENV,
+  X402_CDP_CREDENTIAL_GENERATION_ENV,
+  X402_CDP_EXPECTED_EVM_ADDRESS_ENV,
+  X402_CDP_POLICY_RULES_DIGEST_ENV,
+  X402_CDP_PROJECT_POLICY_ID_ENV,
+  X402_CDP_WALLET_SECRET_ENV,
+  X402_CUSTODY_DAILY_MAX_ATOMIC_ENV,
+  X402_CUSTODY_ENABLED_ENV,
+  X402_CUSTODY_ENV_NAMES,
+  X402_CUSTODY_MAX_ATOMIC_ENV,
+} from './internal/x402-custody-configuration'
 
 export { signRouteTransportCall } from './internal/route-call-signing'
 export {
+  BASE_NETWORK,
+  BASE_USDC_ADDRESS,
   createCdpEvmX402PaymentSignature,
   createCdpEvmX402PaymentSignature as createEvmX402PaymentSignature,
   cdpX402PolicyRulesDigest,
@@ -16,6 +34,7 @@ export {
   cdpX402SellerCanaryPolicyRules,
   cdpX402RequestFingerprint,
   isPaymentSigningIdempotencyKey,
+  observeCdpX402Treasury,
   readCdpX402PaymentAuthorization,
   replayCdpX402PaymentSigningIntent,
 } from './internal/cdp-x402-payment-signer'
@@ -51,12 +70,14 @@ export {
 } from './internal/x402-payment-signer'
 export {
   FACILITATOR_DISCOVERY_JOB_TIMEOUT_MS,
+  FACILITATOR_DISCOVERY_MAX_BODY_BYTES,
+  FACILITATOR_DISCOVERY_MAX_PAGES,
   fetchFacilitatorDiscoveryPages,
 } from './internal/facilitator-discovery-client'
 export { admitOfficialBazaarFromPaymentRequired } from './internal/facilitator-discovery-client'
 export { admitFacilitatorDiscoveryItems } from './internal/facilitator-discovery-admission'
 export { materializeOfficialBazaarX402Import } from './internal/facilitator-discovery-admission'
-export { admitBazaarFromPaymentRequired } from './internal/publication-importer-x402-bazaar'
+export { admitBazaarDiscoveryInfo, admitBazaarFromPaymentRequired } from './internal/publication-importer-x402-bazaar'
 export type { BazaarAdmission } from './internal/publication-importer-x402-bazaar'
 export type {
   X402PaymentRequired,
@@ -68,6 +89,7 @@ export {
   verifyExactEvmX402AuthorizationTransaction,
   verifyExactEvmX402Settlement,
 } from './internal/x402-settlement-verifier'
+export { verifyX402SignedOffer, verifyX402SignedReceipt } from './internal/x402-offer-receipt'
 export type { X402EvmReceipt } from './internal/x402-settlement-verifier'
 export { readGuardedX402EvmReceipt } from './internal/x402-evm-receipt-reader'
 export {

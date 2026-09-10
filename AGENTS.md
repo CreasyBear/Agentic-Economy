@@ -114,7 +114,12 @@ manual edits to generated files or an unplanned repository-wide rename.
 stabilisation well lands as its own branch `well-N/<slug>` cut from `main`, one
 pull request per well, merged with a merge commit once `npm run gate` and CI are
 green. Never push directly to `main`; never stage the whitepaper, `docs/strategy/*`,
-`docs/workflow/aecon-signals-proposal.md` or `output/*`.
+`docs/workflow/aecon-signals-proposal.md` or `output/*`. `npm run gate` runs
+`npm run deps:check` (dependency-cruiser, `.dependency-cruiser.cjs`) next to
+`lint` to fail the build on import cycles across `src`, `convex` and `tools`.
+`deps:check` runs `tools/dev/deps-ratchet.mjs`, a ratchet that caps each
+dependency-cruiser rule's violation count at a ceiling in its `RATCHET`
+block - lower a ceiling there as matching cycles are fixed, never raise one.
 
 This checkout is shared by concurrent agents. `.claude/settings.json` installs a
 PreToolUse hook (`tools/dev/guard-destructive-git.mjs`) that blocks stash,

@@ -4,8 +4,10 @@ import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { validateJsonSchema } from '@/modules/capability-contract/public'
 import { admitFacilitatorDiscoveryItems, admitOfficialBazaarFromPaymentRequired, prepareX402Request } from '@/modules/capability-supply/server'
 import { inspectLiveX402Requirement } from '@/modules/capability-execution/live-x402-requirement'
-import pathFixture from '@/modules/capability-supply/internal/x402-bazaar-fixtures/onesource-path-request-2026-09-08.json'
-import unionFixture from '@/modules/capability-supply/internal/x402-bazaar-fixtures/onesource-union-request-2026-09-08.json'
+import {
+  onesourcePathRequest20260908Fixture as pathFixture,
+  onesourceUnionRequest20260908Fixture as unionFixture,
+} from '@/modules/capability-supply/public'
 import { authority, invokeRouteTransport, preparedX402Custody } from './route-transport-test-harness'
 
 describe('managed x402 path requests', () => {

@@ -1,5 +1,5 @@
 import { canonicalDigest } from '@/modules/common/canonical-digest'
-import type { SpendingPolicy } from './spending-policy'
+import type { SpendingPolicy } from './spending-policy-types'
 import {
   isoTimestampValid,
   spendingPolicyMaterialValid,

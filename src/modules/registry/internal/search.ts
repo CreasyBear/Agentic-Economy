@@ -3,7 +3,6 @@ import type {
   Slug,
 } from '@/modules/common/ids'
 import { normalizeSearchText } from '@/modules/common/normalize-search-text'
-import type { ExactAmount } from '@/modules/money/public'
 import type { IndexStatus } from './schema-values'
 import type { RegistrySourceState } from './projection-contracts'
 
@@ -16,6 +15,9 @@ import {
   type PublicBusinessCatalogV2DetailResult,
 } from './offering-api-projection'
 import { registrySearchTokens } from './search-documents'
+import type { PublicBusinessCatalogSearchInput } from './search-input'
+
+export type { PublicBusinessCatalogSearchInput }
 
 const defaultLimit = 20
 const maxLimit = 50
@@ -25,16 +27,6 @@ export type PublicBusinessCatalogQueryInput = {
     numItems: number
     cursor: string | null
   }
-}
-
-export type PublicBusinessCatalogSearchInput = {
-  cursor?: string
-  limit?: number
-  query: string
-  mode?: 'near_me' | 'whole_catalogue'
-  location?: string
-  maxPrice?: ExactAmount
-  hasPrice?: boolean
 }
 
 export function listPublicBusinessOfferingSupply(

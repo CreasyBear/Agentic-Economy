@@ -5,7 +5,7 @@ import {
   type ProbeDigestBinding,
   type ProbeDigestOffering,
   type ProbeDigestPublication,
-} from '@/modules/capability-supply/internal/graph/probe-digest'
+} from '@/modules/capability-supply/public'
 
 const digest = `sha256:${'1'.repeat(64)}`
 

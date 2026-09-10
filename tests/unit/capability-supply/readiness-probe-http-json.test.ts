@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import { runCapabilityReadinessProbe } from '@/modules/capability-supply/internal/readiness-probe'
-import { HEALTHY_TTL_MS } from '@/modules/capability-supply/internal/readiness-probe-shared'
+import { HEALTHY_TTL_MS, runCapabilityReadinessProbe } from '@/modules/capability-supply/server'
 
 import { keylessAuthority, target } from './readiness-probe-harness'
 

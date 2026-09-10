@@ -13,7 +13,7 @@ import {
 import { privateKeyToAccount } from 'viem/accounts'
 
 import type { RouteTransportFetch } from '@/modules/capability-supply/route-transport-runtime'
-import { x402PaymentCredentialRefFromEnvironment } from '@/modules/capability-supply/internal/server-credential'
+import { x402PaymentCredentialRefFromEnvironment } from '@/modules/capability-supply/server'
 
 import {
   X402_PAYMENT_CREDENTIAL_REF,

@@ -7,7 +7,7 @@ import {
   callResultSchema,
   type CallReceipt,
 } from '@/modules/capability-execution/call-contracts'
-import { buildBrokeredX402Receipt } from '@/modules/capability-execution/call-worker/brokeredX402'
+import { buildBrokeredX402Receipt } from '@/modules/capability-execution/call-runtime'
 import {
   projectPureCallStatus,
   reconciliationResult,

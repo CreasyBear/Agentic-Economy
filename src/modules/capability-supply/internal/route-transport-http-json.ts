@@ -14,7 +14,6 @@ import {
   cancelResponseBody,
   readBoundedRequestText,
 } from '@/lib/server/bounded-request-body'
-import type { ExactAmount } from '@/modules/money/public'
 import {
   injectHttpJsonCredential,
   parseHttpJsonTransportConfiguration,
@@ -30,13 +29,24 @@ import type {
   ProviderConnectionLeaseAuthorityValidation,
   ProviderConnectionLeaseCredentialResolution,
 } from '../provider-connection'
-import type { RouteTransportInvocation } from './route-transport-call'
+import type {
+  PublicUpstreamRouteTransportAuthority,
+  ProviderRouteTransportAuthority,
+  RouteTransportAuthorityCommon,
+  RouteTransportInvocation,
+} from './route-transport-invocation'
 import {
   MAX_RESPONSE_BYTES,
   refused,
   unknown,
   type RouteTransportObservation,
 } from './route-transport-observation'
+
+export type {
+  PublicUpstreamRouteTransportAuthority,
+  ProviderRouteTransportAuthority,
+  RouteTransportAuthorityCommon,
+}
 
 export type RouteTransportResponse = BoundedRequestBody &
   Readonly<{ status: number; ok: boolean }>
@@ -54,37 +64,6 @@ export type RouteTransportFetch = (
   input: URL,
   init?: RouteTransportRequestInit,
 ) => Promise<RouteTransportResponse>
-
-export type RouteTransportAuthorityCommon = Readonly<{
-  attemptRef: string
-  effectGeneration?: number
-  operationKeyDigest: string
-  mandateDigest: string
-  grantDigest: string
-  capabilityContractDigest: string
-  maximumSpend: ExactAmount
-  expiresAt: number
-  callIdentity: Readonly<{ keyId: string; signature: string }>
-}>
-
-export type PublicUpstreamRouteTransportAuthority = RouteTransportAuthorityCommon &
-  Readonly<{
-    authorityGeneration?: never
-    authorityDigest?: never
-  }>
-
-export type ProviderRouteTransportAuthority = RouteTransportAuthorityCommon &
-  Readonly<{
-    authorityGeneration: number
-    authorityDigest: string
-    leaseRef?: string
-    callRef?: string
-    toolRef?: string
-    grantedScopes?: readonly string[]
-    grantedResources?: readonly string[]
-    readinessValidUntil?: number
-    readinessDigest?: string
-  }>
 
 export function isProviderRouteTransportAuthority(
   authority: PublicUpstreamRouteTransportAuthority | ProviderRouteTransportAuthority,

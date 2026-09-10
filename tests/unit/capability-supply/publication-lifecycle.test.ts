@@ -1,27 +1,23 @@
 import { describe, expect, it } from 'vitest'
 
 import {
-  connectionAuthoritySnapshotFromProviderConnection,
-  type CapabilityBindingRow,
-} from '@/modules/capability-supply/internal/binding'
-import type { CapabilityOfferingRow } from '@/modules/capability-supply/internal/offering'
-import {
   createProviderConnection,
   type CreateProviderConnectionCommand,
 } from '@/modules/capability-supply/provider-connection'
 import {
+  INITIAL_PUBLICATION_LIFECYCLE,
   capabilityBindingEligibilityHash,
   capabilityOfferingEligibilityHash,
   capabilityToolId,
+  connectionAuthoritySnapshotFromProviderConnection,
   createPublicToolRef,
-} from '@/modules/capability-supply/public'
-import {
-  INITIAL_PUBLICATION_LIFECYCLE,
   decodeConvexPublicationSource,
   isDirectPublicationSource,
   publicationLifecycle,
   publicationProjection,
-} from '@/modules/capability-supply/internal/publication'
+  type CapabilityBindingRow,
+  type CapabilityOfferingRow,
+} from '@/modules/capability-supply/public'
 
 const digest = `sha256:${'1'.repeat(64)}`
 const toolRef = createPublicToolRef({

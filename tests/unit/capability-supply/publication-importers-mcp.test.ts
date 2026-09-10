@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { publicationSourceDescriptorJson } from "@/modules/capability-supply/internal/publication/source";
+import { publicationSourceDescriptorJson } from "@/modules/capability-supply/public";
 
 import {
   admitRegisteredTransport,

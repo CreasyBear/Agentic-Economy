@@ -8,7 +8,7 @@ import { describe, expect, it } from 'vitest'
 import {
   createSandboxEvmX402PaymentSignature,
   readX402PaymentPayerAndNonce,
-} from '@/modules/capability-supply/internal/x402-payment-signer'
+} from '@/modules/capability-supply/server'
 
 describe('x402 route payment signer', () => {
   it('uses the official v2 exact EVM mechanism and preserves the operation identity', async () => {

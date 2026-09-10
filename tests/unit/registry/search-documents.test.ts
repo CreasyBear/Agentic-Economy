@@ -6,7 +6,7 @@ import {
   buildRegistrySearchDocumentsForCatalog,
   documentMatchesRegistryQuery,
   resolveRegistrySearchLocation,
-} from '@/modules/registry/internal/search-documents'
+} from '@/modules/registry/public'
 
 describe('registry search documents', () => {
   it('builds one public search document per published Offering', () => {

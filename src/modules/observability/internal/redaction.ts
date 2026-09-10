@@ -1,5 +1,5 @@
 import type { SourceHash } from '@/modules/common/ids'
-import type { RedactedPayload } from '@/modules/observability/public'
+import type { RedactedPayload } from '@/modules/common/audit-events'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 
 const sensitiveKeyPattern = /email|phone|contact|cookie|authorization|secret|token|session/i

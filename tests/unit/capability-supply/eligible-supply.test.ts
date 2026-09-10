@@ -1,27 +1,23 @@
 import { describe, expect, it } from 'vitest'
 
 import {
-  getEligibleExactCapabilitySupply,
-  listIntegratedCapabilitySupply,
-  listRouteableCapabilitySupply,
-  MAX_ELIGIBLE_SUPPLY,
-  type EligiblePublicationRow,
-  type EligibleSupplyPorts,
-} from '@/modules/capability-supply/internal/eligibility'
-import {
-  connectionAuthoritySnapshotFromProviderConnection,
-  type CapabilityBindingRow,
-} from '@/modules/capability-supply/internal/binding'
-import type { CapabilityOfferingRow } from '@/modules/capability-supply/internal/offering'
-import {
   capabilityBindingEligibilityHash,
   capabilityBindingRegistrationHash,
   capabilityToolId,
   capabilityOfferingEligibilityHash,
   capabilityOfferingRegistrationHash,
+  connectionAuthoritySnapshotFromProviderConnection,
   createPublicToolRef,
   defineCapabilityOfferingRegistration,
   defineCapabilityTransportBindingRegistration,
+  getEligibleExactCapabilitySupply,
+  listIntegratedCapabilitySupply,
+  listRouteableCapabilitySupply,
+  MAX_ELIGIBLE_SUPPLY,
+  type CapabilityBindingRow,
+  type CapabilityOfferingRow,
+  type EligiblePublicationRow,
+  type EligibleSupplyPorts,
 } from '@/modules/capability-supply/public'
 import {
   createProviderConnection,

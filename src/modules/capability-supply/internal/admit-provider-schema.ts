@@ -1,4 +1,4 @@
-import type { CapabilityTransportAuthority } from "@/modules/capability-supply/public";
+import type { CapabilityTransportAuthority } from "./transport-terms-schema";
 import type { JsonValue } from "@/modules/capability-contract/public";
 import { isRecord } from "@/modules/common/is-record";
 

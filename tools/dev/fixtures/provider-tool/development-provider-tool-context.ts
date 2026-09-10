@@ -3,7 +3,7 @@ import type { ActionContext, ActionResult } from '../../../../src/modules/common
 import type {
   DevelopmentProviderToolCancellationInput,
   DevelopmentProviderToolInput,
-} from './development-provider-tool.actions'
+} from './development-provider-tool-schemas'
 
 export type DevelopmentProviderToolDependencies = Readonly<{
   now?: () => number

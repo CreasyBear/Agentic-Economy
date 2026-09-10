@@ -23,7 +23,7 @@ import {
   X402_CUSTODY_ENABLED_ENV,
   X402_CUSTODY_ENV_NAMES,
   X402_CUSTODY_MAX_ATOMIC_ENV,
-} from '@/modules/capability-supply/internal/x402-custody-configuration'
+} from '@/modules/capability-supply/server'
 import { checkFunding } from '../../../tools/ae/commands/doctor'
 import { CLI_BUNDLE_PATH, spawnCli } from './cli-errors-harness'
 

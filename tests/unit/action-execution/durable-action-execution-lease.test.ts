@@ -8,7 +8,7 @@ import {
   createDurableActionExecutionTracer,
   type PreparedExecution,
   type ReconciliationEvidenceMaterial,
-} from '@/modules/action-execution'
+} from '@/modules/action-execution/runtime'
 import { describe, expect, it, vi } from 'vitest'
 
 describe('durable Action Execution lease', () => {

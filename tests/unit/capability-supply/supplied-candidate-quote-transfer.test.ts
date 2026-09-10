@@ -26,7 +26,7 @@ import {
   createDurableActionExecutionTracer,
   readCompletedResultIdentity,
   type PreparedExecution,
-} from '@/modules/action-execution'
+} from '@/modules/action-execution/runtime'
 import { registryDetailAction } from '@/modules/registry/registry.actions'
 import { evaluateAdr009Transfer } from '../../eval/support/adr009-transfer-comparison'
 import type { TransferBoundaryEvent } from '../../eval/support/adr009-transfer-comparison'

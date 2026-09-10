@@ -3,18 +3,16 @@ import type { CapabilityContractRef } from '@/modules/capability-contract/public
 import { pricingConfigDigest } from '@/modules/money/public'
 import {
   admitPublicationDraft,
+  connectionAuthoritySnapshotFromProviderConnection,
   preparePublicationDraft,
+  publicationSourceDigest,
+  type CapabilityBindingRow,
+  type CapabilityOfferingRow,
   type PreparedPublicationMaterial,
   type PublicationCommandPorts,
   type PublicationCommandRow,
-} from '@/modules/capability-supply/internal/publication'
-import { publicationSourceDigest } from '@/modules/capability-supply/internal/publication/source'
-import {
-  connectionAuthoritySnapshotFromProviderConnection,
-  type CapabilityBindingRow,
-} from '@/modules/capability-supply/internal/binding/registration'
+} from '@/modules/capability-supply/public'
 import { capabilityContractV2 } from '../../fixtures/capability-contract-v2'
-import type { CapabilityOfferingRow } from '@/modules/capability-supply/internal/offering/registration'
 import { providerConnectionAuthorityDigest, type ProviderConnection } from '@/modules/capability-supply/provider-connection'
 import {
   capabilityBindingRegistrationHash,

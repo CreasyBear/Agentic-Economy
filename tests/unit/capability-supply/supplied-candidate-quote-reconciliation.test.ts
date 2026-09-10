@@ -16,7 +16,7 @@ import {
   createDurableActionExecutionTracer,
   type PreparedExecution,
   type ReconciliationEvidenceMaterial,
-} from '@/modules/action-execution'
+} from '@/modules/action-execution/runtime'
 import {
   actor,
   nowIso,

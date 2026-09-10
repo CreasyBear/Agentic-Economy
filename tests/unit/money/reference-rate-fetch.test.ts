@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { fetchCoinbaseReferenceRate } from '../../../src/modules/money/internal/reference-rate-fetch'
+import { fetchCoinbaseReferenceRate } from '../../../src/modules/money/reference-rate'
 
 describe('Coinbase reference rate fetch', () => {
   it('fetches one fixed public currency pair and retains decimal precision', async () => {

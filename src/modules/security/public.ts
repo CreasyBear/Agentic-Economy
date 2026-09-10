@@ -7,6 +7,7 @@ import {
 } from './internal/disputes'
 import {
   bootstrapOwnerAdmin as bootstrapOwnerAdminImpl,
+  canBootstrapOwnerAdmin as canBootstrapOwnerAdminImpl,
   createEmptyAdminAuthorityState as createEmptyAdminAuthorityStateImpl,
   grantAdminMembership as grantAdminMembershipImpl,
   recordAdminActionDenied as recordAdminActionDeniedImpl,
@@ -14,6 +15,7 @@ import {
   revokeAdminMembership as revokeAdminMembershipImpl,
 } from './internal/admin-authority'
 import { readAdminRouteShell as readAdminRouteShellImpl } from './internal/admin-readbacks'
+import { AdminRoleValues } from './internal/validators'
 import type {
   AdminActionDeniedCommand,
   AdminAuthorityMutationResult,
@@ -39,8 +41,9 @@ import type {
 } from './internal/admin-readbacks'
 import type { AuditEventContract, AuditEventSink } from '@/modules/common/audit-events'
 
-export const AdminRoleValues = ['owner_admin', 'support', 'reviewer'] as const
+export { AdminRoleValues, AdminRoleSchema } from './internal/validators'
 export type AdminRole = (typeof AdminRoleValues)[number]
+
 
 export const AdminMembershipStateValues = ['active', 'revoked', 'suspended'] as const
 export type AdminMembershipState = (typeof AdminMembershipStateValues)[number]
@@ -239,6 +242,8 @@ export const assertCsrf = assertCsrfImpl
 
 
 export const requireAdminAuthority = requireAdminAuthorityImpl
+
+export const canBootstrapOwnerAdmin = canBootstrapOwnerAdminImpl
 
 export const bootstrapOwnerAdmin = bootstrapOwnerAdminImpl
 

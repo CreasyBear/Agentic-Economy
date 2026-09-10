@@ -8,7 +8,7 @@ import type {
   CapabilityCancellation,
   CapabilityContinuation,
   CapabilityTransportAuthority,
-} from '@/modules/capability-supply/public'
+} from './transport-terms-schema'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { stableStringify, type StableHashValue } from '@/modules/common/stable-hash'
 

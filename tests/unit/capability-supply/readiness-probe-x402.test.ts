@@ -1,11 +1,10 @@
 import { describe, expect, it, vi } from 'vitest'
 import { validatePaymentRequired } from '@x402/core/schemas'
 
-import { encodeX402PaymentRequiredHeader, type X402PaymentRequired } from '@/modules/capability-supply/server'
-import { runCapabilityReadinessProbe } from '@/modules/capability-supply/internal/readiness-probe'
+import { encodeX402PaymentRequiredHeader, runCapabilityReadinessProbe, type X402PaymentRequired } from '@/modules/capability-supply/server'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { stableStringify, type StableHashValue } from '@/modules/common/stable-hash'
-import timezoneX402PaymentRequiredPin from '@/modules/capability-supply/internal/x402-bazaar-fixtures/timezone-payment-required-2026-08-19.json'
+import { timezonePaymentRequired20260819Fixture as timezoneX402PaymentRequiredPin } from '@/modules/capability-supply/public'
 
 import { keylessAuthority, target } from './readiness-probe-harness'
 

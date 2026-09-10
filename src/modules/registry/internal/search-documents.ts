@@ -1,7 +1,7 @@
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { SEARCH_STOP_WORDS, normalizeSearchText } from '@/modules/common/normalize-search-text'
 import type { PublicBusinessCatalogApiV2Dto } from './offering-api-projection'
-import type { PublicBusinessCatalogSearchInput } from './search'
+import type { PublicBusinessCatalogSearchInput } from './search-input'
 import type { RegistrySearchDocumentContract } from './projection-contracts'
 
 const RegistrySearchDocumentSchemaVersion: RegistrySearchDocumentContract['schemaVersion'] = 'registry-search-document:v1'

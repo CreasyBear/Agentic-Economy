@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { encodePaymentRequiredHeader, encodePaymentResponseHeader } from '@x402/core/http'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { admitFacilitatorDiscoveryItems } from '@/modules/capability-supply/server'
-import timezoneFixture from '@/modules/capability-supply/internal/x402-bazaar-fixtures/timezone-payment-required-2026-08-19.json'
+import { timezonePaymentRequired20260819Fixture as timezoneFixture } from '@/modules/capability-supply/public'
 import type { RouteTransportFetch } from '@/modules/capability-supply/route-transport-runtime'
 import { authority, invocation, invokeRouteTransport, preparedX402Custody, providerAuthority, registeredBinding } from './route-transport-test-harness'
 

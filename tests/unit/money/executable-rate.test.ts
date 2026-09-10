@@ -7,7 +7,7 @@ import {
   splitInclusiveAudTax,
   validateExecutableRateEvidence,
   validateExecutableRateEvidenceIntegrity,
-} from '../../../src/modules/money/internal/executable-rate'
+} from '../../../src/modules/money/public'
 
 describe('executable AUD to USDC pricing evidence', () => {
   it('returns deterministic, expiring sandbox evidence and rounds the required USDC up', async () => {

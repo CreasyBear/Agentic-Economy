@@ -5,13 +5,10 @@ import { parseBoundedJson } from '@/modules/common/bounded-json'
 import { isRecord } from '@/modules/common/is-record'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 import type { ExactAmount } from '@/modules/money/public'
-import type { CapabilityTransportAuthority } from '../public'
 import { validPublicHttpsEndpoint, parseX402FetchTransportConfiguration } from './transport-adapters'
 import {
   isProviderConnectionCredentialRef,
-  type ProviderConnectionAuthorityValidation,
   type ProviderConnectionCredentialResolution,
-  type ProviderConnectionLeaseAuthorityValidation,
   type ProviderConnectionLeaseCredentialResolution,
 } from '../provider-connection'
 import {
@@ -22,8 +19,6 @@ import {
   providerAuthorityFailure,
   invokeHttp,
   type HttpConfiguration,
-  type PublicUpstreamRouteTransportAuthority,
-  type ProviderRouteTransportAuthority,
   type RouteTransportFetch,
 } from './route-transport-http-json'
 import { isMcpConfiguration, invokeMcp, type McpConfiguration } from './route-transport-mcp'
@@ -38,61 +33,29 @@ import {
 } from './route-transport-x402'
 import { prepareX402Request } from './x402-request'
 import { expectedX402Amount } from './route-transport-x402-payment'
-import type {
-  RouteTransportCancellationInvocation,
-  RouteTransportCancellationInvocationFor,
-} from './route-transport-cancel'
 import {
   refused,
   transportKind,
   type RouteTransportObservation,
 } from './route-transport-observation'
 import type { X402SettlementResponse } from './x402-payment-signer'
+import type {
+  ProviderConnectionAuthorityLookup,
+  ProviderConnectionAuthorityValidationResult,
+  ProviderRouteTransportInvocation,
+  PublicUpstreamRouteTransportInvocation,
+  RouteTransportCancellationInvocation,
+  RouteTransportCancellationInvocationFor,
+  RouteTransportInvocation,
+} from './route-transport-invocation'
 
-type RouteTransportBinding<Authority extends CapabilityTransportAuthority> =
-  Readonly<{
-    adapterId: string
-    endpointUrl: string
-    authority: Authority
-    configJson: string
-    configDigest: string
-  }>
-
-export type PublicUpstreamRouteTransportInvocation = Readonly<{
-  binding: RouteTransportBinding<
-    Extract<CapabilityTransportAuthority, { kind: 'public_upstream' }>
-  >
-  authority: PublicUpstreamRouteTransportAuthority
-  inputJson: string
-  committedPaymentRequiredJson?: string
-}>
-
-export type ProviderRouteTransportInvocation = Readonly<{
-  binding: RouteTransportBinding<
-    Extract<CapabilityTransportAuthority, { kind: 'provider_connection' }>
-  >
-  authority: ProviderRouteTransportAuthority
-  inputJson: string
-  committedPaymentRequiredJson?: string
-}>
-
-export type RouteTransportInvocation =
-  PublicUpstreamRouteTransportInvocation | ProviderRouteTransportInvocation
-
-export type ProviderConnectionAuthorityLookup = Readonly<{
-  connectionRef: string
-  providerRef: string
-  adapterId: string
-  authorityGeneration: number
-  authorityDigest: string
-  leaseRef?: string
-  callRef?: string
-  toolRef?: string
-  grantedScopes?: readonly string[]
-  grantedResources?: readonly string[]
-  readinessValidUntil?: number
-  readinessDigest?: string
-}>
+export type {
+  ProviderConnectionAuthorityLookup,
+  ProviderConnectionAuthorityValidationResult,
+  ProviderRouteTransportInvocation,
+  PublicUpstreamRouteTransportInvocation,
+  RouteTransportInvocation,
+}
 
 export type ProviderConnectionAuthorityReader = (
   input: ProviderConnectionAuthorityLookup,
@@ -103,10 +66,6 @@ export type ProviderConnectionAuthorityReader = (
       | ProviderConnectionCredentialResolution
       | ProviderConnectionLeaseCredentialResolution
     >
-
-export type ProviderConnectionAuthorityValidationResult =
-  | ProviderConnectionAuthorityValidation
-  | ProviderConnectionLeaseAuthorityValidation
 
 export type ProviderConnectionAuthorityValidator = (
   input: ProviderConnectionAuthorityLookup,

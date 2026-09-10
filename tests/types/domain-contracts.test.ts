@@ -6,7 +6,7 @@ import { PublicStatusValues, TrustTierValues } from '@/modules/business/public'
 import type { BusinessOfferingStatus, OfferingAccessPathStatus } from '@/modules/catalog/public'
 import { BusinessOfferingStatusValues, OfferingAccessPathStatusValues } from '@/modules/catalog/public'
 import type { AdminRole } from '@/modules/security/public'
-import { AdminRoleSchema } from '@/modules/security/internal/validators'
+import { AdminRoleSchema } from '@/modules/security/public'
 import type {
   AuditEventType,
   AuditTargetType,
@@ -16,12 +16,10 @@ import {
   AuditEventTypeValues,
   AuditTargetTypeValues,
   FunnelEventTypeValues,
-} from '@/modules/observability/public'
-import {
   AuditEventTypeSchema,
   AuditTargetTypeSchema,
   FunnelEventTypeSchema,
-} from '@/modules/observability/internal/validators'
+} from '@/modules/observability/public'
 
 const BusinessOfferingStatusSchema = z.enum(BusinessOfferingStatusValues)
 const OfferingAccessPathStatusSchema = z.enum(OfferingAccessPathStatusValues)

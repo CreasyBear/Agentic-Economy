@@ -4,7 +4,7 @@ import {
   buildOfferingLlmsTxt,
   buildOfferingLlmsUrlsFromSlugs,
   DiscoveryPublicSurfacePaths,
-} from '@/modules/discovery/internal/discovery-files'
+} from '@/modules/discovery/public'
 import { PublicBusinessCatalogApiSchemaVersion } from '@/modules/registry/public'
 import type { PublicBusinessCatalogApiV2Dto } from '@/modules/registry/public'
 

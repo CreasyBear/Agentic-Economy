@@ -30,6 +30,8 @@ import {
 import { MARKET_TOOLS_CALL_SCOPE, MARKET_SUPPLY_MANAGE_SCOPE } from '@/modules/agent-access/contract'
 import type { ProblemKind } from '@/lib/errors'
 import cliPackage from '../../packages/cli/package.json'
+import { fileURLToPath } from 'node:url'
+import { realpathSync } from 'node:fs'
 
 declare const __AE_CLI_BUILD_REVISION__: string | undefined
 
@@ -379,7 +381,7 @@ function publicReadFailureContinuation(parsed: ParsedArgs, kind: ProblemKind): R
 
 
 
-async function main(): Promise<number> {
+async function main(argv: readonly string[] = process.argv.slice(2)): Promise<number> {
   const [
     accountCommands,
     cancelCommands,
@@ -437,7 +439,7 @@ async function main(): Promise<number> {
     revoke: revokeCommands.runRevokeCommand,
   }
 
-  const rawArgv = process.argv.slice(2)
+  const rawArgv = argv
   let parsed: ParsedArgs
   try {
     parsed = parseArgs(rawArgv)
@@ -606,4 +608,82 @@ function isConnectionRefused(error: unknown): boolean {
   return cause.code === 'ECONNREFUSED'
 }
 
-process.exitCode = await main()
+/**
+ * In-process entry for tests (see
+ * tests/unit/market-terminal/cli-errors-harness.ts, `runCliInProcess`). This
+ * exists purely to skip the ~0.10s-per-spawn cost of `spawnCli`/`spawnCliSync`
+ * for assertions that never need a distinct process; it does not change how
+ * the built binary runs (see `isEntryPoint` below).
+ *
+ * `env`, `stdin`, and `cwd` are accepted for interface parity with
+ * `spawnCli(args, { env })`, but they are NOT threaded through: `lib/args.ts`
+ * (base URL resolution) and `lib/config.ts` (config directory, stored
+ * connections, AE_API_KEY) read `process.env` directly, and `commands/*`
+ * never consult an injected `cwd`. Rewiring every one of those reads to take
+ * an injected env object was explicitly out of scope for this change (it
+ * would touch files outside tools/ae/cli.ts for no in-process win on the
+ * call sites that actually need a distinct environment). Callers that need a
+ * different environment, cwd, or stdin than the current process's must keep
+ * using `spawnCli`/`spawnCliSync`, which give each call a real, isolated
+ * child process environment. Passing a diverging value here fails loudly
+ * instead of silently reading the wrong state.
+ */
+export async function runCli(
+  argv: readonly string[],
+  options: Readonly<{ env?: NodeJS.ProcessEnv; stdin?: string; cwd?: string }> = {},
+): Promise<{ status: number; stdout: string; stderr: string }> {
+  if (options.env !== undefined && options.env !== process.env) {
+    throw new Error(
+      'runCli cannot honor a distinct env in-process: tools/ae/lib/args.ts and tools/ae/lib/config.ts '
+      + 'read process.env directly. Use spawnCli/spawnCliSync for a call that needs an overridden environment.',
+    )
+  }
+  if (options.stdin !== undefined) {
+    throw new Error(
+      'runCli cannot honor injected stdin in-process: cli.ts never passes a stdin override into command '
+      + 'routing, so runCallCommand always reads the real process.stdin. Use spawnCli/spawnCliSync instead.',
+    )
+  }
+  if (options.cwd !== undefined && options.cwd !== process.cwd()) {
+    throw new Error('runCli cannot honor a distinct cwd in-process: no code path under tools/ae reads process.cwd().')
+  }
+
+  const stdoutChunks: string[] = []
+  const stderrChunks: string[] = []
+  const realStdoutWrite = process.stdout.write.bind(process.stdout)
+  const realStderrWrite = process.stderr.write.bind(process.stderr)
+  process.stdout.write = ((chunk: string | Uint8Array) => {
+    stdoutChunks.push(typeof chunk === 'string' ? chunk : Buffer.from(chunk).toString('utf8'))
+    return true
+  }) as typeof process.stdout.write
+  process.stderr.write = ((chunk: string | Uint8Array) => {
+    stderrChunks.push(typeof chunk === 'string' ? chunk : Buffer.from(chunk).toString('utf8'))
+    return true
+  }) as typeof process.stderr.write
+  try {
+    const status = await main(argv)
+    return { status, stdout: stdoutChunks.join(''), stderr: stderrChunks.join('') }
+  } finally {
+    process.stdout.write = realStdoutWrite
+    process.stderr.write = realStderrWrite
+  }
+}
+
+/** True only when this module is the process's actual entry script (the built binary, or `tsx tools/ae/cli.ts`), not when a test imports `runCli`. */
+function isEntryPoint(): boolean {
+  const entry = process.argv[1]
+  if (entry === undefined) return false
+  try {
+    // Use es-main idiom: resolve both paths with realpath to handle symlinks (esp. macOS /tmp → /private/tmp)
+    const resolvedEntry = realpathSync(entry)
+    const currentFile = fileURLToPath(import.meta.url)
+    const resolvedCurrentFile = realpathSync(currentFile)
+    return resolvedEntry === resolvedCurrentFile
+  } catch {
+    return false
+  }
+}
+
+if (isEntryPoint()) {
+  process.exitCode = await main()
+}

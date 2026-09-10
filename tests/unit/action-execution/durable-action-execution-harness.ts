@@ -1,5 +1,5 @@
 import { vi } from 'vitest'
-import type { ActionExecutionOrigin, ExecutionActor } from '@/modules/action-execution'
+import type { ActionExecutionOrigin, ExecutionActor } from '@/modules/action-execution/runtime'
 
 vi.mock('@/modules/registry/registry.functions', () => ({
   readPublicOfferingRegistryBusinessDetail: vi.fn(),

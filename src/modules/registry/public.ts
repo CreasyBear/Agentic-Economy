@@ -150,6 +150,8 @@ export {
 export { TOOL_READ_UNAVAILABLE_PROBLEM } from './tool-read-problem'
 export {
   buildRegistrySearchDocumentsForCatalog,
+  documentMatchesRegistryQuery,
+  resolveRegistrySearchLocation,
 } from './internal/search-documents'
 export {
   syncCatalogProjection,

@@ -15,7 +15,7 @@ import { privateKeyToAccount } from 'viem/accounts'
 
 import { isRecord } from '@/modules/common/is-record'
 
-import type { X402PaymentSignatureRequest } from '../route-transport-runtime'
+import type { X402PaymentSignatureRequest } from './x402-challenge'
 
 export type X402ValidatedPaymentRequired = X402SchemaPaymentRequired
 export type X402PaymentRequired = PaymentRequired & Readonly<{ x402Version: 2 }>

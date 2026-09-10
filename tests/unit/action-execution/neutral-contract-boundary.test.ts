@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest'
 import {
   createInMemoryActionExecutionTracer,
   type ActionExecutionOrigin,
-} from '@/modules/action-execution'
+} from '@/modules/action-execution/runtime'
 import { defineAction } from '@/modules/common/action'
 import { z } from 'zod'
 

@@ -1,8 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import { previewSupplySource } from '@/modules/capability-supply/source-preview'
-import { discoverMcpSource } from '@/modules/capability-supply/internal/mcp-source-discovery'
-import { sourceRouteRef } from '@/modules/capability-supply/internal/source-route-identity'
+import { discoverMcpSource, previewSupplySource } from '@/modules/capability-supply/source-preview'
+import { sourceRouteRef } from '@/modules/capability-supply/convex'
 
 const responseSchema = {
   type: 'object',

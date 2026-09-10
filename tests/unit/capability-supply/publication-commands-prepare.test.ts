@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   admitCapabilityPublicationCommand,
   preparePublicationDraft,
-} from '@/modules/capability-supply/internal/publication'
+} from '@/modules/capability-supply/public'
 
 import {
   actor,

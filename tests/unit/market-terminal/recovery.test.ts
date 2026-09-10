@@ -18,11 +18,13 @@ import { runRecoverCommand } from '../../../tools/ae/commands/recover'
 import { requireAgentAccessKey } from '../../../tools/ae/commands/status'
 import type { CliOptions } from '../../../tools/ae/lib/args'
 import { CliFailure } from '../../../tools/ae/lib/output'
-import { spawnCliSync } from './cli-errors-harness'
+import { runCliInProcess } from './cli-errors-harness'
 
-// The cold-loop case spawns the real CLI once per advertised step to prove each
-// one is actually registered, at roughly a second per process under tsx. Keep
-// the per-step spawns and allow the wall-clock they need.
+// The cold-loop case runs the real CLI argv entry once per advertised step to
+// prove each one is actually registered on the routing table in cli.ts (the
+// direct runCallCommand/runManifestCommand imports elsewhere in this file
+// bypass that table). No env override is needed here, so this runs in-process
+// via runCliInProcess instead of spawning a bundle subprocess per step.
 vi.setConfig({ testTimeout: 30_000 })
 
 const baseOptions: CliOptions = {
@@ -254,7 +256,7 @@ describe('CLI Call recovery projections', () => {
 
     expect(compact.coldLoop).toEqual(['search', 'describe', 'call', 'history', 'status', 'wait'])
     for (const step of new Set([...technical.coldLoop, ...compact.coldLoop])) {
-      const help = spawnCliSync(['help', step, '--json'])
+      const help = await runCliInProcess(['help', step, '--json'])
       expect(help.status, `${step} CLI help exit`).toBe(0)
       expect(help.stderr, `${step} CLI help stderr`).toBe('')
       expect(JSON.parse(help.stdout)).toMatchObject({ kind: 'HELP', command: step })

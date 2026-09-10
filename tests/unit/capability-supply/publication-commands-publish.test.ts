@@ -1,19 +1,23 @@
 import { describe, expect, it, vi } from 'vitest'
 import { validatePaymentRequired } from '@x402/core/schemas'
 
-import {
-  publishPreparedCapabilityCommand,
-  type PreparedPublicationMaterial,
-} from '@/modules/capability-supply/internal/publication'
-import { publicationSourceDigest } from '@/modules/capability-supply/internal/publication/source'
-import type { OperationKeyRecord } from '@/modules/capability-supply/internal/tool-ledger'
 import { stableStringify, type StableHashValue } from '@/modules/common/stable-hash'
 import {
   capabilityToolId,
   capabilityPublicationProvenanceDigest,
   createPublicToolRef,
+  publicationSourceDigest,
+  publishPreparedCapabilityCommand,
+  type OperationKeyRecord,
+  type PreparedPublicationMaterial,
 } from '@/modules/capability-supply/public'
-import * as publicationImporters from '@/modules/capability-supply/internal/publication-importers'
+
+vi.mock('@/modules/capability-supply/internal/publication-importers', async (importOriginal) => {
+  const actual = await importOriginal<Record<string, unknown>>()
+  return { ...actual, normalizeCapabilityPublication: vi.fn(actual.normalizeCapabilityPublication as (...args: unknown[]) => unknown) }
+})
+
+const publicationImportersPath = '@/modules/capability-supply/internal/publication-importers'
 
 import {
   actor,
@@ -362,7 +366,9 @@ describe('capability-supply publication commands publish', () => {
 
   it('commits prepared material without invoking the raw normalizer', async () => {
     const prepared = await preparedPublication()
-    const normalizer = vi.spyOn(publicationImporters, 'normalizeCapabilityPublication')
+    const { normalizeCapabilityPublication } = await import(publicationImportersPath)
+    const normalizer = vi.mocked(normalizeCapabilityPublication)
+    normalizer.mockClear()
     normalizer.mockImplementation(async () => {
       throw new Error('raw_normalizer_must_not_run')
     })

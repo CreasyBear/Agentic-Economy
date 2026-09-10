@@ -21,7 +21,7 @@ import { action, internalAction, type ActionCtx } from './_generated/server'
 import { resolveBusinessActor } from './authz'
 import {
   SELLER_ONBOARDING_CANARY_MAXIMUM_PER_CALL_ATOMIC,
-} from './capabilitySupplyCanaryFunding'
+} from './lib/capabilitySupply/canaryFundingConstants'
 
 const MAX_BALANCE_PAGES = 10
 const BALANCE_PAGE_SIZE = 100

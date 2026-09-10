@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { LATEST_PROTOCOL_VERSION } from '@modelcontextprotocol/sdk/types.js'
 
-import { runCapabilityReadinessProbe } from '@/modules/capability-supply/internal/readiness-probe'
+import { runCapabilityReadinessProbe } from '@/modules/capability-supply/server'
 
 import { keylessAuthority, target } from './readiness-probe-harness'
 

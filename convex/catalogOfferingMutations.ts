@@ -88,7 +88,7 @@ import {
 import {
   readCurrentPublishedTool,
   readExactSellerCanaryOperationSnapshotHandler,
-} from './capabilitySupplyCurrentTool'
+} from './lib/capabilitySupply/currentTool'
 import {
   SELLER_ONBOARDING_CANARY_PLATFORM_APPLICATION_REF,
   SELLER_ONBOARDING_CANARY_PLATFORM_GRANT_REF,

@@ -13,7 +13,7 @@ import {
   type ProviderConnectionAuthorityLookup,
   type RouteTransportInvocation,
 } from '@/modules/capability-supply/route-transport-runtime'
-import { runCapabilityReadinessProbe } from '@/modules/capability-supply/internal/readiness-probe'
+import { runCapabilityReadinessProbe } from '@/modules/capability-supply/server'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 const providerAuthority = {
   kind: 'provider_connection',

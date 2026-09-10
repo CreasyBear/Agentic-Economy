@@ -11,7 +11,7 @@ import { afterEach, beforeEach, vi } from "vitest";
 import "../../setup/jsdom-platform";
 import "../../setup/jsdom-dialog";
 
-import type { PreparedPublicationMaterial } from "@/modules/capability-supply/internal/publication";
+import type { PreparedPublicationMaterial } from "@/modules/capability-supply/public";
 import type {
   OwnerSupplyOfferingReadback,
   OwnerSupplyReadbackSource,

@@ -9,7 +9,7 @@ import {
 import { privateKeyToAccount } from 'viem/accounts'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { verifyX402SignedOffer, verifyX402SignedReceipt } from '@/modules/capability-supply/internal/x402-offer-receipt'
+import { verifyX402SignedOffer, verifyX402SignedReceipt } from '@/modules/capability-supply/server'
 
 const now = Math.floor(Date.now() / 1000)
 const resourceUrl = 'https://provider.example/weather'

@@ -2,18 +2,16 @@ import { describe, expect, it } from 'vitest'
 
 import {
   compareStableIdentifier,
+  connectionAuthoritySnapshotFromProviderConnection,
   desiredEligibility,
   eligibilityPublicResult,
   eligibilityReplayAudits,
   eligibleBindingProjection,
   eligibleOfferingProjection,
   validEligibilityInput,
-} from '@/modules/capability-supply/internal/eligibility'
-import {
-  connectionAuthoritySnapshotFromProviderConnection,
   type CapabilityBindingRow,
-} from '@/modules/capability-supply/internal/binding'
-import type { CapabilityOfferingRow } from '@/modules/capability-supply/internal/offering'
+  type CapabilityOfferingRow,
+} from '@/modules/capability-supply/public'
 import { createProviderConnection, type CreateProviderConnectionCommand } from '@/modules/capability-supply/provider-connection'
 
 const digest = 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'

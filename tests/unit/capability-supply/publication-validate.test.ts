@@ -2,15 +2,15 @@ import { describe, expect, it } from 'vitest'
 
 import {
   admitPublicationDraft,
+  dereferenceOpenApiSchema,
   preparePublicationDraft,
+  publicationMaterialContainsCredential,
   publicationValidationFix,
   validateCapabilityPublication,
-} from '@/modules/capability-supply/internal/publication'
-import { dereferenceOpenApiSchema } from '@/modules/capability-supply/internal/schema-deref'
+  type CapabilityPublicationAdmissionSource,
+  type SchemaDereferencer,
+} from '@/modules/capability-supply/public'
 import { dereferenceLocalSchema } from '@/modules/capability-supply/convex'
-import { publicationMaterialContainsCredential } from '@/modules/capability-supply/internal/publication/source'
-import type { SchemaDereferencer } from '@/modules/capability-supply/internal/admit-provider-schema'
-import type { CapabilityPublicationAdmissionSource } from '@/modules/capability-supply/internal/publication/admit'
 
 const JSON_SCHEMA = 'https://json-schema.org/draft/2020-12/schema'
 

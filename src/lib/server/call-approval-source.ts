@@ -9,7 +9,7 @@ import { isLocalE2EAuthBypassEnabled } from '@/lib/server/local-e2e-bypass'
 import type {
   CallApprovalDecisionResult,
   PendingCallApproval,
-} from '@/modules/capability-execution/call-approval.functions'
+} from '@/modules/capability-execution/call-approval-contracts'
 
 const listPendingCallApprovalsQuery = sourceQuery<Record<string, never>, readonly PendingCallApproval[]>(
   'capabilityCalls:listPendingCallApprovals',

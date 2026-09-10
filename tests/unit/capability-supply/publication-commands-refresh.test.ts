@@ -1,22 +1,18 @@
 import { describe, expect, it, vi } from 'vitest'
 
 import {
-  refreshCapabilityCommand,
-} from '@/modules/capability-supply/internal/publication'
-import {
   capabilityToolId,
   capabilityPublicationProvenanceDigest,
   createPublicToolRef,
-} from '@/modules/capability-supply/public'
-import {
+  normalizeCapabilityPublication,
+  refreshCapabilityCommand,
   rotateCapabilityTransportBindingAuthority,
   type RotateCapabilityTransportBindingAuthorityPatch,
-} from '@/modules/capability-supply/internal/binding/write'
+} from '@/modules/capability-supply/public'
 import {
   providerConnectionAuthorityDigest,
   type ProviderConnection,
 } from '@/modules/capability-supply/provider-connection'
-import * as publicationImporters from '@/modules/capability-supply/internal/publication-importers'
 import { capabilityContractV2 } from '../../fixtures/capability-contract-v2'
 
 import {
@@ -324,7 +320,7 @@ describe('capability-supply publication commands refresh', () => {
       previousToolRef: publication.toolRef,
     }), 10)
 
-    const normalized = await publicationImporters.normalizeCapabilityPublication(
+    const normalized = await normalizeCapabilityPublication(
       publicationSource(publication.capabilityId, publication.version),
     )
     if (normalized.kind !== 'normalized') throw new Error(`refresh_fixture_refused:${normalized.reason}`)

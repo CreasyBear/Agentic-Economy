@@ -11,6 +11,7 @@ import type { OpenDispatch } from '../../../../convex/capabilityCallProjection'
 import type { ConnectionAuthority } from './lease'
 import { createX402PaymentCallbacks } from './x402Authorization'
 import type { X402PaymentCallbacks } from './x402Authorization'
+import { X402_MANAGED_CUSTODY_REF } from './x402ManagedCustodyRef'
 
 export {
   configuredX402RpcUrl,
@@ -25,9 +26,8 @@ export {
 } from './x402Authorization'
 export type { X402TransportObservationRecord } from './x402Settlement'
 export type { X402PaymentCallbacks } from './x402Authorization'
+export { X402_MANAGED_CUSTODY_REF } from './x402ManagedCustodyRef'
 
-/** The only production x402 credential locator. It identifies the CDP account name, not a secret. */
-export const X402_MANAGED_CUSTODY_REF = 'env:AE_X402_CDP_ACCOUNT_NAME' as const
 /** @deprecated Use the rail-neutral managed custody reference. */
 export const BROKERED_X402_MANAGED_CUSTODY_REF = X402_MANAGED_CUSTODY_REF
 

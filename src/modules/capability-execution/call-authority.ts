@@ -40,6 +40,7 @@ import {
 } from './call-recover'
 
 export {
+  admitCall,
   canonicalCallRef,
 } from './call-admit'
 export type {

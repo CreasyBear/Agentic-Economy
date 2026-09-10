@@ -32,7 +32,7 @@ import type { ConnectionAuthority, ProviderLeaseAuthority } from './lease'
 import {
   readX402EvmReceipt,
 } from './x402Settlement'
-import { X402_MANAGED_CUSTODY_REF } from './x402Route'
+import { X402_MANAGED_CUSTODY_REF } from './x402ManagedCustodyRef'
 
 type PreparedX402AuthorizationWithFingerprint = X402PreparedAuthorization & Readonly<{
   requestFingerprint?: string

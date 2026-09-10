@@ -9,10 +9,9 @@ import { registerExactEvmScheme } from '@x402/evm/exact/client'
 import { privateKeyToAccount } from 'viem/accounts'
 import { describe, expect, it } from 'vitest'
 
-import { discoverMcpSource } from '@/modules/capability-supply/internal/mcp-source-discovery'
-import { inspectX402SellerEndpoint } from '@/modules/capability-supply/internal/x402-seller-endpoint-inspector'
-import { validateOpenApiDocument } from '@/modules/capability-supply/internal/openapi-import/validation'
-import { previewSupplySource } from '@/modules/capability-supply/source-preview'
+import { inspectX402SellerEndpoint } from '@/modules/capability-supply/server'
+import { validateOpenApiDocument } from '@/modules/capability-supply/public'
+import { discoverMcpSource, previewSupplySource } from '@/modules/capability-supply/source-preview'
 import {
   createPackage5ReferenceProvider,
 } from '../../../tools/release/package5-reference-provider/core'

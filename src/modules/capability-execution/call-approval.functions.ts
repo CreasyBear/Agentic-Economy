@@ -6,29 +6,12 @@ import {
   listPendingCallApprovalsThroughSource,
 } from '@/lib/server/call-approval-source'
 
-import type { PublicAuthorityRequest } from './call-contracts'
+import type {
+  CallApprovalDecisionResult,
+  PendingCallApproval,
+} from './call-approval-contracts'
 
-export type PendingCallApproval = Readonly<{
-  callRef: string
-  toolRef: string
-  authorityRequest: PublicAuthorityRequest
-  createdAt: number
-}>
-
-export type CallApprovalDecisionResult =
-  | Readonly<{
-      kind: 'approved' | 'denied' | 'replayed'
-      callRef: string
-    }>
-  | Readonly<{
-      kind: 'refused'
-      code:
-        | 'authentication_required'
-        | 'invocation_not_found'
-        | 'authority_not_pending'
-        | 'grant_not_current'
-        | 'invocation_invalid'
-    }>
+export type { CallApprovalDecisionResult, PendingCallApproval }
 
 const decisionInputSchema = z.strictObject({
   callRef: z.string().min(1),

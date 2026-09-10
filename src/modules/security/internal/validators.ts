@@ -1,5 +1,5 @@
 import { z } from 'zod'
 
-import { AdminRoleValues } from '@/modules/security/public'
+export const AdminRoleValues = ['owner_admin', 'support', 'reviewer'] as const
 
 export const AdminRoleSchema = z.enum(AdminRoleValues)

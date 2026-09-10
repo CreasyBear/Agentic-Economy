@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import { prepareX402Request } from '@/modules/capability-supply/server'
-import { admitBazaarDiscoveryInfo } from '@/modules/capability-supply/internal/publication-importer-x402-bazaar'
+import { admitBazaarDiscoveryInfo } from '@/modules/capability-supply/server'
 import { admitOfficialBazaarFromPaymentRequired, admitFacilitatorDiscoveryItems } from '@/modules/capability-supply/server'
 
 
-import syntheticPost from '@/modules/capability-supply/internal/x402-bazaar-fixtures/synthetic-post-payment-required.json'
+import { syntheticPostPaymentRequiredFixture as syntheticPost } from '@/modules/capability-supply/public'
 
 describe('managed request serialization', () => {
   const endpoint = new URL('https://example.com/tool?fixed=yes')
