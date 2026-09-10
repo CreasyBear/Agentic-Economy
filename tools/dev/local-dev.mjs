@@ -125,13 +125,22 @@ export function buildConvexEnvSetArgs(value) {
 const ANONYMOUS_CLERK_JWT_ISSUER_DOMAIN = 'https://release-proof.invalid'
 
 /**
- * Pure decision, shared by `convexChildEnv` and `startConvex`: does the
+ * Pure decision, shared by `convexChildEnv`: does the
  * process env still lack `CLERK_JWT_ISSUER_DOMAIN`? A value already present
  * (a real tenant, or one set by a previous run) means Clerk is configured
- * and no placeholder work is needed anywhere.
+ * and no placeholder work is needed in the child environment.
  */
 export function needsClerkPlaceholder(env) {
   return env.CLERK_JWT_ISSUER_DOMAIN === undefined
+}
+
+/**
+ * Pure decision for the value to seed on an anonymous deployment: the process
+ * value if present, else the placeholder. This is always idempotent; `convex env set`
+ * can be called unconditionally.
+ */
+export function anonymousDeploymentEnvSeed(env) {
+  return env.CLERK_JWT_ISSUER_DOMAIN ?? ANONYMOUS_CLERK_JWT_ISSUER_DOMAIN
 }
 
 /**
@@ -860,21 +869,20 @@ async function startConvex(supervisor, env) {
     }
     log('convex init: anonymous deployment configured (no-op if already initialized)')
 
-    if (needsClerkPlaceholder(env)) {
-      const envSet = supervisor.add(createManagedChild(
-        'npx',
-        buildConvexEnvSetArgs(convexEnv.CLERK_JWT_ISSUER_DOMAIN),
-        convexEnv,
-        { label: 'Convex env set' },
-      ))
-      const envSetResult = await envSet.done
-      if (supervisor.parentSignal !== null) return { status: signalExitStatus(supervisor.parentSignal) }
-      if (childExitStatus(envSetResult) !== 0) {
-        reportChildFailure('Convex env set', envSetResult)
-        return { status: childExitStatus(envSetResult) }
-      }
-      log(`convex env set: pushed placeholder CLERK_JWT_ISSUER_DOMAIN=${convexEnv.CLERK_JWT_ISSUER_DOMAIN} to the anonymous deployment`)
+    const seedValue = anonymousDeploymentEnvSeed(env)
+    const envSet = supervisor.add(createManagedChild(
+      'npx',
+      buildConvexEnvSetArgs(seedValue),
+      convexEnv,
+      { label: 'Convex env set' },
+    ))
+    const envSetResult = await envSet.done
+    if (supervisor.parentSignal !== null) return { status: signalExitStatus(supervisor.parentSignal) }
+    if (childExitStatus(envSetResult) !== 0) {
+      reportChildFailure('Convex env set', envSetResult)
+      return { status: childExitStatus(envSetResult) }
     }
+    log('convex env set: seeded CLERK_JWT_ISSUER_DOMAIN on the anonymous deployment')
   } else {
     const selected = supervisor.add(createManagedChild(
       'npx',

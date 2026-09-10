@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import {
+  anonymousDeploymentEnvSeed,
   authModeLine,
   buildConvexDevArgs,
   buildConvexEnvSetArgs,
@@ -276,6 +277,18 @@ describe('convex child env', () => {
     const result = convexChildEnv(env, { log })
     expect(result).toBe(env)
     expect(result.CONVEX_LOCAL_BACKEND_STARTUP_TIMEOUT_SECS).toBe('45')
+  })
+})
+
+describe('anonymous deployment env seed', () => {
+  it('returns the process value when CLERK_JWT_ISSUER_DOMAIN is present', () => {
+    expect(anonymousDeploymentEnvSeed({ CLERK_JWT_ISSUER_DOMAIN: 'https://real-tenant.clerk.accounts.dev' }))
+      .toBe('https://real-tenant.clerk.accounts.dev')
+  })
+
+  it('returns the placeholder when CLERK_JWT_ISSUER_DOMAIN is absent', () => {
+    expect(anonymousDeploymentEnvSeed({})).toBe('https://release-proof.invalid')
+    expect(anonymousDeploymentEnvSeed({ PATH: '/usr/bin' })).toBe('https://release-proof.invalid')
   })
 })
 
