@@ -61,6 +61,7 @@ const AE_MCP_INSTRUCTIONS = [
   'If Account credit is insufficient, use `ae_funding_handoff_create`, give only its Stripe checkoutUrl to the payer, persist fundingSessionId, poll `ae_funding_handoff_status`, then explicitly retry the original Tool only after ready.',
   'If effects are uncertain, use `ae_call_status` or `ae_call_reconcile` before retrying.',
   'Agentic Economy returns the contribution or receipt; your existing harness keeps project planning and execution.',
+  'See `docs/glossary.md` for the vocabulary used above, such as Tool, Quote and Call.',
 ].join(' ')
 export type McpAccessTier = Readonly<{
   tier: 'anonymous' | 'authenticated'

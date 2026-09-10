@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import type { FunctionReference, FunctionReturnType } from 'convex/server'
 
+import { isRecord } from '@/modules/common/is-record'
 import {
   callPublicSourceMutation,
   sourceMutation,
@@ -11,6 +12,7 @@ import { MARKET_SUPPLY_MANAGE_SCOPE } from '@/modules/agent-access/contract'
 import { defineAction, type ActionParameter } from '@/modules/common/action'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { currencySchema, exactAmountSchema, ProviderEarningsViewSchema } from '@/modules/money/public'
+import { base64Codec, tryDecodeBase64Url } from '@/modules/common/base64-codec'
 import type { OwnerProviderEarningsReadback } from './internal/supply-funnel/earnings-readback'
 import type {
   OwnerSupplyCommandResult,
@@ -63,6 +65,7 @@ export const SUPPLY_ACTION_IDS = Object.freeze({
   recheck: 'supply.recheck',
   republish: 'supply.republish',
   earnings: 'supply.earnings',
+  calls: 'supply.calls',
   connectionList: 'supply.connection.list',
   connectionDetail: 'supply.connection.detail',
   connectionConnect: 'supply.connection.connect',
@@ -80,6 +83,7 @@ export const SUPPLY_ACTION_ROUTE_CONTRACTS = Object.freeze({
   recheck: Object.freeze({ actionId: SUPPLY_ACTION_IDS.recheck, contractVersion: 'supply-recheck:v1', method: 'POST' as const, path: '/api/v1/supply/recheck', scope: MARKET_SUPPLY_MANAGE_SCOPE }),
   republish: Object.freeze({ actionId: SUPPLY_ACTION_IDS.republish, contractVersion: 'supply-republish:v1', method: 'POST' as const, path: '/api/v1/supply/republish', scope: MARKET_SUPPLY_MANAGE_SCOPE }),
   earnings: Object.freeze({ actionId: SUPPLY_ACTION_IDS.earnings, contractVersion: 'supply-earnings:v1', method: 'POST' as const, path: '/api/v1/supply/earnings', scope: MARKET_SUPPLY_MANAGE_SCOPE }),
+  calls: Object.freeze({ actionId: SUPPLY_ACTION_IDS.calls, contractVersion: 'supply-calls:v1', method: 'POST' as const, path: '/api/v1/supply/calls', scope: MARKET_SUPPLY_MANAGE_SCOPE }),
   connectionList: Object.freeze({ actionId: SUPPLY_ACTION_IDS.connectionList, contractVersion: 'supply.connection.list:v2', method: 'POST' as const, path: '/api/v1/supply/connections/list', scope: MARKET_SUPPLY_MANAGE_SCOPE }),
   connectionDetail: Object.freeze({ actionId: SUPPLY_ACTION_IDS.connectionDetail, contractVersion: 'supply.connection.detail:v2', method: 'POST' as const, path: '/api/v1/supply/connections/detail', scope: MARKET_SUPPLY_MANAGE_SCOPE }),
   connectionConnect: Object.freeze({ actionId: SUPPLY_ACTION_IDS.connectionConnect, contractVersion: 'supply.connection.connect:v3', method: 'POST' as const, path: '/api/v1/supply/connections/connect', scope: MARKET_SUPPLY_MANAGE_SCOPE }),
@@ -224,6 +228,67 @@ export const supplyEarningsResultSchema = z.union([
   z.strictObject({ kind: z.literal('error'), code: z.enum(['unauthenticated', 'source_unavailable']) }),
 ])
 export type SupplyEarningsResult = z.infer<typeof supplyEarningsResultSchema>
+
+// `capability-supply` may not depend on `capability-execution` or `registry`
+// (see `src/modules/module-boundaries.ts`), so the canonical Call state
+// vocabulary and the opaque-cursor envelope are re-declared locally rather
+// than imported across that boundary.
+export const callStateValues = ['pending', 'completed', 'refused', 'reconciliation_required', 'cancelled'] as const
+export const callStateSchema = z.enum(callStateValues)
+
+const SUPPLY_CALLS_CURSOR_KIND = 'supply-calls'
+const MAX_SUPPLY_CALLS_CURSOR_LENGTH = 512
+const supplyCallsCursorEnvelopeSchema = z.strictObject({
+  kind: z.literal(SUPPLY_CALLS_CURSOR_KIND),
+  scope: z.string(),
+  cursor: z.string(),
+})
+/** Opaque, scope-bound continuation token (same envelope shape as `@/modules/registry/opaque-cursor`, kept local to respect the module boundary). */
+function encodeSupplyCallsCursor(input: Readonly<{ scope: string; cursor: string }>): string {
+  return base64Codec.toBase64Url(new TextEncoder().encode(JSON.stringify({ kind: SUPPLY_CALLS_CURSOR_KIND, ...input })))
+}
+function decodeSupplyCallsCursor(token: string, scope: string): string | undefined {
+  if (token.length === 0 || token.length > MAX_SUPPLY_CALLS_CURSOR_LENGTH) return undefined
+  const bytes = tryDecodeBase64Url(token)
+  if (bytes === undefined) return undefined
+  let json: unknown
+  try {
+    json = JSON.parse(new TextDecoder().decode(bytes))
+  } catch {
+    return undefined
+  }
+  const parsed = supplyCallsCursorEnvelopeSchema.safeParse(json)
+  if (!parsed.success || parsed.data.scope !== scope) return undefined
+  return parsed.data.cursor
+}
+
+export const supplyCallsInputSchema = z.strictObject({
+  state: callStateSchema.optional(),
+  limit: z.number().int().min(1).max(100).default(20),
+  cursor: z.string().trim().min(1).max(512).optional(),
+})
+export type SupplyCallsInput = z.infer<typeof supplyCallsInputSchema>
+export const supplyCallOutcomeSchema = z.enum(['completed', 'pending', 'needs_authority', 'reconciliation_required', 'refused'])
+export const supplyCallSummarySchema = z.strictObject({
+  callRef: z.string(),
+  toolRef: z.string(),
+  state: callStateSchema,
+  outcome: supplyCallOutcomeSchema.optional(),
+  settledAmount: exactAmountSchema.optional(),
+  createdAt: z.number(),
+  updatedAt: z.number(),
+})
+export const supplyCallsResultSchema = z.union([
+  z.strictObject({
+    kind: z.literal('available'),
+    items: z.array(supplyCallSummarySchema).max(100),
+    limit: z.number(),
+    hasMore: z.boolean(),
+    nextCursor: z.string().min(1).max(512).optional(),
+  }),
+  z.strictObject({ kind: z.literal('error'), code: z.enum(['unauthenticated', 'source_unavailable']) }),
+])
+export type SupplyCallsResult = z.infer<typeof supplyCallsResultSchema>
 
 export const providerConnectionLifecycleSchema = z.enum([
   'active',
@@ -452,6 +517,7 @@ export type SupplyManagementService = Readonly<{
   recheck(input: Readonly<{ input: SupplyRecheckInput; principal: AgentAccessPrincipal; correlationId: string }>): Promise<SupplyRecheckResult>
   republish(input: Readonly<{ input: SupplyRepublishInput; principal: AgentAccessPrincipal; correlationId: string }>): Promise<SupplyRepublishResult>
   earnings(input: Readonly<{ input: SupplyEarningsInput; principal: AgentAccessPrincipal; correlationId: string }>): Promise<SupplyEarningsResult>
+  calls(input: Readonly<{ input: SupplyCallsInput; principal: AgentAccessPrincipal; correlationId: string }>): Promise<SupplyCallsResult>
   connectionList(input: Readonly<{ input: SupplyConnectionListInput; principal: AgentAccessPrincipal; correlationId: string }>): Promise<SupplyConnectionListResult>
   connectionDetail(input: Readonly<{ input: SupplyConnectionDetailInput; principal: AgentAccessPrincipal; correlationId: string }>): Promise<SupplyConnectionDetailResult>
   connectionConnect(input: Readonly<{ input: SupplyConnectionConnectInput; principal: AgentAccessPrincipal; correlationId: string }>): Promise<SupplyConnectionCommandResult>
@@ -484,6 +550,17 @@ const withdrawMutation = sourceMutation<Record<string, unknown>, OwnerSupplyComm
 const recheckMutation = sourceMutation<Record<string, unknown>, OwnerSupplyCommandResult>('capabilitySupplyOwnerFunnel:refreshOwnerCapability')
 const republishMutation = sourceMutation<Record<string, unknown>, OwnerSupplyCommandResult>('capabilitySupplyOwnerFunnel:republishOwnerCapability')
 const earningsReadMutation = sourceMutation<Record<string, unknown>, OwnerProviderEarningsReadback>('moneyLedger:readAgentProviderEarnings')
+type SupplyCallsCursor = Readonly<{ createdAt: number; callRef: string }>
+type SupplyCallsBackendResult =
+  | Readonly<{
+      kind: 'available'
+      items: readonly z.infer<typeof supplyCallSummarySchema>[]
+      limit: number
+      hasMore: boolean
+      nextCursor?: SupplyCallsCursor
+    }>
+  | Readonly<{ kind: 'error'; code: 'unauthenticated' | 'source_unavailable' }>
+const callsListMutation = sourceMutation<Record<string, unknown>, SupplyCallsBackendResult>('capabilityCallProjection:listAgentSupplyCalls')
 const connectionListMutation = sourceMutation<Record<string, unknown>, SupplyConnectionListResult>('capabilityProviderConnectionAgents:list')
 const connectionDetailMutation = sourceMutation<Record<string, unknown>, SupplyConnectionDetailResult>('capabilityProviderConnectionAgents:read')
 type ProviderConnectionBackendCommandResult =
@@ -941,6 +1018,51 @@ export function createSupplyManagementService(request: Request, bodyText: string
       correlationId,
     }, operationKey, correlationId)
   }
+  const calls = async ({ input, principal, correlationId }: { input: SupplyCallsInput; principal: AgentAccessPrincipal; correlationId: string }): Promise<SupplyCallsResult> => {
+    const cursorScope = canonicalDigest({ action: SUPPLY_ACTION_IDS.calls, ownerId: principal.ownerId, state: input.state ?? null })
+    let cursor: SupplyCallsCursor | undefined
+    if (input.cursor !== undefined) {
+      const decoded = decodeSupplyCallsCursor(input.cursor, cursorScope)
+      if (decoded === undefined) return { kind: 'error', code: 'source_unavailable' }
+      try {
+        const parsed = JSON.parse(decoded) as unknown
+        if (!isRecord(parsed) || typeof parsed.createdAt !== 'number' || typeof parsed.callRef !== 'string') {
+          return { kind: 'error', code: 'source_unavailable' }
+        }
+        cursor = { createdAt: parsed.createdAt, callRef: parsed.callRef }
+      } catch {
+        return { kind: 'error', code: 'source_unavailable' }
+      }
+    }
+    const operationKey = canonicalDigest({
+      action: SUPPLY_ACTION_IDS.calls,
+      principalId: principal.principalId,
+      credentialId: principal.credentialId,
+      correlationId,
+      state: input.state ?? null,
+      limit: input.limit,
+      cursor: input.cursor ?? null,
+    })
+    const result = await mutate(callsListMutation, {
+      agentPrincipal: principal,
+      ...(input.state === undefined ? {} : { state: input.state }),
+      limit: input.limit,
+      ...(cursor === undefined ? {} : { cursor }),
+      operationKey,
+      correlationId,
+    }, operationKey, correlationId)
+    if (result.kind === 'error') return result
+    const nextCursor = result.nextCursor === undefined
+      ? undefined
+      : encodeSupplyCallsCursor({ scope: cursorScope, cursor: JSON.stringify(result.nextCursor) })
+    return {
+      kind: 'available',
+      items: [...result.items],
+      limit: result.limit,
+      hasMore: result.hasMore,
+      ...(nextCursor === undefined ? {} : { nextCursor }),
+    }
+  }
   return {
     sourcePreview,
     toolsList,
@@ -950,6 +1072,7 @@ export function createSupplyManagementService(request: Request, bodyText: string
     recheck,
     republish,
     earnings,
+    calls,
     connectionList,
     connectionDetail,
     connectionConnect,
@@ -1214,6 +1337,43 @@ export const supplyEarningsAction = defineAction<SupplyEarningsInput, SupplyEarn
     if (context.agentAccessPrincipal === undefined) throw new Error('agent_access_context_missing')
     if (context.supplyManagementService === undefined) throw new Error('supply_management_service_unavailable')
     return await context.supplyManagementService.earnings({ input: data, principal: context.agentAccessPrincipal, correlationId: context.correlationId ?? globalThis.crypto.randomUUID() })
+  },
+})
+
+export const supplyCallsAction = defineAction<SupplyCallsInput, SupplyCallsResult>({
+  id: SUPPLY_ACTION_IDS.calls,
+  name: 'List Provider Calls',
+  summary: 'List the authenticated Provider’s own bounded page of Quotes/Calls, newest first, across its current Tools.',
+  boundaries: [
+    ...supplyBoundaries,
+    'Returns only Calls against Tools the authenticated Provider currently publishes.',
+    'Rows omit buyer identity, credentials, idempotency keys, and Tool input/output payloads.',
+  ],
+  schema: supplyCallsInputSchema,
+  outputSchema: supplyCallsResultSchema,
+  parameters: [
+    { name: 'state', type: 'enum', description: 'Optional canonical Call state filter.', required: false, enum: callStateValues },
+    { name: 'limit', type: 'number', description: 'Page size from 1 through 100; defaults to 20.', required: false },
+    { name: 'cursor', type: 'string', description: 'Opaque cursor returned by the previous page.', required: false },
+  ],
+  readOnly: true,
+  effect: { class: 'observation', reversible: true, recipientKind: 'business', dataClasses: ['usage_evidence'], spendExposure: 'none', approval: 'none' },
+  surfaces: supplySurfaces,
+  credentialAdmission: supplyCredentialAdmission,
+  invocationContract: {
+    version: SUPPLY_ACTION_ROUTE_CONTRACTS.calls.contractVersion,
+    consequenceClass: 'read_only',
+    materialInputPaths: ['state', 'limit', 'cursor'],
+    authorityRequirement: 'principal',
+    retryClass: 'replayable',
+    expectedEvidence: ['call_summaries'],
+    safeContinuations: ['supply.status'],
+    invalidationConditions: ['state_filter_changed', 'cursor_changed'],
+  },
+  run: async ({ data, context }) => {
+    if (context.agentAccessPrincipal === undefined) throw new Error('agent_access_context_missing')
+    if (context.supplyManagementService === undefined) throw new Error('supply_management_service_unavailable')
+    return await context.supplyManagementService.calls({ input: data, principal: context.agentAccessPrincipal, correlationId: context.correlationId ?? globalThis.crypto.randomUUID() })
   },
 })
 

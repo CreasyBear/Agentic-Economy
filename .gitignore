@@ -87,3 +87,4 @@ public/downloads/*.tgz
 !/docs/reviews/*.md
 !/docs/strategy/
 !/docs/strategy/*.md
+!/docs/glossary.md

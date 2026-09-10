@@ -4,7 +4,7 @@
 
 ## Read this first
 
-For product behaviour and implementation changes, read `PRODUCT.md` first — it defines the active product and accepted commercial direction. For "run locally" tasks, follow README's "Run locally" section.
+For product behaviour and implementation changes, read `PRODUCT.md` first — it defines the active product and accepted commercial direction. For "run locally" tasks, follow README's "Run locally" section. New to the vocabulary in this file or in code? Read [`docs/glossary.md`](./docs/glossary.md) first — plain-language definitions of the terms used below, each pointing at the file that defines it.
 
 Use each source for the question it can answer:
 
@@ -107,6 +107,32 @@ any affected backend function references or generated outputs. A filename
 change does not authorize changing public contracts, protected identifiers or
 historical evidence. These rules do not authorize a directory reorganisation,
 manual edits to generated files or an unplanned repository-wide rename.
+
+## Common conventions
+
+**How a Tool price flows**: an owner declares a price on their offering ->
+`pricingConfigForOffering` in `internal/supply-funnel/publication-import.ts`
+and `internal/publication/draft.ts` turns it into a `PricingConfig` at ingest
+-> that config is stored as `pricingConfigJson` on the publication -> every
+display path calls `displayPriceFromPricingConfig` from
+`src/modules/money/public.ts` to render it, and `internal/tool-project.ts`
+projects that resolved price into the public catalog price shape. Never
+format a price by hand outside this chain; add a new display by calling
+`displayPriceFromPricingConfig`, not by re-deriving the price.
+
+**Adding a public API route**: name the file `src/routes/api.v1.<name>.ts`
+(or `api.<name>.ts` for non-versioned surfaces), following an existing route
+such as `api.v1.registry.ts`. Parse query params with a `z.strictObject`
+schema (reject unknown keys); return RFC 9457 problems via the shared
+`problem()` helper in `src/lib/server/problem.ts` and always pass a specific
+`detail`. Page results with opaque cursors from
+`src/modules/registry/opaque-cursor.ts`, never a raw engine cursor. Return a
+freshness object matching the existing `source`/`state`/`completedAt`/
+`staleAfterMs` shape (see `src/modules/registry/tool-choice-contracts.ts`).
+Wrap the handler in `withHttpRateLimit`. Add the new path to
+`DiscoveryPublicSurfacePaths` in
+`src/modules/discovery/internal/offering-discovery-file.ts` and add the
+route's hostile-input cases to `tests/helpers/catalogue-hostile-inputs.ts`.
 
 ## Branches and merges
 

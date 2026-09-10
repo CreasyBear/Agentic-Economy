@@ -88,14 +88,12 @@ unavailable balance. The general readiness endpoint passes while the commercial
 policy required for a Quote is unavailable. Server reachability is therefore
 insufficient evidence that this environment can sell a Tool.
 
-**CLI recovery is not durable before acknowledgement.** In
-tools/ae/commands/call.ts, the CLI generates an idempotency key in memory and says
-a durable retry identity was retained. The transport-unknown and wait-timeout
-helpers discard recovery arguments. There is no persisted pre-dispatch record
-in this path. Repeating the ordinary command also obtains a new Quote. A lost
-response therefore does not give a fresh process enough information to resume
-the exact purchase safely. This finding is from source inspection; no live
-payment was fault-injected.
+**CLI recovery is now durable.** The Call recovery journal at
+tools/ae/lib/call-recovery-journal.ts is locked with proper-lockfile, persisting
+the pre-dispatch record so a fresh process can resume safely after credential
+rotation or process death. The journal records the Principal, idempotency key,
+dispatch timestamp, and recovery state, enabling deterministic replay without
+recreating the purchase. Wells 1+2 implemented recovery-journal locking.
 
 **Discovery needs explicit exclusion and failure evidence.** Candidate failures
 can disappear behind a successful page response, as the Otto AI example shows.

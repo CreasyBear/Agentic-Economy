@@ -5,9 +5,9 @@ import {
 import { CALL_ROUTE_CONTRACT } from '@/modules/capability-execution/call-entry'
 
 import type { CliOptions } from '../lib/args'
-import { CliFailure, callJson, heading, printJson, requireOk, table } from '../lib/output'
+import { CliFailure, callJson, heading, line, printJson, requireOk, table } from '../lib/output'
 import { usageFailure } from '../lib/help'
-import { continuationCommand } from '../lib/continuation-command'
+import { cliContinuation, continuationCommand } from '../lib/continuation-command'
 import { requireAgentAccessKey } from './status'
 
 export const historyCommandDescriptor = Object.freeze({
@@ -57,9 +57,8 @@ export async function runHistoryCommand(args: readonly string[], options: CliOpt
       code: 'history-result-invalid',
     })
   }
-  const nextCommand = nextCursor === undefined
-    ? undefined
-    : continuationCommand([
+  const nextCommand = nextCursor !== undefined
+    ? continuationCommand([
         'ae', 'history',
         ...(options.limit === undefined ? [] : ['--limit', options.limit]),
         ...(options.state === undefined ? [] : ['--state', options.state]),
@@ -69,16 +68,24 @@ export async function runHistoryCommand(args: readonly string[], options: CliOpt
           : ['--base-url', options.baseUrl]),
         ...(options.json ? ['--json'] : []),
       ])
+    // No Calls to page through: point at the command that finds a Tool to call, not an empty table.
+    : result.data.items.length === 0
+      ? cliContinuation(options, ['ae', 'search', '<job>'])
+      : undefined
   if (options.json) {
     printJson(nextCommand === undefined ? result.data : { ...result.data, nextCommand })
     return
   }
   heading('Call history')
-  table(result.data.items.flatMap((item, index) => [
-    [`${index + 1}. call`, item.callRef],
-    ['tool', item.toolRef],
-    ['state', item.state],
-    ['created', new Date(item.createdAt).toISOString()],
-  ]))
+  if (result.data.items.length === 0) {
+    line('  No Calls yet.')
+  } else {
+    table(result.data.items.flatMap((item, index) => [
+      [`${index + 1}. call`, item.callRef],
+      ['tool', item.toolRef],
+      ['state', item.state],
+      ['created', new Date(item.createdAt).toISOString()],
+    ]))
+  }
   if (nextCommand !== undefined) process.stdout.write(`Next: ${nextCommand}\n`)
 }

@@ -411,4 +411,48 @@ describe('AE CLI provider Tool lifecycle', () => {
 
     expect(fetch).toHaveBeenCalledOnce()
   })
+
+  it('lists the provider’s own Calls without ever sending a business id', async () => {
+    const fetch = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      expect(String(url)).toBe('https://market.example/api/v1/supply/calls')
+      expect(init?.method).toBe('POST')
+      expect(new Headers(init?.headers).get('authorization')).toBe('Bearer hidden-provider-secret')
+      expect(JSON.parse(String(init?.body))).toEqual({ state: 'completed', limit: 5 })
+      return Response.json({
+        kind: 'available',
+        items: [
+          { callRef: 'call:one', toolRef: 'operation:one', state: 'completed', outcome: 'completed', createdAt: 30, updatedAt: 30 },
+        ],
+        limit: 5,
+        hasMore: true,
+        nextCursor: 'opaque-cursor-token',
+      })
+    })
+    vi.stubGlobal('fetch', fetch)
+    const write = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
+
+    await runSupplyCommand(['calls'], { ...baseOptions, state: 'completed', limit: '5' })
+
+    expect(fetch).toHaveBeenCalledOnce()
+    const parsed = JSON.parse(write.mock.calls.map(([value]) => String(value)).join('')) as Record<string, unknown>
+    expect(parsed).toMatchObject({
+      kind: 'available',
+      hasMore: true,
+      nextCursor: 'opaque-cursor-token',
+      nextCommand: "ae supply calls --state completed --limit 5 --cursor opaque-cursor-token --json",
+    })
+    expect(Array.isArray(parsed.items) && parsed.items).toEqual([
+      expect.objectContaining({ callRef: 'call:one', toolRef: 'operation:one', state: 'completed' }),
+    ])
+  })
+
+  it('rejects extra positional arguments to calls before any fetch', async () => {
+    const fetch = vi.fn()
+    vi.stubGlobal('fetch', fetch)
+
+    await expect(runSupplyCommand(['calls', 'unexpected'], baseOptions)).rejects.toMatchObject({
+      code: 'supply-calls-usage',
+    })
+    expect(fetch).not.toHaveBeenCalled()
+  })
 })

@@ -1,34 +1,26 @@
-'use client'
-
-import { createFileRoute, Link } from '@tanstack/react-router'
+import { createFileRoute, Link, useRouter } from '@tanstack/react-router'
 import { RefreshCwIcon } from 'lucide-react'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useState } from 'react'
 
 import { AeCopyReference } from '@/components/ae/data/AeCopyReference'
 import { AePublicPage } from '@/components/ae/layout/AePublicPage'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { SiteDiscoveryManifestSchemaVersion } from '@/modules/discovery/public'
+import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
 import { buildPublicPageHead } from '@/modules/seo/public'
+import { readStatusProbesServer, type ProbeId, type ProbeOutcome } from '@/routes/-status.functions'
 
-type CheckState = 'checking' | 'operational' | 'degraded'
-type ProbeId = 'site' | 'market' | 'discovery' | 'release' | 'catalogue'
-type StatusCheck = Readonly<{
-  id: ProbeId
-  label: string
-  path: string
-  state: CheckState
-  detail: string
-  requestRef?: string
-}>
+type CheckState = 'checking' | ProbeOutcome['state']
+type StatusCheck = Readonly<{ id: ProbeId; label: string; state: CheckState; detail: string; requestRef?: string }>
 
-const probes = [
-  { id: 'site', label: 'Website', path: '/api/health', operationalDetail: 'Public pages are responding.' },
-  { id: 'market', label: 'Tool API', path: '/api/ready', operationalDetail: 'Tool search and new Calls are ready.' },
-  { id: 'discovery', label: 'Machine discovery', path: '/.well-known/ucp', operationalDetail: 'Agents can discover the current AE interfaces.' },
-  { id: 'release', label: 'Release identity', path: '/api/v1/release', operationalDetail: 'Deployment identity is available.' },
-  { id: 'catalogue', label: 'Catalogue freshness', path: '/api/v1/catalogue-status', operationalDetail: 'The Tool catalogue was refreshed within the last 36 hours.' },
-] as const
+const probeLabels: Readonly<Record<ProbeId, string>> = {
+  site: 'Website',
+  market: 'Tool API',
+  discovery: 'Machine discovery',
+  release: 'Release identity',
+  catalogue: 'Catalogue freshness',
+}
+const probeOrder: readonly ProbeId[] = ['site', 'market', 'discovery', 'release', 'catalogue']
 
 export const Route = createFileRoute('/status')({
   head: () => buildPublicPageHead({
@@ -36,51 +28,34 @@ export const Route = createFileRoute('/status')({
     title: 'System status | Agentic Economy',
     description: 'Current Agentic Economy website, Tool API, machine discovery, release identity, and catalogue freshness status.',
   }),
+  loader: () => readStatusProbesServer(),
   component: StatusRoute,
 })
 
 function StatusRoute() {
-  const [checks, setChecks] = useState<readonly StatusCheck[]>(() => checkingChecks())
-  const [checkedAt, setCheckedAt] = useState<string>()
-  const [isChecking, setIsChecking] = useState(true)
-  const refreshInFlight = useRef(false)
-  const refresh = useCallback(async () => {
-    if (refreshInFlight.current) return
-    refreshInFlight.current = true
-    setIsChecking(true)
-    setCheckedAt(undefined)
-    setChecks(checkingChecks())
-    try {
-      const results = await Promise.all(probes.map(async (probe): Promise<StatusCheck> => {
-        try {
-          const response = await fetch(probe.path, { cache: 'no-store' })
-          const result = await assessProbeResponse(probe.id, response)
-          const requestRef = result.state === 'degraded'
-            ? response.headers.get('X-AE-Request-Id') || undefined
-            : undefined
-          return {
-            ...probe,
-            ...result,
-            ...(requestRef === undefined ? {} : { requestRef }),
-          }
-        } catch {
-          return { ...probe, state: 'degraded', detail: unreachableDetail(probe.id) }
-        }
-      }))
-      setChecks(results)
-      setCheckedAt(new Date().toLocaleTimeString())
-    } finally {
-      refreshInFlight.current = false
-      setIsChecking(false)
-    }
-  }, [])
+  const { checks: outcomes, checkedAt } = Route.useLoaderData()
+  const router = useRouter()
+  const [isChecking, setIsChecking] = useState(false)
 
-  useEffect(() => { void refresh() }, [refresh])
+  const checks: readonly StatusCheck[] = probeOrder.map((id) => {
+    const outcome = outcomes.find((candidate) => candidate.id === id)
+    return isChecking || outcome === undefined
+      ? { id, label: probeLabels[id], state: 'checking', detail: 'Checking now…' }
+      : { id, label: probeLabels[id], state: outcome.state, detail: outcome.detail, ...(outcome.requestRef === undefined ? {} : { requestRef: outcome.requestRef }) }
+  })
+
+  const refresh = () => {
+    if (isChecking) return
+    setIsChecking(true)
+    void router.invalidate()
+      .catch((cause) => captureClientExceptionOnClient(cause))
+      .finally(() => setIsChecking(false))
+  }
 
   const degradedChecks = checks.filter((check) => check.state === 'degraded')
   const degraded = degradedChecks.length > 0
   const recovery = degraded ? recoveryGuidance(degradedChecks) : undefined
-  const statusAnnouncement = isChecking || checkedAt === undefined
+  const statusAnnouncement = isChecking
     ? 'Checking all systems…'
     : degraded
       ? `Status checked. ${degradedChecks.length} of ${checks.length} systems ${degradedChecks.length === 1 ? 'needs' : 'need'} attention: ${degradedChecks.map((check) => check.label).join(', ')}. Last checked ${checkedAt}.`
@@ -102,7 +77,7 @@ function StatusRoute() {
           className="min-h-touch"
           disabled={isChecking}
           aria-busy={isChecking}
-          onClick={() => void refresh()}
+          onClick={refresh}
         >
           <RefreshCwIcon aria-hidden="true" /> {isChecking ? 'Checking status…' : 'Refresh status'}
         </Button>
@@ -159,107 +134,6 @@ function StatusRoute() {
   )
 }
 
-function checkingChecks(): readonly StatusCheck[] {
-  return probes.map((probe) => ({ ...probe, state: 'checking', detail: 'Checking now…' }))
-}
-
-type ProbeAssessment = Pick<StatusCheck, 'state' | 'detail'>
-
-async function assessProbeResponse(
-  id: ProbeId,
-  response: Response,
-): Promise<ProbeAssessment> {
-  if (!response.ok) {
-    return { state: 'degraded', detail: failedResponseDetail(id, response.status) }
-  }
-
-  let body: unknown
-  try {
-    body = await response.json()
-  } catch {
-    return { state: 'degraded', detail: invalidContractDetail(id) }
-  }
-
-  if (!probeContractMatches(id, body)) {
-    return { state: 'degraded', detail: invalidContractDetail(id) }
-  }
-
-  const probe = probes.find((candidate) => candidate.id === id)
-  if (probe === undefined) throw new Error(`Unknown status probe: ${id}`)
-  return { state: 'operational', detail: probe.operationalDetail }
-}
-
-function probeContractMatches(id: ProbeId, body: unknown): boolean {
-  if (!isRecord(body)) return false
-  switch (id) {
-    case 'site':
-      return body.status === 'ok'
-    case 'market':
-      return body.status === 'ready'
-        && isRecord(body.checks)
-        && body.checks.config === 'ready'
-        && body.checks.convex === 'ready'
-    case 'discovery':
-      return body.schemaVersion === SiteDiscoveryManifestSchemaVersion
-        && body.name === 'Agentic Economy'
-        && typeof body.origin === 'string'
-        && isHttpOrigin(body.origin)
-        && Array.isArray(body.endpoints)
-        && isRecord(body.toolGateway)
-    case 'release':
-      return body.kind === 'ok'
-        && typeof body.sourceRevision === 'string'
-        && /^[a-f0-9]{40}$/u.test(body.sourceRevision)
-    case 'catalogue':
-      return body.schemaVersion === 'catalogue-status:v1' && body.status === 'fresh'
-  }
-}
-
-function failedResponseDetail(id: ProbeId, status: number): string {
-  switch (id) {
-    case 'site':
-      return `Public pages may be unavailable (HTTP ${status}).`
-    case 'market':
-      return `New Calls may fail (HTTP ${status}). Check existing Calls before retrying.`
-    case 'discovery':
-      return `Agent discovery and setup may fail (HTTP ${status}).`
-    case 'release':
-      return `New Calls should wait (HTTP ${status}). Existing Calls may still need review.`
-    case 'catalogue':
-      return `Catalogue freshness is unknown (HTTP ${status}). Tool listings may be out of date.`
-  }
-}
-
-function invalidContractDetail(id: ProbeId): string {
-  switch (id) {
-    case 'site':
-      return 'The website returned an invalid health result.'
-    case 'market':
-      return 'The Tool API returned an invalid readiness result. Check existing Calls before retrying.'
-    case 'discovery':
-      return 'The machine-discovery contract is invalid. Agent setup may fail.'
-    case 'release':
-      return 'The release identity is invalid. New Calls should wait.'
-    case 'catalogue':
-      return 'The catalogue is stale, absent, or its last refresh failed. Tool listings may be out of date.'
-  }
-}
-
-function unreachableDetail(id: ProbeId): string {
-  switch (id) {
-    case 'site':
-      return 'The website could not be reached.'
-    case 'market':
-      return 'The Tool API could not be reached. Check existing Calls before retrying.'
-    case 'discovery':
-      return 'Machine discovery could not be reached. Agent setup may fail.'
-    case 'release':
-      return 'Release identity could not be reached. New Calls should wait.'
-    case 'catalogue':
-      return 'Catalogue freshness could not be checked. Tool listings may be out of date.'
-  }
-}
-
 function recoveryGuidance(checks: readonly StatusCheck[]): Readonly<{
   title: string
   description: string
@@ -280,18 +154,4 @@ function recoveryGuidance(checks: readonly StatusCheck[]): Readonly<{
         href: '/support',
         label: 'Get help',
       }
-}
-
-function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
-
-function isHttpOrigin(value: string): boolean {
-  try {
-    const url = new URL(value)
-    return (url.protocol === 'https:' || url.protocol === 'http:')
-      && url.origin === value.replace(/\/$/u, '')
-  } catch {
-    return false
-  }
 }

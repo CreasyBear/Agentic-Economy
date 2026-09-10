@@ -21,6 +21,7 @@ import {
   agentAccountSelfAction,
 } from '@/modules/agent-access/account.actions'
 import {
+  supplyCallsAction,
   supplyConnectionConnectAction,
   supplyConnectionDetailAction,
   supplyConnectionListAction,
@@ -102,6 +103,7 @@ const registeredActions: readonly AnyAction[] = [
   supplyRecheckAction,
   supplyRepublishAction,
   supplyEarningsAction,
+  supplyCallsAction,
   supplyConnectionListAction,
   supplyConnectionDetailAction,
   supplyConnectionConnectAction,

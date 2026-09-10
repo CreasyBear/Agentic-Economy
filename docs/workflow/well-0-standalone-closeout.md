@@ -144,27 +144,7 @@ Deferred to Well 4 (not applied here):
 
 ## Hosted cutover runbook
 
-Not done. Joel's call — production deploy from unpushed local `main`. In order:
-
-```
-1. npx convex export --prod --path <backup>.zip
-   # record sha256
-
-2. # deploy code+schema via the project's normal hosted deploy path
-   # prod market tables were counted empty on 2026-09-09, so the tightened
-   # schema validates trivially
-
-3. npx convex run --prod scheduledFunctionRetirement:cancelByName \
-     '{"names":["marketRegistryGraduation:sweep","marketExternalRegistryRefresh:run","marketExternalRefresh:run"]}'
-   # expect cancelled >= 0, then a second run with cancelled 0
-
-4. npx convex run --prod x402DirectoryIndexRefresh:start '{}'
-   # only if /api/v1/catalogue-status is absent
-
-5. Publication rows created before `searchText` existed are not searchable; republish them through the owner supply path (there is no backfill; the one-off was deleted 2026-09-09 by decision).
-
-6. # live proof: same six checks as dev (§Live proof), against the hosted origin
-```
+See `docs/operations/hosted-cutover-runbook.md` for the consolidated steps (Well 0, Well 3, Wells 1+2, Well 4) in execution order.
 
 ## Follow-ons and Well 4/5 inputs
 
@@ -187,7 +167,7 @@ Not done. Joel's call — production deploy from unpushed local `main`. In order
   | Test white-box exceptions | 65 (42 into capability-supply) |
   | capability-supply files | 163 (142 internal) |
   | `@/modules/common` import count | 391 |
-  | Import cycles | 0 |
+  | Import cycles | 365 cycles found by dependency-cruiser on 2026-09-10; peer cycles 0; barrel and capability-supply internal cycles ratcheted by Well 5 (see well-5-structure-closeout.md) |
   | Routes importing module internals | 0 |
   | Lines: src / tests / convex | 155,620 / 150,983 / 65,528 |
   | Duplicated concepts | 2 directory read paths in market, 3 quote paths, 3 ledgers |

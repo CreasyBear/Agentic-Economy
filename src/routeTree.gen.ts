@@ -93,6 +93,7 @@ import { Route as ApiV1SupplyRepublishRouteImport } from './routes/api.v1.supply
 import { Route as ApiV1SupplyRecheckRouteImport } from './routes/api.v1.supply.recheck'
 import { Route as ApiV1SupplyPublishRouteImport } from './routes/api.v1.supply.publish'
 import { Route as ApiV1SupplyEarningsRouteImport } from './routes/api.v1.supply.earnings'
+import { Route as ApiV1SupplyCallsRouteImport } from './routes/api.v1.supply.calls'
 import { Route as ApiV1ServicesSearchRouteImport } from './routes/api.v1.services.search'
 import { Route as ApiV1ServicesServiceIdRouteImport } from './routes/api.v1.services.$serviceId'
 import { Route as ApiV1MarketToolsSearchRouteImport } from './routes/api.v1.market-tools.search'
@@ -562,6 +563,11 @@ const ApiV1SupplyEarningsRoute = ApiV1SupplyEarningsRouteImport.update({
   path: '/api/v1/supply/earnings',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiV1SupplyCallsRoute = ApiV1SupplyCallsRouteImport.update({
+  id: '/api/v1/supply/calls',
+  path: '/api/v1/supply/calls',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiV1ServicesSearchRoute = ApiV1ServicesSearchRouteImport.update({
   id: '/search',
   path: '/search',
@@ -870,6 +876,7 @@ export interface FileRoutesByFullPath {
   '/api/v1/market-tools/search': typeof ApiV1MarketToolsSearchRoute
   '/api/v1/services/$serviceId': typeof ApiV1ServicesServiceIdRoute
   '/api/v1/services/search': typeof ApiV1ServicesSearchRoute
+  '/api/v1/supply/calls': typeof ApiV1SupplyCallsRoute
   '/api/v1/supply/earnings': typeof ApiV1SupplyEarningsRoute
   '/api/v1/supply/publish': typeof ApiV1SupplyPublishRoute
   '/api/v1/supply/recheck': typeof ApiV1SupplyRecheckRoute
@@ -992,6 +999,7 @@ export interface FileRoutesByTo {
   '/api/v1/market-tools/search': typeof ApiV1MarketToolsSearchRoute
   '/api/v1/services/$serviceId': typeof ApiV1ServicesServiceIdRoute
   '/api/v1/services/search': typeof ApiV1ServicesSearchRoute
+  '/api/v1/supply/calls': typeof ApiV1SupplyCallsRoute
   '/api/v1/supply/earnings': typeof ApiV1SupplyEarningsRoute
   '/api/v1/supply/publish': typeof ApiV1SupplyPublishRoute
   '/api/v1/supply/recheck': typeof ApiV1SupplyRecheckRoute
@@ -1116,6 +1124,7 @@ export interface FileRoutesById {
   '/api/v1/market-tools/search': typeof ApiV1MarketToolsSearchRoute
   '/api/v1/services/$serviceId': typeof ApiV1ServicesServiceIdRoute
   '/api/v1/services/search': typeof ApiV1ServicesSearchRoute
+  '/api/v1/supply/calls': typeof ApiV1SupplyCallsRoute
   '/api/v1/supply/earnings': typeof ApiV1SupplyEarningsRoute
   '/api/v1/supply/publish': typeof ApiV1SupplyPublishRoute
   '/api/v1/supply/recheck': typeof ApiV1SupplyRecheckRoute
@@ -1240,6 +1249,7 @@ export interface FileRouteTypes {
     | '/api/v1/market-tools/search'
     | '/api/v1/services/$serviceId'
     | '/api/v1/services/search'
+    | '/api/v1/supply/calls'
     | '/api/v1/supply/earnings'
     | '/api/v1/supply/publish'
     | '/api/v1/supply/recheck'
@@ -1362,6 +1372,7 @@ export interface FileRouteTypes {
     | '/api/v1/market-tools/search'
     | '/api/v1/services/$serviceId'
     | '/api/v1/services/search'
+    | '/api/v1/supply/calls'
     | '/api/v1/supply/earnings'
     | '/api/v1/supply/publish'
     | '/api/v1/supply/recheck'
@@ -1485,6 +1496,7 @@ export interface FileRouteTypes {
     | '/api/v1/market-tools/search'
     | '/api/v1/services/$serviceId'
     | '/api/v1/services/search'
+    | '/api/v1/supply/calls'
     | '/api/v1/supply/earnings'
     | '/api/v1/supply/publish'
     | '/api/v1/supply/recheck'
@@ -1577,6 +1589,7 @@ export interface RootRouteChildren {
   ApiV1MarketToolsDescribeRoute: typeof ApiV1MarketToolsDescribeRoute
   ApiV1MarketToolsListRoute: typeof ApiV1MarketToolsListRoute
   ApiV1MarketToolsSearchRoute: typeof ApiV1MarketToolsSearchRoute
+  ApiV1SupplyCallsRoute: typeof ApiV1SupplyCallsRoute
   ApiV1SupplyEarningsRoute: typeof ApiV1SupplyEarningsRoute
   ApiV1SupplyPublishRoute: typeof ApiV1SupplyPublishRoute
   ApiV1SupplyRecheckRoute: typeof ApiV1SupplyRecheckRoute
@@ -2185,6 +2198,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiV1SupplyEarningsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/v1/supply/calls': {
+      id: '/api/v1/supply/calls'
+      path: '/api/v1/supply/calls'
+      fullPath: '/api/v1/supply/calls'
+      preLoaderRoute: typeof ApiV1SupplyCallsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/v1/services/search': {
       id: '/api/v1/services/search'
       path: '/search'
@@ -2757,6 +2777,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiV1MarketToolsDescribeRoute: ApiV1MarketToolsDescribeRoute,
   ApiV1MarketToolsListRoute: ApiV1MarketToolsListRoute,
   ApiV1MarketToolsSearchRoute: ApiV1MarketToolsSearchRoute,
+  ApiV1SupplyCallsRoute: ApiV1SupplyCallsRoute,
   ApiV1SupplyEarningsRoute: ApiV1SupplyEarningsRoute,
   ApiV1SupplyPublishRoute: ApiV1SupplyPublishRoute,
   ApiV1SupplyRecheckRoute: ApiV1SupplyRecheckRoute,

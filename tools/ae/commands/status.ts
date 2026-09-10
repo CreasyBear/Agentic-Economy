@@ -13,7 +13,8 @@ import type { CliOptions } from '../lib/args'
 import { resolveAgentAccessCredential } from '../lib/config'
 import { CliFailure, callJson, heading, line, printJson, requireOk, table } from '../lib/output'
 import { usageFailure } from '../lib/help'
-import { continuationCommand, continuationFlags } from '../lib/continuation-command'
+import { cliContinuation, continuationCommand, continuationFlags } from '../lib/continuation-command'
+import { CALL_REF_FORMAT_EXAMPLE } from '../lib/tool-ref-format'
 import {
   connectionContinuationForCli,
   creditContinuationForCli,
@@ -276,11 +277,27 @@ export async function readCallStatus(
   return parseStatusResult(requireOk(outcome, 'Call status'))
 }
 
+/** A missing or malformed call ref cannot be guessed, so name its exact shape and point at ae history to find one. */
+function statusCallRefUsageFailure(options: CliOptions): CliFailure {
+  return new CliFailure(
+    `Usage: ae status <call-ref>. A call ref looks like ${CALL_REF_FORMAT_EXAMPLE}, returned by ae call or ae history.`,
+    {
+      kind: 'INVALID_ARGUMENT',
+      code: 'status-usage',
+      suggestion: 'List your Calls to find an exact call ref.',
+      nextCommand: cliContinuation(options, ['ae', 'history']),
+    },
+  )
+}
+
 export async function runStatusCommand(args: readonly string[], options: CliOptions): Promise<number> {
   const callRef = args[0]?.trim()
   const parsedRef = callStatusInputSchema.safeParse({ callRef })
-  if (!parsedRef.success || args.length > 1) {
+  if (args.length > 1) {
     throw usageFailure('status', 'status-usage')
+  }
+  if (!parsedRef.success) {
+    throw statusCallRefUsageFailure(options)
   }
 
   let body: CallStatusResult

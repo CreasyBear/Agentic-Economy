@@ -6,7 +6,7 @@ Date: 2026-09-10. PR #221 `stabilisation/wells-0-3` → `main`. Plan: `~/.claude
 
 - CI had never been green on this PR. Both Kernel release gate jobs failed on both prior runs (659694b0 at the Well 3 closeout and c00deba8 after Wells 1+2). The Well 3 closeout's "fresh-checkout CI proof" claim rested on local runs only; corrected here and in the Well 3 closeout pointer.
 - Root causes were diagnosed from the CI logs and the installed Convex CLI source, then fixed at the cause. No timeout was raised, no scanner path was excluded, no compatibility shim was added.
-- Result: (filled after merge) both jobs green on `<sha>`; merge commit `<sha>` on `origin/main`; `main` protected with both job contexts required.
+- Result: both jobs green on `d53aa2665`; merge commit `2206b23f2` on `origin/main`; `main` protected with both job contexts required.
 
 ## Root causes and fixes
 
