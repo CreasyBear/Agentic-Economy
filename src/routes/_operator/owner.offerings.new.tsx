@@ -3,7 +3,7 @@ import { useServerFn } from '@tanstack/react-start'
 import { useReverification } from '@clerk/tanstack-react-start'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 
-import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
+import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
 import { AeSupplySourceNativeStart } from '@/components/ae/supply/AeSupplySourceNativeStart'
 import { readProviderWorkspaceIdentityDetailServer } from '@/components/ae/offerings/provider-workspace.functions'
 import {
@@ -16,6 +16,7 @@ import {
   startOwnerSupplySourceConnectionServer,
 } from '@/modules/capability-supply/supply-funnel.functions'
 import { operatorRouteOptions } from '@/lib/operator/route-options'
+import { isLocalE2EAuthBypassEnabled } from '@/lib/client/local-e2e-auth'
 import { z } from 'zod'
 
 export const Route = createFileRoute('/_operator/owner/offerings/new')({
@@ -64,17 +65,34 @@ export const Route = createFileRoute('/_operator/owner/offerings/new')({
 })
 
 function NewOwnerOfferingRoute() {
+  return isLocalE2EAuthBypassEnabled()
+    ? <LocalNewOwnerOfferingRoute />
+    : <ClerkNewOwnerOfferingRoute />
+}
+
+function ClerkNewOwnerOfferingRoute() {
+  const publishRequest = useServerFn(publishOwnerSupplySourceServer)
+  const publish = useReverification(publishRequest)
+  return <NewOwnerOfferingRouteView publish={publish} />
+}
+
+function LocalNewOwnerOfferingRoute() {
+  const publish = useServerFn(publishOwnerSupplySourceServer)
+  return <NewOwnerOfferingRouteView publish={publish} />
+}
+
+function NewOwnerOfferingRouteView({ publish }: Readonly<{
+  publish: (...args: Parameters<typeof publishOwnerSupplySourceServer>) => Promise<Awaited<ReturnType<typeof publishOwnerSupplySourceServer>>>
+}>) {
   const { identity, connections, resume, resumeRequested, sourceUnavailable } = Route.useLoaderData()
   const currentSearch = Route.useSearch()
   const navigate = Route.useNavigate()
   const preview = useServerFn(previewOwnerSupplySourceServer)
   const connect = useServerFn(startOwnerSupplySourceConnectionServer)
-  const publishRequest = useServerFn(publishOwnerSupplySourceServer)
   const saveDraft = useServerFn(saveOwnerSupplySourceDraftServer)
-  const publish = useReverification(publishRequest)
 
   return (
-    <AeOperatorShell operatorRole="owner" title="Add service" description="Connect the interface you already operate. AE discovers the Tools and validates the one you submit." currentPath="/owner/offerings/new" breadcrumbs={[{ label: 'Tools', href: '/owner/offerings' }, { label: 'Add service' }]}>
+    <AeOperatorPage operatorRole="owner" title="Add service" description="Connect the interface you already operate. AE discovers the Tools and validates the one you submit." currentPath="/owner/offerings/new" breadcrumbs={[{ label: 'Tools', href: '/owner/offerings' }, { label: 'Add service' }]}>
       {identity.kind !== 'available' ? <Alert variant="destructive"><AlertTitle>Provider workspace unavailable</AlertTitle><AlertDescription>AE could not confirm the current Business. Return to Tools and try again.</AlertDescription></Alert> : sourceUnavailable ? (
         <Alert variant="destructive"><AlertTitle>Saved source unavailable</AlertTitle><AlertDescription>AE could not read the saved source or current connections. Reload before starting or submitting another connection.</AlertDescription></Alert>
       ) : (<>
@@ -101,6 +119,6 @@ function NewOwnerOfferingRoute() {
           onPublish={(input) => publish({ data: input })}
         />
       </>)}
-    </AeOperatorShell>
+    </AeOperatorPage>
   )
 }

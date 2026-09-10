@@ -3,6 +3,7 @@ import { v } from 'convex/values'
 
 import { internalMutation, internalQuery, mutation, query } from './_generated/server'
 import { agentAccessPrincipalValue } from './agentAccessPrincipals'
+import { sourceWriteArgs } from './sourceWriteAdmission'
 import {
   authorizeConnectOnboardingArgs,
   authorizeConnectOnboardingHandler,
@@ -119,6 +120,12 @@ export const readOwnerProviderEarnings = query({
 })
 
 export const readAgentProviderEarnings = mutation({
-  args: { agentPrincipal: agentAccessPrincipalValue, currency: v.optional(v.string()) },
+  args: {
+    agentPrincipal: agentAccessPrincipalValue,
+    currency: v.optional(v.string()),
+    operationKey: v.string(),
+    correlationId: v.string(),
+    ...sourceWriteArgs,
+  },
   handler: async () => ({ kind: 'error' as const, code: 'source_unavailable' as const }),
 })

@@ -4,7 +4,7 @@ import { useReverification } from '@clerk/tanstack-react-start'
 import { Link } from '@tanstack/react-router'
 
 import { AeFactList } from '@/components/ae/data/AeFactList'
-import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
+import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
 import { AeSection, AeSettingsStack } from '@/components/ae/layout/AeSection'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
@@ -23,7 +23,7 @@ import {
   readAgentConsentDetails,
   type AgentConsentDetails,
   type AgentConsentTarget,
-} from '@/modules/agent-access/public'
+} from '@/modules/agent-access/consent-read-model'
 import { presentConnectionProblem } from '@/modules/agent-access/public'
 
 type PublicAuthorityMode = Exclude<AgentAccessAuthorityMode, 'unrestricted_test_only'>
@@ -341,7 +341,7 @@ function AgentAccessAuthorizeForm({ locator, oauthState, details, submitApproval
   }
 
   return (
-    <AeOperatorShell operatorRole="owner" title="Review agent access" description="Choose what this agent may do, then approve or decline." currentPath="/agent-access">
+    <AeOperatorPage operatorRole="owner" title="Review agent access" description="Choose what this agent may do, then approve or decline." currentPath="/agent-access">
       <AeSettingsStack>
         {status === 'idle' ? (
           <>
@@ -543,7 +543,7 @@ function AgentAccessAuthorizeForm({ locator, oauthState, details, submitApproval
           <ConnectionProblemAlert code={state.errorCode ?? (state.errorReference === undefined ? 'expired_token' : 'source_unavailable')} {...(state.errorReference === undefined ? {} : { technicalReference: state.errorReference })} />
         )}
       </AeSettingsStack>
-    </AeOperatorShell>
+    </AeOperatorPage>
   )
 }
 

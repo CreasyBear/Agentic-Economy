@@ -68,6 +68,9 @@ vi.mock('@tanstack/react-router', () => ({
 
 vi.mock('sonner', () => ({ Toaster: () => null }))
 vi.mock('@/components/ae/layout/AeRouteProgressBar', () => ({ RouteProgressBar: () => null }))
+vi.mock('@/components/ae/layout/AeAppShell', () => ({
+  AeAppShell: ({ children }: { children: ReactNode }) => children,
+}))
 vi.mock('@/components/ae/feedback/AeObservabilityErrorBoundary', () => ({
   AeObservabilityErrorBoundary: ({ children }: { children: ReactNode }) => children,
 }))

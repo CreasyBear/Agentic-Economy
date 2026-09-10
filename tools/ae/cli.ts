@@ -78,6 +78,8 @@ const COMMAND_OPTIONS: Readonly<Record<string, readonly string[]>> = {
   'supply withdraw': ['input', 'idempotency-key'],
   'supply recheck': ['input', 'idempotency-key'],
   'supply republish': ['input', 'idempotency-key'],
+  'supply earnings': [],
+  'supply calls': ['limit', 'cursor', 'state'],
   'supply connect': ['input', 'idempotency-key'],
   'supply reconnect': ['input', 'idempotency-key'],
   'supply revoke': ['input', 'idempotency-key'],

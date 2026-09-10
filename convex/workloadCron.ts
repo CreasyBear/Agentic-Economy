@@ -372,7 +372,13 @@ const CONSEQUENCE_HANDLERS: Record<ConsequenceOperation, ConsequenceHandler> = {
   'capabilityCallX402AuthorizationExpiry:queueExpiredX402Authorization': (ctx, payload) => ctx.runMutation(internal.capabilityCallX402AuthorizationExpiry.queueExpiredX402Authorization, payload as never),
   'capabilitySupply:recordCapabilityProbeResult': (ctx, payload) => ctx.runMutation(internal.capabilitySupply.recordCapabilityProbeResult, payload as never),
   'facilitatorDiscovery:reconcile': (ctx, payload, current) => ctx.runMutation(internal.facilitatorDiscovery.reconcile, { ...payload, workload: current } as never),
-  'moneyTreasury:recordObservation': (ctx, payload) => ctx.runMutation(internal.moneyTreasury.recordObservation, payload as never),
+  'moneyTreasury:recordObservation': async (ctx, payload): Promise<JsonValue> => {
+    const result = await ctx.runMutation(internal.moneyTreasury.recordObservation, payload as never)
+    if (result.kind === 'accepted') {
+      return { kind: result.kind, replayed: result.replayed, observationRef: result.observationRef }
+    }
+    return { kind: result.kind, code: result.code, retryable: result.retryable }
+  },
   'moneyX402PaymentAttempts:reconcileX402PaymentAttempt': (ctx, payload) => ctx.runMutation(internal.moneyX402PaymentAttempts.reconcileX402PaymentAttempt, payload as never),
 }
 

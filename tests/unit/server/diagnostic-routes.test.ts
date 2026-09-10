@@ -111,6 +111,14 @@ describe('operational diagnostics routes', () => {
     mocks.captureClientError.mockClear()
     mocks.captureServerException.mockClear()
     toolSearchMocks.readCapabilityToolSearch.mockClear()
+    // Default: no x402 directory completion on record, so readiness never
+    // reads a live deployment (a running local backend made these tests
+    // report `catalogue: fresh`). Commercial cases override per test.
+    setPublicSourceTransportForTests({
+      query: vi.fn(async () => ({ kind: 'unavailable' as const, refreshState: 'none' as const })),
+      mutation: vi.fn(),
+      action: vi.fn(),
+    } as never)
   })
 
   afterEach(() => {

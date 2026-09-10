@@ -335,7 +335,7 @@ describe('market-terminal CLI error contracts', () => {
       kind: 'HELP',
       command: 'account disconnect',
       usage: 'ae account disconnect [market|provider]',
-      summary: expect.stringMatching(/Unqualified removes buyer\/market; pass provider/u),
+      summary: expect.stringMatching(/buyer by default; provider with `provider`/u),
     })
     const supplyHelp = await runCliInProcess(['help', 'supply', 'status', '--json'])
     expect(supplyHelp.status).toBe(0)
