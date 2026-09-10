@@ -14,6 +14,10 @@ product and report papercuts.
 Local start path rebuilt and proven live. Agent swarm ran against the live stack: 49 papercuts
 found, 26 fixed same day, 23 filed to owning wells. Hosted cutover not deployed — Joel's call.
 
+## Correction (2026-09-10)
+
+The Well 3 live proof listed the seeded sandbox Tool because the seed wrote its readiness observation directly. That was fabricated state; the hourly readiness probe later marked the Tool degraded and the qualifier excluded it. Wells 1+2 removed the seed's readiness write, pointed the Tool at a real in-app counterparty (`/api/v1/sandbox-reference`), and kept the SSRF guard untouched, so on loopback the Tool is not listed by design. Well 3's exit criterion 1 is therefore restated: fresh checkout proves discovery pass, connect, and funding diagnostics; quoting is `skipped` on loopback and provable on a hosted origin.
+
 ## What changed
 
 ### Launcher (`tools/dev/local-dev.mjs`)

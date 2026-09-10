@@ -161,9 +161,7 @@ If your `.env.development.local` sets `VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E=false
 (real Clerk locally), start with `VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E=true npm run dev:local`
 for the bypass, because the process environment now wins over dotenv files.
 Then `npm run ae -- doctor --json --base-url http://127.0.0.1:3024` shows three groups:
-discovery, quoting, purchase. After connecting, `ae doctor` reports quoting `warn`
-at the funding gate until the Account is funded (Well 2), which is the expected
-fresh-checkout state.
+discovery, quoting, purchase. On a loopback origin the doctor reports quoting `skipped`: the seeded sandbox Tool is only listed where the readiness probe can reach it, which is a public HTTPS origin (a preview or hosted deployment). Locally you can prove Discover, connect and the funding diagnostics; Quote and Call are proven on a hosted origin with credentials (tier 1).
 
 Note: `npm run dev` starts Vite only and is not a valid start path.
 
