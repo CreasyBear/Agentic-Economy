@@ -25,7 +25,8 @@ graphify-out/
 /.agents/skills/*
 !/.agents/skills/deployment-operations/
 !/.agents/skills/deployment-operations/**
-/.claude/
+/.claude/*
+!/.claude/settings.json
 /agent/
 /skills-lock.json
 /PAPERCUTS.md
