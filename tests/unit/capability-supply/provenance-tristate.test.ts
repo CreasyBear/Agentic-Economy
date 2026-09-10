@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest'
 
 import { canonicalDigest } from '@/modules/common/canonical-digest'
-import type { SupplyCommandActor } from '@/modules/capability-supply/internal/shared/command-envelope'
 import {
   CAPABILITY_PUBLICATION_AUTHORITY_MODES,
   defineCapabilityPublicationProvenance,
   listingTier,
   validCapabilityPublicationAuthority,
-} from '@/modules/capability-supply/internal/publication/provenance'
+  type SupplyCommandActor,
+} from '@/modules/capability-supply/public'
 
 const sourceDigest = canonicalDigest({ seed: 'observable-provenance-test' })
 

@@ -5,6 +5,7 @@ import { exactAmountSchema } from '@/modules/money/public'
 import { CURRENT_TOOL_CALL_VIA, REGISTRY_TOOLS_SCHEMA_VERSION } from './internal/tool-projection-types'
 
 export { REGISTRY_TOOLS_SCHEMA_VERSION }
+export { decodePublicSchema, projectPublicSchema } from './internal/tool-projection-wire-schema'
 
 import type {
   ToolCompareInput,

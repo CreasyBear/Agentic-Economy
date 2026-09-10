@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 
 import { prepareSuppliedCandidateQuote } from '@/modules/capability-supply/server'
-import { createDevelopmentReleaseSignal } from '@/modules/action-execution'
+import { createDevelopmentReleaseSignal } from '@/modules/action-execution/runtime'
 import {
   actor,
   inMemoryTracer,

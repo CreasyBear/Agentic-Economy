@@ -2,15 +2,13 @@ import { describe, expect, it } from 'vitest'
 
 import {
   capabilityOfferingRegistrationHash,
-  defineCapabilityOfferingRegistration,
-} from '@/modules/capability-supply/public'
-import {
   contractRefFromRow,
+  defineCapabilityOfferingRegistration,
   offeringIntegrityIsValid,
   offeringRegistrationFromRow,
   writablePresentation,
   type CapabilityOfferingRow,
-} from '@/modules/capability-supply/internal/offering'
+} from '@/modules/capability-supply/public'
 import type { ExactAmount } from '@/modules/money/public'
 
 const contractRef = {

@@ -2,10 +2,10 @@ import { describe, expect, it, vi } from 'vitest'
 
 import {
   republishPreparedCapabilityCommand,
+  type OperationKeyRecord,
   type PublicationCommandPorts,
   type RepublishPreparedCapabilityCommandInput,
-} from '@/modules/capability-supply/internal/publication'
-import type { OperationKeyRecord } from '@/modules/capability-supply/internal/tool-ledger'
+} from '@/modules/capability-supply/public'
 
 import {
   actor,

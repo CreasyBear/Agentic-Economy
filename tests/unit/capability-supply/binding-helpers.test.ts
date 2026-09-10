@@ -1,16 +1,14 @@
 import { describe, expect, it } from 'vitest'
 
 import {
-  capabilityBindingRegistrationHash,
-  defineCapabilityTransportBindingRegistration,
-} from '@/modules/capability-supply/public'
-import {
   bindingIntegrityIsValid,
   bindingRegistrationAudit,
   bindingRegistrationFromRow,
+  capabilityBindingRegistrationHash,
+  defineCapabilityTransportBindingRegistration,
   transportAdmissionInput,
   type CapabilityBindingRow,
-} from '@/modules/capability-supply/internal/binding'
+} from '@/modules/capability-supply/public'
 
 const contractRef = {
   capabilityId: 'reference.lookup',

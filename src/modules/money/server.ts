@@ -35,6 +35,9 @@ export {
   paymentBindingSchema,
   validatePaymentBinding,
 } from './internal/payment-binding'
+export {
+  handleStripeWebhookRequest as handleRawStripeWebhookRequest,
+} from './internal/stripe-webhook'
 export type {
   AccountFundingCommandView,
   AccountFundingBeginInput,

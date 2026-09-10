@@ -43,7 +43,7 @@ vi.mock('@/modules/registry/registry.functions', () => ({
 }))
 
 import { actionToToolContract, findAction } from '@/modules/actions'
-import type { TransferBoundaryEvent } from '@/modules/action-execution/transfer-evaluator'
+import type { TransferBoundaryEvent } from '@/modules/action-execution/runtime'
 
 describe('ADR-009 direct-path negative control', () => {
   it('instruments the selected direct first-contact/read path; Founder must supersede stale direct-booking wording', async () => {

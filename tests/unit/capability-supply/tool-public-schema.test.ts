@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { projectPublicSchema, decodePublicSchema } from '@/modules/capability-supply/internal/tool-projection-wire-schema'
+import { projectPublicSchema, decodePublicSchema } from '@/modules/capability-supply/tool-schemas'
 
 describe('public Tool schemas', () => {
   it('round-trips a bounded provider schema with more than 128 properties', () => {

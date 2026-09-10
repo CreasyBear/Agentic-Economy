@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   buildRegistrySearchDocumentsForCatalog,
   documentMatchesRegistryQuery,
-} from '@/modules/registry/internal/search-documents'
+} from '@/modules/registry/public'
 import type { PublicBusinessCatalogApiV2Dto } from '@/modules/registry/public'
 
 function catalogFor(slug: string, name: string, category: string, offeringName: string, summary: string): PublicBusinessCatalogApiV2Dto {

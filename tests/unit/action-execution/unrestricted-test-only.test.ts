@@ -3,11 +3,11 @@ import { spawnSync } from 'node:child_process'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
-import * as actionExecutionPublic from '@/modules/action-execution'
+import * as actionExecutionPublic from '@/modules/action-execution/runtime'
 import {
   evaluateSpendingPolicy,
   SpendingPolicyStore,
-} from '@/modules/action-execution'
+} from '@/modules/action-execution/runtime'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
   runUnrestrictedTestOnlyEvidence,

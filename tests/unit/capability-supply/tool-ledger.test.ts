@@ -9,17 +9,15 @@ import {
   registerCapabilityOfferingCommand,
   replayOperationResult,
   setCapabilitySupplyEligibilityCommand,
+  storedSupplyAuditEffectRef,
   succeedOperation,
+  supplyAuditEffectRef,
+  type CapabilityBindingRow,
+  type CapabilityOfferingRow,
   type OperationLedgerPorts,
   type OperationKeyRecord,
-} from '@/modules/capability-supply/internal/tool-ledger'
-import type { CapabilityBindingRow } from '@/modules/capability-supply/internal/binding'
-import type { CapabilityOfferingRow } from '@/modules/capability-supply/internal/offering'
-import {
-  storedSupplyAuditEffectRef,
-  supplyAuditEffectRef,
   type SupplyAuditEventRow,
-} from '@/modules/capability-supply/internal/shared'
+} from '@/modules/capability-supply/public'
 
 const digest = `sha256:${'a'.repeat(64)}`
 const actor = { kind: 'admin' as const, ref: 'admin-1' }

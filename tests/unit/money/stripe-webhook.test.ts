@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { handleStripeWebhookRequest } from '../../../src/modules/money/internal/stripe-webhook'
+import { handleRawStripeWebhookRequest as handleStripeWebhookRequest } from '../../../src/modules/money/server'
 import type { StripeMoneyWebhookEvent } from '../../../src/modules/money/server'
 
 describe('money Stripe webhook handler', () => {

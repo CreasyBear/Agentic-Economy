@@ -4,7 +4,7 @@ import {
   FACILITATOR_DISCOVERY_MAX_BODY_BYTES,
   FACILITATOR_DISCOVERY_MAX_PAGES,
   fetchFacilitatorDiscoveryPages,
-} from '@/modules/capability-supply/internal/facilitator-discovery-client'
+} from '@/modules/capability-supply/server'
 
 function response(document: unknown): Response {
   return new Response(JSON.stringify(document), {

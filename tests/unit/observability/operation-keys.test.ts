@@ -2,8 +2,11 @@ import { describe, expect, it } from 'vitest'
 
 import { brandNonEmpty } from '@/modules/common/ids'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
-import type { OperationKeyRecord } from '@/modules/observability/public'
-import { markOperationSucceeded, reserveOperationKey } from '@/modules/observability/internal/operation-keys'
+import {
+  markOperationSucceeded,
+  reserveOperationKey,
+  type OperationKeyRecord,
+} from '@/modules/observability/public'
 
 describe('operation key contract', () => {
   it('reserves a new operation key and replays same-key successes', () => {

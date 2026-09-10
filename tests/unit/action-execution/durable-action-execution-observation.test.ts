@@ -11,7 +11,7 @@ import {
   createDevelopmentDurableState,
   createDurableActionExecutionTracer,
   type PreparedExecution,
-} from '@/modules/action-execution'
+} from '@/modules/action-execution/runtime'
 import { describe, expect, it, vi } from 'vitest'
 
 const lateObservationVector = {

@@ -14,7 +14,7 @@ import {
   configuredX402RpcUrl,
   configuredX402RpcUrls,
   readX402EvmReceipt,
-} from '@/modules/capability-execution/call-worker/x402Route'
+} from '@/modules/capability-execution/call-runtime'
 
 const NETWORK = 'eip155:8453'
 const ASSET = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913'

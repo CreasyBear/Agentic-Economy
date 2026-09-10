@@ -173,6 +173,40 @@ export type CallReserveOutcome =
   | Readonly<{ kind: 'terminal'; result: CallResult }>
   | Readonly<{ kind: 'reserved' } & CallReserved>
 
+function callIdentityMaterial(input: Readonly<{
+  principalId: string
+  credentialId: string
+  applicationRef: string
+  environment: AgentAccessPrincipal['environment']
+  toolRef: string
+  idempotencyKey: string
+}>): Readonly<{
+  principalId: string
+  credentialId: string
+  applicationRef: string
+  environment: AgentAccessPrincipal['environment']
+  operationRef: string
+  idempotencyKey: string
+}> {
+  return {
+    principalId: input.principalId,
+    credentialId: input.credentialId,
+    applicationRef: input.applicationRef,
+    environment: input.environment,
+    operationRef: input.toolRef,
+    idempotencyKey: input.idempotencyKey,
+  }
+}
+
+function callRefFromIdentityAndGeneration(
+  identity: ReturnType<typeof callIdentityMaterial>,
+  grantGeneration: number,
+): string {
+  return `operation-invocation:v1:${canonicalDigest({ ...identity, grantGeneration }).slice(7)}`
+}
+
+// credentialId is the admitted effect identity and grantGeneration binds the authorising grant;
+// replay lookup instead uses the Principal-keyed idempotency index (Wells 1+2).
 export function canonicalCallRef(input: Readonly<{
   principalId: string
   credentialId: string
@@ -182,15 +216,7 @@ export function canonicalCallRef(input: Readonly<{
   toolRef: string
   idempotencyKey: string
 }>): string {
-  return `operation-invocation:v1:${canonicalDigest({
-    principalId: input.principalId,
-    credentialId: input.credentialId,
-    applicationRef: input.applicationRef,
-    grantGeneration: input.grantGeneration,
-    environment: input.environment,
-    operationRef: input.toolRef,
-    idempotencyKey: input.idempotencyKey,
-  }).slice(7)}`
+  return callRefFromIdentityAndGeneration(callIdentityMaterial(input), input.grantGeneration)
 }
 
 export async function admitCall(input: Readonly<{

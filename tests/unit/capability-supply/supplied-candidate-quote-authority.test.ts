@@ -8,7 +8,7 @@ import {
 import {
   type ActionExecutionOrigin,
   createInMemoryActionExecutionTracer,
-} from '@/modules/action-execution'
+} from '@/modules/action-execution/runtime'
 import {
   actor,
   candidate,

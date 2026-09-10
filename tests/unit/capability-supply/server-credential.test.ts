@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   cdpX402CustodyBudgetRef,
   cdpX402CustodyConfigurationFromEnvironment,
-} from '@/modules/capability-supply/internal/server-credential'
+} from '@/modules/capability-supply/server'
 
 const validEnvironment = {
   AE_X402_CUSTODY_ENABLED: 'true',

@@ -22,7 +22,7 @@ import {
   type ActionExecutionOrigin,
   type ExecutionActor,
   type ReconciliationEvidenceMaterial,
-} from '@/modules/action-execution'
+} from '@/modules/action-execution/runtime'
 
 const actor: ExecutionActor = {
   callerRef: 'mock:caller:external-agent',

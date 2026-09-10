@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   createAgentAuditEnvelope,
   type AgentAuditInput,
-} from '@/modules/agent-access/agent-audit'
+} from '@/modules/agent-access/public'
 
 const vector = {
   actorPrincipalRef: `prn_${'1'.repeat(32)}`,

@@ -38,7 +38,7 @@ vi.mock('@/modules/capability-supply/server', () => ({
 import {
   readX402Authorization,
   replayManagedX402SigningForRecovery,
-} from '@/modules/capability-execution/call-worker/x402Route'
+} from '@/modules/capability-execution/call-runtime'
 
 const CUSTODY_REF = 'custody:attempt-one'
 const AUTHORIZATION_DIGEST = 'sha256:authorization-one'

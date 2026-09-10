@@ -12,7 +12,7 @@ vi.mock('@/lib/server/convex-source', async (importOriginal) => ({
 import {
   readOwnerPayoutTransferThroughSource,
   runOwnerPayoutTransferThroughSource,
-} from '@/modules/money/internal/payout-transfer-http'
+} from '@/modules/money/server'
 
 const owner = {
   kind: 'available' as const,

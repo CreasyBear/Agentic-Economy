@@ -10,6 +10,17 @@ import {
 } from '@/modules/common/tool-ref'
 import { stableStringify, type StableHashValue } from '@/modules/common/stable-hash'
 
+import {
+  authoritySchema,
+  cancellationSchema,
+  continuationSchema,
+  type CapabilityCancellation,
+  type CapabilityContinuation,
+  type CapabilityTransportAuthority,
+} from './internal/transport-terms-schema'
+
+export type { CapabilityCancellation, CapabilityContinuation, CapabilityTransportAuthority }
+
 declare const mappingRefBrand: unique symbol
 
 export { isPublicToolRef }
@@ -302,6 +313,7 @@ export {
   normalizeCapabilityPublication,
   preflightOpenApiHttpDocument,
 } from './internal/publication-importers'
+export { validateOpenApiDocument } from './internal/openapi-import/validation'
 export { admitProviderSchema } from './internal/admit-provider-schema'
 export type {
   AdmitCredentialSpec,
@@ -309,6 +321,7 @@ export type {
   AdmitProviderSchemaNormalized,
   AdmitProviderSchemaRefusal,
   AdmitProviderSchemaResult,
+  SchemaDereferencer,
 } from './internal/admit-provider-schema'
 export type {
   CanonicalCapabilityPublicationDraft,
@@ -342,6 +355,7 @@ export {
   publishedToolMaterialMatches,
 } from './published-tool'
 export {
+  createMemoryCapabilityLiquidityPort,
   recordCapabilityCallObservation,
   recordCapabilityDepthObservation,
 } from './internal/liquidity'
@@ -368,6 +382,12 @@ export type {
 } from './published-tool'
 export {
   bindingObservedRowDigest,
+  offeringStatusAfterBindingQuarantine,
+  quarantineBindingAudit,
+  quarantineParentAudit,
+  quarantineParentUpdatedDisposition,
+  validQuarantineAuditPayload,
+  type QuarantineParentDisposition,
 } from './internal/quarantine'
 export {
   registerCapabilityTransportBinding,
@@ -376,17 +396,46 @@ export {
   connectionAuthoritySnapshotIsValid,
   connectionAuthoritySnapshotMatches,
   connectionAuthoritySnapshotsEqual,
+  bindingIntegrityIsValid,
+  bindingRegistrationAudit,
+  bindingRegistrationFromRow,
+  transportAdmissionInput,
   type BindingInsertRow,
   type BindingWritePorts,
   type CapabilityBindingRow,
   type CapabilityConnectionAuthoritySnapshot,
 } from './internal/binding'
+export { dereferenceOpenApiSchema } from './internal/schema-deref'
+export type { RotateCapabilityTransportBindingAuthorityPatch } from './internal/binding/write'
+export type {
+  CdpX402PaymentSignerDependencies,
+  CdpX402PaymentSigningIntent,
+  CdpX402RequestFingerprintContext,
+} from './internal/cdp-x402-payment-signer'
+export { default as timezonePaymentRequired20260819Fixture } from './internal/x402-bazaar-fixtures/timezone-payment-required-2026-08-19.json'
+export { default as syntheticPostPaymentRequiredFixture } from './internal/x402-bazaar-fixtures/synthetic-post-payment-required.json'
+export { default as onesourcePathRequest20260908Fixture } from './internal/x402-bazaar-fixtures/onesource-path-request-2026-09-08.json'
+export { default as onesourceUnionRequest20260908Fixture } from './internal/x402-bazaar-fixtures/onesource-union-request-2026-09-08.json'
+export {
+  decideFacilitatorDiscoveryItem,
+  FACILITATOR_DISCOVERY_URLS,
+  isAllowlistedFacilitatorDiscoveryUrl,
+  parseFacilitatorDiscoveryPage,
+  paymentRequiredFromDiscoveryItem,
+} from './internal/facilitator-discovery-ingest'
 export {
   MAX_ELIGIBLE_SUPPLY,
+  compareStableIdentifier,
+  desiredEligibility,
+  eligibilityPublicResult,
+  eligibilityReplayAudits,
+  eligibleBindingProjection,
+  eligibleOfferingProjection,
   getEligibleExactCapabilitySupply,
   listIntegratedCapabilitySupply,
   listRouteableCapabilitySupply,
   setCapabilitySupplyEligibility,
+  validEligibilityInput,
   type EligiblePublicationRow,
   type EligiblePublishedBusiness,
   type EligibleSupplyPorts,
@@ -410,17 +459,26 @@ export {
   type SuppliedCandidateQualification,
   type SuppliedCandidateRef,
 } from './internal/graph'
+export type {
+  ProbeDigestBinding,
+  ProbeDigestOffering,
+  ProbeDigestPublication,
+} from './internal/graph/probe-digest'
 export {
   contractRefFromRow,
+  offeringIntegrityIsValid,
   offeringRegistrationFromRow,
   registerCapabilityOffering,
+  writablePresentation,
   type CapabilityOfferingRow,
   type OfferingInsertRow,
   type OfferingWritePorts,
 } from './internal/offering'
 export {
   beginOperation,
+  ensureSupplyAudit,
   failOperation,
+  isTrustedQuarantineParent,
   replayOperationResult,
   succeedOperation,
   registerCapabilityBindingCommand,
@@ -432,14 +490,17 @@ export {
   type OperationBeginResult,
 } from './internal/tool-ledger'
 export {
+  INITIAL_PUBLICATION_LIFECYCLE,
   decodeConvexPublicationSource,
   isDirectPublicationSource,
   publicationLifecycle,
   publicationMaterialContainsCredential,
   publicationProjection,
+  publicationValidationFix,
   publishPreparedCapabilityCommand,
   republishPreparedCapabilityCommand,
   refreshCapabilityCommand,
+  validateCapabilityPublication,
   withdrawCapabilityCommand,
   type PublicationCommandPorts,
   type PublicationCommandRow,
@@ -447,6 +508,7 @@ export {
   type PublishPreparedCapabilityCommandInput,
   type PublishPreparedCapabilityCommandResult,
   type PublishPreparedCapabilityRefusal,
+  type RepublishPreparedCapabilityCommandInput,
 } from './internal/publication'
 export {
   admitPublicationDraft,
@@ -467,6 +529,7 @@ export {
   type CapabilityPublicationProvenance,
   type CapabilityPublicationSourceIdentity,
 } from './internal/publication'
+export { listingTier } from './internal/publication/provenance'
 export {
   admitCapabilityPublicationCommand,
   type AdmitCapabilityPublicationInput,
@@ -475,7 +538,13 @@ export {
   type CapabilityPublicationAdmissionSource,
 } from './internal/publication'
 export {
+  publicationSourceDescriptorJson,
+  publicationSourceDigest,
+} from './internal/publication/source'
+export {
   boundedTrimmed,
+  storedSupplyAuditEffectRef,
+  supplyAuditEffectRef,
   validEvidenceRefs,
   validRegistrationContext,
   type RegistrationContext,
@@ -592,22 +661,6 @@ const offeringSchema = z.strictObject({
   searchTerms: z.array(z.string().trim().min(1).max(120)).min(1).max(64),
   registrationEvidenceRefs: evidenceRefs,
 })
-const continuationSchema = z.strictObject({
-  kind: z.enum(['single_response', 'adapter_managed']),
-  evidenceRefs,
-})
-const cancellationSchema = z.strictObject({
-  kind: z.enum(['unsupported', 'adapter_managed']),
-  evidenceRefs,
-})
-const authoritySchema = z.discriminatedUnion('kind', [
-  z.strictObject({ kind: z.literal('public_upstream') }),
-  z.strictObject({
-    kind: z.literal('provider_connection'),
-    connectionRef: identifier,
-    providerRef: identifier,
-  }),
-])
 const bindingSchema = z.strictObject({
   bindingId: identifier,
   offeringId: identifier,
@@ -621,13 +674,10 @@ const bindingSchema = z.strictObject({
   registrationEvidenceRefs: evidenceRefs,
 })
 
-export type CapabilityTransportAuthority = Readonly<z.infer<typeof authoritySchema>>
 export type CapabilityTransportBindingRegistration = Readonly<z.infer<typeof bindingSchema>>
 
 export type CapabilityOfferingRegistration = Readonly<z.infer<typeof offeringSchema>>
 export type CapabilityOfferingOrigin = Readonly<z.infer<typeof offeringOriginSchema>>
-export type CapabilityContinuation = Readonly<z.infer<typeof continuationSchema>>
-export type CapabilityCancellation = Readonly<z.infer<typeof cancellationSchema>>
 export type AdmittedTransportMaterial = Readonly<{
   configJson: string
   configDigest: string

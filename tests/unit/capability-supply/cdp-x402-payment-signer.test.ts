@@ -4,7 +4,14 @@ import { privateKeyToAccount } from 'viem/accounts'
 import { describe, expect, it, vi } from 'vitest'
 
 import {
+  type CdpX402PaymentSignerDependencies,
+  type CdpX402PaymentSigningIntent,
+  type CdpX402RequestFingerprintContext,
+} from '@/modules/capability-supply/public'
+import {
   BASE_NETWORK,
+  BASE_SEPOLIA_NETWORK,
+  BASE_SEPOLIA_USDC_ADDRESS,
   BASE_USDC_ADDRESS,
   cdpX402PolicyRulesDigest,
   cdpX402RequestFingerprint,
@@ -12,13 +19,6 @@ import {
   observeCdpX402Treasury,
   readCdpX402PaymentAuthorization,
   replayCdpX402PaymentSigningIntent,
-  type CdpX402PaymentSignerDependencies,
-  type CdpX402PaymentSigningIntent,
-  type CdpX402RequestFingerprintContext,
-} from '@/modules/capability-supply/internal/cdp-x402-payment-signer'
-import {
-  BASE_SEPOLIA_NETWORK,
-  BASE_SEPOLIA_USDC_ADDRESS,
   type X402AeEnvironment,
 } from '@/modules/capability-supply/server'
 import { canonicalDigest } from '@/modules/common/canonical-digest'

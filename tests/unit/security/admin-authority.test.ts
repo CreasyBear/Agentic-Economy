@@ -2,7 +2,7 @@
 import { convexTest } from 'convex-test'
 import { describe, expect, it } from 'vitest'
 
-import { canBootstrapOwnerAdmin, requireAdminAuthority } from '@/modules/security/internal/admin-authority'
+import { canBootstrapOwnerAdmin, requireAdminAuthority } from '@/modules/security/public'
 import {
   bootstrapOwnerAdmin,
   createEmptyAdminAuthorityState,

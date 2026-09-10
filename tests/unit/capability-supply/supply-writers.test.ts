@@ -1,31 +1,25 @@
 import { describe, expect, it } from 'vitest'
 
 import {
-  connectionAuthoritySnapshotFromProviderConnection,
-  registerCapabilityTransportBinding,
-  type BindingInsertRow,
-  type BindingWritePorts,
-  type CapabilityBindingRow,
-} from '@/modules/capability-supply/internal/binding'
-import {
-  setCapabilitySupplyEligibility,
-  type EligibilityWritePorts,
-} from '@/modules/capability-supply/internal/eligibility'
-import {
-  registerCapabilityOffering,
-  type CapabilityOfferingRow,
-  type OfferingInsertRow,
-  type OfferingWritePorts,
-} from '@/modules/capability-supply/internal/offering'
-import {
   capabilityBindingEligibilityHash,
   capabilityBindingRegistrationHash,
   capabilityToolId,
   capabilityOfferingEligibilityHash,
   capabilityOfferingRegistrationHash,
+  connectionAuthoritySnapshotFromProviderConnection,
   createPublicToolRef,
   defineCapabilityOfferingRegistration,
   defineCapabilityTransportBindingRegistration,
+  registerCapabilityOffering,
+  registerCapabilityTransportBinding,
+  setCapabilitySupplyEligibility,
+  type BindingInsertRow,
+  type BindingWritePorts,
+  type CapabilityBindingRow,
+  type CapabilityOfferingRow,
+  type EligibilityWritePorts,
+  type OfferingInsertRow,
+  type OfferingWritePorts,
 } from '@/modules/capability-supply/public'
 import {
   createProviderConnection,

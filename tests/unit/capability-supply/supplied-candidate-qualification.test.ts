@@ -33,7 +33,7 @@ import {
   type ProviderConnection,
 } from '@/modules/capability-supply/provider-connection'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
-import { probeTargetDigest } from '@/modules/capability-supply/internal/graph'
+import { probeTargetDigest } from '@/modules/capability-supply/public'
 import { pricingConfigDigest } from '@/modules/money/public'
 import { capabilityContractV2 } from '../../fixtures/capability-contract-v2'
 

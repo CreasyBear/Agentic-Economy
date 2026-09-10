@@ -6,7 +6,7 @@ import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
   invokeProviderConsequenceViaVercel,
   providerConsequenceX402PaymentCustodyAvailable,
-} from '@/modules/capability-execution/call-worker/providerConsequenceBridge'
+} from '@/modules/capability-execution/call-runtime'
 import {
   providerConsequenceInvocationDigest,
   providerConsequenceTicketClaimsDigest,

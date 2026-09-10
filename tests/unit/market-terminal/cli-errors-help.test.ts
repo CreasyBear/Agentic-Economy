@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest'
 
 import { parseArgs } from '../../../tools/ae/lib/args'
-import { spawnCliSync } from './cli-errors-harness'
+import { runCliInProcess, spawnCliSync } from './cli-errors-harness'
 
 describe('market-terminal CLI error contracts', () => {
-  it('exposes one Tool command family and rejects removed legacy namespaces', () => {
-    const help = spawnCliSync(['help', '--json'])
+  it('exposes one Tool command family and rejects removed legacy namespaces', async () => {
+    const help = await runCliInProcess(['help', '--json'])
     expect(help.status).toBe(0)
     expect(help.stderr).toBe('')
     const helpBody = JSON.parse(help.stdout) as {
@@ -75,7 +75,7 @@ describe('market-terminal CLI error contracts', () => {
       expect(commands).not.toHaveProperty(legacy)
     }
 
-    const textHelp = spawnCliSync(['help'])
+    const textHelp = await runCliInProcess(['help'])
     expect(textHelp.status).toBe(0)
     expect(textHelp.stderr).toBe('')
     const groupHeadings = [
@@ -107,7 +107,7 @@ describe('market-terminal CLI error contracts', () => {
     expect(textHelp.stdout).not.toContain('ae search ["<job>"]')
     expect(textHelp.stdout).not.toContain('127.0.0.1:3024')
 
-    const unknown = spawnCliSync(['feeds', '--json'])
+    const unknown = await runCliInProcess(['feeds', '--json'])
     expect(unknown.status).toBe(1)
     expect(unknown.stderr).toBe('')
     expect(JSON.parse(unknown.stdout)).toMatchObject({
@@ -117,8 +117,8 @@ describe('market-terminal CLI error contracts', () => {
     })
   }, 30_000)
 
-  it('prints a canonical JSON envelope for parse failures without a stack', () => {
-    const result = spawnCliSync(['manifest', '--json', '--unknown-option'])
+  it('prints a canonical JSON envelope for parse failures without a stack', async () => {
+    const result = await runCliInProcess(['manifest', '--json', '--unknown-option'])
 
     expect(result.status).toBe(1)
     expect(result.signal).toBeNull()
@@ -134,9 +134,9 @@ describe('market-terminal CLI error contracts', () => {
     expect(envelope).not.toHaveProperty('stack')
   }, 15_000)
 
-  it('does not echo unknown-command tokens that may embed secrets', () => {
+  it('does not echo unknown-command tokens that may embed secrets', async () => {
     const secretToken = 'api_key=FAKE_SENTINEL_UNKNOWN_KEY_197e'
-    const result = spawnCliSync([secretToken, '--json'])
+    const result = await runCliInProcess([secretToken, '--json'])
 
     expect(result.status).toBe(1)
     expect(result.stderr).toBe('')
@@ -149,12 +149,12 @@ describe('market-terminal CLI error contracts', () => {
     })
   }, 15_000)
 
-  it('rejects repeated scalar long options instead of silently choosing the last value', () => {
+  it('rejects repeated scalar long options instead of silently choosing the last value', async () => {
     for (const args of [
       ['--base-url', 'http://127.0.0.1:3000', '--base-url', 'http://127.0.0.1:3001', '--json'],
       ['--idempotency-key', 'first', '--idempotency-key', 'second', '--json'],
     ]) {
-      const result = spawnCliSync(args)
+      const result = await runCliInProcess(args)
 
       expect(result.status).toBe(1)
       expect(result.stderr).toBe('')
@@ -167,8 +167,8 @@ describe('market-terminal CLI error contracts', () => {
     }
   }, 15_000)
 
-  it('rejects options that the selected command does not consume', () => {
-    const result = spawnCliSync(['manifest', '--limit', '3', '--json'])
+  it('rejects options that the selected command does not consume', async () => {
+    const result = await runCliInProcess(['manifest', '--limit', '3', '--json'])
 
     expect(result.status).toBe(1)
     expect(result.stderr).toBe('')
@@ -180,8 +180,8 @@ describe('market-terminal CLI error contracts', () => {
     })
   }, 15_000)
 
-  it('accepts --input for supply preview instead of rejecting it as an unsupported option', () => {
-    const result = spawnCliSync([
+  it('accepts --input for supply preview instead of rejecting it as an unsupported option', async () => {
+    const result = await runCliInProcess([
       'supply', 'preview', '--input', '{"kind":"openapi","environment":"sandbox"}', '--json',
     ])
 
@@ -198,14 +198,14 @@ describe('market-terminal CLI error contracts', () => {
     })
   }, 15_000)
 
-  it('does not advertise or accept client-side truncation for provider connections', () => {
-    const help = spawnCliSync(['help', 'supply', 'connections', '--json'])
+  it('does not advertise or accept client-side truncation for provider connections', async () => {
+    const help = await runCliInProcess(['help', 'supply', 'connections', '--json'])
     expect(help.status).toBe(0)
     expect(JSON.parse(help.stdout)).toMatchObject({
       usage: 'ae supply connections <businessId> [lifecycle]',
     })
 
-    const result = spawnCliSync([
+    const result = await runCliInProcess([
       'supply',
       'connections',
       'business:one',
@@ -238,8 +238,8 @@ describe('market-terminal CLI error contracts', () => {
     expect(parsed.positionals).toEqual(['operation:v1:first', 'operation:v1:second'])
   })
 
-  it('keeps search compact while still accepting the global technical flag', () => {
-    const help = spawnCliSync(['help', 'search', '--json'])
+  it('keeps search compact while still accepting the global technical flag', async () => {
+    const help = await runCliInProcess(['help', 'search', '--json'])
     expect(help.status).toBe(0)
     expect(help.stderr).toBe('')
     expect(JSON.parse(help.stdout)).toMatchObject({
@@ -260,7 +260,7 @@ describe('market-terminal CLI error contracts', () => {
     const parsed = parseArgs(['search', 'reference lookup', '--technical', '--json'])
     expect(parsed.options).toMatchObject({ technical: true, json: true })
 
-    const command = spawnCliSync([
+    const command = await runCliInProcess([
       'search',
       'reference lookup',
       '--technical',
@@ -276,9 +276,9 @@ describe('market-terminal CLI error contracts', () => {
     })
   }, 15_000)
 
-  it('advertises and admits technical describe output explicitly', () => {
+  it('advertises and admits technical describe output explicitly', async () => {
     const operationRef = `operation:v1:${'a'.repeat(64)}`
-    const help = spawnCliSync(['help', 'describe', '--json'])
+    const help = await runCliInProcess(['help', 'describe', '--json'])
     expect(help.status).toBe(0)
     expect(help.stderr).toBe('')
     expect(JSON.parse(help.stdout)).toMatchObject({
@@ -296,7 +296,7 @@ describe('market-terminal CLI error contracts', () => {
     expect(parsed.options).toMatchObject({ technical: true, json: true })
     expect(parsed.positionals).toEqual([operationRef])
 
-    const command = spawnCliSync([
+    const command = await runCliInProcess([
       'describe',
       operationRef,
       '--technical',
@@ -312,8 +312,8 @@ describe('market-terminal CLI error contracts', () => {
     })
   }, 15_000)
 
-  it('exposes account subcommand help and accepts the advertised technical manifest', () => {
-    const accountHelp = spawnCliSync(['help', 'account', 'status', '--json'])
+  it('exposes account subcommand help and accepts the advertised technical manifest', async () => {
+    const accountHelp = await runCliInProcess(['help', 'account', 'status', '--json'])
     expect(accountHelp.status).toBe(0)
     expect(JSON.parse(accountHelp.stdout)).toMatchObject({
       kind: 'HELP',
@@ -321,7 +321,7 @@ describe('market-terminal CLI error contracts', () => {
       usage: 'ae account status [market|provider]',
       summary: expect.stringContaining('principal'),
     })
-    const balanceHelp = spawnCliSync(['help', 'account', 'balance', '--json'])
+    const balanceHelp = await runCliInProcess(['help', 'account', 'balance', '--json'])
     expect(balanceHelp.status).toBe(0)
     expect(JSON.parse(balanceHelp.stdout)).toMatchObject({
       kind: 'HELP',
@@ -329,7 +329,7 @@ describe('market-terminal CLI error contracts', () => {
       usage: 'ae account balance [currency]',
       summary: expect.stringContaining('credit'),
     })
-    const disconnectHelp = spawnCliSync(['help', 'account', 'disconnect', '--json'])
+    const disconnectHelp = await runCliInProcess(['help', 'account', 'disconnect', '--json'])
     expect(disconnectHelp.status).toBe(0)
     expect(JSON.parse(disconnectHelp.stdout)).toMatchObject({
       kind: 'HELP',
@@ -337,7 +337,7 @@ describe('market-terminal CLI error contracts', () => {
       usage: 'ae account disconnect [market|provider]',
       summary: expect.stringMatching(/Unqualified removes buyer\/market; pass provider/u),
     })
-    const supplyHelp = spawnCliSync(['help', 'supply', 'status', '--json'])
+    const supplyHelp = await runCliInProcess(['help', 'supply', 'status', '--json'])
     expect(supplyHelp.status).toBe(0)
     expect(JSON.parse(supplyHelp.stdout)).toMatchObject({
       kind: 'HELP',
@@ -348,7 +348,7 @@ describe('market-terminal CLI error contracts', () => {
         deviceFlow: expect.stringContaining('connect --provider'),
       },
     })
-    const supplyToolsHelp = spawnCliSync(['help', 'supply', 'tools', '--json'])
+    const supplyToolsHelp = await runCliInProcess(['help', 'supply', 'tools', '--json'])
     expect(supplyToolsHelp.status).toBe(0)
     expect(JSON.parse(supplyToolsHelp.stdout)).toMatchObject({
       kind: 'HELP',
@@ -356,10 +356,10 @@ describe('market-terminal CLI error contracts', () => {
       usage: 'ae supply tools <businessRef>',
       summary: expect.stringMatching(/inventory/iu),
     })
-    const retiredSupply = spawnCliSync(['supply', 'operations', 'business:one', '--json'])
+    const retiredSupply = await runCliInProcess(['supply', 'operations', 'business:one', '--json'])
     expect(retiredSupply.status).toBe(1)
     expect(JSON.parse(retiredSupply.stdout)).toMatchObject({ kind: 'INVALID_ARGUMENT', code: 'supply-usage' })
-    const doctorHelp = spawnCliSync(['help', 'doctor', '--json'])
+    const doctorHelp = await runCliInProcess(['help', 'doctor', '--json'])
     expect(doctorHelp.status).toBe(0)
     expect(JSON.parse(doctorHelp.stdout)).toMatchObject({
       kind: 'HELP',
@@ -368,7 +368,7 @@ describe('market-terminal CLI error contracts', () => {
       summary: expect.stringContaining('without changing'),
     })
 
-    const technicalManifest = spawnCliSync(['manifest', '--technical', '--json'])
+    const technicalManifest = await runCliInProcess(['manifest', '--technical', '--json'])
     expect(technicalManifest.status).toBe(0)
     expect(JSON.parse(technicalManifest.stdout)).toMatchObject({
       account: {
@@ -378,12 +378,12 @@ describe('market-terminal CLI error contracts', () => {
     })
   }, 30_000)
 
-  it('emits one machine-readable JSON help envelope and keeps root text help usable', () => {
+  it('emits one machine-readable JSON help envelope and keeps root text help usable', async () => {
     for (const [args, command] of [
       [['--json', '--help'], 'root'],
       [['connect', '--json', '--help'], 'connect'],
     ] as const) {
-      const result = spawnCliSync(args)
+      const result = await runCliInProcess(args)
 
       expect(result.status).toBe(0)
       expect(result.stderr).toBe('')
@@ -421,12 +421,12 @@ describe('market-terminal CLI error contracts', () => {
       }
     }
 
-    const textHelp = spawnCliSync(['--help'])
+    const textHelp = await runCliInProcess(['--help'])
     expect(textHelp.status).toBe(0)
     expect(textHelp.stdout).toContain('AE CLI')
     expect(textHelp.stdout).toContain('Usage:')
     expect(textHelp.stderr).toBe('')
-    const connectTextHelp = spawnCliSync(['connect', '--help'])
+    const connectTextHelp = await runCliInProcess(['connect', '--help'])
     expect(connectTextHelp.status).toBe(0)
     expect(connectTextHelp.stdout).toContain('AE_API_KEY_ORIGIN')
     expect(connectTextHelp.stdout).toContain('market_tools:call')
@@ -435,8 +435,8 @@ describe('market-terminal CLI error contracts', () => {
     expect(connectTextHelp.stderr).toBe('')
   }, 30_000)
 
-  it('advertises bounded stdin input for call without broadening supplier input', () => {
-    const callHelp = spawnCliSync(['help', 'call', '--json'])
+  it('advertises bounded stdin input for call without broadening supplier input', async () => {
+    const callHelp = await runCliInProcess(['help', 'call', '--json'])
     expect(callHelp.status).toBe(0)
     expect(callHelp.stderr).toBe('')
     expect(JSON.parse(callHelp.stdout)).toMatchObject({
@@ -457,7 +457,7 @@ describe('market-terminal CLI error contracts', () => {
       },
     })
 
-    const resumeHelp = spawnCliSync(['help', 'call', 'resume', '--json'])
+    const resumeHelp = await runCliInProcess(['help', 'call', 'resume', '--json'])
     expect(resumeHelp.status).toBe(0)
     expect(resumeHelp.stderr).toBe('')
     expect(JSON.parse(resumeHelp.stdout)).toMatchObject({
@@ -470,13 +470,13 @@ describe('market-terminal CLI error contracts', () => {
       ]),
     })
 
-    const supplyHelp = spawnCliSync(['help', 'supply', 'publish', '--json'])
+    const supplyHelp = await runCliInProcess(['help', 'supply', 'publish', '--json'])
     expect(supplyHelp.status).toBe(0)
     expect(JSON.parse(supplyHelp.stdout)).toMatchObject({
       usage: "ae supply publish --input '<json>' [--idempotency-key <key>]",
     })
 
-    const callText = spawnCliSync(['help', 'call'])
+    const callText = await runCliInProcess(['help', 'call'])
     expect(callText.status).toBe(0)
     expect(callText.stdout).toContain("Usage: ae call <tool-ref> --input '<json>' [--wait]")
     expect(callText.stdout).toContain('Authentication:')
@@ -484,23 +484,23 @@ describe('market-terminal CLI error contracts', () => {
     expect(callText.stdout).toContain('market_tools:call')
     expect(callText.stdout).toContain('--input -')
 
-    const searchText = spawnCliSync(['help', 'search'])
+    const searchText = await runCliInProcess(['help', 'search'])
     expect(searchText.status).toBe(0)
     expect(searchText.stdout).not.toContain('AE_API_KEY')
   }, 30_000)
 
-  it('documents each --input-based supply subcommand\'s required fields, derived from its own validation schema', () => {
-    const previewHelp = spawnCliSync(['help', 'supply', 'preview', '--json'])
+  it('documents each --input-based supply subcommand\'s required fields, derived from its own validation schema', async () => {
+    const previewHelp = await runCliInProcess(['help', 'supply', 'preview', '--json'])
     expect(previewHelp.status).toBe(0)
     const previewBody = JSON.parse(previewHelp.stdout) as { guidance?: string[] }
     expect(previewBody.guidance?.[0]).toBe('Required input fields: kind, environment.')
     expect(previewBody.guidance?.[1]).toMatch(/^Example: --input '\{.*"kind":"openapi".*"environment":"sandbox".*\}'$/)
 
-    const previewText = spawnCliSync(['help', 'supply', 'preview'])
+    const previewText = await runCliInProcess(['help', 'supply', 'preview'])
     expect(previewText.status).toBe(0)
     expect(previewText.stdout).toContain('Required input fields: kind, environment.')
 
-    const publishHelp = spawnCliSync(['help', 'supply', 'publish', '--json'])
+    const publishHelp = await runCliInProcess(['help', 'supply', 'publish', '--json'])
     expect(publishHelp.status).toBe(0)
     const publishBody = JSON.parse(publishHelp.stdout) as { guidance?: string[] }
     expect(publishBody.guidance?.[0]).toBe(
@@ -515,12 +515,12 @@ describe('market-terminal CLI error contracts', () => {
     })
   }, 15_000)
 
-  it('scopes valid command help, keeps text and JSON aligned, and rejects typo paths', () => {
+  it('scopes valid command help, keeps text and JSON aligned, and rejects typo paths', async () => {
     for (const [args, command] of [
       [['recover', '--json', '--help'], 'recover'],
       [['describe', '--json', '--help'], 'describe'],
     ] as const) {
-      const json = spawnCliSync(args)
+      const json = await runCliInProcess(args)
       expect(json.status).toBe(0)
       expect(json.stderr).toBe('')
       const envelope = JSON.parse(json.stdout) as {
@@ -539,7 +539,7 @@ describe('market-terminal CLI error contracts', () => {
       })
       expect(envelope.commands).toBeUndefined()
 
-      const text = spawnCliSync(args.filter((arg) => arg !== '--json'))
+      const text = await runCliInProcess(args.filter((arg) => arg !== '--json'))
       expect(text.status).toBe(0)
       expect(text.stderr).toBe('')
       expect(text.stdout).toContain(`Usage: ${envelope.usage}`)
@@ -558,7 +558,7 @@ describe('market-terminal CLI error contracts', () => {
       [['demand', 'typo', '--json', '--help'], 'unknown-command'],
       [['help', 'advanced', 'typo', '--json'], 'unknown-command'],
     ] as const) {
-      const result = spawnCliSync(args)
+      const result = await runCliInProcess(args)
       expect(result.status).toBe(1)
       expect(result.stderr).toBe('')
       expect(JSON.parse(result.stdout)).toMatchObject({
@@ -570,8 +570,8 @@ describe('market-terminal CLI error contracts', () => {
 
   }, 30_000)
 
-  it('derives installed-form usage and actionable failures from one command contract', () => {
-    const root = spawnCliSync(['help', '--json'])
+  it('derives installed-form usage and actionable failures from one command contract', async () => {
+    const root = await runCliInProcess(['help', '--json'])
     expect(root.status).toBe(0)
     const help = JSON.parse(root.stdout) as {
       commands: Record<string, { usage: string; commands?: Record<string, { usage: string }> }>
@@ -585,7 +585,7 @@ describe('market-terminal CLI error contracts', () => {
       }
     }
 
-    const jsonFailure = spawnCliSync(['call', '--json'])
+    const jsonFailure = await runCliInProcess(['call', '--json'])
     expect(jsonFailure.status).toBe(1)
     expect(jsonFailure.stderr).toBe('')
     expect(JSON.parse(jsonFailure.stdout)).toMatchObject({
@@ -597,7 +597,7 @@ describe('market-terminal CLI error contracts', () => {
       exitCode: 1,
     })
 
-    const humanFailure = spawnCliSync(['call'])
+    const humanFailure = await runCliInProcess(['call'])
     expect(humanFailure.status).toBe(1)
     expect(humanFailure.stdout).toBe('')
     expect(humanFailure.stderr).toBe([
@@ -608,9 +608,9 @@ describe('market-terminal CLI error contracts', () => {
     ].join('\n'))
   }, 30_000)
 
-  it('does not leak secret-shaped failure material through suggestions or next commands', () => {
+  it('does not leak secret-shaped failure material through suggestions or next commands', async () => {
     const sentinel = 'FAKE_SENTINEL_CLI_SECRET_98c1'
-    const result = spawnCliSync([
+    const result = await runCliInProcess([
       'recover',
       'invocation:v1:private',
       `{"evidence":"Bearer ${sentinel}","url":"https://user:${sentinel}@example.test/private"}`,

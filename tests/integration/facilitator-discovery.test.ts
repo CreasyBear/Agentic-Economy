@@ -6,7 +6,7 @@ import { api, internal } from '../../convex/_generated/api'
 import schema from '../../convex/schema'
 import { toolRecordProjection } from '../../convex/capabilitySupplyToolShared'
 import { reconcileReadyItems } from '../../convex/capabilitySupplyShared'
-import timezoneFixture from '@/modules/capability-supply/internal/x402-bazaar-fixtures/timezone-payment-required-2026-08-19.json'
+import { timezonePaymentRequired20260819Fixture as timezoneFixture } from '@/modules/capability-supply/public'
 import { convexModules } from '../helpers/convex-fixtures'
 import {
   SYSTEM_WORKLOAD_ACCOUNT_REF,

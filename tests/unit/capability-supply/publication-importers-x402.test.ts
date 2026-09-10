@@ -2,9 +2,11 @@ import { describe, expect, it } from "vitest";
 import { validatePaymentRequired } from "@x402/core/schemas";
 
 import { admitFacilitatorDiscoveryItems } from "../../../convex/facilitatorDiscoveryAction";
-import timezoneFixture from "../../../src/modules/capability-supply/internal/x402-bazaar-fixtures/timezone-payment-required-2026-08-19.json";
+import {
+  timezonePaymentRequired20260819Fixture as timezoneFixture,
+  type SchemaDereferencer,
+} from "@/modules/capability-supply/public";
 
-import type { SchemaDereferencer } from "@/modules/capability-supply/internal/admit-provider-schema";
 import { isRecord } from "@/modules/common/is-record";
 import {
   admitRegisteredTransport,

@@ -3,14 +3,14 @@ import { describe, expect, it, vi } from 'vitest'
 import {
   readAgentUsage,
   readPublicExecutionStatus,
-} from '@/modules/action-execution'
+} from '@/modules/action-execution/runtime'
 import type { ActionResult } from '@/modules/common/action'
 import type {
   DurableActionExecutionPort,
   DurableAttemptRow,
   DurableControlRow,
   DurableHistoryRow,
-} from '@/modules/action-execution/internal/durable-contracts'
+} from '@/modules/action-execution/runtime'
 import type { KeyUsageView, MoneyQueryPort } from '@/modules/money/public'
 
 const actor = { callerRef: 'caller:one', principalRef: 'principal:one' } as const

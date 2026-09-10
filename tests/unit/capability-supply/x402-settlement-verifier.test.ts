@@ -13,7 +13,7 @@ import { describe, expect, it } from 'vitest'
 import {
   verifyExactEvmX402Settlement,
   type X402EvmReceipt,
-} from '@/modules/capability-supply/internal/x402-settlement-verifier'
+} from '@/modules/capability-supply/server'
 import {
   BASE_MAINNET_NETWORK,
   BASE_MAINNET_USDC_ADDRESS,

@@ -48,7 +48,7 @@ import {
 import { PRODUCTION_COMMERCIAL_POLICY_CONTROLS } from '../helpers/commercial-policy-fixtures'
 import { defaultDnsResolver } from '@/modules/network-guard/public'
 import { capabilitySupplyGraphPorts } from '../../convex/capabilitySupplyGraphPorts'
-import { qualifySuppliedCandidate } from '@/modules/capability-supply/internal/graph/qualify-candidate'
+import { qualifySuppliedCandidate } from '@/modules/capability-supply/public'
 import {
   setPublicSourceTransportForTests,
   type ConvexSourceTransport,

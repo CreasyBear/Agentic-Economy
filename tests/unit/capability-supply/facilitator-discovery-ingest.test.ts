@@ -4,16 +4,16 @@ import { dirname, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { admitFacilitatorDiscoveryItems as admitOfficialFacilitatorDiscoveryItems } from "../../../convex/facilitatorDiscoveryAction";
-import timezonePin from "../../../src/modules/capability-supply/internal/x402-bazaar-fixtures/timezone-payment-required-2026-08-19.json";
-import syntheticPost from "../../../src/modules/capability-supply/internal/x402-bazaar-fixtures/synthetic-post-payment-required.json";
 import {
   decideFacilitatorDiscoveryItem,
   FACILITATOR_DISCOVERY_URLS,
   isAllowlistedFacilitatorDiscoveryUrl,
   parseFacilitatorDiscoveryPage,
   paymentRequiredFromDiscoveryItem,
-} from "@/modules/capability-supply/internal/facilitator-discovery-ingest";
-import { admitBazaarDiscoveryInfo } from "@/modules/capability-supply/internal/publication-importer-x402-bazaar";
+  syntheticPostPaymentRequiredFixture as syntheticPost,
+  timezonePaymentRequired20260819Fixture as timezonePin,
+} from "@/modules/capability-supply/public";
+import { admitBazaarDiscoveryInfo } from "@/modules/capability-supply/server";
 import { isRecord } from "@/modules/common/is-record";
 
 const timezonePaymentRequired = isRecord(timezonePin.paymentRequired)

@@ -5,7 +5,7 @@ import {
   amountFromParts,
   readExactAmount,
   zeroExactAmount,
-} from '../../../src/modules/money/internal/exact-amount'
+} from '../../../src/modules/money/public'
 
 describe('exact amount constructors', () => {
   it('parses canonical parts and rejects a currency mismatch at scale', () => {

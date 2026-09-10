@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { isLoopbackCliBaseUrl, parseArgs } from '../../../tools/ae/lib/args'
 import { CliFailure, callJson, maskCredential, requireOk, type HttpOutcome } from '../../../tools/ae/lib/output'
-import { spawnCli, spawnCliSync } from './cli-errors-harness'
+import { runCliInProcess, spawnCliSync } from './cli-errors-harness'
 
 describe('market-terminal CLI error contracts', () => {
   afterEach(() => vi.unstubAllGlobals())
@@ -23,7 +23,7 @@ describe('market-terminal CLI error contracts', () => {
   })
 
   it('routes root call through the call runner before network access', async () => {
-    const result = await spawnCli(['call', '--json'])
+    const result = await runCliInProcess(['call', '--json'])
 
     expect(result.status).toBe(1)
     expect(result.signal).toBeNull()
@@ -34,8 +34,8 @@ describe('market-terminal CLI error contracts', () => {
     })
   }, 15_000)
 
-  it('requires a reachable market when browsing the Tool list', () => {
-    const result = spawnCliSync([
+  it('requires a reachable market when browsing the Tool list', async () => {
+    const result = await runCliInProcess([
       '--base-url',
       'http://127.0.0.1:1',
       'list',
@@ -46,8 +46,8 @@ describe('market-terminal CLI error contracts', () => {
     expect(result.stderr).toContain('Could not reach http://127.0.0.1:1.')
   }, 15_000)
 
-  it('rejects an invalid base URL as a canonical JSON argument error', () => {
-    const result = spawnCliSync(['--base-url', 'not-a-url', '--json'])
+  it('rejects an invalid base URL as a canonical JSON argument error', async () => {
+    const result = await runCliInProcess(['--base-url', 'not-a-url', '--json'])
 
     expect(result.status).toBe(1)
     expect(result.signal).toBeNull()
@@ -91,9 +91,9 @@ describe('market-terminal CLI error contracts', () => {
     'https://market.example/path/TOPSECRET',
     'https://market.example/?q=TOPSECRET',
     'https://market.example/#TOPSECRET',
-  ])('does not echo secrets from invalid base URL %s in human or JSON errors', (baseUrl) => {
+  ])('does not echo secrets from invalid base URL %s in human or JSON errors', async (baseUrl) => {
     for (const json of [false, true]) {
-      const result = spawnCliSync([
+      const result = await runCliInProcess([
         '--base-url',
         baseUrl,
         ...(json ? ['--json'] : []),
@@ -114,10 +114,10 @@ describe('market-terminal CLI error contracts', () => {
     }
   }, 30_000)
 
-  it('keeps loopback connection-refused diagnostics local and redacted', () => {
+  it('keeps loopback connection-refused diagnostics local and redacted', async () => {
     const hostedDoctor = 'ae doctor --base-url https://agentic-economy-phi.vercel.app'
     for (const json of [false, true]) {
-      const result = spawnCliSync([
+      const result = await runCliInProcess([
         '--base-url',
         'http://127.0.0.1:1',
         'search',
@@ -152,11 +152,11 @@ describe('market-terminal CLI error contracts', () => {
     }
   }, 30_000)
 
-  it('keeps remote connection-refused diagnostics origin-aware, non-looping, and redacted', () => {
+  it('keeps remote connection-refused diagnostics origin-aware, non-looping, and redacted', async () => {
     const origin = 'https://ae-unreachable.invalid'
     const expectedNextCommand = `ae config --base-url ${origin} --json`
     for (const json of [false, true]) {
-      const result = spawnCliSync([
+      const result = await runCliInProcess([
         '--base-url',
         origin,
         'search',
@@ -233,7 +233,7 @@ describe('market-terminal CLI error contracts', () => {
     const privateQuery = 'TOPSECRET private lookup'
 
     try {
-      const result = await spawnCli([
+      const result = await runCliInProcess([
         'search',
         privateQuery,
         '--base-url',

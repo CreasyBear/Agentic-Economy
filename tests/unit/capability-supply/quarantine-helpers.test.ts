@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
 
-import type { CapabilityBindingRow } from '@/modules/capability-supply/internal/binding'
 import {
   bindingObservedRowDigest,
   offeringStatusAfterBindingQuarantine,
@@ -8,7 +7,8 @@ import {
   quarantineParentAudit,
   quarantineParentUpdatedDisposition,
   validQuarantineAuditPayload,
-} from '@/modules/capability-supply/internal/quarantine'
+  type CapabilityBindingRow,
+} from '@/modules/capability-supply/public'
 
 const digest = `sha256:${'a'.repeat(64)}`
 const binding = {

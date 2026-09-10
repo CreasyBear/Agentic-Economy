@@ -5,6 +5,7 @@ import { isRecord } from '@/modules/common/is-record'
 import { jsonValueSchema, type JsonValue } from '@/modules/capability-contract/public'
 
 import { dereferenceOpenApiSchema } from './internal/schema-deref'
+export { discoverMcpSource } from './internal/mcp-source-discovery'
 import { resolveOpenApiCredential } from './internal/openapi-import/credentials'
 import { resolveOpenApiRecord } from './internal/openapi-import/document'
 import {
