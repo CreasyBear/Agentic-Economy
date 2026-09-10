@@ -125,7 +125,6 @@ async function authorizeInteractiveRecovery(
     const row = await ctx.runQuery(internal.capabilityCalls.readRecovery, {
       callRef: args.callRef,
       principalId: args.principalId,
-      credentialId: args.credentialId,
     })
     return row !== null && row.ownerId === actor.canonicalAccountRef
   }

@@ -78,6 +78,32 @@ export type SellerCanaryOperationSnapshot = Readonly<{
   readinessValidUntil: number
 }>
 
+/** The four stable fields a Call is identified by. The credential is not one of
+ * them: it rotates while the Call keeps the credential it was admitted under. */
+export type CallPrincipalIdentity = Readonly<{
+  principalId: string
+  ownerId: string
+  applicationRef: string
+  environment: 'sandbox' | 'production'
+}>
+
+/** Worker-local mirror of `callIdentityMatches`
+ * (`convex/lib/callLifecycle/callActions.ts`). That module registers Convex
+ * actions and is not importable here without dragging the action runtime into
+ * the worker bundle, so the tuple - four comparisons, no logic - is restated. */
+export function callPrincipalIdentityMatches(
+  row: CallPrincipalIdentity | null,
+  identity: CallPrincipalIdentity,
+): boolean {
+  if (row === null) return false
+  return [
+    row.principalId === identity.principalId,
+    row.ownerId === identity.ownerId,
+    row.applicationRef === identity.applicationRef,
+    row.environment === identity.environment,
+  ].every(Boolean)
+}
+
 export function sellerCanaryExecutionContext(
   envelope: SellerOnboardingCanaryExecutionEnvelope,
 ): X402ExecutionContext {
@@ -242,22 +268,57 @@ export async function prepareCallRun(
   const principalRow = await ctx.runQuery(internal.agentAccessPrincipals.getAgentPrincipal, {
     principalId: dispatch.principalId,
   })
+  const principalReadAt = Date.now()
+  // A Call's identity survives a credential rotation; its authority does not.
+  //
+  // Identity: the live Principal row must still match the four stable fields a
+  // Call is keyed by - principalId, ownerId, applicationRef, environment (the
+  // tuple `callIdentityMatches` enforces on admit, replay, and recovery) - and
+  // must itself be live. The credential is deliberately NOT part of that tuple:
+  // it rotates, and the Call keeps the credential it was admitted under as
+  // effect evidence. The Principal's grant generation may only move forward; a
+  // Call carrying a generation ahead of the Principal is a stale replay.
+  //
+  // Authority: a rotation does not re-authorise anything. Dispatch proceeds
+  // only if the grant that authorised THIS Call - read below under the Call's
+  // own grantRef, credentialId, and owner tuple, exactly as release re-reads it
+  // - is still current: active (never revoked), unexpired, and at least the
+  // Call's generation. A revoked or expired grant refuses as before.
+  //
+  // Successor credential: when the credential has rotated, the credential now
+  // bound to the Principal must itself be live, proven by its own active,
+  // unexpired grant at the Principal's current generation. Revoking a
+  // credential revokes its grant, so a revoked successor can never dispatch.
   if (
     principalRow === null
-    || principalRow.principalId !== dispatch.principalId
-    || principalRow.ownerId !== dispatch.ownerId
-    || principalRow.credentialId !== dispatch.credentialId
-    || principalRow.applicationRef !== dispatch.applicationRef
-    || principalRow.environment !== dispatch.environment
+    || !callPrincipalIdentityMatches(principalRow, dispatch)
     || principalRow.lifecycle !== 'active'
-    || principalRow.grantGeneration !== dispatch.grantGeneration
+    || (principalRow.expiresAt !== undefined && principalRow.expiresAt <= principalReadAt)
+    || principalRow.grantGeneration < dispatch.grantGeneration
   ) {
     return await refuseBeforeClaim(ctx, dispatch, 'grant_generation_stale', false, 'Refresh the agent grant and retry.')
+  }
+  // Evidence: the credential that actually dispatches this attempt. The Call
+  // retains `dispatch.credentialId` as its admitted effect identity.
+  const dispatchedCredentialId = principalRow.credentialId
+  if (dispatchedCredentialId !== dispatch.credentialId) {
+    const successorGrant = await ctx.runQuery(internal.agentAccessPolicy.readActiveGrant, {
+      credentialId: dispatchedCredentialId,
+      environment: dispatch.environment,
+      principalId: dispatch.principalId,
+      applicationRef: dispatch.applicationRef,
+      ownerId: dispatch.ownerId,
+      generation: principalRow.grantGeneration,
+      now: principalReadAt,
+    })
+    if (successorGrant === null) {
+      return await refuseBeforeClaim(ctx, dispatch, 'grant_generation_stale', false, 'Refresh the agent grant and retry.')
+    }
   }
   const principal: AgentAccessPrincipal = {
     principalId: principalRow.principalId,
     ownerId: principalRow.ownerId,
-    credentialId: principalRow.credentialId,
+    credentialId: dispatchedCredentialId,
     applicationRef: principalRow.applicationRef,
     environment: principalRow.environment,
     scopes: principalRow.scopes,
@@ -267,13 +328,12 @@ export async function prepareCallRun(
   const grantReadAt = Date.now()
   const grant = sellerCanary === undefined
     ? await ctx.runQuery(internal.agentAccessPolicy.readActiveGrant, {
-        credentialId: principal.credentialId,
-        environment: principal.environment,
-        principalId: principal.principalId,
-        applicationRef: principal.applicationRef,
+        credentialId: dispatch.credentialId,
+        environment: dispatch.environment,
+        principalId: dispatch.principalId,
+        applicationRef: dispatch.applicationRef,
         grantRef: dispatch.grantRef,
         ownerId: dispatch.ownerId,
-        generation: dispatch.grantGeneration,
         now: grantReadAt,
       })
     : dispatch.environment !== 'sandbox'
@@ -298,7 +358,14 @@ export async function prepareCallRun(
           },
         )
   if (grant === null) return await refuseBeforeClaim(ctx, dispatch, 'grant_not_found', false, 'Refresh the agent grant and retry.')
-  const actor = { callerRef: principal.credentialId, principalRef: principal.principalId }
+  if (grant.generation < dispatch.grantGeneration) {
+    return await refuseBeforeClaim(ctx, dispatch, 'grant_generation_stale', false, 'Refresh the agent grant and retry.')
+  }
+  // The canonical claim is bound to the credential the Call was admitted under,
+  // not to whichever credential is dispatching now: the outer claim gate checks
+  // the attempt actor against the stored Call, and the effect must stay
+  // attributable to the credential that bought it.
+  const actor = { callerRef: dispatch.credentialId, principalRef: dispatch.principalId }
   const initialAttemptRef = `operation-attempt:${dispatch.callRef}:1`
   const leaseOwner = `operation-worker:${dispatch.callRef}`
 
@@ -566,7 +633,7 @@ export async function prepareCallRun(
     const claimCommand = buildCanonicalClaimCommand(claimInput)
     const persistedClaimCommand = toCallDispatchCommand(claimCommand)
     const claimResult = await ctx.runMutation(internal.capabilityCalls.claimDispatch, {
-      dispatch,
+      dispatch: { ...dispatch, dispatchedCredentialId },
       command: persistedClaimCommand,
     })
     if (claimResult.kind === 'refused') {
@@ -627,6 +694,12 @@ export async function prepareCallRun(
     dispatch,
     port,
     principal,
+    // Rotation evidence: `dispatch.credentialId` is the credential the Call was
+    // admitted under, `dispatchedCredentialId` the one authorising this
+    // dispatch. They differ only across a rotation. The claim call site above
+    // threads `dispatchedCredentialId` onto the persisted Call row alongside
+    // the original `credentialId`.
+    dispatchedCredentialId,
     grant,
     operation,
     descriptor,

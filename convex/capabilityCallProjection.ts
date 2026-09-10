@@ -386,7 +386,6 @@ export async function projectRecoveryOuter(
   await ctx.runMutation(internal.capabilityCalls.projectRecovery, {
     callRef: row.callRef,
     principalId: row.principalId,
-    credentialId: row.credentialId,
     state,
     ...(projectedResult === undefined ? {} : { result: projectedResult }),
     ...(clearAttemptRef ? {} : result.kind === 'found' && typeof result.attemptRef === 'string' ? { attemptRef: result.attemptRef } : {}),

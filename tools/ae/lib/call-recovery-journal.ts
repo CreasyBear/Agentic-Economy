@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
-import { chmodSync, closeSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync, renameSync, rmdirSync, unlinkSync, writeFileSync } from 'node:fs'
+import { chmodSync, closeSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
+import * as lockfile from 'proper-lockfile'
 import { z } from 'zod'
 
 import { canonicalDigest } from '@/modules/common/canonical-digest'
@@ -64,16 +65,39 @@ function durableWrite(path: string, value: unknown): void {
   }
 }
 
-/** Only synchronous journal mutations hold this lock; network requests never do. */
+function lockFailure(lockPath: string): CliFailure {
+  return new CliFailure(
+    `The local Call recovery journal is locked by another process (lock ${lockPath}). No new Call was submitted.`,
+    {
+      kind: 'FAILED_PRECONDITION', code: 'call-recovery-storage-unavailable',
+      suggestion: 'Wait for the other ae process to finish, or remove the lock directory if you are certain no process is using it.',
+    },
+  )
+}
+
+/**
+ * Only synchronous journal mutations hold this lock; network requests never do.
+ *
+ * The calls directory holds every record, request-index, and identity-index
+ * file for the journal, so the lock guards that whole directory rather than
+ * any single file: proper-lockfile creates `${directory()}.lock` next to it
+ * and reclaims it itself once it is older than `stale`, so a crashed owner's
+ * lock is never left stuck.
+ */
 function writeLocked<T>(write: () => T): T {
   const root = directory()
   mkdirSync(root, { recursive: true, mode: 0o700 })
   chmodSync(root, 0o700)
-  const lock = join(root, '.write-lock')
-  // A surviving lock is a fail-closed local diagnostic, never permission to
-  // discard an uncertain purchase or break another process's lock.
-  mkdirSync(lock, { mode: 0o700 })
-  try { return write() } finally { rmdirSync(lock) }
+  let release: () => void
+  try {
+    // proper-lockfile's sync API cannot retry (it throws ESYNC if asked to);
+    // its own mkdir-based acquisition plus stale reclaim is the only retry
+    // semantics available here, matching the fail-closed contract below.
+    release = lockfile.lockSync(root, { stale: 30_000, realpath: false })
+  } catch {
+    throw lockFailure(`${root}.lock`)
+  }
+  try { return write() } finally { release() }
 }
 
 function readRecord(ref: string): CallRecoveryRecord {

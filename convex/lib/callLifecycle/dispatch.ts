@@ -34,6 +34,7 @@ export type OpenDispatchValue = Readonly<{
   principalId: string
   ownerId: string
   credentialId: string
+  dispatchedCredentialId?: string
   applicationRef: string
   environment: 'sandbox' | 'production'
   state: 'pending' | 'completed' | 'refused' | 'reconciliation_required' | 'cancelled'
@@ -869,6 +870,7 @@ export async function claimDispatchHandler(
     dispatchState: 'running',
     attemptRef: attempt.attemptRef,
     updatedAt: Date.now(),
+    ...(dispatch.dispatchedCredentialId === undefined ? {} : { dispatchedCredentialId: dispatch.dispatchedCredentialId }),
   })
   return {
     kind: canonicalResult.kind,

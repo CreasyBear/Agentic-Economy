@@ -560,10 +560,14 @@ export async function canonicalAgentCallHandler(
     return { kind: 'refused', toolRef: material.toolRef, code: 'grant_not_found', retryable: false }
   }
   if (material.consumedCallRef !== undefined) {
+    // Identify the consumed Call by the stable Principal tuple; the credential
+    // it was reserved under may since have been replaced.
     const replay = await ctx.runQuery(internal.capabilityCalls.readReplay, {
       callRef: material.consumedCallRef,
       principalId: principal.principalId,
-      credentialId: principal.credentialId,
+      ownerId: principal.ownerId,
+      applicationRef: principal.applicationRef,
+      environment: principal.environment,
     })
     if (replay === null) return { kind: 'refused', code: 'operation_not_current', retryable: false }
     if (replay.result !== undefined) return projectCallResult(callResultSchema.parse(replay.result))

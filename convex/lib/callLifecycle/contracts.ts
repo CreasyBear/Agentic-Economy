@@ -110,6 +110,7 @@ export const openDispatchValue = v.object({
   principalId: v.string(),
   ownerId: v.string(),
   credentialId: v.string(),
+  dispatchedCredentialId: v.optional(v.string()),
   applicationRef: v.string(),
   environment,
   state: v.union(v.literal('pending'), v.literal('completed'), v.literal('refused'), v.literal('reconciliation_required'), v.literal('cancelled')),
@@ -205,7 +206,6 @@ export const recoveryValue = v.object({
 export const projectRecoveryArgs = {
   callRef: v.string(),
   principalId: v.string(),
-  credentialId: v.string(),
   state: v.union(
     v.literal('pending'),
     v.literal('completed'),

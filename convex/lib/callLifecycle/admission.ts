@@ -221,6 +221,11 @@ function operationSnapshotMatches(existing: CallRow, args: ReserveArgs): boolean
   )
 }
 
+// A reservation is identified by the stable Principal tuple plus the request
+// material the idempotency key stands for. The credential, the grant it was
+// issued under, and the derived callRef are effect evidence retained on the
+// stored row: a credential rotation must replay the original Call, so those
+// fields are read back through reservationFromRow instead of compared.
 function existingReservationMatches(existing: CallRow, args: ReserveArgs): boolean {
   return [
     existing.quoteRef !== undefined,
@@ -229,18 +234,12 @@ function existingReservationMatches(existing: CallRow, args: ReserveArgs): boole
     existing.grantExpiresAt !== undefined,
     existing.principalId === args.principalId,
     existing.ownerId === args.ownerId,
-    existing.credentialId === args.credentialId,
     existing.applicationRef === args.applicationRef,
-    existing.grantRef === args.grantRef,
-    existing.grantGeneration === args.grantGeneration,
-    existing.policyDigest === args.policyDigest,
-    existing.grantExpiresAt === args.grantExpiresAt,
     existing.environment === args.environment,
     existing.toolRef === args.toolRef,
     existing.idempotencyKey === args.idempotencyKey,
     existing.inputDigest === args.inputDigest,
     existing.requestDigest === args.requestDigest,
-    existing.callRef === args.callRef,
     operationSnapshotMatches(existing, args),
     existing.inputJson === args.inputJson,
     canonicalOptionalCanary(existing.sellerOnboardingCanary) === canonicalOptionalCanary(args.sellerOnboardingCanary),
@@ -474,11 +473,15 @@ export async function reserveHandler(
   args: ReserveArgs,
 ): Promise<ReserveResult> {
   if (!canaryEnvelopeMatchesReservation(args)) return { kind: 'conflict' }
+  // Keyed by the stable Principal: a rotated credential replays the original
+  // reservation instead of minting a second Call under the same key.
   const existing = await ctx.db.query('capabilityCalls')
-    .withIndex('by_credentialId_and_idempotencyKey', (query) => query.eq('credentialId', args.credentialId).eq('idempotencyKey', args.idempotencyKey))
-    .unique()
+    .withIndex('by_principalId_and_idempotencyKey', (query) => query.eq('principalId', args.principalId).eq('idempotencyKey', args.idempotencyKey))
+    .take(2)
+  if (existing.length > 1) return { kind: 'conflict' }
   const reservation = reservationFromArgs(args)
-  if (existing !== null) return await replayExistingReservation(ctx, existing, args)
+  const replay = existing[0]
+  if (replay !== undefined) return await replayExistingReservation(ctx, replay, args)
   if (await toolProviderRouteabilityIsFrozen(ctx, args.toolRef)) {
     return {
       kind: 'refused',

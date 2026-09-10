@@ -584,14 +584,17 @@ describe('issued agent binding', () => {
     if (sibling === null) throw new Error('sibling_agent_missing')
     await expect(status({ ...successor, principalId: sibling.principalId, credentialId: sibling.credentialId }))
       .resolves.toMatchObject({ kind: 'refused', code: 'invocation_not_found' })
-    // Internal worker/replay reads stay pinned to the original effect identity;
-    // only the authorised public recovery boundary translates to that identity.
+    // Replay reads resolve on the stable Principal tuple, so a promoted
+    // credential still finds the Call; a foreign Account never does.
+    const replayIdentity = {
+      callRef, principalId: successor.principalId, ownerId: successor.ownerId,
+      applicationRef: successor.applicationRef, environment: successor.environment,
+    }
+    await expect(backend.query(internal.capabilityCalls.readReplay, replayIdentity))
+      .resolves.toMatchObject({ result: original.result })
     await expect(backend.query(internal.capabilityCalls.readReplay, {
-      callRef, principalId: successor.principalId, credentialId: successor.credentialId,
+      ...replayIdentity, ownerId: 'acc_00000000000000000000000000000000',
     })).resolves.toBeNull()
-    await expect(backend.query(internal.capabilityCalls.readReplay, {
-      callRef, principalId: successor.principalId, credentialId: first.credentialId,
-    })).resolves.toMatchObject({ result: original.result })
     await expect(backend.mutation(internal.capabilityCalls.reconcileCallWorkloadAuthority, { callRef }))
       .resolves.toEqual({ kind: 'refused' })
 

@@ -168,13 +168,19 @@ export const openDispatch = internalQuery({
 })
 
 export const readReplay = internalQuery({
-  args: { callRef: v.string(), principalId: v.string(), credentialId: v.string() },
+  args: {
+    callRef: v.string(),
+    principalId: v.string(),
+    ownerId: v.string(),
+    applicationRef: v.string(),
+    environment: v.union(v.literal('sandbox'), v.literal('production')),
+  },
   returns: v.union(replayValue, v.null()),
   handler: readReplayHandler,
 })
 
 export const readRecovery = internalQuery({
-  args: { callRef: v.string(), principalId: v.string(), credentialId: v.string() },
+  args: { callRef: v.string(), principalId: v.string() },
   returns: v.union(recoveryValue, v.null()),
   handler: readRecoveryHandler,
 })

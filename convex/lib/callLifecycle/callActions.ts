@@ -212,6 +212,34 @@ function projectStatusRecoveryResult(
   }
 }
 
+// A Call is identified by the Principal tuple that survives a credential
+// rotation. The stored credentialId stays on the row as effect evidence.
+export type CallIdentityArgs = Readonly<{
+  principalId: string
+  ownerId: string
+  applicationRef: string
+  environment: 'sandbox' | 'production'
+}>
+
+function callIdentity(principal: AgentAccessPrincipal): CallIdentityArgs {
+  return {
+    principalId: principal.principalId,
+    ownerId: principal.ownerId,
+    applicationRef: principal.applicationRef,
+    environment: principal.environment,
+  }
+}
+
+function callIdentityMatches<T extends CallIdentityArgs>(row: T | null, identity: CallIdentityArgs): row is T {
+  if (row === null) return false
+  return [
+    row.principalId === identity.principalId,
+    row.ownerId === identity.ownerId,
+    row.applicationRef === identity.applicationRef,
+    row.environment === identity.environment,
+  ].every(Boolean)
+}
+
 async function authorizeRecovery(
   ctx: ActionCtx,
   callRef: string,
@@ -220,13 +248,7 @@ async function authorizeRecovery(
   // The outer authority boundary authenticates the current credential. A Call
   // retains its original credential as effect evidence after replacement.
   const row = await ctx.runQuery(internal.capabilityCalls.readOwnerRecovery, { callRef })
-  if (
-    row === null
-    || row.principalId !== principal.principalId
-    || row.ownerId !== principal.ownerId
-    || row.applicationRef !== principal.applicationRef
-    || row.environment !== principal.environment
-  ) return { kind: 'not_found' }
+  if (!callIdentityMatches(row, callIdentity(principal))) return { kind: 'not_found' }
   return { kind: 'authorized', row }
 }
 
@@ -541,8 +563,7 @@ export async function callHandler(
       readReplay: async (input) => {
         const replay = await ctx.runQuery(internal.capabilityCalls.readReplay, {
           callRef: input.callRef,
-          principalId: input.principal.principalId,
-          credentialId: input.principal.credentialId,
+          ...callIdentity(input.principal),
         })
         if (replay?.result !== undefined) {
           const parsed = callResultSchema.safeParse(replay.result)
@@ -801,11 +822,11 @@ export async function reconcileOwnerCallHandler(
 
 export async function readReplayHandler(
   ctx: QueryCtx,
-  args: { callRef: string; principalId: string; credentialId: string },
+  args: CallIdentityArgs & { callRef: string },
 ): Promise<ReplayRow | null> {
   const row = await ctx.db.query('capabilityCalls')
     .withIndex('by_callRef', (query) => query.eq('callRef', args.callRef)).unique()
-  if (row === null || row.principalId !== args.principalId || row.credentialId !== args.credentialId) return null
+  if (!callIdentityMatches(row, args)) return null
   if (row.result !== undefined) assertCallResultJson(row.result)
   return {
     toolRef: row.toolRef,
@@ -819,11 +840,11 @@ export async function readReplayHandler(
 
 export async function readRecoveryHandler(
   ctx: QueryCtx,
-  args: { callRef: string; principalId: string; credentialId: string },
+  args: { callRef: string; principalId: string },
 ): Promise<RecoveryRow | null> {
   const row = await ctx.db.query('capabilityCalls')
     .withIndex('by_callRef', (query) => query.eq('callRef', args.callRef)).unique()
-  if (row === null || row.principalId !== args.principalId || row.credentialId !== args.credentialId) return null
+  if (row === null || row.principalId !== args.principalId) return null
   return projectRecoveryRow(row)
 }
 
@@ -879,11 +900,9 @@ function recordPatch(args: RecordArgs): Partial<CallRow> {
 type ProjectRecoveryArgs = Parameters<typeof projectRecoveryHandler>[1]
 
 function recoveryProjectionIdentityMatches(row: CallRow | null, args: ProjectRecoveryArgs): row is CallRow {
-  if (row === null) return false
-  return [
-    row.principalId === args.principalId,
-    row.credentialId === args.credentialId,
-  ].every(Boolean)
+  // The stored credential is effect evidence, never the projection gate: a
+  // replaced credential must still project onto the original Call.
+  return row !== null && row.principalId === args.principalId
 }
 
 function isCompletedProjection(row: CallRow): boolean {
@@ -932,7 +951,6 @@ export async function projectRecoveryHandler(
   args: {
     callRef: string
     principalId: string
-    credentialId: string
     state: 'pending' | 'completed' | 'refused' | 'reconciliation_required' | 'cancelled'
     result?: CallResultValue
     attemptRef?: string

@@ -238,7 +238,7 @@ const requiredIndexes = {
   auditEvents: ['by_eventId'],
   registrySearchDocuments: ['by_documentId', 'by_business', 'by_offering', 'by_publicStatus_updatedAt'],
   disputes: ['by_business_status'],
-  capabilityCalls: ['by_callRef', 'by_credentialId_and_idempotencyKey', 'by_credentialId_and_createdAt', 'by_credentialId_and_state', 'by_credentialId_and_state_and_grantExpiresAt', 'by_principalId_and_callRef', 'by_toolRef_and_state', 'by_ownerId_and_state_and_createdAt'],
+  capabilityCalls: ['by_callRef', 'by_principalId_and_idempotencyKey', 'by_credentialId_and_createdAt', 'by_credentialId_and_state', 'by_credentialId_and_state_and_grantExpiresAt', 'by_principalId_and_callRef', 'by_toolRef_and_state', 'by_ownerId_and_state_and_createdAt'],
   capabilityCallProjections: [
     'by_callRef',
     'by_accountRef_and_createdAt',

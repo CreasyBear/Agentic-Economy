@@ -490,11 +490,42 @@ describe('capability operation reservation admission', () => {
     await expect(reserveHandler(ctx, args({ toolJson: changedOperationJson }))).resolves.toEqual({ kind: 'conflict' })
   })
 
-  it('rejects changed grant generation material for an existing idempotency key', async () => {
+  it('replays the original reservation when the credential and grant generation rotate under one key', async () => {
+    const ctx = context()
+    await expect(reserveHandler(ctx, args())).resolves.toMatchObject({ kind: 'reserved' })
+
+    // A rotated credential mints a new grant generation and therefore a new
+    // derived callRef; the key must still resolve the original reservation.
+    await expect(reserveHandler(ctx, args({
+      credentialId: 'credential:successor',
+      grantGeneration: 2,
+      grantRef: 'grant:successor',
+      callRef: 'operation-invocation:v1:changed',
+    }))).resolves.toMatchObject({
+      kind: 'replayed',
+      reservation: {
+        callRef: 'operation-invocation:v1:one',
+        credentialId: 'credential:one',
+        grantRef: 'grant:one',
+        grantGeneration: 1,
+      },
+    })
+    expect(ctx.db.rows('capabilityCalls')).toHaveLength(1)
+  })
+
+  it('conflicts without throwing when two rows already share one principal idempotency key', async () => {
     const ctx = context()
     await reserveHandler(ctx, args())
+    const [row] = ctx.db.rows('capabilityCalls')
+    if (row === undefined) throw new Error('reservation_missing')
+    ctx.db.seed('capabilityCalls', {
+      ...row,
+      _id: 'capabilityCalls:duplicate',
+      callRef: 'operation-invocation:v1:duplicate',
+    })
 
-    await expect(reserveHandler(ctx, args({ grantGeneration: 2, callRef: 'operation-invocation:v1:changed' }))).resolves.toEqual({ kind: 'conflict' })
+    await expect(reserveHandler(ctx, args())).resolves.toEqual({ kind: 'conflict' })
+    expect(ctx.db.rows('capabilityCalls')).toHaveLength(2)
   })
   it('refuses before insertion when the canonical rate limiter refuses', async () => {
     mocks.assertAgentAccessRateAdmission.mockResolvedValueOnce({ ok: false })

@@ -28,7 +28,7 @@ await build({
   sourcemap: false,
   legalComments: "none",
   define: { __AE_CLI_BUILD_REVISION__: JSON.stringify(buildRevision) },
-  banner: { js: "#!/usr/bin/env node" },
+  banner: { js: "#!/usr/bin/env node\nimport { createRequire as _createRequire } from 'node:module'; globalThis.require ??= _createRequire(import.meta.url);" },
   tsconfig: resolve(repositoryRoot, "tsconfig.json"),
 });
 await chmod(outputFile, 0o755);

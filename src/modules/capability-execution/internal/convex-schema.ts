@@ -389,6 +389,7 @@ export const capabilityCallTables = {
     principalId: v.string(),
     ownerId: v.string(),
     credentialId: v.string(),
+    dispatchedCredentialId: v.optional(v.string()),
     applicationRef: v.string(),
     toolRef: v.string(),
     // Presence is the complete, server-built seller canary authority. Ordinary
@@ -446,7 +447,9 @@ export const capabilityCallTables = {
       'sellerOnboardingCanary.publicationRef',
       'sellerOnboardingCanary.publicationRevision',
     ])
-    .index('by_credentialId_and_idempotencyKey', ['credentialId', 'idempotencyKey'])
+    // Idempotency is keyed by the stable Principal, never by the rotating
+    // credential: a replaced credential must replay, not mint a second Call.
+    .index('by_principalId_and_idempotencyKey', ['principalId', 'idempotencyKey'])
     .index('by_credentialId_and_createdAt', ['credentialId', 'createdAt'])
     .index('by_credentialId_and_state', ['credentialId', 'state'])
     .index('by_credentialId_and_state_and_grantExpiresAt', ['credentialId', 'state', 'grantExpiresAt'])

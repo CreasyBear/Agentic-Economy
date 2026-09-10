@@ -51,7 +51,6 @@ export async function loadRecoveredCall(
   const row = await ctx.runQuery(internal.capabilityCalls.readRecovery, {
     callRef: args.callRef,
     principalId: args.principalId,
-    credentialId: args.credentialId,
   })
   return row
 }
