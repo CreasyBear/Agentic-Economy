@@ -451,6 +451,28 @@ describe('CLI Call recovery projections', () => {
     })
   })
 
+  it('names the exact call ref shape and points a missing status argument at history', async () => {
+    const { runStatusCommand } = await import('../../../tools/ae/commands/status')
+
+    await expect(runStatusCommand([], baseOptions)).rejects.toMatchObject({
+      kind: 'INVALID_ARGUMENT',
+      code: 'status-usage',
+      message: expect.stringContaining('operation-invocation:v1:<64 lowercase hex characters>'),
+      nextCommand: 'ae history --json',
+    } satisfies Partial<CliFailure>)
+  })
+
+  it('names the exact call ref shape when the argument fails to parse', async () => {
+    const { runStatusCommand } = await import('../../../tools/ae/commands/status')
+
+    await expect(runStatusCommand([''], baseOptions)).rejects.toMatchObject({
+      kind: 'INVALID_ARGUMENT',
+      code: 'status-usage',
+      message: expect.stringContaining('operation-invocation:v1:<64 lowercase hex characters>'),
+      nextCommand: 'ae history --json',
+    } satisfies Partial<CliFailure>)
+  })
+
   it('uses top-level status usage to point insufficient credit at account funding', async () => {
     setApiKey('ae-test-caller-key')
     const output = capture(process.stdout)

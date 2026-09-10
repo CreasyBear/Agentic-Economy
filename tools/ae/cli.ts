@@ -221,6 +221,7 @@ LEARN MORE
   ae help <command>         exact arguments and safety guidance
   ae help <command> --json  machine-readable command help
   ae help --json            machine-readable root help
+  docs/glossary.md          plain-language definitions of Tool, Quote, Call and other terms
 `)
 }
 

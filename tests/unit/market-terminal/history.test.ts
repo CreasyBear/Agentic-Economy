@@ -72,6 +72,36 @@ describe('AE CLI Call history', () => {
     })
   })
 
+  it('points an empty Call history at search instead of an empty table, in JSON', async () => {
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>().mockResolvedValue(Response.json({
+      kind: 'available', items: [], hasMore: false,
+    })))
+    const write = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
+    const { cursor: _cursor, ...initialOptions } = options
+
+    await runHistoryCommand([], initialOptions)
+
+    expect(JSON.parse(write.mock.calls.map(([value]) => String(value)).join(''))).toMatchObject({
+      kind: 'available',
+      items: [],
+      nextCommand: "ae search '<job>' --json",
+    })
+  })
+
+  it('prints a search continuation instead of an empty table in human output', async () => {
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>().mockResolvedValue(Response.json({
+      kind: 'available', items: [], hasMore: false,
+    })))
+    const write = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
+    const { cursor: _cursor, ...initialOptions } = options
+
+    await runHistoryCommand([], { ...initialOptions, json: false })
+
+    const output = write.mock.calls.map(([value]) => String(value)).join('')
+    expect(output).toContain('No Calls yet.')
+    expect(output).toContain("Next: ae search '<job>'")
+  })
+
   it('executes an opaque continuation against the same IPv6 origin with the same filters and JSON mode', async () => {
     const cursorInjectionMarker = join(directory, 'history-cursor-was-executed')
     const nextCursor = `opaque'; touch ${cursorInjectionMarker}; #`

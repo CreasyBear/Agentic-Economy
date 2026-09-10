@@ -9,6 +9,7 @@ import { CliFailure, callJson, heading, line, printJson, requireOk } from '../li
 import { continuationFlags } from '../lib/continuation-command'
 import { usageFailure } from '../lib/help'
 import { toolCallCommand } from '../lib/tool-format'
+import { toolRefFormatMessage } from '../lib/tool-ref-format'
 import { QUOTE_MCP_TOOL_NAME } from './manifest'
 import { throwToolReadFailure } from '../lib/tool-read-failure'
 
@@ -20,7 +21,7 @@ export async function runDescribeCommand(args: readonly string[], options: CliOp
   }
   const parsedInput = describeCommandDescriptor.inputSchema.safeParse({ toolRef })
   if (!parsedInput.success) {
-    throw new CliFailure('Tool reference must match operation:v1:<64 lowercase hex characters>.', {
+    throw new CliFailure(toolRefFormatMessage(), {
       kind: 'INVALID_ARGUMENT', code: 'tool-ref-invalid',
     })
   }

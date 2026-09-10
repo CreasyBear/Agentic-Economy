@@ -43,7 +43,8 @@ describe('MCP host adapter protocol', () => {
       + 'Call only with the Quote returned by `ae_tool_quote`. '
       + 'If Account credit is insufficient, use `ae_funding_handoff_create`, give only its Stripe checkoutUrl to the payer, persist fundingSessionId, poll `ae_funding_handoff_status`, then explicitly retry the original Tool only after ready. '
       + 'If effects are uncertain, use `ae_call_status` or `ae_call_reconcile` before retrying. '
-      + 'Agentic Economy returns the contribution or receipt; your existing harness keeps project planning and execution.',
+      + 'Agentic Economy returns the contribution or receipt; your existing harness keeps project planning and execution. '
+      + 'See `docs/glossary.md` for the vocabulary used above, such as Tool, Quote and Call.',
     )
     expect(typeof instructions).toBe('string')
     expect([...String(instructions).matchAll(/`(ae_[^`]+)`/g)].map((match) => match[1])).toEqual([
