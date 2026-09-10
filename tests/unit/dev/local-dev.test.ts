@@ -1,4 +1,7 @@
-import { describe, expect, it } from 'vitest'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { afterEach, describe, expect, it } from 'vitest'
 
 import {
   authModeLine,
@@ -14,6 +17,7 @@ import {
   doctorNextCommand,
   doctorTierLine,
   effectiveEnv,
+  isAnonymousLocalDeployment,
   isCatalogueComplete,
   isConvexReadyOutput,
   isViteReadyOutput,
@@ -164,6 +168,44 @@ describe('local development launcher', () => {
     supervisor.signal('SIGTERM')
     await supervisor.waitForChildren()
     expect(signalledCalls).toEqual([['SIGINT', 'signal', 'SIGTERM']])
+  })
+})
+
+describe('anonymous local deployment detection', () => {
+  const originalCwd = process.cwd()
+  let directory = ''
+
+  afterEach(() => {
+    process.chdir(originalCwd)
+    if (directory) rmSync(directory, { recursive: true, force: true })
+    directory = ''
+  })
+
+  it('treats CONVEX_AGENT_MODE=anonymous as anonymous with no state file', () => {
+    directory = mkdtempSync(join(tmpdir(), 'ae-local-dev-'))
+    process.chdir(directory)
+
+    expect(isAnonymousLocalDeployment({ CONVEX_AGENT_MODE: 'anonymous' })).toBe(true)
+  })
+
+  it('treats a state file naming anonymous-agent as anonymous with no env signal', () => {
+    directory = mkdtempSync(join(tmpdir(), 'ae-local-dev-'))
+    mkdirSync(join(directory, '.convex/local/default'), { recursive: true })
+    writeFileSync(
+      join(directory, '.convex/local/default/config.json'),
+      JSON.stringify({ deploymentName: 'anonymous-agent' }),
+      'utf8',
+    )
+    process.chdir(directory)
+
+    expect(isAnonymousLocalDeployment({})).toBe(true)
+  })
+
+  it('is not anonymous when neither signal is present', () => {
+    directory = mkdtempSync(join(tmpdir(), 'ae-local-dev-'))
+    process.chdir(directory)
+
+    expect(isAnonymousLocalDeployment({})).toBe(false)
   })
 })
 

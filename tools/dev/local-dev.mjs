@@ -73,8 +73,16 @@ export function buildConvexSelectArgs() {
  * `convex deployment select local` hard-fails before `convex dev` runs.
  * `convex dev` resolves the same local state file itself; skipping the
  * select no-op restores the dev:local flow for anonymous sandboxes.
+ *
+ * Two independent signals indicate this: `CONVEX_AGENT_MODE=anonymous`,
+ * which the Convex CLI's own `chooseDeployment` reads to synthesize the
+ * `anonymous-agent` deployment on a fresh checkout with no state file yet
+ * (`node_modules/convex/dist/cli.bundle.cjs` ~line 122847); or an existing
+ * state file already naming that deployment.
  */
-export function isAnonymousLocalDeployment() {
+export function isAnonymousLocalDeployment(env = process.env) {
+  if (env.CONVEX_AGENT_MODE === 'anonymous') return true
+
   const statePath = resolvePath('.convex/local/default/config.json')
   if (!existsSync(statePath)) return false
 
@@ -802,7 +810,7 @@ async function reportDoctor(supervisor, env, baseUrl) {
 }
 
 async function startConvex(supervisor, env) {
-  const anonymous = isAnonymousLocalDeployment()
+  const anonymous = isAnonymousLocalDeployment(env)
   if (anonymous) {
     log('anonymous local deployment — skipping `convex deployment select local`')
   } else {
