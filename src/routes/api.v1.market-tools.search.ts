@@ -6,6 +6,7 @@ import { readToolReadRequest } from '@/lib/server/tool-read-request'
 import { problem } from '@/lib/server/problem'
 import { withHttpRateLimit } from '@/lib/server/rate-limit'
 import { runWithRequestCorrelation, withRequestCorrelationHeader } from '@/lib/server/request-correlation'
+import { InvalidOpaqueCursorError } from '@/modules/registry/opaque-cursor'
 import { registryToolsSearchAction } from '@/modules/registry/tools.actions'
 import { toolCatalogSearchInputSchema, toolChoiceSearchOutputSchema } from '@/modules/registry/tool-choice-contracts'
 
@@ -37,11 +38,13 @@ export async function handleMarketToolSearchRequest(request: Request): Promise<R
           data: parsed.data,
           context: { caller: 'http', request },
         }))
-        if (!result.success) return problem({ status: 503, kind: 'INTERNAL', code: 'tool_read_result_invalid' })
+        if (!result.success) return problem({ status: 503, kind: 'INTERNAL', code: 'tool_read_result_invalid', detail: 'The tool catalogue result failed its own output contract.' })
         return Response.json(result.data, { headers: { 'Cache-Control': 'no-store' } })
       })
-    } catch {
-      response = toolReadUnavailableResponse()
+    } catch (error) {
+      response = error instanceof InvalidOpaqueCursorError
+        ? problem({ status: 400, kind: 'INVALID_ARGUMENT', code: 'invalid_cursor', detail: error.message })
+        : toolReadUnavailableResponse()
     }
     return withRequestCorrelationHeader(response, correlationId)
   })

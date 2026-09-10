@@ -2,6 +2,7 @@ import { createFileRoute } from '@tanstack/react-router'
 
 import { methodNotAllowed } from '@/lib/server/method-guard'
 import { resolveCanonicalBaseUrl } from '@/lib/server/canonical-url'
+import { readDirectoryFreshnessField, type X402DirectoryFreshnessField } from '@/modules/market/x402-directory-index.server'
 import {
   generateDeveloperDiscoverySchema,
   recordDeveloperDiscoveryFetch,
@@ -56,11 +57,27 @@ export async function handleDeveloperDiscoverySchemaRequest(
   const artifact = generateDeveloperDiscoverySchema(state, routeOptions)
   const fetchReadback = readDeveloperDiscoveryFetchReadback('schema', '/api/discovery/schema', artifact, routeOptions.now ?? 0)
 
-  return developerDiscoveryJsonResponse(artifact, fetchReadback)
+  return developerDiscoveryJsonResponse(await withDirectoryFreshness(artifact), fetchReadback)
+}
+
+/**
+ * Fix for swarm row 21: this route (and `/api/discovery/examples`) used to emit
+ * a zero-valued `generatedAt` alongside a hardcoded always-current `freshness`
+ * reading - a contradiction, since a real-current readback cannot have been
+ * generated at the epoch. Both now carry the x402 directory's own completion
+ * time and the same `freshness` shape `/api/v1/registry` reports, replacing
+ * that hardcoded literal.
+ */
+export async function withDirectoryFreshness(
+  artifact: DeveloperDiscoveryArtifact
+): Promise<Omit<DeveloperDiscoveryArtifact, 'freshness'> & { freshness: X402DirectoryFreshnessField }> {
+  const freshness = await readDirectoryFreshnessField()
+  const { freshness: _priorFreshness, ...rest } = artifact
+  return { ...rest, generatedAt: freshness.completedAt ?? artifact.generatedAt, freshness }
 }
 
 export function developerDiscoveryJsonResponse(
-  body: DeveloperDiscoveryArtifact,
+  body: Omit<DeveloperDiscoveryArtifact, 'freshness'> & { freshness: X402DirectoryFreshnessField },
   fetchReadback: DeveloperDiscoveryFetchReadback,
   init: ResponseInit = {}
 ): Response {

@@ -1,5 +1,6 @@
 import { toolCatalogSearchInputSchema, toolChoiceSearchOutputSchema } from '@/modules/registry/tool-choice-contracts'
 import { TOOL_MARKET_SEARCH_PATH } from '@/modules/registry/tool-entry'
+import { nextAction } from '@/modules/registry/next-action'
 
 import type { CliOptions } from '../lib/args'
 import { CliFailure, callJson, heading, line, printJson, requireOk } from '../lib/output'
@@ -99,15 +100,23 @@ export async function runSearchCommand(args: readonly string[], options: CliOpti
     ...technicalContinuation,
   ])
   const hasSearchFilters = options.filters !== undefined
-  const exhausted = pagination?.hasMore !== true
-  const requestCommand = result.kind === 'no_candidates' && exhausted && result.query.length > 0 && !hasSearchFilters
+  const decision = nextAction({
+    kind: result.kind,
+    query: result.query,
+    pagination: {
+      hasMore: pagination?.hasMore ?? false,
+      ...(pagination?.nextCursor === undefined ? {} : { nextCursor: pagination.nextCursor }),
+    },
+    hasFilters: hasSearchFilters,
+  })
+  const requestCommand = decision.kind === 'request'
     ? continuationCommand([
-        'ae', 'request', 'create', result.query,
+        'ae', 'request', 'create', decision.query,
         ...originContinuation,
         ...outputContinuation,
       ])
     : undefined
-  const broadenSearchCommand = result.kind === 'no_candidates' && exhausted && result.query.length > 0 && hasSearchFilters
+  const broadenSearchCommand = decision.kind === 'broaden'
     ? continuationCommand([
         'ae', 'list',
         ...sourceContinuation,

@@ -1,4 +1,5 @@
 import { callPublicSourceQuery, sourceQuery } from '@/lib/server/convex-source'
+import { CATALOGUE_STALE_AFTER_MS, sourceFreshnessState, type SourceFreshnessState } from '@/modules/common/freshness'
 import { readX402Directory } from './x402-directory.server'
 import type { X402DirectoryIndexCoverage, X402DirectoryIndexInput, X402IndexedDirectoryEntry } from './x402-directory-index'
 import {
@@ -26,17 +27,32 @@ type DirectoryStatus = {
 }
 const status = sourceQuery<Record<string, never>, DirectoryStatus>('x402DirectoryIndex:status')
 
-export const CATALOGUE_STALE_AFTER_MS = 36 * 60 * 60 * 1000
+// Re-exported so existing consumers of this module (e.g. the catalogue status
+// route/tests) keep resolving the constant from here after the shared
+// threshold logic moved to `@/modules/common/freshness` (DRY with
+// `registry/tools.actions.ts`, which cannot import this `market` module).
+export { CATALOGUE_STALE_AFTER_MS }
+
+export type SourceFreshnessField<Source extends string> = Readonly<{
+  source: Source
+  state: SourceFreshnessState
+  completedAt?: number
+  staleAfterMs: number
+}>
+export type X402DirectoryFreshnessField = SourceFreshnessField<'x402_directory'>
+
+function directoryFreshnessState(directoryStatus: DirectoryStatus, now: number): SourceFreshnessState {
+  if (directoryStatus.kind === 'unavailable') return 'absent'
+  const completedAt = directoryStatus.coverage?.completedAt
+  return sourceFreshnessState(
+    { ...(completedAt === undefined ? {} : { completedAt }), failed: directoryStatus.refreshState === 'failed' },
+    CATALOGUE_STALE_AFTER_MS,
+    now,
+  )
+}
 
 export function catalogueFreshness(directoryStatus: DirectoryStatus, now: number) {
-  const completedAt = directoryStatus.coverage?.completedAt
-  const state = directoryStatus.kind === 'unavailable' || completedAt === undefined
-    ? 'absent' as const
-    : directoryStatus.refreshState === 'failed'
-      ? 'failed' as const
-      : now - completedAt > CATALOGUE_STALE_AFTER_MS
-        ? 'stale' as const
-        : 'fresh' as const
+  const state = directoryFreshnessState(directoryStatus, now)
   return {
     schemaVersion: 'catalogue-status:v1' as const,
     status: state,
@@ -48,6 +64,27 @@ export function catalogueFreshness(directoryStatus: DirectoryStatus, now: number
 export async function readCatalogueFreshness(now: number = Date.now()): Promise<ReturnType<typeof catalogueFreshness>> {
   const result = await callPublicSourceQuery(status, {})
   return catalogueFreshness(result, now)
+}
+
+/**
+ * Additive `freshness` field shared by `/api/v1/registry` and the developer
+ * discovery routes: reports the x402 directory's own completion state rather
+ * than a route-local "current" guess. Best-effort - a source outage degrades
+ * to `absent` instead of failing the caller's primary response.
+ */
+export async function readDirectoryFreshnessField(now: number = Date.now()): Promise<X402DirectoryFreshnessField> {
+  try {
+    const result = await callPublicSourceQuery(status, {})
+    const completedAt = result.coverage?.completedAt
+    return {
+      source: 'x402_directory',
+      state: directoryFreshnessState(result, now),
+      ...(completedAt === undefined ? {} : { completedAt }),
+      staleAfterMs: CATALOGUE_STALE_AFTER_MS,
+    }
+  } catch {
+    return { source: 'x402_directory', state: 'absent', staleAfterMs: CATALOGUE_STALE_AFTER_MS }
+  }
 }
 
 export async function readX402DirectoryCatalogue(input: X402DirectoryCatalogueInput): Promise<X402DirectoryCatalogue> {

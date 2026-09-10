@@ -8,41 +8,71 @@ import {
   sourceQuery,
 } from '@/lib/server/convex-source'
 import { methodNotAllowed } from '@/lib/server/method-guard'
-import { problem } from '@/lib/server/problem'
+import { duplicateQueryParameterProblem, problem, zodIssueDetail } from '@/lib/server/problem'
 import { withHttpRateLimit } from '@/lib/server/rate-limit'
 import {
   runWithRequestCorrelation,
   withRequestCorrelationHeader,
 } from '@/lib/server/request-correlation'
 import { isInvalidRegistryCursorError } from '@/routes/api.businesses'
+import { decodeOpaqueCursor, encodeOpaqueCursor } from '@/modules/registry/opaque-cursor'
+import { toolCatalogPaginationSchema } from '@/modules/registry/tool-choice-contracts'
+import { readDirectoryFreshnessField } from '@/modules/market/x402-directory-index.server'
 
 const requestQuery = z.strictObject({
   query: z.string().max(200).default(''),
-  access: z.enum(['all', 'x402', 'provider_account']).default('all'),
   limit: z.coerce.number().int().min(1).max(50).default(24),
   cursor: z.string().max(512).optional(),
 })
 
-type RegistrySearchResult =
-  | Readonly<{ kind: 'unavailable' }>
-  | Readonly<{
-      kind: 'ok'
-      generation: string
-      coverage: Readonly<{ entries: number; completedAt: number }>
-      page: readonly Readonly<Record<string, unknown>>[]
-      isDone: boolean
-      continueCursor: string
-    }>
+const REGISTRY_RETRY_AFTER_SECONDS = 30
 
-const registrySearchQuery = sourceQuery<
+// Convex's native pagination vocabulary never crosses this boundary (decision D2):
+// the shared opaque-cursor contract (limit/nextCursor/hasMore) stays the only
+// pagination shape this route speaks. The cursor itself is wrapped by
+// `@/modules/registry/opaque-cursor` (AIP-158: page tokens are opaque to the
+// client and owned by the API) and bound to the directory generation it was
+// issued against, so a cursor from a different route, or one issued against a
+// since-rotated generation, is rejected as `invalid_cursor` before it ever
+// reaches the index - never silently reinterpreted (200) or misreported as an
+// outage (503).
+
+type RegistryBrowseResult =
+  | Readonly<{ kind: 'unavailable'; reason: string }>
+  | (Readonly<{
+      kind: 'ok'
+      coverage: Readonly<Record<string, unknown>>
+      searchMethod: 'native_full_text' | 'native_index'
+      page: readonly Readonly<Record<string, unknown>>[]
+    }> & Readonly<Record<string, unknown>>)
+
+const registryBrowseQuery = sourceQuery<
   {
     query: string
-    access: 'all' | 'x402' | 'provider_account'
-    limit: number
-    cursor: string | null
+    paginationOpts: { cursor: string | null; numItems: number }
   },
-  RegistrySearchResult
->('marketExternalRegistry:search')
+  RegistryBrowseResult
+>('x402DirectoryIndex:browse')
+
+type RegistryStatusResult = Readonly<{
+  kind: 'unavailable' | 'ready'
+  coverage?: Readonly<{ generation: string; completedAt: number }>
+}>
+
+const registryStatusQuery = sourceQuery<Record<string, never>, RegistryStatusResult>('x402DirectoryIndex:status')
+
+/**
+ * Resolves an incoming opaque registry cursor to its inner engine cursor,
+ * scoped to the currently active directory generation. `undefined` means the
+ * caller must be rejected with 400 `invalid_cursor` - either the token itself
+ * is malformed/foreign, or there is no active generation for it to belong to.
+ */
+async function resolveInnerRegistryCursor(cursor: string): Promise<string | undefined> {
+  const status = await callPublicSourceQuery(registryStatusQuery, {})
+  const generation = status.kind === 'ready' ? status.coverage?.generation : undefined
+  if (generation === undefined) return undefined
+  return decodeOpaqueCursor(cursor, { kind: 'registry', scope: generation })
+}
 
 export const Route = createFileRoute('/api/v1/registry')({
   server: {
@@ -69,48 +99,91 @@ export async function handleApiRegistryRequest(
     try {
       response = await withHttpRateLimit(request, 'public-read', async () => {
         const url = new URL(request.url)
-        const cursor = url.searchParams.get('cursor')
-        const parsed = requestQuery.safeParse({
-          query: url.searchParams.get('query') ?? '',
-          access: url.searchParams.get('access') ?? 'all',
-          limit: url.searchParams.get('limit') ?? '24',
-          ...(cursor === null ? {} : { cursor }),
-        })
+        const duplicateParam = duplicateQueryParameterProblem(url)
+        if (duplicateParam !== undefined) return duplicateParam
+        const allParams: Record<string, string> = {}
+        for (const [key, value] of url.searchParams) {
+          allParams[key] = value
+        }
+        const parsed = requestQuery.safeParse(allParams)
         if (!parsed.success) {
           return problem({
             status: 400,
             kind: 'INVALID_ARGUMENT',
-            code: 'invalid_registry_query',
-            detail:
-              'query must be at most 200 characters; access must be all, x402, or provider_account; limit must be 1–50.',
+            code: 'invalid_query_parameter',
+            detail: zodIssueDetail(parsed.error),
           })
         }
-        const projection = await callPublicSourceQuery(registrySearchQuery, {
+        const innerCursor = parsed.data.cursor === undefined
+          ? null
+          : await resolveInnerRegistryCursor(parsed.data.cursor)
+        if (innerCursor === undefined) {
+          return problem({
+            status: 400,
+            kind: 'INVALID_ARGUMENT',
+            code: 'invalid_cursor',
+            detail: 'The supplied pagination cursor is invalid or expired.',
+          })
+        }
+        // `limit` is a maximum page size: browse serves native pages of at most
+        // 12 rows regardless of the requested limit, so `hasMore` carries the rest.
+        const projection = await callPublicSourceQuery(registryBrowseQuery, {
           query: parsed.data.query,
-          access: parsed.data.access,
-          limit: parsed.data.limit,
-          cursor: parsed.data.cursor ?? null,
+          paginationOpts: { cursor: innerCursor, numItems: parsed.data.limit },
         })
+        if (projection.kind === 'unavailable') return unavailableRegistryResponse(projection.reason)
         const headers = {
           'Cache-Control': 'public, max-age=60, stale-while-revalidate=240',
         }
-        return head
-          ? new Response(null, { status: 200, headers })
-          : Response.json(
-              {
-                schemaVersion: 'api-registry:v2',
-                query: parsed.data.query,
-                access: parsed.data.access,
-                ...projection,
-              },
-              { headers },
-            )
+        const nativeDone = projection.isDone === true
+        const nativeCursor = projection.continueCursor
+        const generation = typeof projection.coverage.generation === 'string' ? projection.coverage.generation : undefined
+        const pagination = toolCatalogPaginationSchema.parse({
+          limit: parsed.data.limit,
+          ...(nativeDone || typeof nativeCursor !== 'string' || generation === undefined
+            ? {}
+            : { nextCursor: encodeOpaqueCursor({ kind: 'registry', scope: generation, cursor: nativeCursor }) }),
+          hasMore: !nativeDone,
+        })
+        if (head) return new Response(null, { status: 200, headers })
+        const freshness = await readDirectoryFreshnessField()
+        return Response.json(
+          {
+            schemaVersion: 'api-registry:v3',
+            query: parsed.data.query,
+            kind: projection.kind,
+            coverage: projection.coverage,
+            searchMethod: projection.searchMethod,
+            page: projection.page,
+            pagination,
+            freshness,
+          },
+          { headers },
+        )
       })
     } catch (error) {
       response = registryError(error)
     }
     return withRequestCorrelationHeader(response, correlationId)
   })
+}
+
+function unavailableRegistryResponse(reason: string): Response {
+  if (reason === 'query_invalid' || reason === 'query_sort_unsupported') {
+    return problem({
+      status: 400,
+      kind: 'INVALID_ARGUMENT',
+      code: 'invalid_query_parameter',
+    })
+  }
+  return registryUnavailable()
+}
+
+function registryUnavailable(): Response {
+  return problem(
+    { status: 503, kind: 'UNAVAILABLE', code: 'registry_unavailable' },
+    { 'Retry-After': String(REGISTRY_RETRY_AFTER_SECONDS) },
+  )
 }
 
 function registryError(error: unknown): Response {
@@ -129,9 +202,5 @@ function registryError(error: unknown): Response {
       detail: 'The supplied pagination cursor is invalid or expired.',
     })
   }
-  return problem({
-    status: 503,
-    kind: 'UNAVAILABLE',
-    code: 'registry_unavailable',
-  })
+  return registryUnavailable()
 }

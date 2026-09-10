@@ -137,7 +137,7 @@ export async function readMarketRouteProjection(
   } catch {
     catalog = {
       kind: "unavailable",
-      schemaVersion: "registry-tools:v1",
+      schemaVersion: "registry-tools:v3",
       reason: "source_unavailable",
       navigation: [],
     };
