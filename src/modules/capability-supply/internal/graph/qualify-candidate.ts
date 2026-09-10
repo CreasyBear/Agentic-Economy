@@ -8,6 +8,7 @@ import {
 } from '@/modules/capability-supply/public'
 import {
   compareExactAmounts,
+  displayPriceFromPricingConfig,
   pricingConfigDecisionAmount,
   pricingConfigDigest,
   pricingConfigSchema,
@@ -277,7 +278,9 @@ export async function qualifySuppliedCandidate(
     reasons.push('pricing_missing_or_invalid')
   } else {
     const parsedPricing = pricingConfigSchema.safeParse(publication.pricingConfig)
-    const displayedPrice = offering?.presentation.price
+    const displayedPrice = parsedPricing.success
+      ? displayPriceFromPricingConfig(parsedPricing.data)
+      : undefined
     pricingCurrent = parsedPricing.success
       && pricingConfigDigest(parsedPricing.data) === publication.priceDigest
       && (parsedPricing.data.kind === 'managed_x402'

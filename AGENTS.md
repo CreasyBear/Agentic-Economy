@@ -116,6 +116,11 @@ pull request per well, merged with a merge commit once `npm run gate` and CI are
 green. Never push directly to `main`; never stage the whitepaper, `docs/strategy/*`,
 `docs/workflow/aecon-signals-proposal.md` or `output/*`.
 
+This checkout is shared by concurrent agents. `.claude/settings.json` installs a
+PreToolUse hook (`tools/dev/guard-destructive-git.mjs`) that blocks stash,
+`checkout --`, restore, `reset --hard`, clean and force-push in Bash; report the
+need instead of working around it.
+
 ## Node and command startup
 
 Use Node 22 and npm 11.5.1 for all project commands, including Convex and child

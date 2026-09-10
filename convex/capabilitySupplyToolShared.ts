@@ -18,6 +18,7 @@ import {
 } from '@/modules/capability-supply/public'
 import {
   compareExactAmounts,
+  displayPriceFromPricingConfig,
   normalizePricingConfig,
   pricingConfigDecisionAmount,
   pricingConfigSourceAmount,
@@ -176,7 +177,25 @@ export async function toolRecordProjection(
     && await readManagedX402InspectionTarget(ctx, publication.toolRef, now) !== undefined
   const unavailableReason = routeable ? undefined : awaitingInspection ? 'inspection_required' as const : publicUnavailableReason(publication, qualification)
   const authorityMode = publication.authorityMode
-  const sourcePrice = offering.presentation.price
+  // Display price is derived from the publication's pinned pricing config
+  // rather than read off the stored offering (`presentation.price` is being
+  // retired as a stored field); `priceBreakdownFor` below re-derives and
+  // digest-checks the same config for the x402/on_request breakdown.
+  let normalizedPricingConfig: ReturnType<typeof normalizePricingConfig> | undefined
+  try {
+    normalizedPricingConfig = publication.pricingConfigJson === undefined
+      ? undefined
+      : normalizePricingConfig(JSON.parse(publication.pricingConfigJson) as unknown)
+  } catch {
+    return { kind: 'dropped', reason: 'malformed_price' }
+  }
+  if (
+    normalizedPricingConfig === undefined
+    || normalizedPricingConfig.kind === 'invalid'
+    || publication.priceDigest === undefined
+    || pricingConfigDigest(normalizedPricingConfig.config) !== publication.priceDigest
+  ) return { kind: 'dropped', reason: 'malformed_price' }
+  const sourcePrice = displayPriceFromPricingConfig(normalizedPricingConfig.config)
   const transport = publicToolTransportFor(binding.endpointUrl, binding.adapter.adapterId, bindingRow.configJson)
   if (transport === undefined) return { kind: 'dropped', reason: 'invalid_transport' }
   const pricingSource = qualification.sources.find(({ kind }) => kind === 'pricing')

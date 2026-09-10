@@ -67,6 +67,30 @@ export function pricingConfigDecisionAmount(config: PricingConfig): ExactAmount 
     : undefined
 }
 
+/**
+ * Display-only price shape for catalogue presentation. Mirrors the
+ * `capabilityOfferings.presentation.price` union (see
+ * `src/modules/capability-supply/internal/convex-schema.ts`), redefined here
+ * because `money` cannot import from `capability-supply`
+ * (`src/modules/module-boundaries.ts`). Callers there should point their
+ * `price` field type at this `DisplayPrice` instead of redeclaring it.
+ */
+export type DisplayPrice =
+  | Readonly<{ kind: 'fixed'; amount: ExactAmount }>
+  | Readonly<{ kind: 'range'; minimum: ExactAmount; maximum: ExactAmount }>
+  | Readonly<{ kind: 'on_request' }>
+
+/**
+ * Derives the catalogue display price from the pricing config Quote actually
+ * reads (`normalizePricingConfig`). `fixed_aud` has a single exact amount, so
+ * it maps to `fixed`; every other (metered/unknown) variant is `on_request`
+ * until a tiered `PricingConfig` variant exists to populate `range`.
+ */
+export function displayPriceFromPricingConfig(config: PricingConfig): DisplayPrice {
+  const amount = pricingConfigDecisionAmount(config)
+  return amount === undefined ? { kind: 'on_request' } : { kind: 'fixed', amount }
+}
+
 export function pricingConfigSourceAmount(config: PricingConfig): ExactAmount {
   return config.kind === 'managed_x402'
     ? {

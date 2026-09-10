@@ -102,6 +102,9 @@ describe('narrow owner Tools inventory read', () => {
       { kind: 'catalog_offering', offeringRef, offeringRevision: 1, offeringSourceHash: sourceHash },
     )
     if (prepared.kind === 'refused') throw new Error(`server_tool_detail_prepare_failed:${prepared.reason}`)
+    // `capabilityOfferings.presentation.price` is now derived from the binding's
+    // pricingConfig via `displayPriceFromPricingConfig()`. The harness already
+    // handles the Convex validator's optional field exclusion via `withDefinedPrice()`.
     const published = await owner.mutation(api.capabilitySupply.publishPreparedCapability, prepared.command)
     if (published.kind === 'refused') throw new Error(`server_tool_detail_publish_failed:${published.reason}`)
 

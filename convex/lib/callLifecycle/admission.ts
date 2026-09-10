@@ -10,6 +10,7 @@ import { readCurrentPublishedTool } from '../../capabilitySupplyTools'
 import { enqueueCallDispatch } from './dispatch'
 import { assertAgentAccessRateAdmission } from '../rateLimit'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { pricingConfigDecisionAmount } from '@/modules/money/public'
 import { isBoundedJsonValue, type JsonValue } from '@/modules/capability-contract/public'
 import { isRecord } from '@/modules/common/is-record'
 import { createPublicToolRef, isPublicToolRef } from '@/modules/capability-supply/public'
@@ -676,15 +677,17 @@ function loadApprovalMaterial(row: PendingApprovalRow): ApprovalMaterial | null 
 
 function approvalRequestMatches(
   row: PendingApprovalRow,
+  operation: PublishedTool,
   descriptor: RuntimePublishedToolDescriptor,
 ): boolean {
-  if (descriptor.price.kind !== 'fixed') return false
+  const maximumSpend = pricingConfigDecisionAmount(operation.pricingConfig)
+  if (maximumSpend === undefined) return false
   const expected = {
     kind: 'approval_required' as const,
     toolRef: row.toolRef,
     consequence: descriptor.consequenceClass,
     retryClass: descriptor.retryClass,
-    maximumSpend: descriptor.price.amount,
+    maximumSpend,
     dataFields: [...descriptor.materialInputPointers],
   }
   try {
@@ -718,7 +721,7 @@ async function loadApprovalRuntime(
   if (!commitmentsMatch) return null
   try {
     const descriptor = materializeRuntimePublishedTool(operation)
-    return approvalRequestMatches(row, descriptor) ? { operation, descriptor } : null
+    return approvalRequestMatches(row, operation, descriptor) ? { operation, descriptor } : null
   } catch {
     return null
   }

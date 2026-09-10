@@ -33,7 +33,7 @@ function withReadinessDrift(tool: PublishedTool): PublishedTool {
 }
 
 function withPriceDrift(tool: PublishedTool): PublishedTool {
-  if (tool.identity.price.kind !== 'fixed') throw new Error('fixed-price fixture required')
+  if (tool.identity.price?.kind !== 'fixed') throw new Error('fixed-price fixture required')
   const price = {
     kind: 'fixed' as const,
     amount: { ...tool.identity.price.amount, units: '2' },

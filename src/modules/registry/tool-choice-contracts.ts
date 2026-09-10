@@ -8,6 +8,7 @@ import type {
   PublicToolDescriptor,
 } from '@/modules/capability-supply/public'
 import {
+  REGISTRY_TOOLS_SCHEMA_VERSION,
   publicToolAuthenticationSchema,
   publicToolParameterSchema,
   publicToolPaymentSchema,
@@ -59,6 +60,20 @@ export const toolCatalogPaginationSchema = z.strictObject({
   hasMore: z.boolean(),
 })
 
+// Additive freshness readback (review issue 4A / C16): `market-tools/list` and
+// `market-tools/search` read `registrySearchDocuments`, kept current by the
+// hourly "reconcile business supply projections" workload cron. Same shape as
+// `/api/v1/registry`'s `x402_directory` freshness, different source.
+export const supplyProjectionFreshnessSchema = z.strictObject({
+  source: z.literal('supply_projection'),
+  state: z.enum(['absent', 'failed', 'stale', 'fresh']),
+  completedAt: z.number().optional(),
+  staleAfterMs: z.number(),
+})
+export type SupplyProjectionFreshness = z.infer<typeof supplyProjectionFreshnessSchema>
+
+export const listingTierSchema = z.enum(['reviewed', 'listed'])
+
 export const compactToolCandidateSchema = z.strictObject({
   toolRef: z.string(),
   capabilityId: z.string(),
@@ -70,44 +85,48 @@ export const compactToolCandidateSchema = z.strictObject({
   healthStatus: toolHealthStatusSchema,
   lastCheckedAt: z.number().optional(),
   lastHealthyAt: z.number().optional(),
+  listingTier: listingTierSchema,
 })
 export const publicToolChoiceSchema = compactToolCandidateSchema
 export type PublicToolChoice = z.infer<typeof publicToolChoiceSchema>
 
 const catalogUnavailableSchema = z.strictObject({
   kind: z.literal('unavailable'),
-  schemaVersion: z.literal('registry-tools:v3'),
+  schemaVersion: z.literal(REGISTRY_TOOLS_SCHEMA_VERSION),
   reason: z.enum(['query_invalid', 'source_unavailable', 'source_capacity_exceeded']),
 })
 export const toolChoiceListOutputSchema = z.union([
   z.strictObject({
     kind: z.literal('ok'),
-    schemaVersion: z.literal('registry-tools:v3'),
+    schemaVersion: z.literal(REGISTRY_TOOLS_SCHEMA_VERSION),
     count: z.number().int().nonnegative(),
     partialResults: z.boolean().optional(),
     items: z.array(compactToolCandidateSchema).max(100),
     pagination: toolCatalogPaginationSchema,
+    freshness: supplyProjectionFreshnessSchema.optional(),
   }),
   catalogUnavailableSchema,
 ])
 export const toolChoiceSearchOutputSchema = z.union([
   z.strictObject({
     kind: z.literal('ok'),
-    schemaVersion: z.literal('registry-tools:v3'),
+    schemaVersion: z.literal(REGISTRY_TOOLS_SCHEMA_VERSION),
     query: z.string(),
     count: z.number().int().nonnegative(),
     partialResults: z.boolean().optional(),
     items: z.array(compactToolCandidateSchema).max(20),
     pagination: toolCatalogPaginationSchema,
+    freshness: supplyProjectionFreshnessSchema.optional(),
   }),
   z.strictObject({
     kind: z.literal('no_candidates'),
-    schemaVersion: z.literal('registry-tools:v3'),
+    schemaVersion: z.literal(REGISTRY_TOOLS_SCHEMA_VERSION),
     query: z.string(),
     count: z.literal(0),
     items: z.tuple([]),
     note: z.string(),
     pagination: toolCatalogPaginationSchema,
+    freshness: supplyProjectionFreshnessSchema.optional(),
   }),
   catalogUnavailableSchema,
 ])
@@ -148,21 +167,22 @@ const toolDescriptionSchema = z.strictObject({
   authentication: publicToolAuthenticationSchema,
   payment: publicToolPaymentSchema.optional(),
   parameters: z.array(publicToolParameterSchema).optional(),
+  listingTier: listingTierSchema,
 })
 export const toolChoiceDescribeOutputSchema = z.union([
   z.strictObject({
     kind: z.literal('found'),
-    schemaVersion: z.literal('registry-tools:v3'),
+    schemaVersion: z.literal(REGISTRY_TOOLS_SCHEMA_VERSION),
     tool: toolDescriptionSchema,
   }),
   z.strictObject({
     kind: z.literal('not_found'),
-    schemaVersion: z.literal('registry-tools:v3'),
+    schemaVersion: z.literal(REGISTRY_TOOLS_SCHEMA_VERSION),
     toolRef: z.string(),
   }),
   z.strictObject({
     kind: z.literal('unavailable'),
-    schemaVersion: z.literal('registry-tools:v3'),
+    schemaVersion: z.literal(REGISTRY_TOOLS_SCHEMA_VERSION),
     toolRef: z.string(),
     reason: z.string(),
   }),
@@ -170,12 +190,12 @@ export const toolChoiceDescribeOutputSchema = z.union([
 export const toolChoiceCompareOutputSchema = z.union([
   z.strictObject({
     kind: z.literal('ok'),
-    schemaVersion: z.literal('registry-tools:v3'),
+    schemaVersion: z.literal(REGISTRY_TOOLS_SCHEMA_VERSION),
     tools: z.array(compactToolCandidateSchema).min(1).max(4),
   }),
   z.strictObject({
     kind: z.literal('unavailable'),
-    schemaVersion: z.literal('registry-tools:v3'),
+    schemaVersion: z.literal(REGISTRY_TOOLS_SCHEMA_VERSION),
     reason: z.enum(['query_invalid', 'tool_not_found', 'tool_unavailable']),
   }),
 ])
@@ -206,6 +226,7 @@ function projectCompactTool(tool: PublicToolDescriptor) {
     priceLabel: priceLabel(tool),
     ...(tool.commercial.displayPrice === undefined ? {} : { displayPrice: tool.commercial.displayPrice }),
     ...projectToolHealth(tool.availability, Date.now()),
+    listingTier: tool.listingTier,
   })
 }
 
@@ -229,13 +250,13 @@ function visibleTools(tools: readonly PublicToolDescriptor[], filters: unknown) 
 export function projectToolListChoices(result: ToolSearchResult, filters?: unknown) {
   if (result.kind === 'unavailable') {
     return toolChoiceListOutputSchema.parse({
-      kind: 'unavailable', schemaVersion: 'registry-tools:v3', reason: result.reason,
+      kind: 'unavailable', schemaVersion: REGISTRY_TOOLS_SCHEMA_VERSION, reason: result.reason,
     })
   }
   const items = result.kind === 'ok' ? visibleTools(result.items, filters) : []
   return toolChoiceListOutputSchema.parse({
     kind: 'ok',
-    schemaVersion: 'registry-tools:v3',
+    schemaVersion: REGISTRY_TOOLS_SCHEMA_VERSION,
     count: items.length,
     ...(result.partialResults === undefined ? {} : { partialResults: result.partialResults }),
     items,
@@ -246,7 +267,7 @@ export function projectToolListChoices(result: ToolSearchResult, filters?: unkno
 export function projectToolSearchChoices(result: ToolSearchResult, filters?: unknown) {
   if (result.kind === 'unavailable') {
     return toolChoiceSearchOutputSchema.parse({
-      kind: 'unavailable', schemaVersion: 'registry-tools:v3', reason: result.reason,
+      kind: 'unavailable', schemaVersion: REGISTRY_TOOLS_SCHEMA_VERSION, reason: result.reason,
     })
   }
   const items = result.kind === 'ok' ? visibleTools(result.items, filters) : []
@@ -254,7 +275,7 @@ export function projectToolSearchChoices(result: ToolSearchResult, filters?: unk
     const hasMore = result.kind === 'ok' && result.pagination.hasMore
     return toolChoiceSearchOutputSchema.parse({
       kind: 'no_candidates',
-      schemaVersion: 'registry-tools:v3',
+      schemaVersion: REGISTRY_TOOLS_SCHEMA_VERSION,
       query: result.query,
       count: 0,
       items: [],
@@ -266,7 +287,7 @@ export function projectToolSearchChoices(result: ToolSearchResult, filters?: unk
   }
   return toolChoiceSearchOutputSchema.parse({
     kind: 'ok',
-    schemaVersion: 'registry-tools:v3',
+    schemaVersion: REGISTRY_TOOLS_SCHEMA_VERSION,
     query: result.query,
     count: items.length,
     ...(result.partialResults === undefined ? {} : { partialResults: result.partialResults }),
@@ -279,7 +300,7 @@ export function projectToolDescription(result: ToolDetailResult) {
   if (result.kind !== 'found') {
     return toolChoiceDescribeOutputSchema.parse({
       kind: result.kind,
-      schemaVersion: 'registry-tools:v3',
+      schemaVersion: REGISTRY_TOOLS_SCHEMA_VERSION,
       toolRef: result.toolRef,
       ...(result.kind === 'unavailable' ? { reason: result.reason } : {}),
     })
@@ -287,7 +308,7 @@ export function projectToolDescription(result: ToolDetailResult) {
   const tool = result.tool
   return toolChoiceDescribeOutputSchema.parse({
     kind: 'found',
-    schemaVersion: 'registry-tools:v3',
+    schemaVersion: REGISTRY_TOOLS_SCHEMA_VERSION,
     tool: {
       toolRef: tool.toolRef,
       capabilityId: tool.contract.capabilityId,
@@ -306,6 +327,7 @@ export function projectToolDescription(result: ToolDetailResult) {
       authentication: tool.authentication,
       ...(tool.payment === undefined ? {} : { payment: tool.payment }),
       ...(tool.parameters === undefined ? {} : { parameters: tool.parameters }),
+      listingTier: tool.listingTier,
     },
   })
 }
@@ -314,8 +336,8 @@ export function projectToolCompareChoices(result: ToolCompareResult) {
   return toolChoiceCompareOutputSchema.parse(result.kind === 'ok'
     ? {
         kind: 'ok',
-        schemaVersion: 'registry-tools:v3',
+        schemaVersion: REGISTRY_TOOLS_SCHEMA_VERSION,
         tools: result.tools.map(projectCompactTool),
       }
-    : { kind: 'unavailable', schemaVersion: 'registry-tools:v3', reason: result.reason })
+    : { kind: 'unavailable', schemaVersion: REGISTRY_TOOLS_SCHEMA_VERSION, reason: result.reason })
 }

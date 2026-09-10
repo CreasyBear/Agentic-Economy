@@ -7,6 +7,7 @@ import { x402DirectoryResolveInputSchema, type X402DirectoryResolution } from '@
 import { directoryEntryMatchesFilters } from '@/modules/market/x402-directory-index'
 import { api, internal } from './_generated/api'
 import { action } from './_generated/server'
+import { reconcileReadyItems } from './capabilitySupplyShared'
 import { bindWorkloadCronActionContext } from './workloadCron'
 
 /** Resolve only a server-retrieved directory resource selected by the customer. */
@@ -39,7 +40,7 @@ export const resolve = action({
       if (admission.admitted.length === 0) return { kind: 'unavailable', reason: admission.skipped[0]?.reason ?? 'admission_unavailable' }
       const workload = await ctx.runQuery(internal.workloadCron.admit, { name: 'refresh facilitator discovery' })
       const authorized = bindWorkloadCronActionContext(ctx, { name: 'refresh facilitator discovery', snapshot: workload })
-      const result = await authorized.runMutation(internal.facilitatorDiscovery.reconcile, { items: [...structuredClone(admission.admitted)], complete: false, deadlineAt: Date.now() + 10_000, workload })
+      const result = await authorized.runMutation(internal.facilitatorDiscovery.reconcile, { items: [...structuredClone(reconcileReadyItems(admission.admitted))], complete: false, deadlineAt: Date.now() + 10_000, workload })
       const toolRef = result.toolRefs[0]
       if (toolRef === undefined) return { kind: 'unavailable', reason: 'admission_unavailable' }
       const detail = await ctx.runQuery(api.capabilitySupplyTools.detail, { toolRef })

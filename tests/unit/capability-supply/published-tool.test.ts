@@ -354,7 +354,7 @@ describe('published Tool materialization', () => {
     const tamperers: readonly [string, (packet: Packet) => void][] = [
       ['offering price', (packet) => {
         const price = packet.sourceMaterial.offering.presentation.price
-        if (price.kind !== 'fixed') throw new Error('fixed_price_missing')
+        if (price === undefined || price.kind !== 'fixed') throw new Error('fixed_price_missing')
         Object.assign(price.amount, { units: '2' })
       }],
       ['binding payTo', (packet) => { config(packet).payTo = '0xattacker' }],
@@ -362,7 +362,7 @@ describe('published Tool materialization', () => {
       ['binding asset', (packet) => { config(packet).asset = '0xattacker' }],
       ['offering amount', (packet) => {
         const price = packet.sourceMaterial.offering.presentation.price
-        if (price.kind !== 'fixed') throw new Error('fixed_price_missing')
+        if (price === undefined || price.kind !== 'fixed') throw new Error('fixed_price_missing')
         Object.assign(price.amount, { units: '99' })
       }],
       ['method mismatch', (packet) => { config(packet).method = 'POST' }],

@@ -307,6 +307,7 @@ const MARKET_TOOL_DETAIL_WIRE_DESCRIPTOR = {
   authentication: { kind: 'ae_api_key' },
   transport: { method: 'POST', requestTimeoutMs: 1_000 },
   provenance: { publisher: 'ae_curated_external', sourceKind: 'ae_envelope' },
+  listingTier: 'reviewed',
   availability: { posture: 'setup_required' },
   navigation: [],
 } as const
@@ -463,7 +464,7 @@ function installMarketToolSource(): () => void {
             status: 'success',
             value: {
               kind: 'no_candidates',
-              schemaVersion: 'registry-tools:v1',
+              schemaVersion: 'registry-tools:v3',
               query: 'reference lookup',
               appliedFilters: {},
               matchedCount: 0,
@@ -476,7 +477,7 @@ function installMarketToolSource(): () => void {
             status: 'success',
             value: {
               kind: 'found',
-              schemaVersion: 'registry-tools:v1',
+              schemaVersion: 'registry-tools:v3',
               tool: MARKET_TOOL_DETAIL_WIRE_DESCRIPTOR,
             },
           })
@@ -485,7 +486,7 @@ function installMarketToolSource(): () => void {
             status: 'success',
             value: {
               kind: 'unavailable',
-              schemaVersion: 'registry-tools:v1',
+              schemaVersion: 'registry-tools:v3',
               reason: 'tool_not_found',
               navigation: [],
             },

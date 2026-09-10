@@ -334,7 +334,7 @@ export function verifyDevelopmentAlternatePublishedToolEvidence(
     || packet.tool.identity.publicationRevision !== 3
     || packet.tool.identity.endpoint.url !== endpointUrl
     || packet.tool.identity.endpoint.resource !== 'GET /v1/spot'
-    || packet.tool.identity.price.kind !== 'on_request'
+    || packet.tool.identity.price?.kind !== 'on_request'
     || packet.tool.pricingConfig.kind !== 'managed_x402'
     || packet.tool.pricingConfig.effectTiming !== 'payment_required_before_effect'
     || packet.tool.pricingConfig.sourceRequirement.network !== expectedPayment.network

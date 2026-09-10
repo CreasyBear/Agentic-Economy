@@ -4,6 +4,7 @@ import {
   type ExactAmount,
 } from "@/modules/money/public";
 import { canonicalDigest } from "@/modules/common/canonical-digest";
+import { SEARCH_STOP_WORDS } from "@/modules/common/normalize-search-text";
 import {
   isPublicToolRef,
   type PublicToolRef,
@@ -25,6 +26,23 @@ import {
   type PublicToolDescriptor,
   type PublicToolNavigationRelation,
 } from "./tool-projection-types";
+
+const TOOL_SEARCH_INTENT_WORDS = new Set([
+  "api",
+  "current",
+  "data",
+  "latest",
+  "live",
+  "provider",
+  "result",
+  "results",
+  "search",
+  "value",
+]);
+const TOOL_STOP_WORDS = new Set([
+  ...SEARCH_STOP_WORDS,
+  ...TOOL_SEARCH_INTENT_WORDS,
+]);
 
 export type ToolSearchTextCandidate<T> = Readonly<{
   value: T;
@@ -187,50 +205,6 @@ const SEARCH_MONTHS = new Set([
   "may", "jun", "june", "jul", "july", "aug", "august", "sep",
   "sept", "september", "oct", "october", "nov", "november", "dec",
   "december",
-]);
-const SEARCH_STOP_WORDS = new Set([
-  "a",
-  "an",
-  "and",
-  "api",
-  "for",
-  "from",
-  "get",
-  "how",
-  "in",
-  "into",
-  "is",
-  "latest",
-  "of",
-  "on",
-  "or",
-  "please",
-  "provider",
-  "search",
-  "that",
-  "the",
-  "this",
-  "to",
-  "value",
-  "what",
-  "when",
-  "where",
-  "which",
-  "who",
-  "with",
-  "find",
-  "current",
-  "can",
-  "i",
-  "me",
-  "tell",
-  "data",
-  "use",
-  "want",
-  "need",
-  "live",
-  "result",
-  "results",
 ]);
 
 export async function searchCapabilityTools(
@@ -604,7 +578,7 @@ function matchesFactFilters(
 function searchTokens(query: string): string[] {
   const tokens = query.toLowerCase().match(/[a-z0-9]+/g) ?? [];
   return tokens.filter((token, index) =>
-    !SEARCH_STOP_WORDS.has(token) &&
+    !TOOL_STOP_WORDS.has(token) &&
     !isRuntimeConstraintToken(token, tokens[index - 1]),
   );
 }

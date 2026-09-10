@@ -174,6 +174,7 @@ const publicDescriptor = v.object({
   }),
   availability: publicAvailability,
   navigation: v.array(publicNavigation),
+  listingTier: v.union(v.literal('reviewed'), v.literal('listed')),
   parameters: v.optional(v.array(v.object({
     group: v.union(v.literal('body'), v.literal('path'), v.literal('query'), v.literal('header')),
     name: v.string(), type: v.string(),
@@ -229,7 +230,7 @@ const publicRanking = v.object({ toolRef: v.string(), rank: v.number(), score: v
 export const publicSearchReturns = v.union(
   v.object({
     kind: v.literal('ok'),
-    schemaVersion: v.literal('registry-tools:v1'),
+    schemaVersion: v.literal('registry-tools:v3'),
     query: v.string(),
     items: v.array(publicDescriptor),
     matchedCount: v.optional(v.number()),
@@ -240,7 +241,7 @@ export const publicSearchReturns = v.union(
   }),
   v.object({
     kind: v.literal('no_candidates'),
-    schemaVersion: v.literal('registry-tools:v1'),
+    schemaVersion: v.literal('registry-tools:v3'),
     query: v.string(),
     appliedFilters: publicSearchFilters,
     matchedCount: v.optional(v.number()),
@@ -250,16 +251,16 @@ export const publicSearchReturns = v.union(
   }),
   v.object({
     kind: v.literal('unavailable'),
-    schemaVersion: v.literal('registry-tools:v1'),
+    schemaVersion: v.literal('registry-tools:v3'),
     reason: v.union(v.literal('query_invalid'), v.literal('source_unavailable'), v.literal('source_capacity_exceeded')),
     navigation: publicSearchNavigation,
   }),
 )
 export const publicDetailReturns = v.union(
-  v.object({ kind: v.literal('found'), schemaVersion: v.literal('registry-tools:v1'), tool: publicDescriptor }),
+  v.object({ kind: v.literal('found'), schemaVersion: v.literal('registry-tools:v3'), tool: publicDescriptor }),
   v.object({
     kind: v.literal('unavailable'),
-    schemaVersion: v.literal('registry-tools:v1'),
+    schemaVersion: v.literal('registry-tools:v3'),
     toolRef: v.string(),
     reason: v.union(
       v.literal('setup_required'),
@@ -273,19 +274,19 @@ export const publicDetailReturns = v.union(
     ),
     navigation: publicSearchNavigation,
   }),
-  v.object({ kind: v.literal('not_found'), schemaVersion: v.literal('registry-tools:v1'), toolRef: v.string(), navigation: publicSearchNavigation }),
+  v.object({ kind: v.literal('not_found'), schemaVersion: v.literal('registry-tools:v3'), toolRef: v.string(), navigation: publicSearchNavigation }),
 )
 export const publicCompareReturns = v.union(
   v.object({
     kind: v.literal('ok'),
-    schemaVersion: v.literal('registry-tools:v1'),
+    schemaVersion: v.literal('registry-tools:v3'),
     tools: v.array(publicDescriptor),
     facts: v.array(publicComparisonFact),
     navigation: publicSearchNavigation,
   }),
   v.object({
     kind: v.literal('unavailable'),
-    schemaVersion: v.literal('registry-tools:v1'),
+    schemaVersion: v.literal('registry-tools:v3'),
     reason: v.union(v.literal('query_invalid'), v.literal('tool_not_found'), v.literal('tool_unavailable')),
     navigation: publicSearchNavigation,
   }),
@@ -305,7 +306,7 @@ export async function searchHandler(ctx: QueryCtx, args: ToolSearchInput) {
   const parsed = toolSearchInputSchema.safeParse(args)
   const normalized = parsed.success ? normalizeToolSearchInput({ ...parsed.data, limit: parsed.data.limit ?? 20 }) : undefined
   if (normalized === undefined || (args.source !== undefined && args.source !== 'current')) {
-    return serializeToolSearchResult({ kind: 'unavailable', schemaVersion: 'registry-tools:v1', reason: 'query_invalid', navigation })
+    return serializeToolSearchResult({ kind: 'unavailable', schemaVersion: 'registry-tools:v3', reason: 'query_invalid', navigation })
   }
   args = { ...args, ...normalized }
   const now = Date.now()
@@ -334,19 +335,19 @@ export async function searchHandler(ctx: QueryCtx, args: ToolSearchInput) {
       && (error.message.includes('InvalidCursor') || error.message.includes('Failed to parse cursor'))) return undefined
     throw error
   })
-  if (page === undefined) return serializeToolSearchResult({ kind: 'unavailable', schemaVersion: 'registry-tools:v1', reason: 'query_invalid', navigation })
+  if (page === undefined) return serializeToolSearchResult({ kind: 'unavailable', schemaVersion: 'registry-tools:v3', reason: 'query_invalid', navigation })
   const items = page.page.flatMap((publication) => {
     const tool = hydrated.get(publication.toolRef)
     return tool === undefined ? [] : [tool]
   })
   if (items.length === 0 && page.isDone && args.cursor === undefined) {
     return serializeToolSearchResult({
-      kind: 'no_candidates', schemaVersion: 'registry-tools:v1', query,
+      kind: 'no_candidates', schemaVersion: 'registry-tools:v3', query,
       appliedFilters: args.filters ?? {}, matchedCount: 0, ranking: [], navigation,
     })
   }
   return serializeToolSearchResult({
-    kind: 'ok', schemaVersion: 'registry-tools:v1', query, items, ranking: [],
+    kind: 'ok', schemaVersion: 'registry-tools:v3', query, items, ranking: [],
     pagination: { limit, hasMore: !page.isDone, ...(page.isDone ? {} : { nextCursor: page.continueCursor }) },
     navigation,
   })

@@ -74,6 +74,7 @@ export function deserializeToolDescriptor(
     ...(tool.payment === undefined ? {} : { payment: tool.payment }),
     transport: tool.transport,
     provenance: tool.provenance,
+    listingTier: tool.listingTier,
     availability: tool.availability,
     navigation: deserializeNavigation(tool.navigation),
     ...(tool.parameters === undefined

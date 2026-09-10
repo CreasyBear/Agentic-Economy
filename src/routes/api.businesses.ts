@@ -1,7 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 
 import { withHttpRateLimit } from '@/lib/server/rate-limit'
-import { problem } from '@/lib/server/problem'
+import { duplicateQueryParameterProblem, problem } from '@/lib/server/problem'
 import { methodNotAllowed } from '@/lib/server/method-guard'
 import { registryListAction } from '@/modules/registry/registry.actions'
 import { uniqueSorted } from '@/modules/common/unique-sorted'
@@ -55,6 +55,8 @@ export async function runRegistryListRequest<Input, Result extends ActionResult>
   options: Readonly<{ collection: RegistryCollection; action: RegistryRouteAction<Input, Result> }>,
 ): Promise<Response> {
   const url = new URL(request.url)
+  const duplicateParam = duplicateQueryParameterProblem(url)
+  if (duplicateParam !== undefined) return duplicateParam
   const unsupported = uniqueSorted([...url.searchParams.keys()].filter((key) => !LIST_QUERY_PARAMS.has(key)))
   if (unsupported.length > 0) {
     const searchPath = options.collection === 'businesses' ? '/api/businesses/search?q=' : '/api/v1/services/search?q='
@@ -129,6 +131,8 @@ export async function runRegistrySearchRequest<Input, Result extends ActionResul
   action: RegistryRouteAction<Input, Result>,
 ): Promise<Response> {
   const url = new URL(request.url)
+  const duplicateParam = duplicateQueryParameterProblem(url)
+  if (duplicateParam !== undefined) return duplicateParam
   const unsupported = uniqueSorted([...url.searchParams.keys()].filter((key) => !SEARCH_QUERY_PARAMS.has(key)))
   if (unsupported.length > 0) {
     return problem({

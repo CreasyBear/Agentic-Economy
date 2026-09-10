@@ -8,6 +8,7 @@ import {
   developerDiscoveryJsonResponse,
   readDeveloperDiscoveryFetchReadback,
   readDeveloperDiscoveryRuntimeOptions,
+  withDirectoryFreshness,
 } from './api.discovery.schema'
 
 export const Route = createFileRoute('/api/discovery/examples')({
@@ -40,5 +41,5 @@ export async function handleDeveloperDiscoveryExamplesRequest(
     routeOptions.now ?? 0
   )
 
-  return developerDiscoveryJsonResponse(artifact, fetchReadback)
+  return developerDiscoveryJsonResponse(await withDirectoryFreshness(artifact), fetchReadback)
 }

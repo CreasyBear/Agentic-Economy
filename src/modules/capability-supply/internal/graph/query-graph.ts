@@ -2,6 +2,7 @@ import type { CapabilityContract } from '@/modules/capability-contract/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { uniqueSorted } from '@/modules/common/unique-sorted'
 import type { StableHashValue } from '@/modules/common/stable-hash'
+import { displayPriceFromPricingConfig, normalizePricingConfig } from '@/modules/money/public'
 
 import { bindingIntegrityIsValid } from '../binding/integrity'
 import type { CapabilityBindingRow } from '../binding/registration'
@@ -161,6 +162,15 @@ export async function queryCapabilityGraph(
   }
   return { kind: 'available' as const, nodes, edges: projectGraphEdges(nodes) }
 }
+function graphNodeDisplayPrice(
+  pricingConfig: GraphPublicationRow['pricingConfig'],
+): CapabilityOfferingRow['presentation']['price'] {
+  const normalized = normalizePricingConfig(pricingConfig)
+  return normalized.kind === 'valid'
+    ? displayPriceFromPricingConfig(normalized.config)
+    : { kind: 'on_request' }
+}
+
 function projectGraphNode(input: Readonly<{
   publication: GraphPublicationRow
   offering: CapabilityOfferingRow
@@ -204,7 +214,7 @@ function projectGraphNode(input: Readonly<{
       lifecycle: contract.lifecycle,
     },
     cost: {
-      price: offering.presentation.price,
+      price: graphNodeDisplayPrice(publication.pricingConfig),
       commercialRelationship: offering.presentation.commercialRelationship,
     },
     trust: {

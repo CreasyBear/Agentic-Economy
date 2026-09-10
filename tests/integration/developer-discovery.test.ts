@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import { setPublicSourceTransportForTests } from '@/lib/server/convex-source'
 import { createFixtureDiscoverySourceState } from '../helpers/discovery-fixture-source-state'
 import type { DiscoverySourceState } from '@/modules/discovery/public'
 import type {
@@ -20,6 +21,45 @@ const privateOrAuthorityPattern =
 
 
 describe('developer discovery route handlers', () => {
+  afterEach(() => {
+    setPublicSourceTransportForTests(undefined)
+  })
+
+  it('reports the x402 directory freshness instead of the old generatedAt: 0 / freshness "current" contradiction (swarm row 21)', async () => {
+    const directoryCompletedAt = Date.now() - 60_000
+    const query = vi.fn(async () => ({
+      kind: 'ready' as const,
+      coverage: { generation: 'g1', completedAt: directoryCompletedAt },
+      refreshState: 'complete' as const,
+    }))
+    setPublicSourceTransportForTests({ query, mutation: vi.fn(), action: vi.fn() } as never)
+
+    const state = availableDiscoveryState()
+    // No `now` option supplied - this is the path that used to fall back to
+    // `generatedAt: 0` in production.
+    const schemaResponse = await handleDeveloperDiscoverySchemaRequest(
+      new Request('https://ae.example/api/discovery/schema'),
+      state,
+    )
+    const examplesResponse = await handleDeveloperDiscoveryExamplesRequest(
+      new Request('https://ae.example/api/discovery/examples'),
+      state,
+    )
+    const schema = (await schemaResponse.json()) as DeveloperDiscoverySchemaArtifact & { freshness: unknown }
+    const examples = (await examplesResponse.json()) as DeveloperDiscoveryExamplesArtifact & { freshness: unknown }
+
+    for (const artifact of [schema, examples]) {
+      expect(artifact.generatedAt).toBe(directoryCompletedAt)
+      expect(artifact.generatedAt).not.toBe(0)
+      expect(artifact.freshness).toEqual({
+        source: 'x402_directory',
+        state: 'fresh',
+        completedAt: directoryCompletedAt,
+        staleAfterMs: 36 * 60 * 60 * 1000,
+      })
+    }
+  })
+
   it('serves schema and examples with public headers and read-only payloads', async () => {
     const state = availableDiscoveryState()
     const request = new Request('https://ae.example/api/discovery/schema')

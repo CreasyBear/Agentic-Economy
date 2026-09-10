@@ -63,6 +63,10 @@ export function capabilitySupplyWriterPorts(
       return rows.map(toCapabilityBindingRow)
     },
     insertOffering: async (row: OfferingInsertRow) => {
+      // `row.presentation.price` is a Zod-optional field (`price?: X | undefined`); the
+      // Convex validator's optional field excludes `undefined` from the value type, so an
+      // absent price must be omitted rather than passed through as an explicit `undefined`.
+      const { price, ...presentationRest } = row.presentation
       await db.insert('capabilityOfferings', {
         offeringId: row.offeringId,
         businessId: row.businessId as Id<'businesses'>,
@@ -86,7 +90,7 @@ export function capabilitySupplyWriterPorts(
                   : { accessPathSourceHash: row.origin.accessPathSourceHash }),
               },
         }),
-        presentation: row.presentation,
+        presentation: price === undefined ? presentationRest : { ...presentationRest, price },
         searchTerms: [...row.searchTerms],
         registrationEvidenceRefs: [...row.registrationEvidenceRefs],
         registrationHash: row.registrationHash,

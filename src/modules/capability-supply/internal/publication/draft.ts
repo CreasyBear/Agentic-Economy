@@ -20,6 +20,7 @@ import {
 } from '@/modules/capability-supply/public'
 import {
   compareExactAmounts,
+  displayPriceFromPricingConfig,
   normalizePricingConfig,
   pricingConfigDecisionAmount,
   pricingConfigDigest,
@@ -62,7 +63,8 @@ export function pricingConfigForOffering(
 ): PricingConfig | undefined {
   const price = offering.presentation.price
   if (
-    price.kind !== 'fixed'
+    price === undefined
+    || price.kind !== 'fixed'
     || price.amount.currency !== 'AUD'
     || price.amount.exponent !== 6
   ) return undefined
@@ -160,7 +162,7 @@ export async function preparePublicationDraft(input: Readonly<{
     offering,
     binding,
   }
-  const displayedPrice = draft.offering.presentation.price
+  const displayedPrice = displayPriceFromPricingConfig(pricingConfig)
   const decisionAmount = pricingConfigDecisionAmount(pricingConfig)
   const pricingMatches = pricingConfig.kind === 'managed_x402'
     ? displayedPrice.kind === 'on_request'

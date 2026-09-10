@@ -39,7 +39,7 @@ const AUTHORITY = {
 
 const noCandidates = {
   kind: 'no_candidates',
-  schemaVersion: 'registry-tools:v1',
+  schemaVersion: 'registry-tools:v3',
   query: 'weather',
   appliedFilters: {},
   matchedCount: 0,
@@ -49,14 +49,14 @@ const noCandidates = {
 
 const notFound = {
   kind: 'not_found',
-  schemaVersion: 'registry-tools:v1',
+  schemaVersion: 'registry-tools:v3',
   toolRef: OPERATION_REF,
   navigation: [],
 } as const
 
 const compareUnavailable = {
   kind: 'unavailable',
-  schemaVersion: 'registry-tools:v1',
+  schemaVersion: 'registry-tools:v3',
   reason: 'tool_not_found',
   navigation: [],
 } as const

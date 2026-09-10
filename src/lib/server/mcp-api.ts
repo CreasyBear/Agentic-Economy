@@ -7,13 +7,14 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { Server } from '@modelcontextprotocol/sdk/server/index.js'
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js'
 import { Protocol } from '@modelcontextprotocol/sdk/shared/protocol.js'
-import { safeParse, safeParseAsync } from '@modelcontextprotocol/sdk/server/zod-compat.js'
-import { getMethodLiteral } from '@modelcontextprotocol/sdk/server/zod-json-schema-compat.js'
-import { ErrorCode, McpError, type Notification, type Request as SdkRequest, type Result, type ServerNotification, type ServerRequest, type ServerResult } from '@modelcontextprotocol/sdk/types.js'
+import { normalizeObjectSchema, safeParse, safeParseAsync } from '@modelcontextprotocol/sdk/server/zod-compat.js'
+import { getMethodLiteral, toJsonSchemaCompat } from '@modelcontextprotocol/sdk/server/zod-json-schema-compat.js'
+import { ErrorCode, ListToolsRequestSchema, McpError, type Notification, type Request as SdkRequest, type Result, type ServerNotification, type ServerRequest, type ServerResult } from '@modelcontextprotocol/sdk/types.js'
 import type { AnyObjectSchema, SchemaOutput } from '@modelcontextprotocol/sdk/server/zod-compat.js'
 import type { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/protocol.js'
 import { z } from 'zod'
 
+import { base64Codec, tryDecodeBase64Url } from '@/modules/common/base64-codec'
 import { bearerChallenge, bearerModeChallenge } from '@/lib/http/oauth-challenge'
 import { buildProblem, gatewayFailureToProblem, type ProblemDetails, type ProblemKind } from '@/lib/errors'
 import { problem } from '@/lib/server/problem'
@@ -24,6 +25,8 @@ import { assertHttpAdmission, rateLimitedResponse } from '@/lib/server/rate-limi
 import { readBoundedRequestJson, readBoundedRequestText, type BoundedRequestTextResult } from '@/lib/server/bounded-request-body'
 import { ConvexSourceError } from '@/lib/server/convex-source'
 import { TOOL_READ_UNAVAILABLE_PROBLEM } from '@/modules/registry/public'
+import { toolChoiceSearchOutputSchema } from '@/modules/registry/tool-choice-contracts'
+import { nextAction as toolSearchNextAction } from '@/modules/registry/next-action'
 import {
   authenticateAgentAccess,
   resolveAgentAccessPrincipal,
@@ -52,6 +55,7 @@ const AE_MCP_INSTRUCTIONS = [
   'Use Agentic Economy to acquire one bounded outside contribution when your current harness lacks a capability.',
   'Search with `ae_registry_tools_search` and a capability phrase.',
   'Use `ae_registry_tools_list` to browse, `ae_registry_tools_describe` for one exact input contract, and `ae_registry_tools_compare` for up to four exact references.',
+  '`ae_tool_quote` and `ae_tool_call` are protected Tools: they appear in `tools/list` only after the agent connects. Connect through the OAuth device flow via `ae connect` (CLI), or, for MCP clients that support authorization, through the `/.well-known/oauth-protected-resource` metadata.',
   'Call `ae_tool_quote` with the exact Tool and input. Complete its one continuation or required action, then request a fresh Quote if the input or authority changes.',
   'Call only with the Quote returned by `ae_tool_quote`.',
   'If Account credit is insufficient, use `ae_funding_handoff_create`, give only its Stripe checkoutUrl to the payer, persist fundingSessionId, poll `ae_funding_handoff_status`, then explicitly retry the original Tool only after ready.',
@@ -71,6 +75,8 @@ export type McpAccessTier = Readonly<{
   marketDemandService?: MarketDemandService
   fundingHandoffService?: FundingHandoffService
   rolloutEnvironment?: StringEnvironment
+  /** Test-only override for the tools/list page size (default: MCP_TOOLS_LIST_PAGE_SIZE). */
+  toolsListPageSize?: number
 }>
 
 type AeServerHandler<T extends AnyObjectSchema> = (
@@ -119,6 +125,28 @@ class SafeMcpSdkServer extends Server {
     }
 
     Reflect.apply(Protocol.prototype.setRequestHandler, this, [safeRequestSchema, safeHandler])
+  }
+}
+
+const REGISTRY_TOOLS_SEARCH_ACTION_ID = 'registry.tools.search'
+
+/**
+ * Additive structured field for the search tool only: the one next step
+ * (page, remember the missing job, broaden a filtered search, or stop),
+ * decided by the same registry-owned rule the CLI renders into a shell
+ * continuation. Never a shell string here — MCP callers are not a shell.
+ */
+function toolSearchNextActionField(actionId: string, data: unknown, result: unknown): Record<string, unknown> {
+  if (actionId !== REGISTRY_TOOLS_SEARCH_ACTION_ID) return {}
+  const parsed = toolChoiceSearchOutputSchema.safeParse(result)
+  if (!parsed.success || parsed.data.kind === 'unavailable') return {}
+  return {
+    nextAction: toolSearchNextAction({
+      kind: parsed.data.kind,
+      query: parsed.data.query,
+      pagination: parsed.data.pagination,
+      hasFilters: isRecord(data) && data.filters !== undefined,
+    }),
   }
 }
 
@@ -273,6 +301,80 @@ function recordMcpGatewayTelemetry(
 }
 
 
+/**
+ * `tools/list` is spec-paginated (`ListToolsRequestSchema` params `cursor?`,
+ * `ListToolsResultSchema.nextCursor?`), but the SDK's high-level `McpServer`
+ * installs a single fixed all-tools handler
+ * (`@modelcontextprotocol/sdk/server/mcp.js` `setToolRequestHandlers`). Its own
+ * class doc directs advanced overrides at the underlying low-level `Server`:
+ * "For advanced usage (like sending notifications or setting custom request
+ * handlers), use the underlying Server instance available via the `server`
+ * property." `Protocol.setRequestHandler` explicitly supports this: "Note
+ * that this will replace any previous request handler for the same method."
+ * So the paginated handler below is installed on `sdkServer` after every
+ * `registerTool` call has run (which is what lazily installs the SDK's
+ * default handler), replacing it while leaving per-tool call handling and
+ * the tier filter untouched.
+ */
+const MCP_TOOLS_LIST_PAGE_SIZE = 50
+const EMPTY_MCP_TOOL_INPUT_SCHEMA = { type: 'object', properties: {}, additionalProperties: false } as const
+
+function encodeMcpToolsListCursor(offset: number): string {
+  return base64Codec.toBase64Url(new TextEncoder().encode(String(offset)))
+}
+
+/** Returns undefined for any cursor the server could not have issued itself. */
+function decodeMcpToolsListCursor(cursor: string, toolCount: number): number | undefined {
+  const bytes = tryDecodeBase64Url(cursor)
+  if (bytes === undefined) return undefined
+  let text: string
+  try {
+    text = new TextDecoder('utf-8', { fatal: true }).decode(bytes)
+  } catch {
+    return undefined
+  }
+  if (!/^\d+$/u.test(text)) return undefined
+  const offset = Number.parseInt(text, 10)
+  return Number.isSafeInteger(offset) && offset >= 0 && offset <= toolCount ? offset : undefined
+}
+
+function mcpToolListEntry(action: AnyAction): Record<string, unknown> {
+  const metadata = describeActionMcpMetadata(action)
+  const inputObjectSchema = normalizeObjectSchema(action.schema)
+  return {
+    name: mcpToolName(action),
+    title: action.name,
+    description: mcpToolDescription(action),
+    inputSchema: inputObjectSchema === undefined
+      ? EMPTY_MCP_TOOL_INPUT_SCHEMA
+      : toJsonSchemaCompat(inputObjectSchema, { strictUnions: true, pipeStrategy: 'input' }),
+    annotations: {
+      readOnlyHint: action.readOnly,
+      destructiveHint: action.readOnly ? false : metadata.destructive,
+      idempotentHint: metadata.idempotent,
+      openWorldHint: metadata.openWorld,
+    },
+  }
+}
+
+function registerPaginatedToolsList(
+  sdkServer: Server,
+  admittedActions: readonly AnyAction[],
+  pageSize: number,
+): void {
+  sdkServer.setRequestHandler(ListToolsRequestSchema, (toolsListRequest) => {
+    const cursor = toolsListRequest.params?.cursor
+    const offset = cursor === undefined ? 0 : decodeMcpToolsListCursor(cursor, admittedActions.length)
+    if (offset === undefined) throw new ConciseMcpRequestError()
+    const page = admittedActions.slice(offset, offset + pageSize)
+    const nextOffset = offset + page.length
+    return {
+      tools: page.map(mcpToolListEntry),
+      ...(nextOffset < admittedActions.length ? { nextCursor: encodeMcpToolsListCursor(nextOffset) } : {}),
+    }
+  })
+}
+
 export function createAeMcpServer(
   request: Request,
   actions: readonly AnyAction[] = listMcpActions(),
@@ -352,7 +454,10 @@ export function createAeMcpServer(
           recordMcpGatewayTelemetry(action.id, data, result, access, startedAt)
           return {
             content: [{ type: 'text' as const, text: JSON.stringify(outputValidation.data) }],
-            structuredContent: { result: outputValidation.data },
+            structuredContent: {
+              result: outputValidation.data,
+              ...toolSearchNextActionField(action.id, data, outputValidation.data),
+            },
           }
         } catch (error) {
           recordMcpGatewayTelemetry(action.id, data, undefined, access, startedAt)
@@ -361,6 +466,8 @@ export function createAeMcpServer(
       },
     )
   }
+
+  registerPaginatedToolsList(sdkServer, admittedActions, access.toolsListPageSize ?? MCP_TOOLS_LIST_PAGE_SIZE)
 
   return server
 }
@@ -385,6 +492,8 @@ type McpRequestOptions = Readonly<{
   timing?: ActionTimingSink
   callService?: CallService
   rolloutEnvironment?: StringEnvironment
+  /** Test-only override for the tools/list page size (default: MCP_TOOLS_LIST_PAGE_SIZE). */
+  toolsListPageSize?: number
 }>
 
 /**
@@ -500,10 +609,15 @@ export async function handleMcpRequest(request: Request, options: McpRequestOpti
         fundingHandoffService: options.fundingHandoffService
           ?? createFundingHandoffService(boundedRequest, bounded.bodyText),
         ...(options.rolloutEnvironment === undefined ? {} : { rolloutEnvironment: options.rolloutEnvironment }),
+        ...(options.toolsListPageSize === undefined ? {} : { toolsListPageSize: options.toolsListPageSize }),
       })
       return withRequestCorrelationHeader(await serveMcp(server, boundedRequest), correlationId)
     }
-    const server = createAeMcpServer(boundedRequest, actions, { tier: 'anonymous', correlationId })
+    const server = createAeMcpServer(boundedRequest, actions, {
+      tier: 'anonymous',
+      correlationId,
+      ...(options.toolsListPageSize === undefined ? {} : { toolsListPageSize: options.toolsListPageSize }),
+    })
     return withRequestCorrelationHeader(await serveMcp(server, boundedRequest), correlationId)
   })
 }

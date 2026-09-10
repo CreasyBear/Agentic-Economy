@@ -5,6 +5,7 @@ import { admitFacilitatorDiscoveryItems } from '../../convex/facilitatorDiscover
 import { api, internal } from '../../convex/_generated/api'
 import schema from '../../convex/schema'
 import { toolRecordProjection } from '../../convex/capabilitySupplyToolShared'
+import { reconcileReadyItems } from '../../convex/capabilitySupplyShared'
 import timezoneFixture from '@/modules/capability-supply/internal/x402-bazaar-fixtures/timezone-payment-required-2026-08-19.json'
 import { convexModules } from '../helpers/convex-fixtures'
 import {
@@ -91,7 +92,7 @@ describe('facilitator discovery reconciliation', () => {
     const item = admission.admitted[0]
     if (item === undefined) throw new Error('fixture_not_admitted')
     const reconcile = (candidate: typeof item) => backend.mutation(internal.facilitatorDiscovery.reconcile, {
-      items: [candidate], complete: false, deadlineAt: Date.now() + 60_000, workload,
+      items: reconcileReadyItems([candidate]), complete: false, deadlineAt: Date.now() + 60_000, workload,
     })
     await reconcile(item)
     const before = await backend.run(async (ctx) => ({
@@ -157,7 +158,7 @@ describe('facilitator discovery reconciliation', () => {
     ]))
 
     const reconciled = await backend.mutation(internal.facilitatorDiscovery.reconcile, {
-      items: [item],
+      items: reconcileReadyItems([item]),
       complete: false,
       deadlineAt: Date.now() + 60_000,
       workload,
@@ -205,13 +206,13 @@ describe('facilitator discovery reconciliation', () => {
     if (item === undefined) throw new Error('expected recorded discovery admission')
 
     const first = await backend.mutation(internal.facilitatorDiscovery.reconcile, {
-      items: Array.from({ length: 21 }, () => item),
+      items: reconcileReadyItems(Array.from({ length: 21 }, () => item)),
       complete: false,
       deadlineAt,
       workload,
     })
     const second = await backend.mutation(internal.facilitatorDiscovery.reconcile, {
-      items: [item],
+      items: reconcileReadyItems([item]),
       complete: false,
       deadlineAt,
       workload,
@@ -244,7 +245,7 @@ describe('facilitator discovery reconciliation', () => {
     })
 
     const refreshed = await backend.mutation(internal.facilitatorDiscovery.reconcile, {
-      items: [{ ...item, sourceRevision: `${item.sourceRevision}-refresh` }],
+      items: reconcileReadyItems([{ ...item, sourceRevision: `${item.sourceRevision}-refresh` }]),
       complete: false,
       deadlineAt,
       workload,
@@ -284,7 +285,7 @@ describe('facilitator discovery reconciliation', () => {
     expect(item).toBeDefined()
     if (item === undefined) throw new Error('expected recorded discovery admission')
     await backend.mutation(internal.facilitatorDiscovery.reconcile, {
-      items: [item],
+      items: reconcileReadyItems([item]),
       complete: false,
       deadlineAt,
       workload,
@@ -303,7 +304,7 @@ describe('facilitator discovery reconciliation', () => {
     expect(changedItem).toBeDefined()
     if (changedItem === undefined) throw new Error('expected changed discovery admission')
     const refreshAttempt = await backend.mutation(internal.facilitatorDiscovery.reconcile, {
-      items: [changedItem],
+      items: reconcileReadyItems([changedItem]),
       complete: false,
       deadlineAt,
       workload,
@@ -346,7 +347,7 @@ describe('facilitator discovery reconciliation', () => {
     const admission = await admitFacilitatorDiscoveryItems([{ malformed: true }])
     expect(admission.admitted).toHaveLength(0)
     const result = await backend.mutation(internal.facilitatorDiscovery.reconcile, {
-      items: [...admission.admitted],
+      items: reconcileReadyItems(admission.admitted),
       complete: false,
       deadlineAt: Date.now() + 60_000,
       workload,
@@ -364,7 +365,7 @@ describe('facilitator discovery reconciliation', () => {
     if (item === undefined) throw new Error('expected recorded discovery admission')
 
     const result = await backend.mutation(internal.facilitatorDiscovery.reconcile, {
-      items: [item],
+      items: reconcileReadyItems([item]),
       complete: true,
       seenPublicationRefs: [],
       deadlineAt: 0,
@@ -397,14 +398,14 @@ describe('facilitator discovery reconciliation', () => {
     if (item === undefined) throw new Error('expected recorded discovery admission')
 
     await expect(backend.mutation(internal.facilitatorDiscovery.reconcile, {
-      items: Array.from({ length: 101 }, () => item),
+      items: reconcileReadyItems(Array.from({ length: 101 }, () => item)),
       complete: false,
       deadlineAt,
       workload,
     })).rejects.toThrow('facilitator_discovery_batch_invalid')
 
     await expect(backend.mutation(internal.facilitatorDiscovery.reconcile, {
-      items: [{ ...item, sourceImportJson: 'x'.repeat(262_144) }],
+      items: reconcileReadyItems([{ ...item, sourceImportJson: 'x'.repeat(262_144) }]),
       complete: false,
       deadlineAt,
       workload,

@@ -82,6 +82,7 @@ export const tool = {
   cancellation: { kind: "unsupported" },
   recovery: { idempotency: "required", recovery: "retry_safe" },
   provenance: { publisher: "provider_owned", sourceKind: "openapi_http" },
+  listingTier: "reviewed",
   authentication: { kind: "ae_api_key" },
   transport: { method: "POST", requestTimeoutMs: 1_000 },
   availability: {
@@ -142,7 +143,7 @@ export function publicToolSearchResponse(
 ): Extract<ReturnType<typeof projectToolSearchChoices>, { kind: "ok" }> {
   const source: ToolSearchResult = {
     kind: "ok",
-    schemaVersion: "registry-tools:v1",
+    schemaVersion: "registry-tools:v3",
     query,
     items: [currentProjectionTool()],
     matchedCount: 1,
@@ -162,7 +163,7 @@ export function publicToolDescribeResponse(): Extract<
 > {
   const source: ToolDetailResult = {
     kind: "found",
-    schemaVersion: "registry-tools:v1",
+    schemaVersion: "registry-tools:v3",
     tool: currentProjectionTool(),
   };
   const projected = projectToolDescription(source);

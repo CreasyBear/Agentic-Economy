@@ -76,13 +76,14 @@ function operationDescriptor(toolRef: string, summary = 'Current reference looku
       validUntil: Date.now() + 60_000,
     },
     navigation: [],
+    listingTier: 'reviewed' as const,
   }
 }
 
 function operationSearchResult(query: string, operations: readonly ToolDescriptorFixture[]) {
   return projectToolSearchChoices(toolSearchOutputSchema.parse({
     kind: 'ok' as const,
-    schemaVersion: 'registry-tools:v1' as const,
+    schemaVersion: 'registry-tools:v3' as const,
     query,
     items: operations,
     matchedCount: operations.length,
@@ -99,7 +100,7 @@ function operationSearchResult(query: string, operations: readonly ToolDescripto
 function operationDetailResult(operation: ToolDescriptorFixture) {
   return projectToolDescription(toolDetailOutputSchema.parse({
     kind: 'found' as const,
-    schemaVersion: 'registry-tools:v1' as const,
+    schemaVersion: 'registry-tools:v3' as const,
     tool: operation,
   }))
 }
@@ -107,7 +108,7 @@ function operationDetailResult(operation: ToolDescriptorFixture) {
 function operationListResult(operations: readonly ToolDescriptorFixture[]) {
   return projectToolListChoices(toolSearchOutputSchema.parse({
     kind: 'ok' as const,
-    schemaVersion: 'registry-tools:v1' as const,
+    schemaVersion: 'registry-tools:v3' as const,
     query: '',
     items: operations,
     matchedCount: operations.length,
@@ -292,7 +293,7 @@ describe('external-agent Market Tool cold loop', () => {
   it('gives empty search results private demand memory plus a safe browse fallback', async () => {
     const result = projectToolSearchChoices(toolSearchOutputSchema.parse({
       kind: 'no_candidates',
-      schemaVersion: 'registry-tools:v1',
+      schemaVersion: 'registry-tools:v3',
       query: 'invoice extraction',
       appliedFilters: {},
       matchedCount: 0,
@@ -364,7 +365,7 @@ describe('external-agent Market Tool cold loop', () => {
     const operationRef = `operation:v1:${'c'.repeat(64)}`
     const rawPage = toolSearchOutputSchema.parse({
       kind: 'ok',
-      schemaVersion: 'registry-tools:v1',
+      schemaVersion: 'registry-tools:v3',
       query: 'reference lookup',
       items: [operationDescriptor(operationRef)],
       matchedCount: 2,

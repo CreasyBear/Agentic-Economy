@@ -133,6 +133,7 @@ export function serializeToolDescriptor(
       publisher: tool.provenance.publisher,
       sourceKind: tool.provenance.sourceKind,
     },
+    listingTier: tool.listingTier,
     availability: serializeAvailability(tool.availability),
     navigation: serializeNavigation(tool.navigation),
     ...(tool.parameters === undefined

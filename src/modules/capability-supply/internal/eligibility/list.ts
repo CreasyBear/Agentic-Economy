@@ -11,6 +11,8 @@ import { bindingIntegrityIsValid } from '../binding/integrity'
 import { offeringIntegrityIsValid } from '../offering/integrity'
 import { contractRefFromRow } from '../offering/registration'
 import type { PricingConfig } from '@/modules/money/public'
+import { availability, type CapabilityAvailabilityInput } from '../availability'
+import type { PublicCapabilityUnavailableReason } from '../tool-projection-types'
 
 import { bindingEligibilityIsValid, offeringEligibilityIsValid } from './integrity'
 import {
@@ -212,6 +214,62 @@ function deriveAdmittedTool(
 }
 
 
+/**
+ * Derive the `unavailableReason` a withdrawn/incompatible/under-review
+ * disposition already implies, so `availability()`'s disposition
+ * short-circuit (see `../availability.ts`) can resolve it upstream of the
+ * readiness clock, exactly as its docstring expects.
+ */
+function routeableUnavailableReason(
+  publication: EligiblePublicationRow,
+): PublicCapabilityUnavailableReason | undefined {
+  if (publication.disposition === 'withdrawn') return 'publisher_withdrew'
+  if (publication.disposition === 'incompatible') return 'updated_terms_require_review'
+  if (publication.sourceAuthorityState === 'review_required') return 'under_review'
+  return undefined
+}
+
+/**
+ * The same lifecycle signals `publicationLifecycle()` (`../publication/lifecycle.ts`)
+ * folds into its `active` state -- minus the eligibility-integrity/connection-authority
+ * checks the caller already performed to reach this point -- expressed as the
+ * `routeable`/`integrated` flags `availability()` reads. `admission`/`conformance`
+ * are fixed literals here, mirroring `eligibleBindingProjection`: every row that
+ * reaches this point was sourced from `listAdmittedConformantBindingsByNetwork`,
+ * which only ever returns admitted, conformant bindings.
+ */
+function routeableAvailabilityInput(
+  publication: EligiblePublicationRow,
+): CapabilityAvailabilityInput {
+  const routeable = publication.disposition === 'current'
+    && publication.sourceAuthorityState !== 'review_required'
+    && publication.credentialState === 'ready'
+    && publication.healthState === 'healthy'
+    && publication.readinessObservedAt !== undefined
+  const unavailableReason = routeableUnavailableReason(publication)
+  return {
+    routeable,
+    integrated: true,
+    ...(unavailableReason === undefined ? {} : { unavailableReason }),
+    readiness: {
+      ...(publication.readinessObservedAt === undefined ? {} : { observedAt: publication.readinessObservedAt }),
+      ...(publication.readinessValidUntil === undefined ? {} : { validUntil: publication.readinessValidUntil }),
+      ...(publication.readinessLastHealthyAt === undefined
+        ? {}
+        : { lastHealthyAt: publication.readinessLastHealthyAt }),
+    },
+    disposition: publication.disposition,
+    ...(publication.sourceAuthorityState === undefined
+      ? {}
+      : { sourceAuthorityState: publication.sourceAuthorityState }),
+    admission: 'admitted',
+    conformance: 'conformant',
+    credentialState: publication.credentialState,
+    healthState: publication.healthState,
+    ...(publication.readinessValidUntil === undefined ? {} : { readinessValidUntil: publication.readinessValidUntil }),
+  }
+}
+
 export async function listRouteableCapabilitySupply(
   ports: EligibleSupplyPorts,
   input: Readonly<{ networkId: string; limit: number; now: number }>,
@@ -224,12 +282,18 @@ export async function listRouteableCapabilitySupply(
     limit: MAX_ELIGIBLE_SUPPLY,
   })
   if (integrated.kind === 'unavailable') return integrated
-  return {
-    kind: 'available' as const,
-    supplies: integrated.supplies.flatMap((supply) => (
-      supply.publication === undefined
-        ? []
-        : [{ ...supply, publication: supply.publication }]
-    )).slice(0, input.limit),
+  const routeable: typeof integrated.supplies = []
+  for (const supply of integrated.supplies) {
+    if (supply.publication === undefined) continue
+    // Re-load the raw publication: the catalogue-shaped `supply.publication`
+    // carries `readinessValidUntil` but not `disposition`/`credentialState`/
+    // `healthState`/`sourceAuthorityState`/`readinessObservedAt`, so
+    // presentation and Quote can read the same posture off the same
+    // underlying row instead of a re-derived summary.
+    const currentPublication = await ports.loadCurrentPublicationByBindingId(supply.binding.bindingId)
+    if (currentPublication === null) continue
+    const posture = availability(routeableAvailabilityInput(currentPublication), input.now).posture
+    if (posture === 'routeable') routeable.push(supply)
   }
+  return { kind: 'available' as const, supplies: routeable.slice(0, input.limit) }
 }

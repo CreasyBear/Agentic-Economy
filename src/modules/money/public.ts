@@ -73,7 +73,9 @@ export {
   pricingConfigDecisionAmount,
   pricingConfigSourceAmount,
   fixedAudPricingConfig,
+  displayPriceFromPricingConfig,
 } from './internal/pricing-config'
+export type { DisplayPrice } from './internal/pricing-config'
 export {
   addExactAmounts,
   amountAtScale,

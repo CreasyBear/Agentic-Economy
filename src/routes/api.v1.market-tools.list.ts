@@ -6,6 +6,7 @@ import { readToolReadRequest } from '@/lib/server/tool-read-request'
 import { problem } from '@/lib/server/problem'
 import { withHttpRateLimit } from '@/lib/server/rate-limit'
 import { runWithRequestCorrelation, withRequestCorrelationHeader } from '@/lib/server/request-correlation'
+import { InvalidOpaqueCursorError } from '@/modules/registry/opaque-cursor'
 import { registryToolsListAction } from '@/modules/registry/tools.actions'
 import { toolChoiceListOutputSchema, toolListInputSchema } from '@/modules/registry/tool-choice-contracts'
 
@@ -28,10 +29,12 @@ export async function handleMarketToolListRequest(request: Request): Promise<Res
         }))
         return result.success
           ? Response.json(result.data, { headers: { 'Cache-Control': 'no-store' } })
-          : problem({ status: 503, kind: 'INTERNAL', code: 'tool_read_result_invalid' })
+          : problem({ status: 503, kind: 'INTERNAL', code: 'tool_read_result_invalid', detail: 'The tool catalogue result failed its own output contract.' })
       })
-    } catch {
-      response = toolReadUnavailableResponse()
+    } catch (error) {
+      response = error instanceof InvalidOpaqueCursorError
+        ? problem({ status: 400, kind: 'INVALID_ARGUMENT', code: 'invalid_cursor', detail: error.message })
+        : toolReadUnavailableResponse()
     }
     return withRequestCorrelationHeader(response, correlationId)
   })

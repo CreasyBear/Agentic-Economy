@@ -288,4 +288,63 @@ describe('MCP host adapter tools/list', () => {
       annotations: { idempotentHint: true, openWorldHint: true, destructiveHint: true },
     })
   })
+
+  it('returns a single page with no nextCursor when tools fit within the default page size', async () => {
+    const response = await postMcp({
+      jsonrpc: '2.0',
+      id: 'single-page',
+      method: 'tools/list',
+      params: {},
+    })
+    const body = await readMcpBody(response)
+    const result = body.result as Record<string, unknown>
+
+    expect(result.nextCursor).toBeUndefined()
+    expect((result.tools as unknown[]).length).toBeGreaterThan(0)
+  })
+
+  it('paginates tools/list across pages with an injected page size, terminating with no nextCursor', async () => {
+    const expectedNames = listMcpActions()
+      .filter((action) => action.surfaces.includes('mcp') && action.readOnly && action.credentialAdmission === undefined)
+      .map(mcpToolName)
+    expect(expectedNames.length).toBeGreaterThan(2)
+
+    const collectedNames: string[] = []
+    let cursor: string | undefined
+    let pages = 0
+    do {
+      const response = await postMcp({
+        jsonrpc: '2.0',
+        id: `page-${pages}`,
+        method: 'tools/list',
+        params: cursor === undefined ? {} : { cursor },
+      }, { toolsListPageSize: 2 })
+      const body = await readMcpBody(response)
+      const result = body.result as { tools: Array<Record<string, unknown>>; nextCursor?: string }
+      expect(result.tools.length).toBeLessThanOrEqual(2)
+      collectedNames.push(...result.tools.map((tool) => String(tool.name)))
+      cursor = result.nextCursor
+      pages += 1
+      expect(pages).toBeLessThanOrEqual(expectedNames.length)
+    } while (cursor !== undefined)
+
+    expect(pages).toBeGreaterThan(1)
+    expect(collectedNames).toEqual(expectedNames)
+  })
+
+  it('rejects a malformed tools/list cursor with Invalid params', async () => {
+    const response = await postMcp({
+      jsonrpc: '2.0',
+      id: 'bad-cursor',
+      method: 'tools/list',
+      params: { cursor: 'not-a-valid-cursor!!' },
+    }, { toolsListPageSize: 2 })
+
+    expect(response.status).toBe(200)
+    const body = await readMcpBody(response)
+    expect(body.error).toMatchObject({
+      code: -32602,
+      message: 'Invalid MCP request parameters.',
+    })
+  })
 })

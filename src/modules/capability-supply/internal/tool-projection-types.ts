@@ -8,8 +8,10 @@ import type { PublicToolRef } from "../public";
 import type { X402CatalogPayment } from "./transport-adapters";
 
 export const CURRENT_TOOL_CALL_VIA = "/api/v1/tools/call" as const;
+export const REGISTRY_TOOLS_SCHEMA_VERSION =
+  "registry-tools:v3" as const;
 export const PublicToolRegistrySchemaVersion =
-  "registry-tools:v1" as const;
+  REGISTRY_TOOLS_SCHEMA_VERSION;
 export type PublicToolRegistrySchemaVersion =
   typeof PublicToolRegistrySchemaVersion;
 export type PublicToolBusinessRef = Readonly<{
@@ -260,6 +262,12 @@ export type PublicToolDescriptor = Readonly<{
   /** Additive catalog display aids derived from the contract/price; absent when not derivable. */
   parameters?: readonly PublicToolParameter[];
   catalogPrice?: PublicToolCatalogPrice;
+  /**
+   * Catalogue listing tier derived from `provenance.publisher`
+   * (never stored): 1P direct and AE-curated 3P are `reviewed`;
+   * gateway-mediated and merely observed 3P are `listed`.
+   */
+  listingTier: "reviewed" | "listed";
 }>;
 export type PublicToolParameterMapping = Readonly<{
   inputPointer: string;

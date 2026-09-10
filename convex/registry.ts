@@ -12,7 +12,7 @@ import {
   registrySearchTokens,
 } from '../src/modules/registry/public'
 import { normalizeSlug } from '../src/modules/common/normalize-slug'
-import { normalizeSearchText } from '../src/modules/common/normalize-search-text'
+import { SEARCH_STOP_WORDS, normalizeSearchText } from '../src/modules/common/normalize-search-text'
 import {
   deriveBusinessOfferingSupportFromCapabilitySupply,
   readLiveBusinessSupplyProjection,
@@ -364,8 +364,60 @@ function offeringPlaceKeys(item: OfferingSupplyDto): readonly string[] {
   return [...keys]
 }
 
-const SEARCH_STOP_WORDS = new Set(['a', 'an', 'and', 'around', 'at', 'business', 'businesses', 'find', 'for', 'in', 'near', 'need', 'now', 'open', 'provider', 'providers', 'service', 'services', 'the', 'to'])
-const SERVICE_WORDS = new Set([...SEARCH_STOP_WORDS, 'appointment', 'callout', 'cleaner', 'cleaners', 'day', 'dental', 'dentist', 'dentists', 'diagnostic', 'diagnostics', 'electrical', 'electrician', 'electricians', 'emergency', 'help', 'listed', 'listing', 'listings', 'locksmith', 'locksmiths', 'mechanic', 'mechanics', 'metro', 'offering', 'offerings', 'plumber', 'plumbers', 'plumbing', 'repair', 'repairs', 'same', 'suburb', 'suburbs', 'today', 'tomorrow', 'urgent', 'this', 'week', 'weeks'])
+const REGISTRY_STOP_WORDS = new Set([
+  ...SEARCH_STOP_WORDS,
+  'around',
+  'business',
+  'businesses',
+  'near',
+  'now',
+  'open',
+  'provider',
+  'providers',
+  'service',
+  'services',
+])
+const SERVICE_WORDS = new Set([
+  ...REGISTRY_STOP_WORDS,
+  'appointment',
+  'callout',
+  'cleaner',
+  'cleaners',
+  'day',
+  'dental',
+  'dentist',
+  'dentists',
+  'diagnostic',
+  'diagnostics',
+  'electrical',
+  'electrician',
+  'electricians',
+  'emergency',
+  'help',
+  'listed',
+  'listing',
+  'listings',
+  'locksmith',
+  'locksmiths',
+  'mechanic',
+  'mechanics',
+  'metro',
+  'offering',
+  'offerings',
+  'plumber',
+  'plumbers',
+  'plumbing',
+  'repair',
+  'repairs',
+  'same',
+  'suburb',
+  'suburbs',
+  'today',
+  'tomorrow',
+  'urgent',
+  'week',
+  'weeks',
+])
 const STATE_WORDS = new Set(['act', 'nsw', 'nt', 'qld', 'sa', 'tas', 'vic', 'wa'])
 const LOCATION_PREPOSITION = /\b(?:in|near|around|at)\s+([a-z][a-z\s'-]{1,80})(?:\?|$)/i
 

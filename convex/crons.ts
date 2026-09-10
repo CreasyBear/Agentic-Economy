@@ -12,6 +12,7 @@ const HANDLERS: Record<ScheduledWorkloadName, FunctionReference<'mutation' | 'ac
   'refresh Agentic Economy API registry': internal.workloadCron.refreshAgenticEconomyApiRegistry,
   'refresh current market presence': internal.workloadCron.refreshCurrentMarketPresence,
   'refresh capability supply readiness': internal.workloadCron.refreshCapabilitySupplyReadiness,
+  'reconcile business supply projections': internal.workloadCron.reconcileBusinessSupplyProjections,
   'cleanup expired source write nonces': internal.workloadCron.cleanupExpiredSourceWriteNonces,
   'cleanup expired agent access oauth grants': internal.workloadCron.cleanupExpiredAgentAccessOAuthGrants,
   'observe x402 treasury': internal.workloadCron.observeX402Treasury,

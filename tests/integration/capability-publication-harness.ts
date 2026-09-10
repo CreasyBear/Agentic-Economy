@@ -38,6 +38,22 @@ type PublicationFixtureInput = Parameters<
   typeof prepareCapabilityPublicationMutation
 >[1]
 
+/**
+ * `prepareCapabilityPublicationMutation` (and `preparePublicationDraft`
+ * underneath it) carry a Zod-optional `presentation.price`
+ * (`price?: X | undefined`), while the Convex mutation's `Infer`red
+ * argument type excludes `undefined` from an optional field's value
+ * (`exactOptionalPropertyTypes`). Passing the presentation through
+ * untouched fails that stricter type whenever `price` is absent, so drop
+ * the key entirely instead of carrying it as an explicit `undefined` -
+ * the same pattern `capabilitySupplyShared.ts` uses in
+ * `reconcileReadyItems`/`insertOffering`.
+ */
+export function withDefinedPrice<T extends { price?: unknown }>(presentation: T) {
+  const { price, ...rest } = presentation
+  return price === undefined ? rest : { ...rest, price }
+}
+
 export async function preparedPublicationArgs(
   backend: ConvexFixtureBackend,
   input: PublicationFixtureInput,
@@ -71,10 +87,17 @@ export async function preparedPublicationArgs(
 }
 
 async function admittedPublicationArgs(
-  args: PublishPreparedCapabilityArgs,
+  args: Awaited<ReturnType<typeof prepareCapabilityPublicationMutation>>,
 ): Promise<PublishPreparedCapabilityArgs> {
   return await withSourceWrite('catalog_publish', {
     ...args,
+    prepared: {
+      ...args.prepared,
+      offering: {
+        ...args.prepared.offering,
+        presentation: withDefinedPrice(args.prepared.offering.presentation),
+      },
+    },
     proof: {
       reverificationId: `test:${canonicalDigest({
         operationKey: args.operationKey,

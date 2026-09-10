@@ -10,6 +10,7 @@ import {
 
 import { internal } from './_generated/api'
 import { internalAction } from './_generated/server'
+import { reconcileReadyItems } from './capabilitySupplyShared'
 import {
   bindWorkloadCronActionContext,
   parseWorkloadCronSnapshot,
@@ -49,7 +50,7 @@ export const run = internalAction({
       const admission = await admitFacilitatorDiscoveryItems(fetchedPage.page.items)
       skipped += admission.skipped.length
       const result = await authorized.runMutation(internal.facilitatorDiscovery.reconcile, {
-        items: [...structuredClone(admission.admitted)],
+        items: [...structuredClone(reconcileReadyItems(admission.admitted))],
         complete: false,
         deadlineAt,
         workload,

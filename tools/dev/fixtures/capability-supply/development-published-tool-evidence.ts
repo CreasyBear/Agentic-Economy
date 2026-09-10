@@ -573,16 +573,21 @@ export function verifyDevelopmentPublishedToolEvidence(
   const rebuiltDigest = canonicalDigest(rebuilt)
   const descriptorDigest = runtimeDescriptorDigest(packet.descriptor)
   const rebuiltDescriptorDigest = runtimeDescriptorDigest(descriptor)
+  // `identity.price` is optional and being retired (Well 4, decision D7);
+  // this fixture always sets a fixed-price presentation, so an undefined
+  // price is itself a mismatch.
+  const price = packet.tool.identity.price
   if (packet.discovery.length !== 5
     || actualDiscoveryDigest !== expectedDiscoveryDigest
     || toolDigest !== rebuiltDigest
     || packet.tool.materialDigest !== rebuilt.materialDigest
     || descriptorDigest !== rebuiltDescriptorDigest
     || packet.tool.identity.endpoint.resource !== `GET ${endpointPath}`
-    || packet.tool.identity.price.kind !== 'fixed'
-    || packet.tool.identity.price.amount.currency !== 'AUD'
-    || packet.tool.identity.price.amount.units !== '1000000'
-    || packet.tool.identity.price.amount.exponent !== 6
+    || price === undefined
+    || price.kind !== 'fixed'
+    || price.amount.currency !== 'AUD'
+    || price.amount.units !== '1000000'
+    || price.amount.exponent !== 6
     || packet.tool.identity.payment.kind !== 'x402'
     || packet.tool.identity.payment.network !== expectedPayment.network
     || packet.tool.identity.payment.asset !== expectedPayment.asset

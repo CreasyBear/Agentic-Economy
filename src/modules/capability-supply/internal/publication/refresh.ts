@@ -19,7 +19,7 @@ import type { CapabilityPublicationImport } from '../publication-importers'
 import type { RegistrationContext } from '../shared/command-envelope'
 import { connectionAuthoritySnapshotsEqual, transportAdmissionInput } from '../binding/registration'
 
-import { preparePublicationDraft, pricingConfigForOffering } from './draft'
+import { preparePublicationDraft } from './draft'
 import { INITIAL_PUBLICATION_LIFECYCLE } from './lifecycle'
 import type { PublicationCommandPorts, PublicationCommandRow } from './ports'
 import {
@@ -36,15 +36,6 @@ export type RefreshCapabilityCommandInput = RegistrationContext & Readonly<{
   publicationMetadata?: CapabilityPublicationProvenance
 }>
 
-function refreshedPricingConfig(
-  current: PricingConfig,
-  offering: CapabilityPublicationOfferingDraft | undefined,
-): PricingConfig | undefined {
-  if (offering === undefined) return current
-  if (current.kind === 'managed_x402' && offering.presentation.price.kind === 'on_request') return current
-  return pricingConfigForOffering(offering)
-}
-
 export async function refreshCapabilityCommand(
   input: RefreshCapabilityCommandInput,
   ports: PublicationCommandPorts,
@@ -57,14 +48,14 @@ export async function refreshCapabilityCommand(
   if (currentPricing === undefined) {
     return { kind: 'refused' as const, reason: 'refresh_invalid' as const }
   }
-  const nextPricingConfig = refreshedPricingConfig(currentPricing, input.offering)
-  if (nextPricingConfig === undefined) {
-    return { kind: 'refused' as const, reason: 'refresh_invalid' as const }
-  }
+  // Pricing is owner-declared only at the ingest boundary (preparePublicationDraft's
+  // first call, or admitPublicationDraft). A refresh carries forward the publication's
+  // already-verified pricing config rather than re-deriving it from the offering draft,
+  // whose display price is not the source of truth (Well 4 D7).
   const prepared = await preparePublicationDraft({
     source: input.source,
     sourceRevision: publication.sourceRevision,
-    pricingConfig: nextPricingConfig,
+    pricingConfig: currentPricing,
     offering: input.offering,
     binding: input.binding,
     evidenceRefs: input.evidenceRefs,

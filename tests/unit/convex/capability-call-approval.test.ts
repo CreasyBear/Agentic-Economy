@@ -46,6 +46,7 @@ import {
   materializeRuntimePublishedTool,
 } from '@/modules/capability-supply/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { pricingConfigDecisionAmount } from '@/modules/money/public'
 import { normalizeStoredAgentAccessGrant } from '@/modules/agent-access/policy'
 import type { AgentAccessPrincipal } from '@/modules/agent-access/agent-access'
 
@@ -243,7 +244,7 @@ function authorityRequest() {
     toolRef,
     consequence: descriptor.consequenceClass,
     retryClass: descriptor.retryClass,
-    maximumSpend: descriptor.price.kind === 'fixed' ? descriptor.price.amount : undefined,
+    maximumSpend: pricingConfigDecisionAmount(operation.pricingConfig),
     dataFields: [...descriptor.materialInputPointers],
   }
 }

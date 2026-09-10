@@ -66,6 +66,7 @@ export type ToolSurfaceWireDescriptor = {
   payment?: DeepWritable<PublicToolPayment>;
   transport: DeepWritable<PublicToolTransport>;
   provenance: DeepWritable<PublicToolDescriptor["provenance"]>;
+  listingTier: PublicToolDescriptor["listingTier"];
   availability: DeepWritable<PublicToolAvailability>;
   navigation: ToolSurfaceWireNavigation[];
   parameters?: DeepWritable<PublicToolParameter[]>;

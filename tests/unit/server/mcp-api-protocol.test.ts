@@ -38,6 +38,7 @@ describe('MCP host adapter protocol', () => {
       'Use Agentic Economy to acquire one bounded outside contribution when your current harness lacks a capability. '
       + 'Search with `ae_registry_tools_search` and a capability phrase. '
       + 'Use `ae_registry_tools_list` to browse, `ae_registry_tools_describe` for one exact input contract, and `ae_registry_tools_compare` for up to four exact references. '
+      + '`ae_tool_quote` and `ae_tool_call` are protected Tools: they appear in `tools/list` only after the agent connects. Connect through the OAuth device flow via `ae connect` (CLI), or, for MCP clients that support authorization, through the `/.well-known/oauth-protected-resource` metadata. '
       + 'Call `ae_tool_quote` with the exact Tool and input. Complete its one continuation or required action, then request a fresh Quote if the input or authority changes. '
       + 'Call only with the Quote returned by `ae_tool_quote`. '
       + 'If Account credit is insufficient, use `ae_funding_handoff_create`, give only its Stripe checkoutUrl to the payer, persist fundingSessionId, poll `ae_funding_handoff_status`, then explicitly retry the original Tool only after ready. '
@@ -50,6 +51,8 @@ describe('MCP host adapter protocol', () => {
       'ae_registry_tools_list',
       'ae_registry_tools_describe',
       'ae_registry_tools_compare',
+      'ae_tool_quote',
+      'ae_tool_call',
       'ae_tool_quote',
       'ae_tool_quote',
       'ae_funding_handoff_create',

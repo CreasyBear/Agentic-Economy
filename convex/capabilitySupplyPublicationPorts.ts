@@ -14,6 +14,7 @@ import {
   registerCapabilityContractDocument,
 } from './capabilityContractDocuments'
 import { eligibleSupplyPorts } from './capabilitySupplyEligiblePorts'
+import { rebuildCapabilityOriginSupplyProjection } from './capabilitySupplyShared'
 import { capabilitySupplyToolPorts } from './capabilitySupplyToolPorts'
 import { syncMarketToolPresence } from './marketPresence'
 export function capabilitySupplyPublicationPorts(
@@ -214,12 +215,19 @@ export function capabilitySupplyPublicationPorts(
         withdrawnAt: updatedAt,
         updatedAt,
       })
-      if (publication !== null) await syncMarketToolPresence(ctx, {
-        toolRef: publication.toolRef,
-        businessId: publication.businessId,
-        active: false,
-        now: updatedAt,
-      })
+      if (publication !== null) {
+        await syncMarketToolPresence(ctx, {
+          toolRef: publication.toolRef,
+          businessId: publication.businessId,
+          active: false,
+          now: updatedAt,
+        })
+        // registrySearchDocuments mirrors capabilityPublications' disposition;
+        // rebuild it in the same mutation as the withdraw patch so a
+        // withdrawn publication cannot stay searchable until the hourly
+        // sweep (rebuildAllBusinessSupplyProjections) catches up.
+        await rebuildCapabilityOriginSupplyProjection(ctx, publication.businessId, updatedAt)
+      }
     },
     registerContractDocument: (documentJson, now) => (
       registerCapabilityContractDocument(ctx.db, documentJson, now)

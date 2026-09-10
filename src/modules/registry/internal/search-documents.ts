@@ -1,5 +1,5 @@
 import { canonicalDigest } from '@/modules/common/canonical-digest'
-import { normalizeSearchText } from '@/modules/common/normalize-search-text'
+import { SEARCH_STOP_WORDS, normalizeSearchText } from '@/modules/common/normalize-search-text'
 import type { PublicBusinessCatalogApiV2Dto } from './offering-api-projection'
 import type { PublicBusinessCatalogSearchInput } from './search'
 import type { RegistrySearchDocumentContract } from './projection-contracts'
@@ -12,65 +12,55 @@ export type RegistrySearchLocation = {
   key: string
   source: 'input' | 'query'
 }
-
-const SEARCH_STOP_WORDS = new Set([
-  'a',
-  'an',
-  'and',
+const REGISTRY_STOP_WORDS = new Set([
+  ...SEARCH_STOP_WORDS,
   'around',
-  'at',
   'business',
   'businesses',
-  'for',
-  'find',
-  'in',
   'near',
-  'need',
   'now',
   'open',
   'provider',
   'providers',
   'service',
   'services',
-  'the',
-  'to',
 ])
 export function registrySearchTokens(query: string): readonly string[] {
   return normalizeSearchText(query)
     .split(' ')
-    .filter((token) => token.length > 0 && !SEARCH_STOP_WORDS.has(token))
+    .filter((token) => token.length > 0 && !REGISTRY_STOP_WORDS.has(token))
 }
 
 const SERVICE_WORDS = new Set([
-  ...SEARCH_STOP_WORDS,
+  ...REGISTRY_STOP_WORDS,
   'appointment',
   'callout',
+  'cleaner',
+  'cleaners',
   'day',
+  'dental',
+  'dentist',
+  'dentists',
   'diagnostic',
   'diagnostics',
+  'electrical',
+  'electrician',
+  'electricians',
   'emergency',
   'help',
   'listed',
   'listing',
   'listings',
+  'locksmith',
+  'locksmiths',
+  'mechanic',
+  'mechanics',
   'metro',
   'offering',
   'offerings',
   'plumber',
   'plumbers',
   'plumbing',
-  'electrician',
-  'electricians',
-  'electrical',
-  'dentist',
-  'dentists',
-  'dental',
-  'locksmith',
-  'locksmiths',
-  'mechanic',
-  'mechanics',
-  'cleaner',
-  'cleaners',
   'repair',
   'repairs',
   'same',
@@ -79,7 +69,6 @@ const SERVICE_WORDS = new Set([
   'today',
   'tomorrow',
   'urgent',
-  'this',
   'week',
   'weeks',
 ])

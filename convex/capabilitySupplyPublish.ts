@@ -926,30 +926,6 @@ function decodeBootstrapPublicationSource(
   return isDecodedPublicationImport(decoded) ? decoded : undefined
 }
 
-function pricingConfigForBootstrapSource(
-  source: CapabilityPublicationImport,
-  offering: CapabilityPublicationOfferingDraft | undefined,
-): unknown | undefined {
-  const sourceOffering =
-    offering ??
-    (source.kind === 'ae_envelope'
-      ? source.offering
-      : source.commercial.offering)
-  const price = sourceOffering.presentation.price
-  if (
-    price.kind !== 'fixed'
-    || price.amount.currency !== 'AUD'
-    || price.amount.exponent !== 6
-  ) return undefined
-  return {
-    version: 'pricing:v3',
-    kind: 'fixed_aud',
-    currency: 'AUD',
-    exponent: 6,
-    amountUnits: price.amount.units,
-  }
-}
-
 function bootstrapSourceRevision(
   sourceValue: unknown,
   source: CapabilityPublicationImport,
@@ -1019,14 +995,7 @@ async function commitBootstrapCapability(
   )
   if (source === undefined)
     return { kind: 'refused' as const, reason: 'source_invalid' as const }
-  let pricingConfig: unknown
-  try {
-    pricingConfig =
-      input.pricingConfig ??
-      pricingConfigForBootstrapSource(source, input.offering)
-  } catch {
-    return { kind: 'refused' as const, reason: 'source_invalid' as const }
-  }
+  const pricingConfig = input.pricingConfig
   if (pricingConfig === undefined)
     return { kind: 'refused' as const, reason: 'price_unavailable' as const }
   const prepared = await preparePublicationDraft({

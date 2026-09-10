@@ -468,6 +468,18 @@ export async function refreshCapabilitySupplyReadinessHandler(ctx: WorkloadCronM
   return null
 }
 
+// `rebuildAllBusinessSupplyProjections` stays the permanent maintenance entry
+// point invoked directly by operators (`npx convex run
+// capabilitySupplyProjection:rebuildAllBusinessSupplyProjections '{}'`), so its
+// args shape is untouched here. This wrapper only admits the canonical cron
+// workload identity before calling it with no cursor, matching page 1; the
+// mutation self-chains through its own cursor exactly as it does today.
+export async function reconcileBusinessSupplyProjectionsHandler(ctx: WorkloadCronMutationContext): Promise<null> {
+  await admitWorkloadCron(ctx as Pick<QueryCtx, 'db'>, 'reconcile business supply projections')
+  await ctx.runMutation(internal.capabilitySupplyProjection.rebuildAllBusinessSupplyProjections, {})
+  return null
+}
+
 export async function cleanupExpiredSourceWriteNoncesHandler(
   ctx: WorkloadCronMutationContext,
   args: Readonly<{ now?: number; batchSize?: number }> = {},
@@ -529,6 +541,12 @@ export const refreshCapabilitySupplyReadiness = internalMutation({
   args: {},
   returns: v.null(),
   handler: refreshCapabilitySupplyReadinessHandler,
+})
+
+export const reconcileBusinessSupplyProjections = internalMutation({
+  args: {},
+  returns: v.null(),
+  handler: reconcileBusinessSupplyProjectionsHandler,
 })
 
 export const cleanupExpiredSourceWriteNonces = internalMutation({

@@ -445,7 +445,7 @@ describe('capability Tool search ranking', () => {
     )
     expect(tool.contract.inputExamples).toEqual(examples)
 
-    const result = { kind: 'found' as const, schemaVersion: 'registry-tools:v1' as const, tool }
+    const result = { kind: 'found' as const, schemaVersion: 'registry-tools:v3' as const, tool }
     expect(toolDetailOutputSchema.safeParse(result).success).toBe(true)
     expect(toolDetailOutputSchema.safeParse({
       ...result,

@@ -14,7 +14,7 @@ import {
 import type { CapabilityTransportAuthority } from '@/modules/capability-supply/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { withSourceWrite } from '../helpers/source-write-admission'
-import { installProviderConnectionFixture } from './capability-publication-harness'
+import { installProviderConnectionFixture, withDefinedPrice } from './capability-publication-harness'
 const SECURITY_AUTHORITY: CapabilityTransportAuthority = {
   kind: 'provider_connection',
   connectionRef: 'connection:capability-publication-security',
@@ -31,6 +31,13 @@ async function preparedPublicationArgs(
   const args = await prepareCapabilityPublicationMutation(backend, input)
   return await withSourceWrite('catalog_publish', {
     ...args,
+    prepared: {
+      ...args.prepared,
+      offering: {
+        ...args.prepared.offering,
+        presentation: withDefinedPrice(args.prepared.offering.presentation),
+      },
+    },
     proof: {
       reverificationId: `test:${canonicalDigest({
         operationKey: args.operationKey,

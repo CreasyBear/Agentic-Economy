@@ -145,7 +145,7 @@ function successfulFetch(requests: Request[]): typeof globalThis.fetch {
       const index = sourceKinds.findIndex((sourceKind) => String(body.query).includes(sourceKind))
       return json({
         kind: 'ok', schemaVersion: 'registry-tools:v3', query: body.query, count: 1,
-        items: [{ toolRef: toolRef(index + 1), capabilityId: `fixture.${sourceKinds[index]}`, title: String(body.query), description: 'fixture', provider: { name: 'Fixture', slug: 'fixture' }, priceLabel: 'Free', healthStatus: 'operational' }],
+        items: [{ toolRef: toolRef(index + 1), capabilityId: `fixture.${sourceKinds[index]}`, title: String(body.query), description: 'fixture', provider: { name: 'Fixture', slug: 'fixture' }, priceLabel: 'Free', healthStatus: 'operational', listingTier: 'reviewed' }],
         pagination: { limit: 20, hasMore: false },
       })
     }
@@ -153,7 +153,7 @@ function successfulFetch(requests: Request[]): typeof globalThis.fetch {
       return json({
         kind: 'found', schemaVersion: 'registry-tools:v3', tool: {
           toolRef: body.toolRef, capabilityId: 'fixture.execute', title: 'Fixture', description: 'fixture', provider: { name: 'Fixture', slug: 'fixture' },
-          priceLabel: 'Free', healthStatus: 'operational', inputJsonSchema: { type: 'object' }, outputJsonSchema: { type: 'object' }, materialTerms: [], dataUse: [], effects: [], evidence: [], authentication: { kind: 'ae_api_key' },
+          priceLabel: 'Free', healthStatus: 'operational', inputJsonSchema: { type: 'object' }, outputJsonSchema: { type: 'object' }, materialTerms: [], dataUse: [], effects: [], evidence: [], authentication: { kind: 'ae_api_key' }, listingTier: 'reviewed',
         },
       })
     }

@@ -162,6 +162,7 @@ import { createX402ProviderConnection } from '@/modules/capability-supply/provid
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { canonicalAuthorityBasisMaterial } from '@/modules/action-execution/runtime'
 import {
+  pricingConfigDecisionAmount,
   pricingConfigDigest,
   pricingConfigSourceAmount,
   type PricingConfig,
@@ -474,7 +475,7 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
   const inputDigest = canonicalDigest(input as StableHashValue)
   const authorityExpiresAt = new Date(now + 60_000).toISOString()
   const acceptedBasis = { kind: 'approval_required' as const, authorityRef: `authority:${invocationRef}` }
-  const limits = { amount: descriptor.price.kind === 'fixed' ? descriptor.price.amount : { currency: 'USD', units: '1', exponent: 2 } }
+  const limits = { amount: pricingConfigDecisionAmount(operation.pricingConfig) ?? { currency: 'USD', units: '1', exponent: 2 } }
   const authorityMaterial = {
     callRef: invocationRef,
     toolRef: operationRef,
@@ -1057,9 +1058,8 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
       },
     }
   })
-  const chargeAmount = descriptor.price.kind === 'fixed'
-    ? descriptor.price.amount
-    : { currency: 'USD', units: '0', exponent: 2 }
+  const chargeAmount = pricingConfigDecisionAmount(operation.pricingConfig)
+    ?? { currency: 'USD', units: '0', exponent: 2 }
   const chargeState: 'free_tier' | 'paid' = chargeAmount.units === '0' ? 'free_tier' : 'paid'
   let activeGrantReads = 0
   let currentToolReads = 0

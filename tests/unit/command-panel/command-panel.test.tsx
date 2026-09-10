@@ -164,7 +164,7 @@ describe('operator command panel', () => {
     vi.stubGlobal('fetch', vi.fn(async () => jsonResponse(operationSearchPayload())))
     const readDetail = vi.fn(async (): Promise<PublicToolDetailRouteResult> => ({
       kind: 'found',
-      schemaVersion: 'registry-tools:v1',
+      schemaVersion: 'registry-tools:v3',
       tool: detailFixture(),
     }))
 
@@ -206,7 +206,7 @@ describe('operator command panel', () => {
     )
     const readDetail = vi.fn(async (): Promise<PublicToolDetailRouteResult> => ({
       kind: 'found',
-      schemaVersion: 'registry-tools:v1',
+      schemaVersion: 'registry-tools:v3',
       tool: detailFixture(),
     }))
 
@@ -256,7 +256,7 @@ describe('operator command panel', () => {
     vi.stubGlobal('fetch', vi.fn(async () => jsonResponse(operationSearchPayload())))
     const readDetail = vi.fn(async (): Promise<PublicToolDetailRouteResult> => ({
       kind: 'found',
-      schemaVersion: 'registry-tools:v1',
+      schemaVersion: 'registry-tools:v3',
       tool: detailFixture(),
     }))
     const router = renderPanel({ openImmediately: true, readDetail })
@@ -287,7 +287,7 @@ describe('operator command panel', () => {
     vi.stubGlobal('fetch', vi.fn(async () => jsonResponse(twoOperationSearchPayload())))
     const readDetail = vi.fn(async (toolRef: string): Promise<PublicToolDetailRouteResult> => ({
       kind: 'found',
-      schemaVersion: 'registry-tools:v1',
+      schemaVersion: 'registry-tools:v3',
       tool: detailFixture(toolRef),
     }))
 
@@ -309,7 +309,7 @@ describe('operator command panel', () => {
     vi.stubGlobal('fetch', vi.fn(async () => jsonResponse(twoOperationSearchPayload())))
     const readDetail = vi.fn(async (toolRef: string): Promise<PublicToolDetailRouteResult> => ({
       kind: 'found',
-      schemaVersion: 'registry-tools:v1',
+      schemaVersion: 'registry-tools:v3',
       tool: detailFixture(toolRef),
     }))
 
@@ -395,7 +395,7 @@ describe('operator command panel', () => {
     vi.stubGlobal('fetch', fetchSearch)
     const readDetail = vi.fn(async (toolRef: string): Promise<PublicToolDetailRouteResult> => ({
       kind: 'found',
-      schemaVersion: 'registry-tools:v1',
+      schemaVersion: 'registry-tools:v3',
       tool: detailFixture(toolRef),
     }))
 
@@ -426,7 +426,7 @@ describe('operator command panel', () => {
     vi.stubGlobal('fetch', vi.fn(async () => await deferredSearch))
     const readDetail = vi.fn(async (toolRef: string): Promise<PublicToolDetailRouteResult> => ({
       kind: 'found',
-      schemaVersion: 'registry-tools:v1',
+      schemaVersion: 'registry-tools:v3',
       tool: detailFixture(toolRef),
     }))
 
@@ -453,7 +453,7 @@ describe('operator command panel', () => {
     vi.stubGlobal('fetch', fetchSearch)
     const readDetail = vi.fn(async (toolRef: string): Promise<PublicToolDetailRouteResult> => ({
       kind: 'found',
-      schemaVersion: 'registry-tools:v1',
+      schemaVersion: 'registry-tools:v3',
       tool: detailFixture(toolRef),
     }))
 
@@ -488,7 +488,7 @@ describe('operator command panel', () => {
     vi.stubGlobal('fetch', fetchSearch)
     const readDetail = vi.fn(async (toolRef: string): Promise<PublicToolDetailRouteResult> => ({
       kind: 'found',
-      schemaVersion: 'registry-tools:v1',
+      schemaVersion: 'registry-tools:v3',
       tool: detailFixture(toolRef),
     }))
 
@@ -520,7 +520,7 @@ describe('operator command panel', () => {
     Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })
     const readDetail = vi.fn(async (): Promise<PublicToolDetailRouteResult> => ({
       kind: 'found',
-      schemaVersion: 'registry-tools:v1',
+      schemaVersion: 'registry-tools:v3',
       tool: detailFixture(),
     }))
 
@@ -547,7 +547,7 @@ describe('operator command panel', () => {
     vi.stubGlobal('fetch', vi.fn(async () => jsonResponse(operationSearchPayload())))
     const readDetail = vi.fn(async (): Promise<PublicToolDetailRouteResult> => ({
       kind: 'found',
-      schemaVersion: 'registry-tools:v1',
+      schemaVersion: 'registry-tools:v3',
       tool: detailFixture(),
     }))
 
@@ -572,7 +572,7 @@ describe('operator command panel', () => {
     const { inputExamples: _inputExamples, ...contractWithoutExamples } = fixture.contract
     const readDetail = vi.fn(async (): Promise<PublicToolDetailRouteResult> => ({
       kind: 'found',
-      schemaVersion: 'registry-tools:v1',
+      schemaVersion: 'registry-tools:v3',
       tool: {
         ...fixture,
         contract: contractWithoutExamples,
@@ -596,7 +596,7 @@ describe('operator command panel', () => {
   it('gives an unavailable Tool one primary route back to current supply', async () => {
     const readDetail = vi.fn(async (): Promise<PublicToolDetailRouteResult> => ({
       kind: 'unavailable',
-      schemaVersion: 'registry-tools:v1',
+      schemaVersion: 'registry-tools:v3',
       toolRef: TEST_OPERATION_REF,
       reason: 'temporarily_unavailable',
       navigation: [],
@@ -638,7 +638,7 @@ describe('operator command panel', () => {
   it('does not label a call-less routeable descriptor ready', async () => {
     const readDetail = vi.fn(async (): Promise<PublicToolDetailRouteResult> => ({
       kind: 'found',
-      schemaVersion: 'registry-tools:v1',
+      schemaVersion: 'registry-tools:v3',
       tool: {
         ...detailFixture(),
         availability: { posture: 'routeable' },
@@ -665,7 +665,7 @@ describe('operator command panel', () => {
     let detailReads = 0
     const readDetail = vi.fn(async (): Promise<PublicToolDetailRouteResult> => {
       detailReads += 1
-      return { kind: 'found', schemaVersion: 'registry-tools:v1' as const, tool: detailFixture() }
+      return { kind: 'found', schemaVersion: 'registry-tools:v3' as const, tool: detailFixture() }
     })
 
     renderPanel({ readDetail })
@@ -729,7 +729,7 @@ describe('operator command panel', () => {
 
     const readDetail = vi.fn(async (): Promise<PublicToolDetailRouteResult> => ({
       kind: 'found',
-      schemaVersion: 'registry-tools:v1',
+      schemaVersion: 'registry-tools:v3',
       tool: detailFixture(),
     }))
     renderPanel({ openImmediately: true, readDetail })
@@ -789,6 +789,7 @@ function operationSearchPayload(authentication?: unknown) {
         provider: { name: 'Open-Meteo', slug: 'open-meteo' },
         priceLabel: 'Price confirmed at inspection',
         healthStatus: 'operational',
+        listingTier: 'reviewed',
         ...(authentication === undefined ? {} : { authentication }),
       },
     ],
@@ -821,7 +822,7 @@ function twoOperationSearchPayload() {
 export function detailFixture(toolRef: string = TEST_OPERATION_REF): PublicToolDescriptor {
   const parsed = toolDetailOutputSchema.parse({
     kind: 'found',
-    schemaVersion: 'registry-tools:v1',
+    schemaVersion: 'registry-tools:v3',
     tool: {
       toolRef,
       toolId: 'op_test_a',
@@ -859,6 +860,7 @@ export function detailFixture(toolRef: string = TEST_OPERATION_REF): PublicToolD
       authentication: { kind: 'x402' },
       transport: { method: 'POST', requestTimeoutMs: 30000 },
       provenance: { publisher: 'provider_owned', sourceKind: 'openapi_http' },
+      listingTier: 'reviewed',
       availability: { posture: 'routeable' },
       navigation: [{
         relation: 'call',

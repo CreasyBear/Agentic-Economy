@@ -24,6 +24,7 @@ import {
   refreshCurrentMarketPresenceHandler,
   refreshFacilitatorDiscoveryHandler,
   observeX402TreasuryHandler,
+  reconcileBusinessSupplyProjectionsHandler,
   dispatchWorkloadCronConsequenceHandler,
   reconcile,
   type WorkloadCronActionContext,
@@ -44,6 +45,7 @@ const EXPECTED_BINDINGS = {
   'reconcile due facilitator invocations': 'workloadCron:reconcileDueFacilitatorInvocations',
   'refresh Agentic Economy API registry': 'workloadCron:refreshAgenticEconomyApiRegistry',
   'refresh capability supply readiness': 'workloadCron:refreshCapabilitySupplyReadiness',
+  'reconcile business supply projections': 'workloadCron:reconcileBusinessSupplyProjections',
   'refresh current market presence': 'workloadCron:refreshCurrentMarketPresence',
   'refresh facilitator discovery': 'workloadCron:refreshFacilitatorDiscovery',
   'observe x402 treasury': 'workloadCron:observeX402Treasury',
@@ -66,6 +68,7 @@ const ACTION_HANDLER_WORKLOAD_NAMES = [
 const MUTATION_HANDLERS = [
   refreshCurrentMarketPresenceHandler,
   refreshCapabilitySupplyReadinessHandler,
+  reconcileBusinessSupplyProjectionsHandler,
   cleanupExpiredSourceWriteNoncesHandler,
   cleanupExpiredAgentAccessOAuthGrantsHandler,
 ] as const
@@ -86,7 +89,7 @@ describe('System workload cron boundary', () => {
   })
 
   it('declares every cron as one canonical workload Principal and Account with no exemption', () => {
-    expect(WORKLOAD_CRON_DECLARATIONS).toHaveLength(8)
+    expect(WORKLOAD_CRON_DECLARATIONS).toHaveLength(9)
     expect(WORKLOAD_CRON_DECLARATIONS.map(({ name }) => name).sort()).toEqual(Object.keys(EXPECTED_BINDINGS).sort())
     expect(WORKLOAD_CRON_DECLARATIONS.every((declaration) => (
       declaration.authority === 'canonical_workload'
@@ -343,8 +346,8 @@ describe('System workload cron boundary', () => {
     for (const handler of MUTATION_HANDLERS) await expect(handler(context.mutation())).resolves.toBeNull()
 
     expect(context.admissions).toEqual([...ACTION_HANDLER_WORKLOAD_NAMES])
-    expect(context.dispatches).toHaveLength(8)
-    expect([...context.db.queries].sort()).toEqual(Array.from({ length: 8 }, () => [
+    expect(context.dispatches).toHaveLength(9)
+    expect([...context.db.queries].sort()).toEqual(Array.from({ length: 9 }, () => [
       'principals',
       'accounts',
       'accountOwnerships',

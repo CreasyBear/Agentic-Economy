@@ -13,6 +13,26 @@ export const CAPABILITY_PUBLICATION_AUTHORITY_MODES = [
 export type CapabilityPublicationAuthorityMode =
   typeof CAPABILITY_PUBLICATION_AUTHORITY_MODES[number]
 
+/**
+ * The catalogue listing tier a Tool surfaces under, derived from its
+ * publication authority mode (never stored): 1P direct and AE-curated 3P
+ * are `reviewed`; gateway-mediated and merely observed 3P are `listed`.
+ * Reviewed-vs-listed is the Locus/AgentMuxer pattern
+ * (research/2026-09-09-agent-marketplace-scan.md:16).
+ */
+export function listingTier(
+  authorityMode: CapabilityPublicationAuthorityMode,
+): 'reviewed' | 'listed' {
+  switch (authorityMode) {
+    case 'provider_owned':
+    case 'ae_curated_external':
+      return 'reviewed'
+    case 'third_party_gateway':
+    case 'observed_external':
+      return 'listed'
+  }
+}
+
 export type CapabilityPublicationProvenance = Readonly<{
   publisherRef: string
   authorityMode: CapabilityPublicationAuthorityMode

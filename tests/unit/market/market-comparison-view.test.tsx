@@ -108,6 +108,7 @@ function tool(
     provider: { name: providerName, slug: providerName.toLowerCase().replaceAll(" ", "-") },
     priceLabel,
     healthStatus,
+    listingTier: "reviewed" as const,
   };
 }
 
