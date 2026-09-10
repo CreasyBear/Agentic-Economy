@@ -21,7 +21,7 @@ test.describe('Package 4 Account commerce', () => {
     await page.goto('/')
     await clerk.signIn({ page, emailAddress: environment.ownerEmail })
 
-    await page.goto('/owner/credit', { waitUntil: 'networkidle' })
+    await page.goto('/owner/credit')
     await expect(page.getByRole('heading', { name: 'Funding', level: 1 })).toBeVisible()
     await expect(page.getByRole('heading', { name: 'Account balance' })).toBeVisible()
     await expect(page.getByText(/Paid Calls reserve AUD from this Account/iu)).toBeVisible()
@@ -37,7 +37,7 @@ test.describe('Package 4 Account commerce', () => {
     await expect(page.getByText('Agentic Economy Account credit', { exact: true })).toBeVisible()
     await expect(page.getByTestId('product-summary-total-amount').getByText('A$5.28', { exact: true })).toBeVisible()
 
-    await page.goto(`${environment.baseURL}/activity`, { waitUntil: 'networkidle' })
+    await page.goto(`${environment.baseURL}/activity`)
     await expect(page.getByRole('heading', { name: 'Calls', level: 1 })).toBeVisible()
     await expect(page.getByText(/amount, outcome, and durable receipt together/iu)).toBeVisible()
     await expect(page.getByText(/wallet signature|client_secret|private key/iu)).toHaveCount(0)

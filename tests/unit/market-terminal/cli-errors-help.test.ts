@@ -628,18 +628,20 @@ describe('market-terminal CLI error contracts', () => {
     })
   }, 30_000)
 
-  it('reports local version and provenance without contacting a server', () => {
+  it('reports the build revision embedded at build time and ignores runtime AE_SOURCE_REVISION', () => {
     const json = spawnCliSync(['--version', '--json'], {
       env: { ...process.env, AE_SOURCE_REVISION: 'test-revision' },
     })
     expect(json.status).toBe(0)
     expect(json.stderr).toBe('')
-    expect(JSON.parse(json.stdout)).toMatchObject({
+    const parsed = JSON.parse(json.stdout) as { kind: string; version: string; buildRevision: string; runtime: string }
+    expect(parsed).toMatchObject({
       kind: 'VERSION',
       version: '0.1.0',
-      buildRevision: 'test-revision',
       runtime: process.version,
     })
+    expect(parsed.buildRevision).toBeTruthy()
+    expect(parsed.buildRevision).not.toBe('test-revision')
 
     const human = spawnCliSync(['--version'])
     expect(human.status).toBe(0)

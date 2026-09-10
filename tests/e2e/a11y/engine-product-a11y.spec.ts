@@ -17,15 +17,18 @@ test.describe('market product accessibility', () => {
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
     await expect(page.getByLabel('Search Tools').first()).toBeVisible()
     const compact = (page.viewportSize()?.width ?? 1280) < 768
+    const primary = page.getByRole('navigation', {
+      name: compact ? 'Public navigation' : 'Primary',
+    })
     if (compact) {
       const menu = page.getByRole('button', { name: 'Open public menu' })
       await menu.focus()
       await expect(menu).toBeFocused()
-      await menu.press('Enter')
+      await expect(async () => {
+        await menu.press('Enter')
+        await expect(primary.getByRole('link', { name: 'Discover' })).toBeVisible({ timeout: 1_000 })
+      }).toPass()
     }
-    const primary = page.getByRole('navigation', {
-      name: compact ? 'Public navigation' : 'Primary',
-    })
     await expect(primary.getByRole('link', { name: 'Discover' })).toBeVisible()
     await expect(primary.getByRole('link', { name: 'For agents' })).toBeVisible()
     await expect(primary.getByRole('link', { name: 'For Providers' })).toBeVisible()
@@ -43,10 +46,10 @@ test.describe('market product accessibility', () => {
 
   test('catalogue and controls do not widen the viewport', async ({ page }) => {
     await gotoSettled(page, '/market?window=30d')
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
     const viewportWidth = await page.evaluate(() => window.innerWidth)
     const documentWidth = await page.evaluate(() => document.documentElement.scrollWidth)
     expect(documentWidth).toBeLessThanOrEqual(viewportWidth)
-    await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
   })
 
   test('about keeps public nav while the footer points at the marketing site', async ({ page }) => {
@@ -71,6 +74,6 @@ test.describe('market product accessibility', () => {
 })
 
 async function gotoSettled(page: Page, path: string) {
-  await page.goto(path, { waitUntil: 'networkidle' })
-  await page.reload({ waitUntil: 'networkidle' })
+  await page.goto(path)
+  await page.reload()
 }

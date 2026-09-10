@@ -2,12 +2,13 @@ import { spawn } from 'node:child_process'
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { createServer, type Server } from 'node:http'
 import { tmpdir } from 'node:os'
-import { delimiter, join, resolve } from 'node:path'
+import { delimiter, join } from 'node:path'
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { runRequestCommand } from '../../../tools/ae/commands/request'
 import type { CliOptions } from '../../../tools/ae/lib/args'
+import { CLI_BUNDLE_PATH } from './cli-errors-harness'
 
 type ListInput = Readonly<{
   cursor?: string
@@ -102,7 +103,7 @@ describe('request list origin continuations', () => {
     installAeShim(directory)
     const continued = await runShell(firstJson.nextCommand, {
       ...environment,
-      AE_TEST_CLI: resolve('tools/ae/cli.ts'),
+      AE_TEST_CLI: CLI_BUNDLE_PATH,
       AE_TEST_NODE: process.execPath,
       PATH: `${directory}${delimiter}${process.env.PATH ?? ''}`,
     })
@@ -186,7 +187,7 @@ describe('request list origin continuations', () => {
     installAeShim(directory)
     const continued = await runShell(firstJson.nextCommand, {
       ...environment,
-      AE_TEST_CLI: resolve('tools/ae/cli.ts'),
+      AE_TEST_CLI: CLI_BUNDLE_PATH,
       AE_TEST_NODE: process.execPath,
       PATH: `${directory}${delimiter}${process.env.PATH ?? ''}`,
     })
@@ -278,11 +279,11 @@ function captureStdout(): { read: () => string; restore: () => void } {
 
 function installAeShim(directory: string): void {
   const executable = join(directory, 'ae')
-  writeFileSync(executable, '#!/bin/sh\nexec "$AE_TEST_NODE" --import tsx "$AE_TEST_CLI" "$@"\n', { mode: 0o755 })
+  writeFileSync(executable, '#!/bin/sh\nexec "$AE_TEST_NODE" "$AE_TEST_CLI" "$@"\n', { mode: 0o755 })
 }
 
 async function runCli(args: readonly string[], environment: NodeJS.ProcessEnv): Promise<ProcessResult> {
-  return runProcess(process.execPath, ['--import', 'tsx', 'tools/ae/cli.ts', ...args], environment)
+  return runProcess(process.execPath, [CLI_BUNDLE_PATH, ...args], environment)
 }
 
 async function runShell(command: string, environment: NodeJS.ProcessEnv): Promise<ProcessResult> {

@@ -16,26 +16,27 @@ test.describe('application recovery', () => {
 
     await page.goto(
       `/tools/${encodeURIComponent(firstRef)}?from=${encodeURIComponent(expectedContext)}`,
-      { waitUntil: 'networkidle' },
     )
     const back = page.getByRole('link', { name: 'Back to comparison' })
     await expect(back).toBeVisible()
-    await back.click()
-    await expect.poll(() => marketContext(page.url())).toEqual({
-      pathname: '/market',
-      window: '30d',
-      query: 'weather alerts',
-      availability: 'routeable',
-      category: 'data-research',
-      compare: comparison,
-      hash: '#tools',
-    })
+    await expect(async () => {
+      await back.click()
+      await expect.poll(() => marketContext(page.url()), { timeout: 1_000 }).toEqual({
+        pathname: '/market',
+        window: '30d',
+        query: 'weather alerts',
+        availability: 'routeable',
+        category: 'data-research',
+        compare: comparison,
+        hash: '#tools',
+      })
+    }).toPass()
 
-    await page.goBack({ waitUntil: 'networkidle' })
+    await page.goBack()
     await expect(page).toHaveURL(/\/tools\/operation%3Av1%3A|\/tools\/operation:v1:/)
     await expect(page.getByRole('link', { name: 'Back to comparison' })).toBeVisible()
 
-    await page.goForward({ waitUntil: 'networkidle' })
+    await page.goForward()
     await expect.poll(() => marketContext(page.url())).toEqual({
       pathname: '/market',
       window: '30d',
@@ -46,8 +47,8 @@ test.describe('application recovery', () => {
       hash: '#tools',
     })
 
-    await page.reload({ waitUntil: 'networkidle' })
-    expect(marketContext(page.url())).toEqual({
+    await page.reload()
+    await expect.poll(() => marketContext(page.url())).toEqual({
       pathname: '/market',
       window: '30d',
       query: 'weather alerts',

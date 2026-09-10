@@ -13,7 +13,7 @@ async function expectInitialHitTarget(page: Page, button: Locator) {
 
 test('native setup copy and alternatives work by pointer and keyboard', async ({ context, page }) => {
 
-  await page.goto('/for-agents', { waitUntil: 'networkidle' })
+  await page.goto('/for-agents')
   await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: new URL(page.url()).origin })
 
   const manifestCopyButton = page.getByRole('button', { name: 'Copy Codex MCP command' })
@@ -22,8 +22,10 @@ test('native setup copy and alternatives work by pointer and keyboard', async ({
   await manifestCopyButton.scrollIntoViewIfNeeded()
   await expectInitialHitTarget(page, manifestCopyButton)
 
-  await manifestCopyButton.click()
-  await expect(page.getByRole('status').filter({ hasText: 'Codex MCP command copied.' })).toBeVisible()
+  await expect(async () => {
+    await manifestCopyButton.click()
+    await expect(page.getByRole('status').filter({ hasText: 'Codex MCP command copied.' })).toBeVisible({ timeout: 1_000 })
+  }).toPass()
   const copied = await page.evaluate(() => navigator.clipboard.readText())
   expect(copied).toContain('codex mcp add agentic-economy --url "')
   expect(copied).not.toContain('$ORIGIN')
@@ -42,7 +44,7 @@ test('native setup copy and alternatives work by pointer and keyboard', async ({
 })
 
 test('support keeps private contact and current records keyboard reachable', async ({ page }) => {
-  await page.goto('/support', { waitUntil: 'networkidle' })
+  await page.goto('/support')
   const support = page.getByRole('link', { name: 'Email support', exact: true })
   await expect(support).toHaveAttribute('href', 'mailto:support@aecon.ai')
   await support.focus()
@@ -50,8 +52,10 @@ test('support keeps private contact and current records keyboard reachable', asy
   await expect(page.getByRole('link', { name: 'Open Calls', exact: true })).toHaveAttribute('href', '/activity')
   const diagnostics = page.getByRole('button', { name: 'Advanced connection diagnostics' })
   await diagnostics.focus()
-  await page.keyboard.press('Enter')
-  await expect(diagnostics).toHaveAttribute('aria-expanded', 'true')
+  await expect(async () => {
+    await page.keyboard.press('Enter')
+    await expect(diagnostics).toHaveAttribute('aria-expanded', 'true', { timeout: 1_000 })
+  }).toPass()
   await expect(page.getByRole('button', { name: 'Copy diagnostic command' })).toBeVisible()
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true)
 })

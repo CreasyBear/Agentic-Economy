@@ -30,7 +30,8 @@ test.describe('configured Clerk and Convex multi-agent lifecycle', () => {
     const identityB = await expectUsableAgent(page.request, agentB.secret)
     expect(identityA.principalRef).not.toBe(identityB.principalRef)
 
-    await page.goto('/agent-access', { waitUntil: 'networkidle' })
+    await page.goto('/agent-access')
+    await expect(page.getByRole('heading', { level: 1, name: 'Agents', exact: true })).toBeVisible()
     await ensureAgentVisible(page, agentAName)
     await ensureAgentVisible(page, agentBName)
 
@@ -269,14 +270,15 @@ async function ensureAgentVisible(page: Page, name: string): Promise<void> {
 }
 
 async function openAgent(page: Page, name: string): Promise<void> {
-  await page.goto('/agent-access', { waitUntil: 'networkidle' })
+  await page.goto('/agent-access')
+  await expect(page.getByRole('heading', { level: 1, name: 'Agents', exact: true })).toBeVisible()
   await ensureAgentVisible(page, name)
   const link = page.getByRole('link', { name: `Open ${name}`, exact: true })
   const href = await link.getAttribute('href')
   if (href === null || !/^\/agent-access\?caller=prn_[0-9a-f]{32}$/u.test(href)) {
     throw new Error('agent_detail_link_invalid')
   }
-  await page.goto(href, { waitUntil: 'networkidle' })
+  await page.goto(href)
   await expect(page).toHaveURL(new RegExp(`${href.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')}$`, 'u'))
   await expect(page.getByRole('button', { name: 'Technical details' })).toBeVisible()
 }

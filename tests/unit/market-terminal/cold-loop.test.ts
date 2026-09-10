@@ -2,7 +2,7 @@ import * as childProcess from 'node:child_process'
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:http'
 import { tmpdir } from 'node:os'
-import { delimiter, join, resolve } from 'node:path'
+import { delimiter, join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const childProcessMockState = vi.hoisted(() => ({
@@ -28,6 +28,7 @@ import { CALL_ROUTE_CONTRACT } from '@/modules/capability-execution/call-entry'
 import { TOOL_QUOTE_PATH } from '@/modules/capability-execution/quote'
 import { projectToolDescription, projectToolListChoices, projectToolSearchChoices } from '@/modules/registry/tool-choice-contracts'
 import { toolDetailOutputSchema, toolSearchOutputSchema } from '@/modules/capability-supply/public'
+import { CLI_BUNDLE_PATH } from './cli-errors-harness'
 
 type ToolDescriptorFixture = Readonly<{ toolRef: string; [key: string]: unknown }>
 const CURRENT_OPERATION_REF = `operation:v1:${'d'.repeat(64)}`
@@ -1598,7 +1599,7 @@ describe('external-agent Market Tool cold loop', () => {
       setApiKey('fresh-process-key', selectedOrigin)
       writeFileSync(
         join(testConfigDirectory, 'ae'),
-        '#!/bin/sh\nexec "$AE_TEST_NODE" --import tsx "$AE_TEST_CLI" "$@"\n',
+        '#!/bin/sh\nexec "$AE_TEST_NODE" "$AE_TEST_CLI" "$@"\n',
         { mode: 0o755 },
       )
 
@@ -1619,7 +1620,7 @@ describe('external-agent Market Tool cold loop', () => {
 
       const child = await runFreshShell(connected.nextCommand, {
         ...process.env,
-        AE_TEST_CLI: resolve('tools/ae/cli.ts'),
+        AE_TEST_CLI: CLI_BUNDLE_PATH,
         AE_TEST_NODE: process.execPath,
         PATH: testConfigDirectory + delimiter + (process.env.PATH ?? ''),
       })

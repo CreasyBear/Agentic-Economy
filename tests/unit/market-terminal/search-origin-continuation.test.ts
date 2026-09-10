@@ -19,6 +19,7 @@ import {
 import { handleMarketToolSearchRequest } from '@/routes/api.v1.market-tools.search'
 import { runSearchCommand } from '../../../tools/ae/commands/search'
 import type { CliOptions } from '../../../tools/ae/lib/args'
+import { CLI_BUNDLE_PATH } from './cli-errors-harness'
 
 type SearchInput = Readonly<{
   cursor?: string
@@ -162,7 +163,7 @@ describe('search health-filter continuation', () => {
       installAeShim(directory)
       const continued = await runShell(nextPageCommand, {
         ...process.env,
-        AE_TEST_CLI: resolve('tools/ae/cli.ts'),
+        AE_TEST_CLI: CLI_BUNDLE_PATH,
         AE_TEST_NODE: process.execPath,
         PATH: `${directory}${delimiter}${process.env.PATH ?? ''}`,
       })
@@ -235,7 +236,7 @@ describe('search origin continuations', () => {
     installAeShim(directory)
     const continued = await runShell(result.nextPageCommand, {
       ...process.env,
-      AE_TEST_CLI: resolve('tools/ae/cli.ts'),
+      AE_TEST_CLI: CLI_BUNDLE_PATH,
       AE_TEST_NODE: process.execPath,
       PATH: `${directory}${delimiter}${process.env.PATH ?? ''}`,
     })
@@ -377,7 +378,7 @@ function captureStdout(): { read: () => string; restore: () => void } {
 
 function installAeShim(directory: string): void {
   const executable = join(directory, 'ae')
-  writeFileSync(executable, '#!/bin/sh\nexec "$AE_TEST_NODE" --import tsx "$AE_TEST_CLI" "$@"\n', { mode: 0o755 })
+  writeFileSync(executable, '#!/bin/sh\nexec "$AE_TEST_NODE" "$AE_TEST_CLI" "$@"\n', { mode: 0o755 })
 }
 
 async function runCli(args: readonly string[]): Promise<Readonly<{
@@ -385,7 +386,7 @@ async function runCli(args: readonly string[]): Promise<Readonly<{
   stderr: string
   stdout: string
 }>> {
-  return runProcess(process.execPath, ['--import', 'tsx', 'tools/ae/cli.ts', ...args], process.env)
+  return runProcess(process.execPath, [CLI_BUNDLE_PATH, ...args], process.env)
 }
 
 async function runShell(command: string, environment: NodeJS.ProcessEnv): Promise<Readonly<{

@@ -33,6 +33,6 @@ async function expectNoHorizontalOverflow(page: Page) {
 }
 
 async function gotoSettled(page: Page, path: string) {
-  await page.goto(path, { waitUntil: 'networkidle' })
-  await page.reload({ waitUntil: 'networkidle' })
+  await page.goto(path)
+  await page.reload()
 }

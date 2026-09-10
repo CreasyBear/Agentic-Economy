@@ -2,13 +2,14 @@ import { spawn } from 'node:child_process'
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:http'
 import { tmpdir } from 'node:os'
-import { delimiter, join, resolve } from 'node:path'
+import { delimiter, join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { runAccountCommand } from '../../../tools/ae/commands/account'
 import { parseArgs, type CliOptions } from '../../../tools/ae/lib/args'
 import { readStoredConnection, storeConnection } from '../../../tools/ae/lib/config'
 import { CliFailure } from '../../../tools/ae/lib/output'
+import { CLI_BUNDLE_PATH } from './cli-errors-harness'
 
 let directory = ''
 const options: CliOptions = {
@@ -528,7 +529,7 @@ describe('AE CLI account interface', () => {
       installAeShim(directory)
       const continued = await runProcess('/bin/sh', ['-c', firstPage.nextCommand], {
         ...environment,
-        AE_TEST_CLI: resolve('tools/ae/cli.ts'),
+        AE_TEST_CLI: CLI_BUNDLE_PATH,
         AE_TEST_NODE: process.execPath,
         PATH: `${directory}${delimiter}${process.env.PATH ?? ''}`,
       })
@@ -626,13 +627,13 @@ describe('AE CLI account interface', () => {
 function installAeShim(targetDirectory: string): void {
   writeFileSync(
     join(targetDirectory, 'ae'),
-    '#!/bin/sh\nexec "$AE_TEST_NODE" --import tsx "$AE_TEST_CLI" "$@"\n',
+    '#!/bin/sh\nexec "$AE_TEST_NODE" "$AE_TEST_CLI" "$@"\n',
     { mode: 0o755 },
   )
 }
 
 async function runCliProcess(args: readonly string[], environment: NodeJS.ProcessEnv): Promise<ProcessResult> {
-  return runProcess(process.execPath, ['--import', 'tsx', 'tools/ae/cli.ts', ...args], environment)
+  return runProcess(process.execPath, [CLI_BUNDLE_PATH, ...args], environment)
 }
 
 type ProcessResult = Readonly<{

@@ -167,6 +167,7 @@ function cleanEnvironment(directory: string): NodeJS.ProcessEnv {
   delete env.AE_API_KEY_ORIGIN
   delete env.AE_CLI_BASE_URL
   delete env.AE_CANONICAL_BASE_URL
+  delete env.XDG_CONFIG_HOME
   delete env.CONVEX_URL
   delete env.VITE_CONVEX_URL
   return env

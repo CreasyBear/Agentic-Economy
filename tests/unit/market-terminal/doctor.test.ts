@@ -2,7 +2,7 @@ import { spawn } from 'node:child_process'
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import { tmpdir } from 'node:os'
-import { delimiter, join, resolve } from 'node:path'
+import { delimiter, join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { listMcpActions, mcpToolName } from '@/modules/actions'
@@ -25,7 +25,7 @@ import {
   X402_CUSTODY_MAX_ATOMIC_ENV,
 } from '@/modules/capability-supply/internal/x402-custody-configuration'
 import { checkFunding } from '../../../tools/ae/commands/doctor'
-import { spawnCli } from './cli-errors-harness'
+import { CLI_BUNDLE_PATH, spawnCli } from './cli-errors-harness'
 
 const SANDBOX_TOOL_SLUG = 'sandbox-aecon-reference'
 const SANDBOX_TOOL_REF = `operation:v1:${'e'.repeat(64)}`
@@ -37,9 +37,9 @@ const FRESH_CATALOGUE_CHECK = { id: 'catalogue', group: 'discovery', state: 'pas
 // A fully configured local environment: Stripe test mode plus the CDP/x402 sandbox
 // bundle, so the default test double proves tier 1 (the full loop) rather than tier 0.
 const TIER1_ENV: NodeJS.ProcessEnv = {
-  STRIPE_SECRET_KEY: 'sk_test_doctor00000000000000000000',
-  STRIPE_WEBHOOK_SECRET: 'whsec_doctor000000000000000000000',
-  STRIPE_V2_WEBHOOK_SECRET: 'whsec_doctorv2_00000000000000000000',
+  STRIPE_SECRET_KEY: 'sk_test_FIXTURE',
+  STRIPE_WEBHOOK_SECRET: 'whsec_FIXTURE',
+  STRIPE_V2_WEBHOOK_SECRET: 'whsec_FIXTURE_V2',
   STRIPE_AU_INCLUSIVE_GST_TAX_RATE_ID: 'txr_doctor00000000000000000000000',
   STRIPE_CHECKOUT_HOST: 'checkout.doctor.test',
   [X402_CUSTODY_ENABLED_ENV]: 'true',
@@ -128,7 +128,7 @@ describe('ae doctor', () => {
     installAeShim(directory)
     const continued = await runShell(printedContinuation ?? '', {
       ...cleanEnvironment(directory),
-      AE_TEST_CLI: resolve('tools/ae/cli.ts'),
+      AE_TEST_CLI: CLI_BUNDLE_PATH,
       AE_TEST_NODE: process.execPath,
       PATH: `${directory}${delimiter}${process.env.PATH ?? ''}`,
     })
@@ -1546,7 +1546,7 @@ function makeConfigDirectory(): string {
 }
 
 function installAeShim(directory: string): void {
-  writeFileSync(join(directory, 'ae'), '#!/bin/sh\nexec "$AE_TEST_NODE" --import tsx "$AE_TEST_CLI" "$@"\n', { mode: 0o755 })
+  writeFileSync(join(directory, 'ae'), '#!/bin/sh\nexec "$AE_TEST_NODE" "$AE_TEST_CLI" "$@"\n', { mode: 0o755 })
 }
 
 async function runShell(command: string, environment: NodeJS.ProcessEnv): Promise<ProcessResult> {
