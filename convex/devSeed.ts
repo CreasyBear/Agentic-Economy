@@ -1,16 +1,27 @@
-import { internalMutation, type MutationCtx } from './_generated/server'
+import { env, internalMutation, type MutationCtx } from './_generated/server'
 import type { Doc, Id } from './_generated/dataModel'
 import { internal } from './_generated/api'
 import { v } from 'convex/values'
 import type { UserIdentity } from 'convex/server'
+
+import type { JsonValue } from '@/modules/capability-contract/public'
 
 import {
   buildDevSeedCatalogState,
   DEV_SEED_BUSINESS_FIXTURES,
   type DevSeedBusinessFixture,
 } from '../src/modules/dev/public'
+import {
+  BASE_SEPOLIA_NETWORK,
+  BASE_SEPOLIA_USDC_ADDRESS,
+  validateX402PaymentRequired,
+} from '@/modules/capability-supply/convex'
+import {
+  createX402ProviderConnection,
+  isCanonicalCredentiallessX402ProviderConnection,
+} from '@/modules/capability-supply/provider-connection'
+import { toDomain, toRow } from './lib/providerConnections/lifecycle'
 import { publishCapabilityForSeed } from './capabilitySupplyPublish'
-import { observeCapabilityReadinessHandler } from './capabilitySupplyProbes'
 import { ensureOwnerIdentityForAuthenticatedIdentity } from './interactiveAuthority'
 import { resolveAndBindLegalCustomer } from './lib/moneyLegalCustomer'
 import { persistDevSeedCatalogState } from './devSeedStore'
@@ -472,62 +483,159 @@ export const DEV_SEED_PRICE_BY_SLUG: Readonly<Record<string, OfferingPrice>> = O
 )
 
 /*
- * Sandbox reference Tool.
+ * Sandbox reference Tools.
  *
  * A fresh local deployment has no routeable supply, so nothing can be Quoted.
- * This publishes exactly one named sandbox Tool through the real
- * capability-supply publish command (publishCapabilityForSeed →
- * publishBootstrapCapability → publishPreparedCapabilityCommand); no
- * capabilityPublications row is ever written here directly. Every id, slug and
- * price is fixed, so a rerun finds the existing publication through
- * by_publicationRef_and_revision and reports `created: false`.
+ * This publishes the named sandbox Tools through the real capability-supply
+ * publish command (publishCapabilityForSeed → publishBootstrapCapability →
+ * publishPreparedCapabilityCommand); no capabilityPublications row is ever
+ * written here directly. Every id, slug and price is fixed, so a rerun finds
+ * each existing publication through by_publicationRef_and_revision and reports
+ * `created: false`.
+ *
+ * Two Tools are seeded, each under its own business:
+ *
+ *  1. `sandbox-aecon-reference` — the deterministic fixture Tool. Its endpoint
+ *     is not reachable from anywhere, so it proves discovery, pricing and Quote
+ *     admission and nothing further.
+ *  2. `sandbox-aecon-testnet` — the real Base Sepolia x402 reference provider
+ *     (tools/release/package5-reference-provider). Seeded only on a deployment
+ *     that carries that provider's own env, bound through `x402-fetch:v2`, and
+ *     priced at the exact atomic USDC amount the provider charges, so its Call
+ *     leg can actually settle.
+ *
+ * Sibling businesses rather than two Offerings on one business:
+ * `seedBusinessOfferings` keys `pricingSummary`/`price` by business slug and
+ * applies that one pair to every Offering the business publishes, so a second
+ * Offering under `sandbox-aecon-reference` would be forced to carry the first
+ * Tool's AUD price. The two are also genuinely different providers — different
+ * endpoint, different payee, different settlement network — so one business
+ * each is the truthful shape as well as the workable one.
+ */
+type SandboxToolTransport = Readonly<{
+  authority:
+    | Readonly<{ kind: 'public_upstream' }>
+    | Readonly<{ kind: 'provider_connection'; connectionRef: string; providerRef: string }>
+  adapter: Readonly<{ adapterId: string; config: Readonly<Record<string, JsonValue>> }>
+}>
+
+type SandboxToolSpec = Readonly<{
+  businessSlug: string
+  businessName: string
+  label: string
+  capabilityId: string
+  summary: string
+  contractDescription: string
+  /** Input property the contract carries the caller's request in. */
+  requestField: string
+  /** Output property the completion evidence is read from. */
+  resultField: string
+  inputSchema: Readonly<Record<string, unknown>>
+  outputSchema: Readonly<Record<string, unknown>>
+  recovery: 'retry_safe' | 'reconcile_required'
+  endpointUrl: string
+  method: 'POST'
+  pricingSummary: string
+  /**
+   * What the publication itself displays. A managed_x402 Tool publishes
+   * `on_request` and carries the provider's atomic amount in `pricingConfig`;
+   * a fixed-AUD Tool publishes the amount directly.
+   */
+  presentationPrice:
+    | Readonly<{ kind: 'fixed'; amount: Readonly<{ currency: string; units: string; exponent: number }> }>
+    | Readonly<{ kind: 'on_request' }>
+  /** Omitted for fixed AUD supply, which the publish path derives for itself. */
+  pricingConfig?: Readonly<Record<string, JsonValue>>
+  offeringPrice: OfferingPrice
+  materialTerms: readonly Readonly<{ termId: string; label: string; value: string }>[]
+  commercialFixture: string
+  ownerMessage: string
+  sourceLabel: string
+  serviceAreaSummary: string
+  availabilitySummary: string
+  authenticationSummary: string
+  accessPathSummary: string
+  searchTerms: readonly string[]
+  /**
+   * How the publication is imported. An `ae_envelope` source may only carry an
+   * `http-json:v1` binding (publication/draft.ts pins one adapter per source
+   * kind), so the paid Tool is imported as the `x402` source that derives its
+   * own `x402-fetch:v2` binding from the provider's payment terms.
+   */
+  source:
+    | Readonly<{ kind: 'ae_envelope'; transport: SandboxToolTransport }>
+    | Readonly<{
+        kind: 'x402'
+        payTo: string
+        connectionRef: string
+        providerRef: string
+        requestTimeoutMs: number
+        paymentRequired: Readonly<Record<string, JsonValue>>
+        providerPrice: Readonly<{ currency: string; units: string; exponent: number }>
+      }>
+}>
+
+const SANDBOX_TOOL_NETWORK_ID = 'ae:public'
+
+const sandboxToolOfferingId = (spec: SandboxToolSpec) => `capability-offering:${spec.businessSlug}:v1`
+const sandboxToolBindingId = (spec: SandboxToolSpec) => `capability-binding:${spec.businessSlug}:x402:v1`
+const sandboxToolAccessPathRef = (spec: SandboxToolSpec) => `access:${spec.businessSlug}:x402`
+const sandboxToolSourceRevision = (spec: SandboxToolSpec) => `seed:sandbox:${spec.businessSlug}:v1`
+const sandboxToolEvidenceRef = (spec: SandboxToolSpec) => `private:evidence:dev-seed:${spec.businessSlug}`
+
+/*
+ * The sandbox Tool price facts.
+ *
+ * `/tools/<ref>` and `ae describe` read the capability-supply publication
+ * price; the business page reads the catalog Offering's `price` /
+ * `pricingSummary`. Both are published below from the same spec constants, so a
+ * reader can never be quoted two different numbers for the same Tool.
  */
 const SANDBOX_TOOL_BUSINESS_SLUG = 'sandbox-aecon-reference'
 const SANDBOX_TOOL_LABEL = 'AEcon sandbox reference Tool'
 const SANDBOX_TOOL_CAPABILITY_ID = 'sandbox.aecon-reference'
-const SANDBOX_TOOL_OFFERING_ID = `capability-offering:${SANDBOX_TOOL_BUSINESS_SLUG}:v1`
-const SANDBOX_TOOL_BINDING_ID = `capability-binding:${SANDBOX_TOOL_BUSINESS_SLUG}:x402:v1`
-const SANDBOX_TOOL_ACCESS_PATH_REF = `access:${SANDBOX_TOOL_BUSINESS_SLUG}:x402`
-const SANDBOX_TOOL_ENDPOINT_URL = 'https://sandbox.aecon-reference.example/x402/reference'
-const SANDBOX_TOOL_METHOD = 'POST'
-const SANDBOX_TOOL_NETWORK_ID = 'ae:public'
-const SANDBOX_TOOL_SOURCE_REVISION = `seed:sandbox:${SANDBOX_TOOL_BUSINESS_SLUG}:v1`
-const SANDBOX_TOOL_EVIDENCE_REF = `private:evidence:dev-seed:${SANDBOX_TOOL_BUSINESS_SLUG}`
 // The sandbox commercial-policy fixture every sandbox money gate resolves to
 // (src/modules/money/internal/commercial-policy.ts). Declared on the seeded
 // Tool so the fixture the Quote path admits is visible in the seed itself.
 const SANDBOX_TOOL_COMMERCIAL_FIXTURE = 'managed_x402_deterministic_v1'
-const SANDBOX_TOOL_READINESS_TTL_MS = 60 * 60 * 1000
 
-const SANDBOX_TOOL_FIXTURE: DevSeedBusinessFixture = {
-  requestedSlug: SANDBOX_TOOL_BUSINESS_SLUG,
-  businessName: 'AEcon sandbox reference provider',
-  category: 'API services',
-  suburb: 'Sandbox',
-  stateTerritory: 'External',
-  ownerMessage: 'Sandbox-only reference provider seeded for local Quote bring-up.',
-  sourceLabel: `Sandbox reference fixture ${SANDBOX_TOOL_COMMERCIAL_FIXTURE} https://sandbox.aecon-reference.example/`,
-  offerings: [{
-    name: SANDBOX_TOOL_LABEL,
-    category: 'API services',
-    summary: 'Deterministic sandbox Tool that returns one structured reference result.',
-    serviceAreaSummary: 'Sandbox network only',
-    availabilitySummary: 'Always available in the sandbox environment',
-    pricingSummary: SANDBOX_TOOL_PRICING_SUMMARY,
-    accessPaths: [],
-    firstRequestMode: 'not_available_yet',
-    publicDisclosure: 'This sandbox provider is reached programmatically, not by human request.',
-    noContactReason: 'Sandbox fixture provider publishes no human contact path.',
-  }],
+/*
+ * The reference Tool's endpoint is AEcon's own sandbox counterparty
+ * (`src/routes/api.v1.sandbox-reference.ts`), reached through this
+ * deployment's own public origin - never a hard-coded host. On loopback (local
+ * dev) the readiness probe's SSRF guard refuses the target by design, so the
+ * Tool stays unlisted locally; on a hosted HTTPS origin it becomes healthy
+ * (Wells 1+2 decision D9 A). Without `AE_SITE_URL` there is no origin to
+ * publish against, so the Tool is skipped rather than published against a
+ * guessed URL.
+ */
+const SANDBOX_REFERENCE_ROUTE_PATH = '/api/v1/sandbox-reference'
+export const SANDBOX_REFERENCE_SKIP_SITE_URL_MISSING = 'AE_SITE_URL_missing'
+
+function sandboxReferenceEndpointUrl(): string | undefined {
+  const origin = env.AE_SITE_URL?.trim()
+  if (origin === undefined || origin.length === 0) return undefined
+  try {
+    const url = new URL(origin)
+    const loopback = url.hostname === 'localhost' || url.hostname === '127.0.0.1' || url.hostname === '[::1]'
+    const validOrigin = (url.protocol === 'https:' || (url.protocol === 'http:' && loopback))
+      && url.username === '' && url.password === ''
+    return validOrigin ? new URL(SANDBOX_REFERENCE_ROUTE_PATH, origin).toString() : undefined
+  } catch {
+    return undefined
+  }
 }
 
-function sandboxToolContractDocumentJson(): string {
-  return JSON.stringify({
-    contractFormat: 'ae.capability-contract:v2',
+function sandboxReferenceToolSpec(endpointUrl: string): SandboxToolSpec {
+  return {
+    businessSlug: SANDBOX_TOOL_BUSINESS_SLUG,
+    businessName: 'AEcon sandbox reference provider',
+    label: SANDBOX_TOOL_LABEL,
     capabilityId: SANDBOX_TOOL_CAPABILITY_ID,
-    version: 1,
-    name: SANDBOX_TOOL_LABEL,
-    description: 'Return a deterministic sandbox reference result for a structured request.',
+    summary: 'Deterministic sandbox Tool that returns one structured reference result.',
+    contractDescription: 'Return a deterministic sandbox reference result for a structured request.',
+    requestField: 'request',
+    resultField: 'result',
     inputSchema: {
       $schema: 'https://json-schema.org/draft/2020-12/schema',
       type: 'object',
@@ -542,13 +650,250 @@ function sandboxToolContractDocumentJson(): string {
       required: ['result'],
       additionalProperties: false,
     },
+    recovery: 'retry_safe',
+    endpointUrl,
+    method: 'POST',
+    pricingSummary: SANDBOX_TOOL_PRICING_SUMMARY,
+    presentationPrice: { kind: 'fixed', amount: { ...SANDBOX_TOOL_PRICE_AMOUNT } },
+    offeringPrice: SANDBOX_TOOL_OFFERING_PRICE,
+    materialTerms: [{
+      termId: 'sandbox-fixture',
+      label: 'Sandbox commercial fixture',
+      value: SANDBOX_TOOL_COMMERCIAL_FIXTURE,
+    }],
+    commercialFixture: SANDBOX_TOOL_COMMERCIAL_FIXTURE,
+    ownerMessage: 'Sandbox-only reference provider seeded for local Quote bring-up.',
+    sourceLabel: `Sandbox reference fixture ${SANDBOX_TOOL_COMMERCIAL_FIXTURE} ${endpointUrl}`,
+    serviceAreaSummary: 'Sandbox network only',
+    availabilitySummary: 'Always available in the sandbox environment',
+    authenticationSummary: `Sandbox x402 fixture ${SANDBOX_TOOL_COMMERCIAL_FIXTURE}.`,
+    accessPathSummary: 'Sandbox x402 access path for the seeded reference Tool.',
+    searchTerms: ['sandbox', 'sandbox reference tool', SANDBOX_TOOL_COMMERCIAL_FIXTURE],
+    source: {
+      kind: 'ae_envelope',
+      transport: {
+        authority: { kind: 'public_upstream' },
+        adapter: {
+          adapterId: 'http-json:v1',
+          config: { method: 'POST', requestTimeoutMs: 10_000 },
+        },
+      },
+    },
+  }
+}
+
+/*
+ * The Base Sepolia x402 reference provider.
+ *
+ * Every fact below except the endpoint host and the payee is the provider's
+ * own published constant (tools/release/package5-reference-provider/core.ts):
+ * `exact` scheme on Base Sepolia, USDC, 1000 atomic units, 60s timeout,
+ * `POST /x402/execute`. The host and payee are deployment facts, so they are
+ * read from the same two environment names the provider deployment itself
+ * requires — never hard-coded here.
+ */
+const SANDBOX_TESTNET_BUSINESS_SLUG = 'sandbox-aecon-testnet'
+const SANDBOX_TESTNET_LABEL = 'AEcon sandbox testnet reference Tool'
+const SANDBOX_TESTNET_CAPABILITY_ID = 'sandbox.aecon-testnet-reference'
+const SANDBOX_TESTNET_COMMERCIAL_FIXTURE = 'package5_reference_provider_x402_base_sepolia'
+const SANDBOX_TESTNET_ROUTE_PATH = '/x402/execute'
+const SANDBOX_TESTNET_ATOMIC_AMOUNT = '1000'
+const SANDBOX_TESTNET_USDC_EXPONENT = 6
+const SANDBOX_TESTNET_MAX_TIMEOUT_SECONDS = 60
+const SANDBOX_TESTNET_CONNECTION_REF = `connection:x402:${SANDBOX_TESTNET_BUSINESS_SLUG}`
+const SANDBOX_TESTNET_PROVIDER_REF = `provider:x402:${SANDBOX_TESTNET_BUSINESS_SLUG}`
+const SANDBOX_TESTNET_PRICING_SUMMARY = 'USDC 0.001 per Call (Base Sepolia testnet)'
+const SANDBOX_TESTNET_PRICE_AMOUNT = {
+  currency: 'USDC',
+  units: SANDBOX_TESTNET_ATOMIC_AMOUNT,
+  exponent: SANDBOX_TESTNET_USDC_EXPONENT,
+} as const
+const SANDBOX_TESTNET_OFFERING_PRICE: OfferingPrice = {
+  kind: 'fixed',
+  amount: { ...SANDBOX_TESTNET_PRICE_AMOUNT },
+  unit: 'call',
+  taxTreatment: 'unstated',
+}
+
+/*
+ * The reference provider's own environment names
+ * (tools/release/package5-reference-provider/api/fixture.ts). A deployment that
+ * runs the paid leg has to know the same two facts the provider deployment
+ * knows, so the seed reads them under the provider's names rather than minting
+ * a second name for the same value.
+ *
+ * They are not declared in `convex/convex.config.ts`, so the typed `env` object
+ * is widened for the read. Convex populates every deployment environment
+ * variable regardless of declaration; declaring them there (and in
+ * `.env.example`) is the follow-up that makes them typed.
+ */
+const SANDBOX_TESTNET_ORIGIN_ENV = 'AE_PACKAGE5_FIXTURE_PUBLIC_ORIGIN'
+const SANDBOX_TESTNET_PAY_TO_ENV = 'AE_PACKAGE5_FIXTURE_X402_PAY_TO'
+
+export const SANDBOX_TESTNET_SKIP_ORIGIN_MISSING = 'AE_PACKAGE5_FIXTURE_PUBLIC_ORIGIN_missing'
+export const SANDBOX_TESTNET_SKIP_PAY_TO_MISSING = 'AE_PACKAGE5_FIXTURE_X402_PAY_TO_missing'
+
+function readSeedEnvironmentValue(name: string): string | undefined {
+  const value = (env as Readonly<Record<string, string | undefined>>)[name]?.trim()
+  return value === undefined || value.length === 0 ? undefined : value
+}
+
+function sandboxTestnetEndpointUrl(): string | undefined {
+  const origin = readSeedEnvironmentValue(SANDBOX_TESTNET_ORIGIN_ENV)
+  if (origin === undefined) return undefined
+  try {
+    const url = new URL(SANDBOX_TESTNET_ROUTE_PATH, origin)
+    return url.protocol === 'https:' && url.username === '' && url.password === ''
+      ? url.toString()
+      : undefined
+  } catch {
+    return undefined
+  }
+}
+
+function sandboxTestnetPaymentRequired(
+  endpointUrl: string,
+  payTo: string,
+): Readonly<Record<string, JsonValue>> {
+  return validateX402PaymentRequired({
+    x402Version: 2,
+    resource: { url: endpointUrl },
+    accepts: [{
+      scheme: 'exact',
+      network: BASE_SEPOLIA_NETWORK,
+      amount: SANDBOX_TESTNET_ATOMIC_AMOUNT,
+      asset: BASE_SEPOLIA_USDC_ADDRESS,
+      payTo,
+      maxTimeoutSeconds: SANDBOX_TESTNET_MAX_TIMEOUT_SECONDS,
+      extra: { name: 'USDC', version: '2' },
+    }],
+  }) as Readonly<Record<string, JsonValue>>
+}
+
+function sandboxTestnetToolSpec(endpointUrl: string, payTo: string): SandboxToolSpec {
+  return {
+    businessSlug: SANDBOX_TESTNET_BUSINESS_SLUG,
+    businessName: 'AEcon sandbox testnet reference provider',
+    label: SANDBOX_TESTNET_LABEL,
+    capabilityId: SANDBOX_TESTNET_CAPABILITY_ID,
+    summary: 'Base Sepolia x402 reference Tool that returns one deterministic structured result.',
+    contractDescription: 'Return the reference provider’s deterministic result for a structured value.',
+    requestField: 'value',
+    resultField: 'value',
+    inputSchema: {
+      $schema: 'https://json-schema.org/draft/2020-12/schema',
+      type: 'object',
+      properties: { value: { type: 'string', minLength: 1, maxLength: 200 } },
+      required: ['value'],
+      additionalProperties: false,
+    },
+    outputSchema: {
+      $schema: 'https://json-schema.org/draft/2020-12/schema',
+      type: 'object',
+      properties: {
+        sourceKind: { type: 'string' },
+        value: { type: 'string' },
+        provider: { type: 'string' },
+      },
+      required: ['sourceKind', 'value', 'provider'],
+      additionalProperties: false,
+    },
+    // A settled x402 payment is not replayable: recovery reconciles, never retries.
+    recovery: 'reconcile_required',
+    endpointUrl,
+    method: 'POST',
+    pricingSummary: SANDBOX_TESTNET_PRICING_SUMMARY,
+    // Managed x402: the buyer total is settled by a binding Quote in AUD, so
+    // the publication displays `on_request` and the provider's own atomic
+    // charge is carried by the pricing config below.
+    presentationPrice: { kind: 'on_request' },
+    pricingConfig: {
+      version: 'pricing:v3',
+      kind: 'managed_x402',
+      effectTiming: 'payment_required_before_effect',
+      sourceRequirement: {
+        network: BASE_SEPOLIA_NETWORK,
+        asset: BASE_SEPOLIA_USDC_ADDRESS,
+        atomicUnits: SANDBOX_TESTNET_ATOMIC_AMOUNT,
+      },
+      pricingPolicyRef: 'pricing-policy:managed-x402-reference:v1',
+      publicDisplay: 'on_request',
+    },
+    offeringPrice: SANDBOX_TESTNET_OFFERING_PRICE,
+    materialTerms: [
+      {
+        termId: 'sandbox-fixture',
+        label: 'Sandbox commercial fixture',
+        value: SANDBOX_TESTNET_COMMERCIAL_FIXTURE,
+      },
+      {
+        termId: 'provider-amount',
+        label: 'Listed Provider amount',
+        value: `${SANDBOX_TESTNET_ATOMIC_AMOUNT} atomic USDC on ${BASE_SEPOLIA_NETWORK}`,
+      },
+      {
+        termId: 'buyer-total',
+        label: 'Buyer total',
+        value: 'Confirmed in AUD by a binding Quote for your input.',
+      },
+    ],
+    commercialFixture: SANDBOX_TESTNET_COMMERCIAL_FIXTURE,
+    ownerMessage: 'Base Sepolia x402 reference provider seeded for the real paid-Call proof.',
+    sourceLabel: `Package 5 reference provider ${SANDBOX_TESTNET_COMMERCIAL_FIXTURE} ${endpointUrl}`,
+    serviceAreaSummary: 'Base Sepolia testnet only',
+    availabilitySummary: 'Always available while the reference provider deployment is up',
+    authenticationSummary: 'x402 exact scheme on Base Sepolia USDC; no provider credential.',
+    accessPathSummary: 'Base Sepolia x402 access path for the reference provider Tool.',
+    searchTerms: ['sandbox', 'testnet', 'x402', 'base sepolia', 'usdc'],
+    source: {
+      kind: 'x402',
+      payTo,
+      connectionRef: SANDBOX_TESTNET_CONNECTION_REF,
+      providerRef: SANDBOX_TESTNET_PROVIDER_REF,
+      requestTimeoutMs: 30_000,
+      paymentRequired: sandboxTestnetPaymentRequired(endpointUrl, payTo),
+      providerPrice: { ...SANDBOX_TESTNET_PRICE_AMOUNT },
+    },
+  }
+}
+
+function sandboxToolFixture(spec: SandboxToolSpec): DevSeedBusinessFixture {
+  return {
+    requestedSlug: spec.businessSlug,
+    businessName: spec.businessName,
+    category: 'API services',
+    suburb: 'Sandbox',
+    stateTerritory: 'External',
+    ownerMessage: spec.ownerMessage,
+    sourceLabel: spec.sourceLabel,
+    offerings: [{
+      name: spec.label,
+      category: 'API services',
+      summary: spec.summary,
+      serviceAreaSummary: spec.serviceAreaSummary,
+      availabilitySummary: spec.availabilitySummary,
+      pricingSummary: spec.pricingSummary,
+      accessPaths: [],
+      firstRequestMode: 'not_available_yet',
+      publicDisclosure: 'This sandbox provider is reached programmatically, not by human request.',
+      noContactReason: 'Sandbox fixture provider publishes no human contact path.',
+    }],
+  }
+}
+
+function sandboxToolContractMetadata(spec: SandboxToolSpec): Readonly<Record<string, unknown>> {
+  return {
+    capabilityId: spec.capabilityId,
+    version: 1,
+    name: spec.label,
+    description: spec.contractDescription,
     customerAnnotations: [
-      { annotationId: 'request', document: 'input', pointer: '/request', label: 'Request', role: 'request' },
-      { annotationId: 'result', document: 'output', pointer: '/result', label: 'Result', role: 'completion_evidence' },
+      { annotationId: 'request', document: 'input', pointer: `/${spec.requestField}`, label: 'Request', role: 'request' },
+      { annotationId: 'result', document: 'output', pointer: `/${spec.resultField}`, label: 'Result', role: 'completion_evidence' },
     ],
     dataUse: [{
       effectId: 'request_release',
-      inputPointer: '/request',
+      inputPointer: `/${spec.requestField}`,
       classification: 'personal',
       phase: 'execution',
       recipient: { kind: 'selected_binding' },
@@ -560,8 +905,17 @@ function sandboxToolContractDocumentJson(): string {
       authority: 'mandate_or_explicit',
       reversibility: 'irreversible',
     }],
-    evidence: [{ evidenceId: 'result', outputPointer: '/result', purpose: 'completion' }],
-    lifecycle: { idempotency: 'required', recovery: 'retry_safe' },
+    evidence: [{ evidenceId: 'result', outputPointer: `/${spec.resultField}`, purpose: 'completion' }],
+    lifecycle: { idempotency: 'required', recovery: spec.recovery },
+  }
+}
+
+function sandboxToolContractDocumentJson(spec: SandboxToolSpec): string {
+  return JSON.stringify({
+    contractFormat: 'ae.capability-contract:v2',
+    ...sandboxToolContractMetadata(spec),
+    inputSchema: spec.inputSchema,
+    outputSchema: spec.outputSchema,
   })
 }
 
@@ -575,7 +929,7 @@ type SandboxToolCatalogOrigin = Readonly<{
 }>
 
 /**
- * Publishes the catalog side of the sandbox Tool through the same system
+ * Publishes the catalog side of a sandbox Tool through the same system
  * offering commands the dev catalog already uses, then returns the exact
  * catalog origin the publication must bind to.
  *
@@ -586,12 +940,14 @@ type SandboxToolCatalogOrigin = Readonly<{
  */
 async function ensureSandboxToolCatalogOrigin(
   ctx: MutationCtx,
+  spec: SandboxToolSpec,
   owningAccountRef: string,
   now: number,
 ): Promise<{ businessId: Id<'businesses'>; origin: SandboxToolCatalogOrigin }> {
-  const bundle = buildDevSeedCatalogState([SANDBOX_TOOL_FIXTURE], owningAccountRef)
+  const accessPathRef = sandboxToolAccessPathRef(spec)
+  const bundle = buildDevSeedCatalogState([sandboxToolFixture(spec)], owningAccountRef)
   const persisted = await persistDevSeedCatalogState(ctx.db, bundle, owningAccountRef)
-  const businessId = persisted.businessIdsBySlug[SANDBOX_TOOL_BUSINESS_SLUG]
+  const businessId = persisted.businessIdsBySlug[spec.businessSlug]
   if (businessId === undefined) throw new Error('dev_seed_sandbox_tool_business_missing')
   const offeringRef = bundle.state.offerings[0]?.offeringRef
   if (offeringRef === undefined) throw new Error('dev_seed_sandbox_tool_offering_missing')
@@ -602,8 +958,8 @@ async function ensureSandboxToolCatalogOrigin(
     ctx,
     business,
     now,
-    { [SANDBOX_TOOL_BUSINESS_SLUG]: SANDBOX_TOOL_PRICING_SUMMARY },
-    { [SANDBOX_TOOL_BUSINESS_SLUG]: SANDBOX_TOOL_OFFERING_PRICE },
+    { [spec.businessSlug]: spec.pricingSummary },
+    { [spec.businessSlug]: spec.offeringPrice },
   )
   if (priced.kind === 'error') throw new Error(`dev_seed_sandbox_tool_pricing_${priced.code}`)
 
@@ -612,7 +968,7 @@ async function ensureSandboxToolCatalogOrigin(
     .unique()
   if (offering === null) throw new Error('dev_seed_sandbox_tool_offering_missing')
   const existingPath = await ctx.db.query('offeringAccessPaths')
-    .withIndex('by_accessPathRef', (query) => query.eq('accessPathRef', SANDBOX_TOOL_ACCESS_PATH_REF))
+    .withIndex('by_accessPathRef', (query) => query.eq('accessPathRef', accessPathRef))
     .unique()
   if (existingPath === null
     || existingPath.status !== 'published'
@@ -620,16 +976,16 @@ async function ensureSandboxToolCatalogOrigin(
     const upserted = await upsertOfferingAccessPathCommand(ctx, {
       businessId,
       offeringRef,
-      accessPathRef: SANDBOX_TOOL_ACCESS_PATH_REF,
+      accessPathRef,
       expectedRevision: offering.currentRevision,
-      operationKey: `seed:sandbox-tool-access-path:${SANDBOX_TOOL_BUSINESS_SLUG}:${offering.currentRevision}`,
+      operationKey: `seed:sandbox-tool-access-path:${spec.businessSlug}:${offering.currentRevision}`,
       descriptor: {
         kind: 'external_operation',
-        name: SANDBOX_TOOL_LABEL,
-        summary: 'Sandbox x402 access path for the seeded reference Tool.',
-        url: SANDBOX_TOOL_ENDPOINT_URL,
-        method: SANDBOX_TOOL_METHOD,
-        authenticationSummary: `Sandbox x402 fixture ${SANDBOX_TOOL_COMMERCIAL_FIXTURE}.`,
+        name: spec.label,
+        summary: spec.accessPathSummary,
+        url: spec.endpointUrl,
+        method: spec.method,
+        authenticationSummary: spec.authenticationSummary,
         provenance: 'business_declared',
       },
     }, now)
@@ -645,7 +1001,7 @@ async function ensureSandboxToolCatalogOrigin(
       ))
       .unique(),
     ctx.db.query('offeringAccessPaths')
-      .withIndex('by_accessPathRef', (query) => query.eq('accessPathRef', SANDBOX_TOOL_ACCESS_PATH_REF))
+      .withIndex('by_accessPathRef', (query) => query.eq('accessPathRef', accessPathRef))
       .unique(),
   ])
   if (revision === null) throw new Error('dev_seed_sandbox_tool_revision_missing')
@@ -663,6 +1019,57 @@ async function ensureSandboxToolCatalogOrigin(
   }
 }
 
+type SeededSandboxTool = Readonly<{
+  created: boolean
+  publicationRef: string
+  publicationRevision: number
+  toolRef: string
+}>
+
+/**
+ * Publishes one sandbox Tool: catalog origin, publication.
+ *
+ * The catalog side runs on EVERY invocation: the publication is created once,
+ * but the priced Offering revision it binds to and the business's search
+ * documents have to be re-asserted on each boot. Readiness is never written
+ * here — the hourly `refresh capability supply readiness` workload is the
+ * only writer of the readiness fact.
+ */
+async function publishSeededSandboxTool(
+  ctx: MutationCtx,
+  spec: SandboxToolSpec,
+  owningAccountRef: string,
+  now: number,
+  prepareBusiness?: (businessId: Id<'businesses'>) => Promise<void>,
+): Promise<SeededSandboxTool> {
+  const publicationRef = sandboxToolOfferingId(spec)
+  const evidenceRefs = [sandboxToolEvidenceRef(spec)]
+  const { businessId, origin } = await ensureSandboxToolCatalogOrigin(ctx, spec, owningAccountRef, now)
+  if (prepareBusiness !== undefined) await prepareBusiness(businessId)
+
+  const existing = await ctx.db.query('capabilityPublications')
+    .withIndex('by_publicationRef_and_revision', (query) => (
+      query.eq('publicationRef', publicationRef).eq('revision', 1)
+    ))
+    .unique()
+
+  const target: SeededSandboxTool = existing !== null
+    ? {
+        created: false,
+        publicationRef: existing.publicationRef,
+        publicationRevision: existing.revision,
+        toolRef: existing.toolRef,
+      }
+    : await createSandboxToolPublication(ctx, spec, evidenceRefs, businessId, origin, now)
+
+  return target
+}
+
+const seededSandboxToolValue = v.union(
+  v.object({ capabilityId: v.string(), toolRef: v.string(), created: v.boolean() }),
+  v.object({ capabilityId: v.string(), skipped: v.string() }),
+)
+
 export const publishSandboxTool = internalMutation({
   args: {},
   returns: v.object({
@@ -671,131 +1078,185 @@ export const publishSandboxTool = internalMutation({
     publicationRevision: v.number(),
     toolRef: v.string(),
     businessSlug: v.string(),
+    tools: v.array(seededSandboxToolValue),
   }),
   handler: async (ctx) => {
     // Same deployment guard the money seed uses: never seed sandbox supply into
     // a deployment whose bypass owner account already carries a production agent.
     await requireLocalE2EOwnerAuthority(ctx)
-    const evidenceRefs = [SANDBOX_TOOL_EVIDENCE_REF]
-    // Catalog side first, on EVERY invocation: the publication is created once,
-    // but the priced Offering revision it binds to and the business's search
-    // documents have to be re-asserted on each boot for the same reason the
-    // readiness fact below does.
     await provisionDevSeedCatalogIdentityRows(ctx)
     const authority = await admitDevSeedCatalogAuthority(ctx, 'publishSandboxTool')
     const now = Date.now()
-    const { businessId, origin } = await ensureSandboxToolCatalogOrigin(ctx, authority.accountRef, now)
 
-    const existing = await ctx.db.query('capabilityPublications')
-      .withIndex('by_publicationRef_and_revision', (query) => (
-        query.eq('publicationRef', SANDBOX_TOOL_OFFERING_ID).eq('revision', 1)
-      ))
-      .unique()
-
-    const target = existing !== null
-      ? {
-          created: false,
-          publicationRef: existing.publicationRef,
-          publicationRevision: existing.revision,
-          toolRef: existing.toolRef,
-        }
-      : await createSandboxToolPublication(ctx, evidenceRefs, businessId, origin, now)
-
-    // The publish command only schedules a readiness probe, and the fixture
-    // endpoint is not reachable from a local stack: that probe can only ever
-    // land `unavailable` over the seeded fact, and the readiness window is
-    // shorter than the gap between two local boots. So re-assert the sandbox
-    // readiness fact on EVERY invocation - not just the run that created the
-    // publication - through the documented curated-seed helper, so each boot
-    // leaves the Tool routeable for Quote instead of `readiness_unobserved`.
-    const observed = await observeCapabilityReadinessHandler(ctx, {
-      publicationRef: target.publicationRef,
-      expectedRevision: target.publicationRevision,
-      credentialState: 'ready',
-      healthState: 'healthy',
-      validUntil: Date.now() + SANDBOX_TOOL_READINESS_TTL_MS,
-      operationKey: `seed:sandbox-tool-readiness:${SANDBOX_TOOL_BUSINESS_SLUG}:${target.publicationRevision}`,
-      correlationId: `seed:sandbox-tool:${SANDBOX_TOOL_BUSINESS_SLUG}`,
-      reasonCode: 'dev_seed_sandbox_tool_readiness',
-      evidenceRefs: [...evidenceRefs],
-    })
-    if (observed.kind === 'refused') {
-      throw new Error(`dev_seed_sandbox_tool_readiness_refused:${observed.reason}`)
-    }
+    const referenceEndpointUrl = sandboxReferenceEndpointUrl()
+    const reference = referenceEndpointUrl === undefined
+      ? undefined
+      : await publishSeededSandboxTool(
+          ctx,
+          sandboxReferenceToolSpec(referenceEndpointUrl),
+          authority.accountRef,
+          now,
+        )
+    const testnet = await publishSeededSandboxTestnetTool(ctx, authority.accountRef, now)
 
     return {
-      created: target.created,
-      publicationId: target.publicationRef,
-      publicationRevision: target.publicationRevision,
-      toolRef: target.toolRef,
+      created: reference?.created ?? false,
+      publicationId: reference?.publicationRef ?? '',
+      publicationRevision: reference?.publicationRevision ?? 0,
+      toolRef: reference?.toolRef ?? '',
       businessSlug: SANDBOX_TOOL_BUSINESS_SLUG,
+      tools: [
+        reference === undefined
+          ? { capabilityId: SANDBOX_TOOL_CAPABILITY_ID, skipped: SANDBOX_REFERENCE_SKIP_SITE_URL_MISSING }
+          : { capabilityId: SANDBOX_TOOL_CAPABILITY_ID, toolRef: reference.toolRef, created: reference.created },
+        testnet,
+      ],
     }
   },
 })
 
+/**
+ * Seeds the Base Sepolia reference provider Tool, or reports why it was not.
+ *
+ * A deployment without the reference provider's env has nowhere to send a paid
+ * Call, so the Tool is skipped rather than published against a guessed URL: a
+ * published Tool that cannot settle is worse than an absent one.
+ */
+async function publishSeededSandboxTestnetTool(
+  ctx: MutationCtx,
+  owningAccountRef: string,
+  now: number,
+): Promise<
+  | Readonly<{ capabilityId: string; toolRef: string; created: boolean }>
+  | Readonly<{ capabilityId: string; skipped: string }>
+> {
+  const endpointUrl = sandboxTestnetEndpointUrl()
+  if (endpointUrl === undefined) {
+    return { capabilityId: SANDBOX_TESTNET_CAPABILITY_ID, skipped: SANDBOX_TESTNET_SKIP_ORIGIN_MISSING }
+  }
+  const payTo = readSeedEnvironmentValue(SANDBOX_TESTNET_PAY_TO_ENV)
+  if (payTo === undefined || !/^0x[0-9a-f]{40}$/iu.test(payTo)) {
+    return { capabilityId: SANDBOX_TESTNET_CAPABILITY_ID, skipped: SANDBOX_TESTNET_SKIP_PAY_TO_MISSING }
+  }
+  const spec = sandboxTestnetToolSpec(endpointUrl, payTo)
+  const seeded = await publishSeededSandboxTool(
+    ctx,
+    spec,
+    owningAccountRef,
+    now,
+    (businessId) => ensureSandboxTestnetProviderConnection(ctx, businessId, endpointUrl, payTo, now),
+  )
+  return {
+    capabilityId: SANDBOX_TESTNET_CAPABILITY_ID,
+    toolRef: seeded.toolRef,
+    created: seeded.created,
+  }
+}
+
+/**
+ * The credential-less x402 provider connection the binding's authority names.
+ *
+ * `x402-fetch:v2` never admits a keyless binding (transport-adapters.ts), so a
+ * real x402 Tool needs a provider connection row exactly as facilitator
+ * discovery mints one for a discovered x402 resource. Nothing secret is stored:
+ * the connection carries the resource URL and the payee only.
+ */
+async function ensureSandboxTestnetProviderConnection(
+  ctx: MutationCtx,
+  businessId: Id<'businesses'>,
+  endpointUrl: string,
+  payTo: string,
+  now: number,
+): Promise<void> {
+  const providerAccountRef = `x402:${endpointUrl}`
+  const existing = await ctx.db.query('capabilityProviderConnections')
+    .withIndex('by_connectionRef', (query) => query.eq('connectionRef', SANDBOX_TESTNET_CONNECTION_REF))
+    .unique()
+  if (existing !== null) {
+    const connection = toDomain(existing)
+    if (connection.lifecycle === 'active'
+      && connection.businessId === String(businessId)
+      && connection.providerRef === SANDBOX_TESTNET_PROVIDER_REF
+      && connection.providerAccountRef === providerAccountRef
+      && isCanonicalCredentiallessX402ProviderConnection(connection)) return
+    // The fixture moved or was revoked. Say so instead of publishing a Tool
+    // bound to authority that no longer describes the endpoint.
+    throw new Error('dev_seed_sandbox_testnet_connection_stale')
+  }
+  const business = await ctx.db.get(businessId)
+  if (business === null) throw new Error('dev_seed_sandbox_testnet_business_missing')
+  const commandId = `dev-seed:sandbox-testnet-connection:${canonicalDigest({ endpointUrl, payTo }).slice(7)}`
+  const created = createX402ProviderConnection({
+    commandId,
+    connectionRef: SANDBOX_TESTNET_CONNECTION_REF,
+    businessId: String(businessId),
+    providerRef: SANDBOX_TESTNET_PROVIDER_REF,
+    providerAccountRef,
+    resourceUrl: endpointUrl,
+    method: 'POST',
+    payee: payTo,
+    evidenceRefs: [`private:evidence:dev-seed:${SANDBOX_TESTNET_BUSINESS_SLUG}`],
+    owningAccountRef: business.owningAccountRef,
+    installedByPrincipalRef: DEV_SEED_CATALOG_PRINCIPAL_REF,
+    authorityGrantRef: DEV_SEED_CATALOG_GRANT_REF,
+    authorityGrantGeneration: 1,
+  }, now)
+  if (created.kind !== 'applied') {
+    throw new Error(`dev_seed_sandbox_testnet_connection_${created.kind === 'refused' ? created.code : created.kind}`)
+  }
+  await ctx.db.insert(
+    'capabilityProviderConnections',
+    toRow(created.connection, commandId, created.commandDigest),
+  )
+}
+
 async function createSandboxToolPublication(
   ctx: MutationCtx,
+  spec: SandboxToolSpec,
   evidenceRefs: readonly string[],
   businessId: Id<'businesses'>,
   origin: SandboxToolCatalogOrigin,
   now: number,
-): Promise<{ created: true; publicationRef: string; publicationRevision: number; toolRef: string }> {
+): Promise<SeededSandboxTool & Readonly<{ created: true }>> {
+  const commercialRelationship = {
+    kind: 'none' as const,
+    summary: 'Sandbox fixture supply with no commercial influence.',
+    influencesEligibility: false,
+    influencesInclusion: false,
+    influencesOrder: false,
+    evidenceRefs: [...evidenceRefs],
+  }
+  const presentation = {
+    label: spec.label,
+    summary: spec.summary,
+    materialTerms: spec.materialTerms.map((term) => ({ ...term })),
+    commercialRelationship,
+  }
+  // What the Tool publishes. For managed x402 that is `on_request`: the buyer
+  // total is a binding Quote, not a listed number.
   const offering = {
-    offeringId: SANDBOX_TOOL_OFFERING_ID,
+    offeringId: sandboxToolOfferingId(spec),
     networkId: SANDBOX_TOOL_NETWORK_ID,
     origin,
-    presentation: {
-      label: SANDBOX_TOOL_LABEL,
-      summary: 'Deterministic sandbox Tool that returns one structured reference result.',
-      price: {
-        kind: 'fixed' as const,
-        amount: { ...SANDBOX_TOOL_PRICE_AMOUNT },
-      },
-      materialTerms: [{
-        termId: 'sandbox-fixture',
-        label: 'Sandbox commercial fixture',
-        value: SANDBOX_TOOL_COMMERCIAL_FIXTURE,
-      }],
-      commercialRelationship: {
-        kind: 'none' as const,
-        summary: 'Sandbox fixture supply with no commercial influence.',
-        influencesEligibility: false,
-        influencesInclusion: false,
-        influencesOrder: false,
-        evidenceRefs: [...evidenceRefs],
-      },
-    },
-    searchTerms: ['sandbox', 'sandbox reference tool', SANDBOX_TOOL_COMMERCIAL_FIXTURE],
-    registrationEvidenceRefs: [...evidenceRefs],
-  }
-  const binding = {
-    bindingId: SANDBOX_TOOL_BINDING_ID,
-    endpointUrl: SANDBOX_TOOL_ENDPOINT_URL,
-    authority: { kind: 'public_upstream' as const },
-    continuation: { kind: 'single_response' as const, evidenceRefs: [...evidenceRefs] },
-    cancellation: { kind: 'unsupported' as const, evidenceRefs: [...evidenceRefs] },
-    adapter: {
-      adapterId: 'http-json:v1',
-      config: { method: SANDBOX_TOOL_METHOD, requestTimeoutMs: 10_000 },
-    },
+    presentation: { ...presentation, price: { ...spec.presentationPrice } },
+    searchTerms: [...spec.searchTerms],
     registrationEvidenceRefs: [...evidenceRefs],
   }
   const published = await publishCapabilityForSeed(ctx, {
     businessId: String(businessId),
     runtimeEnvironment: 'sandbox',
-    source: {
-      kind: 'ae_envelope',
-      documentJson: sandboxToolContractDocumentJson(),
-      offering,
-      binding,
-      evidenceRefs: [...evidenceRefs],
-    },
-    sourceRevision: SANDBOX_TOOL_SOURCE_REVISION,
+    source: sandboxToolPublicationSource(spec, presentation, evidenceRefs),
+    sourceRevision: sandboxToolSourceRevision(spec),
+    ...(spec.pricingConfig === undefined ? {} : { pricingConfig: { ...spec.pricingConfig } }),
     offering,
-    binding,
+    // The x402 importer derives its own `x402-fetch:v2` binding from the
+    // provider's payment terms; only the envelope Tool declares one here.
+    ...(spec.source.kind === 'ae_envelope'
+      ? { binding: sandboxToolEnvelopeBinding(spec, spec.source.transport, evidenceRefs) }
+      : {}),
     origin,
-    operationKey: `seed:sandbox-tool-publish:${SANDBOX_TOOL_BUSINESS_SLUG}:v1`,
-    correlationId: `seed:sandbox-tool:${SANDBOX_TOOL_BUSINESS_SLUG}`,
+    operationKey: `seed:sandbox-tool-publish:${spec.businessSlug}:v1`,
+    correlationId: `seed:sandbox-tool:${spec.businessSlug}`,
     reasonCode: 'dev_seed_sandbox_tool',
     evidenceRefs: [...evidenceRefs],
     now,
@@ -808,6 +1269,92 @@ async function createSandboxToolPublication(
     publicationRef: published.publicationRef,
     publicationRevision: published.publicationRevision,
     toolRef: published.toolRef,
+  }
+}
+
+function sandboxToolEnvelopeBinding(
+  spec: SandboxToolSpec,
+  transport: SandboxToolTransport,
+  evidenceRefs: readonly string[],
+) {
+  return {
+    bindingId: sandboxToolBindingId(spec),
+    endpointUrl: spec.endpointUrl,
+    authority: { ...transport.authority },
+    continuation: { kind: 'single_response' as const, evidenceRefs: [...evidenceRefs] },
+    cancellation: { kind: 'unsupported' as const, evidenceRefs: [...evidenceRefs] },
+    adapter: {
+      adapterId: transport.adapter.adapterId,
+      config: { ...transport.adapter.config },
+    },
+    registrationEvidenceRefs: [...evidenceRefs],
+  }
+}
+
+/**
+ * The import the publish command normalizes.
+ *
+ * The x402 importer checks the *submitted* commercial price against the
+ * provider's own resource price, so the source carries the atomic USDC amount
+ * while the published Offering above carries `on_request`.
+ */
+function sandboxToolPublicationSource(
+  spec: SandboxToolSpec,
+  presentation: Readonly<Record<string, unknown>>,
+  evidenceRefs: readonly string[],
+): unknown {
+  const offeringId = sandboxToolOfferingId(spec)
+  if (spec.source.kind === 'ae_envelope') {
+    return {
+      kind: 'ae_envelope',
+      documentJson: sandboxToolContractDocumentJson(spec),
+      offering: {
+        offeringId,
+        networkId: SANDBOX_TOOL_NETWORK_ID,
+        presentation: { ...presentation, price: { ...spec.presentationPrice } },
+        searchTerms: [...spec.searchTerms],
+        registrationEvidenceRefs: [...evidenceRefs],
+      },
+      binding: sandboxToolEnvelopeBinding(spec, spec.source.transport, evidenceRefs),
+      evidenceRefs: [...evidenceRefs],
+    }
+  }
+  const source = spec.source
+  return {
+    kind: 'x402',
+    resource: {
+      resourceUrl: spec.endpointUrl,
+      price: { ...source.providerPrice },
+      method: spec.method,
+      scheme: 'exact',
+      network: BASE_SEPOLIA_NETWORK,
+      asset: BASE_SEPOLIA_USDC_ADDRESS,
+      payTo: source.payTo,
+      routeAmountExponent: source.providerPrice.exponent,
+      assetAmountExponent: source.providerPrice.exponent,
+      paymentRequired: source.paymentRequired,
+      inputSchema: spec.inputSchema,
+      outputSchema: spec.outputSchema,
+    },
+    contract: sandboxToolContractMetadata(spec),
+    commercial: {
+      offering: {
+        offeringId,
+        networkId: SANDBOX_TOOL_NETWORK_ID,
+        presentation: { ...presentation, price: { kind: 'fixed', amount: { ...source.providerPrice } } },
+        searchTerms: [...spec.searchTerms],
+        registrationEvidenceRefs: [...evidenceRefs],
+      },
+      bindingId: sandboxToolBindingId(spec),
+      authority: {
+        kind: 'provider_connection',
+        connectionRef: source.connectionRef,
+        providerRef: source.providerRef,
+      },
+      registrationEvidenceRefs: [...evidenceRefs],
+      requestTimeoutMs: source.requestTimeoutMs,
+    },
+    evidenceRefs: [...evidenceRefs],
   }
 }
 

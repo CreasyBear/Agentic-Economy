@@ -1,6 +1,6 @@
 import { convexTest, type TestConvex } from 'convex-test'
 import { makeFunctionReference, type UserIdentity } from 'convex/server'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { api, internal } from '../../convex/_generated/api'
 import schema from '../../convex/schema'
@@ -21,6 +21,7 @@ import {
   toStableHashValue,
 } from '../../src/modules/agent-access/service-auth-envelope'
 import { withSourceWrite } from '../helpers/source-write-admission'
+import { observeCapabilityReadinessHandler } from '../../convex/capabilitySupplyProbes'
 
 type SeedBackend = TestConvex<typeof schema>
 
@@ -41,6 +42,35 @@ type CatalogPage = {
 }
 
 const SANDBOX_TOOL_BUSINESS_SLUG = 'sandbox-aecon-reference'
+const SANDBOX_TOOL_CAPABILITY_ID = 'sandbox.aecon-reference'
+const SANDBOX_TOOL_BINDING_ID = `capability-binding:${SANDBOX_TOOL_BUSINESS_SLUG}:x402:v1`
+const SANDBOX_TOOL_EVIDENCE_REF = `private:evidence:dev-seed:${SANDBOX_TOOL_BUSINESS_SLUG}`
+const SANDBOX_TESTNET_BUSINESS_SLUG = 'sandbox-aecon-testnet'
+const SANDBOX_TESTNET_CAPABILITY_ID = 'sandbox.aecon-testnet-reference'
+const SANDBOX_TESTNET_OFFERING_ID = `capability-offering:${SANDBOX_TESTNET_BUSINESS_SLUG}:v1`
+const SANDBOX_TESTNET_EVIDENCE_REF = `private:evidence:dev-seed:${SANDBOX_TESTNET_BUSINESS_SLUG}`
+// The two facts tools/release/package5-reference-provider itself requires. The
+// seed reads them under the provider's own env names, so the test supplies them
+// the same way a keyed deployment does.
+const FIXTURE_ORIGIN_ENV = 'AE_PACKAGE5_FIXTURE_PUBLIC_ORIGIN'
+const FIXTURE_PAY_TO_ENV = 'AE_PACKAGE5_FIXTURE_X402_PAY_TO'
+const FIXTURE_ORIGIN = 'https://package5-reference-provider.example'
+const FIXTURE_ENDPOINT_URL = `${FIXTURE_ORIGIN}/x402/execute`
+const FIXTURE_PAY_TO = '0x209693Bc6afc0C5328bA36FaF03C514EF312287C'
+const SKIPPED_WITHOUT_FIXTURE_URL = {
+  capabilityId: SANDBOX_TESTNET_CAPABILITY_ID,
+  skipped: 'AE_PACKAGE5_FIXTURE_PUBLIC_ORIGIN_missing',
+} as const
+// The reference Tool's own endpoint is derived from this deployment's public
+// origin (AE_SITE_URL), never a hard-coded host. Without it the reference
+// entry is skipped rather than published against a guessed URL.
+const SITE_URL_ENV = 'AE_SITE_URL'
+const SITE_URL = 'https://sandbox.example.test'
+const SANDBOX_REFERENCE_ENDPOINT_URL = `${SITE_URL}/api/v1/sandbox-reference`
+const SKIPPED_WITHOUT_SITE_URL = {
+  capabilityId: SANDBOX_TOOL_CAPABILITY_ID,
+  skipped: 'AE_SITE_URL_missing',
+} as const
 
 type SandboxSupplyFacts = {
   sandboxBusinessSlugs: readonly string[]
@@ -70,6 +100,10 @@ type CatalogRow = {
  * demonstrates all four states through the real public read.
  */
 describe('dev-seeded public catalog decision facts', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs()
+  })
+
   it('does not scan or mutate unrelated supplier businesses during catalog bootstrap', async () => {
     const backend = convexTest(schema, modules)
     await seedDevCatalogAuthority(backend)
@@ -124,13 +158,24 @@ describe('dev-seeded public catalog decision facts', () => {
     await runOfferingCutover(backend)
     expect(await readEveryCatalogRow(backend)).toEqual([])
   })
-  it('publishes exactly one sandbox Tool and replays the second run', async () => {
+  /**
+   * Without the reference provider's env there is nowhere to send a paid Call,
+   * so the second Tool is skipped rather than published against a guessed URL,
+   * and the first Tool is seeded exactly as it always was.
+   */
+  it('publishes only the fixture sandbox Tool when the reference provider env is absent', async () => {
     const backend = convexTestWithMarketComponents()
     await seedDevCatalogAuthority(backend)
+    setSiteUrlEnvironment()
+    clearReferenceProviderEnvironment()
 
     const first = await backend.mutation(internal.devSeed.publishSandboxTool, {})
     expect(first).toMatchObject({ created: true, businessSlug: SANDBOX_TOOL_BUSINESS_SLUG })
     expect(first.toolRef).toMatch(/^operation:v1:/u)
+    expect(first.tools).toEqual([
+      { capabilityId: SANDBOX_TOOL_CAPABILITY_ID, toolRef: first.toolRef, created: true },
+      SKIPPED_WITHOUT_FIXTURE_URL,
+    ])
 
     const seeded = await readSandboxSupply(backend)
     expect(seeded.sandboxBusinessSlugs).toEqual([SANDBOX_TOOL_BUSINESS_SLUG])
@@ -150,6 +195,10 @@ describe('dev-seeded public catalog decision facts', () => {
       publicationRevision: first.publicationRevision,
       toolRef: first.toolRef,
       businessSlug: SANDBOX_TOOL_BUSINESS_SLUG,
+      tools: [
+        { capabilityId: SANDBOX_TOOL_CAPABILITY_ID, toolRef: first.toolRef, created: false },
+        SKIPPED_WITHOUT_FIXTURE_URL,
+      ],
     })
     expect(await readSandboxSupply(backend)).toEqual(seeded)
 
@@ -176,6 +225,8 @@ describe('dev-seeded public catalog decision facts', () => {
   it('seeds the sandbox Tool with one price fact and a findable search document', async () => {
     const backend = convexTestWithMarketComponents()
     await seedDevCatalogAuthority(backend)
+    setSiteUrlEnvironment()
+    clearReferenceProviderEnvironment()
 
     await backend.mutation(internal.devSeed.publishSandboxTool, {})
     const seeded = await readSandboxPriceFacts(backend)
@@ -193,6 +244,9 @@ describe('dev-seeded public catalog decision facts', () => {
     const detail = await readSandboxCatalogDetail(backend)
     expect(detail.price).toEqual(seeded.revisionPrice)
     expect(detail.pricingSummary).toBe('AUD 1.00 per Call (sandbox)')
+
+    expect(await readCapabilityBindingEndpointUrl(backend, SANDBOX_TOOL_BINDING_ID))
+      .toBe(SANDBOX_REFERENCE_ENDPOINT_URL)
 
     expect(await searchSandboxSlugs(backend, 'sandbox')).toEqual([SANDBOX_TOOL_BUSINESS_SLUG])
     expect(await searchSandboxSlugs(backend, 'AEcon sandbox reference provider'))
@@ -212,16 +266,289 @@ describe('dev-seeded public catalog decision facts', () => {
     expect(await searchSandboxSlugs(backend, 'AEcon sandbox reference provider'))
       .toEqual([SANDBOX_TOOL_BUSINESS_SLUG])
   }, 300_000)
+
+  /**
+   * `AE_SITE_URL` is this deployment's own public origin - there is no host to
+   * guess it from. Without it the reference Tool is skipped, exactly like the
+   * Base Sepolia Tool is skipped without the reference provider's own env.
+   */
+  it('publishes neither business when AE_SITE_URL is unset', async () => {
+    const backend = convexTestWithMarketComponents()
+    await seedDevCatalogAuthority(backend)
+    clearSiteUrlEnvironment()
+    clearReferenceProviderEnvironment()
+
+    const published = await backend.mutation(internal.devSeed.publishSandboxTool, {})
+    expect(published.tools).toEqual([SKIPPED_WITHOUT_SITE_URL, SKIPPED_WITHOUT_FIXTURE_URL])
+    expect((await readSandboxSupply(backend)).sandboxBusinessSlugs).toEqual([])
+  }, 300_000)
 })
 
-async function readSandboxPriceFacts(backend: SeedBackend): Promise<{
+function clearReferenceProviderEnvironment(): void {
+  vi.stubEnv(FIXTURE_ORIGIN_ENV, '')
+  vi.stubEnv(FIXTURE_PAY_TO_ENV, '')
+}
+
+function setReferenceProviderEnvironment(): void {
+  vi.stubEnv(FIXTURE_ORIGIN_ENV, FIXTURE_ORIGIN)
+  vi.stubEnv(FIXTURE_PAY_TO_ENV, FIXTURE_PAY_TO)
+}
+
+function setSiteUrlEnvironment(): void {
+  vi.stubEnv(SITE_URL_ENV, SITE_URL)
+}
+
+function clearSiteUrlEnvironment(): void {
+  vi.stubEnv(SITE_URL_ENV, '')
+}
+
+/**
+ * Records the readiness fact the hourly `refresh capability supply readiness`
+ * workload would have written, for one seeded sandbox Tool's own binding.
+ * `publishSandboxTool` never writes readiness itself, so any assertion that
+ * depends on a Tool being routeable/Quoteable has to establish that fact.
+ */
+async function recordSandboxToolReadiness(
+  backend: SeedBackend,
+  target: Readonly<{
+    publicationRef: string
+    publicationRevision: number
+    businessSlug: string
+    evidenceRef: string
+  }>,
+): Promise<void> {
+  const observed = await backend.run(async (ctx) => (
+    // simulates the hourly readiness probe; the seed itself never writes readiness
+    observeCapabilityReadinessHandler(ctx, {
+      publicationRef: target.publicationRef,
+      expectedRevision: target.publicationRevision,
+      credentialState: 'ready',
+      healthState: 'healthy',
+      validUntil: Date.now() + 60 * 60 * 1000,
+      operationKey: `test:sandbox-tool-readiness:${target.businessSlug}:${target.publicationRevision}`,
+      correlationId: `test:sandbox-tool:${target.businessSlug}`,
+      reasonCode: 'dev_seed_sandbox_tool_readiness',
+      evidenceRefs: [target.evidenceRef],
+    })
+  ))
+  if (observed.kind === 'refused') {
+    throw new Error(`test_sandbox_tool_readiness_refused:${observed.reason}`)
+  }
+}
+
+async function readCapabilityBindingEndpointUrl(backend: SeedBackend, bindingId: string): Promise<string> {
+  return await backend.run(async (ctx) => {
+    const binding = await ctx.db.query('capabilityTransportBindings')
+      .withIndex('by_bindingId', (query) => query.eq('bindingId', bindingId))
+      .unique()
+    if (binding === null) throw new Error(`binding missing: ${bindingId}`)
+    return binding.endpointUrl
+  })
+}
+
+/**
+ * The paid leg of Well 1 needs supply that can actually settle. The fixture
+ * Tool cannot: its endpoint resolves nowhere. This proves the seed publishes a
+ * second, real Base Sepolia x402 Tool beside it whenever the deployment carries
+ * the reference provider's own env - both discoverable, both priced, each under
+ * its own business - and that a reboot re-asserts both without minting a thing.
+ */
+describe('dev-seeded Base Sepolia reference Tool', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs()
+  })
+
+  it('publishes exactly the two named sandbox Tools and replays the second run', async () => {
+    const backend = convexTestWithMarketComponents()
+    await seedDevCatalogAuthority(backend)
+    setSiteUrlEnvironment()
+    setReferenceProviderEnvironment()
+
+    const first = await backend.mutation(internal.devSeed.publishSandboxTool, {})
+    expect(first).toMatchObject({ created: true, businessSlug: SANDBOX_TOOL_BUSINESS_SLUG })
+    expect(first.tools).toEqual([
+      { capabilityId: SANDBOX_TOOL_CAPABILITY_ID, toolRef: first.toolRef, created: true },
+      {
+        capabilityId: SANDBOX_TESTNET_CAPABILITY_ID,
+        toolRef: expect.stringMatching(/^operation:v1:/u) as unknown as string,
+        created: true,
+      },
+    ])
+
+    const seeded = await readSandboxSupply(backend)
+    expect(seeded.sandboxBusinessSlugs)
+      .toEqual([SANDBOX_TOOL_BUSINESS_SLUG, SANDBOX_TESTNET_BUSINESS_SLUG].sort())
+    expect(seeded.publications).toHaveLength(2)
+    for (const publication of seeded.publications) {
+      expect(publication.runtimeEnvironment).toBe('sandbox')
+      expect((publication.searchText ?? '').toLowerCase()).toContain('sandbox')
+    }
+    expect(seeded.legacySandboxBindings).toEqual([])
+    expect(seeded.legacySandboxPublications).toEqual([])
+
+    // The Base Sepolia leg is bound to the provider's own terms: its endpoint
+    // comes from the env, and its price is the 1000 atomic USDC the reference
+    // provider charges - the same number on the publication and the catalog.
+    const testnet = await readTestnetBinding(backend)
+    expect(testnet).toEqual({
+      endpointUrl: FIXTURE_ENDPOINT_URL,
+      adapterId: 'x402-fetch:v2',
+      network: 'eip155:84532',
+      asset: '0x036CbD53842c5426634e7929541eC2318f3dCF7e',
+      payTo: FIXTURE_PAY_TO,
+      amount: '1000',
+    })
+    // Managed x402 publishes `on_request`: the buyer total is a binding Quote,
+    // and the provider's own 1000 atomic USDC is the pricing config's source
+    // requirement. The catalog twin carries the same provider amount.
+    expect(await readSandboxPriceFacts(backend, SANDBOX_TESTNET_BUSINESS_SLUG)).toMatchObject({
+      publicationPrice: { kind: 'on_request' },
+      revisionPrice: {
+        kind: 'fixed',
+        amount: { currency: 'USDC', units: '1000', exponent: 6 },
+        unit: 'call',
+        taxTreatment: 'unstated',
+      },
+    })
+    expect(await readTestnetPricingConfig(backend)).toEqual({
+      version: 'pricing:v3',
+      kind: 'managed_x402',
+      effectTiming: 'payment_required_before_effect',
+      sourceRequirement: {
+        network: 'eip155:84532',
+        asset: '0x036CbD53842c5426634e7929541eC2318f3dCF7e',
+        atomicUnits: '1000',
+      },
+      pricingPolicyRef: 'pricing-policy:managed-x402-reference:v1',
+      publicDisplay: 'on_request',
+    })
+
+    // Both Tools are findable through the same public read a buyer uses.
+    expect([...await searchSandboxSlugs(backend, 'sandbox')].sort())
+      .toEqual([SANDBOX_TOOL_BUSINESS_SLUG, SANDBOX_TESTNET_BUSINESS_SLUG].sort())
+    expect(await searchSandboxSlugs(backend, 'AEcon sandbox testnet reference provider'))
+      .toContain(SANDBOX_TESTNET_BUSINESS_SLUG)
+    expect(await readSandboxSearchDocumentIds(backend, SANDBOX_TESTNET_BUSINESS_SLUG))
+      .toHaveLength(1)
+
+    // The whole point of the second Tool: it is routeable, so a Call can reach
+    // the real Base Sepolia endpoint. Provider-connection authority, binding
+    // admission and readiness all have to hold for it to appear here. The
+    // hourly probe is the only writer of that readiness fact in production, so
+    // the test records it here for the testnet Tool's own binding.
+    await recordSandboxToolReadiness(backend, {
+      publicationRef: SANDBOX_TESTNET_OFFERING_ID,
+      publicationRevision: 1,
+      businessSlug: SANDBOX_TESTNET_BUSINESS_SLUG,
+      evidenceRef: SANDBOX_TESTNET_EVIDENCE_REF,
+    })
+    const routeable = await backend.run(async (ctx) => (
+      listRouteableCapabilitySupply(eligibleSupplyPorts(ctx.db), {
+        networkId: 'ae:public',
+        limit: 64,
+        now: Date.now(),
+      })
+    ))
+    expect(routeable.kind).toBe('available')
+    if (routeable.kind === 'available') {
+      expect(routeable.supplies.map(({ binding }) => binding.endpointUrl))
+        .toContain(FIXTURE_ENDPOINT_URL)
+    }
+
+    const replay = await backend.mutation(internal.devSeed.publishSandboxTool, {})
+    const testnetEntry = first.tools[1]
+    if (!testnetEntry || !('toolRef' in testnetEntry)) throw new Error('expected a created testnet tool entry')
+    expect(replay).toEqual({
+      created: false,
+      publicationId: first.publicationId,
+      publicationRevision: first.publicationRevision,
+      toolRef: first.toolRef,
+      businessSlug: SANDBOX_TOOL_BUSINESS_SLUG,
+      tools: [
+        { capabilityId: SANDBOX_TOOL_CAPABILITY_ID, toolRef: first.toolRef, created: false },
+        {
+          capabilityId: SANDBOX_TESTNET_CAPABILITY_ID,
+          toolRef: testnetEntry.toolRef,
+          created: false,
+        },
+      ],
+    })
+    expect(await readSandboxSupply(backend)).toEqual(seeded)
+    expect(await readTestnetBinding(backend)).toEqual(testnet)
+  }, 300_000)
+
+  it('keeps seeding the fixture Tool when only the payee env is missing', async () => {
+    const backend = convexTestWithMarketComponents()
+    await seedDevCatalogAuthority(backend)
+    setSiteUrlEnvironment()
+    vi.stubEnv(FIXTURE_ORIGIN_ENV, FIXTURE_ORIGIN)
+    vi.stubEnv(FIXTURE_PAY_TO_ENV, '')
+
+    const published = await backend.mutation(internal.devSeed.publishSandboxTool, {})
+    expect(published.tools).toEqual([
+      { capabilityId: SANDBOX_TOOL_CAPABILITY_ID, toolRef: published.toolRef, created: true },
+      {
+        capabilityId: SANDBOX_TESTNET_CAPABILITY_ID,
+        skipped: 'AE_PACKAGE5_FIXTURE_X402_PAY_TO_missing',
+      },
+    ])
+    expect((await readSandboxSupply(backend)).sandboxBusinessSlugs)
+      .toEqual([SANDBOX_TOOL_BUSINESS_SLUG])
+  }, 300_000)
+})
+
+async function readTestnetPricingConfig(backend: SeedBackend): Promise<unknown> {
+  return await backend.run(async (ctx) => {
+    const publication = await ctx.db.query('capabilityPublications')
+      .withIndex('by_publicationRef_and_revision', (query) => query
+        .eq('publicationRef', `capability-offering:${SANDBOX_TESTNET_BUSINESS_SLUG}:v1`)
+        .eq('revision', 1))
+      .unique()
+    if (publication === null) throw new Error('testnet publication missing')
+    return JSON.parse(publication.pricingConfigJson ?? 'null') as unknown
+  })
+}
+
+async function readTestnetBinding(backend: SeedBackend): Promise<{
+  endpointUrl: string
+  adapterId: string
+  network: unknown
+  asset: unknown
+  payTo: unknown
+  amount: unknown
+}> {
+  return await backend.run(async (ctx) => {
+    const binding = await ctx.db.query('capabilityTransportBindings')
+      .withIndex('by_bindingId', (query) => query
+        .eq('bindingId', `capability-binding:${SANDBOX_TESTNET_BUSINESS_SLUG}:x402:v1`))
+      .unique()
+    if (binding === null) throw new Error('testnet binding missing')
+    const config = JSON.parse(binding.configJson) as Record<string, unknown>
+    const paymentRequired = JSON.parse(String(config.paymentRequiredJson)) as {
+      accepts: readonly Record<string, unknown>[]
+    }
+    return {
+      endpointUrl: binding.endpointUrl,
+      adapterId: binding.adapterId,
+      network: config.network,
+      asset: config.asset,
+      payTo: config.payTo,
+      amount: paymentRequired.accepts[0]?.amount,
+    }
+  })
+}
+
+async function readSandboxPriceFacts(
+  backend: SeedBackend,
+  slug: string = SANDBOX_TOOL_BUSINESS_SLUG,
+): Promise<{
   publicationPrice: unknown
   revisionPrice: unknown
   revisionCount: number
 }> {
   return await backend.run(async (ctx) => {
     const business = await ctx.db.query('businesses')
-      .withIndex('by_slug', (query) => query.eq('slug', SANDBOX_TOOL_BUSINESS_SLUG))
+      .withIndex('by_slug', (query) => query.eq('slug', slug))
       .unique()
     if (business === null) throw new Error('sandbox business missing')
     const offering = await ctx.db.query('businessOfferings')
@@ -245,13 +572,14 @@ async function readSandboxPriceFacts(backend: SeedBackend): Promise<{
   })
 }
 
-async function readSandboxCatalogDetail(backend: SeedBackend): Promise<{
+async function readSandboxCatalogDetail(
+  backend: SeedBackend,
+  slug: string = SANDBOX_TOOL_BUSINESS_SLUG,
+): Promise<{
   price: unknown
   pricingSummary: string | undefined
 }> {
-  const result = await backend.query(api.catalog.getPublicBusinessCatalogBySlug, {
-    slug: SANDBOX_TOOL_BUSINESS_SLUG,
-  })
+  const result = await backend.query(api.catalog.getPublicBusinessCatalogBySlug, { slug })
   if (result.kind !== 'available') throw new Error(`sandbox catalog unavailable: ${result.kind}`)
   const offering = result.catalog.offerings[0]
   return { price: offering?.price, pricingSummary: offering?.pricingSummary }
@@ -262,9 +590,12 @@ async function searchSandboxSlugs(backend: SeedBackend, query: string): Promise<
   return page.items.map(({ slug }) => slug)
 }
 
-async function readSandboxSearchDocumentIds(backend: SeedBackend): Promise<readonly string[]> {
+async function readSandboxSearchDocumentIds(
+  backend: SeedBackend,
+  slug: string = SANDBOX_TOOL_BUSINESS_SLUG,
+): Promise<readonly string[]> {
   return await backend.run(async (ctx) => (await ctx.db.query('registrySearchDocuments')
-    .withIndex('by_business', (query) => query.eq('businessSlug', SANDBOX_TOOL_BUSINESS_SLUG))
+    .withIndex('by_business', (query) => query.eq('businessSlug', slug))
     .collect())
     .map(({ documentId }) => documentId)
     .sort())
@@ -447,15 +778,25 @@ describe('dev-seeded sandbox Tool Quote admission', () => {
   afterEach(() => {
     if (previousServiceKey === undefined) delete process.env.AE_CONVEX_SERVER_FUNCTION_TOKEN
     else process.env.AE_CONVEX_SERVER_FUNCTION_TOKEN = previousServiceKey
+    vi.unstubAllEnvs()
   })
 
   it('admits a Quote inspection for the seeded Tool after the bypass connect flow', async () => {
     const backend = convexTestWithMarketComponents()
     await seedDevCatalogAuthority(backend)
+    setSiteUrlEnvironment()
 
     const published = await backend.mutation(internal.devSeed.publishSandboxTool, {})
     const seeded = await backend.mutation(internal.devSeed.seedSandboxSpendingPolicy, {})
     expect(seeded.created).toBe(true)
+
+    // simulates the hourly readiness probe; the seed itself never writes readiness
+    await recordSandboxToolReadiness(backend, {
+      publicationRef: published.publicationId,
+      publicationRevision: published.publicationRevision,
+      businessSlug: SANDBOX_TOOL_BUSINESS_SLUG,
+      evidenceRef: SANDBOX_TOOL_EVIDENCE_REF,
+    })
 
     const agent = await runBypassConnect(backend, 'ak_local_e2e_28f0c1d4e5a6')
     // `ae connect` owns the agent identity: it must land under the same owner
@@ -472,53 +813,53 @@ describe('dev-seeded sandbox Tool Quote admission', () => {
       })
   }, 300_000)
 
-  it('re-asserts sandbox readiness on every publish so a rebooted deployment stays Quoteable', async () => {
+  it('does not write readiness observations', async () => {
     const backend = convexTestWithMarketComponents()
     await seedDevCatalogAuthority(backend)
+    setSiteUrlEnvironment()
 
     const published = await backend.mutation(internal.devSeed.publishSandboxTool, {})
-    await backend.mutation(internal.devSeed.seedSandboxSpendingPolicy, {})
-    const agent = await runBypassConnect(backend, 'ak_local_e2e_9b71a0c3fd12')
 
-    // The scheduled probe cannot reach the fixture endpoint, so it can only
-    // ever land `unavailable` over the seeded readiness fact, and the readiness
-    // window is shorter than the gap between two local boots.
-    await backend.run(async (ctx) => {
+    const readReadiness = () => backend.run(async (ctx) => {
       const publication = await ctx.db.query('capabilityPublications')
         .withIndex('by_publicationRef_and_revision', (query) => query
           .eq('publicationRef', published.publicationId)
           .eq('revision', published.publicationRevision))
         .unique()
       if (publication === null) throw new Error('seeded publication missing')
-      await ctx.db.patch(publication._id, {
-        credentialState: 'unavailable',
-        healthState: 'unhealthy',
-        readinessValidUntil: Date.now() - 1,
-      })
+      return {
+        credentialState: publication.credentialState,
+        healthState: publication.healthState,
+        readinessObservedAt: publication.readinessObservedAt,
+        readinessValidUntil: publication.readinessValidUntil,
+      }
     })
-    await expect(prepareQuoteSubjects(backend, agent, published.toolRef))
-      .resolves.toMatchObject({ kind: 'refused' })
 
+    // Nothing in `publishSandboxTool` writes readiness - not on the run that
+    // creates the publication, and not on a rebooted deployment's replay.
+    const unobserved = {
+      credentialState: 'unobserved',
+      healthState: 'unobserved',
+      readinessObservedAt: undefined,
+      readinessValidUntil: undefined,
+    }
+    expect(await readReadiness()).toEqual(unobserved)
     const rebooted = await backend.mutation(internal.devSeed.publishSandboxTool, {})
     expect(rebooted.created).toBe(false)
-    const readiness = await backend.run(async (ctx) => {
-      const publication = await ctx.db.query('capabilityPublications')
-        .withIndex('by_publicationRef_and_revision', (query) => query
-          .eq('publicationRef', published.publicationId)
-          .eq('revision', published.publicationRevision))
-        .unique()
-      return publication === null
-        ? null
-        : {
-            credentialState: publication.credentialState,
-            healthState: publication.healthState,
-            future: (publication.readinessValidUntil ?? 0) > Date.now(),
-          }
-    })
-    expect(readiness).toEqual({ credentialState: 'ready', healthState: 'healthy', future: true })
+    expect(await readReadiness()).toEqual(unobserved)
 
-    await expect(prepareQuoteSubjects(backend, agent, published.toolRef))
-      .resolves.toMatchObject({ kind: 'prepared' })
+    // simulates the hourly readiness probe; the seed itself never writes readiness
+    await recordSandboxToolReadiness(backend, {
+      publicationRef: published.publicationId,
+      publicationRevision: published.publicationRevision,
+      businessSlug: SANDBOX_TOOL_BUSINESS_SLUG,
+      evidenceRef: SANDBOX_TOOL_EVIDENCE_REF,
+    })
+    const afterRecording = await readReadiness()
+    expect(afterRecording.credentialState).toBe('ready')
+    expect(afterRecording.healthState).toBe('healthy')
+    expect(afterRecording.readinessObservedAt).toEqual(expect.any(Number) as unknown as number)
+    expect(afterRecording.readinessValidUntil).toBeGreaterThan(Date.now())
   }, 300_000)
 })
 

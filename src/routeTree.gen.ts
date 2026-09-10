@@ -57,6 +57,7 @@ import { Route as DotwellKnownHttpMessageSignaturesDirectoryRouteImport } from '
 import { Route as DotwellKnownApiCatalogRouteImport } from './routes/[.]well-known/api-catalog'
 import { Route as SlugUcpRouteImport } from './routes/$slug.ucp'
 import { Route as ApiV1ServicesRouteImport } from './routes/api.v1.services'
+import { Route as ApiV1SandboxReferenceRouteImport } from './routes/api.v1.sandbox-reference'
 import { Route as ApiV1ReleaseRouteImport } from './routes/api.v1.release'
 import { Route as ApiV1RegistryRouteImport } from './routes/api.v1.registry'
 import { Route as ApiV1MarketRequestsRouteImport } from './routes/api.v1.market-requests'
@@ -371,6 +372,11 @@ const SlugUcpRoute = SlugUcpRouteImport.update({
 const ApiV1ServicesRoute = ApiV1ServicesRouteImport.update({
   id: '/api/v1/services',
   path: '/api/v1/services',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiV1SandboxReferenceRoute = ApiV1SandboxReferenceRouteImport.update({
+  id: '/api/v1/sandbox-reference',
+  path: '/api/v1/sandbox-reference',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiV1ReleaseRoute = ApiV1ReleaseRouteImport.update({
@@ -840,6 +846,7 @@ export interface FileRoutesByFullPath {
   '/api/v1/market-requests': typeof ApiV1MarketRequestsRouteWithChildren
   '/api/v1/registry': typeof ApiV1RegistryRoute
   '/api/v1/release': typeof ApiV1ReleaseRoute
+  '/api/v1/sandbox-reference': typeof ApiV1SandboxReferenceRoute
   '/api/v1/services': typeof ApiV1ServicesRouteWithChildren
   '/owner/offerings/$offeringRef': typeof OperatorOwnerOfferingsOfferingRefRoute
   '/owner/offerings/new': typeof OperatorOwnerOfferingsNewRoute
@@ -961,6 +968,7 @@ export interface FileRoutesByTo {
   '/api/v1/market-requests': typeof ApiV1MarketRequestsRouteWithChildren
   '/api/v1/registry': typeof ApiV1RegistryRoute
   '/api/v1/release': typeof ApiV1ReleaseRoute
+  '/api/v1/sandbox-reference': typeof ApiV1SandboxReferenceRoute
   '/api/v1/services': typeof ApiV1ServicesRouteWithChildren
   '/owner/offerings/$offeringRef': typeof OperatorOwnerOfferingsOfferingRefRoute
   '/owner/offerings/new': typeof OperatorOwnerOfferingsNewRoute
@@ -1084,6 +1092,7 @@ export interface FileRoutesById {
   '/api/v1/market-requests': typeof ApiV1MarketRequestsRouteWithChildren
   '/api/v1/registry': typeof ApiV1RegistryRoute
   '/api/v1/release': typeof ApiV1ReleaseRoute
+  '/api/v1/sandbox-reference': typeof ApiV1SandboxReferenceRoute
   '/api/v1/services': typeof ApiV1ServicesRouteWithChildren
   '/_operator/owner/offerings/$offeringRef': typeof OperatorOwnerOfferingsOfferingRefRoute
   '/_operator/owner/offerings/new': typeof OperatorOwnerOfferingsNewRoute
@@ -1207,6 +1216,7 @@ export interface FileRouteTypes {
     | '/api/v1/market-requests'
     | '/api/v1/registry'
     | '/api/v1/release'
+    | '/api/v1/sandbox-reference'
     | '/api/v1/services'
     | '/owner/offerings/$offeringRef'
     | '/owner/offerings/new'
@@ -1328,6 +1338,7 @@ export interface FileRouteTypes {
     | '/api/v1/market-requests'
     | '/api/v1/registry'
     | '/api/v1/release'
+    | '/api/v1/sandbox-reference'
     | '/api/v1/services'
     | '/owner/offerings/$offeringRef'
     | '/owner/offerings/new'
@@ -1450,6 +1461,7 @@ export interface FileRouteTypes {
     | '/api/v1/market-requests'
     | '/api/v1/registry'
     | '/api/v1/release'
+    | '/api/v1/sandbox-reference'
     | '/api/v1/services'
     | '/_operator/owner/offerings/$offeringRef'
     | '/_operator/owner/offerings/new'
@@ -1557,6 +1569,7 @@ export interface RootRouteChildren {
   ApiV1MarketRequestsRoute: typeof ApiV1MarketRequestsRouteWithChildren
   ApiV1RegistryRoute: typeof ApiV1RegistryRoute
   ApiV1ReleaseRoute: typeof ApiV1ReleaseRoute
+  ApiV1SandboxReferenceRoute: typeof ApiV1SandboxReferenceRoute
   ApiV1ServicesRoute: typeof ApiV1ServicesRouteWithChildren
   ApiV1FundingConstraintsRoute: typeof ApiV1FundingConstraintsRoute
   ApiV1FundingQuoteRoute: typeof ApiV1FundingQuoteRoute
@@ -1918,6 +1931,13 @@ declare module '@tanstack/react-router' {
       path: '/api/v1/services'
       fullPath: '/api/v1/services'
       preLoaderRoute: typeof ApiV1ServicesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/sandbox-reference': {
+      id: '/api/v1/sandbox-reference'
+      path: '/api/v1/sandbox-reference'
+      fullPath: '/api/v1/sandbox-reference'
+      preLoaderRoute: typeof ApiV1SandboxReferenceRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/v1/release': {
@@ -2729,6 +2749,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiV1MarketRequestsRoute: ApiV1MarketRequestsRouteWithChildren,
   ApiV1RegistryRoute: ApiV1RegistryRoute,
   ApiV1ReleaseRoute: ApiV1ReleaseRoute,
+  ApiV1SandboxReferenceRoute: ApiV1SandboxReferenceRoute,
   ApiV1ServicesRoute: ApiV1ServicesRouteWithChildren,
   ApiV1FundingConstraintsRoute: ApiV1FundingConstraintsRoute,
   ApiV1FundingQuoteRoute: ApiV1FundingQuoteRoute,

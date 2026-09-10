@@ -12,6 +12,7 @@ import {
   createSupervisor,
   DEFAULT_LOCAL_BACKEND_STARTUP_TIMEOUT_SECS,
   doctorNextCommand,
+  doctorTierLine,
   effectiveEnv,
   isCatalogueComplete,
   isConvexReadyOutput,
@@ -558,6 +559,28 @@ describe('release identity and reported URLs', () => {
     expect(doctorNextCommand(JSON.stringify({ kind: 'ready', checks: [{ id: 'origin', state: 'pass' }] })))
       .toBeUndefined()
     expect(doctorNextCommand('')).toBeUndefined()
+  })
+
+  it('parses the doctor tier from the JSON report', () => {
+    expect(doctorTierLine(JSON.stringify({
+      kind: 'ready',
+      tier: { level: 1, missing: [] },
+    }))).toBe('tier 1')
+
+    expect(doctorTierLine(JSON.stringify({
+      kind: 'degraded',
+      tier: { level: 0, missing: ['A', 'B'] },
+    }))).toBe('tier 0 (missing: A, B)')
+
+    expect(doctorTierLine(JSON.stringify({
+      kind: 'degraded',
+      tier: { level: 1, missing: ['X'] },
+    }))).toBe('tier 1 (missing: X)')
+
+    expect(doctorTierLine(JSON.stringify({ kind: 'ready', checks: [] })))
+      .toBeUndefined()
+    expect(doctorTierLine('some output without tier')).toBeUndefined()
+    expect(doctorTierLine('')).toBeUndefined()
   })
 })
 

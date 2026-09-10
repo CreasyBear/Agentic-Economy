@@ -13,6 +13,9 @@ export {
   BASE_SEPOLIA_USDC_ADDRESS,
   x402PaymentProfileForEnvironment,
 } from './internal/x402-payment-profile'
+export {
+  validateX402PaymentRequired,
+} from './internal/x402-payment-signer'
 export { validPublicHttpsEndpoint } from './internal/transport-adapters'
 export {
   X402_SELLER_CANARY_ADMISSION_REQUIRED_REF,

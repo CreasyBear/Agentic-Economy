@@ -385,6 +385,23 @@ export function doctorNextCommand(stdout) {
   return nonEmpty(withCommand('warn')?.nextCommand) ?? nonEmpty(withCommand('pass')?.nextCommand)
 }
 
+/**
+ * The `--json` doctor prints a `DoctorResult` with tier information when present.
+ * Parse the tier level and missing dependencies, formatted as `tier ${level}` or
+ * `tier ${level} (missing: ${missing.join(', ')})` when missing dependencies exist.
+ * Returns undefined if the tier field is absent or unparseable.
+ */
+export function doctorTierLine(stdout) {
+  const text = stripAnsi(stdout)
+  const result = jsonTail(text)
+  if (result?.tier === undefined || typeof result.tier !== 'object') return undefined
+  const { level, missing } = result.tier
+  if (typeof level !== 'number') return undefined
+  const baseLine = `tier ${level}`
+  if (!Array.isArray(missing) || missing.length === 0) return baseLine
+  return `${baseLine} (missing: ${missing.join(', ')})`
+}
+
 function stderrTail(text, lines = 4) {
   const kept = stripAnsi(text)
     .split('\n')
@@ -768,7 +785,13 @@ async function reportDoctor(supervisor, env, baseUrl) {
     { label: 'AE doctor', timeoutMs: DOCTOR_TIMEOUT_MS, capture: true, quiet: true },
   ))
   const result = await managed.done
-  const next = doctorNextCommand(result.stdout ?? '') ?? doctorNextCommand(result.stderr ?? '')
+  const stdout = result.stdout ?? ''
+  const stderr = result.stderr ?? ''
+  const tierLine = doctorTierLine(stdout) ?? doctorTierLine(stderr)
+  if (tierLine !== undefined) {
+    log(tierLine)
+  }
+  const next = doctorNextCommand(stdout) ?? doctorNextCommand(stderr)
   if (next !== undefined) {
     log(`doctor Next: ${next}`)
     return

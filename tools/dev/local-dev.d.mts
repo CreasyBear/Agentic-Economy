@@ -120,6 +120,7 @@ export function releaseRevision(
 
 export function isCatalogueComplete(stdout: string): boolean
 export function doctorNextCommand(stdout: string): string | undefined
+export function doctorTierLine(stdout: string): string | undefined
 
 type StageOutcome = {
   ok: boolean
