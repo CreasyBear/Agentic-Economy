@@ -8,13 +8,13 @@ import {
   developmentEvidenceActor,
   developmentEvidenceCandidate,
 } from './development-evidence-fixture'
-import { runDevelopmentInvocations } from './development-evidence-invocations'
+import { runDevelopmentExecutions } from './development-evidence-executions'
 import { collectSuppliedCandidateQuoteAction } from '@/modules/capability-supply/server'
 
 export async function runDevelopmentEvidenceScenario() {
   const graph = createDevelopmentEvidenceSupplyPorts()
   const input = await createDevelopmentEvidenceQuoteInput(graph)
-  const invocations = await runDevelopmentInvocations(graph, input)
+  const invocations = await runDevelopmentExecutions(graph, input)
   const continuity = await buildDevelopmentContinuityEvidence(graph, input, invocations)
   const actionVersion = resolveActionContract(collectSuppliedCandidateQuoteAction).version
   return {
@@ -32,11 +32,11 @@ export async function runDevelopmentEvidenceScenario() {
     },
     origins: invocations.views.map((view) => ({
       origin: view.origin,
-      invocationRef: view.invocationRef,
+      executionRef: view.executionRef,
     })),
     observedTransitions: invocations.views.map((view) => ({
-      invocationRef: view.invocationRef,
-      version: view.invocationVersion,
+      executionRef: view.executionRef,
+      version: view.executionVersion,
       control: view.control,
       attempts: view.attempts,
       resolution: view.observedResolution,
@@ -48,9 +48,9 @@ export async function runDevelopmentEvidenceScenario() {
       controls: [...invocations.standalone.state.controls.values()],
       attempts: [
         ...(invocations.standalone.state.attempts
-          .get(invocations.views[1]!.invocationRef)?.values() ?? []),
+          .get(invocations.views[1]!.executionRef)?.values() ?? []),
       ],
-      history: invocations.standalone.state.history.get(invocations.views[1]!.invocationRef) ?? [],
+      history: invocations.standalone.state.history.get(invocations.views[1]!.executionRef) ?? [],
       source: {
         input: invocations.standalone.sourceInput,
         prepared: invocations.standalone.sourcePrepared,

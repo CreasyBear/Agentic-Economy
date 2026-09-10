@@ -3,11 +3,12 @@ import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 import { uniqueSorted } from '@/modules/common/unique-sorted'
 import {
-  capabilityOperationId,
-  createPublicOperationRef,
+  capabilityToolId,
+  createPublicToolRef,
 } from '@/modules/capability-supply/public'
 import {
   compareExactAmounts,
+  pricingConfigDecisionAmount,
   pricingConfigDigest,
   pricingConfigSchema,
 } from '@/modules/money/public'
@@ -21,9 +22,14 @@ import { contractRefFromRow } from '../offering/registration'
 import { offeringIntegrityIsValid } from '../offering/integrity'
 import { publicationLifecycle } from '../publication/lifecycle'
 import { parseAdmittedTransportCatalogMetadata } from '../transport-adapters'
+import { x402SellerCanaryAdmissionIsSatisfied } from '../x402-seller-onboarding/admission'
+import {
+  FACILITATOR_DISCOVERY_EVIDENCE_REF,
+  FACILITATOR_DISCOVERY_PUBLISHER_REF,
+} from '../facilitator-discovery-ingest'
 
 import {
-  exactCurrentCatalogOperationIsRouteable,
+  exactCurrentCatalogToolIsRouteable,
   routeabilityQualityGate,
 } from './quality-gate'
 import type { CapabilityGraphPorts } from './ports'
@@ -41,6 +47,7 @@ export type SuppliedCandidateRef = Readonly<{
 export type SuppliedCandidateQualificationReason =
   | 'publication_missing'
   | 'publication_not_current'
+  | 'seller_canary_admission_required'
   | 'candidate_reference_mismatch'
   | 'business_not_currently_published'
   | 'contract_missing_or_inactive'
@@ -60,6 +67,7 @@ export type SuppliedCandidateQualificationReason =
   | 'operation_map_mismatch'
   | 'pricing_missing_or_invalid'
   | 'source_integrity_failure'
+  | 'provider_authority_unverified'
 
 export type SuppliedCandidateSourceReference = Readonly<{
   kind: 'publication' | 'business' | 'contract' | 'offering' | 'binding' | 'authority' | 'pricing' | 'readiness'
@@ -97,6 +105,13 @@ export async function qualifySuppliedCandidate(
   const reasons: SuppliedCandidateQualificationReason[] = []
   const publicationCurrent = publication.disposition === 'current'
   if (!publicationCurrent) reasons.push('publication_not_current')
+  const facilitatorAdmissionCurrent = publication.authorityMode === 'observed_external'
+    && publication.publisherRef === FACILITATOR_DISCOVERY_PUBLISHER_REF
+    && publication.sourceKind === 'x402'
+    && publication.registrationEvidenceRefs.includes(FACILITATOR_DISCOVERY_EVIDENCE_REF)
+  const sellerCanaryAdmissionCurrent = facilitatorAdmissionCurrent
+    || x402SellerCanaryAdmissionIsSatisfied(publication.registrationEvidenceRefs)
+  if (!sellerCanaryAdmissionCurrent) reasons.push('seller_canary_admission_required')
   if (
     publication.networkId !== candidate.networkId
     || publication.businessId !== candidate.businessId
@@ -136,12 +151,12 @@ export async function qualifySuppliedCandidate(
   }
 
   let offeringCurrent = false
-  let catalogOperationCurrent = false
+  let catalogToolCurrent = false
   let originCurrent = false
   let catalogAccessPath = null
-  const expectedOperationRef = contract.kind === 'found'
-    ? createPublicOperationRef({
-        operationId: capabilityOperationId(contract.contract.capabilityId),
+  const expectedToolRef = contract.kind === 'found'
+    ? createPublicToolRef({
+        operationId: capabilityToolId(contract.contract.capabilityId),
         publicationRef: publication.publicationRef,
         publicationRevision: publication.revision,
         contractRef: contract.contract.ref,
@@ -170,9 +185,12 @@ export async function qualifySuppliedCandidate(
     if (!offeringCurrent) reasons.push('offering_ineligible_or_unpublished')
 
     const origin = offering.origin
-    if (origin?.kind !== 'catalog_offering') {
+    if (origin?.kind !== 'catalog_offering' && !facilitatorAdmissionCurrent) {
       reasons.push('catalog_origin_missing')
-    } else {
+    } else if (facilitatorAdmissionCurrent) {
+      catalogToolCurrent = publication.toolRef === expectedToolRef
+        && bindingMethod !== undefined
+    } else if (origin?.kind === 'catalog_offering') {
       originCurrent = ports.catalogOriginIsCurrent !== undefined
         && await ports.catalogOriginIsCurrent(origin, candidate.businessId)
       if (!originCurrent) reasons.push('catalog_origin_stale')
@@ -185,16 +203,16 @@ export async function qualifySuppliedCandidate(
         if (catalogAccessPath === null) {
           reasons.push('catalog_access_path_missing_or_stale')
         } else {
-          catalogOperationCurrent = exactCurrentCatalogOperationIsRouteable({
+          catalogToolCurrent = exactCurrentCatalogToolIsRouteable({
             origin,
             originCurrent,
             accessPath: catalogAccessPath,
-            publicationOperationRef: publication.operationRef,
-            expectedOperationRef,
+            publicationToolRef: publication.toolRef,
+            expectedToolRef,
             endpointUrl: binding?.endpointUrl ?? '',
             method: bindingMethod,
           })
-          if (!catalogOperationCurrent) reasons.push('operation_map_mismatch')
+          if (!catalogToolCurrent) reasons.push('operation_map_mismatch')
         }
       }
     }
@@ -217,7 +235,12 @@ export async function qualifySuppliedCandidate(
     sources.push(source(
       'authority',
       `authority:${binding.bindingId}`,
-      binding.connectionAuthority ?? { kind: binding.authority.kind },
+      binding.connectionAuthority === undefined
+        ? { kind: binding.authority.kind }
+        : (() => {
+            const { toolRef, ...authority } = binding.connectionAuthority
+            return { ...authority, operationRef: toolRef }
+          })(),
       binding.authority.kind === 'provider_connection' ? binding.registrationEvidenceRefs : [],
     ))
     if (
@@ -245,6 +268,7 @@ export async function qualifySuppliedCandidate(
       if (reason === 'health_unhealthy') reasons.push('readiness_unhealthy')
       if (reason === 'health_stale') reasons.push('readiness_stale')
       if (reason === 'eligibility_integrity_failure') reasons.push('source_integrity_failure')
+      if (reason === 'provider_authority_unverified') reasons.push('provider_authority_unverified')
     }
   }
 
@@ -256,8 +280,11 @@ export async function qualifySuppliedCandidate(
     const displayedPrice = offering?.presentation.price
     pricingCurrent = parsedPricing.success
       && pricingConfigDigest(parsedPricing.data) === publication.priceDigest
-      && displayedPrice?.kind === 'fixed'
-      && compareExactAmounts(displayedPrice.amount, parsedPricing.data.paidAmount) === 0
+      && (parsedPricing.data.kind === 'managed_x402'
+        ? displayedPrice?.kind === 'on_request'
+        : displayedPrice?.kind === 'fixed'
+          && pricingConfigDecisionAmount(parsedPricing.data) !== undefined
+          && compareExactAmounts(displayedPrice.amount, pricingConfigDecisionAmount(parsedPricing.data)) === 0)
     if (!pricingCurrent) reasons.push('pricing_missing_or_invalid')
     else {
       sources.push({
@@ -298,12 +325,14 @@ export async function qualifySuppliedCandidate(
       origin: offering.origin,
       originCurrent,
       accessPath: catalogAccessPath,
-      publicationOperationRef: publication.operationRef,
-      expectedOperationRef,
+      catalogToolCurrent,
+      publicationToolRef: publication.toolRef,
+      expectedToolRef,
       endpointUrl: binding.endpointUrl,
       method: bindingMethod,
       businessCurrent,
       publicationCurrent,
+      sellerCanaryAdmissionCurrent,
       contractCurrent,
       offeringCurrent,
       bindingCurrent,

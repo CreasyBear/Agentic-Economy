@@ -24,9 +24,10 @@ describe('discovery files', () => {
     const sitemap = buildSitemapXml(state, { canonicalBaseUrl: 'http://localhost:3000', now: 0 })
     const serialized = `${llms.body}\n${sitemap.body}`
     expect(llms.body).not.toContain('/api/v1/registry')
-    expect(llms.body).toContain('/api/v1/market-operations/search')
+    expect(llms.body).toContain('/api/v1/market-tools/search')
 
-    expect(llms.body).toContain('slug=fremantle-heat-pump-repairs')
+    expect(llms.body).not.toContain('slug=fremantle-heat-pump-repairs')
+    expect(llms.body).toContain('Canonical catalogue:')
     expect(sitemap.body).toContain('<loc>http://localhost:3000/fremantle-heat-pump-repairs</loc>')
     expect(serialized).not.toContain('demo-listed-provider')
     expect(serialized).not.toMatch(/\.well-known\/ae-routing|\/v1\/route/)
@@ -35,7 +36,7 @@ describe('discovery files', () => {
     )
   })
 
-  it('builds llms.txt from canonical links and source-owned Offering disposition only', () => {
+  it('builds llms.txt from canonical Tool links without embedding provider records', () => {
     const state = createFixtureDiscoverySourceState()
     const revision = state.revisions.at(0)
 
@@ -55,19 +56,19 @@ describe('discovery files', () => {
     }
     const result = buildLlmsTxt(maliciousState, { canonicalBaseUrl: 'https://ae.example', routingBaseUrl: 'https://route.ae.example' })
 
-    expect(result.body).toContain('https://ae.example/demo-listed-provider/ucp')
-    expect(result.body).toContain('disposition=current')
+    expect(result.body).not.toContain('https://ae.example/demo-listed-provider/ucp')
+    expect(result.body).not.toContain('disposition=current')
     // `/mcp` is the current MCP host endpoint (T6), no longer retired routing-v1 vocabulary.
     expect(result.body).not.toMatch(/route\.ae\.example|\.well-known\/ae-routing|\/v1\/route/)
     expect(result.body).toContain('- MCP: https://ae.example/mcp')
     expect(result.body).toContain('1. Search by outcome: `ae search')
-    expect(result.body.indexOf('1. Search by outcome:')).toBeLessThan(result.body.indexOf('4. Connect only if the call reports'))
-    expect(result.body).toContain('POST https://ae.example/api/v1/market-operations/search')
-    expect(result.body).toContain('POST https://ae.example/api/v1/market-operations/detail')
-    expect(result.body).toContain('ae call "$AE_OPERATION_REF" --input "$AE_INPUT_JSON"')
-    expect(result.body).toContain('ae status "$AE_INVOCATION_REF"')
+    expect(result.body.indexOf('1. Search by outcome:')).toBeLessThan(result.body.indexOf('3. Call `tool.quote`'))
+    expect(result.body).toContain('POST https://ae.example/api/v1/market-tools/search')
+    expect(result.body).toContain('POST https://ae.example/api/v1/market-tools/describe')
+    expect(result.body).toContain('Call only with the returned Quote')
+    expect(result.body).toContain('ae status "$AE_CALL_REF"')
     expect(result.body).toContain('Use cancel or recover only when that receipt offers the action.')
-    expect(result.body).toContain('Public: search, inspect, and eligible free keyless read calls.')
+    expect(result.body).toContain('Public: list, search, describe, and compare.')
     expect(result.body).toContain('The low-level write API requires `idempotencyKey`; the CLI creates and retains it automatically.')
     expect(result.body).not.toContain('--idempotency-key')
     expect(result.body).not.toContain('Demo listed provider')
@@ -78,11 +79,15 @@ describe('discovery files', () => {
     expect(result.urls).toEqual(
       expect.arrayContaining([
         'https://ae.example/',
-        'https://ae.example/api/businesses',
         'https://ae.example/demo-listed-provider',
-        'https://ae.example/demo-listed-provider/ucp',
+        'https://ae.example/api/v1/market-tools/search',
+        'https://ae.example/api/v1/market-tools/describe',
       ])
     )
+    expect(result.urls).not.toEqual(expect.arrayContaining([
+      'https://ae.example/api/businesses',
+      'https://ae.example/demo-listed-provider/ucp',
+    ]))
   })
 
   it('builds sitemap.xml with public static and published business URLs only', () => {

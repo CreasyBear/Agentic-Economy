@@ -24,6 +24,7 @@ const SearchIndexSchema = z.object({
 const TableSchema = z.object({
   tableName: z.string(),
   indexes: z.array(IndexSchema),
+  stagedDbIndexes: z.array(IndexSchema).optional(),
   searchIndexes: z.array(SearchIndexSchema).optional(),
 })
 
@@ -41,6 +42,7 @@ const durableTables = [
   'accountSuccessionAuthorizationParticipants',
   'externalIdentityBindings',
   'credentials',
+  'consequenceProofUses',
   'authorityDelegationGrants',
   'authorityDelegationSnapshots',
   'authorityDelegationSnapshotAncestors',
@@ -53,15 +55,19 @@ const durableTables = [
   'businessOfferings',
   'businessOfferingRevisions',
   'offeringAccessPaths',
-  'moneyAccounts',
-  'moneyLedgerEntries',
-  'moneyTransactions',
-  'moneyCredentialBudgetStates',
+  'moneyCommercialPolicies',
+  'moneyReconciliationCases',
+  'moneyDocuments',
+  'moneyDocumentSnapshotPages',
+  'moneyFundingCommands',
+  'moneyLegalCustomerBindings',
+  'moneyTreasuryObservations',
+  'moneyProviderObligations',
+  'moneyConnectAccountCommands',
   'moneyUsageEvents',
   'moneyCredentialUsageSummaries',
-  'moneyExternalSpendReservations',
   'moneyX402PaymentAttempts',
-  'moneyTopupCommands',
+  'moneyStripeWebhookInbox',
   'moneyStripeEvents',
   'moneyPayoutAccounts',
   'moneyPayouts',
@@ -69,18 +75,30 @@ const durableTables = [
   'qualifiedUseReceipts',
   'capabilityContractDocuments',
   'capabilityOfferings',
-  'capabilityOperationInvocations',
+  'capabilityCallProjections',
+  'capabilityQuotes',
+  'capabilityCalls',
+  'sellerOnboardingCanaryRearmAudits',
   'providerConsequenceJournal',
   'capabilityPublications',
+  'capabilityProviderToolProjections',
+  'capabilitySupplyAdmissionCases',
+  'capabilitySupplySourceDrafts',
   'capabilityTransportBindings',
   'capabilityProviderConnections',
+  'capabilityProviderConnectionAttempts',
+  'capabilityProviderOffboardingCases',
+  'capabilityProviderOffboardingTargets',
   'capabilityProviderConnectionLeases',
   'capabilityProviderApprovals',
-  'registeredOperationMappings',
+  'registeredToolMappings',
   'agentAccessGrants',
   'agentAccessPrincipals',
+  'agentAccessProviderRevocations',
   'agentAccessOAuthGrants',
   'agentAccessOAuthClients',
+  'agentAccessOAuthRefreshFamilies',
+  'agentAccessOAuthRefreshTokens',
   'operationKeys',
   'sourceWriteNonces',
   'adminMemberships',
@@ -90,19 +108,21 @@ const durableTables = [
   'disputes',
   'chatThreads',
   'chatThreadShares',
-  'actionInvocationControls',
-  'actionInvocationAttempts',
-  'actionInvocationHistory',
-  'marketActiveOperations',
-  'marketActiveSuppliers',
+  'actionExecutionControls',
+  'actionExecutionAttempts',
+  'actionExecutionHistory',
+  'marketActiveTools',
+  'marketActiveProviders',
   'marketEvidenceFacts',
   'marketExternalRegistryEntries',
   'marketExternalRegistryGenerations',
   'marketExternalRegistryState',
-  'marketExternalSnapshots',
-  'marketOperationCategories',
-  'marketOperationRatings',
+  'marketToolCategories',
+  'marketToolRatings',
   'marketDemandSignals',
+  'marketDirectoryFacets',
+  'marketDirectorySearchEntries',
+  'marketDirectoryCategoryStats',
 ] as const
 
 const requiredIndexes = {
@@ -152,6 +172,7 @@ const requiredIndexes = {
     'by_principalRef_and_issueIdempotencyRef',
     'by_predecessorCredentialRef',
   ],
+  consequenceProofUses: ['by_reverificationId'],
   authorityDelegationGrants: [
     'by_grantRef',
     'by_subjectPrincipalRef_and_lifecycle',
@@ -177,31 +198,29 @@ const requiredIndexes = {
     'by_admissionRef',
     'by_accountRef_and_operatorPrincipalRef_and_idempotencyRef',
   ],
-  moneyAccounts: ['by_accountRef', 'by_accountId_and_currency', 'by_businessId_and_currency'],
-  moneyLedgerEntries: [
-    'by_transactionRef',
-    'by_accountRef_and_createdAt',
-    'by_principalId_and_createdAt',
-    'by_businessId_and_createdAt',
-    'by_payoutRef_and_allocationRef',
-  ],
-  moneyTransactions: ['by_idempotencyKey', 'by_transactionRef', 'by_principalId_and_createdAt', 'by_externalRef', 'by_reversalOf'],
-  moneyCredentialBudgetStates: ['by_principal_credential_env_generation_window', 'by_credentialId_and_environment_and_generation_and_windowKind'],
   moneyX402PaymentAttempts: [
     'by_attemptRef_and_effectGeneration',
     'by_custodyRef',
     'by_authorizationDigest',
     'by_paymentIdentifier',
   ],
-  moneyUsageEvents: ['by_principalId_and_credentialId_and_currency_and_observedAt', 'by_businessId_and_observedAt', 'by_invocationRef', 'by_usageRef'],
+  moneyUsageEvents: ['by_principalId_and_credentialId_and_currency_and_observedAt', 'by_businessId_and_observedAt', 'by_callRef', 'by_usageRef'],
   moneyCredentialUsageSummaries: ['by_principalId_and_credentialId_and_currency'],
-  moneyTopupCommands: ['by_commandRef', 'by_idempotencyKey', 'by_externalRef'],
+  moneyCommercialPolicies: ['by_policyRef', 'by_environment_and_family_and_lifecycle'],
+  moneyReconciliationCases: ['by_caseRef', 'by_accountRef_and_createdAt', 'by_accountRef_and_status_and_createdAt', 'by_scopeType_and_scopeRef_and_status'],
+  moneyDocuments: ['by_documentRef', 'by_accountRef_and_createdAt'],
+  moneyDocumentSnapshotPages: ['by_pageRef', 'by_documentRef_and_position'],
+  moneyFundingCommands: ['by_commandRef', 'by_idempotencyKey', 'by_externalRef', 'by_paymentId', 'by_accountRef_and_createdAt'],
+  moneyTreasuryObservations: ['by_observationRef', 'by_custody_and_observedAt'],
+  moneyLegalCustomerBindings: ['by_accountRef', 'by_legalCustomerRef_and_state'],
+  moneyProviderObligations: ['by_obligationRef', 'by_callRef', 'by_buyerAccountRef_and_createdAt', 'by_providerRef_and_createdAt'],
+  moneyStripeWebhookInbox: ['by_stripeEventId', 'by_state_and_receivedAt'],
   moneyStripeEvents: ['by_stripeEventId'],
   moneyPayoutAccounts: ['by_businessId_and_currency', 'by_stripeAccountId'],
   moneyPayouts: ['by_businessId_and_currency_and_state', 'by_businessId_and_currency_and_state_and_updatedAt', 'by_periodStart_and_state', 'by_stripeTransferId', 'by_payoutRef', 'by_businessId_and_currency_and_updatedAt', 'by_businessId_and_currency_and_cadence_and_updatedAt'],
   moneyPayoutAllocations: ['by_allocationRef', 'by_qualifiedUseRef', 'by_transactionRef', 'by_payoutRef_and_qualifiedAt', 'by_businessId_and_currency_and_qualifiedAt'],
   businesses: ['by_slug', 'by_owningAccountRef_and_updatedAt', 'by_publicStatus_slug'],
-  businessOfferings: ['by_offeringRef', 'by_businessId_and_status'],
+  businessOfferings: ['by_offeringRef', 'by_businessId_and_status', 'by_businessId_and_offeringRef'],
   businessOfferingRevisions: ['by_offeringRef_and_revision', 'by_businessId_and_createdAt'],
   offeringAccessPaths: [
     'by_accessPathRef',
@@ -219,7 +238,19 @@ const requiredIndexes = {
   auditEvents: ['by_eventId'],
   registrySearchDocuments: ['by_documentId', 'by_business', 'by_offering', 'by_publicStatus_updatedAt'],
   disputes: ['by_business_status'],
-  capabilityOperationInvocations: ['by_invocationRef', 'by_credentialId_and_idempotencyKey', 'by_credentialId_and_createdAt', 'by_credentialId_and_state', 'by_credentialId_and_state_and_grantExpiresAt', 'by_principalId_and_invocationRef', 'by_ownerId_and_state_and_createdAt'],
+  capabilityCalls: ['by_callRef', 'by_principalId_and_idempotencyKey', 'by_credentialId_and_createdAt', 'by_credentialId_and_state', 'by_credentialId_and_state_and_grantExpiresAt', 'by_principalId_and_callRef', 'by_toolRef_and_state', 'by_ownerId_and_state_and_createdAt'],
+  capabilityCallProjections: [
+    'by_callRef',
+    'by_accountRef_and_createdAt',
+    'by_accountRef_and_principalRef_and_createdAt',
+    'by_accountRef_and_toolRef_and_createdAt',
+    'by_accountRef_and_providerRef_and_createdAt',
+    'by_providerRef_and_createdAt',
+    'by_toolRef_and_createdAt',
+    'by_accountRef_and_applicationRef_and_createdAt',
+  ],
+  capabilityQuotes: ['by_quoteRef', 'by_credentialId_and_createdAt', 'by_state_and_expiresAt'],
+  sellerOnboardingCanaryRearmAudits: ['by_auditRef', 'by_callRef', 'by_canaryRef'],
   providerConsequenceJournal: [
     'by_ticketRef',
     'by_effectRef',
@@ -230,7 +261,7 @@ const requiredIndexes = {
   capabilityProviderConnectionLeases: [
     'by_leaseRef',
     'by_connectionRef_and_state',
-    'by_invocationRef',
+    'by_callRef',
     'by_connectionRef_and_authorityGeneration',
   ],
   agentAccessGrants: [
@@ -248,6 +279,11 @@ const requiredIndexes = {
     'by_ownerId_and_lifecycle',
     'by_credentialId_and_lifecycle',
   ],
+  agentAccessProviderRevocations: [
+    'by_revocationRef',
+    'by_credentialRef',
+    'by_principalRef_and_lifecycle',
+  ],
   agentAccessOAuthGrants: [
     'by_grantRef',
     'by_deviceCodeHash',
@@ -257,13 +293,28 @@ const requiredIndexes = {
     'by_status_and_expiresAt',
   ],
   agentAccessOAuthClients: ['by_clientId'],
+  agentAccessOAuthRefreshFamilies: [
+    'by_familyRef',
+    'by_principalRef_and_lifecycle',
+    'by_currentProviderCredentialId_and_lifecycle',
+    'by_currentCredentialRef_and_lifecycle',
+  ],
+  agentAccessOAuthRefreshTokens: ['by_tokenHash', 'by_accessTokenHash', 'by_familyRef_and_generation'],
   capabilityContractDocuments: ['by_capabilityId_and_version', 'by_status_and_capabilityId_and_version'],
   capabilityPublications: [
     'by_publicationRef_and_revision',
-    'by_operationRef_and_disposition',
+    'by_toolRef_and_disposition',
     'by_networkId_and_disposition',
     'by_businessId_and_disposition',
     'by_bindingId_and_disposition',
+    'by_sourceRouteRef_and_disposition',
+  ],
+  capabilitySupplyAdmissionCases: [
+    'by_caseRef',
+    'by_publicationRef_and_revision',
+    'by_toolRef_and_version',
+    'by_businessId_and_submittedAt',
+    'by_state_and_updatedAt',
   ],
   capabilityOfferings: [
     'by_offeringId',
@@ -272,21 +323,47 @@ const requiredIndexes = {
   ],
   capabilityTransportBindings: [
     'by_bindingId',
+    'by_sourceRouteRef',
     'by_offeringId_and_admission_and_conformance',
     'by_networkId_admission_conformance',
   ],
   capabilityProviderConnections: [
     'by_connectionRef',
     'by_businessId_and_lifecycle',
+    'by_businessId_and_connectionRef',
     'by_providerRef_and_lifecycle',
     'by_connectionRef_and_authorityGeneration',
+  ],
+  capabilityProviderConnectionAttempts: [
+    'by_attemptRef',
+    'by_commandId',
+    'by_lifecycle_and_expiresAt',
+    'by_businessId_and_updatedAt',
+  ],
+  capabilityProviderToolProjections: [
+    'by_businessId_and_updatedAt',
+    'by_businessId_and_toolRef',
+    'by_businessId_and_offeringRef',
+  ],
+  capabilitySupplySourceDrafts: [
+    'by_draftRef',
+    'by_businessId_and_updatedAt',
+    'by_lifecycle_and_expiresAt',
+  ],
+  capabilityProviderOffboardingCases: [
+    'by_caseRef',
+    'by_businessId_and_updatedAt',
+    'by_state_and_updatedAt',
+  ],
+  capabilityProviderOffboardingTargets: [
+    'by_caseRef_and_kind_and_targetRef',
   ],
   capabilityProviderApprovals: [
     'by_decisionRef',
     'by_commandId',
     'by_connectionRef_and_authorityGeneration',
   ],
-  registeredOperationMappings: ['by_networkId_and_mappingRef'],
+  registeredToolMappings: ['by_networkId_and_mappingRef'],
   marketDemandSignals: [
     'by_requestRef',
     'by_credentialId_and_idempotencyKey',
@@ -302,7 +379,7 @@ describe('Convex schema', () => {
   const exported = SchemaExport.parse(JSON.parse(String(exportSchema.call(schema))))
 
   it('contains exactly the source-owned durable tables', () => {
-    expect(durableTables).toHaveLength(71)
+    expect(durableTables).toHaveLength(90)
     expect(exported.tables.map((table) => table.tableName).sort()).toEqual([...durableTables].sort())
   })
 
@@ -316,6 +393,47 @@ describe('Convex schema', () => {
         expect(tableIndexes[tableName]).toEqual(indexes)
       else expect(tableIndexes[tableName]).toEqual(expect.arrayContaining(indexes))
     }
+  })
+
+  it('defines the renamed indexed-link fields exactly', () => {
+    const tableIndexes = new Map(
+      exported.tables.map((table) => [
+        table.tableName,
+        new Map(table.indexes.map((index) => [index.indexDescriptor, index.fields])),
+      ]),
+    )
+    const expectIndexFields = (tableName: string, indexName: string, fields: readonly string[]) => {
+      expect(tableIndexes.get(tableName)?.get(indexName)).toEqual(fields)
+    }
+
+    expectIndexFields('capabilityCallProjections', 'by_accountRef_and_toolRef_and_createdAt', ['accountRef', 'toolRef', 'createdAt'])
+    expectIndexFields('capabilityCallProjections', 'by_toolRef_and_createdAt', ['toolRef', 'createdAt'])
+    expectIndexFields('capabilityQuotes', 'by_quoteRef', ['quoteRef'])
+    expectIndexFields('capabilityCalls', 'by_callRef', ['callRef'])
+    expectIndexFields('capabilityCalls', 'by_principalId_and_callRef', ['principalId', 'callRef'])
+    expectIndexFields('capabilityCalls', 'by_toolRef_and_state', ['toolRef', 'state'])
+    expectIndexFields('sellerOnboardingCanaryRearmAudits', 'by_callRef', ['callRef'])
+    expectIndexFields('moneyProviderObligations', 'by_callRef', ['callRef'])
+    expectIndexFields('moneyUsageEvents', 'by_callRef', ['callRef'])
+    expectIndexFields('qualifiedUseReceipts', 'by_callRef', ['callRef'])
+    expectIndexFields('qualifiedUseReceipts', 'by_toolRef_and_qualifiedAt', ['toolRef', 'qualifiedAt'])
+  })
+
+  it('activates the backfilled Account audit indexes', () => {
+    const auditEvents = exported.tables.find((table) => table.tableName === 'auditEvents')
+
+    expect(auditEvents?.indexes).toEqual([
+      { indexDescriptor: 'by_eventId', fields: ['eventId'] },
+      {
+        indexDescriptor: 'by_activeAccountRef_and_createdAt',
+        fields: ['activeAccountRef', 'createdAt'],
+      },
+      {
+        indexDescriptor: 'by_activeAccountRef_and_targetType_and_targetRef_and_createdAt',
+        fields: ['activeAccountRef', 'targetType', 'targetRef', 'createdAt'],
+      },
+    ])
+    expect(auditEvents?.stagedDbIndexes).toEqual([])
   })
 
   it('accepts and indexes canonical durable admin authority records', async () => {
@@ -389,16 +507,62 @@ describe('Convex schema', () => {
       auditType: 'admin.membership_bootstrapped',
     })
   })
-  it('pins the new ledger and payout index field order', () => {
+
+  it('accepts the staged Package 3 proof, credential-use, and audit compatibility fields', async () => {
+    const backend = convexTest(schema, convexModules)
+    const result = await backend.run(async (ctx) => {
+      await ctx.db.insert('consequenceProofUses', {
+        reverificationId: 'rev_123',
+        actorPrincipalRef: 'prn_owner',
+        activeAccountRef: 'acc_owner',
+        commandDigest: 'sha256:command',
+        proofPreset: 'strict',
+        factorEvidence: { firstFactorAgeMinutes: 0, secondFactorAgeMinutes: -1 },
+        verifiedAt: 10,
+        expiresAt: 310,
+        correlationRef: 'corr:proof',
+        idempotencyRef: 'idem:proof',
+      })
+      await ctx.db.insert('auditEvents', {
+        eventId: 'audit:agent.created:1',
+        eventType: 'agent.created',
+        actorKind: 'owner',
+        actorRef: 'prn_owner',
+        activeAccountRef: 'acc_owner',
+        sourceSystem: 'ae_recorded',
+        observedAt: 11,
+        authorityGeneration: 2,
+        targetType: 'agent',
+        targetRef: 'prn_agent',
+        beforeState: 'missing',
+        afterState: 'active',
+        idempotencyKey: 'idem:proof',
+        correlationId: 'corr:proof',
+        evidenceRefs: ['ref:proof'],
+        redactedPayloadJson: '{}',
+        payloadHash: 'sha256:command',
+        createdAt: 11,
+      })
+
+      return {
+        proof: await ctx.db.query('consequenceProofUses')
+          .withIndex('by_reverificationId', (query) => query.eq('reverificationId', 'rev_123'))
+          .unique(),
+        audit: await ctx.db.query('auditEvents')
+          .withIndex('by_eventId', (query) => query.eq('eventId', 'audit:agent.created:1'))
+          .unique(),
+      }
+    })
+
+    expect(result.proof).toMatchObject({ proofPreset: 'strict', activeAccountRef: 'acc_owner' })
+    expect(result.audit).toMatchObject({ sourceSystem: 'ae_recorded', authorityGeneration: 2 })
+  })
+  it('pins the retained payout index field order', () => {
     const index = (tableName: string, indexDescriptor: string) =>
       exported.tables
         .find((table) => table.tableName === tableName)
         ?.indexes.find((item) => item.indexDescriptor === indexDescriptor)
 
-    expect(index('moneyLedgerEntries', 'by_payoutRef_and_allocationRef')).toEqual({
-      indexDescriptor: 'by_payoutRef_and_allocationRef',
-      fields: ['payoutRef', 'allocationRef'],
-    })
     expect(
       index(
         'moneyPayouts',
@@ -409,57 +573,6 @@ describe('Convex schema', () => {
       fields: ['businessId', 'currency', 'cadence', 'updatedAt'],
     })
   })
-  it('accepts optional payout and allocation linkage on canonical refund ledger rows', async () => {
-    const backend = convexTest(schema, convexModules)
-    const rows = await backend.run(async (ctx) => {
-      const linkedId = await ctx.db.insert('moneyLedgerEntries', {
-        entryRef: 'refund:linked',
-        accountRef: 'provider:business:USD',
-        entryType: 'refund',
-        direction: 'debit',
-        amountUnits: '1',
-        currency: 'USD',
-        exponent: 2,
-        transactionRef: 'transaction:refund:linked',
-        idempotencyKey: 'refund:linked',
-        payoutRef: 'payout:daily',
-        allocationRef: 'allocation:daily',
-        allocationCorrectionUnits: '1',
-        sourceDigest: 'sha256:refund',
-        evidenceRefs: [],
-        reversalOf: 'transaction:charge',
-        createdAt: 1,
-      })
-      const unlinkedId = await ctx.db.insert('moneyLedgerEntries', {
-        entryRef: 'refund:unlinked',
-        accountRef: 'provider:business:USD',
-        entryType: 'refund',
-        direction: 'debit',
-        amountUnits: '1',
-        currency: 'USD',
-        exponent: 2,
-        transactionRef: 'transaction:refund:unlinked',
-        idempotencyKey: 'refund:unlinked',
-        sourceDigest: 'sha256:refund',
-        evidenceRefs: [],
-        reversalOf: 'transaction:charge',
-        createdAt: 2,
-      })
-      return {
-        linked: await ctx.db.get(linkedId),
-        unlinked: await ctx.db.get(unlinkedId),
-      }
-    })
-    expect(rows.linked).toMatchObject({
-      payoutRef: 'payout:daily',
-      allocationRef: 'allocation:daily',
-      allocationCorrectionUnits: '1',
-    })
-    expect(rows.unlinked).not.toHaveProperty('payoutRef')
-    expect(rows.unlinked).not.toHaveProperty('allocationRef')
-    expect(rows.unlinked).not.toHaveProperty('allocationCorrectionUnits')
-  })
-
   it('defines the public registry search-document index used by Convex search', () => {
     const registrySearchDocuments = exported.tables.find(
       (table) => table.tableName === 'registrySearchDocuments',
@@ -568,10 +681,10 @@ describe('Convex schema', () => {
     })).rejects.toThrow()
   })
 
-  it('validates current action invocation attempts and rejects removed legacy messages', async () => {
+  it('validates current action execution attempts and rejects removed legacy messages', async () => {
     const backend = convexTest(schema, convexModules)
     const currentAttempt = {
-      invocationRef: 'invocation:schema-regression',
+      executionRef: 'execution:schema-regression',
       attemptRef: 'attempt:current',
       attemptNumber: 1,
       effectGeneration: 1,
@@ -601,28 +714,28 @@ describe('Convex schema', () => {
     } as const
 
     await expect(backend.run(async (ctx) => (
-      ctx.db.insert('actionInvocationAttempts', legacyAttempt as never)
+      ctx.db.insert('actionExecutionAttempts', legacyAttempt as never)
     ))).rejects.toThrow()
     await backend.run(async (ctx) => {
-      await ctx.db.insert('actionInvocationAttempts', currentAttempt)
+      await ctx.db.insert('actionExecutionAttempts', currentAttempt)
     })
     const row = await backend.run(async (ctx) => (
-      ctx.db.query('actionInvocationAttempts').unique()
+      ctx.db.query('actionExecutionAttempts').unique()
     ))
     expect(row).toEqual(expect.objectContaining({
       outcome: currentAttempt.outcome,
     }))
     expect(row?.outcome).not.toHaveProperty('message')
   })
-  it('validates current action invocation controls and rejects removed legacy shapes', async () => {
+  it('validates current action execution controls and rejects removed legacy shapes', async () => {
     const backend = convexTest(schema, convexModules)
     const acceptedAuthority = {
-      kind: 'approve_each',
+      kind: 'approval_required',
       authorityRef: 'authority:schema-regression',
     } as const
     const control = {
-      invocationRef: 'invocation:schema-regression:current',
-      invocationVersion: 1,
+      executionRef: 'execution:schema-regression:current',
+      executionVersion: 1,
       origin: {
         kind: 'standalone',
         callerRef: 'caller:schema-regression',
@@ -640,8 +753,8 @@ describe('Convex schema', () => {
       acceptedAuthority,
     } as const
     const currentControl = {
-      invocationRef: control.invocationRef,
-      invocationVersion: 1,
+      executionRef: control.executionRef,
+      executionVersion: 1,
       control,
       sourceRef: 'source:schema-regression:current',
       authorityReference: 'authority:schema-regression',
@@ -651,35 +764,35 @@ describe('Convex schema', () => {
     const { acceptedAuthority: removedAuthority, ...legacyInnerControl } = control
     const legacyControl = {
       ...currentControl,
-      invocationRef: 'invocation:schema-regression:legacy',
+      executionRef: 'execution:schema-regression:legacy',
       control: {
         ...legacyInnerControl,
-        invocationRef: 'invocation:schema-regression:legacy',
+        executionRef: 'execution:schema-regression:legacy',
       },
       acceptedAuthority: removedAuthority,
     } as const
     const malformedGatheringControl = {
       ...currentControl,
-      invocationRef: 'invocation:schema-regression:malformed-gathering',
+      executionRef: 'execution:schema-regression:malformed-gathering',
       control: {
         ...currentControl.control,
-        invocationRef: 'invocation:schema-regression:malformed-gathering',
+        executionRef: 'execution:schema-regression:malformed-gathering',
         control: { state: 'gathering_information', missingFields: 'convert' },
       },
     } as const
 
     await expect(backend.run(async (ctx) => (
-      ctx.db.insert('actionInvocationControls', legacyControl as never)
+      ctx.db.insert('actionExecutionControls', legacyControl as never)
     ))).rejects.toThrow()
     await expect(backend.run(async (ctx) => (
-      ctx.db.insert('actionInvocationControls', malformedGatheringControl as never)
+      ctx.db.insert('actionExecutionControls', malformedGatheringControl as never)
     ))).rejects.toThrow()
 
     await backend.run(async (ctx) => {
-      await ctx.db.insert('actionInvocationControls', currentControl)
+      await ctx.db.insert('actionExecutionControls', currentControl)
     })
     const row = await backend.run(async (ctx) => (
-      ctx.db.query('actionInvocationControls').unique()
+      ctx.db.query('actionExecutionControls').unique()
     ))
     expect(row).toEqual(expect.objectContaining({
       control: expect.objectContaining({ acceptedAuthority }),

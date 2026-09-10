@@ -2,22 +2,33 @@ import type { ReactNode } from 'react'
 
 import { AePublicPage } from '@/components/ae/layout/AePublicPage'
 import { Skeleton } from '@/components/ui/skeleton'
+import {
+  getAeUiStatePresentation,
+  type AeUiState,
+  type AeUiStateTone,
+} from '@/lib/ui/ui-state'
 
-type AePageStateTone = 'neutral' | 'warning' | 'danger'
-
-type AePageStateProps = {
+type AePageStateProps = ({
+  state: AeUiState
+  title?: string
+  description?: string
+} | {
+  state?: never
   title: string
   description: string
-  tone?: AePageStateTone
+}) & {
+  tone?: AeUiStateTone
   action?: ReactNode
 }
 
-function pageStateEyebrow(tone: AePageStateTone): string | undefined {
+function pageStateEyebrow(tone: AeUiStateTone): string | undefined {
   switch (tone) {
     case 'danger':
       return 'Error'
     case 'warning':
       return 'Notice'
+    case 'positive':
+      return 'Complete'
     case 'neutral':
       return undefined
     default: {
@@ -32,15 +43,23 @@ function pageStateEyebrow(tone: AePageStateTone): string | undefined {
  * public surfaces. The title is a real `<h1>` and the container carries the
  * semantic role (`status` for empty/unavailable, `alert` for failures).
  */
-export function AePageState({ title, description, tone = 'neutral', action }: AePageStateProps) {
-  const eyebrow = pageStateEyebrow(tone)
+export function AePageState({ state, title, description, tone, action }: AePageStateProps) {
+  const presentation = state === undefined ? undefined : getAeUiStatePresentation(state)
+  const resolvedTitle = title ?? presentation?.title
+  const resolvedDescription = description ?? presentation?.description
+  const resolvedTone = tone ?? presentation?.tone ?? 'neutral'
+  const role = presentation?.role ?? (resolvedTone === 'danger' ? 'alert' : 'status')
+  if (resolvedTitle === undefined || resolvedDescription === undefined) {
+    throw new Error('ae_page_state_copy_required')
+  }
+  const eyebrow = pageStateEyebrow(resolvedTone)
 
   return (
     <AePublicPage
       kind="tool"
-      title={title}
-      description={description}
-      introRole={tone === 'danger' ? 'alert' : 'status'}
+      title={resolvedTitle}
+      description={resolvedDescription}
+      introRole={role}
       {...(eyebrow === undefined ? {} : { eyebrow })}
       {...(action === undefined ? {} : { actions: action })}
     />
@@ -52,7 +71,7 @@ type AePageSkeletonProps = {
   description?: string
   /**
    * Content shape of the skeleton. Defaults to a list of three rows, which is
-   * the dominant public pattern (catalogue rows, supplier listings, results).
+   * the dominant public pattern (catalogue rows, provider listings, results).
    */
   shape?: 'list' | 'detail' | 'market'
 }

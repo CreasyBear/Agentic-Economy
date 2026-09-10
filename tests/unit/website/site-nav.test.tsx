@@ -34,12 +34,12 @@ describe('Twenty-style public nav', () => {
     render(<AeSitePrimaryNav />)
 
     const nav = screen.getByRole('navigation', { name: 'Primary' })
-    expect(within(nav).getByRole('link', { name: 'Ask' }).getAttribute('href')).toBe('/t/new')
     expect(within(nav).getByRole('link', { name: 'Discover' }).getAttribute('href')).toBe('/market?window=30d')
-    expect(within(nav).getByRole('link', { name: 'Connections' }).getAttribute('href')).toBe('/for-agents')
-    expect(within(nav).getByRole('link', { name: 'Activity' }).getAttribute('href')).toBe('/activity')
+    expect(within(nav).getByRole('link', { name: 'For agents' }).getAttribute('href')).toBe('/for-agents')
+    expect(within(nav).getByRole('link', { name: 'For Providers' }).getAttribute('href')).toBe('/for-providers')
+    expect(within(nav).getByRole('link', { name: 'Calls' }).getAttribute('href')).toBe('/activity')
     expect(within(nav).getByRole('link', { name: 'Discover' }).getAttribute('aria-current')).toBe('page')
-    expect(within(nav).getByRole('link', { name: 'Ask' }).getAttribute('aria-current')).toBeNull()
+    expect(within(nav).getByRole('link', { name: 'For agents' }).getAttribute('aria-current')).toBeNull()
     expect(nav.textContent).not.toMatch(/Product|Resources|Customers|Pricing/i)
   })
 
@@ -47,7 +47,7 @@ describe('Twenty-style public nav', () => {
     render(<AeSiteDrawerNav onNavigate={() => undefined} />)
 
     const nav = screen.getByRole('navigation', { name: 'Public navigation' })
-    expect(within(nav).getByRole('link', { name: 'Activity' })).toBeTruthy()
+    expect(within(nav).getByRole('link', { name: 'Calls' })).toBeTruthy()
     expect(within(nav).getAllByRole('link')).toHaveLength(4)
   })
 })

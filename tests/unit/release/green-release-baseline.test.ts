@@ -67,6 +67,31 @@ function listedVitestFiles(name: string): string[] {
 }
 
 describe('green release baseline', () => {
+  it('keeps local and Convex Node runtimes on the same project major', () => {
+    const manifest = JSON.parse(readFileSync(resolve(root, 'package.json'), 'utf8'))
+    const convex = JSON.parse(readFileSync(resolve(root, 'convex.json'), 'utf8'))
+    const major = readFileSync(resolve(root, '.nvmrc'), 'utf8').trim()
+    expect(major).toBe('22')
+    expect(manifest.engines.node).toBe(`${major}.x`)
+    expect(convex.node.nodeVersion).toBe(major)
+    expect(manifest.packageManager).toBe('npm@11.5.1')
+  })
+
+  it('runs a guarded command on Node 22 and preserves its exit status', () => {
+    const result = spawnSync(process.execPath, [
+      'tools/dev/require-supported-node.mjs', '--', 'node', '-e',
+      'console.log(process.versions.node); process.exit(17)',
+    ], { cwd: root, encoding: 'utf8' })
+    if (process.versions.node.startsWith('22.')) {
+      expect(result.stdout.trim()).toBe(process.versions.node)
+      expect(result.status).toBe(17)
+    } else {
+      expect(result.status).toBe(1)
+      expect(result.stdout).toBe('')
+      expect(result.stderr).toContain('this project requires Node 22')
+    }
+  })
+
   it('fails closed when an explicit conformance test path is missing', () => {
     for (const scriptName of ['test:conformance', 'test:chat:conformance']) {
       const files = listedVitestFiles(scriptName)
@@ -77,12 +102,12 @@ describe('green release baseline', () => {
     }
 
     const generalConformance = scripts['test:conformance']!
-    expect(generalConformance).toContain('tests/unit/capability-execution/operation-invoke-admit.test.ts')
-    expect(generalConformance).not.toContain('published-operation-provider-conformance.test.ts')
+    expect(generalConformance).toContain('tests/unit/capability-execution/call-admit.test.ts')
+    expect(generalConformance).not.toContain('published-tool-provider-conformance.test.ts')
     expect(generalConformance).not.toContain('provider-conformance-evidence.test.ts')
 
     const chatConformance = scripts['test:chat:conformance']!
-    expect(chatConformance).toContain('tests/unit/chat/operation-chat-agent-tools.test.ts')
+    expect(chatConformance).toContain('tests/unit/chat/chat-agent-tools.test.ts')
     expect(chatConformance).not.toContain('tests/unit/chat/operation-chat-execute.test.ts')
     expect(chatConformance).not.toContain('tests/unit/capability-execution/operation-execute.test.ts')
     expect(chatConformance).toContain(' -- --no-file-parallelism')
@@ -98,8 +123,8 @@ describe('green release baseline', () => {
     expect(`${preflight.stdout}\n${preflight.stderr}`).not.toContain('RUN  v')
   })
 
-  it('executes every required source sub-gate through gate:release', () => {
-    const chain = releaseCommandChain('gate:release')
+  it('executes every required source sub-gate through gate', () => {
+    const chain = releaseCommandChain('gate')
     expect(releaseCommandChain('test:release:source')).toContain('npm run verify:deployment-manifest -- --environment development')
     for (const subGate of [
       'test:conformance',
@@ -120,11 +145,12 @@ describe('green release baseline', () => {
       'test:cli-package',
       'build',
     ]) {
-      expect(chain, `gate:release must execute ${subGate}`).toContain(`npm run ${subGate}`)
+      expect(chain, `gate must execute ${subGate}`).toContain(`npm run ${subGate}`)
     }
     const sourceScript = scripts['test:release:source']!
     const orderedSourceGates = [
       'verify:deployment-manifest',
+      'env:example:check',
       'test:conformance',
       'test:chat:conformance',
       'verify:convex-generated:anonymous',
@@ -139,6 +165,10 @@ describe('green release baseline', () => {
     const nodeGuard = 'node tools/dev/require-supported-node.mjs --'
     expect(scripts['generate:convex']).toBe(`${nodeGuard} convex codegen --typecheck=disable`)
     expect(scripts['check:convex-codegen']).toBe(`${nodeGuard} convex codegen --dry-run --typecheck=disable`)
+    expect(scripts['gate']).toBe(`${nodeGuard} npm run test:release:source`)
+    expect(scripts['dev:local']).toBe(`${nodeGuard} node tools/dev/local-dev.mjs`)
+    expect(scripts['test:all']).toBeUndefined()
+    expect(scripts['gate:release']).toBeUndefined()
     expect(scripts['verify:convex-generated:anonymous']).toBe(
       'tsx tools/release/verify-convex-generated-anonymous.ts',
     )
@@ -147,6 +177,15 @@ describe('green release baseline', () => {
       'utf8',
     )
     expect(anonymousCodegenProof).toContain("CONVEX_AGENT_MODE: 'anonymous'")
+    expect(anonymousCodegenProof).toContain("npm_config_audit: 'false'")
+    expect(anonymousCodegenProof).toContain("npm_config_fund: 'false'")
+    expect(anonymousCodegenProof).toContain("npm_config_cache: resolve(isolatedRoot, '.npm-cache')")
+    expect(anonymousCodegenProof).toContain("npm_config_prefer_offline: 'true'")
+    expect(anonymousCodegenProof).toContain("npm_config_fetch_retries: '2'")
+    expect(anonymousCodegenProof).toContain("npm_config_fetch_timeout: '30000'")
+    expect(anonymousCodegenProof).toContain("npm_config_update_notifier: 'false'")
+    expect(anonymousCodegenProof).toContain("npm_config_userconfig: resolve(isolatedRoot, '.npmrc')")
+    expect(anonymousCodegenProof).not.toContain("npm_config_offline: 'true'")
     expect(anonymousCodegenProof).not.toContain('...process.env')
     expect(anonymousCodegenProof).not.toMatch(/CONVEX_DEPLOYMENT|CONVEX_DEPLOY_KEY|CONVEX_SELF_HOSTED/u)
     expect(anonymousCodegenProof).toContain("rmSync(resolve(isolatedRoot, generatedDirectory, name))")
@@ -155,10 +194,12 @@ describe('green release baseline', () => {
       'tsx tools/release/verify-release-integrity.ts -- npm run build',
     )
     expect(scripts['smoke:chat:staging']).toBe(
-      'node tools/dev/run-with-cleanup.mjs playwright test --config=playwright.chat-staging.config.ts',
+      'node tools/dev/run-with-cleanup.mjs playwright test --config=tests/config/playwright.chat-staging.config.ts',
     )
     expect(scripts['test:release:source:after-codegen']).toContain('npm run test:e2e')
     expect(scripts['test:release:source:after-codegen']).toContain('npm run test:e2e:a11y')
+    expect(scripts['test:release:source:after-codegen']).not.toContain('test:e2e:authenticated')
+    expect(scripts['test:release:authenticated']).toBe('npm run test:e2e:authenticated:required')
     expect(scripts['test:e2e']).toBe('node tools/dev/run-with-cleanup.mjs playwright test tests/e2e')
     expect(scripts['test:e2e']).not.toMatch(/--grep|testMatch|ignore|\.spec\.ts/u)
     for (const staleFile of [
@@ -200,8 +241,17 @@ describe('green release baseline', () => {
     const sourceGate = source?.steps?.find((step) => step.name === 'Run source release contract without deployment credentials')
     expect(sourceGate?.run).toBe('npm run test:release:source:after-codegen')
     expect(sourceGate?.env).toBeUndefined()
-    const chatGate = source?.steps?.find((step) => step.name === 'Run deterministic operation chat conformance')
+    const chatGate = source?.steps?.find((step) => step.name === 'Run deterministic Tool chat conformance')
     expect(chatGate?.run).toBe('npm run test:chat:conformance')
+
+    const authenticated = workflow.jobs?.['authenticated-platform-proof']
+    expect(authenticated?.if).toBe("github.event_name == 'workflow_dispatch'")
+    expect(authenticated?.environment).toBe('staging')
+    expect(authenticated?.steps?.find((step) => step.name === 'Prove the authenticated two-agent lifecycle')?.run)
+      .toBe('npm run test:release:authenticated')
+    expect(JSON.stringify(authenticated?.steps?.find((step) => step.name === 'Prove the authenticated two-agent lifecycle')?.env ?? {}))
+      .toContain('AE_AUTHENTICATED_E2E_CLERK_SECRET_KEY')
+    expect(authenticated?.env?.AE_RELEASE_SOURCE_REVISION).toBe('${{ github.sha }}')
 
     const uploads = steps.filter((step) => step.uses?.startsWith('actions/upload-artifact@'))
     for (const upload of uploads) {
@@ -213,6 +263,9 @@ describe('green release baseline', () => {
       } else if (artifactName.includes('chat-staging-smoke')) {
         expect(upload.if).toBe('always()')
         expect(upload.with?.path).toBe('output/release/playwright-chat-staging-smoke.json')
+      } else if (artifactName.includes('fresh-checkout-proof')) {
+        expect(upload.if).toBe('always()')
+        expect(upload.with?.path).toBe('output/fresh-checkout/')
       } else {
         expect(upload.if).toBe('always()')
         expect(artifactName).toContain('source-release-gate')
@@ -251,7 +304,6 @@ describe('green release baseline', () => {
     expect(staging?.env).toMatchObject({
       PLAYWRIGHT_BASE_URL: '${{ vars.AE_CHAT_STAGING_BASE_URL }}',
       AE_RELEASE_SOURCE_REVISION: '${{ github.sha }}',
-      VERCEL_AUTOMATION_BYPASS_SECRET: '${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}',
     })
 
     const stagingConfig = JSON.stringify(staging ?? {})
@@ -273,7 +325,9 @@ describe('green release baseline', () => {
 
     const smoke = staging?.steps?.find((step) => step.name === 'Run the exact-revision chat staging smoke')
     expect(smoke?.run).toBe('npm run smoke:chat:staging')
-    expect(smoke?.env).toBeUndefined()
+    expect(smoke?.env).toEqual({
+      VERCEL_AUTOMATION_BYPASS_SECRET: '${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}',
+    })
     const upload = staging?.steps?.find((step) => step.name === 'Upload only the sanitized chat staging result')
     expect(upload?.if).toBe('always()')
     expect(upload?.with).toMatchObject({
@@ -306,6 +360,7 @@ describe('green release baseline', () => {
     const liveEnvironment = workflow.jobs?.['live-gateway-proof']?.env ?? {}
     const requiredNames = DEPLOYMENT_MANIFEST.configuration.requiredProduction
       .flatMap(({ names }) => names)
+      .concat(DEPLOYMENT_MANIFEST.configuration.controlledPackage5.flatMap(({ names }) => names))
 
     expect(Object.keys(liveEnvironment)).toEqual(expect.arrayContaining(requiredNames))
     expect(liveEnvironment).toMatchObject({
@@ -314,6 +369,7 @@ describe('green release baseline', () => {
       AE_X402_CDP_EXPECTED_EVM_ADDRESS: '${{ secrets.AE_X402_CDP_EXPECTED_EVM_ADDRESS }}',
       AE_X402_CDP_ACCOUNT_POLICY_ID: '${{ secrets.AE_X402_CDP_ACCOUNT_POLICY_ID }}',
       AE_X402_CDP_PROJECT_POLICY_ID: '${{ secrets.AE_X402_CDP_PROJECT_POLICY_ID }}',
+      AE_X402_CDP_POLICY_RULES_DIGEST: '${{ secrets.AE_X402_CDP_POLICY_RULES_DIGEST }}',
       AE_X402_CDP_CREDENTIAL_GENERATION: '${{ secrets.AE_X402_CDP_CREDENTIAL_GENERATION }}',
       AE_X402_CUSTODY_DAILY_MAX_ATOMIC: '${{ secrets.AE_X402_CUSTODY_DAILY_MAX_ATOMIC }}',
     })
@@ -398,6 +454,73 @@ describe('green release baseline', () => {
     expect(live?.env?.AE_X402_CUSTODY_ENABLED).toBe('true')
     expect(live?.env?.AE_X402_CUSTODY_MAX_ATOMIC).toBe('${{ secrets.AE_X402_CUSTODY_MAX_ATOMIC }}')
     expect(live?.env?.AE_X402_RPC_URLS_JSON).toBe('${{ secrets.AE_X402_RPC_URLS_JSON }}')
+  })
+
+  it('proves a fresh checkout reaches a sellable local sandbox without secrets', () => {
+    const workflow = readWorkflow('.github/workflows/kernel-release-gate.yml')
+    const events = workflow.on ?? {}
+    const fresh = workflow.jobs?.['fresh-checkout-proof']
+    expect(fresh).toBeDefined()
+    expect(fresh?.if).toBeUndefined()
+    expect(fresh?.needs).toEqual([])
+    expect(fresh?.['timeout-minutes']).toBe(30)
+
+    const freshConfig = JSON.stringify(fresh ?? {})
+    expect(freshConfig).not.toContain('secrets.')
+
+    const source = workflow.jobs?.['source-proof']
+    // Same triggers as source-proof: neither job gates on an `if`, both run
+    // for every event this workflow listens for.
+    expect(source?.if).toBeUndefined()
+    expect(events).toHaveProperty('pull_request')
+    expect(events).toHaveProperty('merge_group')
+    expect(events.push).toEqual({ branches: ['main'] })
+
+    const start = fresh?.steps?.find((step) => step.name === 'Start local stack (anonymous)')
+    expect(start?.env).toMatchObject({
+      CONVEX_AGENT_MODE: 'anonymous',
+      CLERK_JWT_ISSUER_DOMAIN: 'https://release-proof.invalid',
+      CI: 'true',
+    })
+    expect(start?.run).toContain('npm run dev:local -- --skip-scan --no-doctor')
+    expect(start?.run).toContain('output/fresh-checkout/dev-local.log')
+    expect(start?.run).toContain('http://127.0.0.1:3024/api/ready')
+    expect(start?.run).toContain('DEV_LOCAL_PID=$!')
+    expect(start?.run).toContain('GITHUB_ENV')
+
+    const connect = fresh?.steps?.find((step) => step.name === 'Bind explicit test authority')
+    expect(connect?.run).toBe('npm run --silent connect:local -- --base-url http://127.0.0.1:3024 --json')
+    // The step must fail the job when the connect driver does not reach
+    // `kind: 'connected'` — no best-effort fallback that lets quoting run
+    // unauthenticated.
+    expect(connect?.run).not.toContain('|| true')
+    expect((connect as { 'continue-on-error'?: boolean } | undefined)?.['continue-on-error']).toBeUndefined()
+
+    const doctor = fresh?.steps?.find((step) => step.name === 'Doctor')
+    expect(doctor?.run).toContain('npm run --silent ae -- doctor --json --base-url http://127.0.0.1:3024 > output/fresh-checkout/doctor.json')
+    expect(doctor?.run).toContain('groups.discovery !== "pass"')
+    expect(doctor?.run).toContain('find((c) => c.id === "quote")')
+    expect(doctor?.run).toContain('!quote')
+    expect(doctor?.run).toContain('loopback_readiness_unprovable')
+    expect(doctor?.run).toContain('catalogue_absent')
+    expect(doctor?.run).toContain('market_requests')
+
+    const upload = fresh?.steps?.find((step) => step.name === 'Upload the fresh-checkout evidence')
+    expect(upload?.if).toBe('always()')
+    expect(upload?.with).toMatchObject({
+      path: 'output/fresh-checkout/',
+      'if-no-files-found': 'error',
+    })
+    expect(upload?.with?.name).toContain('${{ github.sha }}')
+    expect(upload?.with?.name).toContain('${{ github.run_id }}')
+
+    const stop = fresh?.steps?.find((step) => step.name === 'Stop local stack')
+    expect(stop?.if).toBe('always()')
+    expect(stop?.run).toContain('DEV_LOCAL_PID')
+
+    const cache = fresh?.steps?.find((step) => step.uses?.startsWith('actions/cache@'))
+    expect(cache?.with?.path).toBe('~/.cache/convex/binaries')
+    expect(cache?.with?.key).toContain('convex-backend-version.outputs.version')
   })
 
   it('keeps React Doctor explicitly advisory', () => {

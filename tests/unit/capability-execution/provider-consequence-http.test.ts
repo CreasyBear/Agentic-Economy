@@ -47,8 +47,8 @@ function path(reference: unknown) {
 function authority() {
   return {
     kind: 'authorized' as const,
-    invocationRef: 'invocation:canonical',
-    operationRef: 'operation:canonical',
+    callRef: 'call:canonical',
+    toolRef: 'tool:canonical',
     attemptRef: 'attempt:canonical',
     effectGeneration: 3,
     credentialRef: `sec_${'1'.repeat(32)}`,
@@ -190,63 +190,14 @@ describe('provider consequence Convex HTTP callbacks', () => {
     }
   })
 
-  it('canonicalizes provider-direct reserve identity and strips every caller custody field', async () => {
-    const calls: Array<{ path: string; args: Record<string, unknown> }> = []
-    const runMutation = vi.fn(async (reference: unknown, args: Record<string, unknown>) => {
-      calls.push({ path: path(reference), args })
-      if (calls.length === 1) return authority()
-      return { kind: 'accepted', status: 'reserved' }
-    })
-    const supplied = {
-      principalId: 'attacker',
-      credentialId: 'attacker',
-      grantRef: 'grant:attacker',
-      grantGeneration: 999,
-      environment: 'production',
-      invocationRef: 'invocation:attacker',
-      operationRef: 'operation:attacker',
-      attemptRef: 'attempt:attacker',
-      effectGeneration: 999,
-      providerRef: 'provider:attacker',
-      paymentIdentifier: DIGEST('4'),
-      challengeDigest: DIGEST('5'),
-      amount: { currency: 'USD', units: '125', exponent: 2 },
-      custodyRef: 'wallet:attacker',
-      custodyGeneration: 99,
-      custodyDailyMaximum: { currency: 'USD', units: '999999', exponent: 2 },
-      observedAt: 1,
-    }
-
+  it('rejects the retired external-spend reservation operation before authority work', async () => {
+    const runMutation = vi.fn()
     const response = await x402({ runMutation, runQuery: vi.fn() } as unknown as ActionCtx, request({
-      ticketRef: 'ticket:test',
-      operation: 'reserve_external_spend',
-      args: supplied,
+      ticketRef: 'ticket:test', operation: 'reserve_external_spend', args: {},
     }))
 
-    expect(response.status).toBe(200)
-    expect(calls[0]?.path).toBe(
-      'capabilityProviderConsequenceJournal:authorizeProviderConsequenceX402Rpc',
-    )
-    expect(calls[0]?.args.args).toEqual(supplied)
-    expect(calls[1]).toEqual({
-      path: 'moneyLedger:reserveExternalInvocationSpend',
-      args: expect.objectContaining({
-        principalId: authority().principalId,
-        credentialId: authority().credentialId,
-        grantRef: authority().grantRef,
-        grantGeneration: authority().grantGeneration,
-        environment: 'sandbox',
-        invocationRef: authority().invocationRef,
-        operationRef: authority().operationRef,
-        attemptRef: authority().attemptRef,
-        effectGeneration: authority().effectGeneration,
-        providerRef: authority().providerRef,
-        paymentIdentifier: DIGEST('4'),
-      }),
-    })
-    expect(calls[1]?.args).not.toHaveProperty('custodyRef')
-    expect(calls[1]?.args).not.toHaveProperty('custodyGeneration')
-    expect(calls[1]?.args).not.toHaveProperty('custodyDailyMaximum')
+    expect(response.status).toBe(400)
+    expect(runMutation).not.toHaveBeenCalled()
   })
 
   it('canonicalizes prepared authorization provenance and removes managed-custody substitution', async () => {
@@ -281,7 +232,15 @@ describe('provider consequence Convex HTTP callbacks', () => {
       reservationRef: 'external-spend:test',
     }
 
-    const response = await x402({ runMutation, runQuery: vi.fn() } as unknown as ActionCtx, request({
+    const runQuery = vi.fn<(
+      reference: unknown,
+      args: Record<string, unknown>
+    ) => Promise<unknown>>(async () => ({
+      reservationRef: 'formance-aud:test',
+      treasuryReservationRef: 'formance-usdc:test',
+      state: 'reserved',
+    }))
+    const response = await x402({ runMutation, runQuery } as unknown as ActionCtx, request({
       ticketRef: 'ticket:test',
       operation: 'prepare_authorization',
       args: supplied,
@@ -289,18 +248,40 @@ describe('provider consequence Convex HTTP callbacks', () => {
 
     expect(response.status).toBe(200)
     expect(calls[1]?.args).toMatchObject({
-      dispatchRef: authority().invocationRef,
-      operationRef: authority().operationRef,
+      dispatchRef: authority().callRef,
+      toolRef: authority().toolRef,
       inputDigest: authority().inputDigest,
       attemptRef: authority().attemptRef,
       effectGeneration: authority().effectGeneration,
       credentialRef: authority().credentialRef,
-      reservationRef: 'external-spend:test',
+      reservationRef: 'formance-usdc:test',
     })
+    expect(path(runQuery.mock.calls[0]?.[0])).toBe('moneyManagedCallLifecycle:readReservation')
+    expect(runQuery.mock.calls[0]?.[1]).toEqual({ callRef: authority().callRef })
     expect(calls[1]?.args).not.toHaveProperty('custodyBudgetRef')
     expect(calls[1]?.args).not.toHaveProperty('custodyGeneration')
     expect(calls[1]?.args).not.toHaveProperty('custodyDailyMaximumUnits')
+    expect(calls[1]?.args).not.toHaveProperty('operationRef')
   })
+
+  it.each([null, { reservationRef: 'formance-aud:test', state: 'released' }])(
+    'fails closed when the managed Call reservation is not active: %j',
+    async (reservation) => {
+      const runMutation = vi.fn(async () => authority())
+      const response = await x402({
+        runMutation,
+        runQuery: vi.fn(async () => reservation),
+      } as unknown as ActionCtx, request({
+        ticketRef: 'ticket:test',
+        operation: 'prepare_authorization',
+        args: {},
+      }))
+
+      expect(response.status).toBe(200)
+      await expect(response.json()).resolves.toEqual({ kind: 'result', value: null })
+      expect(runMutation).toHaveBeenCalledOnce()
+    },
+  )
 
   it('denies non-allowlisted operations and does not cross a denied journal authorization', async () => {
     const runMutation = vi.fn(async () => ({ kind: 'unavailable' }))

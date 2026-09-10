@@ -147,7 +147,7 @@ export function createLocalE2ePublicSourceTransport(
           return sourceSuccess(await registry.detail(
             args as Parameters<PublicRegistrySourcePort['detail']>[0],
           ))
-        case 'capabilitySupplyOperations:offeringOperationMap':
+        case 'capabilitySupplyTools:offeringToolMap':
           return sourceSuccess([])
         default:
           throw new Error(`local_registry_source_function_unconfigured:${payload.path}`)

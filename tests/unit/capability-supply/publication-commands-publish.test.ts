@@ -6,12 +6,12 @@ import {
   type PreparedPublicationMaterial,
 } from '@/modules/capability-supply/internal/publication'
 import { publicationSourceDigest } from '@/modules/capability-supply/internal/publication/source'
-import type { OperationKeyRecord } from '@/modules/capability-supply/internal/operation-ledger'
+import type { OperationKeyRecord } from '@/modules/capability-supply/internal/tool-ledger'
 import { stableStringify, type StableHashValue } from '@/modules/common/stable-hash'
 import {
-  capabilityOperationId,
+  capabilityToolId,
   capabilityPublicationProvenanceDigest,
-  createPublicOperationRef,
+  createPublicToolRef,
 } from '@/modules/capability-supply/public'
 import * as publicationImporters from '@/modules/capability-supply/internal/publication-importers'
 
@@ -22,6 +22,7 @@ import {
   encodedFor,
   preparedPublication,
   preparedWithSourceAdapter,
+  publicationFixture,
 } from './publication-commands-harness'
 
 describe('capability-supply publication commands publish', () => {
@@ -232,11 +233,34 @@ describe('capability-supply publication commands publish', () => {
     expect(result).toEqual({ kind: 'refused', reason: 'contract_identity_conflict' })
   })
 
+  it('refuses a second Provider-owned Business claiming the same canonical source route', async () => {
+    const prepared = await preparedPublication()
+    const fixture = await publicationFixture()
+    const result = await publishPreparedCapabilityCommand({
+      businessId: 'business-2',
+      prepared,
+      ...context,
+      actor,
+      now: 10,
+    }, emptyPorts({
+      loadCurrentPublicationsBySourceRoute: async (sourceRouteRef) => [{
+        ...fixture.publication,
+        businessId: 'business-1',
+        publicationRef: 'publication:existing-owner',
+        sourceRouteRef,
+        authorityMode: 'provider_owned',
+        disposition: 'current',
+      }],
+    }))
+
+    expect(result).toEqual({ kind: 'refused', reason: 'source_route_conflict' })
+  })
+
   it('replays prepared publish through the operation ledger', async () => {
     const prepared = await preparedPublication()
     const encoded = encodedFor()
-    const operationRef = createPublicOperationRef({
-      operationId: capabilityOperationId(encoded.contract.ref.capabilityId),
+    const toolRef = createPublicToolRef({
+      operationId: capabilityToolId(encoded.contract.ref.capabilityId),
       publicationRef: 'offering:demo:lookup',
       publicationRevision: 1,
       contractRef: encoded.contract.ref,
@@ -244,7 +268,7 @@ describe('capability-supply publication commands publish', () => {
     const expected = {
       publicationRef: 'offering:demo:lookup',
       publicationRevision: 1,
-      operationRef,
+      toolRef,
       contractRef: encoded.contract.ref,
       offeringId: 'offering:demo:lookup',
       bindingId: 'binding:demo:http',

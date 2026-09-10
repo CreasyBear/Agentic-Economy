@@ -187,14 +187,10 @@ function readDeploymentConfig(env: StringEnvironment, nodeMajor?: number): Deplo
   }
   if (mode === 'production') {
     const canonical = readTrimmedEnv(env, 'AE_CANONICAL_BASE_URL')
-    const hostAllowlist = readTrimmedEnv(env, 'AE_CANONICAL_HOST_ALLOWLIST')
-    if (canonical === undefined && hostAllowlist === undefined) {
+    if (canonical === undefined) {
       return { kind: 'failed', code: 'canonical_url_missing' }
     }
     if (canonical !== undefined && readHttpUrl(canonical) === undefined) {
-      return { kind: 'failed', code: 'canonical_url_invalid' }
-    }
-    if (hostAllowlist !== undefined && !hostAllowlist.split(',').some((host) => readAllowlistedHost(host) !== undefined)) {
       return { kind: 'failed', code: 'canonical_url_invalid' }
     }
   }
@@ -263,13 +259,4 @@ function readHttpUrl(value: string): URL | undefined {
   } catch {
     return undefined
   }
-}
-
-function readAllowlistedHost(value: string): string | undefined {
-  const trimmed = value.trim()
-  if (trimmed.length === 0) return undefined
-  const asUrl = readHttpUrl(trimmed)
-  if (asUrl !== undefined) return asUrl.host
-  if (trimmed.includes('/') || trimmed.includes('?') || trimmed.includes('#')) return undefined
-  return trimmed
 }

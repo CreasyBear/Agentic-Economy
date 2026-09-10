@@ -6,8 +6,9 @@ import { describe, expect, it } from 'vitest'
 import {
   formatOperatorNavBadge,
   isOperatorPathActive,
-  listOperatorCommandDestinations,
+  navGroupsForContext,
   navGroupsForRole,
+  ownerWorkspaceOwnerForPath,
   operatorUtilityItemsForRole,
   resolveOperatorNavItem,
   roleHomeHref,
@@ -63,28 +64,7 @@ describe('operator navigation', () => {
   })
 
   it.each(operatorRoles)('sends a %s home to a real route', (role) => {
-    expect(routePaths.has(roleHomeHref[role])).toBe(true)
-  })
-
-  it.each(operatorRoles)('offers a %s only destinations that exist', (role) => {
-    const advertised = listOperatorCommandDestinations(role)
-      .flatMap((group) => group.items.map((item) => item.href))
-
-    const missing = advertised.filter(
-      (href) => !routePaths.has(href) && !publicDestinations.has(href),
-    )
-    expect(missing, `command menu advertises routes that do not exist: ${missing.join(', ')}`)
-      .toEqual([])
-  })
-
-  it('offers the sidebar destinations plus catalog and public utilities', () => {
-    const sidebar = navGroupsForRole('owner')
-      .flatMap((group) => group.items.map((item) => item.href))
-    const utilities = operatorUtilityItemsForRole('owner').map((item) => item.href)
-    const command = listOperatorCommandDestinations('owner')
-      .flatMap((group) => group.items.map((item) => item.href))
-
-    expect(command).toEqual([...sidebar, ...utilities])
+    expect(routePaths.has(roleHomeHref[role]) || publicDestinations.has(roleHomeHref[role])).toBe(true)
   })
 
   it('keeps the gated owner sidebar to the core working set', () => {
@@ -92,14 +72,40 @@ describe('operator navigation', () => {
       .flatMap((group) => group.items.map((item) => item.label))
 
     expect(labels).toEqual([
-      'Operations',
       'Calls',
-      'Keys',
+      'Agents',
       'Credit',
-      'Supplier',
-      'Publish',
-      'Settings',
+      'Tools',
+      'Account & security',
     ])
+  })
+
+  it('assigns every compatibility entrance to one explicit workspace owner', () => {
+    expect(ownerWorkspaceOwnerForPath('/owner/offerings')).toBe('operations')
+    expect(ownerWorkspaceOwnerForPath('/owner/offerings/new')).toBe('operations')
+    expect(ownerWorkspaceOwnerForPath('/owner/supply')).toBe('operations')
+    expect(ownerWorkspaceOwnerForPath('/owner/supply/offering:one')).toBe('operations')
+    expect(ownerWorkspaceOwnerForPath('/owner/status')).toBe('operations')
+    expect(ownerWorkspaceOwnerForPath('/owner/settings/workspace')).toBe('operations')
+    expect(ownerWorkspaceOwnerForPath('/owner/settings/connections')).toBe('operations')
+    expect(ownerWorkspaceOwnerForPath('/owner/settings/payouts')).toBe('operations')
+    expect(ownerWorkspaceOwnerForPath('/owner/settings')).toBe('account')
+    expect(ownerWorkspaceOwnerForPath('/owner/settings/developers')).toBe('agent-setup')
+    expect(ownerWorkspaceOwnerForPath('/owner/settings/unknown')).toBeUndefined()
+  })
+
+  it('projects destinations only for surfaces authorized by operator context', () => {
+    const ownerContext = {
+      kind: 'authorized' as const,
+      userId: 'user_owner',
+      principalRef: 'prn_owner',
+      accountRef: 'acc_owner',
+      allowedSurfaces: ['owner', 'developer'] as const,
+    }
+
+    expect(navGroupsForContext(ownerContext, 'owner').flatMap((group) => group.items).length).toBeGreaterThan(0)
+    expect(navGroupsForContext(ownerContext, 'developer').flatMap((group) => group.items).length).toBeGreaterThan(0)
+    expect(navGroupsForContext(ownerContext, 'admin')).toEqual([])
   })
 
   /** Admin carries the most surfaces, so it is the role where an untiered item
@@ -118,15 +124,21 @@ describe('operator navigation', () => {
   })
 
   it('resolves the owning sidebar item for operator page headers', () => {
-    expect(resolveOperatorNavItem('owner', '/owner/offerings')?.label).toBe('Operations')
-    expect(resolveOperatorNavItem('owner', '/owner/settings/members')?.label).toBe('Settings')
+    expect(resolveOperatorNavItem('owner', '/owner/offerings')?.label).toBe('Tools')
+    expect(resolveOperatorNavItem('owner', '/owner/settings/connections')?.label).toBe('Tools')
+    expect(resolveOperatorNavItem('owner', '/owner/settings')?.label).toBe('Account & security')
+    expect(resolveOperatorNavItem('owner', '/owner/settings/unknown')).toBeUndefined()
     expect(resolveOperatorNavItem('owner', '/activity')?.label).toBe('Calls')
     expect(resolveOperatorNavItem('admin', '/admin/audit-events')?.label).toBe('Audit')
   })
 
   it('exposes public utility links for operator sidebar footers', () => {
-    expect(operatorUtilityItemsForRole('owner').map((item) => item.href))
-      .toEqual(['/market', '/', '/for-agents', '/privacy/remove-business'])
+    expect(operatorUtilityItemsForRole('owner').map((item) => [item.label, item.href]))
+      .toEqual([
+        ['Catalog', '/market'],
+        ['Agent setup', '/for-agents'],
+        ['Help', '/support'],
+      ])
   })
 
   it('keeps administration destinations exclusive to the admin role', () => {

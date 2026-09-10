@@ -6,6 +6,7 @@ import {
 } from '@/modules/capability-supply/owner-supply-validators'
 import type { Doc } from '../_generated/dataModel'
 import type { OwnerSupplyFunnelResult } from './contracts'
+import { projectProviderManagementStatus } from '@/modules/capability-supply/tool-health'
 
 type OwnerSupplyAvailable = Extract<
   OwnerSupplyFunnelResult,
@@ -32,15 +33,7 @@ export function ownerSupplyPricing(
     if (parsed.kind !== 'valid' || publication.priceDigest === undefined) {
       return undefined
     }
-    const config =
-      parsed.config.freeTier === undefined
-        ? {
-            version: parsed.config.version,
-            unit: parsed.config.unit,
-            paidAmount: parsed.config.paidAmount,
-          }
-        : { ...parsed.config, freeTier: parsed.config.freeTier }
-    return { config, priceDigest: publication.priceDigest }
+    return { config: parsed.config, priceDigest: publication.priceDigest }
   } catch {
     return undefined
   }
@@ -103,7 +96,7 @@ export function ownerSupplyPublicationDetails(input: Readonly<{
     ),
     publicationRef: publication.publicationRef,
     publicationRevision: publication.revision,
-    operationRef: publication.operationRef,
+    toolRef: publication.toolRef,
     authorityMode: ownerSupplyLiteral(
       publication.authorityMode,
       [
@@ -239,6 +232,28 @@ export function ownerSupplyActionableReason(input: Readonly<{
       : undefined)
 }
 
+function ownerProviderManagementStatus(
+  publication: Doc<'capabilityPublications'> | undefined,
+  actionableReason: OwnerSupplyActionableReason,
+  now: number,
+) {
+  const publicationFacts = publication === undefined ? {} : {
+    disposition: publication.disposition,
+    credentialState: publication.credentialState,
+    healthState: publication.healthState,
+    ...(publication.readinessObservedAt === undefined ? {} : { readinessObservedAt: publication.readinessObservedAt }),
+    ...(publication.readinessValidUntil === undefined ? {} : { readinessValidUntil: publication.readinessValidUntil }),
+    ...(publication.readinessLastHealthyAt === undefined ? {} : { readinessLastHealthyAt: publication.readinessLastHealthyAt }),
+  }
+  return projectProviderManagementStatus({
+    ...publicationFacts,
+    ownerActionRequired: actionableReason === 'credential_rejected'
+      || actionableReason === 'credential_unavailable'
+      || actionableReason === 'authority_stale',
+    authorityReviewRequired: publication?.sourceAuthorityState === 'review_required',
+  }, now)
+}
+
 export function ownerSupplyOfferingResult(input: Readonly<{
   offering: Doc<'businessOfferings'>
   revision: Doc<'businessOfferingRevisions'> | undefined
@@ -255,6 +270,7 @@ export function ownerSupplyOfferingResult(input: Readonly<{
   stepStates: OwnerSupplyStepStates
   actionableReason: OwnerSupplyOffering['actionableReason']
   sourceMaterial: NonNullable<OwnerSupplyOffering['sourceMaterial']> | undefined
+  now: number
 }>): OwnerSupplyOffering {
   const {
     offering,
@@ -272,6 +288,7 @@ export function ownerSupplyOfferingResult(input: Readonly<{
     stepStates,
     actionableReason,
     sourceMaterial,
+    now,
   } = input
   const sourceHash = revision?.sourceHash
   const source = publicationDetails?.source
@@ -285,6 +302,7 @@ export function ownerSupplyOfferingResult(input: Readonly<{
       ['draft', 'published', 'paused', 'retired'] as const,
       'offering status',
     ),
+    managementStatus: ownerProviderManagementStatus(publication, actionableReason, now),
     ...(sourceHash === undefined ? {} : { sourceHash }),
     ...(sourceMaterial === undefined ? {} : { sourceMaterial }),
     ...(source === undefined ? {} : { source }),
@@ -300,7 +318,7 @@ export function ownerSupplyOfferingResult(input: Readonly<{
     ...(publication === undefined
       ? {}
       : {
-          operationRef: publication.operationRef,
+          toolRef: publication.toolRef,
           publicationRef: publication.publicationRef,
         }),
     ...(publicationDetails === undefined ? {} : { publication: publicationDetails }),

@@ -2,6 +2,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import { Agent, fetch as guardedFetch } from 'undici'
 
 import { methodNotAllowed } from '@/lib/server/method-guard'
+import { response as noStore } from '@/lib/server/no-store-response'
 import { readTrimmedEnv, type StringEnvironment } from '@/lib/server/read-trimmed-env'
 import {
   type RouteTransportFetch,
@@ -93,10 +94,6 @@ export const Route = createFileRoute('/api/internal/provider-consequence')({
     },
   },
 })
-
-function noStore(body: unknown, status: number): Response {
-  return Response.json(body, { status, headers: { 'Cache-Control': 'no-store' } })
-}
 
 function exactKeys(value: Record<string, unknown>, expected: readonly string[]): boolean {
   const keys = Object.keys(value)
@@ -361,10 +358,10 @@ function x402RuntimeFactory(
       )
       if (!isRecord(value)
         || value.state !== 'prepared'
-        || value.dispatchRef !== ticket.invocationRef
+        || value.dispatchRef !== ticket.callRef
         || value.attemptRef !== authority.attemptRef
         || value.effectGeneration !== authority.effectGeneration
-        || value.operationRef !== ticket.operationRef
+        || value.toolRef !== ticket.toolRef
         || value.credentialRef !== credentialRef
         || typeof value.challengeJson !== 'string'
         || typeof value.selectedRequirementJson !== 'string'
@@ -425,12 +422,6 @@ function x402RuntimeFactory(
           || paymentRequest.effectGeneration !== authority.effectGeneration
           || paymentRequest.paymentIdentifier !== authority.operationKeyDigest
           || paymentRequest.credential !== credentialRef) return undefined
-        const reservation = await x402Rpc(request, origin, 'reserve_external_spend', {
-          paymentIdentifier: paymentRequest.paymentIdentifier,
-          challengeDigest: paymentRequest.challengeDigest,
-          amount: paymentRequest.paymentAmount,
-        })
-        if (!isRecord(reservation) || reservation.kind !== 'accepted' || !isRecord(reservation.reservation)) return undefined
         const prepared = await x402Rpc(request, origin, 'prepare_authorization', {
           paymentIdentifier: paymentRequest.paymentIdentifier,
           operationKeyDigest: authority.operationKeyDigest,
@@ -445,7 +436,6 @@ function x402RuntimeFactory(
           amountUnits: paymentRequest.paymentAmount.units,
           currency: paymentRequest.paymentAmount.currency,
           exponent: paymentRequest.paymentAmount.exponent,
-          reservationRef: reservation.reservation.reservationRef,
         })
         return isRecord(prepared)
           && typeof prepared.custodyRef === 'string'
@@ -466,12 +456,14 @@ function x402RuntimeFactory(
         const authorization = readX402PaymentPayerAndNonce(paymentSignature)
         if (authorization === undefined) return false
         return verifyExactEvmX402Settlement({
+          aeEnvironment: 'production',
           response: response as X402SettlementResponse,
           requirement,
           payer: authorization.payer,
           paymentNonce: authorization.nonce,
           receipt: await readX402EvmReceipt(
             requirement.network,
+            requirement.asset,
             response.transaction,
             dispatcher,
             'production',

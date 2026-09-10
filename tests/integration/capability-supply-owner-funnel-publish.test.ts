@@ -11,6 +11,7 @@ import {
   prepareOwnerPublicationCommand,
   seedCatalogOffering,
 } from './capability-supply-owner-funnel-harness'
+import { withSourceWrite } from '../helpers/source-write-admission'
 
 describe('owner capability publication admission', () => {
   it('refuses anonymous and wrong-owner admission without publication', async () => {
@@ -313,9 +314,11 @@ describe('owner capability publication admission', () => {
     })
     expect(readbackOffering.pricing).toEqual({
       config: {
-        version: 'pricing:v2',
-        unit: 'call',
-        paidAmount: { currency: 'AUD', units: '100', exponent: 2 },
+        version: 'pricing:v3',
+        kind: 'fixed_aud',
+        currency: 'AUD',
+        exponent: 6,
+        amountUnits: '1000000',
       },
       priceDigest: admitted.priceDigest,
     })
@@ -325,7 +328,7 @@ describe('owner capability publication admission', () => {
       state: 'current',
       publicationRef: admitted.publicationRef,
       publicationRevision: admitted.publicationRevision,
-      operationRef: admitted.operationRef,
+      toolRef: admitted.toolRef,
     })
     expect(readbackOffering.publication?.source).toEqual({
       kind: 'openapi_http',
@@ -335,9 +338,11 @@ describe('owner capability publication admission', () => {
     })
     expect(readbackOffering.publication?.pricing).toEqual({
       config: {
-        version: 'pricing:v2',
-        unit: 'call',
-        paidAmount: { currency: 'AUD', units: '100', exponent: 2 },
+        version: 'pricing:v3',
+        kind: 'fixed_aud',
+        currency: 'AUD',
+        exponent: 6,
+        amountUnits: '1000000',
       },
       priceDigest: admitted.priceDigest,
     })
@@ -345,6 +350,88 @@ describe('owner capability publication admission', () => {
       bindingId: admitted.bindingId,
       admission: 'admitted',
       conformance: 'conformant',
+    })
+  })
+
+  it('consumes one owner proof for one exact publication command', async () => {
+    const backend = convexTest(schema, modules)
+    const { businessId, owner } = await createPublishedBusinessOwner(
+      backend,
+      'owner-proof-binding',
+    )
+    const offeringRef = 'catalog-offering:owner-proof-binding'
+    const sourceHash = 'catalog-source:owner-proof-binding:v1'
+    await seedCatalogOffering(backend, businessId, offeringRef, 1, 1, sourceHash)
+    const origin = {
+      kind: 'catalog_offering' as const,
+      offeringRef,
+      offeringRevision: 1,
+      offeringSourceHash: sourceHash,
+    }
+    const prepared = await prepareOwnerPublicationCommand(
+      backend,
+      businessId,
+      offeringRef,
+      1,
+      sourceHash,
+      openApiSource('owner.proof.binding'),
+      'owner-proof-binding:publish',
+      origin,
+    )
+    if (prepared.kind === 'refused')
+      throw new Error(`owner_publication_prepare_failed:${prepared.reason}`)
+    const {
+      proof,
+      sourceWrite: _sourceWrite,
+      sourceWriteRequest: _sourceWriteRequest,
+      ...unsignedWithoutProof
+    } = prepared.command
+    const withoutProof = await withSourceWrite('catalog_publish', unsignedWithoutProof)
+    await expect(
+      owner.mutation(api.capabilitySupply.publishPreparedCapability, withoutProof),
+    ).resolves.toEqual({ kind: 'refused', reason: 'reauthentication_required' })
+    await expect(
+      backend.run(async (ctx) => ({
+        publications: await ctx.db.query('capabilityPublications').collect(),
+        proofs: await ctx.db.query('consequenceProofUses').collect(),
+      })),
+    ).resolves.toEqual({ publications: [], proofs: [] })
+
+    await expect(
+      owner.mutation(api.capabilitySupply.publishPreparedCapability, prepared.command),
+    ).resolves.toMatchObject({ kind: 'published', publicationRevision: 1 })
+    const changed = await prepareOwnerPublicationCommand(
+      backend,
+      businessId,
+      offeringRef,
+      1,
+      sourceHash,
+      openApiSource('owner.proof.binding'),
+      'owner-proof-binding:changed-command',
+      origin,
+    )
+    if (changed.kind === 'refused')
+      throw new Error(`owner_publication_changed_prepare_failed:${changed.reason}`)
+    const {
+      sourceWrite: _changedSourceWrite,
+      sourceWriteRequest: _changedSourceWriteRequest,
+      ...changedUnsigned
+    } = changed.command
+    const changedWithReplayedProof = await withSourceWrite('catalog_publish', {
+      ...changedUnsigned,
+      proof,
+    })
+    await expect(
+      owner.mutation(api.capabilitySupply.publishPreparedCapability, changedWithReplayedProof),
+    ).resolves.toEqual({ kind: 'refused', reason: 'command_changed' })
+    await expect(
+      backend.run(async (ctx) => ({
+        publications: await ctx.db.query('capabilityPublications').collect(),
+        proofs: await ctx.db.query('consequenceProofUses').collect(),
+      })),
+    ).resolves.toMatchObject({
+      publications: [expect.objectContaining({ revision: 1 })],
+      proofs: [expect.objectContaining({ reverificationId: proof.reverificationId })],
     })
   })
 })

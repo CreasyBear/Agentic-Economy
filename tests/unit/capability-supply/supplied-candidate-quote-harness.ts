@@ -14,10 +14,10 @@ import type { CapabilityOfferingRow } from '@/modules/capability-supply/internal
 import {
   capabilityBindingEligibilityHash,
   capabilityBindingRegistrationHash,
-  capabilityOperationId,
+  capabilityToolId,
   capabilityOfferingEligibilityHash,
   capabilityOfferingRegistrationHash,
-  createPublicOperationRef,
+  createPublicToolRef,
   defineCapabilityOfferingRegistration,
   defineCapabilityTransportBindingRegistration,
 } from '@/modules/capability-supply/public'
@@ -34,16 +34,16 @@ import {
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { pricingConfigDigest } from '@/modules/money/public'
 import {
-  type ActionInvocationOrigin,
-  type InvocationActor,
+  type ActionExecutionOrigin,
+  type ExecutionActor,
   createDevelopmentReleaseSignal,
-  createInMemoryActionInvocationTracer,
-} from '@/modules/action-invocation'
+  createInMemoryActionExecutionTracer,
+} from '@/modules/action-execution'
 import { capabilityContractV2 } from '../../fixtures/capability-contract-v2'
 
 export const nowMs = Date.parse('2026-07-19T08:00:00.000Z')
 export const nowIso = () => new Date(nowMs).toISOString()
-export const actor: InvocationActor = { callerRef: 'dev:caller', principalRef: 'dev:principal' }
+export const actor: ExecutionActor = { callerRef: 'dev:caller', principalRef: 'dev:principal' }
 
 export const contract = defineCapabilityContract(capabilityContractV2({
   capabilityId: 'sandbox.route.service.quote',
@@ -58,8 +58,8 @@ export const candidate = {
   bindingId: 'dev:binding',
   contractRef: contract.ref,
 }
-export const operationRef = createPublicOperationRef({
-  operationId: capabilityOperationId(contract.capabilityId),
+export const toolRef = createPublicToolRef({
+  operationId: capabilityToolId(contract.capabilityId),
   publicationRef: candidate.publicationRef,
   publicationRevision: candidate.revision,
   contractRef: contract.ref,
@@ -95,9 +95,11 @@ export const catalogAccessPath: GraphCatalogAccessPath = {
   },
 }
 export const pricingConfig = {
-  version: 'pricing:v2' as const,
-  unit: 'call' as const,
-  paidAmount: { currency: 'USD' as const, units: '1', exponent: 2 },
+  version: 'pricing:v3' as const,
+  kind: 'fixed_aud' as const,
+  currency: 'AUD' as const,
+  exponent: 6 as const,
+  amountUnits: '10000',
 }
 export const priceDigest = pricingConfigDigest(pricingConfig)
 export const providerConnectionCommand: CreateProviderConnectionCommand = {
@@ -126,7 +128,7 @@ export function developmentProviderConnection(): ProviderConnection {
 }
 export const connectionAuthority = connectionAuthoritySnapshotFromProviderConnection(
   developmentProviderConnection(),
-  operationRef,
+  toolRef,
 )
 export const offeringRegistration = defineCapabilityOfferingRegistration({
   offeringId: candidate.offeringId,
@@ -137,7 +139,7 @@ export const offeringRegistration = defineCapabilityOfferingRegistration({
   presentation: {
     label: 'Development quote provider',
     summary: 'Labelled fixture supply for quote collection evaluation.',
-    price: { kind: 'fixed', amount: pricingConfig.paidAmount },
+    price: { kind: 'fixed', amount: { currency: 'AUD', units: pricingConfig.amountUnits, exponent: 6 } },
     materialTerms: [],
     commercialRelationship: {
       kind: 'none',
@@ -168,7 +170,7 @@ export const admittedTransport = {
   configJson: JSON.stringify(admittedTransportConfig),
   configDigest: canonicalDigest(admittedTransportConfig),
 }
-export const origins: readonly ActionInvocationOrigin[] = [
+export const origins: readonly ActionExecutionOrigin[] = [
   { kind: 'request_owned', requestRef: 'dev:request', revision: 4 },
   { kind: 'standalone', ...actor },
 ]
@@ -239,7 +241,7 @@ export function publication(overrides: Partial<GraphPublicationRow> = {}): Graph
   return {
     id: 'dev:publication-row',
     ...candidate,
-    operationRef,
+    toolRef,
     ...contract.ref,
     connectionAuthority,
     sourceKind: 'openapi_http',
@@ -333,10 +335,10 @@ export function inMemoryTracer(
   adapter: ReturnType<typeof vi.fn>,
   releaseSignal = createDevelopmentReleaseSignal(),
 ) {
-  return createInMemoryActionInvocationTracer({
+  return createInMemoryActionExecutionTracer({
     action: collectSuppliedCandidateQuoteAction,
     now: nowIso,
-    nextInvocationRef: () => `dev:invocation:${Math.random()}`,
+    nextExecutionRef: () => `dev:invocation:${Math.random()}`,
     nextAuthorityRef: () => 'dev:authority:quote',
     nextAttemptRef: () => 'dev:attempt:quote',
     developmentReleaseSignal: releaseSignal,

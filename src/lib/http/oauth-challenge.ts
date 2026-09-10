@@ -2,27 +2,33 @@ import { trimTrailingSlashes } from '@/modules/common/trim-trailing-slashes'
 
 import {
   AGENT_ACCESS_AUTHORITY_MODE_VALUES,
-  MARKET_OPERATIONS_INVOKE_SCOPE,
+  MARKET_TOOLS_CALL_SCOPE,
   agentAuthorityScopeForMode,
   type AgentAccessAuthorityMode,
 } from '@/modules/agent-access/contract'
+import { AGENT_ACCESS_OAUTH_OFFLINE_SCOPE } from '@/modules/agent-access/oauth-state'
 
 export const AGENT_ACCESS_BEARER_METHOD = 'header' as const
 export const AGENT_ACCESS_OAUTH_SCOPES = Object.freeze([
-  MARKET_OPERATIONS_INVOKE_SCOPE,
+  MARKET_TOOLS_CALL_SCOPE,
   ...AGENT_ACCESS_AUTHORITY_MODE_VALUES.map(agentAuthorityScopeForMode),
 ])
+export const AGENT_ACCESS_OAUTH_AUTHORIZATION_SCOPES = Object.freeze([
+  ...AGENT_ACCESS_OAUTH_SCOPES,
+  AGENT_ACCESS_OAUTH_OFFLINE_SCOPE,
+])
+export const AGENT_ACCESS_DEFAULT_BUYER_OAUTH_SCOPE = `${MARKET_TOOLS_CALL_SCOPE} ${agentAuthorityScopeForMode('approval_required')} ${AGENT_ACCESS_OAUTH_OFFLINE_SCOPE}`
 
 export function bearerChallenge(
   canonicalBaseUrl: string,
-  requiredScope: string = MARKET_OPERATIONS_INVOKE_SCOPE,
+  requiredScope: string = AGENT_ACCESS_DEFAULT_BUYER_OAUTH_SCOPE,
 ): string {
   const metadata = `${trimTrailingSlashes(canonicalBaseUrl)}/.well-known/oauth-protected-resource`
   return `Bearer resource_metadata="${metadata}", scope="${requiredScope}"`
 }
 
 export function bearerModeChallenge(canonicalBaseUrl: string, requiredMode: AgentAccessAuthorityMode): string {
-  return bearerChallenge(canonicalBaseUrl, agentAuthorityScopeForMode(requiredMode))
+  return bearerChallenge(canonicalBaseUrl, `${MARKET_TOOLS_CALL_SCOPE} ${agentAuthorityScopeForMode(requiredMode)} ${AGENT_ACCESS_OAUTH_OFFLINE_SCOPE}`)
 }
 
 export function oauthProtectedResourceMetadata(canonicalBaseUrl: string): Readonly<{

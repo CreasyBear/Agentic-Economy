@@ -1,6 +1,7 @@
 import { v, type Validator } from 'convex/values'
 
 import type { JsonValue } from '@/modules/capability-contract/public'
+import { SCHEDULED_WORKLOADS } from '@/lib/deployment/scheduled-workloads'
 import {
   accountRef,
   createWorkloadContext,
@@ -39,17 +40,9 @@ export const SYSTEM_WORKLOAD_OWNER_PRINCIPAL_REF = 'prn_f20000000000000000000000
 export const SYSTEM_WORKLOAD_OWNERSHIP_REF = 'own_f2000000000000000000000000000001'
 export const SYSTEM_WORKLOAD_MEMBERSHIP_REF = 'mem_f2000000000000000000000000000001'
 
-export const WORKLOAD_CRON_DECLARATIONS = [
-  declaration('reconcile due facilitator invocations', 'reconciliation', 'reconcileDueFacilitatorInvocations'),
-  declaration('refresh facilitator discovery', 'cron', 'refreshFacilitatorDiscovery'),
-  declaration('refresh Agentic Market snapshots', 'cron', 'refreshAgenticMarketSnapshots'),
-  declaration('refresh Agentic Economy API registry', 'cron', 'refreshAgenticEconomyApiRegistry'),
-  declaration('refresh current market presence', 'cron', 'refreshCurrentMarketPresence'),
-  declaration('refresh capability supply readiness', 'cron', 'refreshCapabilitySupplyReadiness'),
-  declaration('cleanup expired source write nonces', 'cron', 'cleanupExpiredSourceWriteNonces'),
-  declaration('cleanup expired agent access oauth grants', 'cron', 'cleanupExpiredAgentAccessOAuthGrants'),
-  declaration('run daily supplier settlement', 'cron', 'runDailySupplierSettlement'),
-] as const
+export const WORKLOAD_CRON_DECLARATIONS = SCHEDULED_WORKLOADS.map((workload) =>
+  declaration(workload.name, workload.workloadKind, workload.handler),
+) as readonly ReturnType<typeof declaration<typeof SCHEDULED_WORKLOADS[number]['name'], typeof SCHEDULED_WORKLOADS[number]['handler']>>[]
 
 export type WorkloadCronName = typeof WORKLOAD_CRON_DECLARATIONS[number]['name']
 export type WorkloadCronActionContext = Pick<ActionCtx, 'runAction' | 'runQuery'>
@@ -81,17 +74,7 @@ export class WorkloadCronBoundaryError extends Error {
   }
 }
 
-export const workloadCronNameValue = v.union(
-  v.literal('reconcile due facilitator invocations'),
-  v.literal('refresh facilitator discovery'),
-  v.literal('refresh Agentic Market snapshots'),
-  v.literal('refresh Agentic Economy API registry'),
-  v.literal('refresh current market presence'),
-  v.literal('refresh capability supply readiness'),
-  v.literal('cleanup expired source write nonces'),
-  v.literal('cleanup expired agent access oauth grants'),
-  v.literal('run daily supplier settlement'),
-)
+export const workloadCronNameValue = v.union(...SCHEDULED_WORKLOADS.map((workload) => v.literal(workload.name)))
 
 export const workloadCronSnapshotValue = v.object({
   name: workloadCronNameValue,
@@ -181,37 +164,18 @@ export function parseWorkloadCronSnapshot(input: unknown): WorkloadCronSnapshot 
 }
 
 export const CONSEQUENCE_OPERATIONS = [
-  'capabilityOperationInvocations:cancelBeforeClaim',
-  'capabilityOperationInvocations:claimAutomaticReconciliationCandidate',
-  'capabilityOperationInvocations:finishAutomaticReconciliation',
-  'capabilityOperationX402AuthorizationExpiry:queueExpiredX402Authorization',
+  'capabilityCalls:cancelBeforeClaim',
+  'capabilityCalls:claimAutomaticReconciliationCandidate',
+  'capabilityCalls:finishAutomaticReconciliation',
+  'capabilityCallX402AuthorizationExpiry:queueExpiredX402Authorization',
   'capabilitySupply:recordCapabilityProbeResult',
   'facilitatorDiscovery:reconcile',
-  'marketExternalRegistry:begin',
-  'marketExternalRegistry:fail',
-  'marketExternalRegistry:finalize',
-  'marketExternalRegistry:writeBatch',
-  'marketExternalSnapshots:upsert',
-  'moneyLedger:reconcileExternalInvocationSpend',
+  'moneyTreasury:recordObservation',
   'moneyX402PaymentAttempts:reconcileX402PaymentAttempt',
 ] as const
 export type ConsequenceOperation = typeof CONSEQUENCE_OPERATIONS[number]
 
-export const consequenceOperationValue = v.union(
-  v.literal('capabilityOperationInvocations:cancelBeforeClaim'),
-  v.literal('capabilityOperationInvocations:claimAutomaticReconciliationCandidate'),
-  v.literal('capabilityOperationInvocations:finishAutomaticReconciliation'),
-  v.literal('capabilityOperationX402AuthorizationExpiry:queueExpiredX402Authorization'),
-  v.literal('capabilitySupply:recordCapabilityProbeResult'),
-  v.literal('facilitatorDiscovery:reconcile'),
-  v.literal('marketExternalRegistry:begin'),
-  v.literal('marketExternalRegistry:fail'),
-  v.literal('marketExternalRegistry:finalize'),
-  v.literal('marketExternalRegistry:writeBatch'),
-  v.literal('marketExternalSnapshots:upsert'),
-  v.literal('moneyLedger:reconcileExternalInvocationSpend'),
-  v.literal('moneyX402PaymentAttempts:reconcileX402PaymentAttempt'),
-)
+export const consequenceOperationValue = v.union(...CONSEQUENCE_OPERATIONS.map((operation) => v.literal(operation)))
 
 export const consequenceJsonScalarValue: Validator<null | boolean | number | string> = v.union(
   v.null(),

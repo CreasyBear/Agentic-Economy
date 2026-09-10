@@ -78,7 +78,7 @@ export type ChargeContractUsage = Readonly<{
   chargeState: string
   amount: ExactAmount
   observedAt: number
-  invocationRef: string
+  callRef: string
   attemptRef: string
 }>
 
@@ -93,7 +93,7 @@ export type ChargeContractEntry = ChargeEntryLeg & Readonly<{
   amount: ExactAmount
   principalId?: string
   businessId?: string
-  invocationRef?: string
+  callRef?: string
   attemptRef?: string
   reversalOf?: string
 }>
@@ -175,17 +175,17 @@ export function validateChargeContract<T extends ChargeContractEntry>(
     || selected.rake.createdAt !== original.createdAt
     || selected.charge.principalId !== original.principalId
     || selected.charge.businessId !== undefined
-    || selected.charge.invocationRef !== usage.invocationRef
+    || selected.charge.callRef !== usage.callRef
     || selected.charge.attemptRef !== usage.attemptRef
     || selected.charge.reversalOf !== undefined
     || selected.provider.principalId !== undefined
     || selected.provider.businessId !== businessId
-    || selected.provider.invocationRef !== usage.invocationRef
+    || selected.provider.callRef !== usage.callRef
     || selected.provider.attemptRef !== usage.attemptRef
     || selected.provider.reversalOf !== undefined
     || selected.rake.principalId !== undefined
     || selected.rake.businessId !== businessId
-    || selected.rake.invocationRef !== undefined
+    || selected.rake.callRef !== undefined
     || selected.rake.attemptRef !== undefined
     || selected.rake.reversalOf !== undefined
     || selected.charge.sourceDigest !== selected.provider.sourceDigest
@@ -211,8 +211,8 @@ export function validateChargeContract<T extends ChargeContractEntry>(
       || selected.recovery.businessId !== businessId
       || selected.recovery.businessId !== selected.provider.businessId
       || selected.recovery.principalId !== undefined
-      || selected.recovery.invocationRef !== usage.invocationRef
-      || selected.recovery.invocationRef !== selected.provider.invocationRef
+      || selected.recovery.callRef !== usage.callRef
+      || selected.recovery.callRef !== selected.provider.callRef
       || selected.recovery.attemptRef !== usage.attemptRef
       || selected.recovery.attemptRef !== selected.provider.attemptRef
       || selected.recovery.reversalOf !== undefined
@@ -253,7 +253,7 @@ function chargeJournalEntryFields(entry: ChargeContractEntry) {
     sourceDigest: entry.sourceDigest,
     evidenceRefs: [...entry.evidenceRefs],
     createdAt: entry.createdAt,
-    invocationRef: entry.invocationRef ?? null,
+    callRef: entry.callRef ?? null,
     attemptRef: entry.attemptRef ?? null,
   }
 }
@@ -286,7 +286,7 @@ export function chargeJournalDigest(
       chargeState: input.usage.chargeState,
       amount: input.usage.amount,
       observedAt: input.usage.observedAt,
-      invocationRef: input.usage.invocationRef,
+      callRef: input.usage.callRef,
       attemptRef: input.usage.attemptRef,
       operationKey: usageIdentity.operationKey,
       priceDigest: usageIdentity.priceDigest,

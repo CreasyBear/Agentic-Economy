@@ -246,11 +246,11 @@ export const reconcile = internalQuery({
 async function attributeInvocationResourceAccount(
   ctx: MutationCtx,
   current: WorkloadCronSnapshot,
-  invocationRef: string,
+  callRef: string,
 ): Promise<void> {
   const invocation = await ctx.db
-    .query('capabilityOperationInvocations')
-    .withIndex('by_invocationRef', (query) => query.eq('invocationRef', invocationRef))
+    .query('capabilityCalls')
+    .withIndex('by_callRef', (query) => query.eq('callRef', callRef))
     .unique()
   if (invocation === null) throw new WorkloadCronBoundaryError('workload_resource_authority_invalid')
   const grant = await ctx.db
@@ -266,7 +266,7 @@ async function attributeInvocationResourceAccount(
   if (invocation.principalId !== grant.subjectPrincipalRef
     || invocation.ownerId !== grant.accountRef
     || invocation.grantExpiresAt !== grant.expiresAt
-    || !grant.resourceRefs.includes(invocation.operationRef)) {
+    || !grant.resourceRefs.includes(invocation.toolRef)) {
     throw new WorkloadCronBoundaryError('workload_resource_authority_invalid')
   }
   try {
@@ -286,7 +286,7 @@ async function attributeInvocationResourceAccount(
         idempotencyRef: `cron-admit:${current.admittedAt}:${canonicalGrantRef}:${invocation.grantGeneration}`,
       },
       requiredScopes: grant.scopes,
-      resourceRefs: [invocation.operationRef],
+      resourceRefs: [invocation.toolRef],
       budgetAmount: 0,
     })
     const consequenceNow = Date.now()
@@ -357,6 +357,25 @@ export function bindWorkloadCronActionContext(
   })
 }
 
+type ConsequenceHandler = (
+  ctx: MutationCtx,
+  payload: Readonly<Record<string, JsonValue>>,
+  current: WorkloadCronSnapshot,
+) => Promise<JsonValue>
+
+// Exhaustive by construction: removing an operation from CONSEQUENCE_OPERATIONS
+// makes its entry here a type error, and no operation can fall through.
+const CONSEQUENCE_HANDLERS: Record<ConsequenceOperation, ConsequenceHandler> = {
+  'capabilityCalls:cancelBeforeClaim': (ctx, payload) => ctx.runMutation(internal.capabilityCalls.cancelBeforeClaim, payload as never),
+  'capabilityCalls:claimAutomaticReconciliationCandidate': (ctx, payload) => ctx.runMutation(internal.capabilityCalls.claimAutomaticReconciliationCandidate, payload as never),
+  'capabilityCalls:finishAutomaticReconciliation': (ctx, payload) => ctx.runMutation(internal.capabilityCalls.finishAutomaticReconciliation, payload as never),
+  'capabilityCallX402AuthorizationExpiry:queueExpiredX402Authorization': (ctx, payload) => ctx.runMutation(internal.capabilityCallX402AuthorizationExpiry.queueExpiredX402Authorization, payload as never),
+  'capabilitySupply:recordCapabilityProbeResult': (ctx, payload) => ctx.runMutation(internal.capabilitySupply.recordCapabilityProbeResult, payload as never),
+  'facilitatorDiscovery:reconcile': (ctx, payload, current) => ctx.runMutation(internal.facilitatorDiscovery.reconcile, { ...payload, workload: current } as never),
+  'moneyTreasury:recordObservation': (ctx, payload) => ctx.runMutation(internal.moneyTreasury.recordObservation, payload as never),
+  'moneyX402PaymentAttempts:reconcileX402PaymentAttempt': (ctx, payload) => ctx.runMutation(internal.moneyX402PaymentAttempts.reconcileX402PaymentAttempt, payload as never),
+}
+
 export async function dispatchWorkloadCronConsequenceHandler(
   ctx: MutationCtx,
   args: Readonly<{
@@ -371,37 +390,7 @@ export async function dispatchWorkloadCronConsequenceHandler(
   if (args.resourceInvocationRef !== undefined) {
     await attributeInvocationResourceAccount(ctx, current, args.resourceInvocationRef)
   }
-  switch (args.operation) {
-    case 'capabilityOperationInvocations:cancelBeforeClaim':
-      return await ctx.runMutation(internal.capabilityOperationInvocations.cancelBeforeClaim, args.payload as never)
-    case 'capabilityOperationInvocations:claimAutomaticReconciliationCandidate':
-      return await ctx.runMutation(internal.capabilityOperationInvocations.claimAutomaticReconciliationCandidate, args.payload as never)
-    case 'capabilityOperationInvocations:finishAutomaticReconciliation':
-      return await ctx.runMutation(internal.capabilityOperationInvocations.finishAutomaticReconciliation, args.payload as never)
-    case 'capabilityOperationX402AuthorizationExpiry:queueExpiredX402Authorization':
-      return await ctx.runMutation(internal.capabilityOperationX402AuthorizationExpiry.queueExpiredX402Authorization, args.payload as never)
-    case 'capabilitySupply:recordCapabilityProbeResult':
-      return await ctx.runMutation(internal.capabilitySupply.recordCapabilityProbeResult, args.payload as never)
-    case 'facilitatorDiscovery:reconcile':
-      return await ctx.runMutation(internal.facilitatorDiscovery.reconcile, {
-        ...args.payload,
-        workload: current,
-      } as never)
-    case 'marketExternalRegistry:begin':
-      return await ctx.runMutation(internal.marketExternalRegistry.begin, args.payload as never)
-    case 'marketExternalRegistry:fail':
-      return await ctx.runMutation(internal.marketExternalRegistry.fail, args.payload as never)
-    case 'marketExternalRegistry:finalize':
-      return await ctx.runMutation(internal.marketExternalRegistry.finalize, args.payload as never)
-    case 'marketExternalRegistry:writeBatch':
-      return await ctx.runMutation(internal.marketExternalRegistry.writeBatch, args.payload as never)
-    case 'marketExternalSnapshots:upsert':
-      return await ctx.runMutation(internal.marketExternalSnapshots.upsert, args.payload as never)
-    case 'moneyLedger:reconcileExternalInvocationSpend':
-      return await ctx.runMutation(internal.moneyLedger.reconcileExternalInvocationSpend, args.payload as never)
-    case 'moneyX402PaymentAttempts:reconcileX402PaymentAttempt':
-      return await ctx.runMutation(internal.moneyX402PaymentAttempts.reconcileX402PaymentAttempt, args.payload as never)
-  }
+  return await CONSEQUENCE_HANDLERS[args.operation](ctx, args.payload, current)
 }
 
 export const dispatchConsequence = internalMutation({
@@ -442,7 +431,7 @@ export async function reconcileDueFacilitatorInvocationsHandler(ctx: WorkloadCro
   return await runAdmittedAction(
     ctx,
     'reconcile due facilitator invocations',
-    internal.capabilityOperationInvocationWorker.reconcileScheduled,
+    internal.capabilityCallWorker.reconcileScheduled,
     {},
   )
 }
@@ -456,22 +445,9 @@ export async function refreshFacilitatorDiscoveryHandler(ctx: WorkloadCronAction
   )
 }
 
-export async function refreshAgenticMarketSnapshotsHandler(ctx: WorkloadCronActionContext): Promise<null> {
-  return await runAdmittedAction(
-    ctx,
-    'refresh Agentic Market snapshots',
-    internal.marketExternalRefresh.run,
-    {},
-  )
-}
-
 export async function refreshAgenticEconomyApiRegistryHandler(ctx: WorkloadCronActionContext): Promise<null> {
-  return await runAdmittedAction(
-    ctx,
-    'refresh Agentic Economy API registry',
-    internal.marketExternalRegistryRefresh.run,
-    {},
-  )
+  await runAdmittedAction(ctx, 'refresh Agentic Economy API registry', internal.x402DirectoryIndexRefresh.start, {})
+  return null
 }
 
 export async function refreshCurrentMarketPresenceHandler(
@@ -516,11 +492,11 @@ export async function cleanupExpiredAgentAccessOAuthGrantsHandler(
   )
 }
 
-export async function runDailySupplierSettlementHandler(ctx: WorkloadCronMutationContext): Promise<null> {
-  return await runAdmittedMutation(
+export async function observeX402TreasuryHandler(ctx: WorkloadCronActionContext): Promise<null> {
+  return await runAdmittedAction(
     ctx,
-    'run daily supplier settlement',
-    internal.moneyLedger.runDailySupplierSettlement,
+    'observe x402 treasury',
+    internal.moneyTreasuryObservation.observe,
     {},
   )
 }
@@ -535,12 +511,6 @@ export const refreshFacilitatorDiscovery = internalAction({
   args: {},
   returns: v.null(),
   handler: refreshFacilitatorDiscoveryHandler,
-})
-
-export const refreshAgenticMarketSnapshots = internalAction({
-  args: {},
-  returns: v.null(),
-  handler: refreshAgenticMarketSnapshotsHandler,
 })
 
 export const refreshAgenticEconomyApiRegistry = internalAction({
@@ -573,8 +543,8 @@ export const cleanupExpiredAgentAccessOAuthGrants = internalMutation({
   handler: cleanupExpiredAgentAccessOAuthGrantsHandler,
 })
 
-export const runDailySupplierSettlement = internalMutation({
+export const observeX402Treasury = internalAction({
   args: {},
   returns: v.null(),
-  handler: runDailySupplierSettlementHandler,
+  handler: observeX402TreasuryHandler,
 })

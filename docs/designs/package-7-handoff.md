@@ -1,0 +1,129 @@
+# WF-20260905-package-7: complete pre-launch trust and account lifecycle
+
+Status: awaiting Package 7 contract re-review and implementation approval
+Dependency: vocabulary/source cutover accepted; retained-data and release proof limits remain
+Owner: this Codex task / Joel for direction and operating decisions
+Started: 2026-09-05
+
+## Direction and authority
+
+Joel selected a complete pre-launch baseline, self-service, familiar mature
+Whop/Locus/Nevermined mechanisms, Australian application and native reuse.
+His support address currently uses an ordinary inbox; no support tool is set up.
+Package 7 implementation approval remains outstanding after the accepted
+vocabulary source cutover. Scoping answers do not select a vendor or approve
+the final architecture.
+
+[PRODUCT](../../PRODUCT.md) remains the product authority. The one current
+[Package 7 plan](package-7-trust-and-lifecycle.md) contains the full
+journeys, P7-01–12 acceptance matrix, surfaces, backend/database contracts,
+policy work, operating decisions and six implementation tasks.
+
+Selected candidate: Clerk identity, existing Convex Workflow/Workpool, existing
+money/Provider primitives, hosted support correspondence and AE-owned lifecycle,
+data and authority decisions. Help Scout is evaluated/recommended, not selected
+or installed. No application/schema change, policy publication or signup occurred.
+
+## Current reconciliation and dependencies
+
+Accepted direction: a mature Australian equivalent of Locus/Nevermined, with
+Whop supporting ordinary account/billing/remedy/support behavior. Intuitiveness
+and enablement precede uniqueness; the market opportunity is accepted. Preserve
+complete Package 7 scope and native reuse. Departures need an actual Australian,
+correctness/safety or demonstrated reference-weakness reason and customer benefit.
+
+[CONTEXT](../../CONTEXT.md) is the accepted glossary. The
+[dated proposal](../../research/VOCABULARY-PROPOSAL-20260905.md) is historical;
+Tool is agreed, and the [vocabulary source closeout](../archive/README.md#vocabulary-source-acceptance)
+records the completed source cutover. The old tentative-choice statement is
+superseded. This does not establish hosted deployment, installed commercial
+execution, retained-data cutover or Package 7 implementation approval.
+
+Hold T1–T6 implementation until Package 7 is reconciled and approved. Apply the
+accepted vocabulary while reviewing proposed new interfaces and schemas. T1 depends on
+identity/authority/request interfaces; T2 on export and retained-record mappings;
+T3 on lifecycle/action/Call and Provider references; T4 on category/table/restore
+boundaries; T5 on accepted language/terms and acceptance records; T6 on migrated
+consumers, fixtures and same-revision proof. The plan contains the dependency
+matrix and unchanged findings. No independent ID, schema, route, immutable-record
+or protocol rename is authorised, and no universal one-to-one mapping is assumed.
+
+Package 6 remains open: checkpoint its bounded fix and carry the latest native
+integration, deployment/client, authenticated journey, support/accessibility and
+import-gate gaps into T1/T3/T5/T6. See [its review](../archive/README.md#package-6-reviews)
+and [follow-up](../archive/README.md#package-6-reviews); local remediation
+is not final closeout. This update does not freshly verify those gaps.
+
+Read-only research/reconciliation continues. Reconcile affected contracts and
+records against the accepted source, perform focused re-review, then obtain the
+single Package 7 implementation direction approval. Regulatory inputs retain owners, next
+steps and specifically affected actions, rather than blocking every activity.
+
+Current dependency-reconciled design SHA-256: `ab9b4aa55c1193d4d2fa36a14b9fd3f0feaac3de37c2ee9984c2f93629409a34`.
+The prior 2026-09-05 candidate digest was `fb20640cab130fc68cf51c39043478e3e7c00921c7a3328221ba6d09ea8802f6`; it remains dated review evidence.
+
+## Dated reviewed revision and handoffs
+
+- Pre-reconciliation reviewed design SHA-256: `31f4298fec25aad8e2ebac4f10c0901eca57e96e7558380653e5a1d5ffe9a3aa`.
+- Native design: `/Users/joelchan/.gstack/projects/CreasyBear-Agentic-Economy/joelchan-main-design-20260905-135725.md`.
+- Native engineering test plan: `/Users/joelchan/.gstack/projects/CreasyBear-Agentic-Economy/joelchan-main-eng-review-test-plan-20260905-135725.md`.
+- Proposed tasks: `/Users/joelchan/.gstack/projects/CreasyBear-Agentic-Economy/joelchan-main-package7-tasks-20260905-135725.jsonl`.
+- Raw baseline and receipts: `/Users/joelchan/.codex/workflow-build/package-7-20260905`.
+- Reused office-hours scoping, including its independent 9/10 spec review.
+- CEO HOLD-scope review completed; independent spec challenge passed 9/10 after
+  three rounds, resolving eight baseline omissions and two archive/delivery
+  clarifications. Engineering and seven-pass design reviews completed; design
+  completeness 8/10. These are plan reviews, not implementation clearance.
+- Native sessions: CEO `85267-1788586520-aedb71f3`, engineering
+  `85267-1788586656-5615566e`, design `85267-1788586657-1bd488b9`.
+- No separate cross-model review or dedicated devex stage. Brain caches were
+  unavailable; source and repository authorities supplied evidence.
+
+## Evidence and remaining proof
+
+The review scores, sketch checks and tests below are dated pre-reconciliation
+evidence. Native snapshots/test plans/task lists remain unchanged historical
+artifacts; they do not supersede the current dependency matrix. No application
+tests, live proof or native plan review were rerun for this planning update.
+
+Foundation command:
+`npm test -- tests/unit/principal-account/account/account-registry.test.ts tests/unit/server/clerk-security-webhook.test.ts tests/unit/settings/account-security-history.test.tsx --no-file-parallelism`
+
+Passed 3 files / 47 tests on 2026-09-05 against the shared dirty workspace,
+starting HEAD `91a4fff6f68fecd63ac39bbbd4509de0bc0d5b0d`. Initial direct wrapper
+invocation could not locate Vitest; repository npm entry point resolved it.
+Package 7's new acceptance tests and real Clerk/Convex/financial journeys remain
+unrun. Exact candidate redaction scan passed. Documentation links and whitespace
+are checked at the handoff.
+
+Interaction sketch: `/Users/joelchan/.gstack/projects/CreasyBear-Agentic-Economy/designs/package-7-20260905/self-service.html`.
+Preview: http://127.0.0.1:8827/self-service.html (open in Codex).
+Navigation/export persistence, closure cancel/confirm/status/completion and terms
+acknowledgment exercised; no console errors, 375px viewport had no document-width
+overflow, desktop closure visually inspected. This is a sketch, not real auth or
+an accessibility audit. Task-owned preview server session `43831` serves only the
+design folder; retained for review, stop that session when the preview is retired.
+
+## Ownership, findings and next action
+
+Planning-owned repository files: this record, the Package 7 design and the
+Package 7 link in the workflow index. Extensive pre-existing/concurrent work and
+the initially empty index are preserved. No implementation commit is claimed.
+All acceptance-critical planning findings are incorporated in the plan. Operating
+inputs have owners/next actions and specific dependent capabilities there.
+
+Next: agree the shared glossary and affected migration boundaries, reconcile
+Package 6's checkpoint and the Package 7 candidate, re-review only affected
+portions, then obtain the single direction approval. Only afterward implement
+T1–T6, gather acceptance evidence, review/fix, maintain docs/registers and commit
+owned changes. Inbox vendor/configuration and
+operating inputs remain explicit decisions before their affected activations.
+
+## Trial lessons
+
+The first scoping draft led with policies; Joel redirected it toward familiar
+journeys. The first delivery draft also overbuilt background-step tracking and
+support administration; his native-reuse prompt removed those layers. Preserve
+AE's commercial decisions while using installed platform primitives and hosted
+correspondence. These are observed corrections, not measured workflow gains;
+no automatic skill rewrite or recursive evolution experiment has run.

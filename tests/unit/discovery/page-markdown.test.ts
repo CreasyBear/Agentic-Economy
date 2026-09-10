@@ -58,12 +58,13 @@ describe('site brief markdown', () => {
   const body = buildSiteBriefMarkdown(options)
 
   it('starts with the public call loop and connects only at the authority boundary', () => {
-    expect(body).toContain('npx @agentic-economy/cli connect --base-url "https://ae.example" --mcp')
-    expect(body.indexOf('ae search "<job>"')).toBeLessThan(body.indexOf('npx @agentic-economy/cli connect'))
-    expect(body).toContain('ae inspect "$AE_OPERATION_REF" --base-url "https://ae.example" --json')
-    expect(body).toContain('ae call "$AE_OPERATION_REF" --input "$AE_INPUT_JSON"')
+    expect(body).toContain('ae connect --base-url "https://ae.example"')
+    expect(body).not.toContain('ae connect --base-url "https://ae.example" --mcp')
+    expect(body.indexOf('ae search "<job>"')).toBeLessThan(body.indexOf('ae connect'))
+    expect(body).toContain('Request the caller-specific `tool.quote` with the exact input after connecting.')
+    expect(body).toContain('Call only with the returned Quote through')
     expect(body).toContain('official MCP client')
-    expect(body).toContain('Connect only when the call reports `agent_access_key_required`')
+    expect(body).toContain('native account connection before protected work')
   })
 
   it('names the OAuth key boundary, body-only idempotency, and stable recovery identity', () => {
@@ -72,21 +73,29 @@ describe('site brief markdown', () => {
     expect(body).toContain('never contains provider credentials or silently grants payment or consequential authority')
     expect(body).toContain('If the receipt explicitly requires reconciliation')
     expect(body).toContain('the CLI creates and retains it automatically')
-    expect(body).toContain('Search, inspection, and eligible free keyless read calls are public')
+    expect(body).toContain('List, search, describe and compare are public')
     expect(body).toContain('Provider and publication records are supporting metadata')
   })
 
   it('builds a machine guide for non-HTML /for-agents requests', () => {
     const guide = buildForAgentsMarkdown(options)
-    expect(guide).toContain('npx @agentic-economy/cli connect --base-url "https://ae.example" --mcp')
+    expect(guide).toContain('codex mcp add agentic-economy --url "https://ae.example/mcp"')
+    expect(guide).toContain('codex mcp login agentic-economy')
+    expect(guide).not.toContain('codex mcp login agentic-economy --scopes')
+    expect(guide).toContain('open /mcp, select agentic-economy, then choose Authenticate')
+    expect(guide).toContain('follow its OAuth prompt')
+    expect(guide).toContain('call `ae_agentAccess_whoami` and report the connected Agent Principal and Account')
+    expect(guide).toContain('ae connect --base-url "https://ae.example"')
+    expect(guide).not.toContain('ae connect --base-url "https://ae.example" --mcp')
     expect(guide).toContain('POST body example')
     expect(guide).toContain('application/problem+json')
-    expect(guide).toContain('ae inspect "$AE_OPERATION_REF" --base-url "https://ae.example" --json')
-    expect(guide).toContain('ae call "$AE_OPERATION_REF" --input "$AE_INPUT_JSON"')
+    expect(guide).toContain('ae describe "$AE_TOOL_REF" --base-url "https://ae.example" --json')
+    expect(guide).toContain('ae call "$AE_TOOL_REF" --input "$AE_INPUT_JSON"')
     expect(guide).not.toContain('advanced')
     expect(guide).toContain(`protocol \`${LATEST_PROTOCOL_VERSION}\``)
     expect(guide).toContain('Client connect performs initialization')
     expect(guide).toContain('may omit `Mcp-Session-Id`')
+    expect(guide).not.toContain('the client opens standard OAuth approval')
   })
 
   it('projects About as the same two doors the HTML page shows', () => {
@@ -95,7 +104,7 @@ describe('site brief markdown', () => {
     expect(about).toContain('https://ae.example/for-agents')
     expect(about).toContain('https://ae.example/for-providers')
     expect(about).toContain('https://ae.example/market')
-    expect(about).toContain('publishes a job')
+    expect(about).toContain('Providers publish the job')
     expect(about).not.toMatch(/\/api\/answer|\/api\/chat\/anonymous/u)
   })
 
@@ -169,23 +178,23 @@ describe('refusal documents', () => {
     expect(body).toContain('Do not invent provider details.')
   })
 
-  it('points an unprojectable page only at canonical Operation surfaces', () => {
+  it('points an unprojectable page only at canonical Tool surfaces', () => {
     const body = buildUnknownPageMarkdown('/careers', options)
     expect(body).toContain('`/careers` is served as HTML only')
     expect(body).toContain('https://ae.example/llms.txt')
     expect(body).toContain('https://ae.example/market')
-    expect(body).toContain('https://ae.example/api/v1/market-operations/search')
-    expect(body).toContain('https://ae.example/api/v1/market-operations/detail')
+    expect(body).toContain('https://ae.example/api/v1/market-tools/search')
+    expect(body).toContain('https://ae.example/api/v1/market-tools/describe')
     expect(body).toContain('https://ae.example/mcp')
     expect(body).toContain('ae search')
     expect(body).not.toMatch(/\/api\/answer|\/api\/chat\/anonymous|X-AE-Turn-Key/u)
   })
 
-  it('keeps catalogue and business projections on Operation surfaces', () => {
+  it('keeps catalogue and business projections on Tool surfaces', () => {
     const bodies = [buildCatalogMarkdown([business()], options), buildBusinessMarkdown(business(), options)]
     for (const body of bodies) {
       expect(body).toContain('https://ae.example/market')
-      expect(body).toContain('https://ae.example/api/v1/market-operations/search')
+      expect(body).toContain('https://ae.example/api/v1/market-tools/search')
       expect(body).toContain('https://ae.example/mcp')
       expect(body).toContain('ae search')
       expect(body).not.toMatch(/\/api\/answer|\/api\/chat\/anonymous|X-AE-Turn-Key/u)

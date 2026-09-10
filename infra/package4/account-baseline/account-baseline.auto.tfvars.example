@@ -1,0 +1,4 @@
+source_revision                   = "0000000000000000000000000000000000000000"
+infrastructure_alert_topic_arn    = "arn:aws:sns:ap-southeast-2:197716152388:package4-release-package4-alerts"
+infrastructure_alert_email        = "joel@agentic-economy.ai"
+runway_budget_email               = "accounts@agentic-economy.ai"

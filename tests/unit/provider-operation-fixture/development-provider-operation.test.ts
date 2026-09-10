@@ -1,18 +1,18 @@
 import { beforeAll, describe, expect, it } from 'vitest'
 
 import { findAction } from '@/modules/actions'
-import { executeDevelopmentProviderOperationAction } from '../../../tools/dev/fixtures/provider-operation/development-provider-operation.actions'
-import { runDevelopmentProviderOperationEvidence } from '../../../tools/dev/fixtures/provider-operation/development-provider-operation-evidence'
+import { executeDevelopmentProviderToolAction } from '../../../tools/dev/fixtures/provider-tool/development-provider-tool.actions'
+import { runDevelopmentProviderToolEvidence } from '../../../tools/dev/fixtures/provider-tool/development-provider-tool-evidence'
 
 describe('provider_operation.executeDevelopmentCancellable', () => {
-  let packet: Awaited<ReturnType<typeof runDevelopmentProviderOperationEvidence>>
+  let packet: Awaited<ReturnType<typeof runDevelopmentProviderToolEvidence>>
   beforeAll(async () => {
-    packet = await runDevelopmentProviderOperationEvidence()
+    packet = await runDevelopmentProviderToolEvidence()
   })
 
   it('keeps the consequential development fixture outside the global registry and every reachable surface', () => {
     expect(findAction('provider_operation.executeDevelopmentCancellable')).toBeUndefined()
-    expect(executeDevelopmentProviderOperationAction).toMatchObject({
+    expect(executeDevelopmentProviderToolAction).toMatchObject({
       readOnly: false,
       surfaces: [],
       invocationContract: {
@@ -58,7 +58,7 @@ describe('provider_operation.executeDevelopmentCancellable', () => {
   })
 
   it('deduplicates same operation material and conflicts changed material', () => {
-    expect(packet.idempotency.first.invocationRef).not.toBe(packet.idempotency.replay.invocationRef)
+    expect(packet.idempotency.first.executionRef).not.toBe(packet.idempotency.replay.executionRef)
     expect(packet.idempotency.first.observedResolution).toEqual(packet.idempotency.replay.observedResolution)
     expect(packet.idempotency.effectsAfterFirst).toBe(packet.idempotency.effectsBeforeDedupe + 1)
     expect(packet.idempotency.effectsAfterReplay).toBe(packet.idempotency.effectsAfterFirst)

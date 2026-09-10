@@ -18,15 +18,15 @@ import { collectSuppliedCandidateQuoteAction, prepareSuppliedCandidateQuote, typ
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { resolveActionContract } from '@/modules/common/action'
 import {
-  type ActionInvocationOrigin,
-  type ActionInvocationView,
+  type ActionExecutionOrigin,
+  type ActionExecutionView,
   createDevelopmentDurablePort,
   createDevelopmentDurableState,
   createDevelopmentReleaseSignal,
-  createDurableActionInvocationTracer,
+  createDurableActionExecutionTracer,
   readCompletedResultIdentity,
-  type PreparedInvocation,
-} from '@/modules/action-invocation'
+  type PreparedExecution,
+} from '@/modules/action-execution'
 import { registryDetailAction } from '@/modules/registry/registry.actions'
 import { evaluateAdr009Transfer } from '../../eval/support/adr009-transfer-comparison'
 import type { TransferBoundaryEvent } from '../../eval/support/adr009-transfer-comparison'
@@ -157,26 +157,26 @@ describe('ADR-009 supplied-candidate development quote collection', () => {
     const source = {
       input: quoteInput,
       context: { developmentOnlySuppliedQuoteAdapter: controlledAdapter },
-      prepared: undefined as PreparedInvocation | undefined,
+      prepared: undefined as PreparedExecution | undefined,
       observedResolution: {
         state: 'pending',
-      } as ActionInvocationView<SuppliedCandidateQuoteResult>['observedResolution'],
+      } as ActionExecutionView<SuppliedCandidateQuoteResult>['observedResolution'],
       resultIdentity: {
         sourceResultRef: 'dev:transfer:source-result:strata-repair',
         resultDigest: canonicalDigest(controlledResult),
       },
     }
-    const tracer = createDurableActionInvocationTracer({
+    const tracer = createDurableActionExecutionTracer({
       action: collectSuppliedCandidateQuoteAction,
       port: durablePort,
       now: nowIso,
-      nextInvocationRef: () => 'dev:transfer:invocation:strata-repair',
+      nextExecutionRef: () => 'dev:transfer:invocation:strata-repair',
       nextAuthorityRef: () => 'dev:transfer:authority:strata-repair',
       nextAttemptRef: () => 'dev:transfer:attempt:strata-repair',
       developmentReleaseSignal: controlledRelease,
       resolveSourceState: () => source,
     })
-    const origin: ActionInvocationOrigin = {
+    const origin: ActionExecutionOrigin = {
       kind: 'standalone',
       callerRef: actor.callerRef,
       principalRef: actor.principalRef,
@@ -195,8 +195,8 @@ describe('ADR-009 supplied-candidate development quote collection', () => {
     expect(controlledAdapter).not.toHaveBeenCalled()
 
     const accepted = await tracer.decide({
-      invocationRef: prepared.view.invocationRef,
-      expectedInvocationVersion: prepared.view.invocationVersion,
+      executionRef: prepared.view.executionRef,
+      expectedExecutionVersion: prepared.view.executionVersion,
       authorityRef: prepared.view.authority!.reference,
       actor,
       origin,
@@ -210,15 +210,15 @@ describe('ADR-009 supplied-candidate development quote collection', () => {
     })
     controlledEvents.push({
       kind: 'authority_decision',
-      invocationRef: prepared.view.invocationRef,
+      executionRef: prepared.view.executionRef,
     })
     controlledEvents.push({
       kind: 'user_or_supervisor_decision',
-      invocationRef: prepared.view.invocationRef,
+      executionRef: prepared.view.executionRef,
     })
     const completed = await tracer.execute({
-      invocationRef: prepared.view.invocationRef,
-      expectedInvocationVersion: accepted.view.invocationVersion,
+      executionRef: prepared.view.executionRef,
+      expectedExecutionVersion: accepted.view.executionVersion,
       authorityRef: prepared.view.authority!.reference,
       actor,
       origin,
@@ -232,8 +232,8 @@ describe('ADR-009 supplied-candidate development quote collection', () => {
       attempts: [{ release: { state: 'released' } }],
     })
 
-    const cold = await tracer.coldResume(prepared.view.invocationRef)
-    const coldView = cold.inspect(prepared.view.invocationRef)
+    const cold = await tracer.coldResume(prepared.view.executionRef)
+    const coldView = cold.inspect(prepared.view.executionRef)
     expect(coldView).toMatchObject({
       origin,
       observedResolution: { state: 'returned', businessOutcome: 'completed' },
@@ -242,7 +242,7 @@ describe('ADR-009 supplied-candidate development quote collection', () => {
     const effectCountBeforeReferenceReuse = controlledAdapter.mock.calls.length
     const identity = await readCompletedResultIdentity(
       durablePort,
-      prepared.view.invocationRef,
+      prepared.view.executionRef,
       actor,
       () => ({
         sourceResultRef: source.resultIdentity.sourceResultRef,
@@ -251,7 +251,7 @@ describe('ADR-009 supplied-candidate development quote collection', () => {
     )
     if (identity.kind === 'refused') throw new Error(identity.code)
     const completedReference = {
-      invocationRef: identity.invocationRef,
+      executionRef: identity.executionRef,
       actionId: identity.actionId,
       sourceResultRef: identity.sourceResultRef,
       resultDigest: identity.resultDigest,
@@ -276,23 +276,23 @@ describe('ADR-009 supplied-candidate development quote collection', () => {
       /authority|attempt|control|raw quote|quoteRef|price|terms|evidenceRefs|RoutePlan|Bundle/u,
     )
     controlledEvents.push({
-      kind: 'action_invocation',
-      invocationRef: prepared.view.invocationRef,
+      kind: 'action_execution',
+      executionRef: prepared.view.executionRef,
     })
     for (const control of durableState.controls.values()) {
-      controlledEvents.push({ kind: 'control', invocationRef: control.invocationRef })
+      controlledEvents.push({ kind: 'control', executionRef: control.executionRef })
     }
-    for (const attempt of durableState.attempts.get(prepared.view.invocationRef)?.values() ?? []) {
+    for (const attempt of durableState.attempts.get(prepared.view.executionRef)?.values() ?? []) {
       controlledEvents.push({
         kind: 'attempt',
-        invocationRef: prepared.view.invocationRef,
+        executionRef: prepared.view.executionRef,
         attemptRef: attempt.attemptRef,
       })
     }
-    for (const history of durableState.history.get(prepared.view.invocationRef) ?? []) {
+    for (const history of durableState.history.get(prepared.view.executionRef) ?? []) {
       controlledEvents.push({
         kind: 'history',
-        invocationRef: prepared.view.invocationRef,
+        executionRef: prepared.view.executionRef,
         commandId: history.commandId,
       })
     }
@@ -312,10 +312,10 @@ describe('ADR-009 supplied-candidate development quote collection', () => {
         ).safeContinuations.length,
       },
       controlledReadback: {
-        invocationVersion: coldView?.invocationVersion ?? 0,
+        executionVersion: coldView?.executionVersion ?? 0,
         controlRecords: durableState.controls.size,
-        attributableAttempts: durableState.attempts.get(prepared.view.invocationRef)?.size ?? 0,
-        durableHistoryRecords: durableState.history.get(prepared.view.invocationRef)?.length ?? 0,
+        attributableAttempts: durableState.attempts.get(prepared.view.executionRef)?.size ?? 0,
+        durableHistoryRecords: durableState.history.get(prepared.view.executionRef)?.length ?? 0,
         terminalResultReconstructed:
           coldView?.observedResolution.state === 'returned'
           && coldView.observedResolution.businessOutcome === 'completed',

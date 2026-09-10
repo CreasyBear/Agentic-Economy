@@ -18,6 +18,24 @@ describe('Offering source commands', () => {
     expect(createOfferingInState(first.state, { authority, operationKey: 'op:1', businessId, offeringRef, facts: { ...facts, name: 'Changed' }, now: 11 })).toMatchObject({ kind: 'error', code: 'operation_conflict' })
   })
 
+  it('does not impose a fleet-wide Offering cap on an exact create command', () => {
+    const existing = Array.from({ length: 100 }, (_, index) => ({
+      offeringRef: brandNonEmpty(`offering:existing:${index}`, 'OfferingRef'),
+      businessId,
+      currentRevision: 1,
+      status: 'published' as const,
+      createdAt: index,
+      updatedAt: index,
+    }))
+
+    const result = createOfferingInState(
+      { ...empty, offerings: existing },
+      { authority, operationKey: 'create-101', businessId, offeringRef, facts, now: 101 },
+    )
+
+    expect(result).toMatchObject({ kind: 'ok', code: 'created' })
+  })
+
   it('refuses a response-lost details replay after a newer revision before any later step can advance', () => {
     const created = createOfferingInState(empty, { authority, operationKey: 'baseline', businessId, offeringRef, facts, now: 1 })
     if (created.kind !== 'ok') throw new Error('fixture')

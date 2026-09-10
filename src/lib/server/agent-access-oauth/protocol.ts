@@ -18,7 +18,9 @@ import {
   AGENT_ACCESS_MAX_TTL_SECONDS,
   AGENT_ACCESS_MIN_TTL_SECONDS,
 } from '@/modules/agent-access/agent-access'
+import { defaultSandboxAgentAccessPolicy } from '@/modules/agent-access/sandbox-policy'
 import { buildProductionAgentAccessPolicy } from '@/modules/agent-access/production-policy'
+import { normalizeAgentAccessToolSelection } from '@/modules/agent-access/policy'
 import { exactAmountSchema, formatExactAmount, type ExactAmount } from '@/modules/money/public'
 
 const MAX_OAUTH_FORM_BODY_BYTES = 16 * 1024
@@ -45,11 +47,13 @@ type AuthorizationDetailsResult =
 const AUTHORIZATION_DETAILS_KEYS = new Set([
   'type',
   'environment',
+  'tool_access',
+  'tool_refs',
   'expires_in_seconds',
-  'maximum_spend_per_invocation',
+  'maximum_spend_per_call',
   'maximum_daily_spend',
   'maximum_monthly_spend',
-  'maximum_concurrent_invocations',
+  'maximum_concurrent_calls',
   'maximum_calls_per_minute',
   'maximum_calls_per_hour',
 ])
@@ -97,9 +101,11 @@ export function parseAuthorizationDetails(raw: string | null): AuthorizationDeta
   const detail = singleRecord(parsed)
   if (detail === undefined) return { kind: 'invalid' }
   if (Object.keys(detail).some((key) => !AUTHORIZATION_DETAILS_KEYS.has(key))) return { kind: 'invalid' }
-  if (detail.type !== 'agentic_economy_market_operations') return { kind: 'invalid' }
+  if (detail.type !== 'agentic_economy_market_tools') return { kind: 'invalid' }
   const environment = detail.environment
   if (environment !== 'sandbox' && environment !== 'production') return { kind: 'invalid' }
+  const toolSelection = parseToolSelection(detail)
+  if (toolSelection === undefined) return { kind: 'invalid' }
   const expiresInSeconds = detail.expires_in_seconds
   if (!isSafeInteger(expiresInSeconds)) return { kind: 'invalid' }
   if (!everyFact([
@@ -108,12 +114,12 @@ export function parseAuthorizationDetails(raw: string | null): AuthorizationDeta
   ])) return { kind: 'invalid' }
 
   const budgetValues = [
-    detail.maximum_spend_per_invocation,
+    detail.maximum_spend_per_call,
     detail.maximum_daily_spend,
     detail.maximum_monthly_spend,
   ]
   const budgetKeys = [
-    'maximum_spend_per_invocation',
+    'maximum_spend_per_call',
     'maximum_daily_spend',
     'maximum_monthly_spend',
   ]
@@ -121,15 +127,15 @@ export function parseAuthorizationDetails(raw: string | null): AuthorizationDeta
   if (![0, budgetKeys.length].includes(budgetCount)) return { kind: 'invalid' }
 
   const rateKeys = [
-    'maximum_concurrent_invocations',
+    'maximum_concurrent_calls',
     'maximum_calls_per_minute',
     'maximum_calls_per_hour',
   ] as const
-  const maximumConcurrentInvocations = optionalPositiveSafeInteger(detail.maximum_concurrent_invocations)
+  const maximumConcurrentCalls = optionalPositiveSafeInteger(detail.maximum_concurrent_calls)
   const maximumCallsPerMinute = optionalPositiveSafeInteger(detail.maximum_calls_per_minute)
   const maximumCallsPerHour = optionalPositiveSafeInteger(detail.maximum_calls_per_hour)
   const suppliedRatesAreValid = everyFact([
-    detail.maximum_concurrent_invocations === undefined || maximumConcurrentInvocations !== undefined,
+    detail.maximum_concurrent_calls === undefined || maximumConcurrentCalls !== undefined,
     detail.maximum_calls_per_minute === undefined || maximumCallsPerMinute !== undefined,
     detail.maximum_calls_per_hour === undefined || maximumCallsPerHour !== undefined,
   ])
@@ -140,7 +146,7 @@ export function parseAuthorizationDetails(raw: string | null): AuthorizationDeta
     return { kind: 'invalid' }
   }
 
-  let maximumSpendPerInvocation: ExactAmount | undefined
+  let maximumSpendPerCall: ExactAmount | undefined
   let maximumDailySpend: ExactAmount | undefined
   let maximumMonthlySpend: ExactAmount | undefined
   if (budgetCount === budgetKeys.length) {
@@ -150,14 +156,14 @@ export function parseAuthorizationDetails(raw: string | null): AuthorizationDeta
     if (!firstAmount.success) return { kind: 'invalid' }
     if (!dailyAmount.success) return { kind: 'invalid' }
     if (!monthlyAmount.success) return { kind: 'invalid' }
-    maximumSpendPerInvocation = firstAmount.data
+    maximumSpendPerCall = firstAmount.data
     maximumDailySpend = dailyAmount.data
     maximumMonthlySpend = monthlyAmount.data
     try {
       buildProductionAgentAccessPolicy({
-        currency: maximumSpendPerInvocation.currency,
-        exponent: maximumSpendPerInvocation.exponent,
-        maximumSpendPerInvocation,
+        currency: maximumSpendPerCall.currency,
+        exponent: maximumSpendPerCall.exponent,
+        maximumSpendPerCall,
         maximumDailySpend,
         maximumMonthlySpend,
       })
@@ -170,15 +176,32 @@ export function parseAuthorizationDetails(raw: string | null): AuthorizationDeta
     kind: 'ok',
     requestedAccess: {
       environment,
+      toolAccess: toolSelection.toolAccess,
+      toolRefs: toolSelection.toolRefs,
       expiresInSeconds,
-      ...(maximumSpendPerInvocation === undefined ? {} : { maximumSpendPerInvocation }),
+      ...(maximumSpendPerCall === undefined ? {} : { maximumSpendPerCall }),
       ...(maximumDailySpend === undefined ? {} : { maximumDailySpend }),
       ...(maximumMonthlySpend === undefined ? {} : { maximumMonthlySpend }),
-      ...(maximumConcurrentInvocations === undefined ? {} : { maximumConcurrentInvocations }),
+      ...(maximumConcurrentCalls === undefined ? {} : { maximumConcurrentCalls }),
       ...(maximumCallsPerMinute === undefined ? {} : { maximumCallsPerMinute }),
       ...(maximumCallsPerHour === undefined ? {} : { maximumCallsPerHour }),
     },
   }
+}
+
+function parseToolSelection(detail: Record<string, unknown>) {
+  const hasToolAccess = Object.hasOwn(detail, 'tool_access')
+  const hasToolRefs = Object.hasOwn(detail, 'tool_refs')
+  if (hasToolAccess !== hasToolRefs) return undefined
+  const toolAccess = hasToolAccess ? detail.tool_access : 'all_admitted'
+  const toolRefs = hasToolRefs ? detail.tool_refs : []
+  if ((toolAccess !== 'all_admitted' && toolAccess !== 'selected_tools')
+    || !Array.isArray(toolRefs)
+    || toolRefs.some((ref) => typeof ref !== 'string')) return undefined
+  return normalizeAgentAccessToolSelection({
+    toolAccess,
+    toolRefs: toolRefs as string[],
+  })
 }
 
 export function isSafeInteger(value: unknown): value is number {
@@ -208,61 +231,115 @@ export function modeForGrant(grant: AgentAccessOAuthGrant): AgentAccessAuthority
   return agentAuthorityModeForScopes(grant.requestedScopes, { allowCustomerDefault: true })
 }
 
-export function accessProfileForGrant(grant: Pick<AgentAccessOAuthGrant, 'requestedScopes'>): 'market' | 'supplier' {
+export function accessProfileForGrant(grant: Pick<AgentAccessOAuthGrant, 'requestedScopes'>): 'market' | 'provider' {
   return grant.requestedScopes.length === 1 && grant.requestedScopes[0] === MARKET_SUPPLY_MANAGE_SCOPE
-    ? 'supplier'
+    ? 'provider'
     : 'market'
 }
 
-export function consentHtml(input: Readonly<{ grantRef: string; clientName: string; mode: AgentAccessAuthorityMode; requestedScopes: readonly string[]; state: string; requestedAccess: AgentAccessOAuthRequestedAccess }>): string {
+export function consentHtml(input: Readonly<{
+  grantRef: string
+  grantRevision: number
+  flow: AgentAccessOAuthGrant['flow']
+  clientName: string
+  mode: AgentAccessAuthorityMode
+  requestedScopes: readonly string[]
+  state: string
+  requestedAccess: AgentAccessOAuthRequestedAccess
+  agentTargets?: readonly Readonly<{ principalRef: string; principalRevision: number; displayName: string }>[]
+  agentTargetsNextCursor?: string
+  agentTargetsUnavailable?: boolean
+  reconnectPrincipalRef?: string
+  reconnectAmbiguous?: boolean
+}>): string {
   const escapedName = escapeHtml(input.clientName)
   const escapedGrantRef = escapeHtml(input.grantRef)
+  const grantRevision = String(input.grantRevision)
   const escapedState = escapeHtml(input.state)
   const profile = accessProfileForGrant({ requestedScopes: input.requestedScopes })
-  const scope = profile === 'supplier' ? MARKET_SUPPLY_MANAGE_SCOPE : agentAuthorityScopeForMode(input.mode)
+  const scope = profile === 'provider' ? MARKET_SUPPLY_MANAGE_SCOPE : agentAuthorityScopeForMode(input.mode)
   const permission = consentPermissionCopy(input.mode, profile)
   const environment = escapeHtml(input.requestedAccess.environment)
+  const toolAccess = escapeHtml(input.requestedAccess.toolAccess)
+  const toolRefs = escapeHtml(encodeURIComponent(JSON.stringify(input.requestedAccess.toolRefs)))
   const authorityMode = escapeHtml(input.mode)
   const expiry = String(input.requestedAccess.expiresInSeconds)
-  return `<main data-ae-consent data-grant-ref="${escapedGrantRef}" data-client-name="${escapedName}" data-authority-mode="${authorityMode}" data-access-profile="${profile}" data-environment="${environment}" data-expires-in-seconds="${expiry}"><h1>Connect ${escapedName} to Agentic Economy</h1><p>This agent may ${permission.allowed}.</p><p>${permission.approval}</p><p data-ae-access>Environment: ${environment}. Access expires in ${expiry} seconds. Authority mode: ${authorityMode}. ${consentAccessSummary(input.requestedAccess)}</p><p>You can revoke it at any time from the Access &amp; usage workspace.</p><details><summary>Technical details</summary><p data-ae-scope>Technical permission: ${escapeHtml(scope)}</p></details><form method="post" action="/oauth/authorize"><input type="hidden" name="grant_ref" value="${escapedGrantRef}"><input type="hidden" name="state" value="${escapedState}"><input type="hidden" name="authority_mode" value="${authorityMode}"><button name="decision" value="approve">Approve access</button><button name="decision" value="deny">Decline</button></form></main>`
+  const accessSummary = escapeHtml(consentAccessSummary(input.requestedAccess))
+  const toolSummary = escapeHtml(consentToolAccessSummary(input.requestedAccess))
+  const targets = escapeHtml(encodeURIComponent(JSON.stringify(input.agentTargets ?? [])))
+  const nextCursor = input.agentTargetsNextCursor === undefined
+    ? ''
+    : escapeHtml(encodeURIComponent(input.agentTargetsNextCursor))
+  const targetsUnavailable = input.agentTargetsUnavailable === true ? 'true' : 'false'
+  const reconnectPrincipalRef = input.reconnectPrincipalRef === undefined ? '' : escapeHtml(input.reconnectPrincipalRef)
+  const reconnectAmbiguous = input.reconnectAmbiguous === true ? 'true' : 'false'
+  return `<main data-ae-consent data-grant-ref="${escapedGrantRef}" data-grant-revision="${grantRevision}" data-flow="${input.flow}" data-client-name="${escapedName}" data-authority-mode="${authorityMode}" data-access-profile="${profile}" data-environment="${environment}" data-tool-access="${toolAccess}" data-tool-refs="${toolRefs}" data-expires-in-seconds="${expiry}" data-access-summary="${accessSummary}" data-agent-targets="${targets}" data-agent-targets-next-cursor="${nextCursor}" data-agent-targets-unavailable="${targetsUnavailable}" data-reconnect-principal-ref="${reconnectPrincipalRef}" data-reconnect-ambiguous="${reconnectAmbiguous}"><h1>Connect ${escapedName} to Agentic Economy</h1><p>This agent may ${permission.allowed}.</p><p>${permission.approval}</p><p data-ae-tools>${toolSummary}</p><p data-ae-access>Environment: ${environment}. Access expires in ${expiry} seconds. Authority mode: ${authorityMode}. ${accessSummary}</p><p>You can revoke it at any time from the Access &amp; usage workspace.</p><details><summary>Technical details</summary><p data-ae-scope>Technical permission: ${escapeHtml(scope)}</p></details><form method="post" action="/oauth/authorize"><input type="hidden" name="grant_ref" value="${escapedGrantRef}"><input type="hidden" name="state" value="${escapedState}"><input type="hidden" name="authority_mode" value="${authorityMode}"><button name="decision" value="approve">Approve access</button><button name="decision" value="deny">Decline</button></form></main>`
 }
 
-export function consentPermissionCopy(mode: AgentAccessAuthorityMode, profile: 'market' | 'supplier' = 'market'): Readonly<{ allowed: string; approval: string }> {
-  if (profile === 'supplier') return { allowed: 'inspect and manage your published supplier Operations', approval: 'It cannot fund buyers, spend buyer credit, or manage unrelated account settings.' }
-  if (mode === 'inspect_only') return { allowed: 'browse and compare Operations', approval: 'Any invocation still waits for your approval.' }
-  if (mode === 'approve_each') return { allowed: 'bring each request to you', approval: 'You approve each request before it moves forward.' }
-  if (mode === 'bounded_mandate') return { allowed: 'work within the requested spend controls', approval: 'Paid calls proceed only within the requested controls.' }
+export function consentRecoveryHtml(grantRef: string): string {
+  const escapedGrantRef = escapeHtml(grantRef)
+  return `<main data-ae-consent data-ae-consent-state="outcome_unknown" data-grant-ref="${escapedGrantRef}"><h1>Check the current access status</h1><p>The approval may have completed. Do not submit it again.</p><p>Request reference: ${escapedGrantRef}</p></main>`
+}
+
+export function consentCompletedHtml(grantRef: string): string {
+  const escapedGrantRef = escapeHtml(grantRef)
+  return `<main data-ae-consent data-ae-consent-state="succeeded" data-grant-ref="${escapedGrantRef}"><h1>Access approved</h1><p>This approval has completed. Open Agents for the current credential status.</p><p>Request reference: ${escapedGrantRef}</p></main>`
+}
+
+export function consentPermissionCopy(mode: AgentAccessAuthorityMode, profile: 'market' | 'provider' = 'market'): Readonly<{ allowed: string; approval: string }> {
+  if (profile === 'provider') return { allowed: 'inspect and manage your published Provider Tools', approval: 'It cannot fund buyers, spend buyer credit, or manage unrelated account settings.' }
+  if (mode === 'read_only') return { allowed: 'browse and compare Tools', approval: 'Any Call still waits for your approval.' }
+  if (mode === 'approval_required') return { allowed: 'bring each request to you', approval: 'You approve each request before it moves forward.' }
+  if (mode === 'spending_policy') return { allowed: 'work within the requested spend controls', approval: 'Paid calls proceed only within the requested controls.' }
   return { allowed: 'carry out approved work on your behalf', approval: 'AE still asks for your approval where required.' }
 }
 
 export function consentAccessSummary(requestedAccess: AgentAccessOAuthRequestedAccess): string {
+  const sandbox = requestedAccess.environment === 'sandbox'
+    ? defaultSandboxAgentAccessPolicy({ currency: 'AUD', exponent: 6 })
+    : undefined
+  const access = sandbox === undefined ? requestedAccess : {
+    ...requestedAccess,
+    maximumSpendPerCall: sandbox.budget.maximumSpendPerCall,
+    maximumDailySpend: sandbox.budget.maximumDailySpend,
+    maximumMonthlySpend: sandbox.budget.maximumMonthlySpend,
+    maximumConcurrentCalls: sandbox.budget.maximumConcurrentCalls,
+    maximumCallsPerMinute: sandbox.rate.maximumCallsPerMinute,
+    maximumCallsPerHour: sandbox.rate.maximumCallsPerHour,
+  }
   const controls: string[] = []
-  if (requestedAccess.maximumSpendPerInvocation !== undefined) {
-    controls.push(`Maximum spend per invocation: ${formatConsentAmount(requestedAccess.maximumSpendPerInvocation)}.`)
+  if (access.maximumSpendPerCall !== undefined) {
+    controls.push(`Maximum spend per Call: ${formatConsentAmount(access.maximumSpendPerCall)}.`)
   }
-  if (requestedAccess.maximumDailySpend !== undefined) {
-    controls.push(`Maximum daily spend: ${formatConsentAmount(requestedAccess.maximumDailySpend)}.`)
+  if (access.maximumDailySpend !== undefined) {
+    controls.push(`Maximum daily spend: ${formatConsentAmount(access.maximumDailySpend)}.`)
   }
-  if (requestedAccess.maximumMonthlySpend !== undefined) {
-    controls.push(`Maximum monthly spend: ${formatConsentAmount(requestedAccess.maximumMonthlySpend)}.`)
+  if (access.maximumMonthlySpend !== undefined) {
+    controls.push(`Maximum monthly spend: ${formatConsentAmount(access.maximumMonthlySpend)}.`)
   }
-  if (requestedAccess.maximumConcurrentInvocations !== undefined) {
-    controls.push(`Maximum concurrent invocations: ${requestedAccess.maximumConcurrentInvocations}.`)
+  if (access.maximumConcurrentCalls !== undefined) {
+    controls.push(`Maximum concurrent Calls: ${access.maximumConcurrentCalls}.`)
   }
-  if (requestedAccess.maximumCallsPerMinute !== undefined) {
-    controls.push(`Maximum calls per minute: ${requestedAccess.maximumCallsPerMinute}.`)
+  if (access.maximumCallsPerMinute !== undefined) {
+    controls.push(`Maximum calls per minute: ${access.maximumCallsPerMinute}.`)
   }
-  if (requestedAccess.maximumCallsPerHour !== undefined) {
-    controls.push(`Maximum calls per hour: ${requestedAccess.maximumCallsPerHour}.`)
+  if (access.maximumCallsPerHour !== undefined) {
+    controls.push(`Maximum calls per hour: ${access.maximumCallsPerHour}.`)
   }
-  if (requestedAccess.environment === 'production'
-    && requestedAccess.maximumSpendPerInvocation === undefined
-    && requestedAccess.maximumDailySpend === undefined
-    && requestedAccess.maximumMonthlySpend === undefined) {
+  if (access.environment === 'production'
+    && access.maximumSpendPerCall === undefined
+    && access.maximumDailySpend === undefined
+    && access.maximumMonthlySpend === undefined) {
     controls.push('Spending is disabled by the zero default.')
   }
   if (controls.length === 0) controls.push('No additional spend or rate controls were supplied.')
   return controls.join(' ')
+}
+
+function consentToolAccessSummary(requestedAccess: AgentAccessOAuthRequestedAccess): string {
+  return requestedAccess.toolAccess === 'all_admitted'
+    ? 'Tools: all admitted Tools, including Tools admitted in the future.'
+    : `Tools: selected only — ${requestedAccess.toolRefs.join(', ')}.`
 }
 
 export function formatConsentAmount(amount: ExactAmount): string {

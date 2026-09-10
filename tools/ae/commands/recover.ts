@@ -1,27 +1,28 @@
-import { OPERATION_INVOKE_ROUTE_CONTRACT } from '@/modules/capability-execution/operation-invoke-entry'
+import { CALL_ROUTE_CONTRACT } from '@/modules/capability-execution/call-entry'
 import {
-  operationInvokeRecoveryResultSchema,
-  operationReconcileInputSchema,
-  operationReconciliationEvidenceSchema,
-} from '@/modules/capability-execution/operation-recovery.actions'
+  callRecoveryResultSchema,
+  callReconcileInputSchema,
+  callReconciliationEvidenceSchema,
+} from '@/modules/capability-execution/call-recovery.actions'
 
 import type { CliOptions } from '../lib/args'
 import { CliFailure, callJson, heading, line, printJson, requireOk, table } from '../lib/output'
 import { usageFailure } from '../lib/help'
+import { continuationCommand } from '../lib/continuation-command'
 import { recoveryTransportFailure, requireAgentAccessKey } from './status'
 
-function recoverPath(invocationRef: string): string {
-  return OPERATION_INVOKE_ROUTE_CONTRACT.reconcile.path.replace(
-    '{invocationRef}',
-    encodeURIComponent(invocationRef),
+function recoverPath(callRef: string): string {
+  return CALL_ROUTE_CONTRACT.reconcile.path.replace(
+    '{callRef}',
+    encodeURIComponent(callRef),
   )
 }
 
-/** Reconcile one uncertain invocation with explicit evidence and replay identity. */
+/** Reconcile one uncertain call with explicit evidence and replay identity. */
 export async function runRecoverCommand(args: readonly string[], options: CliOptions): Promise<void> {
-  const invocationRef = args[0]?.trim()
+  const callRef = args[0]?.trim()
   const rawEvidence = args[1]?.trim()
-  if (invocationRef === undefined || invocationRef.length === 0 || rawEvidence === undefined || rawEvidence.length === 0 || args.length > 2) {
+  if (callRef === undefined || callRef.length === 0 || rawEvidence === undefined || rawEvidence.length === 0 || args.length > 2) {
     throw usageFailure('recover', 'recover-usage')
   }
 
@@ -42,22 +43,22 @@ export async function runRecoverCommand(args: readonly string[], options: CliOpt
       code: 'recover-evidence',
     })
   }
-  const parsedEvidence = operationReconciliationEvidenceSchema.safeParse(evidence)
-  const parsedInput = operationReconcileInputSchema.safeParse({ invocationRef, evidence, idempotencyKey })
-  const identityMatchesEvidence = parsedEvidence.success && parsedEvidence.data.invocationRef === invocationRef
+  const parsedEvidence = callReconciliationEvidenceSchema.safeParse(evidence)
+  const parsedInput = callReconcileInputSchema.safeParse({ callRef, evidence, idempotencyKey })
+  const identityMatchesEvidence = parsedEvidence.success && parsedEvidence.data.invocationRef === callRef
   if (!parsedEvidence.success || !parsedInput.success || !identityMatchesEvidence) {
-    throw new CliFailure('Recovery evidence or identity does not match operation.reconcile:v1.', {
+    throw new CliFailure('Recovery evidence or identity does not match call.reconcile:v1.', {
       kind: 'INVALID_ARGUMENT',
       code: parsedEvidence.success ? 'recover-input' : 'recover-evidence',
     })
   }
 
   const apiKey = requireAgentAccessKey('recover', options)
-  const path = recoverPath(parsedInput.data.invocationRef)
+  const path = recoverPath(parsedInput.data.callRef)
   let outcome
   try {
     outcome = await callJson(options.baseUrl, path, {
-      method: OPERATION_INVOKE_ROUTE_CONTRACT.reconcile.method,
+      method: CALL_ROUTE_CONTRACT.reconcile.method,
       headers: {
         Authorization: `Bearer ${apiKey}`,
       },
@@ -68,25 +69,35 @@ export async function runRecoverCommand(args: readonly string[], options: CliOpt
     })
   } catch (error) {
     if (error instanceof CliFailure) throw error
-    throw recoveryTransportFailure('reconcile', parsedInput.data.invocationRef, parsedInput.data.idempotencyKey)
+    throw recoveryTransportFailure('reconcile', parsedInput.data.callRef, parsedInput.data.idempotencyKey)
   }
-  const parsedResult = operationInvokeRecoveryResultSchema.safeParse(requireOk(outcome, 'operation reconciliation'))
+  const parsedResult = callRecoveryResultSchema.safeParse(requireOk(outcome, 'Call reconciliation'))
   if (!parsedResult.success) {
     throw new CliFailure('The gateway returned an invalid recovery result.', {
       kind: 'UNAVAILABLE',
-      code: 'operation-recover-result-invalid',
+      code: 'call-recover-result-invalid',
     })
   }
 
+  const continuationSuffix = continuationCommand([
+    ...(options.baseUrlSource === undefined || options.baseUrlSource === 'hosted_default'
+      ? []
+      : ['--base-url', options.baseUrl]),
+    ...(options.json ? ['--json'] : []),
+  ])
+  const statusCommand = `ae status ${parsedInput.data.callRef}`
+  const nextCommand = continuationSuffix.length === 0
+    ? statusCommand
+    : `${statusCommand} ${continuationSuffix}`
   const rendered = {
     ...parsedResult.data,
-    nextCommand: `ae status ${parsedInput.data.invocationRef}`,
+    nextCommand,
   }
   if (options.json) {
     printJson(rendered)
     return
   }
-  heading(`Operation recovery ${parsedInput.data.invocationRef}`)
+  heading(`Call recovery ${parsedInput.data.callRef}`)
   table([
     ['status', parsedResult.data.kind],
     ['next command', rendered.nextCommand],

@@ -33,16 +33,23 @@ function SignUpRoute() {
   const { redirect } = Route.useSearch()
   const isLocalE2E = isLocalE2EAuthBypassEnabled()
   const isAgentAccessFlow = redirect?.startsWith('/agent-access') ?? false
+  const isProviderFlow = redirect?.startsWith('/owner') ?? false
   const heading = isLocalE2E
     ? 'Local preview sign-up is off'
     : isAgentAccessFlow
       ? 'Create an account to connect an agent'
-      : 'Create a supplier account'
+      : isProviderFlow
+        ? 'Create a Provider account'
+        : 'Create an account'
   const body = isLocalE2E
     ? 'This browser journey does not connect a Clerk account. Nothing is signed in or authorized.'
     : isAgentAccessFlow
-      ? 'After you create your account, you’ll return to Access and create a caller identity.'
-      : 'After you create your account, you’ll continue to the Operation publishing workspace.'
+      ? 'After you create your account, you’ll return to the agent connection you started.'
+      : isProviderFlow
+        ? 'After you create your account, you’ll continue to the Tool publishing workspace.'
+        : redirect === undefined
+          ? 'After you create your account, you’ll return to your account settings.'
+          : 'After you create your account, you’ll return to where you left off.'
   const switchSearch = redirect === undefined ? {} : { redirect }
 
   return (
@@ -56,7 +63,7 @@ function SignUpRoute() {
             body={body}
           >
             <AeSiteButton asChild>
-              <Link to="/market" search={{ window: '30d' }} hash="operations">
+              <Link to="/market" search={{ window: '30d' }} hash="tools">
                 Browse the catalog
               </Link>
             </AeSiteButton>
@@ -102,7 +109,7 @@ function SignUpRoute() {
           >
             <SignUp
               appearance={clerkAuthSurfaceAppearance}
-              fallbackRedirectUrl={redirect ?? '/owner/offerings'}
+              fallbackRedirectUrl={redirect ?? '/owner/settings'}
               signInUrl="/sign-in"
             />
           </AeSiteAuthPanel>

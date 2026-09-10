@@ -12,75 +12,75 @@ import {
 
 const PRESENCE_REFRESH_PAGE_SIZE = 20
 
-const activeOperations = new TableAggregate<{
+const activeTools = new TableAggregate<{
   Key: null
   DataModel: DataModel
-  TableName: 'marketActiveOperations'
-}>(components.marketActiveOperations, { sortKey: () => null })
+  TableName: 'marketActiveTools'
+}>(components.marketActiveTools, { sortKey: () => null })
 
-const activeSuppliers = new TableAggregate<{
+const activeProviders = new TableAggregate<{
   Key: null
   DataModel: DataModel
-  TableName: 'marketActiveSuppliers'
-}>(components.marketActiveSuppliers, { sortKey: () => null })
+  TableName: 'marketActiveProviders'
+}>(components.marketActiveProviders, { sortKey: () => null })
 
-export async function syncMarketOperationPresence(
+export async function syncMarketToolPresence(
   ctx: MutationCtx,
   input: Readonly<{
-    operationRef: string
+    toolRef: string
     businessId: Id<'businesses'>
     active: boolean
     now: number
   }>,
 ): Promise<void> {
-  const existing = await ctx.db.query('marketActiveOperations')
-    .withIndex('by_operationRef', (index) => index.eq('operationRef', input.operationRef))
+  const existing = await ctx.db.query('marketActiveTools')
+    .withIndex('by_toolRef', (index) => index.eq('toolRef', input.toolRef))
     .unique()
   if (input.active && existing === null) {
-    const id = await ctx.db.insert('marketActiveOperations', {
-      operationRef: input.operationRef,
+    const id = await ctx.db.insert('marketActiveTools', {
+      toolRef: input.toolRef,
       businessId: input.businessId,
       activatedAt: input.now,
     })
     const row = await ctx.db.get(id)
-    if (row === null) throw new Error('market_active_operation_missing_after_insert')
-    await activeOperations.insert(ctx, row)
+    if (row === null) throw new Error('market_active_tool_missing_after_insert')
+    await activeTools.insert(ctx, row)
   }
   if (!input.active && existing !== null) {
     await ctx.db.delete(existing._id)
-    await activeOperations.delete(ctx, existing)
+    await activeTools.delete(ctx, existing)
   }
-  await syncSupplierPresence(ctx, input.businessId, input.now)
+  await syncProviderPresence(ctx, input.businessId, input.now)
 }
 
-async function syncSupplierPresence(ctx: MutationCtx, businessId: Id<'businesses'>, now: number): Promise<void> {
-  const [operation, supplier] = await Promise.all([
-    ctx.db.query('marketActiveOperations').withIndex('by_businessId', (index) => index.eq('businessId', businessId)).first(),
-    ctx.db.query('marketActiveSuppliers').withIndex('by_businessId', (index) => index.eq('businessId', businessId)).unique(),
+async function syncProviderPresence(ctx: MutationCtx, businessId: Id<'businesses'>, now: number): Promise<void> {
+  const [tool, provider] = await Promise.all([
+    ctx.db.query('marketActiveTools').withIndex('by_businessId', (index) => index.eq('businessId', businessId)).first(),
+    ctx.db.query('marketActiveProviders').withIndex('by_businessId', (index) => index.eq('businessId', businessId)).unique(),
   ])
-  if (operation !== null && supplier === null) {
-    const id = await ctx.db.insert('marketActiveSuppliers', { businessId, activatedAt: now })
+  if (tool !== null && provider === null) {
+    const id = await ctx.db.insert('marketActiveProviders', { businessId, activatedAt: now })
     const row = await ctx.db.get(id)
-    if (row === null) throw new Error('market_active_supplier_missing_after_insert')
-    await activeSuppliers.insert(ctx, row)
+    if (row === null) throw new Error('market_active_provider_missing_after_insert')
+    await activeProviders.insert(ctx, row)
   }
-  if (operation === null && supplier !== null) {
-    await ctx.db.delete(supplier._id)
-    await activeSuppliers.delete(ctx, supplier)
+  if (tool === null && provider !== null) {
+    await ctx.db.delete(provider._id)
+    await activeProviders.delete(ctx, provider)
   }
 }
 
-export async function countMarketPresence(ctx: QueryCtx): Promise<{ operations: number; suppliers: number }> {
-  const [operations, suppliers] = await Promise.all([
-    activeOperations.count(ctx),
-    activeSuppliers.count(ctx),
+export async function countMarketPresence(ctx: QueryCtx): Promise<{ tools: number; providers: number }> {
+  const [tools, providers] = await Promise.all([
+    activeTools.count(ctx),
+    activeProviders.count(ctx),
   ])
-  return { operations: operations ?? 0, suppliers: suppliers ?? 0 }
+  return { tools: tools ?? 0, providers: providers ?? 0 }
 }
 
 /**
  * Re-evaluates time-bounded readiness so the current gauges cannot retain an
- * Operation after its readiness window expires without another publication.
+ * Tool after its readiness window expires without another publication.
  */
 export const refresh = internalMutation({
   args: {
@@ -100,10 +100,11 @@ export const refresh = internalMutation({
       numItems: PRESENCE_REFRESH_PAGE_SIZE,
     })
     for (const publication of page.page) {
-      await syncMarketOperationPresence(ctx, {
-        operationRef: publication.operationRef,
+      await syncMarketToolPresence(ctx, {
+        toolRef: publication.toolRef,
         businessId: publication.businessId,
         active: publication.disposition === 'current'
+          && publication.sourceAuthorityState !== 'review_required'
           && publication.credentialState === 'ready'
           && publication.healthState === 'healthy'
           && (publication.readinessValidUntil ?? 0) > now,

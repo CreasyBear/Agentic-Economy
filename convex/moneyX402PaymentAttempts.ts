@@ -12,6 +12,9 @@ import {
   recordX402PaymentSignatureDigestArgs,
   recordX402PaymentSignatureDigestHandler,
   recordX402PaymentSignatureDigestReturns,
+  recordX402PaymentAuthorizationFailureArgs,
+  recordX402PaymentAuthorizationFailureHandler,
+  recordX402PaymentAuthorizationFailureReturns,
   recordX402PaymentSigningIntentArgs,
   recordX402PaymentSigningIntentHandler,
   recordX402PaymentSigningIntentReturns,
@@ -41,7 +44,7 @@ import {
   readX402PaymentAuthorizationHandler,
   readX402PaymentAuthorizationReturns,
 } from './moneyX402PaymentRead'
-import { persistedInvocationAuthorityIsCurrent } from './moneyBillingAuthorization'
+import { persistedCallAuthorityIsCurrent } from './moneyBillingAuthorization'
 
 export const prepareX402PaymentAuthorization = internalMutation({
   args: prepareX402PaymentAuthorizationArgs,
@@ -65,6 +68,12 @@ export const recordX402PaymentSignatureDigest = internalMutation({
   args: recordX402PaymentSignatureDigestArgs,
   returns: recordX402PaymentSignatureDigestReturns,
   handler: recordX402PaymentSignatureDigestHandler,
+})
+
+export const recordX402PaymentAuthorizationFailure = internalMutation({
+  args: recordX402PaymentAuthorizationFailureArgs,
+  returns: recordX402PaymentAuthorizationFailureReturns,
+  handler: recordX402PaymentAuthorizationFailureHandler,
 })
 
 export const readX402PaymentAuthorization = internalQuery({
@@ -124,11 +133,11 @@ export const reconcileX402PaymentAttempt = internalMutation({
     if (
       attempt === null ||
       attempt.dispatchRef !== args.dispatchRef ||
-      attempt.operationRef !== args.operationRef ||
+      attempt.toolRef !== args.toolRef ||
       attempt.inputDigest !== args.inputDigest ||
-      !(await persistedInvocationAuthorityIsCurrent(ctx, {
-        invocationRef: attempt.dispatchRef,
-        operationRef: attempt.operationRef,
+      !(await persistedCallAuthorityIsCurrent(ctx, {
+        callRef: attempt.dispatchRef,
+        toolRef: attempt.toolRef,
         inputDigest: attempt.inputDigest,
         attemptRef: attempt.attemptRef,
       }))

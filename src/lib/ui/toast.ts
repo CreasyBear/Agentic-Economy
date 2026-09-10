@@ -1,5 +1,6 @@
 import { createElement, type ReactElement } from 'react'
 import { toast as sonnerToast } from 'sonner'
+import { createClientOnlyFn } from '@tanstack/react-start'
 
 export type AeToastOptions = { description?: string }
 
@@ -10,9 +11,18 @@ function titledToast(role: ToastRole, title: string, description: string | undef
   return createElement('span', { role, 'aria-label': accessibleTitle }, title)
 }
 
+type ToastKind = 'success' | 'error' | 'info' | 'warning'
+
+const dispatchToastOnClient = createClientOnlyFn(
+  (kind: ToastKind, title: string, options?: AeToastOptions) => {
+    const role: ToastRole = kind === 'error' ? 'alert' : 'status'
+    return sonnerToast[kind](titledToast(role, title, options?.description), options)
+  },
+)
+
 export const toast = {
-  success: (title: string, options?: AeToastOptions) => sonnerToast.success(titledToast('status', title, options?.description), options),
-  error: (title: string, options?: AeToastOptions) => sonnerToast.error(titledToast('alert', title, options?.description), options),
-  info: (title: string, options?: AeToastOptions) => sonnerToast.info(titledToast('status', title, options?.description), options),
-  warning: (title: string, options?: AeToastOptions) => sonnerToast.warning(titledToast('status', title, options?.description), options),
+  success: (title: string, options?: AeToastOptions) => dispatchToastOnClient('success', title, options),
+  error: (title: string, options?: AeToastOptions) => dispatchToastOnClient('error', title, options),
+  info: (title: string, options?: AeToastOptions) => dispatchToastOnClient('info', title, options),
+  warning: (title: string, options?: AeToastOptions) => dispatchToastOnClient('warning', title, options),
 }

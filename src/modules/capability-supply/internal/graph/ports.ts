@@ -43,7 +43,7 @@ export type GraphCatalogAccessPath = Readonly<{
 export type GraphPublicationRow = CapabilityPublicationLifecycleRow & Readonly<{
   id: string
   publicationRef: string
-  operationRef: string
+  toolRef: string
   revision: number
   networkId: string
   businessId: string
@@ -54,6 +54,9 @@ export type GraphPublicationRow = CapabilityPublicationLifecycleRow & Readonly<{
   contractDigest: string
   sourceKind: 'ae_envelope' | 'openapi_http' | 'mcp' | 'agent_plugin_mcp' | 'x402'
   sourceDigest: string
+  publisherRef?: string
+  authorityMode?: 'provider_owned' | 'observed_external' | 'ae_curated_external' | 'third_party_gateway'
+  sourceAuthorityState?: 'verified' | 'review_required'
   registrationEvidenceRefs: readonly string[]
   readinessEvidenceRefs: readonly string[]
 }>
@@ -78,6 +81,7 @@ export type ProbeReadinessPatch = Readonly<{
   readinessOutcome: CapabilityReadinessOutcome
   readinessObservedAt: number
   readinessValidUntil: number
+  readinessLastHealthyAt?: number
   readinessEvidenceRefs: readonly string[]
   updatedAt: number
 }>

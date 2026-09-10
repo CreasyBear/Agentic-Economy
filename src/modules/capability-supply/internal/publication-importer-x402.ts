@@ -87,9 +87,18 @@ export async function importX402Capability(
       : method === "GET"
         ? sourceQueryMapping(resource.query)
         : undefined;
+  const bodyPointer = resource.bodyPointer === "/body" ? "/body" as const : undefined;
+  const queryObjectPointer = resource.queryObjectPointer === "/query" ? "/query" as const : undefined;
+  const path = resource.path === undefined ? undefined : sourceQueryMapping(resource.path, true);
+  const pathTemplate = typeof resource.pathTemplate === "string" ? resource.pathTemplate : undefined;
   if (
     method === undefined ||
-    (method === "GET" && query === undefined) ||
+    (resource.path !== undefined && path === undefined) ||
+    (resource.pathTemplate !== undefined && pathTemplate === undefined) ||
+    (resource.bodyPointer !== undefined && bodyPointer === undefined) ||
+    (resource.queryObjectPointer !== undefined && queryObjectPointer === undefined) ||
+    (query !== undefined && queryObjectPointer !== undefined) ||
+    (method === "GET" && query === undefined && queryObjectPointer === undefined) ||
     (method === "POST" &&
       bazaar.kind !== "admitted" &&
       resource.query !== undefined)
@@ -202,6 +211,10 @@ export async function importX402Capability(
       config: {
         method,
         ...(query === undefined ? {} : { query: [...query] }),
+        ...(bodyPointer === undefined ? {} : { bodyPointer }),
+        ...(queryObjectPointer === undefined ? {} : { queryObjectPointer }),
+        ...(path === undefined ? {} : { path }),
+        ...(pathTemplate === undefined ? {} : { pathTemplate }),
         requestTimeoutMs: input.commercial.requestTimeoutMs,
         scheme,
         network,
@@ -232,13 +245,13 @@ function contractForBazaarSchemas(
   };
 }
 
-function sourceQueryMapping(value: unknown):
+function sourceQueryMapping(value: unknown, path = false):
   | readonly Readonly<{
       inputPointer: string;
       parameter: string;
     }>[]
   | undefined {
-  if (!Array.isArray(value) || value.length < 1 || value.length > 64)
+  if (!Array.isArray(value) || value.length > 64)
     return undefined;
   const seenPointers = new Set<string>();
   const seenParameters = new Set<string>();
@@ -249,7 +262,7 @@ function sourceQueryMapping(value: unknown):
       typeof item.inputPointer !== "string" ||
       typeof item.parameter !== "string" ||
       !/^\/(?:[^/~]|~[01])+(?:\/(?:[^/~]|~[01])+)*$/.test(item.inputPointer) ||
-      !/^[A-Za-z][A-Za-z0-9_.-]{0,99}$/.test(item.parameter) ||
+      !(path ? /^[A-Za-z_][A-Za-z0-9_.-]{0,99}$/ : /^[A-Za-z][A-Za-z0-9_.-]{0,99}$/).test(item.parameter) ||
       seenPointers.has(item.inputPointer) ||
       seenParameters.has(item.parameter)
     )

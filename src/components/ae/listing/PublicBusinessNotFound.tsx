@@ -13,12 +13,12 @@ export function PublicBusinessNotFound({ data }: NotFoundRouteProps) {
   if (reason === 'not_public') {
     return (
       <AePageState
-        title="Supplier profile unavailable"
-        description="This supplier is not published in the catalogue right now."
+        title="Provider profile unavailable"
+        description="This provider is not published in the catalogue right now."
         action={
           <div className="flex flex-col gap-3 sm:flex-row">
-            <Button asChild variant="default" className="min-h-touch"><Link to="/for-providers">Publish an Operation</Link></Button>
-            <Button asChild variant="secondary" className="min-h-touch"><Link to="/market" search={{ window: '30d' }} hash="operations">Back to catalog</Link></Button>
+            <Button asChild variant="default" className="min-h-touch"><Link to="/for-providers">Publish a Tool</Link></Button>
+            <Button asChild variant="secondary" className="min-h-touch"><Link to="/market" search={{ window: '30d' }} hash="tools">Back to catalog</Link></Button>
           </div>
         }
       />
@@ -27,12 +27,12 @@ export function PublicBusinessNotFound({ data }: NotFoundRouteProps) {
 
   return (
     <AePageState
-      title="No supplier at this address"
+      title="No provider at this address"
       description="Nothing is published here. Check the address, or browse the catalogue."
       action={
         <div className="flex flex-col gap-3 sm:flex-row">
-          <Button asChild variant="default" className="min-h-touch"><Link to="/market" search={{ window: '30d' }} hash="operations">Browse catalog</Link></Button>
-          <Button asChild variant="secondary" className="min-h-touch"><Link to="/for-providers">Publish an Operation</Link></Button>
+          <Button asChild variant="default" className="min-h-touch"><Link to="/market" search={{ window: '30d' }} hash="tools">Browse catalog</Link></Button>
+          <Button asChild variant="secondary" className="min-h-touch"><Link to="/for-providers">Publish a Tool</Link></Button>
         </div>
       }
     />

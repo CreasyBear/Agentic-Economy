@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 
-import { render, waitFor } from '@testing-library/react'
+import { act, render, waitFor } from '@testing-library/react'
+import { hydrateRoot } from 'react-dom/client'
+import { renderToString } from 'react-dom/server'
 import { describe, expect, it, vi } from 'vitest'
 
 vi.mock('shiki', () => ({
@@ -36,5 +38,42 @@ describe('CodeBlock deterministic highlighting', () => {
       expect(plainToken.style.fontWeight).toBe('')
       expect(plainToken.style.textDecoration).toBe('')
     })
+  })
+
+  it('hydrates deterministic raw markup after the server token cache is warm', async () => {
+    const code = 'const hydration = "stable"'
+    const warmed = render(<CodeBlock code={code} language="typescript" />)
+
+    await waitFor(() => {
+      expect(warmed.getByText(code).style.color).toBe('rgb(18, 52, 86)')
+    })
+    warmed.unmount()
+
+    const serverMarkup = renderToString(
+      <CodeBlock code={code} language="typescript" />
+    )
+    expect(serverMarkup).toContain('background-color:transparent')
+    expect(serverMarkup).not.toContain('#123456')
+
+    const container = document.createElement('div')
+    container.innerHTML = serverMarkup
+    document.body.append(container)
+    const recoverableErrors: unknown[] = []
+    const root = hydrateRoot(
+      container,
+      <CodeBlock code={code} language="typescript" />,
+      {
+        onRecoverableError: (error) => recoverableErrors.push(error),
+      }
+    )
+
+    await waitFor(() => {
+      const token = container.querySelector('code span span') as HTMLElement | null
+      expect(token?.style.color).toBe('rgb(18, 52, 86)')
+    })
+    expect(recoverableErrors).toEqual([])
+
+    act(() => root.unmount())
+    container.remove()
   })
 })

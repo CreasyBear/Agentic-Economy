@@ -62,6 +62,12 @@ export const retryCleanupAgentArgs = retryCleanupAgentArgsValue.fields
 const connectX402AgentArgsValue = v.object({
   businessId: v.id('businesses'),
   resourceUrl: v.string(),
+  method: v.union(v.literal('GET'), v.literal('POST')),
+  observationDigest: v.string(),
+  payTo: v.string(),
+  claimExpiresAt: v.number(),
+  claimDigest: v.string(),
+  claimSignature: v.string(),
   evidenceRefs: v.array(v.string()),
   commandId: v.string(),
   ...agentRequestFields,
@@ -106,6 +112,7 @@ async function agentActor(
     ? {
         canonicalPrincipalRef: admission.principalId,
         canonicalAccountRef: admission.ownerId,
+        authorityGrantRef: admission.grantRef,
       }
     : null
 }

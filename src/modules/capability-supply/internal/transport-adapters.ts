@@ -1,10 +1,4 @@
 import {
-  CallToolResultSchema,
-  InitializeResultSchema,
-  JSONRPCResponseSchema,
-  ListToolsResultSchema,
-} from '@modelcontextprotocol/sdk/types.js'
-import {
   NetworkSchemaV2,
   validatePaymentRequired,
 } from '@x402/core/schemas'
@@ -17,35 +11,6 @@ import type {
 } from '@/modules/capability-supply/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { stableStringify, type StableHashValue } from '@/modules/common/stable-hash'
-export function isMcpJsonRpcResult(value: unknown, expectedId: string): boolean {
-  const parsed = JSONRPCResponseSchema.safeParse(value)
-  return parsed.success && parsed.data.id === expectedId && 'result' in parsed.data
-}
-export function parseMcpJsonRpcResponse(value: unknown, expectedId: string): unknown | undefined {
-  const parsed = JSONRPCResponseSchema.safeParse(value)
-  return parsed.success && parsed.data.id === expectedId ? parsed.data : undefined
-}
-
-
-function mcpJsonRpcResult(value: unknown, expectedId: string): unknown {
-  const parsed = JSONRPCResponseSchema.safeParse(value)
-  return parsed.success && parsed.data.id === expectedId && 'result' in parsed.data ? parsed.data.result : undefined
-}
-
-export function parseMcpInitializeResult(value: unknown, expectedId: string) {
-  const parsed = InitializeResultSchema.safeParse(mcpJsonRpcResult(value, expectedId))
-  return parsed.success ? parsed.data : undefined
-}
-
-export function parseMcpListToolsResult(value: unknown, expectedId: string) {
-  const parsed = ListToolsResultSchema.safeParse(mcpJsonRpcResult(value, expectedId))
-  return parsed.success ? parsed.data : undefined
-}
-
-export function parseMcpCallToolResult(value: unknown, expectedId: string) {
-  const parsed = CallToolResultSchema.safeParse(mcpJsonRpcResult(value, expectedId))
-  return parsed.success ? parsed.data : undefined
-}
 
 export type X402CatalogPayment = Readonly<{
   network: string
@@ -115,7 +80,7 @@ const queryMapping = z.array(z.strictObject({
   required: z.boolean().optional(),
   style: z.literal('form').optional(),
   explode: z.boolean().optional(),
-})).min(1).max(64).superRefine((items, context) => {
+})).max(64).superRefine((items, context) => {
   const pointers = new Set<string>()
   const parameters = new Set<string>()
   for (const [index, item] of items.entries()) {
@@ -128,7 +93,7 @@ const queryMapping = z.array(z.strictObject({
 })
 const pathMapping = z.array(z.strictObject({
   inputPointer,
-  parameter: queryParameterName,
+  parameter: z.string().regex(/^[A-Za-z_][A-Za-z0-9_.-]{0,99}$/),
   required: z.boolean().optional(),
   style: z.literal('simple').optional(),
   explode: z.boolean().optional(),
@@ -229,6 +194,10 @@ const mcpJsonRpcConfiguration = z.strictObject({
 const x402FetchConfiguration = z.strictObject({
   method: z.enum(['GET', 'POST']),
   query: queryMapping.optional(),
+  path: pathMapping.optional(),
+  pathTemplate: z.string().max(2_000).regex(/^\/(?!\/)[A-Za-z0-9_/:.\-~%{}]+$/).optional(),
+  bodyPointer: z.literal('/body').optional(),
+  queryObjectPointer: z.literal('/query').optional(),
   requestTimeoutMs: z.number().int().min(100).max(120_000),
   scheme: z.literal('exact'),
   network: z.string().trim().min(1).max(200),
@@ -244,7 +213,11 @@ const x402FetchConfiguration = z.strictObject({
     return segments.length === 2 && segments.every((segment) => segment.length > 0)
   })
   .refine((value) => value.assetAmountExponent >= value.routeAmountExponent)
-  .refine((value) => value.method === 'GET' ? (value.query?.length ?? 0) > 0 : value.query === undefined)
+  .refine((value) => value.method === 'GET'
+    ? value.bodyPointer === undefined && (value.query !== undefined || value.queryObjectPointer !== undefined)
+    : value.query === undefined && value.queryObjectPointer === undefined)
+  .refine((value) => value.query === undefined || value.queryObjectPointer === undefined)
+  .refine((value) => value.pathTemplate === undefined || value.path !== undefined)
   .superRefine((value, context) => {
     const paymentRequired = parsePinnedX402PaymentRequiredJson(value.paymentRequiredJson)
     if (paymentRequired === undefined) {
@@ -340,7 +313,11 @@ export function parseMcpJsonRpcTransportConfiguration(
 
 export type X402FetchTransportConfiguration = Readonly<{
   method: 'GET' | 'POST'
+  bodyPointer?: '/body'
+  queryObjectPointer?: '/query'
   query?: HttpJsonQueryParameterMapping[]
+  path?: HttpJsonPathParameterMapping[]
+  pathTemplate?: string
   requestTimeoutMs: number
   scheme: 'exact'
   network: string
@@ -357,7 +334,7 @@ export function parseX402FetchTransportConfiguration(
 ): X402FetchTransportConfiguration | undefined {
   const parsed = x402FetchConfiguration.safeParse(value)
   if (!parsed.success) return undefined
-  const { query: parsedQuery, ...withoutQuery } = parsed.data
+  const { query: parsedQuery, path: parsedPath, pathTemplate, bodyPointer, queryObjectPointer, ...withoutQuery } = parsed.data
   const query = parsedQuery?.map((item) => ({
     inputPointer: item.inputPointer,
     parameter: item.parameter,
@@ -367,6 +344,14 @@ export function parseX402FetchTransportConfiguration(
   }))
   return {
     ...withoutQuery,
+    ...(pathTemplate === undefined ? {} : { pathTemplate }),
+    ...(parsedPath === undefined ? {} : { path: parsedPath.map(item => ({ inputPointer: item.inputPointer, parameter: item.parameter,
+      ...(item.required === undefined ? {} : { required: item.required }),
+      ...(item.style === undefined ? {} : { style: item.style }),
+      ...(item.explode === undefined ? {} : { explode: item.explode }),
+    })) }),
+    ...(bodyPointer === undefined ? {} : { bodyPointer }),
+    ...(queryObjectPointer === undefined ? {} : { queryObjectPointer }),
     ...(query === undefined ? {} : { query }),
   }
 }
@@ -403,7 +388,7 @@ export function readHttpJsonProbeConfiguration(
         : {
             method: configuration.method,
             query: configuration.query ?? [],
-            path: [],
+            path: configuration.path ?? [],
             headers: [],
             fixedQuery: [],
         }

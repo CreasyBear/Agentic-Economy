@@ -1,12 +1,15 @@
+import { v } from 'convex/values'
 import type { GenericDatabaseReader, GenericDatabaseWriter } from 'convex/server'
+import { internal } from './_generated/api'
 import type { DataModel, Doc, Id } from './_generated/dataModel'
+import { internalMutation } from './_generated/server'
+import { providerRouteabilityIsFrozen } from './lib/providerOffboardingFreeze'
 import {
   buildBusinessSupplyProjection,
   BusinessOfferingStatusValues,
   ExternalOperationProvenanceValues,
   HumanRequestChannelValues,
   MAX_ACCESS_PATHS_PER_OFFERING,
-  MAX_OFFERINGS_PER_BUSINESS,
   normalizeOfferingPrice,
   OfferingAccessPathStatusValues,
   type BusinessOfferingRecord,
@@ -34,6 +37,105 @@ import {
 import { qualifySuppliedCandidate } from '../src/modules/capability-supply/public'
 import { capabilitySupplyGraphPorts } from './capabilitySupplyGraphPorts'
 
+const MAX_BUSINESS_CATALOG_OFFERINGS_PER_REBUILD = 100
+const BUSINESS_PROJECTION_REBUILD_PAGE_SIZE = 25
+
+type RebuildAllBusinessSupplyProjectionsResult = {
+  processed: number
+  rebuilt: number
+  skipped: number
+  isDone: boolean
+  continueCursor: string | null
+}
+
+/**
+ * Permanent maintenance entry point for catalogue projections; run with
+ * `npx convex run capabilitySupplyProjection:rebuildAllBusinessSupplyProjections '{}'`.
+ *
+ * `registrySearchDocuments` is the only table public business search reads, and
+ * it is written solely by the projection rebuild below. Any business onboarded
+ * through a path that skipped the rebuild - dev seed, curated bootstrap,
+ * facilitator discovery - stays invisible to business search until this sweep
+ * runs. The command diffs documents against the stored rows, so repeated runs
+ * are idempotent.
+ *
+ * The hot publish path (`rebuildCapabilityOriginSupplyProjection`) no longer
+ * skips programmable providers either - it runs the same derive-and-rebuild
+ * for them and only defers when a fleet outgrows one transaction's page
+ * (`*_requires_pagination` / `*_capacity_exceeded`), logging a structured
+ * warning instead of failing the publish. This sweep is the recovery path for
+ * those deferred businesses, plus any row published before 2026-09-10 (when
+ * programmable providers were still skipped outright and left with no search
+ * document at all). A fleet larger than the rebuild's page cap still throws
+ * here too, so one oversized provider is counted as skipped instead of
+ * aborting the whole sweep.
+ */
+export const rebuildAllBusinessSupplyProjections = internalMutation({
+  args: { cursor: v.optional(v.string()), dryRun: v.optional(v.boolean()) },
+  returns: v.object({
+    processed: v.number(),
+    rebuilt: v.number(),
+    skipped: v.number(),
+    isDone: v.boolean(),
+    continueCursor: v.union(v.string(), v.null()),
+  }),
+  handler: async (ctx, args): Promise<RebuildAllBusinessSupplyProjectionsResult> => {
+    const now = Date.now()
+    const dryRun = args.dryRun === true
+    const page = await ctx.db.query('businesses').paginate({
+      cursor: args.cursor ?? null,
+      numItems: BUSINESS_PROJECTION_REBUILD_PAGE_SIZE,
+    })
+    let rebuilt = 0
+    let skipped = 0
+    for (const business of page.page) {
+      // A frozen provider must not be re-published into search; same guard
+      // `rebuildCapabilityOriginSupplyProjection` applies. That wrapper lives in
+      // `capabilitySupplyShared`, which imports this module, so calling it from
+      // here would close an import cycle.
+      if (await providerRouteabilityIsFrozen(ctx, business._id)) {
+        skipped += 1
+        continue
+      }
+      try {
+        const support = await deriveBusinessOfferingSupportFromCapabilitySupply(ctx.db, business._id, now)
+        if (dryRun) {
+          // The command writes, so a dry run reports what it would rebuild by
+          // reading the same projection the command reads before writing.
+          const projection = await readLiveBusinessSupplyProjection({ db: ctx.db, businessId: business._id, support, now })
+          if (projection === null) skipped += 1
+          else rebuilt += 1
+          continue
+        }
+        const result = await rebuildBusinessSupplyProjectionSnapshotCommand({
+          db: ctx.db,
+          sourceDb: ctx.db,
+          businessId: business._id,
+          support,
+          now,
+        })
+        if (result.kind === 'ok') rebuilt += 1
+        else skipped += 1
+      } catch (error) {
+        console.warn('rebuild_all_business_supply_projections_skipped', business.slug, error)
+        skipped += 1
+      }
+    }
+    if (!page.isDone && !dryRun) {
+      await ctx.scheduler.runAfter(0, internal.capabilitySupplyProjection.rebuildAllBusinessSupplyProjections, {
+        cursor: page.continueCursor,
+      })
+    }
+    return {
+      processed: page.page.length,
+      rebuilt,
+      skipped,
+      isDone: page.isDone,
+      continueCursor: page.isDone ? null : page.continueCursor,
+    }
+  },
+})
+
 export type CapabilityProjectionDb = GenericDatabaseWriter<DataModel>
 type CapabilityProjectionReadDb = GenericDatabaseReader<DataModel>
 
@@ -50,8 +152,8 @@ export async function readLiveBusinessSupplyProjection(input: {
   if (business === null || context === null || business.publicStatus !== 'published') return null
   const offeringRows = await db.query('businessOfferings')
     .withIndex('by_businessId_and_status', (q) => q.eq('businessId', businessId))
-    .take(MAX_OFFERINGS_PER_BUSINESS + 1)
-  if (offeringRows.length > MAX_OFFERINGS_PER_BUSINESS) throw new Error('business_offering_capacity_exceeded')
+    .take(MAX_BUSINESS_CATALOG_OFFERINGS_PER_REBUILD + 1)
+  if (offeringRows.length > MAX_BUSINESS_CATALOG_OFFERINGS_PER_REBUILD) throw new Error('business_catalog_rebuild_requires_pagination')
   const offeringRecords = offeringRows.map(toOffering)
   const revisionRows = await Promise.all(offeringRecords.map((offering) => (
     db.query('businessOfferingRevisions')
@@ -126,9 +228,9 @@ export async function rebuildBusinessSupplyProjectionSnapshotCommand(input: {
   )
   const existingSearchDocuments = await db.query('registrySearchDocuments')
     .withIndex('by_business', (query) => query.eq('businessSlug', business.slug))
-    .take(MAX_OFFERINGS_PER_BUSINESS + 1)
-  if (existingSearchDocuments.length > MAX_OFFERINGS_PER_BUSINESS) {
-    throw new Error('registry_search_document_capacity_exceeded')
+    .take(MAX_BUSINESS_CATALOG_OFFERINGS_PER_REBUILD + 1)
+  if (existingSearchDocuments.length > MAX_BUSINESS_CATALOG_OFFERINGS_PER_REBUILD) {
+    throw new Error('registry_search_document_rebuild_requires_pagination')
   }
   const nextDocumentIds = new Set(searchDocuments.map((document) => document.documentId))
   const writes: Promise<void>[] = existingSearchDocuments.flatMap((document) => (
@@ -375,6 +477,7 @@ type CapabilityPublicationSource = {
   healthState: string
   readinessObservedAt?: number
   readinessValidUntil?: number
+  readinessLastHealthyAt?: number
 }
 
 type CapabilityBindingSource = {
@@ -395,6 +498,7 @@ function readCapabilityOffering(row: Doc<'capabilityOfferings'>): CapabilityOffe
 function readCapabilityPublication(row: Doc<'capabilityPublications'>): CapabilityPublicationSource {
   const readinessObservedAt = optionalNumber(row, 'readinessObservedAt')
   const readinessValidUntil = optionalNumber(row, 'readinessValidUntil')
+  const readinessLastHealthyAt = optionalNumber(row, 'readinessLastHealthyAt')
   return {
     publicationRef: requiredString(row, 'publicationRef'),
     revision: requiredNumber(row, 'revision'),
@@ -409,6 +513,7 @@ function readCapabilityPublication(row: Doc<'capabilityPublications'>): Capabili
     healthState: requiredString(row, 'healthState'),
     ...(readinessObservedAt === undefined ? {} : { readinessObservedAt }),
     ...(readinessValidUntil === undefined ? {} : { readinessValidUntil }),
+    ...(readinessLastHealthyAt === undefined ? {} : { readinessLastHealthyAt }),
   }
 }
 

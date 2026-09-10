@@ -1,30 +1,52 @@
-import { mkdtempSync, rmSync } from 'node:fs'
+import * as childProcess from 'node:child_process'
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { createServer } from 'node:http'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { delimiter, join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+
+const childProcessMockState = vi.hoisted(() => ({
+  realSpawn: undefined as typeof import('node:child_process').spawn | undefined,
+}))
+vi.mock('node:child_process', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:child_process')>()
+  childProcessMockState.realSpawn = actual.spawn
+  return { ...actual, spawn: vi.fn(actual.spawn) }
+})
 
 import { runConnectCommand } from '../../../tools/ae/commands/connect'
 import { runCompareCommand } from '../../../tools/ae/commands/compare'
-import { runInspectPlanCommand } from '../../../tools/ae/commands/inspect-plan'
-import { runInspectCommand } from '../../../tools/ae/commands/inspect'
+import { runDescribeCommand } from '../../../tools/ae/commands/describe'
+import { runListCommand } from '../../../tools/ae/commands/list'
 import { runSearchCommand } from '../../../tools/ae/commands/search'
 import { runStatusCommand } from '../../../tools/ae/commands/status'
-import { runInvokeCommand } from '../../../tools/ae/commands/invoke'
+import { runCallCommand } from '../../../tools/ae/commands/call'
 import { parseArgs, type CliOptions } from '../../../tools/ae/lib/args'
 import { CliFailure } from '../../../tools/ae/lib/output'
 import { storeConnection } from '../../../tools/ae/lib/config'
-import { OPERATION_INVOKE_ROUTE_CONTRACT } from '@/modules/capability-execution/operation-invoke-entry'
-import { projectOperationSearchChoices } from '@/modules/registry/operation-choice-contracts'
-import { operationSearchOutputSchema } from '@/modules/capability-supply/public'
+import { CALL_ROUTE_CONTRACT } from '@/modules/capability-execution/call-entry'
+import { TOOL_QUOTE_PATH } from '@/modules/capability-execution/quote'
+import { projectToolDescription, projectToolListChoices, projectToolSearchChoices } from '@/modules/registry/tool-choice-contracts'
+import { toolDetailOutputSchema, toolSearchOutputSchema } from '@/modules/capability-supply/public'
+import { CLI_BUNDLE_PATH } from './cli-errors-harness'
 
-type OperationDescriptorFixture = Readonly<{ operationRef: string; [key: string]: unknown }>
+type ToolDescriptorFixture = Readonly<{ toolRef: string; [key: string]: unknown }>
+const CURRENT_OPERATION_REF = `operation:v1:${'d'.repeat(64)}`
+const CURRENT_COMMITMENT_REF = `operation-commitment:v1:${'e'.repeat(64)}`
 
-function operationDescriptor(operationRef: string, summary = 'Current reference lookup'): OperationDescriptorFixture {
+const SEARCH_ITEM_NAVIGATION = [
+  { relation: 'describe', pathTemplate: '/api/v1/market-tools/describe', method: 'POST', actionId: 'registry.tools.describe', authentication: 'none' },
+  { relation: 'compare', pathTemplate: '/api/v1/market-tools/compare', method: 'POST', actionId: 'registry.tools.compare', authentication: 'none' },
+  { relation: 'call', pathTemplate: '/api/v1/tools/quote', method: 'POST', actionId: 'tool.quote', authentication: 'required' },
+  { relation: 'review_route', pathTemplate: '/agent-access', method: 'GET', actionId: 'agentAccess.review', authentication: 'required' },
+] as const
+
+function operationDescriptor(toolRef: string, summary = 'Current reference lookup') {
   return {
-    operationRef,
-    callVia: OPERATION_INVOKE_ROUTE_CONTRACT.invoke.path,
+    toolRef,
+    callVia: CALL_ROUTE_CONTRACT.call.path,
     paymentLane: 'brokered',
-    operationId: 'reference.lookup',
+    toolId: 'reference.lookup',
     contract: {
       capabilityId: 'reference.lookup',
       version: 1,
@@ -48,20 +70,24 @@ function operationDescriptor(operationRef: string, summary = 'Current reference 
     authentication: { kind: 'ae_api_key' },
     transport: { method: 'GET', pathTemplate: '/lookup', responseStatus: 200, responseContentType: 'application/json', requestTimeoutMs: 5_000 },
     provenance: { publisher: 'provider_owned', sourceKind: 'openapi_http' },
-    availability: { posture: 'integrated' },
+    availability: {
+      posture: 'routeable',
+      observedAt: Date.now(),
+      validUntil: Date.now() + 60_000,
+    },
     navigation: [],
   }
 }
 
-function operationSearchResult(query: string, operations: readonly OperationDescriptorFixture[]) {
-  return projectOperationSearchChoices(operationSearchOutputSchema.parse({
+function operationSearchResult(query: string, operations: readonly ToolDescriptorFixture[]) {
+  return projectToolSearchChoices(toolSearchOutputSchema.parse({
     kind: 'ok' as const,
-    schemaVersion: 'registry-operations:v1' as const,
+    schemaVersion: 'registry-tools:v1' as const,
     query,
     items: operations,
     matchedCount: operations.length,
     ranking: operations.map((operation, index) => ({
-      operationRef: operation.operationRef,
+      toolRef: operation.toolRef,
       rank: index + 1,
       score: operations.length - index,
     })),
@@ -70,12 +96,29 @@ function operationSearchResult(query: string, operations: readonly OperationDesc
   }))
 }
 
-function operationDetailResult(operation: OperationDescriptorFixture) {
-  return {
+function operationDetailResult(operation: ToolDescriptorFixture) {
+  return projectToolDescription(toolDetailOutputSchema.parse({
     kind: 'found' as const,
-    schemaVersion: 'registry-operations:v1' as const,
-    operation,
-  }
+    schemaVersion: 'registry-tools:v1' as const,
+    tool: operation,
+  }))
+}
+
+function operationListResult(operations: readonly ToolDescriptorFixture[]) {
+  return projectToolListChoices(toolSearchOutputSchema.parse({
+    kind: 'ok' as const,
+    schemaVersion: 'registry-tools:v1' as const,
+    query: '',
+    items: operations,
+    matchedCount: operations.length,
+    ranking: operations.map((operation, index) => ({
+      toolRef: operation.toolRef,
+      rank: index + 1,
+      score: operations.length - index,
+    })),
+    pagination: { limit: 50, hasMore: false },
+    navigation: [],
+  }))
 }
 
 function responseJson(body: unknown, status = 200): Response {
@@ -83,6 +126,70 @@ function responseJson(body: unknown, status = 200): Response {
     status,
     headers: { 'content-type': 'application/json' },
   })
+}
+
+function connectedAccount() {
+  return {
+    kind: 'authenticated' as const,
+    principalRef: 'principal:buyer',
+    accountRef: 'account:buyer',
+    credentialId: 'credential:buyer',
+    applicationRef: 'agentic-economy',
+    environment: 'sandbox' as const,
+    scopes: ['market_tools:call', 'customer_requests:spending_policy'],
+    authorityMode: 'spending_policy' as const,
+  }
+}
+
+function connectFlowFetch(verificationUri?: string, expiresIn = 600, interval = 1) {
+  const deviceRecord: Record<string, unknown> = {
+    device_code: 'device-code',
+    user_code: 'ABCD-EFGH',
+    expires_in: expiresIn,
+    interval,
+  }
+  if (verificationUri !== undefined) deviceRecord.verification_uri = verificationUri
+  return vi.fn<typeof fetch>()
+    .mockResolvedValueOnce(Response.json({ client_id: 'ae_client' }, { status: 201 }))
+    .mockResolvedValueOnce(Response.json(deviceRecord))
+    .mockResolvedValueOnce(Response.json({
+      access_token: 'ae-issued-secret',
+      token_type: 'Bearer',
+      scope: 'market_tools:call customer_requests:spending_policy',
+    }))
+    .mockResolvedValueOnce(responseJson(connectedAccount()))
+}
+
+function operationInspection(
+  toolRef: string,
+  input: Record<string, unknown>,
+  commitmentRef = CURRENT_COMMITMENT_REF,
+) {
+  return {
+    kind: 'committed',
+    quoteRef: commitmentRef,
+    toolRef,
+    toolVersion: 1,
+    expiresAt: 1_900_000_000_000,
+    normalizedInput: input,
+    price: { currency: 'AUD', units: '1000000', exponent: 6 },
+    account: {
+      accountRef: 'account:cold-loop',
+      available: { currency: 'AUD', units: '10000000', exponent: 6 },
+    },
+    budget: {
+      principalRef: 'principal:cold-loop',
+      maximumPerCall: { currency: 'AUD', units: '5000000', exponent: 6 },
+    },
+    policyRefs: ['commercial-policy:sandbox'],
+    evidenceDigest: 'sha256:inspection',
+    continuation: {
+      action: 'tool.call',
+      method: 'POST',
+      path: '/api/v1/tools/call',
+      input: { quoteRef: commitmentRef, idempotencyKey: 'replace-at-call' },
+    },
+  }
 }
 const options: CliOptions = {
   baseUrl: 'https://market.example',
@@ -100,6 +207,47 @@ function captureStdout(): { read: () => string; restore: () => void } {
   })
   return { read: () => writes.join(''), restore: () => spy.mockRestore() }
 }
+function captureStderr(): { read: () => string; restore: () => void } {
+  const writes: string[] = []
+  const spy = vi.spyOn(process.stderr, 'write').mockImplementation((chunk) => {
+    writes.push(String(chunk))
+    return true
+  })
+  return { read: () => writes.join(''), restore: () => spy.mockRestore() }
+}
+function forceStdoutTTY(value: boolean): () => void {
+  const descriptor = Object.getOwnPropertyDescriptor(process.stdout, 'isTTY')
+  Object.defineProperty(process.stdout, 'isTTY', { configurable: true, value })
+  return () => {
+    if (descriptor === undefined) {
+      Reflect.deleteProperty(process.stdout, 'isTTY')
+    } else {
+      Object.defineProperty(process.stdout, 'isTTY', descriptor)
+    }
+  }
+}
+function runFreshShell(
+  command: string,
+  env: NodeJS.ProcessEnv,
+): Promise<{ exitCode: number | null; signal: NodeJS.Signals | null; stdout: string; stderr: string }> {
+  const child = childProcess.spawn('/bin/sh', ['-c', command], {
+    cwd: process.cwd(),
+    env,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  })
+  let stdout = ''
+  let stderr = ''
+  child.stdout?.on('data', (chunk: Buffer | string) => {
+    stdout += String(chunk)
+  })
+  child.stderr?.on('data', (chunk: Buffer | string) => {
+    stderr += String(chunk)
+  })
+  return new Promise((resolve, reject) => {
+    child.once('error', reject)
+    child.once('close', (exitCode, signal) => resolve({ exitCode, signal, stdout, stderr }))
+  })
+}
 function setApiKey(value: string, origin = options.baseUrl): void {
   process.env.AE_API_KEY = value
   process.env.AE_API_KEY_ORIGIN = new URL(origin).origin
@@ -115,6 +263,9 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.restoreAllMocks()
+  if (childProcessMockState.realSpawn !== undefined) {
+    vi.mocked(childProcess.spawn).mockImplementation(childProcessMockState.realSpawn)
+  }
   vi.unstubAllGlobals()
   delete process.env.AE_API_KEY
   delete process.env.AE_API_KEY_ORIGIN
@@ -122,7 +273,7 @@ afterEach(() => {
   rmSync(testConfigDirectory, { recursive: true, force: true })
 })
 
-describe('external-agent Market Operation cold loop', () => {
+describe('external-agent Market Tool cold loop', () => {
   it('searches anonymously over the public Operation route', async () => {
     const operationRef = `operation:v1:${'c'.repeat(64)}`
     const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify(
@@ -133,15 +284,15 @@ describe('external-agent Market Operation cold loop', () => {
     await runSearchCommand(['extract invoices'], options)
 
     const [url, init] = fetchMock.mock.calls[0]!
-    expect(url).toBe('https://market.example/api/v1/market-operations/search')
+    expect(url).toBe('https://market.example/api/v1/market-tools/search')
     expect(init?.method).toBe('POST')
     expect(new Headers(init?.headers).get('Authorization')).toBeNull()
-    expect(JSON.parse(String(init?.body))).toEqual({ query: 'extract invoices' })
+    expect(JSON.parse(String(init?.body))).toEqual({ query: 'extract invoices', limit: 10 })
   })
   it('gives empty search results private demand memory plus a safe browse fallback', async () => {
-    const result = projectOperationSearchChoices(operationSearchOutputSchema.parse({
+    const result = projectToolSearchChoices(toolSearchOutputSchema.parse({
       kind: 'no_candidates',
-      schemaVersion: 'registry-operations:v1',
+      schemaVersion: 'registry-tools:v1',
       query: 'invoice extraction',
       appliedFilters: {},
       matchedCount: 0,
@@ -158,8 +309,8 @@ describe('external-agent Market Operation cold loop', () => {
     }
     expect(JSON.parse(jsonOutput.read())).toMatchObject({
       kind: 'no_candidates',
-      nextCommand: "ae request create 'invoice extraction'",
-      browseCommand: 'ae search',
+      nextCommand: "ae request create 'invoice extraction' --json",
+      browseCommand: 'ae list --json',
       nextHref: 'https://market.example/market',
     })
 
@@ -169,27 +320,125 @@ describe('external-agent Market Operation cold loop', () => {
     } finally {
       humanOutput.restore()
     }
-    expect(humanOutput.read()).toContain('No current Operations match this job.')
+    expect(humanOutput.read()).toContain('No current Tools match this job.')
     expect(humanOutput.read()).toContain("Remember this missing job: ae request create 'invoice extraction'")
-    expect(humanOutput.read()).toContain('Browse all: ae search')
+    expect(humanOutput.read()).toContain('Browse all: ae list')
     expect(humanOutput.read()).toContain('https://market.example/market')
+
+    const technicalOutput = captureStdout()
+    try {
+      await runSearchCommand(['invoice extraction'], {
+        ...options,
+        technical: true,
+        filters: JSON.stringify({ healthStatus: ['degraded'] }),
+      })
+    } finally {
+      technicalOutput.restore()
+    }
+    const technicalResult = JSON.parse(technicalOutput.read()) as {
+      browseCommand: string
+      nextCommand: string
+    }
+    expect(technicalResult).toMatchObject({
+      nextCommand: 'ae list --filters \'{"healthStatus":["degraded"]}\' --json --technical',
+      browseCommand: 'ae list --json --technical',
+    })
+    expect(technicalResult.nextCommand).not.toContain('request create')
+    expect(technicalResult.browseCommand).not.toContain('--filters')
+
+    const filteredHumanOutput = captureStdout()
+    try {
+      await runSearchCommand(['invoice extraction'], {
+        ...options,
+        json: false,
+        filters: JSON.stringify({ healthStatus: ['degraded'] }),
+      })
+    } finally {
+      filteredHumanOutput.restore()
+    }
+    expect(filteredHumanOutput.read()).toContain('No current Tools match these filters.')
+    expect(filteredHumanOutput.read()).toContain('Browse matching filters: ae list --filters \'{"healthStatus":["degraded"]}\'')
+    expect(filteredHumanOutput.read()).not.toContain('Remember this missing job')
   })
-  it('browses all current Operations when no job is supplied', async () => {
+  it('qualifies filtered no-candidate pages and keeps exhausted notes health-neutral', async () => {
+    const operationRef = `operation:v1:${'c'.repeat(64)}`
+    const rawPage = toolSearchOutputSchema.parse({
+      kind: 'ok',
+      schemaVersion: 'registry-tools:v1',
+      query: 'reference lookup',
+      items: [operationDescriptor(operationRef)],
+      matchedCount: 2,
+      ranking: [{ toolRef: operationRef, rank: 1, score: 1 }],
+      pagination: { limit: 1, nextCursor: 'opaque-page-cursor', hasMore: true },
+      navigation: [],
+    })
+    const rawExhausted = toolSearchOutputSchema.parse({
+      ...rawPage,
+      pagination: { limit: 1, hasMore: false },
+    })
+    const pageResult = projectToolSearchChoices(rawPage, { healthStatus: ['degraded'] })
+    const exhaustedResult = projectToolSearchChoices(rawExhausted, { healthStatus: ['degraded'] })
+
+    expect(pageResult).toMatchObject({
+      kind: 'no_candidates',
+      note: 'No Tools match this search on this page.',
+      pagination: { hasMore: true, nextCursor: 'opaque-page-cursor' },
+    })
+    expect(exhaustedResult).toMatchObject({
+      kind: 'no_candidates',
+      note: 'No Tools match this search.',
+      pagination: { hasMore: false },
+    })
+
+    const output = captureStdout()
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>().mockResolvedValue(responseJson(pageResult)))
+    try {
+      await runSearchCommand(['reference lookup'], {
+        ...options,
+        json: false,
+        filters: JSON.stringify({ healthStatus: ['degraded'] }),
+      })
+    } finally {
+      output.restore()
+    }
+    expect(output.read()).toContain('No matching Tools on this page.')
+    expect(output.read()).not.toContain('No current Tools match')
+    expect(output.read()).toContain('More results:')
+  })
+
+  it('browses all current Tools when no job is supplied', async () => {
     const operationRef = `operation:v1:${'b'.repeat(64)}`
-    const result = operationSearchResult('', [operationDescriptor(operationRef)])
+    const result = operationListResult([operationDescriptor(operationRef)])
     const output = captureStdout()
     const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(responseJson(result))
     vi.stubGlobal('fetch', fetchMock)
 
     try {
-      await runSearchCommand([], { ...options, json: false })
+      await runListCommand([], { ...options, json: false })
     } finally {
       output.restore()
     }
 
-    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({ query: '' })
-    expect(output.read()).toContain('Current Market Operations')
+    expect(fetchMock.mock.calls[0]?.[0]).toBe('https://market.example/api/v1/market-tools/list')
+    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({ limit: 50 })
+    expect(output.read()).toContain('Current Tools')
   })
+  it('preserves source and filters when continuing an empty list page', async () => {
+    const result = { ...operationListResult([]), pagination: { limit: 1, nextCursor: '1', hasMore: true } }
+    const output = captureStdout()
+    const fetchMock = vi.fn<typeof fetch>().mockImplementation(async () => responseJson(result))
+    vi.stubGlobal('fetch', fetchMock)
+    const parsed = parseArgs(['list', '--source', 'payai', '--limit', '1', '--filters', '{"location":"NO MATCH"}', '--json'])
+    try {
+      await runListCommand([], { ...parsed.options, baseUrl: options.baseUrl })
+    } finally { output.restore() }
+    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({ source: 'payai', limit: 1, filters: { location: 'NO MATCH' } })
+    const { nextPageCommand } = JSON.parse(output.read())
+    expect(nextPageCommand).toContain('--source payai')
+    expect(nextPageCommand).toContain(`--filters '{"location":"NO MATCH"}'`)
+    expect(nextPageCommand).toContain('--cursor 1')
+  })
+
   it('rejects a malformed successful search body with a safe CLI error', async () => {
     const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
       kind: 'ok',
@@ -200,7 +449,7 @@ describe('external-agent Market Operation cold loop', () => {
 
     await expect(runSearchCommand(['extract invoices'], options)).rejects.toMatchObject({
       kind: 'UNAVAILABLE',
-      code: 'operation-search-result-invalid',
+      code: 'tool-search-result-invalid',
     } satisfies Partial<CliFailure>)
   })
 
@@ -220,39 +469,73 @@ describe('external-agent Market Operation cold loop', () => {
     await runSearchCommand(['reference lookup'], {
       ...options,
       technical: true,
+      source: 'current',
       limit: '3',
       cursor: 'opaque-prior-cursor',
-      filters: JSON.stringify({ availability: ['routeable'] }),
+      filters: JSON.stringify({ healthStatus: ['operational'] }),
     })
 
     expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({
       query: 'reference lookup',
+      source: 'current',
       limit: 3,
       cursor: 'opaque-prior-cursor',
-      filters: { availability: ['routeable'] },
+      filters: { healthStatus: ['operational'] },
     })
     expect(JSON.parse(output.read())).toEqual({
       ...result,
-      nextCommand: `ae search 'reference lookup' --limit 3 --filters '{"availability":["routeable"]}' --cursor opaque-next-cursor`,
+      nextCommand: `ae describe ${operationRef} --json --technical`,
+      nextPageCommand: `ae search 'reference lookup' --limit 3 --source current --filters '{"healthStatus":["operational"]}' --cursor opaque-next-cursor --json --technical`,
     })
   })
   it('returns decision-sized JSON by default and keeps the full contract behind technical mode', async () => {
-    const operationRef = `operation:v1:${'e'.repeat(64)}`
-    const result = operationSearchResult('reference lookup', [operationDescriptor(operationRef)])
-    const output = captureStdout()
-    vi.stubGlobal('fetch', vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify(result), {
+    const operationRefs = [
+      `operation:v1:${'e'.repeat(64)}`,
+      `operation:v1:${'f'.repeat(64)}`,
+    ]
+    const projectedResult = operationSearchResult('reference lookup', operationRefs.map((operationRef, index) => ({
+      ...operationDescriptor(operationRef, `Reference lookup ${index + 1}`),
+      navigation: SEARCH_ITEM_NAVIGATION,
+    })))
+    if (projectedResult.kind !== 'ok') throw new Error('Expected a successful search fixture')
+    const result = projectedResult
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>().mockImplementation(async () => new Response(JSON.stringify(result), {
       status: 200,
       headers: { 'content-type': 'application/json' },
     })))
 
-    await runSearchCommand(['reference lookup'], options)
+    const defaultOutput = captureStdout()
+    try {
+      await runSearchCommand(['reference lookup'], options)
+    } finally {
+      defaultOutput.restore()
+    }
+    const defaultSerialized = defaultOutput.read()
+    const defaultResult = JSON.parse(defaultSerialized) as typeof result
+    const expectedDefault = {
+      ...result,
+      nextCommand: `ae compare ${operationRefs.join(' ')} --json`,
+    }
 
-    const serialized = output.read()
-    const compact = JSON.parse(serialized) as Record<string, unknown>
-    expect(new TextEncoder().encode(serialized).length).toBeLessThan(4 * 1024)
-    expect(compact).toHaveProperty('items')
-    expect(serialized).not.toContain('inputJsonSchema')
-    expect(serialized).not.toContain('outputJsonSchema')
+    expect(defaultSerialized).toBe(`${JSON.stringify(expectedDefault, undefined, 2)}\n`)
+    expect(defaultResult.items.map((item) => item.toolRef)).toEqual(operationRefs)
+
+    const technicalOutput = captureStdout()
+    try {
+      await runSearchCommand(['reference lookup'], { ...options, technical: true })
+    } finally {
+      technicalOutput.restore()
+    }
+    const technicalSerialized = technicalOutput.read()
+
+    const expectedTechnical = {
+      ...result,
+      nextCommand: `ae compare ${operationRefs.join(' ')} --json --technical`,
+    }
+    expect(technicalSerialized).toBe(`${JSON.stringify(expectedTechnical, undefined, 2)}\n`)
+    expect(JSON.parse(technicalSerialized)).toEqual(expectedTechnical)
+    const defaultBytes = new TextEncoder().encode(defaultSerialized).length
+    expect(defaultBytes).toBeLessThanOrEqual(3 * 1024)
   })
   it('rejects an out-of-range search limit before network work', async () => {
     const fetchMock = vi.fn<typeof fetch>()
@@ -264,13 +547,14 @@ describe('external-agent Market Operation cold loop', () => {
     } satisfies Partial<CliFailure>)
     expect(fetchMock).not.toHaveBeenCalled()
   })
-  it('rejects an overlong search query before network work', async () => {
+  it.each([['x'.repeat(257)], ['']])('rejects an out-of-bounds search query before network work', async (query) => {
     const fetchMock = vi.fn<typeof fetch>()
     vi.stubGlobal('fetch', fetchMock)
 
-    await expect(runSearchCommand(['x'.repeat(201)], options)).rejects.toMatchObject({
+    await expect(runSearchCommand([query], options)).rejects.toMatchObject({
       kind: 'INVALID_ARGUMENT',
-      code: 'search-query-too-long',
+      code: 'query_invalid',
+      message: 'Search requires a capability phrase from 1 to 256 characters.',
     } satisfies Partial<CliFailure>)
     expect(fetchMock).not.toHaveBeenCalled()
   })
@@ -284,7 +568,7 @@ describe('external-agent Market Operation cold loop', () => {
       '--cursor',
       'opaque-cursor',
       '--filters',
-      '{"availability":["routeable"]}',
+      '{"healthStatus":["operational"]}',
     ])
 
     expect(parsed).toMatchObject({
@@ -293,12 +577,12 @@ describe('external-agent Market Operation cold loop', () => {
       options: {
         limit: '3',
         cursor: 'opaque-cursor',
-        filters: '{"availability":["routeable"]}',
+        filters: '{"healthStatus":["operational"]}',
       },
     })
   })
 
-  it('inspects one exact operation anonymously', async () => {
+  it('describes one exact Tool anonymously', async () => {
     const operationRef = `operation:v1:${'a'.repeat(64)}`
     const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify(
       operationDetailResult(operationDescriptor(operationRef, 'Extract invoices')),
@@ -307,137 +591,78 @@ describe('external-agent Market Operation cold loop', () => {
     const output = captureStdout()
 
     try {
-      await runInspectCommand([operationRef], options)
+      await runDescribeCommand([operationRef], options)
     } finally {
       output.restore()
     }
 
     expect(JSON.parse(output.read())).toMatchObject({
       kind: 'found',
-      operation: {
-        callVia: OPERATION_INVOKE_ROUTE_CONTRACT.invoke.path,
-        paymentLane: 'brokered',
+      schemaVersion: 'registry-tools:v3',
+      tool: {
+        toolRef: operationRef,
+        capabilityId: 'reference.lookup',
+        description: 'Extract invoices',
+        provider: { name: 'Reference Services', slug: 'reference' },
+        priceLabel: 'USD 0.00',
+        healthStatus: 'operational',
       },
     })
+    expect(JSON.parse(output.read())).not.toHaveProperty('nextCommand')
 
     const [url, init] = fetchMock.mock.calls[0]!
-    expect(url).toBe('https://market.example/api/v1/market-operations/detail')
+    expect(url).toBe('https://market.example/api/v1/market-tools/describe')
     expect(init?.method).toBe('POST')
     expect(new Headers(init?.headers).get('Authorization')).toBeNull()
-    expect(JSON.parse(String(init?.body))).toEqual({ operationRef })
+    expect(JSON.parse(String(init?.body))).toEqual({ toolRef: operationRef })
   })
 
-  it.each([
-    {
-      name: 'wrong scope',
-      accountStatus: 200,
-      scopes: ['market_supply:manage'],
-      expected: 'ae connect',
-    },
-    {
-      name: 'rejected or expired credential',
-      accountStatus: 401,
-      scopes: ['market_operations:invoke'],
-      expected: 'ae connect',
-    },
-    {
-      name: 'current invoke-scoped credential',
-      accountStatus: 200,
-      scopes: ['market_operations:invoke'],
-      expected: 'ae call',
-    },
-  ])('uses server-verified buyer access for the human continuation: $name', async ({
-    accountStatus,
-    scopes,
-    expected,
-  }) => {
-    const operationRef = `operation:v1:${'f'.repeat(64)}`
+  it('keeps describe output canonical and free of duplicated source navigation', async () => {
+    const operationRef = `operation:v1:${'9'.repeat(64)}`
+    const repeatedInputSchema = {
+      type: 'object',
+      properties: Object.fromEntries(Array.from({ length: 24 }, (_, index) => [
+        `field${index}`,
+        { type: 'string', description: `Bounded input field ${index}` },
+      ])),
+    }
+    const navigation = SEARCH_ITEM_NAVIGATION.map((relation) => ({
+      ...relation,
+      inputSchema: repeatedInputSchema,
+    }))
     const operation = {
-      ...operationDescriptor(operationRef, 'Verified continuation'),
-      availability: { posture: 'routeable' },
-      navigation: [{
-        relation: 'invoke',
-        pathTemplate: '/api/v1/operations/call',
-        method: 'POST',
-        actionId: 'agentic-economy.operation-invoke',
-        authentication: 'required',
-        surfaces: ['http', 'cli', 'mcp', 'chat'],
-      }],
+      ...operationDescriptor(operationRef, 'Detailed reference lookup'),
+      navigation,
     }
-    storeConnection({
-      baseUrl: options.baseUrl,
-      accessToken: 'stored-buyer-secret',
-      scope: 'market_operations:invoke',
-    })
-    const fetchMock = vi.fn<typeof fetch>().mockImplementation(async (input) => {
-      const url = String(input)
-      if (url.endsWith('/api/v1/market-operations/detail')) {
-        return responseJson(operationDetailResult(operation))
-      }
-      if (url.endsWith('/api/v1/account')) {
-        return responseJson({
-          kind: 'authenticated',
-          principalRef: 'principal:buyer',
-          accountRef: 'account:buyer',
-          credentialId: 'credential:buyer',
-          applicationRef: 'application:buyer',
-          environment: 'production',
-          scopes,
-          authorityMode: 'inspect_only',
-        }, accountStatus)
-      }
-      throw new Error(`unexpected route ${url}`)
-    })
-    vi.stubGlobal('fetch', fetchMock)
-    const output = captureStdout()
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>().mockImplementation(async () =>
+      responseJson(operationDetailResult(operation))))
 
+    const defaultOutput = captureStdout()
     try {
-      await runInspectCommand([operationRef], { ...options, json: false })
+      await runDescribeCommand([operationRef], options)
     } finally {
-      output.restore()
+      defaultOutput.restore()
     }
+    const defaultSerialized = defaultOutput.read()
+    const defaultResult = JSON.parse(defaultSerialized) as { tool: Record<string, unknown> }
+    expect(defaultResult.tool).not.toHaveProperty('navigation')
+    expect(defaultResult.tool).toHaveProperty('inputJsonSchema')
+    expect(defaultResult).not.toHaveProperty('nextCommand')
 
-    expect(output.read()).toContain(`next: ${expected}`)
-    expect(fetchMock).toHaveBeenCalledTimes(2)
-    const accountRequest = fetchMock.mock.calls.find(([url]) => String(url).endsWith('/api/v1/account'))
-    expect(new Headers(accountRequest?.[1]?.headers).get('Authorization')).toBe('Bearer stored-buyer-secret')
+    const technicalOutput = captureStdout()
+    try {
+      await runDescribeCommand([operationRef], { ...options, technical: true })
+    } finally {
+      technicalOutput.restore()
+    }
+    const technicalSerialized = technicalOutput.read()
+    expect(JSON.parse(technicalSerialized)).toEqual(defaultResult)
   })
 
-  it('keeps a zero-price brokered invoke behind the canonical buyer-access rail', async () => {
-    const operationRef = `operation:v1:${'a'.repeat(64)}`
-    const operation = {
-      ...operationDescriptor(operationRef, 'Public continuation'),
-      availability: { posture: 'routeable' },
-      navigation: [{
-        relation: 'invoke',
-        pathTemplate: '/api/v1/operations/call',
-        method: 'POST',
-        actionId: 'agentic-economy.operation-invoke',
-        authentication: 'required',
-        surfaces: ['http', 'cli', 'mcp', 'chat'],
-      }],
-    }
-    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
-      responseJson(operationDetailResult(operation)),
-    )
-    vi.stubGlobal('fetch', fetchMock)
-    const output = captureStdout()
-
-    try {
-      await runInspectCommand([operationRef], { ...options, json: false })
-    } finally {
-      output.restore()
-    }
-
-    expect(output.read()).toContain('next: ae connect')
-    expect(fetchMock).toHaveBeenCalledTimes(1)
-  })
-
-  it('keeps a routeable descriptor without an invoke relation inspect-only', async () => {
+  it('keeps anonymous describe factual and names the runnable CLI purchase path', async () => {
     const operationRef = `operation:v1:${'b'.repeat(64)}`
     const operation = {
       ...operationDescriptor(operationRef, 'Inspect-only continuation'),
-      availability: { posture: 'routeable' },
     }
     const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
       responseJson(operationDetailResult(operation)),
@@ -446,12 +671,15 @@ describe('external-agent Market Operation cold loop', () => {
     const output = captureStdout()
 
     try {
-      await runInspectCommand([operationRef], { ...options, json: false })
+      await runDescribeCommand([operationRef], { ...options, json: false })
     } finally {
       output.restore()
     }
 
-    expect(output.read()).toContain('next: ae inspect')
+    expect(output.read()).toContain('health: operational')
+    expect(output.read()).toContain(`Next: ae call ${operationRef} --input '<json>'`)
+    expect(output.read()).toContain('From an MCP client: ae_tool_quote')
+    expect(output.read()).not.toContain('tool.quote from your connected agent client')
     expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 
@@ -459,37 +687,38 @@ describe('external-agent Market Operation cold loop', () => {
     const operationRef = `operation:v1:${'e'.repeat(64)}`
     const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
       kind: 'found',
-      operation: { operationRef },
+      tool: { toolRef: operationRef },
     }), { status: 200, headers: { 'content-type': 'application/json' } }))
     vi.stubGlobal('fetch', fetchMock)
 
-    await expect(runInspectCommand([operationRef], options)).rejects.toMatchObject({
+    await expect(runDescribeCommand([operationRef], options)).rejects.toMatchObject({
       kind: 'UNAVAILABLE',
-      code: 'operation-detail-result-invalid',
+      code: 'tool-describe-result-invalid',
     } satisfies Partial<CliFailure>)
   })
 
-  it('rejects a non-canonical OperationRef before network work', async () => {
+  it('rejects a non-canonical Tool reference before network work', async () => {
     const fetchMock = vi.fn<typeof fetch>()
     vi.stubGlobal('fetch', fetchMock)
 
-    await expect(runInspectCommand(['operation:v1:current'], options)).rejects.toMatchObject({
+    await expect(runDescribeCommand(['operation:v1:current'], options)).rejects.toMatchObject({
       kind: 'INVALID_ARGUMENT',
-      code: 'operation-ref-invalid',
+      code: 'tool-ref-invalid',
+      message: 'Tool reference must match operation:v1:<64 lowercase hex characters>.',
     } satisfies Partial<CliFailure>)
     expect(fetchMock).not.toHaveBeenCalled()
   })
-  it('completes the anonymous-to-authenticated operation lifecycle with durable replay', async () => {
-    const operationRef = `operation:v1:${'a'.repeat(64)}`
-    const comparisonRef = `operation:v1:${'b'.repeat(64)}`
-    const invocationRef = `invocation:v1:${'c'.repeat(64)}`
+  it('completes the anonymous-to-authenticated Tool lifecycle with durable replay', async () => {
+    const toolRef = `operation:v1:${'a'.repeat(64)}`
+    const comparisonToolRef = `operation:v1:${'b'.repeat(64)}`
+    const callRef = `invocation:v1:${'c'.repeat(64)}`
     const idempotencyKey = 'cold-loop-idempotency'
     const initialInput = { query: 'bitcoin price' }
     const changedInput = { query: 'ethereum price' }
     const completedResult = {
       kind: 'completed' as const,
-      invocationRef,
-      operationRef,
+      callRef,
+      toolRef,
       output: { value: 42, currency: 'USD' },
       evidenceHash: 'sha256:cold-loop-effect',
       usage: {
@@ -502,9 +731,8 @@ describe('external-agent Market Operation cold loop', () => {
     }
     const unavailableRead = {
       kind: 'unavailable' as const,
-      schemaVersion: 'registry-operations:v1' as const,
-      reason: 'operation_not_found' as const,
-      navigation: [],
+      schemaVersion: 'registry-tools:v3' as const,
+      reason: 'tool_not_found' as const,
     }
     const requests: Array<{
       url: string
@@ -512,10 +740,14 @@ describe('external-agent Market Operation cold loop', () => {
       authorization: string | null
       body: unknown
     }> = []
-    const durableInvocations = new Map<string, {
-      operationRef: string
+    const durableCalls = new Map<string, {
+      toolRef: string
       input: Record<string, unknown>
       result: typeof completedResult
+    }>()
+    const quotes = new Map<string, {
+      toolRef: string
+      input: Record<string, unknown>
     }>()
     let providerEffects = 0
     const jsonResponse = (body: unknown, status = 200, contentType = 'application/json') => (
@@ -529,35 +761,47 @@ describe('external-agent Market Operation cold loop', () => {
       requests.push({ url, method, authorization, body })
       const route = new URL(url).pathname
 
-      if (route === '/api/v1/market-operations/search') {
+      if (route === '/api/v1/market-tools/search') {
         return jsonResponse(operationSearchResult('bitcoin price', [
-          operationDescriptor(operationRef, 'Current bitcoin price'),
-          operationDescriptor(comparisonRef, 'Comparison bitcoin price'),
+          operationDescriptor(toolRef, 'Current bitcoin price'),
+          operationDescriptor(comparisonToolRef, 'Comparison bitcoin price'),
         ]))
       }
-      if (route === '/api/v1/market-operations/detail') {
-        return jsonResponse(operationDetailResult(operationDescriptor(operationRef, 'Current bitcoin price')))
+      if (route === '/api/v1/market-tools/describe') {
+        return jsonResponse(operationDetailResult(operationDescriptor(toolRef, 'Current bitcoin price')))
       }
-      if (
-        route === '/api/v1/market-operations/compare'
-        || route === '/api/v1/market-operations/inspect-plan'
-      ) {
+      if (route === '/api/v1/market-tools/compare') {
         return jsonResponse(unavailableRead)
       }
-      if (route === '/api/v1/operations/call') {
+      if (route === '/api/v1/account') {
+        return jsonResponse({ ...connectedAccount(), accountRef: 'account:cold-loop', principalRef: 'principal:cold-loop' })
+      }
+      if (route === TOOL_QUOTE_PATH) {
         if (authorization !== 'Bearer ae-test-caller-key') {
-          throw new Error('invoke must be authenticated')
+          throw new Error('quote must be authenticated')
+        }
+        const request = body as { toolRef: string; input: Record<string, unknown> }
+        const commitmentRef = JSON.stringify(request.input) === JSON.stringify(initialInput)
+          ? `operation-commitment:v1:${'1'.repeat(64)}`
+          : `operation-commitment:v1:${'2'.repeat(64)}`
+        quotes.set(commitmentRef, request)
+        return jsonResponse(operationInspection(request.toolRef, request.input, commitmentRef))
+      }
+      if (route === CALL_ROUTE_CONTRACT.call.path) {
+        if (authorization !== 'Bearer ae-test-caller-key') {
+          throw new Error('call must be authenticated')
         }
         const request = body as {
-          operationRef: string
-          input: Record<string, unknown>
+          quoteRef: string
           idempotencyKey: string
         }
-        const existing = durableInvocations.get(request.idempotencyKey)
+        const committed = quotes.get(request.quoteRef)
+        if (committed === undefined) throw new Error('call without quote')
+        const existing = durableCalls.get(request.idempotencyKey)
         if (existing !== undefined) {
           if (
-            existing.operationRef !== request.operationRef
-            || JSON.stringify(existing.input) !== JSON.stringify(request.input)
+            existing.toolRef !== committed.toolRef
+            || JSON.stringify(existing.input) !== JSON.stringify(committed.input)
           ) {
             return jsonResponse({
               type: 'about:blank',
@@ -573,28 +817,29 @@ describe('external-agent Market Operation cold loop', () => {
         }
 
         providerEffects += 1
-        durableInvocations.set(request.idempotencyKey, {
-          operationRef: request.operationRef,
-          input: request.input,
+        durableCalls.set(request.idempotencyKey, {
+          toolRef: committed.toolRef,
+          input: committed.input,
           result: completedResult,
         })
         return jsonResponse({
           kind: 'pending',
-          invocationRef,
-          operationRef: request.operationRef,
+          callRef,
+          toolRef: committed.toolRef,
           retryAfterMs: 100,
         })
       }
-      if (route === `/api/v1/operations/${encodeURIComponent(invocationRef)}`) {
+      if (route === `/api/v1/calls/${encodeURIComponent(callRef)}`) {
         if (authorization !== 'Bearer ae-test-caller-key') {
           throw new Error('status must be authenticated')
         }
-        const existing = durableInvocations.get(idempotencyKey)
-        if (existing === undefined) throw new Error('status read before invocation')
+        const existing = durableCalls.get(idempotencyKey)
+        if (existing === undefined) throw new Error('status read before call')
         return jsonResponse({
           kind: 'found',
-          invocationRef,
-          operationRef,
+          callRef,
+          version: 1,
+          toolRef,
           state: 'terminal',
           evidenceHash: existing.result.evidenceHash,
           result: existing.result,
@@ -610,147 +855,149 @@ describe('external-agent Market Operation cold loop', () => {
     vi.stubGlobal('fetch', fetchMock)
 
     await runSearchCommand(['bitcoin', 'price'], options)
-    await runInspectCommand([operationRef], options)
+    await runDescribeCommand([toolRef], options)
     await expect(
-      runCompareCommand([operationRef, comparisonRef], options),
+      runCompareCommand([toolRef, comparisonToolRef], options),
     ).rejects.toMatchObject({
       kind: 'NOT_FOUND',
-      code: 'operation_not_found',
+      code: 'tool_not_found',
       exitCode: 1,
     } satisfies Partial<CliFailure>)
-    await expect(
-      runInspectPlanCommand([operationRef, comparisonRef], options),
-    ).rejects.toMatchObject({
-      kind: 'NOT_FOUND',
-      code: 'operation_not_found',
-      exitCode: 1,
-    } satisfies Partial<CliFailure>)
-
     setApiKey('ae-test-caller-key')
     const invokeOptions = { ...options, idempotencyKey, wait: false }
-    const readJsonOutput = async (run: () => Promise<void>): Promise<Record<string, unknown>> => {
+    const readJsonOutput = async (run: () => Promise<unknown>): Promise<Record<string, unknown>> => {
       const start = writes.length
       await run()
       return JSON.parse(writes.slice(start).join('')) as Record<string, unknown>
     }
-    const pending = await readJsonOutput(() => runInvokeCommand(
-      [operationRef],
+    const pending = await readJsonOutput(() => runCallCommand(
+      [toolRef],
       { ...invokeOptions, input: JSON.stringify(initialInput) },
     ))
-    expect(pending).toMatchObject({ kind: 'pending', invocationRef, operationRef })
+    expect(pending).toMatchObject({ kind: 'pending', callRef, toolRef })
     expect(pending).not.toHaveProperty('idempotencyKey')
 
-    const status = await readJsonOutput(() => runStatusCommand([invocationRef], invokeOptions))
+    const status = await readJsonOutput(() => runStatusCommand([callRef], invokeOptions))
     expect(status).toMatchObject({
       kind: 'found',
-      invocationRef,
-      operationRef,
+      callRef,
+      toolRef,
       state: 'terminal',
       result: completedResult,
     })
 
-    const replay = await readJsonOutput(() => runInvokeCommand(
-      [operationRef],
+    const replay = await readJsonOutput(() => runCallCommand(
+      [toolRef],
       { ...invokeOptions, input: JSON.stringify(initialInput) },
     ))
-    expect(replay).toEqual(completedResult)
+    expect(replay).toEqual({ ...completedResult, recoveryRef: pending.recoveryRef })
     expect(status.result).toEqual(completedResult)
 
-    await expect(runInvokeCommand(
-      [operationRef],
+    await expect(runCallCommand(
+      [toolRef],
       { ...invokeOptions, input: JSON.stringify(changedInput) },
     )).rejects.toMatchObject({
-      kind: 'ALREADY_EXISTS',
-      code: 'idempotency_conflict',
+      kind: 'FAILED_PRECONDITION',
+      code: 'call-recovery-input-conflict',
     } satisfies Partial<CliFailure>)
 
     expect(providerEffects).toBe(1)
     expect(requests.map(({ method, url }) => ({ method, url }))).toEqual([
-      { method: 'POST', url: 'https://market.example/api/v1/market-operations/search' },
-      { method: 'POST', url: 'https://market.example/api/v1/market-operations/detail' },
-      { method: 'POST', url: 'https://market.example/api/v1/market-operations/compare' },
-      { method: 'POST', url: 'https://market.example/api/v1/market-operations/inspect-plan' },
-      { method: 'POST', url: 'https://market.example/api/v1/operations/call' },
-      { method: 'GET', url: `https://market.example/api/v1/operations/${encodeURIComponent(invocationRef)}` },
-      { method: 'POST', url: 'https://market.example/api/v1/operations/call' },
-      { method: 'POST', url: 'https://market.example/api/v1/operations/call' },
+      { method: 'POST', url: 'https://market.example/api/v1/market-tools/search' },
+      { method: 'POST', url: 'https://market.example/api/v1/market-tools/describe' },
+      { method: 'POST', url: 'https://market.example/api/v1/market-tools/compare' },
+      { method: 'POST', url: `https://market.example${TOOL_QUOTE_PATH}` },
+      { method: 'POST', url: 'https://market.example/api/v1/tools/call' },
+      { method: 'GET', url: `https://market.example/api/v1/calls/${encodeURIComponent(callRef)}` },
+      { method: 'GET', url: 'https://market.example/api/v1/account' },
+      { method: 'GET', url: `https://market.example/api/v1/calls/${encodeURIComponent(callRef)}` },
     ])
     expect(requests.map(({ authorization }) => authorization)).toEqual([
       null,
       null,
       null,
-      null,
+      'Bearer ae-test-caller-key',
       'Bearer ae-test-caller-key',
       'Bearer ae-test-caller-key',
       'Bearer ae-test-caller-key',
       'Bearer ae-test-caller-key',
     ])
     expect(requests.map(({ body }) => body)).toEqual([
-      { query: 'bitcoin price' },
-      { operationRef },
-      { operationRefs: [operationRef, comparisonRef] },
-      { operationRefs: [operationRef, comparisonRef] },
-      { operationRef, input: initialInput, idempotencyKey },
+      { query: 'bitcoin price', limit: 10 },
+      { toolRef },
+      { toolRefs: [toolRef, comparisonToolRef] },
+      { toolRef, input: initialInput },
+      { quoteRef: `operation-commitment:v1:${'1'.repeat(64)}`, idempotencyKey },
       undefined,
-      { operationRef, input: initialInput, idempotencyKey },
-      { operationRef, input: changedInput, idempotencyKey },
+      undefined,
+      undefined,
     ])
   })
 
   it('generates a durable idempotency key when call omits one', async () => {
     setApiKey('ae-test-caller-key')
-    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
-      kind: 'pending', invocationRef: 'invocation:generated', operationRef: 'operation:v1:current', retryAfterMs: 100,
-    }), { status: 200, headers: { 'content-type': 'application/json' } }))
+    const fetchMock = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(responseJson(operationInspection(CURRENT_OPERATION_REF, {})))
+      .mockResolvedValueOnce(responseJson({
+        kind: 'pending', callRef: 'invocation:generated', toolRef: CURRENT_OPERATION_REF, retryAfterMs: 100,
+      }))
     vi.stubGlobal('fetch', fetchMock)
 
     const output = captureStdout()
     try {
-      await runInvokeCommand(['operation:v1:current'], { ...options, input: '{}' })
+      await runCallCommand([CURRENT_OPERATION_REF], { ...options, input: '{}' })
     } finally {
       output.restore()
     }
     const result = JSON.parse(output.read()) as Record<string, unknown>
     expect(result).not.toHaveProperty('idempotencyKey')
-    const [, init] = fetchMock.mock.calls[0]!
+    const [, init] = fetchMock.mock.calls[1]!
     const request = JSON.parse(String(init?.body)) as { idempotencyKey: string }
     expect(request.idempotencyKey).toMatch(/^[0-9a-f-]{36}$/u)
-    expect(fetchMock).toHaveBeenCalledOnce()
+    expect(fetchMock).toHaveBeenCalledTimes(2)
   })
 
   it('returns pending with a reusable key and status continuation without --wait', async () => {
     setApiKey('ae-test-caller-key')
     const output = captureStdout()
-    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
+    const fetchMock = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(responseJson(operationInspection(CURRENT_OPERATION_REF, {})))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
       kind: 'pending',
-      invocationRef: 'invocation:current',
-      operationRef: 'operation:v1:current',
+      callRef: 'invocation:current',
+      toolRef: CURRENT_OPERATION_REF,
       retryAfterMs: 100,
     }), { status: 200, headers: { 'content-type': 'application/json' } }))
     vi.stubGlobal('fetch', fetchMock)
 
     try {
-      await runInvokeCommand(['operation:v1:current'], { ...options, input: '{}', idempotencyKey: 'idem-stable' })
+      await runCallCommand([CURRENT_OPERATION_REF], {
+        ...options,
+        baseUrlSource: 'flag',
+        input: '{}',
+        idempotencyKey: 'idem-stable',
+      })
     } finally {
       output.restore()
     }
 
     const printed = JSON.parse(output.read()) as {
       kind: string
-      invocationRef: string
-      operationRef: string
+      callRef: string
+      toolRef: string
       retryAfterMs: number
       nextCommand: string
     }
     expect(printed).toEqual({
       kind: 'pending',
-      invocationRef: 'invocation:current',
-      operationRef: 'operation:v1:current',
+      callRef: 'invocation:current',
+      toolRef: CURRENT_OPERATION_REF,
       retryAfterMs: 100,
-      nextCommand: 'ae status invocation:current',
+      nextCommand: 'ae status invocation:current --base-url https://market.example --json',
+      recoveryRef: expect.stringMatching(/^[0-9a-f-]{36}$/u),
     })
     expect(output.read()).not.toContain('idem-stable')
-    expect(fetchMock).toHaveBeenCalledOnce()
+    expect(fetchMock).toHaveBeenCalledTimes(2)
   })
 
   it('reads status through the authenticated canonical route', async () => {
@@ -758,8 +1005,9 @@ describe('external-agent Market Operation cold loop', () => {
     setApiKey('ae-test-caller-key')
     const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
       kind: 'found',
-      invocationRef: 'invocation:current',
-      operationRef: 'operation:v1:current',
+      callRef: 'invocation:current',
+      version: 1,
+      toolRef: CURRENT_OPERATION_REF,
       state: 'in_progress',
     }), { status: 200, headers: { 'content-type': 'application/json' } }))
     vi.stubGlobal('fetch', fetchMock)
@@ -770,9 +1018,13 @@ describe('external-agent Market Operation cold loop', () => {
       output.restore()
     }
     const [url, init] = fetchMock.mock.calls[0]!
-    expect(url).toBe('https://market.example/api/v1/operations/invocation%3Acurrent')
+    expect(url).toBe('https://market.example/api/v1/calls/invocation%3Acurrent')
     expect(init?.method).toBe('GET')
     expect(new Headers(init?.headers).get('Authorization')).toBe('Bearer ae-test-caller-key')
+    expect(JSON.parse(output.read())).toMatchObject({
+      state: 'in_progress',
+      nextCommand: 'ae status invocation:current --json',
+    })
   })
 
   it('refuses a missing API key origin before any credentialed fetch', async () => {
@@ -804,13 +1056,14 @@ describe('external-agent Market Operation cold loop', () => {
   })
 
   it('allows matching loopback HTTP development credentials', async () => {
-    const loopbackOptions = { ...options, baseUrl: 'http://127.0.0.1:3210' }
+    const loopbackOptions = { ...options, baseUrl: 'http://127.0.0.1:3210', baseUrlSource: 'flag' as const }
     setApiKey('ae-test-caller-key', loopbackOptions.baseUrl)
     const output = captureStdout()
     const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
       kind: 'found',
-      invocationRef: 'invocation:current',
-      operationRef: 'operation:v1:current',
+      callRef: 'invocation:current',
+      version: 1,
+      toolRef: CURRENT_OPERATION_REF,
       state: 'in_progress',
     }), { status: 200, headers: { 'content-type': 'application/json' } }))
     vi.stubGlobal('fetch', fetchMock)
@@ -822,8 +1075,11 @@ describe('external-agent Market Operation cold loop', () => {
     }
 
     const [url, init] = fetchMock.mock.calls[0]!
-    expect(url).toBe('http://127.0.0.1:3210/api/v1/operations/invocation%3Acurrent')
+    expect(url).toBe('http://127.0.0.1:3210/api/v1/calls/invocation%3Acurrent')
     expect(new Headers(init?.headers).get('Authorization')).toBe('Bearer ae-test-caller-key')
+    expect(JSON.parse(output.read())).toMatchObject({
+      nextCommand: 'ae status invocation:current --base-url http://127.0.0.1:3210 --json',
+    })
   })
 
   it('uses the existing OAuth device flow and returns the one-time AE credential', async () => {
@@ -840,15 +1096,10 @@ describe('external-agent Market Operation cold loop', () => {
       .mockResolvedValueOnce(new Response(JSON.stringify({
         access_token: 'ae-issued-secret',
         token_type: 'Bearer',
-        scope: 'market_operations:invoke customer_requests:bounded_mandate',
+        scope: 'market_tools:call customer_requests:spending_policy',
         expires_in: 604800,
       }), { status: 200, headers: { 'content-type': 'application/json' } }))
-      .mockResolvedValueOnce(new Response(JSON.stringify({
-        kind: 'refused',
-        invocationRef: 'invocation:v1:connect-validation',
-        code: 'invocation_not_found',
-        retryable: false,
-      }), { status: 200, headers: { 'content-type': 'application/json' } }))
+      .mockResolvedValueOnce(responseJson(connectedAccount()))
     vi.stubGlobal('fetch', fetchMock)
 
     try {
@@ -862,7 +1113,7 @@ describe('external-agent Market Operation cold loop', () => {
     expect(JSON.parse(String(registration[1]?.body))).toMatchObject({
       grant_types: ['urn:ietf:params:oauth:grant-type:device_code'],
       token_endpoint_auth_method: 'none',
-      scope: 'market_operations:invoke customer_requests:bounded_mandate',
+      scope: 'market_tools:call customer_requests:spending_policy',
     })
     const deviceAuthorization = fetchMock.mock.calls[1]!
     expect(deviceAuthorization[0]).toBe('https://market.example/oauth/device_authorization')
@@ -877,6 +1128,252 @@ describe('external-agent Market Operation cold loop', () => {
       apiKeyOrigin: 'https://market.example',
     })
     expect(output.read()).not.toContain('ae-issued-secret')
+  })
+
+  it('hands a non-TTY JSON caller the safe approval details before polling completes', async () => {
+    const output = captureStdout()
+    const diagnostics = captureStderr()
+    const browserOpen = vi.mocked(childProcess.spawn)
+    browserOpen.mockImplementation(() => {
+      throw new Error('browser opener should be suppressed')
+    })
+    let resolveToken: ((response: Response) => void) | undefined
+    const deferredToken = new Promise<Response>((resolve) => {
+      resolveToken = resolve
+    })
+    let stderrAtFirstPoll = ''
+    let stdoutAtFirstPoll = ''
+    const fetchMock = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(Response.json({ client_id: 'private-client-id' }, { status: 201 }))
+      .mockResolvedValueOnce(Response.json({
+        device_code: 'private-device-code',
+        user_code: 'ABCD-EFGH',
+        verification_uri: 'https://market.example/agent-access/authorize?user_code=ABCD-EFGH',
+        expires_in: 600,
+        interval: 5,
+      }))
+      .mockImplementationOnce(async () => {
+        stderrAtFirstPoll = diagnostics.read()
+        stdoutAtFirstPoll = output.read()
+        return await deferredToken
+      })
+      .mockResolvedValueOnce(Response.json(connectedAccount()))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const connect = runConnectCommand([], options)
+    await vi.waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledTimes(3)
+    })
+    const expectedHandoff = [
+      'Approve: https://market.example/agent-access/authorize?user_code=ABCD-EFGH',
+      'User code: ABCD-EFGH',
+      'Waiting for authorization…',
+      '',
+    ].join('\n')
+    const stderrBeforeApproval = diagnostics.read()
+    const stdoutBeforeApproval = output.read()
+
+    resolveToken?.(Response.json({
+      access_token: 'private-access-token',
+      token_type: 'Bearer',
+      scope: 'market_tools:call customer_requests:spending_policy',
+    }))
+    await connect
+
+    try {
+      expect(stderrAtFirstPoll).toBe(expectedHandoff)
+      expect(stdoutAtFirstPoll).toBe('')
+      expect(stderrBeforeApproval).toBe(expectedHandoff)
+      expect(stdoutBeforeApproval).toBe('')
+
+      const finalOutput = output.read()
+      const result = JSON.parse(finalOutput) as Record<string, unknown>
+      expect(finalOutput).toBe(`${JSON.stringify(result, undefined, 2)}\n`)
+      expect(result).toMatchObject({
+        kind: 'connected',
+        credential: 'origin_bound_agent_key',
+        credentialStored: true,
+        apiKeyOrigin: 'https://market.example',
+      })
+      expect(diagnostics.read()).toBe(expectedHandoff)
+      expect(browserOpen).not.toHaveBeenCalled()
+      for (const forbidden of [
+        'private-client-id',
+        'private-device-code',
+        'private-access-token',
+        testConfigDirectory,
+        'client_id=',
+        'device_code=',
+      ]) {
+        expect(diagnostics.read()).not.toContain(forbidden)
+      }
+    } finally {
+      output.restore()
+      diagnostics.restore()
+    }
+  })
+
+  it('keeps the immediate human approval and success output unchanged', async () => {
+    const output = captureStdout()
+    const diagnostics = captureStderr()
+    const fetchMock = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(Response.json({ client_id: 'ae_client' }, { status: 201 }))
+      .mockResolvedValueOnce(Response.json({
+        device_code: 'device-code',
+        user_code: 'ABCD-EFGH',
+        verification_uri: 'https://market.example/agent-access/authorize?user_code=ABCD-EFGH',
+        expires_in: 600,
+        interval: 5,
+      }))
+      .mockResolvedValueOnce(Response.json({
+        access_token: 'ae-issued-secret',
+        token_type: 'Bearer',
+        scope: 'market_tools:call customer_requests:spending_policy',
+      }))
+      .mockResolvedValueOnce(Response.json(connectedAccount()))
+    vi.stubGlobal('fetch', fetchMock)
+
+    try {
+      await runConnectCommand([], { ...options, json: false })
+      expect(output.read()).toContain('Connect AE')
+      expect(output.read()).toContain('verification  https://market.example/agent-access/authorize?user_code=ABCD-EFGH')
+      expect(output.read()).toContain('user code     ABCD-EFGH')
+      expect(output.read()).toContain('Approve the request, then this command will poll for the one-time credential.')
+      expect(output.read()).toContain('Your agent is connected.')
+      expect(output.read()).toContain('Next: ae search \'what you need\'\n')
+      expect(output.read()).not.toContain('Next: ae search \'what you need\'.')
+      expect(output.read()).toContain('ready_to_buy')
+      expect(output.read()).toContain('https://market.example/agent-access?caller=principal%3Abuyer')
+      expect(output.read()).not.toContain('ae-issued-secret')
+      expect(diagnostics.read()).toBe('')
+      expect(fetchMock).toHaveBeenCalledTimes(4)
+    } finally {
+      output.restore()
+      diagnostics.restore()
+    }
+  })
+
+  it('prints the exact selected IPv6 origin in the human continuation', async () => {
+    const selectedOrigin = 'http://[::1]:3210'
+    const expectedCommand = "ae search 'what you need' --base-url 'http://[::1]:3210'"
+    const output = captureStdout()
+    const diagnostics = captureStderr()
+    const restoreTTY = forceStdoutTTY(false)
+    const browserOpen = vi.mocked(childProcess.spawn)
+    browserOpen.mockImplementation(() => {
+      throw new Error('non-TTY human guidance should not open a browser')
+    })
+    vi.stubGlobal('fetch', connectFlowFetch('https://auth.example/authorize?flow=connect'))
+
+    try {
+      await runConnectCommand([], {
+        ...options,
+        baseUrl: selectedOrigin,
+        baseUrlSource: 'flag',
+        json: false,
+      })
+      expect(output.read()).toContain('Next: ' + expectedCommand + '\n')
+      expect(output.read()).not.toContain('Next: ' + expectedCommand + '.')
+      expect(browserOpen).not.toHaveBeenCalled()
+    } finally {
+      output.restore()
+      diagnostics.restore()
+      restoreTTY()
+      vi.unstubAllGlobals()
+      browserOpen.mockClear()
+      if (childProcessMockState.realSpawn !== undefined) {
+        browserOpen.mockImplementation(childProcessMockState.realSpawn)
+      }
+    }
+  })
+
+  it.each([
+    ['valid HTTPS verification URI', 'https://auth.example/authorize?flow=connect'],
+    ['valid loopback HTTP verification URI', 'http://127.0.0.1:4321/authorize'],
+  ] as const)('accepts %s without imposing a same-origin rule', async (_label, uri) => {
+    const output = captureStdout()
+    const fetchMock = connectFlowFetch(uri)
+    vi.stubGlobal('fetch', fetchMock)
+
+    try {
+      await runConnectCommand([], options)
+    } finally {
+      output.restore()
+    }
+
+    expect(JSON.parse(output.read())).toMatchObject({
+      kind: 'connected',
+      verificationUri: uri,
+    })
+  })
+
+  it.each([
+    ['missing verification_uri', undefined],
+    ['malformed verification_uri', 'not-a-url'],
+    ['relative verification_uri', '/authorize'],
+    ['opaque HTTPS verification_uri', 'https:opaque'],
+    ['empty-authority HTTPS verification_uri', 'https:///authorize'],
+    ['non-web verification_uri', 'file:///tmp/authorize'],
+  ] as const)('rejects %s before attempting to open a browser', async (_label, uri) => {
+    const output = captureStdout()
+    const restoreTTY = forceStdoutTTY(true)
+    const previousDisableOpen = process.env.AE_DISABLE_BROWSER_OPEN
+    delete process.env.AE_DISABLE_BROWSER_OPEN
+    const browserOpen = vi.mocked(childProcess.spawn)
+    browserOpen.mockImplementation(() => {
+      throw new Error('invalid verification URI must not open a browser')
+    })
+    vi.stubGlobal('fetch', connectFlowFetch(uri))
+
+    try {
+      await expect(runConnectCommand([], { ...options, json: false })).rejects.toMatchObject({
+        kind: 'UNAVAILABLE',
+        code: 'connect-response-invalid',
+      } satisfies Partial<CliFailure>)
+      expect(output.read()).toBe('')
+      expect(browserOpen).not.toHaveBeenCalled()
+    } finally {
+      output.restore()
+      restoreTTY()
+      if (previousDisableOpen === undefined) delete process.env.AE_DISABLE_BROWSER_OPEN
+      else process.env.AE_DISABLE_BROWSER_OPEN = previousDisableOpen
+    }
+  })
+
+  it.each([
+    ['JSON + TTY + browser enabled', true, true, undefined],
+    ['human + non-TTY + browser enabled', false, false, undefined],
+    ['human + TTY + browser disabled', false, true, '1'],
+  ] as const)('suppresses validated browser opening for %s', async (_label, json, tty, disableOpen) => {
+    const output = captureStdout()
+    const diagnostics = captureStderr()
+    const restoreTTY = forceStdoutTTY(tty)
+    const previousDisableOpen = process.env.AE_DISABLE_BROWSER_OPEN
+    if (disableOpen === undefined) delete process.env.AE_DISABLE_BROWSER_OPEN
+    else process.env.AE_DISABLE_BROWSER_OPEN = disableOpen
+    const browserOpen = vi.mocked(childProcess.spawn)
+    browserOpen.mockImplementation(() => {
+      throw new Error('browser opening should be suppressed')
+    })
+    vi.stubGlobal('fetch', connectFlowFetch('https://auth.example/authorize?flow=connect'))
+
+    try {
+      await runConnectCommand([], { ...options, json })
+      expect(browserOpen).not.toHaveBeenCalled()
+      if (json) expect(JSON.parse(output.read())).toMatchObject({ kind: 'connected' })
+      else expect(output.read()).toContain('Your agent is connected.')
+    } finally {
+      output.restore()
+      diagnostics.restore()
+      restoreTTY()
+      vi.unstubAllGlobals()
+      browserOpen.mockClear()
+      if (childProcessMockState.realSpawn !== undefined) {
+        browserOpen.mockImplementation(childProcessMockState.realSpawn)
+      }
+      if (previousDisableOpen === undefined) delete process.env.AE_DISABLE_BROWSER_OPEN
+      else process.env.AE_DISABLE_BROWSER_OPEN = previousDisableOpen
+    }
   })
 
   it('waits for a newly issued Clerk key to reach the authentication edge', async () => {
@@ -898,12 +1395,7 @@ describe('external-agent Market Operation cold loop', () => {
         kind: 'UNAUTHENTICATED',
         code: 'authentication_required',
       }, { status: 401 }))
-      .mockResolvedValueOnce(Response.json({
-        kind: 'refused',
-        invocationRef: 'invocation:v1:connect-validation',
-        code: 'invocation_not_found',
-        retryable: false,
-      }))
+      .mockResolvedValueOnce(Response.json(connectedAccount()))
     vi.stubGlobal('fetch', fetchMock)
 
     try {
@@ -936,12 +1428,7 @@ describe('external-agent Market Operation cold loop', () => {
         interval: 1,
       }))
       .mockResolvedValueOnce(Response.json({ access_token: 'replacement-key' }))
-      .mockResolvedValueOnce(Response.json({
-        kind: 'refused',
-        invocationRef: 'invocation:v1:connect-validation',
-        code: 'invocation_not_found',
-        retryable: false,
-      }))
+      .mockResolvedValueOnce(Response.json(connectedAccount()))
     vi.stubGlobal('fetch', fetchMock)
 
     try {
@@ -970,12 +1457,7 @@ describe('external-agent Market Operation cold loop', () => {
   it('validates an existing AE_API_KEY before reporting connected', async () => {
     setApiKey('ae-existing-secret')
     const output = captureStdout()
-    const fetchMock = vi.fn<typeof fetch>().mockResolvedValueOnce(new Response(JSON.stringify({
-      kind: 'refused',
-      invocationRef: 'invocation:v1:connect-validation',
-      code: 'invocation_not_found',
-      retryable: false,
-    }), { status: 200, headers: { 'content-type': 'application/json' } }))
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValueOnce(responseJson(connectedAccount()))
     vi.stubGlobal('fetch', fetchMock)
 
     try {
@@ -986,50 +1468,179 @@ describe('external-agent Market Operation cold loop', () => {
 
     expect(fetchMock).toHaveBeenCalledOnce()
     const [url, init] = fetchMock.mock.calls[0]!
-    expect(url).toBe('https://market.example/api/v1/operations/invocation%3Av1%3Aconnect-validation')
+    expect(url).toBe('https://market.example/api/v1/account')
     expect(new Headers(init?.headers).get('Authorization')).toBe('Bearer ae-existing-secret')
     expect(JSON.parse(output.read())).toMatchObject({
       kind: 'connected',
       credential: 'origin_bound_agent_key',
       source: 'validated_environment',
+      connectionState: 'ready_to_buy',
+      principalRef: 'principal:buyer',
+      accountRef: 'account:buyer',
       apiKeyOrigin: 'https://market.example',
     })
   })
 
-  it('returns an explicit MCP import and new-session verification handoff', async () => {
-    setApiKey('ae-existing-secret')
+  it.each([
+    [false, "ae search 'what you need' --base-url 'http://[::1]:3210' --json"],
+    [true, "ae supply tools '<businessRef>' --base-url 'http://[::1]:3210' --json"],
+  ] as const)('emits a shell-safe origin-preserving %s continuation for an existing key', async (provider, expectedCommand) => {
+    const selectedOrigin = 'http://[::1]:3210'
+    setApiKey('ae-existing-secret', selectedOrigin)
     const output = captureStdout()
-    vi.stubGlobal('fetch', vi.fn<typeof fetch>().mockResolvedValueOnce(responseJson({
-      kind: 'refused',
-      invocationRef: 'invocation:v1:connect-validation',
-      code: 'invocation_not_found',
-      retryable: false,
-    })))
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>().mockResolvedValueOnce(responseJson(
+      provider ? { ...connectedAccount(), scopes: ['market_supply:manage'] } : connectedAccount(),
+    )))
 
     try {
-      await runConnectCommand([], { ...options, mcp: true })
+      await runConnectCommand([], {
+        ...options,
+        baseUrl: selectedOrigin,
+        baseUrlSource: 'flag',
+        provider,
+      })
     } finally {
       output.restore()
     }
 
-    expect(JSON.parse(output.read())).toMatchObject({
+    const result = JSON.parse(output.read()) as Record<string, unknown>
+    expect(result).toMatchObject({
       kind: 'connected',
-      nextAction: expect.stringContaining('Import the returned MCP config path'),
-      mcp: {
-        kind: 'import_required',
-        configPath: expect.stringContaining('mcp.json'),
-        nextAction: expect.stringContaining('start a new agent session'),
-        verificationTool: 'ae_registry_operations_search',
-      },
+      nextCommand: expectedCommand,
+    })
+    expect(result.nextAction).toBe('Run ' + expectedCommand + '.')
+  })
+
+  it('emits an origin-preserving JSON continuation when OAuth approval times out', async () => {
+    const selectedOrigin = 'http://[::1]:3210'
+    const output = captureStdout()
+    const diagnostics = captureStderr()
+    let tokenFetchReached: (() => void) | undefined
+    const tokenFetch = new Promise<void>((resolveTokenFetch) => {
+      tokenFetchReached = resolveTokenFetch
+    })
+    const fetchMock = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(Response.json({ client_id: 'ae_client' }, { status: 201 }))
+      .mockResolvedValueOnce(Response.json({
+        device_code: 'device-code',
+        user_code: 'ABCD-EFGH',
+        verification_uri: 'https://auth.example/authorize?flow=connect',
+        expires_in: 1,
+        interval: 1,
+      }))
+      .mockImplementationOnce(async () => {
+        tokenFetchReached?.()
+        return Response.json({ error: 'authorization_pending' }, { status: 400 })
+      })
+    vi.stubGlobal('fetch', fetchMock)
+    vi.useFakeTimers()
+    vi.setSystemTime(0)
+
+    try {
+      const connect = runConnectCommand([], {
+        ...options,
+        baseUrl: selectedOrigin,
+        baseUrlSource: 'flag',
+        provider: true,
+      })
+      await tokenFetch
+      await vi.advanceTimersByTimeAsync(1_000)
+      await connect
+    } finally {
+      vi.useRealTimers()
+      output.restore()
+      diagnostics.restore()
+      vi.unstubAllGlobals()
+    }
+
+    expect(JSON.parse(output.read())).toMatchObject({
+      kind: 'pending',
+      nextCommand: "ae connect --provider --base-url 'http://[::1]:3210' --json",
     })
   })
 
-  it('does not install a supplier credential as the buyer Operation MCP connection', async () => {
-    await expect(runConnectCommand([], { ...options, supplier: true, mcp: true })).rejects.toMatchObject({
-      kind: 'INVALID_ARGUMENT',
-      code: 'connect-profile-mcp-conflict',
-      nextCommand: 'ae connect --supplier',
-    } satisfies Partial<CliFailure>)
+  it('follows a connected continuation to the selected IPv6 loopback origin in a fresh process', async () => {
+    const requests: Array<{ method: string; url: string; body: string }> = []
+    const server = createServer((request, response) => {
+      const chunks: Buffer[] = []
+      request.on('data', (chunk: Buffer | string) => chunks.push(Buffer.from(chunk)))
+      request.on('end', () => {
+        requests.push({
+          method: request.method ?? '',
+          url: request.url ?? '',
+          body: Buffer.concat(chunks).toString('utf8'),
+        })
+        if (request.url === '/api/v1/account') {
+          response.writeHead(200, { 'content-type': 'application/json' })
+          response.end(JSON.stringify(connectedAccount()))
+          return
+        }
+        if (request.url === '/api/v1/market-tools/search') {
+          response.writeHead(200, { 'content-type': 'application/json' })
+          response.end(JSON.stringify(operationSearchResult('what you need', [])))
+          return
+        }
+        response.writeHead(404, { 'content-type': 'application/json' })
+        response.end(JSON.stringify({ kind: 'not_found' }))
+      })
+    })
+    let listening = false
+
+    await new Promise<void>((resolveListen, reject) => {
+      server.once('error', reject)
+      server.listen(0, '::1', resolveListen)
+    })
+    listening = true
+
+    try {
+      const address = server.address()
+      if (typeof address !== 'object' || address === null) throw new Error('fresh continuation server did not expose an address')
+      const selectedOrigin = 'http://[::1]:' + address.port
+      setApiKey('fresh-process-key', selectedOrigin)
+      writeFileSync(
+        join(testConfigDirectory, 'ae'),
+        '#!/bin/sh\nexec "$AE_TEST_NODE" "$AE_TEST_CLI" "$@"\n',
+        { mode: 0o755 },
+      )
+
+      const output = captureStdout()
+      vi.stubGlobal('fetch', vi.fn<typeof fetch>().mockResolvedValueOnce(responseJson(connectedAccount())))
+      try {
+        await runConnectCommand([], {
+          ...options,
+          baseUrl: selectedOrigin,
+          baseUrlSource: 'flag',
+        })
+      } finally {
+        output.restore()
+      }
+
+      const connected = JSON.parse(output.read()) as { nextCommand: string }
+      expect(connected.nextCommand).toBe("ae search 'what you need' --base-url '" + selectedOrigin + "' --json")
+
+      const child = await runFreshShell(connected.nextCommand, {
+        ...process.env,
+        AE_TEST_CLI: CLI_BUNDLE_PATH,
+        AE_TEST_NODE: process.execPath,
+        PATH: testConfigDirectory + delimiter + (process.env.PATH ?? ''),
+      })
+      expect(child).toMatchObject({ exitCode: 0, signal: null, stderr: '' })
+      expect(JSON.parse(child.stdout)).toMatchObject({
+        kind: 'no_candidates',
+        query: 'what you need',
+      })
+      expect(requests).toContainEqual({
+        method: 'POST',
+        url: '/api/v1/market-tools/search',
+        body: JSON.stringify({ query: 'what you need', limit: 10 }),
+      })
+    } finally {
+      if (listening) {
+        await new Promise<void>((resolveClose, reject) => {
+          server.close((error) => error === undefined ? resolveClose() : reject(error))
+        })
+      }
+    }
   })
 
   it('refuses a fake configured key instead of claiming connected', async () => {

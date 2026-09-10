@@ -3,7 +3,6 @@ import {
   postMcp,
   readMcpBody,
 } from './mcp-api-harness'
-import { toJsonSchemaCompat } from '@modelcontextprotocol/sdk/server/zod-json-schema-compat.js'
 import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
 
@@ -32,18 +31,17 @@ describe('MCP host adapter tools/list', () => {
       .filter((action) => action.surfaces.includes('mcp') && action.readOnly && action.credentialAdmission === undefined)
     const expectedToolNames = mcpActions.map(mcpToolName)
     expect(expectedToolNames).toEqual([
-      'ae_registry_search',
-      'ae_registry_detail',
-      'ae_registry_operations_search',
-      'ae_registry_operations_detail',
-      'ae_registry_operations_compare',
-      'ae_registry_operations_inspectPlan',
+      'ae_registry_tools_list',
+      'ae_registry_tools_search',
+      'ae_registry_tools_describe',
+      'ae_registry_tools_compare',
     ])
-    expect(expectedToolNames).not.toContain('ae_operation_invoke')
-    expect(expectedToolNames).not.toContain('ae_operation_execute')
-    expect(expectedToolNames).not.toContain('ae_operation_status')
+    expect(expectedToolNames).not.toContain('ae_tool_call')
+    expect(expectedToolNames).not.toContain('ae_tool_quote')
+    expect(expectedToolNames).not.toContain('ae_call_status')
     expect(tools.map((tool) => tool.name)).toEqual(expectedToolNames)
     expect(tools).toHaveLength(expectedToolNames.length)
+    expect(new TextEncoder().encode(JSON.stringify(tools)).byteLength).toBeLessThanOrEqual(8192)
 
     for (const tool of tools) {
       const name = tool.name
@@ -57,66 +55,38 @@ describe('MCP host adapter tools/list', () => {
         properties: expect.any(Object),
         additionalProperties: false,
       }))
-      const expectedOutputSchema = toJsonSchemaCompat(z.object({
-        result: action.outputSchema,
-      }), {
-        strictUnions: true,
-        pipeStrategy: 'output',
+      expect(tool.outputSchema).toBeUndefined()
+      expect(tool.annotations).toEqual({
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
       })
-      expect(tool.outputSchema).toEqual(expect.objectContaining({
-        type: 'object',
-        additionalProperties: false,
-        required: ['result'],
-      }))
-      expect(tool.outputSchema).toEqual(expectedOutputSchema)
     }
 
-    const detail = tools.find((tool) => tool.name === 'ae_registry_detail')
-    const operations = tools.find((tool) => tool.name === 'ae_registry_operations_search')
-    const compare = tools.find((tool) => tool.name === 'ae_registry_operations_compare')
-    const inspectPlan = tools.find((tool) => tool.name === 'ae_registry_operations_inspectPlan')
-    const search = tools.find((tool) => tool.name === 'ae_registry_search')
-    expect(detail?.inputSchema).toEqual(expect.objectContaining({
-      properties: expect.objectContaining({ slug: expect.any(Object) }),
+    const list = tools.find((tool) => tool.name === 'ae_registry_tools_list')
+    const toolsSearch = tools.find((tool) => tool.name === 'ae_registry_tools_search')
+    const describeTool = tools.find((tool) => tool.name === 'ae_registry_tools_describe')
+    const compare = tools.find((tool) => tool.name === 'ae_registry_tools_compare')
+    expect(list?.inputSchema).toEqual(expect.objectContaining({
+      properties: expect.objectContaining({ limit: expect.any(Object) }),
     }))
-    expect(search?.inputSchema).toEqual(expect.objectContaining({
+    expect(toolsSearch?.inputSchema).toEqual(expect.objectContaining({
       properties: expect.objectContaining({ query: expect.any(Object) }),
     }))
-    expect(operations?.inputSchema).toEqual(expect.objectContaining({
-      properties: expect.objectContaining({ query: expect.any(Object) }),
+    expect(describeTool?.inputSchema).toEqual(expect.objectContaining({
+      required: ['toolRef'],
+      properties: expect.objectContaining({ toolRef: expect.any(Object) }),
     }))
     expect(compare?.inputSchema).toEqual(expect.objectContaining({
       properties: expect.objectContaining({
-        operationRefs: expect.objectContaining({
+        toolRefs: expect.objectContaining({
           type: 'array',
           minItems: 1,
           maxItems: 4,
           items: expect.objectContaining({ type: 'string', pattern: expect.any(String) }),
         }),
       }),
-    }))
-    expect(inspectPlan?.inputSchema).toEqual(expect.objectContaining({
-      required: ['operationRefs'],
-      additionalProperties: false,
-      properties: expect.objectContaining({
-        operationRefs: expect.any(Object),
-        mappingRefs: expect.any(Object),
-        expiresInMs: expect.any(Object),
-      }),
-    }))
-    expect(inspectPlan?.description).toContain('operationRefs')
-    expect(inspectPlan?.description).toContain('not a singular operationRef')
-    expect(inspectPlan?.inputSchema).toEqual(expect.objectContaining({
-      properties: expect.objectContaining({
-        operationRefs: expect.objectContaining({
-          type: 'array',
-          minItems: 1,
-          maxItems: 4,
-        }),
-      }),
-    }))
-    expect(inspectPlan?.inputSchema).not.toEqual(expect.objectContaining({
-      required: expect.arrayContaining(['operationRef']),
     }))
   })
 
@@ -158,7 +128,7 @@ describe('MCP host adapter tools/list', () => {
       readOnly: false,
       effect: {
         class: 'external_state_change', reversible: false, recipientKind: 'none',
-        dataClasses: [], spendExposure: 'none', approval: 'approve_each',
+        dataClasses: [], spendExposure: 'none', approval: 'approval_required',
       },
       surfaces: ['mcp'],
       outputSchema: z.strictObject({ kind: z.literal('ok') }),
@@ -187,7 +157,7 @@ describe('MCP host adapter tools/list', () => {
       tools: [expect.objectContaining({ name: mcpToolName(registryDetailAction) })],
     })
   })
-  it('hides credential-admitted supplier tools from anonymous tools/list', async () => {
+  it('hides credential-admitted Provider tools from anonymous tools/list', async () => {
     const response = await postMcp({
       jsonrpc: '2.0',
       id: 'anonymous-supply-list',
@@ -204,34 +174,65 @@ describe('MCP host adapter tools/list', () => {
     ]))
   })
 
-  it('lists operation tools without supplier tools for an operation-only principal', async () => {
+  it('lists Tool and Call actions without Provider tools for a buyer principal', async () => {
     const response = await postMcp({
       jsonrpc: '2.0',
-      id: 'operation-only-list',
+      id: 'buyer-list',
       method: 'tools/list',
       params: {},
     }, {
-      authenticate: authenticateWithScopes(['market_operations:invoke']),
+      authenticate: authenticateWithScopes(['market_tools:call']),
     }, {
-      authorization: 'Bearer operation-only',
+      authorization: 'Bearer buyer-only',
     })
     const body = await readMcpBody(response)
     const names = ((body.result?.tools ?? []) as Array<Record<string, unknown>>).map((tool) => tool.name)
     const expectedNames = listMcpActions()
       .filter((action) => (action.readOnly && action.credentialAdmission === undefined)
-        || action.credentialAdmission?.scope === 'market_operations:invoke'
-        || action.credentialAdmission?.anyScopes?.includes('market_operations:invoke') === true)
+        || action.credentialAdmission?.scope === 'market_tools:call'
+        || action.credentialAdmission?.anyScopes?.includes('market_tools:call') === true)
       .map(mcpToolName)
 
     expect(names).toEqual(expectedNames)
+    expect(new TextEncoder().encode(JSON.stringify(body.result?.tools ?? [])).byteLength).toBeLessThanOrEqual(Math.floor(23_631 * 1.1))
     expect(names).not.toEqual(expect.arrayContaining([
       'ae_supply_publish',
       'ae_supply_withdraw',
       'ae_supply_earnings',
     ]))
+    const quote = ((body.result?.tools ?? []) as Array<Record<string, unknown>>)
+      .find((tool) => tool.name === 'ae_tool_quote')
+    const call = ((body.result?.tools ?? []) as Array<Record<string, unknown>>)
+      .find((tool) => tool.name === 'ae_tool_call')
+    const cancel = ((body.result?.tools ?? []) as Array<Record<string, unknown>>)
+      .find((tool) => tool.name === 'ae_call_cancel')
+    expect(quote).toMatchObject({
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: false,
+        openWorldHint: false,
+      },
+    })
+    expect(call).toMatchObject({
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: true,
+        idempotentHint: true,
+        openWorldHint: true,
+      },
+    })
+    expect(cancel).toMatchObject({
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: true,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+    })
   })
 
-  it('lists every supplier lifecycle tool plus anonymous reads for a supply-only principal', async () => {
+  it('lists every Provider lifecycle tool plus anonymous reads for a supply-only principal', async () => {
     const response = await postMcp({
       jsonrpc: '2.0',
       id: 'supply-only-list',
@@ -251,27 +252,40 @@ describe('MCP host adapter tools/list', () => {
         || action.credentialAdmission?.scope === 'market_supply:manage'
         || action.credentialAdmission?.anyScopes?.includes('market_supply:manage') === true)
       .map(mcpToolName)
-    const operationProtectedNames = listMcpActions()
-      .filter((action) => action.credentialAdmission?.scope === 'market_operations:invoke'
+    const buyerProtectedNames = listMcpActions()
+      .filter((action) => action.credentialAdmission?.scope === 'market_tools:call'
         && action.credentialAdmission.anyScopes?.includes('market_supply:manage') !== true)
       .map(mcpToolName)
 
-    expect(supplyActions).toHaveLength(12)
+    expect(supplyActions).toHaveLength(14)
     expect(supplyActions.map((action) => action.id).sort()).toEqual([
       'supply.connection.connect',
       'supply.connection.detail',
       'supply.connection.list',
       'supply.connection.reconnect',
-      'supply.connection.retryCleanup',
       'supply.connection.revoke',
       'supply.earnings',
+      'supply.offboarding.status',
       'supply.publish',
       'supply.recheck',
       'supply.republish',
+      'supply.source.preview',
       'supply.status',
+      'supply.tools.list',
       'supply.withdraw',
     ])
     expect(names).toEqual(expectedNames)
-    expect(names).not.toEqual(expect.arrayContaining(operationProtectedNames))
+    expect(new TextEncoder().encode(JSON.stringify(body.result?.tools ?? [])).byteLength).toBeLessThanOrEqual(Math.floor(28_506 * 1.1))
+    expect(names).not.toEqual(expect.arrayContaining(buyerProtectedNames))
+    const publish = ((body.result?.tools ?? []) as Array<Record<string, unknown>>)
+      .find((tool) => tool.name === 'ae_supply_publish')
+    const withdraw = ((body.result?.tools ?? []) as Array<Record<string, unknown>>)
+      .find((tool) => tool.name === 'ae_supply_withdraw')
+    expect(publish).toMatchObject({
+      annotations: { idempotentHint: true, openWorldHint: true, destructiveHint: false },
+    })
+    expect(withdraw).toMatchObject({
+      annotations: { idempotentHint: true, openWorldHint: true, destructiveHint: true },
+    })
   })
 })

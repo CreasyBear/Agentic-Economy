@@ -1,33 +1,26 @@
-import {
-  operationSearchInputSchema,
-} from '@/modules/capability-supply/public'
-import { operationChoiceSearchOutputSchema } from '@/modules/registry/operation-choice-contracts'
-import { OPERATION_MARKET_SEARCH_PATH } from '@/modules/registry/operation-entry'
+import { toolCatalogSearchInputSchema, toolChoiceSearchOutputSchema } from '@/modules/registry/tool-choice-contracts'
+import { TOOL_MARKET_SEARCH_PATH } from '@/modules/registry/tool-entry'
 
 import type { CliOptions } from '../lib/args'
 import { CliFailure, callJson, heading, line, printJson, requireOk } from '../lib/output'
 import { continuationCommand } from '../lib/continuation-command'
-import {
-  formatOperationAuthentication,
-  formatOperationAvailability,
-  formatOperationInputs,
-  formatOperationTotalPrice,
-  formatOperationVerification,
-  operationLabel,
-} from '../lib/operation-format'
-import { throwOperationReadFailure } from '../lib/operation-read-failure'
-/** Search current public Market Operations without a caller credential. */
+import { throwToolReadFailure } from '../lib/tool-read-failure'
+/** Search current public Market Tools without a caller credential. */
 export async function runSearchCommand(args: readonly string[], options: CliOptions): Promise<void> {
   const query = args.join(' ').trim()
   if (!searchCommandDescriptor.inputSchema.safeParse({ query }).success) {
-    throw new CliFailure('Search query must be 200 characters or fewer.', {
+    // The shared search input schema bounds the phrase without naming a code,
+    // so this reuses the source-owned token the catalogue already emits for a
+    // rejected query instead of inventing a length-specific one.
+    throw new CliFailure('Search requires a capability phrase from 1 to 256 characters.', {
       kind: 'INVALID_ARGUMENT',
-      code: 'search-query-too-long',
+      code: 'query_invalid',
     })
   }
 
   const input = {
     query,
+    ...(options.source === undefined ? {} : { source: options.source }),
     ...(options.limit === undefined ? {} : { limit: parseSearchLimit(options.limit) }),
     ...(options.cursor === undefined ? {} : { cursor: options.cursor }),
     ...(options.filters === undefined ? {} : { filters: parseSearchFilters(options.filters) }),
@@ -47,80 +40,130 @@ export async function runSearchCommand(args: readonly string[], options: CliOpti
   })
   const parsedResult = searchCommandDescriptor.outputSchema.safeParse(requireOk(outcome, path))
   if (!parsedResult.success) {
-    throw new CliFailure('The market returned an invalid operation search result.', {
+    throw new CliFailure('The market returned an invalid tool search result.', {
       kind: 'UNAVAILABLE',
-      code: 'operation-search-result-invalid',
+      code: 'tool-search-result-invalid',
     })
   }
 
   const result = parsedResult.data
   if (result.kind === 'unavailable') {
-    throwOperationReadFailure({
+    throwToolReadFailure({
       reason: result.reason,
       cursorProvided: parsedInput.data.cursor !== undefined,
     })
   }
-  const nextCommand = result.kind === 'ok' && result.pagination.hasMore && result.pagination.nextCursor !== undefined
+  const originContinuation = options.baseUrlSource === undefined || options.baseUrlSource === 'hosted_default'
+    ? []
+    : ['--base-url', options.baseUrl]
+  const outputContinuation = options.json ? ['--json'] : []
+  const technicalContinuation = options.technical ? ['--technical'] : []
+  const filtersContinuation = options.filters === undefined
+    ? []
+    : ['--filters', JSON.stringify(parsedInput.data.filters)]
+  const sourceContinuation = parsedInput.data.source === undefined ? [] : ['--source', parsedInput.data.source]
+  const pagination = result.pagination
+  const nextPageCommand = pagination?.hasMore === true && pagination.nextCursor !== undefined
     ? continuationCommand([
         'ae', 'search', result.query,
         ...(options.limit === undefined ? [] : ['--limit', options.limit]),
-        ...(options.filters === undefined ? [] : [
-          '--filters',
-          typeof options.filters === 'string' ? JSON.stringify(parsedInput.data.filters) : JSON.stringify(options.filters),
-        ]),
-        '--cursor', result.pagination.nextCursor,
+        ...sourceContinuation,
+        ...filtersContinuation,
+        '--cursor', pagination.nextCursor,
+        ...originContinuation,
+        ...outputContinuation,
+        ...technicalContinuation,
       ])
     : undefined
+  const nextActionCommand = result.kind === 'ok' && result.items.length > 0
+    ? result.items.length === 1
+      ? continuationCommand([
+          'ae', 'describe', result.items[0]?.toolRef,
+          ...originContinuation,
+          ...outputContinuation,
+          ...technicalContinuation,
+        ])
+      : continuationCommand([
+          'ae', 'compare', ...result.items.slice(0, 4).map(({ toolRef }) => toolRef),
+          ...originContinuation,
+          ...outputContinuation,
+          ...technicalContinuation,
+        ])
+    : undefined
   const browseCommand = continuationCommand([
-    'ae', 'search',
+    'ae', 'list',
+    ...sourceContinuation,
     ...(options.limit === undefined ? [] : ['--limit', options.limit]),
+    ...originContinuation,
+    ...outputContinuation,
+    ...technicalContinuation,
   ])
-  const requestCommand = result.kind === 'no_candidates' && result.query.length > 0
-    ? continuationCommand(['ae', 'request', 'create', result.query])
+  const hasSearchFilters = options.filters !== undefined
+  const exhausted = pagination?.hasMore !== true
+  const requestCommand = result.kind === 'no_candidates' && exhausted && result.query.length > 0 && !hasSearchFilters
+    ? continuationCommand([
+        'ae', 'request', 'create', result.query,
+        ...originContinuation,
+        ...outputContinuation,
+      ])
+    : undefined
+  const broadenSearchCommand = result.kind === 'no_candidates' && exhausted && result.query.length > 0 && hasSearchFilters
+    ? continuationCommand([
+        'ae', 'list',
+        ...sourceContinuation,
+        ...filtersContinuation,
+        ...originContinuation,
+        ...outputContinuation,
+        ...technicalContinuation,
+      ])
     : undefined
   const nextHref = result.kind === 'no_candidates'
     ? new URL('/market', options.baseUrl).toString()
     : undefined
   if (options.json) {
+    const jsonResult = result
+    const nextCommand = result.kind === 'no_candidates'
+      ? nextPageCommand ?? requestCommand ?? broadenSearchCommand
+      : requestCommand ?? broadenSearchCommand ?? nextActionCommand
     printJson({
-      ...result,
-      ...(nextCommand === undefined ? {} : { nextCommand }),
-      ...(requestCommand === undefined ? {} : { nextCommand: requestCommand }),
+      ...jsonResult,
+      ...(nextCommand === undefined
+        ? {}
+        : { nextCommand }),
+      ...(nextPageCommand === undefined ? {} : { nextPageCommand }),
       ...(result.kind === 'no_candidates' ? { browseCommand } : {}),
       ...(nextHref === undefined ? {} : { nextHref }),
     })
     return
   }
 
-  heading(result.query.length === 0
-    ? `Current Market Operations (${outcome.durationMs}ms)`
-    : `Market Operations for "${result.query}" (${outcome.durationMs}ms)`)
+  heading(`Market Tools for "${result.query}" (${outcome.durationMs}ms)`)
   if (result.kind === 'no_candidates') {
-    line('  No current Operations match this job.')
+    line(pagination?.hasMore === true
+      ? '  No matching Tools on this page.'
+      : hasSearchFilters
+        ? '  No current Tools match these filters.'
+        : '  No current Tools match this job.')
+    if (nextPageCommand !== undefined) line(`  More results: ${nextPageCommand}`)
     if (requestCommand !== undefined) line(`  Remember this missing job: ${requestCommand}`)
+    if (broadenSearchCommand !== undefined) line(`  Browse matching filters: ${broadenSearchCommand}`)
     line(`  Browse all: ${browseCommand}`)
     line(`  Browser: ${nextHref}`)
     return
   }
 
-  line(`  ${result.matchedCount} match${result.matchedCount === 1 ? '' : 'es'}`)
-  for (const [index, operation] of result.items.entries()) {
-    line(`  ${index + 1}. ${operationLabel(operation)}`)
-    line(`     ${operation.summary}`)
-    line(`     ref: ${operation.operationRef}`)
+  line(`  ${result.count} match${result.count === 1 ? '' : 'es'}`)
+  for (const [index, tool] of result.items.entries()) {
+    line(`  ${index + 1}. ${tool.provider.name} — ${tool.title}`)
+    line(`     ref: ${tool.toolRef}`)
     line(
-      `     ${formatOperationAvailability(operation.availability)} · `
-      + `total ${formatOperationTotalPrice(operation)} · `
-      + `${formatOperationAuthentication(operation)}`,
+      `     ${tool.healthStatus} · ${tool.priceLabel}`,
     )
-    line(`     last verified: ${formatOperationVerification(operation)}`)
-    line(`     inputs: ${formatOperationInputs(operation)}`)
   }
-  line(
-    result.pagination.hasMore
-      ? `  Next: ${nextCommand ?? 'ae search --cursor <cursor>'}`
-      : '  End of results.',
-  )
+  if (nextActionCommand !== undefined) line(`  Next: ${nextActionCommand}`)
+  line(result.pagination.hasMore
+    ? `  More results: ${nextPageCommand ?? 'ae search --cursor <cursor>'}`
+    : '  End of results.')
 }
 
 function parseSearchLimit(value: string | number): number {
@@ -148,9 +191,9 @@ function parseSearchFilters(value: string | Record<string, unknown>): unknown {
 
 export const searchCommandDescriptor = {
   command: 'search',
-  actionId: 'registry.operations.search',
-  path: OPERATION_MARKET_SEARCH_PATH,
-  inputSchema: operationSearchInputSchema,
-  outputSchema: operationChoiceSearchOutputSchema,
+  actionId: 'registry.tools.search',
+  path: TOOL_MARKET_SEARCH_PATH,
+  inputSchema: toolCatalogSearchInputSchema,
+  outputSchema: toolChoiceSearchOutputSchema,
   run: runSearchCommand,
 } as const

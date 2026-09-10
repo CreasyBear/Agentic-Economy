@@ -8,10 +8,10 @@ export const serviceAssertion = v.object({
   scopes: v.array(v.string()),
   authorityMode: v.optional(
     v.union(
-      v.literal('inspect_only'),
-      v.literal('approve_each'),
-      v.literal('bounded_mandate'),
-      v.literal('full_yolo'),
+      v.literal('read_only'),
+      v.literal('approval_required'),
+      v.literal('spending_policy'),
+      v.literal('unrestricted_test_only'),
     ),
   ),
   issuedAt: v.number(),

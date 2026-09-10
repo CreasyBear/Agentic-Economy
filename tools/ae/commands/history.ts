@@ -1,8 +1,8 @@
 import {
-  operationListInputSchema,
-  operationListResultSchema,
-} from '@/modules/capability-execution/operation-history.actions'
-import { OPERATION_INVOKE_ROUTE_CONTRACT } from '@/modules/capability-execution/operation-invoke-entry'
+  callListInputSchema,
+  callListResultSchema,
+} from '@/modules/capability-execution/call-history.actions'
+import { CALL_ROUTE_CONTRACT } from '@/modules/capability-execution/call-entry'
 
 import type { CliOptions } from '../lib/args'
 import { CliFailure, callJson, heading, printJson, requireOk, table } from '../lib/output'
@@ -11,12 +11,12 @@ import { continuationCommand } from '../lib/continuation-command'
 import { requireAgentAccessKey } from './status'
 
 export const historyCommandDescriptor = Object.freeze({
-  actionId: OPERATION_INVOKE_ROUTE_CONTRACT.list.actionId,
+  actionId: CALL_ROUTE_CONTRACT.list.actionId,
   command: 'history',
-  method: OPERATION_INVOKE_ROUTE_CONTRACT.list.method,
-  path: OPERATION_INVOKE_ROUTE_CONTRACT.list.path,
-  inputSchema: operationListInputSchema,
-  outputSchema: operationListResultSchema,
+  method: CALL_ROUTE_CONTRACT.list.method,
+  path: CALL_ROUTE_CONTRACT.list.path,
+  inputSchema: callListInputSchema,
+  outputSchema: callListResultSchema,
   run: runHistoryCommand,
 })
 
@@ -24,13 +24,13 @@ export async function runHistoryCommand(args: readonly string[], options: CliOpt
   if (args.length > 0) {
     throw usageFailure('history', 'history-usage')
   }
-  const parsed = operationListInputSchema.safeParse({
+  const parsed = callListInputSchema.safeParse({
     ...(options.limit === undefined ? {} : { limit: Number(options.limit) }),
     ...(options.cursor === undefined ? {} : { cursor: options.cursor }),
     ...(options.state === undefined ? {} : { state: options.state }),
   })
   if (!parsed.success) {
-    throw new CliFailure('History requires limit 1-100, an opaque cursor, and an optional canonical invocation state.', {
+    throw new CliFailure('History requires limit 1-100, an opaque cursor, and an optional canonical call state.', {
       kind: 'INVALID_ARGUMENT',
       code: 'history-query-invalid',
     })
@@ -43,29 +43,40 @@ export async function runHistoryCommand(args: readonly string[], options: CliOpt
     method: historyCommandDescriptor.method,
     headers: { Authorization: `Bearer ${key}` },
   })
-  const result = operationListResultSchema.safeParse(requireOk(outcome, 'operation history'))
+  const result = callListResultSchema.safeParse(requireOk(outcome, 'tool history'))
   if (!result.success) {
-    throw new CliFailure('The gateway returned an invalid invocation history page.', {
+    throw new CliFailure('The gateway returned an invalid call history page.', {
       kind: 'UNAVAILABLE',
       code: 'history-result-invalid',
     })
   }
-  const nextCommand = result.data.nextCursor === undefined
+  const nextCursor = result.data.nextCursor
+  if (nextCursor !== undefined && /[\u0000-\u001f\u007f-\u009f]/u.test(nextCursor)) {
+    throw new CliFailure('The gateway returned an invalid call history cursor.', {
+      kind: 'UNAVAILABLE',
+      code: 'history-result-invalid',
+    })
+  }
+  const nextCommand = nextCursor === undefined
     ? undefined
     : continuationCommand([
         'ae', 'history',
         ...(options.limit === undefined ? [] : ['--limit', options.limit]),
         ...(options.state === undefined ? [] : ['--state', options.state]),
-        '--cursor', result.data.nextCursor,
+        '--cursor', nextCursor,
+        ...(options.baseUrlSource === undefined || options.baseUrlSource === 'hosted_default'
+          ? []
+          : ['--base-url', options.baseUrl]),
+        ...(options.json ? ['--json'] : []),
       ])
   if (options.json) {
     printJson(nextCommand === undefined ? result.data : { ...result.data, nextCommand })
     return
   }
-  heading('Invocation history')
+  heading('Call history')
   table(result.data.items.flatMap((item, index) => [
-    [`${index + 1}. invocation`, item.invocationRef],
-    ['operation', item.operationRef],
+    [`${index + 1}. call`, item.callRef],
+    ['tool', item.toolRef],
     ['state', item.state],
     ['created', new Date(item.createdAt).toISOString()],
   ]))

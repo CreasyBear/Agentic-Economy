@@ -25,7 +25,7 @@ export function defaultSandboxAgentAccessPolicy(input: Readonly<{
     environment: 'sandbox',
     currency: input.currency,
     exponent: input.exponent,
-    maximumSpendPerInvocation: sandboxSpend(input.currency, input.exponent, SANDBOX_SPEND_AT_CENTS.perInvocation.units),
+    maximumSpendPerCall: sandboxSpend(input.currency, input.exponent, SANDBOX_SPEND_AT_CENTS.perInvocation.units),
     maximumDailySpend: sandboxSpend(input.currency, input.exponent, SANDBOX_SPEND_AT_CENTS.daily.units),
     maximumMonthlySpend: sandboxSpend(input.currency, input.exponent, SANDBOX_SPEND_AT_CENTS.monthly.units),
   })

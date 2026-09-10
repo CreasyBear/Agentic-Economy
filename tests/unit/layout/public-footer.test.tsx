@@ -1,11 +1,11 @@
 /**
  * @vitest-environment jsdom
  */
-import { render, screen, within } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
+import { cleanup, render, screen, within } from '@testing-library/react'
+import { afterEach, describe, expect, it } from 'vitest'
 
 import { AeSiteFooter } from '@/components/ae/website'
-import { AECON_MARK_SRC } from '@/content/brand-assets'
+import { AECON_MARKETING_URL, AECON_MARK_SRC } from '@/content/brand-assets'
 import {
   isPublicPrimaryNavActive,
   publicFooterColumns,
@@ -13,28 +13,26 @@ import {
   publicPrimaryNavItems,
 } from '@/lib/public/website-nav'
 
+afterEach(cleanup)
+
 describe('public website footer', () => {
-  it('groups the market, the supplier door, legal, and machine files', () => {
+  it('keeps support, legal, and machine destinations in truthful groups', () => {
     expect(publicFooterColumns.map((column) => column.title)).toEqual([
       'Market',
-      'Suppliers',
+      'Help',
       'Legal',
       'Machines',
     ])
-    expect(publicFooterColumns.flatMap((column) => column.links.map((link) => link.label))).toEqual([
-      'Ask',
-      'Discover',
-      'Connections',
-      'Activity',
-      'About',
-      'Publish an Operation',
-      'Browse listed tools',
-      'Privacy',
-      'Terms',
-      'Remove a listing',
-      'llms.txt',
-      'SKILL.md',
-      '.well-known/ucp',
+    expect(
+      publicFooterColumns.map((column) => [
+        column.title,
+        column.links.map((link) => link.label),
+      ]),
+    ).toEqual([
+      ['Market', ['Discover', 'For agents', 'For Providers', 'Calls', 'About']],
+      ['Help', ['Get help', 'System status']],
+      ['Legal', ['Privacy', 'Terms', 'Remove a listing']],
+      ['Machines', ['llms.txt', 'SKILL.md', '.well-known/ucp']],
     ])
   })
 
@@ -44,39 +42,54 @@ describe('public website footer', () => {
     expect(serialized).toContain('/about')
     expect(serialized).toContain('/for-providers')
     expect(serialized).toContain('/.well-known/ucp')
+    expect(serialized.match(/\/for-providers/g)).toHaveLength(1)
+    expect(serialized.match(/\/market/g)).toHaveLength(1)
   })
 
-  it('mounts those destinations inside a notched contentinfo card with a copyright line', () => {
+  it('renders independently named footer groups and their destinations', () => {
     render(<AeSiteFooter />)
     const footer = screen.getByRole('contentinfo')
-    expect(within(footer).getByRole('link', { name: 'About' }).getAttribute('href')).toBe('/about')
-    expect(within(footer).getByRole('link', { name: 'Activity' }).getAttribute('href')).toBe('/activity')
+    const help = within(footer).getByRole('region', { name: 'Help' })
+    const legal = within(footer).getByRole('region', { name: 'Legal' })
+    const machines = within(footer).getByRole('region', { name: 'Machines' })
+
+    expect(within(help).getByRole('link', { name: 'Get help' }).getAttribute('href')).toBe('/support')
+    expect(within(help).getByRole('link', { name: 'System status' }).getAttribute('href')).toBe('/status')
+    expect(within(help).queryByRole('link', { name: 'Privacy' })).toBeNull()
+    expect(within(legal).getByRole('link', { name: 'Privacy' }).getAttribute('href')).toBe('/privacy')
+    expect(within(legal).getByRole('link', { name: 'Terms' }).getAttribute('href')).toBe('/terms')
+    expect(within(machines).getByRole('link', { name: 'SKILL.md' }).getAttribute('href')).toBe('/SKILL.md')
+  })
+
+  it('links the application brand to the separate marketing site and retains copyright', () => {
+    render(<AeSiteFooter />)
+    const footer = screen.getByRole('contentinfo')
+    expect(within(footer).getByRole('link', { name: 'About AECON' }).getAttribute('href')).toBe(AECON_MARKETING_URL)
     expect(within(footer).getByText(publicFooterCopyright(new Date().getFullYear()))).toBeTruthy()
     expect(within(footer).getByText('AECON')).toBeTruthy()
     expect(footer.querySelector(`img[src="${AECON_MARK_SRC}"]`)).toBeTruthy()
-    expect(footer.querySelector('svg')).not.toBeNull()
   })
 })
 
 describe('public primary navigation', () => {
-  it('keeps the compact Ask / Discover / Connections / Activity set', () => {
+  it('keeps the compact working public destinations', () => {
     expect(publicPrimaryNavItems.map((item) => item.label)).toEqual([
-      'Ask',
       'Discover',
-      'Connections',
-      'Activity',
+      'For agents',
+      'For Providers',
+      'Calls',
     ])
     expect(publicPrimaryNavItems.map((item) => item.to)).toEqual([
-      '/t/new',
       '/market',
       '/for-agents',
+      '/for-providers',
       '/activity',
     ])
   })
 
-  it('marks live catalogue and thread paths without lighting every link', () => {
-    expect(isPublicPrimaryNavActive('/market', publicPrimaryNavItems[1]!)).toBe(true)
-    expect(isPublicPrimaryNavActive('/t/abc', publicPrimaryNavItems[0]!)).toBe(true)
+  it('marks live destinations without lighting every link', () => {
+    expect(isPublicPrimaryNavActive('/market', publicPrimaryNavItems[0]!)).toBe(true)
+    expect(isPublicPrimaryNavActive('/for-providers', publicPrimaryNavItems[2]!)).toBe(true)
     expect(isPublicPrimaryNavActive('/about', publicPrimaryNavItems[0]!)).toBe(false)
     expect(isPublicPrimaryNavActive('/about', publicPrimaryNavItems[3]!)).toBe(false)
   })

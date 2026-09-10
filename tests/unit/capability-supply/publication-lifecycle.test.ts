@@ -12,8 +12,8 @@ import {
 import {
   capabilityBindingEligibilityHash,
   capabilityOfferingEligibilityHash,
-  capabilityOperationId,
-  createPublicOperationRef,
+  capabilityToolId,
+  createPublicToolRef,
 } from '@/modules/capability-supply/public'
 import {
   INITIAL_PUBLICATION_LIFECYCLE,
@@ -24,8 +24,8 @@ import {
 } from '@/modules/capability-supply/internal/publication'
 
 const digest = `sha256:${'1'.repeat(64)}`
-const operationRef = createPublicOperationRef({
-  operationId: capabilityOperationId('cap.demo'),
+const toolRef = createPublicToolRef({
+  operationId: capabilityToolId('cap.demo'),
   publicationRef: 'offering-1',
   publicationRevision: 1,
   contractRef: { capabilityId: 'cap.demo', version: 1, contractDigest: digest },
@@ -171,7 +171,7 @@ describe('capability-supply publication lifecycle', () => {
 
   it('requires admission, conformance, credential, and health readiness for active', () => {
     const connection = providerConnection()
-    const connectionAuthority = connectionAuthoritySnapshotFromProviderConnection(connection, operationRef)
+    const connectionAuthority = connectionAuthoritySnapshotFromProviderConnection(connection, toolRef)
     expect(publicationLifecycle(
       {
         disposition: 'current',
@@ -187,7 +187,7 @@ describe('capability-supply publication lifecycle', () => {
       connection,
     )).toEqual({ state: 'active', reasons: [] })
     const readinessConnection = providerConnection()
-    const readinessAuthority = connectionAuthoritySnapshotFromProviderConnection(readinessConnection, operationRef)
+    const readinessAuthority = connectionAuthoritySnapshotFromProviderConnection(readinessConnection, toolRef)
     expect(publicationLifecycle(
       {
         disposition: 'current',
@@ -206,9 +206,25 @@ describe('capability-supply publication lifecycle', () => {
       'health_unobserved',
     ]))
   })
+
+  it('keeps a healthy public source inactive until Provider authority is verified', () => {
+    expect(publicationLifecycle(
+      {
+        disposition: 'current',
+        credentialState: 'ready',
+        healthState: 'healthy',
+        readinessObservedAt: 100,
+        readinessValidUntil: 200,
+        sourceAuthorityState: 'review_required',
+      },
+      offeringRow(),
+      { ...bindingRow(), authority: { kind: 'public_upstream' } },
+      100,
+    )).toEqual({ state: 'inactive', reasons: ['provider_authority_unverified'] })
+  })
   it('keeps first observations inactive and rejects stale or unbounded freshness', () => {
     const connection = providerConnection()
-    const authority = connectionAuthoritySnapshotFromProviderConnection(connection, operationRef)
+    const authority = connectionAuthoritySnapshotFromProviderConnection(connection, toolRef)
     const first = publicationLifecycle({
       disposition: 'current',
       credentialState: 'unobserved',

@@ -76,6 +76,17 @@ describe('server Convex source seam', () => {
     ).toThrow(expect.objectContaining({ code: 'client_exposed_source_write_secret' }))
   })
 
+  it.each(['STRIPE_READBACK_KEY', 'STRIPE_V2_WEBHOOK_SECRET'] as const)(
+    'keeps the source-write key independent of %s',
+    (providerSecretName) => {
+      const reusedSecret = 'independent-source-write-secret-material'
+      expect(() => readRequiredSourceWriteSecret('billing', {
+        AE_SOURCE_WRITE_SECRET: reusedSecret,
+        [providerSecretName]: reusedSecret,
+      })).toThrow(expect.objectContaining({ code: 'source_write_provider_secret_reuse' }))
+    },
+  )
+
   it('rejects unknown, wrong-family, and retired source write key ids while accepting configured previous keys', async () => {
     const command = {
       operationKey: 'op:rotation',

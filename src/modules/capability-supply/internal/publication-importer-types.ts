@@ -126,7 +126,8 @@ export type CapabilityPublicationImport =
     }>
   | Readonly<{
       kind: "agent_plugin_mcp";
-      manifest: unknown;
+      pluginJson: unknown;
+      mcpJson: unknown;
       serverName: string;
       tool: unknown;
       protocolVersion: string;
@@ -148,7 +149,7 @@ export type CapabilityPublicationImportRefusal =
   | "source_too_deep"
   | "source_version_unsupported"
   | "selector_invalid"
-  | "operation_not_found"
+  | "tool_not_found"
   | "schema_missing"
   | "schema_profile_unsupported"
   | "openapi_query_parameter_definition_unsupported"

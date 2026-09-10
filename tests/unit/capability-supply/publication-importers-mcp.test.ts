@@ -76,10 +76,16 @@ describe("capability publication importers", () => {
   it("normalizes an Agent Plugin MCP server through the canonical MCP importer", async () => {
     const source = {
       kind: "agent_plugin_mcp" as const,
-      manifest: {
-        name: "Reference Plugin",
+      pluginJson: {
+        $schema: "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+        name: "reference-plugin",
+        version: "1.0.0",
+        description: "Reference operations",
+      },
+      mcpJson: {
+        $schema: "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
         mcpServers: {
-          reference: { type: "http", url: "https://tools.example.test/mcp" },
+          reference: { type: "streamable-http", url: "https://tools.example.test/mcp" },
           local: { type: "stdio", command: "node" },
           legacy: { type: "sse", url: "https://tools.example.test/sse" },
         },
@@ -115,10 +121,16 @@ describe("capability publication importers", () => {
       },
     });
     expect(JSON.parse(publicationSourceDescriptorJson(source))).toEqual({
-      manifest: {
-        name: "Reference Plugin",
+      pluginJson: {
+        $schema: "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+        name: "reference-plugin",
+        version: "1.0.0",
+        description: "Reference operations",
+      },
+      mcpJson: {
+        $schema: "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
         mcpServers: {
-          reference: { type: "http", url: "https://tools.example.test/mcp" },
+          reference: { type: "streamable-http", url: "https://tools.example.test/mcp" },
         },
       },
       serverName: "reference",
@@ -133,77 +145,35 @@ describe("capability publication importers", () => {
   it.each([
     [
       {
-        name: "",
-        mcpServers: {
-          reference: { type: "http", url: "https://tools.example.test/mcp" },
-        },
+        $schema: "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
+        mcpServers: { reference: { type: "stdio", command: "node" } },
       },
       "source_invalid",
     ],
-    [{ name: "Reference Plugin" }, "source_invalid"],
     [
       {
-        name: "Reference Plugin",
-        mcpServers: { reference: "https://tools.example.test/mcp" },
-      },
-      "transport_unsupported",
-    ],
-    [
-      {
-        name: "Reference Plugin",
+        $schema: "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
         mcpServers: {
           reference: {
-            type: "http",
+            type: "streamable-http",
             url: "https://tools.example.test/mcp",
             headers: { Authorization: "opaque-provider-credential" },
           },
         },
       },
-      "transport_unsupported",
-    ],
-    [
-      {
-        name: "Reference Plugin",
-        mcpServers: { reference: { type: "stdio", command: "node" } },
-      },
-      "transport_unsupported",
-    ],
-    [
-      {
-        name: "Reference Plugin",
-        mcpServers: {
-          reference: { type: "sse", url: "https://tools.example.test/sse" },
-        },
-      },
-      "transport_unsupported",
-    ],
-    [
-      {
-        name: "Reference Plugin",
-        mcpServers: {
-          reference: {
-            type: "http",
-            url: "https://tools.example.test/mcp",
-            command: "node",
-          },
-        },
-      },
-      "transport_unsupported",
-    ],
-    [
-      {
-        name: "Reference Plugin",
-        mcpServers: { reference: { type: "http", url: "/local/mcp" } },
-      },
-      "transport_unsupported",
+      "source_invalid",
     ],
   ] as const)(
-    "rejects unresolved or local Agent Plugin MCP server manifests",
-    async (manifest, reason) => {
+    "rejects Agent Plugin MCP configurations that require client-owned credentials or local execution",
+    async (mcpJson, reason) => {
       await expect(
         importAgentPluginMcpCapability({
           kind: "agent_plugin_mcp",
-          manifest,
+          pluginJson: {
+            $schema: "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+            name: "reference-plugin",
+          },
+          mcpJson,
           serverName: "reference",
           protocolVersion: "2025-06-18",
           tool: {

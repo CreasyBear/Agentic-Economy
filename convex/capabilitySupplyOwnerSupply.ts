@@ -8,6 +8,8 @@ import { api, internal } from './_generated/api'
 import { action, type ActionCtx } from './_generated/server'
 import type { Id } from './_generated/dataModel'
 import { resolveBusinessActor } from './authz'
+import { jsonObject } from '@/modules/capability-execution/convex'
+import { sourceWriteArgs } from './sourceWriteAdmission'
 
 const ownerSupplyCompletedValue = v.object({
   step: v.union(v.literal('readiness'), v.literal('test')),
@@ -16,7 +18,9 @@ const ownerSupplyCompletedValue = v.object({
   revision: v.number(),
   message: v.string(),
   publicationRef: v.optional(v.string()),
-  operationRef: v.optional(v.string()),
+  toolRef: v.optional(v.string()),
+  canaryRef: v.optional(v.string()),
+  callRef: v.optional(v.string()),
 })
 const ownerSupplyActionResultValue = v.union(
   ownerSupplyCompletedValue,
@@ -35,14 +39,15 @@ const ownerSupplyActionResultValue = v.union(
       v.literal('response_content_type_invalid'), v.literal('response_too_large'),
       v.literal('response_invalid'), v.literal('credential_unavailable'),
       v.literal('credential_rejected'), v.literal('target_changed'),
-      v.literal('revision_changed'), v.literal('operation_not_found'),
-      v.literal('operation_not_keyless'), v.literal('operation_not_executable'),
+      v.literal('revision_changed'), v.literal('tool_not_found'),
+      v.literal('tool_not_keyless'), v.literal('tool_not_executable'),
       v.literal('input_invalid'),
       v.literal('admission_unproven'), v.literal('conformance_unproven'),
       v.literal('credential_readiness_unobserved'), v.literal('health_unobserved'),
       v.literal('health_unhealthy'), v.literal('health_stale'),
-      v.literal('eligibility_integrity_failure'), v.literal('withdrawn'),
+      v.literal('eligibility_integrity_failure'), v.literal('provider_authority_unverified'), v.literal('withdrawn'),
       v.literal('incompatible_revision'),
+      v.literal('canary_admission_refused'),
     ),
   }),
 )
@@ -55,6 +60,9 @@ const ownerSupplyInput = {
   publicationRef: v.string(),
   publicationRevision: v.number(),
   operationKey: v.string(),
+  correlationId: v.optional(v.string()),
+  input: v.optional(jsonObject),
+  ...sourceWriteArgs,
 }
 
 type OwnerSupplyOffering = Readonly<{
@@ -63,10 +71,10 @@ type OwnerSupplyOffering = Readonly<{
   sourceHash?: string
   publicationRef?: string
   publicationRevision?: number
-  operationRef?: string
+  toolRef?: string
   publisher?: string
   sourceKind?: string
-  testCompleted?: boolean
+  readinessCompleted?: boolean
 }>
 async function ownerSupplyOffering(
   ctx: ActionCtx,
@@ -95,8 +103,8 @@ async function ownerSupplyOffering(
     ...(offering.publication?.publicationRevision === undefined
       ? {}
       : { publicationRevision: offering.publication.publicationRevision }),
-    ...(offering.operationRef === undefined ? {} : { operationRef: offering.operationRef }),
-    testCompleted: offering.stepStates.test === 'completed',
+    ...(offering.toolRef === undefined ? {} : { toolRef: offering.toolRef }),
+    readinessCompleted: offering.stepStates.readiness === 'completed',
     ...(offering.publication === undefined ? {} : {
       publisher: offering.publication.authorityMode,
       sourceKind: offering.publication.source.kind,
@@ -109,7 +117,7 @@ type OwnerSupplyAuthority = Extract<Awaited<ReturnType<typeof resolveBusinessAct
 async function currentOwnerSupplyAuthority(ctx: ActionCtx, businessId: Id<'businesses'>): Promise<OwnerSupplyAuthority | null> {
   const actor = await resolveBusinessActor(ctx)
   if (actor.kind !== 'authenticated_owner') return null
-  return await ctx.runQuery(internal.capabilitySupply.authorizeOwnerSupplyAction, { businessId })
+  return await ctx.runQuery(api.catalog.authorizeProviderBusiness, { businessId })
     ? actor
     : null
 }
@@ -162,10 +170,16 @@ export const runOwnerSupplyReadiness = action({
     if (probeAuthority === null) {
       return { step: 'readiness', state: 'refused', refusal: 'authorization_denied' }
     }
-    const result = await ctx.runAction(internal.capabilitySupplyReadiness.probe, {
-      publicationRef: args.publicationRef,
-      expectedRevision: args.publicationRevision,
-    })
+    const result = offering.sourceKind === 'x402'
+      ? await ctx.runAction(internal.capabilitySupplyReadiness.probeOwnerStaged, {
+          publicationRef: args.publicationRef,
+          expectedRevision: args.publicationRevision,
+          businessId: args.businessId,
+        })
+      : await ctx.runAction(internal.capabilitySupplyReadiness.probe, {
+          publicationRef: args.publicationRef,
+          expectedRevision: args.publicationRevision,
+        })
     if (!sameOwnerSupplyAuthority(
       probeAuthority,
       await currentOwnerSupplyAuthority(ctx, args.businessId),
@@ -188,8 +202,10 @@ export const runOwnerSupplyReadiness = action({
       offeringRef: args.offeringRef,
       revision: args.offeringRevision,
       publicationRef: args.publicationRef,
-      ...(offering.operationRef === undefined ? {} : { operationRef: offering.operationRef }),
-      message: 'The admitted public operation is ready.',
+      ...(offering.toolRef === undefined ? {} : { toolRef: offering.toolRef }),
+      message: offering.sourceKind === 'x402'
+        ? 'The exact staged Tool is ready for the seller canary. It is not public yet.'
+        : 'The admitted public Tool is ready.',
     }
   },
 })
@@ -209,16 +225,33 @@ export const runOwnerSupplyTest = action({
       args.publicationRef,
       args.publicationRevision,
     )
-    if (offering === undefined || offering.operationRef === undefined) {
+    if (offering === undefined || offering.toolRef === undefined) {
       return { step: 'test', state: 'refused', refusal: 'revision_changed' }
     }
-    // x402 Test is the already-projected exact no-payment challenge, never a paid call.
     if (offering.sourceKind === 'x402') {
-      if (!offering.testCompleted) {
+      if (!offering.readinessCompleted) {
         return { step: 'test', state: 'refused', refusal: 'health_unhealthy' }
       }
-      if (await currentOwnerSupplyAuthority(ctx, args.businessId) === null) {
-        return { step: 'test', state: 'refused', refusal: 'authorization_denied' }
+      if (args.correlationId === undefined) return { step: 'test', state: 'refused', refusal: 'authorization_denied' }
+      const canary = await ctx.runMutation(internal.capabilitySupplyOwnerCanary.requestSellerOnboardingCanary, {
+        businessId: args.businessId,
+        offeringRef: args.offeringRef,
+        offeringRevision: args.offeringRevision,
+        offeringSourceHash: args.offeringSourceHash,
+        publicationRef: args.publicationRef,
+        publicationRevision: args.publicationRevision,
+        input: args.input ?? {},
+        operationKey: args.operationKey,
+        correlationId: args.correlationId,
+        ...(args.sourceWrite === undefined ? {} : { sourceWrite: args.sourceWrite }),
+        ...(args.sourceWriteRequest === undefined ? {} : { sourceWriteRequest: args.sourceWriteRequest }),
+      })
+      if (canary.kind === 'refused') {
+        return {
+          step: 'test',
+          state: 'refused',
+          refusal: canary.code === 'input_invalid' ? 'input_invalid' : 'canary_admission_refused',
+        }
       }
       return {
         step: 'test',
@@ -226,8 +259,10 @@ export const runOwnerSupplyTest = action({
         offeringRef: args.offeringRef,
         revision: args.offeringRevision,
         publicationRef: args.publicationRef,
-        operationRef: offering.operationRef,
-        message: 'The exact admitted operation returned a fresh valid x402 payment challenge. No payment was sent.',
+        toolRef: canary.toolRef,
+        canaryRef: canary.canaryRef,
+        callRef: canary.callRef,
+        message: 'The exact seller canary was admitted and queued on Base Sepolia. Publication remains blocked until settlement and output evidence pass.',
       }
     }
     const taskStartedAt = Date.now()
@@ -257,7 +292,7 @@ export const runOwnerSupplyTest = action({
       operationKey: args.operationKey,
       publicationRef: args.publicationRef,
       publicationRevision: args.publicationRevision,
-      operationRef: offering.operationRef,
+      toolRef: offering.toolRef,
     })
     if (!sameOwnerSupplyAuthority(
       probeAuthority,
@@ -271,7 +306,7 @@ export const runOwnerSupplyTest = action({
       offeringRef: args.offeringRef,
       publicationRef: args.publicationRef,
       publicationRevision: args.publicationRevision,
-      operationRef: offering.operationRef,
+      toolRef: offering.toolRef,
       taskDigest,
       eventKind: 'supply_owner_test_observed',
       outcome: 'filled',
@@ -288,7 +323,7 @@ export const runOwnerSupplyTest = action({
       offeringRef: args.offeringRef,
       revision: args.offeringRevision,
       publicationRef: args.publicationRef,
-      operationRef: offering.operationRef,
+      toolRef: offering.toolRef,
       message: 'A fresh operation probe returned a contract-valid response.',
     }
   },

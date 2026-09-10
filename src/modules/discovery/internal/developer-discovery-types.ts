@@ -215,7 +215,7 @@ export type DeveloperDiscoveryArtifactBase = {
     mutation: false
     payment: false
     protectedAction: false
-    providerOperation: false
+    providerTool: false
     requestMarket: false
   }
 }

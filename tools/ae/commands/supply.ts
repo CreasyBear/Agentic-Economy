@@ -1,3 +1,5 @@
+import type { z } from 'zod'
+
 import { isRecord } from '@/modules/common/is-record'
 import {
   SUPPLY_ACTION_ROUTE_CONTRACTS,
@@ -5,12 +7,14 @@ import {
   supplyConnectionDetailAction,
   supplyConnectionListAction,
   supplyConnectionReconnectAction,
-  supplyConnectionRetryCleanupAction,
   supplyConnectionRevokeAction,
   supplyEarningsAction,
+  supplyOffboardingStatusAction,
+  supplyToolsListAction,
   supplyPublishAction,
   supplyRecheckAction,
   supplyRepublishAction,
+  supplySourcePreviewAction,
   supplyStatusAction,
   supplyWithdrawAction,
 } from '@/modules/capability-supply/supply-actions'
@@ -29,11 +33,13 @@ import {
 import { usageFailure } from '../lib/help'
 import {
   connectionContinuationForCli,
-  supplierContinuationForCli,
 } from '../lib/suggested-continuation-adapter'
 import { requireAgentAccessKey } from './status'
+import { requiredInputFieldsSummary } from './supply-input-help'
 
 export const SUPPLY_COMMAND_DESCRIPTORS = Object.freeze([
+  { actionId: supplySourcePreviewAction.id, command: 'supply', subcommand: 'preview', route: SUPPLY_ACTION_ROUTE_CONTRACTS.sourcePreview, action: supplySourcePreviewAction },
+  { actionId: supplyToolsListAction.id, command: 'supply', subcommand: 'tools', route: SUPPLY_ACTION_ROUTE_CONTRACTS.toolsList, action: supplyToolsListAction },
   { actionId: supplyStatusAction.id, command: 'supply', subcommand: 'status', route: SUPPLY_ACTION_ROUTE_CONTRACTS.status, action: supplyStatusAction },
   { actionId: supplyPublishAction.id, command: 'supply', subcommand: 'publish', route: SUPPLY_ACTION_ROUTE_CONTRACTS.publish, action: supplyPublishAction },
   { actionId: supplyWithdrawAction.id, command: 'supply', subcommand: 'withdraw', route: SUPPLY_ACTION_ROUTE_CONTRACTS.withdraw, action: supplyWithdrawAction },
@@ -45,7 +51,7 @@ export const SUPPLY_COMMAND_DESCRIPTORS = Object.freeze([
   { actionId: supplyConnectionConnectAction.id, command: 'supply', subcommand: 'connect', route: SUPPLY_ACTION_ROUTE_CONTRACTS.connectionConnect, action: supplyConnectionConnectAction },
   { actionId: supplyConnectionReconnectAction.id, command: 'supply', subcommand: 'reconnect', route: SUPPLY_ACTION_ROUTE_CONTRACTS.connectionReconnect, action: supplyConnectionReconnectAction },
   { actionId: supplyConnectionRevokeAction.id, command: 'supply', subcommand: 'revoke', route: SUPPLY_ACTION_ROUTE_CONTRACTS.connectionRevoke, action: supplyConnectionRevokeAction },
-  { actionId: supplyConnectionRetryCleanupAction.id, command: 'supply', subcommand: 'retry-cleanup', route: SUPPLY_ACTION_ROUTE_CONTRACTS.connectionRetryCleanup, action: supplyConnectionRetryCleanupAction },
+  { actionId: supplyOffboardingStatusAction.id, command: 'supply', subcommand: 'offboarding', route: SUPPLY_ACTION_ROUTE_CONTRACTS.offboardingStatus, action: supplyOffboardingStatusAction },
 ] as const)
 
 type SupplyDescriptor = (typeof SUPPLY_COMMAND_DESCRIPTORS)[number]
@@ -54,27 +60,40 @@ function descriptorFor(subcommand: string): SupplyDescriptor | undefined {
   return SUPPLY_COMMAND_DESCRIPTORS.find((descriptor) => descriptor.subcommand === subcommand)
 }
 
-function parseInputJson(options: CliOptions): Record<string, unknown> {
+/** One `--input '<json>'` guidance line naming the schema's required fields and a matching example. */
+function acceptedInputForm(schema: z.ZodType): string {
+  const { fields, example } = requiredInputFieldsSummary(schema)
+  const fieldsText = fields.length === 0 ? '' : ` Required input fields: ${fields.join(', ')}.`
+  return `${fieldsText} Example: --input '${JSON.stringify(example)}'`
+}
+
+function parseInputJson(options: CliOptions, schema: z.ZodType): Record<string, unknown> {
   if (options.input === undefined) {
-    throw new CliFailure('This supplier command requires --input with one JSON object.', {
-      kind: 'INVALID_ARGUMENT',
-      code: 'supply-input-required',
-    })
+    throw new CliFailure(
+      `This provider command requires --input with one JSON object.${acceptedInputForm(schema)}`,
+      {
+        kind: 'INVALID_ARGUMENT',
+        code: 'supply-input-required',
+      },
+    )
   }
   try {
     const parsed = JSON.parse(options.input) as unknown
     if (!isRecord(parsed)) throw new TypeError('not_object')
     return parsed
   } catch {
-    throw new CliFailure('Supplier --input must be one valid JSON object.', {
-      kind: 'INVALID_ARGUMENT',
-      code: 'supply-input-invalid',
-    })
+    throw new CliFailure(
+      `Provider --input must be one valid JSON object.${acceptedInputForm(schema)}`,
+      {
+        kind: 'INVALID_ARGUMENT',
+        code: 'supply-input-invalid',
+      },
+    )
   }
 }
 
-function writeInput(options: CliOptions): Record<string, unknown> {
-  const input = parseInputJson(options)
+function writeInput(options: CliOptions, schema: z.ZodType): Record<string, unknown> {
+  const input = parseInputJson(options, schema)
   if (options.idempotencyKey === undefined) return input
   if (typeof input.idempotencyKey === 'string' && input.idempotencyKey !== options.idempotencyKey) {
     throw new CliFailure('The input idempotencyKey and --idempotency-key must match.', {
@@ -85,14 +104,28 @@ function writeInput(options: CliOptions): Record<string, unknown> {
   return { ...input, idempotencyKey: options.idempotencyKey }
 }
 
-function inputFor(subcommand: string, args: readonly string[], options: CliOptions): unknown {
+function inputFor(subcommand: string, args: readonly string[], options: CliOptions, schema: z.ZodType): unknown {
+  if (subcommand === 'tools') {
+    const businessRef = args[1]
+    if (businessRef === undefined || args.length > 2) {
+      throw usageFailure('supply tools', 'supply-tools-usage')
+    }
+    return { businessRef }
+  }
   if (subcommand === 'status') {
-    const businessId = args[1]
-    const offeringRef = args[2]
-    if (businessId === undefined || args.length > 3) {
+    const businessRef = args[1]
+    const toolRef = args[2]
+    if (businessRef === undefined || toolRef === undefined || args.length > 3) {
       throw usageFailure('supply status', 'supply-status-usage')
     }
-    return { businessId, ...(offeringRef === undefined ? {} : { offeringRef }) }
+    return { businessRef, toolRef }
+  }
+  if (subcommand === 'offboarding') {
+    const businessRef = args[1]
+    if (businessRef === undefined || args.length > 2) {
+      throw usageFailure('supply offboarding', 'supply-offboarding-usage')
+    }
+    return { businessRef }
   }
   if (subcommand === 'earnings') {
     const currency = args[1]
@@ -122,7 +155,7 @@ function inputFor(subcommand: string, args: readonly string[], options: CliOptio
   if (args.length !== 1) {
     throw usageFailure(`supply ${subcommand}`, 'supply-command-usage')
   }
-  return writeInput(options)
+  return writeInput(options, schema)
 }
 
 function printSupplyResult(subcommand: string, result: unknown, options: CliOptions): void {
@@ -130,39 +163,39 @@ function printSupplyResult(subcommand: string, result: unknown, options: CliOpti
     printJson(result)
     return
   }
-  heading(`Supplier ${subcommand}`)
-  if (result.kind === 'available' && Array.isArray(result.operations)) {
-    line(`${result.operations.length} Operation${result.operations.length === 1 ? '' : 's'}`)
-    for (const operation of result.operations) {
-      if (!isRecord(operation)) continue
-      const lifecycle = isRecord(operation.lifecycle) ? operation.lifecycle : undefined
-      const live = isRecord(operation.live) ? operation.live : undefined
-      const publication = isRecord(operation.publication) ? operation.publication : undefined
+  heading(`Provider ${subcommand}`)
+  const tools = result.kind === 'available' && Array.isArray(result.page)
+    ? result.page
+    : result.kind === 'available' && isRecord(result.status) && result.status.schemaVersion === 'provider_tools:v1'
+      ? [result.status]
+      : undefined
+  if (tools !== undefined) {
+    line(`${tools.length} Tool${tools.length === 1 ? '' : 's'}`)
+    for (const tool of tools) {
+      if (!isRecord(tool)) continue
+      const source = isRecord(tool.source) ? tool.source : undefined
+      const routeability = isRecord(tool.routeability) ? tool.routeability : undefined
+      const health = isRecord(tool.health) ? tool.health : undefined
+      const delivery = isRecord(health?.delivery) ? health.delivery : undefined
+      const usefulOutcome = isRecord(health?.usefulOutcome) ? health.usefulOutcome : undefined
+      const continuation = isRecord(tool.continuation) ? tool.continuation : undefined
+      const ownerHandoff = isRecord(tool.ownerHandoff) ? tool.ownerHandoff : undefined
       table([
-        ['offering', String(operation.offeringRef ?? '')],
-        ['name', String(operation.name ?? '')],
-        ['catalog', String(operation.catalogStatus ?? '')],
-        ['lifecycle', String(lifecycle?.state ?? '')],
-        ['ready', isRecord(operation.readiness) ? String(operation.readiness.outcome ?? '') : ''],
-        ['live', live?.available === true ? 'yes' : 'no'],
+        ['tool', String(tool.toolRef ?? '')],
+        ['state', String(tool.state ?? '')],
+        ['source', String(source?.kind ?? '')],
+        ['routeable', routeability?.available === true ? 'yes' : 'no'],
+        ['connection', String(health?.connection ?? '')],
+        ['validation', String(health?.validation ?? '')],
+        ['delivery', delivery?.kind === 'observed'
+          ? `${String(delivery.deliveredCount ?? 0)}/${String(delivery.sampleSize ?? 0)} delivered; ${String(delivery.notDeliveredCount ?? 0)} not delivered; ${String(delivery.unknownCount ?? 0)} unknown`
+          : String(delivery?.kind ?? 'unobserved')],
+        ['Qualified Use', usefulOutcome?.kind === 'observed'
+          ? String(usefulOutcome.qualifiedUseCount ?? 0)
+          : String(usefulOutcome?.kind ?? 'unobserved')],
       ])
-      if (
-        typeof operation.offeringRef === 'string'
-        && (operation.catalogStatus === 'draft' || operation.catalogStatus === 'published' || operation.catalogStatus === 'paused' || operation.catalogStatus === 'retired')
-        && (lifecycle?.state === 'inactive' || lifecycle?.state === 'active' || lifecycle?.state === 'withdrawn' || lifecycle?.state === 'incompatible')
-      ) {
-        const continuation = supplierContinuationForCli({
-          offeringRef: operation.offeringRef,
-          catalogStatus: operation.catalogStatus,
-          lifecycleState: lifecycle.state,
-          liveAvailable: live?.available === true,
-          ...(publication?.state === 'current' || publication?.state === 'withdrawn' || publication?.state === 'superseded' || publication?.state === 'incompatible'
-            ? { publicationState: publication.state }
-            : {}),
-          ...(typeof publication?.operationRef === 'string' ? { operationRef: publication.operationRef } : {}),
-        })
-        table([['next', continuation.command ?? continuation.href ?? continuation.label]])
-      }
+      if (typeof continuation?.action === 'string') table([['next', continuation.action]])
+      else if (typeof ownerHandoff?.cta === 'string') table([['next', ownerHandoff.cta]])
       line()
     }
     return
@@ -170,7 +203,7 @@ function printSupplyResult(subcommand: string, result: unknown, options: CliOpti
   if (result.kind === 'available' && Array.isArray(result.connections)) {
     line(`${result.connections.length} provider connection${result.connections.length === 1 ? '' : 's'}`)
     if (result.connections.length === 0) {
-      const continuation = connectionContinuationForCli('supplier')
+      const continuation = connectionContinuationForCli('provider')
       table([['next', continuation.command ?? continuation.href ?? continuation.label]])
       return
     }
@@ -199,23 +232,44 @@ function printSupplyResult(subcommand: string, result: unknown, options: CliOpti
     ])
     return
   }
+  if (result.kind === 'available' && isRecord(result.status)) {
+    const blockers = Array.isArray(result.status.blockerCodes)
+      ? result.status.blockerCodes.join(', ')
+      : ''
+    table([
+      ['case', String(result.status.caseRef ?? '')],
+      ['state', String(result.status.state ?? '')],
+      ['new work frozen', result.status.routeabilityFrozen === true ? 'yes' : 'no'],
+      ['blockers', blockers === '' ? 'none' : blockers],
+    ])
+    return
+  }
   printJson(result)
 }
 
-/** First-class supplier Operation lifecycle over the canonical HTTP actions. */
+/** First-class Provider Tool lifecycle over the canonical HTTP actions. */
 export async function runSupplyCommand(args: readonly string[], options: CliOptions): Promise<void> {
   const subcommand = args[0] ?? 'status'
   const descriptor = descriptorFor(subcommand)
   if (descriptor === undefined) {
     throw usageFailure('supply', 'supply-usage')
   }
-  const input = inputFor(subcommand, args, options)
+  const input = inputFor(subcommand, args, options, descriptor.action.schema)
   const parsedInput = descriptor.action.schema.safeParse(input)
   if (!parsedInput.success) {
-    throw new CliFailure(`Input does not match ${descriptor.action.invocationContract.version}.`, {
-      kind: 'INVALID_ARGUMENT',
-      code: 'supply-input-invalid',
-    })
+    const fields = [...new Set(
+      parsedInput.error.issues
+        .map((issue) => issue.path.join('.'))
+        .filter((path) => path.length > 0),
+    )]
+    const fieldsText = fields.length === 0 ? '' : ` Missing or invalid field${fields.length === 1 ? '' : 's'}: ${fields.join(', ')}.`
+    throw new CliFailure(
+      `Input does not match ${descriptor.action.invocationContract.version}.${fieldsText}`,
+      {
+        kind: 'INVALID_ARGUMENT',
+        code: 'supply-input-invalid',
+      },
+    )
   }
   const apiKey = requireAgentAccessKey(`supply ${subcommand}`, options, MARKET_SUPPLY_MANAGE_SCOPE)
   const outcome = await callJson(options.baseUrl, descriptor.route.path, {
@@ -225,7 +279,7 @@ export async function runSupplyCommand(args: readonly string[], options: CliOpti
   })
   const result = descriptor.action.outputSchema.safeParse(requireOk(outcome, `supply ${subcommand}`))
   if (!result.success) {
-    throw new CliFailure('The server returned an invalid supplier action projection.', {
+    throw new CliFailure('The server returned an invalid provider action projection.', {
       kind: 'UNAVAILABLE',
       code: 'supply-result-invalid',
     })

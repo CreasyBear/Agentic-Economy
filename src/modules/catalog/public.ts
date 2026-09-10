@@ -59,7 +59,6 @@ export type {
 
 export {
   MAX_ACCESS_PATHS_PER_OFFERING,
-  MAX_OFFERINGS_PER_BUSINESS,
   changeOfferingStatusInState,
   createOfferingInState,
   reviseOfferingInState,

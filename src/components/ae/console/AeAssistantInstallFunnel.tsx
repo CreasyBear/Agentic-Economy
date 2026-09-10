@@ -1,12 +1,10 @@
-import { useState } from 'react'
-import {
-  CodeBlock,
-  CodeBlockActions,
-  CodeBlockCopyButton,
-  CodeBlockHeader,
-  CodeBlockTitle,
-} from '@/components/ai-elements/code-block'
+import { AeCopyCommand } from '@/components/ae/data/AeCopyCommand'
 import { AeSection } from '@/components/ae/layout/AeSection'
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion'
+import {
+  NATIVE_MCP_CLIENTS,
+  nativeMcpClient,
+} from '@/lib/cli-distribution'
 import { trimTrailingSlashes } from '@/modules/common/trim-trailing-slashes'
 
 export type AeAssistantInstallFunnelProps = Readonly<{
@@ -17,85 +15,51 @@ export function AeAssistantInstallFunnel({
   canonicalBaseUrl,
 }: AeAssistantInstallFunnelProps) {
   const baseUrl = trimTrailingSlashes(canonicalBaseUrl)
-  const cli = 'ae'
-  const steps = [
-    {
-      id: 'connect',
-      title: 'Connect',
-      access: 'Once per device',
-      description: 'Opens browser approval, stores one origin-bound key with user-only permissions, verifies it, and writes an MCP file to import into your harness. No wallet or environment editing.',
-      code: `npx @agentic-economy/cli connect --base-url "${baseUrl}" --mcp`,
-    },
-    {
-      id: 'search',
-      title: 'Search by job',
-      access: 'Public catalogue',
-      description: 'Describe the outcome in ordinary language. Results include current availability, total price, authentication, and last verification.',
-      code: `${cli} search "weather forecast" --base-url "${baseUrl}" --json`,
-    },
-    {
-      id: 'inspect',
-      title: 'Inspect one exact Operation',
-      access: 'Anonymous read',
-      description: 'Read the exact schema, example input and output, provider, readiness, authentication, and total price before calling.',
-      code: `${cli} inspect "$AE_OPERATION_REF" --base-url "${baseUrl}" --json`,
-    },
-    {
-      id: 'call',
-      title: 'Call',
-      access: 'Connected',
-      description: 'Pass schema-valid input. AE creates and retains the retry identity, then returns one durable receipt reference.',
-      code: `${cli} call "$AE_OPERATION_REF" --input "$AE_INPUT_JSON" --base-url "${baseUrl}" --wait`,
-    },
-    {
-      id: 'wait',
-      title: 'Wait for the recorded result',
-      access: 'Authenticated',
-      description: 'Return to the same execution record after any process restart. This only observes progress and the safe next action; it never repeats the call.',
-      code: `${cli} wait "$AE_INVOCATION_REF" --base-url "${baseUrl}" --json`,
-    },
-  ] as const
-  const [copyNotice, setCopyNotice] = useState<string>()
-
-  function handleCopy(title: string) {
-    setCopyNotice(`${title} command copied.`)
-  }
-
-  function handleCopyError(title: string) {
-    setCopyNotice(`Could not copy the ${title} command. Select it and copy it manually.`)
-  }
+  const recommended = nativeMcpClient('codex')
 
   return (
     <AeSection
-      title="Connect once. Call any listed capability."
-      description="One setup command, one catalogue, one call shape, and one receipt. Search and inspection remain public."
+      title="Connect with Codex"
+      description="Use Codex's native connection to add Agentic Economy. You can browse Tools before connecting."
     >
-      <ol className="m-0 grid list-none divide-y divide-border p-0">
-          {steps.map(({ id, title, access, description, code }, index) => (
-            <li key={id} className="grid min-w-0 gap-3 py-5 first:pt-0 last:pb-0">
-              <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-                <h3 className="font-semibold text-foreground">{index + 1}. {title}</h3>
-                <span className="text-sm font-medium text-muted-foreground">{access}</span>
-              </div>
-              <p className="block max-w-3xl text-sm text-muted-foreground">{description}</p>
-              <CodeBlock code={code} language="bash" className="min-w-0 [&_code]:break-all [&_pre]:whitespace-pre-wrap">
-                <CodeBlockHeader>
-                  <CodeBlockTitle>{title}</CodeBlockTitle>
-                  <CodeBlockActions>
-                    <CodeBlockCopyButton
-                      className="min-h-touch min-w-touch"
-                      aria-label={`Copy ${title} command`}
-                      title={`Copy ${title} command`}
-                      onCopy={() => handleCopy(title)}
-                      onError={() => handleCopyError(title)}
-                    />
-                  </CodeBlockActions>
-                </CodeBlockHeader>
-              </CodeBlock>
-            </li>
-          ))}
-        </ol>
-        {copyNotice === undefined ? null : <p role="status" aria-live="polite" className="mt-3 block text-sm text-muted-foreground">{copyNotice}</p>}
+      <div className="grid max-w-3xl gap-related">
+        <AeCopyCommand
+          label="Codex MCP command"
+          code={recommended.setupCommand(baseUrl)}
+          comfortable
+        />
+        <p className="text-sm leading-6 text-muted-foreground">{recommended.authenticationInstruction}</p>
+        <p className="text-sm leading-6 text-muted-foreground">
+          Return to Codex and ask it to find a Tool for your task. A live result confirms the connection;
+          installing it alone does not. Account connection does not grant spending permission.
+        </p>
+      </div>
+      <Accordion type="single" collapsible className="max-w-3xl">
+        <AccordionItem value="alternatives">
+          <AccordionTrigger>Use Claude Code or Cursor</AccordionTrigger>
+          <AccordionContent className="grid gap-related">
+        {NATIVE_MCP_CLIENTS.filter((client) => client.id !== 'codex').map((client) => (
+          <div key={client.id} className="grid gap-related rounded-md border border-border bg-background p-related">
+            <h3 className="font-medium">{client.displayName}</h3>
+            <AeCopyCommand
+              label={`${client.displayName} MCP command`}
+              code={client.setupCommand(baseUrl)}
+              comfortable
+            />
+            <p className="text-sm leading-6 text-muted-foreground">{client.authenticationInstruction}</p>
+          </div>
+        ))}
+          </AccordionContent>
+        </AccordionItem>
+        <AccordionItem value="help">
+          <AccordionTrigger>Check a connection</AccordionTrigger>
+          <AccordionContent className="grid gap-related">
+            <p>If tools are missing, check the connection in your client settings. After connecting, start a fresh task and search again.</p>
+            <p>If a Call needs permission, follow the action shown for that Call. If its result is uncertain, check its status before trying again.</p>
+            <a href="/support" className="inline-flex min-h-touch items-center underline underline-offset-4">Get connection help</a>
+          </AccordionContent>
+        </AccordionItem>
+      </Accordion>
     </AeSection>
   )
 }

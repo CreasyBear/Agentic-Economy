@@ -46,6 +46,7 @@ export type SupplyFunnelRefusal =
   | "health_unhealthy"
   | "health_stale"
   | "eligibility_integrity_failure"
+  | "provider_authority_unverified"
   | "withdrawn"
   | "incompatible_revision"
   | "invalid_offering"
@@ -56,9 +57,9 @@ export type SupplyFunnelRefusal =
   | "source_too_deep"
   | "source_version_unsupported"
   | "selector_invalid"
-  | "operation_not_found"
-  | "operation_not_keyless"
-  | "operation_not_executable"
+  | "tool_not_found"
+  | "tool_not_keyless"
+  | "tool_not_executable"
   | "schema_missing"
   | "schema_profile_unsupported"
   | "openapi_query_parameter_definition_unsupported"
@@ -107,10 +108,127 @@ export type SupplyFunnelStepCompletion = Readonly<{
   revision?: number;
   sourceHash?: string;
   publicationRef?: string;
-  operationRef?: string;
+  toolRef?: string;
+  canaryRef?: string;
+  callRef?: string;
   refusal?: SupplyFunnelRefusal;
   message?: string;
 }>;
+
+export type OwnerSellerCanaryReadback = Readonly<
+  | {
+      kind: "error";
+      code: "unauthenticated" | "wrong_owner" | "source_unavailable";
+      reason?: string;
+    }
+  | { kind: "not_found" }
+  | { kind: "conflict" }
+  | {
+      kind: "available";
+      canaryRef: string;
+      callRef: string;
+      toolRef: string;
+      offeringRef: string;
+      offeringRevision: number;
+      publicationRef: string;
+      publicationRevision: number;
+      state:
+        | "pending"
+        | "completed"
+        | "refused"
+        | "reconciliation_required"
+        | "cancelled";
+      resultKind?:
+        | "completed"
+        | "pending"
+        | "needs_authority"
+        | "reconciliation_required"
+        | "refused";
+      evidenceHash?: string;
+      attemptRef?: string;
+      receipt?: Readonly<{
+        receiptRef: string;
+        state: "settled" | "refunded" | "reconciliation_required";
+        network: string;
+        asset: string;
+        paymentIdentifier?: string;
+        settlementTransactionHash?: string;
+        externalSettlementRef?: string;
+        evidenceHash: string;
+        issuedAt: string;
+        refundState?: "not_applicable" | "released" | "unknown";
+        lossState?: "none" | "provider_output_invalid" | "unknown";
+      }>;
+      reconciliation?: Readonly<{
+        attemptRef: string;
+        effectGeneration: number;
+        requiredAt: string;
+        retry: "reconcile_before_retry";
+        evidenceSource: string;
+      }>;
+      refusal?: Readonly<{
+        code: string;
+        retryable: boolean;
+        authorizationFailureCode?:
+          | 'custody_configuration_invalid'
+          | 'request_fingerprint_context_invalid'
+          | 'material_unavailable'
+          | 'material_identity_invalid'
+          | 'external_spend_identity_invalid'
+          | 'provider_authority_invalid'
+          | 'grant_invalid'
+          | 'managed_authorization_unavailable';
+        authorizationFailureDetail?: string;
+        retryKind?: "pre_claim_rearm" | "safe_before_release_resume";
+        nextAction?: string;
+      }>;
+      promotion:
+        | Readonly<{ state: "not_promoted" }>
+        | Readonly<{ state: "promoted"; evidenceDigest: string }>;
+      updatedAt: number;
+    }
+>;
+
+export type OwnerSellerCanaryPromotionResult = Readonly<
+  | {
+      kind: "promoted" | "replayed";
+      canaryRef: string;
+      offeringRef: string;
+      offeringRevision: number;
+      publicationRef: string;
+      publicationRevision: number;
+      toolRef: string;
+      promotionEvidenceDigest: string;
+      outputDigest: string;
+    }
+  | {
+      kind: "refused";
+      code:
+        | "canary_target_mismatch"
+        | "unauthenticated"
+        | "wrong_owner"
+        | "source_write_refused"
+        | "canary_not_found"
+        | "canary_evidence_invalid"
+        | "target_drift"
+        | "operation_conflict"
+        | "seller_claim_stale"
+        | "funding_authority_invalid"
+        | "readiness_stale"
+        | "output_nondeterministic"
+        | "canary_pending"
+        | "reconciliation_required"
+        | "canary_identity_mismatch"
+        | "canary_expired"
+        | "operation_commitment_stale"
+        | "invocation_refused"
+        | "payment_not_settled"
+        | "payment_evidence_missing"
+        | "spend_commitment_mismatch"
+        | "output_contract_invalid"
+        | "output_unusable";
+    }
+>;
 
 export type SupplyFunnelActionContext = Readonly<{
   businessId: string;
@@ -135,6 +253,11 @@ export type OwnerSupplyMaintenanceSourceInput = OwnerSupplyMaintenanceCommand &
   Readonly<{
     sourceWrite: SourceWriteAdmission;
     sourceWriteRequest: SourceWriteAdmissionRequest;
+    proof?: Readonly<{
+      reverificationId: string;
+      firstFactorAgeMinutes: number;
+      secondFactorAgeMinutes: number;
+    }>;
   }>;
 export type OwnerSupplyCommandResult = Readonly<
   | {
@@ -157,7 +280,7 @@ export type OwnerSupplyCommandResult = Readonly<
       kind: "republished";
       publicationRef: string;
       revision: number;
-      operationRef: string;
+      toolRef: string;
       bindingId: string;
       lifecycle: Readonly<{
         state: "active" | "inactive";
@@ -174,12 +297,39 @@ export type OwnerSupplyReadbackSource = Readonly<{
   digest: string;
 }>;
 
+export type OwnerSupplyToolEvidence = Readonly<{
+  windowStartAt: number;
+  windowEndAt: number;
+  delivery:
+    | Readonly<{ kind: "unobserved"; provenance: "canonical_call_receipts" }>
+    | Readonly<{ kind: "unavailable"; reason: "window_too_large"; provenance: "canonical_call_receipts" }>
+    | Readonly<{
+        kind: "observed";
+        deliveredCount: number;
+        notDeliveredCount: number;
+        unknownCount: number;
+        sampleSize: number;
+        lastObservedAt: number;
+        provenance: "canonical_call_receipts";
+      }>;
+  usefulOutcome:
+    | Readonly<{ kind: "unobserved"; provenance: "qualified_use_receipts" }>
+    | Readonly<{ kind: "unavailable"; reason: "window_too_large"; provenance: "qualified_use_receipts" }>
+    | Readonly<{
+        kind: "observed";
+        qualifiedUseCount: number;
+        lastObservedAt: number;
+        provenance: "qualified_use_receipts";
+      }>;
+}>;
+
 export type OwnerSupplyOfferingReadback = Readonly<{
   offeringRef: string;
   revision: number;
   name: string;
   summary: string;
   status: BusinessOfferingStatus;
+  managementStatus: "Validating" | "Live" | "Action needed" | "Degraded" | "Removed";
   sourceHash?: string;
   sourceMaterial?: PreparedPublicationMaterial;
   endpointUrl?: string;
@@ -205,7 +355,7 @@ export type OwnerSupplyOfferingReadback = Readonly<{
     state: "current" | "withdrawn" | "superseded" | "incompatible";
     publicationRef: string;
     publicationRevision: number;
-    operationRef: string;
+    toolRef: string;
     authorityMode:
       | "provider_owned"
       | "ae_curated_external"
@@ -294,6 +444,7 @@ export type OwnerSupplyOfferingReadback = Readonly<{
   currentStep: SupplyFunnelStep;
   stepStates: Readonly<Record<SupplyFunnelStep, SupplyFunnelStepState>>;
   actionableReason?: SupplyFunnelRefusal;
+  toolEvidence?: OwnerSupplyToolEvidence;
   accessPaths: readonly Readonly<{
     accessPathRef: string;
     offeringSourceHash: string;

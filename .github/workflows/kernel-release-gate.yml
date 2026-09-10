@@ -14,7 +14,7 @@ on:
         default: false
         type: boolean
       confirm_live_gateway_spend:
-        description: 'Type the run ID below and confirm the production-approved paid gateway smoke may move at most USD 6.00 total externally (top-up charge plus provider payout).'
+        description: 'Type the run ID below and confirm the production-approved paid gateway smoke may move at most AUD 6.00 total externally (top-up charge plus provider payout).'
         required: true
         default: false
         type: boolean
@@ -56,7 +56,7 @@ jobs:
           cache: npm
 
       - name: Pin the repository package manager
-        run: npm install --global npm@11.5.1
+        run: npm install --global npm@11.5.1 --ignore-scripts
 
       - name: Frozen dependency install
         run: npm ci
@@ -80,7 +80,7 @@ jobs:
       - name: Run focused provider and recovery conformance
         run: npm run test:conformance
 
-      - name: Run deterministic operation chat conformance
+      - name: Run deterministic Tool chat conformance
         run: npm run test:chat:conformance
 
       - name: Prove committed Convex source with an isolated anonymous local backend
@@ -108,9 +108,117 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+  fresh-checkout-proof:
+    name: Fresh checkout reaches a sellable local sandbox
+    needs: []
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: 'Announce deploy-guard target: local-anonymous'
+        run: "echo 'target: local-anonymous'"
+
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: npm
+
+      - name: Pin the repository package manager
+        run: npm install --global npm@11.5.1 --ignore-scripts
+
+      - name: Frozen dependency install
+        run: npm ci
+
+      - name: Resolve the Convex local backend binary version
+        id: convex-backend-version
+        run: |
+          version=$(node -e "console.log(require('./package-lock.json').packages['node_modules/convex'].version)")
+          echo "version=${version}" >> "${GITHUB_OUTPUT}"
+
+      - name: Cache the Convex local backend binary
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/convex/binaries
+          key: convex-local-backend-${{ runner.os }}-${{ steps.convex-backend-version.outputs.version }}
+
+      - name: Start local stack (anonymous)
+        env:
+          CONVEX_AGENT_MODE: anonymous
+          CLERK_JWT_ISSUER_DOMAIN: https://release-proof.invalid
+          CI: 'true'
+        run: |
+          mkdir -p output/fresh-checkout
+          npm run dev:local -- --skip-scan --no-doctor > output/fresh-checkout/dev-local.log 2>&1 &
+          echo "DEV_LOCAL_PID=$!" >> "${GITHUB_ENV}"
+          ready=''
+          for _ in $(seq 1 180); do
+            if curl -fsS http://127.0.0.1:3024/api/ready > /dev/null 2>&1; then
+              ready=1
+              break
+            fi
+            sleep 1
+          done
+          if [ -z "${ready}" ]; then
+            echo '::error::local stack did not answer http://127.0.0.1:3024/api/ready within 180s'
+            tail -n 200 output/fresh-checkout/dev-local.log || true
+            exit 1
+          fi
+
+      - name: Bind explicit test authority
+        run: npm run --silent connect:local -- --base-url http://127.0.0.1:3024 --json
+
+      - name: Doctor
+        run: |
+          npm run --silent ae -- doctor --json --base-url http://127.0.0.1:3024 > output/fresh-checkout/doctor.json
+          node -e '
+            const fs = require("fs");
+            const result = JSON.parse(fs.readFileSync("output/fresh-checkout/doctor.json", "utf8"));
+            const groups = result.groups || {};
+            const catalogue = (result.checks ?? []).find((c) => c.id === "catalogue");
+            const marketRequests = (result.checks ?? []).find((c) => c.id === "market_requests");
+            // A fresh checkout with the scan skipped has no directory yet by design: admitted
+            // Tools are still discoverable, so a bare catalogue-absent warning does not fail the gate.
+            const discoveryFailed = groups.discovery !== "pass" && !(
+              groups.discovery === "warn" &&
+              catalogue?.code === "catalogue_absent" &&
+              marketRequests?.state === "pass"
+            );
+            const quote = (result.checks ?? []).find((c) => c.id === "quote");
+            const quoteState = quote?.state;
+            const quoteOk = quote !== undefined && (
+              quoteState === "pass" ||
+              quoteState === "warn" ||
+              (quoteState === "skipped" && quote.code === "loopback_readiness_unprovable")
+            );
+            if (discoveryFailed || !quoteOk) {
+              console.error(JSON.stringify(result, null, 2));
+              process.exit(1);
+            }
+            console.log("doctor groups:", JSON.stringify(groups));
+            console.log("catalogue state/code:", JSON.stringify({ state: catalogue?.state, code: catalogue?.code }));
+            console.log("quote state/code:", JSON.stringify({ state: quoteState, code: quote.code }));
+          '
+
+      - name: Upload the fresh-checkout evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ github.sha }}-${{ github.run_id }}-fresh-checkout-proof
+          path: output/fresh-checkout/
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Stop local stack
+        if: always()
+        run: |
+          if [ -n "${DEV_LOCAL_PID}" ]; then
+            kill -TERM -- -"${DEV_LOCAL_PID}" 2>/dev/null || kill -TERM "${DEV_LOCAL_PID}" 2>/dev/null || true
+          fi
+
   chat-staging-proof:
     if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.confirm_chat_staging_smoke == true
-    name: Opt-in exact-revision operation chat staging smoke
+    name: Opt-in exact-revision Tool chat staging smoke
     needs: source-proof
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -118,7 +226,6 @@ jobs:
     env:
       PLAYWRIGHT_BASE_URL: ${{ vars.AE_CHAT_STAGING_BASE_URL }}
       AE_RELEASE_SOURCE_REVISION: ${{ github.sha }}
-      VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
     steps:
       - uses: actions/checkout@v6
 
@@ -128,7 +235,7 @@ jobs:
           cache: npm
 
       - name: Pin the repository package manager
-        run: npm install --global npm@11.5.1
+        run: npm install --global npm@11.5.1 --ignore-scripts
 
       - name: Frozen dependency install without lifecycle scripts
         run: npm ci --ignore-scripts
@@ -147,6 +254,8 @@ jobs:
           echo "SMOKE_OWNER_STORAGE_STATE=${owner_storage_state}" >> "${GITHUB_ENV}"
 
       - name: Run the exact-revision chat staging smoke
+        env:
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
         run: npm run smoke:chat:staging
 
       - name: Upload only the sanitized chat staging result
@@ -157,6 +266,40 @@ jobs:
           path: output/release/playwright-chat-staging-smoke.json
           if-no-files-found: error
           retention-days: 14
+
+  authenticated-platform-proof:
+    if: github.event_name == 'workflow_dispatch'
+    name: Required exact-revision authenticated multi-agent lifecycle proof
+    needs: source-proof
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: staging
+    env:
+      AE_AUTHENTICATED_E2E_BASE_URL: ${{ vars.AE_AUTHENTICATED_E2E_BASE_URL }}
+      AE_RELEASE_SOURCE_REVISION: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: npm
+
+      - name: Pin the repository package manager
+        run: npm install --global npm@11.5.1 --ignore-scripts
+
+      - name: Frozen dependency install without lifecycle scripts
+        run: npm ci --ignore-scripts
+
+      - name: Install the authenticated Chromium browser
+        run: npm exec -- playwright install --with-deps chromium
+
+      - name: Prove the authenticated two-agent lifecycle
+        env:
+          AE_E2E_OWNER_EMAIL: ${{ secrets.AE_AUTHENTICATED_E2E_OWNER_EMAIL }}
+          CLERK_PUBLISHABLE_KEY: ${{ secrets.AE_AUTHENTICATED_E2E_CLERK_PUBLISHABLE_KEY }}
+          CLERK_SECRET_KEY: ${{ secrets.AE_AUTHENTICATED_E2E_CLERK_SECRET_KEY }}
+        run: npm run test:release:authenticated
 
   live-gateway-proof:
     if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.confirm_live_gateway_spend == true
@@ -178,6 +321,7 @@ jobs:
       VITE_CLERK_PUBLISHABLE_KEY: ${{ secrets.VITE_CLERK_PUBLISHABLE_KEY }}
       CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY }}
       CLERK_JWT_ISSUER_DOMAIN: ${{ secrets.CLERK_JWT_ISSUER_DOMAIN }}
+      CLERK_WEBHOOK_SIGNING_SECRET: ${{ secrets.CLERK_WEBHOOK_SIGNING_SECRET }}
       OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
       AE_LLM_MODEL: ${{ vars.AE_LLM_MODEL }}
       AE_CHAT_PROXY_SECRET: ${{ secrets.AE_CHAT_PROXY_SECRET }}
@@ -188,6 +332,7 @@ jobs:
       AE_X402_CDP_EXPECTED_EVM_ADDRESS: ${{ secrets.AE_X402_CDP_EXPECTED_EVM_ADDRESS }}
       AE_X402_CDP_ACCOUNT_POLICY_ID: ${{ secrets.AE_X402_CDP_ACCOUNT_POLICY_ID }}
       AE_X402_CDP_PROJECT_POLICY_ID: ${{ secrets.AE_X402_CDP_PROJECT_POLICY_ID }}
+      AE_X402_CDP_POLICY_RULES_DIGEST: ${{ secrets.AE_X402_CDP_POLICY_RULES_DIGEST }}
       AE_X402_CDP_CREDENTIAL_GENERATION: ${{ secrets.AE_X402_CDP_CREDENTIAL_GENERATION }}
       AE_X402_CUSTODY_ENABLED: "true"
       AE_X402_CUSTODY_MAX_ATOMIC: ${{ secrets.AE_X402_CUSTODY_MAX_ATOMIC }}
@@ -200,8 +345,29 @@ jobs:
       AE_SOURCE_WRITE_KEY_REPAIR: ${{ secrets.AE_SOURCE_WRITE_KEY_REPAIR }}
       AE_SOURCE_WRITE_KEY_SESSION: ${{ secrets.AE_SOURCE_WRITE_KEY_SESSION }}
       STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
+      STRIPE_READBACK_KEY: ${{ secrets.STRIPE_READBACK_KEY }}
       STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
-      VITE_STRIPE_PUBLISHABLE_KEY: ${{ secrets.VITE_STRIPE_PUBLISHABLE_KEY }}
+      STRIPE_V2_WEBHOOK_SECRET: ${{ secrets.STRIPE_V2_WEBHOOK_SECRET }}
+      STRIPE_AU_INCLUSIVE_GST_TAX_RATE_ID: ${{ secrets.STRIPE_AU_INCLUSIVE_GST_TAX_RATE_ID }}
+      AE_FORMANCE_ENVIRONMENT: ${{ vars.AE_FORMANCE_ENVIRONMENT }}
+      AE_FORMANCE_GATEWAY_URL: ${{ secrets.AE_FORMANCE_GATEWAY_URL }}
+      AE_FORMANCE_LEDGER: ${{ vars.AE_FORMANCE_LEDGER }}
+      AE_FORMANCE_REQUEST_TIMEOUT_MS: ${{ vars.AE_FORMANCE_REQUEST_TIMEOUT_MS }}
+      AE_FORMANCE_ACCESS_CLIENT_ID: ${{ secrets.AE_FORMANCE_ACCESS_CLIENT_ID }}
+      AE_FORMANCE_ACCESS_CLIENT_SECRET: ${{ secrets.AE_FORMANCE_ACCESS_CLIENT_SECRET }}
+      AE_PACKAGE5_WRITES_ENABLED: ${{ vars.AE_PACKAGE5_WRITES_ENABLED }}
+      AE_SUPPLY_HTTP_CREDENTIALS_ENABLED: ${{ vars.AE_SUPPLY_HTTP_CREDENTIALS_ENABLED }}
+      AE_SUPPLY_MCP_OAUTH_ENABLED: ${{ vars.AE_SUPPLY_MCP_OAUTH_ENABLED }}
+      AE_PROVIDER_OFFBOARDING_ENABLED: ${{ vars.AE_PROVIDER_OFFBOARDING_ENABLED }}
+      AE_INFISICAL_BASE_URL: ${{ vars.AE_INFISICAL_BASE_URL }}
+      AE_INFISICAL_CUSTOMER_PROJECT_ID: ${{ vars.AE_INFISICAL_CUSTOMER_PROJECT_ID }}
+      AE_INFISICAL_CUSTOMER_ENVIRONMENT: ${{ vars.AE_INFISICAL_CUSTOMER_ENVIRONMENT }}
+      AE_INFISICAL_CUSTOMER_SECRET_PATH: ${{ vars.AE_INFISICAL_CUSTOMER_SECRET_PATH }}
+      AE_INFISICAL_CUSTOMER_MACHINE_IDENTITY_ID: ${{ vars.AE_INFISICAL_CUSTOMER_MACHINE_IDENTITY_ID }}
+      AE_INFISICAL_PLATFORM_PROJECT_ID: ${{ vars.AE_INFISICAL_PLATFORM_PROJECT_ID }}
+      AE_INFISICAL_PLATFORM_ENVIRONMENT: ${{ vars.AE_INFISICAL_PLATFORM_ENVIRONMENT }}
+      AE_INFISICAL_PLATFORM_SECRET_PATH: ${{ vars.AE_INFISICAL_PLATFORM_SECRET_PATH }}
+      AE_INFISICAL_PLATFORM_MACHINE_IDENTITY_ID: ${{ vars.AE_INFISICAL_PLATFORM_MACHINE_IDENTITY_ID }}
       AE_GATEWAY_SMOKE_CONFIRM_LIVE_SPEND: 'true'
       AE_GATEWAY_SMOKE_RUN_ID: ${{ inputs.live_gateway_run_id }}
       AE_GATEWAY_SMOKE_BASE_URL: https://agentic-economy-phi.vercel.app
@@ -231,7 +397,7 @@ jobs:
           cache: npm
 
       - name: Pin the repository package manager
-        run: npm install --global npm@11.5.1
+        run: npm install --global npm@11.5.1 --ignore-scripts
 
       - name: Frozen dependency install
         # Job env carries production secrets; skip lifecycle scripts so install

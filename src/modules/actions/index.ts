@@ -11,10 +11,10 @@
  * rely on module-eval side effects; production bundlers can tree-shake them.
  */
 
-export { CURRENT_OPERATION_PROJECTION_NAVIGATION } from './contract'
+export { CURRENT_TOOL_PROJECTION_NAVIGATION } from './contract'
 
 import { describeActionForAgent, type AgentToolDescriptor, type AnyAction } from '@/modules/common/action'
-import { OPERATION_INVOKE_ROUTE_CONTRACT } from '@/modules/capability-execution/operation-invoke-entry'
+import { CALL_ROUTE_CONTRACT } from '@/modules/capability-execution/call-entry'
 import {
   agentAccountActivityAction,
   agentAccountBalanceAction,
@@ -25,12 +25,14 @@ import {
   supplyConnectionDetailAction,
   supplyConnectionListAction,
   supplyConnectionReconnectAction,
-  supplyConnectionRetryCleanupAction,
   supplyConnectionRevokeAction,
   supplyEarningsAction,
+  supplyOffboardingStatusAction,
+  supplyToolsListAction,
   supplyPublishAction,
   supplyRecheckAction,
   supplyRepublishAction,
+  supplySourcePreviewAction,
   supplyStatusAction,
   supplyWithdrawAction,
 } from '@/modules/capability-supply/supply-actions'
@@ -39,42 +41,61 @@ import {
   registrySearchAction,
 } from '@/modules/registry/registry.actions'
 import {
-  registryOperationsCompareAction,
-  registryOperationsDetailAction,
-  registryOperationsInspectPlanAction,
-  registryOperationsSearchAction,
-} from '@/modules/registry/operations.actions'
+  registryToolsCompareAction,
+  registryToolsDescribeAction,
+  registryToolsListAction,
+  registryToolsSearchAction,
+} from '@/modules/registry/tools.actions'
 import {
-  operationCancelAction,
-  operationReconcileAction,
-  operationStatusAction,
-} from '@/modules/capability-execution/operation-recovery.actions'
-import { operationInvokeAction } from '@/modules/capability-execution/operation-invoke.actions'
-import { operationListAction } from '@/modules/capability-execution/operation-history.actions'
+  callCancelAction,
+  callReconcileAction,
+  callStatusAction,
+} from '@/modules/capability-execution/call-recovery.actions'
+import { callAction } from '@/modules/capability-execution/call.actions'
+import {
+  toolQuoteAction,
+  TOOL_QUOTE_ROUTE_CONTRACT,
+} from '@/modules/capability-execution/quote.actions'
+import { callListAction } from '@/modules/capability-execution/call-history.actions'
 import {
   marketRequestCreateAction,
   marketRequestListAction,
   marketRequestStatusAction,
 } from '@/modules/market-demand/market-demand.actions'
+import {
+  fundingHandoffConfigAction,
+  fundingHandoffCreateAction,
+  fundingHandoffStatusAction,
+} from '@/modules/money/funding-handoff.actions'
+
+const toolMarketReadActions: readonly AnyAction[] = [
+  registryToolsListAction,
+  registryToolsSearchAction,
+  registryToolsDescribeAction,
+  registryToolsCompareAction,
+]
 
 const registeredActions: readonly AnyAction[] = [
   registrySearchAction,
   registryDetailAction,
-  registryOperationsSearchAction,
-  registryOperationsDetailAction,
-  registryOperationsCompareAction,
-  registryOperationsInspectPlanAction,
+  ...toolMarketReadActions,
   agentAccountSelfAction,
   agentAccountBalanceAction,
   agentAccountActivityAction,
+  fundingHandoffConfigAction,
+  fundingHandoffCreateAction,
+  fundingHandoffStatusAction,
   marketRequestCreateAction,
   marketRequestListAction,
   marketRequestStatusAction,
-  operationInvokeAction,
-  operationListAction,
-  operationStatusAction,
-  operationCancelAction,
-  operationReconcileAction,
+  toolQuoteAction,
+  callAction,
+  callListAction,
+  callStatusAction,
+  callCancelAction,
+  callReconcileAction,
+  supplySourcePreviewAction,
+  supplyToolsListAction,
   supplyStatusAction,
   supplyPublishAction,
   supplyWithdrawAction,
@@ -86,7 +107,7 @@ const registeredActions: readonly AnyAction[] = [
   supplyConnectionConnectAction,
   supplyConnectionReconnectAction,
   supplyConnectionRevokeAction,
-  supplyConnectionRetryCleanupAction,
+  supplyOffboardingStatusAction,
 ]
 
 assertUniqueActionIds(registeredActions)
@@ -103,7 +124,14 @@ export function findAction(id: string): AnyAction | undefined {
 
 /** Actions exposed on the anonymous MCP host; the adapter enforces read-only admission. */
 export function listMcpActions(): readonly AnyAction[] {
-  return actions.filter((action) => action.surfaces.includes('mcp'))
+  return actions.filter((action) =>
+    action.surfaces.includes('mcp') && action.id !== 'registry.search' && action.id !== 'registry.detail'
+  )
+}
+
+/** True only for one of the registered public Tool catalogue reads. */
+export function isToolMarketReadAction(action: AnyAction): boolean {
+  return toolMarketReadActions.some((candidate) => candidate === action)
 }
 
 /** Deterministic MCP tool name: one derivation, never a hand-maintained map. */
@@ -121,31 +149,32 @@ export function listMcpActionDescriptors(): readonly PublicMcpActionDescriptor[]
   }))
 }
 
-const operationRouteContracts = [
-  OPERATION_INVOKE_ROUTE_CONTRACT.invoke,
-  OPERATION_INVOKE_ROUTE_CONTRACT.list,
-  OPERATION_INVOKE_ROUTE_CONTRACT.status,
-  OPERATION_INVOKE_ROUTE_CONTRACT.cancel,
-  OPERATION_INVOKE_ROUTE_CONTRACT.reconcile,
+const toolCallRouteContracts = [
+  TOOL_QUOTE_ROUTE_CONTRACT,
+  CALL_ROUTE_CONTRACT.call,
+  CALL_ROUTE_CONTRACT.list,
+  CALL_ROUTE_CONTRACT.status,
+  CALL_ROUTE_CONTRACT.cancel,
+  CALL_ROUTE_CONTRACT.reconcile,
 ] as const
 
-type OperationRouteContractEntry = (typeof operationRouteContracts)[number]
+type ToolCallRouteContractEntry = (typeof toolCallRouteContracts)[number]
 
-type PublicOperationRouteDescriptorBase = Pick<
-  OperationRouteContractEntry,
+type PublicCallRouteDescriptorBase = Pick<
+  ToolCallRouteContractEntry,
   'actionId' | 'contractVersion' | 'method' | 'path' | 'routerPath' | 'requiredHeaders'
 >
 
-export type PublicOperationRouteDescriptor = PublicOperationRouteDescriptorBase & Readonly<{
+export type PublicCallRouteDescriptor = PublicCallRouteDescriptorBase & Readonly<{
   inputJsonSchema?: AgentToolDescriptor['inputJsonSchema']
   outputJsonSchema?: AgentToolDescriptor['outputJsonSchema']
   mcpToolName?: string
 }>
 
-export function listOperationRouteDescriptors(): readonly PublicOperationRouteDescriptor[] {
-  return operationRouteContracts.map((route) => {
+export function listCallRouteDescriptors(): readonly PublicCallRouteDescriptor[] {
+  return toolCallRouteContracts.map((route) => {
     const action = findAction(route.actionId)
-    if (action === undefined) throw new Error(`Operation route action is not registered: ${route.actionId}`)
+    if (action === undefined) throw new Error(`Call route action is not registered: ${route.actionId}`)
     const descriptor = describeActionForAgent(action)
     return {
       actionId: route.actionId,
@@ -175,6 +204,7 @@ function assertUniqueActionIds(registry: readonly AnyAction[]): void {
 export {
   defineAction,
   describeActionForAgent,
+  describeActionMcpMetadata,
   resolveActionContract,
   type Action,
   type ActionAgentAccessPrincipal,
@@ -182,7 +212,8 @@ export {
   type ActionConsequenceClass,
   type ActionContext,
   type ActionCredentialAdmission,
-  type ActionInvocationContract,
+  type ActionExecutionContract,
+  type ActionMcpMetadata,
   type ActionParameter,
   type ActionRetryClass,
   type ActionSurface,

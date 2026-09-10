@@ -1,21 +1,26 @@
 import { ABOUT } from '@/content/brand-copy'
 import { MCP_LATEST_PROTOCOL_VERSION } from '@/lib/mcp-protocol'
+import {
+  AE_MCP_WHOAMI_TOOL_NAME,
+  aeMcpAuthenticateInstruction,
+  aeMcpInstallCommand,
+} from '@/lib/cli-distribution'
 import type { BusinessContext } from '@/modules/business/public'
 import { formatOfferingPrice } from '@/modules/catalog/public'
 import { trimTrailingSlashes } from '@/modules/common/trim-trailing-slashes'
 import type { PublicBusinessCatalogApiV2Dto } from '@/modules/registry/public'
 import { DiscoveryListingBoundaryLine } from './discovery-files'
 import {
-  OperationMarketInvokeScopeLine,
+  ToolMarketCallScopeLine,
 } from './offering-discovery-file'
 import { safePublicText } from './manifest-projection'
-import { OPERATION_INVOKE_ROUTE_CONTRACT } from '@/modules/capability-execution/operation-invoke-entry'
+import { CALL_ROUTE_CONTRACT } from '@/modules/capability-execution/call-entry'
 import { AGENT_ACCESS_OAUTH_PATHS } from '@/modules/agent-access/oauth-state'
-import { operationRouteExamples } from './operation-contract'
+import { callRouteExamples } from './tool-contract'
 import {
-  OPERATION_MARKET_DETAIL_PATH,
-  OPERATION_MARKET_SEARCH_PATH,
-} from '@/modules/registry/operation-entry'
+  TOOL_MARKET_DESCRIBE_PATH,
+  TOOL_MARKET_SEARCH_PATH,
+} from '@/modules/registry/tool-entry'
 
 /**
  * Markdown projections of the public page routes, for a caller that asked for
@@ -30,52 +35,52 @@ export const AgentCatalogMarkdownLimit = 25
 
 export function buildSiteBriefMarkdown(options: AgentPageMarkdownOptions): string {
   const base = trimTrailingSlashes(options.canonicalBaseUrl)
-  const routes = operationRouteExamples()
+  const routes = callRouteExamples()
   const routeFor = (actionId: string) => {
     const route = routes.find((candidate) => candidate.route.actionId === actionId)
-    if (route === undefined) throw new Error(`Operation route is not registered: ${actionId}`)
+    if (route === undefined) throw new Error(`Call route is not registered: ${actionId}`)
     return route
   }
-  const invoke = routeFor(OPERATION_INVOKE_ROUTE_CONTRACT.invoke.actionId)
-  const status = routeFor(OPERATION_INVOKE_ROUTE_CONTRACT.status.actionId)
-  const reconcile = routeFor(OPERATION_INVOKE_ROUTE_CONTRACT.reconcile.actionId)
+  const call = routeFor(CALL_ROUTE_CONTRACT.call.actionId)
+  const status = routeFor(CALL_ROUTE_CONTRACT.status.actionId)
+  const reconcile = routeFor(CALL_ROUTE_CONTRACT.reconcile.actionId)
   const cli = 'ae'
   return [
     '# Agentic Economy',
     '',
-    `1. Search by outcome: \`${cli} search "<job>" --base-url "${base}" --json\` or \`POST ${base}${OPERATION_MARKET_SEARCH_PATH}\`.`,
-    `2. Inspect one result: \`${cli} inspect "$AE_OPERATION_REF" --base-url "${base}" --json\` or \`POST ${base}${OPERATION_MARKET_DETAIL_PATH}\`. Read exact inputs, total price, authentication, readiness, provider, and last verification.`,
-    `3. Call it: \`${cli} call "$AE_OPERATION_REF" --input "$AE_INPUT_JSON" --base-url "${base}" --wait\`. The compiled CLI uses the official MCP client for eligible free keyless reads.`,
-    `4. Connect only when the call reports \`agent_access_key_required\`: \`npx @agentic-economy/cli connect --base-url "${base}" --mcp\`, then repeat the same call through \`${invoke.route.method} ${base}${invoke.route.path}\`.`,
-    `5. Keep the receipt: \`${cli} status "$AE_INVOCATION_REF" --base-url "${base}" --json\` (\`${status.route.method} ${base}${status.route.path}\`). If the receipt explicitly requires reconciliation, use \`${cli} recover\` against \`${reconcile.route.method} ${base}${reconcile.route.path}\`.`,
+    `1. Search by outcome: \`${cli} search "<job>" --base-url "${base}" --json\` or \`POST ${base}${TOOL_MARKET_SEARCH_PATH}\`.`,
+    `2. Describe one result: \`${cli} describe "$AE_TOOL_REF" --base-url "${base}" --json\` or \`POST ${base}${TOOL_MARKET_DESCRIBE_PATH}\`. Catalog health and price are indicative.`,
+    `3. Connect through the official MCP client's native account connection before protected work; direct CLI callers run \`${cli} connect --base-url "${base}"\`. Request the caller-specific \`tool.quote\` with the exact input after connecting.`,
+    `4. Call only with the returned Quote through \`${call.route.method} ${base}${call.route.path}\`.`,
+    `5. Keep the receipt: \`${cli} status "$AE_CALL_REF" --base-url "${base}" --json\` (\`${status.route.method} ${base}${status.route.path}\`). If the receipt explicitly requires reconciliation, use \`${cli} recover\` against \`${reconcile.route.method} ${base}${reconcile.route.path}\`.`,
     '',
-    'Search, inspection, and eligible free keyless read calls are public. Other calls use one owner-approved AE key stored by connect.',
+    'List, search, describe and compare are public. Caller-specific Quote issuance and Calls require account connection and the applicable authority, including free Calls.',
     `Connect uses \`${base}${AGENT_ACCESS_OAUTH_PATHS.deviceAuthorization}\`, owner approval at \`${base}${AGENT_ACCESS_OAUTH_PATHS.deviceVerification}?user_code=...\`, and \`${base}${AGENT_ACCESS_OAUTH_PATHS.token}\`.`,
     'The key identifies the caller; it never contains provider credentials or silently grants payment or consequential authority.',
-    OperationMarketInvokeScopeLine,
+    ToolMarketCallScopeLine,
     'The low-level API requires an `idempotencyKey` in write request bodies; the CLI creates and retains it automatically.',
     '',
     '## Boundary',
     '',
-    'Provider and publication records are supporting metadata. Only independently callable Operations appear as capabilities.',
-    'Never infer fulfilment, payment, deployment, or a receipt from discovery, a caller key, or a pending invocation.',
-    'An Operation is the callable unit. Provider and publication records do not select or execute work.',
+    'Provider and publication records are supporting metadata. Only independently callable Tools appear as capabilities.',
+    'Never infer fulfilment, payment, deployment, or a receipt from discovery, a caller key, or a pending Call.',
+    'A Tool is the callable unit. Provider and publication records do not select or execute work.',
     '',
     '## Problem responses and retry rules',
     '',
     '- Errors use `application/problem+json` with `type`, `title`, `status`, `kind`, `code`, and optional `retryable`.',
     '- If `retryable` is true, respect `Retry-After` when present and retry only the same material command identity.',
-    '- A timeout, `outcome_unknown`, or `reconciliation_required` is not permission to create a new invocation; read status, then recover with the same key.',
+    '- A timeout, `outcome_unknown`, or `reconciliation_required` is not permission to create a new Call; read status, then recover with the same key.',
     '- Never retry authentication, validation, authority, or idempotency-conflict problems without changing the invalid input or authority state.',
     '',
     '## More',
     '',
-    `- \`${base}/llms.txt\` — the public Operation index`,
-    `- \`${base}/SKILL.md\` — the full Operation procedure`,
+    `- \`${base}/llms.txt\` — the public Tool index`,
+    `- \`${base}/SKILL.md\` — the full Tool procedure`,
     `- \`${base}/.well-known/ucp\` — the raw machine contract`,
     `- \`${base}/for-agents\` — the machine guide when requested as markdown`,
     `- \`${base}/about\` — what AE is, for people`,
-    `- \`${base}/market\` — the live Operation catalogue`,
+    `- \`${base}/market\` — the live Tool catalogue`,
     '',
   ].join('\n')
 }
@@ -83,39 +88,63 @@ export function buildSiteBriefMarkdown(options: AgentPageMarkdownOptions): strin
 export function buildForAgentsMarkdown(options: AgentPageMarkdownOptions): string {
   const base = trimTrailingSlashes(options.canonicalBaseUrl)
   const cli = 'ae'
-  const invoke = operationRouteExamples().find(({ route }) => route.actionId === OPERATION_INVOKE_ROUTE_CONTRACT.invoke.actionId)
-  if (invoke === undefined) throw new Error('Operation invoke route is not registered')
+  const call = callRouteExamples().find(({ route }) => route.actionId === CALL_ROUTE_CONTRACT.call.actionId)
+  if (call === undefined) throw new Error('Call route is not registered')
   return [
     '# Agentic Economy — machine guide',
     '',
+    `Browse public Tools before connecting. The shared procedure is at ${base}/SKILL.md; retain the selected Tool and input in your current task.`,
+    '',
+    '## Native MCP connection',
+    '',
+    'Codex:',
+    '```sh',
+    aeMcpInstallCommand(base, 'codex'),
+    '```',
+    aeMcpAuthenticateInstruction('codex'),
+    '',
+    'Claude Code:',
+    '```sh',
+    aeMcpInstallCommand(base, 'claude-code'),
+    '```',
+    aeMcpAuthenticateInstruction('claude-code'),
+    '',
+    'Cursor:',
+    '```sh',
+    aeMcpInstallCommand(base, 'cursor'),
+    '```',
+    aeMcpAuthenticateInstruction('cursor'),
+    '',
+    `Public discovery works before authentication. Use native account connection before protected tools, then refresh the tool list. For connection diagnosis, call \`${AE_MCP_WHOAMI_TOOL_NAME}\` and report the connected Agent Principal and Account. Never ask the human to copy a key.`,
+    '',
     '## One-command activation',
     '',
-    `Run \`ae call "$AE_OPERATION_REF" --input "$AE_INPUT_JSON" --base-url "${base}"\` after public search and inspect. Eligible free keyless reads execute immediately through the official MCP client. If the CLI returns \`agent_access_key_required\`, run \`npx @agentic-economy/cli connect --base-url "${base}" --mcp\` once and repeat the same call.`,
-    'No account or funding is required for an eligible anonymous call. Browser approval stores one origin-bound key only when the selected capability requires it.',
+    `Run \`ae call "$AE_TOOL_REF" --input "$AE_INPUT_JSON" --base-url "${base}"\` after public search, describe and account connection. If the CLI returns \`agent_access_key_required\`, run \`ae connect --base-url "${base}"\` and resume the same intended Call.`,
+    'A free price does not remove the authority requirement. Browser approval connects an account; it does not grant permission for every Call.',
     '',
     '## MCP lifecycle',
     '',
     `Use the installed official MCP SDK with protocol \`${MCP_LATEST_PROTOCOL_VERSION}\` at \`${base}/mcp\`. Client connect performs initialization. This server is stateless and may omit \`Mcp-Session-Id\`; call \`tools/list\` before \`tools/call\`, then close the client transport. Malformed JSON-RPC requests return protocol errors; valid tool calls with invalid tool arguments return \`isError\` tool results.`,
     '',
-    '## Search, inspect, call, receipt',
+    '## Search, describe, call, receipt',
     '',
     `The canonical executable is \`${cli}\`.`,
     '',
     '```sh',
     `${cli} search "weather forecast" --base-url "${base}" --json`,
-    `${cli} inspect "$AE_OPERATION_REF" --base-url "${base}" --json`,
-    `${cli} call "$AE_OPERATION_REF" --input "$AE_INPUT_JSON" --base-url "${base}" --wait`,
-    `${cli} status "$AE_INVOCATION_REF" --base-url "${base}" --json`,
+    `${cli} describe "$AE_TOOL_REF" --base-url "${base}" --json`,
+    `${cli} call "$AE_TOOL_REF" --input "$AE_INPUT_JSON" --base-url "${base}" --wait`,
+    `${cli} status "$AE_CALL_REF" --base-url "${base}" --json`,
     '```',
     '',
-    `POST body example (action-derived): \`${JSON.stringify(invoke.example.http.body)}\`.`,
+    `POST body example (action-derived): \`${JSON.stringify(call.example.http.body)}\`.`,
     'The low-level POST body carries `idempotencyKey`; the CLI creates and retains it automatically.',
     '',
     '## Problem responses and retry rules',
     '',
     '- Parse `application/problem+json`; use `kind` and `code` for branching, not human text.',
-    '- Retry only when `retryable: true`, respecting `Retry-After`, and preserve the same operation, input, and idempotency key.',
-    '- On an unknown outcome, read status and then recover; never create a second invocation to guess.',
+    '- Retry only when `retryable: true`, respecting `Retry-After`, and preserve the same Tool, input, and idempotency key.',
+    '- On an unknown outcome, read status and then recover; never create a second Call to guess.',
     '',
     '## Safe recovery',
     '',
@@ -133,13 +162,13 @@ export function buildAboutMarkdown(options: AgentPageMarkdownOptions): string {
     '',
     ABOUT.subhead,
     '',
-    '## Agents and suppliers',
+    '## Agents and Providers',
     '',
     `- Agents: \`${base}/for-agents\``,
-    `- Suppliers: \`${base}/for-providers\``,
+    `- Providers: \`${base}/for-providers\``,
     `- Live catalog: \`${base}/market\``,
     '',
-    ABOUT.suppliersBody,
+    ABOUT.providersBody,
     '',
     '## Machine files',
     '',
@@ -177,7 +206,7 @@ export function buildCatalogMarkdown(
     '',
     DiscoveryListingBoundaryLine,
     '',
-    `Find callable Operations in the catalogue at \`${base}/market\`, through \`POST ${base}${OPERATION_MARKET_SEARCH_PATH}\`, with MCP at \`${base}/mcp\`, or with \`ae search "<job>" --base-url "${base}" --json\`.`,
+    `Find callable Tools in the catalogue at \`${base}/market\`, through \`POST ${base}${TOOL_MARKET_SEARCH_PATH}\`, with MCP at \`${base}/mcp\`, or with \`ae search "<job>" --base-url "${base}" --json\`.`,
     '',
   ].join('\n')
 }
@@ -215,7 +244,7 @@ export function buildBusinessMarkdown(
         ])),
     DiscoveryListingBoundaryLine,
     '',
-    `Find callable Operations in the catalogue at \`${base}/market\`, through \`POST ${base}${OPERATION_MARKET_SEARCH_PATH}\`, with MCP at \`${base}/mcp\`, or with \`ae search "<job>" --base-url "${base}" --json\`.`,
+    `Find callable Tools in the catalogue at \`${base}/market\`, through \`POST ${base}${TOOL_MARKET_SEARCH_PATH}\`, with MCP at \`${base}/mcp\`, or with \`ae search "<job>" --base-url "${base}" --json\`.`,
     '',
   ].join('\n')
 }
@@ -234,11 +263,11 @@ export function buildUnknownPageMarkdown(
     `- \`GET ${base}/llms.txt\` — the public surface index`,
     `- \`GET ${base}/SKILL.md\` — the full assistant procedure`,
     `- \`GET ${base}/api/businesses\` — every published business`,
-    `- \`GET ${base}/market\` — browse the Operation catalogue`,
-    `- \`POST ${base}${OPERATION_MARKET_SEARCH_PATH}\` — search callable Operations`,
-    `- \`POST ${base}${OPERATION_MARKET_DETAIL_PATH}\` — inspect one Operation`,
-    `- \`${base}/mcp\` — use the Operation MCP surface`,
-    `- \`ae search "<job>" --base-url "${base}" --json\` — use the Operation CLI`,
+    `- \`GET ${base}/market\` — browse the Tool catalogue`,
+    `- \`POST ${base}${TOOL_MARKET_SEARCH_PATH}\` — search callable Tools`,
+    `- \`POST ${base}${TOOL_MARKET_DESCRIBE_PATH}\` — describe one Tool`,
+    `- \`${base}/mcp\` — use the Tool MCP surface`,
+    `- \`ae search "<job>" --base-url "${base}" --json\` — use the Tool CLI`,
     '',
   ].join('\n')
 }

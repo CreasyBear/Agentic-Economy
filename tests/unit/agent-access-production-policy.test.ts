@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   createAgentAccessGrant,
-  evaluateAgentAccessOperation,
+  evaluateAgentAccessTool,
 } from '../../src/modules/agent-access/policy'
 import {
   buildProductionAgentAccessPolicy,
@@ -21,9 +21,9 @@ describe('production agent access policy', () => {
       applicationRef: 'app-1',
       credentialId: 'credential-1',
       environment: 'production',
-      operationAccess: 'all_admitted',
-      authorityMode: 'bounded_mandate',
-      policy,
+      toolAccess: 'all_admitted',
+      authorityMode: 'spending_policy',
+      spendingPolicy: policy,
       lifecycle: 'active',
       generation: 1,
       createdAt: 1,
@@ -31,10 +31,10 @@ describe('production agent access policy', () => {
       expiresAt: 10_000,
     })
     if (created.kind !== 'accepted') throw new Error(created.code)
-    expect(evaluateAgentAccessOperation({
+    expect(evaluateAgentAccessTool({
       grant: created.grant,
       principal: { principalId: 'principal-1', applicationRef: 'app-1', environment: 'production' },
-      operation: { operationRef: 'timezone-convert-x402', spend: timezonePrice },
+      tool: { toolRef: 'operation:v1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', spend: timezonePrice },
       now: 100,
     })).toEqual({ kind: 'refused', code: 'spend_limit_exceeded' })
   })
@@ -43,7 +43,7 @@ describe('production agent access policy', () => {
     const policy = buildProductionAgentAccessPolicy({
       currency: 'USD',
       exponent: 2,
-      maximumSpendPerInvocation: { currency: 'USD', units: '100', exponent: 2 },
+      maximumSpendPerCall: { currency: 'USD', units: '100', exponent: 2 },
       maximumDailySpend: { currency: 'USD', units: '500', exponent: 2 },
       maximumMonthlySpend: { currency: 'USD', units: '2000', exponent: 2 },
     })
@@ -51,27 +51,27 @@ describe('production agent access policy', () => {
     expect(() => buildProductionAgentAccessPolicy({
       currency: 'USD',
       exponent: 2,
-      maximumSpendPerInvocation: { currency: 'USD', units: '0', exponent: 2 },
+      maximumSpendPerCall: { currency: 'USD', units: '0', exponent: 2 },
       maximumDailySpend: { currency: 'USD', units: '500', exponent: 2 },
       maximumMonthlySpend: { currency: 'USD', units: '2000', exponent: 2 },
     })).toThrow()
     expect(() => buildProductionAgentAccessPolicy({
       currency: 'USD',
       exponent: 2,
-      maximumSpendPerInvocation: { currency: 'USD', units: '600', exponent: 2 },
+      maximumSpendPerCall: { currency: 'USD', units: '600', exponent: 2 },
       maximumDailySpend: { currency: 'USD', units: '500', exponent: 2 },
       maximumMonthlySpend: { currency: 'USD', units: '2000', exponent: 2 },
     })).toThrow()
     expect(() => buildProductionAgentAccessPolicy({
       currency: 'USD',
       exponent: 2,
-      maximumSpendPerInvocation: { currency: 'USD', units: '100', exponent: 2 },
+      maximumSpendPerCall: { currency: 'USD', units: '100', exponent: 2 },
       maximumDailySpend: { currency: 'USD', units: '500', exponent: 2 },
       maximumMonthlySpend: { currency: 'EUR', units: '2000', exponent: 2 },
     })).toThrow()
   })
 
-  it('refuses full_yolo at production grant creation and evaluation', () => {
+  it('refuses unrestricted_test_only at production grant creation and evaluation', () => {
     const policy = defaultProductionAgentAccessPolicy({ currency: 'USD', exponent: 2 })
     expect(createAgentAccessGrant({
       grantRef: 'grant-production-full-yolo',
@@ -80,9 +80,9 @@ describe('production agent access policy', () => {
       applicationRef: 'app-1',
       credentialId: 'credential-1',
       environment: 'production',
-      operationAccess: 'all_admitted',
-      authorityMode: 'full_yolo',
-      policy,
+      toolAccess: 'all_admitted',
+      authorityMode: 'unrestricted_test_only',
+      spendingPolicy: policy,
       lifecycle: 'active',
       generation: 1,
       createdAt: 1,
@@ -99,9 +99,9 @@ describe('production agent access policy', () => {
         applicationRef: 'app-1',
         credentialId: 'credential-1',
         environment: 'production',
-        operationAccess: 'all_admitted',
-        authorityMode: 'bounded_mandate',
-        policy: productionPolicy,
+        toolAccess: 'all_admitted',
+        authorityMode: 'spending_policy',
+        spendingPolicy: productionPolicy,
         lifecycle: 'active',
         generation: 1,
         createdAt: 1,
@@ -110,10 +110,10 @@ describe('production agent access policy', () => {
       }),
     }
     if (forgedGrant.kind !== 'accepted') throw new Error(forgedGrant.code)
-    expect(evaluateAgentAccessOperation({
-      grant: { ...forgedGrant.grant, authorityMode: 'full_yolo' },
+    expect(evaluateAgentAccessTool({
+      grant: { ...forgedGrant.grant, authorityMode: 'unrestricted_test_only' },
       principal: { principalId: 'principal-1', applicationRef: 'app-1', environment: 'production' },
-      operation: { operationRef: 'operation-1' },
+      tool: { toolRef: 'operation:v1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' },
       now: 100,
     })).toEqual({ kind: 'refused', code: 'grant_material_invalid' })
   })

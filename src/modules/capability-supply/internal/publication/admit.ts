@@ -55,6 +55,7 @@ export type CapabilityPublicationAdmissionRefusal =
   | 'binding_identity_conflict'
   | 'binding_integrity_failure'
   | 'operation_key_conflict'
+  | 'source_route_conflict'
 
 export type AdmitCapabilityPublicationResult =
   | Readonly<{

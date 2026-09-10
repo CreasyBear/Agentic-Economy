@@ -737,7 +737,7 @@ function artifactBase<K extends DeveloperDiscoveryArtifactKind>(
       mutation: false,
       payment: false,
       protectedAction: false,
-      providerOperation: false,
+      providerTool: false,
       requestMarket: false,
     },
   }

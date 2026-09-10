@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 import { handleAgentAccountActionPost, handleAgentAccountGet } from '@/lib/server/agent-account-api'
 
-const authenticate = async (scopes: readonly string[] = ['market_operations:invoke']) => ({
+const authenticate = async (scopes: readonly string[] = ['market_tools:call']) => ({
   isAuthenticated: true as const,
   tokenType: 'api_key' as const,
   id: 'key_current',
@@ -20,7 +20,7 @@ describe('agent account HTTP adapter', () => {
       {
         authenticate,
         resolvePrincipal: async (projection, requiredScopes, consequenceResource) => {
-          expect(requiredScopes).toEqual(['market_operations:invoke'])
+          expect(requiredScopes).toEqual(['market_tools:call'])
           resources.push(consequenceResource)
           return {
             ...projection,
@@ -43,8 +43,8 @@ describe('agent account HTTP adapter', () => {
       credentialId: 'key_current',
       applicationRef: 'agentic-economy',
       environment: 'sandbox',
-      scopes: ['market_operations:invoke'],
-      authorityMode: 'inspect_only',
+      scopes: ['market_tools:call'],
+      authorityMode: 'read_only',
     })
     expect(JSON.stringify(body)).not.toContain('hidden-secret')
   })
@@ -85,10 +85,10 @@ describe('agent account HTTP adapter', () => {
     })
   })
 
-  it('lets a supplier credential inspect its own identity without granting buyer money access', async () => {
+  it('lets a Provider credential inspect its own identity without granting buyer money access', async () => {
     const response = await handleAgentAccountGet(
       new Request('https://ae.example/api/v1/account', {
-        headers: { Authorization: 'Bearer hidden-supplier-secret' },
+        headers: { Authorization: 'Bearer hidden-provider-secret' },
       }),
       {
         authenticate: async () => await authenticate(['market_supply:manage']),
@@ -107,7 +107,7 @@ describe('agent account HTTP adapter', () => {
     await expect(response.json()).resolves.toMatchObject({
       kind: 'authenticated',
       scopes: ['market_supply:manage'],
-      authorityMode: 'bounded_mandate',
+      authorityMode: 'spending_policy',
     })
   })
 
@@ -116,18 +116,17 @@ describe('agent account HTTP adapter', () => {
       kind: 'available',
       principalRef: 'prn_00000000000040008000000000000043',
       accountRef: 'acc_00000000000040008000000000000043',
-      balance: { currency: 'USD', units: '2500', exponent: 2 },
-      recoveryDue: { currency: 'USD', units: '0', exponent: 2 },
+      balance: { currency: 'AUD', units: '25000000', exponent: 6 },
       accountState: 'active',
       version: 3,
       updatedAt: 1_700_000_000_000,
-      funding: { kind: 'owner_browser_required', path: '/owner/credit', anchor: 'fund' },
+      funding: { kind: 'agent_funding_handoff', configAction: 'funding.handoff.config', createAction: 'funding.handoff.create', statusAction: 'funding.handoff.status' },
     })
     const response = await handleAgentAccountActionPost(
       new Request('https://ae.example/api/v1/account/balance', {
         method: 'POST',
         headers: { Authorization: 'Bearer hidden-secret' },
-        body: JSON.stringify({ currency: 'USD' }),
+        body: JSON.stringify({ currency: 'AUD' }),
       }),
       'balance',
       {
@@ -144,18 +143,18 @@ describe('agent account HTTP adapter', () => {
     expect(response.status).toBe(200)
     await expect(response.json()).resolves.toMatchObject({
       kind: 'available',
-      balance: { currency: 'USD', units: '2500', exponent: 2 },
-      funding: { kind: 'owner_browser_required', path: '/owner/credit', anchor: 'fund' },
+      balance: { currency: 'AUD', units: '25000000', exponent: 6 },
+      funding: { kind: 'agent_funding_handoff', configAction: 'funding.handoff.config', createAction: 'funding.handoff.create', statusAction: 'funding.handoff.status' },
     })
-    expect(balance).toHaveBeenCalledWith(expect.objectContaining({ input: { currency: 'USD' } }))
+    expect(balance).toHaveBeenCalledWith(expect.objectContaining({ input: { currency: 'AUD' } }))
   })
 
-  it('refuses supplier-only credentials from buyer balance reads', async () => {
+  it('refuses Provider-only credentials from buyer balance reads', async () => {
     const balance = vi.fn()
     const response = await handleAgentAccountActionPost(
       new Request('https://ae.example/api/v1/account/balance', {
         method: 'POST',
-        body: JSON.stringify({ currency: 'USD' }),
+        body: JSON.stringify({ currency: 'AUD' }),
       }),
       'balance',
       {

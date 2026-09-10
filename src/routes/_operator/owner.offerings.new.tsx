@@ -1,61 +1,106 @@
-import { createFileRoute, useNavigate } from '@tanstack/react-router'
+import { createFileRoute } from '@tanstack/react-router'
 import { useServerFn } from '@tanstack/react-start'
-import { useRef } from 'react'
+import { useReverification } from '@clerk/tanstack-react-start'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 
 import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
-import { AeOwnerOfferingEditor } from '@/components/ae/offerings/AeOwnerOfferings'
-import { emptyOwnerOfferingEditorValue } from '@/components/ae/offerings/AeOwnerOfferings.exports'
-import type { OwnerOfferingEditorValue } from '@/components/ae/offerings/AeOwnerOfferings'
-import { readOwnerOfferingSupplyServer, saveOwnerOfferingServer } from '@/components/ae/offerings/owner-offering.functions'
-import type { OwnerOfferingSupplyReadResult } from '@/components/ae/offerings/owner-offering.functions'
+import { AeSupplySourceNativeStart } from '@/components/ae/supply/AeSupplySourceNativeStart'
+import { readProviderWorkspaceIdentityDetailServer } from '@/components/ae/offerings/provider-workspace.functions'
+import {
+  filterOwnerSupplyAuthorityOptions,
+  previewOwnerSupplySourceServer,
+  publishOwnerSupplySourceServer,
+  saveOwnerSupplySourceDraftServer,
+  readOwnerProviderConnectionsServer,
+  resumeOwnerSupplySourceDraftServer,
+  startOwnerSupplySourceConnectionServer,
+} from '@/modules/capability-supply/supply-funnel.functions'
 import { operatorRouteOptions } from '@/lib/operator/route-options'
+import { z } from 'zod'
 
 export const Route = createFileRoute('/_operator/owner/offerings/new')({
   ...operatorRouteOptions,
-  validateSearch: (search: Record<string, unknown>): Readonly<{ next?: 'supply' }> => search.next === 'supply' ? { next: 'supply' } : {},
-  loader: () => readOwnerOfferingSupplyServer(),
-  head: () => ({ meta: [{ title: 'Add Operation | Agentic Economy' }, { name: 'robots', content: 'noindex' }] }),
+  validateSearch: z.object({
+    connection: z.string().trim().min(1).max(300).optional(),
+    environment: z.enum(['sandbox', 'production']).optional(),
+    draft: z.string().trim().min(1).max(300).optional(),
+  }),
+  loaderDeps: ({ search }) => ({ connectionRef: search.connection, environment: search.environment, draftRef: search.draft }),
+  loader: async ({ deps }) => {
+    const identity = await readProviderWorkspaceIdentityDetailServer()
+    let sourceUnavailable = false
+    let connections: Awaited<ReturnType<typeof readOwnerProviderConnectionsServer>> = []
+    if (identity.kind === 'available') {
+      try { connections = await readOwnerProviderConnectionsServer() } catch { sourceUnavailable = true }
+    }
+    let resume: Awaited<ReturnType<typeof resumeOwnerSupplySourceDraftServer>> = { kind: 'not_found' }
+    try { if (!sourceUnavailable && identity.kind === 'available'
+      && deps.draftRef !== undefined
+      && deps.connectionRef !== undefined) {
+      const connection = connections.find((candidate) => (
+        candidate.connectionRef === deps.connectionRef
+        && candidate.businessId === identity.businessId
+        && candidate.available
+      ))
+      if (connection !== undefined) {
+        resume = await resumeOwnerSupplySourceDraftServer({ data: {
+          businessId: identity.businessId,
+          draftRef: deps.draftRef,
+          connectionRef: connection.connectionRef,
+          ...(deps.environment === undefined ? {} : { environment: deps.environment }),
+        } })
+      }
+    } else if (!sourceUnavailable && identity.kind === 'available' && deps.draftRef !== undefined) {
+      resume = await resumeOwnerSupplySourceDraftServer({ data: {
+        businessId: identity.businessId,
+        draftRef: deps.draftRef,
+        ...(deps.environment === undefined ? {} : { environment: deps.environment }),
+      } })
+    } } catch { sourceUnavailable = true }
+    return { identity, connections, resume, resumeRequested: deps.draftRef !== undefined, sourceUnavailable }
+  },
+  head: () => ({ meta: [{ title: 'Add service | Agentic Economy' }, { name: 'robots', content: 'noindex' }] }),
   component: NewOwnerOfferingRoute,
 })
 
 function NewOwnerOfferingRoute() {
-  const search = Route.useSearch()
-  const result = Route.useLoaderData()
-  const save = useServerFn(saveOwnerOfferingServer)
-  const navigate = useNavigate()
-  const requestKeyRef = useRef<string | undefined>(undefined)
-  const seed = result.kind === 'available' ? readSeed(result) : undefined
+  const { identity, connections, resume, resumeRequested, sourceUnavailable } = Route.useLoaderData()
+  const currentSearch = Route.useSearch()
+  const navigate = Route.useNavigate()
+  const preview = useServerFn(previewOwnerSupplySourceServer)
+  const connect = useServerFn(startOwnerSupplySourceConnectionServer)
+  const publishRequest = useServerFn(publishOwnerSupplySourceServer)
+  const saveDraft = useServerFn(saveOwnerSupplySourceDraftServer)
+  const publish = useReverification(publishRequest)
 
   return (
-    <AeOperatorShell operatorRole="owner" title="Add Operation" description="Describe one tool, its price, and how an agent can call it." currentPath="/owner/offerings" breadcrumbs={[{ label: 'Operations', href: '/owner/offerings' }, { label: 'Add' }]}>
-      {result.kind !== 'available' ? <Alert variant="destructive"><AlertTitle>Operation editor unavailable</AlertTitle><AlertDescription>Supplier access is required before an Operation can be saved.</AlertDescription></Alert> : (
-        <AeOwnerOfferingEditor
-          initialValue={emptyOwnerOfferingEditorValue}
-          draftKey={result.businessId}
-          {...(seed === undefined ? {} : { seed })}
-          onSave={async (value) => {
-            requestKeyRef.current ??= crypto.randomUUID()
-            const saved = await save({ data: { businessId: result.businessId, requestKey: requestKeyRef.current, value } })
-            if (saved.kind === 'saved' && saved.value.offeringRef !== undefined) {
-              void navigate(search.next === 'supply'
-                ? { to: '/owner/supply/$offeringRef', params: { offeringRef: saved.value.offeringRef } }
-                : { to: '/owner/offerings/$offeringRef', params: { offeringRef: saved.value.offeringRef } })
-            }
-            return saved
+    <AeOperatorShell operatorRole="owner" title="Add service" description="Connect the interface you already operate. AE discovers the Tools and validates the one you submit." currentPath="/owner/offerings/new" breadcrumbs={[{ label: 'Tools', href: '/owner/offerings' }, { label: 'Add service' }]}>
+      {identity.kind !== 'available' ? <Alert variant="destructive"><AlertTitle>Provider workspace unavailable</AlertTitle><AlertDescription>AE could not confirm the current Business. Return to Tools and try again.</AlertDescription></Alert> : sourceUnavailable ? (
+        <Alert variant="destructive"><AlertTitle>Saved source unavailable</AlertTitle><AlertDescription>AE could not read the saved source or current connections. Reload before starting or submitting another connection.</AlertDescription></Alert>
+      ) : (<>
+        {resumeRequested && resume.kind !== 'available' ? (
+          <Alert variant="destructive" className="mb-5"><AlertTitle>Saved source could not be resumed</AlertTitle><AlertDescription>The saved source is unavailable or changed. Review it from Add service before starting another connection.</AlertDescription></Alert>
+        ) : null}
+        <AeSupplySourceNativeStart
+          businessRef={identity.businessId}
+          connections={filterOwnerSupplyAuthorityOptions(identity.businessId, connections)}
+          {...(resume.kind === 'available' ? { initial: resume } : {})}
+          onPreview={(source, idempotencyKey) => preview({ data: { businessId: identity.businessId, source, idempotencyKey } })}
+          onConnect={(input) => connect({ data: input })}
+          onSelectCandidate={(input) => saveDraft({ data: input })}
+          onDraftSaved={async (candidateRef, connectionRef) => {
+            await navigate({
+              search: {
+                draft: candidateRef,
+                ...(connectionRef === undefined ? {} : { connection: connectionRef }),
+                ...(currentSearch.environment === undefined ? {} : { environment: currentSearch.environment }),
+              },
+              replace: true,
+            })
           }}
+          onPublish={(input) => publish({ data: input })}
         />
-      )}
+      </>)}
     </AeOperatorShell>
   )
-}
-
-/** Seeds the quick-start category from the supplier's most recent Operation. */
-function readSeed(
-  result: Extract<OwnerOfferingSupplyReadResult, { kind: 'available' }>,
-): Readonly<{ label: string; value: Partial<OwnerOfferingEditorValue> }> | undefined {
-  const latest = result.offerings.toSorted((left, right) => right.updatedAt - left.updatedAt)[0]
-  const category = latest?.revision?.category.trim()
-  if (category === undefined || category.length === 0) return undefined
-  return { label: category, value: { category } }
 }

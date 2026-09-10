@@ -15,23 +15,26 @@ export const Route = createFileRoute('/.well-known/ucp')({
   server: {
     handlers: {
       GET: ({ request }) => handleSiteDiscoveryManifestRequest(request),
-      POST: () => methodNotAllowed(['GET']),
-      PUT: () => methodNotAllowed(['GET']),
-      PATCH: () => methodNotAllowed(['GET']),
-      DELETE: () => methodNotAllowed(['GET']),
-      HEAD: () => methodNotAllowed(['GET']),
-      OPTIONS: () => methodNotAllowed(['GET']),
-      TRACE: () => methodNotAllowed(['GET']),
-      CONNECT: () => methodNotAllowed(['GET']),
+      POST: () => methodNotAllowed(['GET', 'HEAD']),
+      PUT: () => methodNotAllowed(['GET', 'HEAD']),
+      PATCH: () => methodNotAllowed(['GET', 'HEAD']),
+      DELETE: () => methodNotAllowed(['GET', 'HEAD']),
+      HEAD: ({ request }) => handleSiteDiscoveryManifestRequest(request, true),
+      OPTIONS: () => methodNotAllowed(['GET', 'HEAD']),
+      TRACE: () => methodNotAllowed(['GET', 'HEAD']),
+      CONNECT: () => methodNotAllowed(['GET', 'HEAD']),
     },
   },
 })
 
-export function handleSiteDiscoveryManifestRequest(request: Request): Response {
-  return discoveryJsonResponse(
-    projectCompactSiteDiscoveryManifest(buildSiteDiscoveryManifest({
+export function handleSiteDiscoveryManifestRequest(request: Request, head = false): Response {
+  const manifest = buildSiteDiscoveryManifest({
       canonicalBaseUrl: resolveCanonicalBaseUrl(request).baseUrl,
       now: Date.now(),
-    }))
-  )
+    })
+  const body = new URL(request.url).searchParams.get('technical') === '1'
+    ? manifest
+    : projectCompactSiteDiscoveryManifest(manifest)
+  const response = discoveryJsonResponse(body)
+  return head ? new Response(null, { status: response.status, headers: response.headers }) : response
 }

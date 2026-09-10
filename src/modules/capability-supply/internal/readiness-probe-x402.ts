@@ -34,6 +34,7 @@ import {
   type ProbeObservationBase,
   type ResponseMetadata,
 } from "./readiness-probe-shared";
+import { x402ResourceUrlBindsTarget } from "./route-transport-x402-payment";
 
 export const x402ProbeCommand: ProbeCommand = {
   parse(target) {
@@ -110,7 +111,13 @@ async function probeX402Challenge(
     !isRecord(decoded) ||
     decoded.x402Version !== 2 ||
     !isRecord(decoded.resource) ||
-    decoded.resource.url !== targetUrl.href ||
+    typeof decoded.resource.url !== "string" ||
+    !x402ResourceUrlBindsTarget(
+      decoded.resource.url,
+      targetUrl,
+      configuration.method,
+      configuration.query !== undefined,
+    ) ||
     !Array.isArray(decoded.accepts)
   ) {
     await cancelResponseBody(response);

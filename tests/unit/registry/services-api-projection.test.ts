@@ -1,15 +1,15 @@
 import { describe, expect, it } from 'vitest'
 import type { OfferingPrice } from '@/modules/catalog/public'
 
-import type { CatalogOfferingOperationMapEntry } from '@/modules/capability-supply/public'
+import type { CatalogOfferingToolMapEntry } from '@/modules/capability-supply/public'
 import type {
   PublicBusinessCatalogApiV2Page,
   PublicBusinessCatalogApiV2SearchPage,
-  ServiceOperationMap,
+  ServiceToolMap,
 } from '@/modules/registry/public'
 import { projectPublicServicesPage, projectPublicServicesSearchPage } from '@/modules/registry/public'
 
-describe('agentic.market Service mapping', () => {
+describe('catalogue Services API Service mapping', () => {
   it('omits businesses without public offerings while preserving page and search cursors', () => {
     const source = mappingPage()
     const publishedBusiness = source.page[0]!
@@ -52,7 +52,7 @@ describe('agentic.market Service mapping', () => {
     const firstEndpoint = service.endpoints[0]!
     const secondEndpoint = service.endpoints[1]!
 
-    // Exact agentic.market Service core names. AE-only merchandising and
+    // Exact catalogue Services API Service core names. AE-only merchandising and
     // source data stay together under `ae`, never leak into the core.
     expect(Object.keys(service).sort()).toEqual([
       'ae',
@@ -122,8 +122,8 @@ describe('agentic.market Service mapping', () => {
     expect(service).not.toHaveProperty('source')
     expect(service).not.toHaveProperty('offerings')
 
-    // Exact agentic.market Endpoint core names. Legacy AE endpoint fields
-    // (`summary`, `catalogPrice`, `offeringRef`, `operationRef`) are absent at
+    // Exact catalogue Services API Endpoint core names. Legacy AE endpoint fields
+    // (`summary`, `catalogPrice`, `offeringRef`, `toolRef`) are absent at
     // the top level; the linkage belongs under `ae`.
     expect(Object.keys(firstEndpoint).sort()).toEqual([
       'ae',
@@ -164,14 +164,14 @@ describe('agentic.market Service mapping', () => {
     expect(firstEndpoint).not.toHaveProperty('summary')
     expect(firstEndpoint).not.toHaveProperty('catalogPrice')
     expect(firstEndpoint).not.toHaveProperty('offeringRef')
-    expect(firstEndpoint).not.toHaveProperty('operationRef')
+    expect(firstEndpoint).not.toHaveProperty('toolRef')
     expect(firstEndpoint).not.toHaveProperty('name')
 
     // NEGATIVE: endpoints[] must not inline the full execution schema.
     expect(firstEndpoint).not.toHaveProperty('inputJsonSchema')
     expect(firstEndpoint).not.toHaveProperty('outputJsonSchema')
-    // NEGATIVE: a field with no source (operationRef) stays absent, not fabricated.
-    expect(firstEndpoint.ae).not.toHaveProperty('operationRef')
+    // NEGATIVE: a field with no source (toolRef) stays absent, not fabricated.
+    expect(firstEndpoint.ae).not.toHaveProperty('toolRef')
   })
 
   it('derives integrationType 1P only from linked provider-owned supply', () => {
@@ -181,9 +181,9 @@ describe('agentic.market Service mapping', () => {
     expect(observedService.endpoints[0]).not.toHaveProperty('providerName')
   })
 
-  it('enriches a linked endpoint with operationRef+parameters+pricing and keeps an unlinked one absent (W1)', () => {
-    const operationMap = linkedOperationMap('offering:api-exa-ai:search')
-    const result = projectPublicServicesPage(mappingPage(), operationMap)
+  it('enriches a linked endpoint with toolRef+parameters+pricing and keeps an unlinked one absent (W1)', () => {
+    const toolMap = linkedToolMap('offering:api-exa-ai:search')
+    const result = projectPublicServicesPage(mappingPage(), toolMap)
 
     const service = result.services[0]!
     const searchEndpoint = service.endpoints[0]!
@@ -202,12 +202,12 @@ describe('agentic.market Service mapping', () => {
       'url',
     ])
     expect(searchEndpoint.ae).toMatchObject({
-      operationRef: 'operation:v1:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
+      toolRef: 'operation:v1:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
       offeringRef: 'offering:api-exa-ai:search',
       provenance: 'business_declared',
       access: 'external',
       authentication: { kind: 'ae_api_key' },
-      execution: 'operation_call',
+      execution: 'tool_call',
       authorityMode: 'ae_curated_external',
       sourceKind: 'openapi_http',
       settlementSupport: 'catalog_only',
@@ -218,12 +218,12 @@ describe('agentic.market Service mapping', () => {
       'authorityMode',
       'execution',
       'offeringRef',
-      'operationRef',
       'provenance',
       'settlementSupport',
       'sourceKind',
+      'toolRef',
     ])
-    for (const legacyKey of ['summary', 'catalogPrice', 'offeringRef', 'operationRef']) {
+    for (const legacyKey of ['summary', 'catalogPrice', 'offeringRef', 'toolRef']) {
       expect(searchEndpoint).not.toHaveProperty(legacyKey)
     }
     expect(searchEndpoint.parameters).toEqual([
@@ -233,20 +233,20 @@ describe('agentic.market Service mapping', () => {
     expect(searchEndpoint.pricing).not.toHaveProperty('network')
 
     // The contents offering is NOT in the map -> stays absent, never fabricated.
-    expect(contentsEndpoint.ae).not.toHaveProperty('operationRef')
+    expect(contentsEndpoint.ae).not.toHaveProperty('toolRef')
     expect(contentsEndpoint).not.toHaveProperty('pricing')
     expect(contentsEndpoint.parameters).toEqual([])
     expect(contentsEndpoint.tags).toEqual(['search'])
     expect(contentsEndpoint.quality).toBeNull()
     // Unmapped run still yields plain endpoints (fully additive).
     const plainEndpoint = projectPublicServicesPage(mappingPage()).services[0]!.endpoints[0]!
-    expect(plainEndpoint.ae).not.toHaveProperty('operationRef')
+    expect(plainEndpoint.ae).not.toHaveProperty('toolRef')
     expect(plainEndpoint).not.toHaveProperty('pricing')
   })
  
   it('preserves Agent Plugin MCP provenance in the public endpoint projection', () => {
-    const linked = linkedOperationMap('offering:api-exa-ai:search')
-    const pluginMap: ServiceOperationMap = {
+    const linked = linkedToolMap('offering:api-exa-ai:search')
+    const pluginMap: ServiceToolMap = {
       ...linked,
       'offering:api-exa-ai:search': linked['offering:api-exa-ai:search']!.map((entry) => ({
         ...entry,
@@ -257,9 +257,9 @@ describe('agentic.market Service mapping', () => {
     expect(endpoint.ae).toMatchObject({ sourceKind: 'agent_plugin_mcp' })
   })
 
-  it('refuses stale or ambiguous operation linkage', () => {
-    const current = linkedOperationMap('offering:api-exa-ai:search')
-    const stale: ServiceOperationMap = {
+  it('refuses stale or ambiguous Tool linkage', () => {
+    const current = linkedToolMap('offering:api-exa-ai:search')
+    const stale: ServiceToolMap = {
       ...current,
       'offering:api-exa-ai:search': [{
         ...current['offering:api-exa-ai:search']![0]!,
@@ -268,7 +268,7 @@ describe('agentic.market Service mapping', () => {
     }
     expect(projectPublicServicesPage(mappingPage(), stale).services[0]!.enriched).toBe(false)
 
-    const ambiguous: ServiceOperationMap = {
+    const ambiguous: ServiceToolMap = {
       'offering:api-exa-ai:search': [
         ...current['offering:api-exa-ai:search']!,
         ...current['offering:api-exa-ai:search']!,
@@ -282,23 +282,23 @@ describe('agentic.market Service mapping', () => {
       authentication: { kind: 'unknown' },
       settlementSupport: 'unpriced',
     })
-    expect(ambiguousEndpoint.ae).not.toHaveProperty('operationRef')
+    expect(ambiguousEndpoint.ae).not.toHaveProperty('toolRef')
     expect(ambiguousEndpoint).not.toHaveProperty('pricing')
     expect(JSON.stringify(ambiguousEndpoint)).not.toMatch(/credentialRef|credentialValue|route/u)
 
     const additionalPath = projectPublicServicesPage(
       mappingPageWithAdditionalPath(),
-      linkedOperationMap('offering:api-exa-ai:search'),
+      linkedToolMap('offering:api-exa-ai:search'),
     ).services[0]!
     expect(additionalPath.enriched).toBe(true)
-    expect(additionalPath.endpoints[0]!.ae.operationRef).toBeDefined()
-    expect(additionalPath.endpoints[1]!.ae).not.toHaveProperty('operationRef')
+    expect(additionalPath.endpoints[0]!.ae.toolRef).toBeDefined()
+    expect(additionalPath.endpoints[1]!.ae).not.toHaveProperty('toolRef')
   })
 
-  it('matches two same-offering paths to their distinct operation entries', () => {
-    const first = linkedOperationEntry('offering:api-exa-ai:search')
-    const secondOperationRef = 'operation:v1:fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210' as CatalogOfferingOperationMapEntry['operationRef']
-    const operationMap: ServiceOperationMap = {
+  it('matches two same-offering paths to their distinct Tool entries', () => {
+    const first = linkedToolEntry('offering:api-exa-ai:search')
+    const secondToolRef = 'operation:v1:fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210' as CatalogOfferingToolMapEntry['toolRef']
+    const toolMap: ServiceToolMap = {
       'offering:api-exa-ai:search': [
         first,
         {
@@ -307,62 +307,62 @@ describe('agentic.market Service mapping', () => {
           accessPathSourceHash: 'source:search-mirror-path',
           endpointUrl: 'https://mirror.example/search',
           method: 'POST',
-          operationRef: secondOperationRef,
+          toolRef: secondToolRef,
         },
       ],
     }
-    const endpoints = projectPublicServicesPage(mappingPageWithAdditionalPath(), operationMap).services[0]!.endpoints
+    const endpoints = projectPublicServicesPage(mappingPageWithAdditionalPath(), toolMap).services[0]!.endpoints
 
-    expect(endpoints.map((endpoint) => endpoint.ae.operationRef)).toEqual([
-      first.operationRef,
-      secondOperationRef,
+    expect(endpoints.map((endpoint) => endpoint.ae.toolRef)).toEqual([
+      first.toolRef,
+      secondToolRef,
       undefined,
     ])
     expect(JSON.stringify(endpoints)).not.toMatch(/credentialRef|credentialValue|env:/)
   })
 
-  it('uses the canonical operation_call execution enum only for linked ae_api_key operations', () => {
-    const entry = linkedOperationEntry('offering:api-exa-ai:search')
+  it('uses the canonical tool_call execution enum only for linked ae_api_key Tools', () => {
+    const entry = linkedToolEntry('offering:api-exa-ai:search')
     const endpoint = projectPublicServicesPage(mappingPage(), {
       'offering:api-exa-ai:search': [{ ...entry }],
     }).services[0]!.endpoints[0]!
 
     expect(endpoint.ae).toMatchObject({
       access: 'external',
-      execution: 'operation_call',
-      operationRef: entry.operationRef,
+      execution: 'tool_call',
+      toolRef: entry.toolRef,
     })
   })
 
   it('does not claim executable settlement for a non-routeable operation', () => {
-    const entry = linkedOperationEntry('offering:api-exa-ai:search', {
+    const entry = linkedToolEntry('offering:api-exa-ai:search', {
       network: 'eip155:84532',
       asset: '0x0000000000000000000000000000000000000001',
       currency: 'USDC',
       routeAmountExponent: 2,
       assetAmountExponent: 6,
     })
-    const operationMap: ServiceOperationMap = {
+    const toolMap: ServiceToolMap = {
       'offering:api-exa-ai:search': [{ ...entry, routeable: false }],
     }
-    const endpoint = projectPublicServicesPage(mappingPage(), operationMap).services[0]!.endpoints[0]!
+    const endpoint = projectPublicServicesPage(mappingPage(), toolMap).services[0]!.endpoints[0]!
     expect(endpoint.ae.settlementSupport).toBe('catalog_only')
     expect(endpoint.ae).toMatchObject({ access: 'external', execution: 'catalog_only' })
   })
 
 })
-describe('agentic.market payment network projection', () => {
+describe('catalogue Services API payment network projection', () => {
   it('deduplicates the payment network shared by two linked endpoints', () => {
     const network = 'eip155:84532'
-    const operationMap: ServiceOperationMap = {
-      'offering:api-exa-ai:search': [linkedOperationEntry('offering:api-exa-ai:search', {
+    const toolMap: ServiceToolMap = {
+      'offering:api-exa-ai:search': [linkedToolEntry('offering:api-exa-ai:search', {
         network,
         asset: '0x0000000000000000000000000000000000000001',
         currency: 'USDC',
         routeAmountExponent: 2,
         assetAmountExponent: 6,
       })],
-      'offering:api-exa-ai:contents': [linkedOperationEntry('offering:api-exa-ai:contents', {
+      'offering:api-exa-ai:contents': [linkedToolEntry('offering:api-exa-ai:contents', {
         network,
         asset: '0x0000000000000000000000000000000000000001',
         currency: 'USDC',
@@ -371,7 +371,7 @@ describe('agentic.market payment network projection', () => {
       })],
     }
 
-    const service = projectPublicServicesPage(mappingPage(), operationMap).services[0]!
+    const service = projectPublicServicesPage(mappingPage(), toolMap).services[0]!
 
     expect(service.networks).toEqual([network])
     expect(service.endpoints.map((endpoint) => endpoint.pricing?.network)).toEqual([network, network])
@@ -380,15 +380,15 @@ describe('agentic.market payment network projection', () => {
   })
 
   it('sorts distinct CAIP-2 networks and never substitutes the AE registry partition', () => {
-    const operationMap: ServiceOperationMap = {
-      'offering:api-exa-ai:search': [linkedOperationEntry('offering:api-exa-ai:search', {
+    const toolMap: ServiceToolMap = {
+      'offering:api-exa-ai:search': [linkedToolEntry('offering:api-exa-ai:search', {
         network: 'solana:mainnet',
         asset: 'So11111111111111111111111111111111111111112',
         currency: 'USDC',
         routeAmountExponent: 2,
         assetAmountExponent: 6,
       })],
-      'offering:api-exa-ai:contents': [linkedOperationEntry('offering:api-exa-ai:contents', {
+      'offering:api-exa-ai:contents': [linkedToolEntry('offering:api-exa-ai:contents', {
         network: 'eip155:8453',
         asset: '0x0000000000000000000000000000000000000001',
         currency: 'USDC',
@@ -397,7 +397,7 @@ describe('agentic.market payment network projection', () => {
       })],
     }
 
-    const service = projectPublicServicesPage(mappingPage(), operationMap).services[0]!
+    const service = projectPublicServicesPage(mappingPage(), toolMap).services[0]!
 
     expect(service.networks).toEqual(['eip155:8453', 'solana:mainnet'])
     expect(service.networks).not.toContain('ae:public')
@@ -408,8 +408,8 @@ describe('agentic.market payment network projection', () => {
   })
 
   it('excludes keyless and unlinked endpoints from payment networks', () => {
-    const operationMap = linkedOperationMap('offering:api-exa-ai:search')
-    const service = projectPublicServicesPage(mappingPage(), operationMap).services[0]!
+    const toolMap = linkedToolMap('offering:api-exa-ai:search')
+    const service = projectPublicServicesPage(mappingPage(), toolMap).services[0]!
     const keylessEndpoint = service.endpoints[0]!
     const unlinkedEndpoint = service.endpoints[1]!
 
@@ -422,8 +422,8 @@ describe('agentic.market payment network projection', () => {
   })
 
   it('omits pricing and network on a payment-price currency mismatch', () => {
-    const operationMap: ServiceOperationMap = {
-      'offering:api-exa-ai:search': [linkedOperationEntry('offering:api-exa-ai:search', {
+    const toolMap: ServiceToolMap = {
+      'offering:api-exa-ai:search': [linkedToolEntry('offering:api-exa-ai:search', {
         network: 'eip155:84532',
         asset: '0x0000000000000000000000000000000000000001',
         currency: 'USD',
@@ -432,12 +432,12 @@ describe('agentic.market payment network projection', () => {
       })],
     }
 
-    const endpoint = projectPublicServicesPage(mappingPage(), operationMap).services[0]!.endpoints[0]!
+    const endpoint = projectPublicServicesPage(mappingPage(), toolMap).services[0]!.endpoints[0]!
 
     expect(endpoint).not.toHaveProperty('pricing')
     expect(endpoint.pricing).toBeUndefined()
     expect(endpoint.ae).toMatchObject({
-      operationRef: expect.any(String),
+      toolRef: expect.any(String),
       settlementSupport: 'catalog_only',
     })
     expect(endpoint.ae).not.toHaveProperty('networkId')
@@ -540,7 +540,7 @@ describe('public services API projection', () => {
 
 })
 
-describe('agentic.market merchandising fields (CAVEAT 2)', () => {
+describe('catalogue Services API merchandising fields (CAVEAT 2)', () => {
   it('derives provider identity and domain from programmable-provider context', () => {
     const service = projectPublicServicesPage(mappingPage()).services[0]!
 
@@ -592,22 +592,22 @@ describe('Service price summary honesty', () => {
 
 describe('sub-cent catalog price representation (CAVEAT 3)', () => {
   it('maps a sub-cent catalog price while preserving the exact Service priceSummary', () => {
-    const map: ServiceOperationMap = {
+    const map: ServiceToolMap = {
       'offering:api-exa-ai:search': [{
-        ...linkedOperationEntry('offering:api-exa-ai:search'),
+        ...linkedToolEntry('offering:api-exa-ai:search'),
         catalogPrice: { scheme: 'exact', amount: '0.007', currency: 'USDC' },
       }],
     }
     const service = projectPublicServicesPage(mappingPage(), map).services[0]!
 
-    // Catalog pricing mirrors agentic.market's pricing shape; subCent is AE
+    // Catalog pricing mirrors catalogue Services API's pricing shape; subCent is AE
     // execution metadata, not a leaked core field.
     const endpoint = service.endpoints[0]!
     expect(endpoint.pricing).toEqual({ scheme: 'exact', amount: '0.007', currency: 'USDC' })
     expect(endpoint.pricing).not.toHaveProperty('network')
     expect(endpoint.pricing).not.toHaveProperty('subCent')
     expect(endpoint.ae.settlementSupport).toBe('catalog_only')
-    expect(endpoint.ae.operationRef).toBeDefined()
+    expect(endpoint.ae.toolRef).toBeDefined()
     expect(service.enriched).toBe(true)
 
     // An admitted endpoint price is the source of the Service aggregate; the
@@ -625,17 +625,17 @@ describe('sub-cent catalog price representation (CAVEAT 3)', () => {
   })
 
   it('aggregates endpoint prices exactly at a common exponent', () => {
-    const operationMap: ServiceOperationMap = {
+    const toolMap: ServiceToolMap = {
       'offering:api-exa-ai:search': [{
-        ...linkedOperationEntry('offering:api-exa-ai:search'),
+        ...linkedToolEntry('offering:api-exa-ai:search'),
         catalogPrice: { scheme: 'exact', amount: '0.001', currency: 'USDC' },
       }],
       'offering:api-exa-ai:contents': [{
-        ...linkedOperationEntry('offering:api-exa-ai:contents'),
+        ...linkedToolEntry('offering:api-exa-ai:contents'),
         catalogPrice: { scheme: 'exact', amount: '0.007', currency: 'USDC' },
       }],
     }
-    const service = projectPublicServicesPage(mappingPage(), operationMap).services[0]!
+    const service = projectPublicServicesPage(mappingPage(), toolMap).services[0]!
 
     expect(service.priceSummary).toEqual({
       currency: 'USDC',
@@ -653,14 +653,14 @@ describe('sub-cent catalog price representation (CAVEAT 3)', () => {
       ...source,
       page: source.page.map((business) => ({ ...business, offerings: [business.offerings[0]!] })),
     }
-    const operationMap: ServiceOperationMap = {
+    const toolMap: ServiceToolMap = {
       'offering:api-exa-ai:search': [{
-        ...linkedOperationEntry('offering:api-exa-ai:search'),
+        ...linkedToolEntry('offering:api-exa-ai:search'),
         authorityMode: 'provider_owned',
         authentication: { kind: 'platform_credential', scheme: 'api_key', in: 'header', name: 'X-API-Key' },
       }],
     }
-    const service = projectPublicServicesPage(oneOfferingPage, operationMap).services[0]!
+    const service = projectPublicServicesPage(oneOfferingPage, toolMap).services[0]!
     const endpoint = service.endpoints[0]!
 
     expect(service.integrationType).toBe('1P')
@@ -672,13 +672,13 @@ describe('sub-cent catalog price representation (CAVEAT 3)', () => {
       authorityMode: 'provider_owned',
       sourceKind: 'openapi_http',
     })
-    const operationCallService = projectPublicServicesPage(oneOfferingPage, {
+    const toolCallService = projectPublicServicesPage(oneOfferingPage, {
       'offering:api-exa-ai:search': [{
-        ...linkedOperationEntry('offering:api-exa-ai:search'),
+        ...linkedToolEntry('offering:api-exa-ai:search'),
         authorityMode: 'provider_owned',
       }],
     }).services[0]!
-    expect(operationCallService.endpoints[0]!.ae.execution).toBe('operation_call')
+    expect(toolCallService.endpoints[0]!.ae.execution).toBe('tool_call')
     expect(JSON.stringify(endpoint)).not.toMatch(/credentialRef|secret|env/i)
 
     const unlinked = projectPublicServicesPage(oneOfferingPage).services[0]!
@@ -707,8 +707,8 @@ describe('sub-cent catalog price representation (CAVEAT 3)', () => {
   })
 
   it('emits executable settlement without a sub-cent marker when the decimal equals the integer-minor amount', () => {
-    const operationMap: ServiceOperationMap = {
-      'offering:api-exa-ai:search': [linkedOperationEntry('offering:api-exa-ai:search', {
+    const toolMap: ServiceToolMap = {
+      'offering:api-exa-ai:search': [linkedToolEntry('offering:api-exa-ai:search', {
         network: 'eip155:84532',
         asset: '0x0000000000000000000000000000000000000001',
         currency: 'USDC',
@@ -716,7 +716,7 @@ describe('sub-cent catalog price representation (CAVEAT 3)', () => {
         assetAmountExponent: 6,
       })],
     }
-    const service = projectPublicServicesPage(mappingPage(), operationMap).services[0]!
+    const service = projectPublicServicesPage(mappingPage(), toolMap).services[0]!
     const endpoint = service.endpoints[0]!
     expect(endpoint.pricing).toEqual({
       scheme: 'exact',
@@ -928,14 +928,14 @@ function page(): PublicBusinessCatalogApiV2Page {
   }
 }
 
-function linkedOperationMap(offeringRef: string): ServiceOperationMap {
-  return { [offeringRef]: [linkedOperationEntry(offeringRef)] }
+function linkedToolMap(offeringRef: string): ServiceToolMap {
+  return { [offeringRef]: [linkedToolEntry(offeringRef)] }
 }
 
-function linkedOperationEntry(
+function linkedToolEntry(
   offeringRef: string,
-  payment?: NonNullable<CatalogOfferingOperationMapEntry['payment']>,
-): CatalogOfferingOperationMapEntry {
+  payment?: NonNullable<CatalogOfferingToolMapEntry['payment']>,
+): CatalogOfferingToolMapEntry {
   const contents = offeringRef.endsWith(':contents')
   return {
     offeringRef,
@@ -950,7 +950,7 @@ function linkedOperationEntry(
     authentication: payment === undefined ? { kind: 'ae_api_key' } : { kind: 'x402' },
     routeable: true,
     readiness: { observedAt: 1_700_000_000_001 },
-    operationRef: 'operation:v1:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef' as CatalogOfferingOperationMapEntry['operationRef'],
+    toolRef: 'operation:v1:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef' as CatalogOfferingToolMapEntry['toolRef'],
     parameters: [{ group: 'body', name: 'query', type: 'string', description: 'Search query', required: true }],
     catalogPrice: { scheme: 'exact', amount: '0.01', currency: 'USDC' },
     ...(payment === undefined ? {} : { payment }),

@@ -40,7 +40,14 @@ import {
 } from './capabilitySupplyCommands'
 import type { Id } from './_generated/dataModel'
 import type { MutationCtx, QueryCtx } from './_generated/server'
-import { resolveBusinessActor } from './authz'
+import { internal } from './_generated/api'
+import { resolveAdminAuthority, resolveBusinessActor } from './authz'
+import { clerkConsequenceProofValue } from './lib/consequenceProof'
+import { admitAgentPublicationConsequence } from './lib/agentPublicationConsequence'
+import { admitInteractiveOwnerConsequence } from './lib/ownerConsequence'
+import { providerRouteabilityIsFrozen } from './lib/providerOffboardingFreeze'
+import { isNativeSupplySource, nativeSubmissionBusiness, nativeSubmissionPorts } from './capabilitySupplyNativeAdmission'
+import { upsertProviderToolIdentity } from './capabilityProviderToolProjection'
 import {
   authorityValue,
   cancellationValue,
@@ -57,6 +64,123 @@ import {
   publicationLifecycleValue,
   rebuildCapabilityOriginSupplyProjection,
 } from './capabilitySupplyShared'
+
+export const verifyCapabilitySourceAuthorityArgs = {
+  publicationRef: v.string(),
+  expectedRevision: v.number(),
+  expectedSourceDigest: v.string(),
+  evidenceRefs: v.array(v.string()),
+  operationKey: v.string(),
+  correlationId: v.string(),
+  ...sourceWriteArgs,
+} as const
+
+export const verifyCapabilitySourceAuthorityResultValue = v.union(
+  v.object({
+    kind: v.union(v.literal('verified'), v.literal('replayed')),
+    publicationRef: v.string(),
+    revision: v.number(),
+    toolRef: v.string(),
+    sourceAuthorityState: v.literal('verified'),
+  }),
+  v.object({
+    kind: v.literal('refused'),
+    reason: v.union(
+      v.literal('authorization_denied'),
+      v.literal('publication_not_found'),
+      v.literal('revision_changed'),
+      v.literal('source_changed'),
+      v.literal('evidence_invalid'),
+    ),
+  }),
+)
+
+export async function verifyCapabilitySourceAuthorityHandler(
+  ctx: MutationCtx,
+  args: Readonly<{
+    publicationRef: string
+    expectedRevision: number
+    expectedSourceDigest: string
+    evidenceRefs: string[]
+    operationKey: string
+    correlationId: string
+    sourceWrite?: unknown
+    sourceWriteRequest?: unknown
+  }>,
+) {
+  const sourceWrite = await requireSourceWrite(ctx, args, 'admin_operator')
+  if (sourceWrite.kind === 'rejected') {
+    return { kind: 'refused' as const, reason: 'authorization_denied' as const }
+  }
+  const admin = await resolveAdminAuthority(ctx, 'register_capability_supply')
+  if (admin.kind !== 'allowed') {
+    return { kind: 'refused' as const, reason: 'authorization_denied' as const }
+  }
+  if (!validEvidenceRefs(args.evidenceRefs) || args.evidenceRefs.length === 0) {
+    return { kind: 'refused' as const, reason: 'evidence_invalid' as const }
+  }
+  const publication = await ctx.db.query('capabilityPublications')
+    .withIndex('by_publicationRef_and_revision', (query) => query
+      .eq('publicationRef', args.publicationRef)
+      .eq('revision', args.expectedRevision))
+    .unique()
+  if (publication === null || publication.disposition !== 'current') {
+    return { kind: 'refused' as const, reason: 'publication_not_found' as const }
+  }
+  if (publication.revision !== args.expectedRevision) {
+    return { kind: 'refused' as const, reason: 'revision_changed' as const }
+  }
+  if (publication.sourceDigest !== args.expectedSourceDigest) {
+    return { kind: 'refused' as const, reason: 'source_changed' as const }
+  }
+  if (publication.sourceAuthorityState === 'verified') {
+    return {
+      kind: 'replayed' as const,
+      publicationRef: publication.publicationRef,
+      revision: publication.revision,
+      toolRef: publication.toolRef,
+      sourceAuthorityState: 'verified' as const,
+    }
+  }
+  const now = Date.now()
+  const authorityEvidenceRefs = [...new Set([
+    ...(publication.registrationEvidenceRefs ?? []),
+    ...args.evidenceRefs,
+  ])].sort()
+  await ctx.db.patch(publication._id, {
+    sourceAuthorityState: 'verified',
+    registrationEvidenceRefs: authorityEvidenceRefs,
+    updatedAt: now,
+  })
+  const admissionCase = await ctx.db.query('capabilitySupplyAdmissionCases')
+    .withIndex('by_publicationRef_and_revision', (query) => query
+      .eq('publicationRef', publication.publicationRef)
+      .eq('publicationRevision', publication.revision))
+    .unique()
+  if (admissionCase !== null) {
+    await ctx.db.patch(admissionCase._id, {
+      sourceAuthorityState: 'verified',
+      state: 'under_review',
+      terminalDecision: 'pending',
+      blockerRefs: [],
+      evidenceRefs: [...new Set([...admissionCase.evidenceRefs, ...args.evidenceRefs])].sort(),
+      reviewStartedAt: admissionCase.reviewStartedAt ?? now,
+      completedAt: undefined,
+      updatedAt: now,
+    })
+  }
+  await ctx.scheduler.runAfter(0, internal.capabilitySupplyReadiness.probe, {
+    publicationRef: publication.publicationRef,
+    expectedRevision: publication.revision,
+  })
+  return {
+    kind: 'verified' as const,
+    publicationRef: publication.publicationRef,
+    revision: publication.revision,
+    toolRef: publication.toolRef,
+    sourceAuthorityState: 'verified' as const,
+  }
+}
 
 const adapterConfigScalarValue = v.union(
   v.string(),
@@ -107,6 +231,10 @@ export const preparedPublicationMaterialValue = v.object({
   sourceDescriptorJson: v.string(),
   sourceRevision: v.string(),
   sourceDigest: v.string(),
+  sourceRouteRef: v.string(),
+  sourceAuthorityState: v.optional(
+    v.union(v.literal('verified'), v.literal('review_required')),
+  ),
   documentJson: v.string(),
   offering: capabilityPublicationOfferingValue,
   binding: capabilityPublicationBindingValue,
@@ -116,13 +244,20 @@ export const preparedPublicationMaterialValue = v.object({
 })
 const preparedPublicationRefusalValue = v.union(
   v.literal('authorization_denied'),
+  v.literal('authority_mismatch'),
+  v.literal('reauthentication_required'),
+  v.literal('proof_stale'),
+  v.literal('proof_replayed'),
+  v.literal('command_changed'),
+  v.literal('rate_limited'),
+  v.literal('security_control_unavailable'),
   v.literal('registration_context_invalid'),
   v.literal('source_invalid'),
   v.literal('source_too_large'),
   v.literal('source_too_deep'),
   v.literal('source_version_unsupported'),
   v.literal('selector_invalid'),
-  v.literal('operation_not_found'),
+  v.literal('tool_not_found'),
   v.literal('schema_missing'),
   v.literal('schema_profile_unsupported'),
   v.literal('openapi_query_parameter_definition_unsupported'),
@@ -166,6 +301,7 @@ const preparedPublicationRefusalValue = v.union(
   v.literal('operation_key_conflict'),
   v.literal('registration_changed'),
   v.literal('connection_authority_stale'),
+  v.literal('source_route_conflict'),
 )
 export const preparedPublicationResultValue = v.union(
   v.object({
@@ -173,7 +309,7 @@ export const preparedPublicationResultValue = v.union(
     operationId: v.optional(v.string()),
     publicationRef: v.string(),
     publicationRevision: v.number(),
-    operationRef: v.string(),
+    toolRef: v.string(),
     contractRef: contractRefValue,
     offeringId: v.string(),
     bindingId: v.string(),
@@ -218,7 +354,7 @@ function convexPreparedPublicationResult(
       : { operationId: result.operationId }),
     publicationRef: result.publicationRef,
     publicationRevision: result.publicationRevision,
-    operationRef: result.operationRef,
+    toolRef: result.toolRef,
     contractRef: result.contractRef,
     offeringId: result.offeringId,
     bindingId: result.bindingId,
@@ -237,13 +373,117 @@ function convexPreparedPublicationResult(
   }
 }
 
+async function recordSupplyAdmissionCase(
+  ctx: MutationCtx,
+  args: Readonly<{
+    businessId: Id<'businesses'>
+    operationKey: string
+    correlationId: string
+    evidenceRefs: readonly string[]
+    prepared: Infer<typeof preparedPublicationMaterialValue>
+  }>,
+  result: Exclude<PublishPreparedCapabilityCommandResult, { kind: 'refused' }>,
+  now: number,
+): Promise<void> {
+  const existing = await ctx.db.query('capabilitySupplyAdmissionCases')
+    .withIndex('by_publicationRef_and_revision', (query) => (
+      query.eq('publicationRef', result.publicationRef)
+        .eq('publicationRevision', result.publicationRevision)
+    ))
+    .unique()
+  if (existing !== null) return
+
+  const business = await ctx.db.get(args.businessId)
+  if (business === null) throw new Error('capability_supply_admission_business_missing')
+  const connectionAuthority = result.kind === 'replayed'
+    ? (await ctx.db.query('capabilityPublications')
+        .withIndex('by_publicationRef_and_revision', (query) => (
+          query.eq('publicationRef', result.publicationRef)
+            .eq('revision', result.publicationRevision)
+        ))
+        .unique())?.connectionAuthority
+    : undefined
+  const providerRef = connectionAuthority?.providerRef
+    ?? (args.prepared.binding.authority.kind === 'provider_connection'
+      ? args.prepared.binding.authority.providerRef
+      : String(args.businessId))
+  const caseRef = canonicalDigest({
+    kind: 'capability-supply-admission-case:v1',
+    publicationRef: result.publicationRef,
+    publicationRevision: result.publicationRevision,
+  })
+  const commandDigest = canonicalDigest({
+    kind: 'capability-supply-admission-command:v1',
+    operationKey: args.operationKey,
+    correlationId: args.correlationId,
+    businessId: String(args.businessId),
+    toolRef: result.toolRef,
+    publicationRef: result.publicationRef,
+    publicationRevision: result.publicationRevision,
+    sourceDigest: result.sourceDigest,
+    sourceRevision: result.sourceRevision,
+    sourceRouteRef: args.prepared.sourceRouteRef,
+  })
+  await ctx.db.insert('capabilitySupplyAdmissionCases', {
+    caseRef,
+    commandRef: args.operationKey,
+    commandDigest,
+    owningAccountRef: business.owningAccountRef,
+    businessId: args.businessId,
+    providerRef,
+    toolRef: result.toolRef,
+    toolVersion: result.publicationRevision,
+    publicationRef: result.publicationRef,
+    publicationRevision: result.publicationRevision,
+    sourceKind: result.sourceKind,
+    sourceDigest: result.sourceDigest,
+    sourceRevision: result.sourceRevision,
+    sourceRouteRef: args.prepared.sourceRouteRef,
+    ...(args.prepared.sourceAuthorityState === undefined
+      ? {}
+      : { sourceAuthorityState: args.prepared.sourceAuthorityState }),
+    contractDigest: result.contractRef.contractDigest,
+    ...(connectionAuthority === undefined
+      ? {}
+      : {
+          connectionRef: connectionAuthority.connectionRef,
+          authorityDigest: connectionAuthority.authorityDigest,
+        }),
+    scheduledReadbackRefs: [
+      `capability-readiness:${result.publicationRef}:${result.publicationRevision}`,
+    ],
+    state: 'submitted',
+    terminalDecision: 'pending',
+    blockerRefs: [],
+    evidenceRefs: [...args.evidenceRefs],
+    submittedAt: now,
+    updatedAt: now,
+  })
+  const catalogOrigin = args.prepared.offering.origin?.kind === 'catalog_offering'
+    ? args.prepared.offering.origin
+    : undefined
+  await upsertProviderToolIdentity(ctx, {
+    businessId: args.businessId,
+    providerRef,
+    toolRef: result.toolRef,
+    offeringRef: catalogOrigin?.offeringRef ?? result.offeringId,
+    offeringRevision: catalogOrigin?.offeringRevision ?? result.publicationRevision,
+    publicationRef: result.publicationRef,
+    publicationRevision: result.publicationRevision,
+    offeringId: result.offeringId,
+    bindingId: result.bindingId,
+    updatedAt: now,
+  })
+}
+
 export const publishPreparedCapabilityArgs = {
   businessId: v.id('businesses'),
   offeringRef: v.string(),
   revision: v.number(),
   sourceHash: v.string(),
-  runtimeEnvironment: v.literal('production'),
+  runtimeEnvironment: v.union(v.literal('sandbox'), v.literal('production')),
   prepared: preparedPublicationMaterialValue,
+  proof: v.optional(clerkConsequenceProofValue),
   ...contextFields,
   agentPrincipal: v.optional(agentAccessPrincipalValue),
   ...sourceWriteArgs,
@@ -256,12 +496,12 @@ export function publicationPorts(ctx: MutationCtx) {
   const publicationCommandPorts = capabilitySupplyPublicationPorts(ctx, {
     registerOffering: (registration, now) =>
       registerCapabilityOffering(ctx.db, registration, now),
-    registerBinding: (registration, now, expectedOperationRef) =>
+    registerBinding: (registration, now, expectedToolRef) =>
       registerCapabilityTransportBinding(
         ctx.db,
         registration,
         now,
-        expectedOperationRef,
+        expectedToolRef,
       ),
     setEligibility: (eligibility, now) =>
       setCapabilitySupplyEligibility(ctx.db, eligibility, now),
@@ -303,8 +543,9 @@ export async function publishPreparedCapabilityHandler(
     offeringRef: string
     revision: number
     sourceHash: string
-    runtimeEnvironment: 'production'
+    runtimeEnvironment: 'sandbox' | 'production'
     prepared: Infer<typeof preparedPublicationMaterialValue>
+    proof?: Infer<typeof clerkConsequenceProofValue>
     operationKey: string
     correlationId: string
     reasonCode: string
@@ -327,9 +568,14 @@ export async function publishPreparedCapabilityHandler(
   const ownerActor = args.agentPrincipal === undefined
     ? await resolveBusinessActor(ctx)
     : undefined
+  const nativeSubmission = isNativeSupplySource(args.prepared.sourceKind)
+    && args.prepared.sourceAuthorityState !== undefined
+    && args.prepared.offering.origin?.kind === 'catalog_offering'
   const businessAuthorized = args.agentPrincipal === undefined
     ? ownerActor?.kind === 'authenticated_owner'
-      && await ownsPublishedBusiness(ctx, args.businessId)
+      && (nativeSubmission
+        ? (await nativeSubmissionBusiness(ctx, args.businessId))?.owningAccountRef === ownerActor.canonicalAccountRef
+        : await ownsPublishedBusiness(ctx, args.businessId))
     : agentAdmission?.kind === 'allowed'
       && await ownsPublishedBusinessForOwnerId(ctx, args.businessId, agentAdmission.ownerId)
   if (!validRegistrationContext(args) || !businessAuthorized) {
@@ -337,6 +583,9 @@ export async function publishPreparedCapabilityHandler(
       kind: 'refused' as const,
       reason: 'authorization_denied' as const,
     }
+  }
+  if (await providerRouteabilityIsFrozen(ctx, args.businessId)) {
+    return { kind: 'refused' as const, reason: 'authorization_denied' as const }
   }
   const [catalogOffering, catalogRevision] = await Promise.all([
     ctx.db
@@ -377,6 +626,72 @@ export async function publishPreparedCapabilityHandler(
       kind: 'refused' as const,
       reason: 'authorization_denied' as const,
     }
+  const consequenceCommand = {
+    version: 'ae.publication-consequence:v1',
+    action: 'publication.publish',
+    operationKey: args.operationKey,
+    businessId: String(args.businessId),
+    offeringRef: args.offeringRef,
+    offeringRevision: args.revision,
+    offeringSourceHash: args.sourceHash,
+    publicationRef: args.prepared.offering.offeringId,
+    publicationRevision: 1,
+    sourceDigest: args.prepared.sourceDigest,
+    priceDigest: args.prepared.priceDigest,
+    bindingId: args.prepared.binding.bindingId,
+    documentDigest: canonicalDigest(args.prepared.documentJson),
+  }
+  if (agentAdmission?.kind === 'allowed') {
+    const consequence = await admitAgentPublicationConsequence(ctx, {
+      agent: agentAdmission,
+      action: 'publication.publish',
+      target: {
+        targetType: 'capability_publication',
+        targetRef: args.prepared.offering.offeringId,
+        targetRevision: 1,
+      },
+      resourceRefs: [
+        `offering:${args.offeringRef}`,
+        `publication:${args.prepared.offering.offeringId}`,
+      ],
+      consequenceSummary: 'Publish this exact Tool revision to the market.',
+      statusReadbackRef: `owner/supply/${args.offeringRef}`,
+      correlationRef: args.correlationId,
+      idempotencyRef: args.operationKey,
+      command: consequenceCommand,
+      now: Date.now(),
+    })
+    if (consequence === null) {
+      return { kind: 'refused' as const, reason: 'authorization_denied' as const }
+    }
+  }
+  if (args.agentPrincipal === undefined && ownerActor?.kind === 'authenticated_owner') {
+    const consequence = await admitInteractiveOwnerConsequence(ctx, {
+      actor: ownerActor,
+      action: 'publication.publish',
+      target: {
+        targetType: 'capability_publication',
+        targetRef: args.prepared.offering.offeringId,
+        targetRevision: 1,
+      },
+      requiredScopes: ['catalog_publish'],
+      resourceRefs: [
+        `offering:${args.offeringRef}`,
+        `publication:${args.prepared.offering.offeringId}`,
+      ],
+      budgetAmount: 0,
+      consequenceSummary: 'Publish this exact Tool revision to the market.',
+      statusReadbackRef: `owner/supply/${args.offeringRef}`,
+      correlationRef: args.correlationId,
+      idempotencyRef: args.operationKey,
+      command: consequenceCommand,
+      ...(args.proof === undefined ? {} : { proof: args.proof }),
+      now: Date.now(),
+    })
+    if (consequence.kind === 'refused') {
+      return { kind: 'refused' as const, reason: consequence.code }
+    }
+  }
   const result = await publishPreparedCapabilityCommand(
     {
       businessId: String(args.businessId),
@@ -397,10 +712,11 @@ export async function publishPreparedCapabilityHandler(
       evidenceRefs: args.evidenceRefs,
       now: Date.now(),
     },
-    publicationPorts(ctx),
+    nativeSubmission ? nativeSubmissionPorts(ctx, args.businessId) : publicationPorts(ctx),
   )
   if (result.kind === 'refused')
     return convexPreparedPublicationResult(result)
+  await recordSupplyAdmissionCase(ctx, args, result, Date.now())
   await rebuildCapabilityOriginSupplyProjection(
     ctx,
     args.businessId,
@@ -620,9 +936,18 @@ function pricingConfigForBootstrapSource(
       ? source.offering
       : source.commercial.offering)
   const price = sourceOffering.presentation.price
-  return price.kind === 'fixed'
-    ? { version: 'pricing:v2', unit: 'call', paidAmount: price.amount }
-    : undefined
+  if (
+    price.kind !== 'fixed'
+    || price.amount.currency !== 'AUD'
+    || price.amount.exponent !== 6
+  ) return undefined
+  return {
+    version: 'pricing:v3',
+    kind: 'fixed_aud',
+    currency: 'AUD',
+    exponent: 6,
+    amountUnits: price.amount.units,
+  }
 }
 
 function bootstrapSourceRevision(
@@ -649,7 +974,34 @@ function mapBootstrapPreparationRefusal(
   return reason
 }
 
+/*
+ * `registrySearchDocuments` is the only table `/api/businesses/search` reads,
+ * and nothing under the publish command writes it. The owner-facing handler
+ * rebuilds after its own publish (see `publishPreparedCapabilityHandler`), so
+ * without the same rebuild here every business onboarded through a system
+ * publish - dev seed, curated bootstrap, facilitator discovery - stays
+ * invisible to business search until some unrelated catalog write happens to
+ * rebuild it. Same command every catalog write path uses; it diffs documents
+ * against the stored rows, so a replayed publish is a no-op rather than a
+ * duplicate row.
+ */
 export async function publishBootstrapCapability(
+  ctx: MutationCtx,
+  input: BootstrapCapabilityInput,
+  actor: SupplyCommandActor,
+) {
+  const result = await commitBootstrapCapability(ctx, input, actor)
+  if (result.kind !== 'refused') {
+    await rebuildCapabilityOriginSupplyProjection(
+      ctx,
+      input.businessId as Id<'businesses'>,
+      input.now,
+    )
+  }
+  return result
+}
+
+async function commitBootstrapCapability(
   ctx: MutationCtx,
   input: BootstrapCapabilityInput,
   actor: SupplyCommandActor,

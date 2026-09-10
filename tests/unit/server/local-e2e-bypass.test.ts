@@ -1,12 +1,19 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { isLocalE2EAuthBypassEnabled } from '@/lib/server/local-e2e-bypass'
+import {
+  isLocalE2EAuthBypassEnabled,
+  LOCAL_E2E_OPERATOR_PRINCIPAL,
+} from '@/lib/server/local-e2e-bypass'
 
 afterEach(() => {
   vi.unstubAllEnvs()
 })
 
 describe('isLocalE2EAuthBypassEnabled', () => {
+  it('uses the canonical dev-seed owner subject across local bypass surfaces', () => {
+    expect(LOCAL_E2E_OPERATOR_PRINCIPAL).toBe('dev-seed-owner-session')
+  })
+
   it('throws when the flag is enabled in production', () => {
     vi.stubEnv('NODE_ENV', 'production')
     vi.stubEnv('VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E', 'true')

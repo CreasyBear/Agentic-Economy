@@ -1,3 +1,4 @@
+import { prepareX402Request } from './x402-request'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 import { cancelResponseBody } from '@/lib/server/bounded-request-body'
@@ -15,11 +16,13 @@ import type {
   ProviderConnectionAuthorityValidationResult,
   RouteTransportInvocation,
   RouteTransportRuntime,
-} from './route-transport-invoke'
+} from './route-transport-call'
 import {
   decodeX402Challenge,
+  freshX402ChallengeSelection,
   prepareX402PaymentMaterial,
   type X402Challenge,
+  type X402ChallengeSelection,
 } from './route-transport-x402-payment'
 import {
   refused,
@@ -98,25 +101,7 @@ export type X402RouteTransportRuntime = RouteTransportRuntime &
     ) => Promise<void> | void
   }>
 
-export type X402Configuration = Readonly<{
-  method: 'GET' | 'POST'
-  query?: readonly Readonly<{
-    inputPointer: string
-    parameter: string
-    required?: boolean
-    style?: 'form'
-    explode?: boolean
-  }>[]
-  requestTimeoutMs: number
-  scheme: 'exact'
-  network: string
-  currency: string
-  routeAmountExponent: number
-  assetAmountExponent: number
-  asset: string
-  payTo: string
-  paymentRequiredJson: string
-}>
+export type X402Configuration = import('./transport-adapters').X402FetchTransportConfiguration
 
 export async function invokeX402(
   endpoint: URL,
@@ -143,6 +128,41 @@ export async function invokeX402(
     target,
   )
   if (materialResult.kind === 'refused') return materialResult.observation
+  const freshSelection = await readFreshX402Challenge(
+    configuration,
+    invocation,
+    requestDigest,
+    runtime,
+    target,
+    headers,
+    {
+      challenge: materialResult.material.challenge,
+      requirement: materialResult.material.requirement,
+    },
+    materialResult.material.paymentChallengeDigest,
+  )
+  if (freshSelection.kind === 'refused') return freshSelection.observation
+  const freshAuthorityFailure = await validateX402ProviderAuthority(invocation, runtime)
+  if (freshAuthorityFailure !== undefined) {
+    return {
+      ...refused('x402', requestDigest, false, freshAuthorityFailure),
+      paymentChallengeDigest: materialResult.material.paymentChallengeDigest,
+      paymentAuthorizationStatus: 'not_created',
+      paymentSubmissionStatus: 'not_submitted',
+      queryReleaseStatus: 'released',
+      settlementEvidence: { kind: 'not_submitted' },
+    }
+  }
+  const freshMaterialResult = await prepareX402PaymentMaterial(
+    endpoint,
+    configuration,
+    invocation,
+    requestDigest,
+    runtime,
+    target,
+    freshSelection.selection,
+  )
+  if (freshMaterialResult.kind === 'refused') return { ...freshMaterialResult.observation, queryReleaseStatus: 'released' }
   const {
     challenge,
     requirement,
@@ -151,7 +171,7 @@ export async function invokeX402(
     paymentCredentialRef,
     authorizationIdentity,
     verifiedOffer,
-  } = materialResult.material
+  } = freshMaterialResult.material
   let preparedAuthorization: X402PreparedAuthorization | undefined
   try {
     preparedAuthorization = await runtime.prepareX402PaymentAuthorization({
@@ -169,6 +189,7 @@ export async function invokeX402(
       paymentChallengeDigest,
       paymentAuthorizationStatus: 'not_created',
       paymentSubmissionStatus: 'not_submitted',
+      queryReleaseStatus: 'released',
       settlementEvidence: { kind: 'not_submitted' },
     }
   }
@@ -185,6 +206,7 @@ export async function invokeX402(
         paymentChallengeDigest,
         paymentAuthorizationStatus: 'created',
         paymentSubmissionStatus: 'not_submitted',
+        queryReleaseStatus: 'released',
         settlementEvidence: { kind: 'not_submitted' },
       }
     }
@@ -198,6 +220,7 @@ export async function invokeX402(
       paymentChallengeDigest,
       paymentAuthorizationStatus: 'created',
       paymentSubmissionStatus: 'not_submitted',
+      queryReleaseStatus: 'released',
       settlementEvidence: { kind: 'not_submitted' },
       ...(verifiedOffer === undefined
         ? {}
@@ -215,6 +238,7 @@ export async function invokeX402(
       providerOfferDigest: verifiedOffer.offerDigest,
       paymentAuthorizationStatus: 'created',
       paymentSubmissionStatus: 'not_submitted',
+      queryReleaseStatus: 'released',
       settlementEvidence: { kind: 'not_submitted' },
     }
   }
@@ -250,6 +274,7 @@ export async function invokeX402(
       paymentChallengeDigest,
       paymentAuthorizationStatus: 'created',
       paymentSubmissionStatus: 'not_submitted',
+      queryReleaseStatus: 'released',
       settlementEvidence: { kind: 'not_submitted' },
       ...offerEvidence,
     }
@@ -268,6 +293,7 @@ export async function invokeX402(
       paymentChallengeDigest,
       paymentAuthorizationStatus: 'created',
       paymentSubmissionStatus: 'not_submitted',
+      queryReleaseStatus: 'released',
       settlementEvidence: { kind: 'not_submitted' },
       ...offerEvidence,
     }
@@ -285,6 +311,7 @@ export async function invokeX402(
         paymentChallengeDigest,
         paymentAuthorizationStatus: 'created',
         paymentSubmissionStatus: 'not_submitted',
+        queryReleaseStatus: 'released',
         settlementEvidence: { kind: 'not_submitted' },
         ...offerEvidence,
       }
@@ -300,6 +327,7 @@ export async function invokeX402(
       paymentChallengeDigest,
       paymentAuthorizationStatus: 'created',
       paymentSubmissionStatus: 'not_submitted',
+      queryReleaseStatus: 'released',
       settlementEvidence: { kind: 'not_submitted' },
       ...offerEvidence,
     }
@@ -311,7 +339,7 @@ export async function invokeX402(
       signal: AbortSignal.timeout(configuration.requestTimeoutMs),
       headers: { ...headers, 'Payment-Signature': paymentSignature },
       ...(configuration.method === 'POST'
-        ? { body: invocation.inputJson }
+        ? { body: x402RequestBody(target, configuration, invocation.inputJson) }
         : {}),
     })
     if (paid.status === 402) {
@@ -445,6 +473,21 @@ export async function invokeX402(
       }
     }
     if (settlement.status === 'unknown') {
+      // The provider has already returned a bounded, sensitivity-screened paid
+      // response. Keep that response on the internal observation so the worker
+      // can journal it while independent settlement evidence matures. The
+      // `unknown` disposition and quote-delivery state are the quarantine
+      // boundary: ordinary output validation must not treat it as delivered.
+      const quarantinedResponse = normalized.outputJson === undefined
+        || normalized.responseDigest === undefined
+        ? {}
+        : {
+            responseDigest: normalized.responseDigest,
+            outputJson: normalized.outputJson,
+            ...(normalized.continuationToken === undefined
+              ? {}
+              : { continuationToken: normalized.continuationToken }),
+          }
       return {
         ...unknown(
           'x402',
@@ -467,6 +510,7 @@ export async function invokeX402(
             : { digest: settlement.digest }),
         },
         quoteDeliveryStatus: 'unknown',
+        ...quarantinedResponse,
         ...paymentProof,
         ...providerReceipt,
         ...offerEvidence,
@@ -582,6 +626,68 @@ export async function invokeX402(
   }
 }
 
+type FreshX402ChallengeResult =
+  | Readonly<{ kind: 'ready'; selection: X402ChallengeSelection }>
+  | Readonly<{ kind: 'refused'; observation: RouteTransportObservation }>
+
+async function readFreshX402Challenge(
+  configuration: X402Configuration,
+  invocation: RouteTransportInvocation,
+  requestDigest: string,
+  runtime: X402RouteTransportRuntime,
+  target: URL,
+  headers: Readonly<Record<string, string>>,
+  committed: X402ChallengeSelection,
+  committedChallengeDigest: string,
+): Promise<FreshX402ChallengeResult> {
+  let response: Awaited<ReturnType<X402RouteTransportRuntime['send']>>
+  try {
+    response = await runtime.send(target, {
+      method: configuration.method,
+      redirect: 'manual',
+      signal: AbortSignal.timeout(configuration.requestTimeoutMs),
+      headers,
+      ...(configuration.method === 'POST'
+        ? { body: x402RequestBody(target, configuration, invocation.inputJson) }
+        : {}),
+    })
+  } catch (error) {
+    return {
+      kind: 'refused',
+      observation: {
+        ...refused('x402', requestDigest, false, `network_${errorName(error)}`),
+        queryReleaseStatus: 'unknown',
+        paymentChallengeDigest: committedChallengeDigest,
+        paymentAuthorizationStatus: 'not_created',
+        paymentSubmissionStatus: 'not_submitted',
+        settlementEvidence: { kind: 'not_submitted' },
+      },
+    }
+  }
+
+  const freshChallenge = response.status === 402
+    ? decodeX402Challenge(response.headers.get('payment-required'))
+    : undefined
+  await cancelResponseBody(response)
+  const selection = freshChallenge === undefined
+    ? undefined
+    : freshX402ChallengeSelection(committed, freshChallenge)
+  if (selection === undefined) {
+    return {
+      kind: 'refused',
+      observation: {
+        ...refused('x402', requestDigest, false, 'payment_provider_requirement_stale'),
+        queryReleaseStatus: 'released',
+        paymentChallengeDigest: committedChallengeDigest,
+        paymentAuthorizationStatus: 'not_created',
+        paymentSubmissionStatus: 'not_submitted',
+        settlementEvidence: { kind: 'not_submitted' },
+      },
+    }
+  }
+  return { kind: 'ready', selection }
+}
+
 async function validateX402ProviderAuthority(
   invocation: RouteTransportInvocation,
   runtime: RouteTransportRuntime,
@@ -607,8 +713,8 @@ async function validateX402ProviderAuthority(
         ? {}
         : {
             leaseRef: authority.leaseRef,
-            invocationRef: authority.invocationRef,
-            operationRef: authority.operationRef,
+            callRef: authority.callRef,
+            toolRef: authority.toolRef,
             grantedScopes: authority.grantedScopes,
             grantedResources: authority.grantedResources,
             readinessValidUntil: authority.readinessValidUntil,
@@ -690,4 +796,10 @@ async function x402SettlementCheck(
     response,
     digest,
   }
+}
+
+function x402RequestBody(target: URL, configuration: X402Configuration, inputJson: string): string {
+  const request = prepareX402Request(target, configuration, inputJson)
+  if (request.kind !== 'prepared' || request.body === undefined) throw new Error('x402_request_body_invalid')
+  return request.body
 }

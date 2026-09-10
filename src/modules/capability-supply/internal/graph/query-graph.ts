@@ -66,6 +66,7 @@ export type CapabilityGraphNode = Readonly<{
     healthState: GraphPublicationRow['healthState']
     observedAt?: number
     validUntil?: number
+    lastHealthyAt?: number
     stale: boolean
   }>
   routability: Readonly<{ eligible: boolean; reasons: readonly string[] }>
@@ -221,6 +222,9 @@ function projectGraphNode(input: Readonly<{
       ...(publication.readinessValidUntil === undefined
         ? {}
         : { validUntil: publication.readinessValidUntil }),
+      ...(publication.readinessLastHealthyAt === undefined
+        ? {}
+        : { lastHealthyAt: publication.readinessLastHealthyAt }),
       stale: publication.readinessValidUntil !== undefined
         && publication.readinessValidUntil < now,
     },

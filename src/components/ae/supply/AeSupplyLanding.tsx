@@ -13,34 +13,49 @@ import {
 } from '@/components/ae/website'
 
 import type { SupplyLandingTool } from '@/modules/capability-supply/supply-funnel.functions'
-import type { ServiceDto } from '@/modules/registry/public'
+import type { ToolCardViewModel } from '@/modules/market/tool-view-model'
 
 import { AeSupplyAgentProof } from './AeSupplyAgentProof'
 
-export const SUPPLY_OFFER_SENTENCE = 'Publish one bounded job, its price, and its access terms. Agents inspect the Operation before they call.'
+export const SUPPLY_OFFER_SENTENCE = 'List one service agents can inspect and call. You describe the price, access, effects, and evidence; Agentic Economy records it as a Tool.'
 
 const SUPPLY_STEPS = [
-  { number: '01', title: 'Define one Operation', detail: 'Choose one bounded job with exact inputs and one usable outcome—not an entire app or account.' },
-  { number: '02', title: 'Connect one source', detail: 'Use one OpenAPI 3.1 GET or POST, remote MCP tool, Agent Plugin MCP tool, or public x402 HTTPS endpoint.' },
-  { number: '03', title: 'Set terms and test', detail: 'Declare price, access, effects, and evidence. AE checks the selected route before publication.' },
-  { number: '04', title: 'Publish and verify', detail: 'Publish only after readiness passes, then confirm agents can inspect the current Operation.' },
+  { number: '01', title: 'Choose one service', detail: 'Choose one bounded service with exact inputs and one usable outcome—not an entire app or account.' },
+  { number: '02', title: 'Add its source', detail: 'Start with a supported OpenAPI document, remote MCP server, Agent Plugin bundle, or public x402 endpoint.' },
+  { number: '03', title: 'Describe and check it', detail: 'Provide price, access, effects, data use, and evidence. The check can reach your configured source.' },
+  { number: '04', title: 'Submit, then check status', detail: 'A submitted service is not yet published. Read its current status before sharing it with agents.' },
 ] as const
 
-const SUPPLY_PREP = [
-  'The exact selector: method plus path for OpenAPI, tool name for MCP, server plus tool name for Agent Plugin MCP, or resourceUrl for x402.',
-  'The input and output schema, plus a safe example input for the readiness test.',
-  'Price as ISO currency plus integer units and decimal exponent (USD 0.50 is units 50, exponent 2), material terms, data use, side effects, and completion evidence.',
-  'An existing owner-controlled provider connection if the upstream requires credentials. Never paste a raw key into the Operation form.',
+const SUPPLY_REQUIREMENTS = [
+  'One supported source and one service you are authorised to list.',
+  'A clear input, expected output, price, material terms, data use, external effects, and evidence of completion.',
+  'A safe example for the check. It may call your configured source, consume its quota, or incur its normal cost.',
+  'An existing owner-controlled connection when the source needs credentials. Never paste a raw key or other provider secret into the service form.',
+] as const
+
+const SUPPLY_SOURCE_FIT = [
+  {
+    title: 'Public OpenAPI or MCP',
+    body: 'A public HTTPS API or remote MCP server may be a fit. The source still needs a supported contract and a successful current check.',
+  },
+  {
+    title: 'Source that needs credentials',
+    body: 'Sign in and use an owner-controlled connection. If setup offers no compatible connection, that source cannot be listed yet.',
+  },
+  {
+    title: 'Public x402 endpoint',
+    body: 'Use a public HTTPS endpoint that returns the supported payment challenge. Prove control of the payout address; never paste a wallet private key.',
+  },
 ] as const
 
 export function AeSupplyLanding({
   tools,
-  services,
+  publishedTools,
   sourceError,
   onRetry,
 }: Readonly<{
   tools: readonly SupplyLandingTool[]
-  services: readonly ServiceDto[]
+  publishedTools: readonly ToolCardViewModel[]
   sourceError?: string
   onRetry?: () => void
 }>) {
@@ -50,9 +65,9 @@ export function AeSupplyLanding({
         <AeSiteHeroIntro>
           <AeSiteHeadingPair>
             <div className="mx-auto grid w-full max-w-xl justify-items-center gap-3">
-              <AeSiteEyebrow>Suppliers</AeSiteEyebrow>
+              <AeSiteEyebrow>Providers</AeSiteEyebrow>
               <AeSiteHeading as="h1" size="md" id="supply-hero">
-                Publish an Operation.
+                List a service.
               </AeSiteHeading>
             </div>
             <div className="mx-auto w-full max-w-lg">
@@ -62,14 +77,14 @@ export function AeSupplyLanding({
             </div>
           </AeSiteHeadingPair>
           <AeSiteButton asChild>
-            <Link to="/owner/supply">Create or continue an Operation</Link>
+            <Link to="/owner/offerings">List a service</Link>
           </AeSiteButton>
         </AeSiteHeroIntro>
       </AeSiteSection>
       {sourceError === undefined ? null : (
-        <AeSiteSection ariaLabel="Supplier recovery" scheme="canvas">
+        <AeSiteSection ariaLabel="Provider recovery" scheme="canvas">
           <Alert variant="destructive" className="max-w-3xl">
-            <AlertTitle>Supplier information is unavailable</AlertTitle>
+            <AlertTitle>Provider information is unavailable</AlertTitle>
             <AlertDescription>
               <p>{sourceError}</p>
               {onRetry === undefined ? null : (
@@ -81,27 +96,35 @@ export function AeSupplyLanding({
           </Alert>
         </AeSiteSection>
       )}
-      <AeSiteSection ariaLabel="Check supplier fit" scheme="canvas">
+      <AeSiteSection ariaLabel="Check provider fit" scheme="canvas">
         <div className="grid max-w-3xl gap-page">
           <div className="grid gap-intra">
             <AeSiteEyebrow>Before you sign in</AeSiteEyebrow>
-            <AeSiteHeading as="h2" size="sm">Know what AE will ask for.</AeSiteHeading>
+            <AeSiteHeading as="h2" size="sm">Check whether your service is a fit.</AeSiteHeading>
             <AeSiteBody muted size="sm">
-              An Operation is one callable job an agent can search, compare, inspect, and buy. Public upstreams need no supplier secret. Keyed sources use an existing owner-controlled connection; AE does not collect a raw provider key in this flow.
+              List one service an agent can search, inspect, and call. Public sources need no provider secret. For a source that needs credentials, use an existing owner-controlled connection; this flow does not collect a raw provider key.
             </AeSiteBody>
           </div>
           <ul className="m-0 grid gap-intra pl-5 text-sm text-muted-foreground">
-            {SUPPLY_PREP.map((item) => <li key={item}>{item}</li>)}
+            {SUPPLY_REQUIREMENTS.map((item) => <li key={item}>{item}</li>)}
           </ul>
           <p className="text-sm text-muted-foreground">
-            Readiness tests may reach the configured upstream. Use an example that is safe to execute there and assume it may consume provider quota or cost. The public supplier flow only creates credentialless x402 connections; do not assume a keyed source fits unless authenticated setup offers a compatible existing connection.
+            A check may reach the configured upstream. Use an example that is safe there and assume it may consume provider quota or cost. A successful check does not publish the service, create earnings, or guarantee delivery. Timing depends on the source and current requirements; check the current status rather than relying on an estimate.
           </p>
           <p className="text-sm text-muted-foreground">
-            Creating the supplier account and business is an owner step. After that, an owner can approve a separate agent credential for maintenance. <Link to="/SKILL.md" hash="supplier-path" className="font-medium text-foreground underline underline-offset-4">Read the supplier agent path</Link>.
+            Creating the Provider business is an owner step. After that, an owner can approve a separate agent credential for maintenance. The source preview confirms the exact current contract.
           </p>
+          <div className="grid gap-related sm:grid-cols-3" aria-label="Supported source paths">
+            {SUPPLY_SOURCE_FIT.map((source) => (
+              <article key={source.title} className="grid content-start gap-intra rounded-card border border-border bg-card p-gutter">
+                <h3 className="font-semibold text-foreground">{source.title}</h3>
+                <p className="text-sm text-muted-foreground">{source.body}</p>
+              </article>
+            ))}
+          </div>
         </div>
       </AeSiteSection>
-      <AeSiteSection ariaLabel="How to publish an Operation" scheme="surface">
+      <AeSiteSection ariaLabel="How to publish a Tool" scheme="surface">
         <AeSiteStack>
           <ol className="m-0 grid list-none gap-page p-0">
             {SUPPLY_STEPS.map((step) => (
@@ -117,19 +140,21 @@ export function AeSupplyLanding({
       <AeSiteSection ariaLabel="Listing control" scheme="canvas">
         <div className="grid max-w-3xl gap-section">
           <AeSiteBody muted>
-            You control the listing and the route. Agents see your published facts before choosing. Setup and test calls do not create settled earnings or payouts.
+            You control the listing and the source. Agents can inspect only the facts that are published. Publication means the current service passed Agentic Economy’s admission and readiness checks; it does not guarantee demand, payment, delivery, or payout. Setup and test calls do not create settled earnings or payouts.
           </AeSiteBody>
           <Link
-            to="/owner/supply"
+            to="/owner/offerings"
             className="inline-flex min-h-touch items-center justify-self-start text-sm font-medium underline underline-offset-4"
           >
-            Manage Operations
+            Manage listed services
           </Link>
         </div>
       </AeSiteSection>
-      <AeSiteSection ariaLabel="What agents can inspect" scheme="surface">
-        <AeSupplyAgentProof tools={tools} services={services} />
-      </AeSiteSection>
+      {sourceError === undefined ? (
+        <AeSiteSection ariaLabel="What agents can inspect" scheme="surface">
+          <AeSupplyAgentProof tools={tools} publishedTools={publishedTools} />
+        </AeSiteSection>
+      ) : null}
     </>
   )
 }

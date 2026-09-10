@@ -42,6 +42,10 @@ describe('development x402 local canary', () => {
         network: BASE_SEPOLIA_NETWORK,
       },
     })
+    expect(result.wireFlow).toEqual({
+      officialClient: { unpaidChallengeRequests: 1, signedRetryRequests: 1 },
+      routeRuntime: { unpaidChallengeRequests: 1, signedRetryRequests: 1 },
+    })
     expect(result.routeObservation).toMatchObject({
       transport: 'x402',
       disposition: 'succeeded',

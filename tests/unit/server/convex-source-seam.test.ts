@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import {
   ConvexSourceError,
@@ -16,6 +16,7 @@ import {
   sourceQuery,
   sourceAction,
 } from '@/lib/server/convex-source'
+import { LOCAL_E2E_OPERATOR_PRINCIPAL } from '@/lib/server/local-e2e-bypass'
 
 import { convexUrl } from './server-seams-harness'
 
@@ -39,6 +40,16 @@ describe('server Convex source seam', () => {
     ).rejects.toMatchObject({ code: 'missing_auth', status: 401 })
   })
 
+  it('uses Clerk Convex integration session claims unless a caller explicitly selects a JWT template', async () => {
+    const getToken = vi.fn().mockResolvedValue('owner.jwt')
+
+    await expect(readRequiredConvexAuthToken({ isAuthenticated: true, getToken })).resolves.toBe('owner.jwt')
+    await expect(readRequiredConvexAuthToken({ isAuthenticated: true, getToken }, 'legacy-template')).resolves.toBe('owner.jwt')
+
+    expect(getToken).toHaveBeenNthCalledWith(1)
+    expect(getToken).toHaveBeenNthCalledWith(2, { template: 'legacy-template' })
+  })
+
   it('creates a fresh credentialed Convex client for each owner request', async () => {
     const authObject = { isAuthenticated: true, getToken: async () => 'owner.jwt' }
     const calls: { url: string; init: RequestInit }[] = []
@@ -58,6 +69,48 @@ describe('server Convex source seam', () => {
       { path: 'interactiveAuthority:materializeCurrentInteractiveAuthority', args: [{}], format: 'convex_encoded_json' },
       { path: 'interactiveAuthority:materializeCurrentInteractiveAuthority', args: [{}], format: 'convex_encoded_json' },
     ])
+  })
+
+  it('refreshes canonical owner authority for every local E2E source request', async () => {
+    vi.stubEnv('VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E', 'true')
+    const calls: { path: string; authorization?: string }[] = []
+    const fetch: typeof globalThis.fetch = async (_input, init) => {
+      const body = JSON.parse(String(init?.body)) as { path: string }
+      const headers = new Headers(init?.headers)
+      const authorization = headers.get('Authorization')
+      calls.push({
+        path: body.path,
+        ...(authorization === null ? {} : { authorization }),
+      })
+      return new Response(JSON.stringify({ status: 'success', value: true }))
+    }
+
+    try {
+      await createAuthenticatedConvexClient({
+        env: {
+          CONVEX_URL: convexUrl,
+          CONVEX_SELF_HOSTED_ADMIN_KEY: 'local-admin-key',
+        },
+        fetch,
+      })
+    } finally {
+      vi.unstubAllEnvs()
+    }
+
+    expect(calls).toEqual([{
+      path: 'interactiveAuthority:materializeCurrentInteractiveAuthority',
+      authorization: expect.stringMatching(/^Convex local-admin-key:/),
+    }])
+    const authorization = calls[0]?.authorization
+    if (authorization === undefined) throw new Error('local E2E admin identity missing')
+    const actingAs = JSON.parse(atob(authorization.slice('Convex local-admin-key:'.length))) as {
+      subject: string
+      tokenIdentifier: string
+    }
+    expect(actingAs).toMatchObject({
+      subject: LOCAL_E2E_OPERATOR_PRINCIPAL,
+      tokenIdentifier: `https://convex.test|${LOCAL_E2E_OPERATOR_PRINCIPAL}`,
+    })
   })
 
   it('fails closed before an authenticated source call when canonical expiry cannot be armed', async () => {

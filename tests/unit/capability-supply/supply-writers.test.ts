@@ -20,10 +20,10 @@ import {
 import {
   capabilityBindingEligibilityHash,
   capabilityBindingRegistrationHash,
-  capabilityOperationId,
+  capabilityToolId,
   capabilityOfferingEligibilityHash,
   capabilityOfferingRegistrationHash,
-  createPublicOperationRef,
+  createPublicToolRef,
   defineCapabilityOfferingRegistration,
   defineCapabilityTransportBindingRegistration,
 } from '@/modules/capability-supply/public'
@@ -81,8 +81,8 @@ const admittedTransport = {
   configJson: '{"method":"POST","requestTimeoutMs":5000}',
   configDigest: canonicalDigest({ method: 'POST', requestTimeoutMs: 5_000 }),
 }
-const operationRef = createPublicOperationRef({
-  operationId: capabilityOperationId(contractRef.capabilityId),
+const toolRef = createPublicToolRef({
+  operationId: capabilityToolId(contractRef.capabilityId),
   publicationRef: offeringRegistration.offeringId,
   publicationRevision: 1,
   contractRef,
@@ -155,7 +155,7 @@ function inactiveBinding(overrides: Partial<CapabilityBindingRow> = {}): Capabil
     authority: bindingRegistration.authority,
     connectionAuthority: connectionAuthoritySnapshotFromProviderConnection(
       demoProviderConnection(),
-      operationRef,
+      toolRef,
     ),
     continuation: bindingRegistration.continuation,
     cancellation: bindingRegistration.cancellation,

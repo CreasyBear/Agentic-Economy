@@ -5,7 +5,7 @@ import { StrictLivePayoutReceiptSchema } from '../../../src/modules/money/public
 import {
   buildGatewayPayoutReceipt,
   sanitizeGatewayPayoutProviderTransfers,
-} from '../../../tools/release/operation-gateway-production-smoke'
+} from '../../../tools/release/tool-gateway-production-smoke'
 
 const payoutRef = 'ae-release-smoke:run-1:payout'
 const amount = { currency: 'USD', units: '60', exponent: 2 }

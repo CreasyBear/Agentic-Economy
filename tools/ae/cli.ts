@@ -1,54 +1,69 @@
 /**
  * AE CLI. Exercises AE the way an external agent would through public machine
- * surfaces. Market Operation search/detail/compare are anonymous HTTP reads;
+ * surfaces. Market Tool list/search/describe/compare are anonymous HTTP reads;
  * connect uses the existing OAuth device flow; call/status/wait/cancel/reconcile
  * use the canonical authenticated gateway (the CLI's `recover` command is
- * the `operation.reconcile` action).
+ * the `call.reconcile` action).
  * Run: ae <command> [args] [--json]
  *
  * Evidence class: every HTTP command here is labelled local execution against
  * whatever `--base-url` points at. It never proves hosted behavior.
  */
 
-import { COMMANDS } from './commands/manifest'
-import { parseArgs, safeOriginForDiagnostics, type CliOptions, type ParsedArgs } from './lib/args'
+import { COMMANDS, ROOT_HELP_START } from './commands/manifest'
+import {
+  HOSTED_DEFAULT_BASE_URL,
+  isLoopbackCliBaseUrl,
+  parseArgs,
+  safeOriginForDiagnostics,
+  type CliOptions,
+  type ParsedArgs,
+} from './lib/args'
 import { CliFailure, printJson, sourceErrorToCliFailure } from './lib/output'
+import { continuationCommand } from './lib/continuation-command'
 import {
   CLI_ENTRYPOINT,
   commandMetadata,
   commandUsage,
-  rootCommandHelpLines,
+  rootCommandHelpGroups,
 } from './lib/help'
-import { MARKET_OPERATIONS_INVOKE_SCOPE, MARKET_SUPPLY_MANAGE_SCOPE } from '@/modules/agent-access/contract'
+import { MARKET_TOOLS_CALL_SCOPE, MARKET_SUPPLY_MANAGE_SCOPE } from '@/modules/agent-access/contract'
 import type { ProblemKind } from '@/lib/errors'
+import cliPackage from '../../packages/cli/package.json'
 
-type CommandRunner = (args: readonly string[], options: CliOptions) => Promise<void>
+declare const __AE_CLI_BUILD_REVISION__: string | undefined
+
+type CommandRunner = (args: readonly string[], options: CliOptions) => Promise<void | number>
 
 const JSON_HELP_FLAGS = {
   '--base-url': { type: 'string', description: 'Server to call; defaults to AE_CLI_BASE_URL, AE_CANONICAL_BASE_URL, local Vite when Convex is loopback, or the hosted origin.' },
   '--limit': { type: 'string', description: 'Page size: search accepts 1-20; account activity, requests, and history accept 1-100.' },
+  '--source': { type: 'string', description: 'Tool discovery source: current, coinbase, or payai (browse only).' },
   '--cursor': { type: 'string', description: 'Opaque search, account activity, request, or history continuation cursor.' },
-  '--state': { type: 'string', description: 'Canonical invocation state filter; history only.' },
-  '--filters': { type: 'string', description: 'Canonical JSON search filters; search only.' },
-  '--input': { type: 'string', description: 'Schema-valid JSON object for call or supplier lifecycle write.' },
-  '--mcp': { type: 'boolean', description: 'Write a user-only Streamable HTTP MCP connection file after connect.' },
-  '--supplier': { type: 'boolean', description: 'Request a separate owner-approved supplier credential with market_supply:manage.' },
+  '--state': { type: 'string', description: 'Canonical Call state filter; history only.' },
+  '--filters': { type: 'string', description: 'Canonical JSON Tool filters for list and search.' },
+  '--input': { type: 'string', description: 'Schema-valid JSON object for call or provider lifecycle write; call alone accepts - to read it from standard input.' },
+  '--environment': { type: 'string', description: 'Agent connection environment: sandbox or production. Owner approval is required.' },
+  '--provider': { type: 'boolean', description: 'Request a separate owner-approved provider credential with market_supply:manage.' },
   '--json': { type: 'boolean', description: 'Emit exactly one machine-readable JSON value on stdout.' },
   '--help': { type: 'boolean', description: 'Show help without performing command work.' },
-  '--technical': { type: 'boolean', description: 'Include operation identity and evidence metadata in human compare output.' },
-  '--idempotency-key': { type: 'string', description: 'Optional stable retry identity for a call, private market request, or supplier lifecycle write.' },
+  '--version': { type: 'boolean', description: 'Show CLI version, executable, runtime, and build revision without contacting a server.' },
+  '--technical': { type: 'boolean', description: 'Include per-Tool navigation in JSON search results or describe results, or identity and evidence metadata in human compare output.' },
+  '--idempotency-key': { type: 'string', description: 'Optional stable retry identity for a call, private market request, or provider lifecycle write.' },
   '--wait': { type: 'boolean', description: 'Wait for a bounded call result; timeout preserves recovery detail.' },
 } as const
 
 const COMMON_COMMAND_OPTIONS = ['base-url', 'json'] as const
+const PUBLIC_READ_COMMANDS = new Set(['list', 'search', 'describe', 'compare'])
 const COMMAND_OPTIONS: Readonly<Record<string, readonly string[]>> = {
   manifest: ['technical'],
-  search: ['limit', 'cursor', 'filters'],
-  inspect: [],
+  config: [],
+  list: ['source', 'limit', 'cursor', 'filters'],
+  search: ['source', 'limit', 'cursor', 'filters', 'technical'],
+  describe: ['technical'],
   compare: ['technical'],
-  'inspect-plan': [],
-  connect: ['mcp', 'supplier'],
-  doctor: ['supplier'],
+  connect: ['provider', 'environment'],
+  doctor: ['provider'],
   account: [],
   'account activity': ['limit', 'cursor'],
   request: [],
@@ -56,6 +71,7 @@ const COMMAND_OPTIONS: Readonly<Record<string, readonly string[]>> = {
   'request list': ['limit', 'cursor'],
   'request status': [],
   supply: [],
+  'supply preview': ['input'],
   'supply publish': ['input', 'idempotency-key'],
   'supply withdraw': ['input', 'idempotency-key'],
   'supply recheck': ['input', 'idempotency-key'],
@@ -63,7 +79,6 @@ const COMMAND_OPTIONS: Readonly<Record<string, readonly string[]>> = {
   'supply connect': ['input', 'idempotency-key'],
   'supply reconnect': ['input', 'idempotency-key'],
   'supply revoke': ['input', 'idempotency-key'],
-  'supply retry-cleanup': ['input', 'idempotency-key'],
   fund: [],
   call: ['input', 'idempotency-key', 'wait'],
   history: ['limit', 'cursor', 'state'],
@@ -77,12 +92,12 @@ const COMMAND_OPTIONS: Readonly<Record<string, readonly string[]>> = {
 const AUTH_HELP = {
   credential: 'AE_API_KEY',
   credentialOrigin: 'AE_API_KEY_ORIGIN',
-  scope: MARKET_OPERATIONS_INVOKE_SCOPE,
+  scope: MARKET_TOOLS_CALL_SCOPE,
   deviceFlow: 'connect registers a public device client, displays the server-provided verification URI and user code, then polls for a one-time credential after approval.',
   existingKey: 'If AE_API_KEY is already set, connect validates it against the configured server before reporting connected; AE_API_KEY_ORIGIN must exactly match that server origin.',
   origin: 'Bind AE_API_KEY to the exact --base-url origin in AE_API_KEY_ORIGIN. Credentialed calls require HTTPS except loopback localhost, 127.0.0.1, or ::1 development.',
   next: 'Connect stores one origin-bound key with user-only permissions; private market requests, calls, history, status, wait, cancel, and recovery reuse it automatically.',
-  authenticatedOperations: {
+  authenticatedCalls: {
     call: commandUsage('call'),
     history: commandUsage('history'),
     request: commandUsage('request'),
@@ -97,9 +112,9 @@ const AUTH_HELP = {
 const SUPPLY_AUTH_HELP = {
   ...AUTH_HELP,
   scope: MARKET_SUPPLY_MANAGE_SCOPE,
-  deviceFlow: 'Run ae connect --supplier to request a separate owner-approved supplier credential; ordinary ae connect remains buyer-scoped.',
+  deviceFlow: 'Run ae connect --provider to request a separate owner-approved provider credential; ordinary ae connect remains buyer-scoped.',
   existingKey: 'Use an owner-issued AE key whose exact origin and market_supply:manage scope have already been established.',
-  next: 'Use supply status for Operations and supply connections for provider authority before lifecycle writes; preserve returned revisions, generations, and digests.',
+  next: 'Use supply tools <businessRef> to inventory Provider Tools, then supply status <businessRef> <toolRef> to inspect one exact Tool; use supply connections for provider authority before lifecycle writes and preserve returned revisions, generations, and digests.',
 } as const
 
 function commandHelpName(command: string | undefined, positionals: readonly string[]): string | undefined {
@@ -157,6 +172,11 @@ function jsonHelp(
       ? {
         usage: `${CLI_ENTRYPOINT} <command> [args] [flags]`,
         commands,
+        groups: rootCommandHelpGroups(knownCommands).map((group) => ({
+          id: group.id,
+          title: group.title,
+          commands: group.commands.map(({ name }) => name),
+        })),
       }
       : commandHelpProjection(requested)),
     flags: JSON_HELP_FLAGS,
@@ -167,67 +187,69 @@ function jsonHelp(
         guidance: [
           'Open the displayed verification URI and approve the displayed user code.',
           'Connect validates the issued key and stores it for this exact origin with user-only file permissions.',
-          'Pass --mcp to write the matching Streamable HTTP MCP connection at the same time.',
         ],
       },
     } : {}),
   }
 }
-function printAuthenticatedOperationHelp(): void {
-  process.stdout.write([
-    '',
-    'Authenticated Operation actions:',
-    `  call: ${AUTH_HELP.authenticatedOperations.call}`,
-    `  history: ${AUTH_HELP.authenticatedOperations.history}`,
-    `  request: ${AUTH_HELP.authenticatedOperations.request}`,
-    `  status: ${AUTH_HELP.authenticatedOperations.status}`,
-    `  wait: ${AUTH_HELP.authenticatedOperations.wait}`,
-    `  cancel: ${AUTH_HELP.authenticatedOperations.cancel} (${AUTH_HELP.cancelRequirements})`,
-    `  reconcile: ${AUTH_HELP.authenticatedOperations.reconcile}`,
-  ].join('\n') + '\n')
-}
 
 function printUsage(): void {
+  const groups = rootCommandHelpGroups()
+  const nameWidth = Math.max(...groups.flatMap(({ commands }) => commands.map(({ name }) => name.length))) + 2
+  const groupedCommands = groups.map((group) => [
+    group.title.toUpperCase(),
+    ...group.commands.map(({ name, summary }) => `  ${(name + ':').padEnd(nameWidth)} ${summary}`),
+  ].join('\n')).join('\n\n')
   process.stdout.write(`AE CLI - exercise AE the way an external agent would.
 
 Usage: ${CLI_ENTRYPOINT} <command> [args] [flags]
 
-Canonical Operation commands (need a running server; hosted by default, or the managed local Vite origin when Convex is loopback):
-${rootCommandHelpLines().join('\n')}
+START HERE
+${ROOT_HELP_START.map((example) => `  ${example}`).join('\n')}
 
-Flags:
+${groupedCommands}
+
+UNIVERSAL FLAGS
   --base-url <url>   server to call (env: AE_CLI_BASE_URL or AE_CANONICAL_BASE_URL)
-  Credentials:
-  AE_API_KEY <token>          reusable caller credential for credentialed commands
-  AE_API_KEY_ORIGIN <origin>  exact origin bound to AE_API_KEY; required with HTTPS except loopback HTTP development
   --json             machine-readable output
-  --limit <n>        bounded page size for search, account activity, or history
-  --cursor <cursor>  opaque continuation cursor for search, account activity, or history
-  --state <state>    canonical invocation state filter (history only)
-  --filters '<json>' canonical search filters (search only)
-  --technical        human compare output with operation identity and evidence metadata
-  --supplier         connect a separate owner-approved supplier credential
-  --mcp              write the matching MCP connection after connect validates the credential
-  --idempotency-key <key>  optional stable retry identity; call generates one when omitted
-  --wait             bounded call wait; timeout returns durable recovery detail
-  --help
+  --help             show help
+  --version          show local CLI version and build provenance
+
+LEARN MORE
+  ae help <command>         exact arguments and safety guidance
+  ae help <command> --json  machine-readable command help
+  ae help --json            machine-readable root help
 `)
 }
 
-function printUsageWithAuthenticatedOperationHelp(): void {
-  printUsage()
-  printAuthenticatedOperationHelp()
+function versionProjection(): Readonly<{
+  kind: 'VERSION'
+  version: string
+  buildRevision: string
+  executable: string
+  runtime: string
+}> {
+  const embeddedRevision = typeof __AE_CLI_BUILD_REVISION__ === 'string'
+    ? __AE_CLI_BUILD_REVISION__
+    : undefined
+  return {
+    kind: 'VERSION',
+    version: cliPackage.version,
+    buildRevision: embeddedRevision ?? (process.env.AE_SOURCE_REVISION?.trim() || 'development'),
+    executable: process.argv[1] ?? 'ae',
+    runtime: process.version,
+  }
 }
 
 function printCommandHelp(command: string | undefined, positionals: readonly string[]): void {
   const requested = commandHelpName(command, positionals)
   if (requested === undefined) {
-    printUsageWithAuthenticatedOperationHelp()
+    printUsage()
     return
   }
   const metadata = commandMetadata(requested)
   if (metadata === undefined) {
-    printUsageWithAuthenticatedOperationHelp()
+    printUsage()
     return
   }
   const lines = [
@@ -254,13 +276,24 @@ function printCommandHelp(command: string | undefined, positionals: readonly str
       `  Existing key: ${AUTH_HELP.existingKey}`,
       `  Origin policy: ${AUTH_HELP.origin}`,
       `  Next: ${AUTH_HELP.next}`,
-      '  Supplier profile: ae connect --supplier requests market_supply:manage separately and does not replace the buyer credential.',
+      '  Provider profile: ae connect --provider requests market_supply:manage separately and does not replace the buyer credential.',
+    )
+  }
+  if (metadata.authentication === 'buyer') {
+    lines.push(
+      '',
+      'Authentication:',
+      `  Credential: ${AUTH_HELP.credential}`,
+      `  Credential origin: ${AUTH_HELP.credentialOrigin}`,
+      `  Scope: ${AUTH_HELP.scope}`,
+      `  Origin policy: ${AUTH_HELP.origin}`,
+      `  Next: ${AUTH_HELP.next}`,
     )
   }
   if (requested.startsWith('supply')) {
     lines.push(
       '',
-      'Supplier authentication:',
+      'Provider authentication:',
       `  Credential: ${SUPPLY_AUTH_HELP.credential}`,
       `  Scope: ${SUPPLY_AUTH_HELP.scope}`,
       `  Issuance: ${SUPPLY_AUTH_HELP.deviceFlow}`,
@@ -268,7 +301,6 @@ function printCommandHelp(command: string | undefined, positionals: readonly str
     )
   }
   process.stdout.write(lines.join('\n') + '\n')
-  if (requested === 'connect') printAuthenticatedOperationHelp()
 }
 type HelpPathResult = Readonly<{
   path?: string
@@ -325,18 +357,39 @@ function validateCommandOptions(parsed: ParsedArgs): void {
   )
 }
 
+function publicReadFailureContinuation(parsed: ParsedArgs, kind: ProblemKind): Readonly<{
+  suggestion: string
+  nextCommand: string
+}> | undefined {
+  if (kind !== 'UNAVAILABLE' || parsed.command === undefined || !PUBLIC_READ_COMMANDS.has(parsed.command)) {
+    return undefined
+  }
+  return {
+    suggestion: 'Check AE service health before retrying this read.',
+    nextCommand: continuationCommand([
+      'ae',
+      'doctor',
+      ...(parsed.options.baseUrlSource === undefined || parsed.options.baseUrlSource === 'hosted_default'
+        ? []
+        : ['--base-url', parsed.options.baseUrl]),
+      ...(parsed.options.json ? ['--json'] : []),
+    ]),
+  }
+}
+
 
 
 async function main(): Promise<number> {
   const [
     accountCommands,
     cancelCommands,
-    marketOperationCommands,
+    configCommands,
+    marketToolCommands,
     connectCommands,
     doctorCommands,
     fundCommands,
     historyCommands,
-    invokeCommands,
+    callCommands,
     manifestCommands,
     recoverCommands,
     requestCommands,
@@ -347,12 +400,13 @@ async function main(): Promise<number> {
   ] = await Promise.all([
     import('./commands/account'),
     import('./commands/cancel'),
-    import('./commands/market-operations'),
+    import('./commands/config'),
+    import('./commands/market-tools'),
     import('./commands/connect'),
     import('./commands/doctor'),
     import('./commands/fund'),
     import('./commands/history'),
-    import('./commands/invoke'),
+    import('./commands/call'),
     import('./commands/manifest'),
     import('./commands/recover'),
     import('./commands/request'),
@@ -361,18 +415,19 @@ async function main(): Promise<number> {
     import('./commands/supply'),
     import('./commands/wait'),
   ])
-  const marketOperationRunners: Record<string, CommandRunner> = Object.fromEntries(
-    marketOperationCommands.MARKET_OPERATION_COMMAND_DESCRIPTORS.map(({ command, run }) => [command, run] as const),
+  const marketToolRunners: Record<string, CommandRunner> = Object.fromEntries(
+    marketToolCommands.MARKET_TOOL_COMMAND_DESCRIPTORS.map(({ command, run }) => [command, run] as const),
   )
   const commands: Record<string, CommandRunner> = {
     manifest: manifestCommands.runManifestCommand,
-    ...marketOperationRunners,
+    config: configCommands.runConfigCommand,
+    ...marketToolRunners,
     connect: connectCommands.runConnectCommand,
     doctor: doctorCommands.runDoctorCommand,
     account: accountCommands.runAccountCommand,
     supply: supplyCommands.runSupplyCommand,
     fund: fundCommands.runFundCommand,
-    [invokeCommands.invokeCommandDescriptor.command]: invokeCommands.invokeCommandDescriptor.run,
+    [callCommands.callCommandDescriptor.command]: callCommands.callCommandDescriptor.run,
     [historyCommands.historyCommandDescriptor.command]: historyCommands.historyCommandDescriptor.run,
     status: statusCommands.runStatusCommand,
     [waitCommands.waitCommandDescriptor.command]: waitCommands.waitCommandDescriptor.run,
@@ -403,6 +458,15 @@ async function main(): Promise<number> {
     return 1
   }
   const isHelp = parsed.command === 'help' || parsed.options.help
+  if (parsed.options.version) {
+    const version = versionProjection()
+    if (parsed.options.json) {
+      printJson(version)
+    } else {
+      process.stdout.write(`ae ${version.version} (${version.buildRevision})\n`)
+    }
+    return 0
+  }
   if (isHelp) {
     const helpPath = resolveHelpPath(parsed.command, parsed.positionals, commands)
     if (helpPath.error !== undefined) {
@@ -438,7 +502,7 @@ async function main(): Promise<number> {
       })
       return 1
     }
-    printUsageWithAuthenticatedOperationHelp()
+    printUsage()
     return 1
   }
 
@@ -460,8 +524,8 @@ async function main(): Promise<number> {
 
   try {
     validateCommandOptions(parsed)
-    await run(parsed.positionals, parsed.options)
-    return 0
+    const exitCode = await run(parsed.positionals, parsed.options)
+    return exitCode ?? 0
   } catch (error) {
     let exitCode: number
     let message: string
@@ -483,6 +547,11 @@ async function main(): Promise<number> {
       retryAfter = mappedFailure.retryAfter
       suggestion = mappedFailure.suggestion
       nextCommand = mappedFailure.nextCommand
+      const publicReadContinuation = suggestion === undefined && nextCommand === undefined
+        ? publicReadFailureContinuation(parsed, kind)
+        : undefined
+      suggestion ??= publicReadContinuation?.suggestion
+      nextCommand ??= publicReadContinuation?.nextCommand
       if (kind === 'INVALID_ARGUMENT') {
         suggestion ??= 'Review the command arguments and try again.'
         nextCommand ??= `ae help ${parsed.command}`
@@ -491,9 +560,15 @@ async function main(): Promise<number> {
       exitCode = 1
       kind = 'UNAVAILABLE'
       code = 'connection_refused'
-      message = `Could not reach ${safeOriginForDiagnostics(parsed.options.baseUrl)}.`
-      suggestion = 'Start the AE server, then retry the command.'
-      nextCommand = 'npm run dev'
+      const safeOrigin = safeOriginForDiagnostics(parsed.options.baseUrl)
+      message = `Could not reach ${safeOrigin}.`
+      if (isLoopbackCliBaseUrl(parsed.options.baseUrl)) {
+        suggestion = 'Local AE is not running; check the hosted AE service instead.'
+        nextCommand = `ae doctor --base-url ${HOSTED_DEFAULT_BASE_URL}`
+      } else {
+        suggestion = 'Check network access and confirm the configured AE origin.'
+        nextCommand = continuationCommand(['ae', 'config', '--base-url', safeOrigin, '--json'])
+      }
     } else {
       exitCode = 1
       kind = 'INTERNAL'

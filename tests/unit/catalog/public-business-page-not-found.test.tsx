@@ -88,25 +88,25 @@ describe('PublicBusinessNotFound copy', () => {
   it('does not assert that a business exists when no record was found', () => {
     renderWithRouter(<PublicBusinessNotFound data={{ reason: 'no_such_business' }} isNotFound routeId="/$slug" />)
 
-    expect(screen.getByText('No supplier at this address')).toBeTruthy()
+    expect(screen.getByText('No provider at this address')).toBeTruthy()
     expect(screen.queryByText(/may need to claim or review it/)).toBeNull()
 
-    expect(screen.getByRole('link', { name: 'Browse catalog' }).getAttribute('href')).toContain('/market')
+    expect(screen.getByRole('link', { name: 'Browse catalog' }).getAttribute('href')).toContain('#tools')
   })
 
   it('does not revive claim framing when a real business page is withheld', () => {
     renderWithRouter(<PublicBusinessNotFound data={{ reason: 'not_public' }} isNotFound routeId="/$slug" />)
 
-    expect(screen.getByText('Supplier profile unavailable')).toBeTruthy()
-    expect(screen.getByText('This supplier is not published in the catalogue right now.')).toBeTruthy()
+    expect(screen.getByText('Provider profile unavailable')).toBeTruthy()
+    expect(screen.getByText('This provider is not published in the catalogue right now.')).toBeTruthy()
     expect(screen.queryByText(/claim or review/)).toBeNull()
-    expect(screen.getByRole('link', { name: 'Back to catalog' }).getAttribute('href')).toContain('/market')
+    expect(screen.getByRole('link', { name: 'Back to catalog' }).getAttribute('href')).toContain('#tools')
   })
 
   it('falls back to the no-such-business copy when the boundary carries no reason', () => {
     renderWithRouter(<PublicBusinessNotFound isNotFound routeId="/$slug" />)
 
-    expect(screen.getByText('No supplier at this address')).toBeTruthy()
+    expect(screen.getByText('No provider at this address')).toBeTruthy()
     expect(screen.queryByText(/may need to claim or review it/)).toBeNull()
   })
 })
@@ -119,7 +119,7 @@ describe('ProviderListingError copy', () => {
     expect(screen.getByText('This supplier didn’t load')).toBeTruthy()
     expect(screen.queryByText(/registry/i)).toBeNull()
     expect(screen.getByRole('link', { name: 'Try again' }).classList.contains('min-h-touch')).toBe(true)
-    expect(screen.getByRole('link', { name: 'Back to catalog' }).getAttribute('href')).toContain('/market')
+    expect(screen.getByRole('link', { name: 'Back to catalog' }).getAttribute('href')).toContain('#tools')
     expect(screen.getByRole('link', { name: 'Back to catalog' }).classList.contains('min-h-touch')).toBe(true)
   })
 })

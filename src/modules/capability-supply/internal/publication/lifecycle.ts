@@ -21,6 +21,7 @@ export type PublicationLifecycleReason =
   | 'health_unobserved' | 'credential_unavailable' | 'health_unhealthy' | 'health_stale'
   | 'withdrawn' | 'incompatible_revision'
   | 'eligibility_integrity_failure'
+  | 'provider_authority_unverified'
 
 export type CapabilityReadinessOutcome =
   | 'healthy' | 'credential_unavailable' | 'credential_rejected' | 'target_not_public'
@@ -41,6 +42,8 @@ export type CapabilityPublicationLifecycleRow = Readonly<{
   readinessOutcome?: CapabilityReadinessOutcome
   readinessValidUntil?: number | undefined
   readinessObservedAt?: number | undefined
+  readinessLastHealthyAt?: number | undefined
+  sourceAuthorityState?: 'verified' | 'review_required' | undefined
 }>
 
 export type PublicationContractRef = Readonly<{
@@ -91,6 +94,9 @@ export function publicationLifecycle(
     return { state: 'incompatible' as const, reasons: ['incompatible_revision' as const] }
   }
   const reasons: PublicationLifecycleReason[] = []
+  if (publication.sourceAuthorityState === 'review_required') {
+    reasons.push('provider_authority_unverified')
+  }
   if (!offeringEligibilityIsValid(offering) || !bindingEligibilityIsValid(binding)) {
     return { state: 'inactive', reasons: ['eligibility_integrity_failure'] }
   }
@@ -98,8 +104,8 @@ export function publicationLifecycle(
     && (
       !connectionAuthoritySnapshotMatches(binding.connectionAuthority, currentConnection, {
         businessId: String(offering.businessId),
-        operationRef: publication.connectionAuthority?.operationRef
-          ?? binding.connectionAuthority?.operationRef
+        toolRef: publication.connectionAuthority?.toolRef
+          ?? binding.connectionAuthority?.toolRef
           ?? '',
         adapterId: binding.adapterId,
         now,
@@ -126,4 +132,3 @@ export function publicationLifecycle(
   }
   return { state: reasons.length === 0 ? 'active' as const : 'inactive' as const, reasons }
 }
-

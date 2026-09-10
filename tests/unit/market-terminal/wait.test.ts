@@ -10,6 +10,8 @@ const options: CliOptions = {
   help: false,
   allowWrite: false,
 }
+const callRef = 'call:one'
+const toolRef = `operation:v1:${'a'.repeat(64)}`
 
 function setApiKey(): void {
   process.env.AE_API_KEY = 'ae-test-caller-key'
@@ -23,19 +25,20 @@ afterEach(() => {
   delete process.env.AE_API_KEY_ORIGIN
 })
 
-describe('AE CLI recorded invocation wait', () => {
-  it('returns an already completed recorded result without creating a call', async () => {
+describe('AE CLI recorded Call wait', () => {
+  it('returns an already completed recorded result without creating a Call', async () => {
     setApiKey()
     const stdout = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
     const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(Response.json({
       kind: 'found',
-      invocationRef: 'invocation:one',
-      operationRef: 'operation:one',
+      callRef,
+      version: 1,
+      toolRef,
       state: 'terminal',
       result: {
         kind: 'completed',
-        invocationRef: 'invocation:one',
-        operationRef: 'operation:one',
+        callRef,
+        toolRef,
         output: { answer: 42 },
         evidenceHash: 'sha256:evidence',
         usage: {
@@ -49,17 +52,17 @@ describe('AE CLI recorded invocation wait', () => {
     }))
     vi.stubGlobal('fetch', fetch)
 
-    await runWaitCommand(['invocation:one'], options)
+    await runWaitCommand([callRef], options)
 
     expect(fetch).toHaveBeenCalledOnce()
     const [url, init] = fetch.mock.calls[0]!
-    expect(url).toBe('https://market.example/api/v1/operations/invocation%3Aone')
+    expect(url).toBe('https://market.example/api/v1/calls/call%3Aone')
     expect(init?.method).toBe('GET')
     expect(new Headers(init?.headers).get('Authorization')).toBe('Bearer ae-test-caller-key')
     expect(JSON.parse(stdout.mock.calls.flat().join(''))).toMatchObject({
       kind: 'found',
-      invocationRef: 'invocation:one',
-      result: { kind: 'completed', output: { answer: 42 } },
+      callRef,
+      result: { kind: 'completed', callRef, output: { answer: 42 } },
     })
   })
 
@@ -69,31 +72,33 @@ describe('AE CLI recorded invocation wait', () => {
     const fetch = vi.fn<typeof globalThis.fetch>()
       .mockResolvedValueOnce(Response.json({
         kind: 'found',
-        invocationRef: 'invocation:one',
-        operationRef: 'operation:one',
+        callRef,
+        version: 1,
+        toolRef,
         state: 'in_progress',
       }))
       .mockResolvedValueOnce(Response.json({
         kind: 'found',
-        invocationRef: 'invocation:one',
-        operationRef: 'operation:one',
+        callRef,
+        version: 2,
+        toolRef,
         state: 'reconciliation_required',
       }))
     vi.stubGlobal('fetch', fetch)
 
-    await runWaitCommand(['invocation:one'], options)
+    await runWaitCommand([callRef], options)
 
     expect(fetch).toHaveBeenCalledTimes(2)
-    expect(fetch.mock.calls.every(([url]) => String(url).endsWith('/api/v1/operations/invocation%3Aone'))).toBe(true)
+    expect(fetch.mock.calls.every(([url]) => String(url).endsWith('/api/v1/calls/call%3Aone'))).toBe(true)
     expect(JSON.parse(stdout.mock.calls.flat().join(''))).toMatchObject({
       kind: 'found',
-      invocationRef: 'invocation:one',
+      callRef,
       state: 'reconciliation_required',
     })
   })
 
   it('does not authorize a new identity when the credential is missing', async () => {
-    await expect(runWaitCommand(['invocation:one'], options)).rejects.toMatchObject({
+    await expect(runWaitCommand([callRef], options)).rejects.toMatchObject({
       kind: 'UNAUTHENTICATED',
       code: 'agent_access_key_required',
       message: 'No matching credential is selected for wait on this origin.',
@@ -105,10 +110,10 @@ describe('AE CLI recorded invocation wait', () => {
     setApiKey()
     vi.stubGlobal('fetch', vi.fn<typeof globalThis.fetch>().mockRejectedValue(new Error('socket closed')))
 
-    await expect(runWaitCommand(['invocation:one'], options)).rejects.toMatchObject({
+    await expect(runWaitCommand([callRef], options)).rejects.toMatchObject({
       kind: 'UNAVAILABLE',
-      code: 'operation-wait-transport-unknown',
-      nextCommand: 'ae wait invocation:one',
+      code: 'call-wait-transport-unknown',
+      nextCommand: 'ae wait call:one',
       detail: { identityPreserved: true },
     } satisfies Partial<CliFailure>)
   })

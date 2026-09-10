@@ -14,7 +14,7 @@ const validEvent: RecordCapabilityCallEventArgs = {
   offeringRef: 'offering:valid',
   publicationRef: 'publication:valid',
   publicationRevision: 1,
-  operationRef: 'operation:valid',
+  toolRef: 'operation:valid',
   taskDigest: 'sha256:valid',
   eventKind: 'supply_owner_test_observed',
   outcome: 'filled',

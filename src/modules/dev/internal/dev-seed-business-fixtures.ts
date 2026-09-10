@@ -34,7 +34,7 @@ export type DevSeedBusinessFixture = Readonly<{
 }>
 
 /**
- * Dev-seed businesses are not the product catalog. Market Operations come from
+ * Dev-seed businesses are not the product catalog. Tools come from
  * facilitator discovery ingest, not curated fixtures.
  */
 export const DEV_SEED_BUSINESS_COUNT = 0

@@ -215,8 +215,14 @@ async function terminateBrowsers(pids, processes, dryRun) {
   return { count: terminated.size, failures }
 }
 
-async function cleanup({ baseline, dryRun }) {
-  const caches = await cleanupCaches(dryRun)
+async function cleanup({ baseline, cleanupOnly, dryRun }) {
+  // Build-tool caches are shared with a concurrently running Vite server.
+  // Deleting them after an ordinary test run invalidates the live module graph
+  // and causes transient missing-module/CSS failures. Cache removal is therefore
+  // reserved for the explicit maintenance command.
+  const caches = cleanupOnly
+    ? await cleanupCaches(dryRun)
+    : { count: 0, failures: 0 }
   let browsers = { count: 0, failures: 0 }
   let warning = false
   if (baseline !== null) {
@@ -286,7 +292,7 @@ async function main() {
   try {
     if (!cli.cleanupOnly) result = await runCommand(cli.command, cli.args, cli.env)
   } finally {
-    await cleanup({ baseline, dryRun: cli.dryRun })
+    await cleanup({ baseline, cleanupOnly: cli.cleanupOnly, dryRun: cli.dryRun })
   }
 
   if (result.error !== null) {

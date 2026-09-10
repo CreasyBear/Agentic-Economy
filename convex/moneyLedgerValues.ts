@@ -10,10 +10,10 @@ export const serverFunctionAuth = v.object({
   scopes: v.array(v.string()),
   authorityMode: v.optional(
     v.union(
-      v.literal('inspect_only'),
-      v.literal('approve_each'),
-      v.literal('bounded_mandate'),
-      v.literal('full_yolo'),
+      v.literal('read_only'),
+      v.literal('approval_required'),
+      v.literal('spending_policy'),
+      v.literal('unrestricted_test_only'),
     ),
   ),
   issuedAt: v.number(),
@@ -32,6 +32,7 @@ export const moneyRefusalValue = v.object({
   kind: v.literal('refused'),
   code: v.string(),
   retryable: v.boolean(),
+  correlationRef: v.optional(v.string()),
 })
 export const billingSourceArgs = {
   operationKey: identifier,
@@ -45,7 +46,6 @@ export const checkoutEventArg = v.object({
     v.literal('checkout.session.completed'),
     v.literal('checkout.session.async_payment_succeeded'),
     v.literal('checkout.session.async_payment_failed'),
-    v.literal('checkout.session.expired'),
   ),
   externalRef: identifier,
   sessionId: identifier,
@@ -53,7 +53,11 @@ export const checkoutEventArg = v.object({
   paymentId: v.optional(identifier),
   checkoutSessionDigest: identifier,
   paymentIntentDigest: v.optional(identifier),
-  status: v.union(v.literal('paid'), v.literal('failed'), v.literal('expired')),
+  status: v.union(
+    v.literal('paid'),
+    v.literal('processing'),
+    v.literal('failed'),
+  ),
   amount: exactAmount,
   metadataDigest: identifier,
   payloadDigest: identifier,
@@ -63,7 +67,6 @@ export const accountUpdatedEventArg = v.object({
   kind: v.literal('account'),
   stripeEventId: identifier,
   eventType: v.union(
-    v.literal('account.updated'),
     v.literal('v2.core.account.created'),
     v.literal('v2.core.account.updated'),
     v.literal('v2.core.account.closed'),
@@ -78,7 +81,26 @@ export const accountUpdatedEventArg = v.object({
   payloadDigest: identifier,
   observedAt: v.number(),
 })
+export const refundEventArg = v.object({
+  kind: v.literal('refund'),
+  stripeEventId: identifier,
+  eventType: v.union(
+    v.literal('refund.created'),
+    v.literal('refund.updated'),
+    v.literal('refund.failed'),
+  ),
+  externalRef: identifier,
+  refundId: identifier,
+  paymentId: identifier,
+  chargeId: identifier,
+  refundDigest: identifier,
+  status: v.union(v.literal('pending'), v.literal('succeeded'), v.literal('failed')),
+  amount: exactAmount,
+  payloadDigest: identifier,
+  observedAt: v.number(),
+})
 export const stripeMoneyWebhookEventArg = v.union(
   checkoutEventArg,
+  refundEventArg,
   accountUpdatedEventArg,
 )

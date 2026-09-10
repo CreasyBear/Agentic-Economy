@@ -315,7 +315,10 @@ describe("admitProviderSchema deterministic normalizer", () => {
 
     expect(result.kind).toBe("normalized");
     if (result.kind === "refused") return;
-    expect(result.outputSchema).toEqual(outputSchema);
+    expect(result.outputSchema).toEqual({
+      ...outputSchema,
+      $schema: "https://json-schema.org/draft/2020-12/schema",
+    });
     expect(result.contract.evidence).toEqual([
       expect.objectContaining({
         outputPointer: "",
@@ -381,7 +384,7 @@ describe("admitProviderSchema deterministic normalizer", () => {
     });
   });
 
-  it("returns a named refusal when a non-object output has no guaranteed field", async () => {
+  it("uses root evidence for a non-object JSON output", async () => {
     const result = await admitProviderSchema(
       {
         inputSchema: {
@@ -399,9 +402,6 @@ describe("admitProviderSchema deterministic normalizer", () => {
       dereferenceOpenApiSchema,
     );
 
-    expect(result).toEqual({
-      kind: "refused",
-      reason: "admit_output_no_guaranteed_field",
-    });
+    expect(result).toMatchObject({ kind: "normalized", contract: { evidence: [{ outputPointer: "" }] } });
   });
 });

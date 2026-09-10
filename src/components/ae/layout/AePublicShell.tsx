@@ -2,14 +2,14 @@ import { useEffect, useRef, useState, type RefObject, type ReactNode } from 'rea
 import { Link } from '@tanstack/react-router'
 import { MenuIcon, XIcon } from 'lucide-react'
 
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
+import { AeCommandPanel, CommandPanelProvider } from '@/components/ae/command-panel'
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
 import { emitFunnelEventOnce } from '@/lib/observability/funnel-client'
-import {
-  AeSiteButton,
-} from '@/components/ae/website/AeSiteButton'
+import { Button } from '@/components/ui/button'
 import { AeSiteDrawerNav, AeSiteIconButton, AeSitePrimaryNav } from '@/components/ae/website/AeSiteNav'
 import { AeSiteFooter } from '@/components/ae/website/AeSiteFooter'
-import { AECON_MARK_SRC, aeconMarkClassName } from '@/content/brand-assets'
+import { AECON_MARK_SRC, AECON_MOBILE_LOCKUP_SRC, aeconMarkClassName } from '@/content/brand-assets'
+import { cn } from '@/lib/utils'
 
 function AeFunnelAttributionBoot() {
   useEffect(() => {
@@ -21,6 +21,7 @@ function AeFunnelAttributionBoot() {
 
 type AePublicShellProps = {
   children: ReactNode
+  mode?: 'page' | 'workspace'
 }
 
 /**
@@ -74,13 +75,25 @@ function useHeaderElevated(sentinelRef: RefObject<HTMLDivElement | null>): boole
   return elevated
 }
 
-export function AePublicShell({ children }: AePublicShellProps) {
+export function AePublicShell({ children, mode = 'page' }: AePublicShellProps) {
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
+  const [commandOpen, setCommandOpen] = useState(false)
   const sentinelRef = useRef<HTMLDivElement>(null)
   const elevated = useHeaderElevated(sentinelRef)
 
+  function handleCommandOpenChange(open: boolean) {
+    if (open) setMobileNavOpen(false)
+    setCommandOpen(open)
+  }
+
   return (
-    <div className="relative flex min-h-dvh flex-col">
+    <div
+      data-shell-mode={mode}
+      className={cn(
+        'relative flex flex-col',
+        mode === 'workspace' ? 'h-dvh min-h-0 overflow-hidden' : 'min-h-dvh',
+      )}
+    >
       <AeFunnelAttributionBoot />
       <AeSkipFocusBridge />
       <a
@@ -91,29 +104,33 @@ export function AePublicShell({ children }: AePublicShellProps) {
         Skip to content
       </a>
       <div ref={sentinelRef} aria-hidden="true" className="pointer-events-none absolute inset-x-0 top-0 h-2" />
-      <header className="sticky top-0 z-30 pt-3">
+      <header className={cn('z-30 shrink-0 border-b border-border bg-background', mode === 'page' && 'sticky top-0')}>
         <Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
           <CloseDrawerOnDesktop onClose={setMobileNavOpen} />
           <div
             data-elevated={elevated ? '' : undefined}
-            className="ae-nav flex min-h-13 items-center gap-related rounded-nav border border-border bg-container px-3 shadow-none transition-shadow duration-200 ease-out data-[elevated]:shadow-float motion-reduce:transition-none sm:px-gutter"
+            className="ae-nav flex min-h-20 items-center gap-related px-1 shadow-none transition-shadow duration-200 ease-out data-[elevated]:shadow-soft motion-reduce:transition-none sm:px-2"
           >
             <PublicBrandLink />
             <AeSitePrimaryNav />
             <div className="ms-auto flex items-center gap-intra">
-              <AeSiteButton asChild variant="outlined" className="hidden md:inline-flex">
+              <CommandPanelProvider open={commandOpen} onOpenChange={handleCommandOpenChange}>
+                <AeCommandPanel />
+              </CommandPanelProvider>
+              <Button asChild variant="ghost" className="hidden lg:inline-flex">
                 <Link to="/sign-in/$" params={{ _splat: '' }}>Sign in</Link>
-              </AeSiteButton>
-              <AeSiteButton asChild>
-                <Link to="/sign-up/$" params={{ _splat: '' }}>Create account</Link>
-              </AeSiteButton>
-              <AeSiteIconButton
-                ariaLabel="Open public menu"
-                className="md:hidden"
-                onClick={() => setMobileNavOpen(true)}
-              >
-                <MenuIcon aria-hidden="true" />
-              </AeSiteIconButton>
+              </Button>
+              <Button asChild variant="outline" className="hidden sm:inline-flex">
+                <Link to="/for-providers">Publish</Link>
+              </Button>
+              <SheetTrigger asChild>
+                <AeSiteIconButton
+                  ariaLabel={mobileNavOpen ? 'Close public menu' : 'Open public menu'}
+                  className="lg:hidden"
+                >
+                  <MenuIcon aria-hidden="true" />
+                </AeSiteIconButton>
+              </SheetTrigger>
             </div>
           </div>
           <SheetContent side="left" className="w-80 max-w-[calc(100vw-2rem)] p-0" showCloseButton={false}>
@@ -128,21 +145,29 @@ export function AePublicShell({ children }: AePublicShellProps) {
             </SheetHeader>
             <AeSiteDrawerNav onNavigate={() => setMobileNavOpen(false)} />
             <div className="grid gap-intra border-t border-border p-gutter">
-              <AeSiteButton asChild variant="outlined">
+              <Button asChild variant="outline">
                 <Link to="/sign-in/$" params={{ _splat: '' }} onClick={() => setMobileNavOpen(false)}>Sign in</Link>
-              </AeSiteButton>
-              <AeSiteButton asChild>
-                <Link to="/sign-up/$" params={{ _splat: '' }} onClick={() => setMobileNavOpen(false)}>Create account</Link>
-              </AeSiteButton>
+              </Button>
+              <Button asChild>
+                <Link to="/for-providers" onClick={() => setMobileNavOpen(false)}>Publish</Link>
+              </Button>
             </div>
           </SheetContent>
         </Sheet>
       </header>
-      <div id="ae-app-shell-main" tabIndex={-1} className="flex min-h-0 flex-1 flex-col">
-        <main id="main-content" tabIndex={-1} className="flex-1">
+      <div
+        id="ae-app-shell-main"
+        tabIndex={-1}
+        className={cn('flex min-h-0 flex-1 flex-col', mode === 'workspace' && 'overflow-hidden')}
+      >
+        <main
+          id="main-content"
+          tabIndex={-1}
+          className={cn('flex-1', mode === 'workspace' && 'flex min-h-0 flex-col overflow-hidden')}
+        >
           {children}
         </main>
-        <AeSiteFooter />
+        {mode === 'page' ? <AeSiteFooter /> : null}
       </div>
     </div>
   )
@@ -150,7 +175,7 @@ export function AePublicShell({ children }: AePublicShellProps) {
 
 function CloseDrawerOnDesktop({ onClose }: { onClose: (open: boolean) => void }) {
   useEffect(() => {
-    const mediaQuery = window.matchMedia('(min-width: 768px)')
+    const mediaQuery = window.matchMedia('(min-width: 1024px)')
     const handleChange = () => {
       if (mediaQuery.matches) onClose(false)
     }
@@ -164,10 +189,8 @@ function CloseDrawerOnDesktop({ onClose }: { onClose: (open: boolean) => void })
 function PublicBrandLink() {
   return (
     <Link to="/" aria-label="Agentic Economy home" className="flex min-h-touch min-w-touch items-center gap-related no-underline">
-      <img src={AECON_MARK_SRC} alt="" aria-hidden="true" className={aeconMarkClassName.light} />
-      <span className="hidden min-w-0 sm:block">
-        <span className="text-sm font-semibold tracking-tight text-foreground">AECON</span>
-      </span>
+      <img src={AECON_MARK_SRC} alt="" aria-hidden="true" className={cn(aeconMarkClassName.light, 'hidden sm:block')} />
+      <img src={AECON_MOBILE_LOCKUP_SRC} alt="" aria-hidden="true" className="h-7 w-auto max-w-32 sm:hidden" />
     </Link>
   )
 }

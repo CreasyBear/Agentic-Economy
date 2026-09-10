@@ -16,12 +16,12 @@ import {
 const productionCeilingSchema = z.strictObject({
   currency: currencySchema,
   exponent: z.number().int().min(0).max(18),
-  maximumSpendPerInvocation: exactAmountSchema,
+  maximumSpendPerCall: exactAmountSchema,
   maximumDailySpend: exactAmountSchema,
   maximumMonthlySpend: exactAmountSchema,
 }).superRefine((value, context) => {
   const amounts = [
-    value.maximumSpendPerInvocation,
+    value.maximumSpendPerCall,
     value.maximumDailySpend,
     value.maximumMonthlySpend,
   ]
@@ -31,23 +31,23 @@ const productionCeilingSchema = z.strictObject({
       context.addIssue({
         code: 'custom',
         message: 'production_budget_currency_mismatch',
-        path: [index === 0 ? 'maximumSpendPerInvocation' : index === 1 ? 'maximumDailySpend' : 'maximumMonthlySpend'],
+        path: [index === 0 ? 'maximumSpendPerCall' : index === 1 ? 'maximumDailySpend' : 'maximumMonthlySpend'],
       })
     }
     if (amount.units === '0') {
       context.addIssue({
         code: 'custom',
         message: 'production_budget_must_be_positive',
-        path: [index === 0 ? 'maximumSpendPerInvocation' : index === 1 ? 'maximumDailySpend' : 'maximumMonthlySpend'],
+        path: [index === 0 ? 'maximumSpendPerCall' : index === 1 ? 'maximumDailySpend' : 'maximumMonthlySpend'],
       })
     }
   }
 
-  if (compareExactAmounts(value.maximumSpendPerInvocation, value.maximumDailySpend) === 1) {
+  if (compareExactAmounts(value.maximumSpendPerCall, value.maximumDailySpend) === 1) {
     context.addIssue({
       code: 'custom',
-      message: 'production_per_invocation_exceeds_daily',
-      path: ['maximumSpendPerInvocation'],
+      message: 'production_per_call_exceeds_daily',
+      path: ['maximumSpendPerCall'],
     })
   }
   if (compareExactAmounts(value.maximumDailySpend, value.maximumMonthlySpend) === 1) {
@@ -62,7 +62,7 @@ const productionCeilingSchema = z.strictObject({
 export type ProductionAgentAccessPolicyInput = Readonly<{
   currency: string
   exponent: number
-  maximumSpendPerInvocation: ExactAmount
+  maximumSpendPerCall: ExactAmount
   maximumDailySpend: ExactAmount
   maximumMonthlySpend: ExactAmount
 }>
@@ -76,7 +76,7 @@ export function defaultProductionAgentAccessPolicy(input: Readonly<{
     environment: 'production',
     currency: input.currency,
     exponent: input.exponent,
-    maximumSpendPerInvocation: zero,
+    maximumSpendPerCall: zero,
     maximumDailySpend: zero,
     maximumMonthlySpend: zero,
   })
@@ -89,7 +89,7 @@ export function buildProductionAgentAccessPolicy(input: ProductionAgentAccessPol
     environment: 'production',
     currency: parsed.currency,
     exponent: parsed.exponent,
-    maximumSpendPerInvocation: parsed.maximumSpendPerInvocation,
+    maximumSpendPerCall: parsed.maximumSpendPerCall,
     maximumDailySpend: parsed.maximumDailySpend,
     maximumMonthlySpend: parsed.maximumMonthlySpend,
   }))

@@ -58,17 +58,17 @@ export const Route = createFileRoute('/$slug')({
 
     return {
       meta: [
-        { title: `${loaderData.page.catalog.name} Operations | Agentic Economy` },
-        { name: 'description', content: `Browse published Operations, prices, readiness, and access paths from ${loaderData.page.catalog.name}.` },
+        { title: `${loaderData.page.catalog.name} Tools | Agentic Economy` },
+        { name: 'description', content: `Browse published Tools, prices, readiness, and access paths from ${loaderData.page.catalog.name}.` },
         { name: 'robots', content: loaderData.seo.indexDirective },
         { property: 'og:type', content: 'website' },
         { property: 'og:site_name', content: 'Agentic Economy' },
-        { property: 'og:title', content: `${loaderData.page.catalog.name} Operations | Agentic Economy` },
-        { property: 'og:description', content: `Browse published Operations, prices, readiness, and access paths from ${loaderData.page.catalog.name}.` },
+        { property: 'og:title', content: `${loaderData.page.catalog.name} Tools | Agentic Economy` },
+        { property: 'og:description', content: `Browse published Tools, prices, readiness, and access paths from ${loaderData.page.catalog.name}.` },
         { property: 'og:url', content: loaderData.seo.canonicalUrl },
         { name: 'twitter:card', content: 'summary' },
-        { name: 'twitter:title', content: `${loaderData.page.catalog.name} Operations | Agentic Economy` },
-        { name: 'twitter:description', content: `Browse published Operations, prices, readiness, and access paths from ${loaderData.page.catalog.name}.` },
+        { name: 'twitter:title', content: `${loaderData.page.catalog.name} Tools | Agentic Economy` },
+        { name: 'twitter:description', content: `Browse published Tools, prices, readiness, and access paths from ${loaderData.page.catalog.name}.` },
       ],
       links: [{ rel: 'canonical', href: loaderData.seo.canonicalUrl }],
       scripts: [
@@ -121,7 +121,7 @@ function ProviderListingError() {
       action={
         <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
           <Button asChild variant="default" className="min-h-touch"><a href={pathname}>Try again</a></Button>
-          <Button asChild variant="secondary" className="min-h-touch"><Link to="/market" search={{ window: '30d' }} hash="operations">Back to catalog</Link></Button>
+          <Button asChild variant="secondary" className="min-h-touch"><Link to="/market" search={{ window: '30d' }} hash="tools">Back to catalog</Link></Button>
         </div>
       }
     />
@@ -139,7 +139,7 @@ export function PublicBusinessUnavailable() {
       action={
         <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
           <Button asChild variant="default" className="min-h-touch"><a href={pathname}>Try again</a></Button>
-          <Button asChild variant="secondary" className="min-h-touch"><Link to="/market" search={{ window: '30d' }} hash="operations">Back to catalog</Link></Button>
+          <Button asChild variant="secondary" className="min-h-touch"><Link to="/market" search={{ window: '30d' }} hash="tools">Back to catalog</Link></Button>
         </div>
       }
     />

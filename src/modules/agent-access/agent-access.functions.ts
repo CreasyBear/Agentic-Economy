@@ -13,20 +13,26 @@ import {
 } from '@/lib/server/convex-source'
 import { isLocalE2EAuthBypassEnabled } from '@/lib/server/local-e2e-bypass'
 import { readTrimmedEnv } from '@/lib/server/read-trimmed-env'
-import { trimTrailingSlashes } from '@/modules/common/trim-trailing-slashes'
+import { currentRequestCorrelationId } from '@/lib/server/request-correlation'
+import { clerkUserProviderIdentifier } from '@/modules/principal-account/external-identity/public'
 
 import {
   issueAgentAccessKey,
   AGENT_ACCESS_MAX_TTL_SECONDS,
   AGENT_ACCESS_MIN_TTL_SECONDS,
   listAgentAccessKeys,
-  revokeAgentAccessKey,
   type AgentAccessKeyCreateInput,
   type AgentAccessKeyRecord,
   type AgentAccessPrincipalRegistration,
   type AgentAccessPrincipalRegistrationResult,
   type AgentAccessGrantRegistrationResult,
   type IssuedAgentBindingRegistration,
+  type AgentCredentialReplacementRegistration,
+  type AgentCredentialReplacementRegistrationResult,
+  type AgentCredentialReplacementTransition,
+  type AgentCredentialReplacementTransitionResult,
+  type AgentLifecycleCanonicalResult,
+  type AgentLifecycleResult,
 } from './agent-access'
 import {
   agentAccessPolicySchema,
@@ -34,11 +40,10 @@ import {
 } from './policy'
 import {
   AGENT_ACCESS_AUTHORITY_MODE_VALUES,
-  MARKET_OPERATIONS_INVOKE_SCOPE,
+  MARKET_TOOLS_CALL_SCOPE,
   agentAuthorityModeForScopes,
   agentAuthorityScopeForMode,
 } from './contract'
-import { revokeAgentAccessGrant } from './policy.functions'
 import {
   buildProductionAgentAccessPolicy,
   defaultProductionAgentAccessPolicy,
@@ -46,6 +51,7 @@ import {
 import { defaultSandboxAgentAccessPolicy } from './sandbox-policy'
 import { exactAmountSchema } from '@/modules/money/public'
 import { issuedAgentGrantRef } from './issued-agent-binding'
+import type { OwnerConnectionLifecycleResult } from './agent-connection'
 
 const issueInputSchema = z.strictObject({
   name: z.string().trim().min(1).max(80),
@@ -55,22 +61,22 @@ const issueInputSchema = z.strictObject({
   applicationRef: z.string().trim().min(1).max(200).optional(),
   environment: z.enum(['sandbox', 'production']).optional(),
   authorityMode: z.enum(AGENT_ACCESS_AUTHORITY_MODE_VALUES).optional(),
-  maximumSpendPerInvocation: exactAmountSchema.optional(),
+  maximumSpendPerCall: exactAmountSchema.optional(),
   maximumDailySpend: exactAmountSchema.optional(),
   maximumMonthlySpend: exactAmountSchema.optional(),
-  maximumConcurrentInvocations: z.number().int().safe().positive().optional(),
+  maximumConcurrentCalls: z.number().int().safe().positive().optional(),
   maximumCallsPerMinute: z.number().int().safe().positive().optional(),
   maximumCallsPerHour: z.number().int().safe().positive().optional(),
   expiresInSeconds: z.number().int().safe().min(AGENT_ACCESS_MIN_TTL_SECONDS).max(AGENT_ACCESS_MAX_TTL_SECONDS).optional(),
 }).superRefine((value, context) => {
   const budgetFields = [
-    value.maximumSpendPerInvocation,
+    value.maximumSpendPerCall,
     value.maximumDailySpend,
     value.maximumMonthlySpend,
   ]
   const budgetCount = budgetFields.filter((field) => field !== undefined).length
   if (budgetCount !== 0 && budgetCount !== budgetFields.length) {
-    context.addIssue({ code: 'custom', message: 'production_budget_must_be_complete', path: ['maximumSpendPerInvocation'] })
+    context.addIssue({ code: 'custom', message: 'production_budget_must_be_complete', path: ['maximumSpendPerCall'] })
   }
   const rateFields = [value.maximumCallsPerMinute, value.maximumCallsPerHour]
   const rateCount = rateFields.filter((field) => field !== undefined).length
@@ -85,36 +91,36 @@ type IssueInput = z.infer<typeof issueInputSchema>
 export function buildOwnerAgentAccessPolicy(input: Readonly<Pick<
   IssueInput,
   | 'environment'
-  | 'maximumSpendPerInvocation'
+  | 'maximumSpendPerCall'
   | 'maximumDailySpend'
   | 'maximumMonthlySpend'
-  | 'maximumConcurrentInvocations'
+  | 'maximumConcurrentCalls'
   | 'maximumCallsPerMinute'
   | 'maximumCallsPerHour'
   | 'expiresInSeconds'
   | 'authorityMode'
 >>): AgentAccessPolicy {
   const environment = input.environment ?? 'sandbox'
-  if (environment === 'sandbox') return defaultSandboxAgentAccessPolicy({ currency: 'USD', exponent: 2 })
-  const hasBudget = input.maximumSpendPerInvocation !== undefined
+  if (environment === 'sandbox') return defaultSandboxAgentAccessPolicy({ currency: 'AUD', exponent: 6 })
+  const hasBudget = input.maximumSpendPerCall !== undefined
     && input.maximumDailySpend !== undefined
     && input.maximumMonthlySpend !== undefined
   const base = hasBudget
     ? buildProductionAgentAccessPolicy({
-        currency: 'USD',
-        exponent: 2,
-        maximumSpendPerInvocation: input.maximumSpendPerInvocation,
+        currency: input.maximumSpendPerCall.currency,
+        exponent: input.maximumSpendPerCall.exponent,
+        maximumSpendPerCall: input.maximumSpendPerCall,
         maximumDailySpend: input.maximumDailySpend,
         maximumMonthlySpend: input.maximumMonthlySpend,
       })
-    : defaultProductionAgentAccessPolicy({ currency: 'USD', exponent: 2 })
+    : defaultProductionAgentAccessPolicy({ currency: 'AUD', exponent: 6 })
   return agentAccessPolicySchema.parse({
     ...base,
     budget: {
       ...base.budget,
-      ...(input.maximumConcurrentInvocations === undefined
+      ...(input.maximumConcurrentCalls === undefined
         ? {}
-        : { maximumConcurrentInvocations: input.maximumConcurrentInvocations }),
+        : { maximumConcurrentCalls: input.maximumConcurrentCalls }),
     },
     rate: {
       ...base.rate,
@@ -130,10 +136,10 @@ export function buildOwnerAgentAccessPolicy(input: Readonly<Pick<
 
 function issueScopes(input: IssueInput): readonly string[] | undefined {
   if (input.scopes === undefined && input.authorityMode === undefined) {
-    return [MARKET_OPERATIONS_INVOKE_SCOPE, agentAuthorityScopeForMode('inspect_only')]
+    return [MARKET_TOOLS_CALL_SCOPE, agentAuthorityScopeForMode('read_only')]
   }
   const scopes = input.scopes === undefined && input.authorityMode !== undefined
-    ? [MARKET_OPERATIONS_INVOKE_SCOPE, agentAuthorityScopeForMode(input.authorityMode)]
+    ? [MARKET_TOOLS_CALL_SCOPE, agentAuthorityScopeForMode(input.authorityMode)]
     : input.scopes
   if (scopes === undefined || input.authorityMode === undefined) return scopes
   return agentAuthorityModeForScopes(scopes) === input.authorityMode ? scopes : undefined
@@ -142,25 +148,6 @@ function issueScopes(input: IssueInput): readonly string[] | undefined {
 const owner = async (): Promise<{ userId: string } | undefined> => {
   const identity = await auth()
   return identity.isAuthenticated && identity.userId !== null ? { userId: identity.userId } : undefined
-}
-
-function convexTokenIdentifierFor(userId: string): string | undefined {
-  const issuer = readTrimmedEnv(process.env, 'CLERK_JWT_ISSUER_DOMAIN')
-  if (issuer === undefined || typeof userId !== 'string' || userId.trim().length === 0) return undefined
-  try {
-    const parsed = new URL(issuer)
-    if (
-      (parsed.protocol !== 'http:' && parsed.protocol !== 'https:')
-      || parsed.username.length > 0
-      || parsed.password.length > 0
-      || parsed.search.length > 0
-      || parsed.hash.length > 0
-    ) return undefined
-    const canonicalIssuer = trimTrailingSlashes(parsed.href)
-    return canonicalIssuer.length === 0 ? undefined : `${canonicalIssuer}|${userId}`
-  } catch {
-    return undefined
-  }
 }
 
 type ClerkApiKeyLike = Readonly<{
@@ -201,8 +188,65 @@ type RegisterIssuedAgentBindingArgs = IssuedAgentBindingRegistration & Readonly<
 const registerIssuedAgentBindingMutation = sourceMutation<RegisterIssuedAgentBindingArgs, AgentAccessGrantRegistrationResult>(
   'agentAccessPrincipals:registerIssuedAgentBindingForServer',
 )
+type PrepareReplacementArgs = AgentCredentialReplacementRegistration & Readonly<{ serviceAuth: ConvexServerFunctionAssertion }>
+const prepareCredentialReplacementMutation = sourceMutation<PrepareReplacementArgs, AgentCredentialReplacementRegistrationResult>(
+  'agentAccessPrincipals:prepareCredentialReplacementForServer',
+)
+type TransitionReplacementArgs = AgentCredentialReplacementTransition & Readonly<{ serviceAuth: ConvexServerFunctionAssertion }>
+const promoteCredentialReplacementMutation = sourceMutation<TransitionReplacementArgs, AgentCredentialReplacementTransitionResult>(
+  'agentAccessPrincipals:promoteCredentialReplacementForServer',
+)
+const cancelCredentialReplacementMutation = sourceMutation<TransitionReplacementArgs, AgentCredentialReplacementTransitionResult>(
+  'agentAccessPrincipals:cancelCredentialReplacementForServer',
+)
+type RevokeCredentialCommand = Readonly<{ credentialRef: string; correlationRef: string }>
+type DisconnectAgentCommand = Readonly<{ principalRef: string; correlationRef: string }>
+type LifecycleMutationArgs<Command> = Command & Readonly<{ serviceAuth: ConvexServerFunctionAssertion }>
+const revokeCredentialMutation = sourceMutation<LifecycleMutationArgs<RevokeCredentialCommand>, AgentLifecycleCanonicalResult>(
+  'agentAccessPrincipals:revokeCredentialForServer',
+)
+const disconnectAgentMutation = sourceMutation<LifecycleMutationArgs<DisconnectAgentCommand>, AgentLifecycleCanonicalResult>(
+  'agentAccessPrincipals:disconnectAgentForServer',
+)
+type RenameAgentCommand = Readonly<{
+  principalRef: string
+  expectedRevision: number
+  displayName: string
+  correlationRef: string
+}>
+export type RenameAgentResult =
+  | Readonly<{
+      kind: 'completed' | 'replayed'
+      principalRef: string
+      displayName: string
+      revision: number
+      correlationRef: string
+    }>
+  | Readonly<{ kind: 'conflict'; code: string; correlationRef: string }>
+  | Readonly<{ kind: 'refused'; code: 'authentication_required' | 'source_unavailable'; correlationRef: string }>
+const renameAgentMutation = sourceMutation<RenameAgentCommand, Exclude<RenameAgentResult, { kind: 'refused'; code: 'source_unavailable' }>>(
+  'agentAccessPrincipals:renameAgentForServer',
+)
+type ProviderRevocationCommand = Readonly<{
+  principalRef: string
+  credentialRef: string
+  providerCredentialId: string
+  correlationRef: string
+  outcome: 'revoked' | 'failed'
+}>
+type ProviderRevocationResult = Readonly<{ kind: 'completed' | 'replayed' | 'conflict' } | { kind: 'refused'; code: 'authentication_required' }>
+const recordProviderRevocationMutation = sourceMutation<LifecycleMutationArgs<ProviderRevocationCommand>, ProviderRevocationResult>(
+  'agentAccessPrincipals:recordProviderRevocationForServer',
+)
 const listOwnerGrantReadbacksQuery = sourceQuery<{ requireAuthority: true }, readonly unknown[]>(
   'agentAccessPolicy:listOwnerGrantReadbacks',
+)
+const revokeOwnerConnectionMutation = sourceMutation<Readonly<{
+  connectionRef: string
+  expectedRevision: number
+  correlationRef: string
+}>, Exclude<OwnerConnectionLifecycleResult, { kind: 'refused'; code: 'source_unavailable' }>>(
+  'agentAccessOAuth:revokeOwnerConnection',
 )
 
 async function requireCanonicalOwnerAuthorityServer(): Promise<void> {
@@ -256,7 +300,7 @@ export async function registerAgentAccessPrincipal(
       scopes: [...input.scopes],
       authorityMode: input.authorityMode,
       grantGeneration: input.grantGeneration,
-      policyDigest: input.policyDigest,
+      spendingPolicyDigest: input.spendingPolicyDigest,
       lifecycle: input.lifecycle,
       ...(input.expiresAt === undefined ? {} : { expiresAt: input.expiresAt }),
       seenAt: input.seenAt,
@@ -274,16 +318,64 @@ export async function registerIssuedAgentBinding(
     const command = {
       ...input,
       scopes: [...input.scopes],
+      toolRefs: [...input.toolRefs],
     }
     const serviceAuth = await createConvexServerFunctionAssertion({
       operation: 'agentAccessPrincipals.registerIssuedAgentBindingForServer',
-      scope: MARKET_OPERATIONS_INVOKE_SCOPE,
+      scope: MARKET_TOOLS_CALL_SCOPE,
       command,
     })
     return await callSourceMutation(registerIssuedAgentBindingMutation, { ...command, serviceAuth })
   } catch {
     return { kind: 'unavailable' }
   }
+}
+
+async function callReplacementMutation(
+  operation: string,
+  reference: typeof prepareCredentialReplacementMutation | typeof promoteCredentialReplacementMutation,
+  command: AgentCredentialReplacementRegistration | AgentCredentialReplacementTransition,
+): Promise<AgentCredentialReplacementRegistrationResult | AgentCredentialReplacementTransitionResult> {
+  try {
+    const serviceAuth = await createConvexServerFunctionAssertion({
+      operation,
+      scope: MARKET_TOOLS_CALL_SCOPE,
+      command,
+    })
+    return await callSourceMutation(reference as never, { ...command, serviceAuth } as never) as AgentCredentialReplacementRegistrationResult | AgentCredentialReplacementTransitionResult
+  } catch {
+    return { kind: 'unavailable' }
+  }
+}
+
+export async function prepareAgentCredentialReplacement(
+  input: AgentCredentialReplacementRegistration,
+): Promise<AgentCredentialReplacementRegistrationResult> {
+  return await callReplacementMutation(
+    'agentAccessPrincipals.prepareCredentialReplacementForServer',
+    prepareCredentialReplacementMutation,
+    { ...input, scopes: [...input.scopes], toolRefs: [...input.toolRefs] },
+  ) as AgentCredentialReplacementRegistrationResult
+}
+
+export async function promoteAgentCredentialReplacement(
+  input: AgentCredentialReplacementTransition,
+): Promise<AgentCredentialReplacementTransitionResult> {
+  return await callReplacementMutation(
+    'agentAccessPrincipals.promoteCredentialReplacementForServer',
+    promoteCredentialReplacementMutation,
+    input,
+  ) as AgentCredentialReplacementTransitionResult
+}
+
+export async function cancelAgentCredentialReplacement(
+  input: AgentCredentialReplacementTransition,
+): Promise<AgentCredentialReplacementTransitionResult> {
+  return await callReplacementMutation(
+    'agentAccessPrincipals.cancelCredentialReplacementForServer',
+    cancelCredentialReplacementMutation,
+    input,
+  ) as AgentCredentialReplacementTransitionResult
 }
 
 export const issueAgentAccessKeyServer = createServerFn({ method: 'POST' })
@@ -293,7 +385,7 @@ export const issueAgentAccessKeyServer = createServerFn({ method: 'POST' })
     const environment = data.environment ?? 'sandbox'
     const authorityMode = scopes === undefined ? undefined : agentAuthorityModeForScopes(scopes)
     if (scopes === undefined || authorityMode === undefined
-      || (environment === 'production' && authorityMode === 'full_yolo')) {
+      || (environment === 'production' && authorityMode === 'unrestricted_test_only')) {
       return { kind: 'error' as const, code: 'invalid_input' as const, retryable: false }
     }
     let policy: AgentAccessPolicy
@@ -311,7 +403,10 @@ export const issueAgentAccessKeyServer = createServerFn({ method: 'POST' })
     if (principal === undefined) {
       return { kind: 'error' as const, code: 'missing_auth' as const, retryable: false }
     }
-    const tokenIdentifier = convexTokenIdentifierFor(principal.userId)
+    const tokenIdentifier = clerkUserProviderIdentifier(
+      readTrimmedEnv(process.env, 'CLERK_JWT_ISSUER_DOMAIN'),
+      principal.userId,
+    )
     if (tokenIdentifier === undefined) {
       return { kind: 'error' as const, code: 'missing_auth' as const, retryable: false }
     }
@@ -328,10 +423,10 @@ export const issueAgentAccessKeyServer = createServerFn({ method: 'POST' })
         name: data.name,
         idempotencyKey: data.idempotencyKey,
         scopes,
-        ...(data.maximumSpendPerInvocation === undefined ? {} : { maximumSpendPerInvocation: data.maximumSpendPerInvocation }),
+        ...(data.maximumSpendPerCall === undefined ? {} : { maximumSpendPerCall: data.maximumSpendPerCall }),
         ...(data.maximumDailySpend === undefined ? {} : { maximumDailySpend: data.maximumDailySpend }),
         ...(data.maximumMonthlySpend === undefined ? {} : { maximumMonthlySpend: data.maximumMonthlySpend }),
-        ...(data.maximumConcurrentInvocations === undefined ? {} : { maximumConcurrentInvocations: data.maximumConcurrentInvocations }),
+        ...(data.maximumConcurrentCalls === undefined ? {} : { maximumConcurrentCalls: data.maximumConcurrentCalls }),
         ...(data.maximumCallsPerMinute === undefined ? {} : { maximumCallsPerMinute: data.maximumCallsPerMinute }),
         ...(data.maximumCallsPerHour === undefined ? {} : { maximumCallsPerHour: data.maximumCallsPerHour }),
         ...(data.expiresInSeconds === undefined ? {} : { expiresInSeconds: data.expiresInSeconds }),
@@ -339,7 +434,7 @@ export const issueAgentAccessKeyServer = createServerFn({ method: 'POST' })
         ...(data.applicationRef === undefined ? {} : { applicationRef: data.applicationRef }),
         ...(data.environment === undefined ? {} : { environment: data.environment }),
       },
-      policy,
+      spendingPolicy: policy,
       api,
       registerBinding: registerIssuedAgentBinding,
     })
@@ -354,16 +449,138 @@ export const listAgentAccessKeysServer = createServerFn({ method: 'GET' })
     return await listAgentAccessKeys({ principal, api })
   })
 
-export const revokeAgentAccessKeyServer = createServerFn({ method: 'POST' })
-  .validator((data) => z.strictObject({ keyId: z.string().trim().min(1).max(200) }).parse(data))
-  .handler(async ({ data }) => {
-    await requireCanonicalOwnerAuthorityServer()
-    const principal = await owner()
-    const api = createClerkAgentAccessKeyApi(clerkClient().apiKeys)
-    return await revokeAgentAccessKey({
-      principal,
-      keyId: data.keyId,
-      api,
-      revokeGrant: revokeAgentAccessGrant,
-    })
+async function lifecycleCanonicalMutation<Command extends Record<string, string>>(
+  operation: string,
+  reference: typeof revokeCredentialMutation | typeof disconnectAgentMutation,
+  command: Command,
+): Promise<AgentLifecycleCanonicalResult> {
+  const serviceAuth = await createConvexServerFunctionAssertion({
+    operation,
+    scope: MARKET_TOOLS_CALL_SCOPE,
+    command,
+  })
+  return await callSourceMutation(reference as never, { ...command, serviceAuth } as never) as AgentLifecycleCanonicalResult
+}
+
+export async function recordAgentProviderRevocation(command: ProviderRevocationCommand): Promise<ProviderRevocationResult> {
+  const operation = 'agentAccessPrincipals.recordProviderRevocationForServer'
+  const serviceAuth = await createConvexServerFunctionAssertion({
+    operation,
+    scope: MARKET_TOOLS_CALL_SCOPE,
+    command,
+  })
+  return await callSourceMutation(recordProviderRevocationMutation, { ...command, serviceAuth })
+}
+
+async function completeAgentLifecycle(
+  canonical: AgentLifecycleCanonicalResult,
+): Promise<AgentLifecycleResult> {
+  if (canonical.kind === 'conflict' || canonical.kind === 'refused') return canonical
+  const api = createClerkAgentAccessKeyApi(clerkClient().apiKeys)
+  let partial = false
+  for (const target of canonical.providerTargets) {
+    let outcome: 'revoked' | 'failed' = 'failed'
+    try {
+      const provider = await api.get(target.providerCredentialId)
+      if (!provider.revoked) {
+        await api.revoke({
+          apiKeyId: target.providerCredentialId,
+          revocationReason: 'Agentic Economy owner revoked this credential.',
+        })
+      }
+      outcome = 'revoked'
+    } catch {
+      partial = true
+    }
+    try {
+      const recorded = await recordAgentProviderRevocation({
+        principalRef: canonical.principalRef,
+        credentialRef: target.credentialRef,
+        providerCredentialId: target.providerCredentialId,
+        correlationRef: canonical.correlationRef,
+        outcome,
+      })
+      if (recorded.kind !== 'completed' && recorded.kind !== 'replayed') partial = true
+    } catch {
+      partial = true
+    }
+  }
+  return partial
+    ? { kind: 'partial', code: 'provider_cleanup', principalRef: canonical.principalRef, correlationRef: canonical.correlationRef, retryable: true }
+    : canonical.hasMore === true
+      ? { kind: 'partial', code: 'work_remaining', principalRef: canonical.principalRef, correlationRef: canonical.correlationRef, retryable: true }
+    : { kind: canonical.kind, principalRef: canonical.principalRef, correlationRef: canonical.correlationRef }
+}
+
+function lifecycleCorrelationRef(): string {
+  return currentRequestCorrelationId() ?? globalThis.crypto.randomUUID()
+}
+
+export const revokeAgentCredentialServer = createServerFn({ method: 'POST' })
+  .validator((data) => z.strictObject({ credentialRef: z.string().trim().min(1).max(300) }).parse(data))
+  .handler(async ({ data }): Promise<AgentLifecycleResult> => {
+    const correlationRef = lifecycleCorrelationRef()
+    try {
+      await requireCanonicalOwnerAuthorityServer()
+      const command = { credentialRef: data.credentialRef, correlationRef }
+      return await completeAgentLifecycle(await lifecycleCanonicalMutation(
+        'agentAccessPrincipals.revokeCredentialForServer',
+        revokeCredentialMutation,
+        command,
+      ))
+    } catch {
+      return { kind: 'refused', code: 'source_unavailable', correlationRef }
+    }
+  })
+
+export const disconnectAgentServer = createServerFn({ method: 'POST' })
+  .validator((data) => z.strictObject({ principalRef: z.string().trim().min(1).max(300) }).parse(data))
+  .handler(async ({ data }): Promise<AgentLifecycleResult> => {
+    const correlationRef = lifecycleCorrelationRef()
+    try {
+      await requireCanonicalOwnerAuthorityServer()
+      const command = { principalRef: data.principalRef, correlationRef }
+      return await completeAgentLifecycle(await lifecycleCanonicalMutation(
+        'agentAccessPrincipals.disconnectAgentForServer',
+        disconnectAgentMutation,
+        command,
+      ))
+    } catch {
+      return { kind: 'refused', code: 'source_unavailable', correlationRef }
+    }
+  })
+
+export const revokeOwnerConnectionServer = createServerFn({ method: 'POST' })
+  .validator((data) => z.strictObject({
+    connectionRef: z.string().trim().min(1).max(300),
+    expectedRevision: z.number().int().safe().positive(),
+  }).parse(data))
+  .handler(async ({ data }): Promise<OwnerConnectionLifecycleResult> => {
+    const correlationRef = lifecycleCorrelationRef()
+    try {
+      await requireCanonicalOwnerAuthorityServer()
+      const result = await callSourceMutation(revokeOwnerConnectionMutation, { ...data, correlationRef })
+      if ((result.kind === 'completed' || result.kind === 'replayed') && result.providerCleanupPending) {
+        return { ...result, providerCleanupPending: true }
+      }
+      return result
+    } catch {
+      return { kind: 'refused', code: 'source_unavailable', correlationRef }
+    }
+  })
+
+export const renameAgentServer = createServerFn({ method: 'POST' })
+  .validator((data) => z.strictObject({
+    principalRef: z.string().trim().min(1).max(300),
+    expectedRevision: z.number().int().safe().positive(),
+    displayName: z.string().trim().min(1).max(200),
+  }).parse(data))
+  .handler(async ({ data }): Promise<RenameAgentResult> => {
+    const correlationRef = lifecycleCorrelationRef()
+    try {
+      await requireCanonicalOwnerAuthorityServer()
+      return await callSourceMutation(renameAgentMutation, { ...data, correlationRef })
+    } catch {
+      return { kind: 'refused', code: 'source_unavailable', correlationRef }
+    }
   })

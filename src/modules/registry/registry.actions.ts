@@ -1,11 +1,11 @@
 import { z } from 'zod'
 
 import {
-  type CatalogOfferingOperationMapEntry,
+  type CatalogOfferingToolMapEntry,
 } from '@/modules/capability-supply/public'
 import {
-  readCatalogOfferingOperationMap,
-} from '@/modules/capability-supply/operation-source'
+  readCatalogOfferingToolMap,
+} from '@/modules/capability-supply/tool-source'
 import { defineAction } from '@/modules/common/action'
 import {
   readPublicOfferingRegistryBusinessDetail,
@@ -182,7 +182,7 @@ export const registryServicesListAction = defineAction({
     const page = await readPublicOfferingRegistryPage(
       normalizeRegistryListInput(data),
     )
-    return projectPublicServicesPage(page, await offeringOperationMapFor(page.page.map((item) => item.businessId)))
+    return projectPublicServicesPage(page, await offeringToolMapFor(page.page.map((item) => item.businessId)))
   },
 })
 
@@ -191,7 +191,7 @@ export const registryServicesSearchAction = defineAction({
   name: 'Search published business portfolios',
   summary:
     'Search the public business catalog and return each matching business with its offering portfolio and external endpoint links. ' +
-    'This is the same public business supply used by /api/businesses/search; it does not search Agent Services or select a Market Operation.',
+    'This is the same public business supply used by /api/businesses/search; it does not search Agent Services or select a Market Tool.',
   boundaries: [
     'Read-only. Does not book, charge, dispatch, or send inquiries.',
     'Returns one published business portfolio per business; offering facts remain under ae.offerings[].',
@@ -235,7 +235,7 @@ export const registryServicesSearchAction = defineAction({
     )
     const services = projectPublicServicesSearchPage(
       page,
-      await offeringOperationMapFor(page.items.map((item) => item.businessId)),
+      await offeringToolMapFor(page.items.map((item) => item.businessId)),
     )
     // Echo the caller's query verbatim; the search pipeline normalizes internally.
     return { ...services, query: data.query }
@@ -293,7 +293,7 @@ export const registryServicesDetailAction = defineAction({
     }
     const service = projectPublicServicesPage(
       page,
-      await offeringOperationMapFor([detail.business.businessId]),
+      await offeringToolMapFor([detail.business.businessId]),
     ).services[0]
     if (service === undefined) {
       return {
@@ -354,19 +354,19 @@ function normalizeActionLimit(limit: number | undefined): number {
 }
 
 /**
- * W1 origin seam: fetch the per-offering admitted-operation map for the page's
+ * W1 origin seam: fetch the per-offering admitted Tool map for the page's
  * businesses as plain data from the capability-supply source port. Any read
  * failure (e.g. capability supply unavailable / local registry fixture path)
  * degrades to an empty map — the projection simply leaves unlinked endpoints
  * un-enriched rather than throwing or fabricating.
  */
-async function offeringOperationMapFor(
+async function offeringToolMapFor(
   businessIds: readonly string[],
-): Promise<Readonly<Record<string, readonly CatalogOfferingOperationMapEntry[]>>> {
+): Promise<Readonly<Record<string, readonly CatalogOfferingToolMapEntry[]>>> {
   if (businessIds.length === 0) return {}
   try {
-    const entries = await readCatalogOfferingOperationMap(businessIds)
-    const map: Record<string, CatalogOfferingOperationMapEntry[]> = {}
+    const entries = await readCatalogOfferingToolMap(businessIds)
+    const map: Record<string, CatalogOfferingToolMapEntry[]> = {}
     for (const entry of entries) {
       const current = map[entry.offeringRef]
       if (current === undefined) map[entry.offeringRef] = [entry]
@@ -423,8 +423,8 @@ export const registryDetailAction = defineAction({
   },
 })
 export {
-  registryOperationsSearchAction,
-  registryOperationsDetailAction,
-  registryOperationsCompareAction,
-  registryOperationsInspectPlanAction,
-} from './operations.actions'
+  registryToolsListAction,
+  registryToolsSearchAction,
+  registryToolsDescribeAction,
+  registryToolsCompareAction,
+} from './tools.actions'

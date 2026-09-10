@@ -9,63 +9,65 @@ import {
   runOwnerSupplyTest,
 } from '../../../convex/capabilitySupplyOwnerSupply'
 import { interactiveCredentialExpiryNonce } from '../../../convex/interactiveCredentialLifecycle'
-import { payoutAuthorityAllowed } from '../../../convex/moneyPayoutTransferShared'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { stableStringify } from '@/modules/common/stable-hash'
 import { convexModules as modules, publishedBusinessOwner } from '../../helpers/convex-fixtures'
 import { withSourceWrite } from '../../helpers/source-write-admission'
-import {
-  MemoryDb,
-  identity as payoutIdentity,
-  payoutAuthorityPrincipalRef,
-  seedPayout,
-} from './payout-ledger-test-harness'
 
-const facts = {
-  name: 'Canonical authority offering',
+const draftSource = { definitionUrl: 'https://provider.example/openapi.json', environment: 'sandbox', kind: 'openapi' } as const
+const draftSourceDigest = `sha256:${'1'.repeat(64)}`
+const draftSelector = { method: 'get', path: '/canonical-owner' }
+const draftFacts = {
+  title: 'Canonical authority Operation',
+  description: 'An authority-context regression fixture.',
   category: 'testing',
-  summary: 'An authority-context regression fixture.',
+  sourceKind: 'openapi' as const,
+  sourceDescriptorJson: stableStringify(draftSource),
+  sourceDigest: draftSourceDigest,
+  sourceRevision: 'openapi:canonical-owner',
+  candidateRef: canonicalDigest({ sourceDigest: draftSourceDigest, selector: draftSelector }),
+  sourceSelectorJson: stableStringify(draftSelector),
 }
 
 describe('interactive consequence authority', () => {
-  it('catalog accepts exact canonical ownership', async () => {
+  it('source-native draft accepts exact canonical ownership', async () => {
     const backend = convexTest(schema, modules)
     const { businessId, owner } = await publishedBusinessOwner(backend, 'catalog-canonical-owner')
     const input = {
       businessId,
-      offeringRef: 'offering:canonical-owner',
       operationKey: 'catalog:canonical-owner:create',
       correlationId: 'catalog:canonical-owner:create',
-      facts,
+      ...draftFacts,
     }
     const command = await withSourceWrite('catalog_publish', input)
 
-    const first = await owner.mutation(api.catalog.createBusinessOffering, command)
+    const first = await owner.mutation(api.capabilitySupplyOwnerFunnel.saveOwnerSupplyIntegrationDraft, command)
     const replay = await owner.mutation(
-      api.catalog.createBusinessOffering,
+      api.capabilitySupplyOwnerFunnel.saveOwnerSupplyIntegrationDraft,
       await withSourceWrite('catalog_publish', input),
     )
 
-    if (first.kind !== 'ok') throw new Error(`catalog_valid_owner_failed:${first.code}`)
-    expect(first).toMatchObject({ kind: 'ok', code: 'created', currentRevision: 1 })
+    if (first.kind !== 'saved') throw new Error(`catalog_valid_owner_failed:${first.kind}`)
+    expect(first).toMatchObject({ kind: 'saved', sourceDigest: draftFacts.sourceDigest })
     expect(replay).toMatchObject({
-      kind: 'ok',
-      code: 'replayed',
-      resultRef: first.resultRef,
-      currentRevision: first.currentRevision,
+      kind: 'replayed',
+      offeringRef: first.offeringRef,
+      candidateRef: draftFacts.candidateRef,
     })
     await expect(
       backend.run((ctx) => ctx.db.query('businessOfferings').collect()),
     ).resolves.toHaveLength(1)
-    await expect(
-      backend.run((ctx) => ctx.db.query('operationKeys').collect()),
-    ).resolves.toEqual([
+    const operations = await backend.run((ctx) => ctx.db.query('operationKeys').collect())
+    expect(operations).toHaveLength(3)
+    expect(operations).toEqual(expect.arrayContaining([
       expect.objectContaining({
         actorRef: expect.stringMatching(/^prn_[a-f0-9]{32}$/u),
         key: input.operationKey,
       }),
-    ])
+    ]))
   })
 
-  it('catalog rejects hostile authority substitutions', async () => {
+  it('source-native draft rejects hostile authority substitutions', async () => {
     const backend = convexTest(schema, modules)
     const { businessId } = await publishedBusinessOwner(backend, 'catalog-account-a')
     const { owner: accountBOwner } = await publishedBusinessOwner(backend, 'catalog-account-b')
@@ -73,20 +75,22 @@ describe('interactive consequence authority', () => {
 
     const command = await withSourceWrite('catalog_publish', {
       businessId,
-      offeringRef: 'offering:cross-account-substitution',
       operationKey: 'catalog:cross-account-substitution',
       correlationId: 'catalog:cross-account-substitution',
-      facts,
+      ...draftFacts,
     })
     await expect(
-      accountBOwner.mutation(api.catalog.createBusinessOffering, command),
-    ).resolves.toMatchObject({ kind: 'error', code: 'wrong_owner' })
+      accountBOwner.mutation(api.capabilitySupplyOwnerFunnel.saveOwnerSupplyIntegrationDraft, command),
+    ).resolves.toEqual({ kind: 'refused', reason: 'authorization_denied' })
     await expect(
       backend.run((ctx) => ctx.db.query('businessOfferings').collect()),
     ).resolves.toEqual([])
     await expect(
       backend.run((ctx) => ctx.db.query('sourceWriteNonces').collect()),
-    ).resolves.toEqual([])
+    ).resolves.toEqual([expect.objectContaining({
+      operationKey: command.operationKey,
+      consumedAt: expect.any(Number),
+    })])
 
     await expect(accountBOwner.action(
       api.capabilitySupplyOwnerSupply.runOwnerSupplyReadiness,
@@ -159,115 +163,20 @@ describe('interactive consequence authority', () => {
         : owner
       const lifecycleCommand = await withSourceWrite('catalog_publish', {
         businessId: lifecycleBusinessId,
-        offeringRef: `offering:${slug}`,
         operationKey: `catalog:${slug}`,
         correlationId: `catalog:${slug}`,
-        facts,
+        ...draftFacts,
+        sourceRevision: `openapi:${slug}`,
+        candidateRef: canonicalDigest({
+          sourceDigest: draftSourceDigest,
+          selector: { ...draftSelector, lifecycle },
+        }),
+        sourceSelectorJson: stableStringify({ ...draftSelector, lifecycle }),
       })
       await expect(
-        caller.mutation(api.catalog.createBusinessOffering, lifecycleCommand),
-      ).resolves.toMatchObject({ kind: 'error', code: 'unauthenticated' })
+        caller.mutation(api.capabilitySupplyOwnerFunnel.saveOwnerSupplyIntegrationDraft, lifecycleCommand),
+      ).resolves.toEqual({ kind: 'refused', reason: 'authorization_denied' })
     }
-  })
-
-  it('payout rejects hostile authority substitutions', async () => {
-    const db = new MemoryDb()
-    const auth = {
-      getUserIdentity: async () => ({
-        subject: 'attacker',
-        issuer: 'https://identity.example',
-        tokenIdentifier: 'forged-request-principal',
-      }),
-    }
-
-    await expect(
-      payoutAuthorityAllowed(
-        { db: db as never, auth: auth as never, scheduler: {} as never },
-        'business-1',
-        'forged-request-principal',
-      ),
-    ).resolves.toBe(false)
-
-    const canonicalDb = new MemoryDb()
-    seedPayout(canonicalDb)
-    const principalSubstitution = `${payoutAuthorityPrincipalRef}-caller-shaped`
-    await expect(payoutAuthorityAllowed(
-      { db: canonicalDb as never, auth: payoutIdentity as never, scheduler: {} as never },
-      'business-1',
-      principalSubstitution,
-    )).resolves.toBe(false)
-
-    const revokedDb = new MemoryDb()
-    seedPayout(revokedDb)
-    const credential = revokedDb.rows('credentials')[0]
-    if (credential === undefined) throw new Error('payout_credential_fixture_missing')
-    credential.lifecycle = 'revoked'
-    await expect(payoutAuthorityAllowed(
-      { db: revokedDb as never, auth: payoutIdentity as never, scheduler: {} as never },
-      'business-1',
-      payoutAuthorityPrincipalRef,
-    )).resolves.toBe(false)
-
-    const crossAccountDb = new MemoryDb()
-    seedPayout(crossAccountDb)
-    crossAccountDb.seed('businesses', {
-      _id: 'businesses:cross-account',
-      owningAccountRef: `acc_${'b'.repeat(32)}`,
-      updatedAt: 1,
-    })
-    await expect(payoutAuthorityAllowed(
-      { db: crossAccountDb as never, auth: payoutIdentity as never, scheduler: {} as never },
-      'businesses:cross-account',
-      payoutAuthorityPrincipalRef,
-    )).resolves.toBe(false)
-
-    const expiredDb = new MemoryDb()
-    seedPayout(expiredDb)
-    const expiredCredential = expiredDb.rows('credentials')[0]
-    if (expiredCredential === undefined) throw new Error('payout_expiry_fixture_missing')
-    expiredCredential.issuedAt = 0
-    expiredCredential.expiresAt = 1_000
-    expiredCredential.expiryMaterialization = {
-      state: 'scheduled',
-      credentialGeneration: 1,
-      credentialExpiresAt: 1_000,
-      scheduleNonce: interactiveCredentialExpiryNonce({
-        bindingRef: String(expiredCredential.bindingRef),
-        credentialRef: String(expiredCredential.credentialRef),
-        generation: 1,
-        expiresAt: 1_000,
-      }),
-      scheduleRef: 'scheduled:payout-expired',
-      materializedAt: 1,
-    }
-    await expect(payoutAuthorityAllowed(
-      {
-        db: expiredDb as never,
-        auth: {
-          getUserIdentity: async () => ({
-            subject: 'owner:payout',
-            issuer: 'https://identity.example',
-            tokenIdentifier: 'https://identity.example|owner:payout',
-            exp: 1,
-          }),
-        } as never,
-        scheduler: {} as never,
-      },
-      'business-1',
-      payoutAuthorityPrincipalRef,
-    )).resolves.toBe(false)
-  })
-
-  it('payout preserves valid exact-owner behavior', async () => {
-    const db = new MemoryDb()
-    seedPayout(db)
-
-
-    await expect(payoutAuthorityAllowed(
-      { db: db as never, auth: payoutIdentity as never, scheduler: {} as never },
-      'business-1',
-      payoutAuthorityPrincipalRef,
-    )).resolves.toBe(true)
   })
 
   it('owner supply denies hostile authority before external calls', async () => {
@@ -309,7 +218,7 @@ describe('interactive consequence authority', () => {
       },
       runQuery: async (reference: unknown) => {
         const functionName = getFunctionName(reference as never)
-        if (functionName === 'capabilitySupply:authorizeOwnerSupplyAction') return true
+        if (functionName === 'catalog:authorizeProviderBusiness') return true
         if (functionName === 'capabilitySupplyOwnerFunnel:readOwnerSupplyFunnel') {
           return {
             kind: 'available',
@@ -324,7 +233,7 @@ describe('interactive consequence authority', () => {
                 authorityMode: 'public_upstream',
                 source: { kind: 'openapi_http' },
               },
-              operationRef: 'operation:owner-supply',
+              toolRef: 'operation:owner-supply',
               stepStates: { test: 'in_progress' },
             }],
           }
@@ -380,7 +289,7 @@ describe('interactive consequence authority', () => {
       },
       runQuery: async (reference: unknown) => {
         const functionName = getFunctionName(reference as never)
-        if (functionName === 'capabilitySupply:authorizeOwnerSupplyAction') return true
+        if (functionName === 'catalog:authorizeProviderBusiness') return true
         if (functionName === 'capabilitySupplyOwnerFunnel:readOwnerSupplyFunnel') {
           return {
             kind: 'available',
@@ -395,7 +304,7 @@ describe('interactive consequence authority', () => {
                 authorityMode: 'public_upstream',
                 source: { kind: 'openapi_http' },
               },
-              operationRef: 'operation:current-owner',
+              toolRef: 'operation:current-owner',
               stepStates: { test: 'in_progress' },
             }],
           }
@@ -491,7 +400,7 @@ describe('interactive consequence authority', () => {
     expect(externalProbe).toHaveBeenCalledOnce()
   })
 
-  it('owner supply rechecks projected x402 test authority before completion', async () => {
+  it('owner supply surfaces refusal from the separately reauthenticated x402 canary mutation', async () => {
     let authorityReads = 0
     const handler = (runOwnerSupplyTest as unknown as {
       _handler: (ctx: unknown, args: unknown) => Promise<unknown>
@@ -503,15 +412,16 @@ describe('interactive consequence authority', () => {
         return authorityReads === 1 ? currentAuthority : null
       },
       sourceKind: 'x402',
-      testCompleted: true,
+      readinessCompleted: true,
+      canaryResult: { kind: 'refused', code: 'authorization_denied' },
     })
 
     await expect(handler(ctx, ownerSupplyArgs())).resolves.toEqual({
       step: 'test',
       state: 'refused',
-      refusal: 'authorization_denied',
+      refusal: 'canary_admission_refused',
     })
-    expect(authorityReads).toBe(2)
+    expect(authorityReads).toBe(1)
   })
 
   it('owner supply denies a test before reading the offering when no current authority exists', async () => {
@@ -546,17 +456,34 @@ describe('interactive consequence authority', () => {
         return currentAuthority
       },
       sourceKind: 'x402',
-      testCompleted: true,
+      readinessCompleted: true,
       externalProbe,
     })
 
     await expect(handler(ctx, ownerSupplyArgs())).resolves.toMatchObject({
       step: 'test',
       state: 'completed',
-      message: expect.stringContaining('No payment was sent'),
+      message: expect.stringContaining('queued on Base Sepolia'),
     })
-    expect(authorityReads).toBe(2)
+    expect(authorityReads).toBe(1)
     expect(externalProbe).not.toHaveBeenCalled()
+  })
+
+  it('owner supply refuses an x402 canary before exact readiness has completed', async () => {
+    const handler = (runOwnerSupplyTest as unknown as {
+      _handler: (ctx: unknown, args: unknown) => Promise<unknown>
+    })._handler
+    const ctx = ownerSupplyActionContext({
+      authority: () => ownerSupplyAuthority(),
+      sourceKind: 'x402',
+      readinessCompleted: false,
+    })
+
+    await expect(handler(ctx, ownerSupplyArgs())).resolves.toEqual({
+      step: 'test',
+      state: 'refused',
+      refusal: 'health_unhealthy',
+    })
   })
 
   it('owner supply denies authority revoked immediately before a test probe', async () => {
@@ -647,15 +574,19 @@ function ownerSupplyArgs() {
     publicationRef: 'publication:authority-refresh',
     publicationRevision: 1,
     operationKey: 'authority-refresh',
+    correlationId: 'owner-supply-test:authority-refresh',
+    input: {},
   }
 }
 
 function ownerSupplyActionContext(options: Readonly<{
   authority: () => ReturnType<typeof ownerSupplyAuthority> | null
   sourceKind: 'openapi_http' | 'x402'
-  testCompleted?: boolean
+  readinessCompleted?: boolean
   externalProbe?: () => unknown
   recordEffect?: (...args: unknown[]) => unknown
+  canaryResult?: { kind: 'enqueued'; canaryRef: string; callRef: string; toolRef: string }
+    | { kind: 'refused'; code: string }
 }>) {
   return {
     auth: {
@@ -667,7 +598,7 @@ function ownerSupplyActionContext(options: Readonly<{
     },
     runQuery: async (reference: unknown) => {
       const functionName = getFunctionName(reference as never)
-      if (functionName === 'capabilitySupply:authorizeOwnerSupplyAction') return true
+      if (functionName === 'catalog:authorizeProviderBusiness') return true
       if (functionName === 'capabilitySupplyOwnerFunnel:readOwnerSupplyFunnel') {
         return {
           kind: 'available',
@@ -682,8 +613,11 @@ function ownerSupplyActionContext(options: Readonly<{
               authorityMode: 'public_upstream',
               source: { kind: options.sourceKind },
             },
-            operationRef: 'operation:authority-refresh',
-            stepStates: { test: options.testCompleted === true ? 'completed' : 'in_progress' },
+            toolRef: 'operation:authority-refresh',
+            stepStates: {
+              readiness: options.readinessCompleted === true ? 'completed' : 'in_progress',
+              test: 'in_progress',
+            },
           }],
         }
       }
@@ -700,6 +634,17 @@ function ownerSupplyActionContext(options: Readonly<{
       }
       throw new Error(`unexpected_action:${functionName}`)
     },
-    runMutation: options.recordEffect ?? vi.fn(),
+    runMutation: async (reference: unknown, ...args: unknown[]) => {
+      const functionName = getFunctionName(reference as never)
+      if (functionName === 'capabilitySupplyOwnerCanary:requestSellerOnboardingCanary') {
+        return options.canaryResult ?? {
+          kind: 'enqueued',
+          canaryRef: 'seller-canary:test',
+          callRef: 'seller-canary-invocation:test',
+          toolRef: 'operation:authority-refresh',
+        }
+      }
+      return await (options.recordEffect ?? vi.fn())(reference, ...args)
+    },
   }
 }

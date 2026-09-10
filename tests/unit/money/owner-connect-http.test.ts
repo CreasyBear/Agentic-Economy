@@ -1,17 +1,15 @@
 import {
-  config,
   connectRuntime,
   ownerProjection,
   payoutAccount,
   sourceMocks,
-  stripeMocks,
   type Provider,
 } from './owner-payout-server-harness'
 import { describe, expect, it, vi } from 'vitest'
 import { SourceWriteAdmissionError } from '@/modules/security/source-write-admission'
 import {
-  applyVerifiedStripeEventThroughSource,
   createOwnerConnectAccountThroughSource,
+  updateOwnerPayoutAuthorityThroughSource,
 } from '@/modules/money/server'
 
 describe('owner Connect account reservation', () => {
@@ -20,6 +18,91 @@ describe('owner Connect account reservation', () => {
     currency: 'USD',
     idempotencyKey: 'owner-connect:test-1',
   }
+  it('authorizes an exact payout authority update before creating the Stripe-hosted link', async () => {
+    const proof = {
+      reverificationId: 'reverification:payout-authority:update',
+      firstFactorAgeMinutes: 0,
+      secondFactorAgeMinutes: -1,
+    } as const
+    const createOnboardingLink = vi.fn<Provider['createOnboardingLink']>(async () => ({
+      provider: 'stripe',
+      url: 'https://connect.stripe.test/onboarding',
+      evidenceRef: 'evidence:onboarding-link',
+    }))
+    sourceMocks.callSourceMutation.mockResolvedValue({
+      kind: 'accepted',
+      account: { ...payoutAccount, version: 2 },
+    })
+    sourceMocks.callSourceQuery
+      .mockResolvedValueOnce(ownerProjection)
+      .mockResolvedValueOnce(payoutAccount)
+
+    const result = await updateOwnerPayoutAuthorityThroughSource(
+      {
+        businessId: 'business-1',
+        currency: 'USD',
+        stripeAccountId: 'acct_1',
+        expectedAccountVersion: 1,
+        idempotencyKey: 'onboarding:business-1:USD:1',
+      },
+      {},
+      {
+        ...connectRuntime(async () => ({
+          kind: 'refused',
+          code: 'payout_outcome_unknown',
+          retryable: false,
+        })),
+        provider: {
+          ...connectRuntime(async () => ({
+            kind: 'refused',
+            code: 'payout_outcome_unknown',
+            retryable: false,
+          })).provider!,
+          createOnboardingLink,
+        },
+      },
+      proof,
+    )
+
+    expect(result).toEqual({
+      kind: 'ok',
+      businessId: 'business-1',
+      currency: 'USD',
+      stripeAccountId: 'acct_1',
+      url: 'https://connect.stripe.test/onboarding',
+    })
+    expect(sourceMocks.callSourceMutation).toHaveBeenCalledOnce()
+    expect(sourceMocks.callSourceMutation.mock.calls[0]?.[1]).toMatchObject({
+      operationKey: 'moneyLedger:authorizeConnectOnboarding',
+      expectedAccountVersion: 1,
+      stripeAccountId: 'acct_1',
+      proof,
+    })
+    expect(createOnboardingLink).toHaveBeenCalledOnce()
+  })
+
+  it('does not create an onboarding link without strict proof', async () => {
+    const createOnboardingLink = vi.fn<Provider['createOnboardingLink']>()
+    const result = await updateOwnerPayoutAuthorityThroughSource(
+      {
+        businessId: 'business-1',
+        currency: 'USD',
+        stripeAccountId: 'acct_1',
+        expectedAccountVersion: 1,
+        idempotencyKey: 'onboarding:business-1:USD:1',
+      },
+      {},
+      { ...connectRuntime(async () => ({ kind: 'refused', code: 'payout_outcome_unknown', retryable: false })), provider: { ...connectRuntime(async () => ({ kind: 'refused', code: 'payout_outcome_unknown', retryable: false })).provider!, createOnboardingLink } },
+    )
+
+    expect(result).toEqual({
+      kind: 'refused',
+      code: 'reauthentication_required',
+      retryable: false,
+    })
+    expect(sourceMocks.callSourceMutation).not.toHaveBeenCalled()
+    expect(createOnboardingLink).not.toHaveBeenCalled()
+  })
   it('refuses a Stripe config and mode mismatch before reserving a Connect command', async () => {
     const createOrRecoverConnectAccount =
       vi.fn<Provider['createOrRecoverConnectAccount']>()
@@ -524,60 +607,5 @@ describe('owner Connect account reservation', () => {
     })
     expect(createOrRecoverConnectAccount).not.toHaveBeenCalled()
     expect(sourceMocks.callSourceMutation).toHaveBeenCalledOnce()
-  })
-})
-describe('verified Connect account readback', () => {
-  it('refuses provider currency drift before admitting a binding mutation', async () => {
-    const readConnectAccount = vi.fn().mockResolvedValue({
-      provider: 'stripe',
-      businessId: 'business-1',
-      currency: 'EUR',
-      stripeAccountId: 'acct_1',
-      detailsSubmitted: true,
-      recipientCapabilityActive: true,
-      restricted: false,
-      requirementsDigest: 'sha256:requirements',
-      evidenceRef: 'stripe:account:acct_1',
-      observedAt: 10,
-      providerObjectDigest: 'sha256:provider-object',
-    })
-    stripeMocks.createStripeMoneyProvider.mockReturnValue({
-      readConnectAccount,
-    })
-    sourceMocks.createConvexServerFunctionAssertion.mockResolvedValue({})
-    sourceMocks.callPublicSourceQuery.mockResolvedValue([payoutAccount])
-
-    const result = await applyVerifiedStripeEventThroughSource({
-      event: {
-        kind: 'account',
-        stripeEventId: 'evt-account-1',
-        eventType: 'account.updated',
-        externalRef: 'acct_1',
-        stripeAccountId: 'acct_1',
-        providerObjectDigest: 'sha256:event-object',
-        payloadDigest: 'sha256:event-payload',
-        observedAt: 10,
-      },
-      rawBody: '{}',
-      request: new Request('https://ae.test/api/stripe/webhook', {
-        method: 'POST',
-        body: '{}',
-      }),
-      config,
-    })
-
-    expect(result).toEqual({
-      kind: 'refused',
-      code: 'payment_binding_invalid',
-      retryable: false,
-    })
-    expect(readConnectAccount).toHaveBeenCalledOnce()
-    expect(readConnectAccount).toHaveBeenCalledWith({
-      businessId: 'business-1',
-      currency: 'USD',
-      stripeAccountId: 'acct_1',
-    })
-    expect(sourceMocks.sourceWriteAdmissionFromRequest).not.toHaveBeenCalled()
-    expect(sourceMocks.callSourceMutation).not.toHaveBeenCalled()
   })
 })

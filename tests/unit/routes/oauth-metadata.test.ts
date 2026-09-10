@@ -1,8 +1,9 @@
 import { describe, expect, it, vi } from 'vitest'
-import { AGENT_ACCESS_OAUTH_DEVICE_CLIENT_REGISTRATION_REQUEST, CUSTOMER_REQUEST_BOUNDED_MANDATE_SCOPE, MARKET_OPERATIONS_INVOKE_SCOPE } from '@/modules/agent-access/contract'
+import { AGENT_ACCESS_OAUTH_DEVICE_CLIENT_REGISTRATION_REQUEST, CUSTOMER_REQUEST_APPROVAL_REQUIRED_SCOPE, CUSTOMER_REQUEST_SPENDING_POLICY_SCOPE, MARKET_TOOLS_CALL_SCOPE } from '@/modules/agent-access/contract'
 import {
   AGENT_ACCESS_OAUTH_CODE_CHALLENGE_METHODS,
   AGENT_ACCESS_OAUTH_GRANT_TYPES,
+  AGENT_ACCESS_OAUTH_OFFLINE_SCOPE,
   AGENT_ACCESS_POLL_INTERVAL_SECONDS,
   AGENT_ACCESS_OAUTH_RESPONSE_TYPES,
   AGENT_ACCESS_OAUTH_TOKEN_ENDPOINT_AUTH_METHODS,
@@ -24,11 +25,11 @@ describe('OAuth metadata surfaces', () => {
       authorization_servers: ['https://local.example'],
       bearer_methods_supported: ['header'],
       scopes_supported: [
-        'market_operations:invoke',
-        'customer_requests:inspect_only',
-        'customer_requests:approve_each',
-        'customer_requests:bounded_mandate',
-        'customer_requests:full_yolo',
+        'market_tools:call',
+        'customer_requests:read_only',
+        'customer_requests:approval_required',
+        'customer_requests:spending_policy',
+        'customer_requests:unrestricted_test_only',
       ],
     })
     const authorizationServer = await oauthAuthorizationServerResponse(request, canonicalBaseUrl).json()
@@ -41,8 +42,17 @@ describe('OAuth metadata surfaces', () => {
       response_types_supported: ['code'],
       token_endpoint_auth_methods_supported: ['none'],
       code_challenge_methods_supported: ['S256'],
+      scopes_supported: [
+        'market_tools:call',
+        'customer_requests:read_only',
+        'customer_requests:approval_required',
+        'customer_requests:spending_policy',
+        'customer_requests:unrestricted_test_only',
+        'offline_access',
+      ],
+      revocation_endpoint: 'https://local.example/oauth/revoke',
     })
-    expect(authorizationServer).not.toHaveProperty('refresh_token_endpoint')
+    expect(authorizationServer.grant_types_supported).toContain('refresh_token')
   })
 
   it('uses configured canonical origin for metadata and bearer challenges instead of the request host', async () => {
@@ -62,7 +72,7 @@ describe('OAuth metadata surfaces', () => {
         authorization_endpoint: 'https://canonical.agentic.test/oauth/authorize',
       })
       expect(challenge.headers.get('WWW-Authenticate')).toBe(
-        'Bearer resource_metadata="https://canonical.agentic.test/.well-known/oauth-protected-resource", scope="market_operations:invoke"'
+        `Bearer resource_metadata="https://canonical.agentic.test/.well-known/oauth-protected-resource", scope="market_tools:call ${CUSTOMER_REQUEST_APPROVAL_REQUIRED_SCOPE} ${AGENT_ACCESS_OAUTH_OFFLINE_SCOPE}"`
       )
     } finally {
       vi.unstubAllEnvs()
@@ -86,7 +96,7 @@ describe('OAuth metadata surfaces', () => {
     expect(AGENT_ACCESS_OAUTH_DEVICE_CLIENT_REGISTRATION_REQUEST.token_endpoint_auth_method)
       .toBe(AGENT_ACCESS_OAUTH_TOKEN_ENDPOINT_AUTH_METHODS[0])
     expect(AGENT_ACCESS_OAUTH_DEVICE_CLIENT_REGISTRATION_REQUEST.scope).toBe(
-      `${MARKET_OPERATIONS_INVOKE_SCOPE} ${CUSTOMER_REQUEST_BOUNDED_MANDATE_SCOPE}`,
+      `${MARKET_TOOLS_CALL_SCOPE} ${CUSTOMER_REQUEST_SPENDING_POLICY_SCOPE}`,
     )
     expect(AGENT_ACCESS_POLL_INTERVAL_SECONDS).toBe(5)
   })

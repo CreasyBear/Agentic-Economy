@@ -6,7 +6,6 @@ import {
   buildOfferingLlmsUrlsFromSlugs,
   DiscoveryListingBoundaryLine,
   DiscoveryPublicSurfacePaths,
-  operationMarketLines,
 } from './offering-discovery-file'
 export {
   buildOfferingLlmsTxt,
@@ -37,38 +36,11 @@ export function buildLlmsTxt(
   state: DiscoverySourceState,
   options: BuildDiscoveryFileOptions
 ): DiscoveryFileBuildResult {
-  const canonicalBaseUrl = trimTrailingSlashes(options.canonicalBaseUrl)
   const businesses = readEligibleCatalogs(state)
-  const urls = buildOfferingLlmsUrlsFromSlugs(businesses.map((business) => business.slug), options)
-  const businessLines = businesses.map(
-    (business) =>
-      `- slug=${business.slug} publicUrl=${canonicalBaseUrl}/${business.slug} ucpUrl=${canonicalBaseUrl}/${business.slug}/ucp apiUrl=${canonicalBaseUrl}/api/businesses/${business.slug} disposition=${business.disposition}`
-  )
-  const body = [
-    '# Agentic Economy',
-    '',
-    ...operationMarketLines(canonicalBaseUrl),
-    '',
-    'Public instructions:',
-    `- Skill: ${canonicalBaseUrl}/SKILL.md`,
-    `- Deployment manifest: ${canonicalBaseUrl}/.well-known/ucp`,
-    `- Human guide: ${canonicalBaseUrl}/for-agents`,
-    `- About: ${canonicalBaseUrl}/about`,
-    `- Catalog: ${canonicalBaseUrl}/market`,
-    `- MCP: ${canonicalBaseUrl}/mcp`,
-    '',
-    'Published businesses (business catalog; never Agent Services):',
-    ...(businessLines.length === 0 ? ['- none'] : businessLines),
-    '',
-    'Boundary:',
-    `- ${DiscoveryListingBoundaryLine}`,
-    '',
-    'Privacy and correction:',
-    `- ${canonicalBaseUrl}/privacy/remove-business`,
-    '',
-  ].join('\n')
-
-  return { body, urls }
+  return buildOfferingLlmsTxt(businesses, {
+    ...options,
+    totalBusinesses: businesses.length,
+  })
 }
 
 

@@ -28,6 +28,7 @@ type OwnerSourcePublication = Readonly<{
   sourceDescriptorJson?: string
   sourceRevision: string
   sourceDigest: string
+  sourceRouteRef?: string
   pricingConfigJson?: string
   priceDigest?: string
   registrationEvidenceRefs?: readonly string[]
@@ -129,6 +130,7 @@ export async function reconstructOwnerSourceMaterial(
     sourceDescriptorJson: publication.sourceDescriptorJson,
     sourceRevision: publication.sourceRevision,
     sourceDigest: publication.sourceDigest,
+    sourceRouteRef: publication.sourceRouteRef ?? publication.sourceDigest,
     documentJson: stableStringify(contractDocument as StableHashValue),
     offering,
     binding: {

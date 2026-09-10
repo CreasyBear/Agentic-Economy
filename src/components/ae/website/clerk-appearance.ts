@@ -10,6 +10,7 @@ const aeInk = 'oklch(0.215 0.004 106)'
 const aeWhite = 'oklch(1 0 0)'
 
 export const clerkAppearance = {
+  cssLayerName: 'clerk',
   variables: {
     fontFamily: 'var(--font-sans, ui-sans-serif, system-ui, sans-serif)',
     fontSize: '0.875rem',
@@ -34,7 +35,7 @@ export const clerkAppearance = {
     formFieldInputShowPasswordButton: 'min-h-touch min-w-touch',
     identityPreviewEditButton: '!min-h-touch !min-w-touch',
     formFieldRow__password: 'aria-hidden:!hidden',
-    headerTitle: 'font-display text-xl font-medium tracking-tight',
+    headerTitle: 'font-sans text-xl font-semibold tracking-tight',
     headerSubtitle: 'text-muted-foreground',
     footerActionLink: 'text-foreground underline-offset-4 hover:underline',
     logoBox: 'hidden',
@@ -56,6 +57,25 @@ export const clerkAuthSurfaceAppearance = {
     card: 'w-full border-0 bg-transparent p-0 shadow-none',
     header: 'hidden',
     footer: 'hidden',
+    logoBox: 'hidden',
+    logoImage: 'hidden',
+  },
+}
+
+/** Sign-in keeps Clerk's single account-switch action on the site panel. */
+export const clerkSignInSurfaceAppearance = {
+  variables: {
+    colorBackground: 'transparent',
+  },
+  elements: {
+    rootBox: 'w-full',
+    cardBox: 'w-full shadow-none',
+    card: 'w-full border-0 bg-transparent p-0 shadow-none',
+    header: 'hidden',
+    footer: 'border-0 bg-none bg-transparent text-foreground',
+    footerAction: 'bg-transparent',
+    footerActionText: 'text-muted-foreground',
+    footerActionLink: 'text-foreground underline-offset-4 hover:underline',
     logoBox: 'hidden',
     logoImage: 'hidden',
   },

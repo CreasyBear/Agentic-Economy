@@ -1,5 +1,5 @@
 import { useRef, useState, type FormEvent, type RefObject } from 'react'
-import { createFileRoute } from '@tanstack/react-router'
+import { Link, createFileRoute } from '@tanstack/react-router'
 import { createServerFn, useServerFn } from '@tanstack/react-start'
 import { CopyXIcon, FileWarningIcon, StoreIcon } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -12,6 +12,7 @@ import { Input } from '@/components/ui/input'
 import { Spinner } from '@/components/ui/spinner'
 import { Textarea } from '@/components/ui/textarea'
 import { toast } from '@/lib/ui/toast'
+import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
 import { z } from 'zod'
 
 import { AePublicPage } from '@/components/ae/layout/AePublicPage'
@@ -34,8 +35,8 @@ const openRemovalServer = createServerFn({ method: 'POST' })
 export const Route = createFileRoute('/privacy/remove-business')({
   head: () => ({
     meta: [
-      { title: 'Supplier correction or removal | Agentic Economy' },
-      { name: 'description', content: 'Request a correction or removal for an Agentic Economy supplier profile or published Operation.' },
+      { title: 'Provider correction or removal | Agentic Economy' },
+      { name: 'description', content: 'Request a correction or removal for an Agentic Economy Provider profile or published Tool.' },
       { name: 'robots', content: 'noindex' },
     ],
   }),
@@ -43,10 +44,10 @@ export const Route = createFileRoute('/privacy/remove-business')({
 })
 
 const removalReasonOptions = [
-  { value: 'privacy_removal_requested', label: 'Remove supplier profile' },
-  { value: 'ownership_contested', label: 'Supplier ownership issue' },
+  { value: 'privacy_removal_requested', label: 'Remove Provider profile' },
+  { value: 'ownership_contested', label: 'Provider ownership issue' },
   { value: 'duplicate_or_impersonation', label: 'Duplicate or impersonation' },
-  { value: 'unsafe_or_inaccurate', label: 'Incorrect Operation or supplier facts' },
+  { value: 'unsafe_or_inaccurate', label: 'Incorrect Tool or Provider facts' },
 ] as const
 
 const correctionPaths = [
@@ -54,19 +55,19 @@ const correctionPaths = [
     icon: FileWarningIcon,
     label: 'Details',
     title: 'Fix published facts',
-    body: 'Wrong Operation, price, readiness, access, or supplier information.',
+    body: 'Wrong Tool, price, readiness, access, or Provider information.',
   },
   {
     icon: StoreIcon,
     label: 'Owner',
-    title: 'Resolve supplier ownership',
-    body: 'The profile is yours, contested, or attached to the wrong supplier.',
+    title: 'Resolve Provider ownership',
+    body: 'The profile is yours, contested, or attached to the wrong Provider.',
   },
   {
     icon: CopyXIcon,
     label: 'Remove',
     title: 'Remove or merge',
-    body: 'Duplicate, impersonation, or a supplier profile that should come down.',
+    body: 'Duplicate, impersonation, or a Provider profile that should come down.',
   },
 ] as const
 
@@ -82,6 +83,7 @@ function RemoveBusinessRoute() {
   const [error, setError] = useState<string | undefined>()
   const [receipt, setReceipt] = useState<string | undefined>()
   const [pending, setPending] = useState(false)
+  const [outcomeUnknown, setOutcomeUnknown] = useState(false)
   const contactInvalid = error?.includes('contact') === true
   const evidenceInvalid = error?.includes('Evidence') === true
   const contactEmailRef = useRef<HTMLInputElement>(null)
@@ -96,6 +98,7 @@ function RemoveBusinessRoute() {
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (outcomeUnknown) return
     setError(undefined)
     setReceipt(undefined)
 
@@ -130,8 +133,16 @@ function RemoveBusinessRoute() {
         return
       }
 
+      if (result.retryable) {
+        setOutcomeUnknown(true)
+        setError('The request outcome could not be confirmed. Contact support before submitting another request.')
+        return
+      }
       setError(result.reason)
-      toast.error(result.reason)
+    } catch (cause) {
+      captureClientExceptionOnClient(cause)
+      setOutcomeUnknown(true)
+      setError('The request outcome could not be confirmed. Contact support before submitting another request.')
     } finally {
       setPending(false)
     }
@@ -141,8 +152,8 @@ function RemoveBusinessRoute() {
     <AePublicPage
       kind="document"
       eyebrow="Privacy"
-      title="Supplier corrections"
-      description="Send the supplier slug, your email, and the exact Operation or profile fact that should change."
+      title="Provider corrections"
+      description="Send the Provider slug, your email, and the exact Tool or profile fact that should change."
     >
       <div className="ae-rail grid max-w-prose gap-page pb-page">
         <section className="grid gap-related">
@@ -166,7 +177,10 @@ function RemoveBusinessRoute() {
           {error === undefined ? null : (
             <Alert variant="destructive">
               <AlertTitle>Request needs attention</AlertTitle>
-              <AlertDescription>{error}</AlertDescription>
+              <AlertDescription>
+                {error}
+                {outcomeUnknown ? <> <Link to="/support" className="underline underline-offset-4">Open support</Link> with the Provider slug and your contact email.</> : null}
+              </AlertDescription>
             </Alert>
           )}
           {receipt === undefined ? null : (
@@ -177,7 +191,7 @@ function RemoveBusinessRoute() {
           )}
           <FieldGroup>
             <Field>
-              <FieldLabel htmlFor="slug">Supplier slug</FieldLabel>
+                <FieldLabel htmlFor="slug">Provider slug</FieldLabel>
               <Input
                 id="slug"
                 name="slug"
@@ -190,7 +204,7 @@ function RemoveBusinessRoute() {
                   setValue((current) => ({ ...current, slug: nextValue }))
                 }}
               />
-              <FieldDescription id={slugDescriptionId}>Shown in the supplier profile URL.</FieldDescription>
+              <FieldDescription id={slugDescriptionId}>Shown in the Provider profile URL.</FieldDescription>
             </Field>
             <Field {...(contactInvalid ? { 'data-invalid': true } : {})}>
               <FieldLabel htmlFor="contactEmail">Your email</FieldLabel>
@@ -258,9 +272,9 @@ function RemoveBusinessRoute() {
               ) : null}
             </Field>
           </FieldGroup>
-          <Button type="submit" disabled={pending} className="min-h-touch justify-self-start">
+          <Button type="submit" disabled={pending || outcomeUnknown} className="min-h-touch justify-self-start">
             {pending ? <Spinner /> : null}
-            Send request
+            {outcomeUnknown ? 'Outcome not confirmed' : 'Send request'}
           </Button>
         </form>
         )}

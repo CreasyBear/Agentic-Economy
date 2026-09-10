@@ -1,0 +1,319 @@
+import { v } from 'convex/values'
+
+import { internal } from './_generated/api'
+import { internalAction, internalMutation, internalQuery } from './_generated/server'
+import type {
+  MoneyFormanceManagedCallBooking,
+  MoneyFormanceResult,
+} from './moneyFormance'
+
+type TransitionResult =
+  | { kind: 'accepted'; state: string; replayed: boolean }
+  | { kind: 'refused'; code: string }
+
+type ManagedCallMaterial =
+  | {
+      kind: 'available'
+      booking: MoneyFormanceManagedCallBooking
+      financialState?: 'reservation_pending' | 'reserved' | 'possibly_submitted'
+        | 'outcome_unknown' | 'released' | 'settled'
+      reservationRefs?: string[]
+      releaseRefs?: string[]
+      settlementRefs?: string[]
+    }
+  | { kind: 'not_found' | 'not_required' }
+
+const transitionResult = v.union(
+  v.object({ kind: v.literal('accepted'), state: v.string(), replayed: v.boolean() }),
+  v.object({ kind: v.literal('refused'), code: v.string() }),
+)
+
+export const readReservation = internalQuery({
+  args: { callRef: v.string() },
+  returns: v.union(v.object({
+    reservationRef: v.string(),
+    quoteRef: v.string(),
+    decisionAudUnits: v.string(),
+    sourceUsdcUnits: v.optional(v.string()),
+    journalTransactionRef: v.string(),
+    treasuryReservationRef: v.optional(v.string()),
+    state: v.string(),
+  }), v.null()),
+  handler: async (ctx, args) => {
+    const call = await ctx.db.query('capabilityCalls')
+      .withIndex('by_callRef', (query) => query.eq('callRef', args.callRef))
+      .unique()
+    if (call === null
+      || call.quoteRef === undefined
+      || call.formanceReservationRefs === undefined) return null
+    const quoteRef = call.quoteRef
+    const quote = await ctx.db.query('capabilityQuotes')
+      .withIndex('by_quoteRef', (query) => query.eq('quoteRef', quoteRef))
+      .unique()
+    if (quote === null) return null
+    const [audRef, usdcRef] = call.formanceReservationRefs
+    if (audRef === undefined || usdcRef === undefined) return null
+    return {
+      reservationRef: audRef,
+      quoteRef: quote.quoteRef,
+      decisionAudUnits: quote.decisionAudUnits,
+      ...(quote.sourceUsdcUnits === undefined ? {} : { sourceUsdcUnits: quote.sourceUsdcUnits }),
+      journalTransactionRef: audRef,
+      treasuryReservationRef: usdcRef,
+      state: call.formanceFinancialState ?? 'reservation_pending',
+    }
+  },
+})
+
+export const markPossiblySubmitted = internalMutation({
+  args: { callRef: v.string(), evidenceDigest: v.string(), now: v.number() },
+  returns: transitionResult,
+  handler: async (ctx, args) => {
+    const row = await ctx.db.query('capabilityCalls')
+      .withIndex('by_callRef', (query) => query.eq('callRef', args.callRef))
+      .unique()
+    if (row === null || row.formanceReservationRefs === undefined) {
+      return { kind: 'refused' as const, code: 'managed_call_reservation_not_found' }
+    }
+    if (row.formanceFinancialState === 'possibly_submitted'
+      || row.formanceFinancialState === 'outcome_unknown') {
+      return { kind: 'accepted' as const, state: row.formanceFinancialState, replayed: true }
+    }
+    if (row.formanceFinancialState !== 'reserved') {
+      return { kind: 'refused' as const, code: 'managed_call_state_conflict' }
+    }
+    await ctx.db.patch(row._id, {
+      formanceFinancialState: 'possibly_submitted',
+      updatedAt: args.now,
+    })
+    return { kind: 'accepted' as const, state: 'possibly_submitted', replayed: false }
+  },
+})
+
+export const markOutcomeUnknown = internalMutation({
+  args: { callRef: v.string(), evidenceDigest: v.string(), now: v.number() },
+  returns: transitionResult,
+  handler: async (ctx, args) => {
+    const row = await ctx.db.query('capabilityCalls')
+      .withIndex('by_callRef', (query) => query.eq('callRef', args.callRef))
+      .unique()
+    if (row === null || row.formanceReservationRefs === undefined) {
+      return { kind: 'refused' as const, code: 'managed_call_reservation_not_found' }
+    }
+    if (row.formanceFinancialState === 'outcome_unknown') {
+      return { kind: 'accepted' as const, state: 'outcome_unknown', replayed: true }
+    }
+    if (row.formanceFinancialState !== 'reserved'
+      && row.formanceFinancialState !== 'possibly_submitted') {
+      return { kind: 'refused' as const, code: 'managed_call_state_conflict' }
+    }
+    await ctx.db.patch(row._id, {
+      formanceFinancialState: 'outcome_unknown',
+      updatedAt: args.now,
+    })
+    const obligation = await ctx.db.query('moneyProviderObligations')
+      .withIndex('by_callRef', (query) => query.eq('callRef', args.callRef))
+      .unique()
+    if (obligation !== null) await ctx.db.patch(obligation._id, { state: 'held', updatedAt: args.now })
+    return { kind: 'accepted' as const, state: 'outcome_unknown', replayed: false }
+  },
+})
+
+export const finalizeRelease = internalMutation({
+  args: { callRef: v.string(), transactionRefs: v.array(v.string()), now: v.number() },
+  returns: transitionResult,
+  handler: async (ctx, args) => {
+    const row = await ctx.db.query('capabilityCalls')
+      .withIndex('by_callRef', (query) => query.eq('callRef', args.callRef))
+      .unique()
+    if (row === null || args.transactionRefs.length !== 2) {
+      return { kind: 'refused' as const, code: 'managed_call_release_invalid' }
+    }
+    if (row.formanceFinancialState === 'released') {
+      return JSON.stringify(row.formanceReleaseRefs) === JSON.stringify(args.transactionRefs)
+        ? { kind: 'accepted' as const, state: 'released', replayed: true }
+        : { kind: 'refused' as const, code: 'managed_call_release_conflict' }
+    }
+    if (row.formanceFinancialState !== 'reserved') {
+      return { kind: 'refused' as const, code: 'managed_call_state_conflict' }
+    }
+    await ctx.db.patch(row._id, {
+      formanceFinancialState: 'released',
+      formanceReleaseRefs: [...args.transactionRefs],
+      updatedAt: args.now,
+    })
+    const obligation = await ctx.db.query('moneyProviderObligations')
+      .withIndex('by_callRef', (query) => query.eq('callRef', args.callRef))
+      .unique()
+    if (obligation !== null) await ctx.db.patch(obligation._id, { state: 'reversed', updatedAt: args.now })
+    return { kind: 'accepted' as const, state: 'released', replayed: false }
+  },
+})
+
+export const finalizeSettlement = internalMutation({
+  args: { callRef: v.string(), transactionRefs: v.array(v.string()), now: v.number() },
+  returns: transitionResult,
+  handler: async (ctx, args) => {
+    const row = await ctx.db.query('capabilityCalls')
+      .withIndex('by_callRef', (query) => query.eq('callRef', args.callRef))
+      .unique()
+    const [, settlementTransactionRef] = args.transactionRefs
+    if (row === null || args.transactionRefs.length !== 2 || settlementTransactionRef === undefined) {
+      return { kind: 'refused' as const, code: 'managed_call_settlement_invalid' }
+    }
+    if (row.formanceFinancialState === 'settled') {
+      return JSON.stringify(row.formanceSettlementRefs) === JSON.stringify(args.transactionRefs)
+        ? { kind: 'accepted' as const, state: 'settled', replayed: true }
+        : { kind: 'refused' as const, code: 'managed_call_settlement_conflict' }
+    }
+    if (row.formanceFinancialState !== 'possibly_submitted'
+      && row.formanceFinancialState !== 'outcome_unknown') {
+      return { kind: 'refused' as const, code: 'managed_call_state_conflict' }
+    }
+    await ctx.db.patch(row._id, {
+      formanceFinancialState: 'settled',
+      formanceSettlementRefs: [...args.transactionRefs],
+      updatedAt: args.now,
+    })
+    const obligation = await ctx.db.query('moneyProviderObligations')
+      .withIndex('by_callRef', (query) => query.eq('callRef', args.callRef))
+      .unique()
+    if (obligation !== null) {
+      await ctx.db.patch(obligation._id, {
+        state: 'settled',
+        settlementTransactionRef,
+        evidenceRefs: [...new Set([...obligation.evidenceRefs, ...args.transactionRefs])].slice(-32),
+        settledAt: args.now,
+        updatedAt: args.now,
+      })
+    }
+    return { kind: 'accepted' as const, state: 'settled', replayed: false }
+  },
+})
+
+export const releaseBeforeSubmission = internalAction({
+  args: { callRef: v.string(), now: v.number() },
+  returns: transitionResult,
+  handler: async (ctx, args): Promise<TransitionResult> => {
+    const material: ManagedCallMaterial = await ctx.runQuery(internal.moneyManagedCall.readBooking, {
+      callRef: args.callRef,
+    })
+    if (material.kind !== 'available') {
+      return { kind: 'refused' as const, code: 'managed_call_reservation_not_found' }
+    }
+    if (material.financialState === 'released') {
+      return { kind: 'accepted' as const, state: 'released', replayed: true }
+    }
+    if (material.financialState !== 'reserved') {
+      return { kind: 'refused' as const, code: 'managed_call_state_conflict' }
+    }
+    const result: MoneyFormanceResult = await ctx.runAction(internal.moneyFormance.releaseManagedCall, {
+      booking: material.booking,
+      externalEvidenceDigest: material.booking.quoteDigest,
+      submissionProvenAbsent: true,
+    })
+    if (result.kind !== 'completed') {
+      return {
+        kind: 'refused' as const,
+        code: result.kind === 'outcome_unknown'
+          ? 'managed_call_release_unknown'
+          : result.code,
+      }
+    }
+    return await ctx.runMutation(internal.moneyManagedCallLifecycle.finalizeRelease, {
+      callRef: args.callRef,
+      transactionRefs: [...result.transactionRefs],
+      now: args.now,
+    })
+  },
+})
+
+export const settle = internalAction({
+  args: { callRef: v.string(), evidenceDigest: v.string(), now: v.number() },
+  returns: transitionResult,
+  handler: async (ctx, args): Promise<TransitionResult> => {
+    const material: ManagedCallMaterial = await ctx.runQuery(internal.moneyManagedCall.readBooking, {
+      callRef: args.callRef,
+    })
+    if (material.kind !== 'available') {
+      return { kind: 'refused' as const, code: 'managed_call_reservation_not_found' }
+    }
+    if (material.financialState === 'settled') {
+      return { kind: 'accepted' as const, state: 'settled', replayed: true }
+    }
+    if (material.financialState !== 'possibly_submitted'
+      && material.financialState !== 'outcome_unknown') {
+      return { kind: 'refused' as const, code: 'managed_call_state_conflict' }
+    }
+    const result: MoneyFormanceResult = await ctx.runAction(internal.moneyFormance.settleManagedCall, {
+      booking: material.booking,
+      externalEvidenceDigest: args.evidenceDigest,
+    })
+    if (result.kind !== 'completed') {
+      return {
+        kind: 'refused' as const,
+        code: result.kind === 'outcome_unknown'
+          ? 'managed_call_settlement_unknown'
+          : result.code,
+      }
+    }
+    return await ctx.runMutation(internal.moneyManagedCallLifecycle.finalizeSettlement, {
+      callRef: args.callRef,
+      transactionRefs: [...result.transactionRefs],
+      now: args.now,
+    })
+  },
+})
+
+export const validateX402ReleaseProof = internalQuery({
+  args: {
+    callRef: v.string(), attemptRef: v.string(), effectGeneration: v.number(),
+    toolRef: v.string(), inputDigest: v.string(), reservationRef: v.string(),
+    paymentIdentifier: v.string(), challengeDigest: v.string(), evidenceRef: v.string(),
+    evidenceDigest: v.string(), paymentResponseDigest: v.string(),
+    transportObservationDigest: v.string(), transportRequestDigest: v.string(),
+    paymentObservationDigest: v.string(), observedAt: v.number(),
+  },
+  returns: v.boolean(),
+  handler: async (ctx, args) => {
+    const [call, payment] = await Promise.all([
+      ctx.db.query('capabilityCalls')
+        .withIndex('by_callRef', (query) => query.eq('callRef', args.callRef)).unique(),
+      ctx.db.query('moneyX402PaymentAttempts')
+        .withIndex('by_attemptRef_and_effectGeneration', (query) => query
+          .eq('attemptRef', args.attemptRef).eq('effectGeneration', args.effectGeneration)).unique(),
+    ])
+    return call !== null
+      && call.formanceFinancialState === 'reserved'
+      && call.formanceReservationRefs?.includes(args.reservationRef) === true
+      && payment !== null
+      && payment.dispatchRef === args.callRef
+      && payment.toolRef === args.toolRef
+      && payment.inputDigest === args.inputDigest
+      && payment.reservationRef === args.reservationRef
+      && payment.paymentIdentifier === args.paymentIdentifier
+      && payment.challengeDigest === args.challengeDigest
+      && payment.paymentSignatureDigest === undefined
+      && payment.submissionStartedAt === undefined
+  },
+})
+
+export const releaseBeforeSubmissionWithX402Proof = internalAction({
+  args: {
+    callRef: v.string(), attemptRef: v.string(), effectGeneration: v.number(),
+    toolRef: v.string(), inputDigest: v.string(), reservationRef: v.string(),
+    paymentIdentifier: v.string(), challengeDigest: v.string(), evidenceRef: v.string(),
+    evidenceDigest: v.string(), paymentResponseDigest: v.string(),
+    transportObservationDigest: v.string(), transportRequestDigest: v.string(),
+    paymentObservationDigest: v.string(), observedAt: v.number(),
+  },
+  returns: transitionResult,
+  handler: async (ctx, args): Promise<TransitionResult> => {
+    const valid = await ctx.runQuery(internal.moneyManagedCallLifecycle.validateX402ReleaseProof, args)
+    if (!valid) return { kind: 'refused' as const, code: 'managed_call_recovery_identity_mismatch' }
+    return await ctx.runAction(internal.moneyManagedCallLifecycle.releaseBeforeSubmission, {
+      callRef: args.callRef,
+      now: args.observedAt,
+    })
+  },
+})

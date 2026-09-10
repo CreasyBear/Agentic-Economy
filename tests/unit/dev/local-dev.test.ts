@@ -1,15 +1,67 @@
-import { describe, expect, it } from 'vitest'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { afterEach, describe, expect, it } from 'vitest'
 
 import {
+  anonymousDeploymentEnvSeed,
+  authModeLine,
   buildConvexDevArgs,
+  buildConvexEnvSetArgs,
+  buildConvexInitArgs,
   buildConvexSelectArgs,
+  buildStages,
   childExitStatus,
+  convexChildEnv,
+  convexExitFix,
+  convexPrintedUrl,
   createSupervisor,
+  DEFAULT_LOCAL_BACKEND_STARTUP_TIMEOUT_SECS,
+  doctorNextCommand,
+  doctorTierLine,
+  effectiveEnv,
+  isAnonymousLocalDeployment,
+  isCatalogueComplete,
   isConvexReadyOutput,
   isViteReadyOutput,
+  needsClerkPlaceholder,
+  parseLauncherFlags,
+  probeConvexUrl,
+  releaseRevision,
+  resolveConvexUrl,
+  runStages,
+  shouldSpawnConvex,
   signalProcessTree,
   terminateProcessTrees,
+  viteLocalUrl,
 } from '../../../tools/dev/local-dev.mjs'
+
+type StageOutcome = {
+  ok: boolean
+  stdout?: string
+  stderr?: string
+  skipped?: boolean
+  reason?: string
+  fix?: string
+}
+type Stage = {
+  id: string
+  skip?: boolean
+  skipReason?: string
+  run: () => Promise<StageOutcome | undefined>
+}
+type StageRun = (reference: string, args?: string) => Promise<StageOutcome>
+
+function recorder() {
+  const lines: string[] = []
+  return { lines, log: (message: string) => { lines.push(message) } }
+}
+
+const completeStatus = JSON.stringify({
+  kind: 'ready',
+  coverage: { source: 'coinbase', generation: 'gen_1', completeness: 'completed_observed_scan' },
+  refreshState: 'complete',
+})
 
 describe('local development launcher', () => {
   it('uses the official non-interactive local upgrade path without a reset option', () => {
@@ -24,11 +76,54 @@ describe('local development launcher', () => {
     expect(buildConvexDevArgs()).not.toContain('reset')
   })
 
+  it('builds the argv for the CLI\'s own agent-init recipe (`convex init` then `convex env set`)', () => {
+    expect(buildConvexInitArgs()).toEqual(['convex', 'init'])
+    expect(buildConvexEnvSetArgs('https://release-proof.invalid')).toEqual([
+      'convex',
+      'env',
+      'set',
+      'CLERK_JWT_ISSUER_DOMAIN',
+      'https://release-proof.invalid',
+    ])
+  })
+
+  it('only needs the placeholder pushed when CLERK_JWT_ISSUER_DOMAIN is absent from the env', () => {
+    expect(needsClerkPlaceholder({})).toBe(true)
+    expect(needsClerkPlaceholder({ CLERK_JWT_ISSUER_DOMAIN: 'https://real-tenant.clerk.accounts.dev' })).toBe(false)
+  })
+
   it('does not treat Vite output as ready before Convex is ready', () => {
     expect(isConvexReadyOutput('Preparing Convex functions...')).toBe(false)
     expect(isConvexReadyOutput('✔ Convex functions ready!')).toBe(true)
     expect(isViteReadyOutput('Convex functions ready!')).toBe(false)
     expect(isViteReadyOutput('➜ Local: http://127.0.0.1:3024/')).toBe(true)
+  })
+
+  it('recognizes Vite v8\'s ANSI-decorated ready banner (raw captured bytes)', () => {
+    // Captured verbatim from a live `dev:local` run against Vite v8.2.2; the
+    // ANSI escapes split "Local" from ":" and "3024" from the URL's slash.
+    const banner =
+      '\u001b[32m\u001b[1mVITE\u001b[22m v8.2.2\u001b[39m  \u001b[2mready in \u001b[0m\u001b[1m873\u001b[22m\u001b[2m\u001b[0m ms\u001b[22m\n' +
+      '\n' +
+      '  \u001b[32m➜\u001b[39m  \u001b[1mLocal\u001b[22m:   \u001b[36mhttp://127.0.0.1:\u001b[1m3024\u001b[22m/\u001b[39m\n'
+
+    expect(isViteReadyOutput(banner)).toBe(true)
+    expect(viteLocalUrl(banner)).toBe('http://127.0.0.1:3024')
+  })
+
+  it('recognizes the same banner split across two output chunks', () => {
+    const chunkOne =
+      '\u001b[32m\u001b[1mVITE\u001b[22m v8.2.2\u001b[39m  \u001b[2mready in \u001b[0m\u001b[1m873\u001b[22m\u001b[2m\u001b[0m ms\u001b[22m\n\n'
+    const chunkTwo =
+      '  \u001b[32m➜\u001b[39m  \u001b[1mLocal\u001b[22m:   \u001b[36mhttp://127.0.0.1:\u001b[1m3024\u001b[22m/\u001b[39m\n'
+
+    // Readiness is evaluated over the accumulated output, so the first chunk
+    // alone must not be mistaken for the URL line, but the combined output
+    // (as `createManagedChild` accumulates it) must be recognized as ready.
+    expect(isViteReadyOutput(chunkOne)).toBe(true)
+    expect(viteLocalUrl(chunkOne)).toBeUndefined()
+    expect(isViteReadyOutput(chunkOne + chunkTwo)).toBe(true)
+    expect(viteLocalUrl(chunkOne + chunkTwo)).toBe('http://127.0.0.1:3024')
   })
 
   it('reports timeout and parent-signal statuses without masking child failures', () => {
@@ -93,5 +188,480 @@ describe('local development launcher', () => {
     supervisor.signal('SIGTERM')
     await supervisor.waitForChildren()
     expect(signalledCalls).toEqual([['SIGINT', 'signal', 'SIGTERM']])
+  })
+})
+
+describe('anonymous local deployment detection', () => {
+  const originalCwd = process.cwd()
+  let directory = ''
+
+  afterEach(() => {
+    process.chdir(originalCwd)
+    if (directory) rmSync(directory, { recursive: true, force: true })
+    directory = ''
+  })
+
+  it('treats CONVEX_AGENT_MODE=anonymous as anonymous with no state file', () => {
+    directory = mkdtempSync(join(tmpdir(), 'ae-local-dev-'))
+    process.chdir(directory)
+
+    expect(isAnonymousLocalDeployment({ CONVEX_AGENT_MODE: 'anonymous' })).toBe(true)
+  })
+
+  it('treats a state file naming anonymous-agent as anonymous with no env signal', () => {
+    directory = mkdtempSync(join(tmpdir(), 'ae-local-dev-'))
+    mkdirSync(join(directory, '.convex/local/default'), { recursive: true })
+    writeFileSync(
+      join(directory, '.convex/local/default/config.json'),
+      JSON.stringify({ deploymentName: 'anonymous-agent' }),
+      'utf8',
+    )
+    process.chdir(directory)
+
+    expect(isAnonymousLocalDeployment({})).toBe(true)
+  })
+
+  it('is not anonymous when neither signal is present', () => {
+    directory = mkdtempSync(join(tmpdir(), 'ae-local-dev-'))
+    process.chdir(directory)
+
+    expect(isAnonymousLocalDeployment({})).toBe(false)
+  })
+})
+
+describe('convex child env', () => {
+  it('adds a placeholder issuer domain and the anonymous agent mode when neither is set', () => {
+    const { lines, log } = recorder()
+    const result = convexChildEnv({ PATH: '/usr/bin' }, { anonymous: true, log })
+    expect(result).toEqual({
+      PATH: '/usr/bin',
+      CLERK_JWT_ISSUER_DOMAIN: 'https://release-proof.invalid',
+      CONVEX_AGENT_MODE: 'anonymous',
+      CONVEX_LOCAL_BACKEND_STARTUP_TIMEOUT_SECS: '180',
+    })
+    expect(lines).toEqual([
+      'anonymous local deployment: using placeholder CLERK_JWT_ISSUER_DOMAIN (Clerk is not configured locally)',
+    ])
+  })
+
+  it('leaves an already-configured Clerk issuer domain and timeout untouched', () => {
+    const { lines, log } = recorder()
+    const env = {
+      CLERK_JWT_ISSUER_DOMAIN: 'https://real-tenant.clerk.accounts.dev',
+      CONVEX_LOCAL_BACKEND_STARTUP_TIMEOUT_SECS: '600',
+    }
+    expect(convexChildEnv(env, { anonymous: true, log })).toBe(env)
+    expect(lines).toEqual([])
+  })
+
+  it('never leaks the placeholder into a real, non-anonymous deployment', () => {
+    const { lines, log } = recorder()
+    const env = { PATH: '/usr/bin' }
+    const result = convexChildEnv(env, { anonymous: false, log })
+    expect(result).not.toBe(env)
+    expect(result).toEqual({ PATH: '/usr/bin', CONVEX_LOCAL_BACKEND_STARTUP_TIMEOUT_SECS: '180' })
+    expect(lines).toEqual([])
+  })
+
+  it('sets the default local backend startup timeout when absent, in every mode', () => {
+    const { log } = recorder()
+    const anonymous = convexChildEnv({ PATH: '/usr/bin' }, { anonymous: true, log })
+    const named = convexChildEnv({ PATH: '/usr/bin' }, { anonymous: false, log })
+    expect(anonymous.CONVEX_LOCAL_BACKEND_STARTUP_TIMEOUT_SECS).toBe(String(DEFAULT_LOCAL_BACKEND_STARTUP_TIMEOUT_SECS))
+    expect(named.CONVEX_LOCAL_BACKEND_STARTUP_TIMEOUT_SECS).toBe(String(DEFAULT_LOCAL_BACKEND_STARTUP_TIMEOUT_SECS))
+  })
+
+  it('preserves an explicit local backend startup timeout', () => {
+    const { log } = recorder()
+    const env = { CONVEX_LOCAL_BACKEND_STARTUP_TIMEOUT_SECS: '45' }
+    const result = convexChildEnv(env, { log })
+    expect(result).toBe(env)
+    expect(result.CONVEX_LOCAL_BACKEND_STARTUP_TIMEOUT_SECS).toBe('45')
+  })
+})
+
+describe('anonymous deployment env seed', () => {
+  it('returns the process value when CLERK_JWT_ISSUER_DOMAIN is present', () => {
+    expect(anonymousDeploymentEnvSeed({ CLERK_JWT_ISSUER_DOMAIN: 'https://real-tenant.clerk.accounts.dev' }))
+      .toBe('https://real-tenant.clerk.accounts.dev')
+  })
+
+  it('returns the placeholder when CLERK_JWT_ISSUER_DOMAIN is absent', () => {
+    expect(anonymousDeploymentEnvSeed({})).toBe('https://release-proof.invalid')
+    expect(anonymousDeploymentEnvSeed({ PATH: '/usr/bin' })).toBe('https://release-proof.invalid')
+  })
+})
+
+describe('convex exit fix', () => {
+  it('points at the startup timeout env var when the backend did not start in time', () => {
+    const output = 'Local backend did not start on port 3212 within 30 seconds.'
+    expect(convexExitFix(output, {})).toBe(
+      'the local backend took longer than CONVEX_LOCAL_BACKEND_STARTUP_TIMEOUT_SECS=180; rerun, or raise it for a large local database',
+    )
+    expect(convexExitFix(output, { CONVEX_LOCAL_BACKEND_STARTUP_TIMEOUT_SECS: '600' })).toBe(
+      'the local backend took longer than CONVEX_LOCAL_BACKEND_STARTUP_TIMEOUT_SECS=600; rerun, or raise it for a large local database',
+    )
+  })
+
+  it('points at CLERK_JWT_ISSUER_DOMAIN when that is the failure', () => {
+    const output = 'Error: CLERK_JWT_ISSUER_DOMAIN is required for Convex auth configuration'
+    expect(convexExitFix(output, {})).toMatch(/CLERK_JWT_ISSUER_DOMAIN/)
+  })
+
+  it('falls back to a generic hint for anything else', () => {
+    expect(convexExitFix('some unrelated failure trace', {})).toBe('read the Convex output above')
+    expect(convexExitFix('', {})).toBe('read the Convex output above')
+  })
+})
+
+describe('launcher flags', () => {
+  it('takes its own flags and forwards everything else to Vite', () => {
+    expect(parseLauncherFlags([
+      '--skip-scan',
+      '--port',
+      '4100',
+      '--no-doctor',
+      '--x',
+      '--skip-seed',
+    ])).toEqual({
+      skipScan: true,
+      skipSeed: true,
+      runDoctor: false,
+      viteArgs: ['--port', '4100', '--x'],
+    })
+  })
+
+  it('defaults to a full staged start with no Vite overrides', () => {
+    expect(parseLauncherFlags([])).toEqual({
+      skipScan: false,
+      skipSeed: false,
+      runDoctor: true,
+      viteArgs: [],
+    })
+    expect(parseLauncherFlags(['--host', '0.0.0.0']).viteArgs).toEqual(['--host', '0.0.0.0'])
+  })
+})
+
+describe('effective environment', () => {
+  const files = [
+    { name: '.env', contents: 'SHARED=base\nCONVEX_URL=http://127.0.0.1:1\n' },
+    { name: '.env.local', contents: 'VITE_CONVEX_URL=http://127.0.0.1:2\nCONVEX_DEPLOYMENT=local:stale\n' },
+    { name: '.env.development', contents: 'SHARED=development\n' },
+    { name: '.env.development.local', contents: 'CONVEX_URL=http://127.0.0.1:3\n' },
+  ]
+
+  it('lets the later file win and names the file each value came from', () => {
+    const { env, sources } = effectiveEnv({ PATH: '/usr/bin' }, files)
+    expect(env.SHARED).toBe('development')
+    expect(sources.SHARED).toBe('.env.development')
+    expect(env.CONVEX_URL).toBe('http://127.0.0.1:3')
+    expect(sources.CONVEX_URL).toBe('.env.development.local')
+    expect(sources.VITE_CONVEX_URL).toBe('.env.local')
+    expect(env.PATH).toBe('/usr/bin')
+  })
+
+  it('drops CONVEX_DEPLOYMENT from both the inherited env and the files', () => {
+    const inherited = effectiveEnv({ CONVEX_DEPLOYMENT: 'anonymous:other-checkout' }, [])
+    expect(inherited.env.CONVEX_DEPLOYMENT).toBeUndefined()
+    expect(inherited.dropped).toEqual(['CONVEX_DEPLOYMENT'])
+
+    const fromFile = effectiveEnv({}, files)
+    expect(fromFile.env.CONVEX_DEPLOYMENT).toBeUndefined()
+    expect(fromFile.sources.CONVEX_DEPLOYMENT).toBeUndefined()
+    expect(fromFile.dropped).toEqual(['CONVEX_DEPLOYMENT'])
+    expect(effectiveEnv({}, []).dropped).toEqual([])
+  })
+
+  it('prefers CONVEX_URL over VITE_CONVEX_URL and reports its file', () => {
+    const { env, sources } = effectiveEnv({}, files)
+    expect(resolveConvexUrl(env, sources)).toEqual({
+      url: 'http://127.0.0.1:3',
+      name: 'CONVEX_URL',
+      file: '.env.development.local',
+    })
+    expect(resolveConvexUrl({ VITE_CONVEX_URL: 'http://127.0.0.1:2' }, sources)).toEqual({
+      url: 'http://127.0.0.1:2',
+      name: 'VITE_CONVEX_URL',
+      file: '.env.local',
+    })
+    expect(resolveConvexUrl({ CONVEX_URL: '  ' }, {})).toBeUndefined()
+  })
+
+  it('lets a process-owned value beat every file and records its source as process', () => {
+    const baseEnv = { PATH: '/usr/bin', SHARED: 'process-value', CONVEX_URL: 'http://127.0.0.1:9' }
+    const { env, sources } = effectiveEnv(baseEnv, files)
+    expect(env.SHARED).toBe('process-value')
+    expect(sources.SHARED).toBe('process')
+    expect(env.CONVEX_URL).toBe('http://127.0.0.1:9')
+    expect(sources.CONVEX_URL).toBe('process')
+    // A key the process never set still resolves from the files, later file still winning.
+    expect(env.VITE_CONVEX_URL).toBe('http://127.0.0.1:2')
+    expect(sources.VITE_CONVEX_URL).toBe('.env.local')
+  })
+})
+
+describe('local Clerk bypass startup line', () => {
+  it('reports ON, with no source, when unset or explicitly true', () => {
+    expect(authModeLine({}, {})).toBe(
+      'auth: local Clerk bypass ON (VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E=true; connect:local can approve)',
+    )
+    expect(authModeLine({ VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E: 'true' }, {})).toBe(
+      'auth: local Clerk bypass ON (VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E=true; connect:local can approve)',
+    )
+  })
+
+  it('reports OFF with its source when the value is anything other than true', () => {
+    expect(authModeLine(
+      { VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E: 'false' },
+      { VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E: '.env.local' },
+    )).toBe('auth: local Clerk bypass OFF (source: .env.local); ae connect needs browser approval')
+    expect(authModeLine({ VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E: 'false' }, {})).toBe(
+      'auth: local Clerk bypass OFF (source: process); ae connect needs browser approval',
+    )
+  })
+})
+
+describe('convex probe', () => {
+  it('accepts a listening backend and records the probed path', async () => {
+    const seen: string[] = []
+    const fetchImpl = async (url: URL) => {
+      seen.push(String(url))
+      return { status: 200 }
+    }
+    expect(await probeConvexUrl('http://127.0.0.1:3210', fetchImpl, 50)).toEqual({ ok: true })
+    expect(seen).toEqual(['http://127.0.0.1:3210/version'])
+  })
+
+  it('reports a refused connection, an unexpected status and a timeout', async () => {
+    const refusing = async () => { throw new TypeError('fetch failed') }
+    expect(await probeConvexUrl('http://127.0.0.1:3210', refusing, 50))
+      .toEqual({ ok: false, reason: 'refused' })
+
+    const unavailable = async () => ({ status: 503 })
+    expect(await probeConvexUrl('http://127.0.0.1:3210', unavailable, 50))
+      .toEqual({ ok: false, reason: 'unexpected_status', status: 503 })
+
+    const hanging = () => new Promise<{ status: number }>(() => {})
+    expect(await probeConvexUrl('http://127.0.0.1:3210', hanging, 5))
+      .toEqual({ ok: false, reason: 'timeout' })
+  })
+
+  it('rejects a value that is not an http URL without touching the network', async () => {
+    let called = false
+    const fetchImpl = async () => {
+      called = true
+      return { status: 200 }
+    }
+    expect(await probeConvexUrl('not-a-url', fetchImpl, 50)).toEqual({ ok: false, reason: 'invalid_url' })
+    expect(await probeConvexUrl('ftp://127.0.0.1', fetchImpl, 50)).toEqual({ ok: false, reason: 'invalid_url' })
+    expect(called).toBe(false)
+  })
+
+  it('only spawns convex dev when nothing is already listening', () => {
+    expect(shouldSpawnConvex({ ok: true })).toBe(false)
+    expect(shouldSpawnConvex({ ok: false, reason: 'refused' })).toBe(true)
+    expect(shouldSpawnConvex(undefined)).toBe(true)
+  })
+})
+
+describe('startup stages', () => {
+  it('runs stages in order and reports what ran', async () => {
+    const order: string[] = []
+    const stages: Stage[] = ['first', 'second', 'third'].map((id) => ({
+      id,
+      run: async () => {
+        order.push(id)
+        return { ok: true }
+      },
+    }))
+    const { lines, log } = recorder()
+    expect(await runStages(stages, { log })).toEqual({ ok: true, ran: ['first', 'second', 'third'], skipped: [] })
+    expect(order).toEqual(['first', 'second', 'third'])
+    expect(lines).toEqual([])
+  })
+
+  it('stops at the first failing stage and prints its id, stderr tail and a fix', async () => {
+    let laterRan = false
+    const { lines, log } = recorder()
+    const outcome = await runStages([
+      { id: 'identities', run: async () => ({ ok: true }) },
+      { id: 'authority', run: async () => ({ ok: false, stderr: 'noise\nCould not find function\n', fix: 'add devSeed:seedSandboxSpendingPolicy' }) },
+      { id: 'sandbox-tool', run: async () => { laterRan = true; return { ok: true } } },
+    ] satisfies Stage[], { log })
+
+    expect(outcome).toEqual({ ok: false, id: 'authority', ran: ['identities'], skipped: [] })
+    expect(laterRan).toBe(false)
+    expect(lines[0]).toBe('stage authority failed: noise | Could not find function')
+    expect(lines[1]).toBe('fix: add devSeed:seedSandboxSpendingPolicy')
+  })
+
+  it('treats a thrown stage as a failure', async () => {
+    const { lines, log } = recorder()
+    const outcome = await runStages([
+      { id: 'scan', run: async () => { throw new Error('convex run is unavailable') } },
+    ] satisfies Stage[], { log })
+    expect(outcome.ok).toBe(false)
+    expect(outcome.id).toBe('scan')
+    expect(lines[0]).toBe('stage scan failed: convex run is unavailable')
+    expect(lines[1]).toMatch(/^fix: /u)
+  })
+
+  it('prints the reason for both declared and runtime skips', async () => {
+    const { lines, log } = recorder()
+    const outcome = await runStages([
+      { id: 'authority', skip: true, skipReason: '--skip-seed', run: async () => ({ ok: true }) },
+      { id: 'scan', run: async () => ({ ok: true, skipped: true, reason: 'catalogue already complete' }) },
+    ] satisfies Stage[], { log })
+    expect(outcome).toEqual({ ok: true, ran: [], skipped: ['authority', 'scan'] })
+    expect(lines).toEqual([
+      'stage authority skipped: --skip-seed',
+      'stage scan skipped: catalogue already complete',
+    ])
+  })
+})
+
+describe('x402-era stage set', () => {
+  const stageRun = (overrides: Record<string, StageOutcome> = {}): { calls: string[], run: StageRun } => {
+    const calls: string[] = []
+    return {
+      calls,
+      run: async (reference: string) => {
+        calls.push(reference)
+        return overrides[reference] ?? { ok: true, stdout: '', stderr: '' }
+      },
+    }
+  }
+
+  it('orders identities, authority, scan and the sandbox tool', () => {
+    const { run } = stageRun()
+    expect(buildStages({ run }).map((stage) => stage.id))
+      .toEqual(['identities', 'authority', 'scan', 'sandbox-tool'])
+  })
+
+  it('starts a refresh only when the catalogue is not already complete', async () => {
+    const complete = stageRun({ 'x402DirectoryIndex:status': { ok: true, stdout: completeStatus } })
+    const { lines, log } = recorder()
+    expect(await runStages(buildStages({ run: complete.run }), { log }))
+      .toEqual({ ok: true, ran: ['identities', 'authority', 'sandbox-tool'], skipped: ['scan'] })
+    expect(complete.calls).not.toContain('x402DirectoryIndexRefresh:start')
+    expect(lines).toEqual(['stage scan skipped: catalogue already complete'])
+
+    const empty = stageRun({ 'x402DirectoryIndex:status': { ok: true, stdout: JSON.stringify({ kind: 'unavailable', refreshState: 'none' }) } })
+    expect((await runStages(buildStages({ run: empty.run }), { log: () => {} })).ok).toBe(true)
+    expect(empty.calls).toEqual([
+      'workloadCron:ensurePlatformWorkloadIdentities',
+      'devSeed:ensureLocalE2EOwnerIdentity',
+      'devSeed:seedSandboxSpendingPolicy',
+      'x402DirectoryIndex:status',
+      'x402DirectoryIndexRefresh:start',
+      'devSeed:publishSandboxTool',
+    ])
+  })
+
+  it('honours --skip-scan and --skip-seed', async () => {
+    const { calls, run } = stageRun()
+    const { lines, log } = recorder()
+    expect(await runStages(buildStages({ run, skipScan: true, skipSeed: true }), { log }))
+      .toEqual({ ok: true, ran: ['identities'], skipped: ['authority', 'scan', 'sandbox-tool'] })
+    expect(calls).toEqual([
+      'workloadCron:ensurePlatformWorkloadIdentities',
+      'devSeed:ensureLocalE2EOwnerIdentity',
+    ])
+    expect(lines).toEqual([
+      'stage authority skipped: --skip-seed',
+      'stage scan skipped: --skip-scan',
+      'stage sandbox-tool skipped: --skip-seed',
+    ])
+  })
+
+  it('fails the seed stages by name when the mutation does not exist', async () => {
+    const { run } = stageRun({
+      'devSeed:seedSandboxSpendingPolicy': { ok: false, stderr: 'Could not find function for "devSeed:seedSandboxSpendingPolicy"' },
+    })
+    const { lines, log } = recorder()
+    const outcome = await runStages(buildStages({ run }), { log })
+    expect(outcome.ok).toBe(false)
+    expect(outcome.id).toBe('authority')
+    expect(lines[0]).toContain('devSeed:seedSandboxSpendingPolicy')
+    expect(lines[1]).toContain('devSeed:seedSandboxSpendingPolicy')
+  })
+
+  it('reads the catalogue completeness from the status query result', () => {
+    expect(isCatalogueComplete(completeStatus)).toBe(true)
+    expect(isCatalogueComplete(`log line\n${completeStatus}\n`)).toBe(true)
+    expect(isCatalogueComplete(JSON.stringify({ kind: 'unavailable', refreshState: 'complete' }))).toBe(false)
+    expect(isCatalogueComplete('not json at all')).toBe(false)
+    expect(isCatalogueComplete('')).toBe(false)
+  })
+})
+
+describe('release identity and reported URLs', () => {
+  it('returns a 40-hex revision or nothing outside a repository', () => {
+    expect(releaseRevision(() => `${'a1b2c3d4'.repeat(5)}\n`)).toBe('a1b2c3d4'.repeat(5))
+    expect(releaseRevision(() => { throw new Error('not a git repository') })).toBeUndefined()
+    expect(releaseRevision(() => 'HEAD')).toBeUndefined()
+  })
+
+  it('reads the URLs the two dev servers print', () => {
+    expect(viteLocalUrl('  ➜  Local:   http://127.0.0.1:3024/\n  ➜  Network: use --host\n'))
+      .toBe('http://127.0.0.1:3024')
+    expect(viteLocalUrl('nothing yet')).toBeUndefined()
+
+    expect(convexPrintedUrl('Started running the Convex deployment locally at http://127.0.0.1:3210\n'))
+      .toBe('http://127.0.0.1:3210')
+    expect(convexPrintedUrl('Convex dashboard is at http://127.0.0.1:6790/\nConvex functions ready!\n'))
+      .toBeUndefined()
+    expect(convexPrintedUrl('Convex functions ready!')).toBeUndefined()
+  })
+
+  it('picks the doctor next command from the JSON report', () => {
+    expect(doctorNextCommand(JSON.stringify({
+      kind: 'degraded',
+      checks: [
+        { id: 'origin', state: 'pass' },
+        { id: 'server', state: 'fail', summary: 'unreachable', nextCommand: 'ae doctor --base-url http://127.0.0.1:3024' },
+        { id: 'buyer', state: 'warn', nextCommand: 'ae connect' },
+      ],
+    }))).toBe('ae doctor --base-url http://127.0.0.1:3024')
+
+    expect(doctorNextCommand(JSON.stringify({
+      kind: 'degraded',
+      checks: [{ id: 'buyer', state: 'warn', nextCommand: 'ae connect' }],
+    }))).toBe('ae connect')
+
+    expect(doctorNextCommand('AE doctor: degraded\nNext: ae fund\n')).toBe('ae fund')
+    expect(doctorNextCommand(JSON.stringify({ kind: 'ready', checks: [{ id: 'origin', state: 'pass' }] })))
+      .toBeUndefined()
+    expect(doctorNextCommand('')).toBeUndefined()
+  })
+
+  it('parses the doctor tier from the JSON report', () => {
+    expect(doctorTierLine(JSON.stringify({
+      kind: 'ready',
+      tier: { level: 1, missing: [] },
+    }))).toBe('tier 1')
+
+    expect(doctorTierLine(JSON.stringify({
+      kind: 'degraded',
+      tier: { level: 0, missing: ['A', 'B'] },
+    }))).toBe('tier 0 (missing: A, B)')
+
+    expect(doctorTierLine(JSON.stringify({
+      kind: 'degraded',
+      tier: { level: 1, missing: ['X'] },
+    }))).toBe('tier 1 (missing: X)')
+
+    expect(doctorTierLine(JSON.stringify({ kind: 'ready', checks: [] })))
+      .toBeUndefined()
+    expect(doctorTierLine('some output without tier')).toBeUndefined()
+    expect(doctorTierLine('')).toBeUndefined()
+  })
+})
+
+describe('convex run output parsing', () => {
+  it('finds the result JSON behind a CLI banner', () => {
+    expect(isCatalogueComplete(`✔ Provisioned a dev deployment {ignored\n${completeStatus}`)).toBe(true)
+    expect(doctorNextCommand(`some { banner\n${JSON.stringify({ kind: 'degraded', checks: [{ id: 'server', state: 'fail', nextCommand: 'ae connect' }] })}`))
+      .toBe('ae connect')
   })
 })

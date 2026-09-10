@@ -1,5 +1,3 @@
-import { relative, resolve, sep } from 'node:path'
-
 type JsonObject = Record<string, unknown>
 
 export type PackFile = Readonly<{
@@ -35,10 +33,6 @@ function string(value: unknown, label: string): string {
     throw new Error(`${label}_must_be_a_non_empty_string`)
   }
   return value
-}
-
-function normalizeRepositoryPath(path: string): string {
-  return path.split(sep).join('/').replace(/^\.\//u, '')
 }
 
 export function assertGeneratedSnapshotUnchanged(
@@ -150,12 +144,4 @@ export function assertCliPackIntegrity(
     shasum: string(packed.shasum, 'cli_pack_shasum'),
     version,
   }
-}
-
-export function repositoryRelativePath(root: string, path: string): string {
-  const repositoryPath = normalizeRepositoryPath(relative(resolve(root), resolve(path)))
-  if (repositoryPath === '..' || repositoryPath.startsWith('../')) {
-    throw new Error('path_outside_repository')
-  }
-  return repositoryPath
 }

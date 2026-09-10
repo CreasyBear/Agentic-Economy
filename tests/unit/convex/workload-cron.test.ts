@@ -19,12 +19,11 @@ import {
   reconcileWorkloadCronSnapshot,
   reconcileWorkloadCronSnapshotHandler,
   refreshAgenticEconomyApiRegistryHandler,
-  refreshAgenticMarketSnapshotsHandler,
   refreshCapabilitySupplyReadinessHandler,
   refreshCapabilitySupplyReadiness,
   refreshCurrentMarketPresenceHandler,
   refreshFacilitatorDiscoveryHandler,
-  runDailySupplierSettlementHandler,
+  observeX402TreasuryHandler,
   dispatchWorkloadCronConsequenceHandler,
   reconcile,
   type WorkloadCronActionContext,
@@ -44,18 +43,24 @@ const EXPECTED_BINDINGS = {
   'cleanup expired source write nonces': 'workloadCron:cleanupExpiredSourceWriteNonces',
   'reconcile due facilitator invocations': 'workloadCron:reconcileDueFacilitatorInvocations',
   'refresh Agentic Economy API registry': 'workloadCron:refreshAgenticEconomyApiRegistry',
-  'refresh Agentic Market snapshots': 'workloadCron:refreshAgenticMarketSnapshots',
   'refresh capability supply readiness': 'workloadCron:refreshCapabilitySupplyReadiness',
   'refresh current market presence': 'workloadCron:refreshCurrentMarketPresence',
   'refresh facilitator discovery': 'workloadCron:refreshFacilitatorDiscovery',
-  'run daily supplier settlement': 'workloadCron:runDailySupplierSettlement',
+  'observe x402 treasury': 'workloadCron:observeX402Treasury',
 } as const
 
 const ACTION_HANDLERS = [
   reconcileDueFacilitatorInvocationsHandler,
   refreshFacilitatorDiscoveryHandler,
-  refreshAgenticMarketSnapshotsHandler,
   refreshAgenticEconomyApiRegistryHandler,
+  observeX402TreasuryHandler,
+] as const
+
+const ACTION_HANDLER_WORKLOAD_NAMES = [
+  'reconcile due facilitator invocations',
+  'refresh facilitator discovery',
+  'refresh Agentic Economy API registry',
+  'observe x402 treasury',
 ] as const
 
 const MUTATION_HANDLERS = [
@@ -63,7 +68,6 @@ const MUTATION_HANDLERS = [
   refreshCapabilitySupplyReadinessHandler,
   cleanupExpiredSourceWriteNoncesHandler,
   cleanupExpiredAgentAccessOAuthGrantsHandler,
-  runDailySupplierSettlementHandler,
 ] as const
 
 describe('System workload cron boundary', () => {
@@ -72,16 +76,17 @@ describe('System workload cron boundary', () => {
     vi.setSystemTime(new Date('2026-08-26T00:00:00.000Z'))
   })
 
-  it('binds the exact nine cron registrations only to workload admission wrappers', () => {
-    expect(Object.keys(convexCrons.crons).sort()).toEqual(Object.keys(EXPECTED_BINDINGS).sort())
+  it('binds the eight periodic registrations to workload admission wrappers, retaining on-demand facilitator authority', () => {
+    const periodicBindings = Object.fromEntries(Object.entries(EXPECTED_BINDINGS).filter(([name]) => name !== 'refresh facilitator discovery'))
+    expect(Object.keys(convexCrons.crons).sort()).toEqual(Object.keys(periodicBindings).sort())
     expect(Object.fromEntries(
       Object.entries(convexCrons.crons).map(([name, job]) => [name, job.name]),
-    )).toEqual(EXPECTED_BINDINGS)
+    )).toEqual(periodicBindings)
     expect(Object.values(convexCrons.crons).every((job) => JSON.stringify(job.args) === '[{}]')).toBe(true)
   })
 
   it('declares every cron as one canonical workload Principal and Account with no exemption', () => {
-    expect(WORKLOAD_CRON_DECLARATIONS).toHaveLength(9)
+    expect(WORKLOAD_CRON_DECLARATIONS).toHaveLength(8)
     expect(WORKLOAD_CRON_DECLARATIONS.map(({ name }) => name).sort()).toEqual(Object.keys(EXPECTED_BINDINGS).sort())
     expect(WORKLOAD_CRON_DECLARATIONS.every((declaration) => (
       declaration.authority === 'canonical_workload'
@@ -303,16 +308,16 @@ describe('System workload cron boundary', () => {
 
   it('denies missing, ambiguous, or inactive Account facts', async () => {
     const missing = canonicalDb({ includeAccount: false, includeOwnership: false, includeMembership: false })
-    await expect(admitWorkloadCron(queryContext(missing), 'run daily supplier settlement'))
+    await expect(admitWorkloadCron(queryContext(missing), 'cleanup expired agent access oauth grants'))
       .rejects.toMatchObject({ code: 'workload_account_missing' })
 
     const ambiguous = canonicalDb()
     ambiguous.seed('accounts', account())
-    await expect(admitWorkloadCron(queryContext(ambiguous), 'run daily supplier settlement'))
+    await expect(admitWorkloadCron(queryContext(ambiguous), 'cleanup expired agent access oauth grants'))
       .rejects.toThrow('unique query returned more than one row')
 
     const inactive = canonicalDb({ accountLifecycle: 'suspended' })
-    await expect(admitWorkloadCron(queryContext(inactive), 'run daily supplier settlement'))
+    await expect(admitWorkloadCron(queryContext(inactive), 'cleanup expired agent access oauth grants'))
       .rejects.toMatchObject({ code: 'workload_account_inactive' })
   })
 
@@ -332,19 +337,19 @@ describe('System workload cron boundary', () => {
       .rejects.toThrow('unique query returned more than one row')
   })
 
-  it('checks current workload authority before dispatch across all nine wrappers', async () => {
+  it('checks current workload authority before dispatch across every registered wrapper', async () => {
     const context = new FakeRuntimeContext(canonicalDb())
     for (const handler of ACTION_HANDLERS) await expect(handler(context.action())).resolves.toBeNull()
     for (const handler of MUTATION_HANDLERS) await expect(handler(context.mutation())).resolves.toBeNull()
 
-    expect(context.admissions).toEqual(WORKLOAD_CRON_DECLARATIONS.slice(0, 4).map(({ name }) => name))
-    expect(context.dispatches).toHaveLength(9)
-    expect(context.db.queries).toEqual(Array.from({ length: 9 }, () => [
+    expect(context.admissions).toEqual([...ACTION_HANDLER_WORKLOAD_NAMES])
+    expect(context.dispatches).toHaveLength(8)
+    expect([...context.db.queries].sort()).toEqual(Array.from({ length: 8 }, () => [
       'principals',
       'accounts',
       'accountOwnerships',
       'memberships',
-    ]).flat())
+    ]).flat().sort())
     expect(context.trace.every(([admission, dispatch]) => admission < dispatch)).toBe(true)
   })
 
@@ -352,7 +357,7 @@ describe('System workload cron boundary', () => {
     const context = new FakeRuntimeContext(new FakeDb())
     await expect(reconcileDueFacilitatorInvocationsHandler(context.action()))
       .rejects.toMatchObject({ code: 'workload_principal_missing' })
-    await expect(runDailySupplierSettlementHandler(context.mutation()))
+    await expect(cleanupExpiredAgentAccessOAuthGrantsHandler(context.mutation()))
       .rejects.toMatchObject({ code: 'workload_principal_missing' })
     expect(context.dispatches).toEqual([])
   })
@@ -410,7 +415,7 @@ describe('System workload cron boundary', () => {
 
   it('reconciles same-Account and explicit cross-Account payout attribution from canonical account facts', async () => {
     const db = canonicalDb()
-    const snapshot = await admitWorkloadCron(queryContext(db), 'run daily supplier settlement')
+    const snapshot = await admitWorkloadCron(queryContext(db), 'cleanup expired agent access oauth grants')
     await expect(reconcileWorkloadCronResourceAccount(
       queryContext(db),
       snapshot.name,
@@ -523,18 +528,12 @@ describe('System workload cron boundary', () => {
 
   it('routes every declared mutation consequence through same-transaction current admission', async () => {
     const operations = [
-      'capabilityOperationInvocations:cancelBeforeClaim',
-      'capabilityOperationInvocations:claimAutomaticReconciliationCandidate',
-      'capabilityOperationInvocations:finishAutomaticReconciliation',
-      'capabilityOperationX402AuthorizationExpiry:queueExpiredX402Authorization',
+      'capabilityCalls:cancelBeforeClaim',
+      'capabilityCalls:claimAutomaticReconciliationCandidate',
+      'capabilityCalls:finishAutomaticReconciliation',
+      'capabilityCallX402AuthorizationExpiry:queueExpiredX402Authorization',
       'capabilitySupply:recordCapabilityProbeResult',
       'facilitatorDiscovery:reconcile',
-      'marketExternalRegistry:begin',
-      'marketExternalRegistry:fail',
-      'marketExternalRegistry:finalize',
-      'marketExternalRegistry:writeBatch',
-      'marketExternalSnapshots:upsert',
-      'moneyLedger:reconcileExternalInvocationSpend',
       'moneyX402PaymentAttempts:reconcileX402PaymentAttempt',
     ] as const
     const context = new FakeRuntimeContext(canonicalDb())
@@ -792,11 +791,11 @@ function seedInvocationAuthority(
   const rootActor = 'prn_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
   const intermediate = 'prn_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'
   const leafSubject = 'prn_cccccccccccccccccccccccccccccccc'
-  db.seed('capabilityOperationInvocations', {
-    invocationRef: 'inv_cron',
+  db.seed('capabilityCalls', {
+    callRef: 'inv_cron',
     principalId: input.invocationPrincipalRef ?? leafSubject,
     ownerId: input.invocationAccountRef ?? resourceAccountRef,
-    operationRef: input.invocationOperationRef ?? 'invocation:inv_cron',
+    toolRef: input.invocationOperationRef ?? 'invocation:inv_cron',
     grantRef: leafGrantRef,
     grantGeneration: 7,
     grantExpiresAt: input.invocationGrantExpiresAt ?? (input.grantExpiresAt ?? Date.now() + 60_000),

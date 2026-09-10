@@ -22,7 +22,7 @@ beforeEach(() => {
   process.env.AE_CONFIG_DIR = directory
   delete process.env.AE_API_KEY
   delete process.env.AE_API_KEY_ORIGIN
-  storeConnection({ baseUrl: baseOptions.baseUrl, accessToken: 'hidden-supplier-secret', scope: 'market_supply:manage' })
+  storeConnection({ baseUrl: baseOptions.baseUrl, accessToken: 'hidden-provider-secret', scope: 'market_supply:manage' })
 })
 
 afterEach(() => {
@@ -34,39 +34,48 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-describe('AE CLI supplier Operation lifecycle', () => {
-  it('requests and stores a separate supplier credential without replacing buyer access', async () => {
-    removeStoredConnection(baseOptions.baseUrl, 'supplier')
+describe('AE CLI provider Tool lifecycle', () => {
+  it('requests and stores a separate provider credential without replacing buyer access', async () => {
+    removeStoredConnection(baseOptions.baseUrl, 'provider')
     storeConnection({ baseUrl: baseOptions.baseUrl, accessToken: 'buyer-secret', scope: 'market_operations:invoke customer_requests:bounded_mandate' })
     const fetch = vi.fn()
-      .mockResolvedValueOnce(Response.json({ client_id: 'supplier-client' }, { status: 201 }))
+      .mockResolvedValueOnce(Response.json({ client_id: 'provider-client' }, { status: 201 }))
       .mockResolvedValueOnce(Response.json({
-        device_code: 'supplier-device',
-        user_code: 'SUPP-LIER',
-        verification_uri: 'https://market.example/agent-access/authorize?user_code=SUPP-LIER',
+        device_code: 'provider-device',
+        user_code: 'PROV-IDER',
+        verification_uri: 'https://market.example/agent-access/authorize?user_code=PROV-IDER',
         expires_in: 600,
         interval: 1,
       }))
       .mockResolvedValueOnce(Response.json({
-        access_token: 'new-supplier-secret',
+        access_token: 'new-provider-secret',
         token_type: 'Bearer',
         scope: 'market_supply:manage',
       }))
-      .mockResolvedValueOnce(Response.json({ kind: 'not_found' }))
+      .mockResolvedValueOnce(Response.json({
+        kind: 'authenticated',
+        principalRef: 'prn_provider',
+        accountRef: 'acc_owner',
+        credentialId: 'key_provider',
+        applicationRef: 'agentic-economy',
+        environment: 'sandbox',
+        scopes: ['market_supply:manage'],
+        authorityMode: 'spending_policy',
+      }))
     vi.stubGlobal('fetch', fetch)
     const write = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
 
-    await runConnectCommand([], { ...baseOptions, supplier: true })
+    await runConnectCommand([], { ...baseOptions, provider: true })
 
     const registration = JSON.parse(String(fetch.mock.calls[0]?.[1]?.body)) as Record<string, unknown>
-    expect(registration).toMatchObject({ client_name: 'Agentic Economy Supplier CLI', scope: 'market_supply:manage' })
+    expect(registration).toMatchObject({ client_name: 'Agentic Economy Provider CLI', scope: 'market_supply:manage' })
     expect(String(fetch.mock.calls[1]?.[1]?.body)).toContain('scope=market_supply%3Amanage')
-    expect(String(fetch.mock.calls[3]?.[0])).toBe('https://market.example/api/v1/supply/earnings')
+    expect(String(fetch.mock.calls[3]?.[0])).toBe('https://market.example/api/v1/account')
     expect(readStoredConnection(baseOptions.baseUrl, 'market')?.accessToken).toBe('buyer-secret')
-    expect(readStoredConnection(baseOptions.baseUrl, 'supplier')?.accessToken).toBe('new-supplier-secret')
+    expect(readStoredConnection(baseOptions.baseUrl, 'provider')?.accessToken).toBe('new-provider-secret')
     expect(JSON.parse(write.mock.calls.map(([value]) => String(value)).join(''))).toMatchObject({
       kind: 'connected',
-      profile: 'supplier',
+      profile: 'provider',
       scope: 'market_supply:manage',
     })
   })
@@ -75,65 +84,203 @@ describe('AE CLI supplier Operation lifecycle', () => {
     const fetch = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
       expect(String(url)).toBe('https://market.example/api/v1/supply/status')
       expect(init?.method).toBe('POST')
-      expect(new Headers(init?.headers).get('authorization')).toBe('Bearer hidden-supplier-secret')
-      expect(JSON.parse(String(init?.body))).toEqual({ businessId: 'business:one', offeringRef: 'offering:one' })
+      expect(new Headers(init?.headers).get('authorization')).toBe('Bearer hidden-provider-secret')
+      expect(JSON.parse(String(init?.body))).toEqual({ businessRef: 'business:one', toolRef: 'operation:one' })
       return Response.json({
         kind: 'available',
-        businessId: 'business:one',
-        business: { name: 'Supplier', slug: 'supplier' },
-        operations: [{
-          offeringRef: 'offering:one',
+        schemaVersion: 'provider_tools:v1',
+        businessRef: 'business:one',
+        status: {
+          schemaVersion: 'provider_tools:v1',
+          businessRef: 'business:one',
+          providerRef: 'provider:one',
+          toolRef: 'operation:one',
           revision: 1,
-          name: 'Lookup',
-          summary: 'Look something up.',
-          catalogStatus: 'published',
-          lifecycle: { state: 'active', reasons: [] },
-          readiness: { outcome: 'healthy' },
-          live: { available: true },
-          currentStep: 'test',
-          stepStates: { describe: 'completed', admission: 'completed', readiness: 'completed', test: 'completed' },
-          publication: { publicationRef: 'publication:one', publicationRevision: 1, operationRef: 'operation:one', state: 'current' },
-        }],
-        activityTruncated: false,
+          state: 'Published',
+          reasonCodes: [],
+          observedAt: 10,
+          source: { kind: 'openapi', revision: 'rev:one', digest: `sha256:${'1'.repeat(64)}` },
+          routeability: { available: true, reasonCodes: [] },
+          authority: { kind: 'public' },
+          health: {
+            connection: 'not_required',
+            validation: 'passed',
+            publication: 'published',
+            freshness: 'current',
+            delivery: { kind: 'unobserved', provenance: 'canonical_call_receipts' },
+            usefulOutcome: { kind: 'unobserved', provenance: 'qualified_use_receipts' },
+            operationalConditions: [],
+          },
+        },
       })
     })
     vi.stubGlobal('fetch', fetch)
     const write = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
 
-    await runSupplyCommand(['status', 'business:one', 'offering:one'], baseOptions)
+    await runSupplyCommand(['status', 'business:one', 'operation:one'], baseOptions)
 
     expect(fetch).toHaveBeenCalledOnce()
     const output = write.mock.calls.map(([value]) => String(value)).join('')
-    expect(JSON.parse(output)).toMatchObject({ kind: 'available', operations: [{ offeringRef: 'offering:one' }] })
-    expect(output).not.toContain('hidden-supplier-secret')
+    expect(JSON.parse(output)).toMatchObject({ kind: 'available', status: { toolRef: 'operation:one', state: 'Published' } })
+    expect(output).not.toContain('hidden-provider-secret')
   })
 
-  it('renders the shared supplier continuation from current lifecycle facts', async () => {
+  it('requires a Tool reference for status and refuses before any external fetch', async () => {
+    const fetch = vi.fn()
+    vi.stubGlobal('fetch', fetch)
+
+    await expect(runSupplyCommand(['status', 'business:one'], baseOptions)).rejects.toMatchObject({
+      code: 'supply-status-usage',
+      message: 'Usage: ae supply status <businessRef> <toolRef>',
+      nextCommand: 'ae help supply status',
+    })
+    expect(fetch).not.toHaveBeenCalled()
+  })
+
+  it('previews a native x402 source from a schema-matching --input payload without publishing or calling it', async () => {
+    const fetch = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      expect(String(url)).toBe('https://market.example/api/v1/supply/sources/preview')
+      expect(JSON.parse(String(init?.body))).toEqual({
+        kind: 'x402',
+        resourceUrl: 'https://example.com/pay',
+        method: 'GET',
+        environment: 'sandbox',
+      })
+      return Response.json({
+        kind: 'ready',
+        sourceDigest: `sha256:${'1'.repeat(64)}`,
+        sourceRevision: 'rev:one',
+        provenance: { sourceKind: 'x402', sourceUrl: 'https://example.com/pay', authority: 'unverified_public' },
+        authentication: [],
+        candidates: [],
+      })
+    })
+    vi.stubGlobal('fetch', fetch)
+    const write = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
+
+    await runSupplyCommand(['preview'], {
+      ...baseOptions,
+      input: JSON.stringify({ kind: 'x402', resourceUrl: 'https://example.com/pay', method: 'GET', environment: 'sandbox' }),
+    })
+
+    expect(fetch).toHaveBeenCalledOnce()
+    expect(JSON.parse(write.mock.calls.map(([value]) => String(value)).join(''))).toMatchObject({ kind: 'ready' })
+  })
+
+  it('rejects a malformed preview payload with a message naming the missing field, before any fetch', async () => {
+    const fetch = vi.fn()
+    vi.stubGlobal('fetch', fetch)
+
+    await expect(runSupplyCommand(['preview'], {
+      ...baseOptions,
+      input: JSON.stringify({ kind: 'x402', resourceUrl: 'https://example.com/pay', method: 'GET' }),
+    })).rejects.toMatchObject({
+      code: 'supply-input-invalid',
+      message: expect.stringContaining('environment'),
+    })
+    expect(fetch).not.toHaveBeenCalled()
+  })
+
+  it('reads Provider offboarding without granting the CLI authority to start or resume it', async () => {
+    const fetch = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      expect(String(url)).toBe('https://market.example/api/v1/supply/offboarding/status')
+      expect(JSON.parse(String(init?.body))).toEqual({ businessRef: 'business:one' })
+      return Response.json({
+        kind: 'available',
+        status: {
+          schemaVersion: 'provider_offboarding:v1',
+          caseRef: 'offboarding:one',
+          businessRef: 'business:one',
+          providerRef: 'provider:one',
+          revision: 2,
+          state: 'Action required',
+          routeabilityFrozen: true,
+          blockerCodes: ['payout_resolution_required'],
+          observedAt: 10,
+          retentionPolicyVersion: 'retention:2026-09',
+          continuation: { action: 'supply.offboarding.status' },
+        },
+      })
+    })
+    vi.stubGlobal('fetch', fetch)
+    const write = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
+
+    await runSupplyCommand(['offboarding', 'business:one'], { ...baseOptions, json: false })
+
+    expect(fetch).toHaveBeenCalledOnce()
+    const output = write.mock.calls.flat().join('')
+    expect(output).toContain('state            Action required')
+    expect(output).toContain('new work frozen  yes')
+    expect(output).toContain('payout_resolution_required')
+  })
+
+  it('renders the shared provider continuation from current lifecycle facts', async () => {
     const fetch = vi.fn().mockResolvedValue(Response.json({
       kind: 'available',
-      businessId: 'business:one',
-      business: { name: 'Supplier', slug: 'supplier' },
-      operations: [{
-        offeringRef: 'offering:one',
+      schemaVersion: 'provider_tools:v1',
+      businessRef: 'business:one',
+      page: [{
+        schemaVersion: 'provider_tools:v1',
+        businessRef: 'business:one',
+        providerRef: 'provider:one',
+        toolRef: 'operation:one',
         revision: 1,
-        name: 'Lookup',
-        summary: 'Look something up.',
-        catalogStatus: 'published',
-        lifecycle: { state: 'active', reasons: [] },
-        readiness: { outcome: 'healthy' },
-        live: { available: true },
-        currentStep: 'test',
-        stepStates: { describe: 'completed', admission: 'completed', readiness: 'completed', test: 'completed' },
-        publication: { publicationRef: 'publication:one', publicationRevision: 1, operationRef: 'operation:one', state: 'current' },
+        state: 'Under review',
+        reasonCodes: [],
+        observedAt: 10,
+        source: { kind: 'mcp' },
+        routeability: { available: false, reasonCodes: [] },
+        authority: { kind: 'public' },
+        health: {
+          connection: 'not_required',
+          validation: 'in_progress',
+          publication: 'published',
+          freshness: 'unobserved',
+          delivery: {
+            kind: 'observed',
+            deliveredCount: 4,
+            notDeliveredCount: 1,
+            unknownCount: 0,
+            sampleSize: 5,
+            lastObservedAt: 9,
+            windowStartAt: 1,
+            windowEndAt: 10,
+            provenance: 'canonical_call_receipts',
+          },
+          usefulOutcome: {
+            kind: 'observed',
+            qualifiedUseCount: 3,
+            lastObservedAt: 8,
+            windowStartAt: 1,
+            windowEndAt: 10,
+            provenance: 'qualified_use_receipts',
+          },
+          operationalConditions: [],
+        },
+        continuation: { action: 'supply.status' },
       }],
-      activityTruncated: false,
+      isDone: true,
+      continueCursor: null,
     }))
     vi.stubGlobal('fetch', fetch)
     const write = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
 
-    await runSupplyCommand(['status', 'business:one'], { ...baseOptions, json: false })
+    await runSupplyCommand(['tools', 'business:one'], { ...baseOptions, json: false })
 
-    expect(write.mock.calls.flat().join('')).toContain('next  ae inspect operation:one')
+    const output = write.mock.calls.flat().join('')
+    expect(output).toContain('next  supply.status')
+    expect(output).toContain('4/5 delivered; 1 not delivered; 0 unknown')
+    expect(output).toContain('Qualified Use  3')
+  })
+
+  it('rejects the retired supply operations command without a compatibility alias', async () => {
+    const fetch = vi.fn()
+    vi.stubGlobal('fetch', fetch)
+
+    await expect(runSupplyCommand(['operations', 'business:one'], baseOptions)).rejects.toMatchObject({
+      code: 'supply-usage',
+    })
+    expect(fetch).not.toHaveBeenCalled()
   })
 
   it('uses the shared missing-provider-connection guidance for an empty connection list', async () => {
@@ -146,7 +293,7 @@ describe('AE CLI supplier Operation lifecycle', () => {
 
     await runSupplyCommand(['connections', 'business:one'], { ...baseOptions, json: false })
 
-    expect(write.mock.calls.flat().join('')).toContain('next  /owner/settings/connections')
+    expect(write.mock.calls.flat().join('')).toContain('next  /owner/offerings#provider-connections')
   })
 
   it('adds one explicit idempotency key to maintenance material', async () => {

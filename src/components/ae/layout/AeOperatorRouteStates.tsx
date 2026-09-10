@@ -1,11 +1,20 @@
 import { ArrowLeftIcon } from 'lucide-react'
-import { useLocation } from '@tanstack/react-router'
+import { Link, useLocation, useRouter } from '@tanstack/react-router'
+import { SignOutButton } from '@clerk/tanstack-react-start'
+import { useState } from 'react'
 
 import { AeOperatorShell, useOperatorShellChrome } from '@/components/ae/layout/AeOperatorShell'
+import { AeCopyReference } from '@/components/ae/data/AeCopyReference'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
+import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
 import { Skeleton } from '@/components/ui/skeleton'
+import { isLocalE2EAuthBypassEnabled } from '@/lib/client/local-e2e-auth'
 import { operatorRoleForPath, roleHomeHref } from '@/lib/operator/navigation'
+import {
+  OPERATOR_SURFACE_FORBIDDEN_MESSAGE,
+  OperatorSurfaceForbiddenError,
+} from '@/lib/operator/operator-context'
 
 /**
  * Shared pendingComponent/errorComponent for every /owner, /admin, and
@@ -40,14 +49,58 @@ export function OperatorRoutePending() {
   )
 }
 
-export function OperatorRouteError({ error: _error }: { error: unknown }) {
+export function OperatorRouteError({ error }: { error: unknown }) {
   const { pathname } = useLocation()
+  const router = useRouter()
+  const [retryPending, setRetryPending] = useState(false)
   const parentShell = useOperatorShellChrome()
+  const operatorRole = operatorRoleForPath(pathname) ?? 'owner'
+  const correlationRef = operatorErrorCorrelationRef(error)
+
+  if (isOperatorSurfaceForbidden(error)) {
+    if (parentShell !== null) return <OperatorForbiddenBody />
+    return (
+      <AeOperatorShell
+        operatorRole={operatorRole}
+        title="You don’t have access"
+        description="This signed-in account cannot open the requested workspace."
+        currentPath={pathname}
+        suppressSurfaceNavigation
+      >
+        <OperatorForbiddenBody />
+      </AeOperatorShell>
+    )
+  }
 
   const body = (
     <Alert variant="destructive">
-      <AlertTitle>Workspace unavailable</AlertTitle>
-      <AlertDescription>Refresh the page to try again. If the problem continues, return to your workspace home.</AlertDescription>
+      <AlertTitle>Couldn’t load this page</AlertTitle>
+      <AlertDescription>
+        <p>Try loading it again. If it still fails, check system status before repeating a Call.</p>
+        {correlationRef === undefined
+          ? null
+          : <AeCopyReference label="support reference" value={correlationRef} />}
+        <div className="flex w-full flex-wrap gap-intra">
+          <Button
+            type="button"
+            className="min-h-touch"
+            disabled={retryPending}
+            aria-busy={retryPending || undefined}
+            onClick={() => {
+              if (retryPending) return
+              setRetryPending(true)
+              void router.invalidate()
+                .catch((cause) => captureClientExceptionOnClient(cause))
+                .finally(() => setRetryPending(false))
+            }}
+          >
+            {retryPending ? 'Trying again…' : 'Try again'}
+          </Button>
+          <Button asChild variant="secondary" className="min-h-touch">
+            <Link to="/status">Check system status</Link>
+          </Button>
+        </div>
+      </AlertDescription>
     </Alert>
   )
 
@@ -55,9 +108,9 @@ export function OperatorRouteError({ error: _error }: { error: unknown }) {
 
   return (
     <AeOperatorShell
-      operatorRole={operatorRoleForPath(pathname) ?? 'owner'}
+      operatorRole={operatorRole}
       title="Couldn’t load this page"
-      description="Try again. Your account and access settings are unchanged."
+      description="Try again, then check system status if the page still does not load."
       currentPath={pathname}
     >
       {body}
@@ -65,12 +118,59 @@ export function OperatorRouteError({ error: _error }: { error: unknown }) {
   )
 }
 
+function operatorErrorCorrelationRef(error: unknown): string | undefined {
+  if (typeof error !== 'object' || error === null) return undefined
+  for (const key of ['correlationRef', 'correlationId'] as const) {
+    const value = Reflect.get(error, key)
+    if (typeof value === 'string' && value.trim().length > 0 && value.length <= 200) {
+      return value
+    }
+  }
+  return undefined
+}
+
+function OperatorForbiddenBody() {
+  const localE2E = isLocalE2EAuthBypassEnabled()
+  return (
+    <Alert>
+      <AlertTitle>You don’t have access to this workspace</AlertTitle>
+      <AlertDescription>
+        <p>Use the account that owns this workspace, or return to the public market.</p>
+        <div className="flex w-full flex-wrap gap-intra">
+          <Button asChild type="button" className="min-h-touch">
+            <Link to="/market" search={{ window: '30d' }}>Return to market</Link>
+          </Button>
+          <Button asChild variant="secondary" className="min-h-touch">
+            <Link to="/support">Get help</Link>
+          </Button>
+          {localE2E ? (
+            <Button asChild variant="outline" className="min-h-touch">
+              <Link to="/">Return home</Link>
+            </Button>
+          ) : (
+            <SignOutButton redirectUrl="/">
+              <Button type="button" variant="outline" className="min-h-touch">Sign out</Button>
+            </SignOutButton>
+          )}
+        </div>
+      </AlertDescription>
+    </Alert>
+  )
+}
+
+function isOperatorSurfaceForbidden(error: unknown): boolean {
+  if (error instanceof OperatorSurfaceForbiddenError) return true
+  if (typeof error !== 'object' || error === null) return false
+  return Reflect.get(error, 'code') === 'operator_surface_forbidden'
+    || Reflect.get(error, 'message') === OPERATOR_SURFACE_FORBIDDEN_MESSAGE
+}
+
 export function OperatorRouteNotFound() {
   const { pathname } = useLocation()
   const operatorRole = operatorRoleForPath(pathname) ?? 'owner'
   const isAssistantAccessPath = pathname.startsWith('/agent-access/')
   const recoveryHref = isAssistantAccessPath ? '/agent-access' : roleHomeHref[operatorRole]
-  const recoveryLabel = isAssistantAccessPath ? 'Back to Keys' : 'Back to workspace'
+  const recoveryLabel = isAssistantAccessPath ? 'Back to Agents' : 'Back to workspace'
 
   return (
     <AeOperatorShell
@@ -80,10 +180,10 @@ export function OperatorRouteNotFound() {
       currentPath={pathname}
     >
       <Button asChild variant="secondary" className="min-h-touch w-fit">
-        <a href={recoveryHref}>
+        <Link to={recoveryHref}>
           <ArrowLeftIcon data-icon="inline-start" aria-hidden="true" />
           {recoveryLabel}
-        </a>
+        </Link>
       </Button>
     </AeOperatorShell>
   )

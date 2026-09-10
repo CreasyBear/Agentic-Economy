@@ -68,8 +68,8 @@ function leaseCommand(current: ProviderConnection, overrides: Partial<Parameters
   return {
     commandId: 'command:lease:one',
     leaseRef: 'lease:one',
-    invocationRef: 'invocation:one',
-    operationRef: 'operation:one',
+    callRef: 'invocation:one',
+    toolRef: 'operation:one',
     connectionRef: current.connectionRef,
     providerRef: current.providerRef,
     providerAccountRef: current.providerAccountRef,
@@ -189,7 +189,13 @@ describe('provider connection domain', () => {
   })
 
   it('increments generation and makes the prior authority stale on reauthorization', () => {
-    const current = create()
+    const current = {
+      ...create(),
+      healthStatus: 'healthy' as const,
+      healthCheckedAt: 1_500,
+      healthSubject: 'provider-account:old',
+      healthObservationDigest: `sha256:${'c'.repeat(64)}`,
+    }
     const result = reauthorizeProviderConnection(current, {
       ...baseCommand,
       commandId: 'command:reauthorize:one',
@@ -204,6 +210,11 @@ describe('provider connection domain', () => {
     if (result.kind !== 'applied') return
     expect(result.connection.authorityGeneration).toBe(2)
     expect(result.connection.authorityDigest).not.toBe(current.authorityDigest)
+    expect(result.connection).not.toHaveProperty('healthStatus')
+    expect(result.connection).not.toHaveProperty('healthCheckedAt')
+    expect(result.connection).not.toHaveProperty('healthSubject')
+    expect(result.connection).not.toHaveProperty('healthObservationDigest')
+    expect(result.connection).not.toHaveProperty('healthReasonCode')
     const expiringResult = createProviderConnection({
       ...baseCommand,
       commandId: 'command:create:expiring',
@@ -289,6 +300,8 @@ describe('provider connection domain', () => {
       providerRef: 'provider:x402:provider.example',
       providerAccountRef: 'x402:https://provider.example/paid',
       resourceUrl: 'https://provider.example/paid',
+      method: 'POST',
+      payee: '0x1111111111111111111111111111111111111111',
       evidenceRefs: [],
     }, 1_000)
     if (created.kind !== 'applied') throw new Error('x402 create failed')
@@ -319,6 +332,26 @@ describe('provider connection domain', () => {
       kind: 'refused',
       code: 'invalid_transition',
     })
+  })
+
+  it.each(['revoked', 'already_revoked'] as const)('retires credential authority after upstream OAuth reports %s', (outcome) => {
+    const revoked = beginProviderConnectionRevocation(create(), {
+      commandId: `command:revoke:${outcome}`,
+      expectedAuthorityGeneration: 1,
+      expectedAuthorityDigest: create().authorityDigest,
+      evidenceRefs: [],
+    }, 2_000)
+    if (revoked.kind !== 'applied') throw new Error('revocation failed')
+
+    const cleanup = cleanupCommand(revoked.connection, outcome, `command:cleanup:${outcome}`)
+    const result = recordProviderConnectionCleanupResult(cleanup.bound, cleanup.command, 3_000)
+
+    expect(result).toMatchObject({
+      kind: 'applied',
+      connection: { lifecycle: 'revoked', credentialRef: null },
+    })
+    if (result.kind !== 'applied') return
+    expect(result.connection.secretRef).toBeUndefined()
   })
 
   it('replays exact cleanup callbacks and refuses stale, illegal, or malformed callbacks', () => {
@@ -364,6 +397,15 @@ describe('provider connection domain', () => {
 
     expect(result).toMatchObject({ kind: 'applied', lease: { state: 'active', expiresAt: 2_000 } })
     if (result.kind !== 'applied') return
+    expect(result.commandDigest).toBe('sha256:2d526c08f2d085b18f8cdecfac1286be273cb24ca9a7f6c7355b3ae952b9b900')
+    expect(issueProviderConnectionLease(current, command, 1_100, result.lease)).toMatchObject({
+      kind: 'duplicate',
+      commandDigest: result.commandDigest,
+    })
+    expect(issueProviderConnectionLease(current, { ...command, leaseMs: 999 }, 1_100, result.lease)).toEqual({
+      kind: 'refused',
+      code: 'command_identity_conflict',
+    })
     expect(result.lease).not.toHaveProperty('credentialRef')
     const resolved = resolveProviderConnectionCredentialRefForLease(
       current,
@@ -384,6 +426,8 @@ describe('provider connection domain', () => {
       providerRef: 'provider:x402:lease',
       providerAccountRef: 'x402:https://provider.example/paid',
       resourceUrl: 'https://provider.example/paid',
+      method: 'POST',
+      payee: '0x1111111111111111111111111111111111111111',
       evidenceRefs: ['evidence:x402:lease'],
     }, 1_000)
     if (created.kind !== 'applied') throw new Error('x402_create_failed')
@@ -528,6 +572,8 @@ describe('provider connection domain', () => {
       providerRef: 'provider:x402:api.example.test',
       providerAccountRef: 'x402:https://api.example.test/quote',
       resourceUrl: 'https://api.example.test/quote',
+      method: 'POST',
+      payee: '0x1111111111111111111111111111111111111111',
       evidenceRefs: ['evidence:x402'],
     } as const
     const created = createX402ProviderConnection(command, 1_000)

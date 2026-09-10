@@ -12,7 +12,7 @@ export function methodNotAllowed(allowed: readonly string[], detail?: string): R
       status: 405,
       kind: 'METHOD_NOT_ALLOWED',
       code: 'method_not_allowed',
-      detail: detail ?? `Only ${allowed.join(', ')} are supported by this route.`,
+      detail: detail ?? `Only ${allowed.join(', ')} ${allowed.length === 1 ? 'is' : 'are'} supported by this route.`,
     },
     { Allow: allowed.join(', ') },
   )

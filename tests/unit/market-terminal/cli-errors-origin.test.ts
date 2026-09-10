@@ -1,11 +1,26 @@
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { createServer } from 'node:http'
+
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { parseArgs } from '../../../tools/ae/lib/args'
-import { CliFailure, callJson, requireOk, type HttpOutcome } from '../../../tools/ae/lib/output'
+import { isLoopbackCliBaseUrl, parseArgs } from '../../../tools/ae/lib/args'
+import { CliFailure, callJson, maskCredential, requireOk, type HttpOutcome } from '../../../tools/ae/lib/output'
 import { spawnCli, spawnCliSync } from './cli-errors-harness'
 
 describe('market-terminal CLI error contracts', () => {
   afterEach(() => vi.unstubAllGlobals())
+
+  it.each([
+    ['http://localhost:3024', true],
+    ['http://127.0.0.1:3024', true],
+    ['http://127.255.1.2:3024', true],
+    ['http://[::1]:3024', true],
+    ['https://127.example.invalid', false],
+    ['https://agentic-economy-phi.vercel.app', false],
+  ] as const)('classifies CLI origin %s as loopback=%s', (origin, expected) => {
+    expect(isLoopbackCliBaseUrl(origin)).toBe(expected)
+  })
 
   it('routes root call through the call runner before network access', async () => {
     const result = await spawnCli(['call', '--json'])
@@ -19,11 +34,11 @@ describe('market-terminal CLI error contracts', () => {
     })
   }, 15_000)
 
-  it('requires a reachable market when browsing without a job query', () => {
+  it('requires a reachable market when browsing the Tool list', () => {
     const result = spawnCliSync([
       '--base-url',
       'http://127.0.0.1:1',
-      'search',
+      'list',
     ])
 
     expect(result.status).toBe(1)
@@ -93,12 +108,14 @@ describe('market-terminal CLI error contracts', () => {
           kind: 'INVALID_ARGUMENT',
           code: 'invalid-arguments',
           exitCode: 1,
+          nextCommand: 'ae help',
         })
       }
     }
   }, 30_000)
 
-  it('keeps connection-refused diagnostics to the safe origin', () => {
+  it('keeps loopback connection-refused diagnostics local and redacted', () => {
+    const hostedDoctor = 'ae doctor --base-url https://agentic-economy-phi.vercel.app'
     for (const json of [false, true]) {
       const result = spawnCliSync([
         '--base-url',
@@ -117,13 +134,127 @@ describe('market-terminal CLI error contracts', () => {
           kind: 'UNAVAILABLE',
           code: 'connection_refused',
           message: 'Could not reach http://127.0.0.1:1.',
-          suggestion: 'Start the AE server, then retry the command.',
-          nextCommand: 'npm run dev',
+          suggestion: 'Local AE is not running; check the hosted AE service instead.',
+          nextCommand: hostedDoctor,
           exitCode: 1,
         })
+        expect(result.stdout).not.toContain('npm run')
+      } else {
+        expect(result.stdout).toBe('')
+        expect(result.stderr).toBe([
+          'Could not reach http://127.0.0.1:1.',
+          'Local AE is not running; check the hosted AE service instead.',
+          `Next: ${hostedDoctor}`,
+          '',
+        ].join('\n'))
+        expect(result.stderr).not.toContain('npm run')
       }
     }
   }, 30_000)
+
+  it('keeps remote connection-refused diagnostics origin-aware, non-looping, and redacted', () => {
+    const origin = 'https://ae-unreachable.invalid'
+    const expectedNextCommand = `ae config --base-url ${origin} --json`
+    for (const json of [false, true]) {
+      const result = spawnCliSync([
+        '--base-url',
+        origin,
+        'search',
+        'TOPSECRET?private=query',
+        ...(json ? ['--json'] : []),
+      ])
+
+      expect(result.status).toBe(1)
+      expect(result.stdout).not.toContain('TOPSECRET')
+      expect(result.stderr).not.toContain('TOPSECRET')
+      expect(result.stdout).not.toContain('private=query')
+      expect(result.stderr).not.toContain('private=query')
+      if (json) {
+        expect(result.stderr).toBe('')
+        const envelope = JSON.parse(result.stdout) as { nextCommand: string }
+        expect(envelope).toMatchObject({
+          kind: 'UNAVAILABLE',
+          code: 'connection_refused',
+          message: `Could not reach ${origin}.`,
+          suggestion: 'Check network access and confirm the configured AE origin.',
+          nextCommand: expectedNextCommand,
+          exitCode: 1,
+        })
+        expect(result.stdout).not.toContain('npm run')
+
+        const [executable, ...continuationArgs] = envelope.nextCommand.split(' ')
+        expect(executable).toBe('ae')
+        const continuationEnv: NodeJS.ProcessEnv = {
+          ...process.env,
+          AE_CONFIG_DIR: join(tmpdir(), `ae-cli-origin-continuation-${process.pid}`),
+        }
+        delete continuationEnv.AE_API_KEY
+        delete continuationEnv.AE_API_KEY_ORIGIN
+        delete continuationEnv.AE_CLI_BASE_URL
+        delete continuationEnv.AE_CANONICAL_BASE_URL
+        const continuation = spawnCliSync(continuationArgs, { env: continuationEnv })
+        expect(continuation.status).toBe(0)
+        expect(continuation.stderr).toBe('')
+        expect(continuation.stdout).not.toContain('TOPSECRET')
+        expect(continuation.stdout).not.toContain('private=query')
+        expect(JSON.parse(continuation.stdout)).toMatchObject({
+          kind: 'config',
+          baseUrl: { origin, source: 'flag' },
+        })
+      } else {
+        expect(result.stdout).toBe('')
+        expect(result.stderr).toBe([
+          `Could not reach ${origin}.`,
+          'Check network access and confirm the configured AE origin.',
+          `Next: ${expectedNextCommand}`,
+          '',
+        ].join('\n'))
+        expect(result.stderr).not.toContain('npm run')
+      }
+    }
+  }, 30_000)
+
+  it('routes unavailable public reads to same-origin health without echoing the query', async () => {
+    const server = createServer((_request, response) => {
+      response.writeHead(503, { 'content-type': 'application/problem+json' })
+      response.end(JSON.stringify({
+        type: 'about:blank',
+        title: 'Unavailable',
+        status: 503,
+        kind: 'UNAVAILABLE',
+        code: 'tool_read_unavailable',
+        retryable: true,
+      }))
+    })
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+    const address = server.address()
+    if (address === null || typeof address === 'string') throw new Error('cli_read_test_server_missing')
+    const origin = `http://127.0.0.1:${address.port}`
+    const privateQuery = 'TOPSECRET private lookup'
+
+    try {
+      const result = await spawnCli([
+        'search',
+        privateQuery,
+        '--base-url',
+        origin,
+        '--json',
+      ])
+
+      expect(result.status).toBe(1)
+      expect(result.stderr).toBe('')
+      expect(result.stdout).not.toContain(privateQuery)
+      expect(JSON.parse(result.stdout)).toMatchObject({
+        kind: 'UNAVAILABLE',
+        code: 'tool_read_unavailable',
+        retryable: true,
+        suggestion: 'Check AE service health before retrying this read.',
+        nextCommand: `ae doctor --base-url ${origin} --json`,
+      })
+    } finally {
+      await new Promise<void>((resolve, reject) => server.close((error) => error === undefined ? resolve() : reject(error)))
+    }
+  }, 15_000)
 
   it('falls back to the status kind for a malformed remote problem kind', () => {
     const body = {
@@ -329,7 +460,7 @@ describe('market-terminal CLI error contracts', () => {
     }))
     vi.stubGlobal('fetch', fetchMock)
 
-    const outcome = await callJson('https://market.example', '/api/v1/operations/call', {
+    const outcome = await callJson('https://market.example', '/api/v1/tools/call', {
       method: 'POST',
       headers: { Authorization: 'Bearer ae-secret' },
       body: '{}',
@@ -364,6 +495,40 @@ describe('market-terminal CLI error contracts', () => {
     expect(thrown.message).toBe('/api/example returned 502')
     expect(thrown.detail).toBeUndefined()
     expect(thrown.message).not.toContain('credentials')
+  })
+
+  it('drops secret-bearing fields from failure detail while keeping the continuation honest', () => {
+    const failure = new CliFailure('Tool quote refused: insufficient_balance.', {
+      kind: 'FAILED_PRECONDITION',
+      code: 'insufficient_balance',
+      detail: {
+        continuation: {
+          action: 'funding.handoff.create',
+          method: 'POST',
+          path: '/api/v1/funding/handoffs',
+          input: { idempotencyKey: 'funding:one' },
+        },
+        headers: { authorization: 'Bearer FAKE_SENTINEL_TOKEN_dd47' },
+        apiKey: 'FAKE_SENTINEL_TOKEN_dd47',
+      },
+    })
+
+    expect(failure.detail).toEqual({
+      continuation: {
+        action: 'funding.handoff.create',
+        method: 'POST',
+        path: '/api/v1/funding/handoffs',
+        input: { idempotencyKey: 'funding:one' },
+      },
+    })
+    expect(JSON.stringify(failure.detail)).not.toContain('FAKE_SENTINEL_TOKEN_dd47')
+    expect(JSON.stringify(failure.detail)).not.toContain('<redacted>')
+  })
+
+  it('masks credential-shaped values instead of printing them', () => {
+    expect(maskCredential('ak_local_e2e_0d1aaad80714eec94c47848bc25d45a1860bbd7bdfbaa6f44517a15e36c79729'))
+      .toBe('ak_loc…9729')
+    expect(maskCredential('short-key')).toBe('<redacted>')
   })
 
   it('never copies arbitrary remote problem prose that misses secret-pattern redaction', () => {

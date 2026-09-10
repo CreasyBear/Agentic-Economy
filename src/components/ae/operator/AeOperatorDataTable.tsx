@@ -7,15 +7,20 @@ import {
   getSortedRowModel,
   useReactTable,
   type ColumnDef,
+  type OnChangeFn,
   type Row,
+  type RowSelectionState,
   type SortingState,
+  type Table as TanStackTable,
 } from '@tanstack/react-table'
-import { useRouter } from '@tanstack/react-router'
+import * as RovingFocusGroup from '@radix-ui/react-roving-focus'
+import { Link } from '@tanstack/react-router'
 import { ArrowUpDownIcon } from 'lucide-react'
-import { type KeyboardEvent, type MouseEvent, type ReactNode, useState } from 'react'
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { AeViewBar } from '@/components/ae/data/AeViewBar'
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 import { useFirstLoadPending } from '@/components/ui/data-state'
 import {
   Table,
@@ -26,7 +31,30 @@ import {
   TableRow,
 } from '@/components/ui/table'
 
-type AeRecordTableProps<TData> = {
+export type AeRecordTableSelection<TData> = Readonly<{
+  state: RowSelectionState
+  onChange: OnChangeFn<RowSelectionState>
+  getRowLabel: (row: TData) => string
+  canSelectRow?: (row: TData) => boolean
+  showSelectAll?: boolean
+  showStatus?: boolean
+}>
+
+export type AeRecordTableRowAction<TData> =
+  | Readonly<{
+      kind: 'link'
+      label: string
+      getHref: (row: TData) => string
+      getAccessibleLabel: (row: TData) => string
+    }>
+  | Readonly<{
+      kind: 'button'
+      label: string
+      onOpen: (row: TData) => void
+      getAccessibleLabel: (row: TData) => string
+    }>
+
+type AeRecordTableBaseProps<TData> = {
   columns: ColumnDef<TData, unknown>[]
   data: readonly TData[]
   filterPlaceholder?: string
@@ -36,15 +64,49 @@ type AeRecordTableProps<TData> = {
   hideFilter?: boolean
   countLabel?: string
   action?: ReactNode
-  onRowClick?: (row: TData) => void
-  /** When provided, each row resolves to this href and renders as a link row. */
-  getRowHref?: (row: TData) => string
+  rowAction?: AeRecordTableRowAction<TData>
   /**
    * True while a load is in flight. Skeletons render only before the first
    * settled result; refreshing an already-populated table keeps its rows.
    */
   loading?: boolean
+  filterValue?: string
+  onFilterChange?: (value: string) => void
+  sorting?: SortingState
+  onSortingChange?: OnChangeFn<SortingState>
+  /**
+   * Extra classes applied to rows in the selected state. Market compare
+   * uses this for a brand connection to the comparison tray; operator
+   * tables keep the default muted fill.
+   */
+  selectedRowClassName?: string
+  /**
+   * Roving row-action focus: when `restore` is true and `currentId` is set,
+   * focus returns to that row's action on the next render it is visible.
+   */
+  rowActionFocus?: Readonly<{
+    currentId?: string
+    onCurrentIdChange?: (id: string) => void
+    restore?: boolean
+  }>
+  /**
+   * Mobile-only content rendered above the table (compact cards). The table
+   * itself is hidden on small screens when provided.
+   */
+  compactContent?: ReactNode
 }
+
+type AeRecordTableProps<TData> = AeRecordTableBaseProps<TData> &
+  (
+    | Readonly<{
+        selection: AeRecordTableSelection<TData>
+        getRowId: (row: TData, index: number, parent?: Row<TData>) => string
+      }>
+    | Readonly<{
+        selection?: undefined
+        getRowId?: (row: TData, index: number, parent?: Row<TData>) => string
+      }>
+  )
 
 export function AeRecordTable<TData>({
   columns,
@@ -56,22 +118,96 @@ export function AeRecordTable<TData>({
   hideFilter = false,
   countLabel = 'rows',
   action,
-  onRowClick,
-  getRowHref,
+  getRowId,
+  rowAction,
+  selection,
   loading = false,
+  filterValue,
+  onFilterChange,
+  sorting: controlledSorting,
+  onSortingChange,
+  selectedRowClassName,
+  rowActionFocus,
+  compactContent,
 }: AeRecordTableProps<TData>) {
-  const [sorting, setSorting] = useState<SortingState>([])
-  const [globalFilter, setGlobalFilter] = useState('')
+  const [internalSorting, setInternalSorting] = useState<SortingState>([])
+  const [internalGlobalFilter, setInternalGlobalFilter] = useState('')
+  const tableRootRef = useRef<HTMLDivElement>(null)
+  const sorting = controlledSorting ?? internalSorting
+  const globalFilter = filterValue ?? internalGlobalFilter
+  const updateSorting = onSortingChange ?? setInternalSorting
+  const updateGlobalFilter = onFilterChange ?? setInternalGlobalFilter
+  const onCurrentRowActionIdChange = rowActionFocus?.onCurrentIdChange
 
+  const selectionColumn = useMemo<ColumnDef<TData, unknown> | undefined>(
+    () =>
+      selection === undefined
+        ? undefined
+        : {
+            id: '__ae_selection',
+            enableSorting: false,
+            enableHiding: false,
+            header: ({ table }) => (
+              <TableSelectionHeader
+                table={table}
+                caption={caption}
+                {...(selection.showSelectAll === undefined
+                  ? {}
+                  : { showSelectAll: selection.showSelectAll })}
+              />
+            ),
+            cell: ({ row }) => (
+              <Checkbox
+                checked={row.getIsSelected()}
+                disabled={!row.getCanSelect()}
+                onCheckedChange={(checked) => row.toggleSelected(checked === true)}
+                aria-label={`Select ${selection.getRowLabel(row.original)}`}
+              />
+            ),
+          },
+    [caption, selection],
+  )
+
+  const actionColumn = useMemo<ColumnDef<TData, unknown> | undefined>(
+    () =>
+      rowAction === undefined
+        ? undefined
+        : {
+            id: '__ae_action',
+            enableSorting: false,
+            enableHiding: false,
+            header: () => <span className="sr-only">{rowAction.label}</span>,
+            cell: ({ row }) => <RecordTableAction row={row} action={rowAction} />,
+          },
+    [rowAction],
+  )
+
+  const resolvedColumns = useMemo(
+    () => [selectionColumn, actionColumn, ...columns].filter(
+      (column): column is ColumnDef<TData, unknown> => column !== undefined,
+    ),
+    [actionColumn, columns, selectionColumn],
+  )
+
+  const tableData = useMemo(() => [...data], [data])
   const table = useReactTable({
-    data: [...data],
-    columns,
+    data: tableData,
+    columns: resolvedColumns,
     state: {
       sorting,
       globalFilter,
+      ...(selection === undefined ? {} : { rowSelection: selection.state }),
     },
-    onSortingChange: setSorting,
-    onGlobalFilterChange: setGlobalFilter,
+    onSortingChange: updateSorting,
+    onGlobalFilterChange: updateGlobalFilter,
+    ...(selection === undefined
+      ? {}
+      : {
+          onRowSelectionChange: selection.onChange,
+          enableRowSelection: (row: Row<TData>) =>
+            selection.canSelectRow?.(row.original) ?? true,
+        }),
+    ...(getRowId === undefined ? {} : { getRowId }),
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
@@ -79,23 +215,66 @@ export function AeRecordTable<TData>({
 
   const showFilter = !hideFilter && (data.length > 1 || globalFilter.length > 0)
   const rowCount = table.getRowModel().rows.length
+  const leafColumns = table.getAllLeafColumns()
   const showSkeleton = useFirstLoadPending(loading)
-  const interactive = onRowClick !== undefined || getRowHref !== undefined
+  const hasActiveFilter = globalFilter.trim().length > 0
+  const visibleRows = table.getRowModel().rows
+  const selectableVisibleRows =
+    selection === undefined ? [] : visibleRows.filter((row) => row.getCanSelect())
+  const selectedVisibleCount = selectableVisibleRows.filter((row) => row.getIsSelected()).length
+  const visibleRowKey = visibleRows.map((row) => row.id).join('\u0000')
+  const handleCurrentTabStopIdChange = useCallback(
+    (id: string | null) => {
+      if (id !== null) onCurrentRowActionIdChange?.(id)
+    },
+    [onCurrentRowActionIdChange],
+  )
+
+  useEffect(() => {
+    if (rowActionFocus?.restore !== true || rowActionFocus.currentId === undefined) return
+    const action = Array.from(
+      tableRootRef.current?.querySelectorAll<HTMLElement>('[data-ae-row-action-id]') ?? [],
+    ).find((element) => element.dataset.aeRowActionId === rowActionFocus.currentId)
+    if (action === undefined) return
+    const frame = window.requestAnimationFrame(() => {
+      action.focus({ preventScroll: true })
+      action.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [rowActionFocus?.currentId, rowActionFocus?.restore, visibleRowKey])
 
   return (
-    <div {...(showSkeleton ? { 'aria-busy': true } : {})} className="grid">
+    <div
+      ref={tableRootRef}
+      {...(showSkeleton ? { 'aria-busy': true } : {})}
+      className="grid"
+    >
       {showFilter || action !== undefined ? (
         <AeViewBar
           filterValue={globalFilter}
-          {...(showFilter ? { onFilterChange: setGlobalFilter } : {})}
+          {...(showFilter ? { onFilterChange: updateGlobalFilter } : {})}
           filterPlaceholder={filterPlaceholder}
           count={rowCount}
           countLabel={countLabel}
           {...(action === undefined ? {} : { action })}
         />
       ) : null}
+      {compactContent === undefined ? null : (
+        <div className="md:hidden">{compactContent}</div>
+      )}
       <div
-        {...(maxHeight === undefined ? {} : { className: 'overflow-auto', style: { maxHeight } })}
+        {...(maxHeight === undefined
+          ? {
+              className:
+                compactContent === undefined ? 'min-w-0' : 'hidden min-w-0 md:block',
+            }
+          : {
+              className:
+                compactContent === undefined
+                  ? 'overflow-auto'
+                  : 'hidden overflow-auto md:block',
+              style: { maxHeight },
+            })}
       >
         <Table>
           <caption className="sr-only">{caption}</caption>
@@ -125,12 +304,23 @@ export function AeRecordTable<TData>({
               </TableRow>
             ))}
           </TableHeader>
-          <TableBody>
+          <RecordTableBody
+            roving={rowAction !== undefined}
+            {...(visibleRows[0] === undefined ? {} : { defaultTabStopId: visibleRows[0].id })}
+            {...(onCurrentRowActionIdChange === undefined
+              ? {}
+              : {
+                  onCurrentTabStopChange: (target: EventTarget | null) => {
+                    const id = (target as HTMLElement | null)?.dataset.aeRowActionId ?? null
+                    handleCurrentTabStopIdChange(id)
+                  },
+                })}
+          >
             {showSkeleton ? (
               Array.from({ length: 5 }, (_, index) => (
                 <TableRow key={`skeleton-${String(index)}`} className="hover:bg-transparent">
-                  {columns.map((column, cellIndex) => (
-                    <TableCell key={`${String(column.id ?? cellIndex)}-skeleton`}>
+                  {leafColumns.map((column) => (
+                    <TableCell key={`${column.id}-skeleton`}>
                       <span className="block h-4 w-24 max-w-full animate-pulse rounded-sm bg-muted" />
                     </TableCell>
                   ))}
@@ -138,68 +328,61 @@ export function AeRecordTable<TData>({
               ))
             ) : rowCount === 0 ? (
               <TableRow className="hover:bg-transparent">
-                <TableCell colSpan={columns.length} className="h-24 text-muted-foreground">
-                  {emptyMessage}
+                <TableCell colSpan={leafColumns.length} className="h-24 text-muted-foreground">
+                  <div className="flex flex-wrap items-center gap-related">
+                    <span>{emptyMessage}</span>
+                    {hasActiveFilter ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => updateGlobalFilter('')}
+                      >
+                        Clear filter
+                      </Button>
+                    ) : null}
+                  </div>
                 </TableCell>
               </TableRow>
             ) : (
-              table.getRowModel().rows.map((row) => {
-                const href = getRowHref?.(row.original)
-                if (href === undefined) {
-                  return (
-                    <RecordTableRow
-                      key={row.id}
-                      row={row}
-                      interactive={interactive}
-                      {...(onRowClick === undefined ? {} : { onRowClick })}
-                    />
-                  )
-                }
-                return (
-                  <RecordTableLinkRow
-                    key={row.id}
-                    row={row}
-                    href={href}
-                    {...(onRowClick === undefined ? {} : { onRowClick })}
-                  />
-                )
-              })
+              table.getRowModel().rows.map((row) => (
+                <RecordTableRow
+                  key={row.id}
+                  row={row}
+                  {...(selectedRowClassName === undefined
+                    ? {}
+                    : { selectedRowClassName })}
+                />
+              ))
             )}
-          </TableBody>
+          </RecordTableBody>
         </Table>
       </div>
+      {selection === undefined || selection.showStatus === false ? null : (
+        <p
+          role="status"
+          aria-live="polite"
+          className="py-intra font-mono text-xs tabular-nums text-muted-foreground"
+        >
+          {selectedVisibleCount.toLocaleString()} of{' '}
+          {selectableVisibleRows.length.toLocaleString()} selected
+        </p>
+      )}
     </div>
   )
 }
 
-function isControlTarget(target: EventTarget | null): boolean {
-  return target instanceof Element && target.closest('a, button, input, select, textarea, [role="button"]') !== null
-}
-
 function RecordTableRow<TData>({
   row,
-  interactive,
-  onRowClick,
+  selectedRowClassName,
 }: {
   row: Row<TData>
-  interactive: boolean
-  onRowClick?: (row: TData) => void
+  selectedRowClassName?: string
 }) {
-  function handleClick(event: MouseEvent<HTMLTableRowElement>) {
-    if (!interactive || isControlTarget(event.target)) return
-    onRowClick?.(row.original)
-  }
-
-  function handleKeyDown(event: KeyboardEvent<HTMLTableRowElement>) {
-    if (!interactive) return
-    if (event.key !== 'Enter' && event.key !== ' ') return
-    event.preventDefault()
-    onRowClick?.(row.original)
-  }
-
   return (
     <TableRow
-      {...(interactive ? { className: 'cursor-pointer', tabIndex: 0, onClick: handleClick, onKeyDown: handleKeyDown } : {})}
+      data-state={row.getIsSelected() ? 'selected' : undefined}
+      className={`has-[:focus-visible]:bg-muted/50 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-inset has-[:focus-visible]:ring-ring${row.getIsSelected() && selectedRowClassName !== undefined ? ` ${selectedRowClassName}` : ''}`}
     >
       {row.getVisibleCells().map((cell) => (
         <TableCell key={cell.id} className="whitespace-normal">
@@ -210,59 +393,99 @@ function RecordTableRow<TData>({
   )
 }
 
-function RecordTableLinkRow<TData>({
+function RecordTableAction<TData>({
   row,
-  href,
-  onRowClick,
+  action,
 }: {
   row: Row<TData>
-  href: string
-  onRowClick?: (row: TData) => void
+  action: AeRecordTableRowAction<TData>
 }) {
-  const router = useRouter()
-
-  function followHref(event?: MouseEvent<HTMLTableRowElement>) {
-    if (event !== undefined && (event.metaKey || event.ctrlKey)) {
-      window.open(href, '_blank', 'noopener,noreferrer')
-      return
-    }
-    void router.navigate({ to: href })
-  }
-
-  function handleClick(event: MouseEvent<HTMLTableRowElement>) {
-    if (isControlTarget(event.target)) return
-    if (onRowClick !== undefined) {
-      event.preventDefault()
-      onRowClick(row.original)
-      return
-    }
-    followHref(event)
-  }
-
-  function handleKeyDown(event: KeyboardEvent<HTMLTableRowElement>) {
-    if (event.key !== 'Enter' && event.key !== ' ') return
-    event.preventDefault()
-    if (onRowClick !== undefined) {
-      onRowClick(row.original)
-      return
-    }
-    followHref()
-  }
+  const accessibleLabel = action.getAccessibleLabel(row.original)
+  const control =
+    action.kind === 'link' ? (
+      <Button
+        asChild
+        variant="ghost"
+        size="sm"
+        className="min-h-touch sm:min-h-8"
+        data-ae-row-action-id={row.id}
+      >
+        <Link to={action.getHref(row.original)} aria-label={accessibleLabel}>
+          {action.label}
+        </Link>
+      </Button>
+    ) : (
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        className="min-h-touch sm:min-h-8"
+        aria-label={accessibleLabel}
+        data-ae-row-action-id={row.id}
+        onClick={() => action.onOpen(row.original)}
+      >
+        {action.label}
+      </Button>
+    )
 
   return (
-    <TableRow
-      className="cursor-pointer"
-      tabIndex={0}
-      data-href={href}
-      onClick={handleClick}
-      onKeyDown={handleKeyDown}
+    <RovingFocusGroup.Item asChild tabStopId={row.id}>
+      {control}
+    </RovingFocusGroup.Item>
+  )
+}
+
+function RecordTableBody({
+  children,
+  roving,
+  defaultTabStopId,
+  onCurrentTabStopChange,
+}: {
+  children: ReactNode
+  roving: boolean
+  defaultTabStopId?: string
+  onCurrentTabStopChange?: (target: EventTarget | null) => void
+}) {
+  const body = <TableBody>{children}</TableBody>
+  return roving ? (
+    <RovingFocusGroup.Root
+      asChild
+      orientation="vertical"
+      loop={false}
+      {...(onCurrentTabStopChange === undefined
+        ? {}
+        : { onCurrentTabStopChange })}
+      {...(defaultTabStopId === undefined ? {} : { defaultCurrentTabStopId: defaultTabStopId })}
     >
-      {row.getVisibleCells().map((cell) => (
-        <TableCell key={cell.id} className="whitespace-normal">
-          {flexRender(cell.column.columnDef.cell, cell.getContext())}
-        </TableCell>
-      ))}
-    </TableRow>
+      {body}
+    </RovingFocusGroup.Root>
+  ) : body
+}
+
+function TableSelectionHeader<TData>({
+  table,
+  caption,
+  showSelectAll,
+}: {
+  table: TanStackTable<TData>
+  caption: string
+  showSelectAll?: boolean
+}) {
+  if (showSelectAll === false) return <span className="sr-only">Select</span>
+
+  return (
+    <Checkbox
+      checked={
+        table.getIsAllPageRowsSelected()
+          ? true
+          : table.getIsSomePageRowsSelected()
+            ? 'indeterminate'
+            : false
+      }
+      disabled={!table.getRowModel().rows.some((row) => row.getCanSelect())}
+      onCheckedChange={(checked) => table.toggleAllPageRowsSelected(checked === true)}
+      aria-label={`Select all ${caption}`}
+    />
   )
 }
 

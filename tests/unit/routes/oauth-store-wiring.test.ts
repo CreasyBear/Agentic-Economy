@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   authorizePost: vi.fn((_request: Request, options: { store?: unknown }) => Promise.resolve(Response.json({ store: options.store !== undefined }))),
   device: vi.fn((_request: Request, options: { store?: unknown }) => Promise.resolve(Response.json({ store: options.store !== undefined }))),
   register: vi.fn((_request: Request, options: { store?: unknown }) => Promise.resolve(Response.json({ store: options.store !== undefined }))),
+  revoke: vi.fn((_request: Request, options: { refreshStore?: unknown }) => Promise.resolve(Response.json({ store: options.refreshStore !== undefined }))),
   token: vi.fn((_request: Request, options: { store?: unknown }) => Promise.resolve(Response.json({ store: options.store !== undefined }))),
   authorizationUnavailable: vi.fn(() => new Response(JSON.stringify({
     type: 'about:blank',
@@ -23,12 +24,14 @@ vi.mock('@/lib/server/agent-access-oauth-api', () => ({
   oauthAuthorizationUnavailableResponse: mocks.authorizationUnavailable,
   handleDeviceAuthorizationPost: mocks.device,
   handleOAuthRegisterPost: mocks.register,
+  handleOAuthRevokePost: mocks.revoke,
   handleOAuthTokenPost: mocks.token,
 }))
 
 import { Route as AuthorizeRoute } from '@/routes/oauth.authorize'
 import { Route as DeviceRoute } from '@/routes/oauth.device_authorization'
 import { Route as RegisterRoute } from '@/routes/oauth.register'
+import { Route as RevokeRoute } from '@/routes/oauth.revoke'
 import { Route as TokenRoute } from '@/routes/oauth.token'
 
 type RouteHandler = (context: { request: Request }) => Promise<Response> | Response
@@ -53,19 +56,22 @@ describe('OAuth stateful route wiring', () => {
     const authorizeHandlers = routeHandlers(AuthorizeRoute)
     const deviceHandlers = routeHandlers(DeviceRoute)
     const registerHandlers = routeHandlers(RegisterRoute)
+    const revokeHandlers = routeHandlers(RevokeRoute)
     const tokenHandlers = routeHandlers(TokenRoute)
-    if (authorizeHandlers.GET === undefined || authorizeHandlers.POST === undefined || deviceHandlers.POST === undefined || registerHandlers.POST === undefined || tokenHandlers.POST === undefined) throw new Error('OAuth handlers missing')
+    if (authorizeHandlers.GET === undefined || authorizeHandlers.POST === undefined || deviceHandlers.POST === undefined || registerHandlers.POST === undefined || revokeHandlers.POST === undefined || tokenHandlers.POST === undefined) throw new Error('OAuth handlers missing')
 
     await authorizeHandlers.GET({ request })
     await authorizeHandlers.POST({ request })
     await deviceHandlers.POST({ request })
     await registerHandlers.POST({ request })
+    await revokeHandlers.POST({ request })
     await tokenHandlers.POST({ request })
 
     expect(mocks.authorizeGet).toHaveBeenCalledWith(request, expect.objectContaining({ store: expect.any(Object) }))
     expect(mocks.authorizePost).toHaveBeenCalledWith(request, expect.objectContaining({ store: expect.any(Object) }))
     expect(mocks.device).toHaveBeenCalledWith(request, expect.objectContaining({ store: expect.any(Object) }))
     expect(mocks.register).toHaveBeenCalledWith(request, expect.objectContaining({ store: expect.any(Object) }))
+    expect(mocks.revoke).toHaveBeenCalledWith(request, expect.objectContaining({ store: expect.any(Object), refreshStore: expect.any(Object) }))
     expect(mocks.token).toHaveBeenCalledWith(request, expect.objectContaining({ store: expect.any(Object) }))
   })
   it('returns a typed unavailable problem when the OAuth store cannot be created', async () => {

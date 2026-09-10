@@ -5,10 +5,13 @@ import { describe, expect, it } from 'vitest'
 import { LATEST_PROTOCOL_VERSION } from '@modelcontextprotocol/sdk/types.js'
 
 import { describeActionForAgent, findAction } from '@/modules/actions'
-import { OPERATION_INVOKE_ROUTE_CONTRACT } from '@/modules/capability-execution/operation-invoke-entry'
+import { CALL_ROUTE_CONTRACT } from '@/modules/capability-execution/call-entry'
+import { TOOL_QUOTE_ROUTE_CONTRACT } from '@/modules/capability-execution/quote.actions'
 import { canonicalDigest, schemaDescriptorDigest } from '@/modules/common/canonical-digest'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 import { buildSiteDiscoveryManifest, projectCompactSiteDiscoveryManifest } from '@/modules/discovery/public'
+import { handleSiteDiscoveryManifestRequest } from '@/routes/[.]well-known/ucp'
+import { FUNDING_QUOTE_CONTRACT_VERSION } from '@/modules/money/public'
 
 /**
  * `/.well-known/ucp` is the only document a cold agent reads before it knows
@@ -69,8 +72,8 @@ describe('Site discovery manifest', () => {
     expect(new TextEncoder().encode(serialized).length).toBeLessThan(64 * 1024)
     expect(serialized).not.toContain('inputJsonSchema')
     expect(serialized).not.toContain('outputJsonSchema')
-    expect(compact.fullSchemas).toBe(`${origin}/api/discovery/schema`)
-    expect(compact.operationGateway.access.connected.cli).toContain('ae connect')
+    expect(compact.fullContract).toBe(`${origin}/.well-known/ucp?technical=1`)
+    expect(compact.toolGateway.access.connected.cli).toContain('ae connect')
   })
 
   it('resolves the route-file scan it depends on', () => {
@@ -97,7 +100,7 @@ describe('Site discovery manifest', () => {
     expect(advertised.size).toBeGreaterThan(10)
   })
 
-  it('gives a cold agent the Operation reads, manifest, and authenticated gateway', () => {
+  it('gives a cold agent the Tool reads, manifest, and authenticated gateway', () => {
     const pathsByKind = new Map<string, readonly string[]>(
       manifest.endpoints.map((endpoint) => [
         endpoint.kind,
@@ -105,44 +108,70 @@ describe('Site discovery manifest', () => {
       ])
     )
 
-    expect(pathsByKind.get('catalog_list')).toEqual(['/api/businesses'])
-    expect(pathsByKind.get('catalog_search')).toEqual(['/api/businesses/search?q='])
-    expect(pathsByKind.get('business_manifest')).toEqual(['/{slug}/ucp'])
-    expect(pathsByKind.get('operation_read')).toEqual([
-      '/api/v1/market-operations/search',
-      '/api/v1/market-operations/detail',
-      '/api/v1/market-operations/compare',
-      '/api/v1/market-operations/inspect-plan',
+    expect(pathsByKind.get('catalog_list')).toBeUndefined()
+    expect(pathsByKind.get('catalog_search')).toBeUndefined()
+    expect(pathsByKind.get('business_manifest')).toBeUndefined()
+    expect(pathsByKind.get('tool_read')).toEqual([
+      '/api/v1/market-tools/search',
+      '/api/v1/market-tools/list',
+      '/api/v1/market-tools/describe',
+      '/api/v1/market-tools/compare',
     ])
-    expect(pathsByKind.get('discovery_artifact')).toEqual([
-      '/api/discovery/schema',
-      '/api/discovery/examples',
+    expect(pathsByKind.get('quote')).toEqual(['/api/v1/tools/quote'])
+    expect(pathsByKind.get('call')).toEqual(['/api/v1/tools/call'])
+    expect(pathsByKind.get('funding_preflight')).toEqual([
+      '/api/v1/funding/constraints',
+      '/api/v1/funding/quote',
     ])
-    expect(manifest.businessManifestUrlTemplate).toBe(`${origin}/{slug}/ucp`)
+    expect(pathsByKind.get('discovery_artifact')).toBeUndefined()
     expect(manifest).not.toHaveProperty('businessTools')
     expect(pathsByKind.get('site_entry_point')).toEqual(['/.well-known/ucp'])
     expect(JSON.stringify(manifest)).not.toMatch(/\/api\/answer|answer_turn|\/api\/chat\/anonymous/u)
   })
 
+  it('classifies the generated Quote endpoint as quote in full and compact projections', () => {
+    const fullQuote = manifest.endpoints.find((endpoint) => endpoint.path === TOOL_QUOTE_ROUTE_CONTRACT.path)
+    const compact = projectCompactSiteDiscoveryManifest(manifest)
+    const compactQuote = compact.endpoints.find((endpoint) => endpoint.path === TOOL_QUOTE_ROUTE_CONTRACT.path)
+    const nestedQuote = manifest.toolGateway.routes.find((route) => route.actionId === TOOL_QUOTE_ROUTE_CONTRACT.actionId)
+
+    expect(fullQuote).toMatchObject({
+      kind: 'quote',
+      path: TOOL_QUOTE_ROUTE_CONTRACT.path,
+    })
+    expect(compactQuote).toMatchObject({
+      kind: 'quote',
+      path: TOOL_QUOTE_ROUTE_CONTRACT.path,
+    })
+    expect(nestedQuote).toMatchObject({
+      actionId: TOOL_QUOTE_ROUTE_CONTRACT.actionId,
+      path: TOOL_QUOTE_ROUTE_CONTRACT.path,
+    })
+    expect(fullQuote?.kind).not.toBe('call')
+    expect(fullQuote?.kind).not.toBe('tool_read')
+    expect(compactQuote?.kind).not.toBe('call')
+    expect(compactQuote?.kind).not.toBe('tool_read')
+  })
+
   it('states the authentication each endpoint actually enforces', () => {
-    const operationInvoke = manifest.endpoints.find((endpoint) => endpoint.kind === 'operation_invoke')
-    const operationReads = manifest.endpoints.filter((endpoint) => endpoint.kind === 'operation_read')
+    const call = manifest.endpoints.find((endpoint) => endpoint.kind === 'call')
+    const toolReads = manifest.endpoints.filter((endpoint) => endpoint.kind === 'tool_read')
 
     expect(manifest).not.toHaveProperty('customerRequest')
-    expect(operationInvoke).toMatchObject({
+    expect(call).toMatchObject({
       method: 'POST',
-      path: '/api/v1/operations/call',
+      path: '/api/v1/tools/call',
       authentication: 'clerk_api_key',
-      requiredScope: 'market_operations:invoke',
+      requiredScope: 'market_tools:call',
       requiredHeaders: {
         Authorization: 'required',
         'Content-Type': 'required',
       },
     })
-    expect(manifest.operationGateway).toMatchObject({
-      contract: 'operation.invoke:v1',
-      action: 'operation.invoke',
-      scope: OPERATION_INVOKE_ROUTE_CONTRACT.scope,
+    expect(manifest.toolGateway).toMatchObject({
+      contract: 'tool.call:v1',
+      action: 'tool.call',
+      scope: CALL_ROUTE_CONTRACT.scope,
       http: {
         requestMediaType: 'application/json',
         responseMediaType: 'application/json',
@@ -158,45 +187,77 @@ describe('Site discovery manifest', () => {
       },
       mcp: {
         endpoint: `${origin}/mcp`,
-        operationInvokeTool: 'ae_operation_invoke',
+        callTool: 'ae_tool_call',
         protocolVersion: LATEST_PROTOCOL_VERSION,
         lifecycle: ['initialize', 'notifications/initialized', 'tools/list', 'tools/call', 'close'],
-        inputFields: expect.arrayContaining(['operationRef']),
+        inputFields: expect.arrayContaining(['quoteRef', 'idempotencyKey']),
       },
       executionModes: {
-        gateway: { action: 'operation.invoke', requiresOperationRef: true },
+        gateway: { action: 'tool.call', requiresToolRef: true },
         catalogOnly: { action: null, executable: false },
       },
     })
-    expect(manifest.operationGateway).not.toHaveProperty('directKeyless')
-    for (const endpoint of operationReads) {
-      if (endpoint.actionId === undefined) throw new Error(`Operation endpoint is missing actionId: ${endpoint.path}`)
+    expect(manifest.toolGateway).not.toHaveProperty('directKeyless')
+    for (const endpoint of toolReads) {
+      if (endpoint.actionId === undefined) throw new Error(`Tool endpoint is missing actionId: ${endpoint.path}`)
       const action = findAction(endpoint.actionId)
-      if (action === undefined) throw new Error(`Operation endpoint action is not registered: ${endpoint.actionId}`)
+      if (action === undefined) throw new Error(`Tool endpoint action is not registered: ${endpoint.actionId}`)
       const descriptor = describeActionForAgent(action)
       expect(endpoint.contractVersion).toBe(action.invocationContract.version)
       expect(endpoint.inputJsonSchema).toEqual(descriptor.inputJsonSchema)
       expect(endpoint.outputJsonSchema).toEqual(descriptor.outputJsonSchema)
     }
 
-    expect(operationReads.map((endpoint) => endpoint.path)).toEqual([
-      '/api/v1/market-operations/search',
-      '/api/v1/market-operations/detail',
-      '/api/v1/market-operations/compare',
-      '/api/v1/market-operations/inspect-plan',
+    expect(toolReads.map((endpoint) => endpoint.path)).toEqual([
+      '/api/v1/market-tools/search',
+      '/api/v1/market-tools/list',
+      '/api/v1/market-tools/describe',
+      '/api/v1/market-tools/compare',
     ])
-    expect(operationReads.every((endpoint) => endpoint.method === 'POST' && endpoint.authentication === 'none')).toBe(true)
-    expect(operationReads.every((endpoint) => endpoint.inputJsonSchema !== undefined)).toBe(true)
+    expect(toolReads.every((endpoint) => endpoint.method === 'POST' && endpoint.authentication === 'none')).toBe(true)
+    expect(toolReads.every((endpoint) => endpoint.inputJsonSchema !== undefined)).toBe(true)
   })
-  it('projects every operation route and schema from the canonical contract', () => {
+
+  it('advertises exact anonymous funding preflight before any payment authority', () => {
+    const funding = manifest.endpoints.filter((endpoint) => endpoint.kind === 'funding_preflight')
+
+    expect(funding).toHaveLength(2)
+    expect(funding.map((endpoint) => ({
+      path: endpoint.path,
+      method: endpoint.method,
+      authentication: endpoint.authentication,
+      contractVersion: endpoint.contractVersion,
+    }))).toEqual([
+      {
+        path: '/api/v1/funding/constraints',
+        method: 'GET',
+        authentication: 'none',
+        contractVersion: FUNDING_QUOTE_CONTRACT_VERSION,
+      },
+      {
+        path: '/api/v1/funding/quote',
+        method: 'POST',
+        authentication: 'none',
+        contractVersion: FUNDING_QUOTE_CONTRACT_VERSION,
+      },
+    ])
+    expect(funding[0]?.outputJsonSchema).toBeDefined()
+    expect(funding[1]).toMatchObject({
+      requiredHeaders: { 'Content-Type': 'required' },
+      inputJsonSchema: expect.any(Object),
+      outputJsonSchema: expect.any(Object),
+    })
+  })
+  it('projects every Tool and Call route and schema from the canonical contract', () => {
     const expected = [
-      OPERATION_INVOKE_ROUTE_CONTRACT.invoke,
-      OPERATION_INVOKE_ROUTE_CONTRACT.list,
-      OPERATION_INVOKE_ROUTE_CONTRACT.status,
-      OPERATION_INVOKE_ROUTE_CONTRACT.cancel,
-      OPERATION_INVOKE_ROUTE_CONTRACT.reconcile,
+      TOOL_QUOTE_ROUTE_CONTRACT,
+      CALL_ROUTE_CONTRACT.call,
+      CALL_ROUTE_CONTRACT.list,
+      CALL_ROUTE_CONTRACT.status,
+      CALL_ROUTE_CONTRACT.cancel,
+      CALL_ROUTE_CONTRACT.reconcile,
     ]
-    expect(manifest.operationGateway.routes.map((route) => ({
+    expect(manifest.toolGateway.routes.map((route) => ({
       actionId: route.actionId,
       contractVersion: route.contractVersion,
       method: route.method,
@@ -211,32 +272,30 @@ describe('Site discovery manifest', () => {
       routerPath: route.routerPath,
       requiredHeaders: route.requiredHeaders,
     })))
-    expect(manifest.operationGateway.routes.every((route) => route.inputJsonSchema !== undefined)).toBe(true)
-    expect(manifest.operationGateway.mcpTools.map((tool) => tool.name)).toContain('ae_operation_invoke')
-    expect(manifest.operationGateway.mcpTools.map((tool) => tool.name)).toContain('ae_operation_list')
+    expect(manifest.toolGateway.routes.every((route) => route.inputJsonSchema !== undefined)).toBe(true)
+    expect(manifest.toolGateway.mcpTools.map((tool) => tool.name)).toContain('ae_tool_call')
+    expect(manifest.toolGateway.mcpTools.map((tool) => tool.name)).toContain('ae_call_list')
   })
   it('keeps cancellation and reconciliation labelled as advanced recovery actions', () => {
-    expect(manifest.operationGateway.recovery).toMatchObject({
-      statusAction: 'operation.status',
+    expect(manifest.toolGateway.recovery).toMatchObject({
+      statusAction: 'call.status',
       advancedActions: {
-        cancel: 'operation.cancel',
-        reconcile: 'operation.reconcile',
+        cancel: 'call.cancel',
+        reconcile: 'call.reconcile',
       },
       retryRule: 'inspect_status_then_recover_uncertain',
     })
-    expect(manifest.operationGateway.recovery).not.toHaveProperty('cancelAction')
-    expect(manifest.operationGateway.recovery).not.toHaveProperty('reconcileAction')
+    expect(manifest.toolGateway.recovery).not.toHaveProperty('cancelAction')
+    expect(manifest.toolGateway.recovery).not.toHaveProperty('reconcileAction')
   })
 
   it('marks exactly the templated paths as templated', () => {
     const templated = manifest.endpoints.filter((endpoint) => endpoint.templated).map((endpoint) => endpoint.path)
 
     expect([...templated].sort()).toEqual([
-      '/api/businesses/{slug}',
-      '/api/v1/operations/{invocationRef}',
-      '/api/v1/operations/{invocationRef}/cancel',
-      '/api/v1/operations/{invocationRef}/reconcile',
-      '/{slug}/ucp',
+      '/api/v1/calls/{callRef}',
+      '/api/v1/calls/{callRef}/cancel',
+      '/api/v1/calls/{callRef}/reconcile',
     ])
   })
 
@@ -253,13 +312,13 @@ describe('Site discovery manifest', () => {
     const { generatedAt: _generatedAt, generatedHash: _generatedHash, ...body } = manifest
     expect(schemaDescriptorDigest(body as StableHashValue)).toBe(manifest.generatedHash)
 
-    const firstRoute = body.operationGateway.routes[0]
-    if (firstRoute === undefined) throw new Error('Expected an operation route')
+    const firstRoute = body.toolGateway.routes[0]
+    if (firstRoute === undefined) throw new Error('Expected a Tool or Call route')
     const changed = {
       ...body,
-      operationGateway: {
-        ...body.operationGateway,
-        routes: body.operationGateway.routes.map((route, index) => (
+      toolGateway: {
+        ...body.toolGateway,
+        routes: body.toolGateway.routes.map((route, index) => (
           index === 0 ? { ...route, contractVersion: `${route.contractVersion}:changed` } : route
         )),
       },
@@ -268,13 +327,13 @@ describe('Site discovery manifest', () => {
 
     const changedGatewayAction = {
       ...body,
-      operationGateway: {
-        ...body.operationGateway,
+      toolGateway: {
+        ...body.toolGateway,
         executionModes: {
-          ...body.operationGateway.executionModes,
+          ...body.toolGateway.executionModes,
           gateway: {
-            ...body.operationGateway.executionModes.gateway,
-            action: 'operation.status',
+            ...body.toolGateway.executionModes.gateway,
+            action: 'call.status',
           },
         },
       },
@@ -288,9 +347,31 @@ describe('Site discovery manifest', () => {
   })
 
   it('carries the listing boundary and claims no capability AE withholds', () => {
-    expect(manifest.boundary).toContain('Only independently callable Operations appear')
+    expect(manifest.boundary).toContain('The Tool catalogue is the canonical market')
     expect(manifest.unsupportedCapabilities.map((capability) => capability.label)).toContain(
       'Commercial or owner-action authority'
     )
+  })
+
+  it('serves compact, technical, and HEAD discovery from one contract', async () => {
+    const compact = await handleSiteDiscoveryManifestRequest(
+      new Request(`${origin}/.well-known/ucp`),
+    ).json() as Record<string, unknown>
+    const technical = await handleSiteDiscoveryManifestRequest(
+      new Request(`${origin}/.well-known/ucp?technical=1`),
+    ).json() as Record<string, unknown>
+    const head = handleSiteDiscoveryManifestRequest(
+      new Request(`${origin}/.well-known/ucp`, { method: 'HEAD' }),
+      true,
+    )
+
+    expect(compact).toHaveProperty(
+      'fullContract',
+      `${String(compact.origin)}/.well-known/ucp?technical=1`,
+    )
+    expect(compact).not.toHaveProperty('businessManifestUrlTemplate')
+    expect(technical).toHaveProperty('toolGateway.routes')
+    expect(head.status).toBe(200)
+    expect(await head.text()).toBe('')
   })
 })

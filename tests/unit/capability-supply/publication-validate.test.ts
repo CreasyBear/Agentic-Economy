@@ -164,9 +164,8 @@ describe('capability publication validate (pre-flight admission)', () => {
       source: withoutRevision,
       sourceRevision,
       pricingConfig: {
-        version: 'pricing:v2',
-        unit: 'call',
-        paidAmount: { currency: 'AUD', units: '1200', exponent: 2 },
+        version: 'pricing:v3', kind: 'fixed_aud', currency: 'AUD', exponent: 6,
+        amountUnits: '12000000',
       },
       evidenceRefs: ['source:validate:remote'],
       derefSchema: resolveRemote,
@@ -246,9 +245,8 @@ describe('capability publication validate (pre-flight admission)', () => {
       source,
       sourceRevision,
       pricingConfig: {
-        version: 'pricing:v2',
-        unit: 'call',
-        paidAmount: { currency: 'AUD', units: '1200', exponent: 2 },
+        version: 'pricing:v3', kind: 'fixed_aud', currency: 'AUD', exponent: 6,
+        amountUnits: '12000000',
       },
       evidenceRefs: ['source:validate'],
     })).resolves.toEqual({ kind: 'refused', reason: 'source_invalid' })
@@ -268,9 +266,8 @@ describe('capability publication validate (pre-flight admission)', () => {
       source,
       sourceRevision,
       pricingConfig: {
-        version: 'pricing:v2',
-        unit: 'call',
-        paidAmount: { currency: 'AUD', units: '1200', exponent: 2 },
+        version: 'pricing:v3', kind: 'fixed_aud', currency: 'AUD', exponent: 6,
+        amountUnits: '12000000',
       },
       evidenceRefs: ['source:validate:input-example'],
     })).resolves.toEqual({ kind: 'refused', reason: 'source_invalid' })
@@ -280,9 +277,8 @@ describe('capability publication validate (pre-flight admission)', () => {
       source: openApiAdmissionSource(),
       sourceRevision: '2026-08-10/baseline',
       pricingConfig: {
-        version: 'pricing:v2',
-        unit: 'call',
-        paidAmount: { currency: 'AUD', units: '1200', exponent: 2 },
+        version: 'pricing:v3', kind: 'fixed_aud', currency: 'AUD', exponent: 6,
+        amountUnits: '12000000',
       },
       evidenceRefs: ['source:validate:baseline'],
     })
@@ -306,9 +302,8 @@ describe('capability publication validate (pre-flight admission)', () => {
       source: directSource,
       sourceRevision: '2026-08-10/direct-secret',
       pricingConfig: {
-        version: 'pricing:v2',
-        unit: 'call',
-        paidAmount: { currency: 'AUD', units: '1200', exponent: 2 },
+        version: 'pricing:v3', kind: 'fixed_aud', currency: 'AUD', exponent: 6,
+        amountUnits: '12000000',
       },
       evidenceRefs: ['source:validate:direct-secret'],
     })).resolves.toEqual({ kind: 'refused', reason: 'source_invalid' })
@@ -347,9 +342,8 @@ describe('capability publication validate (pre-flight admission)', () => {
       source,
       sourceRevision,
       pricingConfig: {
-        version: 'pricing:v2',
-        unit: 'call',
-        paidAmount: { currency: 'AUD', units: '1200', exponent: 2 },
+        version: 'pricing:v3', kind: 'fixed_aud', currency: 'AUD', exponent: 6,
+        amountUnits: '12000000',
       },
       evidenceRefs: ['source:validate'],
       derefSchema: dereferenceLocalSchema,
@@ -386,9 +380,8 @@ describe('capability publication validate (pre-flight admission)', () => {
       },
       sourceRevision: '2026-08-09/mcp',
       pricingConfig: {
-        version: 'pricing:v2',
-        unit: 'call',
-        paidAmount: { currency: 'AUD', units: '1200', exponent: 2 },
+        version: 'pricing:v3', kind: 'fixed_aud', currency: 'AUD', exponent: 6,
+        amountUnits: '12000000',
       },
       evidenceRefs: ['source:validate:mcp'],
     })

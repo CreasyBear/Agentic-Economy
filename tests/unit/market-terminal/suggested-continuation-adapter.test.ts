@@ -3,19 +3,21 @@ import { describe, expect, it } from 'vitest'
 import {
   creditContinuationForCli,
   connectionContinuationForCli,
-  invocationContinuationForCli,
-  operationContinuationForCli,
-  supplierContinuationForCli,
+  callNextActionForCli,
+  toolNextActionForCli,
+  providerNextActionForCli,
 } from '../../../tools/ae/lib/suggested-continuation-adapter'
-import { suggestContinuation } from '@/modules/market/suggested-continuation'
+import { suggestNextAction } from '@/modules/market/suggested-next-action'
 
-describe('CLI suggested-continuation adapter', () => {
-  const operationRef = `operation:v1:${'a'.repeat(64)}`
-  const invocationRef = `invocation:v1:${'b'.repeat(64)}`
+describe('CLI suggested next-action adapter', () => {
+  const toolRef = `operation:v1:${'a'.repeat(64)}`
+  const callRef = `invocation:v1:${'b'.repeat(64)}`
+  const searchQuery = 'Current weather forecast for a city'
 
-  it('uses the shared safe Operation projection', () => {
-    expect(operationContinuationForCli({
-      operationRef,
+  it('uses the shared safe Tool projection', () => {
+    expect(toolNextActionForCli({
+      toolRef,
+      searchQuery,
       availabilityPosture: 'routeable',
       requiresBuyerCredential: true,
       hasBuyerCredential: false,
@@ -26,43 +28,47 @@ describe('CLI suggested-continuation adapter', () => {
       href: '/for-agents',
     })
 
-    const routeable = operationContinuationForCli({
-      operationRef,
+    const routeable = toolNextActionForCli({
+      toolRef,
+      searchQuery,
       availabilityPosture: 'routeable',
       requiresBuyerCredential: true,
       hasBuyerCredential: true,
     })
-    expect(routeable).toEqual(suggestContinuation({
-      subject: 'operation',
+    expect(routeable).toEqual(suggestNextAction({
+      subject: 'tool',
       state: 'ready',
-      operationRef,
+      toolRef,
+      searchQuery,
     }))
     expect(routeable).toMatchObject({
-      label: 'Call Operation',
-      command: `ae call ${operationRef} --input '<json>'`,
+      label: 'Call Tool',
+      command: `ae call ${toolRef} --input '<json>'`,
     })
 
-    expect(operationContinuationForCli({
-      operationRef,
-      availabilityPosture: 'integrated',
+    expect(toolNextActionForCli({
+      toolRef,
+      searchQuery,
+      availabilityPosture: 'setup_required',
       requiresBuyerCredential: true,
       hasBuyerCredential: true,
-    })).toEqual(suggestContinuation({
-      subject: 'operation',
-      state: 'inspect_only',
-      operationRef,
+    })).toEqual(suggestNextAction({
+      subject: 'tool',
+      state: 'read_only',
+      toolRef,
+      searchQuery,
     }))
   })
 
   it('uses status and reconciliation before any retry', () => {
-    expect(invocationContinuationForCli({
+    expect(callNextActionForCli({
       kind: 'found',
-      invocationRef,
+      callRef,
       state: 'reconciliation_required',
     })).toEqual({
-      label: 'Review reconciliation',
+      label: 'Prepare reconciliation',
       kind: 'reconcile',
-      command: `ae status ${invocationRef}`,
+      command: 'ae help recover',
       warning: 'The external effect may have started. Reconcile before retrying.',
     })
   })
@@ -70,39 +76,39 @@ describe('CLI suggested-continuation adapter', () => {
   it.each(['terminal', 'cancelled', 'invalidated'] as const)(
     'does not send a %s invocation back to the same status command',
     (state) => {
-      expect(invocationContinuationForCli({
+      expect(callNextActionForCli({
         kind: 'found',
-        invocationRef,
+        callRef,
         state,
       })).toBeUndefined()
     },
   )
 
-  it('uses shared supplier, connection, and credit projections', () => {
-    expect(supplierContinuationForCli({
+  it('uses shared Provider, connection, and credit projections', () => {
+    expect(providerNextActionForCli({
       offeringRef: 'offering:one',
       catalogStatus: 'published',
       lifecycleState: 'active',
       liveAvailable: true,
       publicationState: 'current',
-      operationRef,
-    })).toEqual(suggestContinuation({
-      subject: 'supplier',
+      toolRef,
+    })).toEqual(suggestNextAction({
+      subject: 'provider',
       state: 'current',
       offeringRef: 'offering:one',
-      operationRef,
+      toolRef,
     }))
-    expect(connectionContinuationForCli('buyer')).toEqual(suggestContinuation({
+    expect(connectionContinuationForCli('buyer')).toEqual(suggestNextAction({
       subject: 'connection',
       state: 'missing',
       actor: 'buyer',
     }))
-    expect(connectionContinuationForCli('supplier')).toEqual(suggestContinuation({
+    expect(connectionContinuationForCli('provider')).toEqual(suggestNextAction({
       subject: 'connection',
       state: 'missing',
-      actor: 'supplier',
+      actor: 'provider',
     }))
-    expect(creditContinuationForCli()).toEqual(suggestContinuation({
+    expect(creditContinuationForCli()).toEqual(suggestNextAction({
       subject: 'credit',
       state: 'insufficient',
     }))

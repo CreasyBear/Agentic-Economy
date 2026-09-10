@@ -1,7 +1,8 @@
 import { z } from "zod";
 
-import type { OperationCardViewModel } from "@/modules/market/operation-view-model";
-import { readMarketRouteServer } from "@/modules/market/market.functions";
+import type { ToolCardViewModel } from "@/modules/market/tool-view-model";
+import { readX402DirectoryServer } from "@/modules/market/x402-directory.functions";
+import type { X402DirectoryEntry } from './x402-directory';
 
 const HOME_CAPABILITY_LIMIT = 6;
 
@@ -14,19 +15,13 @@ export type RootSearchParams = {
 };
 
 export type HomeCapabilityRead =
+  | Readonly<{ kind: 'directory'; items: readonly X402DirectoryEntry[]; total?: number }>
   | Readonly<{
       kind: "ok";
-      operations: readonly OperationCardViewModel[];
-      matchedCount: number;
+      tools: readonly ToolCardViewModel[];
+      matchedCount?: number;
     }>
   | Readonly<{ kind: "unavailable" }>;
-
-/** Home never reads project authority. */
-export async function loadRootRoute(
-  _search: RootSearchParams,
-): Promise<undefined> {
-  return undefined;
-}
 
 export function validateRootSearch(
   search: Record<string, unknown>,
@@ -40,22 +35,12 @@ export function validateRootSearch(
 
 export async function readHomeCapabilities(): Promise<HomeCapabilityRead> {
   try {
-    const projection = await readMarketRouteServer({
-      data: {
-        window: "30d",
-        availability: "routeable",
-      },
-    });
-    if (projection.catalog.kind !== "ok") {
-      return projection.catalog.kind === "unavailable"
-        ? { kind: "unavailable" }
-        : { kind: "ok", operations: [], matchedCount: 0 };
-    }
-
+    const page = await readX402DirectoryServer({ data: {} });
+    if (page.kind !== 'ok') return { kind: 'unavailable' };
     return {
-      kind: "ok",
-      matchedCount: projection.catalog.matchedCount,
-      operations: projection.catalog.items.slice(0, HOME_CAPABILITY_LIMIT),
+      kind: 'directory',
+      ...(page.total === undefined ? {} : { total: page.total }),
+      items: page.items.slice(0, HOME_CAPABILITY_LIMIT),
     };
   } catch {
     return { kind: "unavailable" };

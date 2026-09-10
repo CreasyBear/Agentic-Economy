@@ -1,5 +1,6 @@
 import type { MutationCtx, QueryCtx } from '../../_generated/server'
 import type { Id } from '../../_generated/dataModel'
+import { canonicalDigest } from '../../../src/modules/common/canonical-digest'
 import {
   providerConnectionAuthorityProvenanceIsValid,
   type ProviderConnection,
@@ -7,6 +8,8 @@ import {
 } from '../../../src/modules/capability-supply/provider-connection'
 import {
   DELEGATION_MAX_ANCESTRY_GRANTS,
+  DelegationService,
+  delegationGrantRef,
   parsePersistedDelegationGrant,
   type DelegationGrant,
   type DelegationGrantRef,
@@ -19,8 +22,26 @@ import {
 } from '../../../src/modules/principal-account/public'
 import type { CleanupResourceAuthority } from './contracts'
 import { validateCanonicalAgentDelegation } from '../canonicalAgentAuthority'
+import {
+  createConvexDelegationContextPort,
+  createConvexDelegationStore,
+} from '../delegationPersistence'
 
-type ProviderConnectionOperation = 'install' | 'refresh' | 'revoke' | 'delete'
+type ProviderConnectionOperation = 'install' | 'refresh' | 'revoke'
+
+const OWNER_CONNECTION_SCOPES = Object.freeze([
+  'connection:install',
+  'connection:refresh',
+  'connection:revoke',
+  'secret:rotate',
+] as const)
+
+const OWNER_CONNECTION_GRANT_RENEWAL_MS = 30 * 24 * 60 * 60 * 1_000
+
+function deterministicGrantUuid(seed: string): string {
+  const hex = seed.replace(/^sha256:/u, '').slice(0, 32).padEnd(32, '0')
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-8${hex.slice(17, 20)}-${hex.slice(20)}`
+}
 
 export type CanonicalActor = Readonly<{
   principalRef: PrincipalRef
@@ -303,28 +324,28 @@ async function admitProviderConnectionGrantCandidate(
   }
 }
 
-export async function resolveUniqueProviderConnectionGrant(
+export async function resolveExpectedProviderConnectionGrant(
   ctx: MutationCtx,
   actor: CanonicalActor,
   operation: ProviderConnectionOperation,
   resourceRefs: readonly string[],
+  expectedGrantRef: string,
 ): Promise<{ grantRef: DelegationGrantRef; generation: number; expiresAt: number } | null> {
   const now = Date.now()
-  const candidates = await ctx.db.query('authorityDelegationGrants')
-    .withIndex('by_subjectPrincipalRef_and_lifecycle', (query) => query
-      .eq('subjectPrincipalRef', actor.principalRef)
-      .eq('lifecycle', 'active'))
-    .take(DELEGATION_MAX_ANCESTRY_GRANTS + 1)
-  if (candidates.length > DELEGATION_MAX_ANCESTRY_GRANTS) return null
-  const matching: Array<{ grantRef: DelegationGrantRef; generation: number; expiresAt: number }> = []
-  for (const candidate of candidates) {
-    const admitted = await admitProviderConnectionGrantCandidate(
-      ctx, candidate, actor, operation, resourceRefs, now,
-    )
-    if (admitted !== null) matching.push(admitted)
+  let canonicalGrantRef: DelegationGrantRef
+  try {
+    canonicalGrantRef = delegationGrantRef(expectedGrantRef)
+  } catch {
+    return null
   }
-  if (matching.length !== 1) return null
-  return matching[0] ?? null
+  const candidate = await ctx.db.query('authorityDelegationGrants')
+    .withIndex('by_grantRef', (query) => query.eq('grantRef', canonicalGrantRef))
+    .unique()
+  return candidate === null
+    ? null
+    : await admitProviderConnectionGrantCandidate(
+        ctx, candidate, actor, operation, resourceRefs, now,
+      )
 }
 
 export async function resolveProviderConnectionProvenance(
@@ -333,8 +354,11 @@ export async function resolveProviderConnectionProvenance(
   operation: ProviderConnectionOperation,
   resourceRefs: readonly string[],
   credentialRef: string | null,
+  expectedGrantRef: string,
 ): Promise<ProviderConnectionAuthorityProvenance | null> {
-  const grant = await resolveUniqueProviderConnectionGrant(ctx, actor, operation, resourceRefs)
+  const grant = await resolveExpectedProviderConnectionGrant(
+    ctx, actor, operation, resourceRefs, expectedGrantRef,
+  )
   if (grant === null) return null
   return Object.freeze({
     owningAccountRef: actor.accountRef,
@@ -342,5 +366,62 @@ export async function resolveProviderConnectionProvenance(
     authorityGrantRef: grant.grantRef,
     authorityGrantGeneration: grant.generation,
     ...(credentialRef === null ? {} : { secretRef: credentialRef }),
+  })
+}
+
+/**
+ * A human owner acts as the root authority for supplier infrastructure. Issue
+ * one finite, endpoint-scoped grant through the canonical delegation service
+ * so normal onboarding does not depend on a test-only pre-seeded grant.
+ * A stable renewal window makes retries replay the same grant while a later
+ * refresh rotates onto a new grant before the previous one expires.
+ */
+export async function ensureOwnerProviderConnectionGrant(
+  ctx: MutationCtx,
+  actor: CanonicalActor,
+  input: Readonly<{
+    connectionRef: string
+    providerResourceRefs: readonly string[]
+  }>,
+): Promise<{ grantRef: DelegationGrantRef; generation: number; expiresAt: number }> {
+  const now = Date.now()
+  const renewalWindow = Math.floor(now / OWNER_CONNECTION_GRANT_RENEWAL_MS)
+  const expiresAt = (renewalWindow + 2) * OWNER_CONNECTION_GRANT_RENEWAL_MS
+  const resourceRefs = [
+    ...input.providerResourceRefs,
+    `connection:${input.connectionRef}`,
+  ]
+  const identity = canonicalDigest({
+    format: 'owner-provider-connection-grant:v2',
+    accountRef: actor.accountRef,
+    principalRef: actor.principalRef,
+    connectionRef: input.connectionRef,
+    renewalWindow,
+    resourceRefs: [...resourceRefs].sort(),
+  } as never)
+  const grant = await new DelegationService(
+    createConvexDelegationStore(ctx),
+    createConvexDelegationContextPort(ctx, actor.principalRef),
+    {
+      now: () => now,
+      randomUuid: () => deterministicGrantUuid(identity),
+    },
+  ).issueRoot({
+    context: {
+      actorPrincipalRef: actor.principalRef,
+      activeAccountRef: actor.accountRef,
+      correlationRef: identity,
+      idempotencyRef: identity,
+    },
+    subjectPrincipalRef: actor.principalRef,
+    scopes: OWNER_CONNECTION_SCOPES,
+    resourceRefs,
+    budgetLimit: 1,
+    expiresAt,
+  })
+  return Object.freeze({
+    grantRef: grant.grantRef,
+    generation: grant.generation,
+    expiresAt: grant.expiresAt,
   })
 }

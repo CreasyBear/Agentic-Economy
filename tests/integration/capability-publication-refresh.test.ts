@@ -131,6 +131,11 @@ describe('capability publication refresh', () => {
       { revision: 1, disposition: 'superseded' },
       { revision: 2, disposition: 'incompatible' },
     ])
+    expect(revisions[1]?.sourceDescriptorJson).not.toBe(
+      revisions[0]?.sourceDescriptorJson,
+    )
+    expect(revisions[1]?.sourceDigest).not.toBe(revisions[0]?.sourceDigest)
+    expect(revisions[1]?.sourceRouteRef).toBe(revisions[0]?.sourceRouteRef)
     await expect(
       backend.run(
         async (ctx) =>

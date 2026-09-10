@@ -5,6 +5,7 @@ import {
   preflightOpenApiHttpDocument,
   type OpenApiOperationPreflightOutcome,
 } from '@/modules/capability-supply/public'
+import { validateOpenApiDocument } from '@/modules/capability-supply/internal/openapi-import/validation'
 const outputSchema = {
   type: 'object',
   properties: { result: { type: 'string' } },
@@ -81,6 +82,31 @@ function mixedOpenApiDocument() {
 }
 
 describe('OpenAPI document preflight', () => {
+  it('accepts the JSON response body read from a public OpenAPI URL', async () => {
+    const responseBody = JSON.stringify(mixedOpenApiDocument())
+
+    await expect(validateOpenApiDocument(responseBody)).resolves.toMatchObject({
+      kind: 'valid',
+      document: { openapi: '3.1.0' },
+    })
+  })
+
+  it('accepts maintained OpenAPI 3.0 and 3.1 documents and rejects structurally invalid input', async () => {
+    const openApi30 = mixedOpenApiDocument()
+    openApi30.openapi = '3.0.3'
+
+    await expect(preflightOpenApiHttpDocument(openApi30)).resolves.toMatchObject({
+      kind: 'preflighted',
+    })
+    await expect(preflightOpenApiHttpDocument(mixedOpenApiDocument())).resolves.toMatchObject({
+      kind: 'preflighted',
+    })
+    await expect(preflightOpenApiHttpDocument({
+      openapi: '3.0.3',
+      paths: {},
+    })).resolves.toEqual({ kind: 'refused', reason: 'source_invalid' })
+  })
+
   it('returns bounded per-operation outcomes for path, optional array query, JSON POST, credentials, and unsupported shapes', async () => {
     const result = await preflightOpenApiHttpDocument(mixedOpenApiDocument())
 

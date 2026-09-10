@@ -1,0 +1,16 @@
+{
+  "name": "@agentic-economy/package5-reference-provider",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": "22.x"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.30.0",
+    "@x402/core": "2.23.0",
+    "@x402/evm": "2.23.0",
+    "@x402/extensions": "2.23.0",
+    "zod": "4.4.3"
+  }
+}

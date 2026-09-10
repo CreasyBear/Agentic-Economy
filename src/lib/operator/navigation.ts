@@ -2,18 +2,16 @@ import {
   Activity,
   Bot,
   Boxes,
-  Building2,
   CircleHelp,
-  Gauge,
   KeyRound,
   SearchCode,
   ScrollText,
   Settings,
   Store,
-  UploadCloud,
   Wallet,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
+import type { OperatorContext } from '@/lib/operator/operator-context'
 
 export type OperatorRole = 'owner' | 'admin' | 'developer'
 
@@ -22,6 +20,8 @@ export type OperatorNavItem = {
   label: string
   icon: LucideIcon
   tier: OperatorNavTier
+  mobilePrimary?: boolean
+  mobileOrder?: number
 }
 
 export type OperatorNavTier = 'core' | 'advanced'
@@ -49,28 +49,26 @@ export type OperatorBreadcrumbItem = {
 
 const ownerNavGroups: readonly OperatorNavGroup[] = [
   {
-    id: 'records',
-    label: 'Records',
+    id: 'buy',
+    label: 'Buy',
     items: [
-      { href: '/owner/offerings', label: 'Operations', icon: Boxes, tier: 'core' },
-      { href: '/activity', label: 'Calls', icon: Activity, tier: 'core' },
-      { href: '/agent-access', label: 'Keys', icon: KeyRound, tier: 'core' },
+      { href: '/activity', label: 'Calls', icon: Activity, tier: 'core', mobilePrimary: true, mobileOrder: 10 },
+      { href: '/agent-access', label: 'Agents', icon: KeyRound, tier: 'core', mobilePrimary: true, mobileOrder: 20 },
       { href: '/owner/credit', label: 'Credit', icon: Wallet, tier: 'core' },
-      { href: '/owner/status', label: 'Supplier', icon: Building2, tier: 'core' },
     ],
   },
   {
-    id: 'work',
-    label: 'Work',
+    id: 'supply',
+    label: 'Supply',
     items: [
-      { href: '/owner/supply', label: 'Publish', icon: UploadCloud, tier: 'core' },
+      { href: '/owner/offerings', label: 'Tools', icon: Boxes, tier: 'core', mobilePrimary: true, mobileOrder: 30 },
     ],
   },
   {
     id: 'account',
     label: 'Account',
     items: [
-      { href: '/owner/settings', label: 'Settings', icon: Settings, tier: 'core' },
+      { href: '/owner/settings', label: 'Account & security', icon: Settings, tier: 'core' },
     ],
   },
 ] as const
@@ -98,9 +96,8 @@ const developerNavGroups: readonly OperatorNavGroup[] = [
 
 const operatorUtilityItems: readonly OperatorUtilityItem[] = [
   { href: '/market', label: 'Catalog', icon: Store },
-  { href: '/', label: 'Home', icon: Gauge },
   { href: '/for-agents', label: 'Agent setup', icon: Bot },
-  { href: '/privacy/remove-business', label: 'Help & corrections', icon: CircleHelp },
+  { href: '/support', label: 'Help', icon: CircleHelp },
 ] as const
 
 export const roleHomeHref: Record<OperatorRole, string> = {
@@ -110,7 +107,7 @@ export const roleHomeHref: Record<OperatorRole, string> = {
 }
 
 export const roleLabel: Record<OperatorRole, string> = {
-  owner: 'Supplier workspace',
+  owner: 'Buy and supply',
   admin: 'Administration',
   developer: 'Developer tools',
 }
@@ -144,6 +141,14 @@ export function navGroupsForRole(
   return coreGroups
 }
 
+export function navGroupsForContext(
+  context: Pick<OperatorContext, 'allowedSurfaces'>,
+  surface: OperatorRole,
+  options: { advanced?: boolean } = {},
+): readonly OperatorNavGroup[] {
+  return context.allowedSurfaces.includes(surface) ? navGroupsForRole(surface, options) : []
+}
+
 function baseNavGroupsForRole(role: OperatorRole): readonly OperatorNavGroup[] {
   switch (role) {
     case 'owner':
@@ -159,24 +164,22 @@ function baseNavGroupsForRole(role: OperatorRole): readonly OperatorNavGroup[] {
   }
 }
 
-export function listOperatorCommandDestinations(role: OperatorRole): readonly OperatorNavGroup[] {
-  const operatorGroups = navGroupsForRole(role)
-  const resourceItems: readonly OperatorNavItem[] = operatorUtilityItems.map((item) => ({
-    ...item,
-    tier: 'core',
-  }))
-  return [
-    ...operatorGroups,
-    {
-      id: 'resources',
-      label: 'Resources',
-      items: resourceItems,
-    },
-  ]
-}
-
 export function operatorUtilityItemsForRole(_role: OperatorRole): readonly OperatorUtilityItem[] {
   return operatorUtilityItems
+}
+
+export function mobileNavItemsForRole(role: OperatorRole): readonly OperatorNavItem[] {
+  return baseNavGroupsForRole(role)
+    .flatMap((group) => group.items)
+    .filter((item) => item.mobilePrimary === true)
+    .sort((left, right) => (left.mobileOrder ?? 0) - (right.mobileOrder ?? 0))
+}
+
+export function mobileNavItemsForContext(
+  context: Pick<OperatorContext, 'allowedSurfaces'>,
+  surface: OperatorRole,
+): readonly OperatorNavItem[] {
+  return context.allowedSurfaces.includes(surface) ? mobileNavItemsForRole(surface) : []
 }
 
 export function formatOperatorNavBadge(value: OperatorNavBadgeValue): string | undefined {
@@ -205,15 +208,43 @@ export function isOperatorPathActive(currentPath: string, href: string): boolean
   return currentPath.startsWith(`${href}/`)
 }
 
+export type OwnerWorkspaceOwner = 'operations' | 'account' | 'agent-setup' | undefined
+
+export function ownerWorkspaceOwnerForPath(pathname: string): OwnerWorkspaceOwner {
+  if (pathname === '/owner/offerings' || pathname.startsWith('/owner/offerings/')) return 'operations'
+  if (pathname === '/owner/supply' || pathname.startsWith('/owner/supply/')) return 'operations'
+  if (pathname === '/owner/status') return 'operations'
+  if (
+    pathname === '/owner/settings/workspace'
+    || pathname === '/owner/settings/connections'
+    || pathname === '/owner/settings/payouts'
+  ) return 'operations'
+  if (pathname === '/owner/settings') return 'account'
+  if (pathname === '/owner/settings/developers') return 'agent-setup'
+  return undefined
+}
+
 /**
  * Sidebar destination that owns this path, including the list page itself.
- * Longest href wins so `/owner/settings/members` stays on Settings, not a
- * shorter sibling.
+ * Longest href wins for retained deep routes.
  */
 export function resolveOperatorNavItem(
   role: OperatorRole,
   currentPath: string,
 ): OperatorNavItem | undefined {
+  if (role === 'owner') {
+    const owner = ownerWorkspaceOwnerForPath(currentPath)
+    const canonicalHref = owner === 'operations'
+      ? '/owner/offerings'
+      : owner === 'account'
+        ? '/owner/settings'
+        : undefined
+    if (canonicalHref !== undefined) {
+      return ownerNavGroups.flatMap((group) => group.items).find((item) => item.href === canonicalHref)
+    }
+    if (currentPath.startsWith('/owner/settings/')) return undefined
+  }
+
   let match: OperatorNavItem | undefined
   for (const group of baseNavGroupsForRole(role)) {
     for (const item of group.items) {
@@ -228,6 +259,14 @@ export function resolveOperatorNavItem(
   return match
 }
 
+export function isOperatorNavItemCurrent(
+  role: OperatorRole,
+  currentPath: string,
+  href: string,
+): boolean {
+  return resolveOperatorNavItem(role, currentPath)?.href === href
+}
+
 /**
  * The "List" half of a shell-derived breadcrumb trail: the nearest sidebar
  * destination that is a strict ancestor of `currentPath`. Returns undefined
@@ -239,6 +278,9 @@ export function resolveOperatorListCrumb(
   role: OperatorRole,
   currentPath: string,
 ): OperatorBreadcrumbItem | undefined {
+  if (role === 'owner' && ownerWorkspaceOwnerForPath(currentPath) === 'operations' && currentPath !== '/owner/offerings') {
+    return { label: 'Tools', href: '/owner/offerings' }
+  }
   for (const group of baseNavGroupsForRole(role)) {
     for (const item of group.items) {
       if (currentPath.startsWith(`${item.href}/`)) {

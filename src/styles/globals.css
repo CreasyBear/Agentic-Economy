@@ -1,16 +1,13 @@
 /*
- * Agentic Economy product system.
+ * Agentic Economy product system. DESIGN.md is the visual authority.
  *
  * Compact capability-market structure. This file owns the semantic bridge
  * used by shadcn and product components; surfaces do not invent
  * their own palettes, type scales, radii, or elevation systems.
  */
-@layer reset, theme, base, components, utilities;
+@layer reset, theme, base, clerk, components, utilities;
 
-@import "@fontsource-variable/inter";
-@import "@fontsource/dm-mono";
-@import "@fontsource/geist-pixel";
-@import "./base.css";
+@import "./base.css" layer(base);
 @import "tw-animate-css";
 
 @import "tailwindcss/theme.css" layer(theme);
@@ -18,6 +15,16 @@
 @import "tailwindcss/utilities.css" layer(utilities);
 
 @source not "../../.planning";
+@source "../../node_modules/@rjsf/shadcn";
+
+/* The same licensed font shipped by aecon.ai; see docs/licenses/manrope.txt. */
+@font-face {
+  font-family: "Manrope Variable";
+  font-style: normal;
+  font-weight: 200 800;
+  font-display: swap;
+  src: url("/fonts/manrope-latin.woff2") format("woff2");
+}
 
 @theme inline {
   --color-background: var(--background);
@@ -33,6 +40,7 @@
   --color-secondary-foreground: var(--secondary-foreground);
   --color-muted: var(--muted);
   --color-muted-foreground: var(--muted-foreground);
+  --color-foreground-subtle: var(--ae-fg-subtle);
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
@@ -70,19 +78,29 @@
   --color-sidebar-ring: var(--sidebar-ring);
 
   --font-sans: var(--ae-font-sans);
-  --font-heading: var(--ae-font-sans);
   --font-display: var(--ae-font-display);
   --font-mono: var(--ae-font-mono);
 
-  --radius-2xl: 1rem;
-  --radius-3xl: 1.25rem;
-  --radius-4xl: 1.5rem;
-  --radius-card: 0.9375rem;
-  --radius-nav: 0.875rem;
+  --radius-card: 0.875rem;
+  --radius-nav: 0.625rem;
   --shadow-soft: var(--shadow-low);
   --shadow-float: var(--shadow-med);
+  --shadow-float-dark: var(--shadow-high);
+  --shadow-overlay: var(--ae-shadow-overlay);
   --shadow-market-row-hover: var(--shadow-inset-market-row);
-  --shadow-market-cell-hover: var(--shadow-inset-market-cell);
+  /* Use the approved website's radius scale across maintained components. */
+  --radius-sm: 0.375rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.625rem;
+  --radius-xl: 0.875rem;
+  --radius-2xl: 1.125rem;
+  --radius-3xl: 1.375rem;
+  --shadow-xs: 0 1px 3px 0 rgba(0, 0, 0, 0.06);
+  --shadow-sm: 0 1px 3px 0 rgba(0, 0, 0, 0.06);
+  --shadow-md: 0 12px 32px rgba(0, 0, 0, 0.08);
+  --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.4);
+  --shadow-xl: 0 12px 32px -16px rgba(0, 0, 0, 0.18);
+  --shadow-2xl: 0 12px 32px -16px rgba(0, 0, 0, 0.18);
   --duration-fast: var(--motion-duration-fast);
   --duration-base: var(--motion-duration-base);
   --duration-slow: var(--motion-duration-slow);
@@ -116,33 +134,35 @@
   --font-weight-semibold: 600;
   --font-weight-bold: 700;
   --font-family-body:
-    "Inter Variable", Inter, ui-sans-serif, system-ui, sans-serif;
-  --font-family-display: "Geist Pixel", "DM Mono", monospace;
-  --font-family-code: "DM Mono", "SFMono-Regular", Menlo, monospace;
+    "Manrope Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-family-display: var(--font-family-body);
+  --font-family-code:
+    ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas, monospace;
   --ae-font-sans: var(--font-family-body);
   --ae-font-mono: var(--font-family-code);
   --ae-font-display: var(--font-family-display);
 
-  /* Measured donor neutrals, expressed in OKLCH. */
-  --ae-bg: oklch(0.9663 0.004 106.47);
-  --ae-fg: oklch(0.2178 0 0);
-  --ae-muted-fg: oklch(0.493 0 0);
-  --ae-surface: oklch(1 0 0);
-  --ae-surface-sunken: oklch(0.9546 0.0027 106.45);
+  /* Validated against aecon.ai and its local src/styles.css, 2026-09-08. */
+  --ae-bg: #e8e4da;
+  --ae-fg: #141414;
+  --ae-muted-fg: #595854;
+  --ae-fg-subtle: #595854;
+  --ae-surface: #f2efe7;
+  --ae-surface-sunken: #dedbd4;
   --ae-surface-raised: var(--ae-surface);
   /* Canvas vs work-well. Theme the well independently of page chrome. */
   --ae-container: var(--ae-surface);
-  --ae-border: oklch(0.215 0.004 106 / 0.12);
-  --ae-border-strong: oklch(0.215 0.004 106 / 0.22);
+  --ae-border: #c5c1b8;
+  --ae-border-strong: #918e87;
 
-  /* Ink is the action colour. Blue is reserved for links/focus/information. */
+  /* Neutral controls; forest belongs to identity and focus. */
   --ae-primary: var(--ae-fg);
-  --ae-primary-fg: oklch(0.985 0.002 106);
-  --ae-brand: oklch(0.5553 0.1056 232.01);
-  --ae-brand-strong: oklch(0.455 0.1056 232.01);
-  --ae-brand-muted: oklch(0.94 0.024 232.01);
-  --ae-on-brand: var(--ae-primary-fg);
-  --ae-ring: var(--ae-fg);
+  --ae-primary-fg: #e8e4da;
+  --ae-brand: #24543d;
+  --ae-brand-strong: #24543d;
+  --ae-brand-muted: rgba(36, 84, 61, 0.08);
+  --ae-on-brand: #e8e4da;
+  --ae-ring: var(--ae-brand);
 
   --ae-success: oklch(0.5423 0.1222 157.98);
   --ae-success-foreground: oklch(0.32 0.085 150);
@@ -156,8 +176,8 @@
   --ae-danger-ring: oklch(0.53 0.18 28 / 0.32);
   --ae-danger-subtle: oklch(0.95 0.03 28);
   --ae-info: var(--ae-brand);
-  --ae-info-foreground: oklch(0.34 0.085 232);
-  --ae-info-ring: oklch(0.585 0.105 232 / 0.32);
+  --ae-info-foreground: #24543d;
+  --ae-info-ring: rgba(36, 84, 61, 0.32);
   --ae-info-subtle: var(--ae-brand-muted);
 
   --background: var(--ae-bg);
@@ -182,9 +202,9 @@
   --ring: var(--ae-ring);
   --radius: 0.625rem;
 
-  /* Public layout (DESIGN.md). px so the 14px root does not shrink the rail. */
-  --ae-nav: 1160px;
-  --ae-rail: 1080px;
+  /* Public layout. Pixel values keep the rail independent of the root type size. */
+  --ae-nav: 1440px;
+  --ae-rail: 1408px;
   --ae-gutter: 16px;
   --ae-gutter-lg: 26px;
   --ae-space-intra: 8px;
@@ -210,28 +230,25 @@
   --sidebar-border: var(--ae-border);
   --sidebar-ring: var(--ae-ring);
 
-  --motion-duration-fast: 100ms;
-  --motion-duration-base: 160ms;
-  --motion-duration-slow: 220ms;
-  --motion-ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --motion-duration-fast: 150ms;
+  --motion-duration-base: 220ms;
+  --motion-duration-slow: 300ms;
+  --motion-ease-standard: cubic-bezier(0.22, 1, 0.36, 1);
   --motion-ease-emphasized: cubic-bezier(0.16, 1, 0.3, 1);
   --ae-duration-fast: var(--motion-duration-fast);
   --ae-duration-state: var(--motion-duration-base);
   --ae-duration-route: var(--motion-duration-slow);
   --ae-ease-out: var(--motion-ease-emphasized);
   --ae-ease-state: var(--motion-ease-standard);
-  --ae-focus-ring: 0 0 0 2px var(--ae-bg), 0 0 0 4px var(--ae-fg);
-  --ae-overlay-scrim: oklch(0.215 0.004 106 / 0.16);
-  --shadow-low: 0 1px 2px oklch(0 0 0 / 0.08);
-  --shadow-med:
-    0 1px 2px -1px oklch(0 0 0 / 0.04), 0 4px 6px -1px oklch(0 0 0 / 0.06);
-  --shadow-high:
-    0 1px 2px -1px oklch(0 0 0 / 0.04), 0 4px 6px -1px oklch(0 0 0 / 0.06),
-    0 8px 16px oklch(0 0 0 / 0.04);
+  --ae-focus-ring: 0 0 0 2px var(--ae-brand);
+  --ae-overlay-scrim: rgba(28, 28, 28, 0.16);
+  --shadow-low: 0 1px 3px 0 rgba(0, 0, 0, 0.06);
+  --shadow-med: 0 12px 32px rgba(0, 0, 0, 0.08);
+  --shadow-high: 0 12px 32px rgba(0, 0, 0, 0.4);
+  --ae-shadow-overlay: 0 12px 32px -16px rgba(0, 0, 0, 0.18);
   --shadow-inset-hover: inset 0 0 0 1px var(--ae-border-strong);
   --shadow-inset-selected: inset 0 0 0 2px var(--ae-brand);
   --shadow-inset-market-row: inset 0 0 0 1px var(--ae-brand);
-  --shadow-inset-market-cell: inset 0 0 0 1px var(--ae-brand);
 }
 
 @utility duration-fast {
@@ -297,9 +314,24 @@
 @layer base {
   :where(h1, h2, h3, h4) {
     font-family: var(--ae-font-sans);
-    font-weight: 500;
-    letter-spacing: -0.015em;
+    font-optical-sizing: auto;
+    font-weight: 600;
+    line-height: 1.15;
     text-wrap: balance;
+  }
+
+  :where(h1, h2) {
+    letter-spacing: -0.025em;
+  }
+
+  :where(h3, h4) {
+    letter-spacing: -0.015em;
+  }
+
+  .font-display {
+    font-family: var(--ae-font-display);
+    font-weight: 300;
+    font-synthesis-weight: none;
   }
 
   ::selection {

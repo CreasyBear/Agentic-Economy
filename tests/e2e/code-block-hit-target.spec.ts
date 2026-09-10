@@ -11,21 +11,51 @@ async function expectInitialHitTarget(page: Page, button: Locator) {
   expect(await button.evaluate((node, point) => node.contains(document.elementFromPoint(point.x, point.y)), center)).toBe(true)
 }
 
-test('assistant setup primary copy control works by pointer and keyboard before scrolling', async ({ context, page }) => {
+test('native setup copy and alternatives work by pointer and keyboard', async ({ context, page }) => {
 
-  await page.goto('/for-agents', { waitUntil: 'networkidle' })
+  await page.goto('/for-agents')
   await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: new URL(page.url()).origin })
 
-  const manifestCopyButton = page.getByRole('button', { name: 'Copy agent setup instruction' })
+  const manifestCopyButton = page.getByRole('button', { name: 'Copy Codex MCP command' })
 
+  await expect(page.getByRole('link', { name: 'Browse Tools', exact: true })).toBeVisible()
+  await manifestCopyButton.scrollIntoViewIfNeeded()
   await expectInitialHitTarget(page, manifestCopyButton)
-  expect(await page.evaluate(() => window.scrollY)).toBe(0)
 
-  await manifestCopyButton.click()
-  await expect(page.getByRole('status').first()).toHaveText('agent setup instruction copied.')
+  await expect(async () => {
+    await manifestCopyButton.click()
+    await expect(page.getByRole('status').filter({ hasText: 'Codex MCP command copied.' })).toBeVisible({ timeout: 1_000 })
+  }).toPass()
+  const copied = await page.evaluate(() => navigator.clipboard.readText())
+  expect(copied).toContain('codex mcp add agentic-economy --url "')
+  expect(copied).not.toContain('$ORIGIN')
 
   await manifestCopyButton.focus()
   await expect(manifestCopyButton).toBeFocused()
   await page.keyboard.press('Enter')
-  await expect(page.getByRole('status').first()).toHaveText('agent setup instruction copied.')
+  await expect(page.getByRole('status').filter({ hasText: 'Codex MCP command copied.' })).toBeVisible()
+  const alternatives = page.getByRole('button', { name: 'Use Claude Code or Cursor' })
+  await expect(alternatives).toHaveAttribute('aria-expanded', 'false')
+  await alternatives.focus()
+  await page.keyboard.press('Enter')
+  await expect(alternatives).toHaveAttribute('aria-expanded', 'true')
+  await expect(page.getByRole('button', { name: 'Copy Claude Code MCP command' })).toBeVisible()
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true)
+})
+
+test('support keeps private contact and current records keyboard reachable', async ({ page }) => {
+  await page.goto('/support')
+  const support = page.getByRole('link', { name: 'Email support', exact: true })
+  await expect(support).toHaveAttribute('href', 'mailto:support@aecon.ai')
+  await support.focus()
+  await expect(support).toBeFocused()
+  await expect(page.getByRole('link', { name: 'Open Calls', exact: true })).toHaveAttribute('href', '/activity')
+  const diagnostics = page.getByRole('button', { name: 'Advanced connection diagnostics' })
+  await diagnostics.focus()
+  await expect(async () => {
+    await page.keyboard.press('Enter')
+    await expect(diagnostics).toHaveAttribute('aria-expanded', 'true', { timeout: 1_000 })
+  }).toPass()
+  await expect(page.getByRole('button', { name: 'Copy diagnostic command' })).toBeVisible()
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true)
 })

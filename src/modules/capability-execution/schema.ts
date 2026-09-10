@@ -1,1 +1,1 @@
-export { capabilityOperationInvocationTables } from './internal/convex-schema'
+export { capabilityCallTables } from './internal/convex-schema'

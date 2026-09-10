@@ -1,11 +1,10 @@
 import { callPublicSourceQuery, sourceQuery } from "@/lib/server/convex-source";
-import { readCapabilityOperationSearch } from "@/modules/capability-supply/operation-source";
-import type { OperationSearchResult } from "@/modules/capability-supply/public";
+import { readCapabilityToolSearch } from "@/modules/capability-supply/tool-source";
+import type {
+  ToolSearchResult,
+  PublicToolDescriptor,
+} from "@/modules/capability-supply/public";
 import {
-  MARKET_MAX_DAILY_POINTS,
-  MARKET_MAX_FEATURED_SERVICES,
-  MARKET_MAX_RECENT_ACTIVITY,
-  marketSourceStatus,
   type AgenticEconomyProjection,
   type MarketMetricProjection,
   type MarketPageProjection,
@@ -13,20 +12,17 @@ import {
   type X402EcosystemProjection,
 } from "./contracts";
 import {
-  agenticMarketSnapshotSchema,
-  type AgenticMarketSnapshot,
-} from "./agentic-market-source";
-import {
   emptyMarketListingEvidence,
   projectMarketListingEvidence,
+  type MarketListingEvidenceProjection,
   type MarketListingEvidenceSource,
 } from "./listing-evidence";
 import {
   catalogJobLabel,
   catalogJobSummary,
-  toOperationCardViewModel,
-  type OperationCardViewModel,
-} from "./operation-view-model";
+  toToolCardViewModel,
+  type ToolCardViewModel,
+} from "./tool-view-model";
 
 const compactNumberFormatter = new Intl.NumberFormat("en", {
   notation: "compact",
@@ -34,16 +30,11 @@ const compactNumberFormatter = new Intl.NumberFormat("en", {
 });
 
 type MarketSourceRead = Readonly<{
-  snapshot: null | Readonly<{
-    fetchedAt: number;
-    sourceTimestamp: string;
-    snapshotJson: string;
-  }>;
   generatedAt: number;
   firstPartyAvailable: boolean;
   firstParty: Readonly<{
-    operations: number;
-    suppliers: number;
+    tools: number;
+    providers: number;
     invocations: number;
     completedInvocations: number;
     qualifiedUses: number;
@@ -55,18 +46,19 @@ type MarketSourceRead = Readonly<{
 const readMarket = sourceQuery<
   { window: MarketWindow; now: number },
   MarketSourceRead
->("marketExternalSnapshots:read");
+>("marketMetrics:read");
 
 const readListingEvidence = sourceQuery<
-  { operationRefs: string[]; since: number },
+  { toolRefs: string[]; since: number },
   readonly MarketListingEvidenceSource[]
 >("marketListingEvidence:read");
 
 export type MarketCatalogProjection =
   | Readonly<{
       kind: "ok";
-      items: readonly OperationCardViewModel[];
-      matchedCount: number;
+      items: readonly ToolCardViewModel[];
+      matchedCount?: number;
+      partialResults?: boolean;
       pagination: Readonly<{
         limit: number;
         nextCursor?: string;
@@ -83,18 +75,56 @@ export type MarketRouteProjection = Readonly<{
 
 export type MarketCatalogQuery = Readonly<{
   query?: string;
-  availability?: "routeable" | "integrated" | "unavailable";
+  availability?: "routeable" | "setup_required" | "unavailable";
   cursor?: string;
 }>;
+
+export async function readToolListingEvidence(
+  tool: PublicToolDescriptor,
+  window: MarketWindow = "30d",
+): Promise<MarketListingEvidenceProjection> {
+  const summary = catalogJobSummary(
+    tool.summary || tool.offering.summary,
+  );
+  const catalogText = `${catalogJobLabel(
+    tool.contract.capabilityId,
+    tool.offering.label,
+    summary,
+  )} ${summary}`;
+  try {
+    const [source] = await callPublicSourceQuery(readListingEvidence, {
+      toolRefs: [tool.toolRef],
+      since: Date.now() - windowMilliseconds(window),
+    });
+    return source === undefined
+      ? emptyMarketListingEvidence(
+          tool.toolRef,
+          tool.contract.capabilityId,
+          catalogText,
+        )
+      : projectMarketListingEvidence(
+          source,
+          tool.contract.capabilityId,
+          catalogText,
+        );
+  } catch {
+    return emptyMarketListingEvidence(
+      tool.toolRef,
+      tool.contract.capabilityId,
+      catalogText,
+    );
+  }
+}
 
 export async function readMarketRouteProjection(
   window: MarketWindow,
   catalogQuery: MarketCatalogQuery = {},
 ): Promise<MarketRouteProjection> {
   const generatedAt = Date.now();
-  let catalog: OperationSearchResult;
+  let catalog: ToolSearchResult;
   try {
-    catalog = await readCapabilityOperationSearch({
+    catalog = await readCapabilityToolSearch({
+      source: "coinbase",
       query: catalogQuery.query ?? "",
       limit: 12,
       ...(catalogQuery.cursor === undefined
@@ -107,7 +137,7 @@ export async function readMarketRouteProjection(
   } catch {
     catalog = {
       kind: "unavailable",
-      schemaVersion: "registry-operations:v1",
+      schemaVersion: "registry-tools:v1",
       reason: "source_unavailable",
       navigation: [],
     };
@@ -130,58 +160,23 @@ export async function readMarketPageProjection(
   return {
     window,
     generatedAt,
-    x402Ecosystem: externalProjection(source, source.generatedAt),
+    x402Ecosystem: externalProjection(),
     agenticEconomy: firstPartyProjection(source, generatedAt),
   };
 }
 
-function externalProjection(
-  source: MarketSourceRead,
-  now: number,
-): X402EcosystemProjection {
-  const status = marketSourceStatus(source.snapshot?.fetchedAt, now);
-  const base = {
-    label: "Indexed x402 activity via Agentic Market" as const,
-    source: "Agentic Market" as const,
-    sourceUrl: "https://agentic.market/" as const,
-    status,
-    statusDetail:
-      status === "live"
-        ? "The latest bounded snapshot is current."
-        : status === "delayed"
-          ? "The last-known-good snapshot is more than ten minutes old."
-          : "No snapshot newer than sixty minutes is available.",
-  };
-  if (source.snapshot === null)
-    return {
-      ...base,
-      metrics: [],
-      daily: [],
-      recentActivity: [],
-      featuredExternalServices: [],
-    };
-  const parsed = parseSnapshot(source.snapshot.snapshotJson);
-  if (parsed === undefined)
-    return {
-      ...base,
-      status: "unavailable",
-      statusDetail: "The stored source snapshot could not be validated.",
-      metrics: [],
-      daily: [],
-      recentActivity: [],
-      featuredExternalServices: [],
-    };
+function externalProjection(): X402EcosystemProjection {
   return {
-    ...base,
-    fetchedAt: new Date(source.snapshot.fetchedAt).toISOString(),
-    sourceTimestamp: source.snapshot.sourceTimestamp,
-    metrics: parsed.metrics.slice(0, 4),
-    daily: parsed.daily.slice(-MARKET_MAX_DAILY_POINTS),
-    recentActivity: parsed.recentActivity.slice(0, MARKET_MAX_RECENT_ACTIVITY),
-    featuredExternalServices: parsed.featuredExternalServices.slice(
-      0,
-      MARKET_MAX_FEATURED_SERVICES,
-    ),
+    label: "Indexed x402 activity via AEcon directory" as const,
+    source: "AEcon directory" as const,
+    sourceUrl: "/market" as const,
+    status: "unavailable",
+    statusDetail:
+      "AEcon does not yet publish an x402 ecosystem snapshot; first-party counts below are live.",
+    metrics: [],
+    daily: [],
+    recentActivity: [],
+    featuredExternalServices: [],
   };
 }
 
@@ -207,20 +202,20 @@ function firstPartyProjection(
         10;
   const metrics: MarketMetricProjection[] = [
     firstPartyMetric(
-      "operations",
-      "Ready Operations",
-      counts.operations,
+      "tools",
+      "Ready Tools",
+      counts.tools,
       generatedAt,
-      "ae_operation",
-      "Operations that are admitted and ready to run now.",
+      "ae_tool",
+      "Tools that are admitted and ready to run now.",
     ),
     firstPartyMetric(
-      "suppliers",
-      "Active suppliers",
-      counts.suppliers,
+      "providers",
+      "Active Providers",
+      counts.providers,
       generatedAt,
-      "ae_operation",
-      "Suppliers with at least one Operation ready to run.",
+      "ae_provider",
+      "Providers with at least one Tool ready to run.",
     ),
     firstPartyMetric(
       "invocations",
@@ -286,7 +281,7 @@ function firstPartyProjection(
 }
 
 async function projectCatalog(
-  catalog: OperationSearchResult,
+  catalog: ToolSearchResult,
   window: MarketWindow,
   generatedAt: number,
 ): Promise<MarketCatalogProjection> {
@@ -295,48 +290,49 @@ async function projectCatalog(
   if (catalog.kind === "no_candidates")
     return { kind: "no_candidates", matchedCount: 0 };
 
-  const operationRefs = catalog.items.map(
-    (operation) => operation.operationRef,
+  const toolRefs = catalog.items.map(
+    (tool) => tool.toolRef,
   );
   let evidence: readonly MarketListingEvidenceSource[] = [];
   try {
     evidence = await callPublicSourceQuery(readListingEvidence, {
-      operationRefs,
+      toolRefs,
       since: generatedAt - windowMilliseconds(window),
     });
   } catch {
     evidence = [];
   }
-  const evidenceByOperationRef = new Map(
-    evidence.map((item) => [item.operationRef, item] as const),
+  const evidenceByToolRef = new Map(
+    evidence.map((item) => [item.toolRef, item] as const),
   );
   return {
     kind: "ok",
-    items: catalog.items.map((operation) => {
+    items: catalog.items.map((tool) => {
       const summary = catalogJobSummary(
-        operation.summary || operation.offering.summary,
+        tool.summary || tool.offering.summary,
       );
       const catalogText = `${catalogJobLabel(
-        operation.contract.capabilityId,
-        operation.offering.label,
+        tool.contract.capabilityId,
+        tool.offering.label,
         summary,
       )} ${summary}`;
-      const source = evidenceByOperationRef.get(operation.operationRef);
+      const source = evidenceByToolRef.get(tool.toolRef);
       const projection =
         source === undefined
           ? emptyMarketListingEvidence(
-              operation.operationRef,
-              operation.contract.capabilityId,
+              tool.toolRef,
+              tool.contract.capabilityId,
               catalogText,
             )
           : projectMarketListingEvidence(
               source,
-              operation.contract.capabilityId,
+              tool.contract.capabilityId,
               catalogText,
             );
-      return toOperationCardViewModel(operation, projection);
+      return toToolCardViewModel(tool, projection);
     }),
-    matchedCount: catalog.matchedCount,
+    ...(catalog.matchedCount === undefined ? {} : { matchedCount: catalog.matchedCount }),
+    ...(catalog.partialResults === undefined ? {} : { partialResults: catalog.partialResults }),
     pagination: catalog.pagination,
   };
 }
@@ -367,23 +363,13 @@ function firstPartyMetric(
   };
 }
 
-function parseSnapshot(value: string): AgenticMarketSnapshot | undefined {
-  try {
-    const parsed = agenticMarketSnapshotSchema.safeParse(JSON.parse(value));
-    return parsed.success ? parsed.data : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
 function emptyMarketSource(now: number): MarketSourceRead {
   return {
-    snapshot: null,
     generatedAt: now,
     firstPartyAvailable: false,
     firstParty: {
-      operations: 0,
-      suppliers: 0,
+      tools: 0,
+      providers: 0,
       invocations: 0,
       completedInvocations: 0,
       qualifiedUses: 0,

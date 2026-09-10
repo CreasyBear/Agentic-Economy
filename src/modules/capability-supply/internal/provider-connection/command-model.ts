@@ -32,6 +32,7 @@ import {
   type ProviderConnectionCommandResult,
   type ProviderConnectionCredentialResolution,
   type ProviderConnectionRefusalCode,
+  type ProviderConnectionSourceAuthentication,
   type ReauthorizeProviderConnectionCommand,
   type RecordProviderConnectionCleanupResultCommand,
 } from './types'
@@ -45,6 +46,51 @@ type NormalizedAuthorityCommand = Omit<AuthorityCommandFields, 'requestedScopes'
   commandId: string
 }>
 
+function normalizeSourceMetadata(command: AuthorityCommandFields):
+  | Readonly<{
+      kind: 'ok'
+      sourceOrigin?: string
+      sourceEnvironment?: 'sandbox' | 'production'
+      sourceAuthentication?: ProviderConnectionSourceAuthentication
+    }>
+  | Readonly<{ kind: 'refused'; code: ProviderConnectionRefusalCode }> {
+  const present = [command.sourceOrigin, command.sourceEnvironment, command.sourceAuthentication]
+    .filter((value) => value !== undefined).length
+  if (present === 0) return { kind: 'ok' }
+  if (present !== 3 || command.sourceOrigin === undefined
+    || command.sourceEnvironment === undefined || command.sourceAuthentication === undefined) {
+    return { kind: 'refused', code: 'invalid_identity' }
+  }
+  const origin = validPublicHttpsEndpoint(command.sourceOrigin)
+  if (origin === undefined || origin.origin !== command.sourceOrigin) return { kind: 'refused', code: 'invalid_resource' }
+  if (command.sourceEnvironment !== 'sandbox' && command.sourceEnvironment !== 'production') {
+    return { kind: 'refused', code: 'invalid_identity' }
+  }
+  const authentication = command.sourceAuthentication
+  const validAuthentication = authentication.kind === 'mcp_oauth'
+    ? command.adapterId === 'mcp-jsonrpc:v1'
+    : command.adapterId === 'http-json:v1'
+      && (authentication.kind === 'http_bearer' || (
+        authentication.kind === 'api_key'
+        && (authentication.location === 'header' || authentication.location === 'query')
+        && validIdentity(authentication.name, 200)
+        && !/[\r\n]/u.test(authentication.name)
+      ))
+  if (!validAuthentication) return { kind: 'refused', code: 'invalid_identity' }
+  const [grantedResource] = command.grantedResources
+  if (command.grantedResources.length !== 1 || grantedResource === undefined) {
+    return { kind: 'refused', code: 'invalid_resource' }
+  }
+  const resource = validPublicHttpsEndpoint(grantedResource)
+  if (resource === undefined || resource.origin !== origin.origin) return { kind: 'refused', code: 'invalid_resource' }
+  return {
+    kind: 'ok',
+    sourceOrigin: origin.origin,
+    sourceEnvironment: command.sourceEnvironment,
+    sourceAuthentication: authentication,
+  }
+}
+
 function normalizeAuthorityCommand(command: AuthorityCommandFields & Readonly<{ commandId: string }>, now: number):
   | Readonly<{ kind: 'ok'; command: NormalizedAuthorityCommand }>
   | Readonly<{ kind: 'refused'; code: ProviderConnectionRefusalCode }> {
@@ -54,9 +100,13 @@ function normalizeAuthorityCommand(command: AuthorityCommandFields & Readonly<{ 
     || !validIdentity(command.owningAccountRef) || !validIdentity(command.installedByPrincipalRef)
     || !validIdentity(command.authorityGrantRef) || !validGeneration(command.authorityGrantGeneration)) return { kind: 'refused', code: 'invalid_identity' }
   if (command.credentialRef !== null && !isProviderConnectionCredentialRef(command.credentialRef)) return { kind: 'refused', code: 'invalid_identity' }
+  if (command.x402Method !== undefined && command.x402Method !== 'GET' && command.x402Method !== 'POST') return { kind: 'refused', code: 'invalid_identity' }
+  if (command.x402Payee !== undefined && !validIdentity(command.x402Payee)) return { kind: 'refused', code: 'invalid_identity' }
   if (command.secretRef !== command.credentialRef && !(command.secretRef === undefined && command.credentialRef === null)) {
     return { kind: 'refused', code: 'invalid_identity' }
   }
+  const sourceMetadata = normalizeSourceMetadata(command)
+  if (sourceMetadata.kind === 'refused') return sourceMetadata
   const requestedScopes = normalizeValues(command.requestedScopes, 'invalid_scope')
   const grantedScopes = normalizeValues(command.grantedScopes, 'invalid_scope')
   const requestedResources = normalizeValues(command.requestedResources, 'invalid_resource')
@@ -78,7 +128,15 @@ function normalizeAuthorityCommand(command: AuthorityCommandFields & Readonly<{ 
     authorityGrantRef: command.authorityGrantRef, authorityGrantGeneration: command.authorityGrantGeneration,
     ...(command.secretRef === undefined ? {} : { secretRef: command.secretRef }), businessId: command.businessId,
     providerRef: command.providerRef, providerAccountRef: command.providerAccountRef, adapterId: command.adapterId,
-    credentialRef: command.credentialRef, requestedScopes: requestedScopes.values, grantedScopes: grantedScopes.values,
+    credentialRef: command.credentialRef,
+    ...(sourceMetadata.sourceOrigin === undefined ? {} : {
+      sourceOrigin: sourceMetadata.sourceOrigin,
+      sourceEnvironment: sourceMetadata.sourceEnvironment,
+      sourceAuthentication: sourceMetadata.sourceAuthentication,
+    }),
+    ...(command.x402Method === undefined ? {} : { x402Method: command.x402Method }),
+    ...(command.x402Payee === undefined ? {} : { x402Payee: command.x402Payee }),
+    requestedScopes: requestedScopes.values, grantedScopes: grantedScopes.values,
     requestedResources: requestedResources.values, grantedResources: grantedResources.values,
     ...(command.expiresAt === undefined ? {} : { expiresAt: command.expiresAt }),
     ...(reasonCode.value === undefined ? {} : { reasonCode: reasonCode.value }), evidenceRefs: evidenceRefs.values,
@@ -164,11 +222,13 @@ export function providerConnectionCleanupCommandId(revocationRef: string, cleanu
 }
 
 export function isCanonicalCredentiallessX402ProviderConnection(
-  connection: Pick<ProviderConnection, 'adapterId' | 'credentialRef' | 'providerRef' | 'providerAccountRef' | 'grantedScopes' | 'grantedResources'>,
+  connection: Pick<ProviderConnection, 'adapterId' | 'credentialRef' | 'providerRef' | 'providerAccountRef' | 'x402Method' | 'x402Payee' | 'grantedScopes' | 'grantedResources'>,
 ): boolean {
   if (
     connection.adapterId !== 'x402-fetch:v2'
     || connection.credentialRef !== null
+    || (connection.x402Method !== 'GET' && connection.x402Method !== 'POST')
+    || connection.x402Payee === undefined
     || connection.grantedScopes.length !== 0
     || !connection.providerRef.startsWith('provider:x402:')
     || !connection.providerAccountRef.startsWith('x402:')
@@ -199,6 +259,13 @@ export function createProviderConnection(command: CreateProviderConnectionComman
     providerAccountRef: normalized.command.providerAccountRef,
     adapterId: normalized.command.adapterId,
     credentialRef: normalized.command.credentialRef,
+    ...(normalized.command.sourceOrigin === undefined ? {} : {
+      sourceOrigin: normalized.command.sourceOrigin,
+      sourceEnvironment: normalized.command.sourceEnvironment,
+      sourceAuthentication: normalized.command.sourceAuthentication,
+    }),
+    ...(normalized.command.x402Method === undefined ? {} : { x402Method: normalized.command.x402Method }),
+    ...(normalized.command.x402Payee === undefined ? {} : { x402Payee: normalized.command.x402Payee }),
     grantedScopes: normalized.command.grantedScopes,
     grantedResources: normalized.command.grantedResources,
     authorityGeneration: 1,
@@ -232,6 +299,8 @@ export function createX402ProviderConnection(
     providerAccountRef: command.providerAccountRef,
     adapterId: 'x402-fetch:v2',
     credentialRef: null,
+    x402Method: command.method,
+    x402Payee: command.payee,
     requestedScopes: [],
     grantedScopes: [],
     requestedResources: [resourceUrl.toString()],
@@ -242,7 +311,14 @@ export function createX402ProviderConnection(
 }
 
 export function reauthorizeProviderConnection(current: ProviderConnection | undefined, command: ReauthorizeProviderConnectionCommand, now: number): ProviderConnectionCommandResult {
-  const normalized = normalizeAuthorityCommand(command, now)
+  const normalized = normalizeAuthorityCommand({
+    ...command,
+    ...(command.sourceOrigin === undefined && current?.sourceOrigin !== undefined ? {
+      sourceOrigin: current.sourceOrigin,
+      sourceEnvironment: current.sourceEnvironment,
+      sourceAuthentication: current.sourceAuthentication,
+    } : {}),
+  }, now)
   if (normalized.kind === 'refused') return normalized
   const commandDigest = providerConnectionCommandDigest(COMMAND_KINDS.reauthorize, {
     ...normalized.command,
@@ -260,7 +336,12 @@ export function reauthorizeProviderConnection(current: ProviderConnection | unde
     || normalized.command.businessId !== current.businessId
     || normalized.command.providerRef !== current.providerRef
     || normalized.command.providerAccountRef !== current.providerAccountRef
-    || normalized.command.adapterId !== current.adapterId) return refusal('invalid_identity')
+    || normalized.command.adapterId !== current.adapterId
+    || normalized.command.sourceOrigin !== current.sourceOrigin
+    || normalized.command.sourceEnvironment !== current.sourceEnvironment
+    || JSON.stringify(normalized.command.sourceAuthentication) !== JSON.stringify(current.sourceAuthentication)) {
+    return refusal('invalid_identity')
+  }
   if (current.lifecycle !== 'active' && current.lifecycle !== 'reauthorization_required') return refusal('invalid_transition')
   if (current.authorityGeneration === Number.MAX_SAFE_INTEGER) return refusal('invalid_generation')
   const {
@@ -268,6 +349,11 @@ export function reauthorizeProviderConnection(current: ProviderConnection | unde
     reasonCode: _oldReasonCode,
     expiresAt: _oldExpiresAt,
     secretRef: _oldSecretRef,
+    healthStatus: _oldHealthStatus,
+    healthCheckedAt: _oldHealthCheckedAt,
+    healthSubject: _oldHealthSubject,
+    healthObservationDigest: _oldHealthObservationDigest,
+    healthReasonCode: _oldHealthReasonCode,
     ...base
   } = current
   const next = withAuthorityDigest({
@@ -278,6 +364,13 @@ export function reauthorizeProviderConnection(current: ProviderConnection | unde
     authorityGrantGeneration: normalized.command.authorityGrantGeneration,
     ...(normalized.command.secretRef === undefined ? {} : { secretRef: normalized.command.secretRef }),
     credentialRef: normalized.command.credentialRef,
+    ...(normalized.command.sourceOrigin === undefined ? {} : {
+      sourceOrigin: normalized.command.sourceOrigin,
+      sourceEnvironment: normalized.command.sourceEnvironment,
+      sourceAuthentication: normalized.command.sourceAuthentication,
+    }),
+    ...(normalized.command.x402Method === undefined ? {} : { x402Method: normalized.command.x402Method }),
+    ...(normalized.command.x402Payee === undefined ? {} : { x402Payee: normalized.command.x402Payee }),
     grantedScopes: normalized.command.grantedScopes,
     grantedResources: normalized.command.grantedResources,
     authorityGeneration: current.authorityGeneration + 1,
@@ -366,10 +459,15 @@ export function recordProviderConnectionCleanupResult(current: ProviderConnectio
     || current.cleanupCommandId !== normalized.commandId
     || current.cleanupRequestDigest !== normalized.requestDigest
   ) return refusal('invalid_transition')
-  if (
+  const credentiallessDetach = normalized.outcome === 'detached'
+    && isCanonicalCredentiallessX402ProviderConnection(current)
+  const upstreamCredentialRevocation = (
     normalized.outcome === 'revoked'
     || normalized.outcome === 'already_revoked'
-    || (normalized.outcome === 'detached' && !isCanonicalCredentiallessX402ProviderConnection(current))
+  ) && current.credentialRef !== null
+  if (
+    (normalized.outcome === 'detached' && !credentiallessDetach)
+    || ((normalized.outcome === 'revoked' || normalized.outcome === 'already_revoked') && !upstreamCredentialRevocation)
   ) return refusal('invalid_transition')
   const {
     cleanupWorkId: _cleanupWorkId,
@@ -385,16 +483,21 @@ export function recordProviderConnectionCleanupResult(current: ProviderConnectio
     cleanupCallbackGraceUntil: now + 10_000,
     updatedAt: now,
   }
-  if (normalized.outcome !== 'detached') {
+  if (!credentiallessDetach && !upstreamCredentialRevocation) {
     return applied({
       ...common,
       lifecycle: 'cleanup_required',
       ...(normalized.reasonCode === undefined ? {} : { reasonCode: normalized.reasonCode }),
     }, normalized.commandId, commandDigest)
   }
-  const { lastCommandId: _lastCommandId, lastCommandDigest: _lastCommandDigest, ...withoutReceipt } = common
+  const {
+    lastCommandId: _lastCommandId,
+    lastCommandDigest: _lastCommandDigest,
+    secretRef: _secretRef,
+    ...withoutReceiptAndSecret
+  } = common
   return applied(withAuthorityDigest({
-    ...withoutReceipt,
+    ...withoutReceiptAndSecret,
     credentialRef: null,
     lifecycle: 'revoked',
     revokedAt: current.revokedAt ?? now,

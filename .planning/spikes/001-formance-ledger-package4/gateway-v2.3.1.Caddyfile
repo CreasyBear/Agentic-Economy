@@ -1,0 +1,25 @@
+{
+	order versions after metrics
+}
+
+:8080 {
+	handle_path /api/ledger* {
+		reverse_proxy ledger:3068
+	}
+
+	handle /versions {
+		versions {
+			region "local"
+			env "package4-requalification"
+			endpoints {
+				ledger {
+					http://ledger:3068/_info http://ledger:3068/_healthcheck
+				}
+			}
+		}
+	}
+
+	handle {
+		respond "Bad Gateway" 502
+	}
+}

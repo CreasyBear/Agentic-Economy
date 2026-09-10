@@ -8,15 +8,15 @@ import {
 
 const controlledEvents: TransferBoundaryEvent[] = [
   { kind: 'approval_policy', policy: 'prompt', reason: 'exact invocation authority' },
-  { kind: 'authority_decision', invocationRef: 'dev:invocation' },
-  { kind: 'user_or_supervisor_decision', invocationRef: 'dev:invocation' },
+  { kind: 'authority_decision', executionRef: 'dev:execution' },
+  { kind: 'user_or_supervisor_decision', executionRef: 'dev:execution' },
   { kind: 'direct_runner_started', actionId: 'supply.collectDevelopmentQuote' },
   { kind: 'effect_call', actionId: 'supply.collectDevelopmentQuote' },
   { kind: 'direct_runner_returned', actionId: 'supply.collectDevelopmentQuote', outcome: 'quote_returned' },
-  { kind: 'action_invocation', invocationRef: 'dev:invocation' },
-  { kind: 'control', invocationRef: 'dev:invocation' },
-  { kind: 'attempt', invocationRef: 'dev:invocation', attemptRef: 'dev:attempt' },
-  { kind: 'history', invocationRef: 'dev:invocation', commandId: 'dev:command:1' },
+  { kind: 'action_execution', executionRef: 'dev:execution' },
+  { kind: 'control', executionRef: 'dev:execution' },
+  { kind: 'attempt', executionRef: 'dev:execution', attemptRef: 'dev:attempt' },
+  { kind: 'history', executionRef: 'dev:execution', commandId: 'dev:command:1' },
 ]
 
 function passingEvidence(): TransferEvidence {
@@ -36,7 +36,7 @@ function passingEvidence(): TransferEvidence {
     },
     requiredContinuations: { direct_read: 1, direct_consequential: 2, controlled: 2 },
     controlledReadback: {
-      invocationVersion: 5,
+      executionVersion: 5,
       controlRecords: 1,
       attributableAttempts: 1,
       durableHistoryRecords: 5,
@@ -70,6 +70,6 @@ describe('ADR-009 measured transfer recommendation', () => {
     expect(passing.recommendation)
       .toBe('retain_control_for_consequential_and_bypass_read_only')
     expect(altered.falsifiers.F5).toMatchObject({ disposition: 'holds' })
-    expect(altered.recommendation).toBe('narrow_action_invocation_seam')
+    expect(altered.recommendation).toBe('narrow_action_execution_seam')
   })
 })

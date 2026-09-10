@@ -2,43 +2,35 @@
  * @vitest-environment jsdom
  */
 import { cleanup, render, screen } from '@testing-library/react'
-import type { ComponentType, ReactElement } from 'react'
-import { RouterContextProvider, createMemoryHistory, createRootRoute, createRoute, createRouter } from '@tanstack/react-router'
+import { RouterProvider, createMemoryHistory, createRootRoute, createRoute, createRouter } from '@tanstack/react-router'
 import { afterEach, describe, expect, it } from 'vitest'
 import '../../setup/jsdom-platform'
 
 import { Route } from '@/routes/index'
 
-afterEach(() => {
-  cleanup()
-})
+afterEach(cleanup)
 
-function renderWithRouter(ui: ReactElement) {
-  const rootRoute = createRootRoute()
-  const routeTree = rootRoute.addChildren([
-    createRoute({ getParentRoute: () => rootRoute, path: '/' }),
-    createRoute({ getParentRoute: () => rootRoute, path: '/for-providers' }),
-    createRoute({ getParentRoute: () => rootRoute, path: '/sign-in/$' }),
-    createRoute({ getParentRoute: () => rootRoute, path: '/for-agents' }),
-    createRoute({ getParentRoute: () => rootRoute, path: '/privacy' }),
-    createRoute({ getParentRoute: () => rootRoute, path: '/terms' }),
-  ])
-  const router = createRouter({ routeTree, history: createMemoryHistory({ initialEntries: ['/'] }) })
-  return render(<RouterContextProvider router={router}>{ui}</RouterContextProvider>)
-}
+describe('application entry navigation', () => {
+  it.each(['/', '/?q=weather'])('opens the market from %s without a landing-page step', async (entry) => {
+    const beforeLoad = Route.options.beforeLoad
+    if (beforeLoad === undefined) throw new Error('root market redirect is unavailable')
+    const root = createRootRoute()
+    const routeTree = root.addChildren([
+      createRoute({
+        getParentRoute: () => root,
+        path: '/',
+        validateSearch: Route.options.validateSearch,
+        beforeLoad: (ctx) => beforeLoad(ctx as never),
+      }),
+      createRoute({ getParentRoute: () => root, path: '/market', component: () => <h1>Tool market</h1> }),
+    ])
+    const router = createRouter({ routeTree, history: createMemoryHistory({ initialEntries: [entry] }) })
+    render(<RouterProvider router={router} />)
 
-describe('homepage search error', () => {
-  it('explains the transient failure and gives a truthful recovery action', () => {
-    const ErrorComponent = Route.options.errorComponent as ComponentType
-    renderWithRouter(<ErrorComponent />)
-
-    const alert = screen.getByRole('alert')
-    expect(alert.textContent).toContain('Unable to load the catalog')
-    expect(alert.textContent).toContain('Check your connection and try again.')
-    expect(alert.textContent).toContain('No tool was called.')
-
-    const backToSearch = screen.getByRole('link', { name: 'Try again' })
-    expect(backToSearch.getAttribute('href')).toBe('/')
-    expect(backToSearch.classList.contains('min-h-touch')).toBe(true)
+    expect(await screen.findByRole('heading', { name: 'Tool market' })).toBeTruthy()
+    expect(router.state.location.pathname).toBe('/market')
+    expect(router.state.location.search).toMatchObject(entry.includes('?')
+      ? { window: '30d', query: 'weather' }
+      : { window: '30d' })
   })
 })

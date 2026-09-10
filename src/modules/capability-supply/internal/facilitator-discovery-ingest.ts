@@ -1,5 +1,6 @@
+import { canonicalDigest } from '@/modules/common/canonical-digest';
 import { isRecord } from "@/modules/common/is-record";
-import type { ExactAmount } from "@/modules/money/public";
+import { formatCurrencyAmount, type ExactAmount } from "@/modules/money/public";
 
 import type { BazaarAdmission } from "./publication-importer-x402-bazaar";
 import type {
@@ -24,12 +25,23 @@ export const FACILITATOR_DISCOVERY_NETWORK = "eip155:8453" as const;
 export const FACILITATOR_DISCOVERY_ASSET =
   "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" as const;
 export const FACILITATOR_DISCOVERY_ASSET_EXPONENT = 6 as const;
+export const FACILITATOR_DISCOVERY_PAYMENT_PROFILES = Object.freeze([
+  Object.freeze({
+    network: FACILITATOR_DISCOVERY_NETWORK,
+    asset: FACILITATOR_DISCOVERY_ASSET,
+    assetExponent: FACILITATOR_DISCOVERY_ASSET_EXPONENT,
+  }),
+  Object.freeze({
+    network: "eip155:84532" as const,
+    asset: "0x036CbD53842c5426634e7929541eC2318f3dCF7e" as const,
+    assetExponent: FACILITATOR_DISCOVERY_ASSET_EXPONENT,
+  }),
+]);
 export const FACILITATOR_DISCOVERY_MAX_ACCEPTS = 20 as const;
 
-const DISCOVERY_EVIDENCE_REF = "source:facilitator-discovery";
+export const FACILITATOR_DISCOVERY_EVIDENCE_REF = "source:facilitator-discovery";
 const MAX_ATOMIC_DIGITS = 78;
-const FEE_BPS = 1_000n;
-const BPS_DENOMINATOR = 10_000n;
+
 
 export type FacilitatorDiscoverySkipReason =
   | "bazaar_missing"
@@ -53,13 +65,13 @@ export type FacilitatorDiscoveryPriceBreakdown = Readonly<{
   provider: ExactAmount;
   platformFee: ExactAmount;
   total: ExactAmount;
-  feeBps: 1_000;
+  feeBps: 0;
 }>;
 
 export type FacilitatorDiscoveryAdmitCandidate = Readonly<{
   kind: "admit";
   import: Extract<CapabilityPublicationImport, { kind: "x402" }>;
-  identity: Readonly<{ method: "GET" | "POST"; origin: string; path: string }>;
+  identity: DiscoveryHttpIdentity;
   price: FacilitatorDiscoveryPriceBreakdown;
 }>;
 
@@ -87,6 +99,8 @@ export type FacilitatorDiscoveryAdmittedDraft = Readonly<
     execution: Readonly<{
         endpoint: Readonly<{ url: string }>;
         method: "GET" | "POST";
+        bodyPointer?: "/body";
+        queryObjectPointer?: "/query";
         query?: Readonly<{
           inputPointer: string;
           parameter: string;
@@ -152,13 +166,13 @@ export function decideFacilitatorDiscoveryItem(
 
   const accept = firstSupportedAccept(paymentRequired.accepts);
   if (accept.kind === "refused") return { kind: "skip", reason: accept.reason };
-  const price = priceBreakdown(accept.amount);
+  const price = priceBreakdown(accept.amount, accept.assetExponent);
   if (price === undefined) return { kind: "skip", reason: "amount_invalid" };
-  const identity = normalizedHttpIdentity(endpoint, bazaar.method);
+  const identity = normalizedHttpIdentity(endpoint, bazaar.method, accept.network, accept.asset);
   const providerPrice: ExactAmount = {
-    currency: "USD",
+    currency: "USDC",
     units: accept.amount,
-    exponent: FACILITATOR_DISCOVERY_ASSET_EXPONENT,
+    exponent: accept.assetExponent,
   };
   const capabilityId = capabilityIdFromIdentity(identity);
   const offeringLabel = discoveryOfferingLabel(resource, capabilityId);
@@ -171,24 +185,37 @@ export function decideFacilitatorDiscoveryItem(
       price: providerPrice,
       method: bazaar.method,
       scheme: "exact",
-      network: FACILITATOR_DISCOVERY_NETWORK,
-      asset: FACILITATOR_DISCOVERY_ASSET,
+      network: accept.network,
+      asset: accept.asset,
       payTo: accept.payTo,
-      routeAmountExponent: FACILITATOR_DISCOVERY_ASSET_EXPONENT,
-      assetAmountExponent: FACILITATOR_DISCOVERY_ASSET_EXPONENT,
+      routeAmountExponent: accept.assetExponent,
+      assetAmountExponent: accept.assetExponent,
       paymentRequired,
       inputSchema: bazaar.inputSchema,
       outputSchema: bazaar.outputSchema,
       ...(bazaar.query === undefined ? {} : { query: bazaar.query }),
+      ...(bazaar.path === undefined ? {} : { path: bazaar.path }),
+      ...(bazaar.pathTemplate === undefined ? {} : { pathTemplate: bazaar.pathTemplate }),
+      ...(bazaar.bodyPointer === undefined ? {} : { bodyPointer: bazaar.bodyPointer }),
+      ...(bazaar.queryObjectPointer === undefined ? {} : { queryObjectPointer: bazaar.queryObjectPointer }),
     },
     contract: {
       capabilityId,
       version: 1,
       name: offeringLabel,
       description: offeringSummary,
+      inputExamples: bazaar.inputExample === undefined ? [] : [{
+        label: "Provider example", input: bazaar.inputExample,
+      }],
       customerAnnotations: [],
-      dataUse: [],
-      effects: [],
+      dataUse: Object.keys(bazaar.inputSchema.properties ?? {}).map((name) => ({
+        effectId: "provider_data_use", inputPointer: `/${name.replace(/~/g, "~0").replace(/\//g, "~1")}`,
+        classification: "public" as const, phase: "preparation" as const,
+        recipient: { kind: "selected_binding" as const }, purposes: ["Perform the requested Tool"],
+      })),
+      effects: Object.keys(bazaar.inputSchema.properties ?? {}).length === 0 ? [] : [{
+        effectId: "provider_data_use", class: "data_release", authority: "explicit", reversibility: "not_applicable",
+      }],
       evidence: [],
       lifecycle: { idempotency: "required", recovery: "reconcile_required" },
     },
@@ -207,11 +234,11 @@ export function decideFacilitatorDiscoveryItem(
             influencesEligibility: false,
             influencesInclusion: false,
             influencesOrder: false,
-            evidenceRefs: [DISCOVERY_EVIDENCE_REF],
+            evidenceRefs: [FACILITATOR_DISCOVERY_EVIDENCE_REF],
           },
         },
         searchTerms: [...searchTermsForOffering(resource, capabilityId)],
-        registrationEvidenceRefs: [DISCOVERY_EVIDENCE_REF],
+        registrationEvidenceRefs: [FACILITATOR_DISCOVERY_EVIDENCE_REF],
       },
       bindingId: `binding:facilitator-discovery:${capabilityId}`,
       authority: {
@@ -219,10 +246,10 @@ export function decideFacilitatorDiscoveryItem(
         connectionRef: "connection:facilitator-discovery",
         providerRef: "provider:facilitator-discovery",
       },
-      registrationEvidenceRefs: [DISCOVERY_EVIDENCE_REF],
+      registrationEvidenceRefs: [FACILITATOR_DISCOVERY_EVIDENCE_REF],
       requestTimeoutMs: 10_000,
     },
-    evidenceRefs: [DISCOVERY_EVIDENCE_REF],
+    evidenceRefs: [FACILITATOR_DISCOVERY_EVIDENCE_REF],
   };
   return { kind: "admit", import: sourceImport, identity, price };
 }
@@ -277,7 +304,14 @@ function discoveryResourceRecord(
 }
 
 type AcceptResult =
-  | Readonly<{ kind: "valid"; amount: string; payTo: string }>
+  | Readonly<{
+      kind: "valid";
+      amount: string;
+      payTo: string;
+      network: (typeof FACILITATOR_DISCOVERY_PAYMENT_PROFILES)[number]["network"];
+      asset: (typeof FACILITATOR_DISCOVERY_PAYMENT_PROFILES)[number]["asset"];
+      assetExponent: 6;
+    }>
   | Readonly<{ kind: "refused"; reason: FacilitatorDiscoverySkipReason }>;
 
 function firstSupportedAccept(value: unknown): AcceptResult {
@@ -291,13 +325,16 @@ function firstSupportedAccept(value: unknown): AcceptResult {
   for (const candidate of value) {
     if (!isRecord(candidate) || candidate.scheme !== "exact") continue;
     sawExact = true;
-    if (candidate.network !== FACILITATOR_DISCOVERY_NETWORK) {
+    const profile = FACILITATOR_DISCOVERY_PAYMENT_PROFILES.find(
+      ({ network }) => network === candidate.network,
+    );
+    if (profile === undefined) {
       sawChain = true;
       continue;
     }
     if (
       typeof candidate.asset !== "string" ||
-      candidate.asset.toLowerCase() !== FACILITATOR_DISCOVERY_ASSET.toLowerCase()
+      candidate.asset.toLowerCase() !== profile.asset.toLowerCase()
     ) {
       sawAsset = true;
       continue;
@@ -311,7 +348,14 @@ function firstSupportedAccept(value: unknown): AcceptResult {
       continue;
     }
     if (typeof candidate.payTo !== "string" || candidate.payTo.trim().length === 0) continue;
-    return { kind: "valid", amount: candidate.amount, payTo: candidate.payTo };
+    return {
+      kind: "valid",
+      amount: candidate.amount,
+      payTo: candidate.payTo,
+      network: profile.network,
+      asset: profile.asset,
+      assetExponent: profile.assetExponent,
+    };
   }
   if (!sawExact) return { kind: "refused", reason: "scheme_unsupported" };
   if (sawChain) return { kind: "refused", reason: "chain_unsupported" };
@@ -320,27 +364,27 @@ function firstSupportedAccept(value: unknown): AcceptResult {
   return { kind: "refused", reason: "payment_terms_invalid" };
 }
 
-function priceBreakdown(amount: string): FacilitatorDiscoveryPriceBreakdown | undefined {
+function priceBreakdown(amount: string, exponent: number): FacilitatorDiscoveryPriceBreakdown | undefined {
   if (!/^[1-9][0-9]*$/.test(amount) || amount.length > MAX_ATOMIC_DIGITS) return undefined;
   try {
     const providerUnits = BigInt(amount);
-    const feeUnits = (providerUnits * FEE_BPS + BPS_DENOMINATOR - 1n) / BPS_DENOMINATOR;
-    const provider = exactAtomicAmount(providerUnits);
-    const platformFee = exactAtomicAmount(feeUnits);
-    const total = exactAtomicAmount(providerUnits + feeUnits);
+    const feeUnits = 0n;
+    const provider = exactAtomicAmount(providerUnits, exponent);
+    const platformFee = exactAtomicAmount(feeUnits, exponent);
+    const total = exactAtomicAmount(providerUnits + feeUnits, exponent);
     return provider === undefined || platformFee === undefined || total === undefined
       ? undefined
-      : { provider, platformFee, total, feeBps: 1_000 };
+      : { provider, platformFee, total, feeBps: 0 };
   } catch {
     return undefined;
   }
 }
 
-function exactAtomicAmount(units: bigint): ExactAmount | undefined {
+function exactAtomicAmount(units: bigint, exponent: number): ExactAmount | undefined {
   const value = units.toString();
   return value.length > MAX_ATOMIC_DIGITS
     ? undefined
-    : { currency: "USD", units: value, exponent: FACILITATOR_DISCOVERY_ASSET_EXPONENT };
+    : { currency: "USDC", units: value, exponent };
 }
 
 export function admittedFacilitatorDiscoveryDraft(
@@ -350,16 +394,15 @@ export function admittedFacilitatorDiscoveryDraft(
 ): FacilitatorDiscoveryAdmittedDraft {
   const materialTerms = [
     ...normalized.offering.presentation.materialTerms,
-    { termId: "provider-amount", label: "Provider quote", value: `${decision.price.provider.units} atomic USDC units (exponent 6)` },
-    { termId: "platform-fee", label: "Platform fee", value: `${decision.price.platformFee.units} atomic USDC units (1000 bps)` },
-    { termId: "buyer-total", label: "Buyer total", value: `${decision.price.total.units} atomic USDC units` },
+    { termId: "provider-amount", label: "Listed Provider amount", value: formatCurrencyAmount(decision.price.provider) },
+    { termId: "buyer-total", label: "Buyer total", value: "Confirmed in AUD by a binding Quote for your input." },
   ].slice(0, 64);
   const offering: FacilitatorDiscoveryAdmittedDraft["offering"] = {
     ...normalized.offering,
     origin: { kind: "standalone" },
     presentation: {
       ...normalized.offering.presentation,
-      price: { kind: "fixed", amount: decision.price.total },
+      price: { kind: "on_request" },
       materialTerms,
     },
   };
@@ -375,8 +418,14 @@ export function admittedFacilitatorDiscoveryDraft(
     offering,
     binding,
     execution: {
+      // Identity is the bare callable endpoint. The full discovery resourceUrl,
+      // which may carry example parameter values, stays on the source import's
+      // resource and on the binding's endpointUrl for execution, and in the
+      // toolRef digest so distinct resources at one path never collide.
       endpoint: { url: decision.identity.origin + decision.identity.path },
       method: decision.identity.method,
+      ...(config.bodyPointer === undefined ? {} : { bodyPointer: config.bodyPointer }),
+      ...(config.queryObjectPointer === undefined ? {} : { queryObjectPointer: config.queryObjectPointer }),
       ...(query === undefined ? {} : { query }),
     },
     price: decision.price,
@@ -385,16 +434,16 @@ export function admittedFacilitatorDiscoveryDraft(
   };
 }
 
-function normalizedHttpIdentity(
-  endpoint: string,
-  method: "GET" | "POST",
-): Readonly<{ method: "GET" | "POST"; origin: string; path: string }> {
+type DiscoveryHttpIdentity = Readonly<{
+  method: "GET" | "POST"; origin: string; path: string; resourceUrl: string; network: string; asset: string;
+}>;
+function normalizedHttpIdentity(endpoint: string, method: "GET" | "POST", network: string, asset: string): DiscoveryHttpIdentity {
   const parsed = new URL(endpoint);
-  return { method, origin: parsed.origin, path: parsed.pathname || "/" };
+  return { method, origin: parsed.origin, path: parsed.pathname || "/", resourceUrl: parsed.href, network, asset: asset.toLowerCase() };
 }
 
 function capabilityIdFromIdentity(
-  identity: Readonly<{ method: "GET" | "POST"; origin: string; path: string }>,
+  identity: DiscoveryHttpIdentity,
 ): string {
   const host = new URL(identity.origin).hostname
     .replace(/^www\./u, "")
@@ -403,13 +452,13 @@ function capabilityIdFromIdentity(
     .toLowerCase();
   const path = identity.path.replace(/^\//u, "").replace(/[^a-z0-9]+/giu, "-")
     .replace(/^-|-$/gu, "").toLowerCase();
-  return `${identity.method.toLowerCase()}.${host || "endpoint"}.${path || "root"}`.slice(0, 190);
+  return `${`${identity.method.toLowerCase()}.${host || "endpoint"}.${path || "root"}`.slice(0, 115)}.${canonicalDigest({ method: identity.method, url: identity.resourceUrl, network: identity.network, asset: identity.asset }).slice(7)}`;
 }
 
 function admittedResourceUrl(resourceUrl: string): string | undefined {
   const parsed = validPublicHttpsEndpoint(resourceUrl);
   if (parsed === undefined || parsed.hash !== "") return undefined;
-  return `${parsed.origin}${parsed.pathname || "/"}`;
+  return parsed.href;
 }
 
 function boundedResourceText(value: unknown, maximum: number): string | undefined {
@@ -489,7 +538,7 @@ function discoveryOfferingLabel(
 }
 
 function humanizeDiscoveryCapabilityId(capabilityId: string): string {
-  const path = capabilityId.split(".").slice(2).join("-");
+  const path = capabilityId.replace(/\.[a-f0-9]{64}$/, "").split(".").slice(2).join("-");
   const tokens = path
     .split(/[-_]+/u)
     .map((token) => token.trim().toLowerCase())

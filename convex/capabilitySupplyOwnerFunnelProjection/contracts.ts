@@ -18,6 +18,7 @@ const ownerSupplyLifecycleReasonValue = v.union(
   v.literal('withdrawn'),
   v.literal('incompatible_revision'),
   v.literal('eligibility_integrity_failure'),
+  v.literal('provider_authority_unverified'),
 )
 const ownerSupplyAuthorityValue = v.union(
   v.object({ kind: v.literal('public_upstream') }),
@@ -42,7 +43,7 @@ const ownerSupplyPublicationValue = v.object({
   ),
   publicationRef: v.string(),
   publicationRevision: v.number(),
-  operationRef: v.string(),
+  toolRef: v.string(),
   authorityMode: v.union(
     v.literal('provider_owned'),
     v.literal('ae_curated_external'),
@@ -101,6 +102,34 @@ const ownerSupplyPublicationValue = v.object({
   }),
 })
 
+const ownerSupplyToolEvidenceValue = v.object({
+  windowStartAt: v.number(),
+  windowEndAt: v.number(),
+  delivery: v.union(
+    v.object({ kind: v.literal('unobserved'), provenance: v.literal('canonical_call_receipts') }),
+    v.object({ kind: v.literal('unavailable'), reason: v.literal('window_too_large'), provenance: v.literal('canonical_call_receipts') }),
+    v.object({
+      kind: v.literal('observed'),
+      deliveredCount: v.number(),
+      notDeliveredCount: v.number(),
+      unknownCount: v.number(),
+      sampleSize: v.number(),
+      lastObservedAt: v.number(),
+      provenance: v.literal('canonical_call_receipts'),
+    }),
+  ),
+  usefulOutcome: v.union(
+    v.object({ kind: v.literal('unobserved'), provenance: v.literal('qualified_use_receipts') }),
+    v.object({ kind: v.literal('unavailable'), reason: v.literal('window_too_large'), provenance: v.literal('qualified_use_receipts') }),
+    v.object({
+      kind: v.literal('observed'),
+      qualifiedUseCount: v.number(),
+      lastObservedAt: v.number(),
+      provenance: v.literal('qualified_use_receipts'),
+    }),
+  ),
+})
+
 /** Bounded owner readback for the admitted source and single-player panel. */
 export const ownerSupplyFunnelResultValue = v.union(
   v.object({ kind: v.literal('error'), code: v.literal('unauthenticated') }),
@@ -121,6 +150,13 @@ export const ownerSupplyFunnelResultValue = v.union(
           v.literal('published'),
           v.literal('paused'),
           v.literal('retired'),
+        ),
+        managementStatus: v.union(
+          v.literal('Validating'),
+          v.literal('Live'),
+          v.literal('Action needed'),
+          v.literal('Degraded'),
+          v.literal('Removed'),
         ),
         sourceHash: v.optional(v.string()),
         sourceMaterial: v.optional(preparedPublicationMaterialValue),
@@ -164,7 +200,7 @@ export const ownerSupplyFunnelResultValue = v.union(
           state: v.union(v.literal('not_admitted'), v.literal('admitted')),
           reason: v.optional(v.string()),
         }),
-        operationRef: v.optional(v.string()),
+        toolRef: v.optional(v.string()),
         publicationRef: v.optional(v.string()),
         publication: v.optional(ownerSupplyPublicationValue),
         lifecycle: v.object({
@@ -223,6 +259,7 @@ export const ownerSupplyFunnelResultValue = v.union(
           ),
         }),
         actionableReason: v.optional(v.string()),
+        toolEvidence: v.optional(ownerSupplyToolEvidenceValue),
         accessPaths: v.array(
           v.object({
             accessPathRef: v.string(),

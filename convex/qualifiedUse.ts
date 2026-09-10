@@ -15,11 +15,8 @@ import {
   QUALIFIED_USE_EXCLUSIONS,
   type QualifiedUseReceipt,
 } from '../src/modules/money/public'
-import {
-  recordQualifiedUsePayoutAllocation,
-  resolveCanonicalInvocationAuthority,
-  type CanonicalQualifiedUseAuthority,
-} from './lib/qualifiedUsePayout'
+import { resolveCanonicalCallAuthority } from './lib/qualifiedUsePayout/authority'
+import type { CanonicalQualifiedUseAuthority } from './lib/qualifiedUsePayout/contracts'
 import type { Id } from './_generated/dataModel'
 import { recordMarketEvidenceFact } from './marketEvidence'
 
@@ -32,11 +29,11 @@ const principalClassValue = v.union(
 )
 
 const qualifiedUseMaterialArgs = {
-  invocationRef: identifier,
+  callRef: identifier,
   attemptRef: identifier,
   effectGeneration: v.number(),
   businessId: identifier,
-  operationRef: identifier,
+  toolRef: identifier,
   publicationRef: identifier,
   publicationRevision: v.number(),
   contractDigest: identifier,
@@ -89,11 +86,11 @@ function toReceipt(row: Doc<'qualifiedUseReceipts'>): QualifiedUseReceipt {
   return {
     qualifiedUseRef: row.qualifiedUseRef,
     materialDigest: row.materialDigest,
-    invocationRef: row.invocationRef,
+    callRef: row.callRef,
     attemptRef: row.attemptRef,
     effectGeneration: row.effectGeneration,
     businessId: row.businessId,
-    operationRef: row.operationRef,
+    toolRef: row.toolRef,
     publicationRef: row.publicationRef,
     publicationRevision: row.publicationRevision,
     contractDigest: row.contractDigest,
@@ -124,26 +121,26 @@ function receiptAuthorityMatches(
 }
 
 /**
- * A supplier invoking its own operation does not accrue Qualified Use, so the
- * account pinned by the invocation's delegation grant is compared against the
- * supplying business owner account. Unknown grants are treated as third
+ * A Provider Call to its own Tool does not accrue Qualified Use, so the
+ * account pinned by the Call's delegation grant is compared against the
+ * Provider business owner account. Unknown grants are treated as third
  * parties: the caller already proved authorization before reaching delivery.
  */
-async function isOwnerSelfInvocation(
+async function isOwnerSelfCall(
   ctx: QueryCtx,
-  invocationRef: string,
+  callRef: string,
   businessId: string,
 ): Promise<boolean> {
-  const invocation = await ctx.db
-    .query('capabilityOperationInvocations')
-    .withIndex('by_invocationRef', (q) => q.eq('invocationRef', invocationRef))
+  const call = await ctx.db
+    .query('capabilityCalls')
+    .withIndex('by_callRef', (q) => q.eq('callRef', callRef))
     .unique()
-  if (invocation === null) return false
+  if (call === null) return false
   const grant = await ctx.db
     .query('authorityDelegationGrants')
-    .withIndex('by_grantRef', (q) => q.eq('grantRef', invocation.grantRef))
+    .withIndex('by_grantRef', (q) => q.eq('grantRef', call.grantRef))
     .unique()
-  if (grant === null || grant.generation !== invocation.grantGeneration) return false
+  if (grant === null || grant.generation !== call.grantGeneration) return false
   const business = await ctx.db.get(businessId as Id<'businesses'>)
   return business !== null && business.owningAccountRef === grant.accountRef
 }
@@ -172,22 +169,22 @@ export const recordQualifiedUse = internalMutation({
       environment: args.environment,
       contractValidOutput: true,
       releaseOutcome: 'released',
-      ownerSelfInvocation: await isOwnerSelfInvocation(
+      ownerSelfCall: await isOwnerSelfCall(
         ctx,
-        args.invocationRef,
+        args.callRef,
         args.businessId,
       ),
       refundedBeforeDelivery: false,
     })
     if (eligibility.kind === 'excluded')
       return { kind: 'excluded' as const, reason: eligibility.reason }
-    const authority = await resolveCanonicalInvocationAuthority(
+    const authority = await resolveCanonicalCallAuthority(
       ctx,
-      args.invocationRef,
+      args.callRef,
     )
     if (authority.authorityPrincipalRef !== args.principalId)
       throw new Error('qualified_use_payout_allocation_invalid')
-    if (authority.authorityResourceRef !== args.operationRef)
+    if (authority.authorityResourceRef !== args.toolRef)
       throw new Error('qualified_use_authority_invalid')
     const candidate = buildQualifiedUseReceipt(args)
     const existingRow = await ctx.db
@@ -213,38 +210,8 @@ export const recordQualifiedUse = internalMutation({
       case 'refused':
         return { kind: 'refused' as const, code: decision.code }
       case 'replay':
-        if (
-          decision.receipt.usageRef !== undefined &&
-          decision.receipt.transactionRef !== undefined
-        ) {
-          const allocationResult = await recordQualifiedUsePayoutAllocation(
-            ctx,
-            decision.receipt,
-            args.principalId,
-          )
-          if (allocationResult === 'excluded_refunded_before_delivery')
-            return {
-              kind: 'excluded' as const,
-              reason: 'refunded_before_delivery' as const,
-            }
-        }
         return { kind: 'replayed' as const, receipt: toWire(decision.receipt) }
       case 'write': {
-        if (
-          decision.receipt.usageRef !== undefined &&
-          decision.receipt.transactionRef !== undefined
-        ) {
-          const allocationResult = await recordQualifiedUsePayoutAllocation(
-            ctx,
-            decision.receipt,
-            args.principalId,
-          )
-          if (allocationResult === 'excluded_refunded_before_delivery')
-            return {
-              kind: 'excluded' as const,
-              reason: 'refunded_before_delivery' as const,
-            }
-        }
         await ctx.db.insert('qualifiedUseReceipts', {
           ...toWire(decision.receipt),
           ...authority,
@@ -254,6 +221,7 @@ export const recordQualifiedUse = internalMutation({
           'ae_qualified_use',
           decision.receipt.qualifiedUseRef,
           decision.receipt.qualifiedAt,
+          { toolRef: decision.receipt.toolRef },
         )
         return { kind: 'recorded' as const, receipt: toWire(decision.receipt) }
       }
@@ -265,14 +233,14 @@ export const recordQualifiedUse = internalMutation({
   },
 })
 
-export const readQualifiedUseByInvocation = internalQuery({
-  args: { invocationRef: identifier },
+export const readQualifiedUseByCall = internalQuery({
+  args: { callRef: identifier },
   returns: v.union(qualifiedUseReceiptValue, v.null()),
   handler: async (ctx, args) => {
     const row = await ctx.db
       .query('qualifiedUseReceipts')
-      .withIndex('by_invocationRef', (q) =>
-        q.eq('invocationRef', args.invocationRef),
+      .withIndex('by_callRef', (q) =>
+        q.eq('callRef', args.callRef),
       )
       .first()
     return row === null ? null : toWire(toReceipt(row))

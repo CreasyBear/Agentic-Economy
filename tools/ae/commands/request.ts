@@ -9,7 +9,7 @@ import type { CliOptions } from '../lib/args'
 import { continuationCommand } from '../lib/continuation-command'
 import { usageFailure } from '../lib/help'
 import { CliFailure, callJson, heading, line, printJson, requireOk, table } from '../lib/output'
-import { operationLabel } from '../lib/operation-format'
+import { toolLabel } from '../lib/tool-format'
 import { requireAgentAccessKey } from './status'
 
 export const MARKET_REQUEST_COMMAND_DESCRIPTORS = Object.freeze([
@@ -42,6 +42,22 @@ function descriptor(subcommand: 'create' | 'list' | 'status') {
   return found
 }
 
+function continuationFlags(options: Pick<CliOptions, 'baseUrl' | 'baseUrlSource' | 'json'>): readonly string[] {
+  return [
+    ...(options.baseUrlSource === undefined || options.baseUrlSource === 'hosted_default'
+      ? []
+      : ['--base-url', options.baseUrl]),
+    ...(options.json ? ['--json'] : []),
+  ]
+}
+
+function requestContinuation(
+  options: Pick<CliOptions, 'baseUrl' | 'baseUrlSource' | 'json'>,
+  tokens: readonly (string | number | undefined)[],
+): string {
+  return continuationCommand([...tokens, ...continuationFlags(options)])
+}
+
 async function createRequest(args: readonly string[], options: CliOptions): Promise<void> {
   const query = args.slice(1).join(' ').trim()
   const input = marketRequestCreateAction.schema.safeParse({
@@ -64,13 +80,13 @@ async function createRequest(args: readonly string[], options: CliOptions): Prom
   }
   if (parsed.data.kind === 'refused') {
     const nextCommand = parsed.data.code === 'current_match_exists'
-      ? continuationCommand(['ae', 'search', query])
+      ? requestContinuation(options, ['ae', 'search', query])
       : parsed.data.code === 'idempotency_conflict'
-        ? 'ae request create <job> --idempotency-key <new-key>'
+        ? requestContinuation(options, ['ae', 'request', 'create', '<job>', '--idempotency-key', '<new-key>'])
         : undefined
     throw new CliFailure(
       parsed.data.code === 'current_match_exists'
-        ? 'Current Market Operations already match this job; nothing was recorded.'
+        ? 'Current Market Tools already match this job; nothing was recorded.'
         : parsed.data.code === 'idempotency_conflict'
           ? 'That idempotency key already identifies a different market request.'
           : 'The missing job could not be recorded.',
@@ -81,7 +97,7 @@ async function createRequest(args: readonly string[], options: CliOptions): Prom
       },
     )
   }
-  const nextCommand = continuationCommand(['ae', 'request', 'status', parsed.data.requestRef])
+  const nextCommand = requestContinuation(options, ['ae', 'request', 'status', parsed.data.requestRef])
   if (options.json) {
     printJson({ ...parsed.data, nextCommand })
     return
@@ -116,7 +132,7 @@ async function listRequests(args: readonly string[], options: CliOptions): Promi
     })
   }
   const nextCommand = parsed.data.hasMore && parsed.data.nextCursor !== undefined
-    ? continuationCommand([
+    ? requestContinuation(options, [
         'ae', 'request', 'list',
         ...(options.limit === undefined ? [] : ['--limit', options.limit]),
         '--cursor', parsed.data.nextCursor,
@@ -129,7 +145,7 @@ async function listRequests(args: readonly string[], options: CliOptions): Promi
   heading('Private market requests')
   if (parsed.data.items.length === 0) {
     line('No missing jobs have been remembered for this connection.')
-    line('Search first: ae search <job>')
+    line(`Search first: ${requestContinuation(options, ['ae', 'search', '<job>'])}`)
     return
   }
   for (const item of parsed.data.items) {
@@ -137,7 +153,7 @@ async function listRequests(args: readonly string[], options: CliOptions): Promi
       ['request', item.requestRef],
       ['job', item.query],
       ['recorded', new Date(item.createdAt).toISOString()],
-      ['check', continuationCommand(['ae', 'request', 'status', item.requestRef])],
+      ['check', requestContinuation(options, ['ae', 'request', 'status', item.requestRef])],
     ])
     line()
   }
@@ -161,9 +177,9 @@ async function requestStatus(args: readonly string[], options: CliOptions): Prom
     })
   }
   const nextCommand = parsed.data.kind === 'matched'
-    ? continuationCommand(['ae', 'inspect', parsed.data.operations[0]?.operationRef ?? ''])
+    ? requestContinuation(options, ['ae', 'describe', parsed.data.tools[0]?.toolRef ?? ''])
     : parsed.data.kind === 'open'
-      ? continuationCommand(['ae', 'request', 'status', parsed.data.requestRef])
+      ? requestContinuation(options, ['ae', 'request', 'status', parsed.data.requestRef])
       : undefined
   if (options.json) {
     printJson(nextCommand === undefined ? parsed.data : { ...parsed.data, nextCommand })
@@ -172,7 +188,7 @@ async function requestStatus(args: readonly string[], options: CliOptions): Prom
   heading('Market request status')
   if (parsed.data.kind === 'not_found') {
     line('No private request with that reference belongs to this connection.')
-    line('Next: ae request list')
+    line(`Next: ${requestContinuation(options, ['ae', 'request', 'list'])}`)
     return
   }
   if (parsed.data.kind === 'error') {
@@ -187,11 +203,11 @@ async function requestStatus(args: readonly string[], options: CliOptions): Prom
     ['matches', String(parsed.data.matchedCount)],
   ])
   if (parsed.data.kind === 'matched') {
-    for (const operation of parsed.data.operations) {
-      line(`  ${operationLabel(operation)} — ${operation.operationRef}`)
+    for (const tool of parsed.data.tools) {
+      line(`  ${toolLabel(tool)} — ${tool.toolRef}`)
     }
   } else {
-    line('No current canonical Operation matches yet.')
+    line('No current canonical Tool matches yet.')
   }
   if (nextCommand !== undefined) line(`Next: ${nextCommand}`)
 }

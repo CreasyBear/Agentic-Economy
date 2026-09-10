@@ -2,6 +2,7 @@ import { convexTest, type TestConvex } from 'convex-test'
 import { register as registerWorkpool } from '@convex-dev/workpool/test'
 import { register as registerRateLimiter } from '@convex-dev/rate-limiter/test'
 import { register as registerAggregate } from '@convex-dev/aggregate/test'
+import { register as registerWorkflow } from '@convex-dev/workflow/test'
 import agentTest from '@convex-dev/agent/test'
 import { api, components } from '../../convex/_generated/api'
 import type { Id } from '../../convex/_generated/dataModel'
@@ -14,6 +15,7 @@ import {
   type CapabilityPublicationImport,
   type CapabilityPublicationOfferingDraft,
 } from '@/modules/capability-supply/public'
+import { rescaleExactAmount } from '@/modules/money/public'
 export type ConvexFixtureBackend = TestConvex<typeof schema>
 export type ConvexFixtureAdmin = Pick<
   ConvexFixtureBackend,
@@ -31,13 +33,15 @@ export type ConvexTestWithWorkersOptions = Readonly<{
 
 export function convexTestWithMarketComponents() {
   const backend = convexTest(schema, convexModules)
+  registerWorkflow(backend)
   registerRateLimiter(backend)
   agentTest.register(backend)
   registerAggregate(backend, 'marketEvidence')
   registerAggregate(backend, 'marketOperationEvidence')
-  registerAggregate(backend, 'marketOperationRatings')
-  registerAggregate(backend, 'marketActiveOperations')
-  registerAggregate(backend, 'marketActiveSuppliers')
+  registerAggregate(backend, 'marketToolRatings')
+  registerAggregate(backend, 'marketActiveTools')
+  registerAggregate(backend, 'marketActiveProviders')
+  registerAggregate(backend, 'marketDirectoryFacets')
   return backend
 }
 
@@ -46,9 +50,13 @@ export function convexTestWithWorkers(
 ) {
   const backend = convexTestWithMarketComponents()
   registerWorkpool(backend)
+  registerWorkpool(backend, 'stripeWebhookWorkpool')
   if (options.pauseWorkpool === true) {
     void backend.run(async (ctx) => {
       await ctx.runMutation(components.workpool.config.update, {
+        maxParallelism: 0,
+      })
+      await ctx.runMutation(components.stripeWebhookWorkpool.config.update, {
         maxParallelism: 0,
       })
     })
@@ -414,13 +422,15 @@ export async function prepareCapabilityPublicationMutation(
   if (price.kind !== 'fixed' && input.pricingConfig === undefined) {
     throw new Error('capability_publication_fixture_price_missing')
   }
+  const fixedAudAmount = price.kind === 'fixed'
+    ? rescaleExactAmount(price.amount, 6)
+    : undefined
   const pricingConfig = input.pricingConfig ?? {
-    version: 'pricing:v2' as const,
-    unit: 'call' as const,
-    paidAmount:
-      price.kind === 'fixed'
-        ? price.amount
-        : { currency: 'AUD' as const, units: '0', exponent: 2 },
+    version: 'pricing:v3' as const,
+    kind: 'fixed_aud' as const,
+    currency: 'AUD' as const,
+    exponent: 6 as const,
+    amountUnits: fixedAudAmount?.units ?? '0',
   }
   const catalog = await backend.run(async (ctx) => {
     const offeringRows = await ctx.db

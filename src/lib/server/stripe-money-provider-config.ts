@@ -1,9 +1,8 @@
-import Stripe from "stripe";
+import type Stripe from "stripe";
 
 import { canonicalDigest } from "@/modules/common/canonical-digest";
 import {
   exactAmountSchema,
-  isMoneyRefusal,
   rescaleExactAmount,
   type ExactAmount,
   type MoneyRefusal,
@@ -12,6 +11,15 @@ import {
 const MAX_WEBHOOK_BODY_BYTES = 256 * 1024;
 const MAX_PROVIDER_IDENTIFIER_LENGTH = 500;
 
+/** Stripe env names `readStripeMoneyProviderConfig` reads to build a money provider config. */
+export const STRIPE_MONEY_ENV_NAMES = [
+  "STRIPE_SECRET_KEY",
+  "STRIPE_WEBHOOK_SECRET",
+  "STRIPE_V2_WEBHOOK_SECRET",
+  "STRIPE_AU_INCLUSIVE_GST_TAX_RATE_ID",
+  "STRIPE_CHECKOUT_HOST",
+] as const;
+
 type Environment = Readonly<Record<string, string | undefined>>;
 
 export type StripeMoneyMode = "test" | "live";
@@ -19,8 +27,10 @@ export type StripeMoneyClient = Stripe;
 
 export type StripeMoneyProviderConfig = Readonly<{
   secretKey: string;
-  webhookSecret: string;
-  publishableKey: string;
+  webhookSecret?: string;
+  v2WebhookSecret?: string;
+  inclusiveGstTaxRateId?: string;
+  checkoutHost?: string;
   mode: StripeMoneyMode;
 }>;
 
@@ -42,14 +52,15 @@ export function readStripeMoneyProviderConfig(
 ): StripeMoneyProviderConfig | MoneyRefusal {
   const secretKey = readEnvironmentValue(env, "STRIPE_SECRET_KEY");
   const webhookSecret = readEnvironmentValue(env, "STRIPE_WEBHOOK_SECRET");
-  const publishableKey = readEnvironmentValue(
+  const v2WebhookSecret = readEnvironmentValue(env, "STRIPE_V2_WEBHOOK_SECRET");
+  const inclusiveGstTaxRateId = readEnvironmentValue(
     env,
-    "VITE_STRIPE_PUBLISHABLE_KEY",
+    "STRIPE_AU_INCLUSIVE_GST_TAX_RATE_ID",
   );
+  const checkoutHost = readEnvironmentValue(env, "STRIPE_CHECKOUT_HOST");
   if (
     secretKey === undefined ||
-    webhookSecret === undefined ||
-    publishableKey === undefined
+    webhookSecret === undefined
   ) {
     return refusal("stripe_setup_required", false);
   }
@@ -57,7 +68,9 @@ export function readStripeMoneyProviderConfig(
     {
       secretKey,
       webhookSecret,
-      publishableKey,
+      ...(v2WebhookSecret === undefined ? {} : { v2WebhookSecret }),
+      ...(inclusiveGstTaxRateId === undefined ? {} : { inclusiveGstTaxRateId }),
+      ...(checkoutHost === undefined ? {} : { checkoutHost }),
       mode: modeFromSecretKey(secretKey) ?? "test",
     },
     expectedMode,
@@ -69,39 +82,39 @@ export function validateStripeMoneyProviderConfig(
   expectedMode?: StripeMoneyMode,
 ): StripeMoneyProviderConfig | MoneyRefusal {
   const secretMode = modeFromSecretKey(config.secretKey);
-  const publishableMode = modeFromPublishableKey(config.publishableKey);
   if (
     secretMode === undefined ||
-    publishableMode === undefined ||
-    secretMode !== publishableMode ||
     config.mode !== secretMode ||
     (expectedMode !== undefined && secretMode !== expectedMode) ||
-    !/^whsec_[A-Za-z0-9_-]+$/u.test(config.webhookSecret)
+    (config.webhookSecret !== undefined && !/^whsec_[A-Za-z0-9_-]+$/u.test(config.webhookSecret)) ||
+    (config.v2WebhookSecret !== undefined && !/^whsec_[A-Za-z0-9_-]+$/u.test(config.v2WebhookSecret))
   )
     return refusal("stripe_setup_required", false);
   return config;
 }
 
-export function resolveStripeMoneyProviderContext(
-  input: StripeMoneyProviderInput,
-): StripeMoneyProviderContext | MoneyRefusal {
-  const configResult =
-    input.config === undefined
-      ? readStripeMoneyProviderConfig(input.env ?? process.env, input.mode)
-      : validateStripeMoneyProviderConfig(input.config, input.mode);
-  if (isMoneyRefusal(configResult)) return configResult;
-  return {
-    config: configResult,
-    client: input.client ?? createStripeMoneyClient(configResult.secretKey),
-  };
-}
-
-export function createStripeMoneyClient(secretKey: string): StripeMoneyClient {
-  return new Stripe(secretKey, {
-    apiVersion: Stripe.API_VERSION,
-    maxNetworkRetries: 0,
-    typescript: true,
-  });
+export function readStripeMoneyReadbackProviderConfig(
+  env: Environment = process.env,
+  expectedMode?: StripeMoneyMode,
+): StripeMoneyProviderConfig | MoneyRefusal {
+  const secretKey = readEnvironmentValue(env, "STRIPE_READBACK_KEY");
+  if (secretKey === undefined || !/^rk_(?:test|live)_[A-Za-z0-9_-]+$/u.test(secretKey)) {
+    return refusal("stripe_setup_required", false);
+  }
+  const inclusiveGstTaxRateId = readEnvironmentValue(
+    env,
+    "STRIPE_AU_INCLUSIVE_GST_TAX_RATE_ID",
+  );
+  const checkoutHost = readEnvironmentValue(env, "STRIPE_CHECKOUT_HOST");
+  return validateStripeMoneyProviderConfig(
+    {
+      secretKey,
+      mode: modeFromSecretKey(secretKey) ?? "test",
+      ...(inclusiveGstTaxRateId === undefined ? {} : { inclusiveGstTaxRateId }),
+      ...(checkoutHost === undefined ? {} : { checkoutHost }),
+    },
+    expectedMode,
+  );
 }
 
 export function refusal(
@@ -220,14 +233,8 @@ function readEnvironmentValue(
 }
 
 function modeFromSecretKey(value: string): StripeMoneyMode | undefined {
-  if (/^sk_test_[A-Za-z0-9_-]+$/u.test(value)) return "test";
-  if (/^sk_live_[A-Za-z0-9_-]+$/u.test(value)) return "live";
-  return undefined;
-}
-
-function modeFromPublishableKey(value: string): StripeMoneyMode | undefined {
-  if (/^pk_test_[A-Za-z0-9_-]+$/u.test(value)) return "test";
-  if (/^pk_live_[A-Za-z0-9_-]+$/u.test(value)) return "live";
+  if (/^(?:sk|rk)_test_[A-Za-z0-9_-]+$/u.test(value)) return "test";
+  if (/^(?:sk|rk)_live_[A-Za-z0-9_-]+$/u.test(value)) return "live";
   return undefined;
 }
 

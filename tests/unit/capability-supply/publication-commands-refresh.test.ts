@@ -4,9 +4,9 @@ import {
   refreshCapabilityCommand,
 } from '@/modules/capability-supply/internal/publication'
 import {
-  capabilityOperationId,
+  capabilityToolId,
   capabilityPublicationProvenanceDigest,
-  createPublicOperationRef,
+  createPublicToolRef,
 } from '@/modules/capability-supply/public'
 import {
   rotateCapabilityTransportBindingAuthority,
@@ -23,11 +23,9 @@ import {
   bindingDraft,
   context,
   currentPublication,
-  digest,
   emptyPorts,
   encodedFor,
   offeringDraft,
-  preparedPublication,
   publicationFixture,
   publicationSource,
   supplyRows,
@@ -36,14 +34,14 @@ import {
 
 type RotationFixture = PublicationFixture & Readonly<{
   previousAuthority: NonNullable<PublicationFixture['binding']['connectionAuthority']>
-  previousOperationRef: ReturnType<typeof createPublicOperationRef>
-  nextOperationRef: ReturnType<typeof createPublicOperationRef>
+  previousToolRef: ReturnType<typeof createPublicToolRef>
+  nextToolRef: ReturnType<typeof createPublicToolRef>
 }>
 
 async function rotationFixture(): Promise<RotationFixture> {
   const fixture = await publicationFixture()
-  const nextOperationRef = createPublicOperationRef({
-    operationId: capabilityOperationId(fixture.ref.capabilityId),
+  const nextToolRef = createPublicToolRef({
+    operationId: capabilityToolId(fixture.ref.capabilityId),
     publicationRef: fixture.publication.publicationRef,
     publicationRevision: fixture.publication.revision + 1,
     contractRef: fixture.ref,
@@ -51,8 +49,8 @@ async function rotationFixture(): Promise<RotationFixture> {
   return {
     ...fixture,
     previousAuthority: fixture.binding.connectionAuthority!,
-    previousOperationRef: fixture.publication.operationRef,
-    nextOperationRef,
+    previousToolRef: fixture.publication.toolRef,
+    nextToolRef,
   }
 }
 
@@ -66,8 +64,8 @@ function rotationInput(fixture: RotationFixture) {
     providerRef: fixture.providerConnection.providerRef,
     adapterId: fixture.providerConnection.adapterId,
     previousAuthority: fixture.previousAuthority,
-    previousOperationRef: fixture.previousOperationRef,
-    nextOperationRef: fixture.nextOperationRef,
+    previousToolRef: fixture.previousToolRef,
+    nextToolRef: fixture.nextToolRef,
   }
 }
 
@@ -110,7 +108,7 @@ describe('capability-supply publication commands refresh', () => {
         adapterId: fixture.providerConnection.adapterId,
         authorityGeneration: fixture.providerConnection.authorityGeneration,
         authorityDigest: fixture.providerConnection.authorityDigest,
-        operationRef: fixture.nextOperationRef,
+        toolRef: fixture.nextToolRef,
       },
       updatedAt: 10,
     })
@@ -118,8 +116,8 @@ describe('capability-supply publication commands refresh', () => {
 
   it('refuses stale prior operation, generation, or digest without patching', async () => {
     const fixture = await rotationFixture()
-    const stalePriorOperation = createPublicOperationRef({
-      operationId: capabilityOperationId(fixture.binding.capabilityId),
+    const stalePriorTool = createPublicToolRef({
+      operationId: capabilityToolId(fixture.binding.capabilityId),
       publicationRef: fixture.binding.offeringId,
       publicationRevision: 9,
       contractRef: {
@@ -145,7 +143,7 @@ describe('capability-supply publication commands refresh', () => {
     }> = [
       {
         name: 'prior operation',
-        input: { ...rotationInput(fixture), previousOperationRef: stalePriorOperation },
+        input: { ...rotationInput(fixture), previousToolRef: stalePriorTool },
         connection: fixture.providerConnection,
       },
       {
@@ -284,19 +282,9 @@ describe('capability-supply publication commands refresh', () => {
   })
 
   it('refreshes compatible and schedules readiness probe', async () => {
-    const publication = currentPublication({
-      connectionAuthority: {
-        connectionRef: 'connection:demo',
-        providerRef: 'provider:demo',
-        adapterId: 'http-json:v1',
-        authorityGeneration: 1,
-        authorityDigest: digest,
-        operationRef: currentPublication().operationRef,
-        grantedScopes: [],
-        grantedResources: [],
-      },
-    })
-    const prepared = await preparedPublication(publication.capabilityId, publication.version)
+    const fixture = await publicationFixture()
+    const publication = { ...fixture.publication, disposition: 'current' as const }
+    const prepared = fixture.prepared
     const encoded = encodedFor(publication.capabilityId, publication.version)
     const schedule = vi.fn(async () => {})
     const insertPublication = vi.fn(async () => {})
@@ -304,8 +292,8 @@ describe('capability-supply publication commands refresh', () => {
     const result = await refreshCapabilityCommand({
       publication,
       source: publicationSource(publication.capabilityId, publication.version),
-      offering: offeringDraft(),
-      binding: bindingDraft(),
+      offering: prepared.offering,
+      binding: prepared.binding,
       ...context,
       now: 10,
     }, emptyPorts({
@@ -314,7 +302,8 @@ describe('capability-supply publication commands refresh', () => {
         contract: encoded.contract,
         registeredAt: 1,
       }),
-      ...supplyRows(publication),
+      loadOfferingByOfferingId: async () => fixture.offering,
+      loadBindingByBindingId: async () => fixture.binding,
       scheduleReadinessProbe: schedule,
       insertPublication,
       rotateProviderConnectionBindingAuthority: rotate,
@@ -332,7 +321,7 @@ describe('capability-supply publication commands refresh', () => {
     expect(schedule).toHaveBeenCalledWith(publication.publicationRef, 2)
     expect(rotate).toHaveBeenCalledWith(expect.objectContaining({
       bindingId: publication.bindingId,
-      previousOperationRef: publication.operationRef,
+      previousToolRef: publication.toolRef,
     }), 10)
 
     const normalized = await publicationImporters.normalizeCapabilityPublication(

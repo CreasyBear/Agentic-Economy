@@ -50,13 +50,13 @@ function fieldLimit(field: string): number | undefined {
 }
 
 /**
- * Test-only mutating action for Action Invocation control-plane tests.
+ * Test-only mutating action for Action execution control-plane tests.
  * Not registered in the product action list.
  */
 export const durableWriteFixtureAction: Action<DurableWriteFixtureInput, ActionResult> = defineAction({
   id: 'test.durable_write',
   name: 'Durable write fixture',
-  summary: 'Development-only mutating fixture for Action Invocation tests.',
+  summary: 'Development-only mutating fixture for Action execution tests.',
   boundaries: ['Not a product surface. Never registered in findAction.'],
   schema: durableWriteFixtureInputSchema,
   outputSchema: durableWriteFixtureOutputSchema,
@@ -81,7 +81,7 @@ export const durableWriteFixtureAction: Action<DurableWriteFixtureInput, ActionR
     recipientKind: 'business',
     dataClasses: ['contact', 'query_text'],
     spendExposure: 'none',
-    approval: 'mandate_eligible',
+    approval: 'policy_eligible',
   },
   surfaces: ['agentJson'],
   invocationContract: {

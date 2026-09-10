@@ -41,19 +41,25 @@ async function issueBuyerAgent(
     displayName: 'Market demand reader',
     applicationRef: 'agentic-economy',
     environment: 'sandbox' as const,
-    scopes: ['market_operations:invoke'],
-    authorityMode: 'inspect_only' as const,
-    policy: defaultSandboxAgentAccessPolicy({ currency: 'USD', exponent: 2 }),
+    scopes: ['market_tools:call'],
+    authorityMode: 'read_only' as const,
+    spendingPolicy: defaultSandboxAgentAccessPolicy({ currency: 'USD', exponent: 2 }),
+    toolAccess: 'all_admitted' as const,
+    toolRefs: [],
     createdAt: now,
     expiresAt: now + 600_000,
   }
   const serviceAuth = await createCustomerRequestServiceAssertion({
     key: SERVICE_KEY,
     operation: REGISTER_OPERATION,
-    command: toStableHashValue({ ...input, scopes: [...input.scopes] }),
+    command: toStableHashValue({
+      ...input,
+      scopes: [...input.scopes],
+      toolRefs: [...input.toolRefs],
+    }),
     principal: {
       principalId: 'ae:server-function', ownerId: 'ae:server-function',
-      credentialId: 'ae:server-function', scopes: ['market_operations:invoke'],
+      credentialId: 'ae:server-function', scopes: ['market_tools:call'],
     },
     issuedAt: now,
   })

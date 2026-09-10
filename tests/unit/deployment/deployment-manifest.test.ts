@@ -17,6 +17,7 @@ function productionEnvironment(): Record<string, string> {
     AE_CONVEX_SERVER_FUNCTION_TOKEN: 'convex-server-function-token-long-enough',
     VITE_CLERK_PUBLISHABLE_KEY: 'pk_live_example',
     CLERK_SECRET_KEY: 'sk_live_example',
+    CLERK_WEBHOOK_SIGNING_SECRET: 'whsec_live_example',
     CLERK_JWT_ISSUER_DOMAIN: 'https://clerk.example.com',
     OPENROUTER_API_KEY: 'openrouter-secret-value',
     AE_CHAT_PROXY_SECRET: 'chat-proxy-secret-value-long-enough',
@@ -27,14 +28,36 @@ function productionEnvironment(): Record<string, string> {
     AE_X402_CDP_EXPECTED_EVM_ADDRESS: '0x0000000000000000000000000000000000000001',
     AE_X402_CDP_ACCOUNT_POLICY_ID: '11111111-1111-4111-8111-111111111111',
     AE_X402_CDP_PROJECT_POLICY_ID: '22222222-2222-4222-8222-222222222222',
+    AE_X402_CDP_POLICY_RULES_DIGEST: `sha256:${'a'.repeat(64)}`,
     AE_X402_CDP_CREDENTIAL_GENERATION: '7',
     AE_X402_CUSTODY_ENABLED: 'true',
     AE_X402_CUSTODY_MAX_ATOMIC: '100000000',
     AE_X402_CUSTODY_DAILY_MAX_ATOMIC: '100000000',
     AE_X402_RPC_URLS_JSON: '{"eip155:8453":["https://base.example/rpc"]}',
-    STRIPE_SECRET_KEY: 'sk_live_example',
+    STRIPE_SECRET_KEY: 'rk_live_command_example',
+    STRIPE_READBACK_KEY: 'rk_live_readback_example',
     STRIPE_WEBHOOK_SECRET: 'whsec_live_example',
-    VITE_STRIPE_PUBLISHABLE_KEY: 'pk_live_example',
+    STRIPE_V2_WEBHOOK_SECRET: 'whsec_v2_live_example',
+    STRIPE_AU_INCLUSIVE_GST_TAX_RATE_ID: 'txr_au_gst_10_inclusive',
+    AE_FORMANCE_ENVIRONMENT: 'production',
+    AE_FORMANCE_GATEWAY_URL: 'https://formance.example.com',
+    AE_FORMANCE_LEDGER: 'agentic-economy-production',
+    AE_FORMANCE_REQUEST_TIMEOUT_MS: '10000',
+    AE_FORMANCE_ACCESS_CLIENT_ID: 'access-client-id',
+    AE_FORMANCE_ACCESS_CLIENT_SECRET: 'access-client-secret',
+    AE_PACKAGE5_WRITES_ENABLED: 'true',
+    AE_SUPPLY_HTTP_CREDENTIALS_ENABLED: 'true',
+    AE_SUPPLY_MCP_OAUTH_ENABLED: 'true',
+    AE_PROVIDER_OFFBOARDING_ENABLED: 'true',
+    AE_INFISICAL_BASE_URL: 'https://app.infisical.com',
+    AE_INFISICAL_CUSTOMER_PROJECT_ID: 'project-customer',
+    AE_INFISICAL_CUSTOMER_ENVIRONMENT: 'production',
+    AE_INFISICAL_CUSTOMER_SECRET_PATH: '/agentic-economy/customer',
+    AE_INFISICAL_CUSTOMER_MACHINE_IDENTITY_ID: 'identity-customer',
+    AE_INFISICAL_PLATFORM_PROJECT_ID: 'project-platform',
+    AE_INFISICAL_PLATFORM_ENVIRONMENT: 'production',
+    AE_INFISICAL_PLATFORM_SECRET_PATH: '/agentic-economy/platform',
+    AE_INFISICAL_PLATFORM_MACHINE_IDENTITY_ID: 'identity-platform',
     AE_LLM_MODEL: 'deepseek/deepseek-v4-flash',
     ...Object.fromEntries(SOURCE_WRITE_FAMILIES.map((family) => [
       `AE_SOURCE_WRITE_KEY_${family.toUpperCase()}`,
@@ -53,13 +76,19 @@ describe('deployment manifest validator', () => {
       'web-server',
       'convex-components',
       'agent-access',
+      'formance-financial-authority',
+      'seller-onboarding-canary-funding',
       'durable-invocation-workpool',
+      'durable-stripe-webhook-inbox',
+      'provider-tools-rollout',
       'operation-gateway',
       'convex-scheduled-jobs',
     ])
     const components = result.resources.find((resource) => resource.id === 'convex-components')
     expect((components as { components: readonly string[] }).components).toEqual([
       'workpool',
+      'workpool:stripeWebhookWorkpool',
+      'workflow',
       'rate-limiter',
       'agent',
       'aggregate:ownerActivationByStage',
@@ -68,6 +97,11 @@ describe('deployment manifest validator', () => {
       'aggregate:marketOperationRatings',
       'aggregate:marketActiveOperations',
       'aggregate:marketActiveSuppliers',
+    ])
+    const stripeInbox = result.resources.find((resource) => resource.id === 'durable-stripe-webhook-inbox')
+    expect((stripeInbox as { workerEnvironment: readonly string[] }).workerEnvironment).toEqual([
+      'STRIPE_READBACK_KEY',
+      'STRIPE_AU_INCLUSIVE_GST_TAX_RATE_ID',
     ])
     expect(result.readinessProbes.map((probe) => probe.path)).toEqual(['/api/health', '/api/ready', '/api/v1/release'])
   })
@@ -92,9 +126,9 @@ describe('deployment manifest validator', () => {
       'AE_CONVEX_SERVER_FUNCTION_TOKEN',
       'VITE_CLERK_PUBLISHABLE_KEY',
       'CLERK_SECRET_KEY',
+      'CLERK_WEBHOOK_SIGNING_SECRET',
       'CLERK_JWT_ISSUER_DOMAIN',
       'AE_CANONICAL_BASE_URL',
-      'AE_CANONICAL_HOST_ALLOWLIST',
       'OPENROUTER_API_KEY',
       'AE_LLM_MODEL',
       'AE_CHAT_PROXY_SECRET',
@@ -102,8 +136,72 @@ describe('deployment manifest validator', () => {
       'AE_SOURCE_WRITE_KEY_SESSION',
       'STRIPE_SECRET_KEY',
       'STRIPE_WEBHOOK_SECRET',
-      'VITE_STRIPE_PUBLISHABLE_KEY',
+      'STRIPE_V2_WEBHOOK_SECRET',
+      'STRIPE_AU_INCLUSIVE_GST_TAX_RATE_ID',
+      'AE_PACKAGE5_WRITES_ENABLED',
+      'AE_SUPPLY_HTTP_CREDENTIALS_ENABLED',
+      'AE_SUPPLY_MCP_OAUTH_ENABLED',
+      'AE_PROVIDER_OFFBOARDING_ENABLED',
+      'AE_INFISICAL_BASE_URL',
+      'AE_INFISICAL_CUSTOMER_PROJECT_ID',
+      'AE_INFISICAL_CUSTOMER_ENVIRONMENT',
+      'AE_INFISICAL_CUSTOMER_SECRET_PATH',
+      'AE_INFISICAL_CUSTOMER_MACHINE_IDENTITY_ID',
+      'AE_INFISICAL_PLATFORM_PROJECT_ID',
+      'AE_INFISICAL_PLATFORM_ENVIRONMENT',
+      'AE_INFISICAL_PLATFORM_SECRET_PATH',
+      'AE_INFISICAL_PLATFORM_MACHINE_IDENTITY_ID',
     ]))
+  })
+
+  it('requires every Package 5 rollout switch to be explicitly enabled in controlled deployments', () => {
+    const production = validateDeploymentManifest({
+      ...productionEnvironment(),
+      AE_SUPPLY_MCP_OAUTH_ENABLED: 'false',
+    }, { nodeMajor: 22 })
+    expect(production.findings).toContainEqual({
+      kind: 'malformed',
+      code: 'package5_rollout_not_enabled',
+      names: ['AE_SUPPLY_MCP_OAUTH_ENABLED'],
+      scope: 'package5-rollout',
+    })
+
+    const synthetic = validateDeploymentManifest({
+      NODE_ENV: 'test',
+      AE_PACKAGE4_SANDBOX_DEPLOYMENT_PROFILE: 'synthetic_vps_fixture',
+    }, { environment: 'test', nodeMajor: 22 })
+    expect(synthetic.findings.filter(({ scope }) => scope === 'package5-rollout').flatMap(({ names }) => names))
+      .toEqual(expect.arrayContaining([
+        'AE_PACKAGE5_WRITES_ENABLED',
+        'AE_SUPPLY_HTTP_CREDENTIALS_ENABLED',
+        'AE_SUPPLY_MCP_OAUTH_ENABLED',
+        'AE_PROVIDER_OFFBOARDING_ENABLED',
+      ]))
+  })
+
+  it('requires both Infisical scopes before live Provider Invocation can be enabled', () => {
+    for (const name of [
+      'AE_INFISICAL_CUSTOMER_PROJECT_ID',
+      'AE_INFISICAL_CUSTOMER_ENVIRONMENT',
+      'AE_INFISICAL_CUSTOMER_SECRET_PATH',
+      'AE_INFISICAL_CUSTOMER_MACHINE_IDENTITY_ID',
+      'AE_INFISICAL_PLATFORM_PROJECT_ID',
+      'AE_INFISICAL_PLATFORM_ENVIRONMENT',
+      'AE_INFISICAL_PLATFORM_SECRET_PATH',
+      'AE_INFISICAL_PLATFORM_MACHINE_IDENTITY_ID',
+    ]) {
+      const result = validateDeploymentManifest({
+        ...productionEnvironment(),
+        [name]: '',
+      }, { nodeMajor: 22 })
+
+      expect(result.findings).toContainEqual({
+        kind: 'missing',
+        code: 'provider_secret_plane_required',
+        names: [name],
+        scope: 'provider-secret-plane',
+      })
+    }
   })
 
   it('reuses canonical source-write authority validation', () => {
@@ -141,6 +239,84 @@ describe('deployment manifest validator', () => {
       expect.objectContaining({ kind: 'malformed', code: 'clerk_publishable_key_invalid', names: ['VITE_CLERK_PUBLISHABLE_KEY'] }),
       expect.objectContaining({ kind: 'malformed', code: 'clerk_secret_key_invalid', names: ['CLERK_SECRET_KEY'] }),
     ]))
+  })
+
+  it('requires a canonical origin and a valid Clerk webhook signing secret', () => {
+    const result = validateDeploymentManifest({
+      ...productionEnvironment(),
+      AE_CANONICAL_BASE_URL: '',
+      CLERK_WEBHOOK_SIGNING_SECRET: 'not-a-webhook-secret',
+    }, { nodeMajor: 22 })
+
+    expect(result.findings).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: 'missing', code: 'canonical_origin_required', names: ['AE_CANONICAL_BASE_URL'] }),
+      expect.objectContaining({ kind: 'malformed', code: 'clerk_webhook_signing_secret_invalid', names: ['CLERK_WEBHOOK_SIGNING_SECRET'] }),
+    ]))
+  })
+
+  it('rejects test or malformed Stripe credentials in production', () => {
+    const result = validateDeploymentManifest({
+      ...productionEnvironment(),
+      STRIPE_SECRET_KEY: 'sk_live_example',
+      STRIPE_READBACK_KEY: 'sk_live_readback_example',
+      STRIPE_WEBHOOK_SECRET: 'not-a-webhook-secret',
+      STRIPE_V2_WEBHOOK_SECRET: 'not-a-v2-webhook-secret',
+      STRIPE_AU_INCLUSIVE_GST_TAX_RATE_ID: 'not-a-tax-rate',
+    }, { nodeMajor: 22 })
+
+    expect(result.ok).toBe(false)
+    expect(result.findings).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: 'malformed', code: 'stripe_secret_key_invalid', names: ['STRIPE_SECRET_KEY'] }),
+      expect.objectContaining({ kind: 'malformed', code: 'stripe_readback_key_invalid', names: ['STRIPE_READBACK_KEY'] }),
+      expect.objectContaining({ kind: 'malformed', code: 'stripe_webhook_secret_invalid', names: ['STRIPE_WEBHOOK_SECRET'] }),
+      expect.objectContaining({ kind: 'malformed', code: 'stripe_v2_webhook_secret_invalid', names: ['STRIPE_V2_WEBHOOK_SECRET'] }),
+      expect.objectContaining({ kind: 'malformed', code: 'stripe_tax_rate_invalid', names: ['STRIPE_AU_INCLUSIVE_GST_TAX_RATE_ID'] }),
+    ]))
+  })
+
+  it('admits only sandbox identities and remote Formance for the synthetic release profile', () => {
+    const environment = {
+      ...productionEnvironment(),
+      AE_PACKAGE4_SANDBOX_DEPLOYMENT_PROFILE: 'synthetic_vps_fixture',
+      VITE_CLERK_PUBLISHABLE_KEY: 'pk_test_release',
+      CLERK_SECRET_KEY: 'sk_test_release',
+      STRIPE_SECRET_KEY: 'rk_test_release',
+      STRIPE_READBACK_KEY: 'rk_test_readback_release',
+      STRIPE_AU_INCLUSIVE_GST_TAX_RATE_ID: 'txr_au_gst_10_inclusive',
+      AE_FORMANCE_ENVIRONMENT: 'sandbox',
+      AE_FORMANCE_LEDGER: 'agentic-economy-release',
+    }
+
+    expect(validateDeploymentManifest(environment, { nodeMajor: 22 })).toMatchObject({
+      ok: true,
+      findings: [],
+    })
+    expect(validateDeploymentManifest({
+      ...environment,
+      STRIPE_SECRET_KEY: 'rk_live_wrong-boundary',
+      AE_FORMANCE_ENVIRONMENT: 'production',
+    }, { nodeMajor: 22 }).findings.map(({ code }) => code)).toEqual(expect.arrayContaining([
+      'stripe_secret_key_invalid',
+      'formance_environment_mismatch',
+    ]))
+  })
+
+  it('does not allow production CSP enforcement to be downgraded', () => {
+    const reportOnly = validateDeploymentManifest({
+      ...productionEnvironment(),
+      AE_CSP_REPORT_ONLY: 'true',
+    }, { nodeMajor: 22 })
+
+    expect(reportOnly.findings).toContainEqual({
+      kind: 'forbidden',
+      code: 'production_csp_must_enforce',
+      names: ['AE_CSP_REPORT_ONLY'],
+      scope: 'browser-security',
+    })
+    expect(validateDeploymentManifest({
+      ...productionEnvironment(),
+      AE_CSP_REPORT_ONLY: 'false',
+    }, { nodeMajor: 22 }).findings).toEqual([])
   })
 
   it('rejects unenumerated AE-owned credential and bypass keys', () => {
@@ -222,6 +398,7 @@ describe('deployment manifest validator', () => {
       AE_X402_CDP_EXPECTED_EVM_ADDRESS: '',
       AE_X402_CDP_ACCOUNT_POLICY_ID: '',
       AE_X402_CDP_PROJECT_POLICY_ID: '',
+      AE_X402_CDP_POLICY_RULES_DIGEST: '',
       AE_X402_CDP_CREDENTIAL_GENERATION: '',
       AE_X402_CUSTODY_ENABLED: '',
       AE_X402_CUSTODY_MAX_ATOMIC: '',
@@ -236,6 +413,7 @@ describe('deployment manifest validator', () => {
       'AE_X402_CDP_EXPECTED_EVM_ADDRESS',
       'AE_X402_CDP_ACCOUNT_POLICY_ID',
       'AE_X402_CDP_PROJECT_POLICY_ID',
+      'AE_X402_CDP_POLICY_RULES_DIGEST',
       'AE_X402_CDP_CREDENTIAL_GENERATION',
       'AE_X402_CUSTODY_ENABLED',
       'AE_X402_CUSTODY_MAX_ATOMIC',

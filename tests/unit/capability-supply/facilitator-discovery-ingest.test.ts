@@ -66,6 +66,15 @@ const mainnetSyntheticPost = {
   })),
 };
 
+const baseSepoliaSyntheticPost = {
+  ...syntheticPost,
+  accepts: syntheticPost.accepts.map((accept) => ({
+    ...accept,
+    network: "eip155:84532",
+    asset: "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+  })),
+};
+
 describe("facilitator discovery ingest", () => {
   it("rejects unsupported Bazaar HTTP channels and non-JSON output", () => {
     const extension = isRecord(timezonePaymentRequired?.extensions)
@@ -79,7 +88,6 @@ describe("facilitator discovery ingest", () => {
     const input = extension.info.input;
     const output = extension.info.output;
     for (const forbidden of [
-      { pathParams: {} },
       { headers: {} },
       { body: {} },
       { bodyType: "json" },
@@ -100,7 +108,7 @@ describe("facilitator discovery ingest", () => {
     expect(admitBazaarDiscoveryInfo(extension, {
       input,
       output: { type: "json", example: Object.fromEntries(Array.from({ length: 65 }, (_, index) => [`field${index}`, true])) },
-    })).toEqual({ kind: "refused", reason: "schema_missing" });
+    })).toMatchObject({ kind: "admitted" });
   });
 
   it("keeps a searchable offering when a v2 catalog row has a URL string resource and no tags", async () => {
@@ -117,6 +125,9 @@ describe("facilitator discovery ingest", () => {
     }]);
     expect(admission.skipped).toEqual([]);
     expect(admission.admitted[0]?.offering.searchTerms.length).toBeGreaterThan(0);
+    expect(admission.admitted[0]?.offering.presentation.materialTerms).toContainEqual({
+      termId: "buyer-total", label: "Buyer total", value: "Confirmed in AUD by a binding Quote for your input.",
+    });
   });
 
   it("normalizes x402 v2 catalog items whose resource is a URL string", () => {
@@ -151,8 +162,8 @@ describe("facilitator discovery ingest", () => {
         kind: "admitted",
         method: "POST",
         inputSchema: { type: "object" },
+        inputExample: {},
         outputSchema: { type: "object" },
-        query: undefined,
       },
     );
     expect(decision.kind).toBe("admit");
@@ -179,16 +190,21 @@ describe("facilitator discovery ingest", () => {
     ).toBe(false);
   });
 
-  it("skips missing bazaar and MCP instead of falling back to AM parameters", async () => {
+  it("admits official Base Sepolia Bazaar HTTP while skipping missing Bazaar and MCP", async () => {
     expect(decideFacilitatorDiscoveryItem(noBazaarItem)).toEqual({
       kind: "skip",
       reason: "bazaar_missing",
     });
-    const mcpAndTestnet = await admitOfficialFacilitatorDiscoveryItems([mcpItem, syntheticPost]);
-    expect(mcpAndTestnet.admitted).toHaveLength(0);
+    const mcpAndTestnet = await admitOfficialFacilitatorDiscoveryItems([mcpItem, baseSepoliaSyntheticPost]);
+    expect(mcpAndTestnet.admitted).toHaveLength(1);
+    expect(JSON.parse(mcpAndTestnet.admitted[0]?.sourceImportJson ?? "{}")).toMatchObject({
+      resource: {
+        network: "eip155:84532",
+        asset: "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+      },
+    });
     expect(mcpAndTestnet.skipped.map((item) => item.reason)).toEqual([
       "transport_unsupported",
-      "chain_unsupported",
     ]);
   });
 
@@ -208,6 +224,14 @@ describe("facilitator discovery ingest", () => {
       "https://402timezones.vercel.app/api/convert-timezone",
       "https://api.example.test/lookup",
     ]);
+    // Execution identity stays bare, but the discovery resourceUrl keeps its
+    // example parameter values so a paid Call still reaches the exact resource.
+    expect(JSON.parse(result.admitted[0]?.sourceImportJson ?? "{}"))
+      .toMatchObject({
+        resource: {
+          resourceUrl: "https://402timezones.vercel.app/api/convert-timezone?from=UTC&to=America%2FNew_York&time=12%3A00",
+        },
+      });
     expect(new Set(result.admitted.map((draft) => draft.offering.offeringId)).size).toBe(
       2,
     );
@@ -215,10 +239,23 @@ describe("facilitator discovery ingest", () => {
       { kind: "standalone" },
       { kind: "standalone" },
     ]);
+    expect(JSON.parse(result.admitted[0]?.sourceImportJson ?? "{}"))
+      .toMatchObject({
+        contract: {
+          inputExamples: [{
+            label: "Provider example",
+            input: {
+              from: "America/New_York",
+              to: "Asia/Tokyo",
+              time: "2026-07-04T15:30",
+            },
+          }],
+        },
+      });
     expect(result.admitted[1]?.price).toMatchObject({
       provider: { units: "100", exponent: 6 },
-      platformFee: { units: "10", exponent: 6 },
-      total: { units: "110", exponent: 6 },
+      platformFee: { units: "0", exponent: 6 },
+      total: { units: "100", exponent: 6 },
     });
   });
 

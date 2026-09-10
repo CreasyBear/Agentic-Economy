@@ -1,0 +1,4 @@
+interface:
+  display_name: "Deployment Operations"
+  short_description: "Stabilise, operate, and recover AE deployments"
+  default_prompt: "Use $deployment-operations to verify the live baseline, trace this environment's service and credential boundaries, enforce AWS foundation gates, and take the safest evidence-backed operational action."

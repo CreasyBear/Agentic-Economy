@@ -1,0 +1,127 @@
+import { existsSync, readFileSync } from 'node:fs'
+import { globSync } from 'node:fs'
+import { dirname, normalize, resolve } from 'node:path'
+import { describe, expect, it } from 'vitest'
+
+const hostContractFiles = globSync('src/modules/action-execution/hosts/**/*.ts').sort()
+const productionSourceFiles = globSync([
+  'src/**/*.ts',
+  'src/**/*.tsx',
+  'convex/**/*.ts',
+]).sort()
+const publicTerminals = new Set([
+  normalize(resolve('src/modules/action-execution/application-service.ts')),
+  normalize(resolve('src/modules/action-execution/contracts.ts')),
+])
+const developmentProviderFixturePattern =
+  /provider-operation-fixture|tools\/dev\/fixtures\/(?:provider-operation|provider-tool)/u
+
+function referencesDevelopmentProviderFixture(source: string): boolean {
+  return developmentProviderFixturePattern.test(source)
+}
+
+function hostBoundaryViolations(source: string): readonly string[] {
+  const violations = []
+  const imports = [...source.matchAll(/from\s+['"]([^'"]+)['"]/gu)].map((match) => match[1]!)
+  if (imports.some((path) =>
+    /\/internal\/|dynamic-published-adapter|route-transport|payment|credential/iu.test(path))) {
+    violations.push('low_level_import_or_rule')
+  }
+  if (/\b(acquire|executeAcquired|reconcile|leaseOwner|effectGeneration)\s*\(/u.test(source)) {
+    violations.push('low_level_command')
+  }
+  return violations
+}
+
+function localImports(path: string, source: string): readonly string[] {
+  return [...source.matchAll(/from\s+['"](\.[^'"]+)['"]/gu)]
+    .map((match) => {
+      const base = resolve(dirname(path), match[1]!)
+      return [base, `${base}.ts`, `${base}/index.ts`].find(existsSync)
+    })
+    .filter((candidate): candidate is string => candidate !== undefined)
+    .map(normalize)
+}
+
+function graphViolations(entries: readonly string[]): readonly string[] {
+  const violations: string[] = []
+  const visited = new Set<string>()
+  const visit = (path: string) => {
+    const absolute = normalize(resolve(path))
+    if (visited.has(absolute) || publicTerminals.has(absolute)) return
+    visited.add(absolute)
+    const source = readFileSync(absolute, 'utf8')
+    violations.push(...hostBoundaryViolations(source).map((value) => `${path}:${value}`))
+    for (const dependency of localImports(absolute, source)) visit(dependency)
+  }
+  entries.forEach(visit)
+  return violations
+}
+
+describe('Action execution public host graph', () => {
+  it('discovers every actual host entry', () => {
+    expect(hostContractFiles).toEqual([])
+  })
+
+  it('recursively keeps the actual host graph above the public application boundary', () => {
+    expect(graphViolations(hostContractFiles)).toEqual([])
+  })
+
+  it('detects an aliased violating host fixture', () => {
+    const violating = `
+      import type { DynamicPublishedActionExecutionAdapter as PublicLooking }
+        from './dynamic-published-adapter'
+      export const host = (adapter: PublicLooking) =>
+        adapter.executeAcquired({ effectGeneration: 1 })
+    `
+    expect(hostBoundaryViolations(violating)).toContain('low_level_import_or_rule')
+    expect(hostBoundaryViolations(violating)).toContain('low_level_command')
+  })
+
+  it('detects a future host entry that aliases a low-level lifecycle dependency', () => {
+    expect(graphViolations([])).toEqual([])
+    expect(hostBoundaryViolations(`
+      import { createDynamicPublishedActionExecutionAdapter as application } from '../dynamic-published-adapter'
+      export const host = application
+    `)).toContain('low_level_import_or_rule')
+  })
+
+  it('keeps the development provider-operation fixture outside production graphs', () => {
+    expect(referencesDevelopmentProviderFixture(
+      "import { fixture } from 'tools/dev/fixtures/provider-tool/development-provider-tool-fixture'",
+    )).toBe(true)
+    expect(referencesDevelopmentProviderFixture(
+      "import { fixture } from 'tools/dev/fixtures/provider-operation/development-provider-operation-fixture'",
+    )).toBe(true)
+    const violations = productionSourceFiles.filter((path) => {
+      const source = readFileSync(path, 'utf8')
+      return referencesDevelopmentProviderFixture(source)
+    })
+
+    expect(violations).toEqual([])
+    expect(existsSync('src/modules/provider-operation-fixture')).toBe(false)
+    expect(existsSync('tools/dev/fixtures/provider-tool')).toBe(true)
+  })
+
+  it('keeps moved development fixtures outside production source graphs', () => {
+    const oldFixturePaths = [
+      'src/modules/capability-supply/btc-usd-quote-result.ts',
+      'src/modules/action-execution/development-file-x402-payment-attempt-port.ts',
+    ]
+    const violations = productionSourceFiles.filter((path) => {
+      const source = readFileSync(path, 'utf8')
+      return (
+        /tools\/dev\/fixtures\/(?:capability-supply|action-execution)/u.test(source) ||
+        /src\/modules\/capability-supply\/development-[^'"]+/u.test(source) ||
+        /src\/modules\/capability-supply\/btc-usd-quote-result/u.test(source) ||
+        /src\/modules\/action-execution\/development-file-x402-payment-attempt-port/u.test(source)
+      )
+    })
+
+    expect(violations).toEqual([])
+    expect(globSync('src/modules/capability-supply/development-*.ts')).toEqual([])
+    expect(oldFixturePaths.filter(existsSync)).toEqual([])
+    expect(existsSync('tools/dev/fixtures/capability-supply')).toBe(true)
+    expect(existsSync('tools/dev/fixtures/action-execution')).toBe(true)
+  })
+})

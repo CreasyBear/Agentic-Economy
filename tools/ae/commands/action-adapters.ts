@@ -1,10 +1,11 @@
 import { AGENT_ACCOUNT_SELF_ROUTE_CONTRACT } from '@/modules/agent-access/account.actions'
-import { OPERATION_INVOKE_ROUTE_CONTRACT } from '@/modules/capability-execution/operation-invoke-entry'
+import { CALL_ROUTE_CONTRACT } from '@/modules/capability-execution/call-entry'
+import { TOOL_QUOTE_ROUTE_CONTRACT } from '@/modules/capability-execution/quote.actions'
 
 import { ACCOUNT_COMMAND_DESCRIPTORS, accountCommandDescriptor } from './account'
-import { invokeCommandDescriptor } from './invoke'
+import { callCommandDescriptor } from './call'
 import { historyCommandDescriptor } from './history'
-import { MARKET_OPERATION_COMMAND_DESCRIPTORS } from './market-operations'
+import { MARKET_TOOL_COMMAND_DESCRIPTORS } from './market-tools'
 import { SUPPLY_COMMAND_DESCRIPTORS } from './supply'
 import { MARKET_REQUEST_COMMAND_DESCRIPTORS } from './request'
 
@@ -21,7 +22,7 @@ export type CliActionAdapterDescriptor = Readonly<{
  * `cli` declaration without adding its adapter makes conformance fail.
  */
 export const CLI_ACTION_ADAPTERS: readonly CliActionAdapterDescriptor[] = Object.freeze([
-  ...MARKET_OPERATION_COMMAND_DESCRIPTORS.map(({ actionId, command, path }) => ({
+  ...MARKET_TOOL_COMMAND_DESCRIPTORS.map(({ actionId, command, path }) => ({
     actionId,
     command,
     method: 'POST',
@@ -49,10 +50,16 @@ export const CLI_ACTION_ADAPTERS: readonly CliActionAdapterDescriptor[] = Object
     path,
   })),
   {
-    actionId: invokeCommandDescriptor.actionId,
-    command: invokeCommandDescriptor.command,
-    method: invokeCommandDescriptor.method,
-    path: invokeCommandDescriptor.path,
+    actionId: TOOL_QUOTE_ROUTE_CONTRACT.actionId,
+    command: 'call',
+    method: TOOL_QUOTE_ROUTE_CONTRACT.method,
+    path: TOOL_QUOTE_ROUTE_CONTRACT.path,
+  },
+  {
+    actionId: callCommandDescriptor.actionId,
+    command: callCommandDescriptor.command,
+    method: callCommandDescriptor.method,
+    path: callCommandDescriptor.path,
   },
   {
     actionId: historyCommandDescriptor.actionId,
@@ -61,22 +68,22 @@ export const CLI_ACTION_ADAPTERS: readonly CliActionAdapterDescriptor[] = Object
     path: historyCommandDescriptor.path,
   },
   {
-    actionId: OPERATION_INVOKE_ROUTE_CONTRACT.status.actionId,
+    actionId: CALL_ROUTE_CONTRACT.status.actionId,
     command: 'status',
-    method: OPERATION_INVOKE_ROUTE_CONTRACT.status.method,
-    path: OPERATION_INVOKE_ROUTE_CONTRACT.status.path,
+    method: CALL_ROUTE_CONTRACT.status.method,
+    path: CALL_ROUTE_CONTRACT.status.path,
   },
   {
-    actionId: OPERATION_INVOKE_ROUTE_CONTRACT.cancel.actionId,
+    actionId: CALL_ROUTE_CONTRACT.cancel.actionId,
     command: 'cancel',
-    method: OPERATION_INVOKE_ROUTE_CONTRACT.cancel.method,
-    path: OPERATION_INVOKE_ROUTE_CONTRACT.cancel.path,
+    method: CALL_ROUTE_CONTRACT.cancel.method,
+    path: CALL_ROUTE_CONTRACT.cancel.path,
   },
   {
-    actionId: OPERATION_INVOKE_ROUTE_CONTRACT.reconcile.actionId,
+    actionId: CALL_ROUTE_CONTRACT.reconcile.actionId,
     command: 'recover',
-    method: OPERATION_INVOKE_ROUTE_CONTRACT.reconcile.method,
-    path: OPERATION_INVOKE_ROUTE_CONTRACT.reconcile.path,
+    method: CALL_ROUTE_CONTRACT.reconcile.method,
+    path: CALL_ROUTE_CONTRACT.reconcile.path,
   },
   ...SUPPLY_COMMAND_DESCRIPTORS.map(({ actionId, command, subcommand, route }) => ({
     actionId,

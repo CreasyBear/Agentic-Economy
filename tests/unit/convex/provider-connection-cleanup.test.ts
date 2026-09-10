@@ -1,8 +1,17 @@
 import { getFunctionName, type FunctionReference } from 'convex/server'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { completeWork, run } from '../../../convex/capabilityProviderConnectionCleanup'
+import { completeWork } from '../../../convex/capabilityProviderConnectionCleanup'
+import { perform } from '../../../convex/capabilityProviderConnectionCleanupAction'
 import { providerConnectionCleanupRequestDigest } from '@/modules/capability-supply/provider-connection'
+
+vi.mock('@/modules/network-guard/server', () => ({
+  sendGuardedHttpRequest: async (request: Request) => await fetch(request.url, {
+    method: request.method,
+    headers: Object.fromEntries(request.headers.entries()),
+    body: await request.text(),
+  }),
+}))
 
 type Mutation = (
   reference: FunctionReference<'mutation', 'internal', Record<string, unknown>, unknown>,
@@ -21,7 +30,7 @@ type RegisteredWorker = { _handler: WorkerHandler }
 
 const registeredCleanup = completeWork as unknown as RegisteredCleanup
 const handler = registeredCleanup._handler
-const registeredWorker = run as unknown as RegisteredWorker
+const registeredWorker = perform as unknown as RegisteredWorker
 const workerHandler = registeredWorker._handler
 const context = {
   connectionRef: 'connection:test',
@@ -42,6 +51,11 @@ const context = {
     authorityExpiresAt: 4_000_000_000_000,
   },
 }
+
+afterEach(() => {
+  vi.unstubAllEnvs()
+  vi.unstubAllGlobals()
+})
 
 function callbackContext(workKind: 'lease_drain' | 'cleanup') {
   return { ...context, workKind }
@@ -158,6 +172,56 @@ describe('provider cleanup Workpool callback', () => {
       kind: 'cleanup',
       result: { outcome: 'outcome_unknown', reasonCode: 'cleanup_authority_changed' },
     })
+  })
+
+  it('routes MCP OAuth cleanup through the trusted secret boundary and records only redacted evidence', async () => {
+    vi.stubEnv('AE_SITE_URL', 'https://agentic-economy.example')
+    vi.stubEnv('AE_CONVEX_SERVER_FUNCTION_TOKEN', 's'.repeat(43))
+    const revocationRef = 'provider-revocation:v1:test'
+    const target = {
+      ...callbackTarget(),
+      adapterId: 'mcp-jsonrpc:v1',
+      revocationRef,
+      secret: {
+        secretRef: 'sec_00000000000040008000000000000063',
+        activeGeneration: 'sgn_00000000000040008000000000000063',
+        pointerRevision: 3,
+      },
+    }
+    const requestDigest = providerConnectionCleanupRequestDigest({
+      revocationRef,
+      cleanupAttempt: 1,
+      connectionRef: target.connectionRef,
+      expectedAuthorityGeneration: target.authorityGeneration,
+      expectedAuthorityDigest: target.authorityDigest,
+      adapterId: target.adapterId,
+    })
+    const fetch = vi.fn().mockResolvedValue(Response.json({
+      outcome: 'revoked',
+      reasonCode: 'oauth_revoked',
+      responseDigest: `sha256:${'c'.repeat(64)}`,
+      evidenceRefs: ['provider_cleanup:oauth_revoked'],
+    }))
+    vi.stubGlobal('fetch', fetch)
+
+    await expect(workerHandler({ runQuery: vi.fn<Query>(async () => target) }, {
+      ...context,
+      requestDigest,
+      workKind: 'cleanup',
+    })).resolves.toMatchObject({
+      kind: 'cleanup',
+      result: {
+        outcome: 'revoked',
+        reasonCode: 'oauth_revoked',
+        evidenceRefs: ['provider_cleanup:oauth_revoked'],
+      },
+    })
+    const call = fetch.mock.calls.at(0)
+    if (call === undefined) throw new Error('provider cleanup request missing')
+    expect(call[0]).toBe('https://agentic-economy.example/api/internal/provider-connection-cleanup')
+    expect(String(call[1]?.body)).toContain(target.secret.secretRef)
+    expect(String(call[1]?.body)).not.toContain('access_token')
+    expect(String(call[1]?.body)).not.toContain('refresh_token')
   })
 
   it('double-checks lease drain authority and rejects malformed resource projections', async () => {

@@ -260,12 +260,12 @@ export const serviceEndpointOutputSchema = z.strictObject({
   quality: z.null().describe('Traffic quality evidence, absent when not observed'),
   ae: z
     .strictObject({
-      operationRef: z.string().regex(/^operation:v1:[0-9a-f]{64}$/).optional().describe('Canonical execution read link when linked to a capability operation'),
+      toolRef: z.string().regex(/^operation:v1:[0-9a-f]{64}$/).optional().describe('Canonical Tool read link when linked to admitted supply'),
       offeringRef: z.string().describe('Published offering the endpoint belongs to'),
       provenance: z.enum(['business_declared', 'publicly_observed']).describe('Publication authority: declared by the business or observed publicly'),
       access: z.literal('external').describe('Published external Provider endpoint access'),
       authentication: serviceEndpointAuthenticationOutputSchema.describe('Public authentication classification without secret values'),
-      execution: z.enum(['operation_call', 'request_route', 'catalog_only']).describe('Public execution channel'),
+      execution: z.enum(['tool_call', 'request_route', 'catalog_only']).describe('Public execution channel'),
       authorityMode: z.enum(['provider_owned', 'ae_curated_external', 'third_party_gateway', 'observed_external']).optional().describe('Publication authority mode when linked'),
       sourceKind: z.enum(['ae_envelope', 'openapi_http', 'mcp', 'agent_plugin_mcp', 'x402']).optional().describe('Publication source mode when linked'),
       authenticationSummary: z.string().optional().describe('Published authentication requirement'),
@@ -292,8 +292,8 @@ export const serviceOutputSchema = z.strictObject({
   provider: z.string().optional().describe('Published business Provider'),
   providerUrl: z.string().optional().describe('Published business Provider URL'),
   category: z.string().describe('Published business category'),
-  networks: z.array(z.string()).describe('Payment networks represented across linked Operations'),
-  enriched: z.boolean().describe('Whether at least one endpoint is linked to an admitted Market Operation'),
+  networks: z.array(z.string()).describe('Payment networks represented across linked Tools'),
+  enriched: z.boolean().describe('Whether at least one endpoint is linked to an admitted Tool'),
   integrationType: z.enum(['1P', '3P']).describe('Provider-owned or third-party publication grouping'),
   isNew: z.boolean().optional().describe('Whether the business portfolio is newly published'),
   endpoints: z.array(serviceEndpointOutputSchema).describe('Flat external endpoint links published by the business portfolio'),
@@ -460,5 +460,3 @@ export const detailParameters: readonly ActionParameter[] = [
     required: true,
   },
 ]
-
-

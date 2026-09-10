@@ -19,7 +19,7 @@ vi.mock('@tanstack/react-router', () => ({
       options,
       useSearch: () => ({}),
       useLoaderData: () => path === '/'
-        ? { read: { kind: 'ok', operations: [], matchedCount: 0 }, canonicalBaseUrl: 'https://ae.example' }
+        ? { read: { kind: 'ok', tools: [], matchedCount: 0 }, canonicalBaseUrl: 'https://ae.example' }
         : path === '/about'
           ? 'https://ae.example'
           : undefined,
@@ -43,8 +43,7 @@ vi.mock('@/components/ae/layout/AePublicShell', () => ({
   AePublicShell: ({ children }: { children: ReactNode }) => <main>{children}</main>,
 }))
 
-import { ABOUT, HOME } from '@/content/brand-copy'
-import '@/routes/index'
+import { ABOUT } from '@/content/brand-copy'
 import '@/routes/privacy'
 import '@/routes/terms'
 import '@/routes/about'
@@ -59,7 +58,7 @@ describe('public semantic comfort', () => {
     expect(headings.map((heading) => heading.tagName)).toEqual(['H1', 'H2', 'H3', 'H3', 'H3'])
     expect(screen.getByRole('heading', { level: 2, name: 'What these terms mean in practice' })).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Browse catalog' }).classList.contains('min-h-touch')).toBe(true)
-    expect(screen.getByRole('link', { name: /Publish an Operation/ }).classList.contains('min-h-touch')).toBe(true)
+    expect(screen.getByRole('link', { name: /Publish a Tool/ }).classList.contains('min-h-touch')).toBe(true)
   })
 
   it('gives every privacy tab a comfortable standalone target', () => {
@@ -73,23 +72,12 @@ describe('public semantic comfort', () => {
     }
   })
 
-  it('gives homepage actions a comfortable standalone target', () => {
-    renderRoute('/')
-
-    for (const name of ['Browse Operations', 'Publish an Operation'] as const) {
-      const links = screen.getAllByRole('link', { name })
-      expect(links.length).toBeGreaterThan(0)
-      for (const link of links) expect(link.classList.contains('min-h-touch')).toBe(true)
-    }
-    expect(screen.getByRole('link', { name: HOME.aboutLink }).classList.contains('min-h-touch')).toBe(true)
-  })
-
   it('keeps About sequential and its door actions comfortable', () => {
     renderRoute('/about')
 
     expect(screen.getByRole('heading', { level: 1, name: ABOUT.heading })).toBeTruthy()
     expect(screen.getByRole('heading', { level: 2, name: ABOUT.doorsHeading })).toBeTruthy()
-    expect(screen.getByRole('heading', { level: 2, name: ABOUT.suppliersHeading })).toBeTruthy()
+    expect(screen.getByRole('heading', { level: 2, name: ABOUT.providersHeading })).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Browse the live catalog' }).classList.contains('min-h-touch')).toBe(true)
     const machines = screen.getByRole('navigation', { name: 'Machine-readable files' })
     expect(within(machines).getByRole('link', { name: /llms\.txt/ }).getAttribute('href')).toBe('/llms.txt')
@@ -99,7 +87,7 @@ describe('public semantic comfort', () => {
 
 })
 
-function renderRoute(path: '/' | '/privacy' | '/terms' | '/about') {
+function renderRoute(path: '/privacy' | '/terms' | '/about') {
   const Component = routeState.components.get(path)
   if (Component === undefined) throw new Error(`Route component ${path} was not captured.`)
   render(<Component />)

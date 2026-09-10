@@ -31,7 +31,10 @@ import type {
 const { getVercelOidcToken } = vi.hoisted(() => ({ getVercelOidcToken: vi.fn() }))
 vi.mock('@vercel/oidc', () => ({ getVercelOidcToken }))
 
-const NOW = 2_000_000_000_000
+// Capture one real wall-clock instant for the module. The x402 transport
+// deliberately checks requirement lifetime against Date.now(), so a fixed
+// future epoch turns this suite into a date-dependent time bomb.
+const NOW = Math.floor(Date.now() / 1_000) * 1_000
 const REF = secretRef('sec_11111111111111111111111111111111')
 const GENERATION = secretGeneration('sgn_11111111111111111111111111111111')
 const PAYMENT_REF = secretRef('sec_22222222222222222222222222222222')
@@ -69,15 +72,15 @@ function invocation(): ProviderRouteTransportInvocation {
       grantDigest: canonicalDigest({ grant: 'test' }),
       capabilityContractDigest: canonicalDigest({ contract: 'test' }),
       maximumSpend: { currency: 'USD', units: '0', exponent: 2 },
-      expiresAt: NOW + 30_000,
+      expiresAt: NOW + 120_000,
       callIdentity: { keyId: 'route-calls:2026-08', signature: 'hmac-sha256:signed-call' },
       authorityGeneration: 4,
       authorityDigest: canonicalDigest({ connection: 'test', generation: 4 }),
       leaseRef: 'lease:test',
-      invocationRef: 'invocation:test',
-      operationRef: 'operation:test',
+      callRef: 'call:test',
+      toolRef: 'tool:test',
       grantedScopes: ['provider:invoke'],
-      grantedResources: ['operation:test'],
+      grantedResources: ['tool:test'],
       readinessValidUntil: NOW + 20_000,
       readinessDigest: canonicalDigest({ readiness: 'test' }),
     },
@@ -153,16 +156,16 @@ function requestDigest(routeInvocation: RouteTransportInvocation): string {
 function ticket(routeInvocation = invocation()): CanonicalProviderConsequenceTicket {
   const authority = routeInvocation.authority
   const {
-    invocationRef,
-    operationRef,
+    callRef,
+    toolRef,
     leaseRef,
     grantedScopes,
     grantedResources,
     readinessValidUntil,
     readinessDigest,
   } = authority
-  if (invocationRef === undefined
-    || operationRef === undefined
+  if (callRef === undefined
+    || toolRef === undefined
     || leaseRef === undefined
     || grantedScopes === undefined
     || grantedResources === undefined
@@ -177,8 +180,8 @@ function ticket(routeInvocation = invocation()): CanonicalProviderConsequenceTic
     invocationDigest,
     issuedAt: NOW - 1_000,
     expiresAt: NOW + 10_000,
-    invocationRef,
-    operationRef,
+    callRef,
+    toolRef,
     leaseRef,
     connectionRef: routeInvocation.binding.authority.connectionRef,
     authorityGeneration: authority.authorityGeneration,
@@ -767,8 +770,8 @@ describe('JIT provider consequence boundary', () => {
   it('requires a provider lease authority with every consequence binding field materialized', async () => {
     const routeInvocation = invocation()
     const missing = [
-      'invocationRef',
-      'operationRef',
+      'callRef',
+      'toolRef',
       'leaseRef',
       'grantedScopes',
       'grantedResources',
@@ -902,7 +905,7 @@ describe('JIT provider consequence boundary', () => {
     expect(active.send).not.toHaveBeenCalled()
   })
 
-  it('runs the existing x402 custody, submission marker, and reconciliation ports inside the JIT callback without retry', async () => {
+  it('runs x402 custody, one signed submission, and reconciliation inside the JIT callback', async () => {
     const routeInvocation = x402Invocation()
     const challenge = x402Challenge()
     const prepareX402PaymentAuthorization = vi.fn(async () => ({
@@ -960,7 +963,13 @@ describe('JIT provider consequence boundary', () => {
     expect(observeX402PaymentAttempt).toHaveBeenCalledWith(expect.objectContaining({
       state: 'reconciliation_required',
     }))
-    expect(send).toHaveBeenCalledOnce()
+    // x402 first re-reads the unpaid 402 challenge, then submits exactly one
+    // signed request. This is the two-request flow used by @x402/core clients.
+    expect(send).toHaveBeenCalledTimes(2)
+    expect(send.mock.calls[0]?.[1]?.headers).not.toHaveProperty('Payment-Signature')
+    expect(send.mock.calls[1]?.[1]?.headers).toMatchObject({
+      'Payment-Signature': 'signed-payment',
+    })
     expect(durableJournal.complete).toHaveBeenCalledWith({ claimRef: 'claim:test', observation: result })
     expect(JSON.stringify(result)).not.toContain('signed-payment')
   })
@@ -982,19 +991,25 @@ describe('JIT provider consequence boundary', () => {
       markX402PaymentPossiblySubmitted: async () => undefined,
       observeX402PaymentAttempt: async () => undefined,
     }))
-    const send = vi.fn<RouteTransportFetch>(async () => Response.json({
-      serviceReference: Buffer.from(CREDENTIAL).toString('base64'),
-    }, {
-      headers: {
-        'Payment-Response': encodePaymentResponseHeader({
-          success: true,
-          transaction: '0xsettled',
-          network: 'eip155:84532',
-          amount: '1250000',
-          payer: 'test:settled-payer',
-        }),
-      },
-    }))
+    const challenge = x402Challenge()
+    const send = vi.fn<RouteTransportFetch>()
+      .mockResolvedValueOnce(new Response(null, {
+        status: 402,
+        headers: { 'Payment-Required': encodePaymentRequiredHeader(challenge) },
+      }))
+      .mockResolvedValueOnce(Response.json({
+        serviceReference: Buffer.from(CREDENTIAL).toString('base64'),
+      }, {
+        headers: {
+          'Payment-Response': encodePaymentResponseHeader({
+            success: true,
+            transaction: '0xsettled',
+            network: 'eip155:84532',
+            amount: '1250000',
+            payer: 'test:settled-payer',
+          }),
+        },
+      }))
     const durableJournal = journal()
     const active = harness({
       routeInvocation,
@@ -1015,6 +1030,7 @@ describe('JIT provider consequence boundary', () => {
     })
     expect(JSON.stringify(result)).not.toContain(CREDENTIAL)
     expect(JSON.stringify(result)).not.toContain(Buffer.from(CREDENTIAL).toString('base64'))
+    expect(send).toHaveBeenCalledTimes(2)
     expect(durableJournal.complete).toHaveBeenCalledWith({ claimRef: 'claim:test', observation: result })
   })
 
@@ -1060,7 +1076,7 @@ describe('JIT provider consequence boundary', () => {
       releaseStarted: true,
       failureCode: 'provider_consequence_release_unknown',
     })
-    expect(send).toHaveBeenCalledOnce()
+    expect(send).toHaveBeenCalledTimes(2)
     expect(durableJournal.abortBeforeRelease).not.toHaveBeenCalled()
     expect(durableJournal.complete).not.toHaveBeenCalled()
   })
@@ -1092,12 +1108,19 @@ describe('JIT provider consequence boundary', () => {
     const clock = vi.fn()
       .mockReturnValueOnce(NOW)
       .mockReturnValueOnce(NOW)
+      .mockReturnValueOnce(NOW)
       .mockReturnValue(NOW + 10_000)
+    const challenge = x402Challenge()
+    const send = vi.fn<RouteTransportFetch>(async () => new Response(null, {
+      status: 402,
+      headers: { 'Payment-Required': encodePaymentRequiredHeader(challenge) },
+    }))
     const active = harness({
       routeInvocation,
       verifiedTicket: ticket(routeInvocation),
       journal: durableJournal,
       boundaryNow: clock,
+      send,
       createCallbackScopedX402Runtime: async () => callbackScopedX402Runtime({
         markX402PaymentPossiblySubmitted,
       }),
@@ -1110,7 +1133,7 @@ describe('JIT provider consequence boundary', () => {
       failureCode: 'provider_consequence_release_unknown',
     })
     expect(markX402PaymentPossiblySubmitted).toHaveBeenCalledOnce()
-    expect(active.send).not.toHaveBeenCalled()
+    expect(active.send).toHaveBeenCalledOnce()
     expect(durableJournal.abortBeforeRelease).not.toHaveBeenCalled()
     expect(durableJournal.complete).not.toHaveBeenCalled()
   })

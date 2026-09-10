@@ -38,8 +38,8 @@ export {
 } from './qualify-candidate'
 
 export {
-  exactCurrentCatalogOperationIsRouteable,
+  exactCurrentCatalogToolIsRouteable,
   routeabilityQualityGate,
-  type CurrentCatalogOperationInput,
+  type CurrentCatalogToolInput,
   type RouteabilityQualityInput,
 } from './quality-gate'

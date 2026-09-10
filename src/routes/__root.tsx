@@ -2,16 +2,16 @@
 import { ClerkProvider, useAuth } from '@clerk/tanstack-react-start'
 import { ConvexProviderWithClerk } from 'convex/react-clerk'
 import { ConvexReactClient, useConvexAuth, useMutation } from 'convex/react'
-import { HeadContent, Outlet, Scripts, createRootRoute, useRouter, useRouterState } from '@tanstack/react-router'
+import { ClientOnly, HeadContent, Link, Outlet, Scripts, createRootRoute, useRouter, useRouterState } from '@tanstack/react-router'
 import { useEffect, useState, type ReactNode } from 'react'
 import { Toaster } from 'sonner'
 
 
 import { RouteProgressBar } from '@/components/ae/layout/AeRouteProgressBar'
+import { AePageState } from '@/components/ae/layout/AePageState'
+import { Button } from '@/components/ui/button'
 import { SITE_THEME_COLOR_HEX } from '@/components/ui/theme-meta'
 
-import { REQUEST_FAILED_TOAST_EVENT, type RequestFailedToastDetail } from '@/lib/http/toast-error-funnel'
-import { toast } from '@/lib/ui/toast'
 import { AeObservabilityErrorBoundary } from '@/components/ae/feedback/AeObservabilityErrorBoundary'
 import { bootClientObservability } from '@/lib/observability/boot-client-observability'
 import appCss from '../styles/globals.css?url'
@@ -46,7 +46,7 @@ export const Route = createRootRoute({
     ],
     links: [
       { rel: 'stylesheet', href: appCss },
-      { rel: 'icon', href: AECON_MARK_SRC, type: 'image/png' },
+      { rel: 'icon', href: AECON_MARK_SRC, type: 'image/svg+xml' },
       { rel: 'apple-touch-icon', href: AECON_MARK_SRC },
     ],
   }),
@@ -61,30 +61,16 @@ function RootComponent() {
   )
 }
 
-function AeRequestFailedToasts() {
-  useEffect(() => {
-    function onRequestFailed(event: Event) {
-      const message = (event as CustomEvent<RequestFailedToastDetail>).detail?.message
-      if (typeof message === 'string' && message.length > 0) toast.error(message)
-    }
-    window.addEventListener(REQUEST_FAILED_TOAST_EVENT, onRequestFailed)
-    return () => window.removeEventListener(REQUEST_FAILED_TOAST_EVENT, onRequestFailed)
-  }, [])
-
-  return null
-}
-
 function RootDocument({ children }: { children: ReactNode }) {
   const pathname = useRouterState({ select: (state) => state.location.pathname })
-  const content = requiresChatProviders(pathname)
-    ? (
+  const chatProvidersRequired = requiresChatProviders(pathname)
+  const content = isLocalE2EAuthBypassEnabled() && !chatProvidersRequired
+    ? children
+    : (
         <ClerkProvider appearance={clerkAppearance}>
-          <ChatConvexProvider>{children}</ChatConvexProvider>
+          {chatProvidersRequired ? <ChatConvexProvider>{children}</ChatConvexProvider> : children}
         </ClerkProvider>
       )
-    : isLocalE2EAuthBypassEnabled() || !requiresClerkProvider(pathname)
-      ? children
-      : <ClerkProvider appearance={clerkAppearance}>{children}</ClerkProvider>
 
   return (
     <html lang="en">
@@ -95,14 +81,15 @@ function RootDocument({ children }: { children: ReactNode }) {
         <RouteProgressBar />
         <AeObservabilityBoot />
         <AeObservabilityErrorBoundary>{content}</AeObservabilityErrorBoundary>
-        <AeRequestFailedToasts />
-        <Toaster
-          ref={(node) => {
-            node?.setAttribute('aria-live', 'off')
-          }}
-          duration={6000}
-          visibleToasts={5}
-        />
+        <ClientOnly>
+          <Toaster
+            ref={(node) => {
+              node?.setAttribute('aria-live', 'off')
+            }}
+            duration={6000}
+            visibleToasts={5}
+          />
+        </ClientOnly>
         <Scripts />
       </body>
     </html>
@@ -113,14 +100,18 @@ function ChatConvexProvider({ children }: { children: ReactNode }) {
   const convexUrl = import.meta.env.VITE_CONVEX_URL?.trim()
   if (!convexUrl) {
     return (
-      <main className="grid min-h-screen place-items-center p-6">
-        <section className="max-w-md text-center" role="status" aria-live="polite">
-          <h1 className="text-lg font-semibold">Chat is unavailable</h1>
-          <p className="mt-2 text-sm text-muted-foreground">
-            The chat service is not configured. The catalog is still available.
-          </p>
-        </section>
-      </main>
+      <AePageState
+        title="Chat is unavailable"
+        description="Chat is not configured. The Tool catalogue remains available."
+        tone="warning"
+        action={(
+          <Button asChild className="min-h-touch">
+            <Link to="/market" search={{ window: '30d' }} hash="tools">
+              Browse Tools
+            </Link>
+          </Button>
+        )}
+      />
     )
   }
   return <ConfiguredChatConvexProvider convexUrl={convexUrl}>{children}</ConfiguredChatConvexProvider>
@@ -146,8 +137,4 @@ function InteractiveAuthorityMaterializer({ children }: { children: ReactNode })
 
 export function requiresChatProviders(pathname: string): boolean {
   return pathname === '/t/new' || pathname.startsWith('/t/') || pathname.startsWith('/s/')
-}
-
-function requiresClerkProvider(pathname: string): boolean {
-  return pathname.startsWith('/sign-in') || pathname.startsWith('/sign-up') || pathname.startsWith('/owner') || pathname.startsWith('/admin')
 }

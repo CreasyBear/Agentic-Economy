@@ -69,6 +69,23 @@ const externalOperationAccessPath = v.object({
   pricingSummary: v.optional(v.string()),
   provenance: literalUnion(ExternalOperationProvenanceValues),
 })
+
+const supplyIntegrationDraft = v.object({
+  sourceKind: v.union(
+    v.literal('openapi'),
+    v.literal('mcp'),
+    v.literal('agent_plugin'),
+    v.literal('x402'),
+  ),
+  sourceDescriptorJson: v.string(),
+  sourceDigest: v.string(),
+  sourceRevision: v.string(),
+  candidateRef: v.string(),
+  sourceSelectorJson: v.string(),
+  connectionRef: v.optional(v.string()),
+  validationInputJson: v.optional(v.string()),
+  updatedAt: v.number(),
+})
 const publicAccessPath = v.object({
   accessPathRef: v.string(),
   offeringRevision: v.number(),
@@ -134,7 +151,8 @@ export const catalogTables = {
     updatedAt: v.number(),
   })
     .index('by_offeringRef', ['offeringRef'])
-    .index('by_businessId_and_status', ['businessId', 'status']),
+    .index('by_businessId_and_status', ['businessId', 'status'])
+    .index('by_businessId_and_offeringRef', ['businessId', 'offeringRef']),
 
   businessOfferingRevisions: defineTable({
     offeringRef: v.string(),
@@ -162,6 +180,10 @@ export const catalogTables = {
     offeringSourceHash: v.string(),
     status: literalUnion(OfferingAccessPathStatusValues),
     descriptor: v.union(humanRequestAccessPath, externalOperationAccessPath),
+    /** Private resumable Provider setup material. Never enters public catalog projections. */
+    integrationDraft: v.optional(supplyIntegrationDraft),
+    /** Indexed copy of integrationDraft.updatedAt for bounded latest-draft resumption. */
+    integrationDraftUpdatedAt: v.optional(v.number()),
     sourceHash: v.string(),
     createdAt: v.number(),
     updatedAt: v.number(),
@@ -169,5 +191,9 @@ export const catalogTables = {
     .index('by_accessPathRef', ['accessPathRef'])
     .index('by_offeringRef_and_status', ['offeringRef', 'status'])
     .index('by_offeringRef_and_offeringRevision', ['offeringRef', 'offeringRevision'])
-    .index('by_businessId_and_status', ['businessId', 'status']),
+    .index('by_businessId_and_status', ['businessId', 'status'])
+    .index('by_businessId_and_integrationDraftUpdatedAt', [
+      'businessId',
+      'integrationDraftUpdatedAt',
+    ]),
 } as const

@@ -450,10 +450,7 @@ describe("capability publication importers", () => {
         },
         leaveCircularRef,
       ),
-    ).resolves.toEqual({
-      kind: "refused",
-      reason: "admit_schema_circular_reference",
-    });
+    ).resolves.toEqual({ kind: "refused", reason: "source_invalid" });
   });
 
   it("routes remote refs through admission for named refusal and resolution outcomes", async () => {

@@ -16,7 +16,7 @@ import {
 /**
  * Read-only acceptance pre-flight for a capability publication.
  *
- * Mirrors agentic.market `/validate` and CDP `POST /v2/x402/validate`: it runs the SAME
+ * Mirrors CDP `POST /v2/x402/validate`: it runs the SAME
  * deterministic `normalizeCapabilityPublication` the admission path uses and reports
  * whether it *would* be accepted — without admitting, writing to any store, or
  * requiring a `businessId`. It is side-effect-free and idempotent.
@@ -103,7 +103,7 @@ export function publicationValidationFix(reason: CapabilityPublicationImportRefu
       return 'The source declares an unsupported protocol/schema version. Use an OpenAPI 3.1.x document or the expected protocol version and re-validate.'
     case 'selector_invalid':
       return 'The operation selector is invalid or incomplete. Point at an existing path + HTTP method (GET/POST), or a well-formed MCP tool / x402 resource selector.'
-    case 'operation_not_found':
+    case 'tool_not_found':
       return 'The selected operation does not exist in the source. Choose a path + method the document actually defines.'
     case 'schema_missing':
       return 'The operation has no resolvable input and/or output JSON schema, or no unique 2xx response. Provide a single 2xx response with a JSON content schema.'

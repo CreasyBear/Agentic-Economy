@@ -7,7 +7,7 @@ import {
   newVercelBypassedRequestContext,
 } from './vercel-bypass'
 
-test('exact staging revision supports anonymous, durable, and shared operation chat', async ({ browser }) => {
+test('exact staging revision supports anonymous, durable, and shared Tool chat', async ({ browser }) => {
   test.setTimeout(120_000)
 
   const baseUrl = requiredBaseUrl()
@@ -37,7 +37,7 @@ test('exact staging revision supports anonymous, durable, and shared operation c
 
   const anonymousMessage = operationChat.getByRole('textbox', { name: 'Message' })
   await focusByTab(anonymousPage, anonymousMessage)
-  await anonymousMessage.fill('Name one kind of operation this market can search for.')
+  await anonymousMessage.fill('Name one kind of Tool this market can search for.')
   await anonymousPage.keyboard.press('Enter')
 
   const anonymousTranscript = operationChat.getByRole('log', { name: 'Chat transcript' })
@@ -62,7 +62,7 @@ test('exact staging revision supports anonymous, durable, and shared operation c
   await expect(ownerChat.getByRole('complementary', { name: 'Conversation history' })).toBeVisible()
   await expect(ownerChat.getByRole('button', { name: 'New chat' }).first()).toBeVisible()
 
-  const ownerPrompt = `Use registry.operations.search exactly once for weather. Do not execute. Summarize without implementation jargon. ${Date.now()}`
+  const ownerPrompt = `Use registry.tools.search exactly once for weather. Do not execute. Summarize without implementation jargon. ${Date.now()}`
   const ownerTitle = Array.from(ownerPrompt).slice(0, 80).join('')
   const ownerMessage = ownerChat.getByRole('textbox', { name: 'Message' })
   await focusByTab(ownerPage, ownerMessage)
@@ -74,13 +74,13 @@ test('exact staging revision supports anonymous, durable, and shared operation c
   await expect(ownerTranscript.getByText(ownerPrompt, { exact: true })).toBeVisible()
   const ownerAssistant = ownerTranscript.getByRole('article', { name: 'Assistant' }).last()
   await expectAssistantResponse(ownerAssistant)
-  const ownerSearchCard = ownerTranscript.locator('[data-operation-tool="registry.operations.search"]')
+  const ownerSearchCard = ownerTranscript.locator('[data-tool-card="registry.tools.search"]')
   await expect(ownerSearchCard).toHaveCount(1, { timeout: 40_000 })
   await expect(ownerSearchCard.getByText('Search tools', { exact: true })).toBeVisible()
   await expect(ownerSearchCard.getByText('Complete', { exact: true })).toBeVisible()
   await expect(ownerSearchCard.getByText('Working', { exact: true })).toHaveCount(0)
   await expect(ownerSearchCard.getByText(/^\d+ tools$/u)).toBeVisible()
-  await expect(ownerTranscript.locator('[data-operation-tool="operation.invoke"')).toHaveCount(0)
+  await expect(ownerTranscript.locator('[data-tool-card="tool.call"]')).toHaveCount(0)
 
   await ownerChat.getByRole('button', { name: 'Create share link' }).click()
   const shareInput = ownerChat.getByRole('textbox', { name: 'Read-only share link' })
@@ -106,15 +106,15 @@ test('exact staging revision supports anonymous, durable, and shared operation c
   await expect(sharedChat).toBeVisible()
   await expect(sharedChat.getByText(ownerPrompt, { exact: true })).toBeVisible()
   await expectAssistantResponse(sharedChat.getByRole('article', { name: 'Assistant' }).last())
-  const sharedSearchCard = sharedChat.locator('[data-operation-tool="registry.operations.search"]')
+  const sharedSearchCard = sharedChat.locator('[data-tool-card="registry.tools.search"]')
   await expect(sharedSearchCard).toHaveCount(1)
   await expect(sharedSearchCard.getByText('Search tools', { exact: true })).toBeVisible()
   await expect(sharedSearchCard.getByText('Complete', { exact: true })).toBeVisible()
   await expect(sharedSearchCard.getByText('Working', { exact: true })).toHaveCount(0)
   await expect(sharedSearchCard.getByText(/^\d+ tools$/u)).toBeVisible()
-  await expect(sharedChat.locator('[data-operation-tool="operation.invoke"')).toHaveCount(0)
+  await expect(sharedChat.locator('[data-tool-card="tool.call"]')).toHaveCount(0)
   expect(await sharedChat.evaluate((element) => element.outerHTML)).not.toMatch(
-    /\b(?:toolCallId|input|output|endpoint|headers|raw)\b|registry_operations_search/iu,
+    /\b(?:toolCallId|input|output|endpoint|headers|raw)\b|registry_tools_search/iu,
   )
   await expect(sharedChat.getByRole('textbox')).toHaveCount(0)
   await expect(sharedChat.getByRole('button', { name: /send message|new chat/i })).toHaveCount(0)

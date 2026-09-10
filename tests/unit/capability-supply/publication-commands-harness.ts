@@ -19,18 +19,20 @@ import { providerConnectionAuthorityDigest, type ProviderConnection } from '@/mo
 import {
   capabilityBindingRegistrationHash,
   capabilityOfferingRegistrationHash,
-  capabilityOperationId,
+  capabilityToolId,
   capabilityPublicationProvenanceDigest,
-  createPublicOperationRef,
+  createPublicToolRef,
   type CapabilityPublicationBindingDraft,
   type CapabilityPublicationImport,
   type CapabilityPublicationOfferingDraft,
 } from '@/modules/capability-supply/public'
 
 const currentPricingConfig = {
-  version: 'pricing:v2' as const,
-  unit: 'call' as const,
-  paidAmount: { currency: 'AUD' as const, units: '1200', exponent: 2 },
+  version: 'pricing:v3' as const,
+  kind: 'fixed_aud' as const,
+  currency: 'AUD' as const,
+  exponent: 6 as const,
+  amountUnits: '12000000',
 }
 
 export const digest = `sha256:${'a'.repeat(64)}`
@@ -63,7 +65,7 @@ export function offeringDraft(suffix = 'demo'): CapabilityPublicationOfferingDra
     presentation: {
       label: `${suffix} lookup`,
       summary: 'Returns one structured result.',
-      price: { kind: 'fixed' as const, amount: { currency: 'AUD' as const, units: '1200', exponent: 2 } },
+      price: { kind: 'fixed' as const, amount: { currency: 'AUD' as const, units: '12000000', exponent: 6 } },
       materialTerms: [],
       commercialRelationship: {
         kind: 'none' as const,
@@ -105,9 +107,11 @@ export async function preparedPublication(
     source: publicationSource(capabilityId, version),
     sourceRevision: 'source-revision:demo',
     pricingConfig: {
-      version: 'pricing:v2',
-      unit: 'call',
-      paidAmount: { currency: 'AUD', units: '1200', exponent: 2 },
+      version: 'pricing:v3',
+      kind: 'fixed_aud',
+      currency: 'AUD',
+      exponent: 6,
+      amountUnits: '12000000',
     },
     evidenceRefs: context.evidenceRefs,
   })
@@ -211,8 +215,8 @@ export async function publicationFixture(): Promise<PublicationFixture> {
   })
   if ('reason' in admitted) throw new Error(`publication_fixture_refused:${admitted.reason}`)
   const ref = admitted.encoded.contract.ref
-  const operationRef = createPublicOperationRef({
-    operationId: capabilityOperationId(ref.capabilityId),
+  const toolRef = createPublicToolRef({
+    operationId: capabilityToolId(ref.capabilityId),
     publicationRef: admitted.offering.offeringId,
     publicationRevision: 1,
     contractRef: ref,
@@ -245,10 +249,10 @@ export async function publicationFixture(): Promise<PublicationFixture> {
   }
   const connectionAuthority = connectionAuthoritySnapshotFromProviderConnection(
     providerConnection,
-    operationRef,
+    toolRef,
   )
   const publication = currentPublication({
-    operationRef,
+    toolRef,
     disposition: 'withdrawn',
     sourceKind: prepared.sourceKind,
     sourceSelector: prepared.sourceSelector,
@@ -333,8 +337,8 @@ export function currentPublication(
   const ref = encodedFor().contract.ref
   return {
     id: 'pub-row-1',
-    operationRef: createPublicOperationRef({
-      operationId: capabilityOperationId(ref.capabilityId),
+    toolRef: createPublicToolRef({
+      operationId: capabilityToolId(ref.capabilityId),
       publicationRef: 'offering:demo:lookup',
       publicationRevision: 1,
       contractRef: ref,

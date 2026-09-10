@@ -6,11 +6,11 @@ export type SupplyLandingTool = Readonly<{
   inputJsonSchema?: string;
   outputJsonSchema?: string;
 }>;
-export type SupplyLandingReadback<Services> =
+export type SupplyLandingReadback<Listings> =
   | Readonly<{
       kind: "available";
       tools: readonly SupplyLandingTool[];
-      services: Services;
+      listings: Listings;
       evidence: "source" | "labelled_local_dev";
     }>
   | Readonly<{
@@ -28,14 +28,14 @@ type SupplyLandingToolDescriptor = Readonly<{
   outputJsonSchema?: unknown;
 }>;
 
-export type SupplyLandingPorts<Services> = Readonly<{
+export type SupplyLandingPorts<Listings> = Readonly<{
   listTools: () => readonly SupplyLandingToolDescriptor[];
-  listServices: () => Promise<Services>;
+  listListings: () => Promise<Listings>;
 }>;
 
-export async function loadSupplyLandingReadback<Services>(
-  ports: SupplyLandingPorts<Services>,
-): Promise<SupplyLandingReadback<Services>> {
+export async function loadSupplyLandingReadback<Listings>(
+  ports: SupplyLandingPorts<Listings>,
+): Promise<SupplyLandingReadback<Listings>> {
   try {
     const tools = ports.listTools()
       .slice(0, 32)
@@ -53,8 +53,8 @@ export async function loadSupplyLandingReadback<Services>(
               outputJsonSchema: JSON.stringify(tool.outputJsonSchema, null, 2),
             }),
       }));
-    const services = await ports.listServices();
-    return { kind: "available", tools, services, evidence: "source" };
+    const listings = await ports.listListings();
+    return { kind: "available", tools, listings, evidence: "source" };
   } catch {
     return { kind: "error", reason: "source_unavailable", retryable: true };
   }

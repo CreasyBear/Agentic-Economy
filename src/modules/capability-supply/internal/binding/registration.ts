@@ -20,14 +20,14 @@ export type CapabilityConnectionAuthoritySnapshot = Readonly<{
   adapterId: string
   authorityGeneration: number
   authorityDigest: string
-  operationRef: string
+  toolRef: string
   grantedScopes: readonly string[]
   grantedResources: readonly string[]
 }>
 
 export function connectionAuthoritySnapshotFromProviderConnection(
   connection: ProviderConnection,
-  operationRef: string,
+  toolRef: string,
 ): CapabilityConnectionAuthoritySnapshot {
   return {
     connectionRef: connection.connectionRef,
@@ -35,7 +35,7 @@ export function connectionAuthoritySnapshotFromProviderConnection(
     adapterId: connection.adapterId,
     authorityGeneration: connection.authorityGeneration,
     authorityDigest: connection.authorityDigest,
-    operationRef,
+    toolRef,
     grantedScopes: uniqueSorted(connection.grantedScopes),
     grantedResources: uniqueSorted(connection.grantedResources),
   }
@@ -48,7 +48,7 @@ export function connectionAuthoritySnapshotIsValid(
     && snapshot.connectionRef.trim().length > 0
     && snapshot.providerRef.trim().length > 0
     && snapshot.adapterId.trim().length > 0
-    && snapshot.operationRef.trim().length > 0
+    && snapshot.toolRef.trim().length > 0
     && Number.isSafeInteger(snapshot.authorityGeneration)
     && snapshot.authorityGeneration >= 1
     && isCanonicalDigest(snapshot.authorityDigest)
@@ -74,7 +74,7 @@ export function connectionAuthoritySnapshotsEqual(
 export function connectionAuthoritySnapshotMatches(
   snapshot: CapabilityConnectionAuthoritySnapshot | undefined,
   connection: ProviderConnection | null | undefined,
-  expected: Readonly<{ businessId: string; operationRef: string; adapterId: string; now: number }>,
+  expected: Readonly<{ businessId: string; toolRef: string; adapterId: string; now: number }>,
 ): connection is ProviderConnection {
   return connectionAuthoritySnapshotIsValid(snapshot)
     && connection != null
@@ -88,7 +88,7 @@ export function connectionAuthoritySnapshotMatches(
     && connection.providerRef === snapshot.providerRef
     && connection.adapterId === expected.adapterId
     && snapshot.adapterId === expected.adapterId
-    && snapshot.operationRef === expected.operationRef
+    && snapshot.toolRef === expected.toolRef
     && snapshot.authorityGeneration === connection.authorityGeneration
     && snapshot.authorityDigest === connection.authorityDigest
     && uniqueSorted(connection.grantedScopes).join('\u0000') === snapshot.grantedScopes.join('\u0000')

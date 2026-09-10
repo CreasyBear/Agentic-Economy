@@ -9,7 +9,6 @@ const serverMocks = vi.hoisted(() => ({
   sourceQuery: vi.fn((name: string) => ({ name })),
   sourceMutation: vi.fn((name: string) => ({ name })),
   registerAgentAccessGrant: vi.fn(),
-  revokeAgentAccessGrant: vi.fn(),
 }))
 
 vi.mock('@clerk/tanstack-react-start/server', () => ({
@@ -31,12 +30,14 @@ vi.mock('@/lib/server/convex-source', () => ({
 }))
 vi.mock('@/modules/agent-access/policy.functions', () => ({
   registerAgentAccessGrant: serverMocks.registerAgentAccessGrant,
-  revokeAgentAccessGrant: serverMocks.revokeAgentAccessGrant,
 }))
 
 import {
   buildOwnerAgentAccessPolicy,
+  disconnectAgentServer,
   issueAgentAccessKeyServer,
+  renameAgentServer,
+  revokeAgentCredentialServer,
 } from '@/modules/agent-access/agent-access.functions'
 
 const amount = (units: string) => ({ currency: 'USD', units, exponent: 2 })
@@ -61,7 +62,7 @@ beforeEach(() => {
     kind: 'recorded',
     grantRef: input.grantRef,
     generation: 1,
-    policyDigest: 'sha256:policy',
+    spendingPolicyDigest: 'sha256:policy',
     lifecycle: 'active',
     expiresAt: input.expiresAt,
   }))
@@ -69,14 +70,14 @@ beforeEach(() => {
     principalId: 'ae:server-function',
     ownerId: 'ae:server-function',
     credentialId: 'ae:server-function',
-    scopes: ['market_operations:invoke'],
+    scopes: ['market_tools:call'],
   })
   serverMocks.callSourceQuery.mockResolvedValue([])
   serverMocks.registerAgentAccessGrant.mockResolvedValue({
     kind: 'recorded',
     grantRef: 'server-12345678',
     generation: 1,
-    policyDigest: 'sha256:policy',
+    spendingPolicyDigest: 'sha256:policy',
     lifecycle: 'active',
     expiresAt: Date.now() + 60_000,
   })
@@ -90,32 +91,35 @@ describe('owner agent-access issuance policy', () => {
   it('builds explicit bounded production spend, rate, and concurrency limits', () => {
     const policy = buildOwnerAgentAccessPolicy({
       environment: 'production',
-      maximumSpendPerInvocation: amount('100'),
+      maximumSpendPerCall: amount('100'),
       maximumDailySpend: amount('500'),
       maximumMonthlySpend: amount('2000'),
-      maximumConcurrentInvocations: 2,
+      maximumConcurrentCalls: 2,
       maximumCallsPerMinute: 10,
       maximumCallsPerHour: 100,
     })
     expect(policy.environment).toBe('production')
-    expect(policy.budget.maximumSpendPerInvocation).toEqual(amount('100'))
+    expect(policy.budget.maximumSpendPerCall).toEqual(amount('100'))
     expect(policy.budget.maximumDailySpend).toEqual(amount('500'))
     expect(policy.budget.maximumMonthlySpend).toEqual(amount('2000'))
-    expect(policy.budget.maximumConcurrentInvocations).toBe(2)
+    expect(policy.budget.maximumConcurrentCalls).toBe(2)
     expect(policy.rate.maximumCallsPerMinute).toBe(10)
     expect(policy.rate.maximumCallsPerHour).toBe(100)
   })
 
   it('keeps the production default fail-safe when no explicit budgets are supplied', () => {
     const policy = buildOwnerAgentAccessPolicy({ environment: 'production' })
-    expect(policy.budget.maximumSpendPerInvocation).toEqual(amount('0'))
-    expect(policy.budget.maximumDailySpend).toEqual(amount('0'))
-    expect(policy.budget.maximumMonthlySpend).toEqual(amount('0'))
+    const zero = { currency: 'AUD', units: '0', exponent: 6 }
+    expect(policy.budget.maximumSpendPerCall).toEqual(zero)
+    expect(policy.budget.maximumDailySpend).toEqual(zero)
+    expect(policy.budget.maximumMonthlySpend).toEqual(zero)
   })
 
   it('does not replace sandbox policy limits with production zero defaults', () => {
     const policy = buildOwnerAgentAccessPolicy({ environment: 'sandbox' })
-    expect(policy.budget.maximumSpendPerInvocation.units).not.toBe('0')
+    expect(policy.budget.maximumSpendPerCall).toEqual({ currency: 'AUD', units: '1000000', exponent: 6 })
+    expect(policy.budget.maximumDailySpend).toEqual({ currency: 'AUD', units: '5000000', exponent: 6 })
+    expect(policy.budget.maximumMonthlySpend).toEqual({ currency: 'AUD', units: '20000000', exponent: 6 })
   })
 
   it('requires canonical Convex authority before Clerk effects and keeps provider IDs as locators', async () => {
@@ -169,5 +173,138 @@ describe('owner agent-access issuance policy', () => {
       data: { name: 'Server assistant', idempotencyKey: 'identity-12345678' },
     })).resolves.toEqual({ kind: 'error', code: 'missing_auth', retryable: false })
     expect(serverMocks.clerkClient).not.toHaveBeenCalled()
+  })
+
+  it('reports provider cleanup failure as partial and retries from canonical replay', async () => {
+    const canonical = {
+      kind: 'completed' as const,
+      principalRef: 'prn_agent_a',
+      providerTargets: [{ credentialRef: 'crd_agent_a', providerCredentialId: 'key_agent_a' }],
+      correlationRef: 'corr-agent-a',
+    }
+    serverMocks.callSourceMutation.mockImplementation(async (reference: { name: string }, input: Record<string, unknown>) => {
+      if (reference.name === 'agentAccessPrincipals:revokeCredentialForServer') return canonical
+      if (reference.name === 'agentAccessPrincipals:recordProviderRevocationForServer') {
+        expect(input).toMatchObject({ outcome: 'failed', providerCredentialId: 'key_agent_a' })
+        return { kind: 'completed' }
+      }
+      throw new Error(`unexpected mutation ${reference.name}`)
+    })
+    clerkApi.get.mockResolvedValue({ id: 'key_agent_a', subject: 'user_123', name: 'Agent A', revoked: false, expired: false, claims: {} })
+    clerkApi.revoke.mockRejectedValueOnce(new Error('provider unavailable'))
+
+    await expect(revokeAgentCredentialServer({ data: { credentialRef: 'crd_agent_a' } }))
+      .resolves.toMatchObject({ kind: 'partial', principalRef: 'prn_agent_a', retryable: true })
+
+    serverMocks.callSourceMutation.mockImplementation(async (reference: { name: string }, input: Record<string, unknown>) => {
+      if (reference.name === 'agentAccessPrincipals:revokeCredentialForServer') return { ...canonical, kind: 'replayed' }
+      if (reference.name === 'agentAccessPrincipals:recordProviderRevocationForServer') {
+        expect(input).toMatchObject({ outcome: 'revoked', providerCredentialId: 'key_agent_a' })
+        return { kind: 'completed' }
+      }
+      throw new Error(`unexpected mutation ${reference.name}`)
+    })
+    clerkApi.get.mockResolvedValue({ id: 'key_agent_a', subject: 'user_123', name: 'Agent A', revoked: true, expired: false, claims: {} })
+    await expect(revokeAgentCredentialServer({ data: { credentialRef: 'crd_agent_a' } }))
+      .resolves.toMatchObject({ kind: 'replayed', principalRef: 'prn_agent_a' })
+  })
+
+  it('disconnects only the canonical principal selected by the owner', async () => {
+    serverMocks.callSourceMutation.mockImplementation(async (reference: { name: string }, input: Record<string, unknown>) => {
+      if (reference.name === 'agentAccessPrincipals:disconnectAgentForServer') {
+        expect(input).toMatchObject({ principalRef: 'prn_agent_a' })
+        return { kind: 'completed', principalRef: 'prn_agent_a', providerTargets: [], correlationRef: 'corr-disconnect-a' }
+      }
+      throw new Error(`unexpected mutation ${reference.name}`)
+    })
+    await expect(disconnectAgentServer({ data: { principalRef: 'prn_agent_a' } }))
+      .resolves.toEqual({ kind: 'completed', principalRef: 'prn_agent_a', correlationRef: 'corr-disconnect-a' })
+    expect(clerkApi.revoke).not.toHaveBeenCalled()
+  })
+
+  it('renames through canonical Principal CAS without calling Clerk', async () => {
+    serverMocks.callSourceMutation.mockImplementation(async (reference: { name: string }, input: Record<string, unknown>) => {
+      if (reference.name !== 'agentAccessPrincipals:renameAgentForServer') {
+        throw new Error(`unexpected mutation ${reference.name}`)
+      }
+      expect(input).toMatchObject({
+        principalRef: 'prn_agent_a',
+        expectedRevision: 4,
+        displayName: 'Research assistant',
+        correlationRef: expect.any(String),
+      })
+      return {
+        kind: 'completed',
+        principalRef: 'prn_agent_a',
+        displayName: 'Research assistant',
+        revision: 5,
+        correlationRef: input.correlationRef,
+      }
+    })
+
+    await expect(renameAgentServer({
+      data: {
+        principalRef: 'prn_agent_a',
+        expectedRevision: 4,
+        displayName: 'Research assistant',
+      },
+    })).resolves.toMatchObject({
+      kind: 'completed',
+      principalRef: 'prn_agent_a',
+      displayName: 'Research assistant',
+      revision: 5,
+    })
+    expect(serverMocks.callSourceQuery).toHaveBeenCalledWith(
+      { name: 'agentAccessPolicy:listOwnerGrantReadbacks' },
+      { requireAuthority: true },
+    )
+    expect(serverMocks.clerkClient).not.toHaveBeenCalled()
+  })
+
+  it('returns resumable partial state when canonical disconnection has another bounded batch', async () => {
+    serverMocks.callSourceMutation.mockImplementation(async (reference: { name: string }) => {
+      if (reference.name === 'agentAccessPrincipals:disconnectAgentForServer') {
+        return {
+          kind: 'completed',
+          principalRef: 'prn_agent_many',
+          providerTargets: [],
+          hasMore: true,
+          correlationRef: 'corr-disconnect-many',
+        }
+      }
+      throw new Error(`unexpected mutation ${reference.name}`)
+    })
+    await expect(disconnectAgentServer({ data: { principalRef: 'prn_agent_many' } }))
+      .resolves.toEqual({
+        kind: 'partial',
+        code: 'work_remaining',
+        principalRef: 'prn_agent_many',
+        correlationRef: 'corr-disconnect-many',
+        retryable: true,
+      })
+    expect(clerkApi.revoke).not.toHaveBeenCalled()
+  })
+
+  it('does not call Clerk again when canonical replay has no pending provider work', async () => {
+    serverMocks.callSourceMutation.mockImplementation(async (reference: { name: string }) => {
+      if (reference.name === 'agentAccessPrincipals:revokeCredentialForServer') {
+        return {
+          kind: 'replayed',
+          principalRef: 'prn_agent_a',
+          providerTargets: [],
+          correlationRef: 'corr-agent-a-replay',
+        }
+      }
+      throw new Error(`unexpected mutation ${reference.name}`)
+    })
+
+    await expect(revokeAgentCredentialServer({ data: { credentialRef: 'crd_agent_a' } }))
+      .resolves.toEqual({
+        kind: 'replayed',
+        principalRef: 'prn_agent_a',
+        correlationRef: 'corr-agent-a-replay',
+      })
+    expect(clerkApi.get).not.toHaveBeenCalled()
+    expect(clerkApi.revoke).not.toHaveBeenCalled()
   })
 })

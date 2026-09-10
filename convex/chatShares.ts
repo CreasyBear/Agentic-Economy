@@ -17,8 +17,8 @@ import {
   writeChatThreadShare,
 } from '@/modules/chat-sharing/convex'
 import {
-  projectOperationCard,
-  serializeOperationCard,
+  projectToolCard,
+  serializeToolCard,
 } from '@/modules/chat/tool-card'
 
 import { components } from './_generated/api'
@@ -30,11 +30,12 @@ const MAX_PUBLIC_TEXT_CHARS = 8_000
 const MAX_PUBLIC_SUMMARY_CHARS = 240
 
 const chatToolId = v.union(
-  v.literal('registry.operations.search'),
-  v.literal('registry.operations.detail'),
-  v.literal('registry.operations.compare'),
-  v.literal('registry.operations.inspectPlan'),
-  v.literal('operation.invoke'),
+  v.literal('registry.tools.list'),
+  v.literal('registry.tools.search'),
+  v.literal('registry.tools.describe'),
+  v.literal('registry.tools.compare'),
+  v.literal('tool.quote'),
+  v.literal('tool.call'),
 )
 
 const publicTextPart = v.object({
@@ -43,9 +44,9 @@ const publicTextPart = v.object({
 })
 
 const publicChoiceRow = v.object({
-  operationRef: v.string(),
+  toolRef: v.string(),
   title: v.string(),
-  supplier: v.optional(v.string()),
+  provider: v.optional(v.string()),
   price: v.optional(v.string()),
   readiness: v.optional(v.string()),
   access: v.optional(v.string()),
@@ -57,12 +58,12 @@ const publicFact = v.object({
 })
 
 const publicCardChrome = {
-  type: v.literal('operation-card'),
+  type: v.literal('tool-card'),
   toolId: chatToolId,
   title: v.string(),
 }
 
-const publicOperationCardPart = v.union(
+const publicToolCardPart = v.union(
   v.object({
     ...publicCardChrome,
     kind: v.literal('status'),
@@ -73,7 +74,7 @@ const publicOperationCardPart = v.union(
     ...publicCardChrome,
     kind: v.literal('choices'),
     state: v.literal('complete'),
-    operationRefs: v.array(v.string()),
+    toolRefs: v.array(v.string()),
     choices: v.array(publicChoiceRow),
     count: v.optional(v.number()),
     contrasts: v.optional(v.array(publicFact)),
@@ -82,26 +83,41 @@ const publicOperationCardPart = v.union(
     ...publicCardChrome,
     kind: v.literal('inspect'),
     state: v.literal('complete'),
-    operationRefs: v.array(v.string()),
+    toolRefs: v.array(v.string()),
     facts: v.array(publicFact),
   }),
   v.object({
     ...publicCardChrome,
     kind: v.literal('execute'),
-    state: v.literal('complete'),
-    operationRefs: v.array(v.string()),
+    state: v.union(
+      v.literal('completed'),
+      v.literal('pending'),
+      v.literal('needs_authority'),
+      v.literal('reconciliation_required'),
+      v.literal('refused'),
+    ),
+    toolRefs: v.array(v.string()),
     name: v.optional(v.string()),
+    callRef: v.optional(v.string()),
+    outputPreview: v.optional(v.string()),
+    outputTruncated: v.optional(v.boolean()),
+    facts: v.array(publicFact),
+    receiptRef: v.optional(v.string()),
+    evidenceHash: v.optional(v.string()),
+    summary: v.string(),
+    nextAction: v.optional(v.string()),
+    retryable: v.optional(v.boolean()),
   }),
 )
 
 const publicSharedMessage = v.object({
   id: v.string(),
   role: v.union(v.literal('user'), v.literal('assistant')),
-  parts: v.array(v.union(publicTextPart, publicOperationCardPart)),
+  parts: v.array(v.union(publicTextPart, publicToolCardPart)),
 })
 
-type PublicOperationCard = typeof publicOperationCardPart.type
-type PublicSharedPart = typeof publicTextPart.type | PublicOperationCard
+type PublicToolCard = typeof publicToolCardPart.type
+type PublicSharedPart = typeof publicTextPart.type | PublicToolCard
 type PublicSharedMessage = typeof publicSharedMessage.type
 
 function boundUnicode(value: string, maximum: number): string {
@@ -126,29 +142,29 @@ function sanitizeFacts(values: unknown): Array<{ label: string; value: string }>
   })
 }
 
-function sanitizeStoredCard(stored: Record<string, unknown>): PublicOperationCard | null {
+function sanitizeStoredCard(stored: Record<string, unknown>): PublicToolCard | null {
   const title = typeof stored.title === 'string' ? sanitizeSummary(stored.title) : ''
   if (stored.kind === 'status') {
     return {
-      type: 'operation-card',
+      type: 'tool-card',
       kind: 'status',
-      toolId: stored.toolId as PublicOperationCard['toolId'],
+      toolId: stored.toolId as PublicToolCard['toolId'],
       title,
       state: stored.state === 'refused' ? 'refused' : 'error',
       summary: typeof stored.summary === 'string' ? sanitizeSummary(stored.summary) : 'Tool unavailable',
     }
   }
-  const operationRefs = Array.isArray(stored.operationRefs)
-    ? stored.operationRefs.filter((value): value is string => typeof value === 'string')
+  const toolRefs = Array.isArray(stored.toolRefs)
+    ? stored.toolRefs.filter((value): value is string => typeof value === 'string')
     : []
   if (stored.kind === 'choices') {
     const choices = Array.isArray(stored.choices)
       ? stored.choices.flatMap((value) => {
-          if (!isRecord(value) || typeof value.operationRef !== 'string' || typeof value.title !== 'string') return []
+          if (!isRecord(value) || typeof value.toolRef !== 'string' || typeof value.title !== 'string') return []
           return [{
-            operationRef: value.operationRef,
+            toolRef: value.toolRef,
             title: sanitizeSummary(value.title),
-            ...(typeof value.supplier === 'string' ? { supplier: sanitizeSummary(value.supplier) } : {}),
+            ...(typeof value.provider === 'string' ? { provider: sanitizeSummary(value.provider) } : {}),
             ...(typeof value.price === 'string' ? { price: sanitizeSummary(value.price) } : {}),
             ...(typeof value.readiness === 'string' ? { readiness: sanitizeSummary(value.readiness) } : {}),
             ...(typeof value.access === 'string' ? { access: sanitizeSummary(value.access) } : {}),
@@ -157,12 +173,12 @@ function sanitizeStoredCard(stored: Record<string, unknown>): PublicOperationCar
       : []
     const contrasts = sanitizeFacts(stored.contrasts)
     return {
-      type: 'operation-card',
+      type: 'tool-card',
       kind: 'choices',
-      toolId: stored.toolId as PublicOperationCard['toolId'],
+      toolId: stored.toolId as PublicToolCard['toolId'],
       title,
       state: 'complete',
-      operationRefs,
+      toolRefs,
       choices,
       ...(typeof stored.count === 'number' ? { count: stored.count } : {}),
       ...(contrasts.length === 0 ? {} : { contrasts }),
@@ -171,33 +187,59 @@ function sanitizeStoredCard(stored: Record<string, unknown>): PublicOperationCar
   if (stored.kind === 'inspect') {
     const facts = sanitizeFacts(stored.facts)
     return {
-      type: 'operation-card',
+      type: 'tool-card',
       kind: 'inspect',
-      toolId: stored.toolId as PublicOperationCard['toolId'],
+      toolId: stored.toolId as PublicToolCard['toolId'],
       title,
       state: 'complete',
-      operationRefs,
+      toolRefs,
       facts,
     }
   }
   if (stored.kind === 'execute') {
+    const state = stored.state === 'completed'
+      || stored.state === 'pending'
+      || stored.state === 'needs_authority'
+      || stored.state === 'reconciliation_required'
+      || stored.state === 'refused'
+      ? stored.state
+      : 'refused'
     return {
-      type: 'operation-card',
+      type: 'tool-card',
       kind: 'execute',
-      toolId: stored.toolId as PublicOperationCard['toolId'],
+      toolId: stored.toolId as PublicToolCard['toolId'],
       title,
-      state: 'complete',
-      operationRefs,
+      state,
+      toolRefs,
       ...(typeof stored.name === 'string' ? { name: sanitizeSummary(stored.name) } : {}),
+      ...(typeof stored.callRef === 'string'
+        ? { callRef: sanitizeSummary(stored.callRef) }
+        : {}),
+      ...(typeof stored.outputPreview === 'string'
+        ? { outputPreview: sanitizePublicString(stored.outputPreview, MAX_PUBLIC_TEXT_CHARS) }
+        : {}),
+      ...(stored.outputTruncated === true ? { outputTruncated: true } : {}),
+      facts: sanitizeFacts(stored.facts),
+      ...(typeof stored.receiptRef === 'string'
+        ? { receiptRef: sanitizeSummary(stored.receiptRef) }
+        : {}),
+      ...(typeof stored.evidenceHash === 'string'
+        ? { evidenceHash: sanitizeSummary(stored.evidenceHash) }
+        : {}),
+      summary: typeof stored.summary === 'string' ? sanitizeSummary(stored.summary) : 'Call result recorded.',
+      ...(typeof stored.nextAction === 'string'
+        ? { nextAction: sanitizeSummary(stored.nextAction) }
+        : {}),
+      ...(typeof stored.retryable === 'boolean' ? { retryable: stored.retryable } : {}),
     }
   }
   return null
 }
 
-function projectPublicToolPart(value: unknown): PublicOperationCard | null {
-  const card = projectOperationCard(value)
+function projectPublicToolPart(value: unknown): PublicToolCard | null {
+  const card = projectToolCard(value)
   if (card === null) return null
-  const stored = serializeOperationCard(card)
+  const stored = serializeToolCard(card)
   if (stored === null) return null
   return sanitizeStoredCard(stored)
 }
@@ -215,8 +257,8 @@ function projectPublicMessage(message: Awaited<ReturnType<typeof listUIMessages>
       })
       continue
     }
-    const operationCard = projectPublicToolPart(part)
-    if (operationCard !== null) parts.push(operationCard)
+    const toolCard = projectPublicToolPart(part)
+    if (toolCard !== null) parts.push(toolCard)
   }
   if (parts.length === 0) return null
   return { id: message.id, role: message.role, parts }

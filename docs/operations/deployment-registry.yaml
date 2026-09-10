@@ -1,0 +1,353 @@
+schemaVersion: ae.deployment-registry/v1
+# Current operating override: see operatingPause; the baseline below is dated.
+capturedAt: "2026-09-04T08:48:02Z"
+capturedFromRevision: "8621ef3f3017a0e2ebe19c6277da98f7d5488909"
+captureWorkingTree: dirty_preserved_user_and_infrastructure_changes
+
+environment:
+  id: package4-release
+  purpose: synthetic_release_qualification
+  authority: non_production
+  deploymentClass: synthetic_vps_fixture
+  moneyMode: fixture_only
+  releaseState: not_closed
+  productionReady: false
+  neverPromoteInPlace: true
+
+links:
+  - from: browser
+    to: vercel:agentic-economy-package4-release
+    purpose: public_ui_and_http
+  - from: vercel:agentic-economy-package4-release
+    to: convex:fastidious-barracuda-66
+    purpose: product_state_and_commands
+  - from: clerk:ins_3Io6c2NfCPqxUqJI3Vx3Jvc37V9
+    to: vercel:agentic-economy-package4-release
+    purpose: human_identity_and_session
+  - from: stripe:we_1UBYM070N4UjLqHtknl4R8Ep
+    to: https://agentic-economy-package4-release.vercel.app/api/stripe/webhook
+    purpose: active_funding_settlement_evidence_pending_cutover
+  - from: stripe:we_1UBshw70N4UjLqHtRdcPu1FS
+    to: https://agentic-economy-package4-release.vercel.app/api/stripe/webhook
+    purpose: exact_versioned_snapshot_destination_disabled_pending_cutover
+  - from: stripe:ed_test_61VLGGSYypj7Fpg7S16UvBfU9V8SqsP28ZeVu4UQaVMO
+    to: https://agentic-economy-package4-release.vercel.app/api/stripe/webhook/accounts-v2
+    purpose: accounts_v2_lifecycle_evidence_disabled_pending_route_deploy
+  - from: convex:fastidious-barracuda-66
+    to: cloudflare-access:formance-release.aecon.ai
+    purpose: official_formance_sdk
+  - from: cloudflare-access:formance-release.aecon.ai
+    to: aws:i-063c00d935d85d74f
+    purpose: outbound_tunnel_to_private_k3s
+  - from: aws:i-063c00d935d85d74f
+    to: rds:package4-release-formance
+    purpose: formance_ledger_storage
+
+services:
+  web:
+    provider: vercel
+    projectName: agentic-economy-package4-release
+    projectId: prj_ADlGp7Fkox0D2MsAq0RkL3oaNFFn
+    teamId: team_O85TtPPdPANw2OCjrj4dEpxp
+    canonicalUrl: https://agentic-economy-package4-release.vercel.app
+    observedDeploymentId: dpl_4eu4Fnn5EydfJybpixbY7t7h4QyZ
+    observedSourceRevision: "6593dbe7b4b8f75304caeed5b468acc497b720f4"
+    observedState: ready
+    stagedStripeCandidateId: dpl_BHhR2rMv3oWkAzWZw3BXNvMGUX95
+    stagedStripeCandidateState: ready_unpromoted
+  backend:
+    provider: convex
+    projectName: agentic-economy-package4-release
+    deploymentName: fastidious-barracuda-66
+    providerClass: development
+    aeAuthority: synthetic_release
+    observedState: deployed
+  identity:
+    provider: clerk
+    applicationId: app_3Io6c0wmApyND4IBtoeomurojqj
+    instanceId: ins_3Io6c2NfCPqxUqJI3Vx3Jvc37V9
+    issuerHost: relative-phoenix-8958.clerk.accounts.dev
+    mode: test
+    observedState: authenticated_journey_verified
+  processor:
+    provider: stripe
+    accountId: acct_1Tlni770N4UjLqHt
+    webhookEndpointId: we_1UBYM070N4UjLqHtknl4R8Ep
+    mode: sandbox
+    checkoutMode: hosted_page
+    observedState: funded_with_3ds
+    snapshotDestination:
+      state: deployed_requires_narrowing
+      apiVersion: unpinned
+      unexpectedEvents: [checkout.session.expired]
+    snapshotReplacement:
+      id: we_1UBshw70N4UjLqHtRdcPu1FS
+      state: exact_allowlist_versioned_disabled_pending_cutover
+      apiVersion: 2026-07-29.dahlia
+      route: https://agentic-economy-package4-release.vercel.app/api/stripe/webhook
+      signingSecretBinding: vercel_package4_present
+    accountsV2Destination:
+      id: ed_test_61VLGGSYypj7Fpg7S16UvBfU9V8SqsP28ZeVu4UQaVMO
+      state: exact_allowlist_disabled_pending_route_deploy
+      route: https://agentic-economy-package4-release.vercel.app/api/stripe/webhook/accounts-v2
+      signingSecretBinding: vercel_package4_present
+    ingestionTarget: convex_deployed_vercel_candidate_ready_unpromoted
+    commandKeyTarget: restricted_test_key_bound_in_vercel_candidate_ready
+    readbackKeyTarget: restricted_test_key_not_installed
+  formanceEdge:
+    provider: cloudflare
+    hostname: formance-release.aecon.ai
+    accessTeamDomain: agentic-economy-release.cloudflareaccess.com
+    unauthenticatedReadback: http_401
+    observedState: protected_and_application_connected
+    accountNotificationPolicies: declared_not_applied
+  formance:
+    edition: community
+    stackVersion: v3.2.10
+    gatewayVersion: v2.3.1
+    ledgerVersion: v2.4.12
+    sdkVersion: v7.0.0
+    ledgerName: agentic-economy-release
+    schemaVersion: v1.3.0
+    observedState: funding_write_and_balance_read_verified
+  infrastructure:
+    provider: aws
+    accountId: "197716152388"
+    openTofuAllowedAccountId: "197716152388"
+    primaryRegion: ap-southeast-2
+    disasterRecoveryRegion: ap-southeast-4
+    vpcId: vpc-013df7a404d89edd4
+    k3sInstanceId: i-063c00d935d85d74f
+    k3sInstanceType: t4g.large
+    k3sPublicAddress: false
+    ssmState: online
+    rdsInstanceId: package4-release-formance
+    rdsEngineVersion: "16.13"
+    rdsMultiAz: true
+    rdsPublic: false
+    rdsEncrypted: true
+    rdsDeletionProtection: true
+    rdsBackupRetentionDays: 7
+    rdsCredentialState: rotated_and_health_verified_2026_09_04
+    primaryBackupVault: package4-release-package4-primary
+    disasterRecoveryBackupVault: package4-release-package4-dr
+    stateBucket: agentic-economy-p4-state-197716152388-ap-southeast-2
+    observedInfrastructureRevision: c2306fad2fcd2cd036990dba3542a81381544906
+    routineIdentity: arn:aws:iam::197716152388:role/Package4ReleaseOpenTofu
+    rootMfa: true
+    rootAccessKeys: 0
+    accountS3PublicAccessBlockControls: 4
+    defaultEbsEncryption: true
+    cloudTrail: agentic-economy-audit
+    cloudTrailMultiRegion: true
+    cloudTrailLogValidation: true
+    guardDuty: enabled
+    accessAnalyzer: agentic-economy-account
+    vpcFlowLogId: fl-07bafd6c56693c761
+    vpcFlowLogState: active
+    vpcFlowRetentionDays: 14
+    centralizedLogRetentionDays: 30
+    actionableAlarmCount: 8
+    infrastructureAlertSubscriber: joel@agentic-economy.ai
+    infrastructureAlertDelivery: verified
+    budgets:
+      - name: My Monthly Cost Budget
+        limitUsd: 20
+      - name: Agentic Economy USD 400 Runway
+        limitUsd: 400
+    latestSydneyBackup: completed
+    latestMelbourneCopy: completed
+    accountBaselinePlan: no_changes
+    releaseObservabilityState: verified
+  recoveryDrill:
+    identifier: package4-release-restore-20260904
+    state: retained_pending_confirmed_cleanup
+    databaseState: available
+    isolatedNamespace: package4-release-restore-20260904
+    restoredPoint: "2026-09-04T05:04:07Z"
+    restoreRequestedAt: "2026-09-04T05:09:15Z"
+    verificationCompletedAt: "2026-09-04T05:59:12.742Z"
+    rpoSeconds: 308
+    rpoTargetSeconds: 300
+    rpoResult: fail_by_8_seconds
+    rtoSeconds: 2998
+    rtoTargetSeconds: 3600
+    rtoResult: pass
+    schemaVersions: [v1.3.0]
+    idempotentReplayCount: 1
+    verification: pass
+    openTofuPlan: no_changes
+    cleanupPath: exact_name_script_then_reviewed_destroy_plan
+  productionFoundation:
+    environmentPrefix: ae-production
+    state: declared_not_applied
+    primaryRegion: ap-southeast-2
+    disasterRecoveryRegion: ap-southeast-4
+    vpcCidr: 10.43.0.0/16
+    formanceHostname: formance.aecon.ai
+    ledgerName: agentic-economy-production
+    foundationGate: locked_and_fail_closed
+    applicationTrafficBound: false
+
+credentialCustody:
+  - id: aws-human-login
+    owner: aws_iam
+    reference: arn:aws:iam::197716152388:user/joel-package4-deployer
+    valueLocation: aws_managed_login
+  - id: aws-opentofu-role
+    owner: aws_iam
+    reference: arn:aws:iam::197716152388:role/Package4ReleaseOpenTofu
+    valueLocation: temporary_sts_session
+  - id: cloudflare-tunnel-token
+    owner: cloudflare
+    valueLocation: aws_secrets_manager
+    reference: package4-release/package4/cloudflare-tunnel-token
+  - id: cloudflare-access-application
+    owner: cloudflare
+    valueLocation: aws_secrets_manager_and_runtime_environment
+    reference: package4-release/package4/cloudflare-access-application
+  - id: application-runtime-secrets
+    owner: individual_providers
+    valueLocation: vercel_and_convex_environment
+    reference: src/lib/deployment/manifest.ts
+  - id: infisical-custody-target
+    owner: infisical
+    valueLocation: not_ready_example_project_only
+    reference: purpose_built_platform_and_customer_projects_required_before_use
+
+acceptedSyntheticReleaseRisks:
+  - id: cloudflare-tunnel-token-rotation-deferred
+    condition: token_was_exposed_during_local_operator_evidence_capture
+    acceptedBy: user
+    acceptedAt: "2026-09-03"
+    boundary: synthetic_release_only
+    mandatoryBeforeProduction: rotate_token_force_disconnect_old_connections_and_rebind_replicas
+  - id: recovery-drill-rds-credential-rotation-deferred
+    condition: drill_master_credential_was_exposed_during_recovery_diagnostics
+    acceptedBy: user
+    acceptedAt: "2026-09-04"
+    boundary: isolated_recovery_drill_only
+    stabilisationTreatment: do_not_retrieve_reuse_or_rotate
+    mandatoryBeforeProduction: destroy_exact_drill_after_evidence_approval
+
+blockingFindings:
+  - id: stripe-durable-ingestion-not-deployed
+    severity: critical
+    evidence: convex_inbox_and_worker_are_deployed_and_the_exact_thin_destination_is_staged_disabled_but_restricted_keys_vercel_route_snapshot_cutover_and_canaries_remain
+  - id: cloudflare-account-alerts-not-applied
+    severity: high
+    evidence: validated_two_policy_root_exists_but_current_management_token_is_not_accepted
+  - id: cost-explorer-ingestion-pending
+    severity: high
+    evidence: GetCostAndUsage_returns_DataUnavailable_and_GetCostForecast_has_insufficient_history
+  - id: recovery-rpo-target-missed
+    severity: high
+    evidence: isolated_restore_verified_with_RTO_2998_seconds_but_RPO_308_seconds_exceeded_300_second_target
+  - id: production-cloudflare-bootstrap-token-unavailable
+    severity: high
+    evidence: existing_Cloudflare_management_token_is_invalid_and_production_requires_fresh_tunnel_DNS_and_Access_resources
+  - id: package4-commercial-closure-incomplete
+    severity: high
+    evidence: refund_replay_managed_x402_recovery_protocol_and_Base_Sepolia_gates_remain
+  - id: production-approvals-inactive
+    severity: blocking
+    evidence: production_funding_and_mainnet_effects_remain_disabled
+
+vocabularyGenerationReadback:
+  capturedAt: "2026-09-05T09:10:00Z"
+  scope: non_deploying_codegen_preflight_only
+  deploymentName: fastidious-barracuda-66
+  canonicalTestUrl: https://agentic-economy-package4-release.vercel.app
+  healthHttp: 200
+  readyHttp: 200
+  observedSourceRevision: "6593dbe7b4b8f75304caeed5b468acc497b720f4"
+  unauthenticatedFormanceHttp: 401
+  stripeInbox: {stalled: 0, failed: 0, reconciliationRequired: 0}
+  snapshotResult: incomplete_with_five_explicit_skips
+  skippedChecks: [aws, local_restricted_command_key, local_restricted_readback_key, stripe_destinations, cloudflare_alerts]
+  convexCodegenDryRun: passed_without_generated_file_changes
+  deploymentOrDataMutation: false
+  backupRestoreOrCutoverApproval: false
+  evidence: docs/archive/README.md#wayfinder-and-closeout
+  # Original evidence: remaining-housekeeping/files.tar.gz, files/.scratch/vocabulary-rationalisation/issues/22-regenerate-shared-artifacts.md
+
+vocabularyBackupReadback:
+  capturedAt: "2026-09-05T10:21:44Z"
+  scope: inventory_native_convex_export_read_only
+  environment: package4-release
+  authority: non_production_synthetic_release
+  deploymentSelector: dev:fastidious-barracuda-66
+  deploymentName: fastidious-barracuda-66
+  convexCliVersion: "1.45.0"
+  runtime: node_22.22.0_npm_11.5.1
+  targetReadback:
+    capturedAt: "2026-09-05T10:19Z"
+    canonicalTestUrl: https://agentic-economy-package4-release.vercel.app
+    healthHttp: 200
+    readyHttp: 200
+    observedSourceRevision: "6593dbe7b4b8f75304caeed5b468acc497b720f4"
+    stripeInbox: {stalled: 0, failed: 0, reconciliationRequired: 0}
+  archive:
+    privateDirectory: /Users/joelchan/.codex/backups/agentic-economy/convex-native-20260905-102139
+    fileName: snapshot_fastidious-barracuda-66_1788603701438628839.zip
+    directoryMode: "0700"
+    fileMode: "0600"
+    sizeBytes: 229603
+    sha256: 14a276d8b2d05caede5f155367cd0a8feffd8192d21c775fa5a721a38c3a9cbe
+    memberCount: 355
+    documentsJsonlMemberCount: 182
+    fileStorageMemberCount: 23
+  coverage:
+    exportScope: deployment_wide
+    includeFileStorage: true
+    declaredComponentMountCount: 11
+    componentSelector: unsupported_by_export_command
+    componentRestoreProof: not_performed
+    excludes: [code_configuration, environment_variables, pending_scheduled_functions]
+  checks:
+    nativeExportExit: 0
+    unzipTest: pass
+    zipTest: pass
+    archiveIntegrity: verified
+    restoration: not_performed
+    restorationTarget: not_resolved
+    deploymentDataMutation: false
+  snapshotSkipsUnchanged: [aws, local_restricted_command_key, local_restricted_readback_key, stripe_destinations, cloudflare_alerts]
+  cutoverGate: blocked_pending_isolated_restore_and_external_state_reconciliation
+  evidence: docs/operations/vocabulary-cutover-preflight.md
+  # Original report: remaining-housekeeping/files.tar.gz, files/.scratch/vocabulary-rationalisation/reports/31-hosted-cutover-preflight.md
+
+operatingPause:
+  requestedBy: user
+  requestedAt: "2026-09-06T01:36:00Z"
+  reason: reduce_aws_compute_cost_during_vocabulary_refactor
+  environment: package4-release
+  authority: non_production_synthetic_release
+  accountId: "197716152388"
+  region: ap-southeast-2
+  checkoutRevision: "fe09a6463ebda5d259b947ef21d07ae9194e2b7b"
+  deployedApplicationRevision: "6593dbe7b4b8f75304caeed5b468acc497b720f4"
+  ec2: {id: i-063c00d935d85d74f, state: stopped}
+  rds:
+    - id: package4-release-formance
+      state: stopped
+      automaticRestartTime: "2026-09-13T01:48:37.882Z"
+    - id: package4-release-restore-20260904
+      state: stopped
+      automaticRestartTime: "2026-09-13T01:44:38.220Z"
+  finalStopReadback: confirmed
+  finalStopReadbackAt: "2026-09-06T01:48:50Z"
+  rdsAutomaticRestart: after_seven_days_stopped_revisit_before_2026_09_13
+  automaticRestopScheduled: false
+  deletedResources: []
+  retained: [database_data, ebs_volumes, recovery_drill, backups, credentials, network, audit, alarms]
+  remainingChargeableResources: [nat_gateway, public_ipv4, storage, backups, account_services]
+  natGatewayId: nat-0aabc2385d7704d2d
+  hostedMoneyAvailability: intentionally_unavailable
+  nonAwsProviderConfigurationChanged: false
+  preStopSnapshot: six_explained_existing_release_gaps_aws_controls_and_backups_verified
+  postStopRequestSnapshot: same_six_explained_release_gaps_no_new_failures
+  resumeVerified: false
+  observedMonthToDateCostUsd: "18.5614214555"
+  costForecast: insufficient_history
+  evidenceAndResume: docs/operations/aws-foundation.md

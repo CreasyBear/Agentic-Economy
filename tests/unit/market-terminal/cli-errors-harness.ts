@@ -1,6 +1,12 @@
 import { spawn, spawnSync, type SpawnSyncReturns } from 'node:child_process'
+import { resolve } from 'node:path'
 
-const CLI_ARGV = ['--import', 'tsx', 'tools/ae/cli.ts'] as const
+// vitest globalSetup (tests/setup/build-cli.global.ts) builds this bundle
+// before any spawn test runs, so every spawn execs plain JS instead of paying
+// a tsx transpile on each of the hundreds of CLI-spawning assertions.
+export const CLI_BUNDLE_PATH = resolve(process.cwd(), 'packages/cli/dist/ae.js')
+
+const CLI_ARGV = [CLI_BUNDLE_PATH] as const
 
 export async function spawnCli(
   args: readonly string[],
@@ -44,5 +50,6 @@ export function spawnCliSync(
     cwd: process.cwd(),
     encoding: 'utf8',
     env: options?.env,
+    maxBuffer: 4 * 1024 * 1024,
   })
 }

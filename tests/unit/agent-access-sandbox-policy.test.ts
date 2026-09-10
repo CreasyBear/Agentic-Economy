@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   createAgentAccessGrant,
-  evaluateAgentAccessOperation,
+  evaluateAgentAccessTool,
 } from '../../src/modules/agent-access/policy'
 import { defaultSandboxAgentAccessPolicy } from '../../src/modules/agent-access/sandbox-policy'
 
@@ -18,9 +18,9 @@ describe('sandbox agent access policy', () => {
       applicationRef: 'app-1',
       credentialId: 'credential-1',
       environment: 'sandbox',
-      operationAccess: 'all_admitted',
-      authorityMode: 'bounded_mandate',
-      policy,
+      toolAccess: 'all_admitted',
+      authorityMode: 'spending_policy',
+      spendingPolicy: policy,
       lifecycle: 'active',
       generation: 1,
       createdAt: 1,
@@ -28,10 +28,10 @@ describe('sandbox agent access policy', () => {
       expiresAt: 10_000,
     })
     if (created.kind !== 'accepted') throw new Error(created.code)
-    expect(evaluateAgentAccessOperation({
+    expect(evaluateAgentAccessTool({
       grant: created.grant,
       principal: { principalId: 'principal-1', applicationRef: 'app-1', environment: 'sandbox' },
-      operation: { operationRef: 'timezone-convert-x402', spend: timezonePrice },
+      tool: { toolRef: 'operation:v1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', spend: timezonePrice },
       now: 100,
     })).toEqual({ kind: 'accepted', grantRef: 'grant-sandbox', generation: 1 })
   })

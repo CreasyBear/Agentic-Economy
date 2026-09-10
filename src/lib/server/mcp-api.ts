@@ -17,9 +17,13 @@ import { z } from 'zod'
 import { bearerChallenge, bearerModeChallenge } from '@/lib/http/oauth-challenge'
 import { buildProblem, gatewayFailureToProblem, type ProblemDetails, type ProblemKind } from '@/lib/errors'
 import { problem } from '@/lib/server/problem'
+import { package5SupplyActionRolloutDecision } from '@/lib/server/package5-rollout'
+import type { StringEnvironment } from '@/lib/server/read-trimmed-env'
 import { methodNotAllowed } from '@/lib/server/method-guard'
+import { assertHttpAdmission, rateLimitedResponse } from '@/lib/server/rate-limit'
 import { readBoundedRequestJson, readBoundedRequestText, type BoundedRequestTextResult } from '@/lib/server/bounded-request-body'
 import { ConvexSourceError } from '@/lib/server/convex-source'
+import { TOOL_READ_UNAVAILABLE_PROBLEM } from '@/modules/registry/public'
 import {
   authenticateAgentAccess,
   resolveAgentAccessPrincipal,
@@ -29,19 +33,31 @@ import { resolveCanonicalBaseUrl } from '@/lib/server/canonical-url'
 import { runWithRequestCorrelation, withRequestCorrelationHeader } from '@/lib/server/request-correlation'
 import { recordGatewayTelemetry, type GatewayTelemetryEvent } from '@/lib/server/gateway-telemetry'
 import { isRecord } from '@/modules/common/is-record'
-import { listMcpActions, mcpToolName, type AnyAction } from '@/modules/actions'
+import { describeActionMcpMetadata, isToolMarketReadAction, listMcpActions, mcpToolName, type AnyAction } from '@/modules/actions'
 import {
   agentAuthorityModeAllows,
   agentAuthorityScopeForMode,
   type AgentAccessAuthorityMode,
 } from '@/modules/agent-access/contract'
 import type { ActionAgentAccessPrincipal, ActionTimingSink } from '@/modules/common/action'
-import type { OperationInvokeService } from '@/modules/capability-execution/operation-invoke'
-import { createOperationInvokeService } from '@/lib/server/operation-invoke-api'
+import type { CallService } from '@/modules/capability-execution/call-authority'
+import { createCallService } from '@/lib/server/call-api'
 import { createSupplyManagementService, type SupplyManagementService } from '@/modules/capability-supply/supply-actions'
 import { createAccountManagementService, type AccountManagementService } from '@/modules/agent-access/account.actions'
 import { createMarketDemandService, type MarketDemandService } from '@/modules/market-demand/market-demand.actions'
+import { createFundingHandoffService } from '@/lib/server/funding-handoff-api'
+import type { FundingHandoffService } from '@/modules/money/funding-handoff.actions'
 const MAX_MCP_REQUEST_BODY_BYTES = 320 * 1024
+const AE_MCP_INSTRUCTIONS = [
+  'Use Agentic Economy to acquire one bounded outside contribution when your current harness lacks a capability.',
+  'Search with `ae_registry_tools_search` and a capability phrase.',
+  'Use `ae_registry_tools_list` to browse, `ae_registry_tools_describe` for one exact input contract, and `ae_registry_tools_compare` for up to four exact references.',
+  'Call `ae_tool_quote` with the exact Tool and input. Complete its one continuation or required action, then request a fresh Quote if the input or authority changes.',
+  'Call only with the Quote returned by `ae_tool_quote`.',
+  'If Account credit is insufficient, use `ae_funding_handoff_create`, give only its Stripe checkoutUrl to the payer, persist fundingSessionId, poll `ae_funding_handoff_status`, then explicitly retry the original Tool only after ready.',
+  'If effects are uncertain, use `ae_call_status` or `ae_call_reconcile` before retrying.',
+  'Agentic Economy returns the contribution or receipt; your existing harness keeps project planning and execution.',
+].join(' ')
 export type McpAccessTier = Readonly<{
   tier: 'anonymous' | 'authenticated'
   authorityMode?: AgentAccessAuthorityMode
@@ -49,10 +65,12 @@ export type McpAccessTier = Readonly<{
   principal?: ActionAgentAccessPrincipal
   correlationId?: string
   timing?: ActionTimingSink
-  operationInvokeService?: OperationInvokeService
+  callService?: CallService
   supplyManagementService?: SupplyManagementService
   accountManagementService?: AccountManagementService
   marketDemandService?: MarketDemandService
+  fundingHandoffService?: FundingHandoffService
+  rolloutEnvironment?: StringEnvironment
 }>
 
 type AeServerHandler<T extends AnyObjectSchema> = (
@@ -77,7 +95,10 @@ class ConciseMcpRequestError extends McpError {
 }
 class SafeMcpSdkServer extends Server {
   constructor() {
-    super({ name: 'agentic-economy', version: '1.0.0' })
+    super(
+      { name: 'agentic-economy', version: '1.0.0' },
+      { instructions: AE_MCP_INSTRUCTIONS },
+    )
   }
 
   override setRequestHandler<T extends AnyObjectSchema>(
@@ -103,21 +124,26 @@ class SafeMcpSdkServer extends Server {
 
 type McpToolFailure = ProblemDetails
 
-function mcpToolFailure(error: unknown, correlationId?: string): McpToolFailure {
-  const failure = error instanceof ConvexSourceError
-    ? gatewayFailureToProblem({
-      code: error.code === 'missing_auth' ? 'authentication_required' : 'source_unavailable',
-      retryable: error.status >= 500 || error.status === 429,
-      kind: 'error',
-    })
-    : {
-      kind: 'INTERNAL' as const,
-      code: 'action_execution_failed',
-      retryable: false,
-    }
+function mcpToolFailure(action: AnyAction, error: unknown, correlationId?: string): McpToolFailure {
+  const toolReadFailure = isToolMarketReadAction(action)
+  const failure = toolReadFailure
+    ? TOOL_READ_UNAVAILABLE_PROBLEM
+    : error instanceof ConvexSourceError
+      ? gatewayFailureToProblem({
+        code: error.code === 'missing_auth' ? 'authentication_required' : 'source_unavailable',
+        retryable: error.status >= 500 || error.status === 429,
+        kind: 'error',
+      })
+      : {
+        kind: 'INTERNAL' as const,
+        code: 'action_execution_failed',
+        retryable: false,
+      }
   return buildProblem({
     ...failure,
-    detail: safeMcpFailureDetail(failure.kind),
+    detail: toolReadFailure
+      ? TOOL_READ_UNAVAILABLE_PROBLEM.detail
+      : safeMcpFailureDetail(failure.kind),
     ...(correlationId === undefined ? {} : { extras: { correlationId } }),
   })
 }
@@ -140,9 +166,11 @@ function safeMcpFailureDetail(kind: ProblemKind): string {
 function mcpToolError(failure: McpToolFailure): {
   isError: true
   content: [{ type: 'text'; text: string }]
+  structuredContent: McpToolFailure
 } {
   return {
     isError: true,
+    structuredContent: failure,
     content: [{
       type: 'text',
       text: JSON.stringify(failure),
@@ -155,19 +183,19 @@ function mcpGatewayEvent(
   data: unknown,
   result: unknown,
 ): Omit<GatewayTelemetryEvent, 'correlationId' | 'durationMs'> | undefined {
-  if (!actionId.startsWith('operation.')) return undefined
+  if (!actionId.startsWith('tool.') && !actionId.startsWith('call.')) return undefined
   const input = isRecord(data) ? data : {}
   const output = isRecord(result) ? result : {}
-  const invocationRef = typeof output.invocationRef === 'string'
-    ? output.invocationRef
-    : typeof input.invocationRef === 'string' ? input.invocationRef : undefined
-  const operationRef = typeof output.operationRef === 'string'
-    ? output.operationRef
-    : typeof input.operationRef === 'string' ? input.operationRef : undefined
+  const callRef = typeof output.callRef === 'string'
+    ? output.callRef
+    : typeof input.callRef === 'string' ? input.callRef : undefined
+  const toolRef = typeof output.toolRef === 'string'
+    ? output.toolRef
+    : typeof input.toolRef === 'string' ? input.toolRef : undefined
   if (output.kind === 'refused') {
     return {
-      ...(invocationRef === undefined ? {} : { invocationRef }),
-      ...(operationRef === undefined ? {} : { operationRef }),
+      ...(callRef === undefined ? {} : { callRef }),
+      ...(toolRef === undefined ? {} : { toolRef }),
       outcome: 'refused',
       refusalCode: typeof output.code === 'string' ? output.code : 'action_execution_failed',
       ...(typeof output.retryable === 'boolean' ? { retryable: output.retryable } : {}),
@@ -175,51 +203,51 @@ function mcpGatewayEvent(
   }
   if (output.kind === 'reconciliation_required') {
     return {
-      ...(invocationRef === undefined ? {} : { invocationRef }),
-      ...(operationRef === undefined ? {} : { operationRef }),
+      ...(callRef === undefined ? {} : { callRef }),
+      ...(toolRef === undefined ? {} : { toolRef }),
       outcome: 'reconciliation_required',
       unknown: true,
     }
   }
   if (output.kind === 'needs_authority') {
     return {
-      ...(invocationRef === undefined ? {} : { invocationRef }),
-      ...(operationRef === undefined ? {} : { operationRef }),
+      ...(callRef === undefined ? {} : { callRef }),
+      ...(toolRef === undefined ? {} : { toolRef }),
       outcome: 'needs_authority',
       approval: 'required',
     }
   }
   if (output.kind === 'pending') {
     return {
-      ...(invocationRef === undefined ? {} : { invocationRef }),
-      ...(operationRef === undefined ? {} : { operationRef }),
+      ...(callRef === undefined ? {} : { callRef }),
+      ...(toolRef === undefined ? {} : { toolRef }),
       outcome: 'pending',
     }
   }
   if (output.kind === 'found') {
     const state = output.state
     return {
-      ...(invocationRef === undefined ? {} : { invocationRef }),
-      ...(operationRef === undefined ? {} : { operationRef }),
+      ...(callRef === undefined ? {} : { callRef }),
+      ...(toolRef === undefined ? {} : { toolRef }),
       outcome: state === 'cancelled'
         ? 'cancelled'
         : state === 'reconciliation_required'
           ? 'reconciliation_required'
           : state === 'terminal'
-            ? actionId === 'operation.reconcile' ? 'reconciled' : 'completed'
+            ? actionId === 'call.reconcile' ? 'reconciled' : 'completed'
             : 'pending',
     }
   }
   if (output.kind === 'completed' || output.kind === 'ok') {
     return {
-      ...(invocationRef === undefined ? {} : { invocationRef }),
-      ...(operationRef === undefined ? {} : { operationRef }),
+      ...(callRef === undefined ? {} : { callRef }),
+      ...(toolRef === undefined ? {} : { toolRef }),
       outcome: 'completed',
     }
   }
   return {
-    ...(invocationRef === undefined ? {} : { invocationRef }),
-    ...(operationRef === undefined ? {} : { operationRef }),
+    ...(callRef === undefined ? {} : { callRef }),
+    ...(toolRef === undefined ? {} : { toolRef }),
     outcome: 'failed',
     refusalCode: 'action_execution_failed',
   }
@@ -261,27 +289,41 @@ export function createAeMcpServer(
         && agentAuthorityModeAllows(access.authorityMode, requiredModeForAction(action)))
     ))
 
-  const server = new McpServer({ name: 'agentic-economy', version: '1.0.0' })
+  const server = new McpServer(
+    { name: 'agentic-economy', version: '1.0.0' },
+    { instructions: AE_MCP_INSTRUCTIONS },
+  )
   const sdkServer = new SafeMcpSdkServer()
   const serverWithSdk = server as { server: Server }
   serverWithSdk.server = sdkServer
   for (const action of admittedActions) {
+    const metadata = describeActionMcpMetadata(action)
     server.registerTool(
       mcpToolName(action),
       {
         title: action.name,
         description: mcpToolDescription(action),
         inputSchema: action.schema,
-        outputSchema: { result: action.outputSchema },
         annotations: {
           readOnlyHint: action.readOnly,
-          destructiveHint: !action.readOnly,
-          idempotentHint: true,
+          destructiveHint: action.readOnly ? false : metadata.destructive,
+          idempotentHint: metadata.idempotent,
+          openWorldHint: metadata.openWorld,
         },
       },
       async (data: unknown) => {
         const startedAt = Date.now()
         try {
+          const rollout = package5SupplyActionRolloutDecision(action.id, data, access.rolloutEnvironment)
+          if (!rollout.enabled) {
+            return mcpToolError(buildProblem({
+              kind: 'UNAVAILABLE',
+              code: rollout.code,
+              retryable: false,
+              detail: 'This Provider capability is not enabled for the current deployment.',
+              ...(access.correlationId === undefined ? {} : { extras: { correlationId: access.correlationId } }),
+            }))
+          }
           const result = await action.run({
             data,
             context: {
@@ -293,7 +335,8 @@ export function createAeMcpServer(
               ...(access.supplyManagementService === undefined ? {} : { supplyManagementService: access.supplyManagementService }),
               ...(access.accountManagementService === undefined ? {} : { accountManagementService: access.accountManagementService }),
               ...(access.marketDemandService === undefined ? {} : { marketDemandService: access.marketDemandService }),
-              ...(access.operationInvokeService === undefined ? {} : { operationInvokeService: access.operationInvokeService }),
+              ...(access.fundingHandoffService === undefined ? {} : { fundingHandoffService: access.fundingHandoffService }),
+              ...(access.callService === undefined ? {} : { callService: access.callService }),
             },
           })
           const outputValidation = await safeParseAsync(action.outputSchema, result)
@@ -313,7 +356,7 @@ export function createAeMcpServer(
           }
         } catch (error) {
           recordMcpGatewayTelemetry(action.id, data, undefined, access, startedAt)
-          return mcpToolError(mcpToolFailure(error, access.correlationId))
+          return mcpToolError(mcpToolFailure(action, error, access.correlationId))
         }
       },
     )
@@ -338,9 +381,42 @@ type McpRequestOptions = Readonly<{
   supplyManagementService?: SupplyManagementService
   accountManagementService?: AccountManagementService
   marketDemandService?: MarketDemandService
+  fundingHandoffService?: FundingHandoffService
   timing?: ActionTimingSink
-  operationInvokeService?: OperationInvokeService
+  callService?: CallService
+  rolloutEnvironment?: StringEnvironment
 }>
+
+/**
+ * MCP route boundary. Request admission is infrastructure, so an admission
+ * outage must not escape as an opaque framework 500. Keep the failure outside
+ * JSON-RPC (like authentication and media-type failures), but make it a
+ * truthful, retryable HTTP problem with the same request correlation reference.
+ */
+export async function handleMcpRouteRequest(
+  request: Request,
+  options: McpRequestOptions = {},
+): Promise<Response> {
+  return await runWithRequestCorrelation(request, async ({ correlationId }) => {
+    let admission
+    try {
+      admission = await assertHttpAdmission(request, 'public-read')
+    } catch {
+      return withRequestCorrelationHeader(problem({
+        status: 503,
+        kind: 'UNAVAILABLE',
+        code: 'mcp_admission_unavailable',
+        retryable: true,
+        detail: 'The MCP endpoint is temporarily unavailable. Retry later.',
+        extras: { correlationId },
+      }), correlationId)
+    }
+    if (!admission.ok) {
+      return withRequestCorrelationHeader(rateLimitedResponse(admission.retryAfter), correlationId)
+    }
+    return withRequestCorrelationHeader(await handleMcpRequest(request, options), correlationId)
+  })
+}
 
 function mcpActionConsequenceResource(action: AnyAction): string {
   const canonicalActionId = action.id.replace(/[A-Z]/g, (character) => `-${character.toLowerCase()}`)
@@ -392,7 +468,7 @@ export async function handleMcpRequest(request: Request, options: McpRequestOpti
         const base = resolveCanonicalBaseUrl(request).baseUrl
         const challenge = requiredScope !== undefined && requiredScope !== null
           ? bearerChallenge(base, requiredScope)
-          : requiredMode === 'inspect_only'
+          : requiredMode === 'read_only'
             ? bearerChallenge(base)
             : bearerModeChallenge(base, requiredMode)
         const failure = gatewayFailureToProblem({ kind: 'refused', code: admitted.reason, retryable: false })
@@ -413,14 +489,17 @@ export async function handleMcpRequest(request: Request, options: McpRequestOpti
         principalId: admitted.principal.principalId,
         principal: admitted.principal,
         correlationId,
-        operationInvokeService: options.operationInvokeService
-          ?? createOperationInvokeService(boundedRequest, bounded.bodyText),
+        callService: options.callService
+          ?? createCallService(boundedRequest, bounded.bodyText),
         supplyManagementService: options.supplyManagementService
           ?? createSupplyManagementService(boundedRequest, bounded.bodyText),
         accountManagementService: options.accountManagementService
           ?? createAccountManagementService(boundedRequest, bounded.bodyText),
         marketDemandService: options.marketDemandService
           ?? createMarketDemandService(boundedRequest, bounded.bodyText),
+        fundingHandoffService: options.fundingHandoffService
+          ?? createFundingHandoffService(boundedRequest, bounded.bodyText),
+        ...(options.rolloutEnvironment === undefined ? {} : { rolloutEnvironment: options.rolloutEnvironment }),
       })
       return withRequestCorrelationHeader(await serveMcp(server, boundedRequest), correlationId)
     }
@@ -494,9 +573,9 @@ function mcpToolDescription(action: AnyAction): string {
 }
 
 function requiredModeForAction(action: AnyAction): AgentAccessAuthorityMode {
-  if (action.credentialAdmission?.authority === 'descriptor_classified' || action.readOnly) return 'inspect_only'
+  if (action.credentialAdmission?.authority === 'descriptor_classified' || action.readOnly) return 'read_only'
   const requirement = action.invocationContract?.authorityRequirement
-  if (requirement === 'principal' || requirement === 'caller') return 'approve_each'
-  if (requirement === 'owner' || requirement === 'admin') return 'bounded_mandate'
-  return 'approve_each'
+  if (requirement === 'principal' || requirement === 'caller') return 'approval_required'
+  if (requirement === 'owner' || requirement === 'admin') return 'spending_policy'
+  return 'approval_required'
 }

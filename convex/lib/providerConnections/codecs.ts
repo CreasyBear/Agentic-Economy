@@ -2,20 +2,47 @@ import type { Id } from '../../_generated/dataModel'
 import type {
   ProviderConnection,
   ProviderConnectionCommandResult,
-  ProviderConnectionInvocationLease,
+  ProviderConnectionCallLease,
 } from '../../../src/modules/capability-supply/provider-connection'
 import type {
   ProviderConnectionLeaseRow,
   ProviderConnectionRow,
 } from './contracts'
 
-export function toDomain(row: ProviderConnectionRow): ProviderConnection {
+export type ProviderConnectionAuthorityCompatibilityRow = Omit<
+  ProviderConnectionRow,
+  'owningAccountRef' | 'installedByPrincipalRef' | 'authorityGrantRef' | 'authorityGrantGeneration'
+> & Partial<Pick<
+  ProviderConnectionRow,
+  'owningAccountRef' | 'installedByPrincipalRef' | 'authorityGrantRef' | 'authorityGrantGeneration'
+>>
+
+export function hasProviderConnectionAuthorityFields(
+  row: ProviderConnectionAuthorityCompatibilityRow,
+): row is ProviderConnectionRow {
+  return typeof row.owningAccountRef === 'string'
+    && row.owningAccountRef.length > 0
+    && typeof row.installedByPrincipalRef === 'string'
+    && row.installedByPrincipalRef.length > 0
+    && typeof row.authorityGrantRef === 'string'
+    && row.authorityGrantRef.length > 0
+    && Number.isSafeInteger(row.authorityGrantGeneration)
+    && (row.authorityGrantGeneration ?? 0) >= 1
+}
+
+export function toDomain(row: ProviderConnectionAuthorityCompatibilityRow): ProviderConnection {
+  if (!hasProviderConnectionAuthorityFields(row)) {
+    throw new Error('provider_connection_authority_provenance_missing')
+  }
   return row
 }
 
 function optionalConnectionFields(connection: ProviderConnection) {
   return Object.fromEntries(Object.entries({
     secretRef: connection.secretRef,
+    sourceOrigin: connection.sourceOrigin,
+    sourceEnvironment: connection.sourceEnvironment,
+    sourceAuthentication: connection.sourceAuthentication,
     expiresAt: connection.expiresAt,
     revocationRef: connection.revocationRef,
     cleanupAttempt: connection.cleanupAttempt,
@@ -26,6 +53,13 @@ function optionalConnectionFields(connection: ProviderConnection) {
     cleanupCallbackGraceUntil: connection.cleanupCallbackGraceUntil,
     revokedAt: connection.revokedAt,
     reasonCode: connection.reasonCode,
+    x402Method: connection.x402Method,
+    x402Payee: connection.x402Payee,
+    healthStatus: connection.healthStatus,
+    healthCheckedAt: connection.healthCheckedAt,
+    healthSubject: connection.healthSubject,
+    healthObservationDigest: connection.healthObservationDigest,
+    healthReasonCode: connection.healthReasonCode,
   }).filter(([, value]) => value !== undefined))
 }
 
@@ -71,11 +105,11 @@ export function projectCommandResult(result: ProviderConnectionCommandResult) {
     : { kind: 'duplicate' as const, connection, commandDigest: result.commandDigest }
 }
 
-export function toLeaseDomain(row: ProviderConnectionLeaseRow): ProviderConnectionInvocationLease {
+export function toLeaseDomain(row: ProviderConnectionLeaseRow): ProviderConnectionCallLease {
   return row
 }
 
-function optionalLeaseFields(lease: ProviderConnectionInvocationLease) {
+function optionalLeaseFields(lease: ProviderConnectionCallLease) {
   return Object.fromEntries(Object.entries({
     readinessDigest: lease.readinessDigest,
     consumedAt: lease.consumedAt,
@@ -84,7 +118,7 @@ function optionalLeaseFields(lease: ProviderConnectionInvocationLease) {
 }
 
 export function toLeaseRow(
-  lease: ProviderConnectionInvocationLease,
+  lease: ProviderConnectionCallLease,
   _commandId: string,
   _commandDigest: string,
 ): ProviderConnectionLeaseRow {
@@ -99,8 +133,8 @@ export function toLeaseRow(
     grantRef: lease.grantRef,
     grantGeneration: lease.grantGeneration,
     ...optionalLeaseFields(lease),
-    invocationRef: lease.invocationRef,
-    operationRef: lease.operationRef,
+    callRef: lease.callRef,
+    toolRef: lease.toolRef,
     connectionRef: lease.connectionRef,
     providerRef: lease.providerRef,
     providerAccountRef: lease.providerAccountRef,

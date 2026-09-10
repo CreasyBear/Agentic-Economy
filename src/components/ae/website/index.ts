@@ -16,7 +16,6 @@ export { AeNotchedCardShape } from './AeNotchedCard'
 export { AeSiteSignoff } from './AeSiteSignoff'
 export { AeSiteFaq } from './AeSiteFaq'
 export { AeSiteFooter } from './AeSiteFooter'
-export { AeSiteEntrance } from './AeSiteEntrance'
 export { AeSiteCallout } from './AeSiteCallout'
 export { AeAgentInstructionCard } from './AeAgentInstructionCard'
 export { AeSiteButton } from './AeSiteButton'
@@ -27,6 +26,8 @@ export type { AeSiteResourceItem } from './AeSiteResourceList'
 export { AeSiteCover } from './AeSiteCover'
 export { AeSiteAuthStage } from './AeSiteAuthStage'
 export { AeSiteAuthPanel, AeSiteAuthSubmit } from './AeSiteAuthPanel'
-export { clerkAppearance, clerkAuthSurfaceAppearance } from './clerk-appearance'
-export { parseHeadingNotation } from './heading-notation'
-export type { HeadingSegment } from './heading-notation'
+export {
+  clerkAppearance,
+  clerkAuthSurfaceAppearance,
+  clerkSignInSurfaceAppearance,
+} from './clerk-appearance'

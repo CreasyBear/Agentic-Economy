@@ -28,7 +28,8 @@ import {
   type StripeMoneyProviderConfig,
 } from "./stripe-money-provider-config";
 
-const CREDIT_LINE_ITEM_NAME = "AE credit";
+const HOSTED_CREDIT_LINE_ITEM_NAME = "Agentic Economy Account credit";
+const HOSTED_FEE_LINE_ITEM_NAME = "Account funding service fee";
 
 export async function createOrRecoverCreditPayment(
   client: StripeMoneyClient,
@@ -52,33 +53,14 @@ export async function createOrRecoverCreditPayment(
     return refusal("payment_binding_invalid", false);
   if (Date.now() >= input.providerRecoveryDeadlineAt)
     return refusal("credit_topup_outcome_unknown", true);
-  const params = creditSessionCreateParams(input);
+  const params = creditSessionCreateParams(input, config);
   if (params === undefined)
     return refusal("credit_topup_amount_invalid", false);
   try {
-    const created = await client.checkout.sessions.create(params, {
-      idempotencyKey,
-    });
-    return paymentSessionFromCheckoutSession(
-      responseData(created),
-      config,
-      input,
-    );
+    const created = await client.checkout.sessions.create(params, { idempotencyKey });
+    return paymentSessionFromCheckoutSession(responseData(created), config, input);
   } catch {
-    if (Date.now() >= input.providerRecoveryDeadlineAt)
-      return refusal("credit_topup_outcome_unknown", true);
-    try {
-      const recovered = await client.checkout.sessions.create(params, {
-        idempotencyKey,
-      });
-      return paymentSessionFromCheckoutSession(
-        responseData(recovered),
-        config,
-        input,
-      );
-    } catch {
-      return refusal("credit_topup_outcome_unknown", true);
-    }
+    return refusal("credit_topup_outcome_unknown", true);
   }
 }
 
@@ -109,7 +91,7 @@ export function mapStripeCheckoutSessionEvidence(
     input.requestDigest ??
     (input.expected === undefined
       ? undefined
-      : stripeCreditRequestDigest(input.expected));
+      : stripeCreditRequestDigest(input.expected, input.config));
   if (requestDigest === undefined)
     return refusal("payment_binding_invalid", false);
   if (
@@ -119,6 +101,7 @@ export function mapStripeCheckoutSessionEvidence(
       material.amount,
       material.metadata,
       input.expected,
+      input.config,
     )
   ) {
     return refusal("ledger_idempotency_conflict", false);
@@ -134,6 +117,8 @@ export function mapStripeCheckoutSessionEvidence(
     status: material.status,
     checkoutStatus: material.checkoutStatus,
     paymentStatus: material.paymentStatus,
+    checkoutMode: material.checkoutMode,
+    ...(material.checkoutExpiresAt === undefined ? {} : { checkoutExpiresAt: material.checkoutExpiresAt }),
   });
   return {
     provider: "stripe",
@@ -145,6 +130,8 @@ export function mapStripeCheckoutSessionEvidence(
     status: material.status,
     checkoutStatus: material.checkoutStatus,
     paymentStatus: material.paymentStatus,
+    checkoutMode: material.checkoutMode,
+    ...(material.checkoutExpiresAt === undefined ? {} : { checkoutExpiresAt: material.checkoutExpiresAt }),
     requestDigest,
     metadataDigest: material.metadataDigest,
     checkoutSessionDigest: material.checkoutSessionDigest,
@@ -159,12 +146,13 @@ export function mapStripeCheckoutSessionEvidence(
 
 export function stripeCreditRequestDigest(
   input: CreditPaymentRequest,
+  config?: StripeMoneyProviderConfig,
 ): string | undefined {
   const idempotencyKey = stripeCreditIdempotencyKey(input.idempotencyKey);
-  const params = creditSessionCreateParams(input);
+  const params = creditSessionCreateParams(input, config);
   if (idempotencyKey === undefined || params === undefined) return undefined;
   return canonicalDigest({
-    format: "stripe-checkout-request:v1",
+    format: "stripe-checkout-request:v2",
     params,
     idempotencyKey,
   });
@@ -179,6 +167,8 @@ export type CheckoutSessionMaterial = Readonly<{
   status: CreditPaymentEvidence["status"];
   checkoutStatus: NonNullable<CreditPaymentEvidence["checkoutStatus"]>;
   paymentStatus: NonNullable<CreditPaymentEvidence["paymentStatus"]>;
+  checkoutMode: NonNullable<CreditPaymentEvidence["checkoutMode"]>;
+  checkoutExpiresAt?: number;
   checkoutSessionDigest: string;
 }>;
 
@@ -202,7 +192,7 @@ export function readCheckoutSessionMaterial(
   if (
     !sessionMatchesMode(session.livemode, config.mode) ||
     session.mode !== "payment" ||
-    session.ui_mode !== "elements"
+    session.ui_mode !== "hosted_page"
   ) {
     return refusal("stripe_setup_required", false);
   }
@@ -219,8 +209,14 @@ export function readCheckoutSessionMaterial(
     return refusal("payment_binding_invalid", false);
   const metadataDigest = digestMetadata(metadata);
   const paymentIntentDigest = paymentIntentObjectDigest(session.payment_intent);
+  const checkoutMode = "hosted_page" as const;
+  const checkoutExpiresAt = Number.isSafeInteger(session.expires_at)
+    ? session.expires_at * 1000
+    : undefined;
+  if (checkoutExpiresAt === undefined)
+    return refusal("payment_binding_invalid", false);
   const checkoutSessionDigest = canonicalDigest({
-    format: "stripe-checkout-session-identity:v1",
+    format: "stripe-checkout-session-identity:v2",
     id: session.id,
     object: session.object,
     mode: session.mode,
@@ -230,6 +226,9 @@ export function readCheckoutSessionMaterial(
     currency: session.currency?.toUpperCase() ?? null,
     amountTotal: session.amount_total,
     returnUrl: session.return_url ?? null,
+    successUrl: session.success_url ?? null,
+    cancelUrl: session.cancel_url ?? null,
+    expiresAt: session.expires_at ?? null,
     paymentId: paymentId ?? null,
     metadataDigest,
     created: session.created,
@@ -243,6 +242,8 @@ export function readCheckoutSessionMaterial(
     status: providerStatusForSession(session),
     checkoutStatus: session.status,
     paymentStatus,
+    checkoutMode,
+    ...(checkoutExpiresAt === undefined ? {} : { checkoutExpiresAt }),
     checkoutSessionDigest,
   };
 }
@@ -253,7 +254,7 @@ async function retrieveCheckoutSession(
 ): Promise<Stripe.Checkout.Session | MoneyRefusal> {
   try {
     const response = await client.checkout.sessions.retrieve(externalRef, {
-      expand: ["payment_intent", "line_items.data.price"],
+      expand: ["payment_intent", "line_items.data.price", "line_items.data.taxes.rate"],
     });
     return responseData(response);
   } catch {
@@ -266,7 +267,7 @@ function paymentSessionFromCheckoutSession(
   config: StripeMoneyProviderConfig,
   expected: CreditPaymentRequest,
 ): CreditPaymentSession | MoneyRefusal {
-  const requestDigest = stripeCreditRequestDigest(expected);
+  const requestDigest = stripeCreditRequestDigest(expected, config);
   if (requestDigest === undefined)
     return refusal("payment_binding_invalid", false);
   const evidence = mapStripeCheckoutSessionEvidence({
@@ -276,33 +277,78 @@ function paymentSessionFromCheckoutSession(
     expected,
   });
   if (isMoneyRefusal(evidence)) return evidence;
-  const clientSecret = session.client_secret;
-  if (typeof clientSecret !== "string" || clientSecret.length === 0)
-    return refusal("stripe_setup_required", false);
-  return { evidence, clientSecret };
+  const expiresAt = evidence.checkoutExpiresAt;
+  if (expiresAt === undefined) return refusal("payment_binding_invalid", false);
+  const checkoutUrl = session.url;
+  if (checkoutUrl !== null && !validCheckoutUrl(checkoutUrl, config))
+    return refusal("payment_binding_invalid", false);
+  if (evidence.checkoutStatus === "open" && checkoutUrl === null)
+    return refusal("payment_binding_invalid", false);
+  return {
+    kind: "hosted_redirect",
+    evidence,
+    expiresAt,
+    ...(checkoutUrl === null ? {} : { checkoutUrl }),
+  };
 }
 
 function creditSessionCreateParams(
   input: CreditPaymentRequest,
+  config?: StripeMoneyProviderConfig,
 ): Stripe.Checkout.SessionCreateParams | undefined {
   const amount = stripeMinorAmount(input.amount);
   if (amount === undefined) return undefined;
+  const principal = stripeMinorAmount(input.principalAmount);
+  const serviceFee = stripeMinorAmount(input.serviceFeeAmount);
+  const tax = stripeMinorAmount(input.taxAmount);
+  const expiresAt = input.checkoutExpiresAt;
+  const cancelReturnRef = input.cancelReturnRef;
+  const taxRateId = config?.inclusiveGstTaxRateId;
+  if (
+    principal === undefined || serviceFee === undefined || tax === undefined ||
+    principal.currency !== amount.currency || serviceFee.currency !== amount.currency || tax.currency !== amount.currency ||
+    BigInt(principal.units) + BigInt(serviceFee.units) + BigInt(tax.units) !== BigInt(amount.units) ||
+    !validHttpUrl(cancelReturnRef) || typeof expiresAt !== "number" || !Number.isSafeInteger(expiresAt) || expiresAt <= 0 ||
+    !validIdentifier(taxRateId)
+  ) return undefined;
+  const feeInclusiveTax = BigInt(serviceFee.units) + BigInt(tax.units);
+  const lineItems: Stripe.Checkout.SessionCreateParams.LineItem[] = [{
+    price_data: {
+      currency: amount.currency.toLowerCase(),
+      product_data: { name: HOSTED_CREDIT_LINE_ITEM_NAME },
+      unit_amount: Number(principal.units),
+    },
+    quantity: 1,
+  }];
+  if (feeInclusiveTax > 0n) lineItems.push({
+    price_data: {
+      currency: amount.currency.toLowerCase(),
+      product_data: {
+        name: HOSTED_FEE_LINE_ITEM_NAME,
+        description: "Includes Australian GST",
+      },
+      unit_amount: Number(feeInclusiveTax),
+    },
+    quantity: 1,
+    tax_rates: [taxRateId],
+  });
   return {
     mode: "payment",
-    ui_mode: "elements",
-    line_items: [
-      {
-        price_data: {
-          currency: amount.currency.toLowerCase(),
-          product_data: { name: CREDIT_LINE_ITEM_NAME },
-          unit_amount: Number(amount.units),
-        },
-        quantity: 1,
-      },
-    ],
+    ui_mode: "hosted_page",
+    submit_type: "pay",
+    line_items: lineItems,
     client_reference_id: input.commandRef,
     metadata: creditMetadata(input),
-    return_url: input.successReturnRef,
+    payment_intent_data: { metadata: creditMetadata(input) },
+    expires_at: Math.floor(expiresAt / 1000),
+    success_url: input.successReturnRef,
+    cancel_url: cancelReturnRef,
+    custom_text: {
+      submit: {
+        message: "This payment adds Account credit. It does not grant access or spending authority.",
+      },
+    },
+    expand: ["payment_intent", "line_items.data.price", "line_items.data.taxes.rate"],
   };
 }
 
@@ -318,8 +364,8 @@ function paymentIntentObjectDigest(
   });
 }
 
-function creditMetadata(input: CreditPaymentRequest): Record<string, string> {
-  return { ae_command_ref: input.commandRef };
+function creditMetadata(_input: CreditPaymentRequest): Record<string, string> {
+  return { ae_command_ref: _input.commandRef, ae_contract: "account_funding_v2" };
 }
 
 function creditSessionMatchesRequest(
@@ -327,32 +373,74 @@ function creditSessionMatchesRequest(
   amount: ExactAmount,
   metadata: Readonly<Record<string, string>>,
   input: CreditPaymentRequest,
+  config: StripeMoneyProviderConfig,
 ): boolean {
   const expectedAmount = stripeMinorAmount(input.amount);
   if (expectedAmount === undefined) return false;
   const expectedMetadata = creditMetadata(input);
   if (
     session.client_reference_id !== input.commandRef ||
-    session.mode !== "payment" ||
-    session.ui_mode !== "elements"
+    session.mode !== "payment"
   )
     return false;
-  if (
-    session.currency?.toUpperCase() !== expectedAmount.currency ||
-    session.return_url !== input.successReturnRef
-  )
+  if (session.ui_mode !== "hosted_page" || session.currency?.toUpperCase() !== expectedAmount.currency)
     return false;
   if (compareExactAmounts(amount, expectedAmount) !== 0) return false;
   for (const [key, value] of Object.entries(expectedMetadata))
     if (metadata[key] !== value) return false;
-  if (
-    session.line_items === undefined ||
-    session.line_items.data.length !== 1 ||
-    session.line_items.data[0]?.quantity !== 1 ||
-    session.line_items.data[0]?.amount_total !== Number(expectedAmount.units)
-  )
+  return hostedSessionMatchesRequest(session, input, config);
+}
+
+function hostedSessionMatchesRequest(
+  session: Stripe.Checkout.Session,
+  input: CreditPaymentRequest,
+  config: StripeMoneyProviderConfig,
+): boolean {
+  const principal = stripeMinorAmount(input.principalAmount);
+  const serviceFee = stripeMinorAmount(input.serviceFeeAmount);
+  const tax = stripeMinorAmount(input.taxAmount);
+  const taxRateId = config.inclusiveGstTaxRateId;
+  if (principal === undefined || serviceFee === undefined || tax === undefined || taxRateId === undefined)
     return false;
-  return true;
+  if (
+    session.success_url !== input.successReturnRef ||
+    session.cancel_url !== input.cancelReturnRef ||
+    session.expires_at !== Math.floor((input.checkoutExpiresAt ?? -1) / 1000) ||
+    session.total_details?.amount_tax !== Number(tax.units) ||
+    session.line_items === undefined
+  ) return false;
+  const expectedCount = BigInt(serviceFee.units) + BigInt(tax.units) === 0n ? 1 : 2;
+  if (session.line_items.data.length !== expectedCount) return false;
+  const credit = session.line_items.data[0];
+  if (
+    credit?.quantity !== 1 || credit.amount_total !== Number(principal.units) ||
+    credit.amount_tax !== 0 || credit.description !== HOSTED_CREDIT_LINE_ITEM_NAME
+  ) return false;
+  if (expectedCount === 1) return true;
+  const fee = session.line_items.data[1];
+  const appliedTax = fee?.taxes?.[0];
+  const appliedTaxRate = typeof appliedTax?.rate === "object" ? appliedTax.rate : undefined;
+  return fee?.quantity === 1
+    && fee.amount_total === Number(BigInt(serviceFee.units) + BigInt(tax.units))
+    && fee.amount_tax === Number(tax.units)
+    && fee.description === HOSTED_FEE_LINE_ITEM_NAME
+    && fee.taxes?.length === 1
+    && appliedTax?.amount === Number(tax.units)
+    && appliedTaxRate?.id === taxRateId
+    && appliedTaxRate.active === true
+    && appliedTaxRate.inclusive === true
+    && appliedTaxRate.percentage === 10
+    && appliedTaxRate.country === "AU"
+    && appliedTaxRate.livemode === (config.mode === "live");
+}
+
+function validCheckoutUrl(value: string, config: StripeMoneyProviderConfig): boolean {
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" && url.hostname === (config.checkoutHost ?? "checkout.stripe.com");
+  } catch {
+    return false;
+  }
 }
 
 function exactSessionAmount(
@@ -380,6 +468,7 @@ function providerStatusForSession(
 ): CreditPaymentEvidence["status"] {
   if (session.status === "open") return "pending";
   if (session.payment_status === "paid") return "succeeded";
+  if (session.status === "complete") return "pending";
   return "failed";
 }
 

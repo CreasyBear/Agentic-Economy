@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 
-import { SharedOperationChat } from '@/components/ae/operation-chat'
+import { SharedChat } from '@/components/ae/chat'
 import { AePageState } from '@/components/ae/layout/AePageState'
 
 const shareTokenPattern = /^[a-f0-9]{64}$/u
@@ -24,7 +24,7 @@ export const Route = createFileRoute('/s/$shareToken')({
 function SharedThreadPage() {
   const { shareToken } = Route.useParams()
   if (!shareTokenPattern.test(shareToken)) return <SharedChatUnavailable />
-  return <SharedOperationChat shareToken={shareToken} />
+  return <SharedChat shareToken={shareToken} />
 }
 
 function SharedChatUnavailable() {

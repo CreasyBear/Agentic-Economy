@@ -21,9 +21,10 @@ import {
   stripeCreditIdempotencyKey,
   stripePayoutIdempotencyKey,
 } from "./stripe-idempotency";
+import { resolveStripeMoneyProviderContext } from "./stripe-money-client";
 import {
   readStripeMoneyProviderConfig,
-  resolveStripeMoneyProviderContext,
+  readStripeMoneyReadbackProviderConfig,
   type StripeMoneyClient,
   type StripeMoneyMode,
   type StripeMoneyProviderConfig,
@@ -33,6 +34,10 @@ import {
   mapStripeMoneyWebhookEvent,
   verifyStripeMoneyWebhook,
 } from "./stripe-money-webhook";
+import {
+  mapStripeFundingRefundEvidence,
+  readStripeFundingRefund,
+} from "./stripe-refund-evidence";
 import {
   createOrRecoverTransfer,
   mapStripeTransferEvidence,
@@ -51,8 +56,11 @@ export type {
 export {
   mapStripeCheckoutSessionEvidence,
   mapStripeMoneyWebhookEvent,
+  mapStripeFundingRefundEvidence,
   mapStripeTransferEvidence,
   readStripeMoneyProviderConfig,
+  readStripeMoneyReadbackProviderConfig,
+  resolveStripeMoneyProviderContext,
   readStripeTransfersByGroup,
   readStripeTransfersByIdentity,
   stripeConnectIdempotencyKey,
@@ -60,7 +68,9 @@ export {
   stripeCreditRequestDigest,
   stripePayoutIdempotencyKey,
   verifyStripeMoneyWebhook,
+  readStripeFundingRefund,
 };
+export type { StripeFundingRefundEvidence } from "./stripe-refund-evidence";
 export type { StripeTransferGroupReadback };
 
 export function createStripeMoneyProvider(

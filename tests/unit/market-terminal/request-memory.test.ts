@@ -69,7 +69,7 @@ describe('private market request CLI', () => {
       requestRef,
       query: 'translate a handwritten invoice',
       createdAt: 1_700_000_000_000,
-      nextCommand: `ae request status ${requestRef}`,
+      nextCommand: `ae request status ${requestRef} --json`,
     })
     expect(output.read()).not.toContain('missing-job:one')
     expect(output.read()).not.toContain('hidden-buyer-key')
@@ -92,29 +92,27 @@ describe('private market request CLI', () => {
 
     expect(JSON.parse(output.read())).toMatchObject({
       kind: 'available',
-      nextCommand: "ae request list --limit 5 --cursor 'opaque cursor'",
+      nextCommand: "ae request list --limit 5 --cursor 'opaque cursor' --json",
     })
   })
 
-  it('points a matched request directly at the first current Operation', async () => {
+  it('points a matched request directly at the first current Tool', async () => {
     const requestRef = `market-request:v1:${'c'.repeat(64)}`
-    const operationRef = `operation:v1:${'d'.repeat(64)}`
+    const toolRef = `operation:v1:${'d'.repeat(64)}`
     vi.stubGlobal('fetch', vi.fn<typeof fetch>().mockResolvedValue(responseJson({
       kind: 'matched',
       requestRef,
       query: 'missing job',
       createdAt: 10,
       matchedCount: 1,
-      operations: [{
-        operationRef,
+      tools: [{
+        toolRef,
         capabilityId: 'invoice.translate',
         title: 'Invoice translation',
-        summary: 'Translate invoices.',
-        supplier: { name: 'Reference Services', slug: 'reference' },
-        price: { kind: 'fixed', amount: { currency: 'USD', units: '50', exponent: 2 } },
-        authentication: { kind: 'ae_api_key' },
-        availability: { posture: 'integrated' },
-        navigation: [],
+        description: 'Translate invoices.',
+        provider: { name: 'Reference Services', slug: 'reference' },
+        priceLabel: 'USD 0.50',
+        healthStatus: 'operational',
       }],
     })))
     const output = captureStdout()
@@ -126,7 +124,38 @@ describe('private market request CLI', () => {
 
     expect(JSON.parse(output.read())).toMatchObject({
       kind: 'matched',
-      nextCommand: `ae inspect ${operationRef}`,
+      nextCommand: `ae describe ${toolRef} --json`,
+    })
+  })
+
+  it('quotes a hostile current-match query and preserves selected origin and JSON mode', async () => {
+    const query = 'private lookup; touch request-refusal-marker; #'
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>().mockResolvedValue(responseJson({
+      kind: 'refused',
+      code: 'current_match_exists',
+    })))
+
+    await expect(runRequestCommand(['create', 'private', 'lookup;', 'touch', 'request-refusal-marker;', '#'], {
+      ...options,
+      baseUrlSource: 'flag',
+    })).rejects.toMatchObject({
+      code: 'current_match_exists',
+      nextCommand: `ae search '${query}' --base-url ${options.baseUrl} --json`,
+    })
+  })
+
+  it('uses a shell-safe idempotency replacement command with selected origin and JSON mode', async () => {
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>().mockResolvedValue(responseJson({
+      kind: 'refused',
+      code: 'idempotency_conflict',
+    })))
+
+    await expect(runRequestCommand(['create', 'missing', 'job'], {
+      ...options,
+      baseUrlSource: 'flag',
+    })).rejects.toMatchObject({
+      code: 'idempotency_conflict',
+      nextCommand: "ae request create '<job>' --idempotency-key '<new-key>' --base-url https://market.example --json",
     })
   })
 })

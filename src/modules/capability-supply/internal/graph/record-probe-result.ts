@@ -13,6 +13,8 @@ import {
 } from '../publication/lifecycle'
 import { validEvidenceRefs } from '../shared/command-envelope'
 
+import { usesSelectedRequestReadiness } from './selected-request-readiness'
+
 import type { CapabilityGraphPorts } from './ports'
 import { probeTargetDigest } from './probe-digest'
 
@@ -48,10 +50,18 @@ export async function recordCapabilityProbeResult(
     evidenceRefs: readonly string[]
     now?: number
   }>,
+  options?: Readonly<{
+    allowUnpublishedBusiness?: (businessId: string) => Promise<boolean>
+  }>,
 ): Promise<RecordCapabilityProbeResult> {
   const publication = await ports.loadPublicationAtRevision(args.publicationRef, args.expectedRevision)
   if (publication === null || publication.disposition !== 'current') {
     return { kind: 'refused', reason: 'revision_changed' }
+  }
+  // Selected-request publications are only exercisable with customer input at Quote
+  // time, so no probe observation describes a target we can attribute to them.
+  if (usesSelectedRequestReadiness(publication)) {
+    return { kind: 'refused', reason: 'target_changed' }
   }
   const [binding, offering, business, contract] = await Promise.all([
     ports.loadBindingByBindingId(publication.bindingId),
@@ -62,13 +72,15 @@ export async function recordCapabilityProbeResult(
   const currentConnection = binding?.authority.kind === 'provider_connection'
     ? await ports.loadProviderConnection(binding.authority.connectionRef)
     : undefined
+  const businessIsProbeable = business !== null
+    || (await options?.allowUnpublishedBusiness?.(publication.businessId) ?? false)
   const now = args.now ?? Date.now()
   const expectedHealthState = args.outcome === 'healthy' ? 'healthy' : 'unhealthy'
   const expectedCredentialState = args.outcome === 'credential_unavailable' || args.outcome === 'credential_rejected' ? 'unavailable' : 'ready'
   if (
     binding === null
     || offering === null
-    || business === null
+    || !businessIsProbeable
     || contract.kind !== 'found'
     || offering.status !== 'active'
     || binding.admission !== 'admitted'
@@ -81,7 +93,7 @@ export async function recordCapabilityProbeResult(
     || (binding.authority.kind === 'provider_connection' && (
       !connectionAuthoritySnapshotMatches(binding.connectionAuthority, currentConnection, {
         businessId: String(offering.businessId),
-        operationRef: publication.operationRef,
+        toolRef: publication.toolRef,
         adapterId: binding.adapterId,
         now,
       })
@@ -116,6 +128,7 @@ export async function recordCapabilityProbeResult(
     readinessOutcome: args.outcome,
     readinessObservedAt: args.observedAt,
     readinessValidUntil: args.validUntil,
+    ...(args.healthState === 'healthy' ? { readinessLastHealthyAt: args.observedAt } : {}),
     readinessEvidenceRefs: [...args.evidenceRefs],
     updatedAt: now,
   })
@@ -131,6 +144,7 @@ export async function recordCapabilityProbeResult(
     readinessOutcome: args.outcome,
     readinessObservedAt: args.observedAt,
     readinessValidUntil: args.validUntil,
+    ...(args.healthState === 'healthy' ? { readinessLastHealthyAt: args.observedAt } : {}),
   }
   return {
     kind: 'observed',

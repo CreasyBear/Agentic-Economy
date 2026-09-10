@@ -9,6 +9,7 @@ import {
   type CanonicalAgentBinding,
 } from '../../../convex/authorityBoundary'
 import schema from '../../../convex/schema'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { DelegationService } from '@/modules/authority/delegation/public'
 import {
   createSourceWriteAdmission,
@@ -37,6 +38,29 @@ const GRANT_REF = `grt_${'7'.repeat(32)}`
 const PARENT_GRANT_REF = `grt_${'a'.repeat(32)}`
 const OWNERSHIP_REF = `own_${'9'.repeat(32)}`
 const SECRET = 'authority-boundary-source-write-secret-32-bytes'
+const ACCESS_POLICY = {
+  format: 'ae.agent-access-policy:v2' as const,
+  operationAccess: 'all_admitted' as const,
+  operationRefs: [] as string[],
+  environment: 'production' as const,
+  budget: {
+    budgetPolicyRef: 'budget:authority-boundary',
+    generation: 4,
+    currency: 'USD',
+    exponent: 2,
+    maximumSpendPerInvocation: { currency: 'USD', units: '100', exponent: 2 },
+    maximumDailySpend: { currency: 'USD', units: '1000', exponent: 2 },
+    maximumMonthlySpend: { currency: 'USD', units: '10000', exponent: 2 },
+    maximumConcurrentInvocations: 2,
+  },
+  rate: {
+    ratePolicyRef: 'rate:authority-boundary',
+    generation: 4,
+    maximumCallsPerMinute: 10,
+    maximumCallsPerHour: 100,
+  },
+}
+const ACCESS_POLICY_DIGEST = canonicalDigest(ACCESS_POLICY as never)
 
 type MutationArgs = Readonly<{
   credentialId: string
@@ -44,7 +68,7 @@ type MutationArgs = Readonly<{
   environment: 'sandbox' | 'production'
   scopes: readonly string[]
   requiredScopes: readonly string[]
-  authorityMode: 'inspect_only' | 'approve_each' | 'bounded_mandate' | 'full_yolo'
+  authorityMode: 'read_only' | 'approval_required' | 'spending_policy' | 'unrestricted_test_only'
   operationKey: string
   correlationId: string
   sourceWrite?: Readonly<Record<string, unknown>>
@@ -60,6 +84,8 @@ type SeedOverrides = Readonly<{
   parentGrant?: Readonly<Record<string, unknown>> | null
   secondGrant?: Readonly<Record<string, unknown>> | null
   account?: Readonly<Record<string, unknown>> | null
+  admission?: Readonly<Record<string, unknown>> | null
+  accessGrant?: Readonly<Record<string, unknown>> | null
 }>
 
 afterEach(() => {
@@ -90,7 +116,7 @@ describe('canonical agent authority boundary', () => {
       const args = await signedMutationArgs(inputPatch, `authority-boundary-isolation:${caseKind}`)
 
       const result = await backend.mutation(resolveAgentBinding, args)
-      const allowed = caseKind === 'owner' || caseKind === 'member' || caseKind === 'workload'
+      const allowed = caseKind === 'workload'
       if (allowed) {
         expect(result).toMatchObject({
           principalId: PRINCIPAL_REF,
@@ -130,10 +156,163 @@ describe('canonical agent authority boundary', () => {
       applicationRef: 'agent-application',
       environment: 'production',
       scopes: ['operations:invoke'],
-      authorityMode: 'bounded_mandate',
+      authorityMode: 'spending_policy',
     })
     expect(result?.principalId).not.toBe(OTHER_PRINCIPAL_REF)
     expect(result?.ownerId).not.toBe(OTHER_ACCOUNT_REF)
+  })
+
+  it.each([
+    ['expired', NOW - 1, false],
+    ['equal-time', NOW, false],
+    ['current', NOW + 1, true],
+  ] as const)(
+    'enforces normalized access-grant expiry at the Self consequence boundary for a %s grant',
+    async (_state, accessGrantExpiresAt, shouldResolve) => {
+      const backend = testBackend()
+      await seedCanonicalChain(backend, {
+        credential: { expiresAt: NOW + 60_000 },
+        admission: { expiresAt: NOW + 60_000 },
+        grant: { expiresAt: NOW + 30_000, resourceRefs: ['*'] },
+        parentGrant: { expiresAt: NOW + 40_000, resourceRefs: ['*'] },
+        accessGrant: { expiresAt: accessGrantExpiresAt },
+      })
+
+      const result = await runResolver(backend, {
+        operationKey: 'surface:http:account-self',
+        correlationId: `correlation:account-self:access-grant:${_state}`,
+      })
+      if (!shouldResolve) {
+        expect(result).toBeNull()
+        return
+      }
+      expect(result).toMatchObject({
+        principalId: PRINCIPAL_REF,
+        ownerId: ACCOUNT_REF,
+        grantRef: GRANT_REF,
+      })
+    },
+  )
+
+  it.each([
+    ['crossed expiry', NOW + 500, NOW + 1_000],
+    ['equal-time expiry', NOW + 1_000, NOW + 1_000],
+  ] as const)(
+    'rechecks normalized access-grant expiry at the final Self consequence boundary for %s',
+    async (_state, accessGrantExpiresAt, finalNow) => {
+      const backend = testBackend()
+      await seedCanonicalChain(backend, {
+        credential: { expiresAt: NOW + 60_000 },
+        admission: { expiresAt: NOW + 60_000 },
+        grant: { expiresAt: NOW + 30_000, resourceRefs: ['*'] },
+        parentGrant: { expiresAt: NOW + 40_000, resourceRefs: ['*'] },
+        accessGrant: { expiresAt: accessGrantExpiresAt },
+      })
+      vi.spyOn(Date, 'now')
+        .mockReturnValueOnce(NOW)
+        .mockReturnValueOnce(NOW)
+        .mockReturnValueOnce(NOW)
+        .mockReturnValueOnce(finalNow)
+
+      await expect(runResolver(backend, {
+        operationKey: 'surface:http:account-self',
+        correlationId: `correlation:account-self:final-access-grant:${_state}`,
+      })).resolves.toBeNull()
+    },
+  )
+
+  it('coarsens successful credential evidence to one timestamp and audit event per 15 minutes', async () => {
+    const backend = testBackend()
+    await seedCanonicalChain(backend, {
+      credential: { expiresAt: NOW + 3_600_000 },
+      admission: { expiresAt: NOW + 3_600_000 },
+      grant: { expiresAt: NOW + 3_600_000 },
+      parentGrant: { expiresAt: NOW + 7_200_000 },
+    })
+
+    await expect(runResolver(backend, { correlationId: 'correlation:auth:first' }))
+      .resolves.toMatchObject({ canonicalCredentialRef: CREDENTIAL_REF })
+    vi.setSystemTime(NOW + 14 * 60 * 1_000)
+    await expect(runResolver(backend, { correlationId: 'correlation:auth:within-window' }))
+      .resolves.toMatchObject({ canonicalCredentialRef: CREDENTIAL_REF })
+
+    const withinWindow = await backend.run(async (ctx) => ({
+      credential: await ctx.db.query('credentials')
+        .withIndex('by_credentialRef', (query) => query.eq('credentialRef', CREDENTIAL_REF)).unique(),
+      events: await ctx.db.query('auditEvents').collect(),
+    }))
+    expect(withinWindow.credential?.lastAuthenticatedAt).toBe(NOW)
+    expect(withinWindow.events).toEqual([expect.objectContaining({
+      eventType: 'agent.credential.authenticated',
+      actorKind: 'agent',
+      actorRef: PRINCIPAL_REF,
+      targetRef: PRINCIPAL_REF,
+      activeAccountRef: ACCOUNT_REF,
+      afterState: 'authenticated',
+    })])
+
+    vi.setSystemTime(NOW + 15 * 60 * 1_000)
+    await expect(runResolver(backend, { correlationId: 'correlation:auth:next-window' }))
+      .resolves.toMatchObject({ canonicalCredentialRef: CREDENTIAL_REF })
+    const nextWindow = await backend.run(async (ctx) => ({
+      credential: await ctx.db.query('credentials')
+        .withIndex('by_credentialRef', (query) => query.eq('credentialRef', CREDENTIAL_REF)).unique(),
+      events: await ctx.db.query('auditEvents').order('asc').collect(),
+    }))
+    expect(nextWindow.credential?.lastAuthenticatedAt).toBe(NOW + 15 * 60 * 1_000)
+    expect(nextWindow.events).toHaveLength(2)
+    expect(JSON.stringify(nextWindow.events)).not.toContain('ak_live_locator')
+  })
+
+  it('coarsens known-credential denials by canonical credential and five-minute bucket', async () => {
+    const backend = testBackend()
+    await seedCanonicalChain(backend, {
+      credential: { expiresAt: NOW + 3_600_000 },
+      admission: { expiresAt: NOW + 3_600_000 },
+      grant: { scopes: ['operations:read'], expiresAt: NOW + 3_600_000 },
+      parentGrant: { expiresAt: NOW + 7_200_000 },
+    })
+
+    await expect(runResolver(backend, { correlationId: 'correlation:deny:scope' })).resolves.toBeNull()
+    await backend.run(async (ctx) => {
+      const binding = await ctx.db.query('externalIdentityBindings')
+        .withIndex('by_bindingRef', (query) => query.eq('bindingRef', BINDING_REF)).unique()
+      if (binding === null) throw new Error('binding_missing')
+      await ctx.db.patch(binding._id, { providerState: { kind: 'known', value: 'disabled' } })
+    })
+    vi.setSystemTime(NOW + 1_000)
+    await expect(runResolver(backend, { correlationId: 'correlation:deny:authentication' })).resolves.toBeNull()
+
+    const firstBucket = await backend.run(async (ctx) => await ctx.db.query('auditEvents').collect())
+    expect(firstBucket).toEqual([expect.objectContaining({
+      eventType: 'agent.credential.denied',
+      actorKind: 'agent',
+      actorRef: PRINCIPAL_REF,
+      targetRef: PRINCIPAL_REF,
+      activeAccountRef: ACCOUNT_REF,
+      reasonCode: 'scope_required',
+      afterState: 'denied',
+    })])
+    expect(JSON.stringify(firstBucket)).not.toContain('ak_live_locator')
+
+    const nextBucket = (Math.floor(NOW / (5 * 60 * 1_000)) + 1) * 5 * 60 * 1_000
+    vi.setSystemTime(nextBucket)
+    await expect(runResolver(backend, { correlationId: 'correlation:deny:next-bucket' })).resolves.toBeNull()
+    await expect(backend.run(async (ctx) => await ctx.db.query('auditEvents').collect()))
+      .resolves.toHaveLength(2)
+  })
+
+  it('creates no credential, audit, or authority row for an unknown credential locator', async () => {
+    const backend = testBackend()
+    await seedCanonicalChain(backend)
+    const before = await durableCounts(backend)
+
+    await expect(runResolver(backend, {
+      credentialId: 'ak_live_unknown_locator',
+      correlationId: 'correlation:unknown-key',
+    })).resolves.toBeNull()
+
+    expect(await durableCounts(backend)).toEqual(before)
   })
 
   it('admits a concrete operation surface through a wildcard resource grant', async () => {
@@ -206,6 +385,7 @@ describe('canonical agent authority boundary', () => {
     ['missing principal', { principal: null }],
     ['suspended principal', { principal: { lifecycle: 'suspended' } }],
     ['missing live grant', { grant: null }],
+    ['stale admission grant generation', { admission: { grantGeneration: 3 } }],
     ['expired grant', { grant: { expiresAt: NOW } }],
     ['grant missing required scope', { grant: { scopes: ['operations:read'] } }],
     ['grant missing required resource', { grant: { resourceRefs: ['operations:read'] } }],
@@ -221,7 +401,7 @@ describe('canonical agent authority boundary', () => {
     },
   )
 
-  it('fails closed when more than one current grant can authorize the consequence', async () => {
+  it('uses the exact current access grant when another delegation also authorizes the consequence', async () => {
     const backend = testBackend()
     await seedCanonicalChain(backend, {
       secondGrant: {
@@ -230,7 +410,12 @@ describe('canonical agent authority boundary', () => {
       },
     })
 
-    await expect(runResolver(backend)).resolves.toBeNull()
+    await expect(runResolver(backend)).resolves.toMatchObject({
+      principalId: PRINCIPAL_REF,
+      ownerId: ACCOUNT_REF,
+      grantRef: GRANT_REF,
+      grantGeneration: 4,
+    })
   })
 
   it.each([
@@ -317,6 +502,15 @@ describe('canonical agent authority boundary', () => {
     },
   )
 
+  it('fails closed when the persisted access-grant policy digest is corrupted', async () => {
+    const backend = testBackend()
+    await seedCanonicalChain(backend, {
+      accessGrant: { policyDigest: 'sha256:corrupted-access-grant-policy' },
+    })
+
+    await expect(runResolver(backend)).resolves.toBeNull()
+  })
+
   it('requires exact source-write admission for the registered production mutation', async () => {
     vi.stubEnv('AE_SOURCE_WRITE_SECRET', SECRET)
     const backend = testBackend()
@@ -352,7 +546,7 @@ function validInput(): MutationArgs {
     environment: 'production',
     scopes: ['operations:invoke'],
     requiredScopes: ['operations:invoke'],
-    authorityMode: 'bounded_mandate',
+    authorityMode: 'spending_policy',
     operationKey: 'operations:invoke',
     correlationId: 'correlation:invoke:1',
   }
@@ -366,6 +560,16 @@ async function runResolver(
     ctx as unknown as MutationCtx,
     { ...validInput(), ...patch },
   ))
+}
+
+async function durableCounts(backend: ReturnType<typeof testBackend>) {
+  return await backend.run(async (ctx) => ({
+    credentials: (await ctx.db.query('credentials').collect()).length,
+    audits: (await ctx.db.query('auditEvents').collect()).length,
+    principals: (await ctx.db.query('principals').collect()).length,
+    admissions: (await ctx.db.query('agentAccessPrincipals').collect()).length,
+    snapshots: (await ctx.db.query('authorityDelegationSnapshots').collect()).length,
+  }))
 }
 
 async function seedCanonicalChain(
@@ -475,9 +679,47 @@ async function seedCanonicalChain(
       updatedAt: NOW - 20_000,
       lastAction: action,
     }, overrides.account)
+    const admission = mergeRow({
+      principalId: PRINCIPAL_REF,
+      ownerId: ACCOUNT_REF,
+      credentialId: 'ak_live_locator',
+      applicationRef: 'agent-application',
+      environment: 'production',
+      scopes: ['operations:invoke'],
+      authorityMode: 'spending_policy',
+      grantGeneration: 4,
+      spendingPolicyDigest: ACCESS_POLICY_DIGEST,
+      lifecycle: 'active',
+      expiresAt: NOW + 60_000,
+      recordedAt: NOW - 9_000,
+      lastSeenAt: NOW - 9_000,
+    }, overrides.admission)
+    const accessGrant = mergeRow({
+      format: 'ae.agent-access-grant:v2',
+      grantRef: GRANT_REF,
+      principalId: PRINCIPAL_REF,
+      ownerId: ACCOUNT_REF,
+      applicationRef: 'agent-application',
+      credentialId: 'ak_live_locator',
+      environment: 'production',
+      operationAccess: 'all_admitted',
+      operationRefs: [],
+      authorityMode: 'bounded_mandate',
+      policy: ACCESS_POLICY,
+      budgetPolicyRef: ACCESS_POLICY.budget.budgetPolicyRef,
+      ratePolicyRef: ACCESS_POLICY.rate.ratePolicyRef,
+      lifecycle: 'active',
+      generation: 4,
+      policyDigest: ACCESS_POLICY_DIGEST,
+      createdAt: NOW - 9_000,
+      updatedAt: NOW - 9_000,
+      expiresAt: NOW + 7_200_000,
+    }, overrides.accessGrant)
 
     if (binding !== null) await ctx.db.insert('externalIdentityBindings', binding as never)
     if (credential !== null) await ctx.db.insert('credentials', credential as never)
+    if (admission !== null) await ctx.db.insert('agentAccessPrincipals', admission as never)
+    if (accessGrant !== null) await ctx.db.insert('agentAccessGrants', accessGrant as never)
     if (principal !== null) await ctx.db.insert('principals', principal as never)
     if (parentGrant !== null) await ctx.db.insert('authorityDelegationGrants', parentGrant as never)
     if (grant !== null) await ctx.db.insert('authorityDelegationGrants', grant as never)

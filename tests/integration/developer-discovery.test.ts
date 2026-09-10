@@ -16,7 +16,7 @@ import { handleDeveloperDiscoverySchemaRequest } from '@/routes/api.discovery.sc
 import { loadDeveloperDiscoveryRoute } from '@/modules/discovery/developer-discovery-route'
 
 const privateOrAuthorityPattern =
-  /inquiryBody|ownerReply|claimantContact|ownerNotes|notificationPayload|providerPayload|adminEvidence|sourceHash|rawContact(?!Excluded)|private:evidence|ownerId|clerk|callable":true|paymentRequired":true|providerOperation":true|requestMarket":true|mutation":true|payment":true|protectedAction":true/iu
+  /inquiryBody|ownerReply|claimantContact|ownerNotes|notificationPayload|providerPayload|adminEvidence|sourceHash|rawContact(?!Excluded)|private:evidence|ownerId|clerk|callable":true|paymentRequired":true|providerTool":true|requestMarket":true|mutation":true|payment":true|protectedAction":true/iu
 
 
 describe('developer discovery route handlers', () => {

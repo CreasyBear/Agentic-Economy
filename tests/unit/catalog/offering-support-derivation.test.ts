@@ -11,9 +11,9 @@ import {
   capabilityBindingRegistrationHash,
   capabilityOfferingEligibilityHash,
   capabilityOfferingRegistrationHash,
-  capabilityOperationId,
+  capabilityToolId,
   connectionAuthoritySnapshotFromProviderConnection,
-  createPublicOperationRef,
+  createPublicToolRef,
   defineCapabilityOfferingRegistration,
   defineCapabilityTransportBindingRegistration,
 } from '../../../src/modules/capability-supply/public'
@@ -24,7 +24,13 @@ const contractDocument = capabilityContractV2({ capabilityId: 'test.lookup' })
 const contract = defineCapabilityContract(contractDocument)
 const durableContract = encodeCapabilityContractDocument(contractDocument)
 const exactPrice = { currency: 'AUD', units: '100', exponent: 2 } as const
-const pricingConfig = { version: 'pricing:v2' as const, unit: 'call' as const, paidAmount: exactPrice }
+const pricingConfig = {
+  version: 'pricing:v3' as const,
+  kind: 'fixed_aud' as const,
+  currency: 'AUD' as const,
+  exponent: 6 as const,
+  amountUnits: '1000000',
+}
 const priceDigest = pricingConfigDigest(pricingConfig)
 const catalogOfferingSourceHash = canonicalDigest({ offeringRef: 'offering:1', revision: 1 })
 const catalogAccessPathSourceHash = canonicalDigest({ accessPathRef: 'access:1', revision: 1 })
@@ -36,8 +42,8 @@ const catalogOrigin = {
   declaredAccessPathRef: 'access:1',
   accessPathSourceHash: catalogAccessPathSourceHash,
 }
-const operationRef = createPublicOperationRef({
-  operationId: capabilityOperationId(contract.ref.capabilityId),
+const toolRef = createPublicToolRef({
+  operationId: capabilityToolId(contract.ref.capabilityId),
   publicationRef: 'publication:1',
   publicationRevision: 1,
   contractRef: contract.ref,
@@ -141,7 +147,7 @@ describe('catalogue support derivation', () => {
       }, 1)
       if (connectionResult.kind !== 'applied') throw new Error(`connection_fixture_${connectionResult.kind}`)
       const connection = connectionResult.connection
-      const connectionAuthority = connectionAuthoritySnapshotFromProviderConnection(connection, operationRef)
+      const connectionAuthority = connectionAuthoritySnapshotFromProviderConnection(connection, toolRef)
       const persistedConnectionAuthority = {
         ...connectionAuthority,
         grantedScopes: [...connectionAuthority.grantedScopes],
@@ -254,7 +260,7 @@ describe('catalogue support derivation', () => {
         lastCommandDigest: connection.lastCommandDigest ?? connectionResult.commandDigest,
       })
       const publicationId = await ctx.db.insert('capabilityPublications', {
-        operationRef,
+        toolRef,
         publicationRef: 'publication:1',
         revision: 1,
         businessId,

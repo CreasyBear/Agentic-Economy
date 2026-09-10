@@ -156,22 +156,29 @@ export function publicationMaterialContainsCredential(value: unknown): boolean {
 function canonicalAgentPluginDescriptor(
   source: Extract<CapabilityPublicationImport, { kind: 'agent_plugin_mcp' }>,
 ): unknown {
-  const manifest = source.manifest
-  if (!isRecord(manifest) || typeof manifest.name !== 'string' || !isRecord(manifest.mcpServers)) {
+  const plugin = source.pluginJson
+  const mcp = source.mcpJson
+  if (!isRecord(plugin) || typeof plugin.name !== 'string' || !isRecord(mcp) || !isRecord(mcp.mcpServers)) {
     throw new Error('publication_source_invalid')
   }
-  const selectedServer = manifest.mcpServers[source.serverName]
+  const selectedServer = mcp.mcpServers[source.serverName]
   if (!isRecord(selectedServer)
-    || selectedServer.type !== 'http'
+    || selectedServer.type !== 'streamable-http'
     || typeof selectedServer.url !== 'string'
     || Object.keys(selectedServer).some((key) => key !== 'type' && key !== 'url')) {
     throw new Error('publication_source_invalid')
   }
   return {
-    manifest: {
-      name: manifest.name,
+    pluginJson: {
+      $schema: 'https://agent-plugins.org/schemas/1.0.0/plugin.schema.json',
+      name: plugin.name,
+      ...(typeof plugin.version === 'string' ? { version: plugin.version } : {}),
+      ...(typeof plugin.description === 'string' ? { description: plugin.description } : {}),
+    },
+    mcpJson: {
+      $schema: 'https://agent-plugins.org/schemas/1.0.0/mcp.schema.json',
       mcpServers: {
-        [source.serverName]: { type: 'http', url: selectedServer.url },
+        [source.serverName]: { type: 'streamable-http', url: selectedServer.url },
       },
     },
     serverName: source.serverName,
@@ -179,30 +186,70 @@ function canonicalAgentPluginDescriptor(
   }
 }
 function canonicalAgentPluginDescriptorFromParsed(value: unknown): unknown {
+  const official = canonicalOfficialAgentPluginDescriptorFromParsed(value)
+  if (official !== undefined) return official
+  return canonicalLegacyAgentPluginDescriptorFromParsed(value)
+}
+
+function canonicalOfficialAgentPluginDescriptorFromParsed(value: unknown): unknown {
+  if (!isRecord(value)
+    || !isRecord(value.pluginJson)
+    || !isRecord(value.mcpJson)
+    || typeof value.serverName !== 'string'
+    || !isRecord(value.tool)
+    || Object.keys(value).some((key) => key !== 'pluginJson' && key !== 'mcpJson' && key !== 'serverName' && key !== 'tool')) {
+    return undefined
+  }
+  const plugin = value.pluginJson
+  const mcp = value.mcpJson
+  if (plugin.$schema !== 'https://agent-plugins.org/schemas/1.0.0/plugin.schema.json'
+    || typeof plugin.name !== 'string'
+    || mcp.$schema !== 'https://agent-plugins.org/schemas/1.0.0/mcp.schema.json'
+    || !isRecord(mcp.mcpServers)) {
+    return undefined
+  }
+  const server = mcp.mcpServers[value.serverName]
+  if (!isRecord(server) || server.type !== 'streamable-http' || typeof server.url !== 'string'
+    || Object.keys(server).some((key) => key !== 'type' && key !== 'url')
+    || Object.keys(mcp.mcpServers).length !== 1) {
+    return undefined
+  }
+  return {
+    pluginJson: {
+      $schema: plugin.$schema,
+      name: plugin.name,
+      ...(typeof plugin.version === 'string' ? { version: plugin.version } : {}),
+      ...(typeof plugin.description === 'string' ? { description: plugin.description } : {}),
+    },
+    mcpJson: {
+      $schema: mcp.$schema,
+      mcpServers: {
+        [value.serverName]: { type: 'streamable-http', url: server.url },
+      },
+    },
+    serverName: value.serverName,
+    tool: value.tool,
+  }
+}
+
+/** Immutable legacy descriptors remain readable during their retirement window. */
+function canonicalLegacyAgentPluginDescriptorFromParsed(value: unknown): unknown {
   if (!isRecord(value)
     || !isRecord(value.manifest)
     || typeof value.serverName !== 'string'
     || !isRecord(value.tool)
-    || Object.keys(value).some((key) => key !== 'manifest' && key !== 'serverName' && key !== 'tool')) {
-    return undefined
-  }
+    || Object.keys(value).some((key) => key !== 'manifest' && key !== 'serverName' && key !== 'tool')) return undefined
   const manifest = value.manifest
   if (typeof manifest.name !== 'string' || !isRecord(manifest.mcpServers)
-    || Object.keys(manifest).some((key) => key !== 'name' && key !== 'mcpServers')) {
-    return undefined
-  }
+    || Object.keys(manifest).some((key) => key !== 'name' && key !== 'mcpServers')) return undefined
   const server = manifest.mcpServers[value.serverName]
   if (!isRecord(server) || server.type !== 'http' || typeof server.url !== 'string'
     || Object.keys(server).some((key) => key !== 'type' && key !== 'url')
-    || Object.keys(manifest.mcpServers).length !== 1) {
-    return undefined
-  }
+    || Object.keys(manifest.mcpServers).length !== 1) return undefined
   return {
     manifest: {
       name: manifest.name,
-      mcpServers: {
-        [value.serverName]: { type: 'http', url: server.url },
-      },
+      mcpServers: { [value.serverName]: { type: 'http', url: server.url } },
     },
     serverName: value.serverName,
     tool: value.tool,

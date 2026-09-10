@@ -7,12 +7,13 @@ import { describe, expect, it, vi } from 'vitest'
 
 function connectionServiceStubs() {
   return {
+    sourcePreview: vi.fn(),
     connectionList: vi.fn(),
     connectionDetail: vi.fn(),
     connectionConnect: vi.fn(),
     connectionReconnect: vi.fn(),
     connectionRevoke: vi.fn(),
-    connectionRetryCleanup: vi.fn(),
+    offboardingStatus: vi.fn(),
   }
 }
 
@@ -20,8 +21,10 @@ describe('MCP host adapter supply', () => {
   it('dispatches a publication artifact above 64 KiB below the MCP body cap', async () => {
     const publicationSourceBytes = 262_144
     const publicationSource = {
-      kind: 'openapi_http',
-      documentJson: 'x'.repeat(publicationSourceBytes),
+      kind: 'agent_plugin',
+      pluginJson: { payload: 'x'.repeat(publicationSourceBytes) },
+      mcpJson: {},
+      environment: 'sandbox',
     }
     const body = {
       jsonrpc: '2.0',
@@ -30,25 +33,28 @@ describe('MCP host adapter supply', () => {
       params: {
         name: 'ae_supply_publish',
         arguments: {
-          version: 'supply-publication:v1',
-          businessId: 'business:test',
-          offeringRef: 'offering:test',
-          offeringRevision: 1,
-          offeringSourceHash: 'hash:test',
+          businessRef: 'business:test',
           source: publicationSource,
-          evidenceRefs: ['evidence:test'],
+          candidateRef: `sha256:${'1'.repeat(64)}`,
+          expectedSourceDigest: `sha256:${'2'.repeat(64)}`,
+          presentation: { name: 'Lookup', description: 'Looks up one reference.', category: 'Research' },
+          consequences: { effects: [], dataUse: [], evidence: [] },
+          pricing: { kind: 'free' },
+          environment: 'sandbox',
           idempotencyKey: 'large-publication-key',
+          attestation: { authorisedToPublish: true, informationAccurate: true, publishAfterSuccessfulValidation: true },
         },
       },
     }
     const encoder = new TextEncoder()
-    const sourceBytes = encoder.encode(publicationSource.documentJson).byteLength
+    const sourceBytes = encoder.encode(publicationSource.pluginJson.payload).byteLength
     const requestBytes = encoder.encode(JSON.stringify(body)).byteLength
     expect(sourceBytes).toBe(262_144)
     expect(requestBytes).toBeGreaterThan(64 * 1024)
     expect(requestBytes).toBeLessThan(320 * 1024)
 
     const supplyService = {
+    toolsList: vi.fn(),
       status: vi.fn(),
       publish: vi.fn().mockResolvedValue({ kind: 'refused', reason: 'boundary_probe' }),
       withdraw: vi.fn(),
@@ -72,8 +78,9 @@ describe('MCP host adapter supply', () => {
     })
   })
 
-  it('rejects an operation-only principal from calling a supplier action without invoking its service', async () => {
+  it('rejects a buyer principal from calling a Provider action without invoking its service', async () => {
     const supplyService = {
+      toolsList: vi.fn(),
       status: vi.fn(),
       publish: vi.fn(),
       withdraw: vi.fn(),
@@ -84,14 +91,14 @@ describe('MCP host adapter supply', () => {
     }
     const response = await postMcp({
       jsonrpc: '2.0',
-      id: 'operation-only-supply-call',
+      id: 'buyer-only-supply-call',
       method: 'tools/call',
       params: {
         name: 'ae_supply_earnings',
         arguments: { currency: 'USD' },
       },
     }, {
-      authenticate: authenticateWithScopes(['market_operations:invoke']),
+      authenticate: authenticateWithScopes(['market_tools:call']),
       supplyManagementService: supplyService,
     })
 
@@ -104,8 +111,9 @@ describe('MCP host adapter supply', () => {
     expect(supplyService.earnings).not.toHaveBeenCalled()
   })
 
-  it('rejects an anonymous principal from calling a supplier action without invoking its service', async () => {
+  it('rejects an anonymous principal from calling a Provider action without invoking its service', async () => {
     const supplyService = {
+      toolsList: vi.fn(),
       status: vi.fn(),
       publish: vi.fn(),
       withdraw: vi.fn(),
@@ -142,8 +150,9 @@ describe('MCP host adapter supply', () => {
     expect(supplyService.earnings).not.toHaveBeenCalled()
   })
 
-  it('dispatches a supplier action for a supply-only principal', async () => {
+  it('dispatches a Provider action for a supply-only principal', async () => {
     const supplyService = {
+      toolsList: vi.fn(),
       status: vi.fn(),
       publish: vi.fn(),
       withdraw: vi.fn(),
@@ -180,6 +189,7 @@ describe('MCP host adapter supply', () => {
 
   it('dispatches provider connection inspection for a supply-only principal', async () => {
     const supplyService = {
+      toolsList: vi.fn(),
       status: vi.fn(),
       publish: vi.fn(),
       withdraw: vi.fn(),
@@ -191,7 +201,7 @@ describe('MCP host adapter supply', () => {
     supplyService.connectionDetail.mockResolvedValue({ kind: 'not_found' })
     const response = await postMcp({
       jsonrpc: '2.0',
-      id: 'supplier-connection-detail',
+      id: 'provider-connection-detail',
       method: 'tools/call',
       params: {
         name: 'ae_supply_connection_detail',
@@ -210,5 +220,49 @@ describe('MCP host adapter supply', () => {
     expect(supplyService.connectionDetail).toHaveBeenCalledWith(expect.objectContaining({
       input: { connectionRef: 'connection:x402:one' },
     }))
+  })
+
+  it('fails Package 5 action writes closed in production without hiding read actions', async () => {
+    const supplyService = {
+      toolsList: vi.fn().mockResolvedValue({ kind: 'not_found' }),
+      status: vi.fn(), publish: vi.fn(),
+      withdraw: vi.fn().mockResolvedValue({ kind: 'refused', reason: 'must-not-run' }),
+      recheck: vi.fn(), republish: vi.fn(), earnings: vi.fn(),
+      ...connectionServiceStubs(),
+    }
+    const options = {
+      authenticate: authenticateWithScopes(['market_supply:manage']),
+      supplyManagementService: supplyService,
+      rolloutEnvironment: { NODE_ENV: 'production' },
+    }
+    const writeResponse = await postMcp({
+      jsonrpc: '2.0', id: 'disabled-supply-write', method: 'tools/call',
+      params: {
+        name: 'ae_supply_withdraw',
+        arguments: {
+          businessId: 'business:one', offeringRef: 'offering:one', offeringRevision: 1,
+          offeringSourceHash: 'source:one', publicationRef: 'publication:one', publicationRevision: 1,
+          idempotencyKey: 'withdraw:one',
+        },
+      },
+    }, options, { authorization: 'Bearer supply-only' })
+
+    expect(writeResponse.status).toBe(200)
+    expect((await readMcpBody(writeResponse)).result).toMatchObject({
+      isError: true,
+      structuredContent: { kind: 'UNAVAILABLE', code: 'package5_writes_disabled', retryable: false },
+    })
+    expect(supplyService.withdraw).not.toHaveBeenCalled()
+
+    const readResponse = await postMcp({
+      jsonrpc: '2.0', id: 'available-supply-read', method: 'tools/call',
+      params: { name: 'ae_supply_tools_list', arguments: { businessRef: 'business:one', limit: 50 } },
+    }, options, { authorization: 'Bearer supply-only' })
+
+    expect(readResponse.status).toBe(200)
+    expect((await readMcpBody(readResponse)).result).toMatchObject({
+      structuredContent: { result: { kind: 'not_found' } },
+    })
+    expect(supplyService.toolsList).toHaveBeenCalledOnce()
   })
 })

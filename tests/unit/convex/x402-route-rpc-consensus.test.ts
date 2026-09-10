@@ -14,9 +14,12 @@ import {
   configuredX402RpcUrl,
   configuredX402RpcUrls,
   readX402EvmReceipt,
-} from '@/modules/capability-execution/invocation-worker/x402Route'
+} from '@/modules/capability-execution/call-worker/x402Route'
 
 const NETWORK = 'eip155:8453'
+const ASSET = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913'
+const SANDBOX_NETWORK = 'eip155:84532'
+const SANDBOX_ASSET = '0x036CbD53842c5426634e7929541eC2318f3dCF7e'
 const TRANSACTION_HASH = `0x${'1'.repeat(64)}`
 const PAYER = '0x0000000000000000000000000000000000000002'
 const NONCE = `0x${'a'.repeat(64)}`
@@ -28,6 +31,7 @@ const receipt = {
   confirmations: 12n,
   blockHash: `0x${'2'.repeat(64)}`,
   blockNumber: 100n,
+  observedBlockTimestamp: 1_788_120_000n,
   authorizationState: true,
   transactionTo: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
   transactionInput: '0x1234',
@@ -54,6 +58,7 @@ describe('x402 RPC receipt consensus', () => {
 
     await expect(readX402EvmReceipt(
       NETWORK,
+      ASSET,
       TRANSACTION_HASH,
       DISPATCHER,
       'production',
@@ -71,6 +76,7 @@ describe('x402 RPC receipt consensus', () => {
 
     await expect(readX402EvmReceipt(
       NETWORK,
+      ASSET,
       TRANSACTION_HASH,
       DISPATCHER,
       'production',
@@ -98,6 +104,7 @@ describe('x402 RPC receipt consensus', () => {
 
     await expect(readX402EvmReceipt(
       NETWORK,
+      ASSET,
       TRANSACTION_HASH,
       DISPATCHER,
       'production',
@@ -110,6 +117,7 @@ describe('x402 RPC receipt consensus', () => {
   it.each([
     ['block identity', { blockHash: `0x${'3'.repeat(64)}` }],
     ['block number', { blockNumber: 101n }],
+    ['observed block timestamp', { observedBlockTimestamp: 1_788_120_001n }],
     ['authorization state', { authorizationState: false }],
   ])('returns no receipt when endpoints disagree on %s', async (_label, difference) => {
     setRpcConfig(['https://rpc.one.example', 'https://rpc.two.example'])
@@ -119,6 +127,7 @@ describe('x402 RPC receipt consensus', () => {
 
     await expect(readX402EvmReceipt(
       NETWORK,
+      ASSET,
       TRANSACTION_HASH,
       DISPATCHER,
       'production',
@@ -140,6 +149,42 @@ describe('x402 RPC receipt consensus', () => {
     expect(configuredX402RpcUrl(NETWORK, 'production')).toBeUndefined()
   })
 
+  it('allows one Base Sepolia endpoint only in sandbox', async () => {
+    setRpcConfig(['https://rpc.sandbox.example'], SANDBOX_NETWORK)
+    mocks.readGuardedX402EvmReceipt.mockResolvedValue(receipt)
+
+    await expect(readX402EvmReceipt(
+      SANDBOX_NETWORK,
+      SANDBOX_ASSET,
+      TRANSACTION_HASH,
+      DISPATCHER,
+      'sandbox',
+      PAYER,
+      NONCE,
+    )).resolves.toEqual(receipt)
+    expect(mocks.readGuardedX402EvmReceipt).toHaveBeenCalledTimes(1)
+  })
+
+  it.each([
+    ['production testnet', 'production', SANDBOX_NETWORK, SANDBOX_ASSET],
+    ['sandbox mainnet', 'sandbox', NETWORK, ASSET],
+    ['crossed mainnet network', 'production', NETWORK, SANDBOX_ASSET],
+    ['crossed testnet network', 'sandbox', SANDBOX_NETWORK, ASSET],
+  ] as const)('refuses %s before RPC', async (_label, environment, network, asset) => {
+    setRpcConfig(['https://rpc.one.example', 'https://rpc.two.example'], network)
+
+    await expect(readX402EvmReceipt(
+      network,
+      asset,
+      TRANSACTION_HASH,
+      DISPATCHER,
+      environment,
+      PAYER,
+      NONCE,
+    )).resolves.toBeUndefined()
+    expect(mocks.readGuardedX402EvmReceipt).not.toHaveBeenCalled()
+  })
+
   it('rejects malformed and oversized configuration', () => {
     vi.stubEnv('AE_X402_RPC_URLS_JSON', '{not-json')
     expect(configuredX402RpcUrls(NETWORK, 'production')).toEqual([])
@@ -149,8 +194,8 @@ describe('x402 RPC receipt consensus', () => {
   })
 })
 
-function setRpcConfig(value: unknown): void {
-  vi.stubEnv('AE_X402_RPC_URLS_JSON', JSON.stringify({ [NETWORK]: value }))
+function setRpcConfig(value: unknown, network = NETWORK): void {
+  vi.stubEnv('AE_X402_RPC_URLS_JSON', JSON.stringify({ [network]: value }))
 }
 
 function callTargets(): string[] {

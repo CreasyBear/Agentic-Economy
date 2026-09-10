@@ -94,10 +94,10 @@ function invocation(): ProviderInvocation {
       authorityGeneration: 7,
       authorityDigest: DIGEST('7'),
       leaseRef: 'lease:test',
-      invocationRef: 'invocation:test',
-      operationRef: 'operation:test',
+      callRef: 'call:test',
+      toolRef: 'tool:test',
       grantedScopes: ['provider:invoke'],
-      grantedResources: ['operation:test'],
+      grantedResources: ['tool:test'],
       readinessValidUntil: NOW + 120_000,
       readinessDigest: DIGEST('8'),
     },
@@ -187,8 +187,8 @@ function ticket(routeInvocation = invocation()): CanonicalProviderConsequenceTic
     invocationDigest,
     issuedAt: NOW - 1_000,
     expiresAt: NOW + 10_000,
-    invocationRef: 'invocation:test',
-    operationRef: 'operation:test',
+    callRef: 'call:test',
+    toolRef: 'tool:test',
     leaseRef: 'lease:test',
     connectionRef: routeInvocation.binding.authority.connectionRef,
     authorityGeneration: 7,
@@ -196,7 +196,7 @@ function ticket(routeInvocation = invocation()): CanonicalProviderConsequenceTic
     adapterId: routeInvocation.binding.adapterId,
     authorityDigest: routeInvocation.authority.authorityDigest,
     grantedScopes: ['provider:invoke'],
-    grantedResources: ['operation:test'],
+    grantedResources: ['tool:test'],
     readinessValidUntil,
     ...(readinessDigest === undefined ? {} : { readinessDigest }),
     owningAccountRef: `acc_${'1'.repeat(32)}`,
@@ -430,7 +430,7 @@ describe('internal provider consequence route', () => {
     expect(responseBody).not.toContain(JOURNAL_TOKEN)
   })
 
-  it('runs provider-direct x402 through existing reserve/prepare/sign/mark/observe ports without custody or secret leakage', async () => {
+  it('runs provider-direct x402 through managed prepare/sign/mark/observe ports without custody or secret leakage', async () => {
     const routeInvocation = x402Invocation()
     const canonicalTicket = ticket(routeInvocation)
     const convexBodies: string[] = []
@@ -476,19 +476,11 @@ describe('internal provider consequence route', () => {
           const operation = String(body.operation)
           operations.push(operation)
           const rpcArgs = body.args as Record<string, unknown>
-          if (operation === 'reserve_external_spend') {
-            expect(rpcArgs).not.toHaveProperty('custodyRef')
-            expect(rpcArgs).not.toHaveProperty('custodyGeneration')
-            expect(rpcArgs).not.toHaveProperty('custodyDailyMaximum')
-            return Response.json({
-              kind: 'result',
-              value: { kind: 'accepted', reservation: { reservationRef: 'external-spend:test' } },
-            })
-          }
           if (operation === 'prepare_authorization') {
             expect(rpcArgs).not.toHaveProperty('custodyBudgetRef')
             expect(rpcArgs).not.toHaveProperty('custodyGeneration')
             expect(rpcArgs).not.toHaveProperty('custodyDailyMaximumUnits')
+            expect(rpcArgs).not.toHaveProperty('reservationRef')
             return Response.json({
               kind: 'result',
               value: { custodyRef: 'attempt:test', authorizationDigest: DIGEST('a') },
@@ -500,10 +492,10 @@ describe('internal provider consequence route', () => {
               kind: 'result',
               value: {
                 state: 'prepared',
-                dispatchRef: canonicalTicket.invocationRef,
+                dispatchRef: canonicalTicket.callRef,
                 attemptRef: routeInvocation.authority.attemptRef,
                 effectGeneration: routeInvocation.authority.effectGeneration,
-                operationRef: canonicalTicket.operationRef,
+                toolRef: canonicalTicket.toolRef,
                 credentialRef: PAYMENT_SECRET_REF,
                 challengeJson: JSON.stringify(challenge),
                 selectedRequirementJson: JSON.stringify(challenge.accepts[0]),
@@ -538,7 +530,6 @@ describe('internal provider consequence route', () => {
       paymentSubmissionStatus: 'observed',
     })
     expect(operations).toEqual([
-      'reserve_external_spend',
       'prepare_authorization',
       'read_authorization',
       'record_signature_digest',

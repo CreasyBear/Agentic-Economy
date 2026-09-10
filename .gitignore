@@ -20,17 +20,30 @@ graphify-out/
 
 # Local planning, agent memory, and development journals
 /.planning/
-/.agents/
+/.agents/*
+!/.agents/skills/
+/.agents/skills/*
+!/.agents/skills/deployment-operations/
+!/.agents/skills/deployment-operations/**
 /.claude/
 /agent/
 /skills-lock.json
 /PAPERCUTS.md
 /CLAUDE.md
 /RULES.MD
-/DESIGN.md
-/INVESTMENT_THESIS.md
-/UBIQUITOUS_LANGUAGE.md
-/docs/
+/docs/*
+!/docs/licenses/
+!/docs/licenses/*.txt
+!/docs/README.md
+!/docs/archive/
+!/docs/archive/**
+!/docs/guides/
+/docs/guides/*
+!/docs/guides/package-6-plugin-release.md
+!/docs/adr/
+!/docs/adr/*.md
+!/docs/operations/
+!/docs/operations/**
 /convex/README.md
 /tools/ae/README.md
 /eval/**/*.md
@@ -52,8 +65,24 @@ eval/parity/results.tsv
 # local ae CLI session state
 /.ae-cli/
 
+# Public CLI tarball is built at deploy time, not committed
+public/downloads/*.tgz
+
 # Convex snapshot zips are secrets-bearing; never commit
 *.convex-export.zip
 
 # Superdesign local drafts
 .superdesign/tmp/
+
+# Brand direction preview scratch (rebrand iteration); never commit
+/.brand-preview/
+
+# Wayfinder: durable workflow records and native gstack design documents
+!/docs/workflow/
+!/docs/workflow/**
+!/docs/designs/
+!/docs/designs/*.md
+!/docs/reviews/
+!/docs/reviews/*.md
+!/docs/strategy/
+!/docs/strategy/*.md

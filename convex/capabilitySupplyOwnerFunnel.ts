@@ -17,6 +17,15 @@ import {
   reserveOwnerCapabilityPublicationHandler,
   withdrawOwnerCapabilityHandler,
 } from './capabilitySupplyOwnerFunnelCommands'
+import {
+  readOwnerSupplyIntegrationDraftHandler,
+  readOwnerSupplyIntegrationDraftResultValue,
+  saveAgentSupplyIntegrationDraftArgsValue,
+  saveAgentSupplyIntegrationDraftHandler,
+  saveAgentSupplyIntegrationDraftResultValue,
+  saveOwnerSupplyIntegrationDraftArgsValue,
+  saveOwnerSupplyIntegrationDraftHandler,
+} from './capabilitySupplyIntegrationDrafts'
 
 export const readOwnerSupplyFunnel = queryGeneric({
   args: {
@@ -37,6 +46,27 @@ export const reserveOwnerCapabilityPublication = mutationGeneric({
   args: ownerPublishReservationArgsValue.fields,
   returns: ownerPublishReservationResultValue,
   handler: reserveOwnerCapabilityPublicationHandler,
+})
+
+export const saveAgentSupplyIntegrationDraft = mutationGeneric({
+  args: saveAgentSupplyIntegrationDraftArgsValue.fields,
+  returns: saveAgentSupplyIntegrationDraftResultValue,
+  handler: saveAgentSupplyIntegrationDraftHandler,
+})
+
+export const saveOwnerSupplyIntegrationDraft = mutationGeneric({
+  args: saveOwnerSupplyIntegrationDraftArgsValue.fields,
+  returns: saveAgentSupplyIntegrationDraftResultValue,
+  handler: saveOwnerSupplyIntegrationDraftHandler,
+})
+
+export const readOwnerSupplyIntegrationDraft = queryGeneric({
+  args: {
+    businessId: v.id('businesses'),
+    candidateRef: v.string(),
+  },
+  returns: readOwnerSupplyIntegrationDraftResultValue,
+  handler: readOwnerSupplyIntegrationDraftHandler,
 })
 
 export const withdrawOwnerCapability = mutationGeneric({

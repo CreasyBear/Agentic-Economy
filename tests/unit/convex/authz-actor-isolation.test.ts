@@ -10,7 +10,25 @@ import {
 } from '../../helpers/convex-fixtures'
 type Backend = ConvexFixtureBackend
 
-describe('resolveBusinessActor isolation through the registered owner catalog supply query', () => {
+describe('resolveBusinessActor isolation through the Provider Operation directory', () => {
+  it('fails closed when the current account owns multiple supplier identities', async () => {
+    const backend = convexTestWithMarketComponents()
+    const published = await publishedBusinessOwner(backend, 'owner-identity-conflict')
+    await backend.run(async (ctx) => {
+      const business = await ctx.db.get(published.businessId)
+      if (business === null) throw new Error('identity_conflict_fixture_missing')
+      const { _id: _ignoredId, _creationTime: _ignoredTime, ...fields } = business
+      await ctx.db.insert('businesses', {
+        ...fields,
+        slug: 'owner-identity-conflict-second',
+        name: 'Second supplier',
+      })
+    })
+
+    await expect(published.owner.query(api.catalog.getCurrentOwnerProviderIdentity, {}))
+      .resolves.toEqual({ kind: 'conflict', code: 'multiple_businesses' })
+  })
+
   it.each([
     'owner',
     'member',
@@ -20,7 +38,7 @@ describe('resolveBusinessActor isolation through the registered owner catalog su
     'wrong_account',
     'stale_generation',
   ] as const)(
-    'evaluates resolveBusinessActor %s through the registered owner catalog supply query',
+    'evaluates resolveBusinessActor %s through the Provider Operation directory',
     async (caseKind) => {
       const backend = convexTestWithMarketComponents()
       const slug = `authz-actor-isolation-${caseKind}`
@@ -91,25 +109,21 @@ describe('resolveBusinessActor isolation through the registered owner catalog su
       }))
       const before = await authorityState()
 
-      const result = await caller.query(api.catalog.getCurrentOwnerOfferingSupply, {})
+      const result = await caller.query(api.capabilityProviderTools.listOwner, {
+        businessId: published.businessId,
+        now: 1_000,
+        paginationOpts: { numItems: 50, cursor: null },
+      })
 
       await expect(authorityState()).resolves.toEqual(before)
-      // The registered owner-supply union is `catalogOwnerSupplyResult`: the
-      // denied shapes are `error/unauthenticated` (authority resolution refuses
-      // the caller) and `not_found` (authenticated actor owns no business). The
-      // canonical wrong_account patch makes production throw ownership_mismatch
-      // during authority resolution, so every denied case lands on the exact
-      // unauthenticated variant; only owner/member reach `available`.
       if (caseKind === 'owner' || caseKind === 'member') {
         expect(result).toMatchObject({
           kind: 'available',
-          businessId: published.businessId,
-          business: { slug, publicStatus: 'published' },
-          offerings: [],
-          projection: { status: 'current' },
+          page: [],
+          isDone: true,
         })
       } else {
-        expect(result).toEqual({ kind: 'error', code: 'unauthenticated' })
+        expect(result).toEqual({ kind: 'not_found' })
       }
     },
   )

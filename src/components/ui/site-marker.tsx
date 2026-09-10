@@ -21,7 +21,7 @@ export function SiteMarker({ tone = 'fg', visible = false, grow = false, dataMar
         'shrink-0 rounded-[1px] h-[7px]',
         grow
           ? cn(
-              'w-0 transition-[width,opacity] duration-200 ease-out motion-reduce:transition-none md:inline-flex group-hover:w-3.5',
+              'w-0 transition-[width,opacity] duration-fast ease-out motion-reduce:transition-none md:inline-flex group-hover:w-3.5',
               visible ? '' : 'opacity-0 group-hover:opacity-100',
             )
           : 'w-3.5',

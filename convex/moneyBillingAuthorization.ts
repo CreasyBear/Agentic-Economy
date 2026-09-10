@@ -2,7 +2,7 @@ import type { MutationCtx, QueryCtx } from './_generated/server'
 import type { Doc } from './_generated/dataModel'
 import { resolveBusinessActor } from './authz'
 import { requireSourceWrite } from './sourceWriteAdmission'
-import { MARKET_OPERATIONS_INVOKE_SCOPE } from '../src/modules/agent-access/contract'
+import { MARKET_TOOLS_CALL_SCOPE } from '../src/modules/agent-access/contract'
 import { DELEGATION_MAX_ANCESTRY_GRANTS } from '../src/modules/authority/delegation/public'
 
 export type BillingSourceWriteArgs = {
@@ -120,51 +120,13 @@ export async function canonicalBillingPrincipalContext<
   } as Context
 }
 
-export async function canonicalBillingTopupContext<
-  Context extends MutationCtx | QueryCtx,
->(
-  ctx: Context,
-  locator: Readonly<{
-    commandRef?: string
-    externalRef?: string
-    idempotencyKey?: string
-  }>,
-): Promise<Context | null> {
-  const commandRef = locator.commandRef
-  const externalRef = locator.externalRef
-  const command =
-    commandRef !== undefined
-      ? await ctx.db
-          .query('moneyTopupCommands')
-          .withIndex('by_commandRef', (query) =>
-            query.eq('commandRef', commandRef),
-          )
-          .unique()
-      : externalRef !== undefined
-        ? await ctx.db
-            .query('moneyTopupCommands')
-            .withIndex('by_externalRef', (query) =>
-              query.eq('externalRef', externalRef),
-            )
-            .unique()
-        : null
-  if (
-    command === null ||
-    (locator.idempotencyKey !== undefined &&
-      command.idempotencyKey !== locator.idempotencyKey)
-  ) {
-    return null
-  }
-  return await canonicalBillingPrincipalContext(ctx, command.principalId)
-}
-
-export type PersistedInvocationAuthorityExpectation = Readonly<{
-  invocationRef: string
+export type PersistedCallAuthorityExpectation = Readonly<{
+  callRef: string
   principalId?: string
   credentialId?: string
   grantRef?: string
   grantGeneration?: number
-  operationRef?: string
+  toolRef?: string
   inputDigest?: string
   attemptRef?: string
 }>
@@ -179,31 +141,31 @@ function optionalAuthorityExpectationMatches<T>(
   return expected === undefined || expected === actual
 }
 
-function invocationMatchesAuthorityExpectation(
-  invocation: Doc<'capabilityOperationInvocations'>,
-  expected: PersistedInvocationAuthorityExpectation,
+function callMatchesAuthorityExpectation(
+  call: Doc<'capabilityCalls'>,
+  expected: PersistedCallAuthorityExpectation,
 ): boolean {
   return allAuthorityFacts([
-    invocation.invocationRef === expected.invocationRef,
-    optionalAuthorityExpectationMatches(expected.principalId, invocation.principalId),
-    optionalAuthorityExpectationMatches(expected.credentialId, invocation.credentialId),
-    optionalAuthorityExpectationMatches(expected.grantRef, invocation.grantRef),
-    optionalAuthorityExpectationMatches(expected.grantGeneration, invocation.grantGeneration),
-    optionalAuthorityExpectationMatches(expected.operationRef, invocation.operationRef),
-    optionalAuthorityExpectationMatches(expected.inputDigest, invocation.inputDigest),
-    optionalAuthorityExpectationMatches(expected.attemptRef, invocation.attemptRef),
-    invocation.state !== 'refused',
-    invocation.state !== 'cancelled',
+    call.callRef === expected.callRef,
+    optionalAuthorityExpectationMatches(expected.principalId, call.principalId),
+    optionalAuthorityExpectationMatches(expected.credentialId, call.credentialId),
+    optionalAuthorityExpectationMatches(expected.grantRef, call.grantRef),
+    optionalAuthorityExpectationMatches(expected.grantGeneration, call.grantGeneration),
+    optionalAuthorityExpectationMatches(expected.toolRef, call.toolRef),
+    optionalAuthorityExpectationMatches(expected.inputDigest, call.inputDigest),
+    optionalAuthorityExpectationMatches(expected.attemptRef, call.attemptRef),
+    call.state !== 'refused',
+    call.state !== 'cancelled',
   ])
 }
 
 function bindingIsCurrent(
   binding: Doc<'externalIdentityBindings'> | null,
-  invocation: Doc<'capabilityOperationInvocations'>,
+  call: Doc<'capabilityCalls'>,
 ): binding is Doc<'externalIdentityBindings'> {
   if (binding === null) return false
   return allAuthorityFacts([
-    binding.principalRef === invocation.principalId,
+    binding.principalRef === call.principalId,
     binding.lifecycle === 'active',
     binding.providerState.kind === 'known',
     binding.providerState.kind === 'known'
@@ -216,7 +178,7 @@ function bindingIsCurrent(
 function credentialIsCurrent(
   credential: Doc<'credentials'> | null,
   binding: Doc<'externalIdentityBindings'>,
-  invocation: Doc<'capabilityOperationInvocations'>,
+  call: Doc<'capabilityCalls'>,
   now: number,
 ): boolean {
   if (credential === null) return false
@@ -230,7 +192,7 @@ function credentialIsCurrent(
       ])
   return allAuthorityFacts([
     credential.bindingRef === binding.bindingRef,
-    credential.principalRef === invocation.principalId,
+    credential.principalRef === call.principalId,
     credential.generation === binding.credentialGeneration,
     credential.type === 'api_key',
     credential.expiresAt > now,
@@ -239,50 +201,50 @@ function credentialIsCurrent(
 }
 
 function accountAuthorityIsCurrent(input: Readonly<{
-  invocation: Doc<'capabilityOperationInvocations'>
+  call: Doc<'capabilityCalls'>
   account: Doc<'accounts'> | null
   membership: Doc<'memberships'> | null
   ownership: Doc<'accountOwnerships'> | null
 }>): boolean {
-  const { invocation, account, membership, ownership } = input
+  const { call, account, membership, ownership } = input
   if (account === null) return false
   const membershipIsCurrent = membership !== null && allAuthorityFacts([
-    membership.accountRef === invocation.ownerId,
-    membership.memberPrincipalRef === invocation.principalId,
+    membership.accountRef === call.ownerId,
+    membership.memberPrincipalRef === call.principalId,
     membership.lifecycle === 'active',
   ])
   const ownershipIsCurrent = ownership !== null && allAuthorityFacts([
-    ownership.accountRef === invocation.ownerId,
-    ownership.ownerPrincipalRef === invocation.principalId,
+    ownership.accountRef === call.ownerId,
+    ownership.ownerPrincipalRef === call.principalId,
     ownership.lifecycle === 'active',
   ])
   return allAuthorityFacts([
-    account.accountRef === invocation.ownerId,
+    account.accountRef === call.ownerId,
     account.lifecycle === 'active',
     membershipIsCurrent || ownershipIsCurrent,
   ])
 }
 
 function principalAuthorityIsCurrent(input: Readonly<{
-  invocation: Doc<'capabilityOperationInvocations'>
+  call: Doc<'capabilityCalls'>
   agentPrincipal: Doc<'agentAccessPrincipals'> | null
   principal: Doc<'principals'> | null
   now: number
 }>): boolean {
-  const { invocation, agentPrincipal, principal, now } = input
+  const { call, agentPrincipal, principal, now } = input
   if (agentPrincipal === null || principal === null) return false
   return allAuthorityFacts([
-    agentPrincipal.principalId === invocation.principalId,
-    agentPrincipal.ownerId === invocation.ownerId,
-    agentPrincipal.credentialId === invocation.credentialId,
-    agentPrincipal.applicationRef === invocation.applicationRef,
-    agentPrincipal.environment === invocation.environment,
-    agentPrincipal.grantGeneration === invocation.grantGeneration,
-    agentPrincipal.policyDigest === invocation.policyDigest,
-    agentPrincipal.scopes.includes(MARKET_OPERATIONS_INVOKE_SCOPE),
+    agentPrincipal.principalId === call.principalId,
+    agentPrincipal.ownerId === call.ownerId,
+    agentPrincipal.credentialId === call.credentialId,
+    agentPrincipal.applicationRef === call.applicationRef,
+    agentPrincipal.environment === call.environment,
+    agentPrincipal.grantGeneration === call.grantGeneration,
+    agentPrincipal.spendingPolicyDigest === call.policyDigest,
+    agentPrincipal.scopes.includes(MARKET_TOOLS_CALL_SCOPE),
     agentPrincipal.lifecycle === 'active',
     agentPrincipal.expiresAt === undefined || agentPrincipal.expiresAt > now,
-    principal.principalRef === invocation.principalId,
+    principal.principalRef === call.principalId,
     principal.kind === 'agent',
     principal.lifecycle === 'active',
   ])
@@ -290,41 +252,42 @@ function principalAuthorityIsCurrent(input: Readonly<{
 
 function grantAuthorityIsCurrent(
   grant: Doc<'agentAccessGrants'> | null,
-  invocation: Doc<'capabilityOperationInvocations'>,
+  call: Doc<'capabilityCalls'>,
   now: number,
 ): boolean {
   if (grant === null) return false
   return allAuthorityFacts([
-    grant.grantRef === invocation.grantRef,
-    grant.principalId === invocation.principalId,
-    grant.ownerId === invocation.ownerId,
-    grant.credentialId === invocation.credentialId,
-    grant.applicationRef === invocation.applicationRef,
-    grant.environment === invocation.environment,
-    grant.generation === invocation.grantGeneration,
-    grant.policyDigest === invocation.policyDigest,
+    grant.grantRef === call.grantRef,
+    grant.principalId === call.principalId,
+    grant.ownerId === call.ownerId,
+    grant.credentialId === call.credentialId,
+    grant.applicationRef === call.applicationRef,
+    grant.environment === call.environment,
+    grant.generation === call.grantGeneration,
+    grant.policyDigest === call.policyDigest,
     grant.lifecycle === 'active',
-    grant.expiresAt === invocation.grantExpiresAt,
+    grant.expiresAt === call.grantExpiresAt,
     grant.expiresAt > now,
   ])
 }
 
 /**
- * Rechecks the durable invocation, agent, grant, Principal, and Account rows
+ * Rechecks the durable Call, agent, grant, Principal, and Account rows
  * at the instant a money consequence is applied. Caller-shaped fields are
  * accepted only as exact-match expectations against those durable rows.
  */
-export async function persistedInvocationAuthorityIsCurrent(
+export async function persistedCallAuthorityIsCurrent(
   ctx: Pick<MutationCtx, 'db'>,
-  expected: PersistedInvocationAuthorityExpectation,
+  expected: PersistedCallAuthorityExpectation,
 ): Promise<boolean> {
-  const invocation = await ctx.db
-    .query('capabilityOperationInvocations')
-    .withIndex('by_invocationRef', (query) =>
-      query.eq('invocationRef', expected.invocationRef),
+  const call = await ctx.db
+    .query('capabilityCalls')
+    .withIndex('by_callRef', (query) =>
+      query.eq('callRef', expected.callRef),
     )
     .unique()
-  if (invocation === null || !invocationMatchesAuthorityExpectation(invocation, expected)) {
+  if (call === null || !callMatchesAuthorityExpectation(call, expected)) {
+    recordPersistedAuthorityFailure(expected, 'call_mismatch')
     return false
   }
   const now = Date.now()
@@ -333,35 +296,36 @@ export async function persistedInvocationAuthorityIsCurrent(
     .withIndex('by_providerNamespace_and_providerIdentifier', (query) =>
       query
         .eq('providerNamespace', 'clerk/api-key')
-        .eq('providerIdentifier', invocation.credentialId),
+        .eq('providerIdentifier', call.credentialId),
     )
     .unique()
-  if (!bindingIsCurrent(binding, invocation)) {
+  if (!bindingIsCurrent(binding, call)) {
+    recordPersistedAuthorityFailure(expected, 'binding_not_current')
     return false
   }
   const [agentPrincipal, principal, account, grant, credential] = await Promise.all([
     ctx.db
       .query('agentAccessPrincipals')
       .withIndex('by_principalId', (query) =>
-        query.eq('principalId', invocation.principalId),
+        query.eq('principalId', call.principalId),
       )
       .unique(),
     ctx.db
       .query('principals')
       .withIndex('by_principalRef', (query) =>
-        query.eq('principalRef', invocation.principalId),
+        query.eq('principalRef', call.principalId),
       )
       .unique(),
     ctx.db
       .query('accounts')
       .withIndex('by_accountRef', (query) =>
-        query.eq('accountRef', invocation.ownerId),
+        query.eq('accountRef', call.ownerId),
       )
       .unique(),
     ctx.db
       .query('agentAccessGrants')
       .withIndex('by_grantRef', (query) =>
-        query.eq('grantRef', invocation.grantRef),
+        query.eq('grantRef', call.grantRef),
       )
       .unique(),
     ctx.db
@@ -374,7 +338,8 @@ export async function persistedInvocationAuthorityIsCurrent(
       )
       .unique(),
   ])
-  if (!credentialIsCurrent(credential, binding, invocation, now)) {
+  if (!credentialIsCurrent(credential, binding, call, now)) {
+    recordPersistedAuthorityFailure(expected, 'credential_not_current')
     return false
   }
   const [membership, ownership] = account === null
@@ -387,7 +352,7 @@ export async function persistedInvocationAuthorityIsCurrent(
             (query) =>
               query
                 .eq('accountRef', account.accountRef)
-                .eq('memberPrincipalRef', invocation.principalId)
+                .eq('memberPrincipalRef', call.principalId)
                 .eq('lifecycle', 'active'),
           )
           .unique(),
@@ -398,31 +363,58 @@ export async function persistedInvocationAuthorityIsCurrent(
           )
           .unique(),
       ])
-  if (!principalAuthorityIsCurrent({ invocation, agentPrincipal, principal, now })) {
+  if (!principalAuthorityIsCurrent({ call, agentPrincipal, principal, now })) {
+    recordPersistedAuthorityFailure(expected, 'principal_not_current')
     return false
   }
-  if (!accountAuthorityIsCurrent({ invocation, account, membership, ownership })) {
+  if (!accountAuthorityIsCurrent({ call, account, membership, ownership })) {
+    recordPersistedAuthorityFailure(expected, 'account_not_current')
     return false
   }
-  if (!grantAuthorityIsCurrent(grant, invocation, now)) return false
-  return await currentInvocationDelegationAncestryIsValid(ctx, {
-      leafGrantRef: invocation.grantRef,
-      expectedGeneration: invocation.grantGeneration,
-      accountRef: invocation.ownerId,
-      principalRef: invocation.principalId,
-      operationRef: invocation.operationRef,
+  if (!grantAuthorityIsCurrent(grant, call, now)) {
+    recordPersistedAuthorityFailure(expected, 'grant_not_current')
+    return false
+  }
+  const delegationCurrent = await currentCallDelegationAncestryIsValid(ctx, {
+      leafGrantRef: call.grantRef,
+      expectedGeneration: call.grantGeneration,
+      accountRef: call.ownerId,
+      principalRef: call.principalId,
+      toolRef: call.toolRef,
       now,
     })
+  if (!delegationCurrent) {
+    recordPersistedAuthorityFailure(expected, 'delegation_not_current')
+  }
+  return delegationCurrent
 }
 
-async function currentInvocationDelegationAncestryIsValid(
+function recordPersistedAuthorityFailure(
+  expected: PersistedCallAuthorityExpectation,
+  reason:
+    | 'call_mismatch'
+    | 'binding_not_current'
+    | 'credential_not_current'
+    | 'principal_not_current'
+    | 'account_not_current'
+    | 'grant_not_current'
+    | 'delegation_not_current',
+): void {
+  console.warn('persisted_call_authority_refused', {
+    callRef: expected.callRef,
+    attemptRef: expected.attemptRef,
+    reason,
+  })
+}
+
+async function currentCallDelegationAncestryIsValid(
   ctx: Pick<MutationCtx, 'db'>,
   input: Readonly<{
     leafGrantRef: string
     expectedGeneration: number
     accountRef: string
     principalRef: string
-    operationRef: string
+    toolRef: string
     now: number
   }>,
 ): Promise<boolean> {
@@ -530,15 +522,15 @@ function delegationLeafIsCurrent(
     leafGrantRef: string
     expectedGeneration: number
     principalRef: string
-    operationRef: string
+    toolRef: string
   }>,
 ): boolean {
   return allAuthorityFacts([
     leaf.grantRef === input.leafGrantRef,
     leaf.generation === input.expectedGeneration,
     leaf.subjectPrincipalRef === input.principalRef,
-    leaf.scopes.includes(MARKET_OPERATIONS_INVOKE_SCOPE),
-    leaf.resourceRefs.includes('*') || leaf.resourceRefs.includes(input.operationRef),
+    leaf.scopes.includes(MARKET_TOOLS_CALL_SCOPE),
+    leaf.resourceRefs.includes('*') || leaf.resourceRefs.includes(input.toolRef),
   ])
 }
 
@@ -600,79 +592,6 @@ function authoritySubset(
   if (permitted.includes('*')) return true
   const allowed = new Set(permitted)
   return requested.every((value) => allowed.has(value))
-}
-
-/**
- * Resolves a charge journal back to its one durable invocation and rechecks
- * that invocation's current authority. Journal and provider identifiers are
- * only locators. The compatibility identity below is derived from the
- * persisted principal, never from caller-supplied proof.
- */
-export async function canonicalBillingTransactionContext<
-  Context extends MutationCtx,
->(
-  ctx: Context,
-  expected: Readonly<{ transactionRef: string; principalId: string }>,
-): Promise<Context | null> {
-  const [transaction, entries] = await Promise.all([
-    ctx.db
-      .query('moneyTransactions')
-      .withIndex('by_transactionRef', (query) =>
-        query.eq('transactionRef', expected.transactionRef),
-      )
-      .unique(),
-    ctx.db
-      .query('moneyLedgerEntries')
-      .withIndex('by_transactionRef', (query) =>
-        query.eq('transactionRef', expected.transactionRef),
-      )
-      .take(20),
-  ])
-  if (
-    transaction === null ||
-    transaction.kind !== 'charge' ||
-    transaction.principalId !== expected.principalId ||
-    transaction.credentialId === undefined
-  ) {
-    return null
-  }
-  const invocationRefs = new Set(
-    entries.flatMap((entry) =>
-      entry.invocationRef === undefined ? [] : [entry.invocationRef],
-    ),
-  )
-  const attemptRefs = new Set(
-    entries.flatMap((entry) =>
-      entry.attemptRef === undefined ? [] : [entry.attemptRef],
-    ),
-  )
-  if (invocationRefs.size !== 1 || attemptRefs.size !== 1) return null
-  const invocationRef = [...invocationRefs][0]
-  const attemptRef = [...attemptRefs][0]
-  if (
-    invocationRef === undefined ||
-    attemptRef === undefined ||
-    !(await persistedInvocationAuthorityIsCurrent(ctx, {
-      invocationRef,
-      principalId: transaction.principalId,
-      credentialId: transaction.credentialId,
-      inputDigest: transaction.inputDigest,
-      attemptRef,
-    }))
-  ) {
-    return null
-  }
-  const priorIdentity = await ctx.auth.getUserIdentity()
-  return {
-    ...ctx,
-    auth: {
-      ...ctx.auth,
-      getUserIdentity: async () => ({
-        ...(priorIdentity ?? {}),
-        tokenIdentifier: transaction.principalId,
-      }),
-    },
-  } as Context
 }
 
 export async function requireBillingSourceWrite(

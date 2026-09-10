@@ -44,11 +44,12 @@ export type MarketCategory = Readonly<{
 }>;
 
 export type MarketListingEvidenceSource = Readonly<{
-  operationRef: string;
+  toolRef: string;
   categoryId?: string;
   ratingCount: number;
   ratingSum: number;
-  completedInvocations: number;
+  completedCalls: number;
+  qualifiedUses?: number;
   latencySamplesMs: readonly number[];
 }>;
 
@@ -70,13 +71,13 @@ export type MarketRatingProjection =
 export type MarketPopularityProjection =
   | Readonly<{
       kind: "observed";
-      completedInvocations: number;
+      completedCalls: number;
       display: string;
       definition: string;
     }>
   | Readonly<{
       kind: "no_activity";
-      completedInvocations: 0;
+      completedCalls: 0;
       display: "No completed calls yet";
       definition: string;
     }>;
@@ -87,6 +88,7 @@ export type MarketLatencyProjection =
       medianMs: number;
       p95Ms: number;
       sampleSize: number;
+      samplesMs?: readonly number[];
       display: string;
       definition: string;
     }>
@@ -94,12 +96,13 @@ export type MarketLatencyProjection =
       kind: "insufficient_sample";
       sampleSize: number;
       minimumSampleSize: number;
+      samplesMs?: readonly number[];
       display: "Not enough data";
       definition: string;
     }>;
 
 export type MarketListingEvidenceProjection = Readonly<{
-  operationRef: string;
+  toolRef: string;
   category: MarketCategory;
   rating: MarketRatingProjection;
   popularity: MarketPopularityProjection;
@@ -121,24 +124,24 @@ export function projectMarketListingEvidence(
   );
   const rating = projectRating(source.ratingCount, source.ratingSum);
   const popularity: MarketPopularityProjection =
-    source.completedInvocations === 0
+    source.completedCalls === 0
       ? {
           kind: "no_activity",
-          completedInvocations: 0,
+          completedCalls: 0,
           display: "No completed calls yet",
           definition:
-            "Completed Agentic Economy invocations for this published Operation during the selected period.",
+            "Completed Agentic Economy calls for this published Tool during the selected period.",
         }
       : {
           kind: "observed",
-          completedInvocations: source.completedInvocations,
-          display: `${source.completedInvocations.toLocaleString()} completed ${source.completedInvocations === 1 ? "call" : "calls"}`,
+          completedCalls: source.completedCalls,
+          display: `${source.completedCalls.toLocaleString()} completed ${source.completedCalls === 1 ? "call" : "calls"}`,
           definition:
-            "Completed Agentic Economy invocations for this published Operation during the selected period.",
+            "Completed Agentic Economy calls for this published Tool during the selected period.",
         };
 
   return {
-    operationRef: source.operationRef,
+    toolRef: source.toolRef,
     category,
     rating,
     popularity,
@@ -147,16 +150,16 @@ export function projectMarketListingEvidence(
 }
 
 export function emptyMarketListingEvidence(
-  operationRef: string,
+  toolRef: string,
   capabilityId: string,
   catalogText = "",
 ): MarketListingEvidenceProjection {
   return projectMarketListingEvidence(
     {
-      operationRef,
+      toolRef,
       ratingCount: 0,
       ratingSum: 0,
-      completedInvocations: 0,
+      completedCalls: 0,
       latencySamplesMs: [],
     },
     capabilityId,
@@ -194,7 +197,7 @@ function projectRating(count: number, sum: number): MarketRatingProjection {
       count: 0,
       display: "No ratings yet",
       definition:
-        "Ratings submitted by authenticated Agentic Economy principals for this published Operation.",
+        "Ratings submitted by authenticated Agentic Economy principals for this published Tool.",
     };
   const average = Math.round((sum / count) * 10) / 10;
   return {
@@ -203,31 +206,33 @@ function projectRating(count: number, sum: number): MarketRatingProjection {
     count,
     display: `${average.toFixed(1)} (${count.toLocaleString()})`,
     definition:
-      "Average rating submitted by authenticated Agentic Economy principals for this published Operation.",
+      "Average rating submitted by authenticated Agentic Economy principals for this published Tool.",
   };
 }
 
 function projectLatency(samples: readonly number[]): MarketLatencyProjection {
   const valid = samples
     .filter((sample) => Number.isSafeInteger(sample) && sample >= 0)
-    .slice(0, MARKET_MAX_LATENCY_SAMPLE_SIZE)
-    .sort((left, right) => left - right);
+    .slice(0, MARKET_MAX_LATENCY_SAMPLE_SIZE);
+  const sorted = [...valid].sort((left, right) => left - right);
   if (valid.length < MARKET_MIN_LATENCY_SAMPLE_SIZE)
     return {
       kind: "insufficient_sample",
       sampleSize: valid.length,
       minimumSampleSize: MARKET_MIN_LATENCY_SAMPLE_SIZE,
+      samplesMs: valid,
       display: "Not enough data",
       definition:
         "Median admitted-to-completed latency appears after at least five completed calls in the selected period.",
     };
-  const medianMs = percentile(valid, 0.5);
-  const p95Ms = percentile(valid, 0.95);
+  const medianMs = percentile(sorted, 0.5);
+  const p95Ms = percentile(sorted, 0.95);
   return {
     kind: "measured",
     medianMs,
     p95Ms,
     sampleSize: valid.length,
+    samplesMs: valid,
     display: formatDuration(medianMs),
     definition:
       "Median admitted-to-completed latency for completed calls in the selected period; the detail view also preserves the p95 and sample size.",

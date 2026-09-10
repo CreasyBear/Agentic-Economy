@@ -106,17 +106,25 @@ function fakeProbeContext(
 }
 
 describe('capability publication probe', () => {
-  it('logs one bounded scheduled cycle with exactly the unique returned function IDs', async () => {
+  it('skips imported managed requests before selecting twenty due probes', async () => {
     const due = Array.from({ length: 20 }, (_, index) => ({
       publicationRef: `publication:private:${index}`,
       revision: index + 1,
+    }))
+    const imported = Array.from({ length: 25 }, (_, index) => ({
+      publicationRef: `publication:imported:${index}`, revision: 1,
+      authorityMode: 'observed_external', publisherRef: 'system:facilitator-discovery', sourceKind: 'x402',
+      pricingConfigJson: JSON.stringify({ version: 'pricing:v3', kind: 'managed_x402',
+        effectTiming: 'payment_required_before_effect', sourceRequirement: { network: 'eip155:8453',
+          asset: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913', atomicUnits: '100' },
+        pricingPolicyRef: 'pricing-policy:managed-x402:v1', publicDisplay: 'on_request' }),
     }))
     const scheduledFunctionIds = due.map((_, index) => `scheduled:function:${index}`)
     const runAfter = vi.fn(async () => scheduledFunctionIds[runAfter.mock.calls.length - 1])
     const ctx = {
       db: {
         query: vi.fn(() => ({
-          withIndex: vi.fn(() => ({ take: vi.fn(async (limit: number) => due.slice(0, limit)) })),
+          withIndex: vi.fn(() => ({ async *[Symbol.asyncIterator]() { yield* imported; yield* due } })),
         })),
       },
       scheduler: { runAfter },
@@ -373,9 +381,9 @@ describe('capability publication probe', () => {
             applicationRef: 'application:foreign-probe-publisher',
             environment: 'production',
             scopes: ['capability_supply:publish'],
-            authorityMode: 'bounded_mandate',
+            authorityMode: 'spending_policy',
             grantGeneration: 1,
-            policyDigest: 'sha256:foreign-probe-publisher',
+            spendingPolicyDigest: 'sha256:foreign-probe-publisher',
             lifecycle: 'active',
             recordedAt: 2,
             lastSeenAt: 2,
@@ -399,9 +407,9 @@ describe('capability publication probe', () => {
             applicationRef: 'application:stale-probe-agent',
             environment: 'production',
             scopes: ['capability_supply:publish'],
-            authorityMode: 'bounded_mandate',
+            authorityMode: 'spending_policy',
             grantGeneration: 2,
-            policyDigest: 'sha256:stale-probe-agent',
+            spendingPolicyDigest: 'sha256:stale-probe-agent',
             lifecycle: 'active',
             recordedAt: 2,
             lastSeenAt: 2,
@@ -494,6 +502,7 @@ describe('capability publication probe', () => {
           kind: 'openapi_http' as const,
           document: {
             openapi: '3.1.0',
+            info: { title: 'Effectful probe fixture', version: '1.0.0' },
             servers: [{ url: `https://${suffix}.example.test` }],
             components: {
               securitySchemes: {

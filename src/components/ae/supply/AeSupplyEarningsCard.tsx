@@ -1,16 +1,21 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
+import { useReverification } from "@clerk/tanstack-react-start";
+import { isReverificationCancelledError } from "@clerk/tanstack-react-start/errors";
+import { useServerFn } from "@tanstack/react-start";
 
 import { Button } from "@/components/ui/button";
 import { AeEmptyState } from "@/components/ae/feedback/AeEmptyState";
 import { AeFactList } from "@/components/ae/data/AeFactList";
+import { AeConfirmDialog } from "@/components/ae/feedback/AeConfirmDialog";
 import type { OwnerProviderEarningsReadback } from "@/modules/capability-supply/supply-funnel.functions";
 import {
   createOwnerConnectAccountServer,
   createOwnerOnboardingLinkServer,
+  beginOwnerPayoutTransferServer,
   readOwnerPayoutTransferServer,
   type OwnerConnectReadinessReadback,
-} from "@/modules/money/server";
-import { formatCurrencyAmount } from "@/modules/money/public";
+} from "@/modules/money/money.functions";
+import { compareExactAmounts, formatCurrencyAmount } from "@/modules/money/public";
 
 export function AeSupplyEarningsCard({
   readback,
@@ -33,19 +38,19 @@ export function AeSupplyEarningsCard({
             }
             description={
               readback.code === "unauthenticated"
-                ? "An authenticated owner session is required to read supplier earnings."
+                ? "An authenticated owner session is required to read provider earnings."
                 : "We could not read source earnings and payout data. Try again later."
             }
           />
         ) : readback.kind === "not_found" ? (
           <AeEmptyState
             title="No earnings have been recorded."
-            description="This supplier does not have an earnings account yet. Setup or test calls do not create earnings."
+            description="This provider does not have an earnings account yet. Setup or test calls do not create earnings."
           />
         ) : readback.accounts.length === 0 ? (
           <AeEmptyState
             title="No earnings have been recorded."
-            description="No supplier earnings account exists yet. Setup or test calls do not create earnings."
+            description="No provider earnings account exists yet. Setup or test calls do not create earnings."
           />
         ) : (
           <div className="grid gap-4">
@@ -60,12 +65,12 @@ export function AeSupplyEarningsCard({
             ))}
             {readback.accountsTruncated ? (
               <p className="text-sm text-muted-foreground">
-                Only the first 10 supplier earnings currencies are shown.
+                Only the first 10 provider earnings currencies are shown.
               </p>
             ) : null}
             <p className="text-sm text-muted-foreground">
               Setup or test calls do not create earnings. Earnings appear only
-              when source money records supplier accruals.
+              when source money records provider accruals.
             </p>
           </div>
         )}
@@ -91,11 +96,18 @@ function EarningsCurrencyCard({
 }>) {
   const [busy, setBusy] = useState<string | undefined>();
   const [message, setMessage] = useState<string | undefined>();
+  const [confirmAction, setConfirmAction] = useState<"connect" | "onboarding" | "transfer">();
+  const payoutActionRef = useRef<HTMLButtonElement>(null);
+  const createConnect = useReverification(useServerFn(createOwnerConnectAccountServer));
+  const createOnboarding = useReverification(useServerFn(createOwnerOnboardingLinkServer));
+  const beginPayout = useReverification(useServerFn(beginOwnerPayoutTransferServer));
   const canonical =
     connect?.kind === "available"
       ? connect.accounts.find((item) => item.currency === account.currency)
       : undefined;
   const payoutAccount = canonical?.account;
+  const payoutAccountVersion =
+    payoutAccount?.version ?? account.payout.accountVersion;
   const boundStripeAccountId =
     payoutAccount?.stripeAccountId ??
     optionalString(account.payout, "stripeAccountId");
@@ -109,6 +121,16 @@ function EarningsCurrencyCard({
       ? "not_started"
       : account.payout.accountState);
   const payoutState = account.payout.payoutState;
+  const isWaitingForMinimumPayout =
+    accountState === "ready" && payoutState === "held_threshold";
+  const canApprovePayout =
+    isWaitingForMinimumPayout &&
+    compareExactAmounts(account.payout.providerNet, account.payout.minimumPayout) !== -1 &&
+    account.payout.payoutRef !== undefined &&
+    account.payout.payoutRevision !== undefined &&
+    account.payout.accountVersion !== undefined &&
+    account.payout.idempotencyKey !== undefined &&
+    stripeAccountId !== undefined;
   const payoutRef = account.payout.payoutRef;
   const recoveryState = account.payout.recoveryState;
   const payoutCommandId = account.payout.payoutCommandId;
@@ -155,7 +177,7 @@ function EarningsCurrencyCard({
     setBusy("connect");
     setMessage(undefined);
     try {
-      const result = await createOwnerConnectAccountServer({
+      const result = await createConnect({
         data: {
           businessId,
           currency: account.currency,
@@ -166,10 +188,11 @@ function EarningsCurrencyCard({
         setMessage(actionMessage(result.code));
         return;
       }
-      setMessage(
-        "Connect account created. Continue hosted onboarding; return does not mark readiness.",
-      );
-      await openOnboarding(result.stripeAccountId);
+      setMessage(result.onboardingUrl === undefined
+        ? "Connect account created. Reload current status before continuing hosted onboarding."
+        : "Connect account created. Continue in Stripe; returning does not mark readiness.");
+      if (result.onboardingUrl !== undefined) window.location.assign(result.onboardingUrl);
+      else await onStatusRefreshed?.();
     } catch {
       setMessage("Payout setup was interrupted. Reload before trying again.");
     } finally {
@@ -178,19 +201,20 @@ function EarningsCurrencyCard({
   }
 
   async function openOnboarding(accountId = stripeAccountId) {
-    if (accountId === undefined) {
-      setMessage("Connect account is not bound yet. Start setup again.");
+    if (accountId === undefined || payoutAccountVersion === undefined) {
+      setMessage("Current payout authority is unavailable. Reload before updating it.");
       return;
     }
     setBusy("onboarding");
     setMessage(undefined);
     try {
-      const result = await createOwnerOnboardingLinkServer({
+      const result = await createOnboarding({
         data: {
           businessId,
           currency: account.currency,
           stripeAccountId: accountId,
-          idempotencyKey: `onboarding:${businessId}:${account.currency}:${crypto.randomUUID()}`,
+          expectedAccountVersion: payoutAccountVersion,
+          idempotencyKey: `onboarding:${businessId}:${account.currency}:${payoutAccountVersion}`,
         },
       });
       if (result.kind !== "ok") {
@@ -206,6 +230,55 @@ function EarningsCurrencyCard({
       setBusy(undefined);
     }
   }
+
+  async function confirmPayoutAuthority() {
+    const action = confirmAction;
+    if (action === undefined || busy !== undefined) return;
+    if (action === "connect") await createAccount();
+    else if (action === "onboarding") await openOnboarding();
+    else await startPayout();
+    setConfirmAction(undefined);
+  }
+
+  async function startPayout() {
+    if (
+      !canApprovePayout ||
+      payoutRef === undefined ||
+      account.payout.payoutRevision === undefined ||
+      account.payout.accountVersion === undefined ||
+      idempotencyKey === undefined
+    ) return;
+    setBusy("transfer");
+    setMessage(undefined);
+    try {
+      const result = await beginPayout({
+        data: {
+          businessId,
+          currency: account.currency,
+          payoutRef,
+          amount: account.payout.providerNet,
+          expectedPayoutRevision: account.payout.payoutRevision,
+          expectedAccountVersion: account.payout.accountVersion,
+          idempotencyKey,
+        },
+      });
+      if (result.kind !== "ok") {
+        setMessage(actionMessage(result.code));
+        return;
+      }
+      setMessage(result.transfer.state === "outcome_unknown"
+        ? "Transfer outcome is not yet known. Check recorded status; do not submit another payout."
+        : "Payout recorded. Refreshing the authoritative transfer status.");
+      await onStatusRefreshed?.();
+      if (onStatusRefreshed === undefined) window.location.reload();
+    } catch (error) {
+      if (isReverificationCancelledError(error)) return;
+      setMessage("Payout approval was interrupted. Reload current status before taking another action.");
+    } finally {
+      setBusy(undefined);
+    }
+  }
+
   async function refreshRecordedStatus() {
     if (
       !canReadRecordedTransfer ||
@@ -248,14 +321,14 @@ function EarningsCurrencyCard({
           {account.currency} earnings
         </h4>
         <p className="text-sm text-muted-foreground">
-          Source-recorded supplier earnings and payout state.
+          Source-recorded provider earnings and payout state.
         </p>
       </div>
       <AeFactList
         facts={[
           { label: "Gross accrued", value: formatCurrencyAmount(account.earnings.grossAccrual) },
           { label: "AE fee / rake", value: formatCurrencyAmount(account.earnings.rake) },
-          { label: "Supplier net", value: formatCurrencyAmount(account.earnings.providerNet) },
+          { label: "Provider net", value: formatCurrencyAmount(account.earnings.providerNet) },
           { label: "Paid out", value: formatCurrencyAmount(account.earnings.paidOut) },
           { label: "Held", value: formatCurrencyAmount(account.earnings.held) },
           { label: "Payout account", value: payoutAccountLabel(accountState) },
@@ -263,8 +336,18 @@ function EarningsCurrencyCard({
             label: "Payout state",
             value: verifiedPaidEvidence
               ? "Transferred to Stripe"
-              : payoutStateLabel(payoutState),
+              : isWaitingForMinimumPayout
+                ? "Waiting for minimum payout"
+                : payoutStateLabel(payoutState),
           },
+          ...(isWaitingForMinimumPayout
+            ? [
+                {
+                  label: "Threshold progress",
+                  value: `${formatCurrencyAmount(account.payout.providerNet)} of ${formatCurrencyAmount(account.payout.minimumPayout)}`,
+                },
+              ]
+            : []),
         ]}
       />
       {!hasPersistedPayout ? null : (
@@ -278,7 +361,7 @@ function EarningsCurrencyCard({
               ...(stripeTransferId === undefined ? [] : [{ label: "Stripe transfer", value: stripeTransferId, mono: true }]),
               ...(destinationAccountId === undefined ? [] : [{ label: "Destination", value: destinationAccountId, mono: true }]),
               ...(requestDigest === undefined ? [] : [{ label: "Request digest", value: requestDigest, mono: true }]),
-              ...(evidenceDigest === undefined ? [] : [{ label: "Supplier evidence digest", value: evidenceDigest, mono: true }]),
+              ...(evidenceDigest === undefined ? [] : [{ label: "Provider evidence digest", value: evidenceDigest, mono: true }]),
               ...(providerHeldBefore === undefined || providerHeldAfter === undefined
                 ? []
                 : [{
@@ -315,28 +398,42 @@ function EarningsCurrencyCard({
       )}
       <div className="grid gap-2">
         <p className="m-0 text-sm text-muted-foreground">
-          Payouts become available when your payout account and supplier configuration are ready.
+          {isWaitingForMinimumPayout
+            ? "Your payout account is ready. You can approve a payout after provider earnings reach the minimum shown above."
+            : "Payouts become available when your payout account and provider configuration are ready."}
         </p>
         <div className="flex flex-wrap gap-2">
-          {accountState === "ready" ? null : stripeAccountId === undefined ? (
+          {canApprovePayout ? (
             <Button
+              ref={payoutActionRef}
+              type="button"
+              className="min-h-touch"
+              disabled={busy !== undefined}
+              onClick={() => setConfirmAction("transfer")}
+            >
+              {busy === "transfer" ? "Submitting payout…" : "Review payout"}
+            </Button>
+          ) : accountState === "ready" ? null : stripeAccountId === undefined ? (
+            <Button
+              ref={payoutActionRef}
               type="button"
               variant="secondary"
               className="min-h-touch"
               disabled={busy !== undefined}
-              onClick={() => void createAccount()}
+              onClick={() => setConfirmAction("connect")}
             >
               {busy === "connect"
                 ? "Creating Connect account…"
                 : "Set up payouts"}
             </Button>
-          ) : (
+          ) : payoutAccountVersion === undefined ? null : (
             <Button
+              ref={payoutActionRef}
               type="button"
               variant="secondary"
               className="min-h-touch"
               disabled={busy !== undefined}
-              onClick={() => void openOnboarding()}
+              onClick={() => setConfirmAction("onboarding")}
             >
               {busy === "onboarding"
                 ? "Opening hosted onboarding…"
@@ -346,6 +443,22 @@ function EarningsCurrencyCard({
             </Button>
           )}
         </div>
+        <AeConfirmDialog
+          open={confirmAction !== undefined}
+          onOpenChange={(open) => {
+            if (!open && busy === undefined) setConfirmAction(undefined);
+          }}
+          title={confirmAction === "transfer" ? "Confirm payout" : confirmAction === "onboarding" ? "Confirm payout authority update" : "Confirm payout authority"}
+          description={confirmAction === "transfer"
+            ? `Transfer ${formatCurrencyAmount(account.payout.providerNet)} from provider ${businessId} to Stripe account ending ${stripeAccountId?.slice(-4) ?? "unknown"}. AE reserves the amount now and dispatches through Stripe. It may not be reversible after dispatch; an uncertain outcome must be reconciled by status, not resubmitted.`
+            : confirmAction === "onboarding"
+            ? `Reopen Stripe-hosted onboarding for ${account.currency} payouts from provider ${businessId}. This may change where future payouts go. Current readiness remains authoritative after you return.`
+            : `Create Stripe-hosted ${account.currency} payout authority for provider ${businessId} under your signed-in owner Account. This does not transfer funds. Current readiness is read back after you return.`}
+          confirmLabel={confirmAction === "transfer" ? "Confirm payout" : confirmAction === "onboarding" ? "Confirm and continue" : "Confirm and set up"}
+          pending={busy !== undefined}
+          onConfirm={confirmPayoutAuthority}
+          returnFocusRef={payoutActionRef}
+        />
         <div
           role="status"
           aria-live="polite"

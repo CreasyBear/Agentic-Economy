@@ -14,6 +14,7 @@ import {
   getExactRegisteredCapabilityContract,
 } from './capabilityContractDocuments'
 import { toCapabilityBindingRow, toCapabilityOfferingRow } from './capabilitySupplyRowMappers'
+import { toDomain as providerConnectionDomain } from './lib/providerConnections/codecs'
 export function capabilitySupplyGraphPorts(
   db: QueryCtx['db'] | MutationCtx['db'],
 ): CapabilityGraphPorts {
@@ -53,33 +54,7 @@ export function capabilitySupplyGraphPorts(
     loadProviderConnection: async (connectionRef): Promise<ProviderConnection | undefined> => {
       const row = await db.query('capabilityProviderConnections')
         .withIndex('by_connectionRef', (query) => query.eq('connectionRef', connectionRef)).unique()
-      return row === null ? undefined : {
-        connectionRef: row.connectionRef,
-        owningAccountRef: row.owningAccountRef,
-        installedByPrincipalRef: row.installedByPrincipalRef,
-        authorityGrantRef: row.authorityGrantRef,
-        authorityGrantGeneration: row.authorityGrantGeneration,
-        ...(row.secretRef === undefined ? {} : { secretRef: row.secretRef }),
-        businessId: String(row.businessId),
-        providerRef: row.providerRef,
-        providerAccountRef: row.providerAccountRef,
-        adapterId: row.adapterId,
-        credentialRef: row.credentialRef,
-        grantedScopes: row.grantedScopes,
-        grantedResources: row.grantedResources,
-        authorityGeneration: row.authorityGeneration,
-        authorityDigest: row.authorityDigest,
-        lifecycle: row.lifecycle,
-        observedAt: row.observedAt,
-        ...(row.expiresAt === undefined ? {} : { expiresAt: row.expiresAt }),
-        ...(row.revokedAt === undefined ? {} : { revokedAt: row.revokedAt }),
-        ...(row.reasonCode === undefined ? {} : { reasonCode: row.reasonCode }),
-        evidenceRefs: row.evidenceRefs,
-        createdAt: row.createdAt,
-        updatedAt: row.updatedAt,
-        lastCommandId: row.lastCommandId,
-        lastCommandDigest: row.lastCommandDigest,
-      }
+      return row === null ? undefined : providerConnectionDomain(row)
     },
     catalogOriginIsCurrent: async (origin, businessId) => {
       const offering = await db.query('businessOfferings')
@@ -141,6 +116,7 @@ export function capabilitySupplyGraphPorts(
         readinessOutcome: patch.readinessOutcome,
         readinessObservedAt: patch.readinessObservedAt,
         readinessValidUntil: patch.readinessValidUntil,
+        ...(patch.readinessLastHealthyAt === undefined ? {} : { readinessLastHealthyAt: patch.readinessLastHealthyAt }),
         readinessEvidenceRefs: [...patch.readinessEvidenceRefs],
         updatedAt: patch.updatedAt,
       })
@@ -216,7 +192,7 @@ function toPublicationRow(doc: Doc<'capabilityPublications'>): GraphPublicationR
   return {
     id: doc._id,
     publicationRef: doc.publicationRef,
-    operationRef: doc.operationRef,
+    toolRef: doc.toolRef,
     revision: doc.revision,
     networkId: doc.networkId,
     businessId: doc.businessId,
@@ -227,6 +203,9 @@ function toPublicationRow(doc: Doc<'capabilityPublications'>): GraphPublicationR
     contractDigest: doc.contractDigest,
     sourceKind: doc.sourceKind,
     sourceDigest: doc.sourceDigest,
+    publisherRef: doc.publisherRef,
+    authorityMode: doc.authorityMode,
+    ...(doc.sourceAuthorityState === undefined ? {} : { sourceAuthorityState: doc.sourceAuthorityState }),
     disposition: doc.disposition,
     credentialState: doc.credentialState,
     healthState: doc.healthState,
@@ -243,6 +222,7 @@ function toPublicationRow(doc: Doc<'capabilityPublications'>): GraphPublicationR
     registrationEvidenceRefs: doc.registrationEvidenceRefs,
     ...(doc.readinessValidUntil === undefined ? {} : { readinessValidUntil: doc.readinessValidUntil }),
     ...(doc.readinessObservedAt === undefined ? {} : { readinessObservedAt: doc.readinessObservedAt }),
+    ...(doc.readinessLastHealthyAt === undefined ? {} : { readinessLastHealthyAt: doc.readinessLastHealthyAt }),
   }
 }
 

@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   cdpX402CustodyConfigurationFromEnvironment: vi.fn(),
   cdpX402CustodyBudgetRef: vi.fn(),
   readCdpX402PaymentAuthorization: vi.fn(),
+  replayCdpX402PaymentSigningIntent: vi.fn(),
   credentialFromEnvironment: vi.fn(),
   isPaymentSigningIdempotencyKey: (value: unknown) => typeof value === 'string' && value.length > 0,
 }))
@@ -23,6 +24,7 @@ vi.mock('@/modules/capability-supply/server', () => ({
   createSandboxEvmX402PaymentSignature: mocks.createSandboxEvmX402PaymentSignature,
   credentialFromEnvironment: mocks.credentialFromEnvironment,
   readCdpX402PaymentAuthorization: mocks.readCdpX402PaymentAuthorization,
+  replayCdpX402PaymentSigningIntent: mocks.replayCdpX402PaymentSigningIntent,
   isPaymentSigningIdempotencyKey: mocks.isPaymentSigningIdempotencyKey,
   readX402PaymentPayer: vi.fn(),
   readGuardedX402EvmReceipt: vi.fn(),
@@ -33,7 +35,10 @@ vi.mock('@/modules/capability-supply/server', () => ({
   x402SettlementStatusForObservation: vi.fn(),
 }))
 
-import { readX402Authorization } from '@/modules/capability-execution/invocation-worker/x402Route'
+import {
+  readX402Authorization,
+  replayManagedX402SigningForRecovery,
+} from '@/modules/capability-execution/call-worker/x402Route'
 
 const CUSTODY_REF = 'custody:attempt-one'
 const AUTHORIZATION_DIGEST = 'sha256:authorization-one'
@@ -77,6 +82,7 @@ describe('x402 route authorization', () => {
     vi.resetAllMocks()
     mocks.cdpX402CustodyConfigurationFromEnvironment.mockReturnValue(custodyConfiguration())
     mocks.cdpX402CustodyBudgetRef.mockReturnValue(CUSTODY_BUDGET_REF)
+    mocks.cdpX402RequestFingerprint.mockReturnValue(REQUEST_FINGERPRINT)
     configureSigner('payment-signature:first')
   })
 
@@ -97,10 +103,40 @@ describe('x402 route authorization', () => {
 
     await expect(readX402Authorization(ctx, prepared(), false, expected())).resolves.toBe(header)
     expect(mocks.createCdpEvmX402PaymentSignature).toHaveBeenCalledTimes(1)
-    expect(db.queryCalls[0]).toMatchObject({ custodyGeneration: CUSTODY_GENERATION })
+    expect(db.queryCalls[0]).toEqual({
+      custodyRef: CUSTODY_REF,
+      authorizationDigest: AUTHORIZATION_DIGEST,
+      requestFingerprint: REQUEST_FINGERPRINT,
+      custodyGeneration: CUSTODY_GENERATION,
+    })
   })
 
-  it('converges concurrent first reads on one committed header and one signer call', async () => {
+  it('does not leak preparation-only custody fields into the authorization query', async () => {
+    const header = 'payment-signature:first'
+    const db = new AuthorizationDb(material())
+    const preparedWithCustodyBudget = {
+      ...prepared(),
+      custodyBudgetRef: CUSTODY_BUDGET_REF,
+      custodyGeneration: CUSTODY_GENERATION,
+      custodyDailyMaximumUnits: CUSTODY_DAILY_MAXIMUM_UNITS,
+    }
+
+    await expect(readX402Authorization(
+      db.actionCtx(),
+      preparedWithCustodyBudget,
+      false,
+      expected(),
+    )).resolves.toBe(header)
+
+    expect(db.queryCalls[0]).toEqual({
+      custodyRef: CUSTODY_REF,
+      authorizationDigest: AUTHORIZATION_DIGEST,
+      requestFingerprint: REQUEST_FINGERPRINT,
+      custodyGeneration: CUSTODY_GENERATION,
+    })
+  })
+
+  it('converges concurrent first reads on one committed authorization and idempotency key', async () => {
     const header = 'payment-signature:first'
     const db = new AuthorizationDb(material())
     configureSigner(header)
@@ -126,7 +162,7 @@ describe('x402 route authorization', () => {
           payTo: expect.any(String),
         }),
       }),
-      { method: 'GET', operationRef: 'operation:one' },
+      { method: 'GET', toolRef: 'operation:one', aeEnvironment: 'production' },
       REQUEST_FINGERPRINT,
     )
     expect(db.current()).toMatchObject({
@@ -194,6 +230,60 @@ describe('x402 route authorization', () => {
       expected({ requestFingerprint: REQUEST_FINGERPRINT }),
     )).rejects.toThrow('x402_payment_request_fingerprint_conflict')
     expect(mocks.createCdpEvmX402PaymentSignature).not.toHaveBeenCalled()
+  })
+
+  it('classifies an exact CDP invalid_request replay as definitive no-signature evidence', async () => {
+    mocks.replayCdpX402PaymentSigningIntent.mockRejectedValue({
+      statusCode: 400,
+      errorType: 'invalid_request',
+      errorMessage: 'not persisted',
+    })
+    const attempt = material({
+      state: 'reconciliation_required',
+      ...unsignedIntent(),
+      paymentSigningClaimedAt: 1,
+    })
+
+    await expect(replayManagedX402SigningForRecovery(
+      attempt as never,
+      { transport: { configJson: JSON.stringify({ method: 'GET' }) } } as never,
+      'operation:one',
+      'production',
+    )).resolves.toMatchObject({
+      kind: 'definitive_rejection',
+      statusCode: 400,
+      errorType: 'invalid_request',
+      evidenceDigest: expect.stringMatching(/^sha256:/),
+    })
+  })
+
+  it('recovers only the exact persisted signature identity', async () => {
+    const header = 'payment-signature:recovered'
+    configureSigner(header)
+    mocks.replayCdpX402PaymentSigningIntent.mockResolvedValue(header)
+    const attempt = material({
+      state: 'reconciliation_required',
+      ...unsignedIntent(),
+      paymentSigningClaimedAt: 1,
+    })
+
+    await expect(replayManagedX402SigningForRecovery(
+      attempt as never,
+      { transport: { configJson: JSON.stringify({ method: 'GET' }) } } as never,
+      'operation:one',
+      'production',
+    )).resolves.toMatchObject({
+      kind: 'signed',
+      paymentSignatureDigest: canonicalDigest(header),
+      evidenceDigest: expect.stringMatching(/^sha256:/),
+    })
+    expect(mocks.replayCdpX402PaymentSigningIntent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        paymentSigningIdempotencyKey: PAYMENT_SIGNING_KEY,
+        paymentUnsignedMaterialDigest: UNSIGNED_MATERIAL_DIGEST,
+      }),
+      {},
+    )
   })
 
   it('returns undefined without signing when the sandbox credential is missing', async () => {
@@ -343,7 +433,7 @@ function expected(overrides: Partial<{
   credentialRef: string
   requestFingerprint: string
   useCustodySigner: boolean
-  requestFingerprintContext: { method: 'GET' | 'POST'; operationRef: string }
+  requestFingerprintContext: { method: 'GET' | 'POST'; toolRef: string; aeEnvironment: 'sandbox' | 'production' }
 }> = {}): {
   credentialRef: string
   dispatchRef: string
@@ -352,7 +442,7 @@ function expected(overrides: Partial<{
   paymentIdentifier: string
   useCustodySigner: boolean
   requestFingerprint: string
-  requestFingerprintContext: { method: 'GET' | 'POST'; operationRef: string }
+  requestFingerprintContext: { method: 'GET' | 'POST'; toolRef: string; aeEnvironment: 'sandbox' | 'production' }
 } {
   return {
     credentialRef: CREDENTIAL_REF,
@@ -362,7 +452,7 @@ function expected(overrides: Partial<{
     paymentIdentifier: PAYMENT_IDENTIFIER,
     useCustodySigner: true,
     requestFingerprint: REQUEST_FINGERPRINT,
-    requestFingerprintContext: { method: 'GET', operationRef: 'operation:one' },
+    requestFingerprintContext: { method: 'GET', toolRef: 'operation:one', aeEnvironment: 'production' },
     ...overrides,
   }
 }

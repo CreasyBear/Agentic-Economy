@@ -21,9 +21,16 @@ import {
 } from '../src/modules/agent-access/service-auth-envelope'
 import { canonicalDigest } from '../src/modules/common/canonical-digest'
 import {
+  STRIPE_CONNECT_RECOVERY_LEASE_MS,
+  STRIPE_CONNECT_RECOVERY_WINDOW_MS,
   transitionPayoutAccount,
   type StripeAccountUpdatedWebhookEvent,
 } from '../src/modules/money/public'
+import {
+  clerkConsequenceProofValue,
+  type ClerkConsequenceProofInput,
+} from './lib/consequenceProof'
+import { admitInteractiveOwnerConsequence } from './lib/ownerConsequence'
 
 const PAYOUT_BINDING_LOOKUP_OPERATION =
   'moneyLedger:readPayoutAccountByStripeId'
@@ -35,6 +42,43 @@ export type BindConnectAccountArgs = BillingSourceWriteArgs & {
   exponent: number
   stripeAccountId: string
   observedAt: number
+}
+
+export type ReserveConnectAccountArgs = BillingSourceWriteArgs & {
+  businessId: string
+  currency: string
+  exponent: number
+  idempotencyKey: string
+  commandRef: string
+  inputDigest: string
+  providerRequestDigest: string
+  recoveryLeaseOwner: string
+  proof?: ClerkConsequenceProofInput
+}
+
+export type FinalizeConnectAccountArgs = BillingSourceWriteArgs & {
+  businessId: string
+  currency: string
+  exponent: number
+  idempotencyKey: string
+  commandRef: string
+  inputDigest: string
+  providerRequestDigest: string
+  recoveryLeaseOwner: string
+  recoveryLeaseGeneration: number
+  outcome:
+    | Readonly<{ state: 'succeeded'; stripeAccountId: string; providerEvidenceRef: string }>
+    | Readonly<{ state: 'failed' | 'outcome_unknown'; failureCode: string; failureRetryable: boolean }>
+}
+
+export type AuthorizeConnectOnboardingArgs = BillingSourceWriteArgs & {
+  businessId: string
+  currency: string
+  stripeAccountId: string
+  expectedAccountVersion: number
+  commandRef: string
+  idempotencyKey: string
+  proof?: ClerkConsequenceProofInput
 }
 
 export type ReadPayoutAccountByStripeIdArgs = {
@@ -163,6 +207,7 @@ export const reserveConnectAccountArgs = {
   inputDigest: identifier,
   providerRequestDigest: identifier,
   recoveryLeaseOwner: identifier,
+  proof: v.optional(clerkConsequenceProofValue),
   ...billingSourceArgs,
 }
 export const finalizeConnectAccountArgs = {
@@ -178,6 +223,16 @@ export const finalizeConnectAccountArgs = {
   outcome: connectAccountFinalizeOutcomeArg,
   ...billingSourceArgs,
 }
+export const authorizeConnectOnboardingArgs = {
+  businessId: identifier,
+  currency: identifier,
+  stripeAccountId: identifier,
+  expectedAccountVersion: v.number(),
+  commandRef: identifier,
+  idempotencyKey: identifier,
+  proof: v.optional(clerkConsequenceProofValue),
+  ...billingSourceArgs,
+}
 export const bindConnectAccountArgs = {
   businessId: identifier,
   currency: identifier,
@@ -190,18 +245,26 @@ export const readPayoutAccountByStripeIdArgs = {
   stripeAccountId: identifier,
   serviceAuth: v.optional(serverFunctionAuth),
 }
-export const recordConnectAccountEventArgs = {
+export const recordConnectAccountEventFromInboxArgs = {
   businessId: identifier,
   currency: identifier,
   exponent: v.number(),
   event: accountUpdatedEventArg,
   readback: connectAccountReadbackArg,
   expectedVersion: v.optional(v.number()),
+}
+export const recordConnectAccountEventArgs = {
+  ...recordConnectAccountEventFromInboxArgs,
   ...billingSourceArgs,
 }
 
-function refusedConnect(code: string, retryable: boolean) {
-  return { kind: 'refused' as const, code, retryable }
+function refusedConnect(code: string, retryable: boolean, correlationRef?: string) {
+  return {
+    kind: 'refused' as const,
+    code,
+    retryable,
+    ...(correlationRef === undefined ? {} : { correlationRef }),
+  }
 }
 
 function payoutAccountView(row: Doc<'moneyPayoutAccounts'>) {
@@ -235,6 +298,29 @@ function payoutAccountView(row: Doc<'moneyPayoutAccounts'>) {
   }
 }
 
+function connectAccountCommandView(row: Doc<'moneyConnectAccountCommands'>) {
+  return {
+    commandRef: row.commandRef,
+    businessId: row.businessId,
+    currency: row.currency,
+    exponent: row.exponent,
+    idempotencyKey: row.idempotencyKey,
+    inputDigest: row.inputDigest,
+    providerRequestDigest: row.providerRequestDigest,
+    providerRecoveryDeadlineAt: row.providerRecoveryDeadlineAt,
+    recoveryLeaseGeneration: row.recoveryLeaseGeneration,
+    ...(row.recoveryLeaseOwner === undefined ? {} : { recoveryLeaseOwner: row.recoveryLeaseOwner }),
+    ...(row.recoveryLeaseExpiresAt === undefined ? {} : { recoveryLeaseExpiresAt: row.recoveryLeaseExpiresAt }),
+    state: row.state,
+    ...(row.stripeAccountId === undefined ? {} : { stripeAccountId: row.stripeAccountId }),
+    ...(row.providerEvidenceRef === undefined ? {} : { providerEvidenceRef: row.providerEvidenceRef }),
+    ...(row.failureCode === undefined ? {} : { failureCode: row.failureCode }),
+    ...(row.failureRetryable === undefined ? {} : { failureRetryable: row.failureRetryable }),
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  }
+}
+
 async function payoutBindingLookupAuthorized(
   serviceAuth: CustomerRequestServiceAssertion | undefined,
   stripeAccountId: string,
@@ -255,20 +341,392 @@ async function payoutBindingLookupAuthorized(
   })
 }
 
-export async function reserveConnectAccountHandler() {
-  return {
-    kind: 'refused' as const,
-    code: 'connect_account_unlisted',
-    retryable: false,
+export async function reserveConnectAccountHandler(
+  ctx: MutationCtx,
+  args: ReserveConnectAccountArgs,
+) {
+  await requireBillingSourceWrite(ctx, args)
+  const actor = await resolveBusinessActor(ctx)
+  if (actor.kind !== 'authenticated_owner')
+    return refusedConnect('billing_identity_missing', false)
+  const businessId = ctx.db.normalizeId('businesses', args.businessId)
+  if (businessId === null)
+    return refusedConnect('billing_identity_mismatch', false)
+  const business = await ctx.db.get(businessId)
+  if (business === null || business.owningAccountRef !== actor.canonicalAccountRef)
+    return refusedConnect('billing_identity_mismatch', false)
+
+  const now = Date.now()
+  const [binding, commands, sameKey] = await Promise.all([
+    ctx.db
+      .query('moneyPayoutAccounts')
+      .withIndex('by_businessId_and_currency', (q) =>
+        q.eq('businessId', args.businessId).eq('currency', args.currency),
+      )
+      .unique(),
+    ctx.db
+      .query('moneyConnectAccountCommands')
+      .withIndex('by_businessId_and_currency', (q) =>
+        q.eq('businessId', args.businessId).eq('currency', args.currency),
+      )
+      .take(21),
+    ctx.db
+      .query('moneyConnectAccountCommands')
+      .withIndex('by_businessId_and_currency_and_idempotencyKey', (q) =>
+        q
+          .eq('businessId', args.businessId)
+          .eq('currency', args.currency)
+          .eq('idempotencyKey', args.idempotencyKey),
+      )
+      .unique(),
+  ])
+  if (sameKey !== null && (
+    sameKey.commandRef !== args.commandRef
+    || sameKey.inputDigest !== args.inputDigest
+    || sameKey.providerRequestDigest !== args.providerRequestDigest
+    || sameKey.exponent !== args.exponent
+  )) return refusedConnect('ledger_idempotency_conflict', false)
+
+  const bindingReplay =
+    binding !== null
+    && sameKey !== null
+    && sameKey.state === 'succeeded'
+    && sameKey.stripeAccountId === binding.stripeAccountId
+  if (binding !== null && !bindingReplay)
+    return refusedConnect('payment_binding_invalid', false)
+  if (
+    binding === null
+    && sameKey === null
+    && (commands.length > 20 || commands.some((command) => command.state !== 'failed'))
+  ) return refusedConnect('payout_reconciliation_required', false)
+
+  const consequence = await admitInteractiveOwnerConsequence(ctx, {
+    actor,
+    action: 'payout_authority.create',
+    target: {
+      targetType: 'payout_account',
+      targetRef: `payout-account:${args.businessId}:${args.currency}`,
+      targetRevision: (binding?.version ?? 0) + 1,
+    },
+    requiredScopes: ['money:payout_authority_manage'],
+    resourceRefs: [`business:${args.businessId}`, `currency:${args.currency}`],
+    budgetAmount: 0,
+    consequenceSummary: 'Create this Stripe-hosted payout authority for the owner Account.',
+    statusReadbackRef: '/owner/offerings#earnings',
+    command: {
+      version: 'ae.payout-authority-consequence:v1',
+      action: 'payout_authority.create',
+      businessId: args.businessId,
+      currency: args.currency,
+      exponent: args.exponent,
+      commandRef: args.commandRef,
+      idempotencyKey: args.idempotencyKey,
+      inputDigest: args.inputDigest,
+      providerRequestDigest: args.providerRequestDigest,
+      targetRevision: (binding?.version ?? 0) + 1,
+    },
+    correlationRef: args.correlationId,
+    idempotencyRef: args.idempotencyKey,
+    ...(args.proof === undefined ? {} : { proof: args.proof }),
+    now,
+  })
+  if (consequence.kind === 'refused')
+    return refusedConnect(
+      consequence.code,
+      consequence.code === 'rate_limited' || consequence.code === 'security_control_unavailable',
+      consequence.correlationRef,
+    )
+
+  if (bindingReplay)
+    return { kind: 'accepted' as const, command: connectAccountCommandView(sameKey), execute: false }
+  const leaseExpiresAt = now + STRIPE_CONNECT_RECOVERY_LEASE_MS
+  if (sameKey !== null) {
+    if (sameKey.state === 'succeeded')
+      return { kind: 'accepted' as const, command: connectAccountCommandView(sameKey), execute: false }
+    if (sameKey.state === 'failed') {
+      const recoveryLeaseGeneration = sameKey.recoveryLeaseGeneration + 1
+      await ctx.db.patch('moneyConnectAccountCommands', sameKey._id, {
+        state: 'pending',
+        recoveryLeaseOwner: args.recoveryLeaseOwner,
+        recoveryLeaseGeneration,
+        recoveryLeaseExpiresAt: leaseExpiresAt,
+        failureCode: undefined,
+        failureRetryable: undefined,
+        updatedAt: now,
+      })
+      const updated = await ctx.db.get(sameKey._id)
+      return updated === null
+        ? refusedConnect('payout_reconciliation_required', false)
+        : { kind: 'accepted' as const, command: connectAccountCommandView(updated), execute: true }
+    }
+    if (now >= sameKey.providerRecoveryDeadlineAt) {
+      if (
+        sameKey.state !== 'outcome_unknown'
+        || sameKey.failureCode !== 'payout_reconciliation_required'
+        || sameKey.failureRetryable !== false
+        || sameKey.recoveryLeaseOwner !== undefined
+        || sameKey.recoveryLeaseExpiresAt !== undefined
+      ) {
+        await ctx.db.patch('moneyConnectAccountCommands', sameKey._id, {
+          state: 'outcome_unknown',
+          failureCode: 'payout_reconciliation_required',
+          failureRetryable: false,
+          recoveryLeaseOwner: undefined,
+          recoveryLeaseExpiresAt: undefined,
+          updatedAt: now,
+        })
+      }
+      const updated = await ctx.db.get(sameKey._id)
+      return updated === null
+        ? refusedConnect('payout_reconciliation_required', false)
+        : { kind: 'accepted' as const, command: connectAccountCommandView(updated), execute: false }
+    }
+    if (
+      sameKey.recoveryLeaseOwner !== undefined
+      && sameKey.recoveryLeaseExpiresAt !== undefined
+      && sameKey.recoveryLeaseExpiresAt > now
+    ) {
+      return { kind: 'accepted' as const, command: connectAccountCommandView(sameKey), execute: false }
+    }
+    const recoveryLeaseGeneration = sameKey.recoveryLeaseGeneration + 1
+    await ctx.db.patch('moneyConnectAccountCommands', sameKey._id, {
+      state: 'pending',
+      recoveryLeaseOwner: args.recoveryLeaseOwner,
+      recoveryLeaseGeneration,
+      recoveryLeaseExpiresAt: leaseExpiresAt,
+      failureCode: undefined,
+      failureRetryable: undefined,
+      updatedAt: now,
+    })
+    const updated = await ctx.db.get(sameKey._id)
+    return updated === null
+      ? refusedConnect('payout_reconciliation_required', false)
+      : { kind: 'accepted' as const, command: connectAccountCommandView(updated), execute: true }
   }
+  const row = {
+    commandRef: args.commandRef,
+    businessId: args.businessId,
+    currency: args.currency,
+    exponent: args.exponent,
+    idempotencyKey: args.idempotencyKey,
+    inputDigest: args.inputDigest,
+    providerRequestDigest: args.providerRequestDigest,
+    providerRecoveryDeadlineAt: now + STRIPE_CONNECT_RECOVERY_WINDOW_MS,
+    recoveryLeaseGeneration: 1,
+    recoveryLeaseOwner: args.recoveryLeaseOwner,
+    recoveryLeaseExpiresAt: leaseExpiresAt,
+    state: 'pending' as const,
+    createdAt: now,
+    updatedAt: now,
+  }
+  await ctx.db.insert('moneyConnectAccountCommands', row)
+  return { kind: 'accepted' as const, command: row, execute: true }
 }
 
-export async function finalizeConnectAccountHandler() {
-  return {
-    kind: 'refused' as const,
-    code: 'connect_account_unlisted',
-    retryable: false,
+export async function authorizeConnectOnboardingHandler(
+  ctx: MutationCtx,
+  args: AuthorizeConnectOnboardingArgs,
+) {
+  await requireBillingSourceWrite(ctx, args)
+  const actor = await resolveBusinessActor(ctx)
+  if (actor.kind !== 'authenticated_owner')
+    return refusedConnect('billing_identity_missing', false)
+  const businessId = ctx.db.normalizeId('businesses', args.businessId)
+  if (businessId === null)
+    return refusedConnect('billing_identity_mismatch', false)
+  const [business, binding] = await Promise.all([
+    ctx.db.get(businessId),
+    ctx.db
+      .query('moneyPayoutAccounts')
+      .withIndex('by_businessId_and_currency', (q) =>
+        q.eq('businessId', args.businessId).eq('currency', args.currency),
+      )
+      .unique(),
+  ])
+  if (
+    business === null ||
+    business.owningAccountRef !== actor.canonicalAccountRef ||
+    binding === null ||
+    binding.stripeAccountId !== args.stripeAccountId ||
+    !Number.isSafeInteger(args.expectedAccountVersion) ||
+    args.expectedAccountVersion < 0
+  )
+    return refusedConnect('payout_not_ready', false)
+
+  const currentVersion = binding.version ?? 0
+  if (
+    currentVersion !== args.expectedAccountVersion &&
+    currentVersion !== args.expectedAccountVersion + 1
+  )
+    return refusedConnect('payout_not_ready', false)
+
+  const now = Date.now()
+  const consequence = await admitInteractiveOwnerConsequence(ctx, {
+    actor,
+    action: 'payout_authority.replace',
+    target: {
+      targetType: 'payout_account',
+      targetRef: `payout-account:${args.businessId}:${args.currency}`,
+      targetRevision: args.expectedAccountVersion,
+    },
+    requiredScopes: ['money:payout_authority_manage'],
+    resourceRefs: [
+      `business:${args.businessId}`,
+      `currency:${args.currency}`,
+      `destination:${args.stripeAccountId}`,
+    ],
+    budgetAmount: 0,
+    consequenceSummary: 'Reopen Stripe-hosted onboarding for this payout authority.',
+    statusReadbackRef: '/owner/offerings#earnings',
+    command: {
+      version: 'ae.payout-authority-replace-consequence:v1',
+      businessId: args.businessId,
+      currency: args.currency,
+      stripeAccountId: args.stripeAccountId,
+      expectedAccountVersion: args.expectedAccountVersion,
+      nextAccountVersion: args.expectedAccountVersion + 1,
+      commandRef: args.commandRef,
+      idempotencyKey: args.idempotencyKey,
+    },
+    correlationRef: args.correlationId,
+    idempotencyRef: args.idempotencyKey,
+    ...(args.proof === undefined ? {} : { proof: args.proof }),
+    now,
+  })
+  if (consequence.kind === 'refused')
+    return refusedConnect(
+      consequence.code,
+      consequence.code === 'rate_limited' || consequence.code === 'security_control_unavailable',
+      consequence.correlationRef,
+    )
+
+  if (currentVersion === args.expectedAccountVersion + 1) {
+    return consequence.proofUse === 'replayed'
+      ? { kind: 'accepted' as const, account: payoutAccountView(binding) }
+      : refusedConnect('payout_not_ready', false)
   }
+  await ctx.db.patch(binding._id, {
+    version: args.expectedAccountVersion + 1,
+    updatedAt: now,
+  })
+  const updated = await ctx.db.get(binding._id)
+  return updated === null
+    ? refusedConnect('payout_reconciliation_required', false)
+    : { kind: 'accepted' as const, account: payoutAccountView(updated) }
+}
+
+export async function finalizeConnectAccountHandler(
+  ctx: MutationCtx,
+  args: FinalizeConnectAccountArgs,
+) {
+  await requireBillingSourceWrite(ctx, args)
+  const command = await ctx.db
+    .query('moneyConnectAccountCommands')
+    .withIndex('by_commandRef', (q) => q.eq('commandRef', args.commandRef))
+    .unique()
+  if (
+    command === null
+    || command.businessId !== args.businessId
+    || command.currency !== args.currency
+    || command.exponent !== args.exponent
+    || command.idempotencyKey !== args.idempotencyKey
+    || command.inputDigest !== args.inputDigest
+    || command.providerRequestDigest !== args.providerRequestDigest
+  ) return refusedConnect('ledger_idempotency_conflict', false)
+  const outcome = args.outcome
+  if (command.state !== 'pending') {
+    const sameOutcome = outcome.state === 'succeeded'
+      ? command.state === 'succeeded'
+        && command.stripeAccountId === outcome.stripeAccountId
+        && command.providerEvidenceRef === outcome.providerEvidenceRef
+      : command.state === outcome.state
+        && command.failureCode === outcome.failureCode
+        && command.failureRetryable === outcome.failureRetryable
+    return sameOutcome
+      ? { kind: 'accepted' as const, command: connectAccountCommandView(command), execute: false }
+      : refusedConnect('ledger_idempotency_conflict', false)
+  }
+  const now = Date.now()
+  const outcomeStripeAccountId = outcome.state === 'succeeded' ? outcome.stripeAccountId : undefined
+  const outcomeProviderEvidenceRef = outcome.state === 'succeeded' ? outcome.providerEvidenceRef : undefined
+  const retainUnboundProviderOutcome = async () => {
+    await ctx.db.patch('moneyConnectAccountCommands', command._id, {
+      state: 'outcome_unknown',
+      stripeAccountId: outcomeStripeAccountId ?? command.stripeAccountId,
+      providerEvidenceRef: outcomeProviderEvidenceRef ?? command.providerEvidenceRef,
+      failureCode: 'payout_reconciliation_required',
+      failureRetryable: false,
+      recoveryLeaseOwner: undefined,
+      recoveryLeaseExpiresAt: undefined,
+      updatedAt: now,
+    })
+    return refusedConnect('payout_reconciliation_required', false)
+  }
+  if (
+    command.recoveryLeaseOwner !== args.recoveryLeaseOwner
+    || command.recoveryLeaseGeneration !== args.recoveryLeaseGeneration
+    || command.recoveryLeaseExpiresAt === undefined
+    || now >= command.recoveryLeaseExpiresAt
+  ) return refusedConnect('ledger_idempotency_conflict', false)
+  if (now >= command.providerRecoveryDeadlineAt)
+    return refusedConnect('payout_reconciliation_required', false)
+  if (outcome.state === 'succeeded') {
+    const stripeAccountId = outcome.stripeAccountId
+    const providerEvidenceRef = outcome.providerEvidenceRef
+    const [current, stripeBindings] = await Promise.all([
+      ctx.db
+        .query('moneyPayoutAccounts')
+        .withIndex('by_businessId_and_currency', (q) =>
+          q.eq('businessId', args.businessId).eq('currency', args.currency),
+        )
+        .unique(),
+      ctx.db
+        .query('moneyPayoutAccounts')
+        .withIndex('by_stripeAccountId', (q) => q.eq('stripeAccountId', stripeAccountId))
+        .take(2),
+    ])
+    if (
+      stripeBindings.some((binding) =>
+        binding.businessId !== args.businessId || binding.currency !== args.currency,
+      )
+      || stripeBindings.length > 1
+      || (current !== null && current.stripeAccountId !== stripeAccountId)
+    ) return await retainUnboundProviderOutcome()
+    const transition = transitionPayoutAccount({
+      ...(current === null ? {} : { current: payoutAccountView(current) }),
+      businessId: args.businessId,
+      currency: args.currency,
+      exponent: args.exponent,
+      stripeAccountId,
+      event: { kind: 'onboarding_started', observedAt: now },
+    })
+    if (transition.kind === 'refused') return await retainUnboundProviderOutcome()
+    if (current === null) await ctx.db.insert('moneyPayoutAccounts', transition.value)
+    else await ctx.db.patch('moneyPayoutAccounts', current._id, transition.value)
+    await ctx.db.patch('moneyConnectAccountCommands', command._id, {
+      state: 'succeeded',
+      stripeAccountId,
+      providerEvidenceRef,
+      failureCode: undefined,
+      failureRetryable: undefined,
+      recoveryLeaseOwner: undefined,
+      recoveryLeaseExpiresAt: undefined,
+      updatedAt: now,
+    })
+  } else {
+    await ctx.db.patch('moneyConnectAccountCommands', command._id, {
+      state: outcome.state,
+      failureCode: outcome.failureCode,
+      failureRetryable: outcome.failureRetryable,
+      recoveryLeaseOwner: undefined,
+      recoveryLeaseExpiresAt: undefined,
+      updatedAt: now,
+    })
+  }
+  const updated = await ctx.db.get(command._id)
+  return updated === null
+    ? refusedConnect('payout_reconciliation_required', false)
+    : { kind: 'accepted' as const, command: connectAccountCommandView(updated), execute: false }
 }
 
 export async function bindConnectAccountHandler(
@@ -367,6 +825,25 @@ export async function readPayoutAccountByStripeIdHandler(
   )
 }
 
+export async function readPayoutAccountByStripeIdForWorkerHandler(
+  ctx: QueryCtx,
+  stripeAccountId: string,
+) {
+  return (
+    await ctx.db
+      .query('moneyPayoutAccounts')
+      .withIndex('by_stripeAccountId', (q) => q.eq('stripeAccountId', stripeAccountId))
+      .take(20)
+  ).map(({ businessId, currency, exponent, stripeAccountId: boundStripeAccountId, lastStripeEventId, version }) => ({
+    businessId,
+    currency,
+    exponent,
+    stripeAccountId: boundStripeAccountId,
+    ...(lastStripeEventId === undefined ? {} : { lastStripeEventId }),
+    ...(version === undefined ? {} : { version }),
+  }))
+}
+
 export async function readOwnerPayoutAccountHandler(
   ctx: QueryCtx,
   args: ReadOwnerPayoutAccountArgs,
@@ -396,6 +873,13 @@ export async function recordConnectAccountEventHandler(
   args: RecordConnectAccountEventArgs,
 ) {
   await requireBillingSourceWrite(ctx, args)
+  return await recordConnectAccountEventFromInboxHandler(ctx, args)
+}
+
+export async function recordConnectAccountEventFromInboxHandler(
+  ctx: MutationCtx,
+  args: Omit<RecordConnectAccountEventArgs, keyof BillingSourceWriteArgs>,
+) {
   const event = args.event
   if (event.externalRef !== event.stripeAccountId)
     return refusedConnect('payment_binding_invalid', false)

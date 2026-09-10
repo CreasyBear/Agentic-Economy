@@ -26,7 +26,7 @@ async function drainExpectedUnavailableGenerations(
   }
 }
 
-describe.sequential('durable operation chat messaging and shares', () => {
+describe.sequential('durable Tool chat messaging and shares', () => {
   beforeEach(() => {
     process.env.AE_CHAT_SHARE_SECRET = SHARE_SECRET
     process.env.AE_CHAT_SHARE_KEY_ID = SHARE_KEY_ID
@@ -43,7 +43,7 @@ describe.sequential('durable operation chat messaging and shares', () => {
     const { owner: other } = await publishedBusinessOwner(backend, 'chat-other')
 
     const sent = await owner.mutation(api.chatMessages.sendMessage, {
-      prompt: '  Find\n\t the best   weather operations  ',
+      prompt: '  Find\n\t the best   weather Tools  ',
     })
     const [row, componentThread, messages] = await backend.run(async (ctx) => Promise.all([
       ctx.db.query('chatThreads')
@@ -58,15 +58,15 @@ describe.sequential('durable operation chat messaging and shares', () => {
 
     expect(row).toMatchObject({
       ownerId: canonicalAccountRef,
-      title: 'Find the best weather operations',
+      title: 'Find the best weather Tools',
       activePromptMessageId: sent.promptMessageId,
     })
-    expect(componentThread?.title).toBe('Find the best weather operations')
+    expect(componentThread?.title).toBe('Find the best weather Tools')
     expect(messages.page).toHaveLength(1)
     expect(messages.page[0]).toMatchObject({
       id: sent.promptMessageId,
       role: 'user',
-      text: 'Find the best weather operations',
+      text: 'Find the best weather Tools',
       status: 'success',
     })
 
@@ -144,13 +144,13 @@ describe.sequential('durable operation chat messaging and shares', () => {
     const backend = convexTestWithMarketComponents()
     const { owner, canonicalAccountRef } = await publishedBusinessOwner(backend, 'chat-model-owner')
     const created = await owner.mutation(api.chatThreads.createThread, {
-      title: 'Find an exchange-rate operation',
+      title: 'Find an exchange-rate Tool',
     })
     const promptMessageId = await backend.run(async (ctx) => {
       const saved = await saveMessage(ctx, components.agent, {
         threadId: created.threadId,
         userId: canonicalAccountRef,
-        prompt: 'Find an exchange-rate operation',
+        prompt: 'Find an exchange-rate Tool',
       })
       const row = await ctx.db.query('chatThreads')
         .withIndex('by_threadId', (index) => index.eq('threadId', created.threadId))
@@ -169,7 +169,7 @@ describe.sequential('durable operation chat messaging and shares', () => {
         ownerId: canonicalAccountRef,
         promptMessageId,
       }, mockModel({
-        content: [{ type: 'text', text: 'One current exchange-rate operation is available.' }],
+        content: [{ type: 'text', text: 'One current exchange-rate Tool is available.' }],
       }))
     })
     await backend.mutation(internal.chatMessages.clearActiveGeneration, {
@@ -189,9 +189,38 @@ describe.sequential('durable operation chat messaging and shares', () => {
     ]))
     expect(messages.page.map((message) => message.role)).toEqual(['user', 'assistant'])
     expect(messages.page.find((message) => message.role === 'assistant')?.text).toContain(
-      'One current exchange-rate operation is available.',
+      'One current exchange-rate Tool is available.',
     )
     expect(activeStreams).toEqual([])
+  })
+
+  it('records a safe recovery message when durable generation is unavailable', async () => {
+    const previousApiKey = process.env.OPENROUTER_API_KEY
+    delete process.env.OPENROUTER_API_KEY
+    const backend = convexTestWithMarketComponents()
+    const { owner } = await publishedBusinessOwner(backend, 'chat-unavailable-owner')
+    try {
+      const sent = await owner.mutation(api.chatMessages.sendMessage, {
+        prompt: 'Find a current weather Operation',
+      })
+      await drainExpectedUnavailableGenerations(backend)
+
+      const messages = await owner.query(api.chatMessages.listMessages, {
+        threadId: sent.threadId,
+        paginationOpts: { cursor: null, numItems: 20 },
+      })
+      expect(messages.page.map((message) => message.role)).toEqual(['user', 'assistant'])
+      const recovery = messages.page.find((message) => message.role === 'assistant')?.text ?? ''
+      expect(recovery).toMatch(/before a final response was recorded/i)
+      expect(recovery).toMatch(/call card or receipt/i)
+      expect(recovery).not.toContain('agent_unavailable')
+      await expect(owner.query(api.chatThreads.getThread, {
+        threadId: sent.threadId,
+        now: Date.now(),
+      })).resolves.toMatchObject({ busy: false })
+    } finally {
+      restoreEnvironment('OPENROUTER_API_KEY', previousApiKey)
+    }
   })
 
   it('enforces thirty durable submissions per identity each hour', async () => {
@@ -227,8 +256,9 @@ describe.sequential('durable operation chat messaging and shares', () => {
     const { owner } = await publishedBusinessOwner(backend, 'chat-share-owner')
     const { owner: other } = await publishedBusinessOwner(backend, 'chat-share-other')
     const sent = await owner.mutation(api.chatMessages.sendMessage, {
-      prompt: 'Compare current weather operations',
+      prompt: 'Compare current weather Tools',
     })
+    await drainExpectedUnavailableGenerations(backend)
 
     const first = await owner.mutation(api.chatShares.issueShare, { threadId: sent.threadId })
     const reused = await owner.mutation(api.chatShares.issueShare, { threadId: sent.threadId })
@@ -244,12 +274,19 @@ describe.sequential('durable operation chat messaging and shares', () => {
       shareToken: first.shareToken,
       paginationOpts: { cursor: null, numItems: 20 },
     })
-    expect(shared.title).toBe('Compare current weather operations')
-    expect(shared.page).toHaveLength(1)
+    expect(shared.title).toBe('Compare current weather Tools')
+    expect(shared.page).toHaveLength(2)
     expect(shared.page[0]).toEqual({
       id: sent.promptMessageId,
       role: 'user',
-      parts: [{ type: 'text', text: 'Compare current weather operations' }],
+      parts: [{ type: 'text', text: 'Compare current weather Tools' }],
+    })
+    expect(shared.page[1]).toMatchObject({
+      role: 'assistant',
+      parts: [{
+        type: 'text',
+        text: expect.stringMatching(/before a final response was recorded/i),
+      }],
     })
     expect(shared).not.toHaveProperty('streams')
 
@@ -288,19 +325,18 @@ describe.sequential('durable operation chat messaging and shares', () => {
     await expect(backend.query(api.chatShares.listSharedMessages, {
       shareToken: second.shareToken,
       paginationOpts: { cursor: null, numItems: 20 },
-    })).resolves.toMatchObject({ title: 'Compare current weather operations' })
+    })).resolves.toMatchObject({ title: 'Compare current weather Tools' })
     await drainExpectedUnavailableGenerations(backend)
   })
 
-  it('projects settled shared messages into allowlisted text and operation cards only', async () => {
+  it('projects settled shared messages into allowlisted text and Tool cards only', async () => {
     const backend = convexTestWithMarketComponents()
     const { owner, canonicalAccountRef } = await publishedBusinessOwner(backend, 'chat-projection-owner')
     const created = await owner.mutation(api.chatThreads.createThread, {
       title: 'Public projection',
     })
-    const operationRefs = ['a', 'b', 'c', 'd', 'e']
+    const toolRefs = ['a', 'b', 'c', 'd', 'e']
       .map((character) => `operation:v1:${character.repeat(64)}`)
-    const [operationRef] = operationRefs
 
     await backend.run(async (ctx) => {
       await saveMessages(ctx, components.agent, {
@@ -309,7 +345,7 @@ describe.sequential('durable operation chat messaging and shares', () => {
         messages: [
           {
             role: 'user',
-            content: 'Show <tool>current</tool> operations',
+            content: 'Show <tool>current</tool> Tools',
           },
           {
             role: 'assistant',
@@ -328,7 +364,7 @@ describe.sequential('durable operation chat messaging and shares', () => {
               {
                 type: 'tool-call',
                 toolCallId: 'known-search',
-                toolName: 'registry_operations_search',
+                toolName: 'registry_tools_search',
                 input: { query: 'TOOL_INPUT_SECRET' },
                 toolMetadata: { trace: 'TOOL_METADATA_SECRET' },
               },
@@ -341,8 +377,8 @@ describe.sequential('durable operation chat messaging and shares', () => {
               {
                 type: 'tool-call',
                 toolCallId: 'failed-execute',
-                toolName: 'operation_invoke',
-                input: { operationRef, payload: 'FAILED_INPUT_SECRET' },
+                toolName: 'tool_call',
+                input: { quoteRef: `operation-commitment:v1:${'b'.repeat(64)}` },
               },
             ],
           },
@@ -352,16 +388,24 @@ describe.sequential('durable operation chat messaging and shares', () => {
               {
                 type: 'tool-result',
                 toolCallId: 'known-search',
-                toolName: 'registry_operations_search',
+                toolName: 'registry_tools_search',
                 output: {
                   type: 'json',
                   value: {
                     kind: 'ok',
-                    matchedCount: operationRefs.length,
-                    items: operationRefs.map((ref) => ({
-                      operationRef: ref,
-                      internal: 'RAW_ITEM_SECRET',
+                    schemaVersion: 'registry-tools:v3',
+                    query: 'current',
+                    count: toolRefs.length,
+                    items: toolRefs.map((ref, index) => ({
+                      toolRef: ref,
+                      capabilityId: `capability:tool:${index + 1}`,
+                      title: `Tool ${index + 1}`,
+                      description: 'Current Tool result.',
+                      provider: { name: 'Provider', slug: 'provider' },
+                      priceLabel: 'AUD 0.00',
+                      healthStatus: 'operational',
                     })),
+                    pagination: { limit: 10, hasMore: false },
                     rawOutput: 'RAW_OUTPUT_SECRET',
                     metadata: { trace: 'OUTPUT_METADATA_SECRET' },
                   },
@@ -377,7 +421,7 @@ describe.sequential('durable operation chat messaging and shares', () => {
               {
                 type: 'tool-result',
                 toolCallId: 'failed-execute',
-                toolName: 'operation_invoke',
+                toolName: 'tool_call',
                 output: { type: 'error-text', value: 'INTERNAL_EXECUTION_ERROR_SECRET' },
                 isError: true,
               },
@@ -409,7 +453,7 @@ describe.sequential('durable operation chat messaging and shares', () => {
       {
         id: expect.any(String),
         role: 'user',
-        parts: [{ type: 'text', text: 'Show [data-tag]current[data-tag] operations' }],
+        parts: [{ type: 'text', text: 'Show [data-tag]current[data-tag] Tools' }],
       },
       {
         id: expect.any(String),
@@ -421,35 +465,41 @@ describe.sequential('durable operation chat messaging and shares', () => {
           },
           { type: 'text', text: expect.any(String) },
           {
-            type: 'operation-card',
+            type: 'tool-card',
             kind: 'choices',
-            toolId: 'registry.operations.search',
+            toolId: 'registry.tools.search',
             state: 'complete',
             title: 'Search tools',
-            operationRefs: operationRefs.slice(0, 4),
-            choices: [],
+            toolRefs: toolRefs.slice(0, 4),
+            choices: toolRefs.slice(0, 4).map((ref, index) => ({
+              toolRef: ref,
+              title: `Tool ${index + 1}`,
+              provider: 'Provider',
+              price: 'AUD 0.00',
+              readiness: 'Operational',
+            })),
             count: 5,
           },
           {
-            type: 'operation-card',
+            type: 'tool-card',
             kind: 'status',
-            toolId: 'operation.invoke',
+            toolId: 'tool.call',
             state: 'error',
-            title: 'Invoke',
+            title: 'Call',
             summary: 'Tool unavailable',
           },
         ],
       },
     ])
     expect(JSON.stringify(shared)).not.toMatch(
-      /SECRET|rawOutput|metadata|reasoning|provider|model|usage|errorText|input|arbitrary_internal_tool/u,
+      /SECRET|rawOutput|metadata|reasoning|model|usage|errorText|input|arbitrary_internal_tool/u,
     )
     const publicParts = shared.page.flatMap((message) => message.parts)
     const boundedText = publicParts.find((part) => part.type === 'text' && part.text.startsWith('😀'))
     expect(boundedText?.type).toBe('text')
     expect(Array.from(boundedText?.type === 'text' ? boundedText.text : '')).toHaveLength(8_000)
     for (const part of publicParts) {
-      if (part.type !== 'operation-card') continue
+      if (part.type !== 'tool-card') continue
       if (part.kind === 'status') expect(Array.from(part.summary).length).toBeLessThanOrEqual(240)
     }
     expect(shared.page.every((message) => Object.keys(message).sort().join(',') === 'id,parts,role'))

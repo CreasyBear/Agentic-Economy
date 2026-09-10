@@ -36,6 +36,7 @@ function productionReadinessEnvironment(): Record<string, string> {
     AE_CANONICAL_BASE_URL: 'https://ae.example',
     VITE_CLERK_PUBLISHABLE_KEY: 'pk_live_example',
     CLERK_SECRET_KEY: 'sk_live_example',
+    CLERK_WEBHOOK_SIGNING_SECRET: 'whsec_live_example',
     CLERK_JWT_ISSUER_DOMAIN: 'https://clerk.example',
     OPENROUTER_API_KEY: 'openrouter-example',
     AE_LLM_MODEL: 'test/provider-model',
@@ -47,14 +48,36 @@ function productionReadinessEnvironment(): Record<string, string> {
     AE_X402_CDP_EXPECTED_EVM_ADDRESS: '0x0000000000000000000000000000000000000001',
     AE_X402_CDP_ACCOUNT_POLICY_ID: '11111111-1111-4111-8111-111111111111',
     AE_X402_CDP_PROJECT_POLICY_ID: '22222222-2222-4222-8222-222222222222',
+    AE_X402_CDP_POLICY_RULES_DIGEST: `sha256:${'a'.repeat(64)}`,
     AE_X402_CDP_CREDENTIAL_GENERATION: '7',
     AE_X402_CUSTODY_ENABLED: 'true',
     AE_X402_CUSTODY_MAX_ATOMIC: '100000000',
     AE_X402_CUSTODY_DAILY_MAX_ATOMIC: '100000000',
     AE_X402_RPC_URLS_JSON: '{"eip155:8453":["https://base.example/rpc"]}',
-    STRIPE_SECRET_KEY: 'test-only-stripe-secret',
-    STRIPE_WEBHOOK_SECRET: 'test-only-stripe-webhook-secret',
-    VITE_STRIPE_PUBLISHABLE_KEY: 'pk_test_example',
+    STRIPE_SECRET_KEY: 'rk_live_command_example',
+    STRIPE_READBACK_KEY: 'rk_live_readback_example',
+    STRIPE_WEBHOOK_SECRET: 'whsec_example',
+    STRIPE_V2_WEBHOOK_SECRET: 'whsec_v2_example',
+    STRIPE_AU_INCLUSIVE_GST_TAX_RATE_ID: 'txr_au_gst_10_inclusive',
+    AE_FORMANCE_ENVIRONMENT: 'production',
+    AE_FORMANCE_GATEWAY_URL: 'https://formance.example.com',
+    AE_FORMANCE_LEDGER: 'agentic-economy-production',
+    AE_FORMANCE_REQUEST_TIMEOUT_MS: '10000',
+    AE_FORMANCE_ACCESS_CLIENT_ID: 'access-client-id',
+    AE_FORMANCE_ACCESS_CLIENT_SECRET: 'access-client-secret',
+    AE_PACKAGE5_WRITES_ENABLED: 'true',
+    AE_SUPPLY_HTTP_CREDENTIALS_ENABLED: 'true',
+    AE_SUPPLY_MCP_OAUTH_ENABLED: 'true',
+    AE_PROVIDER_OFFBOARDING_ENABLED: 'true',
+    AE_INFISICAL_BASE_URL: 'https://app.infisical.com',
+    AE_INFISICAL_CUSTOMER_PROJECT_ID: 'customer-project',
+    AE_INFISICAL_CUSTOMER_ENVIRONMENT: 'production',
+    AE_INFISICAL_CUSTOMER_SECRET_PATH: '/provider-connections',
+    AE_INFISICAL_CUSTOMER_MACHINE_IDENTITY_ID: 'customer-machine-identity',
+    AE_INFISICAL_PLATFORM_PROJECT_ID: 'platform-project',
+    AE_INFISICAL_PLATFORM_ENVIRONMENT: 'production',
+    AE_INFISICAL_PLATFORM_SECRET_PATH: '/provider-consequences',
+    AE_INFISICAL_PLATFORM_MACHINE_IDENTITY_ID: 'platform-machine-identity',
     ...Object.fromEntries(SOURCE_WRITE_FAMILIES.map((family) => [
       `AE_SOURCE_WRITE_KEY_${family.toUpperCase()}`,
       `${family}:0123456789abcdef0123456789abcdef`,
@@ -110,10 +133,58 @@ describe('operational diagnostics routes', () => {
     ]))
     expect(JSON.stringify(result.diagnostics)).not.toContain('convex.example')
     expect(JSON.stringify(result.diagnostics)).not.toContain('source-write-secret')
-    expect(JSON.stringify(result.diagnostics)).not.toContain('test-only-x402-payer-placeholder')
+    expect(JSON.stringify(result.diagnostics)).not.toContain('rk_live_command_example')
+    expect(JSON.stringify(result.diagnostics)).not.toContain('rk_live_readback_example')
     expect(JSON.stringify(result.diagnostics)).not.toContain('cdp-key-secret')
     expect(JSON.stringify(result.diagnostics)).not.toContain('cdp-wallet-secret')
     expect(fetchImpl).toHaveBeenCalledOnce()
+  })
+
+  it('projects public ready state without internal deployment inventory', async () => {
+    const response = await handleReadyRequest(
+      new Request('https://ae.example/api/ready'),
+      {
+        env: { NODE_ENV: 'test', CONVEX_URL: 'https://convex.example' },
+        fetch: vi.fn(async () => new Response(null, { status: 200 })),
+      },
+    )
+
+    expect(response.status).toBe(200)
+    expect(response.headers.get('cache-control')).toBe('no-store')
+    const body = await response.json()
+    expect(body).toEqual({
+      status: 'ready',
+      checks: { config: 'ready', convex: 'ready' },
+    })
+    const serialized = JSON.stringify(body)
+    for (const internalName of ['diagnostics', 'CONVEX_URL', 'SENTRY_DSN', 'release-readback', 'source-authority']) {
+      expect(serialized).not.toContain(internalName)
+    }
+  })
+
+  it('projects ready and degraded HEAD responses without a body', async () => {
+    const request = (correlationId: string) => new Request('https://ae.example/api/ready', {
+      method: 'HEAD',
+      headers: { 'x-ae-request-id': correlationId },
+    })
+    const options = (status: number) => ({
+      env: { NODE_ENV: 'test', CONVEX_URL: 'https://convex.example' },
+      fetch: vi.fn(async () => new Response(null, { status })),
+    })
+
+    const ready = await handleReadyRequest(request('corr_ready_head'), options(200), true)
+    expect(ready.status).toBe(200)
+    expect(ready.headers.get('cache-control')).toBe('no-store')
+    expect(ready.headers.get('content-type')).toBe('application/json')
+    expect(ready.headers.get('x-ae-request-id')).toBe('corr_ready_head')
+    await expect(ready.text()).resolves.toBe('')
+
+    const degraded = await handleReadyRequest(request('corr_degraded_head'), options(503), true)
+    expect(degraded.status).toBe(503)
+    expect(degraded.headers.get('cache-control')).toBe('no-store')
+    expect(degraded.headers.get('content-type')).toBe('application/problem+json')
+    expect(degraded.headers.get('x-ae-request-id')).toBe('corr_degraded_head')
+    await expect(degraded.text()).resolves.toBe('')
   })
 
   it('projects config diagnostics as names and booleans only', () => {
@@ -176,14 +247,25 @@ describe('operational diagnostics routes', () => {
     expect(routeResponse.status).toBe(503)
     expect(routeResponse.headers.get('content-type')).toBe('application/problem+json')
     expect(routeResponse.headers.get('x-ae-request-id')).toBe('corr_ready_1')
-    await expect(routeResponse.json()).resolves.toMatchObject({
+    expect(routeResponse.headers.get('cache-control')).toBe('no-store')
+    const body = await routeResponse.json()
+    expect(body).toEqual({
+      type: 'about:blank',
+      title: 'Unavailable',
+      status: 503,
+      detail: 'Required server readiness checks did not pass.',
       kind: 'UNAVAILABLE',
       code: 'server_not_ready',
+      retryable: true,
       checks: {
         config: 'ready',
         convex: { status: 'failed', code: 'convex_probe_failed' },
       },
     })
+    const serialized = JSON.stringify(body)
+    for (const internalName of ['diagnostics', 'CONVEX_URL', 'SENTRY_DSN', 'release-readback', 'source-authority']) {
+      expect(serialized).not.toContain(internalName)
+    }
   })
 
   it('dispatches a normalized client error without retaining secrets or URL query values', async () => {

@@ -3,7 +3,7 @@ import { TableAggregate } from '@convex-dev/aggregate'
 import { components } from './_generated/api'
 import type { DataModel } from './_generated/dataModel'
 import type { MutationCtx, QueryCtx } from './_generated/server'
-import { insertOperationEvidence } from './marketListingEvidence'
+import { insertToolEvidence } from './marketListingEvidence'
 
 export type MarketEvidenceKind =
   | 'ae_invocation'
@@ -27,7 +27,7 @@ export async function recordMarketEvidenceFact(
   kind: MarketEvidenceKind,
   sourceRef: string,
   occurredAt: number,
-  listing?: Readonly<{ operationRef: string; durationMs?: number }>,
+  listing?: Readonly<{ toolRef: string; durationMs?: number }>,
 ): Promise<void> {
   const existing = await ctx.db.query('marketEvidenceFacts')
     .withIndex('by_kind_and_sourceRef', (query) => query.eq('kind', kind).eq('sourceRef', sourceRef))
@@ -40,14 +40,14 @@ export async function recordMarketEvidenceFact(
     ...(listing === undefined
       ? {}
       : {
-          operationRef: listing.operationRef,
+          toolRef: listing.toolRef,
           ...(listing.durationMs === undefined ? {} : { durationMs: listing.durationMs }),
         }),
   })
   const row = await ctx.db.get(id)
   if (row === null) throw new Error('market_evidence_fact_missing_after_insert')
   await marketEvidence.insert(ctx, row)
-  await insertOperationEvidence(ctx, row)
+  await insertToolEvidence(ctx, row)
 }
 
 export async function countMarketEvidence(

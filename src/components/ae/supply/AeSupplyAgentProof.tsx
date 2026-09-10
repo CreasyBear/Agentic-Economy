@@ -1,36 +1,37 @@
 import type { ReactNode } from 'react'
+import { Link } from '@tanstack/react-router'
 
 import { AeSection } from '@/components/ae/layout/AeSection'
+import { Badge } from '@/components/ui/badge'
 
 import type { SupplyLandingTool } from '@/modules/capability-supply/supply-funnel.functions'
-import type { ServiceDto } from '@/modules/registry/public'
-import { formatPublishedPrice } from '@/components/ae/services/money'
+import type { ToolCardViewModel } from '@/modules/market/tool-view-model'
 
 const INITIAL_PROOF_COUNT = 3
 
 export function AeSupplyAgentProof({
   tools,
-  services,
+  publishedTools,
 }: Readonly<{
   tools: readonly SupplyLandingTool[]
-  services: readonly ServiceDto[]
+  publishedTools: readonly ToolCardViewModel[]
 }>) {
   return (
     <AeSection
       title="What agents can inspect"
-      description="Supplier profiles are business metadata. AE interface actions help agents inspect them; neither becomes callable supply until an Operation is admitted and published."
+      description="Provider profiles are business metadata. AE interface actions help agents inspect them; neither becomes callable supply until a Tool is admitted and published."
     >
       <div className="grid gap-8">
         <div className="grid gap-3">
-          <h3 className="text-sm font-medium text-foreground">Published supplier profiles</h3>
-          {services.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No supplier profiles are published yet.</p>
+          <h3 className="text-sm font-medium text-foreground">Tools agents can find now</h3>
+          {publishedTools.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No Tools are published yet. Be the first provider to add one bounded job.</p>
           ) : (
             <ProofList
-              items={services}
-              remainingLabel="more listed"
-              getKey={(service) => service.id}
-              render={(service) => <ServiceProofRow service={service} />}
+              items={publishedTools}
+              remainingLabel="more Tools"
+              getKey={(tool) => tool.toolRef}
+              render={(tool) => <PublishedToolProofRow tool={tool} />}
             />
           )}
         </div>
@@ -102,25 +103,28 @@ function ToolProofRow({ tool }: Readonly<{ tool: SupplyLandingTool }>) {
   )
 }
 
-function ServiceProofRow({ service }: Readonly<{ service: ServiceDto }>) {
-  const firstOffering = service.ae.offerings[0]
-  const priceText = firstOffering?.price === undefined
-    ? (firstOffering?.pricingSummary ?? 'Price supplied in the listing')
-    : formatPublishedPrice(firstOffering.price)
+function PublishedToolProofRow({ tool }: Readonly<{ tool: ToolCardViewModel }>) {
   return (
     <div className="grid gap-2">
       <div className="grid gap-1 sm:grid-cols-[1fr_auto] sm:items-start">
         <div>
-          <p className="font-medium text-foreground">{service.name}</p>
-          <p className="text-sm text-muted-foreground">{service.category}</p>
+          <Link
+            to="/tools/$toolRef"
+            params={{ toolRef: tool.toolRef }}
+            className="font-medium text-foreground underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            {tool.title}
+          </Link>
+          <p className="text-sm text-muted-foreground">{tool.providerName} · {tool.category.label}</p>
         </div>
-        <p className="text-sm text-muted-foreground">{priceText}</p>
+        <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+          <Badge variant={tool.readiness === 'Routeable' ? 'success' : tool.readiness === 'SetupRequired' ? 'warning' : 'outline'}>
+            {tool.readinessLabel}
+          </Badge>
+          <span className="text-sm tabular-nums text-muted-foreground">{tool.price}</span>
+        </div>
       </div>
-      <p className="text-sm text-muted-foreground">{firstOffering?.summary ?? service.category}</p>
-      <div className="flex flex-wrap gap-3 text-sm">
-        <a href={service.ae.links.business} className="inline-flex min-h-touch items-center underline underline-offset-4">Supplier profile</a>
-        <a href={service.ae.links.manifest} className="inline-flex min-h-touch items-center underline underline-offset-4">Operation manifest</a>
-      </div>
+      <p className="text-sm text-muted-foreground">{tool.summary}</p>
     </div>
   )
 }

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { MCP_HTTP_ENDPOINT_PATH } from '@/lib/mcp-protocol'
-import { OPERATION_INVOKE_ROUTE_CONTRACT } from '@/modules/capability-execution/operation-invoke-entry'
+import { CALL_ROUTE_CONTRACT } from '@/modules/capability-execution/call-entry'
 import {
   ApiCatalogManifestPath,
   buildApiCatalogDocument,
@@ -32,18 +32,18 @@ function collectLinks(value: unknown, into: Set<string>): void {
 }
 
 describe('api-catalog document projection', () => {
-  it('anchors exactly the market-operation reads, the invoke gateway, and MCP', () => {
+  it('anchors exactly the market-tool reads, the Call gateway, and MCP', () => {
     const anchors = document.linkset.map((entry) => entry.anchor)
     expect(anchors).toEqual([
-      `${origin}/api/v1/market-operations/search`,
-      `${origin}/api/v1/market-operations/detail`,
-      `${origin}/api/v1/market-operations/compare`,
-      `${origin}/api/v1/market-operations/inspect-plan`,
-      `${origin}${OPERATION_INVOKE_ROUTE_CONTRACT.invoke.path}`,
+      `${origin}/api/v1/market-tools/search`,
+      `${origin}/api/v1/market-tools/list`,
+      `${origin}/api/v1/market-tools/describe`,
+      `${origin}/api/v1/market-tools/compare`,
+      `${origin}${CALL_ROUTE_CONTRACT.call.path}`,
       `${origin}${MCP_HTTP_ENDPOINT_PATH}`,
     ])
     // Guard the projection inputs themselves so an emptied surface list fails here first.
-    expect(DiscoveryPublicSurfacePaths.filter((path) => path.startsWith('/api/v1/market-operations/'))).toHaveLength(4)
+    expect(DiscoveryPublicSurfacePaths.filter((path) => path.startsWith('/api/v1/market-tools/'))).toHaveLength(4)
   })
 
   it('is projection-pure: every href resolves against the served origin alone', () => {

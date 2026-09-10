@@ -6,7 +6,7 @@ import { resolve as resolvePath } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { parseEnv } from 'node:util'
 
-const LOCAL_CONVEX_URL = /^https?:\/\/(?:127\.0\.0\.1|localhost):3210\/?$/u
+const LOCAL_CONVEX_URL = /^https?:\/\/(?:127\.0\.0\.1|localhost):\d{1,5}\/?$/u
 const SOURCE_WRITE_SECRET_NAME = 'AE_SOURCE_WRITE_SECRET'
 const CONVEX_SERVER_FUNCTION_TOKEN_NAME = 'AE_CONVEX_SERVER_FUNCTION_TOKEN'
 const MIN_CONVEX_SERVER_FUNCTION_TOKEN_LENGTH = 32

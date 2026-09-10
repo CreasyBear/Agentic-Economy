@@ -9,6 +9,9 @@ import {
   type CapabilityPublicationOfferingDraft,
 } from '@/modules/capability-supply/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { agentAccessPolicyDigest } from '@/modules/agent-access/policy'
+import { isRecord } from '@/modules/common/is-record'
+import { rescaleExactAmount } from '@/modules/money/public'
 import {
   capabilityContractV2,
   objectSchema,
@@ -41,17 +44,52 @@ export async function prepareOwnerPublicationCommand(
   const offering =
     source.kind === 'ae_envelope' ? source.offering : source.commercial.offering
   const price = offering.presentation.price
-  if (price.kind !== 'fixed')
-    throw new Error('owner_publication_fixture_price_missing')
+  let pricingConfig
+  let preparedOffering: CapabilityPublicationOfferingDraft | undefined
+  if (source.kind === 'x402') {
+    if (!isRecord(source.resource)) throw new Error('owner_publication_fixture_x402_resource_invalid')
+    const paymentRequired = validatePaymentRequired(source.resource.paymentRequired)
+    const requirement = paymentRequired.accepts[0]
+    if (requirement === undefined) throw new Error('owner_publication_fixture_x402_requirement_missing')
+    pricingConfig = {
+      version: 'pricing:v3' as const,
+      kind: 'managed_x402' as const,
+      effectTiming: 'payment_required_before_effect' as const,
+      sourceRequirement: {
+        network: requirement.network,
+        asset: requirement.asset,
+        atomicUnits: 'amount' in requirement ? requirement.amount : requirement.maxAmountRequired,
+      },
+      pricingPolicyRef: 'pricing-policy:sandbox-managed-x402:v1',
+      publicDisplay: 'on_request' as const,
+    }
+    preparedOffering = {
+      ...offering,
+      presentation: {
+        ...offering.presentation,
+        price: { kind: 'on_request' as const },
+      },
+    }
+  } else {
+    if (price.kind !== 'fixed') throw new Error('owner_publication_fixture_price_missing')
+    const audPrice = rescaleExactAmount(price.amount, 6)
+    if (audPrice === undefined || audPrice.currency !== 'AUD') {
+      throw new Error('owner_publication_fixture_aud_price_invalid')
+    }
+    pricingConfig = {
+      version: 'pricing:v3' as const,
+      kind: 'fixed_aud' as const,
+      currency: 'AUD' as const,
+      exponent: 6 as const,
+      amountUnits: audPrice.units,
+    }
+  }
   const sourceRevision = 'owner-api/2026-08-09'
   const prepared = await preparePublicationDraft({
     source,
     sourceRevision,
-    pricingConfig: {
-      version: 'pricing:v2',
-      unit: 'call',
-      paidAmount: price.amount,
-    },
+    pricingConfig,
+    ...(preparedOffering === undefined ? {} : { offering: preparedOffering }),
     evidenceRefs: source.evidenceRefs,
     ...(origin === undefined ? {} : { origin }),
   })
@@ -131,6 +169,11 @@ export async function prepareOwnerPublicationCommand(
       runtimeEnvironment: 'production',
       prepared: preparedMaterial,
       operationKey,
+      proof: {
+        reverificationId: `test:${canonicalDigest({ operationKey })}`,
+        firstFactorAgeMinutes: 0,
+        secondFactorAgeMinutes: -1,
+      },
       correlationId: `owner-supply:${offeringRef}`,
       reasonCode: 'owner_supply_publication',
       evidenceRefs: [...source.evidenceRefs],
@@ -414,30 +457,36 @@ export async function seedSupplyAgentPrincipal(
   ownerId: string,
   suffix: string,
 ) {
+  const canonicalSuffix = canonicalDigest({
+    format: 'supply-agent-principal-fixture:v1',
+    ownerId,
+    suffix,
+  }).slice('sha256:'.length, 'sha256:'.length + 32)
   const principal = {
-    principalId: `principal:supply-reservation:${suffix}`,
+    principalId: `prn_${canonicalSuffix}`,
     ownerId,
     credentialId: `credential:supply-reservation:${suffix}`,
     applicationRef: 'agentic-economy',
     environment: 'production' as const,
     scopes: ['market_supply:manage'],
-    authorityMode: 'bounded_mandate' as const,
+    authorityMode: 'spending_policy' as const,
   }
   const now = Date.now()
   const amount = { currency: 'USD', units: '0', exponent: 2 }
   const policy = {
-    format: 'ae.agent-access-policy:v1' as const,
-    operationAccess: 'all_admitted' as const,
+    format: 'ae.agent-access-policy:v2' as const,
+    toolAccess: 'all_admitted' as const,
+    toolRefs: [],
     environment: 'production' as const,
     budget: {
       budgetPolicyRef: `budget-policy:supply-reservation:${suffix}`,
       generation: 1,
       currency: 'USD',
       exponent: 2,
-      maximumSpendPerInvocation: amount,
+      maximumSpendPerCall: amount,
       maximumDailySpend: amount,
       maximumMonthlySpend: amount,
-      maximumConcurrentInvocations: 4,
+      maximumConcurrentCalls: 4,
     },
     rate: {
       ratePolicyRef: `rate-policy:supply-reservation:${suffix}`,
@@ -447,31 +496,86 @@ export async function seedSupplyAgentPrincipal(
     },
   }
   const grant = {
-    format: 'ae.agent-access-grant:v1' as const,
-    grantRef: `grant:supply-reservation:${suffix}`,
+    format: 'ae.agent-access-grant:v2' as const,
+    grantRef: `grt_${canonicalSuffix}`,
     principalId: principal.principalId,
     ownerId: principal.ownerId,
     applicationRef: principal.applicationRef,
     credentialId: principal.credentialId,
     environment: principal.environment,
-    operationAccess: 'all_admitted' as const,
+    toolAccess: 'all_admitted' as const,
+    toolRefs: [],
     authorityMode: principal.authorityMode,
-    policy,
+    spendingPolicy: policy,
     budgetPolicyRef: policy.budget.budgetPolicyRef,
     ratePolicyRef: policy.rate.ratePolicyRef,
     lifecycle: 'active' as const,
     generation: 1,
-    policyDigest: canonicalDigest(policy as never),
+    spendingPolicyDigest: agentAccessPolicyDigest(policy),
     createdAt: now,
     updatedAt: now,
     expiresAt: now + 7 * 24 * 60 * 60 * 1_000,
   }
+  await backend.run(async (ctx) => {
+    const account = await ctx.db.query('accounts')
+      .withIndex('by_accountRef', (query) => query.eq('accountRef', ownerId))
+      .unique()
+    if (account === null) throw new Error('supply_reservation_account_missing')
+    const ownership = await ctx.db.query('accountOwnerships')
+      .withIndex('by_ownershipRef', (query) => query.eq('ownershipRef', account.currentOwnershipRef))
+      .unique()
+    if (ownership === null) throw new Error('supply_reservation_ownership_missing')
+    await ctx.db.insert('principals', {
+      principalRef: principal.principalId,
+      kind: 'agent',
+      displayName: `Supply Agent ${suffix}`,
+      lifecycle: 'active',
+      revision: 1,
+      createdAt: now,
+      updatedAt: now,
+    })
+    await ctx.db.insert('memberships', {
+      membershipRef: `mbr_${canonicalSuffix}`,
+      accountRef: ownerId,
+      memberPrincipalRef: principal.principalId,
+      lifecycle: 'active',
+      revision: 1,
+      createdAt: now,
+      createdBy: {
+        actorPrincipalRef: ownership.ownerPrincipalRef,
+        activeAccountRef: ownerId,
+        correlationRef: `fixture:${grant.grantRef}`,
+        idempotencyRef: `fixture:${grant.grantRef}`,
+      },
+    })
+    await ctx.db.insert('authorityDelegationGrants', {
+      grantRef: grant.grantRef,
+      accountRef: ownerId,
+      actorPrincipalRef: ownership.ownerPrincipalRef,
+      subjectPrincipalRef: principal.principalId,
+      scopes: ['market_supply:manage'],
+      resourceRefs: ['*'],
+      budgetLimit: 1,
+      budgetUsed: 0,
+      expiresAt: grant.expiresAt,
+      generation: 1,
+      revision: 1,
+      lifecycle: 'active',
+      createdAt: now,
+      createdBy: {
+        actorPrincipalRef: ownership.ownerPrincipalRef,
+        activeAccountRef: ownerId,
+        correlationRef: `fixture:${grant.grantRef}`,
+        idempotencyRef: `fixture:${grant.grantRef}`,
+      },
+    })
+  })
   const recorded = await backend.mutation(internal.agentAccessPrincipals.recordAgentPrincipal, {
     ...principal,
     scopes: [...principal.scopes],
     ownerTokenIdentifier: `token:supply-reservation:${suffix}`,
     grantGeneration: 1,
-    policyDigest: grant.policyDigest,
+    spendingPolicyDigest: grant.spendingPolicyDigest,
     lifecycle: 'active',
     seenAt: now,
   })

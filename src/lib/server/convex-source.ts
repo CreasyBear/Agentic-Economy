@@ -1,5 +1,5 @@
 import { auth } from '@clerk/tanstack-react-start/server'
-import { isLocalE2EAuthBypassEnabled } from '@/lib/server/local-e2e-bypass'
+import { isLocalE2EAuthBypassEnabled, LOCAL_E2E_OPERATOR_PRINCIPAL } from '@/lib/server/local-e2e-bypass'
 import { readTrimmedEnv } from '@/lib/server/read-trimmed-env'
 import { createCustomerRequestServiceAssertion, toStableHashValue, type CustomerRequestServiceAssertion } from '@/modules/agent-access/service-auth-envelope'
 import { ConvexHttpClient } from 'convex/browser'
@@ -128,11 +128,12 @@ export async function createAuthenticatedConvexClient(
   const env = options.env ?? process.env
   const convexUrl = readRequiredConvexUrl(env)
   const localAdminKey = env.CONVEX_SELF_HOSTED_ADMIN_KEY?.trim()
+  let client: ConvexHttpClient
   if (isLocalE2EAuthBypassEnabled()) {
     if (localAdminKey === undefined || localAdminKey.length === 0) {
       throw new ConvexSourceError('missing_auth', 'Local source credentials are unavailable.', 503)
     }
-    const client = new ConvexHttpClient(convexUrl, {
+    client = new ConvexHttpClient(convexUrl, {
       ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
       ...(options.skipConvexDeploymentUrlCheck === undefined
         ? {}
@@ -144,22 +145,22 @@ export async function createAuthenticatedConvexClient(
     }
     Reflect.apply(setAdminAuth, client, [localAdminKey, {
       issuer: 'https://convex.test',
-      subject: 'dev-seed-owner-session',
-      tokenIdentifier: 'https://convex.test|dev-seed-owner-session',
+      subject: LOCAL_E2E_OPERATOR_PRINCIPAL,
+      tokenIdentifier: `https://convex.test|${LOCAL_E2E_OPERATOR_PRINCIPAL}`,
       name: 'Dev Seed Owner',
     }])
-    return client
-  }
-  const authObject = options.authObject ?? (await auth())
-  const token = await readRequiredConvexAuthToken(authObject, options.tokenTemplate ?? 'convex')
+  } else {
+    const authObject = options.authObject ?? (await auth())
+    const token = await readRequiredConvexAuthToken(authObject, options.tokenTemplate)
 
-  const client = new ConvexHttpClient(convexUrl, {
-    auth: token,
-    ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
-    ...(options.skipConvexDeploymentUrlCheck === undefined
-      ? {}
-      : { skipConvexDeploymentUrlCheck: options.skipConvexDeploymentUrlCheck }),
-  })
+    client = new ConvexHttpClient(convexUrl, {
+      auth: token,
+      ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
+      ...(options.skipConvexDeploymentUrlCheck === undefined
+        ? {}
+        : { skipConvexDeploymentUrlCheck: options.skipConvexDeploymentUrlCheck }),
+    })
+  }
   let materialized: boolean
   try {
     materialized = await client.mutation(materializeCurrentInteractiveAuthorityMutation, {})
@@ -281,12 +282,14 @@ export function readRequiredConvexUrl(env: Env = process.env): string {
   return value
 }
 
-export async function readRequiredConvexAuthToken(authObject: ConvexSourceAuth, tokenTemplate = 'convex'): Promise<string> {
+export async function readRequiredConvexAuthToken(authObject: ConvexSourceAuth, tokenTemplate?: string): Promise<string> {
   if (!authObject.isAuthenticated) {
     throw new ConvexSourceError('missing_auth', 'Authenticated owner session is required for this Convex call.', 401)
   }
 
-  const token = await authObject.getToken({ template: tokenTemplate })
+  const token = tokenTemplate === undefined
+    ? await authObject.getToken()
+    : await authObject.getToken({ template: tokenTemplate })
   if (token === null || token.trim().length === 0) {
     throw new ConvexSourceError('missing_auth', 'Clerk did not return a Convex auth token for this request.', 401)
   }

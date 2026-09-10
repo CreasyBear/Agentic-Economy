@@ -16,6 +16,7 @@ import {
   readHttpJsonProbeConfiguration,
   validPublicHttpsEndpoint,
 } from '../transport-adapters'
+import { pricingConfigSourceAmount } from '@/modules/money/public'
 
 import type { CapabilityGraphPorts, GraphPublicationRow } from './ports'
 import { probeTargetDigest } from './probe-digest'
@@ -78,6 +79,9 @@ export type ReadCapabilityProbeTargetResult =
 export async function readCapabilityProbeTarget(
   ports: CapabilityGraphPorts,
   args: Readonly<{ publicationRef: string; expectedRevision: number }>,
+  options?: Readonly<{
+    allowUnpublishedBusiness?: (businessId: string) => Promise<boolean>
+  }>,
 ): Promise<ReadCapabilityProbeTargetResult> {
   const publication = await ports.loadPublicationAtRevision(args.publicationRef, args.expectedRevision)
   if (publication === null) {
@@ -92,7 +96,10 @@ export async function readCapabilityProbeTarget(
     ports.loadPublishedBusiness(publication.businessId),
     ports.getActiveExactCapabilityContract(contractRefFromRow(publication)),
   ])
-  if (business === null) return unavailable('target_not_public')
+  if (
+    business === null
+    && !(await options?.allowUnpublishedBusiness?.(publication.businessId) ?? false)
+  ) return unavailable('target_not_public')
   if (
     offering === null
     || offering.status !== 'active'
@@ -119,7 +126,7 @@ export async function readCapabilityProbeTarget(
     && (
       !connectionAuthoritySnapshotMatches(binding.connectionAuthority, currentConnection, {
         businessId: String(offering.businessId),
-        operationRef: publication.operationRef,
+        toolRef: publication.toolRef,
         adapterId: binding.adapterId,
         now: Date.now(),
       })
@@ -191,8 +198,10 @@ export async function readCapabilityProbeTarget(
 
   let expectedPaymentJson: string | undefined
   if (binding.adapterId === 'x402-fetch:v2') {
-    const paidAmount = publication.pricingConfig?.paidAmount
-    if (x402Configuration === undefined || paidAmount === undefined) {
+    const routePaymentAmount = publication.pricingConfig === undefined
+      ? undefined
+      : pricingConfigSourceAmount(publication.pricingConfig)
+    if (x402Configuration === undefined || routePaymentAmount === undefined) {
       return unavailable('binding_invalid')
     }
     expectedPaymentJson = JSON.stringify({
@@ -203,7 +212,7 @@ export async function readCapabilityProbeTarget(
       currency: x402Configuration.currency,
       routeAmountExponent: x402Configuration.routeAmountExponent,
       assetAmountExponent: x402Configuration.assetAmountExponent,
-      paidAmount,
+      paidAmount: routePaymentAmount,
     })
   }
 

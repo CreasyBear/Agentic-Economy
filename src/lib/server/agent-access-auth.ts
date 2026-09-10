@@ -1,6 +1,9 @@
 import { auth, clerkClient } from '@clerk/tanstack-react-start/server'
+import { getRequest } from '@tanstack/react-start/server'
 
 import { callPublicSourceMutation, sourceMutation } from '@/lib/server/convex-source'
+import { authenticateLocalE2EAgentKey } from '@/lib/server/local-e2e-agent-key'
+import { isLocalE2EAuthBypassEnabled, LOCAL_E2E_OPERATOR_PRINCIPAL } from '@/lib/server/local-e2e-bypass'
 import {
   sourceWriteAdmissionFromRequest,
   sourceWriteRequestFromAdmission,
@@ -8,7 +11,7 @@ import {
 import {
   AGENT_ACCESS_DEFAULT_APPLICATION_REF,
   AGENT_ACCESS_ENVIRONMENT_VALUES,
-  MARKET_OPERATIONS_INVOKE_SCOPE,
+  MARKET_TOOLS_CALL_SCOPE,
   agentAuthorityModeAllows,
   agentAuthorityModeForScopes,
   type AgentAccessEnvironment,
@@ -129,22 +132,32 @@ export async function authenticateAgentAccess(
   status: 401 | 403
   reason: 'authentication_required' | 'scope_required'
 }>> {
-  const requiredScope = options.requiredScope === undefined ? MARKET_OPERATIONS_INVOKE_SCOPE : options.requiredScope
+  const requiredScope = options.requiredScope === undefined ? MARKET_TOOLS_CALL_SCOPE : options.requiredScope
   const requiredScopes = Object.freeze([...new Set(
     options.requiredScopes ?? (requiredScope === null ? [] : [requiredScope]),
   )].sort())
   const requiredAnyScopes = Object.freeze([...new Set(options.requiredAnyScopes ?? [])].sort())
   let candidate: AgentAccessApiKeyAuth
+  let localCurrent: AgentAccessCurrentApiKey | undefined
   try {
-    candidate = await (options.authenticate ?? (async () =>
-      await auth({ acceptsToken: 'api_key' }) as AgentAccessApiKeyAuth))()
+    if (options.authenticate !== undefined) {
+      candidate = await options.authenticate()
+    } else if (isLocalE2EAuthBypassEnabled()) {
+      const local = authenticateLocalE2EAgentKey(getRequest())
+      if (local === undefined) return { kind: 'refused', status: 401, reason: 'authentication_required' }
+      candidate = local.candidate
+      localCurrent = local.current
+    } else {
+      candidate = await auth({ acceptsToken: 'api_key' }) as AgentAccessApiKeyAuth
+    }
   } catch {
     return { kind: 'refused', status: 401, reason: 'authentication_required' }
   }
   if (!candidate.isAuthenticated || candidate.tokenType !== 'api_key' || candidate.id === null || candidate.subject === null || candidate.scopes === null) {
     return { kind: 'refused', status: 401, reason: 'authentication_required' }
   }
-  if (!candidate.subject.startsWith('user_')) {
+  if (!candidate.subject.startsWith('user_')
+    && !(localCurrent !== undefined && candidate.subject === LOCAL_E2E_OPERATOR_PRINCIPAL)) {
     return { kind: 'refused', status: 403, reason: 'scope_required' }
   }
   const candidateScopes = candidate.scopes
@@ -156,7 +169,7 @@ export async function authenticateAgentAccess(
   let claims = candidate.claims
   if (options.verifyKeyState !== undefined || options.authenticate === undefined) {
     try {
-      const current = await (options.verifyKeyState ?? (async (keyId: string) => {
+      const current = localCurrent ?? await (options.verifyKeyState ?? (async (keyId: string) => {
         const key = await clerkClient().apiKeys.get(keyId)
         return {
           id: key.id,

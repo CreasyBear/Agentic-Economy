@@ -7,11 +7,11 @@ import {
   admitRegisteredTransport,
   capabilityBindingEligibilityHash,
   capabilityBindingRegistrationHash,
-  capabilityOperationId,
+  capabilityToolId,
   capabilityOfferingEligibilityHash,
   capabilityOfferingRegistrationHash,
   connectionAuthoritySnapshotFromProviderConnection,
-  createPublicOperationRef,
+  createPublicToolRef,
   defineCapabilityOfferingRegistration,
   defineCapabilityTransportBindingRegistration,
   qualifySuppliedCandidate,
@@ -24,6 +24,8 @@ import {
   type SuppliedCandidateRef,
   type CapabilityOfferingRow,
   type CapabilityBindingRow,
+  X402_SELLER_CANARY_ADMISSION_REQUIRED_REF,
+  x402SellerCanaryAdmissionEvidenceRef,
 } from '@/modules/capability-supply/public'
 import {
   createProviderConnection,
@@ -46,8 +48,8 @@ const candidate: SuppliedCandidateRef = {
   bindingId: 'binding:development-reference',
   contractRef: contract.ref,
 }
-const operationRef = createPublicOperationRef({
-  operationId: capabilityOperationId(contract.capabilityId),
+const toolRef = createPublicToolRef({
+  operationId: capabilityToolId(contract.capabilityId),
   publicationRef: candidate.publicationRef,
   publicationRevision: candidate.revision,
   contractRef: contract.ref,
@@ -83,9 +85,11 @@ const catalogAccessPath: GraphCatalogAccessPath = {
   },
 }
 const pricingConfig = {
-  version: 'pricing:v2' as const,
-  unit: 'call' as const,
-  paidAmount: { currency: 'USD' as const, units: '1', exponent: 2 },
+  version: 'pricing:v3' as const,
+  kind: 'fixed_aud' as const,
+  currency: 'AUD' as const,
+  exponent: 6 as const,
+  amountUnits: '10000',
 }
 const priceDigest = pricingConfigDigest(pricingConfig)
 const providerConnectionCommand: CreateProviderConnectionCommand = {
@@ -114,7 +118,7 @@ function developmentProviderConnection(): ProviderConnection {
 }
 const connectionAuthority = connectionAuthoritySnapshotFromProviderConnection(
   developmentProviderConnection(),
-  operationRef,
+  toolRef,
 )
 const offeringRegistration = defineCapabilityOfferingRegistration({
   offeringId: candidate.offeringId,
@@ -125,7 +129,7 @@ const offeringRegistration = defineCapabilityOfferingRegistration({
   presentation: {
     label: 'Development reference lookup',
     summary: 'Labelled fixture supply for qualification evaluation.',
-    price: { kind: 'fixed', amount: pricingConfig.paidAmount },
+    price: { kind: 'fixed', amount: { currency: 'AUD', units: pricingConfig.amountUnits, exponent: 6 } },
     materialTerms: [],
     commercialRelationship: {
       kind: 'none',
@@ -276,7 +280,7 @@ function publication(overrides: Partial<GraphPublicationRow> = {}): GraphPublica
   return {
     id: 'fixture:publication-row',
     ...candidate,
-    operationRef,
+    toolRef,
     ...contract.ref,
     connectionAuthority,
     sourceKind: 'openapi_http',
@@ -353,8 +357,35 @@ describe('ADR-009 supplied-candidate qualification', () => {
     expect(result.sources.every(({ ref, digest }) => ref.length > 0 && digest.startsWith('sha256:')))
       .toBe(true)
   })
+  it('keeps an exact seller-canary publication unrouteable until that revision is admitted', async () => {
+    const required = await qualifySuppliedCandidate(ports({
+      loadPublicationAtRevision: async () => publication({
+        sourceKind: 'x402',
+        registrationEvidenceRefs: [
+          'fixture:publication-registration',
+          X402_SELLER_CANARY_ADMISSION_REQUIRED_REF,
+        ],
+      }),
+    }), { candidate, now })
+    expect(required).toMatchObject({
+      status: 'blocked',
+      reasons: ['seller_canary_admission_required'],
+    })
+
+    const admitted = await qualifySuppliedCandidate(ports({
+      loadPublicationAtRevision: async () => publication({
+        sourceKind: 'x402',
+        registrationEvidenceRefs: [
+          'fixture:publication-registration',
+          X402_SELLER_CANARY_ADMISSION_REQUIRED_REF,
+          x402SellerCanaryAdmissionEvidenceRef(canonicalDigest({ canary: 'completed' })),
+        ],
+      }),
+    }), { candidate, now })
+    expect(admitted).toMatchObject({ status: 'eligible', reasons: [] })
+  })
   it('records credential rejection as durable unavailable state over stale healthy readiness', async () => {
-    const basePublication = publication()
+    const basePublication = publication({ readinessLastHealthyAt: 1_850 })
     const baseOffering = offering()
     const baseBinding = binding()
     let updated: GraphPublicationRow | undefined
@@ -393,7 +424,34 @@ describe('ADR-009 supplied-candidate qualification', () => {
       healthState: 'unhealthy',
       readinessOutcome: 'credential_rejected',
       readinessResponseStatus: 401,
+      readinessLastHealthyAt: 1_850,
     })
+  })
+
+  it('records a successful probe as the latest durable healthy observation', async () => {
+    const basePublication = publication({ readinessLastHealthyAt: 1_850 })
+    let updated: GraphPublicationRow | undefined
+    const targetDigest = probeTargetDigest(basePublication, offering(), binding())
+    await recordCapabilityProbeResult(ports({
+      loadPublicationAtRevision: async () => basePublication,
+      patchProbeReadiness: async (_publicationId, patch) => {
+        updated = { ...basePublication, ...patch }
+      },
+    }), {
+      publicationRef: candidate.publicationRef,
+      expectedRevision: candidate.revision,
+      targetDigest,
+      requestDigest: canonicalDigest({ probe: 'healthy-again' }),
+      outcome: 'healthy',
+      credentialState: 'ready',
+      healthState: 'healthy',
+      observedAt: now,
+      validUntil: now + 100,
+      evidenceRefs: ['fixture:healthy-again'],
+      now,
+    })
+
+    expect(updated?.readinessLastHealthyAt).toBe(now)
   })
 
   it('derives POST for an exact current MCP Agent Plugin publication in both routeability consumers', async () => {
@@ -579,7 +637,7 @@ describe('ADR-009 supplied-candidate qualification', () => {
       'src/modules/capability-supply/internal/graph/qualify-candidate.ts',
       'utf8',
     )
-    expect(source).not.toMatch(/defineAction|ActionInvocationTracer|\.run\(|execute|fetch\(/)
+    expect(source).not.toMatch(/defineAction|ActionExecutionTracer|\.run\(|execute|fetch\(/)
   })
 })
 

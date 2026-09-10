@@ -1,24 +1,29 @@
 import { postMcp, readMcpBody } from './mcp-api-harness'
 import { describe, expect, it, vi } from 'vitest'
 
-import { registryDetailAction, registrySearchAction } from '@/modules/registry/registry.actions'
+import {
+  registryToolsDescribeAction,
+  registryToolsSearchAction,
+} from '@/modules/registry/tools.actions'
 
 describe('MCP host adapter registry', () => {
   it('calls the registered registry search action with MCP attribution', async () => {
-    const run = vi.spyOn(registrySearchAction, 'run').mockResolvedValue({
-      kind: 'ok',
-      schemaVersion: 'public-business-catalog-api:v2',
+    const run = vi.spyOn(registryToolsSearchAction, 'run').mockResolvedValue({
+      kind: 'no_candidates',
+      schemaVersion: 'registry-tools:v3',
       query: 'plumbing',
+      count: 0,
       items: [],
-      pagination: { limit: 10, total: 0, hasMore: false },
-    } as never)
+      note: 'No operational Tools matched this search.',
+      pagination: { limit: 10, hasMore: false },
+    })
 
     const response = await postMcp({
       jsonrpc: '2.0',
       id: 3,
       method: 'tools/call',
       params: {
-        name: 'ae_registry_search',
+        name: 'ae_registry_tools_search',
         arguments: { query: 'plumbing' },
       },
     })
@@ -27,22 +32,22 @@ describe('MCP host adapter registry', () => {
     const body = await readMcpBody(response)
     const result = body.result as Record<string, unknown>
     expect(run).toHaveBeenCalledWith({
-      data: { query: 'plumbing' },
+      data: { query: 'plumbing', limit: 10 },
       context: expect.objectContaining({ caller: 'mcp' }),
     })
     expect((result.structuredContent as { result?: unknown } | undefined)?.result).toMatchObject({
-      kind: 'ok',
+      kind: 'no_candidates',
     })
   })
 
-  it('returns an input validation error without invoking the detail action', async () => {
-    const run = vi.spyOn(registryDetailAction, 'run')
+  it('returns an input validation error without invoking the describe action', async () => {
+    const run = vi.spyOn(registryToolsDescribeAction, 'run')
     const response = await postMcp({
       jsonrpc: '2.0',
       id: 4,
       method: 'tools/call',
       params: {
-        name: 'ae_registry_detail',
+        name: 'ae_registry_tools_describe',
         arguments: {},
       },
     })

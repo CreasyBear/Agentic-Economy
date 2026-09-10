@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 
 import { prepareSuppliedCandidateQuote } from '@/modules/capability-supply/server'
-import { createDevelopmentReleaseSignal } from '@/modules/action-invocation'
+import { createDevelopmentReleaseSignal } from '@/modules/action-execution'
 import {
   actor,
   inMemoryTracer,
@@ -30,15 +30,15 @@ describe('ADR-009 supplied-candidate development quote collection', () => {
     })
     if (prepared.kind !== 'prepared') throw new Error(prepared.code)
     const accepted = await tracer.decide({
-      invocationRef: prepared.view.invocationRef,
-      expectedInvocationVersion: prepared.view.invocationVersion,
+      executionRef: prepared.view.executionRef,
+      expectedExecutionVersion: prepared.view.executionVersion,
       authorityRef: prepared.view.authority!.reference,
       actor, origin: origins[1]!, accept: true,
     })
     if (accepted.kind !== 'accepted') throw new Error(accepted.code)
     const refused = await tracer.execute({
-      invocationRef: prepared.view.invocationRef,
-      expectedInvocationVersion: accepted.view.invocationVersion,
+      executionRef: prepared.view.executionRef,
+      expectedExecutionVersion: accepted.view.executionVersion,
       authorityRef: prepared.view.authority!.reference,
       actor, origin: origins[1]!, materialInput: quoteInput,
     })
@@ -71,15 +71,15 @@ describe('ADR-009 supplied-candidate development quote collection', () => {
     })
     if (prepared.kind !== 'prepared') throw new Error(prepared.code)
     const accepted = await tracer.decide({
-      invocationRef: prepared.view.invocationRef,
-      expectedInvocationVersion: prepared.view.invocationVersion,
+      executionRef: prepared.view.executionRef,
+      expectedExecutionVersion: prepared.view.executionVersion,
       authorityRef: prepared.view.authority!.reference,
       actor, origin: origins[1]!, accept: true,
     })
     if (accepted.kind !== 'accepted') throw new Error(accepted.code)
     const failed = await tracer.execute({
-      invocationRef: prepared.view.invocationRef,
-      expectedInvocationVersion: accepted.view.invocationVersion,
+      executionRef: prepared.view.executionRef,
+      expectedExecutionVersion: accepted.view.executionVersion,
       authorityRef: prepared.view.authority!.reference,
       actor, origin: origins[1]!, materialInput: quoteInput,
     })

@@ -1,22 +1,23 @@
 import { isRecord } from '@/modules/common/is-record'
 import { MARKET_SUPPLY_MANAGE_SCOPE } from '@/modules/agent-access/contract'
-import { OPERATION_INVOKE_ROUTE_CONTRACT } from '@/modules/capability-execution/operation-invoke-entry'
+import { CALL_ROUTE_CONTRACT } from '@/modules/capability-execution/call-entry'
 import {
-  operationInvokeStatusResultSchema,
-  operationStatusInputSchema,
-} from '@/modules/capability-execution/operation-recovery.actions'
+  callStatusResultSchema,
+  callStatusInputSchema,
+} from '@/modules/capability-execution/call-recovery.actions'
 import {
-  operationInvokeStatusStateSchema,
-  type OperationInvokeStatusResult,
-} from '@/modules/capability-execution/operation-recovery-contracts'
+  callStatusStateSchema,
+  type CallStatusResult,
+} from '@/modules/capability-execution/call-recovery-contracts'
 import type { CliOptions } from '../lib/args'
 import { resolveAgentAccessCredential } from '../lib/config'
 import { CliFailure, callJson, heading, line, printJson, requireOk, table } from '../lib/output'
 import { usageFailure } from '../lib/help'
+import { continuationCommand, continuationFlags } from '../lib/continuation-command'
 import {
   connectionContinuationForCli,
   creditContinuationForCli,
-  invocationContinuationForCli,
+  callNextActionForCli,
 } from '../lib/suggested-continuation-adapter'
 
 export const MAX_STATUS_WAIT_MS = 60_000
@@ -29,10 +30,10 @@ function asRecord(value: unknown): JsonRecord | undefined {
   return isRecord(value) ? value : undefined
 }
 
-export function operationStatusPath(invocationRef: string): string {
-  return OPERATION_INVOKE_ROUTE_CONTRACT.status.path.replace(
-    '{invocationRef}',
-    encodeURIComponent(invocationRef),
+export function callStatusPath(callRef: string): string {
+  return CALL_ROUTE_CONTRACT.status.path.replace(
+    '{callRef}',
+    encodeURIComponent(callRef),
   )
 }
 
@@ -100,13 +101,13 @@ function configuredApiKeyOrigin(options: CliOptions, rawOrigin: string | undefin
 export function requireAgentAccessKey(command: string, options: CliOptions, requiredScope?: string): string {
   const credential = resolveAgentAccessCredential(options.baseUrl, requiredScope)
   if (credential === undefined) {
-    const shouldAuthorizeNow = command === 'invoke'
+    const shouldAuthorizeNow = command === 'call'
       || command === 'connect'
       || command === 'request create'
       || command.startsWith('supply ')
     const buyerConnection = connectionContinuationForCli('buyer')
     const connect = requiredScope === MARKET_SUPPLY_MANAGE_SCOPE
-      ? { label: 'Authorize supplier access for this exact origin.', command: 'ae connect --supplier' }
+      ? { label: 'Authorize provider access for this exact origin.', command: 'ae connect --provider' }
       : { label: buyerConnection?.label ?? 'Authorize buyer access for this exact origin.', command: buyerConnection?.command ?? 'ae connect' }
     const continuation = shouldAuthorizeNow
       ? connect
@@ -122,12 +123,12 @@ export function requireAgentAccessKey(command: string, options: CliOptions, requ
   return credential.accessToken
 }
 
-function parseStatusResult(value: unknown): OperationInvokeStatusResult {
-  const parsed = operationInvokeStatusResultSchema.safeParse(value)
+function parseStatusResult(value: unknown): CallStatusResult {
+  const parsed = callStatusResultSchema.safeParse(value)
   if (parsed.success) return parsed.data
-  throw new CliFailure('The gateway returned an invalid operation status result.', {
+  throw new CliFailure('The gateway returned an invalid Call status result.', {
     kind: 'UNAVAILABLE',
-    code: 'operation-status-result-invalid',
+    code: 'call-status-result-invalid',
   })
 }
 
@@ -138,7 +139,7 @@ export function pendingDelay(value: unknown, fallback?: number): number {
   if (typeof retryAfterMs !== 'number' || !Number.isFinite(retryAfterMs)) {
     throw new CliFailure('The gateway returned a pending result without a bounded retryAfterMs.', {
       kind: 'UNAVAILABLE',
-      code: 'invoke-status-malformed',
+      code: 'call-status-malformed',
     })
   }
   return Math.min(MAX_STATUS_DELAY_MS, Math.max(MIN_STATUS_DELAY_MS, retryAfterMs))
@@ -157,28 +158,28 @@ export function terminalResult(value: unknown): unknown | undefined {
   )) return result
   if (body.state === 'cancelled' || body.state === 'reconciliation_required') return value
   if (body.state === 'terminal' || body.state === 'invalidated') {
-    throw new CliFailure('The gateway returned a terminal status without a terminal operation result.', {
+    throw new CliFailure('The gateway returned a terminal status without a terminal Call result.', {
       kind: 'UNAVAILABLE',
-      code: 'invoke-status-malformed',
+      code: 'call-status-malformed',
     })
   }
   return undefined
 }
 
-export function statusCommandFor(invocationRef: string): string {
-  return `ae status ${invocationRef}`
+export function statusCommandFor(callRef: string): string {
+  return `ae status ${callRef}`
 }
 
-export function statusTransportFailure(_invocationRef: string): CliFailure {
+export function statusTransportFailure(_callRef: string): CliFailure {
   const detail = {
-    recovery: 'Read operation status again with the same invocation identity.',
+    recovery: 'Read Call status again with the same Call identity.',
     identityPreserved: true,
   }
   return new CliFailure(
-    'Operation status transport is unknown; retry status with the same invocation identity.',
+    'Call status transport is unknown; retry status with the same call identity.',
     {
       kind: 'UNAVAILABLE',
-      code: 'operation-status-transport-unknown',
+      code: 'call-status-transport-unknown',
       detail,
     },
   )
@@ -186,84 +187,108 @@ export function statusTransportFailure(_invocationRef: string): CliFailure {
 
 export function recoveryTransportFailure(
   action: 'cancel' | 'reconcile',
-  _invocationRef: string,
+  _callRef: string,
   _idempotencyKey: string,
 ): CliFailure {
   const detail = {
     action,
-    recovery: 'Retry with the same invocation and idempotency identity; do not create a new identity.',
+    recovery: 'Retry with the same call and idempotency identity; do not create a new identity.',
     identityPreserved: true,
   }
   return new CliFailure(
-    `Operation ${action} transport is unknown; do not retry with a new identity.`,
+    `Call ${action} transport is unknown; do not retry with a new identity.`,
     {
       kind: 'UNAVAILABLE',
-      code: `operation-${action}-transport-unknown`,
+      code: `call-${action}-transport-unknown`,
       detail,
     },
   )
 }
 
+type StatusContinuation = Readonly<{ command?: string; warning?: string }>
+
+/** A refused status is a failure like every other refusal, so it must not exit 0. */
+export const STATUS_REFUSED_EXIT_CODE = 1
+
 export function renderStatusResult(
   title: string,
-  invocationRef: string,
+  callRef: string,
   body: unknown,
   options: CliOptions,
-): void {
-  if (options.json) {
-    printJson(body)
-    return
-  }
-  heading(`${title} ${invocationRef}`)
+): number {
   const record = asRecord(body)
+  let continuation: StatusContinuation | undefined
+  if (record?.kind === 'found' || record?.kind === 'refused') {
+    const parsedState = callStatusStateSchema.safeParse(record.state)
+    const usage = asRecord(record.usage)
+    continuation = record.code === 'invocation_not_found'
+      // An unknown Call cannot become known by asking again for it.
+      ? { command: 'ae history' }
+      : usage?.chargeState === 'insufficient_credit'
+        ? creditContinuationForCli()
+        : callNextActionForCli({
+            kind: record.kind,
+            callRef,
+            ...(parsedState.success ? { state: parsedState.data } : {}),
+            ...(typeof record.retryable === 'boolean' ? { retryable: record.retryable } : {}),
+          })
+  }
+  const continuationSuffix = continuationCommand(continuationFlags(options))
+  const nextCommand = continuation?.command === undefined
+    ? undefined
+    : continuationSuffix.length === 0
+      ? continuation.command
+      : `${continuation.command} ${continuationSuffix}`
+  const warning = continuation?.warning
+  const exitCode = record?.kind === 'refused' ? STATUS_REFUSED_EXIT_CODE : 0
+  if (options.json) {
+    printJson(record === undefined || nextCommand === undefined
+      ? body
+      : {
+          ...record,
+          nextCommand,
+          ...(warning === undefined ? {} : { warning }),
+        })
+    return exitCode
+  }
+  heading(`${title} ${callRef}`)
   table([
     ['status', typeof record?.state === 'string' ? record.state : typeof record?.kind === 'string' ? record.kind : 'unknown'],
-    ['operation', typeof record?.operationRef === 'string' ? record.operationRef : 'unknown'],
+    ['tool', typeof record?.toolRef === 'string' ? record.toolRef : 'unknown'],
   ])
-  if (record?.kind === 'found' || record?.kind === 'refused') {
-    const parsedState = operationInvokeStatusStateSchema.safeParse(record.state)
-    const usage = asRecord(record.usage)
-    const continuation = usage?.chargeState === 'insufficient_credit'
-      ? creditContinuationForCli()
-      : invocationContinuationForCli({
-          kind: record.kind,
-          invocationRef,
-          ...(parsedState.success ? { state: parsedState.data } : {}),
-          ...(typeof record.retryable === 'boolean' ? { retryable: record.retryable } : {}),
-        })
-    if (continuation?.command !== undefined) line(`  next: ${continuation.command}`)
-    if (continuation?.warning !== undefined) line(`  warning: ${continuation.warning}`)
-  }
+  if (nextCommand !== undefined) line(`  next: ${nextCommand}`)
+  if (continuation?.warning !== undefined) line(`  warning: ${continuation.warning}`)
   line(JSON.stringify(body, undefined, 2))
+  return exitCode
 }
 
-export async function readOperationStatus(
+export async function readCallStatus(
   options: CliOptions,
-  invocationRef: string,
+  callRef: string,
   credentialCommand = 'status',
-): Promise<OperationInvokeStatusResult> {
+): Promise<CallStatusResult> {
   const apiKey = requireAgentAccessKey(credentialCommand, options)
-  const path = operationStatusPath(invocationRef)
+  const path = callStatusPath(callRef)
   const outcome = await callJson(options.baseUrl, path, {
-    method: OPERATION_INVOKE_ROUTE_CONTRACT.status.method,
+    method: CALL_ROUTE_CONTRACT.status.method,
     headers: { Authorization: `Bearer ${apiKey}` },
   })
-  return parseStatusResult(requireOk(outcome, 'operation status'))
+  return parseStatusResult(requireOk(outcome, 'Call status'))
 }
 
-export async function runStatusCommand(args: readonly string[], options: CliOptions): Promise<void> {
-  const invocationRef = args[0]?.trim()
-  const parsedRef = operationStatusInputSchema.safeParse({ invocationRef })
+export async function runStatusCommand(args: readonly string[], options: CliOptions): Promise<number> {
+  const callRef = args[0]?.trim()
+  const parsedRef = callStatusInputSchema.safeParse({ callRef })
   if (!parsedRef.success || args.length > 1) {
     throw usageFailure('status', 'status-usage')
   }
 
-  let body: OperationInvokeStatusResult
+  let body: CallStatusResult
   try {
-    body = await readOperationStatus(options, parsedRef.data.invocationRef)
+    body = await readCallStatus(options, parsedRef.data.callRef)
   } catch (error) {
     if (error instanceof CliFailure && error.kind !== 'UNAVAILABLE') throw error
-    throw statusTransportFailure(parsedRef.data.invocationRef)
+    throw statusTransportFailure(parsedRef.data.callRef)
   }
-  renderStatusResult('Operation status', parsedRef.data.invocationRef, body, options)
+  return renderStatusResult('Call status', parsedRef.data.callRef, body, options)
 }

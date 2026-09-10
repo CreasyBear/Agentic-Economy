@@ -22,15 +22,12 @@ const deepenedFolders = [
   'src/modules/capability-supply/internal/quarantine',
   'src/modules/capability-supply/internal/publication',
   'src/modules/capability-supply/internal/shared',
-  'src/modules/capability-supply/internal/operation-ledger',
+  'src/modules/capability-supply/internal/tool-ledger',
 ] as const
 
 describe('capability supply boundaries', () => {
   it('keeps CDP native loading isolated from optional x402 SVM peers', () => {
-    const signer = readFileSync(
-      'src/modules/capability-supply/internal/cdp-x402-payment-signer.ts',
-      'utf8',
-    )
+    const signer = readFileSync('src/modules/capability-supply/internal/cdp-x402-payment-signer.ts', 'utf8')
     const convexConfiguration = JSON.parse(readFileSync('convex.json', 'utf8')) as {
       node?: { externalPackages?: unknown }
     }
@@ -48,13 +45,15 @@ describe('capability supply boundaries', () => {
 
   it('does not import or fall back to V1 Request, catalog or routing binding authorities', () => {
     for (const source of sources()) {
-      const legacyAuthorityImport = /from\s+['"][^'"]*(?:customer-request|catalog|routing-kernel|routingKernelBindings)[^'"]*['"]/
+      const legacyAuthorityImport =
+        /from\s+['"][^'"]*(?:customer-request|catalog|routing-kernel|routingKernelBindings)[^'"]*['"]/
       expect(source).not.toMatch(legacyAuthorityImport)
     }
   })
 
   it('does not inspect adapter configuration keys in neutral registration or eligibility code', () => {
-    const keyInspection = /(?:Object\.(?:keys|entries)|Reflect\.get)\([^)]*config|JSON\.parse\([^)]*config|\.config\s*(?:\[|\.)/
+    const keyInspection =
+      /(?:Object\.(?:keys|entries)|Reflect\.get)\([^)]*config|JSON\.parse\([^)]*config|\.config\s*(?:\[|\.)/
     for (const source of sources()) expect(source).not.toMatch(keyInspection)
   })
 
@@ -72,7 +71,9 @@ describe('capability supply boundaries', () => {
     expect(seed).toContain('rebuildBusinessSupplyProjectionSnapshotCommand')
     expect(seed).not.toContain('claimBusinessCommand')
     expect(seed).not.toContain('publishBusinessCatalogCommand')
-    expect(seed).not.toMatch(/(?:ctx\.db|db)\.(?:insert|patch|replace)\(['"](?:businesses|claims|businessOfferings|capabilityOfferings|capabilityTransportBindings)['"]/)
+    expect(seed).not.toMatch(
+      /(?:ctx\.db|db)\.(?:insert|patch|replace)\(['"](?:businesses|claims|businessOfferings|capabilityOfferings|capabilityTransportBindings)['"]/,
+    )
   })
 
   it('keeps publication importers production-owned and fixture-independent', () => {
@@ -94,12 +95,61 @@ describe('capability supply boundaries', () => {
 
   it('reads canonical Operations directly without a cutover read model', () => {
     const schema = readFileSync('src/modules/capability-supply/internal/convex-schema.ts', 'utf8')
-    const queries = readFileSync('convex/capabilitySupplyOperationQueries.ts', 'utf8')
+    const queries = readFileSync('convex/capabilitySupplyToolQueries.ts', 'utf8')
 
-    expect(schema).not.toContain('capabilityCurrentOperationReadControls')
-    expect(schema).not.toContain('capabilityCurrentOperationDetails')
-    expect(queries).toMatch(/query\('capabilityPublications'\)[\s\S]*?\.withIndex\('by_operationRef_and_disposition'/)
+    expect(schema).not.toContain('capabilityCurrentToolReadControls')
+    expect(schema).not.toContain('capabilityCurrentToolDetails')
+    expect(queries).toMatch(/query\('capabilityPublications'\)[\s\S]*?\.withIndex\('by_toolRef_and_disposition'/)
     expect(queries).not.toContain('CURRENT_OPERATION_SHADOW')
+  })
+
+  it('ships one source-native Provider writer instead of the retired Offering editor contract', () => {
+    const catalog = readFileSync('convex/catalog.ts', 'utf8')
+    const serverSurface = readFileSync('src/modules/capability-supply/supply-funnel.functions.ts', 'utf8')
+    const retiredPublicNames = [
+      'createBusinessOffering',
+      'reviseBusinessOffering',
+      'changeBusinessOfferingStatus',
+      'upsertOfferingAccessPath',
+      'withdrawOfferingAccessPath',
+      'retryBusinessSupplyProjection',
+      'getCurrentOwnerOfferingSupply',
+      'promoteX402SellerCanary',
+    ]
+    const retiredCeremonies = [
+      'preflightOwnerOpenApiDocumentServer',
+      'preflightOwnerCapabilityServer',
+      'admitOwnerCapabilityServer',
+      'runOwnerSupplyReadinessServer',
+      'runOwnerSupplyTestServer',
+      'readOwnerSellerCanaryStatusServer',
+      'promoteOwnerSellerCanaryServer',
+    ]
+
+    for (const name of retiredPublicNames) {
+      expect(catalog).not.toMatch(new RegExp(`export const ${name}\\b`, 'u'))
+    }
+    for (const name of retiredCeremonies) {
+      expect(serverSurface).not.toMatch(new RegExp(`export const ${name}\\b`, 'u'))
+    }
+    expect(readFileSync('src/routes/_operator/owner.offerings.$offeringRef.tsx', 'utf8')).toContain(
+      "to: '/owner/supply/$offeringRef'",
+    )
+    expect(readFileSync('src/modules/capability-supply/supply-actions.ts', 'utf8')).toContain(
+      "publish: 'supply.publish'",
+    )
+  })
+
+  it('delegates Provider MCP OAuth to the official client transport', () => {
+    const handoff = readFileSync(
+      'src/modules/capability-supply/internal/supply-funnel/provider-connection-handoff.ts',
+      'utf8',
+    )
+
+    expect(handoff).toContain('new StreamableHTTPClientTransport')
+    expect(handoff).toContain('await client.connect(transport')
+    expect(handoff).toContain('await transport.finishAuth(input.callbackParams)')
+    expect(handoff).not.toMatch(/\bauth\s+as\s+authorizeMcp\b/u)
   })
 })
 

@@ -5,13 +5,13 @@ import { cleanup, render, screen } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { AGENT_INSTRUCTION, AGENT_SETUP_INSTRUCTION, HOME } from '@/content/brand-copy'
+import { AGENT_INSTRUCTION, HOME } from '@/content/brand-copy'
 
 const routeState = vi.hoisted(() => {
   const state = {
     HomeComponent: null as (() => ReactNode) | null,
     search: { q: undefined as string | undefined },
-    loaderData: { read: { kind: 'ok' as const, operations: [], matchedCount: 0 }, canonicalBaseUrl: 'https://ae.example' },
+    loaderData: { read: { kind: 'ok' as const, tools: [], matchedCount: 0 }, canonicalBaseUrl: 'https://ae.example' },
     navigate: vi.fn(async () => undefined),
   }
   return state
@@ -43,14 +43,14 @@ vi.mock('@/components/ae/layout/AePublicShell', () => ({
   AePublicShell: ({ children }: { children: ReactNode }) => <div>{children}</div>,
 }))
 
-import '@/routes/index'
+import { AeHomeLanding } from '@/components/ae/home/AeHomeLanding'
 
-describe('catalogue-first home', () => {
+describe('retained landing component', () => {
   afterEach(() => {
     cleanup()
     routeState.search = { q: undefined }
     routeState.navigate.mockClear()
-    routeState.loaderData = { read: { kind: 'ok', operations: [], matchedCount: 0 }, canonicalBaseUrl: 'https://ae.example' }
+    routeState.loaderData = { read: { kind: 'ok', tools: [], matchedCount: 0 }, canonicalBaseUrl: 'https://ae.example' }
   })
 
   it('leads with the tool market and an agent instruction, with no network work', () => {
@@ -64,11 +64,10 @@ describe('catalogue-first home', () => {
     expect(screen.getAllByRole('heading', { name: AGENT_INSTRUCTION.heading }).length).toBeGreaterThan(0)
     expect(screen.getByRole('button', { name: `Copy ${AGENT_INSTRUCTION.label}` })).toBeTruthy()
     expect(screen.getByText(AGENT_INSTRUCTION.code)).toBeTruthy()
-    expect(screen.queryByText(AGENT_SETUP_INSTRUCTION.code)).toBeNull()
+    expect(screen.queryByText('Install Agentic Economy and verify it in this coding agent.')).toBeNull()
     expect(screen.queryByText(/Claude Code/)).toBeNull()
     expect(document.querySelector('[data-slot="ae-site-browser"]')?.textContent).toContain('/llms.txt')
-    expect(screen.getAllByRole('link', { name: 'Browse Operations' }).length).toBeGreaterThan(0)
-    expect(screen.getAllByRole('link', { name: 'Publish an Operation' }).length).toBeGreaterThan(0)
+    expect(screen.getAllByRole('link', { name: 'Browse Tools' }).length).toBeGreaterThan(0)
     expect(screen.getByRole('heading', { name: HOME.catalogHeading })).toBeTruthy()
     expect(screen.getByText(HOME.catalogEmpty)).toBeTruthy()
     expect(screen.queryByRole('heading', { name: 'One connection.' })).toBeNull()
@@ -86,13 +85,13 @@ describe('catalogue-first home', () => {
 
     const catalog = document.querySelector('#home-catalog')
     expect(catalog).not.toBeNull()
-    const browse = screen.getAllByRole('link', { name: 'Browse Operations' })
+    const browse = screen.getAllByRole('link', { name: 'Browse Tools' })
     expect(browse.some((link) => catalog?.contains(link) && link.getAttribute('href')?.startsWith('/market'))).toBe(true)
     const hero = document.querySelector('#home-hero')?.closest('section')
     expect(browse.some((link) => hero?.contains(link))).toBe(true)
   })
 
-  it('orders landing sections as hero, paste, catalog, close', () => {
+  it('orders landing sections as hero, paste, then catalog', () => {
     renderHomeRoute()
 
     const headings = screen.getAllByRole('heading').map((heading) => heading.textContent)
@@ -100,8 +99,7 @@ describe('catalogue-first home', () => {
     expect(headings).toContain(AGENT_INSTRUCTION.heading)
     expect(headings).toContain(HOME.catalogHeading)
     expect(headings.indexOf(AGENT_INSTRUCTION.heading)).toBeLessThan(headings.indexOf(HOME.catalogHeading))
-    expect(headings.indexOf(HOME.catalogHeading)).toBeLessThan(headings.lastIndexOf(AGENT_INSTRUCTION.heading))
-    expect(headings.at(-1)).toBe(AGENT_INSTRUCTION.heading)
+    expect(headings.filter((heading) => heading === AGENT_INSTRUCTION.heading)).toHaveLength(1)
     expect(screen.queryByLabelText(/timing|budget|maximum spend/i)).toBeNull()
   })
 
@@ -116,7 +114,5 @@ describe('catalogue-first home', () => {
 
 function renderHomeRoute(q = '') {
   routeState.search = q.length === 0 ? { q: undefined } : { q }
-  const HomeComponent = routeState.HomeComponent
-  if (HomeComponent === null) throw new Error('Home route component was not captured by the router mock.')
-  render(<HomeComponent />)
+  render(<AeHomeLanding read={routeState.loaderData.read} />)
 }

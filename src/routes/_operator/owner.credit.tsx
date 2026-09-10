@@ -3,17 +3,33 @@ import { Link, createFileRoute } from '@tanstack/react-router'
 import { useServerFn } from '@tanstack/react-start'
 
 import { AeOwnerCredit } from '@/components/ae/console/AeOwnerCredit'
-import type { CreditTopupPort } from '@/components/ae/console/AeCreditTopUpPanel'
-import { OwnerSettingsNav } from '@/components/ae/settings/OwnerSettingsSections'
+import type { AccountFundingPort } from '@/components/ae/console/AeCreditTopUpPanel'
 import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
 import { AeSettingsStack } from '@/components/ae/layout/AeSection'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { isLocalE2EAuthBypassEnabled } from '@/lib/client/local-e2e-auth'
 import { operatorRouteOptions } from '@/lib/operator/route-options'
-import { readAgentAccessConsoleServer } from '@/lib/server/agent-access-console.functions'
-import type { AgentAccessConsoleReadback } from '@/modules/agent-access/agent-access-console'
-import { beginCreditTopupServer, readCreditPaymentServer } from '@/modules/money/server'
+import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
+import { readAgentDirectoryServer } from '@/lib/server/agent-access-console.functions'
+import {
+  createOwnerStatementServer,
+  createOwnerDailyCloseServer,
+  readOwnerProviderObligationsServer,
+  readOwnerMoneyDocumentsServer,
+  readOwnerMoneyReconciliationServer,
+  renderOwnerMoneyDocumentServer,
+  signOwnerDailyCloseServer,
+  type MoneyDocumentView,
+  type MoneyProviderObligationView,
+  type MoneyReconciliationCaseView,
+} from '@/lib/server/money-documents.functions'
+import type { AgentDirectoryProjection } from '@/modules/agent-access/agent-operator-view-model'
+import {
+  beginAccountFundingServer,
+  readAccountFundingServer,
+} from '@/modules/money/money.functions'
+import type { AccountFundingBalance } from '@/modules/money/server'
 
 export const Route = createFileRoute('/_operator/owner/credit')({
   ...operatorRouteOptions,
@@ -27,33 +43,53 @@ export const Route = createFileRoute('/_operator/owner/credit')({
 })
 
 function OwnerCreditRoute() {
-  const readConsole = useServerFn(readAgentAccessConsoleServer)
+  const readDirectory = useServerFn(readAgentDirectoryServer)
   const localE2E = isLocalE2EAuthBypassEnabled()
-  const beginCreditTopup = useServerFn(beginCreditTopupServer)
-  const readCreditPayment = useServerFn(readCreditPaymentServer)
-  const creditTopupPort = useMemo<CreditTopupPort>(() => ({
-    begin: (data) => beginCreditTopup({ data }),
-    read: (data) => readCreditPayment({ data }),
-  }), [beginCreditTopup, readCreditPayment])
-  const [items, setItems] = useState<AgentAccessConsoleReadback>([])
+  const beginAccountFunding = useServerFn(beginAccountFundingServer)
+  const readAccountFunding = useServerFn(readAccountFundingServer)
+  const readDocuments = useServerFn(readOwnerMoneyDocumentsServer)
+  const readReconciliation = useServerFn(readOwnerMoneyReconciliationServer)
+  const readObligations = useServerFn(readOwnerProviderObligationsServer)
+  const createStatement = useServerFn(createOwnerStatementServer)
+  const createDailyClose = useServerFn(createOwnerDailyCloseServer)
+  const signDailyClose = useServerFn(signOwnerDailyCloseServer)
+  const renderDocument = useServerFn(renderOwnerMoneyDocumentServer)
+  const accountFundingPort = useMemo<AccountFundingPort>(() => ({
+    begin: (data) => beginAccountFunding({ data }),
+    read: (data) => readAccountFunding({ data }),
+  }), [beginAccountFunding, readAccountFunding])
+  const [directory, setDirectory] = useState<AgentDirectoryProjection>(emptyAgentDirectory)
+  const [documents, setDocuments] = useState<readonly MoneyDocumentView[]>([])
+  const [reconciliationCases, setReconciliationCases] = useState<readonly MoneyReconciliationCaseView[]>([])
+  const [providerObligations, setProviderObligations] = useState<readonly MoneyProviderObligationView[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string>()
 
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      setItems(await readConsole())
+      const [nextDirectory, nextDocuments, nextReconciliation, nextObligations] = await Promise.all([
+        readDirectory(),
+        readDocuments({ data: {} }),
+        readReconciliation({ data: {} }),
+        readObligations({ data: {} }),
+      ])
+      setDirectory(nextDirectory)
+      setDocuments(nextDocuments.page)
+      setReconciliationCases(nextReconciliation.page)
+      setProviderObligations(nextObligations.page)
       setError(undefined)
-    } catch {
+    } catch (cause) {
+      captureClientExceptionOnClient(cause)
       setError('Credit balance is temporarily unavailable.')
     } finally {
       setLoading(false)
     }
-  }, [readConsole])
+  }, [readDirectory, readDocuments, readObligations, readReconciliation])
 
   useEffect(() => {
     if (localE2E) {
-      setItems([])
+      setDirectory(emptyAgentDirectory)
       setError(undefined)
       setLoading(false)
       return
@@ -64,15 +100,14 @@ function OwnerCreditRoute() {
   return (
     <AeOperatorShell
       operatorRole="owner"
-      title="Credit"
-      description="Add credit, then keep it assigned to each agent that makes paid calls."
+      title="Funding"
+      description="Fund the Account in AUD, then control each Agent's spending through its spending policy."
       currentPath="/owner/credit"
       actions={
         <Button asChild variant="secondary">
-          <Link to="/agent-access">Open Keys</Link>
+          <Link to="/agent-access">Open Agents</Link>
         </Button>
       }
-      secondaryBar={<OwnerSettingsNav current="credit" />}
     >
       <AeSettingsStack>
         {localE2E ? (
@@ -96,12 +131,57 @@ function OwnerCreditRoute() {
           </Alert>
         )}
         <AeOwnerCredit
-          items={items}
+          directory={directory}
           loading={loading}
-          creditTopupPort={creditTopupPort}
+          accountFundingPort={accountFundingPort}
           onCreditRefresh={load}
+          documents={documents}
+          reconciliationCases={reconciliationCases}
+          providerObligations={providerObligations}
+          {...(localE2E
+            ? {}
+            : {
+                onCreateStatement: async () => {
+                  const now = new Date()
+                  const periodStart = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)
+                  const periodEnd = Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1)
+                  const result = await createStatement({ data: { periodStart, periodEnd } })
+                  if (result.kind === 'refused') throw new Error(result.code)
+                  await load()
+                },
+                onCreateDailyClose: async () => {
+                  const today = new Date()
+                  const periodEnd = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate())
+                  const periodStart = periodEnd - 24 * 60 * 60 * 1_000
+                  const result = await createDailyClose({ data: { periodStart, periodEnd } })
+                  if (result.kind === 'refused') throw new Error(result.code)
+                  await load()
+                },
+                onSignDailyClose: async (documentRef: string, expectedRenderInputDigest: string) => {
+                  const result = await signDailyClose({ data: { documentRef, expectedRenderInputDigest } })
+                  if (result.kind === 'refused') throw new Error(result.code)
+                  await load()
+                },
+                onOpenDocument: async (documentRef: string) => {
+                  const url = await renderDocument({ data: { documentRef } })
+                  if (url === null) throw new Error('money_document_url_unavailable')
+                  window.open(url, '_blank', 'noopener,noreferrer')
+                },
+              })}
         />
       </AeSettingsStack>
     </AeOperatorShell>
   )
 }
+
+const emptyAgentDirectory: AgentDirectoryProjection = Object.freeze({
+  items: Object.freeze([]),
+  details: Object.freeze([]),
+  accountBalance: Object.freeze({
+    kind: 'available',
+    accountRef: 'local-preview',
+    balance: Object.freeze({ currency: 'AUD', units: '0', exponent: 6 }),
+    locked: false,
+    version: 0,
+  } satisfies AccountFundingBalance),
+})

@@ -1,11 +1,9 @@
-import { convexTest } from 'convex-test'
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { api, internal } from '../../convex/_generated/api'
-import schema from '../../convex/schema'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { probeRequestDigest } from '@/modules/capability-supply/public'
-import { convexModules as modules } from '../helpers/convex-fixtures'
+import { convexTestWithMarketComponents } from '../helpers/convex-fixtures'
 import {
   createPublishedBusinessOwner,
   prepareOwnerPublicationCommand,
@@ -15,8 +13,11 @@ import {
 import { installProviderConnectionFixture } from './capability-publication-harness'
 
 describe('owner supply test', () => {
-  it('completes x402 Test only from the exact fresh no-payment challenge', async () => {
-    const backend = convexTest(schema, modules)
+  beforeEach(() => vi.useFakeTimers())
+  afterEach(() => vi.useRealTimers())
+
+  it('does not turn an exact fresh no-payment challenge into a paid canary or publication authority', async () => {
+    const backend = convexTestWithMarketComponents()
     const { businessId, owner } = await createPublishedBusinessOwner(
       backend,
       'owner-x402-test',
@@ -70,6 +71,7 @@ describe('owner supply test', () => {
     )
     if (published.kind !== 'published')
       throw new Error(`owner_x402_publish_failed:${published.kind}`)
+    await backend.finishAllScheduledFunctions(vi.runAllTimers)
     const targetResult = await backend.query(
       internal.capabilitySupply.readCapabilityProbeTarget,
       {
@@ -115,6 +117,22 @@ describe('owner supply test', () => {
       publicationRef: published.publicationRef,
       revision: published.publicationRevision,
     })
+    const admissionCases = await backend.run(async (ctx) => (
+      await ctx.db.query('capabilitySupplyAdmissionCases')
+        .withIndex('by_publicationRef_and_revision', (query) => (
+          query.eq('publicationRef', published.publicationRef)
+            .eq('publicationRevision', published.publicationRevision)
+        ))
+        .collect()
+    ))
+    expect(admissionCases).toHaveLength(1)
+    expect(admissionCases[0]).toMatchObject({
+      state: 'completed',
+      terminalDecision: 'published',
+      blockerRefs: [],
+      reviewStartedAt: expect.any(Number),
+      completedAt: expect.any(Number),
+    })
 
     const readTestState = async () => {
       const readback = await owner.query(
@@ -135,61 +153,15 @@ describe('owner supply test', () => {
         publicationRef: published.publicationRef,
         publicationRevision: published.publicationRevision,
         operationKey: 'owner-x402-test',
+        correlationId: 'owner-x402-test:direct-action',
+        input: {},
       }),
     ).resolves.toMatchObject({
       step: 'test',
-      state: 'completed',
-      message: expect.stringContaining('No payment was sent'),
+      state: 'refused',
     })
     await expect(
       backend.run(async () => []),
     ).resolves.toEqual([])
-
-    const patchReadiness = async (patch: Record<string, unknown>) => {
-      await backend.run(async (ctx) => {
-        const publication = await ctx.db
-          .query('capabilityPublications')
-          .withIndex('by_publicationRef_and_revision', (q) =>
-            q
-              .eq('publicationRef', published.publicationRef)
-              .eq('revision', published.publicationRevision),
-          )
-          .unique()
-        if (publication === null)
-          throw new Error('owner_x402_publication_missing')
-        await ctx.db.patch(publication._id, patch)
-      })
-    }
-    await patchReadiness({
-      readinessTargetDigest: canonicalDigest('mismatched-target'),
-    })
-    await expect(readTestState()).resolves.toBe('in_progress')
-    await patchReadiness({
-      readinessTargetDigest: observation.targetDigest,
-    })
-    await patchReadiness({
-      readinessRequestDigest: canonicalDigest('mismatched-request'),
-    })
-    await expect(readTestState()).resolves.toBe('in_progress')
-    await patchReadiness({
-      readinessRequestDigest: observation.requestDigest,
-      readinessEvidenceRefs: ['probe:x402_payment_required_mismatch'],
-    })
-    await expect(readTestState()).resolves.toBe('in_progress')
-    await patchReadiness({
-      readinessEvidenceRefs: observation.evidenceRefs,
-      readinessValidUntil: now - 1,
-    })
-    await expect(readTestState()).resolves.toBe('not_started')
-    await patchReadiness({ publisherRef: 'credential:forged-readiness-publisher' })
-    await expect(backend.query(internal.capabilitySupply.readCapabilityProbeTarget, {
-      publicationRef: published.publicationRef,
-      expectedRevision: published.publicationRevision,
-      now: Date.now(),
-    })).resolves.toEqual({
-      kind: 'unavailable',
-      reason: 'authority_stale',
-      evidenceRefs: ['probe-target:authority-stale'],
-    })
   })
 })

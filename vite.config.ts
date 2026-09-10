@@ -57,6 +57,11 @@ export default defineConfig({
   },
   ssr: {
     external: ["@clerk/tanstack-react-start"],
+    // @visx packages' ESM builds re-export extensionless files ("./components/ParentSize"
+    // and similar), which a bundler tolerates but Node's native ESM
+    // resolution rejects, so the SSR dev server fails to boot. Bundle the
+    // whole @visx scope here instead of leaving it to Node.
+    noExternal: [/@visx\//],
   },
   resolve: {
     tsconfigPaths: true,
@@ -74,7 +79,6 @@ export default defineConfig({
       routes: {
         "/SKILL.md": {
           handler: "./src/routes/SKILL[.]md.ts",
-          method: "GET",
         },
       },
       preset: "vercel",

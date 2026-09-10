@@ -1,26 +1,26 @@
 import type { OfferingPrice, BusinessSupplyProjection } from '@/modules/catalog/public'
 import type { BusinessContext } from '@/modules/business/public'
 import type {
-  PublicOperationAuthentication,
-  PublicOperationParameter,
+  PublicToolAuthentication,
+  PublicToolParameter,
 } from '@/modules/capability-supply/public'
 /**
  * Published-business portfolio wire model retained by `/api/v1/services`.
  *
  * One record represents one published business and rolls up its offerings and
  * external endpoint links. It is not an Agent Service: that term is reserved
- * for one admitted Market Operation. `provider` links the business Provider;
+ * for one admitted Market Tool. `provider` links the business Provider;
  * endpoint provenance describes Publication authority and source mode unless
  * a separately verified Publisher identity exists.
  *
  * The projection is produced by `projectServiceFromBusinessDto`
  * (`services-api-projection.ts`) from the same public business catalog DTO used
- * by `/api/businesses`. Exact Operation links are additive and appear only when
+ * by `/api/businesses`. Exact Tool links are additive and appear only when
  * capability supply proves a single current linkage.
  */
 
-export type ServiceEndpointAuthenticationDto = PublicOperationAuthentication
-export type ServiceEndpointExecutionDto = 'operation_call' | 'request_route' | 'catalog_only'
+export type ServiceEndpointAuthenticationDto = PublicToolAuthentication
+export type ServiceEndpointExecutionDto = 'tool_call' | 'request_route' | 'catalog_only'
 export type ServiceEndpointAuthorityModeDto =
   | 'provider_owned'
   | 'ae_curated_external'
@@ -45,10 +45,10 @@ export type ServiceEndpointDto = Readonly<{
   providerName?: string
   serviceName: string
   tags: readonly string[]
-  parameters: readonly PublicOperationParameter[]
+  parameters: readonly PublicToolParameter[]
   quality: null
   ae: Readonly<{
-    operationRef?: string
+    toolRef?: string
     offeringRef: string
     provenance: 'business_declared' | 'publicly_observed'
     access: 'external'
@@ -117,4 +117,3 @@ export type ServiceOfferingDto = Readonly<{
     validUntil?: number
   }>
 }>
-

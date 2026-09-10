@@ -1,4 +1,6 @@
 import { v, type Infer } from 'convex/values'
+import { parseBoundedJson } from '@/modules/common/bounded-json'
+import { isCanonicalDigest } from '@/modules/common/canonical-digest'
 
 import type { MutationCtx } from './_generated/server'
 import {
@@ -24,13 +26,15 @@ export const recordX402PaymentObservationArgs = {
   attemptRef: v.string(),
   effectGeneration: v.number(),
   paymentIdentifier: v.string(),
-  operationRef: v.string(),
+  toolRef: v.string(),
   inputDigest: v.string(),
   transportObservationDigest: v.string(),
   transportRequestDigest: v.string(),
   paymentObservationDigest: v.string(),
   settlementStatus: x402PaymentSettlementStatusValue,
   paymentResponseDigest: v.optional(v.string()),
+  quarantinedResponseDigest: v.optional(v.string()),
+  quarantinedOutputJson: v.optional(v.string()),
   observedAt: v.number(),
 }
 
@@ -40,7 +44,7 @@ export const reconcileX402PaymentAttemptArgs = {
   dispatchRef: v.string(),
   attemptRef: v.string(),
   effectGeneration: v.number(),
-  operationRef: v.string(),
+  toolRef: v.string(),
   inputDigest: v.string(),
   evidenceRef: v.string(),
   evidenceDigest: v.string(),
@@ -78,20 +82,22 @@ type RecordObservationArgs = {
   attemptRef: string
   effectGeneration: number
   paymentIdentifier: string
-  operationRef: string
+  toolRef: string
   inputDigest: string
   transportObservationDigest: string
   transportRequestDigest: string
   paymentObservationDigest: string
   settlementStatus: 'settled' | 'not_settled' | 'unknown'
   paymentResponseDigest?: string
+  quarantinedResponseDigest?: string
+  quarantinedOutputJson?: string
   observedAt: number
 }
 type ReconcileArgs = {
   dispatchRef: string
   attemptRef: string
   effectGeneration: number
-  operationRef: string
+  toolRef: string
   inputDigest: string
   evidenceRef: string
   evidenceDigest: string
@@ -109,6 +115,63 @@ type ReconcileArgs = {
   observedAt: number
 }
 type ReconcileResult = Infer<typeof reconcileX402PaymentAttemptReturns>
+
+const MAX_QUARANTINED_OUTPUT_BYTES = 512 * 1024
+
+type QuarantinedOutput = Readonly<{
+  responseDigest: string
+  outputJson: string
+}>
+
+function quarantinedOutputFromArgs(args: RecordObservationArgs): QuarantinedOutput | undefined {
+  const responseDigest = args.quarantinedResponseDigest
+  const outputJson = args.quarantinedOutputJson
+  if ((responseDigest === undefined) !== (outputJson === undefined)) {
+    throw new Error('x402_payment_quarantined_output_invalid')
+  }
+  if (responseDigest === undefined || outputJson === undefined) return undefined
+  if (
+    args.settlementStatus !== 'unknown'
+    || !isCanonicalDigest(responseDigest)
+    || new TextEncoder().encode(outputJson).byteLength
+      > MAX_QUARANTINED_OUTPUT_BYTES
+  ) throw new Error('x402_payment_quarantined_output_invalid')
+  const parsed = parseBoundedJson(outputJson)
+  if (
+    parsed === undefined
+    || JSON.stringify(parsed) !== outputJson
+  ) throw new Error('x402_payment_quarantined_output_invalid')
+  return {
+    responseDigest,
+    outputJson,
+  }
+}
+
+function quarantinedOutputFromRow(
+  row: Readonly<{
+    quarantinedResponseDigest?: string
+    quarantinedOutputJson?: string
+  }>,
+): QuarantinedOutput | undefined {
+  const responseDigest = row.quarantinedResponseDigest
+  const outputJson = row.quarantinedOutputJson
+  if ((responseDigest === undefined) !== (outputJson === undefined)) {
+    throw new Error('x402_payment_quarantined_output_conflict')
+  }
+  if (responseDigest === undefined || outputJson === undefined) return undefined
+  return {
+    responseDigest,
+    outputJson,
+  }
+}
+
+function sameQuarantinedOutput(
+  left: QuarantinedOutput | undefined,
+  right: QuarantinedOutput | undefined,
+): boolean {
+  return left?.responseDigest === right?.responseDigest
+    && left?.outputJson === right?.outputJson
+}
 
 export async function observeX402PaymentAttemptHandler(
   ctx: MutationCtx,
@@ -163,12 +226,13 @@ export async function recordX402PaymentObservationHandler(
   ctx: MutationCtx,
   args: RecordObservationArgs,
 ): Promise<null> {
+  const quarantinedOutput = quarantinedOutputFromArgs(args)
   const row = await loadByAttempt(ctx, args.attemptRef, args.effectGeneration)
   if (
     row === null
     || row.dispatchRef !== args.dispatchRef
     || row.paymentIdentifier !== args.paymentIdentifier
-    || (row.operationRef !== undefined && row.operationRef !== args.operationRef)
+    || (row.toolRef !== undefined && row.toolRef !== args.toolRef)
     || (row.inputDigest !== undefined && row.inputDigest !== args.inputDigest)
     || (
       row.state !== 'prepared'
@@ -185,6 +249,7 @@ export async function recordX402PaymentObservationHandler(
     row.paymentResponseDigest !== undefined
     && row.paymentResponseDigest !== args.paymentResponseDigest
   ) throw new Error('x402_payment_response_identity_conflict')
+  const persistedQuarantinedOutput = quarantinedOutputFromRow(row)
   const targetState = args.settlementStatus === 'unknown' ? 'reconciliation_required' : 'observed'
   if (row.state === 'observed' || row.state === 'reconciliation_required') {
     if (row.state !== targetState) {
@@ -196,24 +261,63 @@ export async function recordX402PaymentObservationHandler(
     if (row.paymentResponseDigest !== args.paymentResponseDigest) {
       throw new Error('x402_payment_response_identity_conflict')
     }
+    const observationDigests = [
+      row.paymentObservationDigest,
+      row.transportObservationDigest,
+      row.transportRequestDigest,
+    ]
+    const missingObservationDigests = observationDigests.every((value) => value === undefined)
+    if (missingObservationDigests) {
+      if (
+        persistedQuarantinedOutput !== undefined
+        && !sameQuarantinedOutput(persistedQuarantinedOutput, quarantinedOutput)
+      ) throw new Error('x402_payment_quarantined_output_conflict')
+      await ctx.db.patch(row._id, {
+        toolRef: args.toolRef,
+        inputDigest: args.inputDigest,
+        paymentObservationDigest: args.paymentObservationDigest,
+        transportObservationDigest: args.transportObservationDigest,
+        transportRequestDigest: args.transportRequestDigest,
+        ...(persistedQuarantinedOutput === undefined && quarantinedOutput !== undefined
+          ? {
+              quarantinedResponseDigest: quarantinedOutput.responseDigest,
+              quarantinedOutputJson: quarantinedOutput.outputJson,
+            }
+          : {}),
+        observedAt: args.observedAt,
+      })
+      return null
+    }
     if (
-      row.operationRef !== args.operationRef
+      row.toolRef !== args.toolRef
       || row.inputDigest !== args.inputDigest
       || row.paymentObservationDigest !== args.paymentObservationDigest
       || row.transportObservationDigest !== args.transportObservationDigest
       || row.transportRequestDigest !== args.transportRequestDigest
     ) throw new Error('x402_payment_observation_attribution_invalid')
+    if (!sameQuarantinedOutput(persistedQuarantinedOutput, quarantinedOutput)) {
+      throw new Error('x402_payment_quarantined_output_conflict')
+    }
     return null
+  }
+  if (persistedQuarantinedOutput !== undefined) {
+    throw new Error('x402_payment_quarantined_output_conflict')
   }
   await ctx.db.patch(row._id, {
     state: targetState,
-    operationRef: args.operationRef,
+    toolRef: args.toolRef,
     paymentObservationDigest: args.paymentObservationDigest,
     inputDigest: args.inputDigest,
     transportObservationDigest: args.transportObservationDigest,
     transportRequestDigest: args.transportRequestDigest,
     settlementStatus: args.settlementStatus,
     ...(args.paymentResponseDigest === undefined ? {} : { paymentResponseDigest: args.paymentResponseDigest }),
+    ...(quarantinedOutput === undefined
+      ? {}
+      : {
+          quarantinedResponseDigest: quarantinedOutput.responseDigest,
+          quarantinedOutputJson: quarantinedOutput.outputJson,
+        }),
     observedAt: args.observedAt,
   })
   if (args.settlementStatus === 'settled') {
@@ -230,27 +334,53 @@ export async function reconcileX402PaymentAttemptHandler(
   args: ReconcileArgs,
 ): Promise<ReconcileResult> {
   const row = await loadByAttempt(ctx, args.attemptRef, args.effectGeneration)
-  if (
-    row === null
-    || row.dispatchRef !== args.dispatchRef
-    || row.operationRef !== args.operationRef
-    || row.inputDigest !== args.inputDigest
-    || row.reservationRef !== args.reservationRef
-    || row.paymentIdentifier !== args.paymentIdentifier
-    || row.challengeDigest !== args.challengeDigest
-    || row.amountUnits !== args.amountUnits
-    || row.currency !== args.currency
-    || row.exponent !== args.exponent
-    || row.transportObservationDigest !== args.transportObservationDigest
-    || row.transportRequestDigest !== args.transportRequestDigest
-    || row.paymentObservationDigest !== args.paymentObservationDigest
-    || (
-      row.settlementStatus !== undefined
-      && row.settlementStatus !== 'unknown'
-      && row.settlementStatus !== args.settlementStatus
-    )
-    || (row.state !== 'observed' && row.state !== 'reconciliation_required')
-  ) return { kind: 'reconciliation_required' }
+  if (row === null) {
+    console.warn('x402_payment_attempt_reconciliation_refused', {
+      attemptRef: args.attemptRef,
+      effectGeneration: args.effectGeneration,
+      mismatch: 'attempt_not_found',
+    })
+    return { kind: 'reconciliation_required' }
+  }
+  const mismatch = row.dispatchRef !== args.dispatchRef
+    ? 'dispatch_ref'
+    : row.toolRef !== args.toolRef
+      ? 'tool_ref'
+      : row.inputDigest !== args.inputDigest
+          ? 'input_digest'
+          : row.reservationRef !== args.reservationRef
+            ? 'reservation_ref'
+            : row.paymentIdentifier !== args.paymentIdentifier
+              ? 'payment_identifier'
+              : row.challengeDigest !== args.challengeDigest
+                ? 'challenge_digest'
+                : row.amountUnits !== args.amountUnits
+                  ? 'amount_units'
+                  : row.currency !== args.currency
+                    ? 'currency'
+                    : row.exponent !== args.exponent
+                      ? 'exponent'
+                      : row.transportObservationDigest !== args.transportObservationDigest
+                        ? 'transport_observation_digest'
+                        : row.transportRequestDigest !== args.transportRequestDigest
+                          ? 'transport_request_digest'
+                          : row.paymentObservationDigest !== args.paymentObservationDigest
+                            ? 'payment_observation_digest'
+                            : row.settlementStatus !== undefined
+                              && row.settlementStatus !== 'unknown'
+                              && row.settlementStatus !== args.settlementStatus
+                              ? 'settlement_status'
+                              : row.state !== 'observed' && row.state !== 'reconciliation_required'
+                                ? 'attempt_state'
+                                : undefined
+  if (mismatch !== undefined) {
+    console.warn('x402_payment_attempt_reconciliation_refused', {
+      attemptRef: args.attemptRef,
+      effectGeneration: args.effectGeneration,
+      mismatch,
+    })
+    return { kind: 'reconciliation_required' }
+  }
   if (row.reconciliationEvidenceDigest !== undefined) {
     return row.reconciliationEvidenceRef === args.evidenceRef
       && row.reconciliationEvidenceDigest === args.evidenceDigest

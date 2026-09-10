@@ -10,6 +10,8 @@ export type PayoutTransferCommandInput = Readonly<{
   amount: ExactAmount
   providerAccountRef: string
   destinationAccountId: string
+  expectedPayoutRevision: number
+  expectedAccountVersion: number
   idempotencyKey: string
   observedAt: number
 }>
@@ -19,6 +21,8 @@ export type PayoutTransferCommand = Readonly<{
   amount: ExactAmount
   providerAccountRef: string
   destinationAccountId: string
+  expectedPayoutRevision: number
+  expectedAccountVersion: number
   payoutRef: string
   commandId: string
   inputDigest: string
@@ -36,6 +40,10 @@ export function payoutTransferCommand(
     input.payoutRef.length === 0 ||
     input.providerAccountRef.length === 0 ||
     input.destinationAccountId.length === 0 ||
+    !Number.isSafeInteger(input.expectedPayoutRevision) ||
+    input.expectedPayoutRevision <= 0 ||
+    !Number.isSafeInteger(input.expectedAccountVersion) ||
+    input.expectedAccountVersion < 0 ||
     input.idempotencyKey.length === 0 ||
     input.amount.units === '0'
   ) {
@@ -45,6 +53,9 @@ export function payoutTransferCommand(
     format: 'money-payout-command:v1',
     businessId: input.businessId,
     payoutRef: input.payoutRef,
+    destinationAccountId: input.destinationAccountId,
+    expectedPayoutRevision: input.expectedPayoutRevision,
+    expectedAccountVersion: input.expectedAccountVersion,
     idempotencyKey: input.idempotencyKey,
   } as StableHashValue)
   const inputDigest = canonicalDigest({
@@ -52,6 +63,9 @@ export function payoutTransferCommand(
     businessId: input.businessId,
     payoutRef: input.payoutRef,
     amount: input.amount,
+    destinationAccountId: input.destinationAccountId,
+    expectedPayoutRevision: input.expectedPayoutRevision,
+    expectedAccountVersion: input.expectedAccountVersion,
     idempotencyKey: input.idempotencyKey,
   } as StableHashValue)
   const requestDigest = canonicalDigest({
@@ -59,6 +73,9 @@ export function payoutTransferCommand(
     payoutRef: input.payoutRef,
     commandId,
     providerAccountRef: input.providerAccountRef,
+    destinationAccountId: input.destinationAccountId,
+    expectedPayoutRevision: input.expectedPayoutRevision,
+    expectedAccountVersion: input.expectedAccountVersion,
     amount: input.amount,
     inputDigest,
     idempotencyKey: input.idempotencyKey,
@@ -68,6 +85,8 @@ export function payoutTransferCommand(
     amount: input.amount,
     providerAccountRef: input.providerAccountRef,
     destinationAccountId: input.destinationAccountId,
+    expectedPayoutRevision: input.expectedPayoutRevision,
+    expectedAccountVersion: input.expectedAccountVersion,
     payoutRef: input.payoutRef,
     commandId,
     inputDigest,

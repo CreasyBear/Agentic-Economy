@@ -1,4 +1,4 @@
-import type { InvocationActor, ReconciliationEvidence, ReconciliationEvidenceMaterial } from '@/modules/action-invocation'
+import type { ExecutionActor, ReconciliationEvidence, ReconciliationEvidenceMaterial } from '@/modules/action-execution'
 import { defineCapabilityContract } from '@/modules/capability-contract/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { pricingConfigDigest } from '@/modules/money/public'
@@ -8,10 +8,10 @@ import type { CapabilityOfferingRow } from '@/modules/capability-supply/internal
 import {
   capabilityBindingEligibilityHash,
   capabilityBindingRegistrationHash,
-  capabilityOperationId,
+  capabilityToolId,
   capabilityOfferingEligibilityHash,
   capabilityOfferingRegistrationHash,
-  createPublicOperationRef,
+  createPublicToolRef,
   defineCapabilityOfferingRegistration,
   defineCapabilityTransportBindingRegistration,
 } from '@/modules/capability-supply/public'
@@ -19,7 +19,7 @@ import { qualifySuppliedCandidate, type SuppliedCandidateQuoteInput } from '@/mo
 
 export const developmentEvidenceNowMs = Date.parse('2026-07-19T08:00:00.000Z')
 export const developmentEvidenceNow = () => new Date(developmentEvidenceNowMs).toISOString()
-export const developmentEvidenceActor: InvocationActor = {
+export const developmentEvidenceActor: ExecutionActor = {
   callerRef: 'mock:caller:developer',
   principalRef: 'mock:principal:developer',
 }
@@ -73,9 +73,11 @@ const catalogOrigin = {
   }),
 }
 const pricingConfig = {
-  version: 'pricing:v2' as const,
-  unit: 'call' as const,
-  paidAmount: { currency: 'USD' as const, units: '1', exponent: 2 },
+  version: 'pricing:v3' as const,
+  kind: 'fixed_aud' as const,
+  currency: 'AUD' as const,
+  exponent: 6 as const,
+  amountUnits: '10000',
 }
 const priceDigest = pricingConfigDigest(pricingConfig)
 
@@ -105,8 +107,8 @@ const catalogAccessPath: GraphCatalogAccessPath = {
     provenance: 'business_declared',
   },
 }
-const operationRef = createPublicOperationRef({
-  operationId: capabilityOperationId(contract.capabilityId),
+const toolRef = createPublicToolRef({
+  operationId: capabilityToolId(contract.capabilityId),
   publicationRef: developmentEvidenceCandidate.publicationRef,
   publicationRevision: developmentEvidenceCandidate.revision,
   contractRef: contract.ref,
@@ -120,7 +122,10 @@ const offeringRegistration = defineCapabilityOfferingRegistration({
   origin: catalogOrigin,
   presentation: {
     label: 'Mock development provider', summary: 'MOCK/DEVELOPMENT ONLY',
-    price: { kind: 'fixed', amount: pricingConfig.paidAmount }, materialTerms: [],
+    price: {
+      kind: 'fixed',
+      amount: { currency: 'AUD', units: pricingConfig.amountUnits, exponent: 6 },
+    }, materialTerms: [],
     commercialRelationship: {
       kind: 'none', summary: 'Fixture only.', influencesEligibility: false,
       influencesInclusion: false, influencesOrder: false, evidenceRefs: ['mock:commercial'],
@@ -180,7 +185,7 @@ export function createDevelopmentEvidenceSupplyPorts(): CapabilityGraphPorts {
     registeredAt: developmentEvidenceNowMs - 10_000, updatedAt: developmentEvidenceNowMs - 10_000,
   }
   const publication: GraphPublicationRow = {
-    id: 'mock:publication-row', ...developmentEvidenceCandidate, operationRef, ...contract.ref,
+    id: 'mock:publication-row', ...developmentEvidenceCandidate, toolRef, ...contract.ref,
     sourceKind: 'openapi_http', sourceDigest: canonicalDigest({ fixture: true }),
     pricingConfig, priceDigest,
     disposition: 'current', credentialState: 'ready', healthState: 'healthy',

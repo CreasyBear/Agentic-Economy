@@ -16,6 +16,7 @@ const staticSecurityHeaders = {
 
 const requiredCspAllowances = [
   "frame-ancestors 'none'",
+  "https://res.cloudinary.com/bdb-prod/image/upload/",
   'https://*.clerk.accounts.dev',
   'https://*.clerk.com',
   'wss://*.clerk.com',
@@ -27,6 +28,14 @@ const requiredCspAllowances = [
   'https://*.convex.site',
   'wss://*.convex.cloud',
   'wss://*.convex.site',
+  'https://api.stripe.com',
+  'https://checkout.stripe.com',
+  'https://js.stripe.com',
+  'https://*.js.stripe.com',
+  'https://hooks.stripe.com',
+  'https://*.stripe.com',
+  'https://link.com',
+  'https://*.link.com',
 ] as const
 
 describe('security header middleware', () => {

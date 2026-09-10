@@ -1,14 +1,16 @@
 "use node"
 
+import { saveMessages } from '@convex-dev/agent'
 import type { LanguageModelV4 } from '@ai-sdk/provider'
 import { v } from 'convex/values'
 
+import { sanitizeTelemetryError } from '@/lib/observability/private-route-safety'
 import {
   openRouterGatewayConfig,
   openRouterModel,
 } from '@/modules/model-gateway/public'
 
-import { internal } from './_generated/api'
+import { components, internal } from './_generated/api'
 import { env, internalAction } from './_generated/server'
 import type { ActionCtx } from './_generated/server'
 import { createChatAgent } from './chatTools'
@@ -20,6 +22,9 @@ import {
   ownershipRef,
   principalRef,
 } from '../src/modules/principal-account/public'
+
+const DURABLE_CHAT_FAILURE_MESSAGE =
+  'Chat stopped before a final response was recorded. Review any call card or receipt already shown before sending this request again.'
 
 function interactiveAuthorityContextFromValue(
   input: typeof interactiveAuthorityContextValue.type,
@@ -72,7 +77,15 @@ export const generate = internalAction({
   },
   returns: v.null(),
   handler: async (ctx, args) => {
+    let ownerId: string | undefined
     try {
+      const current = await ctx.runQuery(internal.chatMessages.authorizeScheduledGeneration, {
+        threadId: args.threadId,
+        promptMessageId: args.promptMessageId,
+        authority: args.authority,
+      })
+      if (current === null) throw new Error('chat_generation_authority_invalid')
+      ownerId = current.ownerId
       const apiKey = env.OPENROUTER_API_KEY?.trim()
       if (apiKey === undefined || apiKey.length === 0) {
         throw new Error('agent_unavailable')
@@ -82,12 +95,6 @@ export const generate = internalAction({
         ...(env.AE_LLM_MODEL === undefined ? {} : { AE_LLM_MODEL: env.AE_LLM_MODEL }),
         ...(env.AE_SITE_URL === undefined ? {} : { SITE_URL: env.AE_SITE_URL }),
       })
-      const current = await ctx.runQuery(internal.chatMessages.authorizeScheduledGeneration, {
-        threadId: args.threadId,
-        promptMessageId: args.promptMessageId,
-        authority: args.authority,
-      })
-      if (current === null) throw new Error('chat_generation_authority_invalid')
       await streamDurableChatResponse(
         ctx,
         {
@@ -98,6 +105,25 @@ export const generate = internalAction({
         openRouterModel(config, config.model),
       )
       return null
+    } catch (error) {
+      if (ownerId !== undefined) {
+        try {
+          await saveMessages(ctx, components.agent, {
+            threadId: args.threadId,
+            userId: ownerId,
+            promptMessageId: args.promptMessageId,
+            messages: [{ role: 'assistant', content: DURABLE_CHAT_FAILURE_MESSAGE }],
+            agentName: 'Agentic Economy Operation Market',
+            failPendingSteps: true,
+          })
+        } catch (saveError) {
+          console.error(
+            '[chat-durable] recovery message failed',
+            sanitizeTelemetryError(saveError),
+          )
+        }
+      }
+      throw error
     } finally {
       await ctx.runMutation(internal.chatMessages.clearActiveGeneration, {
         threadId: args.threadId,

@@ -7,9 +7,9 @@ import {
   type ExactAmount,
 } from '@/modules/money/public'
 import {
-  isPublicOperationRef,
-  type CatalogOfferingOperationMapEntry,
-  type PublicOperationCatalogPrice,
+  isPublicToolRef,
+  type CatalogOfferingToolMapEntry,
+  type PublicToolCatalogPrice,
 } from '@/modules/capability-supply/public'
 
 
@@ -31,10 +31,10 @@ export const PublicServicesApiSchemaVersion = 'public-services-api:v3' as const
 
 /**
  * The W1 origin seam: a per-catalog-offering list of exact admitted
- * operation entries. A list is required because one offering can publish
+ * Tool entries. A list is required because one offering can publish
  * multiple independently linked access paths.
  */
-export type ServiceOperationMap = Readonly<Record<string, readonly CatalogOfferingOperationMapEntry[]>>
+export type ServiceToolMap = Readonly<Record<string, readonly CatalogOfferingToolMapEntry[]>>
 
 export type PublicServicesApiPage = Readonly<{
   kind: 'ok'
@@ -59,14 +59,14 @@ export type PublicServicesSearchPage = Readonly<{
  */
 export function projectPublicServicesPage(
   page: PublicBusinessCatalogApiV2Page,
-  operationMap?: ServiceOperationMap,
+  toolMap?: ServiceToolMap,
 ): PublicServicesApiPage {
   return {
     kind: 'ok',
     schemaVersion: PublicServicesApiSchemaVersion,
     services: page.page
       .filter((business) => business.offerings.length > 0)
-      .map((business) => projectServiceFromBusinessDto(business, operationMap)),
+      .map((business) => projectServiceFromBusinessDto(business, toolMap)),
     isDone: page.isDone,
     continueCursor: page.continueCursor,
   }
@@ -74,7 +74,7 @@ export function projectPublicServicesPage(
 
 export function projectPublicServicesSearchPage(
   page: PublicBusinessCatalogApiV2SearchPage,
-  operationMap?: ServiceOperationMap,
+  toolMap?: ServiceToolMap,
 ): PublicServicesSearchPage {
   return {
     kind: 'ok',
@@ -82,14 +82,14 @@ export function projectPublicServicesSearchPage(
     ...(page.query === undefined ? {} : { query: page.query }),
     services: page.items
       .filter((business) => business.offerings.length > 0)
-      .map((business) => projectServiceFromBusinessDto(business, operationMap)),
+      .map((business) => projectServiceFromBusinessDto(business, toolMap)),
     pagination: page.pagination,
   }
 }
 
 function projectServiceFromBusinessDto(
   business: PublicBusinessCatalogApiV2Page['page'][number],
-  operationMap?: ServiceOperationMap,
+  toolMap?: ServiceToolMap,
 ): ServiceDto {
   const offerings = business.offerings.map((offering): ServiceOfferingDto => ({
     offeringRef: offering.offeringRef,
@@ -123,7 +123,7 @@ function projectServiceFromBusinessDto(
         offering.offeringRef,
         offering.revision,
         offering.category,
-        operationMap,
+        toolMap,
       ))
   })
   const priceSummary = priceSummaryOf(endpoints, business.offerings)
@@ -153,7 +153,7 @@ function projectServiceFromBusinessDto(
     ...(description === undefined ? {} : { description }),
     category: business.category,
     networks,
-    enriched: endpoints.some((endpoint) => endpoint.ae.operationRef !== undefined),
+    enriched: endpoints.some((endpoint) => endpoint.ae.toolRef !== undefined),
     integrationType,
     serviceName: business.name,
     tags,
@@ -187,24 +187,24 @@ function projectEndpoint(
   offeringRef: string,
   offeringRevision: number,
   offeringCategory: string,
-  operationMap?: ServiceOperationMap,
+  toolMap?: ServiceToolMap,
 ): ServiceEndpointDto {
   // W1 origin seam: enrich only when exactly one map entry matches the
   // offering revision, declared access path, endpoint URL and HTTP method.
   // A missing or ambiguous exact match stays catalog-only/unenriched.
   const method = path.method?.trim().toUpperCase()
   // Public catalog paths intentionally omit private lineage hashes. The
-  // operation map remains the internal source of admitted linkage, while
+  // Tool map remains the internal source of admitted linkage, while
   // revision, declared path, URL, and method bind it to this public endpoint.
   const linkedCandidates = method === undefined
     ? []
-    : (operationMap?.[offeringRef] ?? []).filter((candidate) => (
+    : (toolMap?.[offeringRef] ?? []).filter((candidate) => (
         candidate.offeringRef === offeringRef
         && candidate.offeringRevision === offeringRevision
         && candidate.declaredAccessPathRef === path.accessPathRef
         && candidate.endpointUrl === path.url
         && candidate.method === method
-        && isPublicOperationRef(candidate.operationRef)
+        && isPublicToolRef(candidate.toolRef)
       ))
   const linked = linkedCandidates.length === 1 ? linkedCandidates[0] : undefined
   const authentication: ServiceEndpointDto['ae']['authentication'] =
@@ -213,7 +213,7 @@ function projectEndpoint(
     linked === undefined || !linked.routeable
       ? 'catalog_only'
       : linked.authentication.kind === 'ae_api_key'
-        ? 'operation_call'
+        ? 'tool_call'
         : 'request_route'
   const pricing = projectEndpointPricing(linked?.catalogPrice, linked?.payment)
   const paymentCurrencyMismatch = hasPaymentCurrencyMismatch(linked?.catalogPrice, linked?.payment)
@@ -236,7 +236,7 @@ function projectEndpoint(
     quality: null,
     ...(pricing === undefined ? {} : { pricing }),
     ae: {
-      ...(linked === undefined ? {} : { operationRef: linked.operationRef }),
+      ...(linked === undefined ? {} : { toolRef: linked.toolRef }),
       offeringRef,
       provenance: path.provenance,
       access: 'external',
@@ -253,8 +253,8 @@ function projectEndpoint(
 }
 
 function projectEndpointPricing(
-  price: PublicOperationCatalogPrice | undefined,
-  payment: CatalogOfferingOperationMapEntry['payment'] | undefined,
+  price: PublicToolCatalogPrice | undefined,
+  payment: CatalogOfferingToolMapEntry['payment'] | undefined,
 ): ServiceEndpointPricingDto | undefined {
   if (price === undefined) return undefined
   const currency = optionalText(price.currency)
@@ -274,8 +274,8 @@ function projectEndpointPricing(
 }
 
 function hasPaymentCurrencyMismatch(
-  price: PublicOperationCatalogPrice | undefined,
-  payment: CatalogOfferingOperationMapEntry['payment'] | undefined,
+  price: PublicToolCatalogPrice | undefined,
+  payment: CatalogOfferingToolMapEntry['payment'] | undefined,
 ): boolean {
   if (price === undefined || payment === undefined) return false
   const priceCurrency = optionalText(price.currency)

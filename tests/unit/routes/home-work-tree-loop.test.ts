@@ -1,23 +1,24 @@
 import { isRedirect } from '@tanstack/react-router'
 import { describe, expect, it } from 'vitest'
 
-import {
-  loadRootRoute,
-  validateRootSearch,
-} from '@/modules/market/home-catalogue'
+import { validateRootSearch } from '@/modules/market/home-catalogue'
 import { Route } from '@/routes/index'
 
 const BAS_ASK = 'My BAS is overdue and my books are a mess'
-const ORDINARY_ASK = 'dentist near Adelaide'
-
 describe('root route readback', () => {
-  it.each([
-    ['a BAS ask', BAS_ASK],
-    ['an ordinary ask', ORDINARY_ASK],
-  ])('does not execute a hidden homepage pipeline for %s', async (_label, query) => {
-    await expect(loadRootRoute({ q: query })).resolves.toBeUndefined()
+  it('opens the application directly in the market', () => {
+    const beforeLoad = Route.options.beforeLoad
+    if (beforeLoad === undefined) throw new Error('root market redirect is unavailable')
+    let thrown: unknown
+    try {
+      beforeLoad({ search: {} } as never)
+    } catch (error) {
+      thrown = error
+    }
+    expect(isRedirect(thrown)).toBe(true)
+    if (!isRedirect(thrown)) return
+    expect(thrown.options).toMatchObject({ to: '/market', search: { window: '30d' }, replace: true })
   })
-
   it('redirects a query to the market even when a project param is present', () => {
     const beforeLoad = Route.options.beforeLoad
     if (beforeLoad === undefined) throw new Error('root query redirect is unavailable')
@@ -31,7 +32,7 @@ describe('root route readback', () => {
 
     expect(isRedirect(thrown)).toBe(true)
     if (!isRedirect(thrown)) return
-    expect(thrown.options).toMatchObject({ to: '/t/new', search: { q: BAS_ASK } })
+    expect(thrown.options).toMatchObject({ to: '/market', search: { window: '30d', query: BAS_ASK } })
   })
 
   it('redirects a query without a project to the market', () => {
@@ -47,7 +48,7 @@ describe('root route readback', () => {
 
     expect(isRedirect(thrown)).toBe(true)
     if (!isRedirect(thrown)) return
-    expect(thrown.options).toMatchObject({ to: '/t/new', search: { q: BAS_ASK } })
+    expect(thrown.options).toMatchObject({ to: '/market', search: { window: '30d', query: BAS_ASK } })
   })
 
   it('preserves a 173-character query through home and market navigation', () => {
@@ -69,7 +70,7 @@ describe('root route readback', () => {
 
     expect(isRedirect(thrown)).toBe(true)
     if (!isRedirect(thrown)) return
-    expect(thrown.options).toMatchObject({ to: '/t/new', search: { q: query } })
+    expect(thrown.options).toMatchObject({ to: '/market', search: { window: '30d', query } })
   })
 
 })

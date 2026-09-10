@@ -4,48 +4,46 @@ import { useMemo } from "react";
 
 import { AeEmptyState } from "@/components/ae/feedback/AeEmptyState";
 import { AeCapabilityTile } from "@/components/ae/market/AeCapabilityTile";
+import { X402DirectoryCards } from "@/components/ae/market/AeX402Directory";
 import {
   AeAgentInstructionCard,
   AeConnectingFrame,
   AeSiteBody,
   AeSiteBrowser,
   AeSiteButton,
-  AeSiteEntrance,
   AeSiteEyebrow,
   AeSiteHeading,
   AeSiteHeadingPair,
   AeSiteHeroIntro,
   AeSiteIntro,
   AeSiteSection,
-  AeSiteSignoff,
   AeSiteStack,
 } from "@/components/ae/website";
 import { ItemGroup } from "@/components/ui/item";
-import {
-  AGENT_INSTRUCTION,
-  BUSINESS_DOOR,
-  HOME,
-} from "@/content/brand-copy";
+import { HOME } from "@/content/brand-copy";
 import type { HomeCapabilityRead } from "@/modules/market/home-catalogue";
-import { groupOperationCards } from "@/modules/market/operation-view-model";
+import { groupToolCards } from "@/modules/market/tool-view-model";
 
 type AeHomeLandingProps = Readonly<{
   read: HomeCapabilityRead;
 }>;
 
 export function AeHomeLanding({ read }: AeHomeLandingProps) {
-  const operationCount = read.kind === "unavailable" ? 0 : read.matchedCount;
-  const operationLabel = operationCount === 1 ? "Operation" : "Operations";
+  const toolCount = read.kind === "unavailable" ? 0 : read.kind === 'directory' ? read.total ?? read.items.length : read.matchedCount ?? read.tools.length;
+  const toolLabel = toolCount === 1 ? "Tool" : "Tools";
   const meta =
     read.kind === "unavailable"
       ? "Catalogue unavailable"
-      : `${operationCount.toLocaleString()} current ${operationLabel}`;
+      : read.kind === 'directory'
+        ? `${toolCount.toLocaleString()} x402 Tools`
+      : read.matchedCount === undefined
+        ? `${toolCount.toLocaleString()} shown`
+        : `${toolCount.toLocaleString()} current ${toolLabel}`;
 
   return (
     <div className="flex flex-col">
-      <HomeHero meta={meta} showMeta={read.kind === "ok" && operationCount > 0} />
+      <HomeHero meta={meta} showMeta={read.kind !== "unavailable" && toolCount > 0} />
       <HomeCapabilityResults read={read} />
-      <HomeClose />
     </div>
   );
 }
@@ -72,7 +70,7 @@ function HomeHero({
         </AeSiteHeadingPair>
         <div className="flex flex-wrap items-center justify-center gap-related">
           <AeSiteButton asChild>
-            <Link to="/market" search={{ window: "30d" }}>Browse Operations</Link>
+            <Link to="/market" search={{ window: "30d" }}>Browse Tools</Link>
           </AeSiteButton>
         </div>
       </AeSiteHeroIntro>
@@ -89,7 +87,7 @@ export function HomeCapabilityResults({
   read,
 }: Readonly<{ read: HomeCapabilityRead }>) {
   const groups = useMemo(
-    () => (read.kind === "ok" ? groupOperationCards(read.operations) : []),
+    () => (read.kind === "ok" ? groupToolCards(read.tools) : []),
     [read],
   );
 
@@ -106,16 +104,9 @@ export function HomeCapabilityResults({
       <div className="py-page md:pb-hero">
         <AeSiteStack>
           <AeSiteIntro>
-            <div className="flex flex-col gap-related sm:flex-row sm:items-end sm:justify-between">
-              <AeSiteHeading as="h2" size="md" id="home-catalog-heading">
-                {HOME.catalogHeading}
-              </AeSiteHeading>
-              <AeSiteButton asChild variant="outlined" className="self-start sm:self-auto">
-                <Link to="/market" search={{ window: "30d" }}>
-                  Browse Operations
-                </Link>
-              </AeSiteButton>
-            </div>
+            <AeSiteHeading as="h2" size="md" id="home-catalog-heading">
+              {HOME.catalogHeading}
+            </AeSiteHeading>
           </AeSiteIntro>
           {read.kind === "unavailable" ? (
             <AeEmptyState
@@ -128,6 +119,11 @@ export function HomeCapabilityResults({
                 </AeSiteButton>
               }
             />
+          ) : read.kind === 'directory' && read.items.length > 0 ? (
+            <div className="grid gap-related">
+              <AeSiteBody muted>Explore the x402 catalogue from Coinbase Bazaar.</AeSiteBody>
+              <X402DirectoryCards entries={read.items} />
+            </div>
           ) : groups.length === 0 ? (
             <AeEmptyState
               icon={<SearchIcon />}
@@ -136,7 +132,7 @@ export function HomeCapabilityResults({
               action={
                 <AeSiteButton asChild variant="outlined">
                   <Link to="/market" search={{ window: "30d" }}>
-                    Browse Operations
+                    Browse Tools
                   </Link>
                 </AeSiteButton>
               }
@@ -144,42 +140,17 @@ export function HomeCapabilityResults({
           ) : (
             <div className="grid gap-section">
               <AeSiteBody muted>{HOME.catalogBody}</AeSiteBody>
-              <AeSiteEntrance>
-                <ItemGroup className="grid gap-related sm:grid-cols-2">
-                  {groups.map((group) => (
-                    <li key={group.capabilityId}>
-                      <AeCapabilityTile group={group} window="30d" />
-                    </li>
-                  ))}
-                </ItemGroup>
-              </AeSiteEntrance>
+              <ItemGroup className="grid gap-related sm:grid-cols-2">
+                {groups.map((group) => (
+                  <li key={group.capabilityId}>
+                    <AeCapabilityTile group={group} window="30d" />
+                  </li>
+                ))}
+              </ItemGroup>
             </div>
           )}
         </AeSiteStack>
       </div>
     </AeSiteSection>
-  );
-}
-
-function HomeClose() {
-  return (
-    <AeSiteSignoff
-      heading={AGENT_INSTRUCTION.heading}
-      headingId="home-close"
-      body={HOME.closeBody}
-    >
-      <AeSiteButton asChild>
-        <Link to="/market" search={{ window: "30d" }}>Browse Operations</Link>
-      </AeSiteButton>
-      <AeSiteButton asChild variant="outlined">
-        <Link to={BUSINESS_DOOR.href}>{BUSINESS_DOOR.cta}</Link>
-      </AeSiteButton>
-      <a
-        href="/about"
-        className="inline-flex min-h-touch items-center underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-      >
-        {HOME.aboutLink}
-      </a>
-    </AeSiteSignoff>
   );
 }

@@ -26,18 +26,18 @@ type RouteHandlers = Partial<Record<Method, RouteHandler>>
 type RouteCase = {
   name: string
   route: unknown
-  allowed: Method
+  allowed: readonly Method[]
   params?: Record<string, string>
 }
 type RouteLike = { options: { server?: { handlers?: unknown } } }
 
 const request = new Request('https://ae.example/public-route')
 const routeCases: RouteCase[] = [
-  { name: 'business UCP', route: UcpRoute, allowed: 'GET', params: { slug: 'demo' } },
-  { name: 'SKILL.md', route: SkillRoute, allowed: 'GET' },
-  { name: 'site UCP', route: SiteUcpRoute, allowed: 'GET' },
-  { name: 'llms.txt', route: LlmsRoute, allowed: 'GET' },
-  { name: 'robots.txt', route: RobotsRoute, allowed: 'GET' },
+  { name: 'business UCP', route: UcpRoute, allowed: ['GET'], params: { slug: 'demo' } },
+  { name: 'SKILL.md', route: SkillRoute, allowed: ['GET', 'HEAD'] },
+  { name: 'site UCP', route: SiteUcpRoute, allowed: ['GET', 'HEAD'] },
+  { name: 'llms.txt', route: LlmsRoute, allowed: ['GET', 'HEAD'] },
+  { name: 'robots.txt', route: RobotsRoute, allowed: ['GET'] },
 ]
 
 function routeHandlers(route: unknown): RouteHandlers {
@@ -47,15 +47,16 @@ function routeHandlers(route: unknown): RouteHandlers {
   return handlers as RouteHandlers
 }
 
-async function assertMethodNotAllowed(response: Response, allowed: Method): Promise<void> {
+async function assertMethodNotAllowed(response: Response, allowed: readonly Method[]): Promise<void> {
+  const allowedText = allowed.join(', ')
   expect(response.status).toBe(405)
   expect(response.headers.get('content-type')).toBe('application/problem+json')
-  expect(response.headers.get('allow')).toBe(allowed)
+  expect(response.headers.get('allow')).toBe(allowedText)
   await expect(response.json()).resolves.toMatchObject({
     status: 405,
     kind: 'METHOD_NOT_ALLOWED',
     code: 'method_not_allowed',
-    detail: `Only ${allowed} are supported by this route.`,
+    detail: `Only ${allowedText} ${allowed.length === 1 ? 'is' : 'are'} supported by this route.`,
   })
 }
 
@@ -71,7 +72,7 @@ describe('public route method contracts', () => {
 
     for (const routeCase of routeCases) {
       const handlers = routeHandlers(routeCase.route)
-      const handler = handlers[routeCase.allowed]
+      const handler = handlers.GET
       if (handler === undefined) throw new Error(`${routeCase.name} allowed handler missing`)
       const response = await handler({ request, params: routeCase.params ?? {} })
       expect(response.status, routeCase.name).toBe(expectedStatus[routeCase.name])
@@ -87,7 +88,7 @@ describe('public route method contracts', () => {
     for (const routeCase of routeCases) {
       const handlers = routeHandlers(routeCase.route)
       for (const method of methods) {
-        if (method === routeCase.allowed) continue
+        if (routeCase.allowed.includes(method)) continue
         const handler = handlers[method]
         if (handler === undefined) throw new Error(`${routeCase.name} missing explicit ${method} handler`)
         const response = await handler({ request, params: routeCase.params ?? {} })

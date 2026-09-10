@@ -1,9 +1,12 @@
-/** Field-backed AECON mark for operator and site chrome (128px derivative of the source lockup). */
-export const AECON_MARK_SRC = '/brand/aecon/mark-128.png'
+/** Approved aecon.ai assets, shared from the local marketing website. */
+export const AECON_MARK_SRC = '/brand/aecon-symbol-forest-compact.svg'
+export const AECON_DARK_MARK_SRC = '/brand/aecon-symbol-chalk-gold-compact.svg'
+export const AECON_MOBILE_LOCKUP_SRC = '/brand/aecon-horizontal-light.svg'
+export const AECON_MARKETING_URL = 'https://aecon.ai'
 
 export const aeconMarkClassName = {
-  light: 'size-8 shrink-0 rounded-sm object-cover outline outline-1 outline-black/10',
-  dark: 'size-8 shrink-0 rounded-sm object-cover outline outline-1 outline-white/10',
-  chat: 'size-7 shrink-0 rounded-sm object-cover outline outline-1 outline-black/10',
-  about: 'size-20 shrink-0 rounded-sm object-cover outline outline-1 outline-black/10',
+  light: 'size-9 shrink-0 object-contain',
+  dark: 'size-9 shrink-0 object-contain',
+  chat: 'size-7 shrink-0 object-contain',
+  about: 'size-20 shrink-0 object-contain',
 } as const

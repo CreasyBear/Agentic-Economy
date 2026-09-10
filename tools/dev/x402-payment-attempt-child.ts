@@ -1,15 +1,15 @@
-import { createDevelopmentFileX402PaymentAttemptPort } from './fixtures/action-invocation/development-file-x402-payment-attempt-port'
+import { createDevelopmentFileX402PaymentAttemptPort } from './fixtures/action-execution/development-file-x402-payment-attempt-port'
 import type {
   X402PaymentAttempt,
   X402PaymentAuthorizationEvent,
-} from '../../src/modules/action-invocation/x402-payment-attempt'
+} from '../../src/modules/action-execution/x402-payment-attempt'
 
 const [command, filePath, state = 'prepared'] = process.argv.slice(2)
 if (filePath === undefined) throw new Error('payment_state_path_required')
 
 const port = createDevelopmentFileX402PaymentAttemptPort(filePath)
 const event: X402PaymentAuthorizationEvent = {
-  invocationRef: 'invocation:child',
+  executionRef: 'invocation:child',
   attemptRef: 'attempt:child',
   effectGeneration: 1,
   operationKey: 'operation:child',
@@ -21,7 +21,7 @@ const event: X402PaymentAuthorizationEvent = {
 }
 const attempt: X402PaymentAttempt = {
   paymentIdentifier: 'operation:child',
-  invocationRef: event.invocationRef,
+  executionRef: event.executionRef,
   attemptRef: event.attemptRef,
   effectGeneration: event.effectGeneration,
   operationKey: event.operationKey,
@@ -32,7 +32,7 @@ const attempt: X402PaymentAttempt = {
   payTo: '0x0000000000000000000000000000000000000001',
   amount: { currency: 'USDC', units: '37', exponent: 2 },
   providerEndpoint: 'https://provider.invalid/paid',
-  operationRevision: 'sha256:revision',
+  toolVersion: 'sha256:revision',
   authorizationDigest: event.authorizationDigest!,
   custodyRef: `sha256:${'a'.repeat(64)}`,
   state: state as X402PaymentAttempt['state'],

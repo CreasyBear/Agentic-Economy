@@ -23,6 +23,11 @@ type AePublicRecordPageProps = AePublicPageHeader & {
   introRole?: 'status' | 'alert'
 }
 
+type AePublicWorkspacePageProps = AePublicPageHeader & {
+  kind: 'workspace'
+  children: ReactNode
+}
+
 /**
  * The public page seam. Routes import this, not `AePublicShell`.
  *
@@ -31,7 +36,19 @@ type AePublicRecordPageProps = AePublicPageHeader & {
  * - `tool` / `document`: legal, 404, operation detail — the shared
  *   `AePageHeader` so they cannot invent a third intro.
  */
-export function AePublicPage(props: AePublicEditorialPageProps | AePublicRecordPageProps) {
+export function AePublicPage(
+  props: AePublicEditorialPageProps | AePublicRecordPageProps | AePublicWorkspacePageProps,
+) {
+  if (props.kind === 'workspace') {
+    const { children, kind: _kind, ...header } = props
+    return (
+      <AePublicShell mode="workspace">
+        <AePageHeader {...header} variant="workspace" />
+        {children}
+      </AePublicShell>
+    )
+  }
+
   if (props.kind === 'tool' || props.kind === 'document') {
     const { children, kind: _kind, introRole, ...header } = props
     const intro = <AePageHeader {...header} />

@@ -1,217 +1,144 @@
-import { useEffect, useState } from 'react'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Button } from '@/components/ui/button'
-import { Label } from '@/components/ui/label'
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
-import { createFileRoute } from '@tanstack/react-router'
+import { Link, createFileRoute } from '@tanstack/react-router'
 import { z } from 'zod'
 
+import { AeAgentAccessAuthorizeForm } from '@/components/ae/agent-access/AeAgentAccessAuthorizeForm'
 import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
-import { AeSection, AeSettingsStack } from '@/components/ae/layout/AeSection'
-import { AeFactList } from '@/components/ae/data/AeFactList'
-import { operatorRouteOptions } from '@/lib/operator/route-options'
-
-type PublicAuthorityMode = 'inspect_only' | 'approve_each' | 'bounded_mandate'
-
-const authorityOptions = [
-  {
-    value: 'inspect_only',
-    label: 'Browse only',
-    description: 'Discover, compare, and run free read-only operations.',
-  },
-  {
-    value: 'approve_each',
-    label: 'Ask each time',
-    description: 'Paid or consequential work comes back to you first.',
-  },
-  {
-    value: 'bounded_mandate',
-    label: 'Work within limits',
-    description: 'Paid calls up to $1 each, $5 a day, $20 a month.',
-  },
-] as const
-
-function canSelectAuthority(value: PublicAuthorityMode, ceiling: string | undefined): boolean {
-  if (value === 'inspect_only') return true
-  if (value === 'approve_each') return ceiling !== 'inspect_only'
-  return ceiling === 'bounded_mandate'
-}
-
-function readConsentDetails(html: string): Readonly<{ grantRef?: string; clientName?: string; mode?: string; accessProfile?: 'market' | 'supplier' }> {
-  const document = new DOMParser().parseFromString(html, 'text/html')
-  const consent = document.querySelector<HTMLElement>('[data-ae-consent]')
-  const grantRef = consent?.dataset.grantRef
-  const clientName = consent?.dataset.clientName
-  const mode = consent?.dataset.authorityMode
-  const accessProfile = consent?.dataset.accessProfile
-  return {
-    ...(grantRef === undefined || grantRef.length === 0 ? {} : { grantRef }),
-    ...(clientName === undefined || clientName.length === 0 ? {} : { clientName }),
-    ...(mode === undefined || mode.length === 0 ? {} : { mode }),
-    ...(accessProfile === 'market' || accessProfile === 'supplier' ? { accessProfile } : {}),
-  }
-}
-
+import {
+  OperatorRouteError,
+  OperatorRouteNotFound,
+  OperatorRoutePending,
+} from '@/components/ae/layout/AeOperatorRouteStates'
+import { AeSettingsStack } from '@/components/ae/layout/AeSection'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Button } from '@/components/ui/button'
+import { readAgentAccessConsentServer } from '@/lib/server/agent-access-consent.functions'
+import { readAgentConsentDetails } from '@/modules/agent-access/consent-read-model'
 
 export const Route = createFileRoute('/_operator/agent-access/authorize')({
-  ...operatorRouteOptions,
-  validateSearch: z.object({ user_code: z.string().trim().min(3).max(32).optional() }),
+  validateSearch: z.object({
+    user_code: z.string().trim().min(3).max(32).optional(),
+    grant_ref: z.string().trim().min(3).max(160).optional(),
+    state: z.string().max(2_048).optional(),
+  }),
+  loaderDeps: ({ search }) => ({
+    userCode: search.user_code,
+    grantRef: search.grant_ref,
+    state: search.state,
+  }),
+  ssr: false,
+  loader: async ({ deps }) => {
+    const locator = deps.userCode !== undefined && deps.grantRef === undefined
+      ? { kind: 'user_code' as const, value: deps.userCode }
+      : deps.grantRef !== undefined && deps.userCode === undefined
+        ? { kind: 'grant_ref' as const, value: deps.grantRef }
+        : undefined
+    if (locator === undefined) return { kind: 'missing' as const }
+    const response = await readAgentAccessConsentServer({ data: {
+      ...(deps.userCode === undefined ? {} : { userCode: deps.userCode }),
+      ...(deps.grantRef === undefined ? {} : { grantRef: deps.grantRef }),
+    } })
+    if (response.status < 200 || response.status >= 300) throw new Error('authorization_unavailable')
+    const details = readAgentConsentDetails(response.html)
+    if (details.state === 'outcome_unknown' && details.grantRef !== undefined) {
+      return { kind: 'outcome_unknown' as const, grantRef: details.grantRef }
+    }
+    if (details.state === 'succeeded' && details.grantRef !== undefined) {
+      return { kind: 'succeeded' as const, grantRef: details.grantRef }
+    }
+    if (details.grantRef === undefined
+      || details.grantRevision === undefined
+      || details.flow === undefined
+      || details.clientName === undefined
+      || details.mode === undefined
+      || details.environment === undefined
+      || details.toolAccess === undefined
+      || details.toolRefs === undefined
+      || details.expiresInSeconds === undefined
+      || details.accessSummary === undefined) {
+      throw new Error('authorization_details_missing')
+    }
+    return {
+      kind: 'ready' as const,
+      locator,
+      ...(deps.state === undefined ? {} : { oauthState: deps.state }),
+      details: {
+        ...details,
+        grantRef: details.grantRef,
+        grantRevision: details.grantRevision,
+        flow: details.flow,
+        clientName: details.clientName,
+        mode: details.mode,
+        environment: details.environment,
+        toolAccess: details.toolAccess,
+        toolRefs: details.toolRefs,
+        expiresInSeconds: details.expiresInSeconds,
+        accessSummary: details.accessSummary,
+      },
+    }
+  },
   head: () => ({ meta: [
     { title: 'Review agent access | Agentic Economy' },
     { name: 'robots', content: 'noindex' },
   ] }),
+  pendingComponent: OperatorRoutePending,
+  errorComponent: OperatorRouteError,
+  notFoundComponent: OperatorRouteNotFound,
   component: AgentAccessAuthorizeRoute,
 })
 
 function AgentAccessAuthorizeRoute() {
-  const { user_code: userCode } = Route.useSearch()
-  const [status, setStatus] = useState<'idle' | 'approved' | 'denied' | 'error'>('idle')
-  const [pending, setPending] = useState(false)
-  const [consentLoading, setConsentLoading] = useState(userCode !== undefined)
-  const [clientName, setClientName] = useState<string>()
-  const [mode, setMode] = useState<string>()
-  const [accessProfile, setAccessProfile] = useState<'market' | 'supplier'>('market')
-  const [selectedMode, setSelectedMode] = useState<PublicAuthorityMode>('approve_each')
-  const [grantRef, setGrantRef] = useState<string>()
-
-  useEffect(() => {
-    if (userCode === undefined) {
-      setConsentLoading(false)
-      setClientName(undefined)
-      setMode(undefined)
-      setAccessProfile('market')
-      setGrantRef(undefined)
-      return
-    }
-
-    const controller = new AbortController()
-    setConsentLoading(true)
-    setStatus('idle')
-    setClientName(undefined)
-    setMode(undefined)
-    void fetch(`/oauth/authorize?user_code=${encodeURIComponent(userCode)}`, { credentials: 'same-origin', signal: controller.signal })
-      .then(async (response) => {
-        if (!response.ok) throw new Error('authorization_unavailable')
-        const html = await response.text()
-        const details = readConsentDetails(html)
-        if (details.grantRef === undefined || details.clientName === undefined || details.mode === undefined) {
-          throw new Error('authorization_details_missing')
-        }
-        setGrantRef(details.grantRef)
-        setClientName(details.clientName)
-        setMode(details.mode)
-        setAccessProfile(details.accessProfile ?? 'market')
-        setSelectedMode(
-          details.mode === 'inspect_only'
-            ? 'inspect_only'
-            : details.mode === 'bounded_mandate'
-              ? 'bounded_mandate'
-              : 'approve_each',
-        )
-      })
-      .catch((error: unknown) => {
-        if (error instanceof Error && error.name === 'AbortError') return
-        setStatus('error')
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setConsentLoading(false)
-      })
-    return () => controller.abort()
-  }, [userCode])
-
-  async function decide(decision: 'approve' | 'deny') {
-    if (grantRef === undefined) return
-    setPending(true)
-    try {
-      const response = await fetch('/oauth/authorize', {
-        method: 'POST',
-        credentials: 'same-origin',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({ grant_ref: grantRef, decision, authority_mode: selectedMode }).toString(),
-      })
-      setStatus(response.ok ? (decision === 'approve' ? 'approved' : 'denied') : 'error')
-    } catch {
-      setStatus('error')
-    } finally {
-      setPending(false)
-    }
+  const loaded = Route.useLoaderData()
+  if (loaded.kind === 'ready') {
+    return <AeAgentAccessAuthorizeForm
+      key={loaded.details.grantRef}
+      locator={loaded.locator}
+      {...(loaded.oauthState === undefined ? {} : { oauthState: loaded.oauthState })}
+      details={loaded.details}
+    />
   }
-
-  const consentReady = grantRef !== undefined && clientName !== undefined && mode !== undefined
-
+  if (loaded.kind === 'outcome_unknown') {
+    return (
+      <AeOperatorShell operatorRole="owner" title="Review agent access" description="Confirm the current result before taking another action." currentPath="/agent-access">
+        <AeSettingsStack>
+          <Alert variant="destructive">
+            <AlertTitle>Check the current access status</AlertTitle>
+            <AlertDescription>
+              <p>The approval may have completed. Do not submit it again.</p>
+              <p className="mt-2 break-all">Request reference: {loaded.grantRef}</p>
+              <Button asChild variant="secondary" className="mt-4 min-h-touch">
+                <Link to="/agent-access">Open Agents</Link>
+              </Button>
+            </AlertDescription>
+          </Alert>
+        </AeSettingsStack>
+      </AeOperatorShell>
+    )
+  }
+  if (loaded.kind === 'succeeded') {
+    return (
+      <AeOperatorShell operatorRole="owner" title="Review agent access" description="This request has already completed." currentPath="/agent-access">
+        <AeSettingsStack>
+          <Alert>
+            <AlertTitle>Access approved</AlertTitle>
+            <AlertDescription>
+              <p>This approval has completed. Open Agents for the current credential status.</p>
+              <p className="mt-2 break-all">Request reference: {loaded.grantRef}</p>
+              <Button asChild variant="secondary" className="mt-4 min-h-touch">
+                <Link to="/agent-access">Open Agents</Link>
+              </Button>
+            </AlertDescription>
+          </Alert>
+        </AeSettingsStack>
+      </AeOperatorShell>
+    )
+  }
   return (
     <AeOperatorShell operatorRole="owner" title="Review agent access" description="Choose what this agent may do, then approve or decline." currentPath="/agent-access">
       <AeSettingsStack>
-        {userCode === undefined ? (
-          <Alert variant="destructive"><AlertTitle>This access request is missing a code</AlertTitle><AlertDescription>Start a new request from your agent.</AlertDescription></Alert>
-        ) : status !== 'error' && (consentLoading || !consentReady) ? (
-          <Alert aria-live="polite"><AlertTitle>Loading access request</AlertTitle><AlertDescription>Retrieving the agent name and exact permission before you decide.</AlertDescription></Alert>
-        ) : status === 'idle' ? (
-          <>
-            <AeSection
-              title={clientName === undefined ? 'Connect your agent' : `Connect ${clientName}`}
-              description={accessProfile === 'supplier'
-                ? 'This separate credential can inspect and manage your supplier Operations.'
-                : 'How much may this agent do without asking you?'}
-            >
-              {accessProfile === 'supplier' ? (
-                <Alert>
-                  <AlertTitle>Supplier management</AlertTitle>
-                  <AlertDescription>May inspect lifecycle and earnings, publish, recheck, withdraw, and republish your Operations. It cannot spend buyer credit or manage unrelated account settings.</AlertDescription>
-                </Alert>
-              ) : <fieldset className="grid gap-3" disabled={pending}>
-                <legend className="sr-only">Authority</legend>
-                <RadioGroup
-                  aria-describedby="consent-expiry"
-                  value={selectedMode}
-                  onValueChange={(value) => setSelectedMode(value as PublicAuthorityMode)}
-                  className="grid gap-2"
-                >
-                  {authorityOptions.map((option) => {
-                    const disabled = !canSelectAuthority(option.value, mode)
-                    return (
-                      <Label
-                        key={option.value}
-                        htmlFor={`authority-${option.value}`}
-                        className="grid min-h-touch cursor-pointer grid-cols-[auto_minmax(0,1fr)] items-start gap-3 rounded-md border border-border px-3 py-3 has-[[data-state=checked]]:border-foreground"
-                      >
-                        <RadioGroupItem
-                          id={`authority-${option.value}`}
-                          value={option.value}
-                          disabled={disabled}
-                          className="mt-1"
-                        />
-                        <span className="grid gap-1">
-                          <span className="font-medium text-foreground">{option.label}</span>
-                          <span className="text-sm font-normal text-muted-foreground">
-                            {disabled ? 'This agent requested narrower access.' : option.description}
-                          </span>
-                        </span>
-                      </Label>
-                    )
-                  })}
-                </RadioGroup>
-              </fieldset>}
-              <AeFactList
-                facts={[
-                  { label: 'Application', value: `${clientName ?? 'Your agent'} · Development · Standard rate limits` },
-                  { label: 'Expiry', value: 'Access expires in seven days. You can revoke it at any time from Keys.' },
-                ]}
-              />
-              <p id="consent-expiry" className="sr-only">Access expires in seven days. You can revoke it at any time from Keys.</p>
-            </AeSection>
-            <div className="flex flex-wrap gap-3">
-              <Button aria-describedby="consent-expiry" variant="default" onClick={() => void decide('approve')} disabled={pending}>{pending ? 'Approving…' : 'Approve access'}</Button>
-              <Button aria-describedby="consent-expiry" variant="secondary" onClick={() => void decide('deny')} disabled={pending}>{pending ? 'Working…' : 'Decline'}</Button>
-            </div>
-          </>
-        ) : status === 'approved' ? (
-          <Alert><AlertTitle>Access approved — return to your agent</AlertTitle><AlertDescription>{accessProfile === 'supplier' ? 'AE delivers the separate supplier key to that agent once. It can now manage the approved supplier lifecycle.' : 'AE delivers the caller key to that agent once. It can now finish setup; supplier authority is not included.'}</AlertDescription></Alert>
-        ) : status === 'denied' ? (
-          <Alert><AlertTitle>Access not approved</AlertTitle><AlertDescription>Your agent can start a new request if you want to try again.</AlertDescription></Alert>
-        ) : (
-          <Alert variant="destructive"><AlertTitle>Access request unavailable</AlertTitle><AlertDescription>It may have expired. Start a new request from your agent.</AlertDescription></Alert>
-        )}
+        <Alert variant="destructive">
+          <AlertTitle>This access request is missing a code</AlertTitle>
+          <AlertDescription>Start a new request from your agent.</AlertDescription>
+        </Alert>
       </AeSettingsStack>
     </AeOperatorShell>
   )

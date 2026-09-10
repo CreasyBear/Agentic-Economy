@@ -3,7 +3,6 @@ import type { Infer } from 'convex/values'
 
 import { internal } from './_generated/api'
 import type { ActionCtx } from './_generated/server'
-import { externalSpendMutationResultValue } from './moneyExternalSpend'
 import { prepareX402PaymentAuthorizationReturns } from './moneyX402PaymentAuthorization'
 import {
   readX402PaymentAuthorizationByDigestReturns,
@@ -178,7 +177,6 @@ export const abortProviderConsequenceJournal = httpActionGeneric(async (ctx, req
 })
 
 const X402_OPERATIONS = new Set([
-  'reserve_external_spend',
   'prepare_authorization',
   'read_authorization',
   'read_authorization_by_digest',
@@ -189,7 +187,6 @@ const X402_OPERATIONS = new Set([
 
 type X402Operation = typeof X402_OPERATIONS extends Set<infer Operation> ? Operation : never
 type X402OperationResult =
-  | Infer<typeof externalSpendMutationResultValue>
   | Infer<typeof prepareX402PaymentAuthorizationReturns>
   | Infer<typeof readX402PaymentAuthorizationReturns>
   | Infer<typeof readX402PaymentAuthorizationByDigestReturns>
@@ -202,8 +199,6 @@ async function runX402Operation(
 ): Promise<X402OperationResult> {
   const checkedArgs = args as never
   switch (operation) {
-    case 'reserve_external_spend':
-      return await ctx.runMutation(internal.moneyLedger.reserveExternalInvocationSpend, checkedArgs)
     case 'prepare_authorization':
       return await ctx.runMutation(internal.moneyX402PaymentAttempts.prepareX402PaymentAuthorization, checkedArgs)
     case 'read_authorization':
@@ -223,8 +218,8 @@ function canonicalX402Args(
   operation: X402Operation,
   supplied: Record<string, unknown>,
   authority: Readonly<{
-    invocationRef: string
-    operationRef: string
+    callRef: string
+    toolRef: string
     attemptRef: string
     effectGeneration: number
     credentialRef: string
@@ -236,29 +231,13 @@ function canonicalX402Args(
     inputDigest: string
     providerRef: string
   }>,
+  reservationRef?: string,
 ): Record<string, unknown> {
-  if (operation === 'reserve_external_spend') {
-    return {
-      principalId: authority.principalId,
-      credentialId: authority.credentialId,
-      grantRef: authority.grantRef,
-      grantGeneration: authority.grantGeneration,
-      environment: authority.environment,
-      invocationRef: authority.invocationRef,
-      attemptRef: authority.attemptRef,
-      effectGeneration: authority.effectGeneration,
-      operationRef: authority.operationRef,
-      providerRef: authority.providerRef,
-      paymentIdentifier: supplied.paymentIdentifier,
-      challengeDigest: supplied.challengeDigest,
-      amount: supplied.amount,
-      observedAt: Date.now(),
-    }
-  }
   if (operation === 'prepare_authorization') {
     const {
       dispatchRef: _dispatchRef,
       operationRef: _operationRef,
+      toolRef: _toolRef,
       inputDigest: _inputDigest,
       attemptRef: _attemptRef,
       effectGeneration: _effectGeneration,
@@ -266,10 +245,12 @@ function canonicalX402Args(
       custodyBudgetRef: _custodyBudgetRef,
       custodyGeneration: _custodyGeneration,
       custodyDailyMaximumUnits: _custodyDailyMaximumUnits,
+      reservationRef: _reservationRef,
       ...material
     } = supplied
     void _dispatchRef
     void _operationRef
+    void _toolRef
     void _inputDigest
     void _attemptRef
     void _effectGeneration
@@ -277,14 +258,16 @@ function canonicalX402Args(
     void _custodyBudgetRef
     void _custodyGeneration
     void _custodyDailyMaximumUnits
+    void _reservationRef
     return {
       ...material,
-      dispatchRef: authority.invocationRef,
-      operationRef: authority.operationRef,
+      dispatchRef: authority.callRef,
+      toolRef: authority.toolRef,
       inputDigest: authority.inputDigest,
       attemptRef: authority.attemptRef,
       effectGeneration: authority.effectGeneration,
       credentialRef: authority.credentialRef,
+      ...(reservationRef === undefined ? {} : { reservationRef }),
     }
   }
   return supplied
@@ -308,7 +291,18 @@ export const providerConsequenceX402Rpc = httpActionGeneric(async (ctx, request)
       { ticketRef: body.ticketRef, journalTokenDigest: digest, operation, args: body.args as never },
     )
     if (authorization.kind !== 'authorized') return json({ kind: 'unavailable' }, 409)
-    const args = canonicalX402Args(operation, body.args, authorization)
+    let reservationRef: string | undefined
+    if (operation === 'prepare_authorization') {
+      const reservation = await ctx.runQuery(
+        internal.moneyManagedCallLifecycle.readReservation,
+        { callRef: authorization.callRef },
+      )
+      if (reservation === null || reservation.state !== 'reserved') {
+        return json({ kind: 'result', value: null })
+      }
+      reservationRef = reservation.treasuryReservationRef ?? reservation.reservationRef
+    }
+    const args = canonicalX402Args(operation, body.args, authorization, reservationRef)
     return json({ kind: 'result', value: await runX402Operation(ctx, operation, args) })
   } catch {
     return json({ kind: 'unavailable' }, 503)

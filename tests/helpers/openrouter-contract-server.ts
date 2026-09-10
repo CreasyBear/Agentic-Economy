@@ -3,7 +3,12 @@ import type { AddressInfo } from 'node:net'
 import { json } from 'node:stream/consumers'
 
 export type OpenRouterContractRequest = {
-  messages: { role: string; content: string; tool_call_id?: string }[]
+  messages: {
+    role: string
+    content: unknown
+    tool_call_id?: string
+    tool_calls?: unknown
+  }[]
   tools?: { function: { name: string } }[]
 }
 
@@ -74,6 +79,33 @@ export function openRouterProseResponse(
     choices: [{
       finish_reason: 'stop',
       message: { role: 'assistant', content: JSON.stringify(prose) },
+    }],
+    usage: { prompt_tokens: 140, completion_tokens: 42, total_tokens: 182 },
+  }
+}
+
+export function openRouterToolCallResponse(
+  toolName: string,
+  input: unknown,
+  options: { id?: string; model?: string; toolCallId?: string } = {},
+): unknown {
+  return {
+    id: options.id ?? 'chatcmpl-tool-turn',
+    model: options.model ?? 'test-model',
+    choices: [{
+      finish_reason: 'tool_calls',
+      message: {
+        role: 'assistant',
+        content: null,
+        tool_calls: [{
+          id: options.toolCallId ?? 'tool-call-1',
+          type: 'function',
+          function: {
+            name: toolName,
+            arguments: JSON.stringify(input),
+          },
+        }],
+      },
     }],
     usage: { prompt_tokens: 140, completion_tokens: 42, total_tokens: 182 },
   }

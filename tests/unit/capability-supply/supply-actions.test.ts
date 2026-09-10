@@ -1,6 +1,5 @@
 import type * as ConvexSourceModule from '@/lib/server/convex-source'
 import type * as SourceWriteAdmissionModule from '@/lib/server/source-write-admission'
-import type * as PublicationModule from '@/modules/capability-supply/internal/publication'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
@@ -8,9 +7,9 @@ const mocks = vi.hoisted(() => ({
   sourceMutation: vi.fn((name: string) => ({ name })),
   sourceWriteAdmissionFromRequest: vi.fn(),
   sourceWriteRequestFromAdmission: vi.fn(),
-  ownerPublicationImport: vi.fn(),
-  ownerPublicationWithCatalogOrigin: vi.fn(),
-  preparePublicationDraft: vi.fn(),
+  prepareSupplyPublicationV2: vi.fn(),
+  inspectX402SellerEndpoint: vi.fn(),
+  verifyMessage: vi.fn(),
 }))
 
 vi.mock('@/lib/server/convex-source', async (importOriginal) => ({
@@ -23,24 +22,33 @@ vi.mock('@/lib/server/source-write-admission', async (importOriginal) => ({
   sourceWriteAdmissionFromRequest: mocks.sourceWriteAdmissionFromRequest,
   sourceWriteRequestFromAdmission: mocks.sourceWriteRequestFromAdmission,
 }))
-vi.mock('@/modules/capability-supply/supply-funnel.functions', () => ({
-  ownerPublicationImport: mocks.ownerPublicationImport,
-  ownerPublicationWithCatalogOrigin: mocks.ownerPublicationWithCatalogOrigin,
-}))
-vi.mock('@/modules/capability-supply/internal/publication', async (importOriginal) => ({
-  ...(await importOriginal<typeof PublicationModule>()),
-  preparePublicationDraft: mocks.preparePublicationDraft,
+vi.mock('@/modules/capability-supply/supply-publication-v2', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/modules/capability-supply/supply-publication-v2')>()),
+  prepareSupplyPublicationV2: mocks.prepareSupplyPublicationV2,
 }))
 vi.mock('@/modules/capability-supply/internal/schema-deref', () => ({
   dereferenceOpenApiSchema: vi.fn(),
 }))
+vi.mock('@/modules/capability-supply/internal/x402-seller-endpoint-inspector', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/modules/capability-supply/internal/x402-seller-endpoint-inspector')>()),
+  inspectX402SellerEndpoint: mocks.inspectX402SellerEndpoint,
+}))
+vi.mock('viem', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('viem')>()),
+  verifyMessage: mocks.verifyMessage,
+}))
 
 import {
   createSupplyManagementService,
+  supplyConnectionConnectInputSchema,
   type SupplyPublishInput,
   type SupplyWithdrawInput,
 } from '@/modules/capability-supply/supply-actions'
 import type { AgentAccessPrincipal } from '@/modules/agent-access/agent-access'
+import {
+  x402SellerClaimDigest,
+  x402SellerClaimMessage,
+} from '@/modules/capability-supply/public'
 
 const principal: AgentAccessPrincipal = {
   principalId: 'principal:supply-actions',
@@ -49,24 +57,7 @@ const principal: AgentAccessPrincipal = {
   applicationRef: 'agentic-economy',
   environment: 'production',
   scopes: ['market_supply:manage'],
-  authorityMode: 'full_yolo',
-}
-const validSource = {
-  kind: 'openapi_http',
-  document: { openapi: '3.0.0', info: { title: 'Owner API', version: '1' } },
-  operation: { path: '/lookup', method: 'get' },
-  contract: { capabilityId: 'owner.lookup', version: 1 },
-  commercial: {
-    offering: {
-      presentation: {
-        price: {
-          kind: 'fixed',
-          amount: { currency: 'USD', units: '10', exponent: 2 },
-        },
-      },
-    },
-  },
-  evidenceRefs: ['evidence:owner-api'],
+  authorityMode: 'unrestricted_test_only',
 }
 const preparedMaterial = {
   sourceKind: 'openapi_http',
@@ -77,45 +68,90 @@ const preparedMaterial = {
   marker: 'prepared',
 }
 const publishInput: SupplyPublishInput = {
-  version: 'supply-publication:v1',
-  businessId: 'business:supply-actions',
+  businessRef: 'business:supply-actions',
+  source: { kind: 'openapi', definitionUrl: 'https://provider.example/openapi.yaml', environment: 'production' },
+  candidateRef: `sha256:${'1'.repeat(64)}`,
+  expectedSourceDigest: `sha256:${'2'.repeat(64)}`,
+  presentation: { name: 'Reference lookup', description: 'Looks up one reference.', category: 'Research' },
+  consequences: {
+    effects: [{ class: 'data_release', authority: 'explicit', reversibility: 'irreversible' }],
+    dataUse: [{ inputPointer: '/query', classification: 'public', phase: 'execution', purposes: ['lookup'] }],
+    evidence: [{ outputPointer: '/result', purpose: 'completion' }],
+  },
+  pricing: { kind: 'free' },
+  validationInput: { query: 'example' },
+  environment: 'production',
+  idempotencyKey: 'idempotency:supply-actions',
+  attestation: { authorisedToPublish: true, informationAccurate: true, publishAfterSuccessfulValidation: true },
+}
+const withdrawInput: SupplyWithdrawInput = {
+  businessId: publishInput.businessRef,
   offeringRef: 'offering:one',
   offeringRevision: 1,
   offeringSourceHash: 'source-hash:one',
-  source: validSource as SupplyPublishInput['source'],
-  evidenceRefs: ['evidence:owner-api'],
-  idempotencyKey: 'idempotency:supply-actions',
-}
-const withdrawInput: SupplyWithdrawInput = {
-  businessId: publishInput.businessId,
-  offeringRef: publishInput.offeringRef,
-  offeringRevision: publishInput.offeringRevision,
-  offeringSourceHash: publishInput.offeringSourceHash,
   publicationRef: 'publication:one',
   publicationRevision: 1,
   idempotencyKey: 'idempotency:withdraw-supply-actions',
+}
+const sellerEndpoint = 'https://provider.example/x402'
+const sellerPayTo = '0x1111111111111111111111111111111111111111'
+const sellerObservationDigest = `sha256:${'c'.repeat(64)}`
+const sellerClaimSignature = `0x${'ab'.repeat(65)}`
+const sellerObservation = {
+  kind: 'observed' as const,
+  endpoint: { url: sellerEndpoint },
+  payment: {
+    selection: { kind: 'selected' as const, alternativeId: 'alternative:base-mainnet' },
+    accepts: [{
+      alternativeId: 'alternative:base-mainnet',
+      payTo: sellerPayTo,
+    }],
+  },
+  discovery: { kind: 'admitted' as const },
+  digest: sellerObservationDigest,
+}
+const connectedProjection = {
+  connectionRef: 'connection:x402:one',
+  businessId: 'business:supply-actions',
+  providerRef: 'provider:x402:provider.example',
+  providerAccountRef: `x402:${sellerEndpoint}`,
+  adapterId: 'x402-fetch:v2',
+  grantedScopes: [],
+  grantedResources: [sellerEndpoint],
+  authorityGeneration: 1,
+  authorityDigest: `sha256:${'d'.repeat(64)}`,
+  lifecycle: 'active' as const,
+  available: true,
+  credentialConfigured: false,
+  observedAt: 10,
+  reasonCode: null,
+  evidenceRefs: [`x402-endpoint-inspection:${sellerObservationDigest}`],
+  createdAt: 10,
+  updatedAt: 10,
 }
 
 function setHappyPublishResponses() {
   const readback = {
     kind: 'available',
     offerings: [
-      { offeringRef: 'offering:one', revision: 1, sourceHash: 'source-hash:one' },
+      { offeringRef: 'offering:one', revision: 1, sourceHash: 'source-hash:one', accessPaths: [{ accessPathRef: 'access:one', sourceHash: 'access-source:one' }] },
       { offeringRef: 'offering:two', revision: 1, sourceHash: 'source-hash:two' },
     ],
   }
-  mocks.ownerPublicationImport.mockReturnValue({
-    source: validSource,
-    sourceRevision: 'owner-api/2026-08-09',
-    pricingConfig: { version: 'pricing:v2' },
+  mocks.prepareSupplyPublicationV2.mockResolvedValue({
+    kind: 'prepared',
+    sourceRevision: `openapi:sha256:${'2'.repeat(64)}`,
+    sourceDigest: publishInput.expectedSourceDigest,
+    candidate: { candidateRef: publishInput.candidateRef },
+    sourceDescriptorJson: JSON.stringify(publishInput.source),
+    sourceSelectorJson: JSON.stringify({ serverUrl: 'https://provider.example/', path: '/lookup', method: 'get' }),
+    validationInputJson: JSON.stringify(publishInput.validationInput),
+    prepared: { prepared: preparedMaterial },
   })
-  mocks.ownerPublicationWithCatalogOrigin.mockImplementation((source: unknown) => ({
-    ...(source as Record<string, unknown>),
-    catalogOrigin: 'owner-catalog',
-  }))
-  mocks.preparePublicationDraft.mockResolvedValue({ kind: 'prepared', prepared: preparedMaterial })
   mocks.callPublicSourceMutation.mockImplementation(async (mutation: { name: string }) => {
     switch (mutation.name) {
+      case 'capabilitySupplyOwnerFunnel:saveAgentSupplyIntegrationDraft':
+        return { kind: 'saved', offeringRef: 'offering:one', accessPathRef: 'access:one', candidateRef: publishInput.candidateRef, sourceDigest: publishInput.expectedSourceDigest }
       case 'capabilitySupplyOwnerFunnel:readAgentOwnerSupplyFunnel':
         return readback
       case 'capabilitySupplyOwnerFunnel:reserveOwnerCapabilityPublication':
@@ -125,7 +161,7 @@ function setHappyPublishResponses() {
           kind: 'published',
           publicationRef: 'publication:one',
           publicationRevision: 1,
-          operationRef: 'operation:one',
+          toolRef: 'operation:one',
           lifecycle: { state: 'active', reasons: [] },
         }
       default:
@@ -138,9 +174,9 @@ beforeEach(() => {
   mocks.callPublicSourceMutation.mockReset()
   mocks.sourceWriteAdmissionFromRequest.mockReset()
   mocks.sourceWriteRequestFromAdmission.mockReset()
-  mocks.ownerPublicationImport.mockReset()
-  mocks.ownerPublicationWithCatalogOrigin.mockReset()
-  mocks.preparePublicationDraft.mockReset()
+  mocks.prepareSupplyPublicationV2.mockReset()
+  mocks.inspectX402SellerEndpoint.mockReset()
+  mocks.verifyMessage.mockReset()
   mocks.sourceWriteAdmissionFromRequest.mockImplementation(async ({ operationKey, correlationId }: { operationKey: string; correlationId: string }) => ({
     version: 'source-write:v2',
     operationKey,
@@ -153,73 +189,92 @@ beforeEach(() => {
 })
 
 describe('supply action runtime boundaries', () => {
-  it('projects one canonical lifecycle status without endpoint or provider authority material', async () => {
-    mocks.callPublicSourceMutation.mockResolvedValue({
-      kind: 'available',
-      businessId: 'business:supply-actions',
-      business: { name: 'Supplier', slug: 'supplier' },
-      offerings: [{
-        offeringRef: 'offering:one',
-        revision: 1,
-        name: 'Lookup',
-        summary: 'Look something up.',
-        status: 'published',
-        endpointUrl: 'https://private-provider.example/lookup',
-        authority: { kind: 'provider_connection', providerRef: 'provider:secret' },
-        admission: { state: 'admitted' },
-        publication: {
-          state: 'current',
-          publicationRef: 'publication:one',
-          publicationRevision: 1,
-          operationRef: 'operation:one',
-        },
-        lifecycle: { state: 'active', reasons: [] },
-        readiness: { outcome: 'healthy', observedAt: 10, validUntil: 20, evidenceRefs: [] },
-        live: { available: true },
-        currentStep: 'test',
-        stepStates: { describe: 'completed', admission: 'completed', readiness: 'completed', test: 'completed' },
-        accessPaths: [],
-      }],
-      callLog: [],
-      activityTruncated: false,
-      liquidity: { fillCount: 0, zeroCount: 0, depthSamples: 0, environment: 'production' },
-    })
+  it('separates the paginated Provider directory from one exact lifecycle status', async () => {
+    const projectedStatus = {
+      schemaVersion: 'provider_tools:v1',
+      businessRef: 'business:supply-actions',
+      providerRef: 'business:supply-actions',
+      toolRef: 'operation:one',
+      revision: 1,
+      state: 'Published',
+      reasonCodes: [],
+      observedAt: 20,
+      source: { kind: 'mcp' },
+      routeability: { available: true, reasonCodes: [] },
+      authority: { kind: 'connection', connectionRef: 'connection:one', providerRef: 'business:supply-actions' },
+      health: {
+        connection: 'connected',
+        validation: 'passed',
+        publication: 'published',
+        freshness: 'current',
+        delivery: { kind: 'observed', deliveredCount: 7, notDeliveredCount: 1, unknownCount: 2, sampleSize: 10, lastObservedAt: 19, windowStartAt: 1, windowEndAt: 20, provenance: 'canonical_call_receipts' },
+        usefulOutcome: { kind: 'observed', qualifiedUseCount: 6, lastObservedAt: 18, windowStartAt: 1, windowEndAt: 20, provenance: 'qualified_use_receipts' },
+        operationalConditions: [],
+      },
+    }
+    mocks.callPublicSourceMutation.mockImplementation(async (mutation: { name: string }) => mutation.name === 'capabilityProviderTools:listAgent'
+      ? { kind: 'available', page: [{ statusJson: JSON.stringify(projectedStatus) }], isDone: true, continueCursor: '' }
+      : { kind: 'available', statusJson: JSON.stringify(projectedStatus) })
     const service = createSupplyManagementService(new Request('https://agent.example/api'), '{}')
 
-    const result = await service.status({
-      input: { businessId: 'business:supply-actions', offeringRef: 'offering:one' },
+    const directory = await service.toolsList({
+      input: { businessRef: 'business:supply-actions', limit: 50 },
+      principal,
+      correlationId: 'list:one',
+    })
+    const status = await service.status({
+      input: { businessRef: 'business:supply-actions', toolRef: 'operation:one' },
       principal,
       correlationId: 'status:one',
     })
 
-    expect(result).toMatchObject({
+    expect(directory).toMatchObject({
       kind: 'available',
-      operations: [{
-        offeringRef: 'offering:one',
-        lifecycle: { state: 'active' },
-        readiness: { outcome: 'healthy' },
-        publication: { operationRef: 'operation:one' },
+      schemaVersion: 'provider_tools:v1',
+      businessRef: 'business:supply-actions',
+      page: [{
+        toolRef: 'operation:one',
+        state: 'Published',
       }],
+      isDone: true,
+      continueCursor: null,
     })
-    expect(JSON.stringify(result)).not.toContain('private-provider')
-    expect(JSON.stringify(result)).not.toContain('provider:secret')
+    expect(status).toMatchObject({
+      kind: 'available',
+      schemaVersion: 'provider_tools:v1',
+      businessRef: 'business:supply-actions',
+      status: {
+        toolRef: 'operation:one',
+        state: 'Published',
+        routeability: { available: true },
+        health: {
+          validation: 'passed',
+          freshness: 'current',
+          delivery: {
+            kind: 'observed',
+            deliveredCount: 7,
+            notDeliveredCount: 1,
+            unknownCount: 2,
+            sampleSize: 10,
+            windowStartAt: 1,
+            windowEndAt: 20,
+            provenance: 'canonical_call_receipts',
+          },
+          usefulOutcome: {
+            kind: 'observed',
+            qualifiedUseCount: 6,
+            windowStartAt: 1,
+            windowEndAt: 20,
+            provenance: 'qualified_use_receipts',
+          },
+        },
+      },
+    })
+    expect(JSON.stringify([directory, status])).not.toContain('private-provider')
+    expect(JSON.stringify([directory, status])).not.toContain('publication:one')
   })
 
-  it('refuses raw unknown apiKey material before any source mutation', async () => {
-    setHappyPublishResponses()
-    const service = createSupplyManagementService(new Request('https://agent.example/api'), '{}')
-    const result = await service.publish({
-      input: { ...publishInput, source: { ...validSource, apiKey: 'sk_live_unknown-field-secret' } },
-      principal,
-      correlationId: 'transport:raw-credential',
-    })
-
-    expect(result).toEqual({ kind: 'refused', reason: 'source_invalid' })
-    expect(mocks.callPublicSourceMutation).not.toHaveBeenCalled()
-    expect(mocks.sourceWriteAdmissionFromRequest).not.toHaveBeenCalled()
-  })
-
-  it('publishes prepared material without a source draft round-trip', async () => {
+  it('persists the selected native-source draft before submitting exact prepared material', async () => {
     setHappyPublishResponses()
     const service = createSupplyManagementService(new Request('https://agent.example/api'), '{}')
     await service.publish({ input: publishInput, principal, correlationId: 'transport:source-shape' })
@@ -233,13 +288,23 @@ describe('supply action runtime boundaries', () => {
       revision: 1,
       sourceHash: 'source-hash:one',
       runtimeEnvironment: 'production',
-      prepared: preparedMaterial,
+      prepared: expect.objectContaining({
+        ...preparedMaterial,
+        offering: expect.objectContaining({
+          origin: expect.objectContaining({
+            kind: 'catalog_offering',
+            offeringRef: 'offering:one',
+            declaredAccessPathRef: 'access:one',
+          }),
+        }),
+      }),
     })
     expect(publishCall?.[1]).not.toHaveProperty('sourceDraftRevision')
     expect(publishCall?.[1]).not.toHaveProperty('sourceDigest')
     expect(
       mocks.callPublicSourceMutation.mock.calls.map(([mutation]) => mutation.name),
     ).toEqual([
+      'capabilitySupplyOwnerFunnel:saveAgentSupplyIntegrationDraft',
       'capabilitySupplyOwnerFunnel:readAgentOwnerSupplyFunnel',
       'capabilitySupplyOwnerFunnel:reserveOwnerCapabilityPublication',
       'capabilitySupply:publishPreparedCapability',
@@ -278,16 +343,18 @@ describe('supply action runtime boundaries', () => {
         reservationCalls += 1
         return reservationCalls === 1 ? { kind: 'reserved' } : { kind: 'refused', reason: 'operation_key_conflict' }
       }
+      if (mutation.name === 'capabilitySupplyOwnerFunnel:saveAgentSupplyIntegrationDraft') {
+        return { kind: 'saved', offeringRef: 'offering:one', accessPathRef: 'access:one', candidateRef: publishInput.candidateRef, sourceDigest: publishInput.expectedSourceDigest }
+      }
       if (mutation.name === 'capabilitySupplyOwnerFunnel:readAgentOwnerSupplyFunnel') {
         return {
           kind: 'available',
           offerings: [
-            { offeringRef: 'offering:one', revision: 1, sourceHash: 'source-hash:one' },
-            { offeringRef: 'offering:two', revision: 1, sourceHash: 'source-hash:two' },
+            { offeringRef: 'offering:one', revision: 1, sourceHash: 'source-hash:one', accessPaths: [{ accessPathRef: 'access:one', sourceHash: 'access-source:one' }] },
           ],
         }
       }
-      if (mutation.name === 'capabilitySupply:publishPreparedCapability') return { kind: 'published', publicationRef: 'publication:one', publicationRevision: 1, operationRef: 'operation:one', lifecycle: { state: 'active', reasons: [] } }
+      if (mutation.name === 'capabilitySupply:publishPreparedCapability') return { kind: 'published', publicationRef: 'publication:one', publicationRevision: 1, toolRef: 'operation:one', lifecycle: { state: 'active', reasons: [] } }
       throw new Error(`unexpected_source_mutation:${mutation.name}`)
     })
     const service = createSupplyManagementService(new Request('https://agent.example/api'), '{}')
@@ -295,25 +362,29 @@ describe('supply action runtime boundaries', () => {
     const beforeEvidenceRetry = mocks.callPublicSourceMutation.mock.calls.length
     const changedEvidence: SupplyPublishInput = {
       ...publishInput,
-      evidenceRefs: ['evidence:changed'],
+      consequences: {
+        ...publishInput.consequences,
+        evidence: [{ outputPointer: '/alternate', purpose: 'completion' }],
+      },
     }
     const evidenceRetry = await service.publish({ input: changedEvidence, principal, correlationId: 'transport:evidence-changed' })
     expect(evidenceRetry).toEqual({ kind: 'refused', reason: 'operation_key_conflict' })
     const evidenceRetryNames = mocks.callPublicSourceMutation.mock.calls.slice(beforeEvidenceRetry).map(([mutation]) => mutation.name)
     expect(evidenceRetryNames).toEqual([
+      'capabilitySupplyOwnerFunnel:saveAgentSupplyIntegrationDraft',
       'capabilitySupplyOwnerFunnel:readAgentOwnerSupplyFunnel',
       'capabilitySupplyOwnerFunnel:reserveOwnerCapabilityPublication',
     ])
     const beforeOfferingRetry = mocks.callPublicSourceMutation.mock.calls.length
     const changedOffering: SupplyPublishInput = {
       ...publishInput,
-      offeringRef: 'offering:two',
-      offeringSourceHash: 'source-hash:two',
+      presentation: { ...publishInput.presentation, description: 'Changed Provider presentation.' },
     }
     const offeringRetry = await service.publish({ input: changedOffering, principal, correlationId: 'transport:offering-changed' })
     expect(offeringRetry).toEqual({ kind: 'refused', reason: 'operation_key_conflict' })
     const offeringRetryNames = mocks.callPublicSourceMutation.mock.calls.slice(beforeOfferingRetry).map(([mutation]) => mutation.name)
     expect(offeringRetryNames).toEqual([
+      'capabilitySupplyOwnerFunnel:saveAgentSupplyIntegrationDraft',
       'capabilitySupplyOwnerFunnel:readAgentOwnerSupplyFunnel',
       'capabilitySupplyOwnerFunnel:reserveOwnerCapabilityPublication',
     ])
@@ -350,7 +421,7 @@ describe('supply action runtime boundaries', () => {
         kind: 'republished',
         publicationRef: withdrawInput.publicationRef,
         revision: 2,
-        operationRef: 'operation:one',
+        toolRef: 'operation:one',
         bindingId: 'binding:one',
         lifecycle: { state: 'active', reasons: [] },
       })
@@ -524,6 +595,262 @@ describe('supply action runtime boundaries', () => {
       }),
     )
     expect(JSON.stringify(result)).not.toContain('credentialRef')
+  })
+
+  it('reinspects and verifies the exact seller claim before admitting an agent connection write', async () => {
+    const claimExpiresAt = Date.now() + 10 * 60_000
+    const claim = {
+      businessId: 'business:supply-actions',
+      endpointUrl: sellerEndpoint,
+      method: 'POST' as const,
+      observationDigest: sellerObservationDigest,
+      payTo: sellerPayTo,
+      expiresAt: claimExpiresAt,
+    }
+    mocks.inspectX402SellerEndpoint.mockResolvedValue(sellerObservation)
+    mocks.verifyMessage.mockResolvedValue(true)
+    mocks.callPublicSourceMutation.mockResolvedValue({
+      kind: 'applied',
+      connection: connectedProjection,
+      commandDigest: `sha256:${'e'.repeat(64)}`,
+    })
+    const service = createSupplyManagementService(
+      new Request('https://agent.example/api/v1/supply/connections/connect'),
+      '{}',
+    )
+
+    const result = await service.connectionConnect({
+      input: {
+        kind: 'x402',
+        businessRef: claim.businessId,
+        resourceUrl: sellerEndpoint,
+        method: claim.method,
+        environment: 'production',
+        observationDigest: claim.observationDigest,
+        payTo: claim.payTo,
+        claimExpiresAt,
+        claimSignature: sellerClaimSignature,
+        evidenceRefs: ['seller-submission:one'],
+        idempotencyKey: 'connect-command-one',
+      },
+      principal,
+      correlationId: 'transport-only-correlation',
+    })
+
+    expect(result).toMatchObject({ kind: 'applied', connection: { connectionRef: connectedProjection.connectionRef } })
+    expect(mocks.inspectX402SellerEndpoint).toHaveBeenCalledWith({
+      endpointUrl: sellerEndpoint,
+      method: 'POST',
+      aeEnvironment: 'production',
+    })
+    expect(mocks.verifyMessage).toHaveBeenCalledWith({
+      address: sellerPayTo,
+      message: x402SellerClaimMessage(claim),
+      signature: sellerClaimSignature,
+    })
+    const command = mocks.callPublicSourceMutation.mock.calls[0]?.[1] as Record<string, unknown>
+    expect(mocks.callPublicSourceMutation.mock.calls[0]?.[0]).toEqual({
+      name: 'capabilityProviderConnectionAgents:connectX402',
+    })
+    expect(command).toMatchObject({
+      businessId: claim.businessId,
+      resourceUrl: sellerEndpoint,
+      method: claim.method,
+      observationDigest: claim.observationDigest,
+      payTo: claim.payTo,
+      claimExpiresAt,
+      claimDigest: x402SellerClaimDigest(claim),
+      claimSignature: sellerClaimSignature,
+      evidenceRefs: [
+        'seller-submission:one',
+        `x402-endpoint-inspection:${sellerObservationDigest}`,
+      ],
+      agentPrincipal: principal,
+    })
+    expect(command.commandId).toBe(command.operationKey)
+    expect(command.correlationId).toBe(command.operationKey)
+  })
+
+  it.each([
+    {
+      source: {
+        kind: 'http_credential' as const,
+        businessRef: 'business:supply-actions',
+        sourceUrl: 'https://provider.example/openapi.yaml',
+        authentication: { kind: 'api_key' as const, location: 'header' as const, name: 'X-API-Key' },
+        environment: 'production' as const,
+        idempotencyKey: 'connect-http-credential',
+      },
+      expectedKind: 'http_credential',
+    },
+    {
+      source: {
+        kind: 'mcp_oauth' as const,
+        businessRef: 'business:supply-actions',
+        serverUrl: 'https://mcp.provider.example/mcp',
+        environment: 'production' as const,
+        idempotencyKey: 'connect-mcp-oauth',
+      },
+      expectedKind: 'mcp_oauth',
+    },
+  ])('creates one credential-free hosted owner handoff for $expectedKind', async ({ source, expectedKind }) => {
+    mocks.callPublicSourceMutation.mockResolvedValue({
+      kind: 'reserved',
+      attemptRef: `provider-connection-attempt:${expectedKind}`,
+      expiresAt: 600_000,
+    })
+    const service = createSupplyManagementService(
+      new Request('https://agent.example/api/v1/supply/connections/connect'),
+      '{}',
+    )
+
+    await expect(service.connectionConnect({
+      input: source,
+      principal,
+      correlationId: 'transport-only-correlation',
+    })).resolves.toEqual({
+      kind: 'action_required',
+      attemptRef: `provider-connection-attempt:${expectedKind}`,
+      expiresAt: 600_000,
+      requiredAction: {
+        action: 'supply.connection.connect',
+        blockedCapabilities: ['supply.publish'],
+        cta: `/owner/supply/connections/new?attempt=${encodeURIComponent(`provider-connection-attempt:${expectedKind}`)}`,
+        ctaLabel: 'Connect service',
+        description: expectedKind === 'mcp_oauth'
+          ? 'Sign in to the MCP service in your browser, then return to your agent.'
+          : 'Enter the service credential securely in your browser, then return to your agent.',
+        iconUrl: null,
+        status: 'required',
+        title: 'Connect service',
+      },
+    })
+    expect(mocks.callPublicSourceMutation.mock.calls[0]?.[0]).toEqual({
+      name: 'capabilityProviderConnectionAttempts:reserveAgent',
+    })
+    const command = mocks.callPublicSourceMutation.mock.calls[0]?.[1] as Record<string, unknown>
+    expect(command).toMatchObject({
+      businessId: source.businessRef,
+      sourceKind: expectedKind,
+      environment: 'production',
+      agentPrincipal: principal,
+    })
+    expect(command).not.toHaveProperty('credential')
+    expect(command).not.toHaveProperty('token')
+    expect(command).not.toHaveProperty('secret')
+  })
+
+  it('rejects credential material in the shared connection action', () => {
+    const result = supplyConnectionConnectInputSchema.safeParse({
+      kind: 'http_credential',
+      businessRef: 'business:supply-actions',
+      sourceUrl: 'https://provider.example/openapi.yaml',
+      authentication: { kind: 'http_bearer' },
+      environment: 'production',
+      idempotencyKey: 'connect-http-credential',
+      credential: 'must-not-cross-the-agent-boundary',
+    })
+
+    expect(result.success).toBe(false)
+  })
+
+  it('rejects fields from another Provider connection lane', () => {
+    const result = supplyConnectionConnectInputSchema.safeParse({
+      kind: 'mcp_oauth',
+      businessRef: 'business:supply-actions',
+      serverUrl: 'https://provider.example/mcp',
+      sourceUrl: 'https://provider.example/openapi.yaml',
+      authentication: { kind: 'http_bearer' },
+      environment: 'production',
+      idempotencyKey: 'connect-mcp-oauth',
+    })
+
+    expect(result.success).toBe(false)
+  })
+
+  it('refuses stale or unsigned agent seller claims before source-write admission', async () => {
+    mocks.inspectX402SellerEndpoint.mockResolvedValue(sellerObservation)
+    mocks.verifyMessage.mockResolvedValue(false)
+    const service = createSupplyManagementService(
+      new Request('https://agent.example/api/v1/supply/connections/connect'),
+      '{}',
+    )
+    const baseInput = {
+      kind: 'x402' as const,
+      businessRef: 'business:supply-actions',
+      resourceUrl: sellerEndpoint,
+      method: 'POST' as const,
+      environment: 'production' as const,
+      observationDigest: sellerObservationDigest,
+      payTo: sellerPayTo,
+      claimExpiresAt: Date.now() + 10 * 60_000,
+      claimSignature: sellerClaimSignature,
+      evidenceRefs: [],
+      idempotencyKey: 'connect-command-refused',
+    }
+
+    await expect(service.connectionConnect({
+      input: { ...baseInput, observationDigest: `sha256:${'f'.repeat(64)}` },
+      principal,
+      correlationId: 'stale-observation',
+    })).resolves.toEqual({ kind: 'refused', reason: 'claim_invalid' })
+    expect(mocks.verifyMessage).not.toHaveBeenCalled()
+    expect(mocks.sourceWriteAdmissionFromRequest).not.toHaveBeenCalled()
+    expect(mocks.callPublicSourceMutation).not.toHaveBeenCalled()
+
+    await expect(service.connectionConnect({
+      input: baseInput,
+      principal,
+      correlationId: 'invalid-signature',
+    })).resolves.toEqual({ kind: 'refused', reason: 'claim_invalid' })
+    expect(mocks.verifyMessage).toHaveBeenCalledOnce()
+    expect(mocks.sourceWriteAdmissionFromRequest).not.toHaveBeenCalled()
+    expect(mocks.callPublicSourceMutation).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    { kind: 'absent' as const },
+    { kind: 'refused' as const, reason: 'bazaar_discovery_invalid' as const },
+  ])('treats Bazaar discovery as evidence rather than Provider connection authority', async (discovery) => {
+    mocks.inspectX402SellerEndpoint.mockResolvedValue({ ...sellerObservation, discovery })
+    mocks.verifyMessage.mockResolvedValue(true)
+    mocks.callPublicSourceMutation.mockResolvedValue({
+      kind: 'applied',
+      connection: connectedProjection,
+      commandDigest: `sha256:${'e'.repeat(64)}`,
+    })
+    const service = createSupplyManagementService(
+      new Request('https://agent.example/api/v1/supply/connections/connect'),
+      '{}',
+    )
+
+    await expect(service.connectionConnect({
+      input: {
+        kind: 'x402',
+        businessRef: 'business:supply-actions',
+        resourceUrl: sellerEndpoint,
+        method: 'POST',
+        environment: 'production',
+        observationDigest: sellerObservationDigest,
+        payTo: sellerPayTo,
+        claimExpiresAt: Date.now() + 10 * 60_000,
+        claimSignature: sellerClaimSignature,
+        evidenceRefs: [],
+        idempotencyKey: 'connect-bazaar-refused',
+      },
+      principal,
+      correlationId: 'bazaar-refused',
+    })).resolves.toMatchObject({ kind: 'applied' })
+    expect(mocks.verifyMessage).toHaveBeenCalledOnce()
+    expect(mocks.sourceWriteAdmissionFromRequest).toHaveBeenCalledOnce()
+    expect(mocks.callPublicSourceMutation).toHaveBeenCalledWith(
+      { name: 'capabilityProviderConnectionAgents:connectX402' },
+      expect.objectContaining({
+        evidenceRefs: expect.arrayContaining([
+          `x402-endpoint-inspection:${sellerObservationDigest}`,
+        ]),
+      }),
+    )
   })
 
   it('uses one durable command identity for connection writes and preserves typed stale-authority refusal', async () => {

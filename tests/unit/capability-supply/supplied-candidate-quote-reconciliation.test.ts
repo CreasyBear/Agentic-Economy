@@ -8,15 +8,15 @@ import {
 } from '@/modules/capability-supply/server'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
-  type ActionInvocationView,
-  type InvocationDecision,
+  type ActionExecutionView,
+  type ExecutionDecision,
   createDevelopmentDurablePort,
   createDevelopmentDurableState,
   createDevelopmentReleaseSignal,
-  createDurableActionInvocationTracer,
-  type PreparedInvocation,
+  createDurableActionExecutionTracer,
+  type PreparedExecution,
   type ReconciliationEvidenceMaterial,
-} from '@/modules/action-invocation'
+} from '@/modules/action-execution'
 import {
   actor,
   nowIso,
@@ -25,6 +25,37 @@ import {
   qualificationPorts,
   quoteInputFor,
 } from './supplied-candidate-quote-harness'
+
+const attemptTransitionDigests = {
+  request_owned: {
+    execute_acquired: {
+      priorDigest: 'sha256:5273af0409a63ba24d22b835c814677c43dd565451723eaac6fc032065867bea',
+      nextDigest: 'sha256:cfa8d62119c2b46214e6ef914ca539028e16a981c18a9f98546f7d5c96f0f39d',
+    },
+    released: {
+      priorDigest: 'sha256:cfa8d62119c2b46214e6ef914ca539028e16a981c18a9f98546f7d5c96f0f39d',
+      nextDigest: 'sha256:c766c108ae4b7f360e832148fbaf4c13a24f4bc906d563d273b87dafdcd5570c',
+    },
+    not_released: {
+      priorDigest: 'sha256:cfa8d62119c2b46214e6ef914ca539028e16a981c18a9f98546f7d5c96f0f39d',
+      nextDigest: 'sha256:775b86ce8b70b6c0466b46bd0f235f8f717c007844d8a9a5ac7fcbb5ec7290e9',
+    },
+  },
+  standalone: {
+    execute_acquired: {
+      priorDigest: 'sha256:35a2d0dfa3edd4bf89b0f7da18a8cdfe26ef88ef3608063b7577335fad3b120b',
+      nextDigest: 'sha256:1d297211ccf957ab0c95a7229ef17e6c9d8a67aefab51aa6932ad9f03c9e3863',
+    },
+    released: {
+      priorDigest: 'sha256:1d297211ccf957ab0c95a7229ef17e6c9d8a67aefab51aa6932ad9f03c9e3863',
+      nextDigest: 'sha256:9e2bcad120afe8cb0278898cae91c62a20076683862058fc778759e436889e31',
+    },
+    not_released: {
+      priorDigest: 'sha256:1d297211ccf957ab0c95a7229ef17e6c9d8a67aefab51aa6932ad9f03c9e3863',
+      nextDigest: 'sha256:a3deda934bad1878992531988f87899ef9f0d37c3a76d8b312f4fe07d16d79f1',
+    },
+  },
+} as const
 
 describe('ADR-009 supplied-candidate development quote collection', () => {
   it.each(origins.flatMap((origin) => [
@@ -46,14 +77,14 @@ describe('ADR-009 supplied-candidate development quote collection', () => {
     const source = {
       input: quoteInput,
       context: { developmentOnlySuppliedQuoteAdapter: adapter },
-      prepared: undefined as PreparedInvocation | undefined,
-      observedResolution: { state: 'pending' } as ActionInvocationView<SuppliedCandidateQuoteResult>['observedResolution'],
+      prepared: undefined as PreparedExecution | undefined,
+      observedResolution: { state: 'pending' } as ActionExecutionView<SuppliedCandidateQuoteResult>['observedResolution'],
     }
-    const create = () => createDurableActionInvocationTracer({
+    const create = () => createDurableActionExecutionTracer({
       action: collectSuppliedCandidateQuoteAction,
       port: createDevelopmentDurablePort(durableState),
       now: nowIso,
-      nextInvocationRef: () => `dev:durable-quote:${origin.kind}`,
+      nextExecutionRef: () => `dev:durable-quote:${origin.kind}`,
       nextAuthorityRef: () => `dev:durable-authority:${origin.kind}`,
       nextAttemptRef: () => `dev:durable-attempt:${origin.kind}`,
       developmentReleaseSignal: releaseSignal,
@@ -73,15 +104,15 @@ describe('ADR-009 supplied-candidate development quote collection', () => {
     if (prepared.kind !== 'prepared') throw new Error(prepared.code)
     source.prepared = prepared.view.prepared!
     const accepted = await firstProcess.decide({
-      invocationRef: prepared.view.invocationRef,
-      expectedInvocationVersion: prepared.view.invocationVersion,
+      executionRef: prepared.view.executionRef,
+      expectedExecutionVersion: prepared.view.executionVersion,
       authorityRef: prepared.view.authority!.reference,
       actor, origin, accept: true,
     })
     if (accepted.kind !== 'accepted') throw new Error(accepted.code)
     const uncertain = await firstProcess.execute({
-      invocationRef: prepared.view.invocationRef,
-      expectedInvocationVersion: accepted.view.invocationVersion,
+      executionRef: prepared.view.executionRef,
+      expectedExecutionVersion: accepted.view.executionVersion,
       authorityRef: prepared.view.authority!.reference,
       actor, origin, materialInput: quoteInput,
     })
@@ -96,8 +127,8 @@ describe('ADR-009 supplied-candidate development quote collection', () => {
     if (uncertain.kind !== 'accepted') throw new Error(uncertain.code)
     source.observedResolution = uncertain.view.observedResolution
 
-    const freshProcess = await firstProcess.coldResume(uncertain.view.invocationRef)
-    expect(freshProcess.inspect(uncertain.view.invocationRef)).toMatchObject({
+    const freshProcess = await firstProcess.coldResume(uncertain.view.executionRef)
+    expect(freshProcess.inspect(uncertain.view.executionRef)).toMatchObject({
       origin,
       control: { state: 'reconciliation_required' },
     })
@@ -106,13 +137,13 @@ describe('ADR-009 supplied-candidate development quote collection', () => {
       version: 1,
       evidenceRef: `mock:quote-evidence:${origin.kind}:${resolution}`,
       source: 'supply.collectDevelopmentQuote:provider-observer:v1',
-      invocationRef: uncertain.view.invocationRef,
+      invocationRef: uncertain.view.executionRef,
       attemptRef: uncertain.view.attempts[0]!.attemptRef,
       effectGeneration: uncertain.view.attempts[0]!.effectGeneration,
       resolution,
       observedAt: nowIso(),
     })
-    const unchangedBeforeMalformedEvidence = freshProcess.inspect(uncertain.view.invocationRef)
+    const unchangedBeforeMalformedEvidence = freshProcess.inspect(uncertain.view.executionRef)
     const malformedEvidence = { ...reconciliationEvidence }
     Reflect.set(malformedEvidence, 'kind', 'malformed')
     const forgedMaterial: ReconciliationEvidenceMaterial = {
@@ -130,7 +161,7 @@ describe('ADR-009 supplied-candidate development quote collection', () => {
       ...forgedMaterial,
       digest: canonicalDigest(forgedMaterial as never),
     }
-    const refusedEvidence: InvocationDecision<SuppliedCandidateQuoteResult>[] = []
+    const refusedEvidence: ExecutionDecision<SuppliedCandidateQuoteResult>[] = []
     for (const evidence of [
       malformedEvidence,
       {
@@ -160,15 +191,15 @@ describe('ADR-009 supplied-candidate development quote collection', () => {
       forgedEvidence,
     ]) {
       refusedEvidence.push(await freshProcess.reconcile({
-        invocationRef: uncertain.view.invocationRef,
-        expectedInvocationVersion: uncertain.view.invocationVersion,
+        executionRef: uncertain.view.executionRef,
+        expectedExecutionVersion: uncertain.view.executionVersion,
         attemptRef: uncertain.view.attempts[0]!.attemptRef,
         actor,
         origin,
         evidence,
       }))
     }
-    expect(refusedEvidence.map((decision: InvocationDecision<SuppliedCandidateQuoteResult>) =>
+    expect(refusedEvidence.map((decision: ExecutionDecision<SuppliedCandidateQuoteResult>) =>
       decision.kind === 'refused' ? decision.code : 'accepted'))
       .toEqual([
         'evidence_malformed',
@@ -180,11 +211,11 @@ describe('ADR-009 supplied-candidate development quote collection', () => {
         'evidence_time_invalid',
         'evidence_source_unverified',
       ])
-    expect(freshProcess.inspect(uncertain.view.invocationRef)).toEqual(unchangedBeforeMalformedEvidence)
+    expect(freshProcess.inspect(uncertain.view.executionRef)).toEqual(unchangedBeforeMalformedEvidence)
 
     const reconciled = await freshProcess.reconcile({
-      invocationRef: uncertain.view.invocationRef,
-      expectedInvocationVersion: uncertain.view.invocationVersion,
+      executionRef: uncertain.view.executionRef,
+      expectedExecutionVersion: uncertain.view.executionVersion,
       attemptRef: uncertain.view.attempts[0]!.attemptRef,
       actor,
       origin,
@@ -213,16 +244,16 @@ describe('ADR-009 supplied-candidate development quote collection', () => {
         })
     if (reconciled.kind !== 'accepted') throw new Error(reconciled.code)
     expect(await freshProcess.reconcile({
-      invocationRef: uncertain.view.invocationRef,
-      expectedInvocationVersion: uncertain.view.invocationVersion,
+      executionRef: uncertain.view.executionRef,
+      expectedExecutionVersion: uncertain.view.executionVersion,
       attemptRef: uncertain.view.attempts[0]!.attemptRef,
       actor,
       origin,
       evidence: reconciliationEvidence,
-    })).toMatchObject({ kind: 'accepted', view: { invocationVersion: reconciled.view.invocationVersion } })
+    })).toMatchObject({ kind: 'accepted', view: { executionVersion: reconciled.view.executionVersion } })
     expect(await freshProcess.reconcile({
-      invocationRef: uncertain.view.invocationRef,
-      expectedInvocationVersion: uncertain.view.invocationVersion,
+      executionRef: uncertain.view.executionRef,
+      expectedExecutionVersion: uncertain.view.executionVersion,
       attemptRef: uncertain.view.attempts[0]!.attemptRef,
       actor,
       origin,
@@ -231,8 +262,8 @@ describe('ADR-009 supplied-candidate development quote collection', () => {
         resolution: resolution === 'released' ? 'not_released' : 'released',
       }),
     })).toMatchObject({ kind: 'refused', code: 'command_identity_conflict' })
-    const coldAfterReconciliation = await firstProcess.coldResume(reconciled.view.invocationRef)
-    const coldView = coldAfterReconciliation.inspect(reconciled.view.invocationRef)
+    const coldAfterReconciliation = await firstProcess.coldResume(reconciled.view.executionRef)
+    const coldView = coldAfterReconciliation.inspect(reconciled.view.executionRef)
     expect(coldView).toMatchObject({
       control: resolution === 'released' ? { state: 'terminal' } : { state: 'retryable' },
       attempts: [resolution === 'released'
@@ -251,11 +282,16 @@ describe('ADR-009 supplied-candidate development quote collection', () => {
 
     const port = createDevelopmentDurablePort(durableState)
     const persisted = JSON.stringify({
-      control: await port.readControl(uncertain.view.invocationRef),
-      attempts: await port.readAttempts(uncertain.view.invocationRef, 10),
-      history: await port.readHistory(uncertain.view.invocationRef, 0, 20),
+      control: await port.readControl(uncertain.view.executionRef),
+      attempts: await port.readAttempts(uncertain.view.executionRef, 10),
+      history: await port.readHistory(uncertain.view.executionRef, 0, 20),
     })
-    expect(await port.readHistory(uncertain.view.invocationRef, 0, 20)).toContainEqual(
+    const reconciliationHistoryRows = await port.readHistory(uncertain.view.executionRef, 0, 20)
+    expect(reconciliationHistoryRows.find((row) => row.kind === 'execute_acquired')?.attemptTransition)
+      .toMatchObject(attemptTransitionDigests[origin.kind].execute_acquired)
+    expect(reconciliationHistoryRows.find((row) => row.kind === 'reconcile')?.attemptTransition)
+      .toMatchObject(attemptTransitionDigests[origin.kind][resolution])
+    expect(reconciliationHistoryRows).toContainEqual(
       expect.objectContaining({
         kind: 'reconcile',
         current: true,
@@ -281,7 +317,7 @@ describe('ADR-009 supplied-candidate development quote collection', () => {
     expect(persisted).not.toContain(quoteInput.disclosure.purpose)
     expect(persisted).not.toContain('dev:quote:0001')
     expect(persisted).toContain(quoteInput.operationKey)
-    expect((await port.readControl(uncertain.view.invocationRef))?.dataLimitSummary)
+    expect((await port.readControl(uncertain.view.executionRef))?.dataLimitSummary)
       .toEqual(quoteInput.disclosure.limits)
   })
 })

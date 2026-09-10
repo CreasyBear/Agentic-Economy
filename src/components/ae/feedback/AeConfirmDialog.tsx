@@ -1,14 +1,14 @@
-import { useRef, type RefObject } from "react";
-
-import { Button } from "@/components/ui/button";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { useRef, type RefObject } from "react";
 
 type AeConfirmDialogProps = {
   open: boolean;
@@ -18,9 +18,11 @@ type AeConfirmDialogProps = {
   confirmLabel: string;
   cancelLabel?: string;
   confirmVariant?: "default" | "destructive";
+  showConfirm?: boolean;
   pending?: boolean;
   onConfirm: () => void | Promise<void>;
   returnFocusRef?: RefObject<HTMLElement | null>;
+  returnFocusFallbackRefs?: readonly RefObject<HTMLElement | null>[];
 };
 
 export function AeConfirmDialog({
@@ -31,12 +33,13 @@ export function AeConfirmDialog({
   confirmLabel,
   cancelLabel = "Cancel",
   confirmVariant = "default",
+  showConfirm = true,
   pending = false,
   onConfirm,
   returnFocusRef,
+  returnFocusFallbackRefs = [],
 }: AeConfirmDialogProps) {
-  const cancelRef = useRef<HTMLButtonElement>(null);
-  const openerRef = useRef<HTMLElement | null>(null);
+  const confirmationInFlightRef = useRef(false);
 
   function handleOpenChange(nextOpen: boolean) {
     if (pending && !nextOpen) {
@@ -47,63 +50,58 @@ export function AeConfirmDialog({
   }
 
   async function handleConfirm() {
-    if (pending) {
+    if (pending || confirmationInFlightRef.current) {
       return;
     }
-    await onConfirm();
+    confirmationInFlightRef.current = true;
+    try {
+      await onConfirm();
+    } finally {
+      confirmationInFlightRef.current = false;
+    }
   }
 
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent
-        role="alertdialog"
-        showCloseButton={false}
-        onOpenAutoFocus={(event) => {
-          event.preventDefault();
-          const activeElement = document.activeElement;
-          openerRef.current =
-            activeElement instanceof HTMLElement ? activeElement : null;
-          cancelRef.current?.focus();
-        }}
-        onCloseAutoFocus={(event) => {
-          event.preventDefault();
-          const focusTarget = returnFocusRef?.current ?? openerRef.current;
-          focusTarget?.focus();
-          openerRef.current = null;
-        }}
-        onEscapeKeyDown={(event) => {
-          if (pending) {
-            event.preventDefault();
-          }
-        }}
-      >
-        <DialogHeader>
-          <DialogTitle>{title}</DialogTitle>
-          <DialogDescription>{description}</DialogDescription>
-        </DialogHeader>
-        <DialogFooter>
-          <Button
-            ref={cancelRef}
-            type="button"
-            variant="outline"
-            onClick={() => {
-              if (!pending) {
-                onOpenChange(false);
-              }
+    <AlertDialog open={open} onOpenChange={handleOpenChange}>
+      <AlertDialogContent
+        onCloseAutoFocus={returnFocusRef === undefined && returnFocusFallbackRefs.length === 0
+          ? undefined
+          : (event) => {
+              event.preventDefault();
+              const targets = [returnFocusRef, ...returnFocusFallbackRefs];
+              const target = targets
+                .map((ref) => ref?.current)
+                .find((element) => element !== null
+                  && element !== undefined
+                  && element.isConnected
+                  && element !== document.body
+                  && !(element instanceof HTMLButtonElement && element.disabled));
+              target?.focus();
             }}
-          >
+      >
+        <AlertDialogHeader>
+          <AlertDialogTitle>{title}</AlertDialogTitle>
+          <AlertDialogDescription>{description}</AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel type="button" disabled={pending}>
             {cancelLabel}
-          </Button>
-          <Button
-            type="button"
-            variant={confirmVariant}
-            disabled={pending}
-            onClick={() => void handleConfirm()}
-          >
-            {pending ? "Working…" : confirmLabel}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+          </AlertDialogCancel>
+          {showConfirm ? (
+            <AlertDialogAction
+              type="button"
+              variant={confirmVariant}
+              disabled={pending}
+              onClick={(event) => {
+                event.preventDefault();
+                void handleConfirm();
+              }}
+            >
+              {pending ? "Working…" : confirmLabel}
+            </AlertDialogAction>
+          ) : null}
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   );
 }

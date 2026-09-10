@@ -1,11 +1,12 @@
 import { canonicalDigest } from '@/modules/common/canonical-digest'
-import { OPERATION_INVOKE_ACTION_ID, OPERATION_INVOKE_HTTP_PATH } from '@/modules/capability-execution/operation-invoke-entry'
+import { CALL_ACTION_ID, CALL_HTTP_PATH } from '@/modules/capability-execution/call-entry'
 import {
   SourceWriteAdmissionScopeValues,
   resolveActiveSourceWriteSigningKey,
   sourceWriteKeyFamilyForScope,
 } from '@/modules/security/source-write-admission'
 import type { StableHashValue } from '@/modules/common/stable-hash'
+import { SCHEDULED_WORKLOAD_JOB_NAMES } from './scheduled-workloads'
 
 export type DeploymentEnvironment = 'production' | 'preview' | 'development' | 'test'
 export type DeploymentEnvironmentInput = Readonly<Record<string, string | undefined>>
@@ -51,15 +52,46 @@ const forbiddenProductionNames = Object.freeze([
 ])
 
 const requiredProduction: readonly RequirementGroup[] = [
-  { scope: 'canonical', code: 'canonical_origin_required', names: ['AE_CANONICAL_BASE_URL', 'AE_CANONICAL_HOST_ALLOWLIST'], mode: 'one-of' },
+  { scope: 'canonical', code: 'canonical_origin_required', names: ['AE_CANONICAL_BASE_URL'], mode: 'all' },
   { scope: 'convex', code: 'convex_source_required', names: ['CONVEX_URL', 'VITE_CONVEX_URL'], mode: 'one-of' },
   { scope: 'convex-auth', code: 'server_function_auth_required', names: ['AE_CONVEX_SERVER_FUNCTION_TOKEN'], mode: 'all' },
-  { scope: 'clerk', code: 'required_configuration_missing', names: ['VITE_CLERK_PUBLISHABLE_KEY', 'CLERK_SECRET_KEY', 'CLERK_JWT_ISSUER_DOMAIN'], mode: 'all' },
+  { scope: 'clerk', code: 'required_configuration_missing', names: ['VITE_CLERK_PUBLISHABLE_KEY', 'CLERK_SECRET_KEY', 'CLERK_JWT_ISSUER_DOMAIN', 'CLERK_WEBHOOK_SIGNING_SECRET'], mode: 'all' },
   { scope: 'model-gateway', code: 'required_configuration_missing', names: ['OPENROUTER_API_KEY', 'AE_LLM_MODEL'], mode: 'all' },
   { scope: 'chat-proxy', code: 'required_configuration_missing', names: ['AE_CHAT_PROXY_SECRET'], mode: 'all' },
   { scope: 'source-write', code: 'source_write_family_required', names: sourceWriteNames, mode: 'all' },
-  { scope: 'x402-payment', code: 'x402_payment_custody_required', names: ['CDP_API_KEY_ID', 'CDP_API_KEY_SECRET', 'CDP_WALLET_SECRET', 'AE_X402_CDP_ACCOUNT_NAME', 'AE_X402_CDP_EXPECTED_EVM_ADDRESS', 'AE_X402_CDP_ACCOUNT_POLICY_ID', 'AE_X402_CDP_PROJECT_POLICY_ID', 'AE_X402_CDP_CREDENTIAL_GENERATION', 'AE_X402_CUSTODY_ENABLED', 'AE_X402_CUSTODY_MAX_ATOMIC', 'AE_X402_CUSTODY_DAILY_MAX_ATOMIC', 'AE_X402_RPC_URLS_JSON'], mode: 'all' },
-  { scope: 'stripe-money', code: 'stripe_configuration_required', names: ['STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET', 'VITE_STRIPE_PUBLISHABLE_KEY'], mode: 'all' },
+  { scope: 'x402-payment', code: 'x402_payment_custody_required', names: ['CDP_API_KEY_ID', 'CDP_API_KEY_SECRET', 'CDP_WALLET_SECRET', 'AE_X402_CDP_ACCOUNT_NAME', 'AE_X402_CDP_EXPECTED_EVM_ADDRESS', 'AE_X402_CDP_ACCOUNT_POLICY_ID', 'AE_X402_CDP_PROJECT_POLICY_ID', 'AE_X402_CDP_POLICY_RULES_DIGEST', 'AE_X402_CDP_CREDENTIAL_GENERATION', 'AE_X402_CUSTODY_ENABLED', 'AE_X402_CUSTODY_MAX_ATOMIC', 'AE_X402_CUSTODY_DAILY_MAX_ATOMIC', 'AE_X402_RPC_URLS_JSON'], mode: 'all' },
+  { scope: 'stripe-money', code: 'stripe_configuration_required', names: ['STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET', 'STRIPE_V2_WEBHOOK_SECRET', 'STRIPE_AU_INCLUSIVE_GST_TAX_RATE_ID'], mode: 'all' },
+  { scope: 'formance', code: 'formance_configuration_required', names: ['AE_FORMANCE_ENVIRONMENT', 'AE_FORMANCE_GATEWAY_URL', 'AE_FORMANCE_LEDGER', 'AE_FORMANCE_REQUEST_TIMEOUT_MS', 'AE_FORMANCE_ACCESS_CLIENT_ID', 'AE_FORMANCE_ACCESS_CLIENT_SECRET'], mode: 'all' },
+]
+
+const package5ControlledRequirements: readonly RequirementGroup[] = [
+  {
+    scope: 'package5-rollout',
+    code: 'package5_rollout_required',
+    names: [
+      'AE_PACKAGE5_WRITES_ENABLED',
+      'AE_SUPPLY_HTTP_CREDENTIALS_ENABLED',
+      'AE_SUPPLY_MCP_OAUTH_ENABLED',
+      'AE_PROVIDER_OFFBOARDING_ENABLED',
+    ],
+    mode: 'all',
+  },
+  {
+    scope: 'provider-secret-plane',
+    code: 'provider_secret_plane_required',
+    names: [
+      'AE_INFISICAL_BASE_URL',
+      'AE_INFISICAL_CUSTOMER_PROJECT_ID',
+      'AE_INFISICAL_CUSTOMER_ENVIRONMENT',
+      'AE_INFISICAL_CUSTOMER_SECRET_PATH',
+      'AE_INFISICAL_CUSTOMER_MACHINE_IDENTITY_ID',
+      'AE_INFISICAL_PLATFORM_PROJECT_ID',
+      'AE_INFISICAL_PLATFORM_ENVIRONMENT',
+      'AE_INFISICAL_PLATFORM_SECRET_PATH',
+      'AE_INFISICAL_PLATFORM_MACHINE_IDENTITY_ID',
+    ],
+    mode: 'all',
+  },
 ]
 
 const liveGatewaySmokeNames = [
@@ -115,9 +147,12 @@ const optionalNames = Object.freeze([
   'SENTRY_ENVIRONMENT', 'SENTRY_RELEASE', 'VITE_POSTHOG_KEY', 'POSTHOG_KEY', 'VITE_POSTHOG_HOST', 'POSTHOG_HOST',
   'VITE_POSTHOG_APP_URL', 'POSTHOG_APP_URL',   'AE_WBA_SIGNATURE_AGENT_ALLOWLIST', 'AE_WBA_DIRECTORY_PUBLIC_JWK_JSON',
   'AE_CLI_BASE_URL',
+  'AE_PACKAGE4_SANDBOX_DEPLOYMENT_PROFILE',
+  'AE_INFISICAL_CUSTOMER_ORGANIZATION_SLUG',
+  'AE_INFISICAL_PLATFORM_ORGANIZATION_SLUG',
 ])
 
-const fieldRules: readonly FieldRule[] = [
+export const fieldRules: readonly FieldRule[] = [
   { name: 'AE_CANONICAL_BASE_URL', kind: 'url' }, { name: 'AE_CANONICAL_HOST_ALLOWLIST', kind: 'host-list' },
   { name: 'CONVEX_URL', kind: 'url' }, { name: 'VITE_CONVEX_URL', kind: 'url' }, { name: 'CLERK_JWT_ISSUER_DOMAIN', kind: 'url' },
   { name: 'AE_GATEWAY_SMOKE_BASE_URL', kind: 'url' }, { name: 'AE_RELEASE_CONVEX_URL', kind: 'url' },
@@ -133,27 +168,39 @@ const fieldRules: readonly FieldRule[] = [
   { name: 'AE_DISABLE_OBSERVABILITY', kind: 'boolean' }, { name: 'VITE_AE_DISABLE_OBSERVABILITY', kind: 'boolean' },
   { name: 'VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E', kind: 'boolean' }, { name: 'VITE_AE_OPERATOR_ADVANCED_NAV', kind: 'boolean' },
   { name: 'AE_DEV_WBA_SMOKE_ENABLED', kind: 'boolean' },
+  { name: 'AE_PACKAGE5_WRITES_ENABLED', kind: 'boolean' },
+  { name: 'AE_SUPPLY_HTTP_CREDENTIALS_ENABLED', kind: 'boolean' },
+  { name: 'AE_SUPPLY_MCP_OAUTH_ENABLED', kind: 'boolean' },
+  { name: 'AE_PROVIDER_OFFBOARDING_ENABLED', kind: 'boolean' },
+  { name: 'AE_INFISICAL_BASE_URL', kind: 'url' },
 ]
 
-const knownNames = Object.freeze([
-  'OPENROUTER_API_KEY', 'AE_CONVEX_SERVER_FUNCTION_TOKEN', 'VITE_CLERK_PUBLISHABLE_KEY', 'CLERK_SECRET_KEY',
+export const knownNames = Object.freeze([
+  'OPENROUTER_API_KEY', 'AE_CONVEX_SERVER_FUNCTION_TOKEN', 'VITE_CLERK_PUBLISHABLE_KEY', 'CLERK_SECRET_KEY', 'CLERK_WEBHOOK_SIGNING_SECRET',
   'AE_CHAT_PROXY_SECRET', 'AE_CHAT_SHARE_SECRET', 'AE_CHAT_SHARE_KEY_ID',
   'AE_SOURCE_WRITE_SECRET',
   'AE_ROUTE_CALL_SIGNING_KEY_ID', 'AE_X402_PAYMENT_CREDENTIAL_REF', 'AE_X402_PAYMENT_PRIVATE_KEY',
-  'CDP_API_KEY_ID', 'CDP_API_KEY_SECRET', 'CDP_WALLET_SECRET', 'AE_X402_CDP_ACCOUNT_NAME', 'AE_X402_CUSTODY_MAX_ATOMIC',
+  'CDP_API_KEY_ID', 'CDP_API_KEY_SECRET', 'CDP_WALLET_SECRET', 'AE_X402_CDP_ACCOUNT_NAME', 'AE_X402_CDP_EXPECTED_EVM_ADDRESS',
+  'AE_X402_CDP_ACCOUNT_POLICY_ID', 'AE_X402_CDP_PROJECT_POLICY_ID', 'AE_X402_CDP_POLICY_RULES_DIGEST',
+  'AE_X402_CDP_CREDENTIAL_GENERATION', 'AE_X402_CUSTODY_ENABLED', 'AE_X402_CUSTODY_MAX_ATOMIC',
+  'AE_X402_CUSTODY_DAILY_MAX_ATOMIC', 'AE_X402_RPC_URLS_JSON',
   'SENTRY_AUTH_TOKEN', 'SENTRY_ORG', 'SENTRY_PROJECT',
   'SENTRY_ENVIRONMENT', 'VITE_SENTRY_ENVIRONMENT', 'SENTRY_RELEASE', 'VITE_SENTRY_DSN', 'SENTRY_DSN', 'VITE_POSTHOG_KEY',
   'POSTHOG_KEY', 'VERCEL_ENV', 'VERCEL_DEPLOYMENT_ID', 'VERCEL_URL', 'AE_RELEASE_DEPLOYMENT_ID', 'AE_GATEWAY_SMOKE_RELEASE_API_KEY',
   'AE_DEV_WBA_SMOKE_SECRET', 'AE_DEV_WBA_SIGNATURE_AGENT', 'AE_LOCAL_DEV_VITE_ARGS', 'AE_KERNEL_PROOF_MANIFEST_JSON',
   'AE_KERNEL_PROOF_MANIFEST_PATH', 'AE_CLI_BASE_URL',
-  'STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET', 'VITE_STRIPE_PUBLISHABLE_KEY',
+  'STRIPE_SECRET_KEY', 'STRIPE_READBACK_KEY', 'STRIPE_WEBHOOK_SECRET', 'STRIPE_V2_WEBHOOK_SECRET', 'STRIPE_AU_INCLUSIVE_GST_TAX_RATE_ID',
+  'AE_FORMANCE_ENVIRONMENT', 'AE_FORMANCE_GATEWAY_URL', 'AE_FORMANCE_LEDGER', 'AE_FORMANCE_REQUEST_TIMEOUT_MS',
+  'AE_FORMANCE_ACCESS_CLIENT_ID', 'AE_FORMANCE_ACCESS_CLIENT_SECRET',
 ])
 
 export const DEPLOYMENT_MANIFEST = Object.freeze({
   schemaVersion: 'ae.deployment-manifest:v1', version: 1,
   runtime: Object.freeze({ nodeMajor: 22, engine: 'nodejs22.x' }),
   configuration: Object.freeze({
-    requiredProduction: Object.freeze(requiredProduction), conditional: Object.freeze(conditional), optional: optionalNames,
+    requiredProduction: Object.freeze(requiredProduction),
+    controlledPackage5: Object.freeze(package5ControlledRequirements),
+    conditional: Object.freeze(conditional), optional: optionalNames,
     forbiddenProduction: forbiddenProductionNames,
   }),
   resources: Object.freeze([
@@ -163,6 +210,8 @@ export const DEPLOYMENT_MANIFEST = Object.freeze({
       kind: 'convex-component-set',
       components: Object.freeze([
         'workpool',
+        'workpool:stripeWebhookWorkpool',
+        'workflow',
         'rate-limiter',
         'agent',
         'aggregate:ownerActivationByStage',
@@ -174,22 +223,30 @@ export const DEPLOYMENT_MANIFEST = Object.freeze({
       ]),
     }),
     Object.freeze({ id: 'agent-access', kind: 'clerk-api-key-agent-access', declaration: 'Clerk-issued bearer key; AE-owned principal, grant, policy, and revocation readback.' }),
-    Object.freeze({ id: 'durable-invocation-workpool', kind: 'convex-workpool', components: Object.freeze(['workpool', 'operation-invocation-worker', 'operation-recovery-worker']) }),
-    Object.freeze({ id: 'operation-gateway', kind: 'authenticated-action-gateway', action: `${OPERATION_INVOKE_ACTION_ID}:v1`, httpPath: OPERATION_INVOKE_HTTP_PATH, mcpPath: '/mcp' }),
+    Object.freeze({ id: 'formance-financial-authority', kind: 'private-formance-community-stack', declaration: 'Cloudflare Access protected Gateway; Ledger and managed PostgreSQL remain private.' }),
+    Object.freeze({
+      id: 'seller-onboarding-canary-funding',
+      kind: 'convex-agent-access-funding-authority',
+      declaration: 'Fixed AE-owned sandbox principal and exact grant; CDP development custody and Base Sepolia RPC are checked by an internal read-only readiness query.',
+    }),
+    Object.freeze({ id: 'durable-invocation-workpool', kind: 'convex-workpool', components: Object.freeze(['workpool', 'operation-call-worker', 'operation-recovery-worker']) }),
+    Object.freeze({
+      id: 'durable-stripe-webhook-inbox',
+      kind: 'convex-workpool',
+      components: Object.freeze(['stripeWebhookWorkpool', 'moneyStripeWebhookInbox', 'moneyStripeWebhookWorker']),
+      workerEnvironment: Object.freeze(['STRIPE_READBACK_KEY', 'STRIPE_AU_INCLUSIVE_GST_TAX_RATE_ID']),
+      declaration: 'Parallelism 4; 13 attempts; 60-second exponential backoff; Stripe API 2026-07-29.dahlia.',
+    }),
+    Object.freeze({
+      id: 'provider-tools-rollout',
+      kind: 'controlled-rollout',
+      declaration: 'Package 5 writes, hosted HTTP credentials, MCP OAuth, and Provider offboarding require independent server-side activation. Provider credentials remain in the Infisical customer scope; AE-held consequence-signing material remains in the platform scope.',
+    }),
+    Object.freeze({ id: 'operation-gateway', kind: 'authenticated-action-gateway', action: `${CALL_ACTION_ID}:v1`, httpPath: CALL_HTTP_PATH, mcpPath: '/mcp' }),
     Object.freeze({
       id: 'convex-scheduled-jobs',
       kind: 'convex-cron-set',
-      jobs: Object.freeze([
-        'cleanup expired agent access oauth grants',
-        'cleanup expired source write nonces',
-        'reconcile due facilitator invocations',
-        'refresh Agentic Economy API registry',
-        'refresh Agentic Market snapshots',
-        'refresh capability supply readiness',
-        'refresh current market presence',
-        'refresh facilitator discovery',
-        'run daily supplier settlement',
-      ]),
+      jobs: Object.freeze([...SCHEDULED_WORKLOAD_JOB_NAMES]),
     }),
   ]),
   readinessProbes: Object.freeze([
@@ -211,6 +268,8 @@ export function validateDeploymentManifest(environment: DeploymentEnvironmentInp
   }
   const envClass = resolveEnvironment(environment, options.environment, add)
   const production = envClass === 'production'
+  const package4Release = present(environment, 'AE_PACKAGE4_SANDBOX_DEPLOYMENT_PROFILE') === 'synthetic_vps_fixture'
+  const package5Controlled = production || package4Release
   const compatible = options.nodeMajor === undefined || options.nodeMajor === 22
   if (!compatible) add('runtime', 'node_runtime_incompatible', ['NODE_RUNTIME'], 'runtime')
 
@@ -223,9 +282,14 @@ export function validateDeploymentManifest(environment: DeploymentEnvironmentInp
     if (present(environment, name) !== undefined) add('forbidden', 'production_local_or_fixture_configuration', [name], 'environment')
   }
   for (const group of requiredProduction) if (production) requireGroup(environment, group, add)
+  for (const group of package5ControlledRequirements) if (package5Controlled) requireGroup(environment, group, add)
   for (const group of conditional) if (group.trigger?.some((name) => present(environment, name)) === true) requireGroup(environment, group, add)
-  if (production) validateProductionClerkCredentials(environment, add)
+  if (production) validateProductionClerkCredentials(environment, add, package4Release)
+  if (production) validateProductionStripeCredentials(environment, add, package4Release)
+  if (production) validateProductionFormanceConfiguration(environment, add, package4Release)
+  if (production) validateProductionBrowserSecurity(environment, add)
   if (production) validateSourceWriteAuthority(environment, add)
+  if (package5Controlled) validatePackage5Rollout(environment, add)
   for (const rule of fieldRules) validateField(environment, rule, production, add)
   validateX402Custody(environment, add)
   validateX402RpcUrls(environment, add)
@@ -250,6 +314,7 @@ export function deploymentConfigFingerprint(environment: DeploymentEnvironmentIn
     ...sourceWriteNames,
     ...sourceWriteDerivedNames,
     ...requiredProduction.flatMap((group) => group.names),
+    ...package5ControlledRequirements.flatMap((group) => group.names),
     ...conditional.flatMap((group) => group.names),
   ])].sort()
   const unknownNames = options.unknownNames
@@ -309,6 +374,17 @@ function requireGroup(environment: DeploymentEnvironmentInput, group: Requiremen
   }
   for (const name of missing) add('missing', group.code, [name], group.scope)
 }
+function validatePackage5Rollout(
+  environment: DeploymentEnvironmentInput,
+  add: (kind: DeploymentFindingKind, code: string, names: readonly string[], scope: string) => void,
+): void {
+  for (const name of package5ControlledRequirements[0]!.names) {
+    const value = present(environment, name)
+    if (value !== undefined && value !== 'true') {
+      add('malformed', 'package5_rollout_not_enabled', [name], 'package5-rollout')
+    }
+  }
+}
 function validateSourceWriteAuthority(
   environment: DeploymentEnvironmentInput,
   add: (kind: DeploymentFindingKind, code: string, names: readonly string[], scope: string) => void,
@@ -333,14 +409,81 @@ function validateSourceWriteAuthority(
 function validateProductionClerkCredentials(
   environment: DeploymentEnvironmentInput,
   add: (kind: DeploymentFindingKind, code: string, names: readonly string[], scope: string) => void,
+  sandboxRelease: boolean,
 ): void {
   const publishableKey = present(environment, 'VITE_CLERK_PUBLISHABLE_KEY')
-  if (publishableKey !== undefined && !/^pk_live_[A-Za-z0-9_-]+$/u.test(publishableKey)) {
+  const publishablePattern = sandboxRelease ? /^pk_test_[A-Za-z0-9_-]+$/u : /^pk_live_[A-Za-z0-9_-]+$/u
+  const secretPattern = sandboxRelease ? /^sk_test_[A-Za-z0-9_-]+$/u : /^sk_live_[A-Za-z0-9_-]+$/u
+  if (publishableKey !== undefined && !publishablePattern.test(publishableKey)) {
     add('malformed', 'clerk_publishable_key_invalid', ['VITE_CLERK_PUBLISHABLE_KEY'], 'clerk')
   }
   const secretKey = present(environment, 'CLERK_SECRET_KEY')
-  if (secretKey !== undefined && !/^sk_live_[A-Za-z0-9_-]+$/u.test(secretKey)) {
+  if (secretKey !== undefined && !secretPattern.test(secretKey)) {
     add('malformed', 'clerk_secret_key_invalid', ['CLERK_SECRET_KEY'], 'clerk')
+  }
+  const webhookSecret = present(environment, 'CLERK_WEBHOOK_SIGNING_SECRET')
+  if (webhookSecret !== undefined && !/^whsec_[A-Za-z0-9_-]+$/u.test(webhookSecret)) {
+    add('malformed', 'clerk_webhook_signing_secret_invalid', ['CLERK_WEBHOOK_SIGNING_SECRET'], 'clerk')
+  }
+}
+function validateProductionStripeCredentials(
+  environment: DeploymentEnvironmentInput,
+  add: (kind: DeploymentFindingKind, code: string, names: readonly string[], scope: string) => void,
+  sandboxRelease: boolean,
+): void {
+  const secretPattern = sandboxRelease ? /^rk_test_[A-Za-z0-9_-]+$/u : /^rk_live_[A-Za-z0-9_-]+$/u
+  const secretKey = present(environment, 'STRIPE_SECRET_KEY')
+  if (secretKey !== undefined && !secretPattern.test(secretKey)) {
+    add('malformed', 'stripe_secret_key_invalid', ['STRIPE_SECRET_KEY'], 'stripe-money')
+  }
+  const readbackKey = present(environment, 'STRIPE_READBACK_KEY')
+  if (readbackKey !== undefined && !secretPattern.test(readbackKey)) {
+    add('malformed', 'stripe_readback_key_invalid', ['STRIPE_READBACK_KEY'], 'stripe-money')
+  }
+  const webhookSecret = present(environment, 'STRIPE_WEBHOOK_SECRET')
+  if (webhookSecret !== undefined && !/^whsec_[A-Za-z0-9_-]+$/u.test(webhookSecret)) {
+    add('malformed', 'stripe_webhook_secret_invalid', ['STRIPE_WEBHOOK_SECRET'], 'stripe-money')
+  }
+  const v2WebhookSecret = present(environment, 'STRIPE_V2_WEBHOOK_SECRET')
+  if (v2WebhookSecret !== undefined && !/^whsec_[A-Za-z0-9_-]+$/u.test(v2WebhookSecret)) {
+    add('malformed', 'stripe_v2_webhook_secret_invalid', ['STRIPE_V2_WEBHOOK_SECRET'], 'stripe-money')
+  }
+  const taxRateId = present(environment, 'STRIPE_AU_INCLUSIVE_GST_TAX_RATE_ID')
+  if (taxRateId !== undefined && !/^txr_[A-Za-z0-9_]+$/u.test(taxRateId)) {
+    add('malformed', 'stripe_tax_rate_invalid', ['STRIPE_AU_INCLUSIVE_GST_TAX_RATE_ID'], 'stripe-money')
+  }
+}
+
+function validateProductionFormanceConfiguration(
+  environment: DeploymentEnvironmentInput,
+  add: (kind: DeploymentFindingKind, code: string, names: readonly string[], scope: string) => void,
+  sandboxRelease: boolean,
+): void {
+  const profile = present(environment, 'AE_PACKAGE4_SANDBOX_DEPLOYMENT_PROFILE')
+  if (profile !== undefined && profile !== 'synthetic_vps_fixture') {
+    add('malformed', 'package4_deployment_profile_invalid', ['AE_PACKAGE4_SANDBOX_DEPLOYMENT_PROFILE'], 'formance')
+  }
+  const formanceEnvironment = present(environment, 'AE_FORMANCE_ENVIRONMENT')
+  const expected = sandboxRelease ? 'sandbox' : 'production'
+  if (formanceEnvironment !== undefined && formanceEnvironment !== expected) {
+    add('conflict', 'formance_environment_mismatch', ['AE_FORMANCE_ENVIRONMENT'], 'formance')
+  }
+  const gateway = present(environment, 'AE_FORMANCE_GATEWAY_URL')
+  if (gateway !== undefined && !validUrl(gateway, true)) {
+    add('malformed', 'formance_gateway_invalid', ['AE_FORMANCE_GATEWAY_URL'], 'formance')
+  }
+  const timeout = present(environment, 'AE_FORMANCE_REQUEST_TIMEOUT_MS')
+  if (timeout !== undefined && (!/^\d+$/u.test(timeout) || Number(timeout) < 100 || Number(timeout) > 30_000)) {
+    add('malformed', 'formance_timeout_invalid', ['AE_FORMANCE_REQUEST_TIMEOUT_MS'], 'formance')
+  }
+}
+function validateProductionBrowserSecurity(
+  environment: DeploymentEnvironmentInput,
+  add: (kind: DeploymentFindingKind, code: string, names: readonly string[], scope: string) => void,
+): void {
+  const reportOnly = present(environment, 'AE_CSP_REPORT_ONLY')
+  if (reportOnly === 'true' || reportOnly === '1') {
+    add('forbidden', 'production_csp_must_enforce', ['AE_CSP_REPORT_ONLY'], 'browser-security')
   }
 }
 function validateX402RpcUrls(
@@ -423,10 +566,10 @@ function isSecretDeploymentName(name: string): boolean {
     name === 'VITE_CLERK_PUBLISHABLE_KEY'
     || name === 'VITE_SENTRY_DSN'
     || name === 'VITE_POSTHOG_KEY'
-    || name === 'VITE_STRIPE_PUBLISHABLE_KEY'
   ) return false
   if (name === 'AE_X402_RPC_URLS_JSON') return true
   return name === 'STRIPE_WEBHOOK_SECRET'
+    || name === 'STRIPE_V2_WEBHOOK_SECRET'
     || name.startsWith('AE_SOURCE_WRITE_KEY_')
     || name.startsWith('AE_SOURCE_WRITE_PREVIOUS_KEYS_')
     || name.includes('TOKEN')
@@ -440,6 +583,7 @@ function isKnown(name: string): boolean {
   return fieldRules.some((rule) => rule.name === name)
     || knownNames.includes(name)
     || requiredProduction.some((group) => group.names.includes(name))
+    || package5ControlledRequirements.some((group) => group.names.includes(name))
     || conditional.some((group) => group.names.includes(name))
     || optionalNames.includes(name)
     || /^AE_SOURCE_WRITE_(?:KEY|PREVIOUS_KEYS|DERIVED_KEY_ID|PREVIOUS_DERIVED_KEY_IDS)_(?:BILLING|PROTECTED|CATALOG|OPERATOR|REPAIR|SESSION)$/u.test(name)

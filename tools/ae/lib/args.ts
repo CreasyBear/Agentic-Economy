@@ -1,13 +1,16 @@
+import { isIP } from 'node:net'
 import { parseArgs as parseNodeArgs } from 'node:util'
 
 export type CliOptions = {
   baseUrl: string
+  baseUrlSource?: CliBaseUrlSource
   json: boolean
   help: boolean
+  version?: boolean
   allowWrite: boolean
   technical?: boolean
   threadId?: string
-  operationRef?: string
+  toolRef?: string
   candidateDigest?: string
   apply?: boolean
   idempotencyKey?: string
@@ -19,13 +22,22 @@ export type CliOptions = {
   snapshotName?: string
   updateSnapshot?: boolean
   limit?: string | number
+  source?: string
   cursor?: string
   state?: string
   filters?: string | Record<string, unknown>
   input?: string
-  mcp?: boolean
-  supplier?: boolean
+  environment?: string
+  provider?: boolean
 }
+
+export type CliBaseUrlSource =
+  | 'flag'
+  | 'AE_CLI_BASE_URL'
+  | 'AE_CANONICAL_BASE_URL'
+  | 'CONVEX_URL_loopback'
+  | 'VITE_CONVEX_URL_loopback'
+  | 'hosted_default'
 
 export type ParsedArgs = {
   command?: string
@@ -34,7 +46,7 @@ export type ParsedArgs = {
   providedOptions: readonly string[]
 }
 
-const HOSTED_DEFAULT_BASE_URL = 'https://agentic-economy-phi.vercel.app'
+export const HOSTED_DEFAULT_BASE_URL = 'https://agentic-economy-phi.vercel.app'
 const LOCAL_DEV_BASE_URL = 'http://127.0.0.1:3024'
 export const INVALID_BASE_URL_PLACEHOLDER = '<invalid-origin>'
 
@@ -53,21 +65,45 @@ export function safeOriginForDiagnostics(value: unknown): string {
   }
 }
 
-function isLoopbackHttpUrl(value: string): boolean {
+export function isLoopbackCliBaseUrl(value: string): boolean {
   try {
     const url = new URL(value)
-    return url.hostname === '127.0.0.1' || url.hostname === 'localhost' || url.hostname === '::1'
+    const hostname = url.hostname.toLowerCase().replace(/^\[(.*)\]$/u, '$1')
+    return hostname === 'localhost'
+      || hostname === '::1'
+      || (isIP(hostname) === 4 && hostname.startsWith('127.'))
   } catch {
     return false
   }
 }
 
-function defaultCliBaseUrl(): string {
-  const convexUrl = process.env.CONVEX_URL?.trim() || process.env.VITE_CONVEX_URL?.trim()
-  if (convexUrl !== undefined && convexUrl.length > 0 && isLoopbackHttpUrl(convexUrl)) {
-    return LOCAL_DEV_BASE_URL
+function defaultCliBaseUrl(): Readonly<{ value: string; source: CliBaseUrlSource }> {
+  const serverConvexUrl = process.env.CONVEX_URL?.trim()
+  const publicConvexUrl = process.env.VITE_CONVEX_URL?.trim()
+  const convexUrl = serverConvexUrl || publicConvexUrl
+  if (convexUrl !== undefined && convexUrl.length > 0 && isLoopbackCliBaseUrl(convexUrl)) {
+    return {
+      value: LOCAL_DEV_BASE_URL,
+      source: serverConvexUrl === convexUrl ? 'CONVEX_URL_loopback' : 'VITE_CONVEX_URL_loopback',
+    }
   }
-  return HOSTED_DEFAULT_BASE_URL
+  return { value: HOSTED_DEFAULT_BASE_URL, source: 'hosted_default' }
+}
+
+function selectedCliBaseUrl(explicit: string | undefined): Readonly<{
+  value: string
+  source: CliBaseUrlSource
+}> {
+  if (explicit !== undefined) return { value: explicit, source: 'flag' }
+  const cliBaseUrl = process.env.AE_CLI_BASE_URL?.trim()
+  if (cliBaseUrl !== undefined && cliBaseUrl.length > 0) {
+    return { value: cliBaseUrl, source: 'AE_CLI_BASE_URL' }
+  }
+  const canonicalBaseUrl = process.env.AE_CANONICAL_BASE_URL?.trim()
+  if (canonicalBaseUrl !== undefined && canonicalBaseUrl.length > 0) {
+    return { value: canonicalBaseUrl, source: 'AE_CANONICAL_BASE_URL' }
+  }
+  return defaultCliBaseUrl()
 }
 
 function parseBaseUrl(value: unknown): string {
@@ -96,11 +132,12 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
       'base-url': { type: 'string' },
       json: { type: 'boolean' },
       help: { type: 'boolean' },
+      version: { type: 'boolean' },
       technical: { type: 'boolean' },
       'allow-write': { type: 'boolean' },
       apply: { type: 'boolean' },
       'thread-id': { type: 'string' },
-      'operation-ref': { type: 'string' },
+      'tool-ref': { type: 'string' },
       'candidate-digest': { type: 'string' },
       'idempotency-key': { type: 'string' },
       wait: { type: 'boolean' },
@@ -111,12 +148,13 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
       'snapshot-name': { type: 'string' },
       'update-snapshot': { type: 'boolean' },
       limit: { type: 'string' },
+      source: { type: 'string' },
       cursor: { type: 'string' },
       state: { type: 'string' },
       filters: { type: 'string' },
       input: { type: 'string' },
-      mcp: { type: 'boolean' },
-      supplier: { type: 'boolean' },
+      environment: { type: 'string' },
+      provider: { type: 'boolean' },
     },
     allowPositionals: true,
     tokens: true,
@@ -129,21 +167,19 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
     }
     seenLongOptions.add(token.name)
   }
-  const configuredBaseUrl = process.env.AE_CLI_BASE_URL?.trim() || process.env.AE_CANONICAL_BASE_URL?.trim()
-  const baseUrl = parseBaseUrl(
-    parsed.values['base-url'] === undefined
-      ? configuredBaseUrl || defaultCliBaseUrl()
-      : parsed.values['base-url'],
-  )
+  const selectedBaseUrl = selectedCliBaseUrl(parsed.values['base-url'])
+  const baseUrl = parseBaseUrl(selectedBaseUrl.value)
   const options: CliOptions = {
     baseUrl,
+    baseUrlSource: selectedBaseUrl.source,
     json: parsed.values.json ?? false,
     help: parsed.values.help ?? false,
+    version: parsed.values.version ?? false,
     allowWrite: parsed.values['allow-write'] ?? false,
     technical: parsed.values.technical ?? false,
     apply: parsed.values.apply ?? false,
     ...(parsed.values['thread-id'] === undefined ? {} : { threadId: parsed.values['thread-id'] }),
-    ...(parsed.values['operation-ref'] === undefined ? {} : { operationRef: parsed.values['operation-ref'] }),
+    ...(parsed.values['tool-ref'] === undefined ? {} : { toolRef: parsed.values['tool-ref'] }),
     ...(parsed.values['candidate-digest'] === undefined ? {} : { candidateDigest: parsed.values['candidate-digest'] }),
     wait: parsed.values.wait ?? false,
     ...(parsed.values['idempotency-key'] === undefined ? {} : { idempotencyKey: parsed.values['idempotency-key'] }),
@@ -154,12 +190,13 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
     ...(parsed.values['snapshot-name'] === undefined ? {} : { snapshotName: parsed.values['snapshot-name'] }),
     ...(parsed.values['update-snapshot'] === undefined ? {} : { updateSnapshot: parsed.values['update-snapshot'] }),
     ...(parsed.values.limit === undefined ? {} : { limit: parsed.values.limit }),
+    ...(parsed.values.source === undefined ? {} : { source: parsed.values.source }),
     ...(parsed.values.cursor === undefined ? {} : { cursor: parsed.values.cursor }),
     ...(parsed.values.state === undefined ? {} : { state: parsed.values.state }),
     ...(parsed.values.filters === undefined ? {} : { filters: parsed.values.filters }),
     ...(parsed.values.input === undefined ? {} : { input: parsed.values.input }),
-    mcp: parsed.values.mcp ?? false,
-    supplier: parsed.values.supplier ?? false,
+    ...(parsed.values.environment === undefined ? {} : { environment: parsed.values.environment }),
+    provider: parsed.values.provider ?? false,
   }
   const [command, ...positionals] = parsed.positionals
   return {

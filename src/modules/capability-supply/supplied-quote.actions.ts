@@ -160,7 +160,7 @@ export const collectSuppliedCandidateQuoteAction = defineAction({
     recipientKind: 'provider_system',
     dataClasses: ['service_reference', 'constraints'],
     spendExposure: 'none',
-    approval: 'mandate_eligible',
+    approval: 'policy_eligible',
   },
   surfaces: [],
   invocationContract: {

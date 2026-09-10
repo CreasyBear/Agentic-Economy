@@ -10,7 +10,8 @@ export type MarketEvidenceClass =
   | "ae_invocation"
   | "ae_settlement"
   | "ae_qualified_use"
-  | "ae_operation";
+  | "ae_tool"
+  | "ae_provider";
 
 export type MarketMetricProjection = Readonly<{
   key: string;
@@ -56,9 +57,9 @@ export type FeaturedExternalService = Readonly<{
 }>;
 
 export type X402EcosystemProjection = Readonly<{
-  label: "Indexed x402 activity via Agentic Market";
-  source: "Agentic Market";
-  sourceUrl: "https://agentic.market/";
+  label: "Indexed x402 activity via AEcon directory";
+  source: "AEcon directory";
+  sourceUrl: "/market";
   status: MarketSourceStatus;
   fetchedAt?: string;
   sourceTimestamp?: string;
@@ -90,21 +91,6 @@ export const marketWindowToUpstream = {
   "30d": 30,
 } as const satisfies Record<MarketWindow, 1 | 7 | 30>;
 
-export const MARKET_SOURCE_DELAYED_AFTER_MS = 8 * 60 * 60_000;
-export const MARKET_SOURCE_UNAVAILABLE_AFTER_MS = 24 * 60 * 60_000;
 export const MARKET_MAX_DAILY_POINTS = 31;
 export const MARKET_MAX_RECENT_ACTIVITY = 24;
 export const MARKET_MAX_FEATURED_SERVICES = 6;
-
-export function marketSourceStatus(
-  fetchedAt: number | undefined,
-  now: number,
-): MarketSourceStatus {
-  if (
-    fetchedAt === undefined ||
-    now - fetchedAt >= MARKET_SOURCE_UNAVAILABLE_AFTER_MS
-  )
-    return "unavailable";
-  if (now - fetchedAt >= MARKET_SOURCE_DELAYED_AFTER_MS) return "delayed";
-  return "live";
-}

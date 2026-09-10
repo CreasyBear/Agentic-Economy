@@ -5,6 +5,10 @@ import { containsForbiddenSignatureKey } from '@/modules/common/forbidden-signat
 import { isRecord } from '@/modules/common/is-record'
 import { stableStringify } from '@/modules/common/stable-hash'
 import type { StableHashValue } from '@/modules/common/stable-hash'
+import {
+  x402PaymentAuthorizationFailureCodeValue,
+  x402PaymentAuthorizationFailureDetailValue,
+} from '@/modules/money/schema'
 
 import type { MutationCtx } from './_generated/server'
 import {
@@ -19,6 +23,7 @@ import {
 
 const paymentSigningIdempotencyKeyPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
 const paymentAuthorizationValidBeforePattern = /^(?:0|[1-9][0-9]*)$/
+export const X402_PAYMENT_SIGNING_CLAIM_LEASE_MS = 30_000
 
 function isPaymentSigningIdempotencyKey(value: unknown): value is string {
   return typeof value === 'string' && paymentSigningIdempotencyKeyPattern.test(value)
@@ -95,7 +100,7 @@ export const prepareX402PaymentAuthorizationArgs = {
   dispatchRef: v.string(),
   attemptRef: v.string(),
   effectGeneration: v.number(),
-  operationRef: v.optional(v.string()),
+  toolRef: v.optional(v.string()),
   inputDigest: v.optional(v.string()),
   paymentIdentifier: v.string(),
   operationKeyDigest: v.string(),
@@ -130,7 +135,7 @@ type PrepareArgs = {
   dispatchRef: string
   attemptRef: string
   effectGeneration: number
-  operationRef?: string
+  toolRef?: string
   inputDigest?: string
   paymentIdentifier: string
   operationKeyDigest: string
@@ -194,7 +199,7 @@ function prepareAttributionMatches(row: AttemptRow, args: PrepareArgs): boolean 
     row.dispatchRef === args.dispatchRef
     && row.attemptRef === args.attemptRef
     && row.effectGeneration === args.effectGeneration
-    && row.operationRef === args.operationRef
+    && row.toolRef === args.toolRef
     && row.inputDigest === args.inputDigest
     && row.paymentIdentifier === args.paymentIdentifier
     && row.operationKeyDigest === args.operationKeyDigest
@@ -313,6 +318,26 @@ export const recordX402PaymentSigningIntentArgs = {
 
 export const recordX402PaymentSigningIntentReturns = v.null()
 
+export const x402PaymentAuthorizationFailureCode = x402PaymentAuthorizationFailureCodeValue
+
+export type X402PaymentAuthorizationFailureCode = Infer<
+  typeof x402PaymentAuthorizationFailureCode
+>
+export const x402PaymentAuthorizationFailureDetail = x402PaymentAuthorizationFailureDetailValue
+export type X402PaymentAuthorizationFailureDetail = Infer<
+  typeof x402PaymentAuthorizationFailureDetail
+>
+
+export const recordX402PaymentAuthorizationFailureArgs = {
+  dispatchRef: v.string(),
+  attemptRef: v.string(),
+  effectGeneration: v.number(),
+  code: x402PaymentAuthorizationFailureCode,
+  detail: v.optional(x402PaymentAuthorizationFailureDetail),
+}
+
+export const recordX402PaymentAuthorizationFailureReturns = v.null()
+
 export const recordX402PaymentSignatureDigestArgs = {
   custodyRef: v.string(),
   authorizationDigest: v.string(),
@@ -356,6 +381,13 @@ type RecordSignatureDigestArgs = {
   paymentNonce?: string
   requestFingerprint?: string
   custodyGeneration?: number
+}
+type RecordAuthorizationFailureArgs = {
+  dispatchRef: string
+  attemptRef: string
+  effectGeneration: number
+  code: X402PaymentAuthorizationFailureCode
+  detail?: X402PaymentAuthorizationFailureDetail
 }
 type MarkPossiblySubmittedArgs = EventArgs & {
   settlementStatus?: 'settled' | 'not_settled' | 'unknown'
@@ -463,16 +495,36 @@ export async function claimX402PaymentAuthorizationHandler(
   }
   const stored = storedAuthorization(row)
   if (stored !== undefined) return { kind: 'stored', ...stored }
-  // A digest or a partial authorization is evidence that another signer has
-  // already crossed the one-authorization boundary. Do not mint a second
-  // EIP-3009 nonce while the first result is unavailable.
-  if (
-    row.paymentSignatureDigest !== undefined
-    || row.paymentPayer !== undefined
-    || row.paymentNonce !== undefined
-    || row.paymentSigningClaimedAt !== undefined
-  ) return { kind: 'pending' }
-  await ctx.db.patch(row._id, { paymentSigningClaimedAt: Date.now() })
+  // Any unsigned intent or authorization identity is durable first-win
+  // evidence, not a lease. Once it exists, a later worker must converge on the
+  // same idempotency key and EIP-3009 nonce instead of minting another one.
+  const authorizationIdentityFields = [
+    row.paymentUnsignedMaterialJson,
+    row.paymentUnsignedMaterialDigest,
+    row.paymentSigningIdempotencyKey,
+    row.paymentSignatureDigest,
+    row.paymentPayer,
+    row.paymentNonce,
+    row.paymentAuthorizationValidBefore,
+    row.paymentAuthorizationExpiresAt,
+  ]
+  if (authorizationIdentityFields.some((value) => value !== undefined)) {
+    return { kind: 'pending' }
+  }
+
+  const now = Date.now()
+  if (row.paymentSigningClaimedAt !== undefined) {
+    const claimedAt = row.paymentSigningClaimedAt
+    // Invalid or future timestamps fail closed. A valid bare claim can be
+    // reclaimed only after its bounded lease expires without identity evidence.
+    if (
+      !Number.isSafeInteger(claimedAt)
+      || claimedAt < 0
+      || claimedAt > now
+      || now - claimedAt < X402_PAYMENT_SIGNING_CLAIM_LEASE_MS
+    ) return { kind: 'pending' }
+  }
+  await ctx.db.patch(row._id, { paymentSigningClaimedAt: now })
   return { kind: 'claimed' }
 }
 
@@ -549,6 +601,38 @@ export async function recordX402PaymentSigningIntentHandler(
     paymentAuthorizationValidBefore: args.paymentAuthorizationValidBefore,
     paymentAuthorizationExpiresAt: args.paymentAuthorizationExpiresAt,
     paymentSigningClaimedAt: row.paymentSigningClaimedAt ?? Date.now(),
+  })
+  return null
+}
+
+export async function recordX402PaymentAuthorizationFailureHandler(
+  ctx: MutationCtx,
+  args: RecordAuthorizationFailureArgs,
+): Promise<null> {
+  const row = await loadByAttempt(ctx, args.attemptRef, args.effectGeneration)
+  if (row === null || row.dispatchRef !== args.dispatchRef) {
+    throw new Error('x402_payment_attempt_attribution_invalid')
+  }
+  if (
+    row.state !== 'prepared'
+    || row.submissionStartedAt !== undefined
+    || row.paymentSignatureDigest !== undefined
+  ) throw new Error('x402_payment_authorization_failure_state_invalid')
+  if (args.code !== 'provider_authority_invalid' && args.detail !== undefined) {
+    throw new Error('x402_payment_authorization_failure_detail_invalid')
+  }
+  if (
+    row.authorizationFailureCode === args.code
+    && row.authorizationFailureDetail === args.detail
+  ) {
+    return null
+  }
+  await ctx.db.patch(row._id, {
+    authorizationFailureCode: args.code,
+    ...(args.detail === undefined
+      ? { authorizationFailureDetail: undefined }
+      : { authorizationFailureDetail: args.detail }),
+    authorizationFailureObservedAt: Date.now(),
   })
   return null
 }

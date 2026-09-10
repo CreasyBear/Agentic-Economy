@@ -8,6 +8,8 @@ export const indexedPublicPagePaths = [
   '/for-agents',
   '/for-providers',
   '/about',
+  '/support',
+  '/status',
   '/privacy',
   '/terms',
   '/privacy/remove-business',

@@ -4,7 +4,13 @@ import { remoteProblemToProblem, type ProblemKind } from '@/lib/errors'
 import { safeOriginForDiagnostics } from './args'
 
 const REDACTED_FAILURE_VALUE = '<redacted>'
-const SENSITIVE_FAILURE_FIELD = /^(?:authorization|access[_-]?token|api[_-]?key|bearer|base[_-]?url|body|credential|cookie|evidence(?:[_-]?ref)?|headers?|idempotency[_-]?key|input|invocation[_-]?ref|password|path|query|raw[_-]?url|request[_-]?url|retry[_-]?hint|secret|status[_-]?path|token|transport[_-]?url|url|userinfo)$/iu
+/**
+ * Only secret-bearing fields are dropped. Structural fields (path, input, url,
+ * refs) stay, because a placeholder in their place makes the envelope lie about
+ * the continuation the caller must perform; their string values are still
+ * sanitized for embedded credentials.
+ */
+const SECRET_FAILURE_FIELD = /^(?:authorization|access[_-]?token|api[_-]?key|bearer|cookie|credential|headers?|password|secret|token|userinfo)$/iu
 const URL_IN_FAILURE_TEXT = /https?:\/\/[^\s"'<>]+/giu
 const SENSITIVE_FAILURE_TEXT = /\b(?:authorization|access[_-]?token|api[_-]?key|bearer|idempotency[_-]?key|invocation[_-]?ref|password|secret|token)\s*[:=]\s*[^\s,;]+/giu
 
@@ -15,12 +21,23 @@ function sanitizeFailureText(value: string): string {
     .replace(SENSITIVE_FAILURE_TEXT, (field) => `${field.slice(0, field.search(/[:=]/u) + 1)}${REDACTED_FAILURE_VALUE}`)
 }
 
-function sanitizeFailureValue(value: unknown, field?: string): unknown {
-  if (field !== undefined && SENSITIVE_FAILURE_FIELD.test(field)) return REDACTED_FAILURE_VALUE
+/** Secret fields are omitted rather than replaced, so the surviving structure stays honest. */
+function sanitizeFailureValue(value: unknown): unknown {
   if (typeof value === 'string') return sanitizeFailureText(value)
   if (Array.isArray(value)) return value.map((item) => sanitizeFailureValue(item))
   if (!isRecord(value)) return value
-  return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, sanitizeFailureValue(item, key)]))
+  return Object.fromEntries(
+    Object.entries(value)
+      .filter(([key]) => !SECRET_FAILURE_FIELD.test(key))
+      .map(([key, item]) => [key, sanitizeFailureValue(item)]),
+  )
+}
+
+/** Show enough of a credential-shaped value to identify it, never enough to use it. */
+export function maskCredential(value: string): string {
+  const trimmed = value.trim()
+  if (trimmed.length <= 12) return REDACTED_FAILURE_VALUE
+  return `${trimmed.slice(0, 6)}…${trimmed.slice(-4)}`
 }
 
 export type CliFailureOptions = {

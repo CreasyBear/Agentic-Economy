@@ -1,12 +1,18 @@
 import {
   handleMcpRequest,
+  handleMcpRouteRequest,
   postMcp,
   readMcpBody,
 } from './mcp-api-harness'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
 
 import { defineAction, mcpToolName } from '@/modules/actions'
+import { setHttpRateLimitAdmissionForTests } from '@/lib/server/rate-limit'
+
+afterEach(() => {
+  setHttpRateLimitAdmissionForTests(undefined)
+})
 
 describe('MCP host adapter protocol', () => {
   it('initializes with server information and the tools capability', async () => {
@@ -27,6 +33,35 @@ describe('MCP host adapter protocol', () => {
       serverInfo: { name: 'agentic-economy', version: '1.0.0' },
       capabilities: { tools: expect.any(Object) },
     })
+    const instructions = body.result?.instructions
+    expect(instructions).toBe(
+      'Use Agentic Economy to acquire one bounded outside contribution when your current harness lacks a capability. '
+      + 'Search with `ae_registry_tools_search` and a capability phrase. '
+      + 'Use `ae_registry_tools_list` to browse, `ae_registry_tools_describe` for one exact input contract, and `ae_registry_tools_compare` for up to four exact references. '
+      + 'Call `ae_tool_quote` with the exact Tool and input. Complete its one continuation or required action, then request a fresh Quote if the input or authority changes. '
+      + 'Call only with the Quote returned by `ae_tool_quote`. '
+      + 'If Account credit is insufficient, use `ae_funding_handoff_create`, give only its Stripe checkoutUrl to the payer, persist fundingSessionId, poll `ae_funding_handoff_status`, then explicitly retry the original Tool only after ready. '
+      + 'If effects are uncertain, use `ae_call_status` or `ae_call_reconcile` before retrying. '
+      + 'Agentic Economy returns the contribution or receipt; your existing harness keeps project planning and execution.',
+    )
+    expect(typeof instructions).toBe('string')
+    expect([...String(instructions).matchAll(/`(ae_[^`]+)`/g)].map((match) => match[1])).toEqual([
+      'ae_registry_tools_search',
+      'ae_registry_tools_list',
+      'ae_registry_tools_describe',
+      'ae_registry_tools_compare',
+      'ae_tool_quote',
+      'ae_tool_quote',
+      'ae_funding_handoff_create',
+      'ae_funding_handoff_status',
+      'ae_call_status',
+      'ae_call_reconcile',
+    ])
+    expect(instructions).toContain('one bounded outside contribution')
+    expect(instructions).toContain('your existing harness keeps project planning and execution')
+    expect(instructions).not.toMatch(/Agentic Economy (?:owns|plans|executes|orchestrates)/i)
+    expect(instructions).not.toMatch(/api[_ -]?key|bearer|credential|password|secret|private origin|https?:\/\/|localhost/i)
+    expect(instructions).not.toMatch(/\bevidence\b|idempotenc/i)
   })
   it('maps top-level MCP request schema failures to Invalid params', async () => {
     const malformedInitialize = await postMcp({
@@ -107,8 +142,75 @@ describe('MCP host adapter protocol', () => {
     })
   })
 
+  it('returns a correlated retryable problem when MCP request admission is unavailable', async () => {
+    setHttpRateLimitAdmissionForTests(async () => {
+      throw new Error('private admission source detail')
+    })
+    const request = new Request('https://ae.example/mcp', {
+      method: 'POST',
+      headers: {
+        accept: 'application/json, text/event-stream',
+        'content-type': 'application/json',
+        'x-ae-request-id': 'corr_mcp_admission_42',
+      },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 'admission-unavailable',
+        method: 'tools/list',
+        params: {},
+      }),
+    })
+
+    const response = await handleMcpRouteRequest(request)
+
+    expect(response.status).toBe(503)
+    expect(response.headers.get('content-type')).toContain('application/problem+json')
+    expect(response.headers.get('x-ae-request-id')).toBe('corr_mcp_admission_42')
+    const body = await response.json()
+    expect(body).toMatchObject({
+      status: 503,
+      kind: 'UNAVAILABLE',
+      code: 'mcp_admission_unavailable',
+      retryable: true,
+      detail: 'The MCP endpoint is temporarily unavailable. Retry later.',
+      correlationId: 'corr_mcp_admission_42',
+    })
+    expect(JSON.stringify(body)).not.toContain('private admission source detail')
+  })
+
+  it('preserves correlated Retry-After semantics when MCP admission is limited', async () => {
+    setHttpRateLimitAdmissionForTests(async () => ({ ok: false, retryAfter: 1_250 }))
+    const request = new Request('https://ae.example/mcp', {
+      method: 'POST',
+      headers: {
+        accept: 'application/json, text/event-stream',
+        'content-type': 'application/json',
+        'x-ae-request-id': 'corr_mcp_limited_42',
+      },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 'admission-limited',
+        method: 'tools/list',
+        params: {},
+      }),
+    })
+
+    const response = await handleMcpRouteRequest(request)
+
+    expect(response.status).toBe(429)
+    expect(response.headers.get('retry-after')).toBe('2')
+    expect(response.headers.get('x-ae-request-id')).toBe('corr_mcp_limited_42')
+    await expect(response.json()).resolves.toMatchObject({
+      status: 429,
+      kind: 'RESOURCE_EXHAUSTED',
+      code: 'rate_limited',
+      retryable: true,
+    })
+  })
+
   it('sanitizes thrown MCP action errors', async () => {
-    const secret = 'secret_internal_exception_detail'
+    const secret = 'secret_internal_exception_detail recovery:v1:private'
+    const correlationId = 'corr_mcp_safe_42'
     const throwingAction = defineAction({
       id: 'test.throwing',
       name: 'Throwing test action',
@@ -153,16 +255,34 @@ describe('MCP host adapter protocol', () => {
         },
       },
       { actions: [throwingAction] },
+      { 'x-ae-request-id': correlationId },
     )
 
     expect(response.status).toBe(200)
+    expect(response.headers.get('x-ae-request-id')).toBe(correlationId)
     const body = await readMcpBody(response)
-    const result = body.result as Record<string, unknown>
+    const result = body.result as {
+      isError?: boolean
+      structuredContent?: Record<string, unknown>
+      content?: Array<{ type?: string; text?: string }>
+    }
     expect(result.isError).toBe(true)
-    expect(result.content).toEqual(expect.arrayContaining([
-      { type: 'text', text: expect.stringContaining('action_execution_failed') },
-    ]))
+    const text = result.content?.[0]?.text
+    expect(typeof text).toBe('string')
+    const textFallback = JSON.parse(text ?? 'null') as Record<string, unknown>
+    expect(result.structuredContent).toEqual(textFallback)
+    expect(textFallback).toEqual({
+      type: 'about:blank',
+      title: 'Internal error',
+      status: 500,
+      detail: 'Action execution failed.',
+      kind: 'INTERNAL',
+      code: 'action_execution_failed',
+      retryable: false,
+      correlationId,
+    })
     expect(JSON.stringify(result)).not.toContain(secret)
+    expect(JSON.stringify(result)).not.toContain('recovery:v1:private')
   })
 
   it('returns an error for an unknown tool without invoking an action', async () => {
@@ -193,7 +313,7 @@ describe('MCP host adapter protocol', () => {
       readOnly: false,
       effect: {
         class: 'external_state_change', reversible: false, recipientKind: 'none',
-        dataClasses: [], spendExposure: 'none', approval: 'approve_each',
+        dataClasses: [], spendExposure: 'none', approval: 'approval_required',
       },
       surfaces: ['mcp'],
       outputSchema: z.strictObject({ kind: z.literal('ok') }),
@@ -238,7 +358,7 @@ describe('MCP host adapter protocol', () => {
 
     expect(response.status).toBe(401)
     expect(response.headers.get('WWW-Authenticate')).toBe(
-      'Bearer resource_metadata="https://canonical.example/.well-known/oauth-protected-resource", scope="customer_requests:approve_each"',
+      'Bearer resource_metadata="https://canonical.example/.well-known/oauth-protected-resource", scope="market_tools:call customer_requests:approval_required offline_access"',
     )
   })
 

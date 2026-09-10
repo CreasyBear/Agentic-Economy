@@ -10,6 +10,8 @@ import {
 import { resolveCanonicalBaseUrl } from '@/lib/server/canonical-url'
 import { response } from '@/lib/server/no-store-response'
 import { problem } from '@/lib/server/problem'
+import { package5SupplyActionRolloutDecision } from '@/lib/server/package5-rollout'
+import type { StringEnvironment } from '@/lib/server/read-trimmed-env'
 import {
   runWithRequestCorrelation,
   withRequestCorrelationHeader,
@@ -22,12 +24,14 @@ import {
   supplyConnectionDetailAction,
   supplyConnectionListAction,
   supplyConnectionReconnectAction,
-  supplyConnectionRetryCleanupAction,
   supplyConnectionRevokeAction,
   supplyEarningsAction,
+  supplyOffboardingStatusAction,
+  supplyToolsListAction,
   supplyPublishAction,
   supplyRecheckAction,
   supplyRepublishAction,
+  supplySourcePreviewAction,
   supplyStatusAction,
   supplyWithdrawAction,
   type SupplyManagementService,
@@ -36,6 +40,8 @@ import {
 const MAX_SUPPLY_ACTION_BODY_BYTES = 320 * 1024
 
 export const SUPPLY_HTTP_ACTIONS = Object.freeze({
+  sourcePreview: supplySourcePreviewAction,
+  toolsList: supplyToolsListAction,
   status: supplyStatusAction,
   publish: supplyPublishAction,
   withdraw: supplyWithdrawAction,
@@ -47,7 +53,7 @@ export const SUPPLY_HTTP_ACTIONS = Object.freeze({
   connectionConnect: supplyConnectionConnectAction,
   connectionReconnect: supplyConnectionReconnectAction,
   connectionRevoke: supplyConnectionRevokeAction,
-  connectionRetryCleanup: supplyConnectionRetryCleanupAction,
+  offboardingStatus: supplyOffboardingStatusAction,
 })
 
 export type SupplyHttpActionName = keyof typeof SUPPLY_HTTP_ACTIONS
@@ -61,6 +67,7 @@ export type SupplyActionHandlerOptions = Readonly<{
   authenticate?: AgentAccessAuthenticationOptions['authenticate']
   resolvePrincipal?: AgentAccessPrincipalResolver
   supplyManagementService?: SupplyManagementService
+  rolloutEnvironment?: StringEnvironment
 }>
 
 function authenticationFailure(request: Request, reason: string, status: number, correlationId: string): Response {
@@ -71,14 +78,14 @@ function authenticationFailure(request: Request, reason: string, status: number,
     status,
     detail: reason === 'scope_required'
       ? `The current agent credential does not grant ${scope}.`
-      : 'Connect an owner-issued supplier credential before managing supplier Operations.',
+      : 'Connect an owner-issued provider credential before managing Provider Tools.',
   }, {
     Vary: 'Authorization',
     'WWW-Authenticate': bearerChallenge(resolveCanonicalBaseUrl(request).baseUrl, scope),
   }), correlationId)
 }
 
-/** Canonical authenticated HTTP adapter for every supplier action contract. */
+/** Canonical authenticated HTTP adapter for every provider action contract. */
 export async function handleSupplyActionPost(
   request: Request,
   actionName: SupplyHttpActionName,
@@ -91,7 +98,7 @@ export async function handleSupplyActionPost(
         status: 413,
         kind: 'PAYLOAD_TOO_LARGE',
         code: bounded.code,
-        detail: 'The supplier action body is too large.',
+        detail: 'The provider action body is too large.',
       }), correlationId)
     }
 
@@ -117,7 +124,7 @@ export async function handleSupplyActionPost(
         status: 400,
         kind: 'INVALID_ARGUMENT',
         code: 'invalid_json',
-        detail: 'The supplier action body must be valid JSON.',
+        detail: 'The provider action body must be valid JSON.',
       }), correlationId)
     }
 
@@ -129,6 +136,17 @@ export async function handleSupplyActionPost(
         kind: 'INVALID_ARGUMENT',
         code: 'invalid_request',
         detail: `The request did not match ${action.invocationContract.version}.`,
+      }), correlationId)
+    }
+
+    const rollout = package5SupplyActionRolloutDecision(action.id, parsed.data, options.rolloutEnvironment)
+    if (!rollout.enabled) {
+      return withRequestCorrelationHeader(problem({
+        status: 503,
+        kind: 'UNAVAILABLE',
+        code: rollout.code,
+        retryable: false,
+        detail: 'This Provider capability is not enabled for the current deployment.',
       }), correlationId)
     }
 
@@ -153,7 +171,7 @@ export async function handleSupplyActionPost(
       const failure = gatewayFailureToProblem({ kind: 'error', code: 'source_unavailable', retryable: true })
       return withRequestCorrelationHeader(problem({
         ...failure,
-        detail: 'The supplier Operation source is temporarily unavailable.',
+        detail: 'The Provider Tool source is temporarily unavailable.',
       }), correlationId)
     }
   })

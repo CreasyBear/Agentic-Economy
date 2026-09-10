@@ -1,9 +1,9 @@
 import { actionToToolContract, listActions } from '@/modules/actions'
-import { readCompletedResultIdentity } from '@/modules/action-invocation'
+import { readCompletedResultIdentity } from '@/modules/action-execution'
 import {
   evaluateAdr009Transfer,
   type TransferBoundaryEvent,
-} from '@/modules/action-invocation/transfer-evaluator'
+} from '@/modules/action-execution/transfer-evaluator'
 import { resolveActionContract } from '@/modules/common/action'
 import { registryDetailAction } from '@/modules/registry/registry.actions'
 import {
@@ -12,7 +12,7 @@ import {
   type createDevelopmentEvidenceQuoteInput,
   type createDevelopmentEvidenceSupplyPorts,
 } from './development-evidence-fixture'
-import type { DevelopmentInvocationEvidence } from './development-evidence-invocations'
+import type { DevelopmentExecutionEvidence } from './development-evidence-executions'
 import {
   collectSuppliedCandidateQuoteAction,
   type SuppliedCandidateQuoteInput,
@@ -29,7 +29,7 @@ function requireContinuityFixture<T>(value: T | undefined, errorCode: string): T
 export async function buildDevelopmentContinuityEvidence(
   graph: Graph,
   input: Input,
-  invocations: DevelopmentInvocationEvidence,
+  invocations: DevelopmentExecutionEvidence,
 ) {
   const directRead = await executeDirectRead()
   const directConsequential = await executeDirectConsequential(graph, input)
@@ -39,7 +39,7 @@ export async function buildDevelopmentContinuityEvidence(
     'continuity_standalone_invocation_missing',
   )
   const identity = await readCompletedResultIdentity(invocations.standalone.port,
-    standaloneView.invocationRef,
+    standaloneView.executionRef,
     actor,
     () => ({
       sourceResultRef: invocations.standalone.sourceResultRef,
@@ -49,7 +49,7 @@ export async function buildDevelopmentContinuityEvidence(
   const completedReference = {
     role: 'prior_completed_task' as const,
     referenceRef: `completed-task:${identity.resultDigest}`,
-    invocationRef: identity.invocationRef,
+    executionRef: identity.executionRef,
     actionId: identity.actionId,
     actionVersion: identity.actionVersion,
     sourceRef: identity.sourceRef,
@@ -77,7 +77,7 @@ export async function buildDevelopmentContinuityEvidence(
     inspection: {
       kind: 'completed_task' as const,
       referenceRef: completedReference.referenceRef,
-      invocationRef: completedReference.invocationRef,
+      executionRef: completedReference.executionRef,
       sourceResultRef: completedReference.sourceResultRef,
     },
   }]
@@ -100,7 +100,7 @@ export async function buildDevelopmentContinuityEvidence(
     /authority|attempt|control|quoteRef|price|terms|evidenceRefs/u,
   )?.length ?? 0
   const controlledEvents = deriveControlledEvents(invocations)
-  const history = invocations.standalone.state.history.get(standaloneView.invocationRef) ?? []
+  const history = invocations.standalone.state.history.get(standaloneView.executionRef) ?? []
   const transfer = evaluateAdr009Transfer({
     events: {
       direct_read: directRead.events,
@@ -115,10 +115,10 @@ export async function buildDevelopmentContinuityEvidence(
         resolveActionContract(collectSuppliedCandidateQuoteAction).safeContinuations.length,
     },
     controlledReadback: {
-      invocationVersion: standaloneView.invocationVersion,
+      executionVersion: standaloneView.executionVersion,
       controlRecords: invocations.standalone.state.controls.size,
       attributableAttempts:
-        invocations.standalone.state.attempts.get(standaloneView.invocationRef)?.size ?? 0,
+        invocations.standalone.state.attempts.get(standaloneView.executionRef)?.size ?? 0,
       durableHistoryRecords: history.length,
       terminalResultReconstructed:
         standaloneView.observedResolution.state === 'returned'
@@ -175,7 +175,7 @@ async function executeDirectRead() {
   })
   events.push({ kind: 'direct_runner_returned', actionId: registryDetailAction.id, outcome: (result as { kind: string }).kind })
   const snapshot = {
-    actionInvocationEmissions: 0,
+    actionExecutionEmissions: 0,
     controlEmissions: 0,
     attemptEmissions: 0,
     historyEmissions: 0,
@@ -219,7 +219,7 @@ async function executeDirectConsequential(graph: Graph, input: SuppliedCandidate
   })
   events.push({
     kind: 'direct_control_snapshot',
-    actionInvocationEmissions: 0,
+    actionExecutionEmissions: 0,
     controlEmissions: 0,
     attemptEmissions: 0,
     historyEmissions: 0,
@@ -229,12 +229,12 @@ async function executeDirectConsequential(graph: Graph, input: SuppliedCandidate
 }
 
 function deriveControlledEvents(
-  invocations: DevelopmentInvocationEvidence,
+  invocations: DevelopmentExecutionEvidence,
 ): TransferBoundaryEvent[] {
   const ref = requireContinuityFixture(
     invocations.views[1],
     'continuity_controlled_invocation_missing',
-  ).invocationRef
+  ).executionRef
   const history = invocations.standalone.state.history.get(ref) ?? []
   const authorityIndex = history.findIndex(({ kind }) => kind === 'decide')
   const releaseIndex = history.findIndex(({ kind }) => kind === 'begin_release')
@@ -243,18 +243,18 @@ function deriveControlledEvents(
   }
   const events: TransferBoundaryEvent[] = [
     { kind: 'approval_policy', policy: 'prompt', reason: 'exact invocation authority' },
-    { kind: 'authority_decision', invocationRef: ref },
-    { kind: 'user_or_supervisor_decision', invocationRef: ref },
+    { kind: 'authority_decision', executionRef: ref },
+    { kind: 'user_or_supervisor_decision', executionRef: ref },
     ...invocations.standalone.events,
   ]
   for (const row of invocations.standalone.state.controls.values()) {
-    events.push({ kind: 'control', invocationRef: row.invocationRef })
+    events.push({ kind: 'control', executionRef: row.executionRef })
   }
   for (const row of invocations.standalone.state.attempts.get(ref)?.values() ?? []) {
-    events.push({ kind: 'attempt', invocationRef: row.invocationRef, attemptRef: row.attemptRef })
+    events.push({ kind: 'attempt', executionRef: row.executionRef, attemptRef: row.attemptRef })
   }
   for (const row of history) {
-    events.push({ kind: 'history', invocationRef: row.invocationRef, commandId: row.commandId })
+    events.push({ kind: 'history', executionRef: row.executionRef, commandId: row.commandId })
   }
   return events
 }

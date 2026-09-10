@@ -20,6 +20,7 @@ export type {
   ProviderConnectionLifecycle,
   ProviderConnectionPublicProjection,
   ProviderConnectionRefusalCode,
+  ProviderConnectionSourceAuthentication,
   ReauthorizeProviderConnectionCommand,
   RecordProviderConnectionCleanupResultCommand,
 } from './internal/provider-connection/types'
@@ -63,7 +64,7 @@ export type {
   ExpireProviderConnectionLeaseCommand,
   InvalidateProviderConnectionLeaseCommand,
   IssueProviderConnectionLeaseCommand,
-  ProviderConnectionInvocationLease,
+  ProviderConnectionCallLease,
   ProviderConnectionLeaseApproval,
   ProviderConnectionLeaseAuthoritySnapshot,
   ProviderConnectionLeaseAuthorityValidation,
@@ -78,3 +79,6 @@ export {
   projectProviderConnectionPublic,
 } from './internal/provider-connection/owner-projection'
 export type { ProviderConnectionOwnerProjection } from './internal/provider-connection/owner-projection'
+
+export { createConnectionHealthAuditEvent, createConnectionLifecycleAuditEvent } from './internal/provider-connection/audit'
+export type { ConnectionHealthAuditInput, ConnectionLifecycleAuditInput } from './internal/provider-connection/audit'

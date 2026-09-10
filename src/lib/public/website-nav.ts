@@ -12,6 +12,7 @@ export type PublicFooterRouteLink = {
 export type PublicFooterLink = PublicFooterHrefLink | PublicFooterRouteLink
 
 export type PublicFooterColumn = {
+  id: string
   title: string
   links: readonly PublicFooterLink[]
 }
@@ -25,16 +26,13 @@ export function isPublicFooterHrefLink(link: PublicFooterLink): link is PublicFo
  * Destinations must stay real routes; do not add CRM mega-menus.
  */
 export const publicPrimaryNavItems: readonly PublicFooterRouteLink[] = [
-  { label: 'Ask', to: '/t/new' },
   { label: 'Discover', to: '/market', search: { window: '30d' } },
-  { label: 'Connections', to: '/for-agents' },
-  { label: 'Activity', to: '/activity' },
+  { label: 'For agents', to: '/for-agents' },
+  { label: 'For Providers', to: '/for-providers' },
+  { label: 'Calls', to: '/activity' },
 ]
 
 export function isPublicPrimaryNavActive(pathname: string, item: PublicFooterRouteLink): boolean {
-  if (item.to === '/t/new') {
-    return pathname === '/t/new' || pathname.startsWith('/t/')
-  }
   if (item.to === '/market') {
     return pathname === '/market' || pathname.startsWith('/market/')
   }
@@ -44,11 +42,13 @@ export function isPublicPrimaryNavActive(pathname: string, item: PublicFooterRou
 /**
  * One list drives the public footer. Destinations here must exist as routes
  * or static files; do not add logo walls, fake customers, or unpublished pages.
- * Four groups, same as Twenty's footer: destinations, the other door, legal,
- * machines. The first group is the market, not a CRM "Product" column.
+ * Four groups, following Twenty's labelled footer pattern: market, help, legal,
+ * and machine-readable artifacts. The first group is the market, not a CRM
+ * "Product" column.
  */
 export const publicFooterColumns: readonly PublicFooterColumn[] = [
   {
+    id: 'footer-market',
     title: 'Market',
     links: [
       ...publicPrimaryNavItems,
@@ -56,13 +56,15 @@ export const publicFooterColumns: readonly PublicFooterColumn[] = [
     ],
   },
   {
-    title: 'Suppliers',
+    id: 'footer-help',
+    title: 'Help',
     links: [
-      { label: 'Publish an Operation', to: '/for-providers' },
-      { label: 'Browse listed tools', to: '/market', search: { window: '30d' } },
+      { label: 'Get help', to: '/support' },
+      { label: 'System status', to: '/status' },
     ],
   },
   {
+    id: 'footer-legal',
     title: 'Legal',
     links: [
       { label: 'Privacy', to: '/privacy' },
@@ -71,6 +73,7 @@ export const publicFooterColumns: readonly PublicFooterColumn[] = [
     ],
   },
   {
+    id: 'footer-machines',
     title: 'Machines',
     links: [
       { label: 'llms.txt', href: '/llms.txt' },

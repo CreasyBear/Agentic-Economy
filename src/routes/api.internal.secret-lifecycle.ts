@@ -1,6 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 
 import { methodNotAllowed } from '@/lib/server/method-guard'
+import { response as noStore } from '@/lib/server/no-store-response'
 import { readTrimmedEnv, type StringEnvironment } from '@/lib/server/read-trimmed-env'
 import { isRecord } from '@/modules/common/is-record'
 import {
@@ -71,10 +72,6 @@ export const Route = createFileRoute('/api/internal/secret-lifecycle')({
     },
   },
 })
-
-function noStore(body: unknown, status: number): Response {
-  return Response.json(body, { status, headers: { 'Cache-Control': 'no-store' } })
-}
 
 function exactKeys(value: Record<string, unknown>, expected: readonly string[]): boolean {
   const keys = Object.keys(value)

@@ -6,7 +6,9 @@ import type * as TanstackReactStartModule from '@tanstack/react-start'
 import type { OwnerMoneyServerRuntime } from '@/modules/money/server'
 
 export const sourceMocks = {
+  callPublicSourceAction: vi.fn(),
   callPublicSourceQuery: vi.fn(),
+  callPublicSourceMutation: vi.fn(),
   callSourceQuery: vi.fn(),
   callSourceMutation: vi.fn(),
   createConvexServerFunctionAssertion: vi.fn(),
@@ -26,7 +28,9 @@ vi.mock('@tanstack/react-start', async (importOriginal) => ({
 }))
 vi.mock('@/lib/server/convex-source', async (importOriginal) => ({
   ...(await importOriginal<typeof ConvexSourceModule>()),
+  callPublicSourceAction: sourceMocks.callPublicSourceAction,
   callPublicSourceQuery: sourceMocks.callPublicSourceQuery,
+  callPublicSourceMutation: sourceMocks.callPublicSourceMutation,
   callSourceQuery: sourceMocks.callSourceQuery,
   callSourceMutation: sourceMocks.callSourceMutation,
   createConvexServerFunctionAssertion:
@@ -65,6 +69,8 @@ export const ownerProjection = {
         accountState: 'ready' as const,
         payoutState: 'held_threshold' as const,
         payoutRef: 'payout-1',
+        payoutRevision: 50,
+        accountVersion: 1,
         providerNet: amount,
         minimumPayout: { currency: 'USD', units: '1000', exponent: 2 },
         evidence: 'source' as const,
@@ -81,18 +87,20 @@ export const payoutAccount = {
   state: 'ready' as const,
   detailsSubmitted: true,
   recipientCapabilityActive: true,
+  version: 1,
 }
 export const input = {
   businessId: 'business-1',
   currency: 'USD',
   payoutRef: 'payout-1',
   amount,
+  expectedPayoutRevision: 50,
+  expectedAccountVersion: 1,
   idempotencyKey: 'owner-payout:test-1',
 }
 export const config = {
   secretKey: 'sk_live_test',
   webhookSecret: 'whsec_test',
-  publishableKey: 'pk_live_test',
   mode: 'live' as const,
 }
 export const unavailable = {

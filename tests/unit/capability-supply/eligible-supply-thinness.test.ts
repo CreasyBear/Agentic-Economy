@@ -53,8 +53,8 @@ describe('capability-supply eligible-supply thinness', () => {
     }
   })
 
-  it('does not merge eligible inventory into operation-ledger', () => {
-    for (const file of listTsFiles('src/modules/capability-supply/internal/operation-ledger')) {
+  it('does not merge eligible inventory into tool-ledger', () => {
+    for (const file of listTsFiles('src/modules/capability-supply/internal/tool-ledger')) {
       const source = readFileSync(file, 'utf8')
       expect(source).not.toMatch(/listIntegratedCapabilitySupply|listRouteableCapabilitySupply/)
       expect(source).not.toMatch(/getEligibleExactCapabilitySupply/)

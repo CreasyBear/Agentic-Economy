@@ -16,6 +16,7 @@ const validEnvironment = {
   AE_X402_CDP_EXPECTED_EVM_ADDRESS: '0x0000000000000000000000000000000000000001',
   AE_X402_CDP_ACCOUNT_POLICY_ID: '11111111-1111-4111-8111-111111111111',
   AE_X402_CDP_PROJECT_POLICY_ID: '22222222-2222-4222-8222-222222222222',
+  AE_X402_CDP_POLICY_RULES_DIGEST: `sha256:${'a'.repeat(64)}`,
   AE_X402_CDP_CREDENTIAL_GENERATION: '7',
 }
 
@@ -29,6 +30,7 @@ describe('CDP x402 custody configuration', () => {
       expectedEvmAddress: '0x0000000000000000000000000000000000000001',
       accountPolicyId: '11111111-1111-4111-8111-111111111111',
       projectPolicyId: '22222222-2222-4222-8222-222222222222',
+      policyRulesDigest: `sha256:${'a'.repeat(64)}`,
       credentialGeneration: 7,
       maxAtomic: 10000n,
       dailyMaxAtomic: 100000n,
@@ -60,6 +62,8 @@ describe('CDP x402 custody configuration', () => {
     const baseRef = cdpX402CustodyBudgetRef(base)
     expect(cdpX402CustodyBudgetRef(rotated)).toBe(baseRef)
     expect(cdpX402CustodyBudgetRef(differentWallet)).not.toBe(baseRef)
+    expect(cdpX402CustodyBudgetRef(base, 'production')).toBe(baseRef)
+    expect(cdpX402CustodyBudgetRef(base, 'sandbox')).not.toBe(baseRef)
     expect(baseRef).not.toContain(base.expectedEvmAddress)
     expect(baseRef).not.toContain(base.apiKeySecret)
     expect(baseRef).not.toContain(base.walletSecret)
@@ -77,6 +81,8 @@ describe('CDP x402 custody configuration', () => {
     ['malformed account policy', { AE_X402_CDP_ACCOUNT_POLICY_ID: 'not-a-uuid' }],
     ['missing project policy', { AE_X402_CDP_PROJECT_POLICY_ID: undefined }],
     ['malformed project policy', { AE_X402_CDP_PROJECT_POLICY_ID: 'not-a-uuid' }],
+    ['missing policy rules digest', { AE_X402_CDP_POLICY_RULES_DIGEST: undefined }],
+    ['malformed policy rules digest', { AE_X402_CDP_POLICY_RULES_DIGEST: 'not-a-digest' }],
     ['missing credential generation', { AE_X402_CDP_CREDENTIAL_GENERATION: undefined }],
     ['zero credential generation', { AE_X402_CDP_CREDENTIAL_GENERATION: '0' }],
     ['unsafe credential generation', { AE_X402_CDP_CREDENTIAL_GENERATION: '9007199254740992' }],

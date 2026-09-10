@@ -1,15 +1,14 @@
 import { createFileRoute } from '@tanstack/react-router'
 
-import { withHttpRateLimit } from '@/lib/server/rate-limit'
-import { handleMcpRequest } from '@/lib/server/mcp-api'
+import { handleMcpRouteRequest } from '@/lib/server/mcp-api'
 import { methodNotAllowed } from '@/lib/server/method-guard'
 
 export const Route = createFileRoute('/mcp')({
   server: {
     handlers: {
       GET: () => methodNotAllowed(['POST', 'DELETE']),
-      POST: ({ request }) => withHttpRateLimit(request, 'public-read', () => handleMcpRequest(request)),
-      DELETE: ({ request }) => withHttpRateLimit(request, 'public-read', () => handleMcpRequest(request)),
+      POST: ({ request }) => handleMcpRouteRequest(request),
+      DELETE: ({ request }) => handleMcpRouteRequest(request),
       PUT: () => methodNotAllowed(['POST', 'DELETE']),
       PATCH: () => methodNotAllowed(['POST', 'DELETE']),
       HEAD: () => methodNotAllowed(['POST', 'DELETE']),

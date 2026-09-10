@@ -2,12 +2,12 @@ import { describe, expect, it } from 'vitest'
 
 import { getPublicBusinessCatalog } from '@/modules/registry/public'
 import {
-  operationCompareOutputSchema,
-  operationDetailOutputSchema,
-  operationInspectPlanOutputSchema,
-  operationSearchOutputSchema,
-} from '@/modules/capability-supply/public'
-import { OPERATION_INVOKE_ROUTE_CONTRACT } from '@/modules/capability-execution/operation-invoke-entry'
+  toolChoiceCompareOutputSchema,
+  toolChoiceDescribeOutputSchema,
+  toolChoiceListOutputSchema,
+  toolChoiceSearchOutputSchema,
+} from '@/modules/registry/tool-choice-contracts'
+import { CALL_ROUTE_CONTRACT } from '@/modules/capability-execution/call-entry'
 import { brandNonEmpty } from '@/modules/common/ids'
 import { isRecord } from '@/modules/common/is-record'
 import {
@@ -15,13 +15,12 @@ import {
   setPublicSourceTransportForTests,
 } from '@/lib/server/convex-source'
 import {
-  OPERATION_MARKET_ACTION_ENTRIES,
-  OPERATION_MARKET_COMPARE_PATH,
-  OPERATION_MARKET_DETAIL_PATH,
-  OPERATION_MARKET_INSPECT_PLAN_PATH,
-  OPERATION_MARKET_SEARCH_PATH,
-} from '@/modules/registry/operation-entry'
-import { registryDetailAction, registryListAction } from '@/modules/registry/registry.actions'
+  TOOL_MARKET_ACTION_ENTRIES,
+  TOOL_MARKET_COMPARE_PATH,
+  TOOL_MARKET_DESCRIBE_PATH,
+  TOOL_MARKET_LIST_PATH,
+  TOOL_MARKET_SEARCH_PATH,
+} from '@/modules/registry/tool-entry'
 import {
   buildLlmsTxt,
   buildRobotsTxt,
@@ -33,10 +32,11 @@ import {
   listPublicBusinessOfferingSupply,
   searchPublicBusinessOfferingSupply,
 } from '@/modules/registry/public'
-import { Route as MarketOperationCompareRoute } from '@/routes/api.v1.market-operations.compare'
-import { Route as MarketOperationDetailRoute } from '@/routes/api.v1.market-operations.detail'
-import { Route as MarketOperationInspectPlanRoute } from '@/routes/api.v1.market-operations.inspect-plan'
-import { Route as MarketOperationSearchRoute } from '@/routes/api.v1.market-operations.search'
+import { registryDetailAction, registryListAction } from '@/modules/registry/registry.actions'
+import { Route as MarketToolCompareRoute } from '@/routes/api.v1.market-tools.compare'
+import { Route as MarketToolDescribeRoute } from '@/routes/api.v1.market-tools.describe'
+import { Route as MarketToolListRoute } from '@/routes/api.v1.market-tools.list'
+import { Route as MarketToolSearchRoute } from '@/routes/api.v1.market-tools.search'
 import { handleUcpManifestRequest } from '../helpers/discovery-fixture-routes'
 import { createFixtureDiscoverySourceState } from '../helpers/discovery-fixture-source-state'
 import { handleRobotsTxtRequest } from '@/routes/robots[.]txt'
@@ -96,7 +96,9 @@ describe('discovery route parity', () => {
       slug: 'fremantle-heat-pump-repairs',
       businessName: 'Fremantle Heat Pump Repairs',
     })
-    expect(llms.body).toContain('slug=fremantle-heat-pump-repairs')
+    expect(llms.body).toContain('The Tool catalogue is the canonical market')
+    expect(llms.body).not.toContain('slug=fremantle-heat-pump-repairs')
+    expect(llms.urls).toContain('https://ae.example/fremantle-heat-pump-repairs')
     expect(sitemap.body).toContain('https://ae.example/fremantle-heat-pump-repairs')
     expect(JSON.stringify({ page, registryList, registrySearch, apiDetail, ucp, llms })).not.toContain(
       'demo-listed-provider'
@@ -135,7 +137,7 @@ describe('discovery route parity', () => {
       reason: 'No public business catalog exists for this slug.',
     })
     expect(suppressedManifest.status).toBe(404)
-    expect(suppressedLlms.body).not.toContain('fremantle-heat-pump-repairs')
+    expect(suppressedLlms.urls).not.toContain('https://ae.example/fremantle-heat-pump-repairs')
     expect(suppressedSitemap.body).not.toContain('fremantle-heat-pump-repairs')
   })
 
@@ -160,14 +162,14 @@ describe('discovery route parity', () => {
     ])
 
     expect(routes.length).toBeGreaterThan(0)
-    const restoreMarketOperationSource = installMarketOperationSource()
+    const restoreMarketToolSource = installMarketToolSource()
     try {
       for (const route of routes) {
         const resolved = await resolveAdvertisedRoute(route, state)
         expect(resolved, `${route.method} ${route.url}`).toBe(true)
       }
     } finally {
-      restoreMarketOperationSource()
+      restoreMarketToolSource()
     }
   })
 
@@ -180,63 +182,43 @@ describe('discovery route parity', () => {
       .map(advertisedRoute)
     const apiPaths = apiRoutes.map((route) => new URL(route.url).pathname)
     const expectedApiPaths = [
-      '/api/businesses',
-      ...state.businesses.map((business) => `/api/businesses/${business.slug}`),
-      OPERATION_MARKET_SEARCH_PATH,
-      OPERATION_MARKET_DETAIL_PATH,
-      OPERATION_MARKET_COMPARE_PATH,
-      OPERATION_MARKET_INSPECT_PLAN_PATH,
+      TOOL_MARKET_LIST_PATH,
+      TOOL_MARKET_SEARCH_PATH,
+      TOOL_MARKET_DESCRIBE_PATH,
+      TOOL_MARKET_COMPARE_PATH,
     ].sort()
 
     expect(apiPaths.sort()).toEqual(expectedApiPaths)
     expect(
       apiRoutes
-        .filter((route) => new URL(route.url).pathname.startsWith('/api/v1/market-operations/'))
+        .filter((route) => new URL(route.url).pathname.startsWith('/api/v1/market-tools/'))
         .every((route) => route.method === 'POST'),
     ).toBe(true)
 
-    const listRoute = apiRoutes.find((route) => new URL(route.url).pathname === '/api/businesses')
-    const businessDetailRoute = apiRoutes.find(
-      (route) => new URL(route.url).pathname === '/api/businesses/demo-listed-provider',
-    )
-    const searchRoute = apiRoutes.find((route) => new URL(route.url).pathname === OPERATION_MARKET_SEARCH_PATH)
-    const operationDetailRoute = apiRoutes.find((route) => new URL(route.url).pathname === OPERATION_MARKET_DETAIL_PATH)
+    const searchRoute = apiRoutes.find((route) => new URL(route.url).pathname === TOOL_MARKET_SEARCH_PATH)
+    const toolDescribeRoute = apiRoutes.find((route) => new URL(route.url).pathname === TOOL_MARKET_DESCRIBE_PATH)
     if (
-      listRoute === undefined
-      || businessDetailRoute === undefined
-      || searchRoute === undefined
-      || operationDetailRoute === undefined
+      searchRoute === undefined
+      || toolDescribeRoute === undefined
     ) {
-      throw new Error('Expected current llms list, search, and detail URLs to be present.')
+      throw new Error('Expected current llms Tool search and describe URLs to be present.')
     }
-
-    const listBody = listPublicBusinessOfferingSupply(state, {
-      paginationOpts: { cursor: null, numItems: 20 },
-    })
-    const detailBody = getPublicBusinessOfferingSupplyBySlug(state, {
-      slug: new URL(businessDetailRoute.url).pathname.split('/').at(-1) ?? '',
-    })
-
-    expect(registryListAction.outputSchema.safeParse(listBody).success).toBe(true)
-    expect(listBody.page.map((item) => item.slug)).toContain('demo-listed-provider')
-    expect(registryDetailAction.outputSchema.safeParse(detailBody).success).toBe(true)
-    const restoreMarketOperationSource = installMarketOperationSource()
-    const operationDetailResponse = await routeHandler(MarketOperationDetailRoute, 'POST')({
-      request: new Request(`${origin}${OPERATION_MARKET_DETAIL_PATH}`, {
+    const restoreMarketToolSource = installMarketToolSource()
+    const toolDetailResponse = await routeHandler(MarketToolDescribeRoute, 'POST')({
+      request: new Request(`${origin}${TOOL_MARKET_DESCRIBE_PATH}`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ operationRef: MARKET_OPERATION_DETAIL_REF }),
+        body: JSON.stringify({ toolRef: MARKET_TOOL_DETAIL_REF }),
       }),
       params: {},
     })
-    expect(operationDetailResponse.status).toBe(200)
-    const operationDetailBody: unknown = await operationDetailResponse.json()
-    expect(operationDetailOutputSchema.safeParse(operationDetailBody).success).toBe(true)
-    expect(operationDetailBody).toMatchObject({
+    expect(toolDetailResponse.status).toBe(200)
+    const toolDetailBody: unknown = await toolDetailResponse.json()
+    expect(toolChoiceDescribeOutputSchema.safeParse(toolDetailBody).success).toBe(true)
+    expect(toolDetailBody).toMatchObject({
       kind: 'found',
-      operation: {
-        callVia: OPERATION_INVOKE_ROUTE_CONTRACT.invoke.path,
-        paymentLane: 'brokered',
+      tool: {
+        toolRef: MARKET_TOOL_DETAIL_REF,
       },
     })
     try {
@@ -244,8 +226,8 @@ describe('discovery route parity', () => {
         expect(await resolveAdvertisedRoute(route, state), `${route.method} ${route.url}`).toBe(true)
       }
 
-      const wrongMethod = await routeHandler(MarketOperationSearchRoute, 'GET')({
-        request: new Request(`${origin}${OPERATION_MARKET_SEARCH_PATH}`, { method: 'GET' }),
+      const wrongMethod = await routeHandler(MarketToolSearchRoute, 'GET')({
+        request: new Request(`${origin}${TOOL_MARKET_SEARCH_PATH}`, { method: 'GET' }),
         params: {},
       })
       expect(wrongMethod.status).toBe(405)
@@ -256,7 +238,7 @@ describe('discovery route parity', () => {
         code: 'method_not_allowed',
       })
     } finally {
-      restoreMarketOperationSource()
+      restoreMarketToolSource()
     }
   })
 })
@@ -268,7 +250,7 @@ type AdvertisedRoute = Readonly<{
 
 function advertisedRoute(url: string): AdvertisedRoute {
   const path = new URL(url).pathname
-  const marketRoute = OPERATION_MARKET_ACTION_ENTRIES.find((entry) => entry.pathTemplate === path)
+  const marketRoute = TOOL_MARKET_ACTION_ENTRIES.find((entry) => entry.pathTemplate === path)
   return {
     url,
     method: marketRoute?.method ?? 'GET',
@@ -284,18 +266,18 @@ type OutputSchema = Readonly<{
   safeParse: (value: unknown) => Readonly<{ success: boolean }>
 }>
 
-type MarketOperationRouteCase = Readonly<{
+type MarketToolRouteCase = Readonly<{
   path: string
   route: unknown
   input: Readonly<Record<string, unknown>>
   outputSchema: OutputSchema
 }>
 
-const MARKET_OPERATION_DETAIL_REF = `operation:v1:${'f'.repeat(64)}`
-const MARKET_OPERATION_DETAIL_WIRE_DESCRIPTOR = {
-  operationRef: MARKET_OPERATION_DETAIL_REF,
-  operationId: 'reference-operation',
-  callVia: OPERATION_INVOKE_ROUTE_CONTRACT.invoke.path,
+const MARKET_TOOL_DETAIL_REF = `operation:v1:${'f'.repeat(64)}`
+const MARKET_TOOL_DETAIL_WIRE_DESCRIPTOR = {
+  toolRef: MARKET_TOOL_DETAIL_REF,
+  toolId: 'reference-operation',
+  callVia: CALL_ROUTE_CONTRACT.call.path,
   paymentLane: 'brokered',
   contract: {
     capabilityId: 'reference.lookup',
@@ -309,9 +291,9 @@ const MARKET_OPERATION_DETAIL_WIRE_DESCRIPTOR = {
     offeringRef: 'offering:reference',
     revision: 1,
     label: 'Reference lookup',
-    summary: 'Reference lookup operation.',
+    summary: 'Reference lookup Tool.',
   },
-  summary: 'Reference lookup operation.',
+  summary: 'Reference lookup Tool.',
   commercial: {
     price: { kind: 'on_request' },
     materialTerms: [],
@@ -325,46 +307,46 @@ const MARKET_OPERATION_DETAIL_WIRE_DESCRIPTOR = {
   authentication: { kind: 'ae_api_key' },
   transport: { method: 'POST', requestTimeoutMs: 1_000 },
   provenance: { publisher: 'ae_curated_external', sourceKind: 'ae_envelope' },
-  availability: { posture: 'integrated' },
+  availability: { posture: 'setup_required' },
   navigation: [],
 } as const
 
-const MARKET_OPERATION_ROUTE_CASES: readonly MarketOperationRouteCase[] = [
+const MARKET_TOOL_ROUTE_CASES: readonly MarketToolRouteCase[] = [
   {
-    path: OPERATION_MARKET_SEARCH_PATH,
-    route: MarketOperationSearchRoute,
+    path: TOOL_MARKET_LIST_PATH,
+    route: MarketToolListRoute,
+    input: {},
+    outputSchema: toolChoiceListOutputSchema,
+  },
+  {
+    path: TOOL_MARKET_SEARCH_PATH,
+    route: MarketToolSearchRoute,
     input: { query: 'reference lookup', limit: 1 },
-    outputSchema: operationSearchOutputSchema,
+    outputSchema: toolChoiceSearchOutputSchema,
   },
   {
-    path: OPERATION_MARKET_DETAIL_PATH,
-    route: MarketOperationDetailRoute,
-    input: { operationRef: MARKET_OPERATION_DETAIL_REF },
-    outputSchema: operationDetailOutputSchema,
+    path: TOOL_MARKET_DESCRIBE_PATH,
+    route: MarketToolDescribeRoute,
+    input: { toolRef: MARKET_TOOL_DETAIL_REF },
+    outputSchema: toolChoiceDescribeOutputSchema,
   },
   {
-    path: OPERATION_MARKET_COMPARE_PATH,
-    route: MarketOperationCompareRoute,
+    path: TOOL_MARKET_COMPARE_PATH,
+    route: MarketToolCompareRoute,
     input: {
-      operationRefs: [`operation:v1:${'a'.repeat(64)}`, `operation:v1:${'b'.repeat(64)}`],
+      toolRefs: [`operation:v1:${'a'.repeat(64)}`, `operation:v1:${'b'.repeat(64)}`],
     },
-    outputSchema: operationCompareOutputSchema,
-  },
-  {
-    path: OPERATION_MARKET_INSPECT_PLAN_PATH,
-    route: MarketOperationInspectPlanRoute,
-    input: { operationRefs: [`operation:v1:${'c'.repeat(64)}`], expiresInMs: 1_000 },
-    outputSchema: operationInspectPlanOutputSchema,
+    outputSchema: toolChoiceCompareOutputSchema,
   },
 ]
 
 async function resolveAdvertisedRoute(route: AdvertisedRoute, state: DiscoverySourceState): Promise<boolean> {
   const parsed = new URL(route.url)
   const path = parsed.pathname
-  const marketRoute = OPERATION_MARKET_ACTION_ENTRIES.find((entry) => entry.pathTemplate === path)
+  const marketRoute = TOOL_MARKET_ACTION_ENTRIES.find((entry) => entry.pathTemplate === path)
 
   if (marketRoute !== undefined) {
-    return route.method === marketRoute.method && await resolveMarketOperationRoute(route)
+    return route.method === marketRoute.method && await resolveMarketToolRoute(route)
   }
 
   if (path === '/') {
@@ -376,7 +358,8 @@ async function resolveAdvertisedRoute(route: AdvertisedRoute, state: DiscoverySo
   // `$slug` data dependency), so they cannot fall through to the business-catalog
   // pageMatch below — that lookup only resolves registered provider slugs.
   if (path === '/for-agents' || path === '/for-providers' || path === '/privacy/remove-business'
-    || path === '/market' || path === '/about' || path === '/terms' || path === '/privacy') {
+    || path === '/market' || path === '/about' || path === '/terms' || path === '/privacy'
+    || path === '/support' || path === '/status' || path === '/SKILL.md') {
     return route.method === 'GET'
   }
 
@@ -428,9 +411,9 @@ async function resolveAdvertisedRoute(route: AdvertisedRoute, state: DiscoverySo
   return false
 }
 
-async function resolveMarketOperationRoute(route: AdvertisedRoute): Promise<boolean> {
+async function resolveMarketToolRoute(route: AdvertisedRoute): Promise<boolean> {
   const path = new URL(route.url).pathname
-  const routeCase = MARKET_OPERATION_ROUTE_CASES.find((candidate) => candidate.path === path)
+  const routeCase = MARKET_TOOL_ROUTE_CASES.find((candidate) => candidate.path === path)
   if (routeCase === undefined || route.method !== 'POST') return false
 
   const response = await routeHandler(routeCase.route, 'POST')({
@@ -447,15 +430,15 @@ async function resolveMarketOperationRoute(route: AdvertisedRoute): Promise<bool
 
 function routeHandler(route: unknown, method: 'GET' | 'POST'): RouteHandler {
   if (!isRecord(route) || !isRecord(route.options) || !isRecord(route.options.server)) {
-    throw new Error('Market operation route handlers are missing.')
+    throw new Error('Market Tool route handlers are missing.')
   }
   const handlers = route.options.server.handlers
   if (!isRecord(handlers)) {
-    throw new Error('Market operation route handlers are missing.')
+    throw new Error('Market Tool route handlers are missing.')
   }
   const handler = handlers[method]
   if (!isRouteHandler(handler)) {
-    throw new Error(`Market operation ${method} handler is missing.`)
+    throw new Error(`Market Tool ${method} handler is missing.`)
   }
   return handler
 }
@@ -464,23 +447,23 @@ function isRouteHandler(value: unknown): value is RouteHandler {
   return typeof value === 'function'
 }
 
-function installMarketOperationSource(): () => void {
+function installMarketToolSource(): () => void {
   return setPublicSourceTransportForTests(createPublicSourceTransport({
     env: { CONVEX_URL: 'https://ae.test' },
     fetch: async (_input, init) => {
       const payload: unknown = JSON.parse(String(init?.body ?? '{}'))
       if (!isRecord(payload) || typeof payload.path !== 'string') {
-        throw new Error('market_operation_source_request_invalid')
+        throw new Error('market_tool_source_request_invalid')
       }
       switch (payload.path) {
         case 'rateLimit:admitHttp':
           return Response.json({ status: 'success', value: { ok: true } })
-        case 'capabilitySupplyOperations:search':
+        case 'capabilityToolCatalog:search':
           return Response.json({
             status: 'success',
             value: {
               kind: 'no_candidates',
-              schemaVersion: 'registry-operations:v1',
+              schemaVersion: 'registry-tools:v1',
               query: 'reference lookup',
               appliedFilters: {},
               matchedCount: 0,
@@ -488,37 +471,27 @@ function installMarketOperationSource(): () => void {
               navigation: [],
             },
           })
-        case 'capabilitySupplyOperations:detail':
+        case 'capabilityToolCatalog:detail':
           return Response.json({
             status: 'success',
             value: {
               kind: 'found',
-              schemaVersion: 'registry-operations:v1',
-              operation: MARKET_OPERATION_DETAIL_WIRE_DESCRIPTOR,
+              schemaVersion: 'registry-tools:v1',
+              tool: MARKET_TOOL_DETAIL_WIRE_DESCRIPTOR,
             },
           })
-        case 'capabilitySupplyOperations:compare':
+        case 'capabilityToolCatalog:compare':
           return Response.json({
             status: 'success',
             value: {
               kind: 'unavailable',
-              schemaVersion: 'registry-operations:v1',
-              reason: 'operation_not_found',
-              navigation: [],
-            },
-          })
-        case 'capabilitySupplyOperations:inspectPlan':
-          return Response.json({
-            status: 'success',
-            value: {
-              kind: 'unavailable',
-              schemaVersion: 'registry-operations:v1',
-              reason: 'mapping_unavailable',
+              schemaVersion: 'registry-tools:v1',
+              reason: 'tool_not_found',
               navigation: [],
             },
           })
         default:
-          throw new Error(`market_operation_source_unconfigured:${payload.path}`)
+          throw new Error(`market_tool_source_unconfigured:${payload.path}`)
       }
     },
   }))

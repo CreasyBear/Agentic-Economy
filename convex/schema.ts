@@ -7,9 +7,9 @@ import {
   agentAccessOAuthTables,
   agentAccessPolicyTables,
   agentAccessPrincipalTables,
-} from '../src/modules/agent-access/public'
-import { actionInvocationTables } from '../src/modules/action-invocation/schema'
-import { capabilityOperationInvocationTables } from '../src/modules/capability-execution/schema'
+} from '../src/modules/agent-access/schema'
+import { actionExecutionTables } from '../src/modules/action-execution/schema'
+import { capabilityCallTables } from '../src/modules/capability-execution/schema'
 import { observabilityTables } from '../src/modules/observability/schema'
 import { registryTables } from '../src/modules/registry/schema'
 import { securityTables } from '../src/modules/security/schema'
@@ -26,8 +26,8 @@ import { marketDemandTables } from '../src/modules/market-demand/schema'
 export default defineSchema({
   ...chatTables,
   ...chatSharingTables,
-  ...actionInvocationTables,
-  ...capabilityOperationInvocationTables,
+  ...actionExecutionTables,
+  ...capabilityCallTables,
   ...businessTables,
   ...catalogTables,
   ...capabilityContractRegistryTables,

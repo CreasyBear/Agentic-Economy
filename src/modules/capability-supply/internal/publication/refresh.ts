@@ -1,16 +1,23 @@
 import { canonicalDigest } from '@/modules/common/canonical-digest'
-import { normalizePricingConfig, pricingConfigDigest } from '@/modules/money/public'
+import { normalizePricingConfig, pricingConfigDigest, type PricingConfig } from '@/modules/money/public'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 import {
-  capabilityOperationId,
-  createPublicOperationRef,
+  capabilityToolId,
+  capabilityOfferingRegistrationHash,
+  capabilityBindingRegistrationHash,
+  defineCapabilityOfferingRegistration,
+  defineCapabilityTransportBindingRegistration,
+  admitRegisteredTransport,
+  createPublicToolRef,
+  type CapabilityOfferingRegistration,
+  type CapabilityTransportBindingRegistration,
   type CapabilityPublicationBindingDraft,
   type CapabilityPublicationOfferingDraft,
 } from '@/modules/capability-supply/public'
 import { contractRefFromRow } from '../offering/registration'
 import type { CapabilityPublicationImport } from '../publication-importers'
 import type { RegistrationContext } from '../shared/command-envelope'
-import { connectionAuthoritySnapshotsEqual } from '../binding/registration'
+import { connectionAuthoritySnapshotsEqual, transportAdmissionInput } from '../binding/registration'
 
 import { preparePublicationDraft, pricingConfigForOffering } from './draft'
 import { INITIAL_PUBLICATION_LIFECYCLE } from './lifecycle'
@@ -29,6 +36,15 @@ export type RefreshCapabilityCommandInput = RegistrationContext & Readonly<{
   publicationMetadata?: CapabilityPublicationProvenance
 }>
 
+function refreshedPricingConfig(
+  current: PricingConfig,
+  offering: CapabilityPublicationOfferingDraft | undefined,
+): PricingConfig | undefined {
+  if (offering === undefined) return current
+  if (current.kind === 'managed_x402' && offering.presentation.price.kind === 'on_request') return current
+  return pricingConfigForOffering(offering)
+}
+
 export async function refreshCapabilityCommand(
   input: RefreshCapabilityCommandInput,
   ports: PublicationCommandPorts,
@@ -37,24 +53,11 @@ export async function refreshCapabilityCommand(
   if (publication.disposition !== 'current') {
     return { kind: 'refused' as const, reason: 'revision_changed' as const }
   }
-  const pricingConfigJson = publication.pricingConfigJson
-  const priceDigest = publication.priceDigest
-  if (pricingConfigJson === undefined || priceDigest === undefined) {
+  const currentPricing = verifiedPublicationPricing(publication)
+  if (currentPricing === undefined) {
     return { kind: 'refused' as const, reason: 'refresh_invalid' as const }
   }
-  let pricingConfigValue: unknown
-  try {
-    pricingConfigValue = JSON.parse(pricingConfigJson)
-  } catch {
-    return { kind: 'refused' as const, reason: 'refresh_invalid' as const }
-  }
-  const pricing = normalizePricingConfig(pricingConfigValue)
-  if (pricing.kind === 'invalid' || pricingConfigDigest(pricing.config) !== priceDigest) {
-    return { kind: 'refused' as const, reason: 'refresh_invalid' as const }
-  }
-  const nextPricingConfig = input.offering === undefined
-    ? pricing.config
-    : pricingConfigForOffering(input.offering)
+  const nextPricingConfig = refreshedPricingConfig(currentPricing, input.offering)
   if (nextPricingConfig === undefined) {
     return { kind: 'refused' as const, reason: 'refresh_invalid' as const }
   }
@@ -119,8 +122,8 @@ export async function refreshCapabilityCommand(
   } as StableHashValue)
 
   const revision = publication.revision + 1
-  const operationRef = createPublicOperationRef({
-    operationId: capabilityOperationId(encoded.contract.ref.capabilityId),
+  const toolRef = createPublicToolRef({
+    operationId: capabilityToolId(encoded.contract.ref.capabilityId),
     publicationRef: publication.publicationRef,
     publicationRevision: revision,
     contractRef: encoded.contract.ref,
@@ -149,7 +152,7 @@ export async function refreshCapabilityCommand(
 
   if (!compatible) {
     await ports.insertPublication({
-      operationRef,
+      toolRef,
       publicationRef: publication.publicationRef,
       revision,
       businessId: publication.businessId,
@@ -160,6 +163,7 @@ export async function refreshCapabilityCommand(
       sourceDescriptorJson: material.sourceDescriptorJson,
       sourceRevision: material.sourceRevision,
       sourceDigest: material.sourceDigest,
+      sourceRouteRef: publication.sourceRouteRef ?? material.sourceRouteRef,
       pricingConfigJson: material.pricingConfigJson,
       priceDigest: material.priceDigest,
       publisherRef: publicationMetadata.publisherRef,
@@ -190,22 +194,22 @@ export async function refreshCapabilityCommand(
   if (contractResult.kind === 'refused') {
     throw new Error(`capability_publication_refresh_${contractResult.reason}`)
   }
-  const nextOffering = {
+  const nextOffering = refreshedOffering({
     ...draft.offering,
     businessId: publication.businessId,
     contractRef: encoded.contract.ref,
-  }
-  const nextBinding = {
+  }, currentOffering, publication.publicationRef, revision)
+  const nextBinding = refreshedBinding({
     ...draft.binding,
-    offeringId: draft.offering.offeringId,
+    offeringId: nextOffering.offeringId,
     networkId: draft.offering.networkId,
     contractRef: encoded.contract.ref,
-  }
+  }, currentBinding, publication.publicationRef, revision)
   const offeringResult = await ports.registerOffering(nextOffering, input.now)
   if (offeringResult.kind === 'refused') {
     throw new Error(`capability_publication_refresh_${offeringResult.reason}`)
   }
-  if (currentBinding.authority.kind === 'provider_connection') {
+  if (nextBinding.bindingId === currentBinding.bindingId && currentBinding.authority.kind === 'provider_connection') {
     const nextAuthority = nextBinding.authority
     if (
       nextAuthority.kind !== 'provider_connection'
@@ -227,19 +231,19 @@ export async function refreshCapabilityCommand(
       providerRef: nextAuthority.providerRef,
       adapterId: nextBinding.adapter.adapterId,
       previousAuthority: publication.connectionAuthority,
-      previousOperationRef: publication.operationRef,
-      nextOperationRef: operationRef,
+      previousToolRef: publication.toolRef,
+      nextToolRef: toolRef,
     }, input.now)
     if (rotated.kind === 'refused') {
       throw new Error(`capability_publication_refresh_${rotated.reason}`)
     }
   }
-  const bindingResult = await ports.registerBinding(nextBinding, input.now, operationRef)
+  const bindingResult = await ports.registerBinding(nextBinding, input.now, toolRef)
   if (bindingResult.kind === 'refused') {
     throw new Error(`capability_publication_refresh_${bindingResult.reason}`)
   }
   await ports.insertPublication({
-    operationRef,
+    toolRef,
     publicationRef: publication.publicationRef,
     revision,
     businessId: publication.businessId,
@@ -250,14 +254,15 @@ export async function refreshCapabilityCommand(
     sourceDescriptorJson: material.sourceDescriptorJson,
     sourceRevision: material.sourceRevision,
     sourceDigest: material.sourceDigest,
+    sourceRouteRef: material.sourceRouteRef,
     pricingConfigJson: material.pricingConfigJson,
     priceDigest: material.priceDigest,
     publisherRef: publicationMetadata.publisherRef,
     authorityMode: publicationMetadata.authorityMode,
     provenanceDigest: publicationMetadata.provenanceDigest,
     ...encoded.contract.ref,
-    offeringId: draft.offering.offeringId,
-    bindingId: draft.binding.bindingId,
+    offeringId: nextOffering.offeringId,
+    bindingId: nextBinding.bindingId,
     disposition: 'current',
     supersedesRevision: publication.revision,
     registrationEvidenceRefs: [...input.evidenceRefs],
@@ -272,4 +277,43 @@ export async function refreshCapabilityCommand(
     disposition: 'current' as const,
     lifecycle: INITIAL_PUBLICATION_LIFECYCLE,
   }
+}
+
+// Registrations are immutable. Changed material gets new internal identities
+// while the publication retains its revision chain and old evidence.
+function refreshedOffering(
+  candidate: CapabilityOfferingRegistration,
+  current: Readonly<{ offeringId: string; registrationHash: string }>,
+  publicationRef: string,
+  revision: number,
+): CapabilityOfferingRegistration {
+  const registration = defineCapabilityOfferingRegistration(candidate)
+  return registration.offeringId === current.offeringId
+    && capabilityOfferingRegistrationHash(registration) !== current.registrationHash
+    ? { ...registration, offeringId: `${publicationRef}:offering:${revision}` }
+    : registration
+}
+
+function refreshedBinding(
+  candidate: CapabilityTransportBindingRegistration,
+  current: Readonly<{ bindingId: string; registrationHash: string }>,
+  publicationRef: string,
+  revision: number,
+): CapabilityTransportBindingRegistration {
+  const registration = defineCapabilityTransportBindingRegistration(candidate)
+  const transport = admitRegisteredTransport(transportAdmissionInput(registration))
+  if (transport.kind === 'refused') throw new Error('capability_publication_refresh_binding_invalid')
+  return registration.bindingId === current.bindingId
+    && capabilityBindingRegistrationHash(registration, transport.transport) !== current.registrationHash
+    ? { ...registration, bindingId: `${publicationRef}:binding:${revision}` }
+    : registration
+}
+
+function verifiedPublicationPricing(publication: PublicationCommandRow): PricingConfig | undefined {
+  if (publication.pricingConfigJson === undefined || publication.priceDigest === undefined) return undefined
+  let value: unknown
+  try { value = JSON.parse(publication.pricingConfigJson) } catch { return undefined }
+  const pricing = normalizePricingConfig(value)
+  return pricing.kind === 'valid' && pricingConfigDigest(pricing.config) === publication.priceDigest
+    ? pricing.config : undefined
 }

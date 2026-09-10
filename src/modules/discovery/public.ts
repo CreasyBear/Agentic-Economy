@@ -14,10 +14,10 @@ export type {
 export {
   SITE_DISCOVERY_SUMMARY_LINES,
   SiteDiscoveryEndpointKindValues,
-  SiteDiscoveryManifestSchemaVersion,
   buildSiteDiscoveryManifest,
   projectCompactSiteDiscoveryManifest,
 } from './internal/site-manifest'
+export { SiteDiscoveryManifestSchemaVersion } from './site-manifest-version'
 export type {
   SiteDiscoveryEndpointContract,
   SiteDiscoveryEndpointKind,
@@ -28,15 +28,15 @@ export {
   buildApiCatalogDocument,
 } from './internal/api-catalog'
 export {
-  PUBLIC_INVOCATION_REF_EXAMPLE,
+  PUBLIC_CALL_REF_EXAMPLE,
   PUBLIC_IDEMPOTENCY_KEY_EXAMPLE,
-  PUBLIC_OPERATION_REF_EXAMPLE,
+  PUBLIC_TOOL_REF_EXAMPLE,
   PUBLIC_RECONCILIATION_EVIDENCE_EXAMPLE,
-  operationRouteExamples,
-  operationRoutesMarkdown,
+  callRouteExamples,
+  callRoutesMarkdown,
   publicMcpToolDocs,
-} from './internal/operation-contract'
-export type { PublicMcpToolDoc } from './internal/operation-contract'
+} from './internal/tool-contract'
+export type { PublicMcpToolDoc } from './internal/tool-contract'
 export {
   AgentCatalogMarkdownLimit,
   buildBusinessMarkdown,

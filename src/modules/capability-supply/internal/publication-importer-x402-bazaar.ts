@@ -1,5 +1,6 @@
 import {
   isBoundedJsonValue,
+  validateJsonSchema,
   type JsonValue,
 } from "@/modules/capability-contract/public";
 import { isRecord } from "@/modules/common/is-record";
@@ -29,8 +30,13 @@ export type BazaarAdmission =
       kind: "admitted";
       method: "GET" | "POST";
       inputSchema: Readonly<Record<string, JsonValue>>;
+      inputExample?: Readonly<Record<string, JsonValue>>;
+      bodyPointer?: "/body";
+      queryObjectPointer?: "/query";
       outputSchema: Readonly<Record<string, JsonValue>>;
-      query: BazaarAdmissionQuery | undefined;
+      query?: BazaarAdmissionQuery;
+      path?: BazaarAdmissionQuery;
+      pathTemplate?: string;
     }>;
 
 export type BazaarDiscoveryInfo = Readonly<{
@@ -71,16 +77,13 @@ export function admitBazaarDiscoveryInfo(
   if (method !== "GET" && method !== "POST") {
     return { kind: "refused", reason: "selector_invalid" };
   }
-  if ("pathParams" in input || "headers" in input) {
+  if ("headers" in input) {
     return { kind: "refused", reason: "transport_unsupported" };
   }
 
   if (method === "GET") {
     if ("bodyType" in input || "body" in input) {
       return { kind: "refused", reason: "transport_unsupported" };
-    }
-    if (!isRecord(input.queryParams)) {
-      return { kind: "refused", reason: "selector_invalid" };
     }
   } else {
     if ("queryParams" in input) {
@@ -89,30 +92,108 @@ export function admitBazaarDiscoveryInfo(
     if (!("bodyType" in input) || input.bodyType !== "json") {
       return { kind: "refused", reason: "transport_unsupported" };
     }
-    if (!isRecord(input.body)) {
-      return { kind: "refused", reason: "selector_invalid" };
-    }
   }
 
-  const inputSchema = inputSchemaFromExtension(extension, method);
-  const outputSchema = outputSchemaFromInfo(info.output);
-  if (inputSchema === undefined || outputSchema === undefined) {
+  const declared = inputSchemaFromExtension(extension, method);
+  const schema = isRecord(extension.schema) ? extension.schema : undefined;
+  const properties = isRecord(schema?.properties) ? schema.properties : undefined;
+  const inputDeclaration = isRecord(properties?.input) ? properties.input : undefined;
+  const inputProperties = isRecord(inputDeclaration?.properties) ? inputDeclaration.properties : undefined;
+  const declaredRequest = inputProperties?.[method === "GET" ? "queryParams" : "body"];
+  if (declared === undefined && isRecord(declaredRequest) && Object.hasOwn(declaredRequest, "properties")) {
     return { kind: "refused", reason: "schema_missing" };
   }
-  if (method === "GET") {
-    const query = queryMappingFromInputSchema(inputSchema);
-    if (query === undefined) {
-      return { kind: "refused", reason: "selector_invalid" };
-    }
-    return { kind: "admitted", method, inputSchema, outputSchema, query };
+  const noInput = method === "GET" && isRecord(input.queryParams) && Object.keys(input.queryParams).length === 0;
+  const baseInputSchema: Readonly<Record<string, JsonValue>> = declared ?? (noInput
+    ? { $schema: JSON_SCHEMA, type: "object", properties: {}, additionalProperties: false }
+    : requestEnvelope(method, method === "POST" && isRecord(declaredRequest) && declaredRequest.type !== "object" && isBoundedJsonValue(declaredRequest) ? declaredRequest as Readonly<Record<string, JsonValue>> : undefined));
+  const outputSchema = outputSchemaFromExtension(extension, info.output);
+  if (outputSchema === undefined) return { kind: "refused", reason: "schema_missing" };
+  const pathNames = typeof extension.routeTemplate === "string"
+    ? [...extension.routeTemplate.matchAll(/:([A-Za-z_][A-Za-z0-9_]*)/g)].flatMap(match => match[1] === undefined ? [] : [match[1]]) : [];
+  if (pathNames.length > 32 || new Set(pathNames).size !== pathNames.length
+    || (isRecord(input.pathParams) && Object.keys(input.pathParams).some(name => !pathNames.includes(name)))) {
+    return { kind: "refused", reason: "transport_unsupported" };
   }
-  return {
-    kind: "admitted",
-    method,
-    inputSchema,
-    outputSchema,
-    query: undefined,
+  const pathDeclaration = isRecord(inputProperties?.pathParams) ? inputProperties.pathParams : undefined;
+  const declaredPathProperties = isRecord(pathDeclaration?.properties) ? pathDeclaration.properties : {};
+  const pathProperties: Record<string, JsonValue> = {};
+  for (const name of pathNames) {
+    const field = declaredPathProperties[name] ?? { type: "string" };
+    if (!isBoundedJsonValue(field)) return { kind: "refused", reason: "schema_missing" };
+    pathProperties[name] = field;
+  }
+  if (pathNames.length > 0 && isRecord(baseInputSchema.properties) && Object.hasOwn(baseInputSchema.properties, "pathParams")) {
+    return { kind: "refused", reason: "selector_invalid" };
+  }
+  const inputSchema: Readonly<Record<string, JsonValue>> = pathNames.length === 0 ? baseInputSchema : {
+    ...baseInputSchema,
+    properties: { ...(isRecord(baseInputSchema.properties) ? baseInputSchema.properties as Record<string, JsonValue> : {}),
+      pathParams: { type: "object", properties: pathProperties, required: pathNames, additionalProperties: false } },
+    required: [...(Array.isArray(baseInputSchema.required) ? baseInputSchema.required : []), "pathParams"],
   };
+  const baseExample = declared === undefined ? undefined : inputExampleFromInfo(input, method, baseInputSchema);
+  const example = pathNames.length === 0 ? baseExample
+    : isRecord(input.pathParams) && isBoundedJsonValue(input.pathParams) && baseExample !== undefined
+      ? { ...baseExample, pathParams: input.pathParams } : undefined;
+  const inputExample = example !== undefined && validateJsonSchema(inputSchema, example) ? example : undefined;
+  const transport = method === "POST"
+    ? (declared === undefined ? { bodyPointer: "/body" as const } : {})
+    : declared === undefined && !noInput
+      ? { queryObjectPointer: "/query" as const }
+      : { query: queryMappingFromInputSchema(baseInputSchema) ?? [] };
+  return { kind: "admitted", method, inputSchema, outputSchema,
+    ...(pathNames.length === 0 ? {} : {
+      path: pathNames.map(parameter => ({ inputPointer: `/pathParams/${parameter}`, parameter, required: true })),
+      pathTemplate: (extension.routeTemplate as string).replace(/:([A-Za-z_][A-Za-z0-9_]*)/g, '{$1}'),
+    }),
+    ...(inputExample === undefined ? {} : { inputExample }), ...transport };
+}
+
+const JSON_VALUE_SCHEMA: Readonly<Record<string, JsonValue>> = {
+  type: ["object", "array", "string", "number", "boolean", "null"],
+};
+function requestEnvelope(method: "GET" | "POST", declaredBody?: Readonly<Record<string, JsonValue>>): Readonly<Record<string, JsonValue>> {
+  const name = method === "POST" ? "body" : "query";
+  const primitive = { type: ["string", "number", "boolean"] };
+  return {
+    $schema: JSON_SCHEMA, type: "object", required: [name], additionalProperties: false,
+    properties: { [name]: method === "POST" ? (declaredBody ?? JSON_VALUE_SCHEMA) : {
+      type: "object", maxProperties: 64,
+      propertyNames: { pattern: "^[A-Za-z][A-Za-z0-9_.-]{0,99}$" },
+      additionalProperties: { anyOf: [primitive, { type: "array", items: primitive }] },
+    } },
+  };
+}
+
+function inputExampleFromInfo(
+  input: Readonly<Record<string, unknown>>,
+  method: "GET" | "POST",
+  inputSchema: Readonly<Record<string, JsonValue>> | undefined,
+): Readonly<Record<string, JsonValue>> | undefined {
+  const candidate = method === "GET" ? input.queryParams : input.body;
+  if (
+    inputSchema === undefined ||
+    !isRecord(candidate) ||
+    !isBoundedJsonValue(candidate)
+  ) {
+    return undefined;
+  }
+  // `next_token` is a public pagination input in the admitted transport, but
+  // persisting a concrete cursor would be indistinguishable from fixed token
+  // material to the publication credential guard. A provider example does not
+  // need the optional cursor to teach or probe the first page, so omit it and
+  // then prove the remaining source example still conforms to the exact schema.
+  const sanitized = Object.fromEntries(
+    Object.entries(candidate).filter(([name]) => name !== "next_token"),
+  );
+  if (
+    !isBoundedJsonValue(sanitized) ||
+    !validateJsonSchema(inputSchema, sanitized)
+  ) {
+    return undefined;
+  }
+  return sanitized as Readonly<Record<string, JsonValue>>;
 }
 
 function inputSchemaFromExtension(
@@ -133,13 +214,20 @@ function inputSchemaFromExtension(
   return objectJsonSchema(source);
 }
 
-function outputSchemaFromInfo(
+function outputSchemaFromExtension(
+  extension: Readonly<Record<string, unknown>>,
   output: unknown,
 ): Readonly<Record<string, JsonValue>> | undefined {
-  if (!isRecord(output) || output.type !== "json" || !isRecord(output.example)) return undefined;
-  return isBoundedJsonValue(output.example)
-    ? jsonSchemaFromExampleObject(output.example)
-    : undefined;
+  if (output !== undefined && (!isRecord(output) || output.type !== "json")) return undefined;
+  const schema = isRecord(extension.schema) ? extension.schema : undefined;
+  const properties = isRecord(schema?.properties) ? schema.properties : undefined;
+  const outputDeclaration = isRecord(properties?.output) ? properties.output : undefined;
+  const outputProperties = isRecord(outputDeclaration?.properties) ? outputDeclaration.properties : undefined;
+  const declared = outputProperties?.example;
+  if (isRecord(declared) && isBoundedJsonValue(declared) && Object.keys(declared).length > 0) {
+    return declared as Readonly<Record<string, JsonValue>>;
+  }
+  return { $schema: JSON_SCHEMA, ...JSON_VALUE_SCHEMA };
 }
 
 function objectJsonSchema(
@@ -176,6 +264,7 @@ function objectJsonSchema(
     return undefined;
   }
   return {
+    ...value,
     $schema: JSON_SCHEMA,
     type: "object",
     properties,
@@ -184,57 +273,12 @@ function objectJsonSchema(
   };
 }
 
-function jsonSchemaFromExampleObject(
-  example: Readonly<Record<string, unknown>>,
-): Readonly<Record<string, JsonValue>> | undefined {
-  const names = Object.keys(example);
-  if (names.length < 1 || names.length > MAX_SCHEMA_PROPERTIES) {
-    return undefined;
-  }
-  const properties: Record<string, JsonValue> = {};
-  const required: string[] = [];
-  for (const [name, value] of Object.entries(example)) {
-    if (!PROPERTY_NAME.test(name)) return undefined;
-    const schema = jsonSchemaFromExampleValue(value);
-    if (schema === undefined) return undefined;
-    properties[name] = schema;
-    required.push(name);
-  }
-  return {
-    $schema: JSON_SCHEMA,
-    type: "object",
-    properties,
-    required,
-    additionalProperties: false,
-  };
-}
-
-function jsonSchemaFromExampleValue(value: unknown): JsonValue | undefined {
-  if (typeof value === "string") return { type: "string" };
-  if (typeof value === "number" && Number.isFinite(value)) {
-    return { type: "number" };
-  }
-  if (typeof value === "boolean") return { type: "boolean" };
-  if (Array.isArray(value)) {
-    const item = value[0];
-    const items = jsonSchemaFromExampleValue(item ?? "");
-    return items === undefined ? undefined : { type: "array", items };
-  }
-  if (isRecord(value)) {
-    const nested = jsonSchemaFromExampleObject(value);
-    if (nested === undefined) return undefined;
-    const { $schema: _schema, ...rest } = nested;
-    return rest;
-  }
-  return undefined;
-}
-
 function queryMappingFromInputSchema(
   inputSchema: Readonly<Record<string, JsonValue>>,
 ): BazaarAdmissionQuery | undefined {
   if (!isRecord(inputSchema.properties)) return undefined;
   const names = Object.keys(inputSchema.properties);
-  if (names.length < 1) return undefined;
+
   const required = new Set(
     Array.isArray(inputSchema.required)
       ? inputSchema.required.filter(

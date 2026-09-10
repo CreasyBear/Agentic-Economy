@@ -31,6 +31,10 @@ export function resolveCanonicalBaseUrl(request?: Request): CanonicalBaseUrlReso
   return { kind: 'fallback', baseUrl: fallbackCanonicalBaseUrl }
 }
 
+export function resolveCanonicalOrigin(request?: Request): string {
+  return new URL(resolveCanonicalBaseUrl(request).baseUrl).origin
+}
+
 function readConfiguredCanonicalBaseUrl(value: string | undefined): string | undefined {
   const parsed = readHttpUrl(value)
   if (parsed === undefined) {
@@ -96,4 +100,3 @@ function readHttpUrl(value: string | undefined): URL | undefined {
     return undefined
   }
 }
-

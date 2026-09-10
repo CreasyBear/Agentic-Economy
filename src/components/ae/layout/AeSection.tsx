@@ -1,5 +1,5 @@
 import { ChevronRightIcon } from 'lucide-react'
-import { useId, type ReactNode } from 'react'
+import { useId, type ReactNode, type Ref } from 'react'
 
 import { cn } from '@/lib/utils'
 
@@ -9,24 +9,30 @@ type AeSectionProps = {
   children?: ReactNode
   id?: string
   className?: string
+  headingRef?: Ref<HTMLHeadingElement>
 }
 
-export function AeSection({ title, description, children, id, className }: AeSectionProps) {
+export function AeSection({ title, description, children, id, className, headingRef }: AeSectionProps) {
   const generatedTitleId = useId()
   const titleId = `${generatedTitleId}-title`
 
   return (
     <section
       aria-labelledby={titleId}
-      className={cn('grid scroll-mt-6 gap-related', className)}
+      className={cn('grid scroll-mt-anchor gap-related', className)}
       {...(id === undefined ? {} : { id })}
     >
       <div className="grid gap-intra">
-        <h2 id={titleId} className="text-base font-semibold tracking-tight text-foreground">
+        <h2
+          ref={headingRef}
+          id={titleId}
+          tabIndex={headingRef === undefined ? undefined : -1}
+          className="font-sans text-base font-semibold leading-snug tracking-tight text-foreground"
+        >
           {title}
         </h2>
         {description === undefined ? null : (
-          <p className="text-pretty text-sm text-muted-foreground">{description}</p>
+          <p className="max-w-[65ch] text-pretty text-sm leading-normal text-muted-foreground">{description}</p>
         )}
       </div>
       {children}
@@ -35,7 +41,7 @@ export function AeSection({ title, description, children, id, className }: AeSec
 }
 
 export function AeSettingsStack({ children, className }: { children: ReactNode; className?: string }) {
-  return <div className={cn('mx-auto grid w-full max-w-3xl gap-section pb-hero', className)}>{children}</div>
+  return <div className={cn('mx-auto grid w-full max-w-3xl gap-section pb-page', className)}>{children}</div>
 }
 
 type AeSettingsRowProps = {

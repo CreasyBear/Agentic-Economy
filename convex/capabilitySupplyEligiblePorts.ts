@@ -1,6 +1,6 @@
 import {
-  capabilityOperationId,
-  createPublicOperationRef,
+  capabilityToolId,
+  createPublicToolRef,
   qualifySuppliedCandidate,
   type EligiblePublicationRow,
   type EligiblePublishedBusiness,
@@ -14,6 +14,7 @@ import type { QueryCtx } from './_generated/server'
 import { capabilitySupplyGraphPorts } from './capabilitySupplyGraphPorts'
 import { getActiveExactCapabilityContract } from './capabilityContractDocuments'
 import { toCapabilityBindingRow, toCapabilityOfferingRow } from './capabilitySupplyRowMappers'
+import { toDomain as providerConnectionDomain } from './lib/providerConnections/codecs'
 export function eligibleSupplyPorts(db: QueryCtx['db']): EligibleSupplyPorts {
   return {
     listAdmittedConformantBindingsByNetwork: async (networkId, take) => {
@@ -45,33 +46,7 @@ export function eligibleSupplyPorts(db: QueryCtx['db']): EligibleSupplyPorts {
     loadProviderConnection: async (connectionRef): Promise<ProviderConnection | undefined> => {
       const row = await db.query('capabilityProviderConnections')
         .withIndex('by_connectionRef', (query) => query.eq('connectionRef', connectionRef)).unique()
-      return row === null ? undefined : {
-        connectionRef: row.connectionRef,
-        owningAccountRef: row.owningAccountRef,
-        installedByPrincipalRef: row.installedByPrincipalRef,
-        authorityGrantRef: row.authorityGrantRef,
-        authorityGrantGeneration: row.authorityGrantGeneration,
-        ...(row.secretRef === undefined ? {} : { secretRef: row.secretRef }),
-        businessId: String(row.businessId),
-        providerRef: row.providerRef,
-        providerAccountRef: row.providerAccountRef,
-        adapterId: row.adapterId,
-        credentialRef: row.credentialRef,
-        grantedScopes: row.grantedScopes,
-        grantedResources: row.grantedResources,
-        authorityGeneration: row.authorityGeneration,
-        authorityDigest: row.authorityDigest,
-        lifecycle: row.lifecycle,
-        observedAt: row.observedAt,
-        ...(row.expiresAt === undefined ? {} : { expiresAt: row.expiresAt }),
-        ...(row.revokedAt === undefined ? {} : { revokedAt: row.revokedAt }),
-        ...(row.reasonCode === undefined ? {} : { reasonCode: row.reasonCode }),
-        evidenceRefs: row.evidenceRefs,
-        createdAt: row.createdAt,
-        updatedAt: row.updatedAt,
-        lastCommandId: row.lastCommandId,
-        lastCommandDigest: row.lastCommandDigest,
-      }
+      return row === null ? undefined : providerConnectionDomain(row)
     },
     catalogOriginIsCurrent: async (origin, businessId) => {
       const offering = await db.query('businessOfferings')
@@ -113,8 +88,8 @@ function toPublishedBusiness(doc: Doc<'businesses'>): EligiblePublishedBusiness 
 }
 
 function toPublicationRow(doc: Doc<'capabilityPublications'>): EligiblePublicationRow | null {
-  const operationRef = createPublicOperationRef({
-    operationId: capabilityOperationId(doc.capabilityId),
+  const toolRef = createPublicToolRef({
+    operationId: capabilityToolId(doc.capabilityId),
     publicationRef: doc.publicationRef,
     publicationRevision: doc.revision,
     contractRef: {
@@ -123,7 +98,7 @@ function toPublicationRow(doc: Doc<'capabilityPublications'>): EligiblePublicati
       contractDigest: doc.contractDigest,
     },
   })
-  if (operationRef !== doc.operationRef
+  if (toolRef !== doc.toolRef
     || doc.pricingConfigJson === undefined
     || doc.priceDigest === undefined) return null
   let pricingConfig
@@ -136,7 +111,7 @@ function toPublicationRow(doc: Doc<'capabilityPublications'>): EligiblePublicati
   }
   return {
     publicationRef: doc.publicationRef,
-    operationRef,
+    toolRef,
     revision: doc.revision,
     businessId: String(doc.businessId),
     networkId: doc.networkId,
@@ -149,6 +124,7 @@ function toPublicationRow(doc: Doc<'capabilityPublications'>): EligiblePublicati
     sourceDigest: doc.sourceDigest,
     publisherRef: doc.publisherRef,
     provenanceDigest: doc.provenanceDigest,
+    ...(doc.sourceAuthorityState === undefined ? {} : { sourceAuthorityState: doc.sourceAuthorityState }),
     registrationEvidenceRefs: [...doc.registrationEvidenceRefs],
     readinessEvidenceRefs: [...doc.readinessEvidenceRefs],
     disposition: doc.disposition,
@@ -159,5 +135,6 @@ function toPublicationRow(doc: Doc<'capabilityPublications'>): EligiblePublicati
     ...(doc.connectionAuthority === undefined ? {} : { connectionAuthority: doc.connectionAuthority }),
     ...(doc.readinessValidUntil === undefined ? {} : { readinessValidUntil: doc.readinessValidUntil }),
     ...(doc.readinessObservedAt === undefined ? {} : { readinessObservedAt: doc.readinessObservedAt }),
+    ...(doc.readinessLastHealthyAt === undefined ? {} : { readinessLastHealthyAt: doc.readinessLastHealthyAt }),
   }
 }

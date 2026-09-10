@@ -1,0 +1,42 @@
+services:
+  postgres:
+    image: postgres@sha256:cf78e76683b9ca8c5733cbbdce6c9262b45b6767934dd0a95e671f9a0fc20685
+
+  migrate:
+    image: ghcr.io/formancehq/ledger@sha256:4d72bd5cbf0a83a0cce9b37ea96a376ba33197517e40b97d16c43c36753727df
+
+  worker:
+    image: ghcr.io/formancehq/ledger@sha256:4d72bd5cbf0a83a0cce9b37ea96a376ba33197517e40b97d16c43c36753727df
+    environment:
+      EXPERIMENTAL_FEATURES: "false"
+      EXPERIMENTAL_EXPORTERS: "false"
+      OTEL_METRICS: "true"
+      OTEL_METRICS_KEEP_IN_MEMORY: "true"
+
+  ledger:
+    image: ghcr.io/formancehq/ledger@sha256:4d72bd5cbf0a83a0cce9b37ea96a376ba33197517e40b97d16c43c36753727df
+    environment:
+      AUTO_UPGRADE: "false"
+      EXPERIMENTAL_FEATURES: "false"
+      EXPERIMENTAL_EXPORTERS: "false"
+      EXPERIMENTAL_NUMSCRIPT_INTERPRETER: "false"
+      OTEL_METRICS: "true"
+      OTEL_METRICS_KEEP_IN_MEMORY: "true"
+      SCHEMA_ENFORCEMENT_MODE: strict
+    healthcheck:
+      test: ["CMD", "/usr/bin/curl", "--fail", "--silent", "http://localhost:3068/_healthcheck"]
+      interval: 2s
+      timeout: 5s
+      retries: 15
+      start_period: 5s
+
+  gateway:
+    image: ghcr.io/formancehq/gateway@sha256:239926753312410ee9a602aa0bffe1e5c89cd340540a98a6df58694f3d6e4165
+    volumes: !override
+      - ../gateway-v2.3.1.Caddyfile:/etc/caddy/Caddyfile:ro
+    healthcheck:
+      test: ["CMD", "/usr/bin/curl", "--fail", "--silent", "http://localhost:8080/versions"]
+      interval: 2s
+      timeout: 5s
+      retries: 15
+      start_period: 5s

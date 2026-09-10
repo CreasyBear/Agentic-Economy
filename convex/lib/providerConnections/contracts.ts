@@ -2,7 +2,7 @@ import { v } from 'convex/values'
 import type { Id } from '../../_generated/dataModel'
 import type {
   ProviderConnection,
-  ProviderConnectionInvocationLease,
+  ProviderConnectionCallLease,
 } from '../../../src/modules/capability-supply/provider-connection'
 
 export const lifecycle = v.union(
@@ -24,6 +24,17 @@ export const connectionValue = v.object({
   providerAccountRef: v.string(),
   adapterId: v.string(),
   credentialRef: v.union(v.string(), v.null()),
+  sourceOrigin: v.optional(v.string()),
+  sourceEnvironment: v.optional(v.union(v.literal('sandbox'), v.literal('production'))),
+  sourceAuthentication: v.optional(v.union(
+    v.object({
+      kind: v.literal('api_key'),
+      location: v.union(v.literal('header'), v.literal('query')),
+      name: v.string(),
+    }),
+    v.object({ kind: v.literal('http_bearer') }),
+    v.object({ kind: v.literal('mcp_oauth') }),
+  )),
   grantedScopes: v.array(v.string()),
   grantedResources: v.array(v.string()),
   authorityGeneration: v.number(),
@@ -53,6 +64,17 @@ export const authorityFields = {
   providerAccountRef: v.string(),
   adapterId: v.string(),
   credentialRef: v.union(v.string(), v.null()),
+  sourceOrigin: v.optional(v.string()),
+  sourceEnvironment: v.optional(v.union(v.literal('sandbox'), v.literal('production'))),
+  sourceAuthentication: v.optional(v.union(
+    v.object({
+      kind: v.literal('api_key'),
+      location: v.union(v.literal('header'), v.literal('query')),
+      name: v.string(),
+    }),
+    v.object({ kind: v.literal('http_bearer') }),
+    v.object({ kind: v.literal('mcp_oauth') }),
+  )),
   requestedScopes: v.array(v.string()),
   grantedScopes: v.array(v.string()),
   requestedResources: v.array(v.string()),
@@ -74,6 +96,11 @@ export const cleanupTargetValue = v.object({
   lifecycle,
   revocationRef: v.optional(v.string()),
   cleanupAttempt: v.optional(v.number()),
+  secret: v.optional(v.object({
+    secretRef: v.string(),
+    activeGeneration: v.string(),
+    pointerRevision: v.number(),
+  })),
   resourceAuthority: v.object({
     connectionRef: v.string(),
     authorityGeneration: v.number(),
@@ -122,6 +149,7 @@ export const connectionAuthorityValidation = v.union(
 
 export const createArgs = {
   ...authorityFields,
+  authorityGrantRef: v.string(),
   commandId: v.string(),
   now: v.number(),
 } as const
@@ -249,6 +277,9 @@ export type ProviderConnectionRow = {
   providerAccountRef: string
   adapterId: string
   credentialRef: string | null
+  sourceOrigin?: string
+  sourceEnvironment?: NonNullable<ProviderConnection['sourceEnvironment']>
+  sourceAuthentication?: NonNullable<ProviderConnection['sourceAuthentication']>
   grantedScopes: string[]
   grantedResources: string[]
   authorityGeneration: number
@@ -279,8 +310,8 @@ export type ProviderConnectionLeaseRow = {
   actorPrincipalRef: string
   grantRef: string
   grantGeneration: number
-  invocationRef: string
-  operationRef: string
+  callRef: string
+  toolRef: string
   connectionRef: string
   providerRef: string
   providerAccountRef: string
@@ -293,7 +324,7 @@ export type ProviderConnectionLeaseRow = {
   approvalDecisionDigest: string
   readinessValidUntil: number
   readinessDigest?: string
-  state: ProviderConnectionInvocationLease['state']
+  state: ProviderConnectionCallLease['state']
   issuedAt: number
   expiresAt: number
   consumedAt?: number
@@ -307,11 +338,15 @@ export type ProviderConnectionLeaseRow = {
 
 export type AuthorityCommandArgs = {
   connectionRef: string
+  authorityGrantRef: string
   businessId: Id<'businesses'>
   providerRef: string
   providerAccountRef: string
   adapterId: string
   credentialRef: string | null
+  sourceOrigin?: string
+  sourceEnvironment?: NonNullable<ProviderConnection['sourceEnvironment']>
+  sourceAuthentication?: NonNullable<ProviderConnection['sourceAuthentication']>
   requestedScopes: string[]
   grantedScopes: string[]
   requestedResources: string[]
@@ -323,7 +358,7 @@ export type AuthorityCommandArgs = {
   now: number
 }
 
-export type ReauthorizeCommandArgs = AuthorityCommandArgs & {
+export type ReauthorizeCommandArgs = Omit<AuthorityCommandArgs, 'authorityGrantRef'> & {
   expectedAuthorityGeneration: number
   expectedAuthorityDigest: string
 }

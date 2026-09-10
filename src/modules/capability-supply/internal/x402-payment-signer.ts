@@ -147,10 +147,11 @@ export async function createSandboxEvmX402PaymentSignature(
   try {
     const extensions = structuredClone(request.challenge.extensions ?? {})
     const paymentIdentifierExtension = extensions['payment-identifier']
-    if (!isPaymentIdentifierExtension(paymentIdentifierExtension))
-      return undefined
     const identifier = paymentIdentifier(request.paymentIdentifier)
-    appendPaymentIdentifierToExtensions(extensions, identifier)
+    if (paymentIdentifierExtension !== undefined) {
+      if (!isPaymentIdentifierExtension(paymentIdentifierExtension)) return undefined
+      appendPaymentIdentifierToExtensions(extensions, identifier)
+    }
     const required: X402PaymentRequired = {
       x402Version: request.challenge.x402Version,
       resource: { ...request.challenge.resource },
@@ -168,7 +169,10 @@ export async function createSandboxEvmX402PaymentSignature(
     const client = new x402HTTPClient(core)
     const payload = await client.createPaymentPayload(required)
     const header = client.encodePaymentSignatureHeader(payload)['PAYMENT-SIGNATURE']
-    return extractPaymentIdentifier(payload) === identifier ? header : undefined
+    const encodedIdentifier = extractPaymentIdentifier(payload)
+    return paymentIdentifierExtension === undefined
+      ? encodedIdentifier === null ? header : undefined
+      : encodedIdentifier === identifier ? header : undefined
   } catch {
     return undefined
   }

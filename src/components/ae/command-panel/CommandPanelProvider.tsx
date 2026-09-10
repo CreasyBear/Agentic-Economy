@@ -3,9 +3,9 @@
 import { createContext, use, useCallback, useMemo, useState, type ReactNode } from 'react'
 
 import {
-  readPublicOperationDetailRouteServer,
-  type PublicOperationDetailRouteResult,
-} from '@/modules/registry/operation-detail-route.functions'
+  readPublicToolDetailRouteServer,
+  type PublicToolDetailRouteResult,
+} from '@/modules/registry/tool-detail-route.functions'
 
 import {
   initialCommandPanelPages,
@@ -16,37 +16,27 @@ import {
   type CommandPanelStack,
 } from './command-panel-state'
 
-/** Reader for one operation's canonical detail; injectable for tests. */
-export type OperationDetailReader = (
-  operationRef: string,
-) => Promise<PublicOperationDetailRouteResult>
+/** Reader for one Tool's canonical detail; injectable for tests. */
+export type ToolDetailReader = (
+  toolRef: string,
+) => Promise<PublicToolDetailRouteResult>
 
-export type BuyerCredentialPresenceReader = () => Promise<boolean>
-
-export function readCanonicalOperationDetail(
-  operationRef: string,
-): Promise<PublicOperationDetailRouteResult> {
-  return readPublicOperationDetailRouteServer({ data: { operationRef } })
+export function readCanonicalToolDetail(
+  toolRef: string,
+): Promise<PublicToolDetailRouteResult> {
+  return readPublicToolDetailRouteServer({ data: { toolRef } })
 }
 
-const OperationDetailReaderContext =
-  createContext<OperationDetailReader | undefined>(undefined)
-const BuyerCredentialPresenceReaderContext =
-  createContext<BuyerCredentialPresenceReader | undefined>(undefined)
-const missingBuyerCredentialReader: BuyerCredentialPresenceReader = async () => false
+const ToolDetailReaderContext =
+  createContext<ToolDetailReader | undefined>(undefined)
 
 /**
  * Resolves the detail reader the current subtree was given, falling back to
- * the canonical `/operations/$operationRef` server function.
+ * the canonical `/tools/$toolRef` server function.
  */
-export function useOperationDetailReader(): OperationDetailReader {
-  const injected = use(OperationDetailReaderContext)
-  return injected ?? readCanonicalOperationDetail
-}
-
-export function useBuyerCredentialPresenceReader(): BuyerCredentialPresenceReader {
-  const injected = use(BuyerCredentialPresenceReaderContext)
-  return injected ?? missingBuyerCredentialReader
+export function useToolDetailReader(): ToolDetailReader {
+  const injected = use(ToolDetailReaderContext)
+  return injected ?? readCanonicalToolDetail
 }
 
 type CommandPanelContextValue = Readonly<{
@@ -59,8 +49,9 @@ type CommandPanelContextValue = Readonly<{
   toggle(): void
   open(): void
   close(): void
+  completeNavigation(): void
   popPage(): void
-  pushInspect(operationRef: string): void
+  pushToolDetail(toolRef: string): void
 }>
 
 const CommandPanelContext = createContext<CommandPanelContextValue | null>(null)
@@ -79,15 +70,12 @@ export function CommandPanelProvider({
   open,
   onOpenChange,
   readDetail,
-  readBuyerCredentialPresence,
   children,
 }: Readonly<{
   open: boolean
   onOpenChange: (open: boolean) => void
   /** Injectable so harnesses never hit the network for detail reads. */
-  readDetail?: OperationDetailReader
-  /** Existing owner-key read projected to the one credential fact the panel needs. */
-  readBuyerCredentialPresence?: BuyerCredentialPresenceReader
+  readDetail?: ToolDetailReader
   children: ReactNode
 }>) {
   const [pages, setPages] = useState<CommandPanelStack>(initialCommandPanelPages)
@@ -101,6 +89,10 @@ export function CommandPanelProvider({
   const closePanel = useCallback(() => {
     onOpenChange(false)
   }, [onOpenChange])
+  const completeNavigation = useCallback(() => {
+    setPages(initialCommandPanelPages)
+    onOpenChange(false)
+  }, [onOpenChange])
 
   const popPage = useCallback(() => {
     const next = popCommandPanelPage(pages)
@@ -108,9 +100,9 @@ export function CommandPanelProvider({
     if (next.closeRequested) onOpenChange(false)
   }, [onOpenChange, pages])
 
-  const pushInspect = useCallback((operationRef: string) => {
+  const pushToolDetail = useCallback((toolRef: string) => {
     setPages((currentPages) =>
-      pushCommandPanelPage(currentPages, { kind: 'operation-inspect', operationRef }),
+      pushCommandPanelPage(currentPages, { kind: 'tool-detail', toolRef }),
     )
   }, [])
 
@@ -123,17 +115,16 @@ export function CommandPanelProvider({
       toggle,
       open: openPanel,
       close: closePanel,
+      completeNavigation,
       popPage,
-      pushInspect,
+      pushToolDetail,
     }),
-    [closePanel, openPanel, open, pages, popPage, pushInspect, toggle],
+    [closePanel, completeNavigation, openPanel, open, pages, popPage, pushToolDetail, toggle],
   )
 
   return (
-    <BuyerCredentialPresenceReaderContext.Provider value={readBuyerCredentialPresence}>
-      <OperationDetailReaderContext.Provider value={readDetail}>
-        <CommandPanelContext.Provider value={value}>{children}</CommandPanelContext.Provider>
-      </OperationDetailReaderContext.Provider>
-    </BuyerCredentialPresenceReaderContext.Provider>
+    <ToolDetailReaderContext.Provider value={readDetail}>
+      <CommandPanelContext.Provider value={value}>{children}</CommandPanelContext.Provider>
+    </ToolDetailReaderContext.Provider>
   )
 }

@@ -20,7 +20,7 @@ const repoRoot = process.cwd()
 
 async function main() {
   const registry = await loadRegistry()
-  const operationRouteDescriptors = registry.listOperationRouteDescriptors()
+  const callRouteDescriptors = registry.listCallRouteDescriptors()
   const routeFiles = await collectSourceFiles(path.join(repoRoot, 'src/routes'))
   const componentFiles = await collectSourceFiles(path.join(repoRoot, 'src/components'))
   const moduleFiles = await collectSourceFiles(path.join(repoRoot, 'src/modules'))
@@ -38,10 +38,10 @@ async function main() {
 
   for (const action of registry.listActions()) {
     const exportName = findExportName(moduleFiles, sources, action.id)
-    const operationRouteDescriptor = operationRouteDescriptors.find(({ actionId }) => actionId === action.id)
-    const nativeRouteEvidence = operationRouteDescriptor === undefined
+    const callRouteDescriptor = callRouteDescriptors.find(({ actionId }) => actionId === action.id)
+    const nativeRouteEvidence = callRouteDescriptor === undefined
       ? []
-      : routeFiles.filter((file) => sources.get(file)?.includes(operationRouteDescriptor.routerPath) ?? false)
+      : routeFiles.filter((file) => sources.get(file)?.includes(callRouteDescriptor.routerPath) ?? false)
     const mcpRouteEvidence = action.surfaces.includes('mcp')
       ? routeFiles.filter((file) => sources.get(file)?.includes('handleMcpRequest') ?? false)
       : []

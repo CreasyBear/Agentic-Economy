@@ -13,7 +13,7 @@ import { isProviderConnectionCredentialRef } from '../provider-connection'
 import type {
   RouteTransportInvocation,
   RouteTransportRuntime,
-} from './route-transport-invoke'
+} from './route-transport-call'
 import {
   decodeX402PaymentRequiredHeader,
   validateX402PaymentRequired,
@@ -63,6 +63,11 @@ export type X402PaymentMaterialResult =
   | Readonly<{ kind: 'ready'; material: X402PaymentMaterial }>
   | Readonly<{ kind: 'refused'; observation: RouteTransportObservation }>
 
+export type X402ChallengeSelection = Readonly<{
+  challenge: X402Challenge
+  requirement: X402Challenge['accepts'][number]
+}>
+
 export async function prepareX402PaymentMaterial(
   endpoint: URL,
   configuration: X402Configuration,
@@ -70,6 +75,7 @@ export async function prepareX402PaymentMaterial(
   requestDigest: string,
   runtime: RouteTransportRuntime,
   target: URL | undefined,
+  selection?: X402ChallengeSelection,
 ): Promise<X402PaymentMaterialResult> {
   if (
     target === undefined
@@ -80,7 +86,7 @@ export async function prepareX402PaymentMaterial(
       kind: 'refused',
       observation: refused('x402', requestDigest, false, 'input_invalid'),
     }
-  const challenge = decodePinnedX402Challenge(configuration)
+  const challenge = selection?.challenge ?? decodePinnedX402Challenge(configuration, invocation.committedPaymentRequiredJson)
   if (challenge === undefined) {
     return {
       kind: 'refused',
@@ -88,14 +94,21 @@ export async function prepareX402PaymentMaterial(
     }
   }
   const paymentChallengeDigest = canonicalDigest(challenge as StableHashValue)
-  const requirement = challenge.accepts.find(
-    (candidate) =>
-      candidate.scheme === configuration.scheme
-      && candidate.network === configuration.network
-      && candidate.asset.toLowerCase() === configuration.asset.toLowerCase()
-      && candidate.payTo.toLowerCase() === configuration.payTo.toLowerCase(),
-  )
+  const requirement = selection?.requirement
+    ?? configuredX402Requirement(challenge, configuration)
   if (requirement === undefined) {
+    return {
+      kind: 'refused',
+      observation: {
+        ...refused('x402', requestDigest, false, 'payment_requirement_unsupported'),
+        paymentChallengeDigest,
+      },
+    }
+  }
+  if (
+    !challenge.accepts.includes(requirement)
+    || !configuredX402RequirementMatches(requirement, configuration)
+  ) {
     return {
       kind: 'refused',
       observation: {
@@ -109,7 +122,7 @@ export async function prepareX402PaymentMaterial(
       challenge.resource.url,
       target,
       configuration.method,
-      configuration.query !== undefined,
+      configuration.query !== undefined || configuration.queryObjectPointer !== undefined,
     )
     || Date.now() + requirement.maxTimeoutSeconds * 1_000 > invocation.authority.expiresAt
   ) {
@@ -233,6 +246,78 @@ export async function prepareX402PaymentMaterial(
   }
 }
 
+export function freshX402ChallengeSelection(
+  committed: X402ChallengeSelection,
+  freshChallenge: X402Challenge,
+): X402ChallengeSelection | undefined {
+  if (!x402ResourcesEquivalent(committed.challenge.resource, freshChallenge.resource)) {
+    return undefined
+  }
+  const requirement = freshChallenge.accepts.find((candidate) =>
+    x402RequirementsEquivalent(committed.requirement, candidate))
+  return requirement === undefined
+    ? undefined
+    : { challenge: freshChallenge, requirement }
+}
+
+function configuredX402Requirement(
+  challenge: X402Challenge,
+  configuration: X402Configuration,
+): X402Challenge['accepts'][number] | undefined {
+  return challenge.accepts.find((candidate) =>
+    configuredX402RequirementMatches(candidate, configuration))
+}
+
+function configuredX402RequirementMatches(
+  candidate: X402Challenge['accepts'][number],
+  configuration: X402Configuration,
+): boolean {
+  return candidate.scheme === configuration.scheme
+    && candidate.network === configuration.network
+    && candidate.asset.toLowerCase() === configuration.asset.toLowerCase()
+    && candidate.payTo.toLowerCase() === configuration.payTo.toLowerCase()
+}
+
+function x402ResourcesEquivalent(
+  committed: X402Challenge['resource'],
+  fresh: X402Challenge['resource'],
+): boolean {
+  let committedUrl: string
+  let freshUrl: string
+  try {
+    committedUrl = new URL(committed.url).href
+    freshUrl = new URL(fresh.url).href
+  } catch {
+    return false
+  }
+  return committedUrl === freshUrl
+    && committed.description === fresh.description
+    && committed.mimeType === fresh.mimeType
+}
+
+function x402RequirementsEquivalent(
+  committed: X402Challenge['accepts'][number],
+  fresh: X402Challenge['accepts'][number],
+): boolean {
+  return committed.scheme === fresh.scheme
+    && committed.network === fresh.network
+    && committed.amount === fresh.amount
+    && committed.asset.toLowerCase() === fresh.asset.toLowerCase()
+    && committed.payTo.toLowerCase() === fresh.payTo.toLowerCase()
+    && committed.maxTimeoutSeconds === fresh.maxTimeoutSeconds
+    && canonicalDigest(normalizedX402Extra(committed.extra) as StableHashValue)
+      === canonicalDigest(normalizedX402Extra(fresh.extra) as StableHashValue)
+}
+
+function normalizedX402Extra(
+  extra: Readonly<Record<string, unknown>>,
+): Readonly<Record<string, unknown>> {
+  return {
+    ...extra,
+    assetTransferMethod: extra.assetTransferMethod ?? 'eip3009',
+  }
+}
+
 export function decodeX402Challenge(header: string | null): X402Challenge | undefined {
   if (header === null || header.length > MAX_RESPONSE_BYTES * 2)
     return undefined
@@ -245,13 +330,14 @@ export function decodeX402Challenge(header: string | null): X402Challenge | unde
   }
 }
 
-function decodePinnedX402Challenge(configuration: X402Configuration): X402Challenge | undefined {
+function decodePinnedX402Challenge(configuration: X402Configuration, committedPaymentRequiredJson?: string): X402Challenge | undefined {
   if (!('paymentRequiredJson' in configuration) || typeof configuration.paymentRequiredJson !== 'string') {
     return undefined
   }
+  if (committedPaymentRequiredJson !== undefined && committedPaymentRequiredJson.length > 65_536) return undefined
   try {
     return validateX402Challenge(
-      validateX402PaymentRequired(JSON.parse(configuration.paymentRequiredJson)),
+      validateX402PaymentRequired(JSON.parse(committedPaymentRequiredJson ?? configuration.paymentRequiredJson)),
     )
   } catch {
     return undefined
@@ -325,7 +411,7 @@ export function expectedX402Amount(
   return tokenAmount?.units === rescaled.units ? rescaled : undefined
 }
 
-function x402ResourceUrlBindsTarget(
+export function x402ResourceUrlBindsTarget(
   resourceUrl: string,
   target: URL,
   method: 'GET' | 'POST',

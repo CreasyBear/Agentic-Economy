@@ -10,7 +10,7 @@ export function sanitizeAuthRedirectTarget(value: unknown): string | undefined {
   }
 
   const trimmed = value.trim()
-  if (!trimmed.startsWith('/') || trimmed.startsWith('//')) {
+  if (!trimmed.startsWith('/') || trimmed.startsWith('//') || trimmed.includes('\\')) {
     return undefined
   }
 

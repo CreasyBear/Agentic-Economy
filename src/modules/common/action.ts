@@ -51,6 +51,19 @@ export type ActionCredentialAdmission = Readonly<{
   authority: 'descriptor_classified'
 }>
 
+/**
+ * MCP-only facts that cannot be inferred from retry guidance.  In particular,
+ * idempotence answers whether repeating identical arguments adds an effect;
+ * it does not tell a caller whether an uncertain outcome may be retried.
+ */
+export type ActionMcpMetadata = Readonly<{
+  idempotent: boolean
+  /** The action can interact with external entities. */
+  openWorld: boolean
+  /** The action can remove, overwrite, or invalidate state. */
+  destructive: boolean
+}>
+
 export type ActionAgentIdentity = {
   kind: 'identity'
   signatureAgent: string
@@ -82,8 +95,8 @@ export type ActionModelRequestObservation = Readonly<{
 
 type ActionBaseContext = {
   /** Kernel-owned execution attribution; action callers must not supply it. */
-  actionInvocationExecution?: Readonly<{
-    invocationRef: string
+  actionExecution?: Readonly<{
+    executionRef: string
     attemptRef: string
     effectGeneration: number
   }>
@@ -175,10 +188,10 @@ export type ActionEffectMetadata = Readonly<{
   recipientKind: 'none' | 'business' | 'customer' | 'provider_system'
   dataClasses: readonly string[]
   spendExposure: 'none' | 'bounded' | 'unbounded'
-  approval: 'none' | 'approve_each' | 'mandate_eligible'
+  approval: 'none' | 'approval_required' | 'policy_eligible'
 }>
 
-export type ActionInvocationContract = Readonly<{
+export type ActionExecutionContract = Readonly<{
   /** Immutable version of the action's invocation semantics, not the application version. */
   version: string
   consequenceClass: ActionConsequenceClass
@@ -195,7 +208,7 @@ export type ActionInvocationContract = Readonly<{
   reconciliationEvidenceSource?: string
 }>
 
-export type ActionInvocationPreparation = Readonly<{
+export type ActionExecutionPreparation = Readonly<{
   dataUse: Readonly<{
     fields: readonly string[]
     limits: Readonly<Record<string, ActionJsonValue>>
@@ -210,18 +223,18 @@ type ActionJsonValue =
   | readonly ActionJsonValue[]
   | Readonly<{ [key: string]: ActionJsonValue }>
 
-export type ActionInvocationResultClassification = Readonly<{
+export type ActionExecutionResultClassification = Readonly<{
   outcome: string
   referenceable: boolean
 }>
 
 
 type ActionPreparationProjector<Input> = {
-  project(input: Input): ActionInvocationPreparation
+  project(input: Input): ActionExecutionPreparation
 }['project']
 
 type ActionResultClassifier<Result extends ActionResult> = {
-  classify(result: Result): ActionInvocationResultClassification
+  classify(result: Result): ActionExecutionResultClassification
 }['classify']
 
 type ActionPreReleaseCheck<Input, Result extends ActionResult> = {
@@ -235,6 +248,8 @@ export type ActionDefinition<
 > = {
   readonly id: string
   readonly credentialAdmission?: ActionCredentialAdmission
+  /** Required for non-observation MCP actions. */
+  readonly mcp?: ActionMcpMetadata
 
   readonly name: string
   readonly summary: string
@@ -245,7 +260,7 @@ export type ActionDefinition<
   readonly effect: ActionEffectMetadata
   readonly surfaces: readonly ActionSurface[]
   readonly outputSchema: z.ZodType<Result>
-  readonly invocationContract: ActionInvocationContract
+  readonly invocationContract: ActionExecutionContract
   readonly projectInvocationPreparation?: ActionPreparationProjector<Input>
   /** Action-owned interpretation of its returned business result. */
   readonly classifyInvocationResult?: ActionResultClassifier<Result>
@@ -266,8 +281,25 @@ export function defineAction<Input, Result extends ActionResult>(
 }
 
 /** Return the action's declared invocation contract without deriving metadata. */
-export function resolveActionContract(action: AnyAction): ActionInvocationContract {
+export function resolveActionContract(action: AnyAction): ActionExecutionContract {
   return action.invocationContract
+}
+
+/**
+ * Project the standard MCP tool facts from the action contract.  A missing
+ * idempotence declaration fails closed for effects; read-only observations
+ * are safe by definition.  OAuth scopes remain owned by credential admission.
+ */
+export function describeActionMcpMetadata(action: AnyAction): Readonly<{
+  idempotent: boolean
+  openWorld: boolean
+  destructive: boolean
+}> {
+  return {
+    idempotent: action.effect.class === 'observation' ? true : action.mcp?.idempotent ?? false,
+    openWorld: action.mcp?.openWorld ?? false,
+    destructive: action.mcp?.destructive ?? false,
+  }
 }
 
 /** Machine-readable description of an action. */

@@ -6,6 +6,10 @@ import { build } from "esbuild";
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const outputFile = resolve(repositoryRoot, "packages/cli/dist/ae.js");
+// A release pipeline may pin this to an immutable source revision. Keeping the
+// local default stable makes the checked-in download reproducible after the
+// commit that adds it instead of creating a self-referential archive digest.
+const buildRevision = process.env.AE_SOURCE_REVISION?.trim() || "development";
 
 await mkdir(dirname(outputFile), { recursive: true });
 await build({
@@ -16,9 +20,15 @@ await build({
   platform: "node",
   format: "esm",
   target: "node20",
+  loader: { ".md": "text" },
+  // Coinbase's SDK advertises Solana support through an optional dynamic peer.
+  // Preserve that boundary instead of forcing every AE CLI install to ship the
+  // SVM stack when AE's configured payment lane is Base USDC.
+  external: ["@x402/svm", "@x402/svm/*"],
   sourcemap: false,
   legalComments: "none",
-  banner: { js: "#!/usr/bin/env node" },
+  define: { __AE_CLI_BUILD_REVISION__: JSON.stringify(buildRevision) },
+  banner: { js: "#!/usr/bin/env node\nimport { createRequire as _createRequire } from 'node:module'; globalThis.require ??= _createRequire(import.meta.url);" },
   tsconfig: resolve(repositoryRoot, "tsconfig.json"),
 });
 await chmod(outputFile, 0o755);

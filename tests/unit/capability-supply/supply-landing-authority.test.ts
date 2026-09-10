@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from 'vitest'
 
-const registry = vi.hoisted(() => ({ run: vi.fn() }))
+import { isRecord } from '@/modules/common/is-record'
+
+const market = vi.hoisted(() => ({ read: vi.fn() }))
 
 vi.mock('@tanstack/react-start', () => ({
   createServerFn: () => ({
@@ -8,49 +10,46 @@ vi.mock('@tanstack/react-start', () => ({
     handler: (handler: unknown) => handler,
   }),
 }))
-vi.mock('@/modules/actions', () => ({
-  listMcpActions: () => [
-    { id: 'public-read', readOnly: true, credentialAdmission: undefined },
-    { id: 'credentialed-read', readOnly: true, credentialAdmission: { kind: 'credential' } },
-  ],
-  describeActionForAgent: (action: { id: string }) => ({
-    id: action.id,
-    name: 'Public read',
-    summary: 'Reads public registry data.',
-    boundaries: ['no account mutation'],
-  }),
-}))
-vi.mock('@/modules/registry/registry.actions', () => ({
-  registryServicesListAction: {
-    schema: { parse: (value: unknown) => value },
-    run: registry.run,
-  },
+vi.mock('@/modules/market/server', () => ({
+  readMarketRouteProjection: market.read,
 }))
 
+import { listMcpActions } from '@/modules/actions'
 import { loadSupplyLandingReadbackServer } from '@/lib/server/supply-landing.functions'
 
 describe('Supply landing public exemption', () => {
-  it('loadSupplyLandingReadbackServer returns only credential-free public tools and registry projections', async () => {
-    registry.run.mockResolvedValue({ items: [], cursor: null, hasMore: false })
+  it('loadSupplyLandingReadbackServer presents the current public Tool inventory', async () => {
+    market.read.mockResolvedValue({ window: '30d', catalog: { kind: 'no_candidates', matchedCount: 0 } })
 
     const result = await (loadSupplyLandingReadbackServer as unknown as () => Promise<unknown>)()
+    const registeredToolIds = listMcpActions()
+      .filter((action) => (
+        action.readOnly
+        && action.credentialAdmission === undefined
+        && action.id.startsWith('registry.tools.')
+      ))
+      .map(({ id }) => id)
 
     expect(loadSupplyLandingReadbackServer).toBeDefined()
-    expect(result).toEqual({
-      kind: 'available',
-      tools: [{
-        id: 'public-read',
-        name: 'Public read',
-        summary: 'Reads public registry data.',
-        boundaries: ['no account mutation'],
-      }],
-      services: { items: [], cursor: null, hasMore: false },
-      evidence: 'source',
-    })
-    expect(JSON.stringify(result)).not.toMatch(/credentialed-read|secret|ownerId|accountRef/u)
-    expect(registry.run).toHaveBeenCalledWith({
-      data: { limit: 10 },
-      context: { caller: 'ui' },
-    })
+    expect(result).toMatchObject({ kind: 'available', listings: [], evidence: 'source' })
+    if (!isAvailableSupplyLandingReadback(result)) {
+      throw new Error('supply_landing_readback_unavailable')
+    }
+    expect(result.tools.map(({ id }) => id)).toEqual(registeredToolIds)
+    expect(registeredToolIds).toEqual([
+      'registry.tools.list',
+      'registry.tools.search',
+      'registry.tools.describe',
+      'registry.tools.compare',
+    ])
+    expect(JSON.stringify(result)).not.toMatch(/registry\.operations\.|registry\.services_|secret|ownerId|accountRef/u)
+    expect(market.read).toHaveBeenCalledWith('30d')
   })
 })
+
+function isAvailableSupplyLandingReadback(
+  value: unknown,
+): value is Readonly<{ kind: 'available'; tools: readonly { id: string }[] }> {
+  if (!isRecord(value) || value.kind !== 'available' || !Array.isArray(value.tools)) return false
+  return value.tools.every((tool) => isRecord(tool) && typeof tool.id === 'string')
+}

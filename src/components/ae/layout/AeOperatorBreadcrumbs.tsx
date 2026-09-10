@@ -1,4 +1,5 @@
 import { Fragment } from 'react'
+import { Link } from '@tanstack/react-router'
 
 import {
   Breadcrumb,
@@ -34,7 +35,7 @@ export function AeOperatorBreadcrumbs({ items }: AeOperatorBreadcrumbsProps) {
                   <BreadcrumbPage>{item.label}</BreadcrumbPage>
                 ) : (
                   <BreadcrumbLink asChild>
-                    <a href={item.href}>{item.label}</a>
+                    <Link to={item.href}>{item.label}</Link>
                   </BreadcrumbLink>
                 )}
               </BreadcrumbItem>

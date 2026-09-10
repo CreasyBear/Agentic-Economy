@@ -1,7 +1,6 @@
 import { clerkMiddleware } from '@clerk/tanstack-react-start/server'
 import { createCsrfMiddleware, createMiddleware, createStart } from '@tanstack/react-start'
 
-import { toastErrorFunnel } from '@/lib/http/toast-error-funnel'
 import { applySecurityHeadersToResponse, resolveCspModeFromEnv } from '@/lib/http/security-headers'
 import { isLocalE2EAuthBypassEnabled } from '@/lib/server/local-e2e-bypass'
 import { createSourceWriteAdmissionMiddleware } from '@/lib/server/source-write-admission'
@@ -9,7 +8,7 @@ import { apiRequestBoundaryResponse } from '@/lib/server/api-request-boundary'
 
 import { negotiateAgentPage } from '@/lib/http/agent-content-negotiation'
 import { respondWithAgentPageMarkdown } from '@/lib/server/agent-page-markdown'
-import { resolveCanonicalBaseUrl } from '@/lib/server/canonical-url'
+import { resolveCanonicalBaseUrl, resolveCanonicalOrigin } from '@/lib/server/canonical-url'
 import { sanitizeTelemetryError, sanitizeTelemetryValue } from '@/lib/observability/private-route-safety'
 
 const requestCorrelationMiddleware = createMiddleware().server(async (ctx) => {
@@ -88,10 +87,10 @@ const apiRequestBoundaryMiddleware = createMiddleware().server((ctx) =>
   apiRequestBoundaryResponse(ctx.request) ?? ctx.next(),
 )
 
-const clerkRequestMiddleware = isLocalE2EAuthBypassEnabled() ? [] : [clerkMiddleware()]
+const clerkRequestMiddleware = isLocalE2EAuthBypassEnabled()
+  ? []
+  : [clerkMiddleware(() => ({ authorizedParties: [resolveCanonicalOrigin()] }))]
 export const startInstance = createStart(() => ({
-
-  functionMiddleware: [toastErrorFunnel],
   requestMiddleware: [
     requestCorrelationMiddleware,
     apiRequestBoundaryMiddleware,

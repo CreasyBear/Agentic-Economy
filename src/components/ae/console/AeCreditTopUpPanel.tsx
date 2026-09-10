@@ -1,61 +1,72 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { loadStripe } from '@stripe/stripe-js'
-import {
-  CheckoutElementsProvider,
-  PaymentElement,
-  useCheckoutElements,
-} from '@stripe/react-stripe-js/checkout'
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Spinner } from '@/components/ui/spinner'
-import { isMoneyRefusal, parseDecimalExactAmount, type CreditPaymentSession, type MoneyRefusal } from '@/modules/money/public'
-import type { CreditTopupBeginInput, CreditTopupOutcomeUnknownResult, CreditTopupReadInput, CreditTopupStartResult } from '@/modules/money/server'
-export type CreditTopupTarget = Readonly<{
-  principalId: string
-  currency: string
-  exponent: number
+import {
+  AUD_EXPONENT,
+  audFundingPolicyFromCommercialControls,
+  canonicalAudUnits,
+  formatExactAmount,
+  isMoneyRefusal,
+  quoteAudAccountFunding,
+  SANDBOX_COMMERCIAL_POLICY_CONTROLS,
+  type CreditPaymentSession,
+  type MoneyRefusal,
+} from '@/modules/money/public'
+import type {
+  AccountFundingBeginInput,
+  AccountFundingOutcomeUnknownResult,
+  AccountFundingReadInput,
+  AccountFundingStartResult,
+} from '@/modules/money/server'
+import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
+
+export type AccountFundingPort = Readonly<{
+  begin: (input: AccountFundingBeginInput) => Promise<AccountFundingStartResult>
+  read: (input: AccountFundingReadInput) => Promise<CreditPaymentSession | MoneyRefusal>
 }>
 
-
-export type CreditTopupPort = Readonly<{
-  begin: (input: CreditTopupBeginInput) => Promise<CreditTopupStartResult>
-  read: (input: CreditTopupReadInput) => Promise<CreditPaymentSession | MoneyRefusal>
-}>
-
-export type AeCreditTopUpPanelProps = Readonly<{
-  target?: CreditTopupTarget
-  port?: CreditTopupPort
-  publishableKey?: string
+export type AeAccountFundingPanelProps = Readonly<{
+  port?: AccountFundingPort
   onRefresh?: () => void | Promise<void>
+  redirectToCheckout?: (url: string) => void
 }>
 
 type RecoveryLocator =
-  | Readonly<{ externalRef: string; idempotencyKey: string }>
+  | Readonly<{ externalRef: string; idempotencyKey?: string }>
   | Readonly<{ commandRef: string; idempotencyKey: string }>
 
 type CreditPaymentStatus = CreditPaymentSession['evidence']['status']
 
-const recoveryStoragePrefix = 'ae.credit-topup.recovery.v1:'
+const recoveryStorageKey = 'ae.account-funding.recovery.v1'
 
-export function AeCreditTopUpPanel({ target, port, publishableKey, onRefresh }: AeCreditTopUpPanelProps) {
+export function AeAccountFundingPanel({
+  port,
+  onRefresh,
+  redirectToCheckout = defaultCheckoutRedirect,
+}: AeAccountFundingPanelProps) {
   const [pending, setPending] = useState(false)
   const [checking, setChecking] = useState(false)
   const [amountText, setAmountText] = useState('')
+  const [amountInvalid, setAmountInvalid] = useState(false)
   const [session, setSession] = useState<CreditPaymentSession>()
   const [paymentStatus, setPaymentStatus] = useState<CreditPaymentStatus>()
   const [errorMessage, setErrorMessage] = useState<string>()
   const [recovery, setRecovery] = useState<RecoveryLocator>()
   const idempotencyKey = useRef<string | undefined>(undefined)
   const recoveryAttempted = useRef(false)
-  const targetPrincipalId = target?.principalId
-
-  const stripePromise = useMemo(() => {
-    const key = (publishableKey ?? import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY)?.trim()
-    return key === undefined || key.length === 0 ? null : loadStripe(key)
-  }, [publishableKey])
+  const preview = useMemo(() => {
+    const units = canonicalAudUnits(amountText)
+    return units === undefined
+      ? undefined
+      : quoteAudAccountFunding(
+          units,
+          audFundingPolicyFromCommercialControls(SANDBOX_COMMERCIAL_POLICY_CONTROLS),
+        )
+  }, [amountText])
 
   const readCanonicalPayment = useCallback(async (locator: RecoveryLocator) => {
     if (port === undefined) return
@@ -64,72 +75,65 @@ export function AeCreditTopUpPanel({ target, port, publishableKey, onRefresh }: 
     try {
       const result = await port.read(locator)
       if (isMoneyRefusal(result)) {
-        setPaymentStatus(result.code === 'credit_topup_pending' ? 'pending' : result.code === 'credit_topup_outcome_unknown' ? 'outcome_unknown' : undefined)
+        setPaymentStatus(result.code === 'funding_pending' ? 'pending' : result.code === 'funding_outcome_unknown' ? 'outcome_unknown' : undefined)
         setErrorMessage(topUpErrorCopy(result))
         return
       }
       setSession(result)
       setPaymentStatus(result.evidence.status)
-      if (result.evidence.status === 'failed') setErrorMessage('The provider did not complete this payment. No credit was added.')
-      if (result.evidence.status === 'outcome_unknown') setErrorMessage('Payment status is still being verified. No credit was added by this browser return.')
+      if (result.evidence.status === 'failed') setErrorMessage('The provider did not complete this payment. No Account funds were added.')
+      if (result.evidence.status === 'outcome_unknown') setErrorMessage('Payment status is still being verified. No Account funds were added by this browser return.')
       setRecovery(locator)
-      persistRecovery(targetPrincipalId, locator)
+      persistRecovery(locator)
       try {
         await onRefresh?.()
       } catch {
-        setErrorMessage('Payment was read back, but the canonical credit balance is temporarily unavailable.')
+        setErrorMessage('Payment was read back, but the canonical Account balance is temporarily unavailable.')
       }
-    } catch {
+    } catch (cause) {
+      captureClientExceptionOnClient(cause)
       setPaymentStatus('outcome_unknown')
-      setErrorMessage('Payment status is still being checked. Your credit balance has not been updated by this browser return.')
+      setErrorMessage('Payment status is still being checked. Your Account balance has not been updated by this browser return.')
     } finally {
       setChecking(false)
     }
-  }, [onRefresh, port, targetPrincipalId])
+  }, [onRefresh, port])
 
   useEffect(() => {
-    if (target === undefined || port === undefined || recoveryAttempted.current) return
-    const stored = readStoredRecovery(target.principalId)
+    if (port === undefined || recoveryAttempted.current) return
+    const stored = readStoredRecovery()
     const returnedExternalRef = readReturnedExternalRef()
     const locator = returnedExternalRef === undefined
       ? stored
-      : stored === undefined
-        ? undefined
-        : { externalRef: returnedExternalRef, idempotencyKey: stored.idempotencyKey }
+      : { externalRef: returnedExternalRef }
     if (locator === undefined) return
     recoveryAttempted.current = true
     idempotencyKey.current = locator.idempotencyKey
     setRecovery(locator)
     void readCanonicalPayment(locator)
-  }, [port, readCanonicalPayment, target])
+  }, [port, readCanonicalPayment])
 
   async function beginTopUp() {
-    if (pending || target === undefined || port === undefined) return
-    const amount = parseDecimalExactAmount(target.currency, amountText, target.exponent)
-    if (amount === undefined) {
-      setErrorMessage('Enter a valid credit amount before starting payment.')
+    if (pending || port === undefined) return
+    const units = canonicalAudUnits(amountText)
+    if (units === undefined) {
+      setAmountInvalid(true)
       return
     }
-    if (stripePromise === null) {
-      setErrorMessage(topUpErrorCopy({ kind: 'refused', code: 'stripe_setup_required', retryable: false }))
-      return
-    }
-
-    const nextIdempotencyKey = idempotencyKey.current ?? `credit-topup:${randomId()}`
+    const nextIdempotencyKey = idempotencyKey.current ?? `account-funding:${randomId()}`
     idempotencyKey.current = nextIdempotencyKey
     setPending(true)
     setErrorMessage(undefined)
     try {
       const result = await port.begin({
-        principalId: target.principalId,
-        amount,
+        amount: { currency: 'AUD', units: units.toString(), exponent: AUD_EXPONENT },
         idempotencyKey: nextIdempotencyKey,
       })
       if (result.kind === 'outcome_unknown') {
         const locator = { commandRef: result.commandRef, idempotencyKey: nextIdempotencyKey }
         setPaymentStatus('outcome_unknown')
         setRecovery(locator)
-        persistRecovery(target.principalId, locator)
+        persistRecovery(locator)
         setErrorMessage(topUpErrorCopy(result))
         return
       }
@@ -140,11 +144,34 @@ export function AeCreditTopUpPanel({ target, port, publishableKey, onRefresh }: 
       const locator = { externalRef: result.session.evidence.externalRef, idempotencyKey: nextIdempotencyKey }
       setSession(result.session)
       setRecovery(locator)
-      persistRecovery(target.principalId, locator)
-    } catch {
-      setErrorMessage('Adding credit could not be started. No payment was confirmed; try again.')
+      persistRecovery(locator)
+      if (result.session.kind === 'hosted_redirect' && result.session.checkoutUrl !== undefined) {
+        redirectToCheckout(result.session.checkoutUrl)
+      }
+    } catch (cause) {
+      captureClientExceptionOnClient(cause)
+      setErrorMessage('Account funding could not be started. No payment was confirmed; try again.')
     } finally {
       setPending(false)
+    }
+  }
+
+  function startAnotherPayment() {
+    if (pending || checking || (paymentStatus !== 'succeeded' && paymentStatus !== 'failed')) return
+    idempotencyKey.current = undefined
+    setSession(undefined)
+    setRecovery(undefined)
+    setPaymentStatus(undefined)
+    setErrorMessage(undefined)
+    setAmountText('')
+    setAmountInvalid(false)
+    try {
+      window.sessionStorage.removeItem(recoveryStorageKey)
+      const url = new URL(window.location.href)
+      for (const key of ['funding', 'checkout_session_id', 'session_id']) url.searchParams.delete(key)
+      window.history.replaceState(window.history.state, '', url)
+    } catch {
+      // The current render can start a new payment even when browser storage is unavailable.
     }
   }
 
@@ -153,21 +180,12 @@ export function AeCreditTopUpPanel({ target, port, publishableKey, onRefresh }: 
     await readCanonicalPayment(recovery)
   }
 
-  const showPaymentForm = session !== undefined && paymentStatus === undefined && stripePromise !== null
-  const showSetupRefusal = target !== undefined && stripePromise === null && session === undefined
-
   return (
     <div className="grid gap-3">
-        {target === undefined ? (
+        {port === undefined ? (
           <Alert>
-            <AlertTitle>Credit is unavailable for this account</AlertTitle>
-            <AlertDescription>Your authenticated credit account could not be selected. No payment was started.</AlertDescription>
-          </Alert>
-        ) : null}
-        {showSetupRefusal ? (
-          <Alert>
-            <AlertTitle>Adding credit is unavailable right now</AlertTitle>
-            <AlertDescription>No payment started and your balance did not change. Try again later.</AlertDescription>
+            <AlertTitle>Account funding is unavailable</AlertTitle>
+            <AlertDescription>Your authenticated Account could not be loaded. No payment was started.</AlertDescription>
           </Alert>
         ) : null}
         {errorMessage !== undefined ? (
@@ -177,50 +195,71 @@ export function AeCreditTopUpPanel({ target, port, publishableKey, onRefresh }: 
           </Alert>
         ) : null}
         {checking ? <p className="text-sm text-muted-foreground" role="status">Checking the canonical payment readback…</p> : null}
-        {paymentStatus === 'pending' ? <p className="text-sm text-muted-foreground" role="status">Payment is pending canonical server readback; the browser has not changed your credit balance.</p> : null}
+        {paymentStatus === 'pending' ? <p className="text-sm text-muted-foreground" role="status">Payment is pending canonical server readback; the browser has not changed your Account balance.</p> : null}
         {paymentStatus === 'outcome_unknown' ? (
           <Alert>
             <AlertTitle>Payment is still being verified</AlertTitle>
-            <AlertDescription>Do not retry with a new payment. The authenticated server is reconciling this payment before any credit changes.</AlertDescription>
+            <AlertDescription>Do not retry with a new payment. The authenticated server is reconciling this payment before any Account balance change.</AlertDescription>
           </Alert>
         ) : null}
         {paymentStatus === 'succeeded' ? (
           <Alert>
             <AlertTitle>Payment verified</AlertTitle>
-            <AlertDescription>Your balance will reflect credit only after the canonical ledger readback. The browser return did not grant credit.</AlertDescription>
+            <AlertDescription>Your Account balance changes only after the canonical journal readback. The browser return did not grant funds.</AlertDescription>
           </Alert>
         ) : null}
-        {showPaymentForm ? (
-          <CheckoutElementsProvider stripe={stripePromise} options={{ clientSecret: session.clientSecret }}>
-            <CheckoutPaymentForm confirming={pending} onConfirmed={refreshPayment} />
-          </CheckoutElementsProvider>
-        ) : null}
-        {session === undefined && recovery === undefined && target !== undefined ? (
+        {session === undefined && recovery === undefined && port !== undefined ? (
           <div className="grid gap-2">
-            <Label htmlFor="credit-topup-amount">Credit amount ({target.currency})</Label>
+            <Label htmlFor="account-funding-amount">Account funding amount (AUD)</Label>
             <Input
-              id="credit-topup-amount"
+              id="account-funding-amount"
               inputMode="decimal"
               autoComplete="off"
               value={amountText}
-              onChange={(event) => setAmountText(event.target.value)}
+              onChange={(event) => {
+                setAmountText(event.target.value)
+                if (canonicalAudUnits(event.target.value) !== undefined) setAmountInvalid(false)
+              }}
               disabled={pending || checking}
-              placeholder={target.exponent === 0 ? '500' : '10.00'}
-              aria-describedby="credit-topup-amount-help"
+              placeholder="10.00"
+              aria-invalid={amountInvalid}
+              aria-describedby={amountInvalid ? 'account-funding-amount-help account-funding-amount-error' : 'account-funding-amount-help'}
             />
-            <p id="credit-topup-amount-help" className="text-xs text-muted-foreground">The configured minimum and maximum are enforced by the authenticated server.</p>
+            <p id="account-funding-amount-help" className="text-xs text-muted-foreground">The configured minimum and maximum are enforced by the authenticated server.</p>
+            {amountInvalid ? <p id="account-funding-amount-error" className="text-sm text-destructive" role="alert">Enter a valid AUD funding amount before starting payment.</p> : null}
+            {preview === undefined ? null : (
+              <div className="grid gap-2 rounded-lg border border-border/70 bg-muted/30 p-3 text-sm">
+                <p className="m-0 text-muted-foreground">
+                  Your signed-in Account receives the requested AUD principal after Stripe confirms the full payment.
+                </p>
+              <dl className="grid grid-cols-[1fr_auto] gap-x-4 gap-y-1" aria-label="Funding quote">
+                <dt className="text-muted-foreground">Account principal</dt>
+                <dd className="font-mono">AUD {formatAudUnits(preview.principalUnits)}</dd>
+                <dt className="text-muted-foreground">Service fee</dt>
+                <dd className="font-mono">AUD {formatAudUnits(preview.serviceFeeUnits)}</dd>
+                <dt className="text-muted-foreground">Tax on service fee</dt>
+                <dd className="font-mono">AUD {formatAudUnits(preview.taxUnits)}</dd>
+                <dt className="font-medium">Total payment</dt>
+                <dd className="font-mono font-medium">AUD {formatAudUnits(preview.totalUnits)}</dd>
+              </dl>
+              </div>
+            )}
           </div>
         ) : null}
       <div className="flex flex-wrap gap-2">
         {session === undefined && recovery === undefined ? (
           <Button
             variant="secondary"
-            disabled={pending || checking || target === undefined || port === undefined}
+            disabled={pending || checking || port === undefined}
             onClick={() => void beginTopUp()}
             className="min-h-touch"
           >
             {pending ? <Spinner data-icon="inline-start" /> : null}
-            {pending ? 'Preparing secure payment…' : 'Add credit for paid calls'}
+            {pending ? 'Preparing secure payment…' : 'Continue to Stripe'}
+          </Button>
+        ) : paymentStatus === 'succeeded' || paymentStatus === 'failed' ? (
+          <Button type="button" variant="secondary" disabled={checking || pending} onClick={startAnotherPayment} className="min-h-touch">
+            Add more credit
           </Button>
         ) : recovery !== undefined && (paymentStatus === 'pending' || paymentStatus === 'outcome_unknown') ? (
           <Button type="button" variant="ghost" disabled={checking || pending} onClick={() => void refreshPayment()} className="min-h-touch">
@@ -233,52 +272,17 @@ export function AeCreditTopUpPanel({ target, port, publishableKey, onRefresh }: 
   )
 }
 
-function CheckoutPaymentForm({ confirming, onConfirmed }: Readonly<{ confirming: boolean; onConfirmed: () => Promise<void> }>) {
-  const checkoutState = useCheckoutElements()
-  const [confirmingLocal, setConfirmingLocal] = useState(false)
-
-  if (checkoutState.type === 'loading') {
-    return <p className="text-sm text-muted-foreground" role="status">Loading secure payment form…</p>
-  }
-  if (checkoutState.type === 'error') {
-    return <p className="text-sm text-muted-foreground">The secure payment form could not load. No payment was confirmed.</p>
-  }
-  const checkout = checkoutState.checkout
-
-  async function confirmPayment() {
-    if (confirming || confirmingLocal) return
-    setConfirmingLocal(true)
-    try {
-      const result = await checkout.confirm()
-      if (result.type === 'error') {
-        await onConfirmed()
-        return
-      }
-      await onConfirmed()
-    } catch {
-      await onConfirmed()
-    } finally {
-      setConfirmingLocal(false)
-    }
-  }
-
-  return (
-    <form className="grid gap-3" onSubmit={(event) => { event.preventDefault(); void confirmPayment() }}>
-      <PaymentElement />
-      <Button type="submit" disabled={confirming || confirmingLocal} className="min-h-touch">
-        {confirming || confirmingLocal ? <Spinner data-icon="inline-start" /> : null}
-        {confirming || confirmingLocal ? 'Confirming payment…' : 'Pay securely'}
-      </Button>
-    </form>
-  )
+function topUpErrorCopy(result: MoneyRefusal | AccountFundingOutcomeUnknownResult): string {
+  if (result.code === 'stripe_setup_required') return 'Account funding is unavailable right now. No payment started and your balance did not change. Try again later.'
+  if (result.code === 'billing_identity_missing' || result.code === 'billing_identity_mismatch') return 'Your authenticated Account is unavailable. No payment started.'
+  if (result.code === 'funding_amount_invalid') return 'That AUD principal is outside the configured limits. No payment started.'
+  if (result.code === 'commercial_policy_required') return 'Production funding is not enabled because the required commercial approvals are not current. No payment started.'
+  if (result.code === 'funding_pending' || result.code === 'funding_outcome_unknown') return 'Payment is still being verified. Your Account balance will not change until the canonical server readback completes.'
+  return 'Account funding could not be started. No payment was confirmed; try again.'
 }
 
-function topUpErrorCopy(result: MoneyRefusal | CreditTopupOutcomeUnknownResult): string {
-  if (result.code === 'stripe_setup_required') return 'Adding credit is unavailable right now. No payment started and your balance did not change. Try again later.'
-  if (result.code === 'billing_identity_missing' || result.code === 'billing_identity_mismatch') return 'Your authenticated credit account is unavailable. No payment started.'
-  if (result.code === 'credit_topup_amount_invalid') return 'That credit amount is outside the configured limits. No payment started.'
-  if (result.code === 'credit_topup_pending' || result.code === 'credit_topup_outcome_unknown') return 'Payment is still being verified. Your balance will not change until the canonical server readback completes.'
-  return 'Adding credit could not be started. No payment was confirmed; try again.'
+function formatAudUnits(units: bigint): string {
+  return formatExactAmount({ currency: 'AUD', units: units.toString(), exponent: AUD_EXPONENT }) ?? '—'
 }
 
 function randomId(): string {
@@ -286,23 +290,19 @@ function randomId(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`
 }
 
-function storageKey(principalId: string): string {
-  return `${recoveryStoragePrefix}${encodeURIComponent(principalId)}`
-}
-
-function persistRecovery(principalId: string | undefined, locator: RecoveryLocator): void {
-  if (principalId === undefined || typeof window === 'undefined') return
+function persistRecovery(locator: RecoveryLocator): void {
+  if (typeof window === 'undefined') return
   try {
-    window.sessionStorage.setItem(storageKey(principalId), JSON.stringify(locator))
+    window.sessionStorage.setItem(recoveryStorageKey, JSON.stringify(locator))
   } catch {
     // Browser storage is optional; the in-memory locator still protects this render.
   }
 }
 
-function readStoredRecovery(principalId: string): RecoveryLocator | undefined {
+function readStoredRecovery(): RecoveryLocator | undefined {
   if (typeof window === 'undefined') return undefined
   try {
-    const raw = window.sessionStorage.getItem(storageKey(principalId))
+    const raw = window.sessionStorage.getItem(recoveryStorageKey)
     if (raw === null) return undefined
     const parsed: unknown = JSON.parse(raw)
     if (!isRecoveryLocator(parsed)) return undefined
@@ -315,7 +315,7 @@ function readStoredRecovery(principalId: string): RecoveryLocator | undefined {
 function readReturnedExternalRef(): string | undefined {
   if (typeof window === 'undefined') return undefined
   const params = new URLSearchParams(window.location.search)
-  const value = params.get('checkout_session_id') ?? params.get('session_id')
+  const value = params.get('funding') ?? params.get('checkout_session_id') ?? params.get('session_id')
   return value === null || value.trim().length === 0 ? undefined : value
 }
 
@@ -325,5 +325,10 @@ function isRecoveryLocator(value: unknown): value is RecoveryLocator {
   const hasIdempotencyKey = typeof candidate.idempotencyKey === 'string' && candidate.idempotencyKey.length > 0
   const hasExternalRef = typeof candidate.externalRef === 'string' && candidate.externalRef.length > 0
   const hasCommandRef = typeof candidate.commandRef === 'string' && candidate.commandRef.length > 0
-  return hasIdempotencyKey && (hasExternalRef !== hasCommandRef)
+  return (hasExternalRef && !hasCommandRef)
+    || (hasCommandRef && !hasExternalRef && hasIdempotencyKey)
+}
+
+function defaultCheckoutRedirect(url: string): void {
+  window.location.assign(url)
 }

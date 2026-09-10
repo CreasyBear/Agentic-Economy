@@ -9,6 +9,7 @@ import {
   type ProviderConnectionAuthorityValidation,
   type ProviderConnectionCredentialResolution,
 } from '../../../src/modules/capability-supply/provider-connection'
+import type { Doc } from '../../_generated/dataModel'
 import type { MutationCtx, QueryCtx } from '../../_generated/server'
 import {
   type AuthorityCommandArgs,
@@ -30,7 +31,7 @@ export {
   readCurrentCleanupResourceAuthority,
   resolveCanonicalBusinessOwner,
   resolveProviderConnectionProvenance,
-  resolveUniqueProviderConnectionGrant,
+  resolveExpectedProviderConnectionGrant,
   type CanonicalActor,
 } from './authority'
 export {
@@ -47,20 +48,37 @@ export {
   invalidateActiveLeases,
 } from './cleanup'
 import { invalidateActiveLeases } from './cleanup'
+import { providerRouteabilityIsFrozen } from '../providerOffboardingFreeze'
 
 function createOptionalFields(args: AuthorityCommandArgs) {
   return Object.fromEntries(Object.entries({
     expiresAt: args.expiresAt,
     reasonCode: args.reasonCode,
+    sourceOrigin: args.sourceOrigin,
+    sourceEnvironment: args.sourceEnvironment,
+    sourceAuthentication: args.sourceAuthentication,
   }).filter(([, value]) => value !== undefined))
+}
+
+async function resolveWritableCanonicalBusinessOwner(
+  ctx: MutationCtx,
+  businessId: string,
+) {
+  const canonicalBusinessId = ctx.db.normalizeId('businesses', businessId)
+  if (canonicalBusinessId === null) return null
+  const actor = await resolveCanonicalBusinessOwner(ctx, canonicalBusinessId)
+  if (actor === null || await providerRouteabilityIsFrozen(ctx, canonicalBusinessId)) return null
+  return actor
 }
 
 export async function createHandler(ctx: MutationCtx, args: AuthorityCommandArgs) {
   const existing = await ctx.db.query('capabilityProviderConnections')
     .withIndex('by_connectionRef', (query) => query.eq('connectionRef', args.connectionRef)).unique()
   const now = Date.now()
-  const actor = await resolveCanonicalBusinessOwner(ctx, args.businessId)
-  if (actor === null) return { kind: 'refused' as const, code: 'invalid_identity' as const }
+  const actor = await resolveWritableCanonicalBusinessOwner(ctx, args.businessId)
+  if (actor === null) {
+    return { kind: 'refused' as const, code: 'invalid_identity' as const }
+  }
   const provenance = await resolveProviderConnectionProvenance(
     ctx,
     actor,
@@ -71,6 +89,7 @@ export async function createHandler(ctx: MutationCtx, args: AuthorityCommandArgs
       ...(args.credentialRef === null ? [] : [`secret:${args.credentialRef}`]),
     ],
     args.credentialRef,
+    args.authorityGrantRef,
   )
   if (provenance === null) return { kind: 'refused' as const, code: 'invalid_transition' as const }
   const result = createProviderConnection({
@@ -108,14 +127,16 @@ export async function reauthorizeHandler(ctx: MutationCtx, args: ReauthorizeComm
     .withIndex('by_connectionRef', (query) => query.eq('connectionRef', args.connectionRef)).unique()
   if (existing === null) return { kind: 'refused' as const, code: 'invalid_transition' as const }
   const current = toDomain(existing)
-  const actor = await resolveCanonicalBusinessOwner(ctx, args.businessId)
+  const actor = await resolveWritableCanonicalBusinessOwner(ctx, args.businessId)
   if (!providerConnectionAuthorityProvenanceIsValid(current)
-    || actor === null || current.owningAccountRef !== actor.accountRef) {
+    || actor === null
+    || current.owningAccountRef !== actor.accountRef) {
     return { kind: 'refused' as const, code: 'invalid_identity' as const }
   }
   const now = Date.now()
   const provenance = await resolveProviderConnectionProvenance(
     ctx, actor, 'refresh', [`connection:${current.connectionRef}`], args.credentialRef,
+    current.authorityGrantRef,
   )
   if (provenance === null) return { kind: 'refused' as const, code: 'invalid_transition' as const }
   const result = reauthorizeProviderConnection(current, {
@@ -160,6 +181,7 @@ export async function beginRevocationHandler(ctx: MutationCtx, args: BeginRevoca
   if (result.kind === 'refused') return result
   const provenance = await resolveProviderConnectionProvenance(
     ctx, actor, 'revoke', [`connection:${current.connectionRef}`], current.credentialRef,
+    current.authorityGrantRef,
   )
   if (provenance === null) return { kind: 'refused' as const, code: 'invalid_transition' as const }
   const rebound = withProviderConnectionAuthority(result.connection, provenance)
@@ -203,6 +225,24 @@ export async function readHandler(ctx: QueryCtx, args: { connectionRef: string }
     : toRow(connection, row.lastCommandId, row.lastCommandDigest)
 }
 
+async function readCleanupSecret(
+  ctx: QueryCtx,
+  row: Doc<'capabilityProviderConnections'>,
+) {
+  const secretRef = row.secretRef ?? row.credentialRef ?? undefined
+  if (secretRef === undefined) return undefined
+  const pointer = await ctx.db.query('secretPointers')
+    .withIndex('by_secretRef', (query) => query.eq('secretRef', secretRef))
+    .unique()
+  return pointer === null || pointer.owningAccountRef !== row.owningAccountRef
+    ? undefined
+    : {
+        secretRef: pointer.secretRef,
+        activeGeneration: pointer.activeGeneration,
+        pointerRevision: pointer.revision,
+      }
+}
+
 export async function readCleanupTargetHandler(ctx: QueryCtx, args: ReadCleanupTargetArgs) {
   if (!Number.isSafeInteger(args.now) || args.now < 0) return null
   const row = await ctx.db.query('capabilityProviderConnections')
@@ -220,6 +260,7 @@ export async function readCleanupTargetHandler(ctx: QueryCtx, args: ReadCleanupT
   if (!targetMatches) return null
   const resourceAuthority = await readCurrentCleanupResourceAuthority(ctx, toDomain(row), args.now)
   if (resourceAuthority === null) return null
+  const secret = await readCleanupSecret(ctx, row)
   return {
     connectionRef: row.connectionRef,
     providerRef: row.providerRef,
@@ -234,6 +275,7 @@ export async function readCleanupTargetHandler(ctx: QueryCtx, args: ReadCleanupT
     ...Object.fromEntries(Object.entries({
       revocationRef: row.revocationRef,
       cleanupAttempt: row.cleanupAttempt,
+      secret,
     }).filter(([, value]) => value !== undefined)),
     resourceAuthority,
   }

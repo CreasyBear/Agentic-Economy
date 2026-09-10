@@ -1,8 +1,8 @@
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { Infer } from 'convex/values'
 import {
-  isRegisteredOperationMappingRef,
-  resolveRegisteredOperationMappingRef,
+  isRegisteredToolMappingRef,
+  resolveRegisteredToolMappingRef,
   registerCapabilityTransportBinding as registerCapabilityTransportBindingWrite,
   registerCapabilityOffering as registerCapabilityOfferingWrite,
   setCapabilitySupplyEligibility as setCapabilitySupplyEligibilityWrite,
@@ -14,26 +14,26 @@ import {
   validEvidenceRefs,
   type EligibilityInput,
   type OperationLedgerPorts,
-  type RegisteredOperationMapping,
+  type RegisteredToolMapping,
   type RegistrationContext,
   type SupplyCommandActor,
 } from '@/modules/capability-supply/public'
 
-import { registeredOperationMappingValue } from './capabilitySupplyValues'
-import { toRegisteredOperationMapping } from './capabilitySupplyRowMappers'
+import { registeredToolMappingValue } from './capabilitySupplyValues'
+import { toRegisteredToolMapping } from './capabilitySupplyRowMappers'
 import { getActiveExactCapabilityContract } from './capabilityContractDocuments'
-import { capabilitySupplyOperationPorts } from './capabilitySupplyOperationPorts'
+import { capabilitySupplyToolPorts } from './capabilitySupplyToolPorts'
 import { capabilitySupplyWriterPorts } from './capabilitySupplyWriterPorts'
 import type { MutationCtx } from './_generated/server'
 import { publicationAuthorityModeValue } from './capabilitySupplyShared'
 
-type RegisteredOperationMappingInput = Infer<
-  typeof registeredOperationMappingValue
+type RegisteredToolMappingInput = Infer<
+  typeof registeredToolMappingValue
 >
 
 type MappingCommandInput = Readonly<{
   networkId: string
-  mapping: RegisteredOperationMappingInput
+  mapping: RegisteredToolMappingInput
   authorityMode: Infer<typeof publicationAuthorityModeValue>
   registrationEvidenceRefs: readonly string[]
   actorKind: 'owner' | 'admin' | 'system'
@@ -42,7 +42,7 @@ type MappingCommandInput = Readonly<{
 
 async function validateMappingContracts(
   db: MutationCtx['db'],
-  mapping: RegisteredOperationMappingInput,
+  mapping: RegisteredToolMappingInput,
 ): Promise<
   | Readonly<{ kind: 'ok' }>
   | Readonly<{
@@ -78,13 +78,13 @@ async function registerMappingCommand(
   db: MutationCtx['db'],
   input: MappingCommandInput,
 ) {
-  let mapping: RegisteredOperationMapping
+  let mapping: RegisteredToolMapping
   try {
-    if (!isRegisteredOperationMappingRef(input.mapping.mappingRef)) {
+    if (!isRegisteredToolMappingRef(input.mapping.mappingRef)) {
       return { kind: 'refused' as const, reason: 'mapping_invalid' as const }
     }
     mapping = { ...input.mapping, mappingRef: input.mapping.mappingRef }
-    if (resolveRegisteredOperationMappingRef(mapping) !== mapping.mappingRef) {
+    if (resolveRegisteredToolMappingRef(mapping) !== mapping.mappingRef) {
       return { kind: 'refused' as const, reason: 'mapping_invalid' as const }
     }
   } catch {
@@ -94,14 +94,14 @@ async function registerMappingCommand(
   const contracts = await validateMappingContracts(db, mapping)
   if (contracts.kind === 'refused') return contracts
   const existingMapping = await db
-    .query('registeredOperationMappings')
+    .query('registeredToolMappings')
     .withIndex('by_networkId_and_mappingRef', (query) =>
       query.eq('networkId', input.networkId).eq('mappingRef', mappingRef),
     )
     .unique()
   if (
     existingMapping !== null &&
-    toRegisteredOperationMapping(existingMapping) === null
+    toRegisteredToolMapping(existingMapping) === null
   ) {
     return {
       kind: 'refused' as const,
@@ -149,7 +149,7 @@ async function registerMappingCommand(
   })
   if (existingMapping === null) {
     const { mappingRef: storedMappingRef, ...material } = mapping
-    await db.insert('registeredOperationMappings', {
+    await db.insert('registeredToolMappings', {
       networkId: input.networkId,
       mappingRef: storedMappingRef,
       material,
@@ -172,7 +172,7 @@ export async function registerCuratedMapping(
   ctx: MutationCtx,
   input: Readonly<{
     networkId: string
-    mapping: RegisteredOperationMappingInput
+    mapping: RegisteredToolMappingInput
     registrationEvidenceRefs: readonly string[]
   }>,
 ) {
@@ -209,13 +209,13 @@ export async function registerCapabilityTransportBinding(
   db: MutationCtx['db'],
   input: unknown,
   registeredAt: number,
-  expectedOperationRef?: string,
+  expectedToolRef?: string,
 ) {
   return registerCapabilityTransportBindingWrite(
     capabilitySupplyWriterPorts(db),
     input,
     registeredAt,
-    expectedOperationRef,
+    expectedToolRef,
   )
 }
 
@@ -232,15 +232,15 @@ export async function setCapabilitySupplyEligibility(
 }
 
 function portsFor(db: MutationCtx['db']): OperationLedgerPorts {
-  return capabilitySupplyOperationPorts(db, {
+  return capabilitySupplyToolPorts(db, {
     registerOffering: (registration, now) =>
       registerCapabilityOffering(db, registration, now),
-    registerBinding: (registration, now, expectedOperationRef) =>
+    registerBinding: (registration, now, expectedToolRef) =>
       registerCapabilityTransportBinding(
         db,
         registration,
         now,
-        expectedOperationRef,
+        expectedToolRef,
       ),
     setEligibility: (eligibility, now) =>
       setCapabilitySupplyEligibility(db, eligibility, now),

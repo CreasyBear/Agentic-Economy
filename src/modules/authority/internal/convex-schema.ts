@@ -5,6 +5,11 @@ import { accountActionContextValue } from '../../principal-account/public'
 
 const delegationLifecycleValue = v.union(v.literal('active'), v.literal('revoked'))
 
+const consequenceFactorEvidenceValue = v.object({
+  firstFactorAgeMinutes: v.number(),
+  secondFactorAgeMinutes: v.number(),
+})
+
 const delegationGrantFields = {
   grantRef: v.string(),
   accountRef: v.string(),
@@ -40,6 +45,18 @@ const delegationSnapshotAncestorFields = {
 }
 
 export const authorityDelegationTables = {
+  consequenceProofUses: defineTable({
+    reverificationId: v.string(),
+    actorPrincipalRef: v.string(),
+    activeAccountRef: v.string(),
+    commandDigest: v.string(),
+    proofPreset: v.literal('strict'),
+    factorEvidence: consequenceFactorEvidenceValue,
+    verifiedAt: v.number(),
+    expiresAt: v.number(),
+    correlationRef: v.string(),
+    idempotencyRef: v.string(),
+  }).index('by_reverificationId', ['reverificationId']),
   authorityDelegationGrants: defineTable(delegationGrantFields)
     .index('by_grantRef', ['grantRef'])
     .index('by_subjectPrincipalRef_and_lifecycle', ['subjectPrincipalRef', 'lifecycle'])

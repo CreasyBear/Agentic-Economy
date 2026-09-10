@@ -6,7 +6,9 @@ import type { ReactNode } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 
 vi.mock('@/components/ae/layout/AePublicShell', () => ({
-  AePublicShell: ({ children }: { children: ReactNode }) => <main>{children}</main>,
+  AePublicShell: ({ children, mode = 'page' }: { children: ReactNode; mode?: string }) => (
+    <main data-shell-mode={mode}>{children}</main>
+  ),
 }))
 
 import { AePublicPage } from '@/components/ae/layout/AePublicPage'
@@ -38,5 +40,22 @@ describe('AePublicPage', () => {
     expect(screen.getByText('Legal')).toBeTruthy()
     expect(screen.getByRole('heading', { level: 1, name: 'Privacy' })).toBeTruthy()
     expect(screen.getByText('Document body')).toBeTruthy()
+  })
+
+  it('promotes a workspace to the outer shell instead of nesting it in a document page', () => {
+    render(
+      <AePublicPage
+        kind="workspace"
+        eyebrow="Operation"
+        title="Invoice extraction"
+        description="One bounded result."
+      >
+        <p>Workspace panes</p>
+      </AePublicPage>,
+    )
+
+    expect(document.querySelector('[data-shell-mode="workspace"]')).toBeTruthy()
+    expect(screen.getByRole('heading', { level: 1, name: 'Invoice extraction' })).toBeTruthy()
+    expect(screen.getByText('Workspace panes')).toBeTruthy()
   })
 })

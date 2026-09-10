@@ -4,8 +4,8 @@ import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 
 import { AGENT_ACCESS_OAUTH_DEVICE_CLIENT_REGISTRATION_REQUEST } from '@/modules/agent-access/contract'
-import { listOperationRouteDescriptors } from '@/modules/actions'
-import { OPERATION_MARKET_ACTION_ENTRIES } from '@/modules/registry/operation-entry'
+import { findAction, listCallRouteDescriptors, listMcpActionDescriptors } from '@/modules/actions'
+import { TOOL_MARKET_ACTION_ENTRIES } from '@/modules/registry/tool-entry'
 import {
   AGENT_ACCESS_OAUTH_ERROR_VALUES,
   AGENT_ACCESS_POLL_INTERVAL_SECONDS,
@@ -74,7 +74,12 @@ describe('market terminal manifest OAuth contract', () => {
     expect(serialized).not.toContain('inputJsonSchema')
     expect(serialized).not.toContain('outputJsonSchema')
     expect(compact.fullContract).toBe('ae manifest --technical --json')
-    expect((compact.call as JsonRecord).connected).toMatchObject({ transport: 'operation.invoke:v1' })
+    expect((compact.call as JsonRecord).connected).toMatchObject({ transport: 'tool.call:v1' })
+    expect(compact.account).toMatchObject({
+      disconnect: 'ae account disconnect',
+      disconnectDefaultProfile: 'market',
+      disconnectProvider: 'ae account disconnect provider',
+    })
   })
 
   it('serializes the registration request accepted by the OAuth handler', async () => {
@@ -84,6 +89,7 @@ describe('market terminal manifest OAuth contract', () => {
     const registration = flow.find((step) => step.order === 1)
 
     expect(manifest.$schema).toBe('https://agentic-economy/market-terminal/manifest:v3')
+    expect(manifest.protocol).toBe('agentic-economy.tool-terminal.v1')
     expect(registration).toMatchObject({
       method: 'POST',
       path: '/oauth/register',
@@ -99,16 +105,16 @@ describe('market terminal manifest OAuth contract', () => {
     const gateway = manifest.gateway as JsonRecord
     const routes = gateway.routes as readonly JsonRecord[]
     expect(routes.map((entry) => (entry.route as JsonRecord).actionId)).toEqual(
-      listOperationRouteDescriptors().map(({ actionId }) => actionId),
+      listCallRouteDescriptors().map(({ actionId }) => actionId),
     )
     expect(routes.map((entry) => (entry.action as JsonRecord).mcpToolName)).toEqual(
-      listOperationRouteDescriptors().map(({ mcpToolName: toolName }) => toolName),
+      listCallRouteDescriptors().map(({ mcpToolName: toolName }) => toolName),
     )
-    const operationReads = ((manifest.anonymous as JsonRecord).operationReads as readonly JsonRecord[])
-    expect(operationReads).toHaveLength(OPERATION_MARKET_ACTION_ENTRIES.length)
-    for (const operationRead of operationReads) {
-      const route = operationRead.route as JsonRecord
-      const action = operationRead.action as JsonRecord
+    const toolReads = ((manifest.anonymous as JsonRecord).toolReads as readonly JsonRecord[])
+    expect(toolReads).toHaveLength(TOOL_MARKET_ACTION_ENTRIES.length)
+    for (const toolRead of toolReads) {
+      const route = toolRead.route as JsonRecord
+      const action = toolRead.action as JsonRecord
       expect(action.id).toBe(route.actionId)
       expect(action.invocationContract).toMatchObject({ version: expect.any(String) })
       expect(action.inputJsonSchema).toEqual(expect.any(Object))
@@ -118,7 +124,45 @@ describe('market terminal manifest OAuth contract', () => {
     expect(response.status).toBe(201)
   })
 
-  it('keeps connect registration bytes and polling semantics equal to the manifest', async () => {
+  it('serializes registered Call and funding continuations without adding contracts to MCP descriptors', async () => {
+    const manifest = await manifestJson()
+    const account = manifest.account as JsonRecord
+    const moneyRoutes = account.moneyRoutes as readonly JsonRecord[]
+    const activity = moneyRoutes.find((route) => (route.action as JsonRecord).id === 'agentAccess.activity')
+
+    expect(activity?.action).toMatchObject({
+      id: 'agentAccess.activity',
+      invocationContract: { safeContinuations: ['call.status'] },
+    })
+    expect(JSON.stringify(activity)).not.toContain('operation.status')
+
+    const fundingStatus = findAction('funding.handoff.status')
+    expect(fundingStatus?.invocationContract.safeContinuations).toEqual([
+      'funding.handoff.status',
+      'agentAccess.balance',
+      'tool.quote',
+    ])
+    expect(fundingStatus?.boundaries.join(' ')).toMatch(/authority|Call/u)
+    expect(fundingStatus?.boundaries.join(' ')).not.toMatch(/Mandate|Operation/u)
+
+    for (const continuationId of [
+      ...((findAction('agentAccess.activity')?.invocationContract.safeContinuations ?? [])),
+      ...(fundingStatus?.invocationContract.safeContinuations ?? []),
+    ]) {
+      expect(findAction(continuationId), `${continuationId} continuation registration`).toBeDefined()
+    }
+
+    const fundingMcpDescriptor = listMcpActionDescriptors().find(({ id }) => id === 'funding.handoff.status')
+    expect(fundingMcpDescriptor).toMatchObject({ id: 'funding.handoff.status' })
+    expect(fundingMcpDescriptor).not.toHaveProperty('invocationContract')
+    expect(JSON.stringify(fundingMcpDescriptor)).not.toMatch(/operation\.invoke|Mandate/u)
+  })
+
+  it.each([
+    { scopes: ['market_tools:call'], environment: undefined },
+    { scopes: ['market_tools:call', 'customer_requests:spending_policy'], environment: undefined },
+    { scopes: ['market_tools:call'], environment: 'production' },
+  ])('accepts the granted buyer scopes and requested environment $environment', async ({ scopes, environment }) => {
     const manifest = await manifestJson()
     const oauth = (manifest.gateway as JsonRecord).oauth as JsonRecord
     const flow = oauth.deviceFlow as readonly JsonRecord[]
@@ -138,10 +182,14 @@ describe('market terminal manifest OAuth contract', () => {
       })
       if (calls.length === 3) return Response.json({ access_token: 'token-test' })
       return Response.json({
-        kind: 'refused',
-        invocationRef: 'invocation:v1:connect-validation',
-        code: 'invocation_not_found',
-        retryable: false,
+        kind: 'authenticated',
+        principalRef: 'principal:test-agent',
+        accountRef: 'account:test-owner',
+        credentialId: 'credential:test-agent',
+        applicationRef: 'agentic-economy',
+        environment: environment ?? 'sandbox',
+        scopes,
+        authorityMode: 'spending_policy',
       })
     })
     const output = captureStdout()
@@ -149,7 +197,7 @@ describe('market terminal manifest OAuth contract', () => {
     vi.stubEnv('AE_API_KEY', '')
     vi.stubEnv('AE_CONFIG_DIR', configDirectory)
     try {
-      await runConnectCommand([], cliOptions)
+      await runConnectCommand([], { ...cliOptions, ...(environment === undefined ? {} : { environment }) })
     } finally {
       output.restore()
       fetch.mockRestore()
@@ -157,6 +205,11 @@ describe('market terminal manifest OAuth contract', () => {
       rmSync(configDirectory, { recursive: true, force: true })
     }
 
+    const deviceForm = new URLSearchParams(String(calls[1]?.init?.body))
+    if (environment === 'production') expect(JSON.parse(deviceForm.get('authorization_details') ?? 'null')).toEqual([{
+      type: 'agentic_economy_market_tools', environment: 'production', tool_access: 'all_admitted', tool_refs: [], expires_in_seconds: 604800,
+    }])
+    else expect(deviceForm.has('authorization_details')).toBe(false)
     const connectRequest = JSON.parse(String(calls[0]?.init?.body)) as unknown
     expect(connectRequest).toEqual(registration?.request)
     expect(JSON.stringify(connectRequest)).toBe(JSON.stringify(registration?.request))
@@ -166,5 +219,17 @@ describe('market terminal manifest OAuth contract', () => {
     expect(polling.waitOn).toEqual(['authorization_pending'])
     expect(polling.increaseIntervalOn).toEqual(['slow_down'])
     expect(polling.stopOn).toEqual(AGENT_ACCESS_OAUTH_ERROR_VALUES.filter((error) => error !== 'authorization_pending' && error !== 'slow_down'))
+    expect(calls[3]?.input).toBe('https://ae.example/api/v1/account')
+    expect(new Headers(calls[3]?.init?.headers).get('Authorization')).toBe('Bearer token-test')
+    expect(JSON.parse(output.read())).toMatchObject({
+      kind: 'connected',
+      connectionState: 'ready_to_buy',
+      principalRef: 'principal:test-agent',
+      accountRef: 'account:test-owner',
+      credentialId: 'credential:test-agent',
+      authorityMode: 'spending_policy',
+      ownerConnectionHref: 'https://ae.example/agent-access?caller=principal%3Atest-agent',
+    })
+    expect(output.read()).not.toContain('token-test')
   })
 })

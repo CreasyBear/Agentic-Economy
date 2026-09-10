@@ -19,12 +19,64 @@ import {
   X402_PAYMENT_CREDENTIAL_REF,
   authority,
   invocation,
-  invokeRouteTransport,
+  invokeRouteTransport as invokePreparedRouteTransport,
+  neverEndingResponse,
   preparedX402Custody,
   providerAuthority,
   registeredBinding as registeredBindingFromHarness,
   resolveProviderCredential,
 } from './route-transport-test-harness'
+
+type HarnessInvocation = Parameters<typeof invokePreparedRouteTransport>[0]
+type HarnessRuntime = Parameters<typeof invokePreparedRouteTransport>[1]
+type MutableChallenge = {
+  x402Version: 2
+  resource: { url: string; description?: string; mimeType?: string }
+  accepts: Array<{
+    scheme: string
+    network: `${string}:${string}`
+    amount: string
+    asset: string
+    payTo: string
+    maxTimeoutSeconds: number
+    extra: Record<string, unknown>
+  }>
+}
+
+async function invokeRouteTransport(
+  routeInvocation: HarnessInvocation,
+  runtime: HarnessRuntime,
+) {
+  if (routeInvocation.binding.adapterId !== 'x402-fetch:v2') {
+    return await invokePreparedRouteTransport(routeInvocation, runtime)
+  }
+  const configuration = JSON.parse(routeInvocation.binding.configJson) as {
+    paymentRequiredJson?: string
+  }
+  if (configuration.paymentRequiredJson === undefined) {
+    return await invokePreparedRouteTransport(routeInvocation, runtime)
+  }
+  const paymentRequired = JSON.parse(configuration.paymentRequiredJson) as Parameters<
+    typeof encodePaymentRequiredHeader
+  >[0]
+  let freshChallengeSent = false
+  return await invokePreparedRouteTransport(routeInvocation, {
+    ...runtime,
+    send: async (target, init) => {
+      if (!freshChallengeSent) {
+        freshChallengeSent = true
+        expect(init?.headers).not.toHaveProperty('Payment-Signature')
+        return new Response(null, {
+          status: 402,
+          headers: {
+            'Payment-Required': encodePaymentRequiredHeader(paymentRequired),
+          },
+        })
+      }
+      return await runtime.send(target, init)
+    },
+  })
+}
 
 function registeredBinding(
   adapterId: string,
@@ -126,8 +178,8 @@ describe('registered route transport runtime', () => {
         ...authority,
         maximumSpend: { currency: 'USD', units: '1', exponent: 2 },
         leaseRef: 'lease:x402:signed',
-        invocationRef: 'invocation:x402:signed',
-        operationRef: 'operation:x402:signed',
+        callRef: 'invocation:x402:signed',
+        toolRef: 'operation:x402:signed',
         grantedScopes: [],
         grantedResources: [],
         readinessValidUntil: Date.now() + 60_000,
@@ -135,7 +187,7 @@ describe('registered route transport runtime', () => {
     })
   }
 
-  it('sends the first and only origin request with Payment-Signature', async () => {
+  it('sends one paid origin request with Payment-Signature after the fresh challenge', async () => {
     const paymentSignature = payerAuthorization()
     const receipt = await createReceiptEIP712(
       {
@@ -162,10 +214,12 @@ describe('registered route transport runtime', () => {
       )
     })
     const createPayment = vi.fn(async () => paymentSignature)
+    const validateProviderConnectionAuthority = vi.fn(() => ({ kind: 'valid' as const }))
 
     const observed = await invokeRouteTransport(signedInvocation(), {
       send: fetch,
       resolveCredential: resolveProviderCredential('unused'),
+      validateProviderConnectionAuthority,
       ...preparedX402Custody(createPayment),
       verifyX402Settlement: async () => true,
       markX402PaymentPossiblySubmitted: () => undefined,
@@ -180,6 +234,293 @@ describe('registered route transport runtime', () => {
     expect(JSON.stringify(observed)).not.toContain(paymentSignature)
     expect(createPayment).toHaveBeenCalledTimes(1)
     expect(fetch).toHaveBeenCalledTimes(1)
+    expect(validateProviderConnectionAuthority).toHaveBeenCalledTimes(3)
+  })
+
+  it.each([
+    { boundary: 'after fresh challenge', invalidAt: 2, expectedSignatures: 0 },
+    { boundary: 'immediately before paid send', invalidAt: 3, expectedSignatures: 1 },
+  ] as const)(
+    'fails closed when credentialless connection authority rotates $boundary',
+    async ({ invalidAt, expectedSignatures }) => {
+      const paymentSignature = payerAuthorization()
+      const paidSend = vi.fn<RouteTransportFetch>()
+      const createPayment = vi.fn(async () => paymentSignature)
+      let validations = 0
+      const validateProviderConnectionAuthority = vi.fn(() => {
+        validations += 1
+        return validations < invalidAt
+          ? { kind: 'valid' as const }
+          : { kind: 'unavailable' as const, reason: 'stale_generation' as const }
+      })
+      const markPossiblySubmitted = vi.fn()
+
+      const observed = await invokeRouteTransport(signedInvocation(), {
+        send: paidSend,
+        resolveCredential: resolveProviderCredential('unused'),
+        validateProviderConnectionAuthority,
+        ...preparedX402Custody(createPayment),
+        markX402PaymentPossiblySubmitted: markPossiblySubmitted,
+        observeX402PaymentAttempt: vi.fn(),
+      })
+
+      expect(observed).toMatchObject({
+        disposition: 'refused',
+        releaseStarted: false,
+        failureCode: 'connection_authority_stale_generation',
+        paymentSubmissionStatus: 'not_submitted',
+      })
+      expect(validateProviderConnectionAuthority).toHaveBeenCalledTimes(invalidAt)
+      expect(createPayment).toHaveBeenCalledTimes(expectedSignatures)
+      expect(markPossiblySubmitted).not.toHaveBeenCalled()
+      expect(paidSend).not.toHaveBeenCalled()
+    },
+  )
+
+  it('reads and cancels an identical fresh 402 before signing and submitting the same attempt', async () => {
+    const target = 'https://provider.example/fresh-paid'
+    const paymentRequired = {
+      x402Version: 2 as const,
+      resource: { url: target },
+      accepts: [{
+        scheme: 'exact',
+        network: 'eip155:84532' as const,
+        amount: '1250000',
+        asset: '0x0000000000000000000000000000000000000001',
+        payTo: '0x0000000000000000000000000000000000000002',
+        maxTimeoutSeconds: 60,
+        extra: {},
+      }],
+    }
+    const paymentLane = paymentRequired.accepts[0]!
+    const freshPaymentRequired = structuredClone(paymentRequired)
+    freshPaymentRequired.accepts[0]!.extra = { assetTransferMethod: 'eip3009' }
+    const fresh = neverEndingResponse(402, {
+      'Payment-Required': encodePaymentRequiredHeader(freshPaymentRequired),
+    })
+    const lifecycle: string[] = []
+    const send = vi.fn<RouteTransportFetch>()
+      .mockImplementationOnce(async (_url, init) => {
+        lifecycle.push('fresh-402')
+        expect(init).toMatchObject({
+          method: 'POST',
+          redirect: 'manual',
+          body: JSON.stringify({ destination: 'PER' }),
+        })
+        expect(init?.headers).not.toHaveProperty('Payment-Signature')
+        return fresh.response
+      })
+      .mockImplementationOnce(async (_url, init) => {
+        lifecycle.push('paid-send')
+        expect(init?.headers).toMatchObject({ 'Payment-Signature': 'fresh-signature' })
+        return Response.json(
+          { serviceReference: 'service:fresh' },
+          {
+            headers: {
+              'Payment-Response': encodePaymentResponseHeader({
+                success: true,
+                transaction: '0xfresh-settlement',
+                network: paymentLane.network,
+                amount: paymentLane.amount,
+                payer: 'test:fresh-payer',
+              }),
+            },
+          },
+        )
+      })
+    const sign = vi.fn(async () => {
+      lifecycle.push('sign')
+      expect(fresh.wasCanceled()).toBe(true)
+      return 'fresh-signature'
+    })
+    const observed = await invokePreparedRouteTransport(
+      invocation({
+        binding: registeredBinding(
+          'x402-fetch:v2',
+          target,
+          providerAuthority,
+          {
+            method: 'POST',
+            requestTimeoutMs: 5_000,
+            scheme: 'exact',
+            network: paymentLane.network,
+            currency: 'USD',
+            routeAmountExponent: 2,
+            assetAmountExponent: 6,
+            asset: paymentLane.asset,
+            payTo: paymentLane.payTo,
+            paymentRequiredJson: stableStringify(paymentRequired as StableHashValue),
+          },
+        ),
+      }),
+      {
+        send,
+        resolveCredential: resolveProviderCredential('unused'),
+        ...preparedX402Custody(sign),
+        markX402PaymentPossiblySubmitted: () => {
+          lifecycle.push('marked')
+        },
+        observeX402PaymentAttempt: () => undefined,
+      },
+    )
+
+    expect(observed).toMatchObject({
+      disposition: 'succeeded',
+      paymentAuthorizationStatus: 'created',
+      paymentSubmissionStatus: 'observed',
+    })
+    expect(lifecycle).toEqual(['fresh-402', 'sign', 'marked', 'paid-send'])
+    expect(send).toHaveBeenCalledTimes(2)
+    expect(sign).toHaveBeenCalledTimes(1)
+    expect(sign).toHaveBeenCalledWith(expect.objectContaining({
+      selectedRequirement: expect.objectContaining({
+        extra: { assetTransferMethod: 'eip3009' },
+      }),
+    }))
+    expect(fresh.wasCanceled()).toBe(true)
+  })
+
+  it.each([
+    ['amount', (challenge: MutableChallenge) => { challenge.accepts[0]!.amount = '1250001' }],
+    ['payee', (challenge: MutableChallenge) => { challenge.accepts[0]!.payTo = '0x0000000000000000000000000000000000000003' }],
+    ['network', (challenge: MutableChallenge) => { challenge.accepts[0]!.network = 'eip155:1' }],
+    ['asset', (challenge: MutableChallenge) => { challenge.accepts[0]!.asset = '0x0000000000000000000000000000000000000004' }],
+    ['scheme', (challenge: MutableChallenge) => { challenge.accepts[0]!.scheme = 'upto' }],
+    ['transfer method', (challenge: MutableChallenge) => { challenge.accepts[0]!.extra = { assetTransferMethod: 'permit2' } }],
+    ['resource', (challenge: MutableChallenge) => { challenge.resource.url = 'https://provider.example/other-resource' }],
+  ])('refuses fresh 402 %s drift before signing', async (_label, mutate) => {
+    const target = 'https://provider.example/fresh-drift'
+    const committed: MutableChallenge = {
+      x402Version: 2,
+      resource: { url: target },
+      accepts: [{
+        scheme: 'exact',
+        network: 'eip155:84532',
+        amount: '1250000',
+        asset: '0x0000000000000000000000000000000000000001',
+        payTo: '0x0000000000000000000000000000000000000002',
+        maxTimeoutSeconds: 60,
+        extra: {},
+      }],
+    }
+    const freshChallenge = structuredClone(committed)
+    mutate(freshChallenge)
+    const fresh = neverEndingResponse(402, {
+      'Payment-Required': encodePaymentRequiredHeader(freshChallenge as Parameters<
+        typeof encodePaymentRequiredHeader
+      >[0]),
+    })
+    const send = vi.fn<RouteTransportFetch>().mockImplementationOnce(async (_url, init) => {
+      expect(init).toMatchObject({ method: 'POST', redirect: 'manual' })
+      expect(init?.headers).not.toHaveProperty('Payment-Signature')
+      return fresh.response
+    })
+    const sign = vi.fn(async () => 'must-not-sign')
+
+    const observed = await invokePreparedRouteTransport(
+      invocation({
+        binding: registeredBinding(
+          'x402-fetch:v2',
+          target,
+          providerAuthority,
+          {
+            method: 'POST',
+            requestTimeoutMs: 5_000,
+            scheme: 'exact',
+            network: committed.accepts[0]!.network,
+            currency: 'USD',
+            routeAmountExponent: 2,
+            assetAmountExponent: 6,
+            asset: committed.accepts[0]!.asset,
+            payTo: committed.accepts[0]!.payTo,
+            paymentRequiredJson: stableStringify(committed as StableHashValue),
+          },
+        ),
+      }),
+      {
+        send,
+        resolveCredential: resolveProviderCredential('unused'),
+        ...preparedX402Custody(sign),
+        markX402PaymentPossiblySubmitted: () => undefined,
+      },
+    )
+
+    expect(observed).toMatchObject({
+      disposition: 'refused',
+      releaseStarted: false,
+      failureCode: 'payment_provider_requirement_stale',
+      paymentAuthorizationStatus: 'not_created',
+      paymentSubmissionStatus: 'not_submitted',
+      settlementEvidence: { kind: 'not_submitted' },
+    })
+    expect(sign).not.toHaveBeenCalled()
+    expect(send).toHaveBeenCalledTimes(1)
+    expect(fresh.wasCanceled()).toBe(true)
+  })
+
+  it('does not follow or sign a redirect returned by the fresh unpaid request', async () => {
+    const target = 'https://provider.example/fresh-redirect'
+    const requirement = {
+      x402Version: 2 as const,
+      resource: { url: target },
+      accepts: [{
+        scheme: 'exact',
+        network: 'eip155:84532' as const,
+        amount: '1250000',
+        asset: '0x0000000000000000000000000000000000000001',
+        payTo: '0x0000000000000000000000000000000000000002',
+        maxTimeoutSeconds: 60,
+        extra: {},
+      }],
+    }
+    const requirementLane = requirement.accepts[0]!
+    const redirect = neverEndingResponse(302, {
+      location: 'https://attacker.example/collect',
+    })
+    const send = vi.fn<RouteTransportFetch>().mockImplementationOnce(async (url, init) => {
+      expect(url.href).toBe(target)
+      expect(init?.redirect).toBe('manual')
+      expect(init?.headers).not.toHaveProperty('Payment-Signature')
+      return redirect.response
+    })
+    const sign = vi.fn(async () => 'must-not-sign')
+
+    const observed = await invokePreparedRouteTransport(
+      invocation({
+        binding: registeredBinding(
+          'x402-fetch:v2',
+          target,
+          providerAuthority,
+          {
+            method: 'POST',
+            requestTimeoutMs: 5_000,
+            scheme: 'exact',
+            network: requirementLane.network,
+            currency: 'USD',
+            routeAmountExponent: 2,
+            assetAmountExponent: 6,
+            asset: requirementLane.asset,
+            payTo: requirementLane.payTo,
+            paymentRequiredJson: stableStringify(requirement as StableHashValue),
+          },
+        ),
+      }),
+      {
+        send,
+        resolveCredential: resolveProviderCredential('unused'),
+        ...preparedX402Custody(sign),
+      },
+    )
+
+    expect(observed).toMatchObject({
+      disposition: 'refused',
+      releaseStarted: false,
+      failureCode: 'payment_provider_requirement_stale',
+      paymentAuthorizationStatus: 'not_created',
+    })
+    expect(send).toHaveBeenCalledTimes(1)
+    expect(sign).not.toHaveBeenCalled()
+    expect(redirect.wasCanceled()).toBe(true)
   })
 
   it('reconciles a returned 402 after one signed submit without retrying', async () => {
@@ -482,8 +823,8 @@ describe('registered route transport runtime', () => {
         authority: {
           ...authority,
           leaseRef: 'lease:x402:valid',
-          invocationRef: 'invocation:x402:valid',
-          operationRef: 'operation:x402:valid',
+          callRef: 'invocation:x402:valid',
+          toolRef: 'operation:x402:valid',
           grantedScopes: [],
           grantedResources: [],
           readinessValidUntil: Date.now() + 60_000,
@@ -576,7 +917,7 @@ describe('registered route transport runtime', () => {
     )
     expect(fetch).toHaveBeenCalledTimes(1)
   })
-  it('holds a provider-asserted x402 settlement until a trusted verifier confirms it', async () => {
+  it('quarantines a successful paid response while settlement confirmations are still pending', async () => {
     const requirement = {
       x402Version: 2 as const,
       resource: { url: 'https://provider.example/paid' },
@@ -627,8 +968,8 @@ describe('registered route transport runtime', () => {
         authority: {
           ...authority,
           leaseRef: 'lease:x402:unverified',
-          invocationRef: 'invocation:x402:unverified',
-          operationRef: 'operation:x402:unverified',
+          callRef: 'invocation:x402:unverified',
+          toolRef: 'operation:x402:unverified',
           grantedScopes: [],
           grantedResources: [],
           readinessValidUntil: Date.now() + 60_000,
@@ -649,12 +990,17 @@ describe('registered route transport runtime', () => {
       disposition: 'unknown',
       releaseStarted: true,
       failureCode: 'payment_settlement_unverified',
+      responseDigest: expect.stringMatching(/^sha256:[0-9a-f]{64}$/),
+      outputJson: JSON.stringify({ serviceReference: 'service:unverified' }),
       paymentSubmissionStatus: 'observed',
       settlementEvidence: {
         kind: 'unknown',
         reason: 'payment_settlement_unverified',
       },
+      quoteDeliveryStatus: 'unknown',
     })
+    expect(observed.disposition).not.toBe('succeeded')
+    expect(observed.quoteDeliveryStatus).not.toBe('delivered')
     expect(fetch).toHaveBeenCalledTimes(1)
   })
   it('fails closed when a paid x402 response echoes its payment signature', async () => {
@@ -704,8 +1050,8 @@ describe('registered route transport runtime', () => {
         authority: {
           ...authority,
           leaseRef: 'lease:x402:echo',
-          invocationRef: 'invocation:x402:echo',
-          operationRef: 'operation:x402:echo',
+          callRef: 'invocation:x402:echo',
+          toolRef: 'operation:x402:echo',
           grantedScopes: [],
           grantedResources: [],
           readinessValidUntil: Date.now() + 60_000,
@@ -809,8 +1155,8 @@ describe('registered route transport runtime', () => {
           authority: {
             ...authority,
             leaseRef: 'lease:x402',
-            invocationRef: 'invocation:x402',
-            operationRef: 'operation:x402',
+            callRef: 'invocation:x402',
+            toolRef: 'operation:x402',
             grantedScopes: [],
             grantedResources: [],
             readinessValidUntil: Date.now() + 60_000,

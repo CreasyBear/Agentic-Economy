@@ -12,11 +12,12 @@ import {
 } from '@/modules/actions'
 
 const CHAT_TOOL_IDS = [
-  'registry.operations.search',
-  'registry.operations.detail',
-  'registry.operations.compare',
-  'registry.operations.inspectPlan',
-  'operation.invoke',
+  'registry.tools.list',
+  'registry.tools.search',
+  'registry.tools.describe',
+  'registry.tools.compare',
+  'tool.quote',
+  'tool.call',
 ] as const
 
 type FakeActionResult = Readonly<{ kind: string } & Record<string, unknown>>
@@ -42,8 +43,8 @@ describe('action tool contract', () => {
     expect(descriptors.every((projection) => projection.descriptor.type === 'function')).toBe(true)
   })
 
-  it('builds canonical operation read contracts and preserves full input schemas', () => {
-    for (const actionId of ['registry.operations.compare', 'registry.operations.inspectPlan'] as const) {
+  it('builds canonical Tool read contracts and preserves full input schemas', () => {
+    for (const actionId of ['registry.tools.compare', 'registry.tools.describe'] as const) {
       const action = findAction(actionId)
       expect(action).toBeDefined()
       expect(() => actionToToolContract(action!)).not.toThrow('canonical_digest_value_invalid')

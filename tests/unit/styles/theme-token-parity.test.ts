@@ -98,6 +98,10 @@ function assertResolvable(name: string, referrerChain: string[]): void {
 }
 
 describe('AE theme token parity (src/styles/globals.css)', () => {
+  it('(d) keeps local base styles inside the cascade so utilities can override them', () => {
+    expect(GLOBALS_CSS).toMatch(/@import\s+["']\.\/base\.css["']\s+layer\(base\);/)
+  })
+
   it('(a) every @theme inline var() bridge resolves fully, without cycles', () => {
     for (const { name, value } of themeDecls) {
       for (const ref of value.matchAll(/var\(\s*(--[A-Za-z0-9-]+)/g)) {
@@ -190,7 +194,6 @@ describe('AE theme token parity (src/styles/globals.css)', () => {
     const problems: string[] = []
     for (const required of [
       '--font-sans',
-      '--font-heading',
       '--font-display',
       '--font-mono',
       '--duration-fast',

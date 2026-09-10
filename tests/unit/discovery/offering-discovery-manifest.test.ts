@@ -10,7 +10,7 @@ describe('Offering discovery manifest', () => {
   it('publishes a profile with zero Offerings', () => {
     const result = buildOfferingDiscoveryManifest({
       business: projectBusinessSupplyToPublicApi(projection([])),
-      canonicalBaseUrl: 'https://agentic.market/',
+      canonicalBaseUrl: 'https://example.test/',
       now: 101,
     })
 
@@ -57,7 +57,7 @@ describe('Offering discovery manifest', () => {
       support: { integrated: false, routeable: false, reasons: ['not_integrated'] },
     }]))
 
-    const result = buildOfferingDiscoveryManifest({ business, canonicalBaseUrl: 'https://agentic.market', now: 101 })
+    const result = buildOfferingDiscoveryManifest({ business, canonicalBaseUrl: 'https://example.test', now: 101 })
     expect(result.kind).toBe('available')
     if (result.kind !== 'available') return
 
@@ -81,7 +81,7 @@ describe('Offering discovery manifest', () => {
       pricedOffering('offering:graph:hostile', { ...price, minimum: { ...price.minimum, currency: 'A\u202eUD' } }),
     ]))
 
-    const result = buildOfferingDiscoveryManifest({ business, canonicalBaseUrl: 'https://agentic.market', now: 101 })
+    const result = buildOfferingDiscoveryManifest({ business, canonicalBaseUrl: 'https://example.test', now: 101 })
     expect(result.kind).toBe('available')
     if (result.kind !== 'available') return
 
@@ -97,7 +97,7 @@ describe('Offering discovery manifest', () => {
     const business = projectBusinessSupplyToPublicApi(projection([humanRequestOffering('phone')]))
     const result = buildOfferingDiscoveryManifest({
       business,
-      canonicalBaseUrl: 'https://agentic.market',
+      canonicalBaseUrl: 'https://example.test',
       now: 101,
     })
     expect(result.kind).toBe('available')
@@ -116,7 +116,7 @@ describe('Offering discovery manifest', () => {
     })
 
     const refused = buildOfferingDiscoveryManifest({
-      business, canonicalBaseUrl: 'https://agentic.market', now: 101,
+      business, canonicalBaseUrl: 'https://example.test', now: 101,
     })
     expect(refused.kind).toBe('available')
     if (refused.kind !== 'available') return
@@ -133,7 +133,7 @@ describe('Offering discovery manifest', () => {
     })
 
     const result = buildOfferingDiscoveryManifest({
-      business, canonicalBaseUrl: 'https://agentic.market', now: 101,
+      business, canonicalBaseUrl: 'https://example.test', now: 101,
     })
 
     expect(result.kind).toBe('available')
@@ -152,7 +152,7 @@ describe('Offering discovery manifest', () => {
       },
     })
 
-    const result = buildOfferingDiscoveryManifest({ business, canonicalBaseUrl: 'https://agentic.market', now: 101 })
+    const result = buildOfferingDiscoveryManifest({ business, canonicalBaseUrl: 'https://example.test', now: 101 })
 
     expect(result.kind).toBe('available')
     if (result.kind !== 'available') return

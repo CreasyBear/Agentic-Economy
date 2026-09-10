@@ -3,8 +3,65 @@ import type { PaginationOptions } from "convex/server";
 import { exactAmountSchema, type ExactAmount } from "./internal/exact-amount";
 import {
   moneyRefSchema,
-  type PricingConfig,
 } from "./internal/pricing-contract";
+
+export {
+  COMMERCIAL_POLICY_FAMILIES,
+  COMMERCIAL_POLICY_REFUSAL_REASONS,
+  commercialPolicyRefusalReasonSchema,
+  evaluateCommercialPolicyGate,
+  PACKAGE4_FORMANCE_REQUIREMENTS,
+  PACKAGE4_SYNTHETIC_VPS_CONTROLS,
+  SANDBOX_COMMERCIAL_POLICY_CONTROLS,
+  validCommercialPolicyControl,
+} from './internal/commercial-policy'
+export type {
+  CommercialPolicyApproval,
+  CommercialPolicyControl,
+  CommercialPolicyControls,
+  CommercialPolicyEnvironment,
+  CommercialPolicyFamily,
+  CommercialPolicyGateRefusalCode,
+  CommercialPolicyGateResult,
+  CommercialPolicyRefusalReason,
+  CommercialPolicyLifecycle,
+  CommercialPolicySandboxFixture,
+  Package4SandboxDeploymentProfile,
+} from './internal/commercial-policy'
+export {
+  AUD_EXPONENT,
+  audFundingPolicyFromCommercialControls,
+  calculateAudFundingFinancials,
+  canonicalAudUnits,
+  quoteAudAccountFunding,
+  roundAudStatementTotal,
+  roundAudUnitsToCent,
+} from './internal/aud-funding'
+export {
+  createExecutableRatePort,
+  quoteExecutableAudToUsdc,
+  quoteManagedX402BuyerAud,
+  splitInclusiveAudTax,
+  validateExecutableRateEvidence,
+  validateExecutableRateEvidenceIntegrity,
+  validReferenceRate,
+} from './internal/executable-rate'
+export type {
+  ReferenceRate,
+  ManagedReferenceRateEvidence,
+  LegacyExecutableRateEvidence,
+  ExecutableRateEnvironment,
+  ExecutableRateEvidence,
+  ExecutableRatePort,
+  ExecutableRateQuoteResult,
+} from './internal/executable-rate'
+export type {
+  AudFundingPolicy,
+} from './internal/aud-funding'
+export {
+  accountRefForOwner,
+  accountRefForProvider,
+} from './internal/account-ref'
 
 export {
   moneyRefSchema,
@@ -12,6 +69,11 @@ export {
   exactAmountSchema,
   pricingConfigSchema,
 } from "./internal/pricing-contract";
+export {
+  pricingConfigDecisionAmount,
+  pricingConfigSourceAmount,
+  fixedAudPricingConfig,
+} from './internal/pricing-config'
 export {
   addExactAmounts,
   amountAtScale,
@@ -57,6 +119,8 @@ export type MoneyRefusalCode =
   | "billing_identity_mismatch"
   | "price_unavailable"
   | "pricing_config_invalid"
+  | "pricing_setup_required"
+  | "pricing_source_amount_invalid"
   | "currency_mismatch"
   | "price_changed"
   | "rake_not_configured"
@@ -68,6 +132,15 @@ export type MoneyRefusalCode =
   | "credit_topup_required"
   | "credit_topup_pending"
   | "credit_topup_outcome_unknown"
+  | "funding_amount_invalid"
+  | "funding_pending"
+  | "funding_outcome_unknown"
+  | "funding_idempotency_conflict"
+  | "commercial_policy_required"
+  | "source_write_denied"
+  | "journal_invalid"
+  | "journal_idempotency_conflict"
+  | "journal_reconciliation_required"
   | "stripe_setup_required"
   | "payout_not_ready"
   | "payout_below_threshold"
@@ -76,27 +149,19 @@ export type MoneyRefusalCode =
   | "payment_binding_invalid"
   | "payment_approval_expired"
   | "fresh_approval_required"
+  | "reauthentication_required"
+  | "proof_stale"
+  | "proof_replayed"
+  | "command_changed"
+  | "rate_limited"
+  | "security_control_unavailable"
   | "budget_policy_missing"
   | "budget_generation_stale"
-  | "budget_invocation_limit_exceeded"
+  | "budget_call_limit_exceeded"
   | "budget_daily_limit_exceeded"
   | "budget_monthly_limit_exceeded"
   | "budget_concurrency_exhausted"
   | "budget_reconciliation_required";
-export type EntryType =
-  | "topup"
-  | "charge"
-  | "refund"
-  | "payout_accrual"
-  | "rake"
-  | "external_loss"
-  | "promo_grant"
-  | "topup_bonus";
-export type EntryDirection = "credit" | "debit";
-export type AccountKind = "operator_credit" | "provider_earnings" | "ae_rake" | "ae_external_loss";
-export type AccountState = "active" | "locked";
-export type TransactionState =
-  "pending" | "applied" | "outcome_unknown" | "reversed";
 export type ChargeState =
   "free_tier" | "paid" | "insufficient_credit" | "outcome_unknown" | "refunded";
 export type PayoutAccountState =
@@ -110,75 +175,6 @@ export type PayoutState =
   | "reversed"
   | "failed"
   | "outcome_unknown";
-
-export type MoneyAccount = Readonly<{
-  accountRef: string;
-  accountKind: AccountKind;
-  accountId?: string;
-  businessId?: string;
-  balance: ExactAmount;
-  recoveryDue: ExactAmount;
-  version: number;
-  state: AccountState;
-  createdAt: number;
-  updatedAt: number;
-}>;
-
-export type MoneyLedgerEntry = Readonly<{
-  entryRef: string;
-  accountRef: string;
-  entryType: EntryType;
-  direction: EntryDirection;
-  amount: ExactAmount;
-  transactionRef: string;
-  idempotencyKey: string;
-  principalId?: string;
-  businessId?: string;
-  invocationRef?: string;
-  attemptRef?: string;
-  sourceDigest: string;
-  evidenceRefs: readonly string[];
-  createdAt: number;
-  reversalOf?: string;
-}>;
-
-export type MoneyTransaction = Readonly<{
-  transactionRef: string;
-  kind: EntryType;
-  idempotencyKey: string;
-  inputDigest: string;
-  principalId: string;
-  accountId?: string;
-  currency: string;
-  exponent: number;
-  state: TransactionState;
-  expectedAccountVersion: number;
-  amount?: ExactAmount;
-  budgetState?: "reserved" | "settled" | "released" | "unknown";
-  settledAt?: number;
-  externalRef?: string;
-  reversalOf?: string;
-  createdAt: number;
-  updatedAt: number;
-}>;
-
-export type MoneyUsageEvent = Readonly<{
-  usageRef: string;
-  principalId: string;
-  accountId?: string;
-  credentialId: string;
-  serviceRef: string;
-  offeringRef: string;
-  businessId: string;
-  invocationRef: string;
-  attemptRef: string;
-  operationKey: string;
-  priceDigest: string;
-  chargeState: ChargeState;
-  amount: ExactAmount;
-  transactionRef?: string;
-  observedAt: number;
-}>;
 
 export type MoneyFreeTierCounter = Readonly<{
   counterRef: string;
@@ -271,6 +267,7 @@ export type MoneyRefusal = Readonly<{
   kind: "refused";
   code: MoneyRefusalCode;
   retryable: boolean;
+  correlationRef?: string;
   nextAction?: "credit_topup_required";
   requiredAmount?: ExactAmount;
   availableAmount?: ExactAmount;
@@ -294,72 +291,19 @@ export type MoneyAcceptedCharge = Readonly<{
   rake?: ExactAmount;
 }>;
 
-export type MoneyAcceptedInvocationCharge = MoneyAcceptedCharge &
+export type MoneyAcceptedCallCharge = MoneyAcceptedCharge &
   Readonly<{
     usageRef: string;
     observedAt: number;
   }>;
 
 export type ChargeAuthorizationResult =
-  MoneyAcceptedInvocationCharge | MoneyRefusal;
+  MoneyAcceptedCallCharge | MoneyRefusal;
 export type MoneyChargeOutcomeUnknown = Readonly<{
   kind: "outcome_unknown";
   transactionRef: string;
 }>;
 
-
-export type CredentialBudgetGrant = Readonly<{
-  grantRef: string;
-  generation: number;
-}>;
-export type MoneyInvocationChargeInput = Readonly<{
-  applicationRef?: string;
-  principalId: string;
-  operationKey: string;
-  invocationRef: string;
-  attemptRef: string;
-  effectGeneration: number;
-  capabilityContractDigest: string;
-  businessId: string;
-  offeringRef: string;
-  pricingConfig: PricingConfig;
-  priceDigest: string;
-  priceSourceDigest: string;
-  authorityMaximumSpend: ExactAmount;
-  credentialBudget?: CredentialBudgetGrant;
-}>;
-
-export type MoneyInvocationPort = Readonly<{
-  authorizeInvocationCharge: (
-    input: MoneyInvocationChargeInput,
-  ) => Promise<ChargeAuthorizationResult>;
-  markChargeOutcomeUnknown?: (
-    input: Readonly<{
-      transactionRef: string;
-      principalId: string;
-      invocationRef: string;
-      attemptRef: string;
-      effectGeneration: number;
-    }>,
-  ) => Promise<MoneyChargeOutcomeUnknown | MoneyRefusal>;
-  refundCharge?: (
-    input: Readonly<{
-      transactionRef: string;
-      principalId: string;
-      invocationRef: string;
-      attemptRef: string;
-      effectGeneration: number;
-    }>,
-  ) => Promise<MoneyRefusal | MoneyAcceptedCharge>;
-  reconcileCharge?: (
-    input: Readonly<{
-      transactionRef: string;
-      principalId: string;
-      outcome: "not_released" | "released";
-      evidenceRefs: readonly string[];
-    }>,
-  ) => Promise<MoneyRefusal | MoneyAcceptedCharge>;
-}>;
 
 export type RakeConfig = Readonly<{ rakeBps: number }>;
 export type RakeSplit = Readonly<{
@@ -416,7 +360,7 @@ export type CreditActivityView = Readonly<{
   offeringRef: string;
   businessId: string;
   operationKey: string;
-  invocationRef: string;
+  callRef: string;
   attemptRef: string;
   grossAmount: ExactAmount;
   chargeState: ChargeState;
@@ -450,8 +394,10 @@ export type ProviderEarningsView = Readonly<{
 export type PayoutStatusView = Readonly<{
   businessId: string;
   accountState: PayoutAccountState | "missing";
+  accountVersion?: number;
   payoutState?: PayoutState;
   payoutRef?: string;
+  payoutRevision?: number;
   payoutCommandId?: string;
   idempotencyKey?: string;
   providerNet: ExactAmount;
@@ -506,7 +452,7 @@ export const CreditActivityViewSchema = z.strictObject({
   offeringRef: moneyRefSchema,
   businessId: moneyRefSchema,
   operationKey: moneyRefSchema,
-  invocationRef: moneyRefSchema,
+  callRef: moneyRefSchema,
   attemptRef: moneyRefSchema,
   grossAmount: exactAmountSchema,
   chargeState: strictChargeStateSchema,
@@ -605,66 +551,11 @@ export async function readPayoutStatus(
 }
 
 export {
-  computeProviderFeeBreakdown,
   computeRakeSplit,
   normalizePricingConfig,
   pricingConfigDigest,
-  resolveInvocationPrice,
+  resolveCallPrice,
 } from "./internal/pricing-config";
-export type { ProviderFeeBreakdown } from "./internal/pricing-config";
-export {
-  createLedgerState,
-  beginIdempotentTransaction,
-  validateChargeAccounts,
-  applyTopup,
-  authorizePaidCharge,
-  planPaidCharge,
-  applyChargePlan,
-  paidChargeContractInput,
-  appendRefundReversal,
-  applyProviderAccountCredit,
-  applyProviderAccountDebit,
-  markOutcomeUnknown,
-  decideChargeOutcomeUnknown,
-  payoutAccrualFromChargeAmounts,
-  reconcileCharge,
-  accountRefForOwner,
-  accountRefForProvider,
-  accountRefForRake,
-  accountRefForExternalLoss,
-  sameEvidenceRefs,
-  selectChargeEntries,
-  recoveryExceedsProvider,
-  validateChargeContract,
-  CHARGE_JOURNAL_DIGEST_FORMAT,
-  chargeJournalDigest,
-} from "./internal/ledger";
-export type {
-  LedgerState,
-  LedgerOperationResult,
-  BeginTransactionInput,
-  TopupInput,
-  PaidChargeInput,
-  ChargePlan,
-  ChargePlanAccounts,
-  PlanPaidChargeInput,
-  RefundInput,
-  OutcomeUnknownInput,
-  ReconcileChargeInput,
-  ProviderAccountCreditApplication,
-  ChargeBudgetState,
-  ChargeOutcomeUnknownDecision,
-  PayoutAccrualAmounts,
-  SelectedChargeEntries,
-  ChargeEntryLeg,
-  ChargeContractAccount,
-  ChargeContractEntry,
-  ChargeContractOriginal,
-  ChargeContractUsage,
-  ChargeJournalUsageIdentity,
-  ValidateChargeContractInput,
-  ValidatedChargeContract,
-} from "./internal/ledger";
 export {
   transitionPayoutAccount,
   transitionPayout,
@@ -707,81 +598,26 @@ export type {
 } from "./internal/ports";
 export type {
   StripeAccountUpdatedWebhookEvent,
+  StripeRefundWebhookEvent,
   StripeMoneyWebhookEvent,
 } from "./internal/stripe-webhook";
 export {
-  createTopupState,
-  beginCreditTopup,
-  applyCreditTopup,
-  markCreditTopupOutcomeUnknown,
-  setAutoRecharge,
-  productionCreditTopupConfig,
-  calculateCreditTopupFinancials,
-  STRIPE_CREDIT_RECOVERY_WINDOW_MS,
-  fixtureUsdTopupConfig,
-} from "./internal/topup";
+  FUNDING_QUOTE_CONTRACT_VERSION,
+  FUNDING_QUOTE_VALIDITY_MS,
+  FUNDING_CONSTRAINTS_PATH,
+  FUNDING_QUOTE_PATH,
+  FUNDING_PREFLIGHT_ROUTE_CONTRACTS,
+  fundingConstraintsSchema,
+  fundingQuoteInputSchema,
+  fundingQuoteSchema,
+  quoteFunding,
+  readFundingConstraints,
+} from "./internal/funding-quote";
 export type {
-  CreditTopupConfig,
-  CreditTopupFinancials,
-  AutoRechargeSettings,
-  CreditTopupCommand,
-  TopupState,
-  BeginTopupResult,
-} from "./internal/topup";
-export {
-  admitCredentialBudget,
-  settleCredentialBudget,
-  releaseCredentialBudget,
-  credentialBudgetReservationDigest,
-  credentialBudgetDayWindowStart,
-  credentialBudgetMonthWindowStart,
-} from "./internal/credential-budget";
-export type {
-  CredentialBudgetPolicy,
-  CredentialBudgetWindowUsage,
-  CredentialBudgetUsage,
-  CredentialBudgetReservationState,
-  CredentialBudgetReservation,
-  CredentialBudgetRefusalCode,
-  CredentialBudgetAdmission,
-} from "./internal/credential-budget";
-export { reverseCredentialBudget } from "./internal/credential-budget";
-export {
-  decideExternalSpendFinalization,
-  decideExternalSpendReconciliation,
-  decideExternalSpendReversal,
-  externalSpendCustodyPolicyRefusal,
-  externalSpendFinalizationCommandRefusal,
-  externalSpendIdentityDigest,
-  externalSpendIdentityFromReservation,
-  externalSpendIdentityMatchingReservationRef,
-  externalSpendIdentityMaterialValid,
-  externalSpendFinalizationDigest,
-  externalSpendPaymentFactsValid,
-  externalSpendReconciliationCommandRefusal,
-  externalSpendReconciliationDigest,
-  externalSpendReversalCommandRefusal,
-  externalSpendReversalDigest,
-  mintExternalSpendIdentity,
-  sameExternalSpendIdentity,
-  externalSpendStateForSettlement,
-} from "./internal/external-spend";
-export type {
-  ExternalSpendFinalizationCommand,
-  ExternalSpendIdentity,
-  ExternalSpendPaymentFacts,
-  ExternalSpendReservation,
-  ExternalSpendReservationState,
-  ExternalSpendSettlementStatus,
-  ExternalSpendSubmissionStatus,
-  ExternalSpendRefusalCode,
-  ExternalSpendMutationResult,
-} from "./internal/external-spend";
-export {
-  createInMemoryMoneyQueryPort,
-  projectProviderEarnings,
-} from "./internal/query-projections";
-export type { ProviderEarningsProjectionResult } from "./internal/query-projections";
+  FundingConstraints,
+  FundingQuote,
+  FundingQuoteInput,
+} from "./internal/funding-quote";
 export {
   buildQualifiedUseReceipt,
   decideQualifiedUseWrite,
@@ -801,16 +637,5 @@ export type {
   QualifiedUseReceipt,
   QualifiedUseWriteDecision,
 } from "./internal/delivery";
-export {
-  calculateTopupBonusAmount,
-  OWNER_TRIAL_PROMO_EVIDENCE_REF,
-  OWNER_TRIAL_PROMO_GRANT,
-  ownerTrialPromoInputDigest,
-  ownerTrialPromoTransactionRef,
-  resolveTopupBonusBps,
-  TOPUP_BONUS_EVIDENCE_REF,
-  topupBonusInputDigest,
-  topupBonusTransactionRef,
-  TOPUP_BONUS_LADDER,
-} from "./internal/promotions";
-export type { TopupBonusTier } from "./internal/promotions";
+
+export { formatDisplayPrice } from './internal/display-price'

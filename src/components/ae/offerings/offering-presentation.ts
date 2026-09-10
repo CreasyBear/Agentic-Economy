@@ -79,10 +79,10 @@ export function offeringApiDtoToSupplyView(dto: PublicBusinessCatalogApiV2Dto): 
 
 export function plainLanguageCopy(value: string): string {
   return value
-    .replace(/\bpublished offering\b/giu, 'published Operation')
-    .replace(/\b(?:labelled\s+)?sandbox provider\b/giu, 'demo supplier')
+    .replace(/\bpublished offering\b/giu, 'published Tool')
+    .replace(/\b(?:labelled\s+)?sandbox provider\b/giu, 'demo provider')
     .replace(/\bsandbox\b/giu, 'demo')
-    .replace(/\bcapabilities?\b/giu, 'Operations')
+    .replace(/\bcapabilities?\b/giu, 'Tools')
     .replace(/\bprovenance\b/giu, 'source')
     .replace(/\bendpoint\b/giu, 'web address')
     .replace(/\bslugs?\b/giu, 'page address')
@@ -96,7 +96,7 @@ export type OfferingAccessPresentation = Readonly<{
   detail: string
   href?: string
   external: boolean
-  provenance?: 'Published by the supplier' | 'Found in public information'
+  provenance?: 'Published by the provider' | 'Found in public information'
   price?: string
   technical?: ReadonlyArray<Readonly<{ label: string; value: string }>>
 }>
@@ -121,7 +121,7 @@ export function presentOfferingAccessPath(path: PublicOfferingAccessPathView): O
     href: descriptor.documentationUrl ?? descriptor.url,
     external: true,
     provenance: descriptor.provenance === 'business_declared'
-      ? 'Published by the supplier'
+      ? 'Published by the provider'
       : 'Found in public information',
     ...(descriptor.pricingSummary === undefined ? {} : { price: descriptor.pricingSummary }),
     ...(technical.length === 0 ? {} : { technical }),

@@ -24,7 +24,7 @@ export {
   invokePreparedRouteTransport,
   prepareRegisteredRouteTransportInvocation,
   preflightRouteTransportCredential,
-} from './internal/route-transport-invoke'
+} from './internal/route-transport-call'
 export type {
   PreparedRouteTransportInvocation,
   ProviderConnectionAuthorityLookup,
@@ -35,7 +35,7 @@ export type {
   RouteTransportInvocation,
   RouteTransportPreparation,
   RouteTransportRuntime,
-} from './internal/route-transport-invoke'
+} from './internal/route-transport-call'
 
 export {
   normalizeResponseMediaType,

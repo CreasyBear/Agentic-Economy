@@ -19,14 +19,12 @@ export const HOME = {
   heroHeading: 'The marketplace built for agents.',
   heroSubhead:
     'Search first. Inspect the price and access terms. Connect only when the selected call needs it.',
-  catalogHeading: 'Current Operations',
-  catalogBody: 'Current Operations, priced before the call. Open one to compare.',
-  catalogUnavailable: 'The Operation catalog is temporarily unavailable',
-  catalogUnavailableBody: 'Try again shortly. Existing Operation links continue to work.',
-  catalogEmpty: 'No Operations are available right now',
-  catalogEmptyBody: 'Browse the current catalog, including Operations that still need setup.',
-  closeBody: 'Paste one instruction. Your agent gets the catalog, the price, and the call.',
-  aboutLink: 'About',
+  catalogHeading: 'Current Tools',
+  catalogBody: 'Price and readiness are shown before you choose.',
+  catalogUnavailable: 'The Tool catalog is temporarily unavailable',
+  catalogUnavailableBody: 'Try again shortly. Existing Tool links continue to work.',
+  catalogEmpty: 'No Tools are published yet',
+  catalogEmptyBody: 'Publish the first bounded job, or check again after Providers finish setup.',
 } as const
 
 export type AgentPasteInstruction = {
@@ -40,47 +38,37 @@ export type AgentPasteInstruction = {
 /** Market paste on `/`. Do not rewrite `copyText`. */
 export const AGENT_INSTRUCTION: AgentPasteInstruction = {
   heading: 'Give this to your agent',
-  body: 'One paste. It searches the live catalog, compares, shows the price, then calls only what you approve.',
+  body: 'One paste. It searches the live catalog, shows the strongest matches, and explains what each one can do now.',
   label: 'agent setup instruction',
-  code: 'Search the catalog for my task. Compare. Show total price and inputs. Then use the one I approve.',
+  code: 'Search the catalog for my task. Show the best matches, total price, required inputs, and the next valid action.',
   copyText:
-    'Read $ORIGIN/llms.txt. Preserve my full task, find viable capabilities, compare the real differences, show me total price and inputs, then use the one I approve. Connect only if that capability requires it.',
-}
-
-/** Setup paste on `/for-agents`. Connect first. Then the market loop. */
-export const AGENT_SETUP_INSTRUCTION: AgentPasteInstruction = {
-  heading: 'Set this up with your agent',
-  body: 'Paste this. Claude Code, Cursor, or Codex connects once, then can search the catalog and pay per call.',
-  label: 'agent setup instruction',
-  code: 'Help me connect to Agentic Economy. One connection for Claude Code, Cursor, or Codex. Then I can search, compare, and call from this wallet.',
-  copyText:
-    'Help me connect to Agentic Economy at $ORIGIN. Read $ORIGIN/llms.txt and $ORIGIN/SKILL.md. Add $ORIGIN/mcp so Claude Code, Cursor, or Codex can use one connection. After it is connected, preserve my full task, search the live catalog, compare, show total price and inputs, then use the one I approve. Connect the wallet only if that call requires it. Do not create per-provider accounts.',
+    'Read $ORIGIN/llms.txt. Preserve my full task, find viable capabilities, show the real differences, total price, required inputs, and the next valid action. Connect only if a callable capability requires it.',
 }
 
 /** Agent/Runtime door on `/` (routes to /for-agents). */
 export const AGENT_DOOR = {
   heading: 'For your agent',
-  body: 'Search and inspect without a key. Connect once when a call needs it.',
+  body: 'Browse public Tools. Connect your account when you are ready to make a Call.',
   cta: 'Connect your agent',
   href: '/for-agents',
 } as const
 
 /** Agent/Runtime landing (`/for-agents`) — setup for named harnesses, then the market. */
 export const AGENT_PAGE = {
-  metaTitle: 'One connection, every tool | Agentic Economy',
+  metaTitle: 'Connect your agent | Agentic Economy',
   metaDescription:
-    'Claude Code, Cursor, and Codex connect once. Then search, compare, and call listed tools from one wallet. No per-provider accounts.',
+    'Find an outside service, compare its terms, and connect Codex, Claude Code or Cursor to make an authorized Call.',
   eyebrow: 'Connections',
-  heading: 'One connection. Every tool.',
+  heading: 'Add the market to your agent.',
   harnesses: 'Claude Code, Cursor, and Codex',
-  subhead: 'One connection. Then the catalog and a wallet.',
+  subhead: 'Find the service your task needs. Connect your account, review the terms, and make a Call within the authority you have granted.',
 } as const
 
 /** Supplier door on `/` (routes to the existing supply mode). */
 export const BUSINESS_DOOR = {
-  heading: 'Publish an Operation',
+  heading: 'Publish a Tool',
   body: 'Publish one bounded job, its price, readiness, and access terms. Agents inspect before they call.',
-  cta: 'Publish an Operation',
+  cta: 'Publish a Tool',
   href: '/for-providers',
 } as const
 
@@ -91,14 +79,14 @@ export const ABOUT = {
   eyebrow: 'About',
   heading: 'Who this market is for.',
   subhead:
-    'Agents find, compare, and call. Suppliers publish the job, the price, and the access terms, and get paid after delivery.',
-  doorsHeading: 'Agents and suppliers',
+    'Agents find, compare, and call. Providers publish the job, the price, and the access terms, and get paid after delivery.',
+  doorsHeading: 'Agents and Providers',
   settlementHeading: 'Pay per call',
   settlementBody:
-    'Browse and inspect without a provider account. The price sits on the card before a call. Suppliers are paid when the job is delivered.',
-  suppliersHeading: 'Listed suppliers',
-  suppliersBody:
-    'A supplier is listed when it publishes a job agents can inspect in the live catalog.',
+    'Browse and inspect without a Provider account. The price sits on the card before a Call. Providers are paid when the job is delivered.',
+  providersHeading: 'Listed Providers',
+  providersBody:
+    'A Provider is listed when it publishes a Tool agents can inspect in the current catalogue.',
   machinesHeading: 'Files for agents',
   machinesBody: 'The same facts the site shows: an index, a skill file, and a handshake.',
 } as const
