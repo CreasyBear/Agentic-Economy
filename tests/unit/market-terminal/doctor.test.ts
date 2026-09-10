@@ -1049,7 +1049,7 @@ describe('ae doctor', () => {
           id: 'release', group: 'discovery', state: 'fail',
           summary: 'Release identity is unavailable (source_revision_unconfigured). The service operator must configure a valid release identity before calls proceed; the caller should not continue or retry.',
         },
-        { id: 'catalogue', group: 'discovery', state: 'warn', summary: 'Market catalogue coverage could not be read.' },
+        { id: 'catalogue', group: 'discovery', state: 'warn', summary: 'Market catalogue coverage could not be read.', code: 'catalogue_unreadable' },
         {
           id: 'buyer', group: 'quoting', state: 'warn',
           summary: 'No buyer credential is selected for this origin; anonymous search and describe remain available.',
@@ -1228,7 +1228,7 @@ describe('ae doctor', () => {
     const staleResult = JSON.parse(stale.stdout) as { groups: unknown; checks: unknown[] }
     expect(staleResult.groups).toEqual({ discovery: 'warn', quoting: 'pass', purchase: 'warn' })
     expect(staleResult.checks).toEqual(expect.arrayContaining([{
-      id: 'catalogue', group: 'discovery', state: 'warn', summary: 'Market catalogue coverage is stale.',
+      id: 'catalogue', group: 'discovery', state: 'warn', summary: 'Market catalogue coverage is stale.', code: 'catalogue_stale',
     }]))
 
     scenario.catalogue = 'failed'
@@ -1237,7 +1237,16 @@ describe('ae doctor', () => {
     const failedResult = JSON.parse(failed.stdout) as { groups: { discovery: string }; checks: unknown[] }
     expect(failedResult.groups.discovery).toBe('fail')
     expect(failedResult.checks).toEqual(expect.arrayContaining([{
-      id: 'catalogue', group: 'discovery', state: 'fail', summary: 'Market catalogue refresh failed.',
+      id: 'catalogue', group: 'discovery', state: 'fail', summary: 'Market catalogue refresh failed.', code: 'catalogue_refresh_failed',
+    }]))
+
+    scenario.catalogue = 'absent'
+    const absent = await spawnCli(['doctor', '--base-url', origin, '--json'], { env: cleanEnvironment(directory) })
+    expect(absent.status).toBe(0)
+    const absentResult = JSON.parse(absent.stdout) as { groups: unknown; checks: unknown[] }
+    expect(absentResult.groups).toEqual({ discovery: 'warn', quoting: 'pass', purchase: 'warn' })
+    expect(absentResult.checks).toEqual(expect.arrayContaining([{
+      id: 'catalogue', group: 'discovery', state: 'warn', summary: 'Market catalogue coverage is absent.', code: 'catalogue_absent',
     }]))
   }, 20_000)
 

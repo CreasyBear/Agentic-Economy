@@ -884,12 +884,12 @@ async function checkDeployment(baseUrl: string): Promise<readonly DoctorCheckDra
 
 const CATALOGUE_CHECK_STATES: Readonly<Record<string, DoctorCheckDraft>> = {
   fresh: { id: 'catalogue', state: 'pass', summary: 'Market catalogue coverage is fresh.' },
-  stale: { id: 'catalogue', state: 'warn', summary: 'Market catalogue coverage is stale.' },
-  failed: { id: 'catalogue', state: 'fail', summary: 'Market catalogue refresh failed.' },
-  absent: { id: 'catalogue', state: 'warn', summary: 'Market catalogue coverage is absent.' },
+  stale: { id: 'catalogue', state: 'warn', summary: 'Market catalogue coverage is stale.', code: 'catalogue_stale' },
+  failed: { id: 'catalogue', state: 'fail', summary: 'Market catalogue refresh failed.', code: 'catalogue_refresh_failed' },
+  absent: { id: 'catalogue', state: 'warn', summary: 'Market catalogue coverage is absent.', code: 'catalogue_absent' },
 }
 const CATALOGUE_UNREADABLE: DoctorCheckDraft = {
-  id: 'catalogue', state: 'warn', summary: 'Market catalogue coverage could not be read.',
+  id: 'catalogue', state: 'warn', summary: 'Market catalogue coverage could not be read.', code: 'catalogue_unreadable',
 }
 
 async function checkCatalogue(baseUrl: string): Promise<DoctorCheckDraft> {

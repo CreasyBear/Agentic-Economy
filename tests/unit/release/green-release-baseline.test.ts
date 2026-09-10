@@ -499,10 +499,11 @@ describe('green release baseline', () => {
     const doctor = fresh?.steps?.find((step) => step.name === 'Doctor')
     expect(doctor?.run).toContain('npm run --silent ae -- doctor --json --base-url http://127.0.0.1:3024 > output/fresh-checkout/doctor.json')
     expect(doctor?.run).toContain('groups.discovery !== "pass"')
-    expect(doctor?.run).toContain('groups.quoting !== "pass" && groups.quoting !== "warn"')
     expect(doctor?.run).toContain('find((c) => c.id === "quote")')
     expect(doctor?.run).toContain('!quote')
-    expect(doctor?.run).toContain('quoteState === "skipped" || quoteState === "fail"')
+    expect(doctor?.run).toContain('loopback_readiness_unprovable')
+    expect(doctor?.run).toContain('catalogue_absent')
+    expect(doctor?.run).toContain('market_requests')
 
     const upload = fresh?.steps?.find((step) => step.name === 'Upload the fresh-checkout evidence')
     expect(upload?.if).toBe('always()')
