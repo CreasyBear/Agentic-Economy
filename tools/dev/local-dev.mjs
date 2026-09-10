@@ -79,6 +79,10 @@ export function buildConvexSelectArgs() {
  * `anonymous-agent` deployment on a fresh checkout with no state file yet
  * (`node_modules/convex/dist/cli.bundle.cjs` ~line 122847); or an existing
  * state file already naming that deployment.
+ *
+ * The anonymous branch below follows the CLI's own documented recipe for
+ * initializing an agent (`node_modules/convex/dist/cli.bundle.cjs:130776`):
+ * `CONVEX_AGENT_MODE=anonymous && npx convex init && npx convex env set ... && npx convex dev`.
  */
 export function isAnonymousLocalDeployment(env = process.env) {
   if (env.CONVEX_AGENT_MODE === 'anonymous') return true
@@ -98,10 +102,37 @@ export function buildConvexDevArgs() {
   return ['convex', 'dev', '--typecheck', 'disable', '--local-force-upgrade']
 }
 
+/**
+ * `npx convex init` (`node_modules/convex/dist/cli.bundle.cjs:130775-130776`,
+ * the command's own description): "Ensures a Convex project is configured
+ * and initialized in the current directory. Does nothing if one is already
+ * configured." The `existingDeployment` fast path it takes when a
+ * deployment is already selected (`:128009-128016`) returns the stored
+ * credentials without reconfiguring anything, so this is safe to run
+ * unconditionally rather than guarding it on `.convex/local/default/config.json`.
+ */
+export function buildConvexInitArgs() {
+  return ['convex', 'init']
+}
+
+export function buildConvexEnvSetArgs(value) {
+  return ['convex', 'env', 'set', 'CLERK_JWT_ISSUER_DOMAIN', value]
+}
+
 // Matches the placeholder `tools/release/verify-convex-generated-anonymous.ts`
 // already proves anonymous codegen against, so both paths agree on what an
 // unconfigured Clerk looks like.
 const ANONYMOUS_CLERK_JWT_ISSUER_DOMAIN = 'https://release-proof.invalid'
+
+/**
+ * Pure decision, shared by `convexChildEnv` and `startConvex`: does the
+ * process env still lack `CLERK_JWT_ISSUER_DOMAIN`? A value already present
+ * (a real tenant, or one set by a previous run) means Clerk is configured
+ * and no placeholder work is needed anywhere.
+ */
+export function needsClerkPlaceholder(env) {
+  return env.CLERK_JWT_ISSUER_DOMAIN === undefined
+}
 
 /**
  * `convex/auth.config.ts` throws on a missing `CLERK_JWT_ISSUER_DOMAIN`, so a
@@ -112,14 +143,14 @@ const ANONYMOUS_CLERK_JWT_ISSUER_DOMAIN = 'https://release-proof.invalid'
  */
 export function convexChildEnv(env, { anonymous = false, log: write = log } = {}) {
   const needsTimeout = env[CONVEX_LOCAL_BACKEND_STARTUP_TIMEOUT_SECS_ENV] === undefined
-  const needsClerkPlaceholder = anonymous && env.CLERK_JWT_ISSUER_DOMAIN === undefined
-  if (!needsTimeout && !needsClerkPlaceholder) return env
+  const needsPlaceholder = anonymous && needsClerkPlaceholder(env)
+  if (!needsTimeout && !needsPlaceholder) return env
 
   const next = { ...env }
   if (needsTimeout) {
     next[CONVEX_LOCAL_BACKEND_STARTUP_TIMEOUT_SECS_ENV] = String(DEFAULT_LOCAL_BACKEND_STARTUP_TIMEOUT_SECS)
   }
-  if (needsClerkPlaceholder) {
+  if (needsPlaceholder) {
     write('anonymous local deployment: using placeholder CLERK_JWT_ISSUER_DOMAIN (Clerk is not configured locally)')
     next.CLERK_JWT_ISSUER_DOMAIN = ANONYMOUS_CLERK_JWT_ISSUER_DOMAIN
     next.CONVEX_AGENT_MODE = 'anonymous'
@@ -811,8 +842,39 @@ async function reportDoctor(supervisor, env, baseUrl) {
 
 async function startConvex(supervisor, env) {
   const anonymous = isAnonymousLocalDeployment(env)
+  const convexEnv = convexChildEnv(env, { anonymous })
   if (anonymous) {
     log('anonymous local deployment — skipping `convex deployment select local`')
+
+    const initialized = supervisor.add(createManagedChild(
+      'npx',
+      buildConvexInitArgs(),
+      convexEnv,
+      { label: 'Convex init' },
+    ))
+    const initResult = await initialized.done
+    if (supervisor.parentSignal !== null) return { status: signalExitStatus(supervisor.parentSignal) }
+    if (childExitStatus(initResult) !== 0) {
+      reportChildFailure('Convex init', initResult)
+      return { status: childExitStatus(initResult) }
+    }
+    log('convex init: anonymous deployment configured (no-op if already initialized)')
+
+    if (needsClerkPlaceholder(env)) {
+      const envSet = supervisor.add(createManagedChild(
+        'npx',
+        buildConvexEnvSetArgs(convexEnv.CLERK_JWT_ISSUER_DOMAIN),
+        convexEnv,
+        { label: 'Convex env set' },
+      ))
+      const envSetResult = await envSet.done
+      if (supervisor.parentSignal !== null) return { status: signalExitStatus(supervisor.parentSignal) }
+      if (childExitStatus(envSetResult) !== 0) {
+        reportChildFailure('Convex env set', envSetResult)
+        return { status: childExitStatus(envSetResult) }
+      }
+      log(`convex env set: pushed placeholder CLERK_JWT_ISSUER_DOMAIN=${convexEnv.CLERK_JWT_ISSUER_DOMAIN} to the anonymous deployment`)
+    }
   } else {
     const selected = supervisor.add(createManagedChild(
       'npx',
@@ -828,7 +890,6 @@ async function startConvex(supervisor, env) {
     }
   }
 
-  const convexEnv = convexChildEnv(env, { anonymous })
   const convex = supervisor.add(createManagedChild(
     'npx',
     buildConvexDevArgs(),

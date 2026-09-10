@@ -16,8 +16,11 @@ export function isConvexReadyOutput(output: string): boolean
 export function isViteReadyOutput(output: string): boolean
 export function buildConvexSelectArgs(): string[]
 export function buildConvexDevArgs(): string[]
+export function buildConvexInitArgs(): string[]
+export function buildConvexEnvSetArgs(value: string): string[]
 export function isAnonymousLocalDeployment(env?: Record<string, string | undefined>): boolean
 export const DEFAULT_LOCAL_BACKEND_STARTUP_TIMEOUT_SECS: number
+export function needsClerkPlaceholder(env: Record<string, string | undefined>): boolean
 export function convexChildEnv(
   env: Record<string, string | undefined>,
   options?: { anonymous?: boolean, log?: (message: string) => void },

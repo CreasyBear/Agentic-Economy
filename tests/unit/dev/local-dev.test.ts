@@ -6,6 +6,8 @@ import { afterEach, describe, expect, it } from 'vitest'
 import {
   authModeLine,
   buildConvexDevArgs,
+  buildConvexEnvSetArgs,
+  buildConvexInitArgs,
   buildConvexSelectArgs,
   buildStages,
   childExitStatus,
@@ -21,6 +23,7 @@ import {
   isCatalogueComplete,
   isConvexReadyOutput,
   isViteReadyOutput,
+  needsClerkPlaceholder,
   parseLauncherFlags,
   probeConvexUrl,
   releaseRevision,
@@ -70,6 +73,22 @@ describe('local development launcher', () => {
       '--local-force-upgrade',
     ])
     expect(buildConvexDevArgs()).not.toContain('reset')
+  })
+
+  it('builds the argv for the CLI\'s own agent-init recipe (`convex init` then `convex env set`)', () => {
+    expect(buildConvexInitArgs()).toEqual(['convex', 'init'])
+    expect(buildConvexEnvSetArgs('https://release-proof.invalid')).toEqual([
+      'convex',
+      'env',
+      'set',
+      'CLERK_JWT_ISSUER_DOMAIN',
+      'https://release-proof.invalid',
+    ])
+  })
+
+  it('only needs the placeholder pushed when CLERK_JWT_ISSUER_DOMAIN is absent from the env', () => {
+    expect(needsClerkPlaceholder({})).toBe(true)
+    expect(needsClerkPlaceholder({ CLERK_JWT_ISSUER_DOMAIN: 'https://real-tenant.clerk.accounts.dev' })).toBe(false)
   })
 
   it('does not treat Vite output as ready before Convex is ready', () => {
