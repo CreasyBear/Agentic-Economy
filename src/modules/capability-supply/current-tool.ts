@@ -2,7 +2,7 @@ import type { CapabilityContractRef } from '@/modules/capability-contract/public
 import { canonicalDigest, isCanonicalDigest } from '@/modules/common/canonical-digest'
 import { deepFreeze } from '@/modules/common/deep-freeze'
 import type { StableHashValue } from '@/modules/common/stable-hash'
-import { compareExactAmounts, exactAmountSchema, pricingConfigDecisionAmount, pricingConfigDigest } from '@/modules/money/public'
+import { compareExactAmounts, displayPriceFromPricingConfig, exactAmountSchema, pricingConfigDigest } from '@/modules/money/public'
 
 import type { PublicCapabilityUnavailableReason, PublicToolPrice } from './tool-projection'
 import type { PublishedTool } from './published-tool'
@@ -186,13 +186,12 @@ export function createCurrentToolQuote(input: Readonly<{
   const expectedOfferingDigest = capabilityOfferingRegistrationHash(tool.offering)
   const expectedBindingDigest = capabilityBindingRegistrationHash(tool.binding, tool.transport)
   const providerAuthority = currentProviderAuthority(tool, expectedToolRef)
-  const toolPricingMatches = tool.pricingConfig.kind === 'managed_x402'
-    ? tool.identity.price.kind === 'on_request'
-    : tool.identity.price.kind === 'fixed'
-      && compareExactAmounts(
-        tool.identity.price.amount,
-        pricingConfigDecisionAmount(tool.pricingConfig),
-      ) === 0
+  // `presentation.price`/`identity.price` are the retired owner-declared field (D7); the
+  // pricing config is the source of truth, and the `sameStableValue` check below already
+  // proves `tool.identity.price` equals `displayPriceFromPricingConfig(tool.pricingConfig)`
+  // kind-for-kind and amount-for-amount, so deriving the current price here instead of
+  // trusting the possibly-absent stored field is both simpler and no less exact.
+  const currentPrice = displayPriceFromPricingConfig(tool.pricingConfig)
 
   if (!isPublicToolRef(input.toolRef)
     || input.toolRef !== expectedToolRef
@@ -223,9 +222,8 @@ export function createCurrentToolQuote(input: Readonly<{
     || !transportConfigIsExact(tool)
     || tool.priceDigest !== tool.identity.priceDigest
     || tool.priceDigest !== pricingConfigDigest(tool.pricingConfig)
-    || !toolPricingMatches
     || !sameStableValue(tool.pricingConfig, tool.identity.pricingConfig)
-    || !sameStableValue(tool.identity.price, tool.offering.presentation.price)
+    || !sameStableValue(tool.identity.price, currentPrice)
     || !sameStableValue(tool.identity.materialTerms, tool.offering.presentation.materialTerms)
     || !isCanonicalDigest(tool.identity.publicationDigest)
     || !isCanonicalDigest(tool.identity.evidenceDigest)
@@ -254,8 +252,8 @@ export function createCurrentToolQuote(input: Readonly<{
     offering: { id: tool.identity.offeringId, digest: tool.identity.offeringDigest },
     binding: { id: tool.identity.bindingId, digest: tool.identity.bindingDigest },
     commercial: {
-      price: tool.identity.price,
-      priceDigest: canonicalDigest(tool.identity.price),
+      price: currentPrice,
+      priceDigest: canonicalDigest(currentPrice),
       priceAuthorityDigest: tool.identity.priceDigest,
       materialTermsDigest: canonicalDigest(tool.identity.materialTerms as StableHashValue),
     },

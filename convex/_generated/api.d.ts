@@ -108,8 +108,6 @@ import type * as lib_canonicalAgentAuthority from "../lib/canonicalAgentAuthorit
 import type * as lib_consequenceProof from "../lib/consequenceProof.js";
 import type * as lib_delegationPersistence from "../lib/delegationPersistence.js";
 import type * as lib_liveX402RequirementRef from "../lib/liveX402RequirementRef.js";
-import type * as lib_marketExternalRegistry_contracts from "../lib/marketExternalRegistry/contracts.js";
-import type * as lib_marketExternalRegistry_validation from "../lib/marketExternalRegistry/validation.js";
 import type * as lib_moneyLegalCustomer from "../lib/moneyLegalCustomer.js";
 import type * as lib_ownerConsequence from "../lib/ownerConsequence.js";
 import type * as lib_providerConnections_agent from "../lib/providerConnections/agent.js";
@@ -137,10 +135,10 @@ import type * as lib_x402DirectoryIndex_rows from "../lib/x402DirectoryIndex/row
 import type * as marketDemandSignals from "../marketDemandSignals.js";
 import type * as marketDispatchWorkpool from "../marketDispatchWorkpool.js";
 import type * as marketEvidence from "../marketEvidence.js";
-import type * as marketExternalRegistry from "../marketExternalRegistry.js";
 import type * as marketListingEvidence from "../marketListingEvidence.js";
 import type * as marketMetrics from "../marketMetrics.js";
 import type * as marketPresence from "../marketPresence.js";
+import type * as migrations from "../migrations.js";
 import type * as moneyAccountFunding from "../moneyAccountFunding.js";
 import type * as moneyAccountFundingFormance from "../moneyAccountFundingFormance.js";
 import type * as moneyBillingAuthorization from "../moneyBillingAuthorization.js";
@@ -301,8 +299,6 @@ declare const fullApi: ApiFromModules<{
   "lib/consequenceProof": typeof lib_consequenceProof;
   "lib/delegationPersistence": typeof lib_delegationPersistence;
   "lib/liveX402RequirementRef": typeof lib_liveX402RequirementRef;
-  "lib/marketExternalRegistry/contracts": typeof lib_marketExternalRegistry_contracts;
-  "lib/marketExternalRegistry/validation": typeof lib_marketExternalRegistry_validation;
   "lib/moneyLegalCustomer": typeof lib_moneyLegalCustomer;
   "lib/ownerConsequence": typeof lib_ownerConsequence;
   "lib/providerConnections/agent": typeof lib_providerConnections_agent;
@@ -330,10 +326,10 @@ declare const fullApi: ApiFromModules<{
   marketDemandSignals: typeof marketDemandSignals;
   marketDispatchWorkpool: typeof marketDispatchWorkpool;
   marketEvidence: typeof marketEvidence;
-  marketExternalRegistry: typeof marketExternalRegistry;
   marketListingEvidence: typeof marketListingEvidence;
   marketMetrics: typeof marketMetrics;
   marketPresence: typeof marketPresence;
+  migrations: typeof migrations;
   moneyAccountFunding: typeof moneyAccountFunding;
   moneyAccountFundingFormance: typeof moneyAccountFundingFormance;
   moneyBillingAuthorization: typeof moneyBillingAuthorization;
@@ -420,6 +416,7 @@ export declare const components: {
   workflow: import("@convex-dev/workflow/_generated/component.js").ComponentApi<"workflow">;
   rateLimiter: import("@convex-dev/rate-limiter/_generated/component.js").ComponentApi<"rateLimiter">;
   agent: import("@convex-dev/agent/_generated/component.js").ComponentApi<"agent">;
+  migrations: import("@convex-dev/migrations/_generated/component.js").ComponentApi<"migrations">;
   ownerActivationByStage: import("@convex-dev/aggregate/_generated/component.js").ComponentApi<"ownerActivationByStage">;
   marketEvidence: import("@convex-dev/aggregate/_generated/component.js").ComponentApi<"marketEvidence">;
   marketOperationEvidence: import("@convex-dev/aggregate/_generated/component.js").ComponentApi<"marketOperationEvidence">;

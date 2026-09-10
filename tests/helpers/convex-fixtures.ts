@@ -416,13 +416,16 @@ export async function prepareCapabilityPublicationMutation(
   }
   const offering =
     source.kind === 'ae_envelope' ? source.offering : source.commercial.offering
+  // `presentation.price` is optional and being retired (Well 4, decision
+  // D7): the pricing config is the source of truth. Fixtures that omit it
+  // must supply `input.pricingConfig` explicitly.
   const price = offering.presentation.price
   const declaredOrigin =
     offering.origin?.kind === 'catalog_offering' ? offering.origin : undefined
-  if (price.kind !== 'fixed' && input.pricingConfig === undefined) {
+  if ((price === undefined || price.kind !== 'fixed') && input.pricingConfig === undefined) {
     throw new Error('capability_publication_fixture_price_missing')
   }
-  const fixedAudAmount = price.kind === 'fixed'
+  const fixedAudAmount = price?.kind === 'fixed'
     ? rescaleExactAmount(price.amount, 6)
     : undefined
   const pricingConfig = input.pricingConfig ?? {

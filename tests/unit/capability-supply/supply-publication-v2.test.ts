@@ -181,7 +181,6 @@ describe('supply.publish:v2 preparation', () => {
         offering: {
           presentation: {
             label: 'Reference lookup',
-            price: { kind: 'fixed', amount: { currency: 'AUD', units: '2500000', exponent: 6 } },
           },
         },
       },

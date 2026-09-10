@@ -22,6 +22,7 @@ import {
   type ConvexFixtureBackend,
 } from '../helpers/convex-fixtures'
 import { withSourceWrite } from '../helpers/source-write-admission'
+import { withDefinedPrice } from './capability-publication-harness'
 
 type CatalogOfferingOrigin = Extract<
   NonNullable<CapabilityPublicationOfferingDraft['origin']>,
@@ -71,7 +72,7 @@ export async function prepareOwnerPublicationCommand(
       },
     }
   } else {
-    if (price.kind !== 'fixed') throw new Error('owner_publication_fixture_price_missing')
+    if (price === undefined || price.kind !== 'fixed') throw new Error('owner_publication_fixture_price_missing')
     const audPrice = rescaleExactAmount(price.amount, 6)
     if (audPrice === undefined || audPrice.currency !== 'AUD') {
       throw new Error('owner_publication_fixture_aud_price_invalid')
@@ -120,7 +121,7 @@ export async function prepareOwnerPublicationCommand(
     offering: {
       ...prepared.prepared.offering,
       origin: normalizedOrigin,
-      presentation: {
+      presentation: withDefinedPrice({
         ...prepared.prepared.offering.presentation,
         materialTerms:
           prepared.prepared.offering.presentation.materialTerms.map((term) => ({
@@ -133,7 +134,7 @@ export async function prepareOwnerPublicationCommand(
               .evidenceRefs,
           ],
         },
-      },
+      }),
       searchTerms: [...prepared.prepared.offering.searchTerms],
       registrationEvidenceRefs: [
         ...prepared.prepared.offering.registrationEvidenceRefs,

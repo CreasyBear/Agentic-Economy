@@ -25,7 +25,7 @@ import {
   type ConvexFixtureBackend,
 } from '../helpers/convex-fixtures'
 import { withSourceWrite } from '../helpers/source-write-admission'
-import { installProviderConnectionFixture } from './capability-publication-harness'
+import { installProviderConnectionFixture, withDefinedPrice } from './capability-publication-harness'
 
 type PublishPreparedCapabilityArgs = FunctionArgs<typeof api.capabilitySupply.publishPreparedCapability>
 type PublicationFixtureInput = Parameters<typeof prepareCapabilityPublicationMutation>[1]
@@ -37,6 +37,13 @@ export async function preparedPublicationArgs(
   const args = await prepareCapabilityPublicationMutation(backend, input)
   return await withSourceWrite('catalog_publish', {
     ...args,
+    prepared: {
+      ...args.prepared,
+      offering: {
+        ...args.prepared.offering,
+        presentation: withDefinedPrice(args.prepared.offering.presentation),
+      },
+    },
     proof: {
       reverificationId: `test:${canonicalDigest({
         operationKey: args.operationKey,

@@ -8,7 +8,7 @@ import type {
   ActionConsequenceClass,
   ActionRetryClass,
 } from '@/modules/common/action'
-import { compareExactAmounts, pricingConfigDecisionAmount, pricingConfigDigest, pricingConfigSchema, type PricingConfig } from '@/modules/money/public'
+import { compareExactAmounts, displayPriceFromPricingConfig, pricingConfigDecisionAmount, pricingConfigDigest, pricingConfigSchema, type PricingConfig } from '@/modules/money/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 import { isRecord } from '@/modules/common/is-record'
@@ -213,12 +213,15 @@ export function materializePublishedTool(input: Readonly<{
     contractRef: contract.ref,
   })
   const parsedPricingConfig = pricingConfigSchema.safeParse(publication.pricingConfig)
-  const pricingMatches = parsedPricingConfig.success && (
+  const displayedPrice = parsedPricingConfig.success
+    ? displayPriceFromPricingConfig(parsedPricingConfig.data)
+    : undefined
+  const pricingMatches = parsedPricingConfig.success && displayedPrice !== undefined && (
     parsedPricingConfig.data.kind === 'managed_x402'
-      ? offering.presentation.price.kind === 'on_request'
-      : offering.presentation.price.kind === 'fixed'
+      ? displayedPrice.kind === 'on_request'
+      : displayedPrice.kind === 'fixed'
         && compareExactAmounts(
-          offering.presentation.price.amount,
+          displayedPrice.amount,
           pricingConfigDecisionAmount(parsedPricingConfig.data),
         ) === 0
   )
@@ -290,7 +293,7 @@ export function materializePublishedTool(input: Readonly<{
     paymentRecipient: paymentRecipient(binding.adapter.adapterId, admittedConfig),
     pricingConfig: parsedPricingConfig.data,
     priceDigest: publication.priceDigest,
-    price: offering.presentation.price,
+    price: displayPriceFromPricingConfig(parsedPricingConfig.data),
     materialTerms: offering.presentation.materialTerms,
     evidenceDigest,
     ...(connectionAuthority === undefined ? {} : { connectionAuthority }),

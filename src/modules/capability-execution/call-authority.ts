@@ -7,7 +7,7 @@ import {
 } from '@/modules/capability-supply/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { StableHashValue } from '@/modules/common/stable-hash'
-import type { ExactAmount } from '@/modules/money/public'
+import { pricingConfigDecisionAmount, type ExactAmount } from '@/modules/money/public'
 import type { CallPersistedAuthority } from './internal/convex-schema'
 import {
   type CallInput,
@@ -355,9 +355,8 @@ export function buildCallAuthority(input: Readonly<{
   decisionPrice?: ExactAmount
   now: number
 }>): CallPersistedAuthority | undefined {
-  const decisionPrice = input.descriptor.price.kind === 'fixed'
-    ? input.descriptor.price.amount
-    : input.decisionPrice
+  const decisionPrice = pricingConfigDecisionAmount(input.operation.pricingConfig)
+    ?? input.decisionPrice
   if (decisionPrice === undefined) return undefined
   const authorityExpiresAt = Date.parse(input.authority.expiresAt)
   const grantExpiresAt = input.grant.expiresAt

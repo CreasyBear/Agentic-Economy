@@ -177,6 +177,11 @@ describe('catalogue support derivation', () => {
       const bindingRegistrationHash = capabilityBindingRegistrationHash(bindingRegistration, transport)
       const bindingAdmissionEvidenceRefs = ['admission:binding']
       const bindingConformanceEvidenceRefs = ['conformance:binding']
+      // `offeringRegistration.presentation.price` is a Zod-optional field
+      // (`price?: X | undefined`); the Convex validator's optional field excludes
+      // `undefined` from the value type, so the fixture must omit an absent key
+      // rather than carry it through as an explicit `undefined`.
+      const { price: offeringPrice, ...offeringPresentationRest } = offeringRegistration.presentation
       const offeringId = await ctx.db.insert('capabilityOfferings', {
         offeringId: 'co:1',
         businessId,
@@ -185,7 +190,9 @@ describe('catalogue support derivation', () => {
         version: contract.ref.version,
         contractDigest: contract.ref.contractDigest,
         origin: catalogOrigin,
-        presentation: offeringRegistration.presentation,
+        presentation: offeringPrice === undefined
+          ? offeringPresentationRest
+          : { ...offeringPresentationRest, price: offeringPrice },
         searchTerms: [...offeringRegistration.searchTerms],
         registrationEvidenceRefs: [...offeringRegistration.registrationEvidenceRefs],
         registrationHash: offeringRegistrationHash,

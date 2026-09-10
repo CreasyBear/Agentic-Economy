@@ -18,7 +18,7 @@ import {
   type RuntimePublishedToolDescriptor,
 } from '@/modules/capability-supply/public'
 import type { CallReceipt } from '@/modules/capability-execution/call-contracts'
-import type { ExactAmount } from '@/modules/money/public'
+import { pricingConfigDecisionAmount, type ExactAmount } from '@/modules/money/public'
 import type { ActionCtx } from '../../../../../convex/_generated/server'
 import { internal } from '../../../../../convex/_generated/api'
 import {
@@ -111,7 +111,7 @@ export async function loadRecoveryWorkContext(
   if (material === undefined) return undefined
   const { operation, descriptor, parsedInput } = material
   const managedReservation = await loadManagedReservation(ctx, recovered, operation)
-  const priceAmount = recoveryPriceAmount(recovered, descriptor, managedReservation)
+  const priceAmount = recoveryPriceAmount(recovered, operation, managedReservation)
   if (priceAmount === undefined) return undefined
   const dynamicInput = buildCommittedCallMaterial({
     operation,
@@ -208,10 +208,11 @@ export async function loadRecoveryWorkContext(
 
 function recoveryPriceAmount(
   recovered: RecoveredCall,
-  descriptor: RuntimePublishedToolDescriptor,
+  operation: PublishedTool,
   managedReservation: Awaited<ReturnType<typeof loadManagedReservation>>,
 ): ExactAmount | undefined {
-  if (descriptor.price.kind === 'fixed') return descriptor.price.amount
+  const fixedPriceAmount = pricingConfigDecisionAmount(operation.pricingConfig)
+  if (fixedPriceAmount !== undefined) return fixedPriceAmount
   if (recovered.sellerOnboardingCanary !== undefined) {
     return recovered.sellerOnboardingCanary.funding.requestedSpend
   }

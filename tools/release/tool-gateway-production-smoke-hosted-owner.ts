@@ -386,10 +386,15 @@ async function prepareOwnerPublicationMaterial(
     options.source.kind === "ae_envelope"
       ? options.source.offering
       : options.source.commercial.offering;
+  // `presentation.price` is optional and being retired (Well 4, decision
+  // D7); this owner fixture always sets a fixed-price presentation, so an
+  // undefined price is itself invalid.
+  const price = offering.presentation.price;
   if (
-    offering.presentation.price.kind !== "fixed" ||
-    offering.presentation.price.amount.currency !== "AUD" ||
-    offering.presentation.price.amount.exponent !== 6
+    price === undefined ||
+    price.kind !== "fixed" ||
+    price.amount.currency !== "AUD" ||
+    price.amount.exponent !== 6
   )
     throw new GatewaySmokeError("gateway_smoke_owner_source_price_invalid");
   const prepared = await preparePublicationDraft({
@@ -400,7 +405,7 @@ async function prepareOwnerPublicationMaterial(
       kind: "fixed_aud",
       currency: "AUD",
       exponent: 6,
-      amountUnits: offering.presentation.price.amount.units,
+      amountUnits: price.amount.units,
     },
     evidenceRefs: options.evidenceRefs,
   });

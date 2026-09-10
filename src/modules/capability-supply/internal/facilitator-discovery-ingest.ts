@@ -226,6 +226,11 @@ export function decideFacilitatorDiscoveryItem(
         presentation: {
           label: offeringLabel,
           summary: offeringSummary,
+          // Kept as an input to importX402Capability's anti-fraud check
+          // (publication-importer-x402.ts:129, no pricing config in scope
+          // there — see report), which validates it against the resource's
+          // own declared price. admittedFacilitatorDiscoveryDraft below
+          // overrides this to on_request before the offering is persisted.
           price: { kind: "fixed", amount: providerPrice },
           materialTerms: [],
           commercialRelationship: {
@@ -397,12 +402,12 @@ export function admittedFacilitatorDiscoveryDraft(
     { termId: "provider-amount", label: "Listed Provider amount", value: formatCurrencyAmount(decision.price.provider) },
     { termId: "buyer-total", label: "Buyer total", value: "Confirmed in AUD by a binding Quote for your input." },
   ].slice(0, 64);
+  const { price: _discoveredProviderPrice, ...presentationWithoutPrice } = normalized.offering.presentation;
   const offering: FacilitatorDiscoveryAdmittedDraft["offering"] = {
     ...normalized.offering,
     origin: { kind: "standalone" },
     presentation: {
-      ...normalized.offering.presentation,
-      price: { kind: "on_request" },
+      ...presentationWithoutPrice,
       materialTerms,
     },
   };

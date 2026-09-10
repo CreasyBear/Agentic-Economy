@@ -405,7 +405,7 @@ export const capabilitySupplyTables = {
     presentation: v.object({
       label: v.string(),
       summary: v.string(),
-      price,
+      price: v.optional(price),
       materialTerms: v.array(
         v.object({ termId: v.string(), label: v.string(), value: v.string() }),
       ),

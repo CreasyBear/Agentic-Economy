@@ -17,13 +17,14 @@ import { fetchCoinbaseReferenceRate } from '@/modules/money/reference-rate'
 import { quoteManagedX402BuyerAud } from '@/modules/money/public'
 import { api, internal } from './_generated/api'
 import { action, type ActionCtx } from './_generated/server'
+import { reconcileReadyItems } from './capabilitySupplyShared'
 import { publicSearchReturns, searchArgs, publicDetailReturns, publicCompareReturns, toolRefArgs, compareArgs } from './capabilitySupplyToolQueries'
 import { bindWorkloadCronActionContext } from './workloadCron'
 
 const PAGE_LIMIT = 20
 const TIMEOUT_MS = 10_000
 const navigation = noToolNavigation(CURRENT_TOOL_PROJECTION_NAVIGATION)
-const unavailable = (reason: 'query_invalid' | 'source_unavailable'): ToolSearchResult => ({ kind: 'unavailable', schemaVersion: 'registry-tools:v1', reason, navigation })
+const unavailable = (reason: 'query_invalid' | 'source_unavailable'): ToolSearchResult => ({ kind: 'unavailable', schemaVersion: 'registry-tools:v3', reason, navigation })
 
 /** Use the SDK's discovery contracts; upstream offsets remain the continuation. */
 export async function fetchCatalogPage(input: ToolSearchInput): Promise<Readonly<{ items: readonly unknown[]; nextCursor?: string; partialResults?: boolean; limit: number }>> {
@@ -109,7 +110,7 @@ export const search = action({
       try {
         const admission = await admitFacilitatorDiscoveryItems([candidate])
         if (admission.admitted.length === 0) continue
-        const result = await authorized.runMutation(internal.facilitatorDiscovery.reconcile, { items: [...structuredClone(admission.admitted)], complete: false, deadlineAt: Date.now() + TIMEOUT_MS, workload })
+        const result = await authorized.runMutation(internal.facilitatorDiscovery.reconcile, { items: [...structuredClone(reconcileReadyItems(admission.admitted))], complete: false, deadlineAt: Date.now() + TIMEOUT_MS, workload })
         for (const ref of result.toolRefs) refs.add(ref)
       } catch {
         // Candidate failure may be isolated; revoked workload authority may not.
@@ -122,7 +123,7 @@ export const search = action({
       const detail = deserializeToolDetailResult(wire)
       return detail.kind === 'found' && matchesToolFilters(detail.tool, input.filters ?? {}) ? [detail.tool] : []
     })
-    return serializeToolSearchResult(await decorate(ctx, { kind: 'ok', schemaVersion: 'registry-tools:v1', query: input.query, items, ranking: [], pagination: { limit: page.limit, hasMore: page.nextCursor !== undefined, ...(page.nextCursor === undefined ? {} : { nextCursor: page.nextCursor }) }, ...(page.partialResults === undefined ? {} : { partialResults: page.partialResults }), navigation }))
+    return serializeToolSearchResult(await decorate(ctx, { kind: 'ok', schemaVersion: 'registry-tools:v3', query: input.query, items, ranking: [], pagination: { limit: page.limit, hasMore: page.nextCursor !== undefined, ...(page.nextCursor === undefined ? {} : { nextCursor: page.nextCursor }) }, ...(page.partialResults === undefined ? {} : { partialResults: page.partialResults }), navigation }))
   },
 })
 

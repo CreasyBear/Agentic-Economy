@@ -1,5 +1,6 @@
 import type { ConvexFixtureBackend } from './convex-fixtures'
 import { internal } from '../../convex/_generated/api'
+import { reconcileReadyItems } from '../../convex/capabilitySupplyShared'
 import { admitFacilitatorDiscoveryItems } from '@/modules/capability-supply/server'
 import timezoneFixture from '@/modules/capability-supply/internal/x402-bazaar-fixtures/timezone-payment-required-2026-08-19.json'
 
@@ -15,7 +16,7 @@ export async function admitDiscoveredToolFixture(backend: ConvexFixtureBackend, 
     source.contract.inputExamples = []
     draft = { ...draft, sourceImportJson: JSON.stringify(source) }
   }
-  const result = await backend.mutation(internal.facilitatorDiscovery.reconcile, { items: [draft], complete: false, deadlineAt: Date.now() + 60_000, workload })
+  const result = await backend.mutation(internal.facilitatorDiscovery.reconcile, { items: [...reconcileReadyItems([draft])], complete: false, deadlineAt: Date.now() + 60_000, workload })
   const toolRef = result.toolRefs[0]
   if (toolRef === undefined) throw new Error(`fixture_publication_failed:${JSON.stringify(result)}`)
   return { toolRef, draft, workload, paymentRequired: structuredClone(timezoneFixture.paymentRequired) }

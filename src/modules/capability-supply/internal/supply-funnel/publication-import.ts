@@ -60,7 +60,7 @@ function capabilityOfferingDraft(
     !isRecord(value.presentation) ||
     !boundedSourceText(value.presentation.label, 160) ||
     !boundedSourceText(value.presentation.summary, 2_000) ||
-    !isRecord(value.presentation.price) ||
+    (value.presentation.price !== undefined && !isRecord(value.presentation.price)) ||
     !Array.isArray(value.presentation.materialTerms) ||
     !isRecord(value.presentation.commercialRelationship) ||
     !Array.isArray(value.searchTerms) ||
@@ -182,6 +182,7 @@ function ownerPricingConfig(
 ): unknown {
   const price = offering.presentation.price;
   if (
+    price === undefined ||
     price.kind !== "fixed" ||
     price.amount.currency !== "AUD" ||
     price.amount.exponent !== 6

@@ -325,11 +325,6 @@ function offeringFor(input: PublishSupplyToolV2Input, candidate: SupplyToolCandi
     presentation: {
       label: input.presentation.name,
       summary: input.presentation.description,
-      price: input.pricing.kind === 'source_x402'
-        ? { kind: 'on_request' as const }
-        : { kind: 'fixed' as const, amount: input.pricing.kind === 'free'
-            ? { currency: 'AUD', units: '0', exponent: 6 }
-            : input.pricing.amount },
       materialTerms: [
         { termId: 'category', label: 'Category', value: input.presentation.category },
         ...(input.presentation.serviceArea === undefined ? [] : [{ termId: 'service-area', label: 'Service area', value: input.presentation.serviceArea }]),
@@ -359,17 +354,8 @@ function commercialFor(
   authority: CapabilityTransportAuthority,
 ) {
   const suffix = sourceRouteIdentity(input, candidate).slice(7, 31)
-  const sourceAmount = candidate.x402 === undefined
-    ? undefined
-    : { currency: 'USD', units: candidate.x402.amount, exponent: 6 }
   return {
-    offering: {
-      ...offeringFor(input, candidate),
-      presentation: {
-        ...offeringFor(input, candidate).presentation,
-        ...(sourceAmount === undefined ? {} : { price: { kind: 'fixed' as const, amount: sourceAmount } }),
-      },
-    },
+    offering: offeringFor(input, candidate),
     bindingId: `binding:provider:${suffix}`,
     authority,
     registrationEvidenceRefs: [input.expectedSourceDigest, input.candidateRef],

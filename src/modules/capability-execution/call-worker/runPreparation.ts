@@ -22,7 +22,6 @@ import {
   normalizePricingConfig,
   pricingConfigDecisionAmount,
   pricingConfigDigest,
-  readExactAmount,
 } from '@/modules/money/public'
 import {
   materializeRuntimePublishedTool,
@@ -493,18 +492,11 @@ export async function prepareCallRun(
     : sellerCanary?.funding.requestedSpend
   if (economicRail === 'brokered_x402' || economicRail === 'managed_testnet_canary') {
     if (pricingConfig.kind !== 'managed_x402'
-      || descriptor.price.kind !== 'on_request'
       || (economicRail === 'brokered_x402' && dispatch.quoteRef === undefined)) {
       return await refuseBeforeClaim(ctx, dispatch, 'operation_unsupported', false, 'Inspect this managed Operation to obtain a current Commitment before invoking it.')
     }
   } else {
-    const descriptorAmount = descriptor.price.kind === 'fixed'
-      ? readExactAmount(descriptor.price.amount)
-      : undefined
-    if (pricingConfig.kind !== 'fixed_aud'
-      || pricingAmount === undefined
-      || descriptorAmount === undefined
-      || compareExactAmounts(pricingAmount, descriptorAmount) !== 0) {
+    if (pricingConfig.kind !== 'fixed_aud' || pricingAmount === undefined) {
       return await refuseBeforeClaim(ctx, dispatch, 'price_changed', false, 'The published price changed; retry discovery.')
     }
   }

@@ -3,7 +3,7 @@ import type { StableHashValue } from '@/modules/common/stable-hash'
 import { canonicalAuthorityBasisMaterial } from '@/modules/action-execution/runtime'
 import type { AgentAccessPrincipal } from '@/modules/agent-access/agent-access'
 import type { CallPersistedAuthority } from '@/modules/capability-execution/convex'
-import { exactAmountSchema, type ExactAmount } from '@/modules/money/public'
+import { exactAmountSchema, pricingConfigDecisionAmount, type ExactAmount } from '@/modules/money/public'
 import {
   publishedToolIdentityDigest,
   type PublishedTool,
@@ -66,6 +66,7 @@ export function validateCallAuthority(input: Readonly<{
   try {
     const authorityExpiresAt = Date.parse(authority.expiresAt)
     const amount = exactAmountSchema.safeParse(authority.limits.amount)
+    const fixedPriceAmount = pricingConfigDecisionAmount(input.operation.pricingConfig)
     if (
       !amount.success
       || !Number.isFinite(authorityExpiresAt)
@@ -83,11 +84,11 @@ export function validateCallAuthority(input: Readonly<{
       || authority.grantDigest !== input.grant.policyDigest
       || authority.consequence !== input.descriptor.consequenceClass
       || authority.targetDigest !== publishedToolIdentityDigest(input.operation.identity)
-      || (input.descriptor.price.kind === 'fixed' && (
+      || (fixedPriceAmount !== undefined && (
         canonicalDigest(authority.limits as StableHashValue)
-          !== canonicalDigest({ amount: input.descriptor.price.amount } as StableHashValue)
+          !== canonicalDigest({ amount: fixedPriceAmount } as StableHashValue)
         || canonicalDigest(amount.data as StableHashValue)
-          !== canonicalDigest(input.descriptor.price.amount as StableHashValue)
+          !== canonicalDigest(fixedPriceAmount as StableHashValue)
       ))
     ) return undefined
     const basis = authority.acceptedBasis

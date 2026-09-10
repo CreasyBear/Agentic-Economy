@@ -1,5 +1,6 @@
 import aggregate from '@convex-dev/aggregate/convex.config'
 import agent from '@convex-dev/agent/convex.config'
+import migrations from '@convex-dev/migrations/convex.config'
 import { defineApp } from 'convex/server'
 import { v } from 'convex/values'
 import rateLimiter from '@convex-dev/rate-limiter/convex.config'
@@ -54,6 +55,7 @@ app.use(workpool, { name: 'stripeWebhookWorkpool' })
 app.use(workflow)
 app.use(rateLimiter)
 app.use(agent)
+app.use(migrations)
 app.use(aggregate, { name: 'ownerActivationByStage' })
 app.use(aggregate, { name: 'marketEvidence' })
 app.use(aggregate, { name: 'marketOperationEvidence' })

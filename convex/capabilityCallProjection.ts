@@ -9,6 +9,7 @@ import type {
 import type { RouteTransportObservation } from '@/modules/capability-supply/route-transport-runtime'
 import { transportObservationDigest } from '@/modules/capability-supply/public'
 import {
+  pricingConfigDecisionAmount,
   pricingConfigDigest,
   type ExactAmount,
   type MoneyAcceptedCallCharge,
@@ -603,22 +604,23 @@ export async function projectOuterResult(
   }
   if (outputValidation.valid && observation.outputJson !== undefined && settlement?.kind === 'settled' && settlement.outcome === 'released' && observation.releaseStarted) {
     const evidenceHash = observation.responseDigest ?? canonicalDigest(observation.outputJson)
-    const usage = money === undefined
-      ? descriptor.price.kind !== 'fixed'
+    const fixedPriceAmount = pricingConfigDecisionAmount(operation.pricingConfig)
+    const usage: Infer<typeof usageValue> | undefined = money === undefined
+      ? fixedPriceAmount === undefined
         ? undefined
         : {
             usageRef: `operation-usage:${dispatch.callRef}:${attemptRef}`,
             observedAt: Date.parse(recordedAt),
-            chargeState: descriptor.price.amount.units === '0'
+            chargeState: fixedPriceAmount.units === '0'
               ? 'free_tier' as const
               : 'paid' as const,
-            amount: descriptor.price.amount,
+            amount: fixedPriceAmount,
             priceDigest: pricingConfigDigest({
               version: 'pricing:v3',
               kind: 'fixed_aud',
               currency: 'AUD',
               exponent: 6,
-              amountUnits: descriptor.price.amount.units,
+              amountUnits: fixedPriceAmount.units,
             }),
           }
       : {
@@ -758,7 +760,7 @@ export async function projectSellerOnboardingCanaryResult(
     || dispatch.environment !== 'sandbox'
     || profile === undefined
     || profile.network !== 'eip155:84532'
-    || descriptor.price.kind !== 'on_request'
+    || pricingConfigDecisionAmount(operation.pricingConfig) !== undefined
   ) throw new Error('seller_canary_projection_identity_invalid')
 
   const evidenceHash = observation.responseDigest

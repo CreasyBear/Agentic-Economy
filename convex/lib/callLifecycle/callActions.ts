@@ -7,6 +7,7 @@ import type { AgentAccessPrincipal } from '@/modules/agent-access/agent-access'
 import { MARKET_TOOLS_CALL_SCOPE } from '@/modules/agent-access/contract'
 import { isBoundedJsonValue, type JsonValue } from '@/modules/capability-contract/public'
 import { isRecord } from '@/modules/common/is-record'
+import { pricingConfigDecisionAmount } from '@/modules/money/public'
 import {
   createCallApplication,
   type CallIdempotencyReservation,
@@ -496,7 +497,7 @@ export async function callHandler(
           },
         }
       },
-      evaluateAuthority: async ({ descriptor, toolRef, grant, callRef }) => {
+      evaluateAuthority: async ({ operation, descriptor, toolRef, grant, callRef }) => {
         const authorityExpiresAt = principal.authorityMode === 'spending_policy'
           ? grant.expiresAt
           : Math.min(Date.now() + 30_000, grant.expiresAt)
@@ -512,10 +513,11 @@ export async function callHandler(
           },
           expiresAt: new Date(authorityExpiresAt).toISOString(),
         }
+        const fixedPriceAmount = pricingConfigDecisionAmount(operation.pricingConfig)
         const freeRead = descriptor.consequenceClass === 'read_only'
           && descriptor.authorityRequirement === 'none'
-          && descriptor.price.kind === 'fixed'
-          && descriptor.price.amount.units === '0'
+          && fixedPriceAmount !== undefined
+          && fixedPriceAmount.units === '0'
         if (freeRead) return {
           kind: 'approved' as const,
           basis: { kind: 'approval_required' as const, authorityRef: `inspect-only:${toolRef}` },
@@ -528,7 +530,7 @@ export async function callHandler(
             toolRef,
             consequence: descriptor.consequenceClass,
             retryClass: descriptor.retryClass,
-            ...(descriptor.price.kind === 'fixed' ? { maximumSpend: descriptor.price.amount } : {}),
+            ...(fixedPriceAmount === undefined ? {} : { maximumSpend: fixedPriceAmount }),
             dataFields: descriptor.materialInputPointers,
           },
         }

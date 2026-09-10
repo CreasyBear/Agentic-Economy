@@ -537,15 +537,11 @@ type SandboxToolSpec = Readonly<{
   method: 'POST'
   pricingSummary: string
   /**
-   * What the publication itself displays. A managed_x402 Tool publishes
-   * `on_request` and carries the provider's atomic amount in `pricingConfig`;
-   * a fixed-AUD Tool publishes the amount directly.
+   * The publication no longer carries a display price of its own; every
+   * reader derives it from this pricing config (managed_x402 for the
+   * testnet Tool, fixed_aud for the reference Tool).
    */
-  presentationPrice:
-    | Readonly<{ kind: 'fixed'; amount: Readonly<{ currency: string; units: string; exponent: number }> }>
-    | Readonly<{ kind: 'on_request' }>
-  /** Omitted for fixed AUD supply, which the publish path derives for itself. */
-  pricingConfig?: Readonly<Record<string, JsonValue>>
+  pricingConfig: Readonly<Record<string, JsonValue>>
   offeringPrice: OfferingPrice
   materialTerms: readonly Readonly<{ termId: string; label: string; value: string }>[]
   commercialFixture: string
@@ -654,7 +650,13 @@ function sandboxReferenceToolSpec(endpointUrl: string): SandboxToolSpec {
     endpointUrl,
     method: 'POST',
     pricingSummary: SANDBOX_TOOL_PRICING_SUMMARY,
-    presentationPrice: { kind: 'fixed', amount: { ...SANDBOX_TOOL_PRICE_AMOUNT } },
+    pricingConfig: {
+      version: 'pricing:v3',
+      kind: 'fixed_aud',
+      currency: 'AUD',
+      exponent: 6,
+      amountUnits: SANDBOX_TOOL_PRICE_AMOUNT.units,
+    },
     offeringPrice: SANDBOX_TOOL_OFFERING_PRICE,
     materialTerms: [{
       termId: 'sandbox-fixture',
@@ -804,9 +806,8 @@ function sandboxTestnetToolSpec(endpointUrl: string, payTo: string): SandboxTool
     method: 'POST',
     pricingSummary: SANDBOX_TESTNET_PRICING_SUMMARY,
     // Managed x402: the buyer total is settled by a binding Quote in AUD, so
-    // the publication displays `on_request` and the provider's own atomic
-    // charge is carried by the pricing config below.
-    presentationPrice: { kind: 'on_request' },
+    // the publication displays `on_request` (derived from this pricing
+    // config) and the provider's own atomic charge is carried below.
     pricingConfig: {
       version: 'pricing:v3',
       kind: 'managed_x402',
@@ -1238,7 +1239,7 @@ async function createSandboxToolPublication(
     offeringId: sandboxToolOfferingId(spec),
     networkId: SANDBOX_TOOL_NETWORK_ID,
     origin,
-    presentation: { ...presentation, price: { ...spec.presentationPrice } },
+    presentation: { ...presentation },
     searchTerms: [...spec.searchTerms],
     registrationEvidenceRefs: [...evidenceRefs],
   }
@@ -1247,7 +1248,7 @@ async function createSandboxToolPublication(
     runtimeEnvironment: 'sandbox',
     source: sandboxToolPublicationSource(spec, presentation, evidenceRefs),
     sourceRevision: sandboxToolSourceRevision(spec),
-    ...(spec.pricingConfig === undefined ? {} : { pricingConfig: { ...spec.pricingConfig } }),
+    pricingConfig: { ...spec.pricingConfig },
     offering,
     // The x402 importer derives its own `x402-fetch:v2` binding from the
     // provider's payment terms; only the envelope Tool declares one here.
@@ -1311,7 +1312,7 @@ function sandboxToolPublicationSource(
       offering: {
         offeringId,
         networkId: SANDBOX_TOOL_NETWORK_ID,
-        presentation: { ...presentation, price: { ...spec.presentationPrice } },
+        presentation: { ...presentation },
         searchTerms: [...spec.searchTerms],
         registrationEvidenceRefs: [...evidenceRefs],
       },

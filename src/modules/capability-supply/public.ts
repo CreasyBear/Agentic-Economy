@@ -84,7 +84,7 @@ export function isAnonymousKeylessToolEligible(input: Readonly<{
   effects: readonly AnonymousKeylessToolEffect[]
 }>): boolean {
   if (!Array.isArray(input.effects)) return false
-  const hasExactZeroPrice = input.price.kind === 'fixed'
+  const hasExactZeroPrice = input.price?.kind === 'fixed'
     && exactAmountSchema.safeParse(input.price.amount).success
     && input.price.amount.units === '0'
   const hasNoConsequentialEffect = input.effects.every((effect) => (
@@ -355,6 +355,12 @@ export type {
   LiquidityOutcome,
   LiquidityZeroReason,
 } from './internal/liquidity'
+export {
+  availability,
+} from './internal/availability'
+export type {
+  CapabilityAvailabilityInput,
+} from './internal/availability'
 export type {
   PublishedTool,
   PublishedToolUsageObservation,
@@ -575,7 +581,7 @@ const offeringSchema = z.strictObject({
   presentation: z.strictObject({
     label: z.string().trim().min(1).max(160),
     summary: z.string().trim().min(1).max(2_000),
-    price: priceSchema,
+    price: priceSchema.optional(),
     materialTerms: z.array(z.strictObject({
       termId: identifier,
       label: z.string().trim().min(1).max(160),

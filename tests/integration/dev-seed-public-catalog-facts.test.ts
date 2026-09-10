@@ -22,6 +22,7 @@ import {
 } from '../../src/modules/agent-access/service-auth-envelope'
 import { withSourceWrite } from '../helpers/source-write-admission'
 import { observeCapabilityReadinessHandler } from '../../convex/capabilitySupplyProbes'
+import { displayPriceFromPricingConfig, normalizePricingConfig } from '@/modules/money/public'
 
 type SeedBackend = TestConvex<typeof schema>
 
@@ -563,7 +564,15 @@ async function readSandboxPriceFacts(
       .withIndex('by_businessId_and_status', (query) => query.eq('businessId', business._id).eq('status', 'active'))
       .unique()
     if (supply === null) throw new Error('sandbox capability offering missing')
-    const publicationPrice = supply.presentation.price
+    const publication = await ctx.db.query('capabilityPublications')
+      .withIndex('by_businessId_and_disposition', (query) => query
+        .eq('businessId', business._id)
+        .eq('disposition', 'current'))
+      .unique()
+    if (publication === null) throw new Error('sandbox publication missing')
+    const normalized = normalizePricingConfig(JSON.parse(publication.pricingConfigJson ?? 'null') as unknown)
+    if (normalized.kind === 'invalid') throw new Error('sandbox publication pricing config invalid')
+    const publicationPrice = displayPriceFromPricingConfig(normalized.config)
     return {
       publicationPrice: publicationPrice.kind === 'fixed' ? publicationPrice.amount : publicationPrice,
       revisionPrice: current?.price,

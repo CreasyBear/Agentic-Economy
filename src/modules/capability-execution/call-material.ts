@@ -310,6 +310,7 @@ function stablePricingConfig(config: PublishedTool['pricingConfig']): StableHash
 }
 
 function stablePrice(price: PublishedTool['identity']['price']): StableHashValue {
+  if (price === undefined) return { kind: 'absent' }
   return price.kind === 'fixed'
     ? { kind: 'fixed', amount: { ...price.amount } }
     : price.kind === 'range'

@@ -258,8 +258,9 @@ describe('current Tool Quote contract', () => {
 
   it('fails closed when price facts drift between the publication and offering', () => {
     const value = structuredClone(fixture().tool) as MutableTool
-    if (value.offering.presentation.price.kind !== 'fixed') throw new Error('test_fixed_price_missing')
-    value.offering.presentation.price.amount.units = '99'
+    const price = value.offering.presentation.price
+    if (price === undefined || price.kind !== 'fixed') throw new Error('test_fixed_price_missing')
+    price.amount.units = '99'
     expect(() => quote({ tool: value, toolRef: fixture().toolRef }))
       .toThrow('current_tool_not_exact')
   })

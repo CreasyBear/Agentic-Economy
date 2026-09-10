@@ -1,3 +1,4 @@
+import type { admitFacilitatorDiscoveryItems } from '@/modules/capability-supply/server'
 import type { PublicationLifecycle } from '@/modules/capability-supply/public'
 import { v, type Infer } from 'convex/values'
 
@@ -48,7 +49,7 @@ export const priceValue = v.union(
 export const presentationValue = v.object({
   label: v.string(),
   summary: v.string(),
-  price: priceValue,
+  price: v.optional(priceValue),
   materialTerms: v.array(
     v.object({ termId: v.string(), label: v.string(), value: v.string() }),
   ),
@@ -123,6 +124,30 @@ export function convexPublicationLifecycle(
   lifecycle: PublicationLifecycle,
 ): Infer<typeof publicationLifecycleValue> {
   return { state: lifecycle.state, reasons: [...lifecycle.reasons] }
+}
+
+type FacilitatorDiscoveryAdmittedItems =
+  Awaited<ReturnType<typeof admitFacilitatorDiscoveryItems>>['admitted']
+
+/**
+ * Admitted facilitator-discovery drafts carry a Zod-optional
+ * `offering.presentation.price` (`price?: X | undefined`), while the Convex
+ * validator's optional field excludes `undefined` from the value type
+ * (`Exclude<Infer<T>, undefined>`). Passing an item through untouched fails
+ * `exactOptionalPropertyTypes` whenever the price is absent, so drop the key
+ * entirely instead of carrying it as an explicit `undefined`.
+ */
+export function reconcileReadyItems(items: FacilitatorDiscoveryAdmittedItems) {
+  return items.map((item) => {
+    const { price, ...presentationRest } = item.offering.presentation
+    return {
+      ...item,
+      offering: {
+        ...item.offering,
+        presentation: price === undefined ? presentationRest : { ...presentationRest, price },
+      },
+    }
+  })
 }
 
 async function publishedBusiness(
