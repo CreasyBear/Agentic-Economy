@@ -13,7 +13,7 @@ vi.mock('@/components/ae/offerings/provider-workspace.functions', () => ({
 }))
 vi.mock('@/components/ae/offerings/AeProviderWorkspace', () => ({ AeProviderWorkspace: () => null }))
 vi.mock('@/components/ae/offerings/AeOwnerOfferings', () => ({ AeOwnerOfferingsList: () => null }))
-vi.mock('@/components/ae/layout/AeOperatorShell', () => ({ AeOperatorShell: () => null }))
+vi.mock('@/components/ae/layout/AeOperatorPage', () => ({ AeOperatorPage: () => null }))
 
 import { Route } from '@/routes/_operator/owner.offerings'
 import { Route as LegacyDetailRoute } from '@/routes/_operator/owner.offerings.$offeringRef'

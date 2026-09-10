@@ -28,7 +28,7 @@ test.describe('local auth boundary', () => {
     const skip = page.getByRole('link', { name: 'Skip to content' })
     await expect(skip).toBeFocused()
     await skip.press('Enter')
-    await expect(page.locator('#operator-main-content')).toBeFocused()
+    await expect(page.locator('#main-content')).toBeFocused()
 
     const compact = (page.viewportSize()?.width ?? 1440) < 768
     if (compact) {

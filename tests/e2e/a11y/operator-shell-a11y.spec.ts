@@ -9,7 +9,7 @@ test.describe('authenticated operator shell accessibility', () => {
     const skip = page.getByRole('link', { name: 'Skip to content' })
     await expect(skip).toBeFocused()
     await skip.press('Enter')
-    await expect(page.locator('#operator-main-content')).toBeFocused()
+    await expect(page.locator('#main-content')).toBeFocused()
 
     const documentWidth = await page.evaluate(() => document.documentElement.scrollWidth)
     const viewportWidth = await page.evaluate(() => window.innerWidth)

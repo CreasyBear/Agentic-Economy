@@ -32,7 +32,7 @@ vi.mock('@/modules/capability-supply/supply-funnel.functions', () => ({
   startOwnerSupplySourceConnectionServer: vi.fn(),
 }))
 vi.mock('@/components/ae/offerings/provider-workspace.functions', () => ({ readProviderWorkspaceIdentityDetailServer: mocks.readIdentity }))
-vi.mock('@/components/ae/layout/AeOperatorShell', () => ({ AeOperatorShell: ({ children }: { children: unknown }) => children }))
+vi.mock('@/components/ae/layout/AeOperatorPage', () => ({ AeOperatorPage: ({ children }: { children: unknown }) => children }))
 vi.mock('@/components/ae/supply/AeSupplySourceNativeStart', async () => {
   const React = await import('react')
   return {

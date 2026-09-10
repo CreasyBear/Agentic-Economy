@@ -5,7 +5,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { AeFactList } from '@/components/ae/data/AeFactList'
 import { AeEmptyState } from '@/components/ae/feedback/AeEmptyState'
-import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
+import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
 import { AeSection } from '@/components/ae/layout/AeSection'
 import { operatorRouteOptions } from '@/lib/operator/route-options'
 import { loadDeveloperDiscoveryRouteServer } from '@/modules/discovery/developer-discovery-route'
@@ -30,7 +30,7 @@ function DevelopersDiscoveryRoute() {
   const readback = Route.useLoaderData()
 
   return (
-    <AeOperatorShell
+    <AeOperatorPage
       operatorRole="developer"
       title={readback.copy.title}
       description={readback.copy.description}
@@ -137,7 +137,7 @@ function DevelopersDiscoveryRoute() {
           />
         </AeSection>
       </div>
-    </AeOperatorShell>
+    </AeOperatorPage>
   )
 }
 

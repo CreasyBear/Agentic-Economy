@@ -24,8 +24,8 @@ vi.mock('@tanstack/react-router', () => ({
   useRouter: () => ({ invalidate: routeStateMocks.invalidate }),
 }))
 
-vi.mock('@/components/ae/layout/AeOperatorShell', () => ({
-  AeOperatorShell: ({
+vi.mock('@/components/ae/layout/AeOperatorPage', () => ({
+  AeOperatorPage: ({
     children,
     currentPath,
     title,
@@ -42,7 +42,7 @@ vi.mock('@/components/ae/layout/AeOperatorShell', () => ({
   useOperatorShellChrome: () => routeStateMocks.parentShell,
 }))
 
-import { OperatorRouteError } from '@/components/ae/layout/AeOperatorRouteStates'
+import { OperatorRouteError } from '@/components/ae/layout/AeRouteStates'
 
 afterEach(() => {
   cleanup()

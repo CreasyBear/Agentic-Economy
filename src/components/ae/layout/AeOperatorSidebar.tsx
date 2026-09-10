@@ -22,7 +22,7 @@ import {
   useSidebar,
 } from '@/components/ui/sidebar'
 
-import { AECON_MARK_SRC, aeconMarkClassName } from '@/content/brand-assets'
+import { useOperatorSidebarChrome } from '@/components/ae/layout/AeOperatorPage'
 import { isLocalE2EAuthBypassEnabled } from '@/lib/client/local-e2e-auth'
 import {
   formatOperatorNavBadge,
@@ -44,9 +44,15 @@ type AeOperatorSidebarProps = {
   currentPath: string
   navBadges?: OperatorNavBadges
   suppressSurfaceNavigation?: boolean
+  className?: string
 }
 
 const EMPTY_NAV_BADGES: OperatorNavBadges = {}
+
+function useResolvedNavBadges(navBadges: OperatorNavBadges | undefined): OperatorNavBadges {
+  const sidebarChrome = useOperatorSidebarChrome()
+  return navBadges ?? sidebarChrome?.navBadges ?? EMPTY_NAV_BADGES
+}
 const OPERATOR_NAV_BUTTON_CLASS = 'rounded-none border-s-2 border-transparent px-intra data-[active=true]:border-info data-[active=true]:bg-sidebar-accent/50 data-[active=true]:font-semibold hover:bg-sidebar-accent/50'
 
 function AuthenticatedOwnerAccount({ isCollapsed }: { isCollapsed: boolean }) {
@@ -90,7 +96,8 @@ function LocalPreviewOwnerAccount({ isCollapsed }: { isCollapsed: boolean }) {
 }
 
 
-export function AeOperatorSidebar({ operatorRole, operatorContext, currentPath, navBadges = EMPTY_NAV_BADGES, suppressSurfaceNavigation = false }: AeOperatorSidebarProps) {
+export function AeOperatorSidebar({ operatorRole, operatorContext, currentPath, navBadges: navBadgesProp, suppressSurfaceNavigation = false, className }: AeOperatorSidebarProps) {
+  const navBadges = useResolvedNavBadges(navBadgesProp)
   const { state, isMobile, open, openMobile, setOpenMobile } = useSidebar()
   const isCollapsed = !isMobile && state === 'collapsed'
   const expanded = isMobile ? openMobile : open
@@ -106,29 +113,21 @@ export function AeOperatorSidebar({ operatorRole, operatorContext, currentPath, 
   }
 
   return (
-    <Sidebar variant="sidebar" collapsible="icon" role="complementary" aria-label="Workspace navigation">
+    <Sidebar variant="sidebar" collapsible="icon" role="complementary" aria-label="Workspace navigation" className={className}>
       <nav id="operator-sidebar-navigation" aria-label="Operator navigation" className="flex h-full min-h-0 flex-1 flex-col">
         <SidebarHeader className="px-related pt-intra">
+          {/* The frame header owns the brand mark; the rail names the mode only. */}
           <SidebarMenu>
             <SidebarMenuItem>
-              <SidebarMenuButton asChild size="lg" tooltip="Agentic Economy workspace" className="h-14 rounded-none border-b border-sidebar-border px-1 hover:bg-transparent active:bg-transparent">
+              <SidebarMenuButton asChild size="lg" tooltip={roleLabel[operatorRole]} className="h-14 rounded-none border-b border-sidebar-border px-1 hover:bg-transparent">
                 <Link
                   to={roleHomeHref[operatorRole]}
                   aria-label={operatorRole === 'owner' ? 'Tools home' : `${roleLabel[operatorRole]} home`}
                   onClick={closeMobileNavigation}
                 >
-                  <img
-                    src={AECON_MARK_SRC}
-                    alt=""
-                    aria-hidden="true"
-                    className={aeconMarkClassName.light}
-                  />
-                  <span className={isCollapsed ? 'sr-only' : 'grid min-w-0 gap-1'}>
-                    <span className="truncate font-sans text-sm font-semibold tracking-tight text-sidebar-foreground">AECON</span>
-                    <span className="flex items-center gap-2 truncate font-sans text-xs font-medium text-muted-foreground">
-                      <SiteMarker tone="info" visible />
-                      {roleLabel[operatorRole]}
-                    </span>
+                  <span className={isCollapsed ? 'sr-only' : 'flex items-center gap-2 truncate font-sans text-xs font-medium text-muted-foreground'}>
+                    <SiteMarker tone="info" visible />
+                    {roleLabel[operatorRole]}
                   </span>
                 </Link>
               </SidebarMenuButton>

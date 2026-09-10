@@ -6,7 +6,7 @@ import { Suspense, useCallback, useEffect, useRef, useState, type ComponentProps
 
 import { AeEmptyState } from '@/components/ae/feedback/AeEmptyState'
 import { AeConfirmDialog } from '@/components/ae/feedback/AeConfirmDialog'
-import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
+import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
 import { AeSection } from '@/components/ae/layout/AeSection'
 import { AeWorkspaceGeneral } from '@/components/ae/settings/AeWorkspaceGeneral'
 import { AeOwnerProviderConnections } from '@/components/ae/supply/AeOwnerProviderConnections'
@@ -69,7 +69,7 @@ export function AeProviderWorkspace(props: WorkspaceProps) {
 
   const actions = props.inventory.kind === 'available' ? <AddToolAction /> : undefined
   return (
-    <AeOperatorShell
+    <AeOperatorPage
       operatorRole="owner"
       title="Tools"
       description="Publish the exact tools agents can inspect and call."
@@ -93,7 +93,7 @@ export function AeProviderWorkspace(props: WorkspaceProps) {
       ) : (
         <AvailableWorkspace {...props} inventory={props.inventory} refresh={refresh} />
       )}
-    </AeOperatorShell>
+    </AeOperatorPage>
   )
 }
 

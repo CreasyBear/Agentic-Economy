@@ -14,10 +14,8 @@ test.describe('owner Operations compatibility', () => {
   test('legacy supplier and settings entrances replace into Operations', async ({ page }) => {
     for (const [source, hash] of [
       ['/owner/supply#earnings', '#earnings'],
-      ['/owner/settings/workspace', '#supplier-identity'],
       ['/owner/settings/connections', '#supplier-connections'],
       ['/owner/settings/payouts', '#earnings'],
-      ['/owner/status?slug=foreign-supplier', ''],
     ] as const) {
       await page.goto(source)
       await expect.poll(() => new URL(page.url()).pathname).toBe('/owner/offerings')

@@ -4,7 +4,7 @@ import { useServerFn } from '@tanstack/react-start'
 
 import { AeOwnerCredit } from '@/components/ae/console/AeOwnerCredit'
 import type { AccountFundingPort } from '@/components/ae/console/AeCreditTopUpPanel'
-import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
+import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
 import { AeSettingsStack } from '@/components/ae/layout/AeSection'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
@@ -98,7 +98,7 @@ function OwnerCreditRoute() {
   }, [load, localE2E])
 
   return (
-    <AeOperatorShell
+    <AeOperatorPage
       operatorRole="owner"
       title="Funding"
       description="Fund the Account in AUD, then control each Agent's spending through its spending policy."
@@ -170,7 +170,7 @@ function OwnerCreditRoute() {
               })}
         />
       </AeSettingsStack>
-    </AeOperatorShell>
+    </AeOperatorPage>
   )
 }
 

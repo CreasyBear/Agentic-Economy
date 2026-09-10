@@ -1,7 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { createServerFn } from '@tanstack/react-start'
 
-import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
+import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
 import { AeAdminReadbackPanel } from '@/components/ae/readback/AeAdminReadbackPanel'
 import { operatorRouteOptions } from '@/lib/operator/route-options'
 import { readAdminAuditEventsThroughSource } from '@/modules/security/admin-readback.functions'
@@ -28,7 +28,7 @@ function AdminAuditEventsRoute() {
   const readback = Route.useLoaderData()
 
   return (
-    <AeOperatorShell
+    <AeOperatorPage
       operatorRole="admin"
       title="Activity log"
       description="Inspect admin and recovery transitions with redacted payloads after source-owned membership is resolved."
@@ -40,6 +40,6 @@ function AdminAuditEventsRoute() {
         description="Denied reads return no private event rows and preserve the HTTP decision for the operator."
         readback={readback}
       />
-    </AeOperatorShell>
+    </AeOperatorPage>
   )
 }

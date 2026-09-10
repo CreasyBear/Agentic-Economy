@@ -85,8 +85,6 @@ describe('operator navigation', () => {
     expect(ownerWorkspaceOwnerForPath('/owner/offerings/new')).toBe('operations')
     expect(ownerWorkspaceOwnerForPath('/owner/supply')).toBe('operations')
     expect(ownerWorkspaceOwnerForPath('/owner/supply/offering:one')).toBe('operations')
-    expect(ownerWorkspaceOwnerForPath('/owner/status')).toBe('operations')
-    expect(ownerWorkspaceOwnerForPath('/owner/settings/workspace')).toBe('operations')
     expect(ownerWorkspaceOwnerForPath('/owner/settings/connections')).toBe('operations')
     expect(ownerWorkspaceOwnerForPath('/owner/settings/payouts')).toBe('operations')
     expect(ownerWorkspaceOwnerForPath('/owner/settings')).toBe('account')

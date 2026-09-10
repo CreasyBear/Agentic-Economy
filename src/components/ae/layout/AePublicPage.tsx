@@ -1,7 +1,7 @@
 import { type ReactNode } from 'react'
 
 import { AePageHeader } from '@/components/ae/layout/AePageHeader'
-import { AePublicShell } from '@/components/ae/layout/AePublicShell'
+import { AeSiteFooter } from '@/components/ae/website/AeSiteFooter'
 
 type AePublicPageHeader = {
   eyebrow?: string
@@ -29,7 +29,7 @@ type AePublicWorkspacePageProps = AePublicPageHeader & {
 }
 
 /**
- * The public page seam. Routes import this, not `AePublicShell`.
+ * The public page seam. Routes render this inside `AeAppShell`.
  *
  * - `editorial`: home, doors, catalog, listings, auth, receipts — own their
  *   hero or record intro inside `children`.
@@ -42,23 +42,38 @@ export function AePublicPage(
   if (props.kind === 'workspace') {
     const { children, kind: _kind, ...header } = props
     return (
-      <AePublicShell mode="workspace">
+      <main
+        id="main-content"
+        data-shell-mode="workspace"
+        tabIndex={-1}
+        className="flex min-h-0 flex-1 flex-col overflow-hidden"
+      >
         <AePageHeader {...header} variant="workspace" />
         {children}
-      </AePublicShell>
+      </main>
     )
   }
 
-  if (props.kind === 'tool' || props.kind === 'document') {
-    const { children, kind: _kind, introRole, ...header } = props
-    const intro = <AePageHeader {...header} />
-    return (
-      <AePublicShell>
-        {introRole === undefined ? intro : <div role={introRole}>{intro}</div>}
-        {children}
-      </AePublicShell>
-    )
-  }
+  const composition = (() => {
+    if (props.kind === 'tool' || props.kind === 'document') {
+      const { children, kind: _kind, introRole, ...header } = props
+      const intro = <AePageHeader {...header} />
+      return (
+        <>
+          {introRole === undefined ? intro : <div role={introRole}>{intro}</div>}
+          {children}
+        </>
+      )
+    }
+    return props.children
+  })()
 
-  return <AePublicShell>{props.children}</AePublicShell>
+  return (
+    <div className="flex min-h-0 flex-1 flex-col">
+      <main id="main-content" data-shell-mode="page" tabIndex={-1} className="flex-1">
+        {composition}
+      </main>
+      <AeSiteFooter />
+    </div>
+  )
 }

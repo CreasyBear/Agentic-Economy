@@ -13,10 +13,10 @@ vi.mock('@/components/ae/offerings/provider-workspace.functions', () => ({
   readProviderWorkspaceIdentityDetailServer: vi.fn(),
   readProviderToolStatusServer: vi.fn(),
 }))
-vi.mock('@/components/ae/layout/AeOperatorShell', async () => {
+vi.mock('@/components/ae/layout/AeOperatorPage', async () => {
   const React = await import('react')
   return {
-    AeOperatorShell: ({ children }: { children: ReactNode }) => React.createElement('main', null, children),
+    AeOperatorPage: ({ children }: { children: ReactNode }) => React.createElement('main', null, children),
   }
 })
 vi.mock('@/components/ae/supply/AeProviderToolDetail', async () => {

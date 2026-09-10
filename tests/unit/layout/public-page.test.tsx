@@ -1,17 +1,12 @@
 /**
  * @vitest-environment jsdom
  */
-import { render, screen } from '@testing-library/react'
-import type { ReactNode } from 'react'
-import { describe, expect, it, vi } from 'vitest'
-
-vi.mock('@/components/ae/layout/AePublicShell', () => ({
-  AePublicShell: ({ children, mode = 'page' }: { children: ReactNode; mode?: string }) => (
-    <main data-shell-mode={mode}>{children}</main>
-  ),
-}))
+import { cleanup, render, screen, within } from '@testing-library/react'
+import { afterEach, describe, expect, it } from 'vitest'
 
 import { AePublicPage } from '@/components/ae/layout/AePublicPage'
+
+afterEach(cleanup)
 
 describe('AePublicPage', () => {
   it('lets editorial pages own their intro', () => {
@@ -37,9 +32,10 @@ describe('AePublicPage', () => {
       </AePublicPage>,
     )
 
-    expect(screen.getByText('Legal')).toBeTruthy()
-    expect(screen.getByRole('heading', { level: 1, name: 'Privacy' })).toBeTruthy()
-    expect(screen.getByText('Document body')).toBeTruthy()
+    const main = within(screen.getByRole('main'))
+    expect(main.getByText('Legal')).toBeTruthy()
+    expect(main.getByRole('heading', { level: 1, name: 'Privacy' })).toBeTruthy()
+    expect(main.getByText('Document body')).toBeTruthy()
   })
 
   it('promotes a workspace to the outer shell instead of nesting it in a document page', () => {

@@ -7,6 +7,7 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { Toaster } from 'sonner'
 
 
+import { AeAppShell } from '@/components/ae/layout/AeAppShell'
 import { RouteProgressBar } from '@/components/ae/layout/AeRouteProgressBar'
 import { AePageState } from '@/components/ae/layout/AePageState'
 import { Button } from '@/components/ui/button'
@@ -56,7 +57,9 @@ export const Route = createRootRoute({
 function RootComponent() {
   return (
     <RootDocument>
-      <Outlet />
+      <AeAppShell>
+        <Outlet />
+      </AeAppShell>
     </RootDocument>
   )
 }

@@ -51,8 +51,11 @@ vi.mock('@/components/ae/command-panel', () => ({
   AeCommandPanel: () => null,
 }))
 
-import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
-import { OperatorRouteError, OperatorRouteNotFound, OperatorRoutePending } from '@/components/ae/layout/AeOperatorRouteStates'
+import { AeAppShell } from '@/components/ae/layout/AeAppShell'
+import { AeOperatorPage, OperatorChromeProvider } from '@/components/ae/layout/AeOperatorPage'
+import { AeOperatorSidebar } from '@/components/ae/layout/AeOperatorSidebar'
+import { SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar'
+import { OperatorRouteError, OperatorRouteNotFound, OperatorRoutePending } from '@/components/ae/layout/AeRouteStates'
 import { AECON_MARK_SRC } from '@/content/brand-assets'
 import { ownerSettingsChrome } from '@/lib/operator/settings-navigation'
 import {
@@ -77,8 +80,7 @@ describe('operator shell nested chrome', () => {
     renderAt(<FocusTransitionHarness />, '/owner/offerings')
 
     const calls = await screen.findByRole('link', { name: 'Open Calls' })
-    const main = screen.getByTestId('operator-content').parentElement
-    if (!(main instanceof HTMLElement)) throw new Error('operator_main_missing')
+    const main = screen.getByTestId('operator-content')
     const titlesAtFocus: string[] = []
     main.addEventListener('focus', () => {
       titlesAtFocus.push(screen.getByRole('heading', { level: 1 }).textContent ?? '')
@@ -122,14 +124,20 @@ describe('operator shell nested chrome', () => {
     expect(AgentAccessRoute.options.notFoundComponent).toBe(OperatorRouteNotFound)
 
     renderAt(
-      <AeOperatorShell
-        operatorRole="owner"
-        title="Operator workspace"
-        description="Loading the latest operator view."
-        currentPath="/agent-access/unknown"
-      >
-        <OperatorRouteNotFound />
-      </AeOperatorShell>,
+      <AeAppShell>
+        <OperatorChromeProvider
+          sidebar={<AeOperatorSidebar operatorRole="owner" currentPath="/agent-access/unknown" />}
+        >
+          <AeOperatorPage
+            operatorRole="owner"
+            title="Operator workspace"
+            description="Loading the latest operator view."
+            currentPath="/agent-access/unknown"
+          >
+            <OperatorRouteNotFound />
+          </AeOperatorPage>
+        </OperatorChromeProvider>
+      </AeAppShell>,
       '/agent-access/unknown',
     )
 
@@ -144,44 +152,51 @@ describe('operator shell nested chrome', () => {
     expect(recovery.getAttribute('href')).toBe('/agent-access')
   })
 
-  it('puts AECON on the operator mark and drops the nested settings record icon', async () => {
+  it('names the mode on the rail without repeating the brand mark, and drops the nested settings record icon', async () => {
     renderAt(
-      <AeOperatorShell
-        operatorRole="owner"
-        title="Workspace"
-        description="Loading your latest marketplace activity."
-        currentPath="/owner/settings"
-      >
-        <AeOperatorShell
-          operatorRole="owner"
-          title={ownerSettingsChrome.title}
-          description={ownerSettingsChrome.description}
-          currentPath="/owner/settings"
+      <SidebarProvider>
+        <OperatorChromeProvider
+          sidebar={<AeOperatorSidebar operatorRole="owner" currentPath="/owner/settings" />}
         >
-          <div>Settings body</div>
-        </AeOperatorShell>
-      </AeOperatorShell>,
+          <AeOperatorPage
+            operatorRole="owner"
+            title="Workspace"
+            description="Loading your latest marketplace activity."
+            currentPath="/owner/settings"
+          >
+            <AeOperatorPage
+              operatorRole="owner"
+              title={ownerSettingsChrome.title}
+              description={ownerSettingsChrome.description}
+              currentPath="/owner/settings"
+            >
+              <div>Settings body</div>
+            </AeOperatorPage>
+          </AeOperatorPage>
+        </OperatorChromeProvider>
+      </SidebarProvider>,
       '/owner/settings',
     )
 
     const heading = await screen.findByRole('heading', { level: 1, name: 'Account & security' })
     expect(heading.parentElement?.previousElementSibling).toBeNull()
-    expect(screen.getByText('AECON')).toBeTruthy()
-    expect(document.querySelector(`img[src="${AECON_MARK_SRC}"]`)).toBeTruthy()
+    // The frame header owns the brand mark and wordmark; the rail names the mode only.
+    expect(screen.queryByText('AECON')).toBeNull()
+    expect(document.querySelectorAll(`img[src="${AECON_MARK_SRC}"]`).length).toBe(0)
     expect(screen.getByRole('link', { name: 'Tools home' })).toBeTruthy()
     expect(screen.getAllByText('Buy and supply').length).toBeGreaterThan(0)
   })
 
   it('drops the record-header icon on operator lists', async () => {
     renderAt(
-      <AeOperatorShell
+      <AeOperatorPage
         operatorRole="owner"
         title="Tools"
         description="Publish the exact tools agents can inspect and call."
         currentPath="/owner/offerings"
       >
         <div>Tools body</div>
-      </AeOperatorShell>,
+      </AeOperatorPage>,
       '/owner/offerings',
     )
 
@@ -191,15 +206,15 @@ describe('operator shell nested chrome', () => {
 
   it('keeps parent chrome while a nested pending state loads', async () => {
     renderAt(
-      <AeOperatorShell
+      <AeOperatorPage
         operatorRole="owner"
         title="Tools"
         description="Publish the exact tools agents can inspect and call."
         currentPath="/owner/offerings"
       >
         <OperatorRoutePending />
-      </AeOperatorShell>,
-      '/owner/settings/workspace',
+      </AeOperatorPage>,
+      '/owner/settings/connections',
     )
 
     expect(await screen.findByRole('heading', { level: 1, name: 'Tools' })).toBeTruthy()
@@ -209,14 +224,14 @@ describe('operator shell nested chrome', () => {
 
   it('keeps parent chrome when a nested route fails to load', async () => {
     renderAt(
-      <AeOperatorShell
+      <AeOperatorPage
         operatorRole="owner"
         title="Tools"
         description="Publish the exact tools agents can inspect and call."
         currentPath="/owner/offerings"
       >
         <OperatorRouteError error={new Error('unavailable')} />
-      </AeOperatorShell>,
+      </AeOperatorPage>,
       '/owner/settings/connections',
     )
 
@@ -229,14 +244,14 @@ describe('operator shell nested chrome', () => {
 
   it('keeps a safe correlation reference visible on route failure', async () => {
     renderAt(
-      <AeOperatorShell
+      <AeOperatorPage
         operatorRole="owner"
         title="Settings"
         description="Account settings."
         currentPath="/owner/settings"
       >
         <OperatorRouteError error={{ correlationRef: 'corr_operator_route_123' }} />
-      </AeOperatorShell>,
+      </AeOperatorPage>,
       '/owner/settings',
     )
 
@@ -379,8 +394,8 @@ describe('owner account identity', () => {
     const account = await screen.findByRole('group', { name: 'Signed in as ada@supply.example' })
     expect(within(account).getByText('ada@supply.example').classList.contains('sr-only')).toBe(false)
     expect(within(account).getByRole('button', { name: 'Account menu' })).toBeTruthy()
-    expect(shellMocks.userButton).toHaveBeenCalledOnce()
-    expect(shellMocks.userButton.mock.calls[0]?.[0]).toMatchObject({
+    expect(shellMocks.userButton).toHaveBeenCalled()
+    expect(shellMocks.userButton.mock.calls.at(-1)?.[0]).toMatchObject({
       appearance: {
         elements: {
           avatarBox: 'size-6',
@@ -404,7 +419,7 @@ describe('owner account identity', () => {
   })
 
   it('falls back to the human name only when the primary email is absent', async () => {
-    shellMocks.useUser.mockReturnValueOnce({
+    const noEmailUser = {
       isLoaded: true,
       isSignedIn: true,
       user: {
@@ -413,7 +428,13 @@ describe('owner account identity', () => {
         primaryEmailAddress: null,
       },
       sessionId: 'session_private_ada',
-    })
+    }
+    // The sidebar bridge settles one render after mount (its navBadges arrive
+    // from the route's root AeOperatorPage via an effect), so the account
+    // component renders more than once; queue the override for each pass.
+    shellMocks.useUser.mockReturnValueOnce(noEmailUser)
+    shellMocks.useUser.mockReturnValueOnce(noEmailUser)
+    shellMocks.useUser.mockReturnValueOnce(noEmailUser)
 
     renderOperatorShell('owner', '/owner/offerings')
 
@@ -462,25 +483,31 @@ function OperatorShellHarness() {
   const navBadges = useMemo(() => ({ '/admin/audit-events': version === 'one' ? 2 : 5 }), [version])
 
   return (
-    <AeOperatorShell
-      operatorRole="admin"
-      title="Outer shell"
-      description="Outer shell description"
-      currentPath="/admin"
-    >
-      <button type="button" onClick={() => setVersion('two')}>Update chrome</button>
-      <AeOperatorShell
-        operatorRole="admin"
-        title="Nested shell"
-        description="Nested shell description"
-        currentPath="/admin/audit-events"
-        actions={actions}
-        breadcrumbs={breadcrumbs}
-        navBadges={navBadges}
+    <SidebarProvider>
+      <OperatorChromeProvider
+        sidebar={<AeOperatorSidebar operatorRole="admin" currentPath="/admin" />}
       >
-        <div>Nested content</div>
-      </AeOperatorShell>
-    </AeOperatorShell>
+        <AeOperatorPage
+          operatorRole="admin"
+          title="Outer shell"
+          description="Outer shell description"
+          currentPath="/admin"
+        >
+          <button type="button" onClick={() => setVersion('two')}>Update chrome</button>
+          <AeOperatorPage
+            operatorRole="admin"
+            title="Nested shell"
+            description="Nested shell description"
+            currentPath="/admin/audit-events"
+            actions={actions}
+            breadcrumbs={breadcrumbs}
+            navBadges={navBadges}
+          >
+            <div>Nested content</div>
+          </AeOperatorPage>
+        </AeOperatorPage>
+      </OperatorChromeProvider>
+    </SidebarProvider>
   )
 }
 
@@ -489,36 +516,49 @@ function FocusTransitionHarness() {
   const calls = pathname === '/activity'
 
   return (
-    <AeOperatorShell
-      operatorRole="owner"
-      title="Outer workspace"
-      description="Outer workspace."
-      currentPath="/owner/offerings"
-    >
-      <Link to="/activity">Open Calls</Link>
-      <Link to="/owner/offerings" hash="earnings">Open earnings</Link>
-      <AeOperatorShell
+    <OperatorChromeProvider>
+      <AeOperatorPage
         operatorRole="owner"
-        title={calls ? 'Calls' : 'Tools'}
-        description={calls ? 'Review calls.' : 'Manage Tools.'}
-        currentPath={pathname}
+        title="Outer workspace"
+        description="Outer workspace."
+        currentPath="/owner/offerings"
       >
-        <div>{calls ? 'Calls content' : 'Tools content'}</div>
-      </AeOperatorShell>
-    </AeOperatorShell>
+        <Link to="/activity">Open Calls</Link>
+        <Link to="/owner/offerings" hash="earnings">Open earnings</Link>
+        <AeOperatorPage
+          operatorRole="owner"
+          title={calls ? 'Calls' : 'Tools'}
+          description={calls ? 'Review calls.' : 'Manage Tools.'}
+          currentPath={pathname}
+        >
+          <div>{calls ? 'Calls content' : 'Tools content'}</div>
+        </AeOperatorPage>
+      </AeOperatorPage>
+    </OperatorChromeProvider>
   )
 }
 
 function renderOperatorShell(operatorRole: 'owner' | 'admin', currentPath: string) {
   return renderAt(
-    <AeOperatorShell
-      operatorRole={operatorRole}
-      title="Operator workspace"
-      description="Operator workspace content."
-      currentPath={currentPath}
-    >
-      <div>Workspace body</div>
-    </AeOperatorShell>,
+    <SidebarProvider>
+      <OperatorChromeProvider
+        sidebar={(
+          <>
+            <SidebarTrigger aria-label="Open operator navigation" className="md:hidden" />
+            <AeOperatorSidebar operatorRole={operatorRole} currentPath={currentPath} />
+          </>
+        )}
+      >
+        <AeOperatorPage
+          operatorRole={operatorRole}
+          title="Operator workspace"
+          description="Operator workspace content."
+          currentPath={currentPath}
+        >
+          <div>Workspace body</div>
+        </AeOperatorPage>
+      </OperatorChromeProvider>
+    </SidebarProvider>,
     currentPath,
   )
 }
@@ -533,7 +573,6 @@ function renderAt(ui: ReactElement, pathname: string) {
     createRoute({ getParentRoute: () => rootRoute, path: '/owner/offerings/new' }),
     createRoute({ getParentRoute: () => rootRoute, path: '/owner/offerings' }),
     createRoute({ getParentRoute: () => rootRoute, path: '/owner/settings' }),
-    createRoute({ getParentRoute: () => rootRoute, path: '/owner/settings/workspace' }),
     createRoute({ getParentRoute: () => rootRoute, path: '/owner/settings/connections' }),
     createRoute({ getParentRoute: () => rootRoute, path: '/owner/supply' }),
     createRoute({ getParentRoute: () => rootRoute, path: '/activity' }),

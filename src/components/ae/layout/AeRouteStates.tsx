@@ -1,14 +1,16 @@
 import { ArrowLeftIcon } from 'lucide-react'
 import { Link, useLocation, useRouter } from '@tanstack/react-router'
 import { SignOutButton } from '@clerk/tanstack-react-start'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 
-import { AeOperatorShell, useOperatorShellChrome } from '@/components/ae/layout/AeOperatorShell'
 import { AeCopyReference } from '@/components/ae/data/AeCopyReference'
+import { AeNotFound } from '@/components/ae/layout/AeNotFound'
+import { AeOperatorPage, useOperatorShellChrome } from '@/components/ae/layout/AeOperatorPage'
+import { AePageSkeleton, AePageState } from '@/components/ae/layout/AePageState'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
-import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
 import { Skeleton } from '@/components/ui/skeleton'
+import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
 import { isLocalE2EAuthBypassEnabled } from '@/lib/client/local-e2e-auth'
 import { operatorRoleForPath, roleHomeHref } from '@/lib/operator/navigation'
 import {
@@ -17,11 +19,24 @@ import {
 } from '@/lib/operator/operator-context'
 
 /**
- * Shared pendingComponent/errorComponent for every /owner, /admin, and
- * /developers route (see src/lib/operator/route-options.ts). Rendered
- * INSIDE the operator shell so a slow or failed load never drops the
- * sidebar/breadcrumb chrome.
+ * One pending/error/not-found family shared by public routes (defaults in
+ * src/router.tsx) and operator routes (src/lib/operator/route-options.ts).
+ * The Operator* exports render INSIDE the operator shell so a slow or failed
+ * load never drops the sidebar/breadcrumb chrome; they wrap in AeOperatorPage
+ * only when not already nested under one (detected via
+ * useOperatorShellChrome). A plain pathname check can't stand in for that
+ * flag: operator-owned paths like /agent-access/* don't match
+ * operatorRoleForPath, so the two families stay separate thin exports over
+ * shared helpers rather than one auto-detecting component.
  */
+
+export function RoutePending({
+  title = 'Loading page',
+  description = 'Loading the latest available information.',
+}: { title?: string; description?: string } = {}) {
+  return <AePageSkeleton title={title} description={description} />
+}
+
 export function OperatorRoutePending() {
   const { pathname } = useLocation()
   const parentShell = useOperatorShellChrome()
@@ -38,40 +53,88 @@ export function OperatorRoutePending() {
   if (parentShell !== null) return body
 
   return (
-    <AeOperatorShell
+    <AeOperatorPage
       operatorRole={operatorRoleForPath(pathname) ?? 'owner'}
       title="Loading workspace"
       description="Fetching the latest marketplace and account details."
       currentPath={pathname}
+      pending
     >
       {body}
-    </AeOperatorShell>
+    </AeOperatorPage>
   )
 }
 
-export function OperatorRouteError({ error }: { error: unknown }) {
+function RouteErrorState({ error, operator }: { error: unknown; operator: boolean }) {
   const { pathname } = useLocation()
   const router = useRouter()
+  const retryLock = useRef(false)
   const [retryPending, setRetryPending] = useState(false)
   const parentShell = useOperatorShellChrome()
-  const operatorRole = operatorRoleForPath(pathname) ?? 'owner'
-  const correlationRef = operatorErrorCorrelationRef(error)
+  const correlationRef = errorCorrelationRef(error)
 
   if (isOperatorSurfaceForbidden(error)) {
-    if (parentShell !== null) return <OperatorForbiddenBody />
+    if (!operator || parentShell !== null) return <OperatorForbiddenBody />
     return (
-      <AeOperatorShell
-        operatorRole={operatorRole}
+      <AeOperatorPage
+        operatorRole={operatorRoleForPath(pathname) ?? 'owner'}
         title="You don’t have access"
         description="This signed-in account cannot open the requested workspace."
         currentPath={pathname}
         suppressSurfaceNavigation
       >
         <OperatorForbiddenBody />
-      </AeOperatorShell>
+      </AeOperatorPage>
     )
   }
 
+  if (!operator) {
+    const actions = (
+      <div className="grid w-full gap-related">
+        <div className="flex w-full flex-col gap-intra sm:flex-row">
+          <Button
+            type="button"
+            className="min-h-touch w-full sm:w-auto"
+            disabled={retryPending}
+            aria-busy={retryPending || undefined}
+            onClick={() => {
+              if (retryLock.current) return
+              retryLock.current = true
+              setRetryPending(true)
+              void router.invalidate()
+                .catch((cause) => captureClientExceptionOnClient(cause))
+                .finally(() => {
+                  retryLock.current = false
+                  setRetryPending(false)
+                })
+            }}
+          >
+            {retryPending ? 'Trying again…' : 'Try again'}
+          </Button>
+          <Button asChild variant="secondary" className="min-h-touch w-full sm:w-auto">
+            <Link to="/status">Check system status</Link>
+          </Button>
+        </div>
+        {correlationRef === undefined ? null : (
+          <div className="grid gap-1 text-sm text-muted-foreground">
+            <span>Support reference</span>
+            <AeCopyReference label="support reference" value={correlationRef} />
+          </div>
+        )}
+      </div>
+    )
+
+    return (
+      <AePageState
+        state="unavailable"
+        title="Couldn’t load this page"
+        description="The current source could not be reached. No newer state is claimed."
+        action={actions}
+      />
+    )
+  }
+
+  const operatorRole = operatorRoleForPath(pathname) ?? 'owner'
   const body = (
     <Alert variant="destructive">
       <AlertTitle>Couldn’t load this page</AlertTitle>
@@ -107,24 +170,32 @@ export function OperatorRouteError({ error }: { error: unknown }) {
   if (parentShell !== null) return body
 
   return (
-    <AeOperatorShell
+    <AeOperatorPage
       operatorRole={operatorRole}
       title="Couldn’t load this page"
       description="Try again, then check system status if the page still does not load."
       currentPath={pathname}
     >
       {body}
-    </AeOperatorShell>
+    </AeOperatorPage>
   )
 }
 
-function operatorErrorCorrelationRef(error: unknown): string | undefined {
+export function RouteError({ error }: { error: unknown }) {
+  return <RouteErrorState error={error} operator={false} />
+}
+
+export function OperatorRouteError({ error }: { error: unknown }) {
+  return <RouteErrorState error={error} operator={true} />
+}
+
+export function errorCorrelationRef(error: unknown): string | undefined {
   if (typeof error !== 'object' || error === null) return undefined
   for (const key of ['correlationRef', 'correlationId'] as const) {
     const value = Reflect.get(error, key)
-    if (typeof value === 'string' && value.trim().length > 0 && value.length <= 200) {
-      return value
-    }
+    if (typeof value !== 'string') continue
+    const bounded = value.trim()
+    if (bounded.length > 0 && bounded.length <= 200) return bounded
   }
   return undefined
 }
@@ -158,11 +229,15 @@ function OperatorForbiddenBody() {
   )
 }
 
-function isOperatorSurfaceForbidden(error: unknown): boolean {
+export function isOperatorSurfaceForbidden(error: unknown): boolean {
   if (error instanceof OperatorSurfaceForbiddenError) return true
   if (typeof error !== 'object' || error === null) return false
   return Reflect.get(error, 'code') === 'operator_surface_forbidden'
     || Reflect.get(error, 'message') === OPERATOR_SURFACE_FORBIDDEN_MESSAGE
+}
+
+export function RouteNotFound() {
+  return <AeNotFound />
 }
 
 export function OperatorRouteNotFound() {
@@ -173,7 +248,7 @@ export function OperatorRouteNotFound() {
   const recoveryLabel = isAssistantAccessPath ? 'Back to Agents' : 'Back to workspace'
 
   return (
-    <AeOperatorShell
+    <AeOperatorPage
       operatorRole={operatorRole}
       title="Page not found"
       description="This page may have moved, or your account may not have access."
@@ -185,6 +260,6 @@ export function OperatorRouteNotFound() {
           {recoveryLabel}
         </Link>
       </Button>
-    </AeOperatorShell>
+    </AeOperatorPage>
   )
 }

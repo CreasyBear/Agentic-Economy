@@ -35,10 +35,6 @@ vi.mock('@/lib/client/local-e2e-auth', () => ({
   isLocalE2EAuthBypassEnabled: () => false,
 }))
 
-vi.mock('@/components/ae/layout/AePublicShell', () => ({
-  AePublicShell: ({ children }: { children: ReactNode }) => <main>{children}</main>,
-}))
-
 import '@/routes/sign-up.$'
 
 afterEach(() => {

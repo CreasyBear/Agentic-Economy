@@ -13,7 +13,6 @@ describe('owner account settings', () => {
 
   it('does not claim supplier compatibility routes as account settings', () => {
     expect(ownerWorkspaceOwnerForPath('/owner/settings')).toBe('account')
-    expect(ownerWorkspaceOwnerForPath('/owner/settings/workspace')).toBe('operations')
     expect(ownerWorkspaceOwnerForPath('/owner/settings/connections')).toBe('operations')
     expect(ownerWorkspaceOwnerForPath('/owner/settings/payouts')).toBe('operations')
     expect(ownerWorkspaceOwnerForPath('/owner/settings/developers')).toBe('agent-setup')

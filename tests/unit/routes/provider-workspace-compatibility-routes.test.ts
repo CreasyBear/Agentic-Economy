@@ -1,9 +1,7 @@
 import { isRedirect } from '@tanstack/react-router'
 import { describe, expect, it } from 'vitest'
 
-import { Route as StatusRoute } from '@/routes/_operator/owner.status'
 import { Route as AccountSettingsRoute } from '@/routes/_operator/owner.settings'
-import { Route as WorkspaceRoute } from '@/routes/_operator/owner.settings.workspace'
 import { Route as ConnectionsRoute } from '@/routes/_operator/owner.settings.connections'
 import { Route as PayoutsRoute } from '@/routes/_operator/owner.settings.payouts'
 import { Route as DevelopersRoute } from '@/routes/_operator/owner.settings.developers'
@@ -20,8 +18,6 @@ describe('Operations compatibility routes', () => {
   })
 
   it.each([
-    [StatusRoute, '/owner/offerings', undefined],
-    [WorkspaceRoute, '/owner/offerings', 'supplier-identity'],
     [ConnectionsRoute, '/owner/offerings', 'supplier-connections'],
     [PayoutsRoute, '/owner/offerings', 'earnings'],
     [DevelopersRoute, '/for-agents', undefined],

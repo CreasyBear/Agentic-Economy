@@ -1,7 +1,7 @@
 import { Link, createFileRoute, redirect } from '@tanstack/react-router'
 import { z } from 'zod'
 
-import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
+import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
 import { AeSettingsStack } from '@/components/ae/layout/AeSection'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
@@ -63,7 +63,7 @@ function OwnerMcpOAuthCallbackRoute() {
   const connected = result.kind === 'connected' || result.kind === 'replayed'
   const statusUnavailable = result.kind === 'refused' && result.code === 'source_unavailable'
   return (
-    <AeOperatorShell
+    <AeOperatorPage
       operatorRole="owner"
       title="Service connection"
       description="Return to Add service after the source confirms authentication."
@@ -89,6 +89,6 @@ function OwnerMcpOAuthCallbackRoute() {
           </AlertDescription>
         </Alert>
       </AeSettingsStack>
-    </AeOperatorShell>
+    </AeOperatorPage>
   )
 }

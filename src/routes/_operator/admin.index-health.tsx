@@ -3,7 +3,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import { createServerFn, useServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 
-import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
+import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
 import { AeSection } from '@/components/ae/layout/AeSection'
 import { AeAdminReadbackPanel } from '@/components/ae/readback/AeAdminReadbackPanel'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -67,7 +67,7 @@ function AdminIndexHealthRoute() {
     : undefined
 
   return (
-    <AeOperatorShell
+    <AeOperatorPage
       operatorRole="admin"
       title="Catalog health"
       description="Check catalog and projection readbacks before public discovery files are allowed to ship."
@@ -84,7 +84,7 @@ function AdminIndexHealthRoute() {
           readback={readback}
         />
       </div>
-    </AeOperatorShell>
+    </AeOperatorPage>
   )
 }
 

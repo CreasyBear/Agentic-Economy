@@ -3,7 +3,7 @@ import { useServerFn } from '@tanstack/react-start'
 import { useReverification } from '@clerk/tanstack-react-start'
 import { useState } from 'react'
 
-import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
+import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
 import {
   readProviderWorkspaceIdentityDetailServer,
   readProviderToolStatusServer,
@@ -96,7 +96,7 @@ function OwnerSupplyDetailRoute() {
   const onWithdraw = maintenanceAction('withdraw', withdraw)
   const onRepublish = maintenanceAction('republish', republish)
   return (
-    <AeOperatorShell
+    <AeOperatorPage
       operatorRole="owner"
       title={name}
       description="Current publication, source health, delivery and Qualified Use."
@@ -115,13 +115,13 @@ function OwnerSupplyDetailRoute() {
         {...(onWithdraw === undefined ? {} : { onWithdraw })}
         {...(onRepublish === undefined ? {} : { onRepublish })}
       />
-    </AeOperatorShell>
+    </AeOperatorPage>
   )
 }
 
 function UnavailableTool({ offeringRef, unavailable }: Readonly<{ offeringRef: string; unavailable: boolean }>) {
   return (
-    <AeOperatorShell
+    <AeOperatorPage
       operatorRole="owner"
       title="Tool status"
       description="AE could not confirm this Tool."
@@ -140,7 +140,7 @@ function UnavailableTool({ offeringRef, unavailable }: Readonly<{ offeringRef: s
           <Link to="/owner/offerings">Return to Tools</Link>
         </Button>
       </div>
-    </AeOperatorShell>
+    </AeOperatorPage>
   )
 }
 

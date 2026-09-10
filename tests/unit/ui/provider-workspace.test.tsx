@@ -41,7 +41,7 @@ vi.mock('@/components/ae/offerings/provider-identity.functions', () => ({ ensure
 vi.mock('@/lib/server/owner-workspace.functions', () => ({ renameProviderDisplayNameServer: tokens.rename }))
 vi.mock('@/modules/capability-supply/supply-funnel.functions', () => ({ readOwnerProviderEarningsServer: tokens.earnings }))
 vi.mock('@/modules/money/money.functions', () => ({ readOwnerConnectReadinessServer: tokens.connect }))
-vi.mock('@/components/ae/layout/AeOperatorShell', () => ({ AeOperatorShell: ({ children }: { children: ReactNode }) => <main>{children}</main> }))
+vi.mock('@/components/ae/layout/AeOperatorPage', () => ({ AeOperatorPage: ({ children }: { children: ReactNode }) => <main>{children}</main> }))
 vi.mock('@/components/ae/offerings/AeOwnerOfferings', () => ({ AeOwnerOfferingsList: () => <div data-testid="tools-list" /> }))
 vi.mock('@/components/ae/supply/AeOwnerProviderConnections', () => ({ AeOwnerProviderConnections: (props: unknown) => { rendered.connections(props); return <div data-testid="connection-controls" /> } }))
 vi.mock('@/components/ae/supply/AeSupplyEarningsCard', () => ({ AeSupplyEarningsCard: () => <div data-testid="earnings-controls" /> }))

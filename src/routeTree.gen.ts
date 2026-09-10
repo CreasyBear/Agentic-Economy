@@ -77,7 +77,6 @@ import { Route as ApiChatAnonymousRouteImport } from './routes/api.chat.anonymou
 import { Route as ApiBusinessesSearchRouteImport } from './routes/api.businesses.search'
 import { Route as ApiBusinessesSlugRouteImport } from './routes/api.businesses.$slug'
 import { Route as OperatorOwnerSupplyRouteImport } from './routes/_operator/owner.supply'
-import { Route as OperatorOwnerStatusRouteImport } from './routes/_operator/owner.status'
 import { Route as OperatorOwnerSettingsRouteImport } from './routes/_operator/owner.settings'
 import { Route as OperatorOwnerOfferingsRouteImport } from './routes/_operator/owner.offerings'
 import { Route as OperatorOwnerCreditRouteImport } from './routes/_operator/owner.credit'
@@ -110,7 +109,6 @@ import { Route as ApiV1AccountBalanceRouteImport } from './routes/api.v1.account
 import { Route as ApiV1AccountActivityRouteImport } from './routes/api.v1.account.activity'
 import { Route as ApiStripeWebhookAccountsV2RouteImport } from './routes/api.stripe.webhook.accounts-v2'
 import { Route as OperatorOwnerSupplyOfferingRefRouteImport } from './routes/_operator/owner.supply.$offeringRef'
-import { Route as OperatorOwnerSettingsWorkspaceRouteImport } from './routes/_operator/owner.settings.workspace'
 import { Route as OperatorOwnerSettingsPayoutsRouteImport } from './routes/_operator/owner.settings.payouts'
 import { Route as OperatorOwnerSettingsDevelopersRouteImport } from './routes/_operator/owner.settings.developers'
 import { Route as OperatorOwnerSettingsConnectionsRouteImport } from './routes/_operator/owner.settings.connections'
@@ -479,11 +477,6 @@ const OperatorOwnerSupplyRoute = OperatorOwnerSupplyRouteImport.update({
   path: '/owner/supply',
   getParentRoute: () => OperatorRoute,
 } as any)
-const OperatorOwnerStatusRoute = OperatorOwnerStatusRouteImport.update({
-  id: '/owner/status',
-  path: '/owner/status',
-  getParentRoute: () => OperatorRoute,
-} as any)
 const OperatorOwnerSettingsRoute = OperatorOwnerSettingsRouteImport.update({
   id: '/owner/settings',
   path: '/owner/settings',
@@ -652,12 +645,6 @@ const OperatorOwnerSupplyOfferingRefRoute =
     id: '/$offeringRef',
     path: '/$offeringRef',
     getParentRoute: () => OperatorOwnerSupplyRoute,
-  } as any)
-const OperatorOwnerSettingsWorkspaceRoute =
-  OperatorOwnerSettingsWorkspaceRouteImport.update({
-    id: '/workspace',
-    path: '/workspace',
-    getParentRoute: () => OperatorOwnerSettingsRoute,
   } as any)
 const OperatorOwnerSettingsPayoutsRoute =
   OperatorOwnerSettingsPayoutsRouteImport.update({
@@ -832,7 +819,6 @@ export interface FileRoutesByFullPath {
   '/owner/credit': typeof OperatorOwnerCreditRoute
   '/owner/offerings': typeof OperatorOwnerOfferingsRouteWithChildren
   '/owner/settings': typeof OperatorOwnerSettingsRouteWithChildren
-  '/owner/status': typeof OperatorOwnerStatusRoute
   '/owner/supply': typeof OperatorOwnerSupplyRouteWithChildren
   '/api/businesses/$slug': typeof ApiBusinessesSlugRoute
   '/api/businesses/search': typeof ApiBusinessesSearchRoute
@@ -859,7 +845,6 @@ export interface FileRoutesByFullPath {
   '/owner/settings/connections': typeof OperatorOwnerSettingsConnectionsRoute
   '/owner/settings/developers': typeof OperatorOwnerSettingsDevelopersRoute
   '/owner/settings/payouts': typeof OperatorOwnerSettingsPayoutsRoute
-  '/owner/settings/workspace': typeof OperatorOwnerSettingsWorkspaceRoute
   '/owner/supply/$offeringRef': typeof OperatorOwnerSupplyOfferingRefRoute
   '/api/stripe/webhook/accounts-v2': typeof ApiStripeWebhookAccountsV2Route
   '/api/v1/account/activity': typeof ApiV1AccountActivityRoute
@@ -955,7 +940,6 @@ export interface FileRoutesByTo {
   '/owner/credit': typeof OperatorOwnerCreditRoute
   '/owner/offerings': typeof OperatorOwnerOfferingsRouteWithChildren
   '/owner/settings': typeof OperatorOwnerSettingsRouteWithChildren
-  '/owner/status': typeof OperatorOwnerStatusRoute
   '/owner/supply': typeof OperatorOwnerSupplyRouteWithChildren
   '/api/businesses/$slug': typeof ApiBusinessesSlugRoute
   '/api/businesses/search': typeof ApiBusinessesSearchRoute
@@ -982,7 +966,6 @@ export interface FileRoutesByTo {
   '/owner/settings/connections': typeof OperatorOwnerSettingsConnectionsRoute
   '/owner/settings/developers': typeof OperatorOwnerSettingsDevelopersRoute
   '/owner/settings/payouts': typeof OperatorOwnerSettingsPayoutsRoute
-  '/owner/settings/workspace': typeof OperatorOwnerSettingsWorkspaceRoute
   '/owner/supply/$offeringRef': typeof OperatorOwnerSupplyOfferingRefRoute
   '/api/stripe/webhook/accounts-v2': typeof ApiStripeWebhookAccountsV2Route
   '/api/v1/account/activity': typeof ApiV1AccountActivityRoute
@@ -1080,7 +1063,6 @@ export interface FileRoutesById {
   '/_operator/owner/credit': typeof OperatorOwnerCreditRoute
   '/_operator/owner/offerings': typeof OperatorOwnerOfferingsRouteWithChildren
   '/_operator/owner/settings': typeof OperatorOwnerSettingsRouteWithChildren
-  '/_operator/owner/status': typeof OperatorOwnerStatusRoute
   '/_operator/owner/supply': typeof OperatorOwnerSupplyRouteWithChildren
   '/api/businesses/$slug': typeof ApiBusinessesSlugRoute
   '/api/businesses/search': typeof ApiBusinessesSearchRoute
@@ -1107,7 +1089,6 @@ export interface FileRoutesById {
   '/_operator/owner/settings/connections': typeof OperatorOwnerSettingsConnectionsRoute
   '/_operator/owner/settings/developers': typeof OperatorOwnerSettingsDevelopersRoute
   '/_operator/owner/settings/payouts': typeof OperatorOwnerSettingsPayoutsRoute
-  '/_operator/owner/settings/workspace': typeof OperatorOwnerSettingsWorkspaceRoute
   '/_operator/owner/supply/$offeringRef': typeof OperatorOwnerSupplyOfferingRefRoute
   '/api/stripe/webhook/accounts-v2': typeof ApiStripeWebhookAccountsV2Route
   '/api/v1/account/activity': typeof ApiV1AccountActivityRoute
@@ -1205,7 +1186,6 @@ export interface FileRouteTypes {
     | '/owner/credit'
     | '/owner/offerings'
     | '/owner/settings'
-    | '/owner/status'
     | '/owner/supply'
     | '/api/businesses/$slug'
     | '/api/businesses/search'
@@ -1232,7 +1212,6 @@ export interface FileRouteTypes {
     | '/owner/settings/connections'
     | '/owner/settings/developers'
     | '/owner/settings/payouts'
-    | '/owner/settings/workspace'
     | '/owner/supply/$offeringRef'
     | '/api/stripe/webhook/accounts-v2'
     | '/api/v1/account/activity'
@@ -1328,7 +1307,6 @@ export interface FileRouteTypes {
     | '/owner/credit'
     | '/owner/offerings'
     | '/owner/settings'
-    | '/owner/status'
     | '/owner/supply'
     | '/api/businesses/$slug'
     | '/api/businesses/search'
@@ -1355,7 +1333,6 @@ export interface FileRouteTypes {
     | '/owner/settings/connections'
     | '/owner/settings/developers'
     | '/owner/settings/payouts'
-    | '/owner/settings/workspace'
     | '/owner/supply/$offeringRef'
     | '/api/stripe/webhook/accounts-v2'
     | '/api/v1/account/activity'
@@ -1452,7 +1429,6 @@ export interface FileRouteTypes {
     | '/_operator/owner/credit'
     | '/_operator/owner/offerings'
     | '/_operator/owner/settings'
-    | '/_operator/owner/status'
     | '/_operator/owner/supply'
     | '/api/businesses/$slug'
     | '/api/businesses/search'
@@ -1479,7 +1455,6 @@ export interface FileRouteTypes {
     | '/_operator/owner/settings/connections'
     | '/_operator/owner/settings/developers'
     | '/_operator/owner/settings/payouts'
-    | '/_operator/owner/settings/workspace'
     | '/_operator/owner/supply/$offeringRef'
     | '/api/stripe/webhook/accounts-v2'
     | '/api/v1/account/activity'
@@ -2086,13 +2061,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OperatorOwnerSupplyRouteImport
       parentRoute: typeof OperatorRoute
     }
-    '/_operator/owner/status': {
-      id: '/_operator/owner/status'
-      path: '/owner/status'
-      fullPath: '/owner/status'
-      preLoaderRoute: typeof OperatorOwnerStatusRouteImport
-      parentRoute: typeof OperatorRoute
-    }
     '/_operator/owner/settings': {
       id: '/_operator/owner/settings'
       path: '/owner/settings'
@@ -2317,13 +2285,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OperatorOwnerSupplyOfferingRefRouteImport
       parentRoute: typeof OperatorOwnerSupplyRoute
     }
-    '/_operator/owner/settings/workspace': {
-      id: '/_operator/owner/settings/workspace'
-      path: '/workspace'
-      fullPath: '/owner/settings/workspace'
-      preLoaderRoute: typeof OperatorOwnerSettingsWorkspaceRouteImport
-      parentRoute: typeof OperatorOwnerSettingsRoute
-    }
     '/_operator/owner/settings/payouts': {
       id: '/_operator/owner/settings/payouts'
       path: '/payouts'
@@ -2509,14 +2470,12 @@ interface OperatorOwnerSettingsRouteChildren {
   OperatorOwnerSettingsConnectionsRoute: typeof OperatorOwnerSettingsConnectionsRoute
   OperatorOwnerSettingsDevelopersRoute: typeof OperatorOwnerSettingsDevelopersRoute
   OperatorOwnerSettingsPayoutsRoute: typeof OperatorOwnerSettingsPayoutsRoute
-  OperatorOwnerSettingsWorkspaceRoute: typeof OperatorOwnerSettingsWorkspaceRoute
 }
 
 const OperatorOwnerSettingsRouteChildren: OperatorOwnerSettingsRouteChildren = {
   OperatorOwnerSettingsConnectionsRoute: OperatorOwnerSettingsConnectionsRoute,
   OperatorOwnerSettingsDevelopersRoute: OperatorOwnerSettingsDevelopersRoute,
   OperatorOwnerSettingsPayoutsRoute: OperatorOwnerSettingsPayoutsRoute,
-  OperatorOwnerSettingsWorkspaceRoute: OperatorOwnerSettingsWorkspaceRoute,
 }
 
 const OperatorOwnerSettingsRouteWithChildren =
@@ -2550,7 +2509,6 @@ interface OperatorRouteChildren {
   OperatorOwnerCreditRoute: typeof OperatorOwnerCreditRoute
   OperatorOwnerOfferingsRoute: typeof OperatorOwnerOfferingsRouteWithChildren
   OperatorOwnerSettingsRoute: typeof OperatorOwnerSettingsRouteWithChildren
-  OperatorOwnerStatusRoute: typeof OperatorOwnerStatusRoute
   OperatorOwnerSupplyRoute: typeof OperatorOwnerSupplyRouteWithChildren
 }
 
@@ -2563,7 +2521,6 @@ const OperatorRouteChildren: OperatorRouteChildren = {
   OperatorOwnerCreditRoute: OperatorOwnerCreditRoute,
   OperatorOwnerOfferingsRoute: OperatorOwnerOfferingsRouteWithChildren,
   OperatorOwnerSettingsRoute: OperatorOwnerSettingsRouteWithChildren,
-  OperatorOwnerStatusRoute: OperatorOwnerStatusRoute,
   OperatorOwnerSupplyRoute: OperatorOwnerSupplyRouteWithChildren,
 }
 

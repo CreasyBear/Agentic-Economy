@@ -4,7 +4,7 @@ import type { ColumnDef } from '@tanstack/react-table'
 
 import { AeEmptyState } from '@/components/ae/feedback/AeEmptyState'
 import { AeDegradedState } from '@/components/ae/feedback/AeDegradedState'
-import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
+import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
 import { AeRecordSheet } from '@/components/ae/layout/AeRecordSheet'
 import { AeSection } from '@/components/ae/layout/AeSection'
 import {
@@ -52,7 +52,7 @@ function ActivityRoute() {
   const [retryPending, setRetryPending] = useState(false)
   if (result.kind === 'unavailable') {
     return (
-      <AeOperatorShell
+      <AeOperatorPage
         operatorRole="owner"
         title="Calls"
         description="Your agent’s calls in task language, with the amount, outcome, and durable receipt together."
@@ -80,7 +80,7 @@ function ActivityRoute() {
             </Button>
           )}
         />
-      </AeOperatorShell>
+      </AeOperatorPage>
     )
   }
   return <ActivityAvailable
@@ -151,7 +151,7 @@ function ActivityAvailable({
   )
 
   return (
-    <AeOperatorShell
+    <AeOperatorPage
       operatorRole="owner"
       title="Calls"
       description="Your agent’s calls in task language, with the amount, outcome, and durable receipt together."
@@ -254,7 +254,7 @@ function ActivityAvailable({
           )}
         </>
       )}
-    </AeOperatorShell>
+    </AeOperatorPage>
   )
 }
 

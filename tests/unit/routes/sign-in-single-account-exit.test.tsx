@@ -2,7 +2,7 @@
  * @vitest-environment jsdom
  */
 import { cleanup, render, screen } from '@testing-library/react'
-import type { ComponentType, ReactNode } from 'react'
+import type { ComponentType } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import '../../setup/jsdom-platform'
 
@@ -36,10 +36,6 @@ vi.mock('@clerk/tanstack-react-start', () => ({
 
 vi.mock('@/lib/client/local-e2e-auth', () => ({
   isLocalE2EAuthBypassEnabled: () => false,
-}))
-
-vi.mock('@/components/ae/layout/AePublicShell', () => ({
-  AePublicShell: ({ children }: { children: ReactNode }) => <main>{children}</main>,
 }))
 
 import '@/routes/sign-in.$'

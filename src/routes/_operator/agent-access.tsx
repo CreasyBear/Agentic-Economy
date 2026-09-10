@@ -8,7 +8,7 @@ import { AeAgentOperatorConsole } from '@/components/ae/console/AeAgentOperatorC
 import { AeAgentSecurityHistory } from '@/components/ae/agent-access/AeAgentSecurityHistory'
 import { AeAssistantInstallFunnel } from '@/components/ae/console/AeAssistantInstallFunnel'
 import { AeCopyReference } from '@/components/ae/data/AeCopyReference'
-import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
+import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
 import { AeSection } from '@/components/ae/layout/AeSection'
 import { isLocalE2EAuthBypassEnabled } from '@/lib/client/local-e2e-auth'
 import { readCanonicalBaseUrlServer } from '@/lib/server/canonical-url.functions'
@@ -289,7 +289,7 @@ function AgentAccessHome() {
     }
   }
   return (
-    <AeOperatorShell
+    <AeOperatorPage
       operatorRole="owner"
       title="Agents"
       description="Connect independent agents, review their access, and manage credential history."
@@ -389,7 +389,7 @@ function AgentAccessHome() {
           {loadingMore ? 'Loading more agents…' : 'Load more agents'}
         </Button>
       )}
-    </AeOperatorShell>
+    </AeOperatorPage>
   )
 }
 

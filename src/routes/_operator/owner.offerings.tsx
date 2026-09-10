@@ -9,7 +9,7 @@ import {
   readProviderWorkspacePublicStatusServer,
   readOwnerProviderOffboardingServer,
 } from '@/components/ae/offerings/provider-workspace.functions'
-import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
+import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
 import { operatorRouteOptions } from '@/lib/operator/route-options'
 import { parseOwnerToolsCompatibilitySearch } from '@/lib/operator/supply-compatibility'
 
@@ -44,13 +44,13 @@ function OwnerOfferingsRoute() {
 
 function OwnerOfferingsPending() {
   return (
-    <AeOperatorShell
+    <AeOperatorPage
       operatorRole="owner"
       title="Tools"
       description="Publish the exact tools agents can inspect and call."
       currentPath="/owner/offerings"
     >
       <AeOwnerOfferingsList offerings={[]} loading />
-    </AeOperatorShell>
+    </AeOperatorPage>
   )
 }

@@ -39,10 +39,6 @@ vi.mock('@tanstack/react-start', () => ({
   createServerFn: () => ({ handler: (fn: unknown) => fn, validator: () => ({ handler: (fn: unknown) => fn }) }),
 }))
 
-vi.mock('@/components/ae/layout/AePublicShell', () => ({
-  AePublicShell: ({ children }: { children: ReactNode }) => <div>{children}</div>,
-}))
-
 import { AeHomeLanding } from '@/components/ae/home/AeHomeLanding'
 
 describe('retained landing component', () => {

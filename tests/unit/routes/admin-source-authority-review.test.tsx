@@ -27,8 +27,8 @@ vi.mock('@tanstack/react-start', () => ({
   createServerFn: () => ({ handler: () => Symbol('admin-readback-server') }),
   useServerFn: () => mocks.review,
 }))
-vi.mock('@/components/ae/layout/AeOperatorShell', () => ({
-  AeOperatorShell: ({ children }: { children: ReactNode }) => <main>{children}</main>,
+vi.mock('@/components/ae/layout/AeOperatorPage', () => ({
+  AeOperatorPage: ({ children }: { children: ReactNode }) => <main>{children}</main>,
 }))
 vi.mock('@/components/ae/readback/AeAdminReadbackPanel', () => ({
   AeAdminReadbackPanel: () => <section>Catalog readback</section>,

@@ -5,7 +5,7 @@ import { useReverification } from '@clerk/tanstack-react-start'
 import { isReverificationCancelledError } from '@clerk/tanstack-react-start/errors'
 import { z } from 'zod'
 
-import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
+import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
 import { AeSettingsStack } from '@/components/ae/layout/AeSection'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
@@ -285,7 +285,7 @@ function McpOAuthHandoff({ attempt, onCancel, cancelBusy, cancelError }: Readonl
 
 function Shell({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <AeOperatorShell
+    <AeOperatorPage
       operatorRole="owner"
       title="Connect service"
       description="Connect the credential required by this Provider source."
@@ -293,7 +293,7 @@ function Shell({ children }: Readonly<{ children: React.ReactNode }>) {
       breadcrumbs={[{ label: 'Tools', href: '/owner/offerings' }, { label: 'Add service', href: '/owner/offerings/new' }, { label: 'Connect service' }]}
     >
       <AeSettingsStack>{children}</AeSettingsStack>
-    </AeOperatorShell>
+    </AeOperatorPage>
   )
 }
 

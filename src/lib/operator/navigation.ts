@@ -213,10 +213,8 @@ export type OwnerWorkspaceOwner = 'operations' | 'account' | 'agent-setup' | und
 export function ownerWorkspaceOwnerForPath(pathname: string): OwnerWorkspaceOwner {
   if (pathname === '/owner/offerings' || pathname.startsWith('/owner/offerings/')) return 'operations'
   if (pathname === '/owner/supply' || pathname.startsWith('/owner/supply/')) return 'operations'
-  if (pathname === '/owner/status') return 'operations'
   if (
-    pathname === '/owner/settings/workspace'
-    || pathname === '/owner/settings/connections'
+    pathname === '/owner/settings/connections'
     || pathname === '/owner/settings/payouts'
   ) return 'operations'
   if (pathname === '/owner/settings') return 'account'
@@ -271,7 +269,7 @@ export function isOperatorNavItemCurrent(
  * The "List" half of a shell-derived breadcrumb trail: the nearest sidebar
  * destination that is a strict ancestor of `currentPath`. Returns undefined
  * on a list page itself (top of its section, no trail needed) or when no
- * nav item matches. AeOperatorShell appends the page's own title as the
+ * nav item matches. AeOperatorPage appends the page's own title as the
  * terminal "Detail" crumb, so no per-route breadcrumbs prop is needed.
  */
 export function resolveOperatorListCrumb(
