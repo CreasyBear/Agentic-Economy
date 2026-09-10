@@ -7,11 +7,14 @@ import {
   rescaleExactAmount,
 } from "@/modules/money/public";
 import { isRecord } from "@/modules/common/is-record";
+import { sanitizeText } from "@/modules/common/sanitize-text";
 import {
   createPublicToolRef,
   isPublicToolRef,
   type PublicToolRef,
 } from "../public";
+import { availability as deriveAvailability } from "./availability";
+import { listingTier } from "./publication/provenance";
 import { paymentLaneAdmission } from "./x402-call-policy";
 import { projectPublicSchema } from "./tool-projection-wire";
 import { CURRENT_TOOL_CALL_VIA } from "./tool-projection-types";
@@ -120,8 +123,12 @@ export function projectCapabilityTool(
         : { inputExamples: record.contract.inputExamples }),
     },
     business: record.business,
-    offering: record.offering,
-    summary: record.contract.description,
+    offering: {
+      ...record.offering,
+      label: sanitizeText(record.offering.label, 160),
+      summary: sanitizeText(record.offering.summary, 1_000),
+    },
+    summary: sanitizeText(record.contract.description, 1_000),
     commercial: {
       price: record.price,
       ...(record.priceEvidence === undefined
@@ -149,6 +156,7 @@ export function projectCapabilityTool(
     ...(record.payment === undefined ? {} : { payment: record.payment }),
     transport: record.transport,
     provenance: record.provenance,
+    listingTier: listingTier(record.provenance.publisher),
     availability,
     navigation:
       availability.posture === "unavailable"
@@ -303,25 +311,15 @@ function projectAvailability(
   record: CapabilityToolSourceRecord,
   now: number,
 ): PublicToolAvailability {
-  const { observedAt, validUntil, lastHealthyAt } = record.readiness;
-  if (record.routeable && validUntil !== undefined && validUntil > now)
-    return {
-      posture: "routeable",
-      ...(observedAt === undefined ? {} : { observedAt }),
-      ...(lastHealthyAt === undefined ? {} : { lastHealthyAt }),
-      validUntil,
-    };
-  const reason =
-    record.unavailableReason === "inspection_required"
-      ? "inspection_required" as const
-      : validUntil !== undefined && validUntil <= now
-      ? ("readiness_expired" as const)
-      : (record.unavailableReason ?? "setup_required");
-  return {
-    posture: record.integrated ? "setup_required" : "unavailable",
-    ...(observedAt === undefined ? {} : { observedAt }),
-    ...(validUntil === undefined ? {} : { validUntil }),
-    ...(lastHealthyAt === undefined ? {} : { lastHealthyAt }),
-    reason,
-  };
+  return deriveAvailability(
+    {
+      routeable: record.routeable,
+      integrated: record.integrated,
+      readiness: record.readiness,
+      ...(record.unavailableReason === undefined
+        ? {}
+        : { unavailableReason: record.unavailableReason }),
+    },
+    now,
+  );
 }

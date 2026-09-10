@@ -113,6 +113,7 @@ describe('private market request CLI', () => {
         provider: { name: 'Reference Services', slug: 'reference' },
         priceLabel: 'USD 0.50',
         healthStatus: 'operational',
+        listingTier: 'reviewed',
       }],
     })))
     const output = captureStdout()

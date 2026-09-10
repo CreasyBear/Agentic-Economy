@@ -174,6 +174,31 @@ describe('public Tool read contract', () => {
       actionId: 'registry.tools.describe',
     })
   })
+  it('C17: sanitizes provider-authored contract description and offering label/summary', () => {
+    const hostile = '<script>alert(1)</script>  **Bold**   markdown\n\nwith   extra   whitespace'
+    const tool = projectCapabilityTool({
+      ...operationRecord,
+      contract: { ...operationRecord.contract, description: hostile },
+      offering: { ...operationRecord.offering, label: hostile, summary: hostile },
+    }, 2_000)
+    for (const text of [tool.summary, tool.offering.label, tool.offering.summary]) {
+      expect(text).not.toContain('<')
+      expect(text).not.toContain('>')
+      expect(text).not.toMatch(/\s{2,}/)
+      expect(text).toBe(text.trim())
+    }
+    expect(tool.summary).toBe('scriptalert(1)/script **Bold** markdown with extra whitespace')
+    expect(tool.offering.label.length).toBeLessThanOrEqual(160)
+    expect(tool.offering.summary.length).toBeLessThanOrEqual(1_000)
+
+    const overlong = projectCapabilityTool({
+      ...operationRecord,
+      contract: { ...operationRecord.contract, description: 'y'.repeat(2_000) },
+      offering: { ...operationRecord.offering, label: 'z'.repeat(2_000) },
+    }, 2_000)
+    expect(overlong.summary.length).toBe(1_000)
+    expect(overlong.offering.label.length).toBe(160)
+  })
   it('projects toolId through the wire roundtrip and rejects the retired public alias', () => {
     const projected = projectCapabilityTool(operationRecord, 2_000)
     expect(projected.toolRef).toBe('operation:v1:e44c003644675cf77edbadbfa296976d2cb0bc82d7d20445df92af940bc18f6b')
@@ -190,7 +215,7 @@ describe('public Tool read contract', () => {
 
     const parsed = toolDetailOutputSchema.parse({
       kind: 'found',
-      schemaVersion: 'registry-tools:v1',
+      schemaVersion: 'registry-tools:v3',
       tool: roundTripped,
     })
     expect(parsed.kind).toBe('found')
@@ -202,12 +227,12 @@ describe('public Tool read contract', () => {
     const oldOnly = { ...withoutToolId, operationId: toolId }
     expect(toolDetailOutputSchema.safeParse({
       kind: 'found',
-      schemaVersion: 'registry-tools:v1',
+      schemaVersion: 'registry-tools:v3',
       tool: oldOnly,
     }).success).toBe(false)
     expect(toolDetailOutputSchema.safeParse({
       kind: 'found',
-      schemaVersion: 'registry-tools:v1',
+      schemaVersion: 'registry-tools:v3',
       tool: { ...roundTripped, operationId: toolId },
     }).success).toBe(false)
   })
@@ -238,7 +263,7 @@ describe('public Tool read contract', () => {
     expect(wire.commercial.priceBreakdown).toEqual(tool.commercial.priceBreakdown)
     expect(deserializeToolDescriptor(wire).commercial.priceBreakdown).toEqual(tool.commercial.priceBreakdown)
     expect(toolDetailOutputSchema.safeParse({
-      kind: 'found', schemaVersion: 'registry-tools:v1', tool,
+      kind: 'found', schemaVersion: 'registry-tools:v3', tool,
     }).success).toBe(true)
   })
   it('preserves last healthy evidence through availability and comparison wire roundtrips', async () => {

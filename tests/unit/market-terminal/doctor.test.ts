@@ -426,7 +426,7 @@ describe('ae doctor', () => {
             tools: [{
               toolRef, capabilityId: 'document.translate', title: 'Document translation',
               description: 'Translate one document.', provider: { name: 'Reference Services', slug: 'reference' },
-              priceLabel: 'USD 0.50', healthStatus: 'operational',
+              priceLabel: 'USD 0.50', healthStatus: 'operational', listingTier: 'reviewed',
             }],
           })
           return
@@ -1532,7 +1532,7 @@ function sandboxSearchResult() {
       toolRef: SANDBOX_TOOL_REF, capabilityId: 'sandbox.aecon-reference',
       title: 'AEcon sandbox reference Tool', description: 'Deterministic sandbox Tool.',
       provider: { name: 'AEcon sandbox reference provider', slug: SANDBOX_TOOL_SLUG },
-      priceLabel: 'AUD 1.00', healthStatus: 'operational',
+      priceLabel: 'AUD 1.00', healthStatus: 'operational', listingTier: 'reviewed',
     }],
     pagination: { limit: 10, hasMore: false },
   }
@@ -1668,6 +1668,7 @@ function currentTool(toolRef: string) {
     effects: [],
     evidence: [],
     authentication: { kind: 'ae_api_key' },
+    listingTier: 'reviewed',
   }
 }
 

@@ -5,6 +5,7 @@ import type { SupplyCommandActor } from '@/modules/capability-supply/internal/sh
 import {
   CAPABILITY_PUBLICATION_AUTHORITY_MODES,
   defineCapabilityPublicationProvenance,
+  listingTier,
   validCapabilityPublicationAuthority,
 } from '@/modules/capability-supply/internal/publication/provenance'
 
@@ -99,5 +100,14 @@ describe('capability publication provenance tri-state (1P/3P/observed, design §
       sourceRevision: 'rev:1',
       sourceDigest,
     }))
+  })
+
+  it('C8: derives the catalogue listing tier from authority mode (reviewed vs listed, agent-marketplace-scan §Locus/AgentMuxer)', () => {
+    // 1P direct and AE-curated 3P are editorially reviewed
+    expect(listingTier('provider_owned')).toBe('reviewed')
+    expect(listingTier('ae_curated_external')).toBe('reviewed')
+    // gateway-mediated and merely observed 3P are only listed
+    expect(listingTier('third_party_gateway')).toBe('listed')
+    expect(listingTier('observed_external')).toBe('listed')
   })
 })

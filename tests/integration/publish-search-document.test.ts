@@ -47,17 +47,15 @@ async function bootstrapPublishInput(
   const fixture = capabilityPublicationInput(businessId, slugSuffix)
   return {
     ...fixture,
-    // The bootstrap path derives its pricing config from the offering price,
-    // and only accepts canonical AUD micro-units.
-    offering: {
-      ...fixture.offering,
-      presentation: {
-        ...fixture.offering.presentation,
-        price: {
-          kind: 'fixed' as const,
-          amount: { currency: 'AUD' as const, units: '12000000', exponent: 6 },
-        },
-      },
+    // The bootstrap path requires an explicit pricing config (Well 4,
+    // decision D7: `presentation.price` is display-only and retired), only
+    // accepting canonical AUD micro-units.
+    pricingConfig: {
+      version: 'pricing:v3' as const,
+      kind: 'fixed_aud' as const,
+      currency: 'AUD' as const,
+      exponent: 6 as const,
+      amountUnits: '12000000',
     },
     businessId: String(businessId),
     runtimeEnvironment: 'sandbox' as const,
