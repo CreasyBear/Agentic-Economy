@@ -4,95 +4,28 @@ import {
   compareExactAmounts,
   sameExactScale,
   sumExactAmounts,
-  type ExactAmount,
 } from '@/modules/money/public'
 import type {
   AuthorityUse,
-  SpendingPolicyResult,
-  SpendingPolicyRefusalCode,
   SpendingPolicy,
-} from './spending-policy'
+  SpendingPolicyDecision,
+  SpendingPolicyProposal,
+  SpendingPolicyRefusalCode,
+  SpendingPolicyResult,
+} from './spending-policy-types'
 import {
   authorityUseIntegrityValid,
+  canonicalPolicyDecisionMaterial,
   spendingPolicyIntegrityValid,
-} from './spending-policy'
+} from './spending-policy-integrity'
 import {
   persistedAuthorityUseMaterialValid,
   policyProposalMaterialValid,
   spendingPolicyMaterialValid,
 } from './spending-policy-validation'
 
-/**
- * Spending-policy decisions retain their v1 canonical bytes. The
- * storage-facing executionRef is projected back to the established protected
- * v1 invocationRef key only at this existing digest boundary.
- */
-export function canonicalPolicyDecisionMaterial(
-  decision: Omit<SpendingPolicyDecision, 'digest'>,
-) {
-  const { proposal, ...unchangedFields } = decision
-  const { executionRef, ...unchangedProposalFields } = proposal
-  const {
-    spendingPolicyRef,
-    spendingPolicyVersion,
-    spendingPolicyGeneration,
-  } = unchangedFields
-  return {
-    policyDecisionRef: unchangedFields.policyDecisionRef,
-    policy: unchangedFields.policy,
-    objectiveRef: unchangedFields.objectiveRef,
-    mandateRef: spendingPolicyRef,
-    mandateVersion: spendingPolicyVersion,
-    mandateGeneration: spendingPolicyGeneration,
-    proposal: { ...unchangedProposalFields, invocationRef: executionRef },
-    capacity: unchangedFields.capacity,
-    fallbackOrdinal: unchangedFields.fallbackOrdinal,
-    heldWorstCaseLoss: unchangedFields.heldWorstCaseLoss,
-    proposedWorstCaseLoss: unchangedFields.proposedWorstCaseLoss,
-    maximumLoss: unchangedFields.maximumLoss,
-    accepted: unchangedFields.accepted,
-  }
-}
-
-export type SpendingPolicyProposal = Readonly<{
-  objectiveRef: string
-  objective: string
-  sourceOptionRef: string
-  materialDigest: string
-  authorityUseRef: string
-  executionRef: string
-  action: Readonly<{ id: string; version: string }>
-  providerRef: string
-  recipientRef: string
-  purpose: string
-  dataFields: readonly string[]
-  spend: ExactAmount
-  worstCaseLoss: ExactAmount
-  fallbackRef: string
-  risk: string
-}>
-
-export type SpendingPolicyDecision = Readonly<{
-  policyDecisionRef: string
-  policy: 'exact_scope_and_worst_case_loss:v1'
-  objectiveRef: string
-  spendingPolicyRef: string
-  spendingPolicyVersion: number
-  spendingPolicyGeneration: number
-  proposal: SpendingPolicyProposal
-  capacity: Readonly<{
-    consumedCount: number
-    reservedCount: number
-    committedSpend: ExactAmount
-    heldWorstCaseLoss: ExactAmount
-  }>
-  fallbackOrdinal: number
-  heldWorstCaseLoss: ExactAmount
-  proposedWorstCaseLoss: ExactAmount
-  maximumLoss: ExactAmount
-  accepted: true
-  digest: string
-}>
+export { canonicalPolicyDecisionMaterial }
+export type { SpendingPolicyDecision, SpendingPolicyProposal }
 
 export function evaluateSpendingPolicy(input: Readonly<{
   spendingPolicy: SpendingPolicy

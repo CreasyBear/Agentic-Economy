@@ -19,6 +19,11 @@ import {
 } from '@/modules/capability-supply/convex'
 
 import { env, internalMutation, internalQuery, type MutationCtx, type QueryCtx } from './_generated/server'
+import {
+  SELLER_ONBOARDING_CANARY_MAXIMUM_PER_CALL_ATOMIC,
+  SELLER_ONBOARDING_CANARY_MAXIMUM_DAILY_ATOMIC,
+  SELLER_ONBOARDING_CANARY_MAXIMUM_MONTHLY_ATOMIC,
+} from './lib/capabilitySupply/canaryFundingConstants'
 
 export type {
   SellerOnboardingCanaryCdpPreflightCode,
@@ -44,15 +49,11 @@ export const SELLER_ONBOARDING_CANARY_RATE_POLICY_REF =
   'rate:platform:seller-onboarding-canary:sandbox:v1' as const
 export const SELLER_ONBOARDING_CANARY_GRANT_GENERATION = 1 as const
 
-// CDP's maintained x402 spend-control example uses `environment: development`
-// (Base Sepolia), 10,000 atomic units per payment, and 50,000 cumulative:
-// github.com/coinbase/cdp-sdk/blob/7ef6ce6cec532dff55eca479a31bbbefac4740b7/
-// examples/typescript/x402/clients/payForApiWithSpendControls.ts
-// The first AE lane intentionally makes the ledger's monthly ceiling equal to
-// that cumulative ceiling as well.
-export const SELLER_ONBOARDING_CANARY_MAXIMUM_PER_CALL_ATOMIC = '10000' as const
-export const SELLER_ONBOARDING_CANARY_MAXIMUM_DAILY_ATOMIC = '50000' as const
-export const SELLER_ONBOARDING_CANARY_MAXIMUM_MONTHLY_ATOMIC = '50000' as const
+export {
+  SELLER_ONBOARDING_CANARY_MAXIMUM_PER_CALL_ATOMIC,
+  SELLER_ONBOARDING_CANARY_MAXIMUM_DAILY_ATOMIC,
+  SELLER_ONBOARDING_CANARY_MAXIMUM_MONTHLY_ATOMIC,
+}
 
 const SELLER_ONBOARDING_CANARY_GRANT_EXPIRES_AT = 4_102_444_800_000
 const MAX_X402_RPC_CONFIG_LENGTH = 16_384

@@ -1,4 +1,4 @@
-import type { RecordPublicFunnelEventInput } from '@/modules/observability/funnel.functions'
+import type { RecordPublicFunnelEventInput } from '@/lib/observability/funnel-event-schema'
 
 export type FunnelCaptureInput = Pick<
   RecordPublicFunnelEventInput,

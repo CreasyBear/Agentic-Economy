@@ -10,10 +10,8 @@ import {
 } from '@/modules/money/public'
 import type { ExactAmount } from '@/modules/money/public'
 import { isProviderConnectionCredentialRef } from '../provider-connection'
-import type {
-  RouteTransportInvocation,
-  RouteTransportRuntime,
-} from './route-transport-call'
+import type { RouteTransportRuntime } from './route-transport-call'
+import type { RouteTransportInvocation } from './route-transport-invocation'
 import {
   decodeX402PaymentRequiredHeader,
   validateX402PaymentRequired,
@@ -33,21 +31,9 @@ import type {
   X402Configuration,
   X402PaymentAuthorizationIdentity,
 } from './route-transport-x402'
+import type { X402Challenge } from './x402-challenge'
 
-export type X402Challenge = Readonly<{
-  x402Version: 2
-  resource: Readonly<{ url: string; description?: string; mimeType?: string }>
-  accepts: readonly Readonly<{
-    scheme: string
-    network: `${string}:${string}`
-    amount: string
-    asset: string
-    payTo: string
-    maxTimeoutSeconds: number
-    extra: Readonly<Record<string, unknown>>
-  }>[]
-  extensions?: Readonly<Record<string, unknown>>
-}>
+export type { X402Challenge }
 
 export type X402PaymentMaterial = Readonly<{
   challenge: X402Challenge

@@ -14,94 +14,49 @@ import {
 } from './spending-policy-grant'
 import type { SpendingPolicyAuthorityBasis } from './contracts'
 import {
-  canonicalPolicyDecisionMaterial,
+  canonicalAuthorityExposureOffsetMaterial,
+  canonicalAuthorityUseMaterial,
+  canonicalSpendingPolicyMaterial,
+  authorityUseIntegrityValid,
+  policyDecisionIntegrityValid,
+  spendingPolicyIntegrityValid,
+} from './spending-policy-integrity'
+import {
+  SPENDING_POLICY_FORMAT,
+  type AuthorityExposureOffset,
+  type AuthorityUse,
+  type AuthorityUseMaterial,
+  type SpendingPolicy,
   type SpendingPolicyDecision,
-} from './spending-policy-evaluation'
+  type SpendingPolicyRefusalCode,
+  type SpendingPolicyResult,
+  type SpendingPolicyScope,
+} from './spending-policy-types'
 import {
   verifyExposureReleaseAttestation,
   type ExposureOffsetRuleIdentity,
-  type ExposureReleaseAttestation,
 } from './exposure-offset-rules'
-import type { Ed25519VerificationKey } from '@/modules/common/ed25519-attestation'
 import {
   authorityUseMaterialValid,
   exposureOffsetMaterialValid,
   isoTimestampValid,
   parseSpendingPolicyInput,
   parseSpendingPolicySnapshot,
-  persistedAuthorityUseMaterialValid,
   policyDecisionMaterialValid,
   spendingPolicyMaterialValid,
 } from './spending-policy-validation'
 
-export const SPENDING_POLICY_FORMAT = 'ae.action-invocation-standing-mandate:v1' as const
-
-export type SpendingPolicyScope = Readonly<{
-  objective: string
-  action: Readonly<{ id: string; version: string }>
-  actions?: readonly Readonly<{ id: string; version: string }>[]
-  providerRefs: readonly string[]
-  recipientRefs: readonly string[]
-  purposes: readonly string[]
-  allowedDataFields: readonly string[]
-  maximumSpend: ExactAmount
-  maximumActionCount: number
-  /** Historical v1 wire key: limits concurrently held effect-capacity reservations. */
-  maximumConcurrentReservations: number
-  startsAt: string
-  expiresAt: string
-  permittedFallbacks: readonly string[]
-  riskCeiling: string
-  maximumLoss?: ExactAmount
-  exposureOffsetRules?: readonly ExposureOffsetRuleIdentity[]
-  exposureOffsetVerificationKeys?: readonly Ed25519VerificationKey[]
-}>
-
-export type SpendingPolicy = Readonly<{
-  format: typeof SPENDING_POLICY_FORMAT
-  mode: 'spending_policy' | 'unrestricted_test_only'
-  spendingPolicyRef: string
-  version: number
-  generation: number
-  grantorRef: string
-  principalRef: string
-  delegateRef: string
-  callerRef: string
-  scope: SpendingPolicyScope
-  issuedAt: string
-  revoked: false | Readonly<{ reason: string; revokedAt: string }>
-  digest: string
-}>
-
-export type AuthorityUseMaterial = Readonly<{
-  authorityUseRef: string
-  spendingPolicyRef: string
-  spendingPolicyVersion: number
-  spendingPolicyGeneration: number
-  callerRef: string
-  principalRef: string
-  delegateRef: string
-  executionRef: string
-  action: Readonly<{ id: string; version: string }>
-  preparedMaterialDigest: string
-  providerRef: string
-  recipientRef: string
-  purpose: string
-  dataFields: readonly string[]
-  reservedSpend: ExactAmount
-  reservedLoss?: ExactAmount
-  fallbackRef: string | null
-  risk: string
-  effectGeneration: number
-  policyDecisionRef?: string
-}>
-
-export type AuthorityUse = AuthorityUseMaterial & Readonly<{
-  state: 'reserved' | 'not_released' | 'released' | 'uncertain'
-  reservedAt: string
-  settledAt?: string
-  digest: string
-}>
+export {
+  SPENDING_POLICY_FORMAT,
+  type AuthorityExposureOffset,
+  type AuthorityUse,
+  type AuthorityUseMaterial,
+  type SpendingPolicy,
+  type SpendingPolicyRefusalCode,
+  type SpendingPolicyResult,
+  type SpendingPolicyScope,
+}
+export { spendingPolicyIntegrityValid, authorityUseIntegrityValid, policyDecisionIntegrityValid }
 
 export type SpendingPolicySnapshot = Readonly<{
   format: 'ae.action-invocation-standing-mandate-store:v1'
@@ -111,63 +66,6 @@ export type SpendingPolicySnapshot = Readonly<{
   exposureOffsets?: readonly AuthorityExposureOffset[]
   policyDecisions?: readonly SpendingPolicyDecision[]
 }>
-
-export type AuthorityExposureOffset = Readonly<{
-  authorityUseRef: string
-  offsetAuthorityUseRef: string
-  spendingPolicyRef: string
-  spendingPolicyVersion: number
-  spendingPolicyGeneration: number
-  principalRef: string
-  providerRef: string
-  exposureAction: Readonly<{ id: string; version: string }>
-  offsetAction: Readonly<{ id: string; version: string }>
-  exposureSubjectRef: string
-  exposureResultRef: string
-  exposureEvidenceRef: string
-  offsetSubjectRef: string
-  offsetResultRef: string
-  offsetEvidenceRef: string
-  amount: ExactAmount
-  evidenceRuleRef: string
-  evidenceRuleSource: string
-  evidenceRuleVersion: string
-  releaseAttestation: ExposureReleaseAttestation
-  offsetGeneration: 1
-  recordedAt: string
-  digest: string
-}>
-
-export type SpendingPolicyRefusalCode =
-  | 'spending_policy_material_invalid'
-  | 'spending_policy_not_found'
-  | 'spending_policy_integrity_invalid'
-  | 'spending_policy_grant_unauthenticated'
-  | 'spending_policy_revoked'
-  | 'spending_policy_not_started'
-  | 'spending_policy_expired'
-  | 'spending_policy_generation_stale'
-  | 'spending_policy_principal_mismatch'
-  | 'spending_policy_delegate_mismatch'
-  | 'spending_policy_caller_mismatch'
-  | 'spending_policy_action_mismatch'
-  | 'spending_policy_provider_mismatch'
-  | 'spending_policy_recipient_mismatch'
-  | 'spending_policy_purpose_mismatch'
-  | 'spending_policy_data_widening'
-  | 'spending_policy_spend_exceeded'
-  | 'spending_policy_currency_mismatch'
-  | 'spending_policy_count_exhausted'
-  | 'spending_policy_concurrency_exhausted'
-  | 'spending_policy_fallback_mismatch'
-  | 'spending_policy_risk_exceeded'
-  | 'authority_use_conflict'
-  | 'authority_use_not_found'
-  | 'authority_use_linkage_invalid'
-
-export type SpendingPolicyResult<T> =
-  | Readonly<{ kind: 'accepted'; value: T }>
-  | Readonly<{ kind: 'refused'; code: SpendingPolicyRefusalCode }>
 
 export function issueSpendingPolicy(
   input: unknown,
@@ -784,69 +682,6 @@ export class SpendingPolicyStore {
       && attested.outcome === 'provider_confirmed_reversal'
       && sameExactScale(attested.reversedAmount, offset.amount)
       && compareExactAmounts(attested.reversedAmount, offset.amount) === 0
-  }
-}
-
-export function spendingPolicyIntegrityValid(mandate: SpendingPolicy): boolean {
-  if (!spendingPolicyMaterialValid(mandate)) return false
-  const { digest, ...material } = mandate
-  return digest === canonicalDigest(canonicalSpendingPolicyMaterial(material))
-}
-
-export function authorityUseIntegrityValid(use: AuthorityUse): boolean {
-  if (!persistedAuthorityUseMaterialValid(use)) return false
-  const { digest, ...material } = use
-  return digest === canonicalDigest(canonicalAuthorityUseMaterial(material))
-}
-
-export function policyDecisionIntegrityValid(decision: SpendingPolicyDecision): boolean {
-  if (!policyDecisionMaterialValid(decision)) return false
-  const { digest, ...material } = decision
-  return digest === canonicalDigest(canonicalPolicyDecisionMaterial(material))
-}
-
-/**
- * Authority-use v1 records retain their original invocationRef hash key. The
- * generic executionRef rename is projected only at this existing integrity
- * and persistence-digest boundary; every other material field is unchanged.
- */
-function canonicalAuthorityUseMaterial(
-  material: Omit<AuthorityUse, 'digest'>,
-) {
-  const { executionRef, spendingPolicyRef, spendingPolicyVersion, spendingPolicyGeneration, ...unchangedFields } = material
-  return {
-    mandateRef: spendingPolicyRef,
-    mandateVersion: spendingPolicyVersion,
-    mandateGeneration: spendingPolicyGeneration,
-    ...unchangedFields,
-    invocationRef: executionRef,
-  }
-}
-
-/** Preserve the existing standing-policy v1 material and digest bytes. */
-function canonicalSpendingPolicyMaterial(
-  material: Omit<SpendingPolicy, 'digest'>,
-) {
-  const { spendingPolicyRef, format: _format, mode, revoked, ...unchangedFields } = material
-  return {
-    mandateRef: spendingPolicyRef,
-    ...unchangedFields,
-    format: 'ae.action-invocation-standing-mandate:v1' as const,
-    mode: mode === 'spending_policy' ? 'bounded_mandate' as const : 'full_yolo' as const,
-    revoked,
-  }
-}
-
-/** Exposure offsets retain their v1 mandate reference keys in hash material. */
-function canonicalAuthorityExposureOffsetMaterial(
-  material: Omit<AuthorityExposureOffset, 'digest'>,
-) {
-  const { spendingPolicyRef, spendingPolicyVersion, spendingPolicyGeneration, ...unchangedFields } = material
-  return {
-    ...unchangedFields,
-    mandateRef: spendingPolicyRef,
-    mandateVersion: spendingPolicyVersion,
-    mandateGeneration: spendingPolicyGeneration,
   }
 }
 

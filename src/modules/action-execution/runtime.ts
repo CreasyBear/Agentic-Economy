@@ -7,6 +7,14 @@
  * compatibility nouns deliberately stay on their existing non-runtime
  * surfaces.
  */
+import type { ActionResult } from '@/modules/common/action'
+import type { InMemoryControlSnapshot } from './contracts'
+
+export function roundTripControlSnapshot<Result extends ActionResult>(
+  snapshot: InMemoryControlSnapshot<Result>,
+): InMemoryControlSnapshot<Result> {
+  return structuredClone(snapshot)
+}
 export {
   acceptedAuthorityValue,
 } from './internal/convex-schema'
@@ -101,6 +109,7 @@ export type {
 } from './x402-payment-attempt'
 export {
   cancelPublicExecution,
+  readAgentUsage,
   readPublicExecutionStatus,
   reconcilePublicExecution,
 } from './execution-public'
@@ -109,6 +118,7 @@ export type {
 } from './execution-public'
 export type {
   ReconciliationEvidence,
+  ReconciliationEvidenceMaterial,
 } from './reconciliation-evidence'
 export {
   validateReconciliationEvidence,
@@ -122,3 +132,28 @@ export type {
   X402PaymentReconciliationEvidenceMaterial,
   X402PaymentReconciliationEvidenceVerifier,
 } from './x402-payment-reconciliation-evidence'
+export {
+  authorityUseIntegrityValid,
+  issueSpendingPolicy,
+  restoreSpendingPolicyStore,
+  SpendingPolicyStore,
+} from './spending-policy'
+export type {
+  AuthorityUseMaterial,
+  SpendingPolicySnapshot,
+} from './spending-policy'
+export {
+  createDevelopmentSpendingPolicyGrantVerifier,
+} from './spending-policy-grant'
+export { evaluateSpendingPolicy } from './spending-policy-evaluation'
+export {
+  evaluateAdr009Transfer,
+  transferFalsifiers,
+} from './transfer-evaluator'
+export type {
+  ReferenceReuseMeasurement,
+  TransferArm,
+  TransferBoundaryEvent,
+  TransferEvidence,
+  TransferMeasurement,
+} from './transfer-evaluator'

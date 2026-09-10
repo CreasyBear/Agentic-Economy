@@ -19,25 +19,14 @@ import {
 import { boundedString } from './route-transport-observation'
 import {
   resolveCredentialForAuthority,
-  type PublicUpstreamRouteTransportInvocation,
-  type ProviderRouteTransportInvocation,
-  type RouteTransportInvocation,
   type RouteTransportRuntime,
 } from './route-transport-call'
+import type {
+  RouteTransportCancellationInvocation,
+  RouteTransportCancellationInvocationFor,
+} from './route-transport-invocation'
 
-type RouteTransportCancellationInvocationFor<
-  Invocation extends RouteTransportInvocation,
-> = Readonly<{
-  binding: Invocation['binding']
-  authority: Invocation['authority']
-  cancellationRequestRef: string
-}>
-
-export type { RouteTransportCancellationInvocationFor }
-
-export type RouteTransportCancellationInvocation =
-  | RouteTransportCancellationInvocationFor<PublicUpstreamRouteTransportInvocation>
-  | RouteTransportCancellationInvocationFor<ProviderRouteTransportInvocation>
+export type { RouteTransportCancellationInvocation, RouteTransportCancellationInvocationFor }
 
 export type RouteTransportCancellationObservation = Readonly<{
   disposition: 'accepted' | 'rejected' | 'unknown' | 'unsupported'

@@ -40,7 +40,7 @@ import {
   type X402AeEnvironment,
   type X402PaymentProfile,
 } from './x402-payment-profile'
-import type { X402PaymentSignatureRequest } from '../route-transport-runtime'
+import type { X402PaymentSignatureRequest } from './x402-challenge'
 
 /** @deprecated Use the explicit payment profile constants for new code. */
 export const BASE_NETWORK = BASE_MAINNET_NETWORK

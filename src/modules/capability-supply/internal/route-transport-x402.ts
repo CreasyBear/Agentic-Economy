@@ -12,11 +12,11 @@ import {
 import {
   verifyX402SignedReceipt,
 } from './x402-offer-receipt'
+import type { RouteTransportRuntime } from './route-transport-call'
 import type {
   ProviderConnectionAuthorityValidationResult,
   RouteTransportInvocation,
-  RouteTransportRuntime,
-} from './route-transport-call'
+} from './route-transport-invocation'
 import {
   decodeX402Challenge,
   freshX402ChallengeSelection,
@@ -47,13 +47,9 @@ export type {
   X402SettlementStatus,
 } from './x402-payment-signer'
 
-export type X402PaymentSignatureRequest = Readonly<{
-  challenge: X402Challenge
-  /** Opaque server-only payer credential locator; resolve it only at signing. */
-  credential: string
-  paymentIdentifier: string
-  selectedRequirement: X402Challenge['accepts'][number]
-}>
+import type { X402PaymentSignatureRequest } from './x402-challenge'
+
+export type { X402PaymentSignatureRequest }
 
 export type X402PaymentAuthorizationIdentity = Readonly<{
   paymentIdentifier: string
