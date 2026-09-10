@@ -108,6 +108,14 @@ change does not authorize changing public contracts, protected identifiers or
 historical evidence. These rules do not authorize a directory reorganisation,
 manual edits to generated files or an unplanned repository-wide rename.
 
+## Branches and merges
+
+`main` is protected: both Kernel release gate jobs must pass before a merge. Each
+stabilisation well lands as its own branch `well-N/<slug>` cut from `main`, one
+pull request per well, merged with a merge commit once `npm run gate` and CI are
+green. Never push directly to `main`; never stage the whitepaper, `docs/strategy/*`,
+`docs/workflow/aecon-signals-proposal.md` or `output/*`.
+
 ## Node and command startup
 
 Use Node 22 and npm 11.5.1 for all project commands, including Convex and child
