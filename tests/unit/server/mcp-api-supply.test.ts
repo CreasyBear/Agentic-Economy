@@ -60,6 +60,7 @@ describe('MCP host adapter supply', () => {
       withdraw: vi.fn(),
       recheck: vi.fn(),
       republish: vi.fn(),
+      calls: vi.fn(),
       earnings: vi.fn(),
       ...connectionServiceStubs(),
     }
@@ -86,6 +87,7 @@ describe('MCP host adapter supply', () => {
       withdraw: vi.fn(),
       recheck: vi.fn(),
       republish: vi.fn(),
+      calls: vi.fn(),
       earnings: vi.fn().mockResolvedValue({ kind: 'not_found' }),
       ...connectionServiceStubs(),
     }
@@ -119,6 +121,7 @@ describe('MCP host adapter supply', () => {
       withdraw: vi.fn(),
       recheck: vi.fn(),
       republish: vi.fn(),
+      calls: vi.fn(),
       earnings: vi.fn().mockResolvedValue({ kind: 'not_found' }),
       ...connectionServiceStubs(),
     }
@@ -158,6 +161,7 @@ describe('MCP host adapter supply', () => {
       withdraw: vi.fn(),
       recheck: vi.fn(),
       republish: vi.fn(),
+      calls: vi.fn(),
       earnings: vi.fn().mockResolvedValue({ kind: 'not_found' }),
       ...connectionServiceStubs(),
     }
@@ -195,6 +199,7 @@ describe('MCP host adapter supply', () => {
       withdraw: vi.fn(),
       recheck: vi.fn(),
       republish: vi.fn(),
+      calls: vi.fn(),
       earnings: vi.fn(),
       ...connectionServiceStubs(),
     }
@@ -227,7 +232,7 @@ describe('MCP host adapter supply', () => {
       toolsList: vi.fn().mockResolvedValue({ kind: 'not_found' }),
       status: vi.fn(), publish: vi.fn(),
       withdraw: vi.fn().mockResolvedValue({ kind: 'refused', reason: 'must-not-run' }),
-      recheck: vi.fn(), republish: vi.fn(), earnings: vi.fn(),
+      recheck: vi.fn(), republish: vi.fn(), earnings: vi.fn(), calls: vi.fn(),
       ...connectionServiceStubs(),
     }
     const options = {

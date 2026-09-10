@@ -25,6 +25,7 @@ function service(overrides: Partial<SupplyManagementService> = {}): SupplyManage
     recheck: vi.fn().mockResolvedValue({ kind: 'refused', reason: 'unused' }),
     republish: vi.fn().mockResolvedValue({ kind: 'refused', reason: 'unused' }),
     earnings: vi.fn().mockResolvedValue({ kind: 'not_found' }),
+    calls: vi.fn().mockResolvedValue({ kind: 'available', items: [], limit: 20, hasMore: false }),
     connectionList: vi.fn().mockResolvedValue({ kind: 'not_found' }),
     connectionDetail: vi.fn().mockResolvedValue({ kind: 'not_found' }),
     connectionConnect: vi.fn().mockResolvedValue({ kind: 'refused', reason: 'unused' }),

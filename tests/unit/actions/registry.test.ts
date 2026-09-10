@@ -105,16 +105,16 @@ describe('action registry', () => {
       'tool.quote', 'tool.call', 'call.list', 'call.status',
       'call.cancel', 'call.reconcile',
       'supply.source.preview', 'supply.tools.list', 'supply.status', 'supply.publish', 'supply.withdraw',
-      'supply.recheck', 'supply.republish', 'supply.earnings',
+      'supply.recheck', 'supply.republish', 'supply.earnings', 'supply.calls',
       'supply.connection.list', 'supply.connection.detail',
       'supply.connection.connect', 'supply.connection.reconnect',
       'supply.connection.revoke',
       'supply.offboarding.status',
     ])
-    expect(exposed.slice(-14).every((action) =>
+    expect(exposed.slice(-15).every((action) =>
       action.credentialAdmission?.scope === 'market_supply:manage'
       && action.surfaces.includes('mcp'))).toBe(true)
-    expect(exposed.slice(-14).every((action) => action.surfaces.includes('cli'))).toBe(true)
+    expect(exposed.slice(-15).every((action) => action.surfaces.includes('cli'))).toBe(true)
     const anonymous = exposed.filter((action) => action.readOnly && action.credentialAdmission === undefined)
     expect(anonymous.map((action) => action.id)).toEqual([
       'registry.tools.list', 'registry.tools.search',
@@ -142,7 +142,7 @@ describe('action registry', () => {
       'ae_tool_quote', 'ae_tool_call', 'ae_call_list', 'ae_call_status',
       'ae_call_cancel', 'ae_call_reconcile',
       'ae_supply_source_preview', 'ae_supply_tools_list', 'ae_supply_status', 'ae_supply_publish', 'ae_supply_withdraw',
-      'ae_supply_recheck', 'ae_supply_republish', 'ae_supply_earnings',
+      'ae_supply_recheck', 'ae_supply_republish', 'ae_supply_earnings', 'ae_supply_calls',
       'ae_supply_connection_list', 'ae_supply_connection_detail',
       'ae_supply_connection_connect', 'ae_supply_connection_reconnect',
       'ae_supply_connection_revoke',

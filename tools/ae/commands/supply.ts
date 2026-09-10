@@ -3,6 +3,7 @@ import type { z } from 'zod'
 import { isRecord } from '@/modules/common/is-record'
 import {
   SUPPLY_ACTION_ROUTE_CONTRACTS,
+  supplyCallsAction,
   supplyConnectionConnectAction,
   supplyConnectionDetailAction,
   supplyConnectionListAction,
@@ -31,6 +32,7 @@ import {
   table,
 } from '../lib/output'
 import { usageFailure } from '../lib/help'
+import { cliContinuation } from '../lib/continuation-command'
 import {
   connectionContinuationForCli,
 } from '../lib/suggested-continuation-adapter'
@@ -46,6 +48,7 @@ export const SUPPLY_COMMAND_DESCRIPTORS = Object.freeze([
   { actionId: supplyRecheckAction.id, command: 'supply', subcommand: 'recheck', route: SUPPLY_ACTION_ROUTE_CONTRACTS.recheck, action: supplyRecheckAction },
   { actionId: supplyRepublishAction.id, command: 'supply', subcommand: 'republish', route: SUPPLY_ACTION_ROUTE_CONTRACTS.republish, action: supplyRepublishAction },
   { actionId: supplyEarningsAction.id, command: 'supply', subcommand: 'earnings', route: SUPPLY_ACTION_ROUTE_CONTRACTS.earnings, action: supplyEarningsAction },
+  { actionId: supplyCallsAction.id, command: 'supply', subcommand: 'calls', route: SUPPLY_ACTION_ROUTE_CONTRACTS.calls, action: supplyCallsAction },
   { actionId: supplyConnectionListAction.id, command: 'supply', subcommand: 'connections', route: SUPPLY_ACTION_ROUTE_CONTRACTS.connectionList, action: supplyConnectionListAction },
   { actionId: supplyConnectionDetailAction.id, command: 'supply', subcommand: 'connection', route: SUPPLY_ACTION_ROUTE_CONTRACTS.connectionDetail, action: supplyConnectionDetailAction },
   { actionId: supplyConnectionConnectAction.id, command: 'supply', subcommand: 'connect', route: SUPPLY_ACTION_ROUTE_CONTRACTS.connectionConnect, action: supplyConnectionConnectAction },
@@ -134,6 +137,16 @@ function inputFor(subcommand: string, args: readonly string[], options: CliOptio
     }
     return { currency }
   }
+  if (subcommand === 'calls') {
+    if (args.length > 1) {
+      throw usageFailure('supply calls', 'supply-calls-usage')
+    }
+    return {
+      ...(options.state === undefined ? {} : { state: options.state }),
+      ...(options.limit === undefined ? {} : { limit: Number(options.limit) }),
+      ...(options.cursor === undefined ? {} : { cursor: options.cursor }),
+    }
+  }
   if (subcommand === 'connections') {
     const businessId = args[1]
     const lifecycle = args[2]
@@ -158,7 +171,47 @@ function inputFor(subcommand: string, args: readonly string[], options: CliOptio
   return writeInput(options, schema)
 }
 
+/** `supply calls` carries its own opaque continuation cursor, so it is projected before the shared JSON/table dispatch below. */
+function printSupplyCallsResult(result: Record<string, unknown>, options: CliOptions): void {
+  const items = Array.isArray(result.items) ? result.items : []
+  const nextCursor = typeof result.nextCursor === 'string' ? result.nextCursor : undefined
+  const nextCommand = nextCursor === undefined
+    ? undefined
+    : cliContinuation(options, [
+        'ae', 'supply', 'calls',
+        ...(options.state === undefined ? [] : ['--state', options.state]),
+        ...(options.limit === undefined ? [] : ['--limit', options.limit]),
+        '--cursor', nextCursor,
+      ])
+  if (options.json) {
+    printJson(nextCommand === undefined ? result : { ...result, nextCommand })
+    return
+  }
+  heading('Provider calls')
+  line(`${items.length} Call${items.length === 1 ? '' : 's'}`)
+  for (const item of items) {
+    if (!isRecord(item)) continue
+    const rows: (readonly [string, string])[] = [
+      ['call', String(item.callRef ?? '')],
+      ['tool', String(item.toolRef ?? '')],
+      ['state', String(item.state ?? '')],
+    ]
+    if (item.outcome !== undefined) rows.push(['outcome', String(item.outcome)])
+    if (isRecord(item.settledAmount)) {
+      rows.push(['settled', `${String(item.settledAmount.units ?? '')} ${String(item.settledAmount.currency ?? '')}`])
+    }
+    rows.push(['created', new Date(Number(item.createdAt ?? 0)).toISOString()])
+    table(rows)
+    line()
+  }
+  if (nextCommand !== undefined) process.stdout.write(`Next: ${nextCommand}\n`)
+}
+
 function printSupplyResult(subcommand: string, result: unknown, options: CliOptions): void {
+  if (subcommand === 'calls' && isRecord(result) && result.kind === 'available') {
+    printSupplyCallsResult(result, options)
+    return
+  }
   if (options.json || !isRecord(result)) {
     printJson(result)
     return
