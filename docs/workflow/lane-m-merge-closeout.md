@@ -18,6 +18,7 @@ Date: 2026-09-10. PR #221 `stabilisation/wells-0-3` → `main`. Plan: `~/.claude
 | 4 | Clean-source job: `XDG_CONFIG_HOME: false` assertion | GitHub runners export `XDG_CONFIG_HOME`; the test asserted the host's env | the harness's own controlled env | The spawn env removes the variable explicitly |
 | 5 | Secret-scanning alert #1 | Stripe-shaped fixtures (`whsec_` + 29 characters) | Stripe docs placeholder convention; validators require only the prefix | Fixtures `sk_test_FIXTURE` / `whsec_FIXTURE`; alert resolved as used-in-tests |
 | 6 | Local gate: three Playwright specs intermittently time out on `networkidle` | Vite dev mode serves hundreds of unbundled modules per route, so the network never idles within 15 s | Playwright docs: `networkidle` is discouraged for tests | All 34 waits replaced with web-first assertions across ten specs |
+| 7 | Fresh-checkout job: Doctor step fails once the stack boots | The CI assertion rejected any `skipped` quote check, contradicting the restated Well 3 exit criterion (quoting is `skipped` on loopback by design); the skip carried only free text | Doctor's typed check states; restated criterion in the Well 3 closeout correction | The loopback skip carries `code: loopback_readiness_unprovable`; CI accepts exactly that skip and still fails any other |
 
 ## Behavioural finding
 

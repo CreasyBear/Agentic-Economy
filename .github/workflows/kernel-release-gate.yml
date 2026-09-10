@@ -177,13 +177,17 @@ jobs:
             const groups = result.groups || {};
             const quote = (result.checks ?? []).find((c) => c.id === "quote");
             const quoteState = quote?.state;
-            if (groups.discovery !== "pass" ||
-                (groups.quoting !== "pass" && groups.quoting !== "warn") ||
-                !quote || quoteState === "skipped" || quoteState === "fail") {
+            const quoteOk = quote !== undefined && (
+              quoteState === "pass" ||
+              quoteState === "warn" ||
+              (quoteState === "skipped" && quote.code === "loopback_readiness_unprovable")
+            );
+            if (groups.discovery !== "pass" || !quoteOk) {
               console.error(JSON.stringify(result, null, 2));
               process.exit(1);
             }
-            console.log("doctor groups pass:", JSON.stringify(groups));
+            console.log("doctor groups:", JSON.stringify(groups));
+            console.log("quote state/code:", JSON.stringify({ state: quoteState, code: quote.code }));
           '
 
       - name: Upload the fresh-checkout evidence

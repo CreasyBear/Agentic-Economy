@@ -66,6 +66,8 @@ type DoctorCheck = Readonly<{
   summary: string
   reason?: string
   nextCommand?: string
+  /** Machine-readable discriminator for a skip reason, so CI can gate on it instead of matching free text. */
+  code?: string
 }>
 
 /** Checks stay group-free so one table owns the discovery/quoting/purchase split. */
@@ -192,11 +194,13 @@ function doctorResult(drafts: readonly DoctorCheckDraft[]): DoctorResult {
 }
 
 /** A skipped Quote states why it could not run and never reports a pass. */
-function skippedQuoteCheck(reason: string, nextCommand?: string): DoctorCheckDraft {
+function skippedQuoteCheck(reason: string, nextCommand?: string, code?: string): DoctorCheckDraft {
+  const trimmedReason = reason.endsWith('.') ? reason.slice(0, -1) : reason
   return {
     id: 'quote', state: 'skipped', reason,
-    summary: `Quote inspection was skipped: ${reason}.`,
+    summary: `Quote inspection was skipped: ${trimmedReason}.`,
     ...(nextCommand === undefined ? {} : { nextCommand }),
+    ...(code === undefined ? {} : { code }),
   }
 }
 
@@ -450,6 +454,7 @@ async function checkQuote(
       return skippedQuoteCheck(
         'no routeable sandbox Tool on this loopback origin. The readiness probe only reaches public HTTPS endpoints, so the seeded sandbox Tool is listed on hosted origins (preview or production), not on 127.0.0.1. Discover and connect are provable here; Quote is provable on a hosted origin.',
         'ae doctor --base-url <hosted origin> --json',
+        'loopback_readiness_unprovable',
       )
     }
     return skippedQuoteCheck('no sandbox Tool is published; run npm run dev:local (stage sandbox-tool)', LOCAL_DEV_COMMAND)

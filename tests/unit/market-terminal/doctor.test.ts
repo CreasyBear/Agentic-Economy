@@ -64,11 +64,13 @@ function tier0Environment(directory: string): NodeJS.ProcessEnv {
   return { ...cleanEnvironment(directory), ...blanked }
 }
 
-function skippedQuoteCheck(reason: string, nextCommand?: string) {
+function skippedQuoteCheck(reason: string, nextCommand?: string, code?: string) {
+  const trimmedReason = reason.endsWith('.') ? reason.slice(0, -1) : reason
   return {
     id: 'quote', group: 'quoting', state: 'skipped', reason,
-    summary: `Quote inspection was skipped: ${reason}.`,
+    summary: `Quote inspection was skipped: ${trimmedReason}.`,
     ...(nextCommand === undefined ? {} : { nextCommand }),
+    ...(code === undefined ? {} : { code }),
   }
 }
 
@@ -321,7 +323,7 @@ describe('ae doctor', () => {
         { id: 'release', group: 'discovery', state: 'pass', summary: `Release identity is ${'a'.repeat(40)}.` },
         FRESH_CATALOGUE_CHECK,
         { id: 'buyer', group: 'quoting', state: 'pass', summary: 'Buyer credential is origin-bound, authenticated, and has market_tools:call.' },
-        skippedQuoteCheck(LOOPBACK_NO_SANDBOX_TOOL_REASON, LOOPBACK_DOCTOR_COMMAND),
+        skippedQuoteCheck(LOOPBACK_NO_SANDBOX_TOOL_REASON, LOOPBACK_DOCTOR_COMMAND, 'loopback_readiness_unprovable'),
         { id: 'balance', group: 'purchase', state: 'pass', summary: 'Buyer balance is available and the account is active.' },
         {
           id: 'funding', group: 'purchase', state: 'pass',
@@ -735,7 +737,7 @@ describe('ae doctor', () => {
         { id: 'release', group: 'discovery', state: 'pass' },
         FRESH_CATALOGUE_CHECK,
         { id: 'buyer', group: 'quoting', state: 'pass' },
-        skippedQuoteCheck(LOOPBACK_NO_SANDBOX_TOOL_REASON, LOOPBACK_DOCTOR_COMMAND),
+        skippedQuoteCheck(LOOPBACK_NO_SANDBOX_TOOL_REASON, LOOPBACK_DOCTOR_COMMAND, 'loopback_readiness_unprovable'),
         { id: 'balance', group: 'purchase', state: 'pass' },
         { id: 'funding', group: 'purchase', state: 'pass' },
         { id: 'call', group: 'purchase', state: 'pass' },
@@ -937,7 +939,7 @@ describe('ae doctor', () => {
         { id: 'release', group: 'discovery', state: 'pass', summary: `Release identity is ${'a'.repeat(40)}.` },
         FRESH_CATALOGUE_CHECK,
         { id: 'buyer', group: 'quoting', state: 'pass', summary: 'Buyer credential is origin-bound, authenticated, and has market_tools:call.' },
-        skippedQuoteCheck(LOOPBACK_NO_SANDBOX_TOOL_REASON, LOOPBACK_DOCTOR_COMMAND),
+        skippedQuoteCheck(LOOPBACK_NO_SANDBOX_TOOL_REASON, LOOPBACK_DOCTOR_COMMAND, 'loopback_readiness_unprovable'),
         { id: 'balance', group: 'purchase', state: 'pass', summary: 'Buyer balance is available and the account is active.' },
         {
           id: 'funding', group: 'purchase', state: 'pass',
@@ -1181,8 +1183,16 @@ describe('ae doctor', () => {
     const result = JSON.parse(json.stdout) as { groups: { quoting: string }; checks: unknown[] }
     expect(result.groups.quoting).toBe('skipped')
     expect(result.checks).toEqual(expect.arrayContaining([
-      skippedQuoteCheck(LOOPBACK_NO_SANDBOX_TOOL_REASON, LOOPBACK_DOCTOR_COMMAND),
+      skippedQuoteCheck(LOOPBACK_NO_SANDBOX_TOOL_REASON, LOOPBACK_DOCTOR_COMMAND, 'loopback_readiness_unprovable'),
     ]))
+    // CI gates on this structured code rather than matching the free-text reason.
+    const quoteCheck = result.checks.find((check) => (check as { id: string }).id === 'quote') as {
+      code?: string
+      summary: string
+    }
+    expect(quoteCheck.code).toBe('loopback_readiness_unprovable')
+    expect(quoteCheck.summary.endsWith('..')).toBe(false)
+    expect(quoteCheck.summary.endsWith('.')).toBe(true)
     // No Tool to quote means no Quote request is sent at all.
     expect(observed.map((request) => request.path)).toEqual([TOOL_MARKET_SEARCH_PATH])
   }, 20_000)
