@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from 'react'
+import { Fragment, useEffect, useRef, useState, useSyncExternalStore, type CSSProperties, type ReactNode, type RefObject } from 'react'
 import { Link, useLocation } from '@tanstack/react-router'
 import { MenuIcon, XIcon } from 'lucide-react'
 
@@ -79,6 +79,8 @@ function useHeaderElevated(sentinelRef: RefObject<HTMLDivElement | null>): boole
  * `AePublicPage`; the operator layout renders its `Sidebar` + `SidebarInset`
  * inside the flex row below the header.
  */
+const subscribeNever = () => () => {}
+
 export function AeAppShell({ children }: { children: ReactNode }) {
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
   const [commandOpen, setCommandOpen] = useState(false)
@@ -90,10 +92,9 @@ export function AeAppShell({ children }: { children: ReactNode }) {
     setCommandOpen(open)
   }
 
-  const [hydrated, setHydrated] = useState(false)
-  useEffect(() => {
-    setHydrated(true)
-  }, [])
+  // False during SSR and hydration, true once React runs on the client: lets
+  // browser specs probe the frame only after the DOM is React's.
+  const hydrated = useSyncExternalStore(subscribeNever, () => true, () => false)
 
   return (
     <SidebarProvider className="flex min-h-svh flex-col" style={{ '--header-height': '4rem' } as CSSProperties}>
