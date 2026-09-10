@@ -1,23 +1,42 @@
 /**
  * @vitest-environment jsdom
  */
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import type { ComponentType, ReactNode } from 'react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { createMemoryHistory, createRootRoute, createRoute, createRouter, RouterContextProvider } from '@tanstack/react-router'
+import type { ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import '../../setup/jsdom-platform'
 
-const routeState = vi.hoisted(() => ({ component: undefined as ComponentType | undefined }))
-
-vi.mock('@tanstack/react-router', () => ({
-  createFileRoute: () => (options: { component: ComponentType }) => {
-    routeState.component = options.component
-    return { ...options, options }
-  },
-  Link: ({ children, to, className }: { children: ReactNode; to: string; className?: string }) => (
-    <a href={to} className={className}>{children}</a>
-  ),
+const mocks = vi.hoisted(() => ({
+  getRequest: vi.fn(),
+  readServerReadiness: vi.fn(),
+  buildSiteDiscoveryManifest: vi.fn(),
+  readCatalogueFreshness: vi.fn(),
+  invalidate: vi.fn(async () => undefined),
 }))
 
+vi.mock('@tanstack/react-start', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@tanstack/react-start')>()),
+  createServerFn: () => ({ handler: (handler: unknown) => handler }),
+}))
+vi.mock('@tanstack/react-start/server', () => ({
+  getRequest: mocks.getRequest,
+}))
+vi.mock('@/lib/server/readiness', () => ({
+  readServerReadiness: mocks.readServerReadiness,
+}))
+vi.mock('@/modules/discovery/public', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/modules/discovery/public')>()),
+  buildSiteDiscoveryManifest: mocks.buildSiteDiscoveryManifest,
+}))
+vi.mock('@/modules/market/x402-directory-index.server', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/modules/market/x402-directory-index.server')>()),
+  readCatalogueFreshness: mocks.readCatalogueFreshness,
+}))
+vi.mock('@tanstack/react-router', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@tanstack/react-router')>()),
+  useRouter: () => ({ invalidate: mocks.invalidate }),
+}))
 vi.mock('@/components/ae/layout/AePublicPage', () => ({
   AePublicPage: ({ actions, children, title }: { actions: ReactNode; children: ReactNode; title: string }) => (
     <main>
@@ -28,232 +47,205 @@ vi.mock('@/components/ae/layout/AePublicPage', () => ({
   ),
 }))
 
-import '@/routes/status'
+import { readStatusProbesServer, type StatusProbesResult } from '@/routes/-status.functions'
+import { Route } from '@/routes/status'
 
-type DeferredResponse = Readonly<{
-  promise: Promise<Response>
-  resolve: (response: Response) => void
-  reject: (reason: unknown) => void
-}>
+function operationalManifest() {
+  return { schemaVersion: 'ae-site-discovery:v2', name: 'Agentic Economy', origin: 'https://ae.test', endpoints: [], toolGateway: {} }
+}
 
-const fetchMock = vi.fn<typeof fetch>()
+function readyDefaults() {
+  mocks.getRequest.mockReturnValue(new Request('http://localhost/status'))
+  mocks.readServerReadiness.mockResolvedValue({ status: 'ready' })
+  mocks.buildSiteDiscoveryManifest.mockReturnValue(operationalManifest())
+  mocks.readCatalogueFreshness.mockResolvedValue({ schemaVersion: 'catalogue-status:v1', status: 'fresh' })
+}
 
 beforeEach(() => {
-  vi.stubGlobal('fetch', fetchMock)
-  vi.useFakeTimers({ shouldAdvanceTime: true })
-  vi.setSystemTime(new Date('2026-08-31T04:05:06.000Z'))
+  readyDefaults()
+  vi.stubEnv('AE_RELEASE_SOURCE_REVISION', 'a'.repeat(40))
 })
 
 afterEach(() => {
   cleanup()
-  fetchMock.mockReset()
-  vi.useRealTimers()
-  vi.unstubAllGlobals()
+  vi.clearAllMocks()
+  vi.unstubAllEnvs()
+  vi.restoreAllMocks()
 })
 
-describe('/status', () => {
-  it('owns each four-probe batch through initial and manual refreshes', async () => {
-    const initial = queueDeferredBatch()
-    renderRoute()
+describe('readStatusProbesServer', () => {
+  it('reports every probe operational when every reader is healthy', async () => {
+    const result = await readStatusProbesServer()
+    expect(result.checks).toHaveLength(5)
+    expect(result.checks.map((check) => check.id)).toEqual(['site', 'market', 'discovery', 'release', 'catalogue'])
+    for (const check of result.checks) {
+      expect(check.state).toBe('operational')
+      expect(check.requestRef).toBeUndefined()
+    }
+    expect(result.checkedAt).toEqual(expect.any(String))
+  })
 
-    const initialButton = screen.getByRole('button', { name: 'Checking status…' })
-    expect(initialButton).toHaveProperty('disabled', true)
-    expect(initialButton.getAttribute('aria-busy')).toBe('true')
-    expect(screen.getByRole('list').getAttribute('aria-busy')).toBe('true')
-    const initialStatus = screen.getByRole('status')
-    expect(initialStatus.getAttribute('aria-live')).toBe('polite')
-    expect(initialStatus.getAttribute('aria-atomic')).toBe('true')
-    expect(initialStatus.textContent).toBe('Checking all systems…')
-    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Checking system status.')
-    expect(screen.queryByText(/Last checked/)).toBeNull()
-    expect(screen.queryByText('Request reference')).toBeNull()
-    expect(fetchMock).toHaveBeenCalledTimes(5)
-    expect(fetchMock.mock.calls.map(([path]) => path)).toEqual([
-      '/api/health',
-      '/api/ready',
-      '/.well-known/ucp',
-      '/api/v1/release',
-      '/api/v1/catalogue-status',
-    ])
+  it('degrades the market probe when readiness is not ready and attaches a request reference', async () => {
+    mocks.readServerReadiness.mockResolvedValue({ status: 'not_ready' })
+    const result = await readStatusProbesServer()
+    const market = result.checks.find((check) => check.id === 'market')
+    expect(market?.state).toBe('degraded')
+    expect(market?.detail).toMatch(/New Calls may fail/)
+    expect(market?.requestRef).toEqual(expect.any(String))
+  })
 
-    initial[0]?.resolve(responseForProbe(0, 200, {
-      'X-AE-Request-Id': 'request:ignored-on-success',
-    }))
-    resolveBatch(initial.slice(1), [200, 200, 200], 1)
+  it('degrades discovery when the manifest contract is invalid', async () => {
+    mocks.buildSiteDiscoveryManifest.mockReturnValue({ ...operationalManifest(), name: 'Wrong Name' })
+    const result = await readStatusProbesServer()
+    const discovery = result.checks.find((check) => check.id === 'discovery')
+    expect(discovery?.state).toBe('degraded')
+    expect(discovery?.detail).toMatch(/machine-discovery contract is invalid/)
+  })
 
-    const refreshButton = await screen.findByRole('button', { name: 'Refresh status' })
-    expect(refreshButton).toHaveProperty('disabled', false)
-    expect(refreshButton.getAttribute('aria-busy')).toBe('false')
-    expect(screen.getByRole('list').getAttribute('aria-busy')).toBe('false')
-    expect(screen.getByRole('status').textContent).toMatch(
-      /^Status checked\. All 5 systems are operational\. Last checked .+\.$/,
-    )
-    const initialCheckedAt = screen.getByRole('status').textContent
+  it('degrades release identity when the environment contract is unmet', async () => {
+    vi.stubEnv('AE_RELEASE_SOURCE_REVISION', '')
+    const result = await readStatusProbesServer()
+    const release = result.checks.find((check) => check.id === 'release')
+    expect(release?.state).toBe('degraded')
+    expect(release?.detail).toMatch(/Release identity is unavailable/)
+  })
+
+  it('degrades catalogue freshness when the directory reports stale coverage', async () => {
+    mocks.readCatalogueFreshness.mockResolvedValue({ schemaVersion: 'catalogue-status:v1', status: 'stale' })
+    const result = await readStatusProbesServer()
+    const catalogue = result.checks.find((check) => check.id === 'catalogue')
+    expect(catalogue?.state).toBe('degraded')
+    expect(catalogue?.detail).toMatch(/catalogue is stale/)
+  })
+
+  it('settles a rejected reader as an explicit unreachable degradation instead of failing the page', async () => {
+    mocks.readCatalogueFreshness.mockRejectedValue(new Error('convex_unreachable'))
+    const result = await readStatusProbesServer()
+    const catalogue = result.checks.find((check) => check.id === 'catalogue')
+    expect(catalogue?.state).toBe('degraded')
+    expect(catalogue?.detail).toMatch(/could not be checked/)
+  })
+
+  it('bounds a hung reader with the per-probe timeout instead of hanging the page', async () => {
+    mocks.readServerReadiness.mockReturnValue(new Promise(() => {}))
+    const result = await readStatusProbesServer()
+    const market = result.checks.find((check) => check.id === 'market')
+    expect(market?.state).toBe('degraded')
+    expect(market?.detail).toMatch(/could not be reached/)
+  }, 10_000)
+})
+
+describe('/status route', () => {
+  it('renders every probe from the initial loader data with no client refetch', () => {
+    renderRoute({
+      checkedAt: '9:05:06 AM',
+      checks: [
+        { id: 'site', state: 'operational', detail: 'Public pages are responding.' },
+        { id: 'market', state: 'operational', detail: 'Tool search and new Calls are ready.' },
+        { id: 'discovery', state: 'operational', detail: 'Agents can discover the current AE interfaces.' },
+        { id: 'release', state: 'operational', detail: 'Deployment identity is available.' },
+        { id: 'catalogue', state: 'operational', detail: 'The Tool catalogue was refreshed within the last 36 hours.' },
+      ],
+    })
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('All systems operational.')
     expect(screen.getAllByText('Operational')).toHaveLength(5)
-    expect(screen.queryByText('Request reference')).toBeNull()
+    expect(screen.getByRole('status').textContent).toBe('Status checked. All 5 systems are operational. Last checked 9:05:06 AM.')
+    expect(screen.getByRole('button', { name: 'Refresh status' })).toBeTruthy()
+  })
 
-    const manual = queueDeferredBatch()
-    fireEvent.click(refreshButton)
-    fireEvent.click(refreshButton)
-
-    expect(fetchMock).toHaveBeenCalledTimes(10)
-    expect(screen.getByRole('button', { name: 'Checking status…' })).toHaveProperty('disabled', true)
-    expect(screen.getByRole('status').textContent).toBe('Checking all systems…')
-    expect(screen.queryByText(/Last checked/)).toBeNull()
-
-    vi.setSystemTime(new Date('2026-08-31T04:06:07.000Z'))
-    const requestRef = 'corr_status_operation_api_01'
-    manual[0]?.resolve(responseForProbe(0))
-    manual[1]?.resolve(responseForProbe(1, 503, { 'X-AE-Request-Id': requestRef }))
-    resolveBatch(manual.slice(2), [200, 200], 2)
-
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Refresh status' })).toHaveProperty('disabled', false))
-    const degradedStatus = screen.getByText(
-      /^Status checked\. 1 of 5 systems needs attention: Tool API\. Last checked .+\.$/,
-    )
-    expect(degradedStatus.getAttribute('role')).toBe('status')
-    expect(degradedStatus.textContent).not.toBe(initialCheckedAt)
-    expect(screen.getByText('New Calls may fail (HTTP 503). Check existing Calls before retrying.')).toBeTruthy()
+  it('renders a degraded probe with its request reference and call-safety recovery guidance', () => {
+    renderRoute({
+      checkedAt: '9:06:07 AM',
+      checks: [
+        { id: 'site', state: 'operational', detail: 'Public pages are responding.' },
+        { id: 'market', state: 'degraded', detail: 'New Calls may fail. Check existing Calls before retrying.', requestRef: 'corr_status_01' },
+        { id: 'discovery', state: 'operational', detail: 'Agents can discover the current AE interfaces.' },
+        { id: 'release', state: 'operational', detail: 'Deployment identity is available.' },
+        { id: 'catalogue', state: 'operational', detail: 'The Tool catalogue was refreshed within the last 36 hours.' },
+      ],
+    })
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Some systems are degraded.')
     expect(screen.getByText('Degraded')).toBeTruthy()
-    expect(screen.getAllByText('Operational')).toHaveLength(4)
-    expect(screen.getByRole('heading', { level: 1 }).textContent).toContain('Some systems are degraded.')
+    expect(screen.getByText(
+      'Status checked. 1 of 5 systems needs attention: Tool API. Last checked 9:06:07 AM.',
+    ).getAttribute('role')).toBe('status')
+    expect(screen.getByText('Request reference').textContent).toBe('Request reference')
+    expect(screen.getByText('corr_status_01').tagName).toBe('CODE')
     expect(screen.getByRole('heading', { level: 2, name: 'Check existing calls before retrying' })).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Open Calls' }).getAttribute('href')).toBe('/activity')
-    expect(screen.getByRole('link', { name: 'Get help' }).getAttribute('href')).toBe('/support')
+  })
 
-    expect(screen.getByText('Request reference').textContent).toBe('Request reference')
-    expect(screen.getByText(requestRef).tagName).toBe('CODE')
+  it('routes non-call-safety degradations to the support recovery path', () => {
+    renderRoute({
+      checkedAt: '9:07:08 AM',
+      checks: [
+        { id: 'site', state: 'operational', detail: 'Public pages are responding.' },
+        { id: 'market', state: 'operational', detail: 'Tool search and new Calls are ready.' },
+        { id: 'discovery', state: 'degraded', detail: 'Machine discovery could not be reached. Agent setup may fail.', requestRef: 'corr_status_02' },
+        { id: 'release', state: 'operational', detail: 'Deployment identity is available.' },
+        { id: 'catalogue', state: 'operational', detail: 'The Tool catalogue was refreshed within the last 36 hours.' },
+      ],
+    })
+    const region = screen.getByRole('region', { name: 'Retry after the affected system recovers' })
+    expect(within(region).getByRole('link', { name: 'Get help' }).getAttribute('href')).toBe('/support')
+  })
+
+  it('copies a degraded probe request reference to the clipboard', async () => {
+    renderRoute({
+      checkedAt: '9:08:09 AM',
+      checks: [
+        { id: 'site', state: 'operational', detail: 'Public pages are responding.' },
+        { id: 'market', state: 'degraded', detail: 'New Calls may fail. Check existing Calls before retrying.', requestRef: 'corr_status_03' },
+        { id: 'discovery', state: 'operational', detail: 'Agents can discover the current AE interfaces.' },
+        { id: 'release', state: 'operational', detail: 'Deployment identity is available.' },
+        { id: 'catalogue', state: 'operational', detail: 'The Tool catalogue was refreshed within the last 36 hours.' },
+      ],
+    })
     const writeText = vi.fn().mockResolvedValue(undefined)
     Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })
     fireEvent.click(screen.getByRole('button', { name: 'Copy Tool API request reference' }))
-    await waitFor(() => expect(writeText).toHaveBeenCalledWith(requestRef))
-    expect(screen.getByText('Copied').getAttribute('role')).toBe('status')
-    expect(screen.getByRole('button', { name: 'Tool API request reference copied' })).toBeTruthy()
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith('corr_status_03'))
+  })
 
-    const recovered = queueDeferredBatch()
+  it('marks the list busy and disables the button while a manual refresh reloads the loader', async () => {
+    let releaseInvalidate: () => void = () => {}
+    mocks.invalidate.mockImplementation(() => new Promise<undefined>((resolve) => { releaseInvalidate = () => resolve(undefined) }))
+    renderRoute({
+      checkedAt: '9:09:10 AM',
+      checks: [
+        { id: 'site', state: 'operational', detail: 'Public pages are responding.' },
+        { id: 'market', state: 'operational', detail: 'Tool search and new Calls are ready.' },
+        { id: 'discovery', state: 'operational', detail: 'Agents can discover the current AE interfaces.' },
+        { id: 'release', state: 'operational', detail: 'Deployment identity is available.' },
+        { id: 'catalogue', state: 'operational', detail: 'The Tool catalogue was refreshed within the last 36 hours.' },
+      ],
+    })
+
     fireEvent.click(screen.getByRole('button', { name: 'Refresh status' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Checking status…' }))
+    const busyButton = screen.getByRole('button', { name: 'Checking status…' })
+    expect(busyButton).toHaveProperty('disabled', true)
+    expect(busyButton.getAttribute('aria-busy')).toBe('true')
+    expect(screen.getByRole('list').getAttribute('aria-busy')).toBe('true')
+    expect(screen.getByRole('status').textContent).toBe('Checking all systems…')
+    expect(mocks.invalidate).toHaveBeenCalledTimes(1)
 
-    expect(fetchMock).toHaveBeenCalledTimes(15)
-    expect(screen.queryByText('Request reference')).toBeNull()
-    expect(screen.queryByText(requestRef)).toBeNull()
-    recovered[0]?.resolve(responseForProbe(0))
-    recovered[1]?.resolve(responseForProbe(1, 200, {
-      'X-AE-Request-Id': 'request:ignored-after-recovery',
-    }))
-    resolveBatch(recovered.slice(2), [200, 200, 200], 2)
-
+    releaseInvalidate()
     await waitFor(() => expect(screen.getByRole('button', { name: 'Refresh status' })).toHaveProperty('disabled', false))
-    expect(screen.queryByText('Request reference')).toBeNull()
-    expect(screen.queryByText(requestRef)).toBeNull()
-  })
-
-  it('settles unreachable probes as degraded and releases the refresh control', async () => {
-    const batch = queueDeferredBatch()
-    renderRoute()
-
-    batch[0]?.resolve(responseForProbe(0))
-    batch[1]?.resolve(responseForProbe(1))
-    batch[2]?.resolve(responseForProbe(2))
-    batch[3]?.reject(new Error('network unavailable'))
-    batch[4]?.resolve(responseForProbe(4))
-
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Refresh status' })).toHaveProperty('disabled', false))
-    expect(screen.getByText('Release identity could not be reached. New Calls should wait.')).toBeTruthy()
-    expect(screen.getByText('Degraded')).toBeTruthy()
-    expect(screen.getByRole('status').textContent).toMatch(
-      /^Status checked\. 1 of 5 systems needs attention: Release identity\. Last checked .+\.$/,
-    )
-    expect(screen.queryByText('Request reference')).toBeNull()
-  })
-
-  it('treats an HTTP 200 with an invalid contract as degraded', async () => {
-    const batch = queueDeferredBatch()
-    renderRoute()
-
-    batch[0]?.resolve(responseForProbe(0))
-    batch[1]?.resolve(Response.json(
-      { status: 'ready', checks: { config: 'ready' } },
-      { headers: { 'X-AE-Request-Id': 'request:invalid-ready-contract' } },
-    ))
-    batch[2]?.resolve(responseForProbe(2))
-    batch[3]?.resolve(responseForProbe(3))
-    batch[4]?.resolve(responseForProbe(4))
-
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Refresh status' })).toHaveProperty('disabled', false))
-    expect(screen.getByText('The Tool API returned an invalid readiness result. Check existing Calls before retrying.')).toBeTruthy()
-    expect(screen.getAllByText('Operational')).toHaveLength(4)
-    expect(screen.getByText('Degraded')).toBeTruthy()
-    expect(screen.getByText('request:invalid-ready-contract')).toBeTruthy()
-    expect(screen.getByRole('link', { name: 'Open Calls' }).getAttribute('href')).toBe('/activity')
-  })
-
-  it('announces multiple degraded systems in probe order with plural copy', async () => {
-    const batch = queueDeferredBatch()
-    renderRoute()
-
-    resolveBatch(batch, [503, 200, 500, 200, 200])
-
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Refresh status' })).toHaveProperty('disabled', false))
-    expect(screen.getByRole('status').textContent).toMatch(
-      /^Status checked\. 2 of 5 systems need attention: Website, Machine discovery\. Last checked .+\.$/,
-    )
-    expect(screen.queryByText('Request reference')).toBeNull()
   })
 })
 
-function renderRoute() {
-  const Component = routeState.component
-  if (Component === undefined) throw new Error('Status route component was not captured.')
-  render(<Component />)
-}
-
-function queueDeferredBatch(): readonly DeferredResponse[] {
-  const batch = Array.from({ length: 5 }, deferredResponse)
-  for (const deferred of batch) fetchMock.mockImplementationOnce(() => deferred.promise)
-  return batch
-}
-
-function deferredResponse(): DeferredResponse {
-  let resolve!: (response: Response) => void
-  let reject!: (reason: unknown) => void
-  const promise = new Promise<Response>((resolvePromise, rejectPromise) => {
-    resolve = resolvePromise
-    reject = rejectPromise
+function renderRoute(loaderData: StatusProbesResult) {
+  vi.spyOn(Route, 'useLoaderData').mockReturnValue(loaderData as never)
+  const Component = Route.options.component
+  if (Component === undefined) throw new Error('status_route_component_missing')
+  const rootRoute = createRootRoute()
+  const router = createRouter({
+    routeTree: rootRoute.addChildren([createRoute({ getParentRoute: () => rootRoute, path: '/' })]),
+    history: createMemoryHistory({ initialEntries: ['/'] }),
   })
-  return { promise, resolve, reject }
-}
-
-function resolveBatch(
-  batch: readonly DeferredResponse[],
-  statuses: readonly number[],
-  startIndex = 0,
-) {
-  for (const [index, deferred] of batch.entries()) {
-    deferred.resolve(responseForProbe(startIndex + index, statuses[index] ?? 200))
-  }
-}
-
-function responseForProbe(
-  index: number,
-  status = 200,
-  headers?: HeadersInit,
-): Response {
-  const validBodies = [
-    { status: 'ok' },
-    { status: 'ready', checks: { config: 'ready', convex: 'ready' } },
-    {
-      schemaVersion: 'ae-site-discovery:v2',
-      name: 'Agentic Economy',
-      origin: 'https://ae.test',
-      endpoints: [],
-      toolGateway: {},
-    },
-    { kind: 'ok', sourceRevision: 'a'.repeat(40) },
-    { schemaVersion: 'catalogue-status:v1', status: 'fresh' },
-  ] as const
-  return Response.json(
-    status >= 200 && status < 300 ? validBodies[index] : { code: 'probe_failed' },
-    { status, ...(headers === undefined ? {} : { headers }) },
+  return render(
+    <RouterContextProvider router={router}>
+      <Component />
+    </RouterContextProvider>,
   )
 }

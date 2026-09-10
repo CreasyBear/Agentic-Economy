@@ -1,9 +1,15 @@
 import { readTrimmedEnv, type StringEnvironment } from '@/lib/server/read-trimmed-env'
+import { readStripeMoneyProviderConfig } from '@/lib/server/stripe-money-provider-config'
 import {
   DEPLOYMENT_MANIFEST,
   validateDeploymentManifest,
   type DeploymentEnvironment,
 } from '@/lib/deployment/manifest'
+import { cdpX402CustodyConfigurationFromEnvironment } from '@/modules/capability-supply/server'
+import { readCapabilityToolSearch } from '@/modules/capability-supply/tool-source'
+import type { SourceFreshnessState } from '@/modules/common/freshness'
+import { readDirectoryFreshnessField } from '@/modules/market/x402-directory-index.server'
+import { isMoneyRefusal } from '@/modules/money/public'
 
 const DEFAULT_PROBE_TIMEOUT_MS = 2_000
 const MAX_PROBE_TIMEOUT_MS = 5_000
@@ -101,16 +107,36 @@ export function readNamesOnlyReadinessDiagnostics(
 }
 
 
+/**
+ * Whether a sale can complete right now, additive to the Kubernetes-style
+ * infra `checks` above (config/convex = "process is up"; this = "the doctor's
+ * discovery/quoting/purchase grouping actually clears"). Every field is
+ * best-effort: a source outage or timeout degrades to the named unavailable
+ * state, it never fails the request or flips the HTTP status.
+ */
+export type CommercialReadiness = Readonly<{
+  /** x402 directory completion state (absent|failed|stale|fresh), from `readDirectoryFreshnessField`. */
+  catalogue: SourceFreshnessState
+  /** Whether at least one routeable Tool is discoverable through the public search surface the CLI doctor's sandbox search also uses. */
+  quoting: 'ready' | 'unavailable'
+  /** Whether a money rail (Stripe test/live or the CDP/x402 custody bundle) is configured to settle a sale. */
+  funding: 'configured' | 'missing'
+  /** catalogue in {fresh, stale} && quoting ready && funding configured. */
+  sellable: boolean
+}>
+
 export type ServerReadinessResult =
   | Readonly<{
       status: 'ready'
       checks: Readonly<{ config: ReadinessCheck; convex: ReadinessCheck }>
       diagnostics: ReadinessDiagnostics
+      commercial: CommercialReadiness
     }>
   | Readonly<{
       status: 'not_ready'
       checks: Readonly<{ config: ReadinessCheck; convex: ReadinessCheck }>
       diagnostics: ReadinessDiagnostics
+      commercial: CommercialReadiness
     }>
 
 export type ServerReadinessOptions = Readonly<{
@@ -126,6 +152,13 @@ export async function readServerReadiness(
   const env = options.env ?? process.env
   const diagnostics = readNamesOnlyReadinessDiagnostics(env, options.nodeMajor)
   const config = readDeploymentConfig(env, options.nodeMajor)
+  // Commercial truth is independent of the deployment-manifest gate above
+  // (e.g. a missing canonical URL in production still leaves Convex, the
+  // directory, and the money rails reachable) and shares its probe budget
+  // with the Convex liveness probe below via Promise.all, so adding it never
+  // multiplies /api/ready's worst-case latency.
+  const commercialPromise = readCommercialReadiness(env, options.timeoutMs)
+
   if (config.kind === 'failed') {
     return {
       status: 'not_ready',
@@ -134,10 +167,14 @@ export async function readServerReadiness(
         convex: { status: 'failed', code: 'convex_probe_skipped' },
       },
       diagnostics,
+      commercial: await commercialPromise,
     }
   }
 
-  const convex = await probeConvex(config.convexUrl, options.fetch ?? globalThis.fetch, options.timeoutMs)
+  const [convex, commercial] = await Promise.all([
+    probeConvex(config.convexUrl, options.fetch ?? globalThis.fetch, options.timeoutMs),
+    commercialPromise,
+  ])
   if (convex.status === 'failed') {
     return {
       status: 'not_ready',
@@ -146,6 +183,7 @@ export async function readServerReadiness(
         convex,
       },
       diagnostics,
+      commercial,
     }
   }
 
@@ -156,6 +194,72 @@ export async function readServerReadiness(
       convex,
     },
     diagnostics,
+    commercial,
+  }
+}
+
+/** Bounds a probe timeout the same way `probeConvex` does, shared by every commercial sub-check. */
+function boundedProbeTimeout(timeoutMs = DEFAULT_PROBE_TIMEOUT_MS): number {
+  return Math.min(Math.max(1, Math.trunc(timeoutMs)), MAX_PROBE_TIMEOUT_MS)
+}
+
+/** Races a lazily-started probe against a bounded timeout; never rejects, always settles to `fallback`. */
+function withBoundedTimeout<T>(run: () => Promise<T>, timeoutMs: number, fallback: T): Promise<T> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => resolve(fallback), timeoutMs)
+    Promise.resolve()
+      .then(run)
+      .then(
+        (value) => {
+          clearTimeout(timer)
+          resolve(value)
+        },
+        () => {
+          clearTimeout(timer)
+          resolve(fallback)
+        },
+      )
+  })
+}
+
+async function readCommercialReadiness(env: StringEnvironment, timeoutMs?: number): Promise<CommercialReadiness> {
+  const bounded = boundedProbeTimeout(timeoutMs)
+  const [catalogue, quoting] = await Promise.all([probeCatalogue(bounded), probeQuoting(bounded)])
+  const funding = fundingState(env)
+  const sellable = (catalogue === 'fresh' || catalogue === 'stale') && quoting === 'ready' && funding === 'configured'
+  return { catalogue, quoting, funding, sellable }
+}
+
+/** x402 directory freshness, best-effort (shared with `/api/v1/catalogue-status`). */
+function probeCatalogue(timeoutMs: number): Promise<SourceFreshnessState> {
+  return withBoundedTimeout(async () => (await readDirectoryFreshnessField(Date.now())).state, timeoutMs, 'absent')
+}
+
+/**
+ * Whether at least one routeable Tool is discoverable. An empty query is the
+ * catalogue-browse operation (see `rankToolSearchCandidates` in
+ * `tool-search.ts`), i.e. the same anonymous search surface the CLI doctor's
+ * sandbox lookup and `/api/v1/market-tools/search` both call.
+ */
+function probeQuoting(timeoutMs: number): Promise<'ready' | 'unavailable'> {
+  return withBoundedTimeout(
+    async () => {
+      const result = await readCapabilityToolSearch({ query: '', limit: 1 })
+      return result.kind === 'ok' && result.items.length > 0 ? ('ready' as const) : ('unavailable' as const)
+    },
+    timeoutMs,
+    'unavailable',
+  )
+}
+
+/** Either money rail configured (Stripe test/live, or the CDP/x402 custody bundle) suffices to settle a sale. */
+function fundingState(env: StringEnvironment): 'configured' | 'missing' {
+  try {
+    const stripe = readStripeMoneyProviderConfig(env)
+    if (!isMoneyRefusal(stripe)) return 'configured'
+    return cdpX402CustodyConfigurationFromEnvironment(env) === undefined ? 'missing' : 'configured'
+  } catch {
+    return 'missing'
   }
 }
 
@@ -226,7 +330,7 @@ async function probeConvex(
   fetchImpl: typeof globalThis.fetch,
   timeoutMs = DEFAULT_PROBE_TIMEOUT_MS,
 ): Promise<ReadinessCheck> {
-  const boundedTimeout = Math.min(Math.max(1, Math.trunc(timeoutMs)), MAX_PROBE_TIMEOUT_MS)
+  const boundedTimeout = boundedProbeTimeout(timeoutMs)
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), boundedTimeout)
   try {

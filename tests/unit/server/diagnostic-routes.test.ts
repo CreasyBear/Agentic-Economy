@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { ToolSearchResult } from '@/modules/capability-supply/tool-projection'
 
 const mocks = vi.hoisted(() => ({
   captureClientError: vi.fn((payload: unknown) => {
@@ -8,10 +9,27 @@ const mocks = vi.hoisted(() => ({
 }))
 vi.mock('@/lib/observability/sentry.server', () => mocks)
 
+// Quoting reads the public Tool search surface (also used by
+// `/api/v1/market-tools/search` and the CLI doctor's sandbox lookup). Stubbed
+// at the module boundary the same way `tests/unit/server/tool-market-routes.test.ts`
+// does, so readiness tests never depend on a real Convex deployment.
+const toolSearchMocks = vi.hoisted(() => ({
+  readCapabilityToolSearch: vi.fn(async (): Promise<ToolSearchResult> => ({
+    kind: 'no_candidates',
+    schemaVersion: 'registry-tools:v3',
+    query: '',
+    appliedFilters: {},
+    ranking: [],
+    navigation: [],
+  })),
+}))
+vi.mock('@/modules/capability-supply/tool-source', () => toolSearchMocks)
+
 import { handleHealthRequest } from '@/routes/api.health'
 import { handleReadyRequest, Route as ReadyRoute } from '@/routes/api.ready'
 import { handleClientErrorRequest, Route as ClientErrorRoute } from '@/routes/api.observability.client-error'
 import { readNamesOnlyReadinessDiagnostics, readServerReadiness } from '@/lib/server/readiness'
+import { setPublicSourceTransportForTests } from '@/lib/server/convex-source'
 import { setHttpRateLimitAdmissionForTests } from '@/lib/server/rate-limit'
 import { SOURCE_WRITE_FAMILIES } from '@/lib/deployment/manifest'
 
@@ -92,10 +110,12 @@ describe('operational diagnostics routes', () => {
     setHttpRateLimitAdmissionForTests(async () => ({ ok: true }))
     mocks.captureClientError.mockClear()
     mocks.captureServerException.mockClear()
+    toolSearchMocks.readCapabilityToolSearch.mockClear()
   })
 
   afterEach(() => {
     setHttpRateLimitAdmissionForTests(undefined)
+    setPublicSourceTransportForTests(undefined)
     vi.unstubAllEnvs()
   })
 
@@ -155,6 +175,7 @@ describe('operational diagnostics routes', () => {
     expect(body).toEqual({
       status: 'ready',
       checks: { config: 'ready', convex: 'ready' },
+      commercial: { catalogue: 'absent', quoting: 'unavailable', funding: 'missing', sellable: false },
     })
     const serialized = JSON.stringify(body)
     for (const internalName of ['diagnostics', 'CONVEX_URL', 'SENTRY_DSN', 'release-readback', 'source-authority']) {
@@ -261,6 +282,7 @@ describe('operational diagnostics routes', () => {
         config: 'ready',
         convex: { status: 'failed', code: 'convex_probe_failed' },
       },
+      commercial: { catalogue: 'absent', quoting: 'unavailable', funding: 'missing', sellable: false },
     })
     const serialized = JSON.stringify(body)
     for (const internalName of ['diagnostics', 'CONVEX_URL', 'SENTRY_DSN', 'release-readback', 'source-authority']) {
@@ -361,5 +383,264 @@ describe('operational diagnostics routes', () => {
     })
     if (!(readyWrongMethod instanceof Response)) throw new Error('ready POST handler did not return a Response')
     await expect(readyWrongMethod.json()).resolves.toMatchObject({ status: 405, kind: 'METHOD_NOT_ALLOWED' })
+  })
+
+  describe('commercial readiness (catalogue/quoting/funding -> sellable)', () => {
+    const readyFetch = () => vi.fn(async () => new Response(null, { status: 200 }))
+    const cdpCustodyEnv = () => {
+      const env = productionReadinessEnvironment()
+      return {
+        AE_X402_CUSTODY_ENABLED: env.AE_X402_CUSTODY_ENABLED,
+        CDP_API_KEY_ID: env.CDP_API_KEY_ID,
+        CDP_API_KEY_SECRET: env.CDP_API_KEY_SECRET,
+        CDP_WALLET_SECRET: env.CDP_WALLET_SECRET,
+        AE_X402_CDP_ACCOUNT_NAME: env.AE_X402_CDP_ACCOUNT_NAME,
+        AE_X402_CDP_EXPECTED_EVM_ADDRESS: env.AE_X402_CDP_EXPECTED_EVM_ADDRESS,
+        AE_X402_CDP_ACCOUNT_POLICY_ID: env.AE_X402_CDP_ACCOUNT_POLICY_ID,
+        AE_X402_CDP_PROJECT_POLICY_ID: env.AE_X402_CDP_PROJECT_POLICY_ID,
+        AE_X402_CDP_POLICY_RULES_DIGEST: env.AE_X402_CDP_POLICY_RULES_DIGEST,
+        AE_X402_CDP_CREDENTIAL_GENERATION: env.AE_X402_CDP_CREDENTIAL_GENERATION,
+        AE_X402_CUSTODY_MAX_ATOMIC: env.AE_X402_CUSTODY_MAX_ATOMIC,
+        AE_X402_CUSTODY_DAILY_MAX_ATOMIC: env.AE_X402_CUSTODY_DAILY_MAX_ATOMIC,
+      }
+    }
+    const stripeOnlyEnv = () => {
+      const env = productionReadinessEnvironment()
+      return { STRIPE_SECRET_KEY: env.STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET: env.STRIPE_WEBHOOK_SECRET }
+    }
+    const readyToolSearchResult = {
+      kind: 'ok' as const,
+      schemaVersion: 'registry-tools:v3' as const,
+      query: '',
+      items: [{} as never],
+      ranking: [],
+      pagination: { limit: 1, hasMore: false },
+      navigation: [],
+    }
+    const directoryStatus = (input: Readonly<{ completedAt: number; refreshState: 'complete' | 'failed'; lastError?: string }>) => ({
+      kind: 'ready' as const,
+      coverage: { generation: 'g1', completedAt: input.completedAt },
+      refreshState: input.refreshState,
+      ...(input.lastError === undefined ? {} : { lastError: input.lastError }),
+    })
+
+    it('reports catalogue absent when the x402 directory has no completion on record', async () => {
+      setPublicSourceTransportForTests({
+        query: vi.fn(async () => ({ kind: 'unavailable' as const, refreshState: 'none' as const })),
+        mutation: vi.fn(),
+        action: vi.fn(),
+      } as never)
+
+      const result = await readServerReadiness({ env: { NODE_ENV: 'test', CONVEX_URL: 'https://convex.example' }, fetch: readyFetch() })
+
+      expect(result.commercial.catalogue).toBe('absent')
+    })
+
+    it('reports catalogue fresh within the staleness window', async () => {
+      setPublicSourceTransportForTests({
+        query: vi.fn(async () => directoryStatus({ completedAt: Date.now() - 3_600_000, refreshState: 'complete' })),
+        mutation: vi.fn(),
+        action: vi.fn(),
+      } as never)
+
+      const result = await readServerReadiness({ env: { NODE_ENV: 'test', CONVEX_URL: 'https://convex.example' }, fetch: readyFetch() })
+
+      expect(result.commercial.catalogue).toBe('fresh')
+    })
+
+    it('reports catalogue stale once the refresh window has been missed', async () => {
+      setPublicSourceTransportForTests({
+        query: vi.fn(async () => directoryStatus({ completedAt: Date.now() - 40 * 60 * 60 * 1000, refreshState: 'complete' })),
+        mutation: vi.fn(),
+        action: vi.fn(),
+      } as never)
+
+      const result = await readServerReadiness({ env: { NODE_ENV: 'test', CONVEX_URL: 'https://convex.example' }, fetch: readyFetch() })
+
+      expect(result.commercial.catalogue).toBe('stale')
+    })
+
+    it('reports catalogue failed when the last refresh attempt failed', async () => {
+      setPublicSourceTransportForTests({
+        query: vi.fn(async () => directoryStatus({ completedAt: Date.now() - 3_600_000, refreshState: 'failed', lastError: 'boom' })),
+        mutation: vi.fn(),
+        action: vi.fn(),
+      } as never)
+
+      const result = await readServerReadiness({ env: { NODE_ENV: 'test', CONVEX_URL: 'https://convex.example' }, fetch: readyFetch() })
+
+      expect(result.commercial.catalogue).toBe('failed')
+    })
+
+    it('degrades catalogue to absent when the directory probe throws', async () => {
+      setPublicSourceTransportForTests({
+        query: vi.fn(async () => {
+          throw new Error('directory unreachable')
+        }),
+        mutation: vi.fn(),
+        action: vi.fn(),
+      } as never)
+
+      const result = await readServerReadiness({ env: { NODE_ENV: 'test', CONVEX_URL: 'https://convex.example' }, fetch: readyFetch() })
+
+      expect(result.commercial.catalogue).toBe('absent')
+    })
+
+    it('reports quoting ready when at least one routeable Tool is discoverable', async () => {
+      toolSearchMocks.readCapabilityToolSearch.mockResolvedValueOnce(readyToolSearchResult)
+
+      const result = await readServerReadiness({ env: { NODE_ENV: 'test', CONVEX_URL: 'https://convex.example' }, fetch: readyFetch() })
+
+      expect(result.commercial.quoting).toBe('ready')
+      expect(toolSearchMocks.readCapabilityToolSearch).toHaveBeenCalledWith({ query: '', limit: 1 })
+    })
+
+    it('reports quoting unavailable when no routeable Tool is found', async () => {
+      const result = await readServerReadiness({ env: { NODE_ENV: 'test', CONVEX_URL: 'https://convex.example' }, fetch: readyFetch() })
+
+      expect(result.commercial.quoting).toBe('unavailable')
+    })
+
+    it('degrades quoting to unavailable when the search probe throws', async () => {
+      toolSearchMocks.readCapabilityToolSearch.mockRejectedValueOnce(new Error('search unreachable'))
+
+      const result = await readServerReadiness({ env: { NODE_ENV: 'test', CONVEX_URL: 'https://convex.example' }, fetch: readyFetch() })
+
+      expect(result.commercial.quoting).toBe('unavailable')
+    })
+
+    it('degrades quoting to unavailable when the search probe exceeds its bounded timeout', async () => {
+      toolSearchMocks.readCapabilityToolSearch.mockImplementationOnce(() => new Promise(() => {}))
+
+      const result = await readServerReadiness({
+        env: { NODE_ENV: 'test', CONVEX_URL: 'https://convex.example' },
+        fetch: readyFetch(),
+        timeoutMs: 5,
+      })
+
+      expect(result.commercial.quoting).toBe('unavailable')
+    })
+
+    it('reports funding configured from a valid Stripe money provider config alone', async () => {
+      const result = await readServerReadiness({
+        env: { NODE_ENV: 'test', CONVEX_URL: 'https://convex.example', ...stripeOnlyEnv() },
+        fetch: readyFetch(),
+      })
+
+      expect(result.commercial.funding).toBe('configured')
+    })
+
+    it('reports funding configured from the CDP/x402 custody bundle alone', async () => {
+      const result = await readServerReadiness({
+        env: { NODE_ENV: 'test', CONVEX_URL: 'https://convex.example', ...cdpCustodyEnv() },
+        fetch: readyFetch(),
+      })
+
+      expect(result.commercial.funding).toBe('configured')
+    })
+
+    it('reports funding missing when neither money rail is configured', async () => {
+      const result = await readServerReadiness({ env: { NODE_ENV: 'test', CONVEX_URL: 'https://convex.example' }, fetch: readyFetch() })
+
+      expect(result.commercial.funding).toBe('missing')
+    })
+
+    it('derives sellable true only once catalogue is fresh-or-stale, quoting is ready, and funding is configured', async () => {
+      setPublicSourceTransportForTests({
+        query: vi.fn(async () => directoryStatus({ completedAt: Date.now() - 3_600_000, refreshState: 'complete' })),
+        mutation: vi.fn(),
+        action: vi.fn(),
+      } as never)
+      toolSearchMocks.readCapabilityToolSearch.mockResolvedValueOnce(readyToolSearchResult)
+
+      const result = await readServerReadiness({
+        env: { NODE_ENV: 'test', CONVEX_URL: 'https://convex.example', ...stripeOnlyEnv() },
+        fetch: readyFetch(),
+      })
+
+      expect(result.commercial).toEqual({ catalogue: 'fresh', quoting: 'ready', funding: 'configured', sellable: true })
+    })
+
+    it('derives sellable true for a stale-but-usable catalogue', async () => {
+      setPublicSourceTransportForTests({
+        query: vi.fn(async () => directoryStatus({ completedAt: Date.now() - 40 * 60 * 60 * 1000, refreshState: 'complete' })),
+        mutation: vi.fn(),
+        action: vi.fn(),
+      } as never)
+      toolSearchMocks.readCapabilityToolSearch.mockResolvedValueOnce(readyToolSearchResult)
+
+      const result = await readServerReadiness({
+        env: { NODE_ENV: 'test', CONVEX_URL: 'https://convex.example', ...stripeOnlyEnv() },
+        fetch: readyFetch(),
+      })
+
+      expect(result.commercial).toEqual({ catalogue: 'stale', quoting: 'ready', funding: 'configured', sellable: true })
+    })
+
+    it('derives sellable false when the catalogue refresh has failed even though quoting and funding are ready', async () => {
+      setPublicSourceTransportForTests({
+        query: vi.fn(async () => directoryStatus({ completedAt: Date.now() - 3_600_000, refreshState: 'failed', lastError: 'boom' })),
+        mutation: vi.fn(),
+        action: vi.fn(),
+      } as never)
+      toolSearchMocks.readCapabilityToolSearch.mockResolvedValueOnce(readyToolSearchResult)
+
+      const result = await readServerReadiness({
+        env: { NODE_ENV: 'test', CONVEX_URL: 'https://convex.example', ...stripeOnlyEnv() },
+        fetch: readyFetch(),
+      })
+
+      expect(result.commercial).toEqual({ catalogue: 'failed', quoting: 'ready', funding: 'configured', sellable: false })
+    })
+
+    it('derives sellable false when no routeable Tool can be quoted even though the catalogue and funding are ready', async () => {
+      setPublicSourceTransportForTests({
+        query: vi.fn(async () => directoryStatus({ completedAt: Date.now() - 3_600_000, refreshState: 'complete' })),
+        mutation: vi.fn(),
+        action: vi.fn(),
+      } as never)
+
+      const result = await readServerReadiness({
+        env: { NODE_ENV: 'test', CONVEX_URL: 'https://convex.example', ...stripeOnlyEnv() },
+        fetch: readyFetch(),
+      })
+
+      expect(result.commercial).toEqual({ catalogue: 'fresh', quoting: 'unavailable', funding: 'configured', sellable: false })
+    })
+
+    it('derives sellable false when no money rail is configured even though the catalogue and quoting are ready', async () => {
+      setPublicSourceTransportForTests({
+        query: vi.fn(async () => directoryStatus({ completedAt: Date.now() - 3_600_000, refreshState: 'complete' })),
+        mutation: vi.fn(),
+        action: vi.fn(),
+      } as never)
+      toolSearchMocks.readCapabilityToolSearch.mockResolvedValueOnce(readyToolSearchResult)
+
+      const result = await readServerReadiness({ env: { NODE_ENV: 'test', CONVEX_URL: 'https://convex.example' }, fetch: readyFetch() })
+
+      expect(result.commercial).toEqual({ catalogue: 'fresh', quoting: 'ready', funding: 'missing', sellable: false })
+    })
+
+    it('projects commercial in the /api/ready body alongside the unchanged config/convex checks contract', async () => {
+      setPublicSourceTransportForTests({
+        query: vi.fn(async () => directoryStatus({ completedAt: Date.now() - 3_600_000, refreshState: 'complete' })),
+        mutation: vi.fn(),
+        action: vi.fn(),
+      } as never)
+      toolSearchMocks.readCapabilityToolSearch.mockResolvedValueOnce(readyToolSearchResult)
+
+      const response = await handleReadyRequest(
+        new Request('https://ae.example/api/ready'),
+        { env: { NODE_ENV: 'test', CONVEX_URL: 'https://convex.example', ...stripeOnlyEnv() }, fetch: readyFetch() },
+      )
+
+      expect(response.status).toBe(200)
+      const body = await response.json()
+      expect(body).toEqual({
+        status: 'ready',
+        checks: { config: 'ready', convex: 'ready' },
+        commercial: { catalogue: 'fresh', quoting: 'ready', funding: 'configured', sellable: true },
+      })
+    })
   })
 })
