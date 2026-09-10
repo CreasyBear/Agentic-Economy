@@ -16,7 +16,7 @@ found, 26 fixed same day, 23 filed to owning wells. Hosted cutover not deployed 
 
 ## Correction (2026-09-10)
 
-The Well 3 live proof listed the seeded sandbox Tool because the seed wrote its readiness observation directly. That was fabricated state; the hourly readiness probe later marked the Tool degraded and the qualifier excluded it. Wells 1+2 removed the seed's readiness write, pointed the Tool at a real in-app counterparty (`/api/v1/sandbox-reference`), and kept the SSRF guard untouched, so on loopback the Tool is not listed by design. Well 3's exit criterion 1 is therefore restated: fresh checkout proves discovery pass, connect, and funding diagnostics; quoting is `skipped` on loopback and provable on a hosted origin.
+The Well 3 live proof listed the seeded sandbox Tool because the seed wrote its readiness observation directly. That was fabricated state; the hourly readiness probe later marked the Tool degraded and the qualifier excluded it. Wells 1+2 removed the seed's readiness write, pointed the Tool at a real in-app counterparty (`/api/v1/sandbox-reference`), and kept the SSRF guard untouched, so on loopback the Tool is not listed by design. Well 3's exit criterion 1 is therefore restated: fresh checkout proves discovery pass, connect, and funding diagnostics; quoting is `skipped` on loopback and provable on a hosted origin. CI's fresh-checkout job first passed on 2026-09-10 after Lane M merged the stabilisation branch to main (see lane-m-merge-closeout.md).
 
 ## What changed
 
@@ -255,18 +255,7 @@ See [`well-3-swarm-triage.md`](well-3-swarm-triage.md) for the full per-item rou
 
 ## Hosted cutover runbook
 
-Not deployed. Requires Joel's go — production deploy from unpushed local `main`.
-
-```
-1. Deploy code + schema via the project's normal hosted deploy path.
-
-2. npx convex run --prod capabilitySupplyProjection:rebuildAllBusinessSupplyProjections '{}'
-   # run once, so hosted business search matches CLI/describe results immediately
-
-3. Set nothing for the sandbox deployment profile — unset is a valid value.
-
-4. Expect ae doctor quoting: warn until the Account is funded (Well 2).
-```
+See `docs/operations/hosted-cutover-runbook.md` for the consolidated steps (Well 0, Well 3, Wells 1+2, Well 4) in execution order.
 
 ## Commits
 

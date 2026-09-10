@@ -19,7 +19,8 @@ not own the agent's larger project, planning, memory or orchestration.
 Read [PRODUCT.md](./PRODUCT.md) for the active direction,
 [CONTEXT.md](./CONTEXT.md) for familiar product terms, source contracts and
 compatibility names, and the [Australian whitepaper](./AGENTIC_ECONOMY_AUSTRALIA_WHITEPAPER.md)
-for the institutional thesis.
+for the institutional thesis. New to the vocabulary? Start with the
+[glossary](./docs/glossary.md).
 
 ## The product loop
 

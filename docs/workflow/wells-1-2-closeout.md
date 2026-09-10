@@ -68,4 +68,4 @@ Scope: a Call must survive the buyer's process dying and the buyer's credential 
 
 ## Hosted runbook additions
 
-After deploy (Joel's call): `npm run stripe:webhooks -- --mode test --apply` (then `--mode live --confirm-live --apply`), set the two `AE_PACKAGE5_FIXTURE_*` env names and `AE_SITE_URL` on the deployment, confirm `observe x402 treasury` runs once custody keys exist.
+See `docs/operations/hosted-cutover-runbook.md` for the consolidated steps (Well 0, Well 3, Wells 1+2, Well 4) in execution order.
