@@ -18,11 +18,20 @@ export async function directoryGeneration(ctx: Pick<QueryCtx, 'db'> | Pick<Mutat
   return row?.source === 'coinbase' ? row : null
 }
 
+/**
+ * The live generation is updated in place (Well 8 Lane B): a refresh patches
+ * this same row rather than swapping to a fresh one, so `status` legitimately
+ * reads 'refreshing' for the run's whole duration. Gating reads on
+ * `terminalObserved` alone (never re-checking `status`) keeps browse/search/
+ * facets available throughout a refresh - `terminalObserved` latches true the
+ * first time a scan ever completes (x402DirectoryIndexStore.applyPage) and
+ * never resets, unlike `status`, which does flip per run.
+ */
 export async function activeDirectoryGeneration(ctx: Pick<QueryCtx, 'db'>) {
   const state = await directoryState(ctx)
   if (state?.activeGeneration === undefined) return null
   const generation = await directoryGeneration(ctx, state.activeGeneration)
-  return generation?.status === 'complete' && generation.terminalObserved === true ? generation : null
+  return generation?.terminalObserved === true ? generation : null
 }
 
 export function directoryCoverage(row: Doc<'marketExternalRegistryGenerations'>): X402DirectoryIndexCoverage {
@@ -60,61 +69,23 @@ export function storedDirectoryEntry(row: Doc<'marketExternalRegistryEntries'>):
   return { ...entry, ...directorySourceLabels(raw), title, metadataJson: row.directorySourceJson }
 }
 
-export type MomentumObservation = { calls?: number; payers?: number }
-
-export type MomentumSignal = { momentumOrder: number; callDelta?: number; payerDelta?: number; momentumBand: DirectoryMomentumBand }
-
-function reportedCount(value: number | undefined): number | undefined {
-  return value !== undefined && Number.isSafeInteger(value) && value >= 0 ? value : undefined
-}
-
-/**
- * Momentum against the previous generation's reported activity. A missing
- * previous observation means nothing is comparable ('unknown'); a previous
- * observation without reported payers marks a resource that entered the
- * directory with payers as 'new'. Bands: rising >= 2 payer delta,
- * falling <= -2, otherwise flat.
- */
-export function directoryMomentum(
-  current: MomentumObservation,
-  previous: MomentumObservation | undefined,
-): MomentumSignal {
-  if (previous === undefined) return { momentumOrder: -1, momentumBand: 'unknown' }
-  const currentPayers = reportedCount(current.payers)
-  const previousPayers = reportedCount(previous.payers)
-  if (previousPayers === undefined) return { momentumOrder: -1, momentumBand: currentPayers !== undefined && currentPayers > 0 ? 'new' : 'unknown' }
-  if (currentPayers === undefined) return { momentumOrder: -1, momentumBand: 'unknown' }
-  const payerDelta = currentPayers - previousPayers
-  const currentCalls = reportedCount(current.calls)
-  const previousCalls = reportedCount(previous.calls)
-  return {
-    momentumOrder: payerDelta,
-    payerDelta,
-    ...(currentCalls !== undefined && previousCalls !== undefined ? { callDelta: currentCalls - previousCalls } : {}),
-    momentumBand: payerDelta >= 2 ? 'rising' : payerDelta <= -2 ? 'falling' : 'flat',
-  }
-}
-
-/** Stored projection patch: undefined deltas are omitted, never zero-filled. */
-export function momentumPatch(momentum: MomentumSignal) {
-  return {
-    momentumOrder: momentum.momentumOrder, momentumBand: momentum.momentumBand,
-    ...(momentum.callDelta === undefined ? {} : { callDelta: momentum.callDelta }),
-    ...(momentum.payerDelta === undefined ? {} : { payerDelta: momentum.payerDelta }),
-  }
-}
-
 export function indexedDirectoryEntry(row: Doc<'marketExternalRegistryEntries'>, search?: Doc<'marketDirectorySearchEntries'>): IndexedEntry {
   const stored = storedDirectoryEntry(row)
   const entry = search?.slug === undefined ? stored : { ...stored, slug: search.slug }
-  const analytics = search === undefined || search.depthBand === undefined || search.lastCalledBand === undefined || search.momentumBand === undefined ? undefined : {
+  // momentumBand/callDelta/payerDelta are no longer computed (Well 8 Lane B
+  // dropped the previous-generation comparison they depended on - see
+  // x402DirectoryIndexBackfill.ts). They stay optional here so legacy rows
+  // that still carry a value from before that change keep rendering it,
+  // without gating the whole analytics block on a field nothing writes
+  // anymore.
+  const analytics = search === undefined || search.depthBand === undefined || search.lastCalledBand === undefined ? undefined : {
     ...(search.payerDepth === undefined ? {} : { payerDepth: search.payerDepth }),
     depthBand: search.depthBand as DirectoryDepthBand,
     ...(search.lastActivatedAt === undefined ? {} : { lastActivatedAt: search.lastActivatedAt }),
     lastCalledBand: search.lastCalledBand as DirectoryRecencyBand,
     ...(search.callDelta === undefined ? {} : { callDelta: search.callDelta }),
     ...(search.payerDelta === undefined ? {} : { payerDelta: search.payerDelta }),
-    momentumBand: search.momentumBand as DirectoryMomentumBand,
+    ...(search.momentumBand === undefined ? {} : { momentumBand: search.momentumBand as DirectoryMomentumBand }),
   }
   return {
     entry, category: row.directoryCategory ?? 'uncategorized',

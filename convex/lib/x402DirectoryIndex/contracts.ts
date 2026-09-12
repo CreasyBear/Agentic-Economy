@@ -44,7 +44,9 @@ export const indexedEntryValue = v.object({
     lastCalledBand: v.string(),
     callDelta: v.optional(v.number()),
     payerDelta: v.optional(v.number()),
-    momentumBand: v.string(),
+    // Optional (Well 8 Lane B): no longer computed going forward (see
+    // x402DirectoryIndexBackfill.ts) - only legacy rows still carry a value.
+    momentumBand: v.optional(v.string()),
   })),
 })
 export type IndexedEntry = Infer<typeof indexedEntryValue>

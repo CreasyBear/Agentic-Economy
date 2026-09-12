@@ -11,7 +11,7 @@ import type { IndexProgress } from './lib/x402DirectoryIndex/contracts'
 const workflow = new WorkflowManager(components.workflow)
 
 export const scan = workflow.define({
-  args: { generation: v.string(), workload: workloadCronSnapshotValue },
+  args: { generation: v.string(), runStartedAt: v.number(), workload: workloadCronSnapshotValue },
   returns: v.object({ kind: v.union(v.literal('complete'), v.literal('preserved')), generation: v.string(), indexedTotal: v.number() }),
 }).handler(async (step, args): Promise<{ kind: 'complete' | 'preserved'; generation: string; indexedTotal: number }> => {
   let offset = 0
@@ -27,46 +27,31 @@ export const scan = workflow.define({
 
 export const start = internalAction({
   args: { workload: v.optional(workloadCronSnapshotValue) },
-  returns: v.object({ kind: v.union(v.literal('started'), v.literal('refreshing'), v.literal('unchanged')), generation: v.string() }),
-  handler: async (ctx, args): Promise<{ kind: 'started' | 'refreshing' | 'unchanged'; generation: string }> => {
+  returns: v.object({ kind: v.union(v.literal('started'), v.literal('refreshing')), generation: v.string() }),
+  handler: async (ctx, args): Promise<{ kind: 'started' | 'refreshing'; generation: string }> => {
     if (args.workload === undefined) await ctx.runMutation(internal.workloadCron.ensurePlatformWorkloadIdentities, {})
     const workload = parseWorkloadCronSnapshot(args.workload ?? await ctx.runQuery(internal.workloadCron.admit, { name: 'refresh Agentic Economy API registry' }))
-    // Change-signal guard: a full re-index rewrites ~14,541 resources (2-3
-    // search rows and ~15 aggregate-component calls each) - roughly 225,000
-    // function calls (before: 24h cadence -> ~225,000/day -> ~6.75M/month,
-    // 6.75x the Starter 1M/month allowance). Comparing the source's reported
-    // total against what the active generation already recorded costs 3 calls
-    // (query + probe + audit patch) and lets an unchanged upstream skip the
-    // rewrite entirely (after: with the 7-day cadence below, ~6 guard-only
-    // days/week at ~3 calls plus at most 1 real refresh/week -> well under
-    // 1M/month even every week actually changes).
-    const active = await ctx.runQuery(internal.x402DirectoryIndexStore.activeCoverage, {})
-    if (active !== null) {
-      const probedTotal = await ctx.runAction(internal.x402DirectoryIndexSource.probeTotal, {})
-      if (probedTotal === active.sourceReportedLatest) {
-        console.info(JSON.stringify({
-          kind: 'x402_directory_refresh_unchanged', generation: active.generation, storedTotal: active.sourceReportedLatest, probedTotal,
-        }))
-        await ctx.runMutation(internal.x402DirectoryIndexStore.recordUnchangedCheck, { workload })
-        return { kind: 'unchanged', generation: active.generation }
-      }
-    }
-    return await ctx.runMutation(internal.x402DirectoryIndexStore.begin, {
-      generation: `coinbase-${Date.now()}-${crypto.randomUUID()}`, startedAt: Date.now(), workload,
-    })
+    // Well 8 Lane B: no more change-signal guard here. The old guard existed
+    // to skip a full re-index (~225,000 calls) when nothing changed upstream;
+    // now every run diffs per-resource against the retained observation
+    // (x402DirectoryIndexStore.writeSource) and an unchanged resource costs
+    // one small patch, so there is no expensive "full rewrite" left to skip -
+    // the weekly cadence below is the only cost control needed.
+    return await ctx.runMutation(internal.x402DirectoryIndexStore.begin, { startedAt: Date.now(), workload })
   },
 })
 
 export const onComplete = internalMutation({
   args: {
     workflowId: vWorkflowId, result: vResultValidator,
-    context: v.object({ generation: v.string(), workload: workloadCronSnapshotValue }),
+    context: v.object({ generation: v.string(), workload: workloadCronSnapshotValue, runStartedAt: v.number() }),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
     if (args.result.kind !== 'success') {
       await ctx.runMutation(internal.x402DirectoryIndexStore.fail, {
-        ...args.context, reason: args.result.kind === 'failed' ? args.result.error : 'directory_refresh_canceled',
+        generation: args.context.generation, workload: args.context.workload,
+        reason: args.result.kind === 'failed' ? args.result.error : 'directory_refresh_canceled',
       })
     } else if (isRecord(args.result.returnValue) && args.result.returnValue.kind === 'complete' && typeof args.result.returnValue.generation === 'string') {
       // Pre-admission: only the first adoption-sorted page of eligible
@@ -78,6 +63,12 @@ export const onComplete = internalMutation({
       if (resources.length > 0) {
         await marketDispatchWorkpool.enqueueActionBatch(ctx, api.x402Directory.resolve, resources.map(resource => ({ resource })), { retry: true })
       }
+      // Removal sweep only runs after a full, successful scan (never after a
+      // partial/failed one - x402DirectoryIndexStore.fail leaves the live
+      // generation untouched on failure).
+      await ctx.scheduler.runAfter(0, internal.x402DirectoryIndexStore.cleanup, {
+        generation: args.context.generation, runStartedAt: args.context.runStartedAt,
+      })
     }
     await workflow.cleanup(ctx, args.workflowId)
     return null

@@ -10,8 +10,9 @@ import { internalMutation, internalQuery, type MutationCtx } from './_generated/
 import { parseWorkloadCronSnapshot, reconcileWorkloadCronSnapshot, workloadCronSnapshotValue } from './workloadCron'
 import { indexedSourceValue, progressValue, type IndexedSource, type IndexProgress } from './lib/x402DirectoryIndex/contracts'
 import { directoryFacets } from './lib/x402DirectoryIndex/facets'
-import { ANALYTICS_VERSION, analyticsNamespace, eligibleFacetsNamespace, searchAnalytics, writeAnalytics } from './lib/x402DirectoryIndex/analytics'
-import { activeDirectoryGeneration, directoryGeneration, directoryState, storedDirectoryEntry } from './lib/x402DirectoryIndex/rows'
+import { ANALYTICS_VERSION, deleteAnalyticsMembership, eligibleFacetsNamespace, searchAnalytics, writeAnalytics } from './lib/x402DirectoryIndex/analytics'
+import { directoryGeneration, directoryState, storedDirectoryEntry } from './lib/x402DirectoryIndex/rows'
+import { listingIdentityDigest } from './lib/x402DirectoryIndex/listingDigest'
 
 export const DIRECTORY_INDEX_PAGE_SIZE = 100
 const MAX_ENTRY_BYTES = 768 * 1024
@@ -26,33 +27,58 @@ async function authorize(ctx: MutationCtx, workload: Parameters<typeof parseWork
   await reconcileWorkloadCronSnapshot(ctx, 'refresh Agentic Economy API registry', parseWorkloadCronSnapshot(workload))
 }
 
+/**
+ * Well 8 Lane B: one live generation, updated in place. `begin` no longer
+ * mints a fresh generation when an active one already exists - it reuses
+ * `state.activeGeneration`, resets that generation row's per-run cursor and
+ * reports, and records the run's start time on `marketExternalRegistryState.
+ * runStartedAt` (threaded through to every touched row's `lastSeenRunAt`,
+ * and to the removal sweep's staleness threshold). Only the very first ever
+ * run (no `activeGeneration` yet) mints a new generation id.
+ */
 export const begin = internalMutation({
-  args: { generation: v.string(), startedAt: v.number(), workload: workloadCronSnapshotValue },
+  args: { startedAt: v.number(), workload: workloadCronSnapshotValue },
   returns: v.object({ kind: v.union(v.literal('started'), v.literal('refreshing')), generation: v.string() }),
   handler: async (ctx, args): Promise<{ kind: 'started' | 'refreshing'; generation: string }> => {
     await authorize(ctx, args.workload)
-    if (!/^coinbase-[a-zA-Z0-9-]{1,100}$/u.test(args.generation) || !Number.isSafeInteger(args.startedAt)) throw new Error('directory_generation_invalid')
+    if (!Number.isSafeInteger(args.startedAt)) throw new Error('directory_generation_invalid')
     const state = await directoryState(ctx)
     if (state?.refreshGeneration !== undefined) {
       const previous = await directoryGeneration(ctx, state.refreshGeneration)
       if (previous?.status === 'refreshing') return { kind: 'refreshing', generation: previous.generation }
     }
-    if (await directoryGeneration(ctx, args.generation) !== null) throw new Error('directory_generation_exists')
-    await ctx.db.insert('marketExternalRegistryGenerations', {
-      generation: args.generation, source: 'coinbase', status: 'refreshing', startedAt: args.startedAt,
-      ingestedCount: 0, nextOffset: 0, pagesFetched: 0, observations: 0, duplicateObservations: 0, terminalObserved: false, analyticsVersion: ANALYTICS_VERSION,
-    })
+    const generation = state?.activeGeneration ?? `coinbase-${args.startedAt}-${crypto.randomUUID()}`
+    if (!/^coinbase-[a-zA-Z0-9-]{1,100}$/u.test(generation)) throw new Error('directory_generation_invalid')
+    const existingRow = await directoryGeneration(ctx, generation)
+    if (existingRow === null) {
+      await ctx.db.insert('marketExternalRegistryGenerations', {
+        generation, source: 'coinbase', status: 'refreshing', startedAt: args.startedAt,
+        ingestedCount: 0, nextOffset: 0, pageItemCursor: 0, pagesFetched: 0, observations: 0, duplicateObservations: 0, terminalObserved: false, analyticsVersion: ANALYTICS_VERSION,
+      })
+    } else {
+      // Reuse in place: reset this run's cursor/report fields; `ingestedCount`
+      // (the live row total) and `terminalObserved` (sticky "has ever
+      // completed" flag read by activeDirectoryGeneration) are NOT reset, so
+      // reads stay served from the last-good state for the run's whole
+      // duration - there is no spare "previous complete generation" anymore.
+      await ctx.db.patch(existingRow._id, {
+        status: 'refreshing', startedAt: args.startedAt, nextOffset: 0, pageItemCursor: 0,
+        pagesFetched: 0, observations: 0, duplicateObservations: 0,
+        sourceReportedInitial: undefined, sourceReportedLatest: undefined, sourceReportedMinimum: undefined, sourceReportedMaximum: undefined,
+        completedAt: undefined, failedAt: undefined, failureReason: undefined,
+      })
+    }
     const next = {
-      key: 'coinbase' as const, ...(state?.activeGeneration === undefined ? {} : { activeGeneration: state.activeGeneration }),
-      refreshGeneration: args.generation, lastAttemptAt: args.startedAt, lastAttemptStatus: 'refreshing' as const,
+      key: 'coinbase' as const, activeGeneration: generation, refreshGeneration: generation,
+      runStartedAt: args.startedAt, lastAttemptAt: args.startedAt, lastAttemptStatus: 'refreshing' as const,
     }
     if (state === null) await ctx.db.insert('marketExternalRegistryState', next)
     else await ctx.db.replace(state._id, next)
-    await start(ctx, internal.x402DirectoryIndexRefresh.scan, { generation: args.generation, workload: args.workload }, {
+    await start(ctx, internal.x402DirectoryIndexRefresh.scan, { generation, workload: args.workload, runStartedAt: args.startedAt }, {
       startAsync: true, onComplete: internal.x402DirectoryIndexRefresh.onComplete,
-      context: { generation: args.generation, workload: args.workload },
+      context: { generation, workload: args.workload, runStartedAt: args.startedAt },
     })
-    return { kind: 'started', generation: args.generation }
+    return { kind: 'started', generation }
   },
 })
 
@@ -62,43 +88,6 @@ export const checkpoint = internalQuery({
   handler: async (ctx, args) => {
     const row = await directoryGeneration(ctx, args.generation)
     return row === null ? null : { status: row.status, nextOffset: row.nextOffset ?? 0, indexedTotal: row.ingestedCount }
-  },
-})
-
-/** The active generation's already-recorded coverage, for the change-signal guard in x402DirectoryIndexRefresh.start. */
-export const activeCoverage = internalQuery({
-  args: {},
-  returns: v.union(v.null(), v.object({ generation: v.string(), sourceReportedLatest: v.optional(v.number()) })),
-  handler: async ctx => {
-    const generation = await activeDirectoryGeneration(ctx)
-    if (generation === null) return null
-    return { generation: generation.generation, ...(generation.sourceReportedLatest === undefined ? {} : { sourceReportedLatest: generation.sourceReportedLatest }) }
-  },
-})
-
-/**
- * Advances the audit trail when the change-signal guard finds nothing new
- * upstream: marketExternalRegistryState.lastAttemptAt moves to now so an
- * operator can see the check happened, without minting a new generation row.
- * No new schema field is needed - the compared totals (equal by definition
- * of "unchanged") are already on the active generation's sourceReportedLatest,
- * and the exact comparison is logged by the caller.
- */
-export const recordUnchangedCheck = internalMutation({
-  args: { workload: workloadCronSnapshotValue },
-  returns: v.null(),
-  handler: async (ctx, args) => {
-    await authorize(ctx, args.workload)
-    const state = await directoryState(ctx)
-    if (state === null) return null
-    await ctx.db.replace(state._id, {
-      key: 'coinbase',
-      ...(state.activeGeneration === undefined ? {} : { activeGeneration: state.activeGeneration }),
-      ...(state.refreshGeneration === undefined ? {} : { refreshGeneration: state.refreshGeneration }),
-      lastAttemptAt: Date.now(), lastAttemptStatus: state.lastAttemptStatus,
-      ...(state.lastError === undefined ? {} : { lastError: state.lastError }),
-    })
-    return null
   },
 })
 
@@ -133,6 +122,16 @@ async function writeFacetMembership(ctx: MutationCtx, generation: string, resour
   }
 }
 
+/** Adds or removes the eligible-only mirror membership only, for a resource whose base category/provider/network facets are unchanged. */
+async function toggleEligibleFacetMembership(ctx: MutationCtx, generation: string, resource: string, category: string, provider: string, networks: string[], eligible: boolean, previousEligible: boolean) {
+  if (eligible === previousEligible) return
+  const namespace = eligibleFacetsNamespace(generation)
+  for (const key of facetKeys({ directoryCategory: category, provider, networks })) {
+    if (eligible) await directoryFacets.insert(ctx, { namespace, key, id: resource })
+    else await directoryFacets.deleteIfExists(ctx, { namespace, key, id: resource })
+  }
+}
+
 /**
  * Kebab slug for the canonical `/tools/<providerKey>/<slug>` URL, unique
  * within (generation, providerKey). The base slug is the resource path only;
@@ -153,7 +152,24 @@ async function resolveDirectorySlug(
   return collision !== null && collision.resource !== resource ? directorySlugWithMethod(resource, method) : base
 }
 
-async function writeSource(ctx: MutationCtx, generation: string, item: IndexedSource, observedAt: number): Promise<boolean> {
+type WriteOutcome = 'inserted' | 'unchanged' | 'activity_patched' | 'rewritten'
+
+/**
+ * Well 8 Lane B, three-tier diff against the retained observation:
+ * 1. No previous row -> insert (full path, as always).
+ * 2. `sourceDigest` (whole raw entry) unchanged -> nothing at all changed;
+ *    only `lastSeenRunAt` is stamped so the removal sweep does not treat this
+ *    resource as gone.
+ * 3. `sourceDigest` changed but `listingDigest` (identity-only) did not ->
+ *    activity-only change (the common week-to-week case for an active
+ *    resource): patch the retained snapshot and each search row's
+ *    activity-derived fields, and flip the eligible-only facet mirror if
+ *    adoption crossed the threshold. No slug/category/provider/network facet
+ *    churn - those depend only on identity fields, which are unchanged.
+ * 4. `listingDigest` changed (or there's no previous row) -> full rewrite:
+ *    same insert-shaped path as case 1, applied on top of the existing row.
+ */
+async function writeSource(ctx: MutationCtx, generation: string, item: IndexedSource, observedAt: number, runStartedAt: number): Promise<WriteOutcome> {
   if (item.resource !== item.entry.resource || item.resource.length === 0 || item.resource.length > 8192
     || !/^sha256:[0-9a-f]{64}$/u.test(item.sourceDigest)
     || encoder.encode(item.sourceJson).byteLength > MAX_SOURCE_BYTES
@@ -166,6 +182,50 @@ async function writeSource(ctx: MutationCtx, generation: string, item: IndexedSo
   const networks = [...new Set(entry.prices.map(price => directoryNetwork(price.network)))].sort()
   if (networks.length > 128) throw new Error('directory_network_metadata_invalid')
   const category = entry.category?.trim().toLowerCase() || 'uncategorized'
+  const digest = listingIdentityDigest(entry, category)
+
+  // Tier 2: nothing changed at all upstream.
+  if (previous !== null && previous.sourceDigest === item.sourceDigest) {
+    await ctx.db.patch(previous._id, { lastSeenRunAt: runStartedAt })
+    return 'unchanged'
+  }
+
+  // Tier 3: activity-only change - the listing itself is identical.
+  if (previous !== null && previous.listingDigest === digest) {
+    const sourceUpdatedAt = entry.provenance?.updatedAt === undefined ? undefined : Date.parse(entry.provenance.updatedAt)
+    const updatedOrder = sourceUpdatedAt !== undefined && Number.isFinite(sourceUpdatedAt) ? sourceUpdatedAt : -1
+    const calls = entry.activity?.calls30d
+    const popularOrder = calls !== undefined && Number.isSafeInteger(calls) && calls >= 0 ? calls : -1
+    await ctx.db.patch(previous._id, {
+      sourceDigest: item.sourceDigest, updatedAt: observedAt,
+      directoryEntryJson: JSON.stringify({ ...entry, metadataJson: '' }), directorySourceJson: item.sourceJson,
+      directorySourceUpdatedAt: updatedOrder === -1 ? undefined : updatedOrder,
+      directoryCalls30d: popularOrder === -1 ? undefined : popularOrder,
+      listingDigest: digest, lastSeenRunAt: runStartedAt,
+    })
+    const searchRows = await ctx.db.query('marketDirectorySearchEntries')
+      .withIndex('by_generation_and_resource', q => q.eq('generation', generation).eq('resource', item.resource)).take(130)
+    const universalAnalytics = searchAnalytics(entry, '*', observedAt)
+    const eligible = isDirectoryEntryEligible(universalAnalytics)
+    const previousEligible = searchRows.find(row => row.network === '*')?.eligible === true
+    for (const row of searchRows) {
+      const next = searchAnalytics(entry, row.network, observedAt)
+      const changed = row.popularOrder !== popularOrder || row.updatedOrder !== updatedOrder || row.eligible !== eligible
+        || row.payersOrder !== next.payersOrder || row.adoptionBand !== next.adoptionBand || row.depthBand !== next.depthBand
+        || row.lastCalledBand !== next.lastCalledBand || row.payerDepth !== next.payerDepth || row.lastActivatedAt !== next.lastActivatedAt
+      if (changed) {
+        await ctx.db.patch(row._id, {
+          popularOrder, updatedOrder, eligible,
+          payersOrder: next.payersOrder, adoptionBand: next.adoptionBand, depthBand: next.depthBand, lastCalledBand: next.lastCalledBand,
+          payerDepth: next.payerDepth, lastActivatedAt: next.lastActivatedAt,
+        })
+      }
+    }
+    await toggleEligibleFacetMembership(ctx, generation, item.resource, category, entry.provider, networks, eligible, previousEligible)
+    return 'activity_patched'
+  }
+
+  // Tier 1/4: insert, or a listing-identity rewrite.
   const sourceUpdatedAt = entry.provenance?.updatedAt === undefined ? undefined : Date.parse(entry.provenance.updatedAt)
   const updatedOrder = sourceUpdatedAt !== undefined && Number.isFinite(sourceUpdatedAt) ? sourceUpdatedAt : -1
   const calls = entry.activity?.calls30d
@@ -173,7 +233,7 @@ async function writeSource(ctx: MutationCtx, generation: string, item: IndexedSo
   const searchText = [entry.title, entry.serviceName, entry.description, entry.provider, category, ...(entry.tags ?? [])].filter(Boolean).join(' ').slice(0, 8000)
   // Eligibility and provider identity are resource-level (not per-network), so
   // compute once and copy onto every network-variant search row below.
-  const universalAnalytics = searchAnalytics(entry, '*')
+  const universalAnalytics = searchAnalytics(entry, '*', observedAt)
   const eligible = isDirectoryEntryEligible(universalAnalytics)
   const providerKey = directoryProviderKey(entry.provider)
   const slug = await resolveDirectorySlug(ctx, generation, providerKey, item.resource, entry.method)
@@ -196,6 +256,7 @@ async function writeSource(ctx: MutationCtx, generation: string, item: IndexedSo
     directoryEntryJson: JSON.stringify({ ...entry, metadataJson: '' }), directorySourceJson: item.sourceJson,
     directoryCategory: category, ...(updatedOrder === -1 ? {} : { directorySourceUpdatedAt: updatedOrder }),
     ...(popularOrder === -1 ? {} : { directoryCalls30d: popularOrder }),
+    listingDigest: digest, lastSeenRunAt: runStartedAt,
   }
   let entryId: Id<'marketExternalRegistryEntries'>
   if (previous === null) entryId = await ctx.db.insert('marketExternalRegistryEntries', row)
@@ -208,13 +269,13 @@ async function writeSource(ctx: MutationCtx, generation: string, item: IndexedSo
     await ctx.db.insert('marketDirectorySearchEntries', {
       generation, resource: item.resource, entryId, network, category, provider: entry.provider.toLowerCase(), providerKey, eligible, searchText,
       slug, ...(routeRef === undefined ? {} : { sourceRouteRef: routeRef }),
-      popularOrder, updatedOrder, ...searchAnalytics(entry, network),
+      popularOrder, updatedOrder, ...searchAnalytics(entry, network, observedAt),
 
     })
   }
   await writeFacetMembership(ctx, generation, item.resource, item, category, networks, eligible, previous, previousEligible)
   await writeAnalytics(ctx, generation, item.resource, entry, previous === null ? undefined : storedDirectoryEntry(previous))
-  return previous === null
+  return previous === null ? 'inserted' : 'rewritten'
 }
 
 /** Each successful page advances its checkpoint atomically with all metadata/index writes. */
@@ -222,7 +283,7 @@ export const applyPage = internalMutation({
   args: {
     generation: v.string(), offset: v.number(), reportedTotal: v.number(), items: v.array(indexedSourceValue),
     startItem: v.optional(v.number()), totalItems: v.optional(v.number()),
-    observedAt: v.number(), workload: workloadCronSnapshotValue,
+    observedAt: v.number(), runStartedAt: v.number(), workload: workloadCronSnapshotValue,
   },
   returns: progressValue,
   handler: async (ctx, args): Promise<IndexProgress> => {
@@ -241,8 +302,10 @@ export const applyPage = internalMutation({
     if (startItem !== pageItemCursor || !Number.isSafeInteger(totalItems) || totalItems < 0 || totalItems > DIRECTORY_INDEX_PAGE_SIZE || startItem + args.items.length > totalItems) throw new Error('directory_source_batch_invalid')
     const pageDone = startItem + args.items.length === totalItems
     if (totalItems === 0 && args.offset < args.reportedTotal) throw new Error('directory_source_ended_early')
-    let inserted = 0
-    for (const item of args.items) if (await writeSource(ctx, args.generation, item, args.observedAt)) inserted += 1
+    const counts: Record<WriteOutcome, number> = { inserted: 0, unchanged: 0, activity_patched: 0, rewritten: 0 }
+    for (const item of args.items) counts[await writeSource(ctx, args.generation, item, args.observedAt, args.runStartedAt)] += 1
+    const inserted = counts.inserted
+    console.info(JSON.stringify({ kind: 'x402_directory_page_applied', generation: args.generation, offset: args.offset, ...counts }))
     const complete = totalItems === 0
     // The source paginates fixed offset windows, including a short final page.
     // Advancing by its window avoids re-reading a rounded-down final offset.
@@ -256,13 +319,19 @@ export const applyPage = internalMutation({
       pagesFetched: (generation.pagesFetched ?? 0) + (pageDone ? 1 : 0),
       observations: (generation.observations ?? 0) + args.items.length,
       duplicateObservations: (generation.duplicateObservations ?? 0) + args.items.length - inserted,
-      terminalObserved: complete,
+      // Sticky true (never reset false): activeDirectoryGeneration gates read
+      // availability on this alone, so a mid-run patch never makes the live
+      // generation look "not ready yet" (rows.ts:activeDirectoryGeneration).
+      terminalObserved: complete || generation.terminalObserved === true,
       ...(complete ? { status: 'complete' as const, completedAt: args.observedAt, analyticsVersion: ANALYTICS_VERSION, analyticsStatus: 'ready' as const } : {}),
     }
     await ctx.db.patch(generation._id, next)
-    if (complete) {
-      await ctx.db.replace(state._id, { key: 'coinbase', activeGeneration: args.generation, lastAttemptAt: args.observedAt, lastAttemptStatus: 'complete' })
-      if (state.activeGeneration !== undefined && state.activeGeneration !== args.generation) await ctx.scheduler.runAfter(0, internal.x402DirectoryIndexStore.cleanup, { generation: state.activeGeneration })
+    if (complete && state !== null) {
+      await ctx.db.replace(state._id, {
+        key: 'coinbase', activeGeneration: args.generation,
+        ...(state.runStartedAt === undefined ? {} : { runStartedAt: state.runStartedAt }),
+        lastAttemptAt: args.observedAt, lastAttemptStatus: 'complete',
+      })
     }
     return { kind: complete ? 'complete' : 'advanced', generation: args.generation, nextOffset, indexedTotal: ingestedCount }
   },
@@ -274,64 +343,75 @@ export const fail = internalMutation({
   handler: async (ctx, args) => {
     // Failure records preserve visibility even if the workload was revoked.
     // They never write source rows, replace active coverage, or admit supply.
+    // The live generation is left exactly as far as this run got - a partial
+    // scan must never trigger the removal sweep (that only runs from
+    // onComplete after a full successful scan), so nothing is deleted here.
     const generation = await directoryGeneration(ctx, args.generation)
     if (generation === null || generation.status !== 'refreshing') return null
     const state = await directoryState(ctx)
     await ctx.db.patch(generation._id, { status: 'failed', failedAt: Date.now(), failureReason: args.reason.slice(0, 500) })
     if (state?.refreshGeneration === args.generation) await ctx.db.replace(state._id, {
       key: 'coinbase', ...(state.activeGeneration === undefined ? {} : { activeGeneration: state.activeGeneration }),
+      ...(state.runStartedAt === undefined ? {} : { runStartedAt: state.runStartedAt }),
       lastAttemptAt: Date.now(), lastAttemptStatus: 'failed', lastError: args.reason.slice(0, 500),
     })
-    await ctx.scheduler.runAfter(0, internal.x402DirectoryIndexStore.cleanup, { generation: args.generation })
     return null
   },
 })
 
+/**
+ * Removal sweep (Well 8 Lane B): replaces the old "delete the abandoned
+ * generation" cleanup. The live generation is never torn down wholesale
+ * anymore - this deletes only the resources a full, successful scan did NOT
+ * see this run (`lastSeenRunAt < runStartedAt`), decrementing their facet
+ * memberships the same budgeted way the old cleanup did. Scheduled only from
+ * x402DirectoryIndexRefresh.onComplete after a scan reports `kind: 'complete'`
+ * - never after a partial/failed scan (see `fail` above).
+ */
 export const cleanup = internalMutation({
-  args: { generation: v.string() }, returns: v.null(),
+  args: { generation: v.string(), runStartedAt: v.number() },
+  returns: v.null(),
   handler: async (ctx, args) => {
     const state = await directoryState(ctx)
-    if (state?.activeGeneration === args.generation || state?.refreshGeneration === args.generation) return null
+    if (state?.activeGeneration !== args.generation) return null
     const generation = await directoryGeneration(ctx, args.generation)
     if (generation === null) return null
-    const searchRows = await ctx.db.query('marketDirectorySearchEntries').withIndex('by_generation_and_resource', q => q.eq('generation', args.generation)).take(100)
-    if (searchRows.length > 0) {
-      for (const row of searchRows) await ctx.db.delete(row._id)
-      await ctx.scheduler.runAfter(0, internal.x402DirectoryIndexStore.cleanup, args)
-      return null
-    }
-    // Batch 200 (was 5): the same read/write budget services 40x more rows per
-    // reschedule tick, which is what turned cleanup into thousands of extra
-    // internalMutation calls per generation (see cost comment in scheduled-workloads.ts).
-    // Bounded by work, not row count: each row's facetKeys() fans out to
-    // category + provider + up to 128 network aggregate deletes, so 200 rows
-    // can mean up to 26,000 aggregate deletes in one mutation. Stop once the
-    // accumulated key count would cross the budget (always processing at
-    // least one row, so a single wide row can't stall the reschedule loop).
+    // Batch 200, same facet-key budget pattern as the old cleanup: each row's
+    // facetKeys() fans out to category + provider + up to 128 network
+    // aggregate deletes, so the budget (not the row count) bounds one
+    // invocation's work.
     const CLEANUP_FACET_KEY_BUDGET = 2000
-    const rows = await ctx.db.query('marketExternalRegistryEntries').withIndex('by_generation_and_documentId', q => q.eq('generation', args.generation)).take(200)
-    if (rows.length > 0) {
-      let keyBudget = 0
-      for (const [processed, row] of rows.entries()) {
-        const keys = facetKeys(row)
-        if (processed > 0 && keyBudget + keys.length > CLEANUP_FACET_KEY_BUDGET) break
-        if (row.source !== 'coinbase') throw new Error('directory_cleanup_source_conflict')
-        const endpointUrl = row.endpointUrl
-        if (endpointUrl === undefined) throw new Error('directory_cleanup_endpoint_missing')
-        for (const key of keys) await directoryFacets.delete(ctx, { namespace: args.generation, key, id: endpointUrl })
-        await ctx.db.delete(row._id)
-        keyBudget += keys.length
-      }
-      await ctx.scheduler.runAfter(0, internal.x402DirectoryIndexStore.cleanup, args)
+    const stale = await ctx.db.query('marketExternalRegistryEntries')
+      .withIndex('by_generation_and_lastSeenRunAt', q => q.eq('generation', args.generation).lt('lastSeenRunAt', args.runStartedAt))
+      .take(200)
+    if (stale.length === 0) {
+      console.info(JSON.stringify({ kind: 'x402_directory_sweep_complete', generation: args.generation }))
       return null
     }
-    const facets = await ctx.db.query('marketDirectoryFacets').withIndex('by_generation_and_kind_and_key', q => q.eq('generation', args.generation)).take(100)
-    for (const row of facets) await ctx.db.delete(row._id)
-    if (facets.length === 100) { await ctx.scheduler.runAfter(0, internal.x402DirectoryIndexStore.cleanup, args); return null }
-    await directoryFacets.clear(ctx, { namespace: args.generation })
-    await directoryFacets.clear(ctx, { namespace: analyticsNamespace(args.generation) })
-    await directoryFacets.clear(ctx, { namespace: eligibleFacetsNamespace(args.generation) })
-    await ctx.db.delete(generation._id)
+    let keyBudget = 0
+    let deleted = 0
+    for (const [processed, row] of stale.entries()) {
+      const keys = facetKeys(row)
+      if (processed > 0 && keyBudget + keys.length > CLEANUP_FACET_KEY_BUDGET) break
+      if (row.source !== 'coinbase') throw new Error('directory_cleanup_source_conflict')
+      const endpointUrl = row.endpointUrl
+      if (endpointUrl === undefined) throw new Error('directory_cleanup_endpoint_missing')
+      const searchRows = await ctx.db.query('marketDirectorySearchEntries')
+        .withIndex('by_generation_and_resource', q => q.eq('generation', args.generation).eq('resource', endpointUrl)).take(130)
+      const wasEligible = searchRows.some(searchRow => searchRow.eligible === true)
+      for (const key of keys) {
+        await directoryFacets.delete(ctx, { namespace: args.generation, key, id: endpointUrl })
+        if (wasEligible) await directoryFacets.deleteIfExists(ctx, { namespace: eligibleFacetsNamespace(args.generation), key, id: endpointUrl })
+      }
+      await deleteAnalyticsMembership(ctx, args.generation, endpointUrl, storedDirectoryEntry(row))
+      for (const searchRow of searchRows) await ctx.db.delete(searchRow._id)
+      await ctx.db.delete(row._id)
+      deleted += 1
+      keyBudget += keys.length
+    }
+    if (deleted > 0) await ctx.db.patch(generation._id, { ingestedCount: Math.max(0, generation.ingestedCount - deleted) })
+    console.info(JSON.stringify({ kind: 'x402_directory_sweep_progress', generation: args.generation, deleted }))
+    await ctx.scheduler.runAfter(0, internal.x402DirectoryIndexStore.cleanup, args)
     return null
   },
 })

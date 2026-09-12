@@ -52,7 +52,7 @@ function directoryPayerDepth(calls: number | undefined, payers: number | undefin
   if (calls === undefined || payers === undefined || !Number.isSafeInteger(calls) || !Number.isSafeInteger(payers) || payers <= 0) return undefined
   return Math.round((calls / payers) * 100) / 100
 }
-function memberships(entry: X402DirectoryEntry, now: number): [string, string | number][] {
+export function memberships(entry: X402DirectoryEntry, now: number): [string, string | number][] {
   const keys: [string, string | number][] = [['adoption', directoryAdoptionBand(entry.activity?.payers30d)], ['depth', directoryDepthBand(entry.activity?.calls30d, entry.activity?.payers30d)], ['recency', directoryRecencyBand(entry.activity?.lastCalledAt, now)]]
   for (const tag of new Set(entry.tags ?? [])) keys.push(['tag', tag])
   for (const bundle of new Set(entry.bundleSlugs ?? [])) keys.push(['bundle', bundle])
@@ -68,6 +68,12 @@ function memberships(entry: X402DirectoryEntry, now: number): [string, string | 
   if (price !== undefined) keys.push(['price:*', new Decimal(price).toNumber()])
   return keys
 }
+/** Removes every analytics-namespace membership for a resource being swept out of the live generation. */
+export async function deleteAnalyticsMembership(ctx: MutationCtx, generation: string, resource: string, entry: X402DirectoryEntry, now = Date.now()) {
+  const namespace = analyticsNamespace(generation)
+  for (const key of memberships(entry, now)) await directoryFacets.deleteIfExists(ctx, { namespace, key, id: resource })
+}
+
 export async function writeAnalytics(ctx: MutationCtx, generation: string, resource: string, entry: X402DirectoryEntry, previous?: X402DirectoryEntry, now = Date.now()) {
   const namespace = analyticsNamespace(generation)
   if (previous !== undefined) for (const key of memberships(previous, now)) await directoryFacets.deleteIfExists(ctx, { namespace, key, id: resource })

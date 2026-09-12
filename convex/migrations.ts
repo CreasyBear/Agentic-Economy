@@ -5,6 +5,8 @@ import { sourceRouteRef } from '@/modules/capability-supply/public'
 import { components } from './_generated/api'
 import { eligibleFacetsNamespace } from './lib/x402DirectoryIndex/analytics'
 import { directoryFacets } from './lib/x402DirectoryIndex/facets'
+import { listingIdentityDigest } from './lib/x402DirectoryIndex/listingDigest'
+import { directoryState, storedDirectoryEntry } from './lib/x402DirectoryIndex/rows'
 import schema from './schema'
 
 export const migrations = new Migrations(components.migrations, { schema })
@@ -127,6 +129,35 @@ export const backfillDirectorySourceRouteRefAndSlug = migrations.define({
       ...(providerKey === doc.providerKey ? {} : { providerKey }),
       slug,
       ...(sourceRouteRefValue === undefined ? {} : { sourceRouteRef: sourceRouteRefValue }),
+    }
+  },
+})
+
+/**
+ * Well 8 Lane B (one live generation, updated in place): backfills
+ * `listingDigest`/`lastSeenRunAt` on `marketExternalRegistryEntries` rows of
+ * the ACTIVE generation only - abandoned generations from before this change
+ * are not touched (they carry no live reads and are not swept by this
+ * migration). `listingDigest` is computed the same way
+ * x402DirectoryIndexStore.writeSource computes it going forward, from the
+ * row's own retained observation (no upstream re-fetch); `lastSeenRunAt`
+ * backfills to "now" so the first post-migration refresh's removal sweep
+ * (x402DirectoryIndexStore.cleanup) only ever treats a resource as stale
+ * because that refresh genuinely did not observe it upstream, never because
+ * this migration hadn't run yet. Idempotent: rows that already have both
+ * fields are skipped.
+ */
+export const backfillDirectoryListingDigestAndLastSeenRunAt = migrations.define({
+  table: 'marketExternalRegistryEntries',
+  migrateOne: async (ctx, doc) => {
+    if (doc.source !== 'coinbase' || (doc.listingDigest !== undefined && doc.lastSeenRunAt !== undefined)) return
+    const state = await directoryState(ctx)
+    if (state?.activeGeneration !== doc.generation) return
+    const entry = storedDirectoryEntry(doc)
+    const category = doc.directoryCategory ?? 'uncategorized'
+    return {
+      listingDigest: listingIdentityDigest(entry, category),
+      lastSeenRunAt: Date.now(),
     }
   },
 })

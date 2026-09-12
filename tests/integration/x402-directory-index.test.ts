@@ -45,10 +45,10 @@ describe('complete external directory index', () => {
     const generation = 'coinbase-complete'
     await seedRefresh(backend, generation)
     for (let offset = 0; offset < 1001; offset += 100) {
-      await backend.mutation(internal.x402DirectoryIndexStore.applyPage, { generation, offset, reportedTotal: 1001, observedAt: offset + 2, workload, items: Array.from({ length: Math.min(100, 1001 - offset) }, (_, i) => source(offset + i)) })
+      await backend.mutation(internal.x402DirectoryIndexStore.applyPage, { generation, offset, reportedTotal: 1001, observedAt: offset + 2, runStartedAt: 1, workload, items: Array.from({ length: Math.min(100, 1001 - offset) }, (_, i) => source(offset + i)) })
     }
     expect(await backend.query(api.x402DirectoryIndex.status, {})).toMatchObject({ kind: 'unavailable', refreshState: 'refreshing' })
-    await backend.mutation(internal.x402DirectoryIndexStore.applyPage, { generation, offset: 1100, reportedTotal: 1001, observedAt: 1200, workload, items: [] })
+    await backend.mutation(internal.x402DirectoryIndexStore.applyPage, { generation, offset: 1100, reportedTotal: 1001, observedAt: 1200, runStartedAt: 1, workload, items: [] })
     let cursor: string | null = null
     const resources = new Set<string>()
     for (;;) {
@@ -71,12 +71,12 @@ describe('complete external directory index', () => {
     const { backend, workload } = await setup()
     const generation = 'coinbase-drift'
     await seedRefresh(backend, generation)
-    await backend.mutation(internal.x402DirectoryIndexStore.applyPage, { generation, offset: 0, reportedTotal: 101, observedAt: 2, workload, items: [source(1)] })
-    await backend.mutation(internal.x402DirectoryIndexStore.applyPage, { generation, offset: 100, reportedTotal: 2, observedAt: 3, workload, items: [source(1, { title: 'Updated research' }), source(2)] })
-    await backend.mutation(internal.x402DirectoryIndexStore.applyPage, { generation, offset: 200, reportedTotal: 2, observedAt: 4, workload, items: [] })
+    await backend.mutation(internal.x402DirectoryIndexStore.applyPage, { generation, offset: 0, reportedTotal: 101, observedAt: 2, runStartedAt: 1, workload, items: [source(1)] })
+    await backend.mutation(internal.x402DirectoryIndexStore.applyPage, { generation, offset: 100, reportedTotal: 2, observedAt: 3, runStartedAt: 1, workload, items: [source(1, { title: 'Updated research' }), source(2)] })
+    await backend.mutation(internal.x402DirectoryIndexStore.applyPage, { generation, offset: 200, reportedTotal: 2, observedAt: 4, runStartedAt: 1, workload, items: [] })
     expect(await backend.query(api.x402DirectoryIndex.status, {})).toMatchObject({ kind: 'ready', coverage: { indexedTotal: 2, sourceChangedDuringScan: true, duplicateObservations: 1 } })
     await seedRefresh(backend, 'coinbase-failed')
-    await expect(backend.mutation(internal.x402DirectoryIndexStore.applyPage, { generation: 'coinbase-failed', offset: 0, reportedTotal: 100, observedAt: 5, workload, items: [] })).rejects.toThrow('directory_source_ended_early')
+    await expect(backend.mutation(internal.x402DirectoryIndexStore.applyPage, { generation: 'coinbase-failed', offset: 0, reportedTotal: 100, observedAt: 5, runStartedAt: 1, workload, items: [] })).rejects.toThrow('directory_source_ended_early')
     await backend.mutation(internal.x402DirectoryIndexStore.fail, { generation: 'coinbase-failed', reason: 'source failed', workload })
     expect(await backend.query(api.x402DirectoryIndex.status, {})).toMatchObject({ kind: 'ready', refreshState: 'failed', coverage: { generation, indexedTotal: 2 } })
     expect(await backend.query(api.x402DirectoryIndex.resource, { resource: source(1).resource })).toMatchObject({ kind: 'found', item: { entry: { title: 'Updated research' } } })
@@ -89,8 +89,8 @@ describe('complete external directory index', () => {
     const original = source(1, { title: 'StableEnrich', serviceName: 'StableEnrich' })
     const raw = { resource: original.resource, serviceName: 'StableEnrich', description: 'Exa Search. Search the web for current evidence.' }
     const observed = { ...original, sourceJson: JSON.stringify(raw), sourceDigest: canonicalDigest(raw) }
-    await backend.mutation(internal.x402DirectoryIndexStore.applyPage, { generation, offset: 0, reportedTotal: 1, observedAt: 2, workload, items: [observed] })
-    await backend.mutation(internal.x402DirectoryIndexStore.applyPage, { generation, offset: 100, reportedTotal: 1, observedAt: 3, workload, items: [] })
+    await backend.mutation(internal.x402DirectoryIndexStore.applyPage, { generation, offset: 0, reportedTotal: 1, observedAt: 2, runStartedAt: 1, workload, items: [observed] })
+    await backend.mutation(internal.x402DirectoryIndexStore.applyPage, { generation, offset: 100, reportedTotal: 1, observedAt: 3, runStartedAt: 1, workload, items: [] })
     const detail = await backend.query(api.x402DirectoryIndex.resource, { resource: original.resource })
     expect(detail).toMatchObject({ kind: 'found', item: { entry: { title: 'Exa Search.', serviceName: 'StableEnrich', metadataJson: observed.sourceJson }, sourceDigest: observed.sourceDigest } })
     const page = await backend.query(api.x402DirectoryIndex.browse, { paginationOpts: { numItems: 12, cursor: null } })
@@ -107,12 +107,12 @@ describe('complete external directory index', () => {
     const { backend, workload } = await setup()
     const generation = 'coinbase-batches'
     await seedRefresh(backend, generation)
-    const first = { generation, offset: 0, reportedTotal: 2, observedAt: 2, workload, items: [source(1)], startItem: 0, totalItems: 2 }
+    const first = { generation, offset: 0, reportedTotal: 2, observedAt: 2, runStartedAt: 1, workload, items: [source(1)], startItem: 0, totalItems: 2 }
     expect(await backend.mutation(internal.x402DirectoryIndexStore.applyPage, first)).toMatchObject({ nextOffset: 0, indexedTotal: 1 })
     expect(await backend.mutation(internal.x402DirectoryIndexStore.applyPage, first)).toMatchObject({ nextOffset: 0, indexedTotal: 1 })
     expect(await backend.mutation(internal.x402DirectoryIndexStore.applyPage, { ...first, items: [source(2)], startItem: 1 })).toMatchObject({ nextOffset: 100, indexedTotal: 2 })
     expect(await backend.mutation(internal.x402DirectoryIndexStore.applyPage, first)).toMatchObject({ nextOffset: 100, indexedTotal: 2 })
-    await backend.mutation(internal.x402DirectoryIndexStore.applyPage, { generation, offset: 100, reportedTotal: 2, observedAt: 3, workload, items: [] })
+    await backend.mutation(internal.x402DirectoryIndexStore.applyPage, { generation, offset: 100, reportedTotal: 2, observedAt: 3, runStartedAt: 1, workload, items: [] })
     expect(await backend.query(api.x402DirectoryIndex.status, {})).toMatchObject({ coverage: { indexedTotal: 2, duplicateObservations: 0, pagesFetched: 2 } })
   })
 
@@ -125,7 +125,7 @@ describe('complete external directory index', () => {
       if (principal === null) throw new Error('missing fixture principal')
       await ctx.db.patch(principal._id, { lifecycle: 'suspended' })
     })
-    await expect(backend.mutation(internal.x402DirectoryIndexStore.applyPage, { generation, offset: 0, reportedTotal: 1, observedAt: 2, workload, items: [source(1)] })).rejects.toThrow()
+    await expect(backend.mutation(internal.x402DirectoryIndexStore.applyPage, { generation, offset: 0, reportedTotal: 1, observedAt: 2, runStartedAt: 1, workload, items: [source(1)] })).rejects.toThrow()
     expect(await backend.query(internal.x402DirectoryIndexStore.checkpoint, { generation })).toMatchObject({ indexedTotal: 0, nextOffset: 0 })
     expect(await backend.run(ctx => ctx.db.query('marketExternalRegistryEntries').collect())).toEqual([])
   })
@@ -135,8 +135,8 @@ describe('complete external directory index', () => {
     const generation = 'coinbase-filters'
     await seedRefresh(backend, generation)
     const items = [source(1, { prices: [{ network: 'base', scheme: 'exact', amount: '2000000', decimalAmount: '2', symbol: 'USDC' }, { network: 'eip155:1', scheme: 'exact', amount: '100', decimalAmount: '0.0001', symbol: 'USDC' }] }), source(2)]
-    await backend.mutation(internal.x402DirectoryIndexStore.applyPage, { generation, offset: 0, reportedTotal: 2, observedAt: 2, workload, items })
-    await backend.mutation(internal.x402DirectoryIndexStore.applyPage, { generation, offset: 100, reportedTotal: 2, observedAt: 3, workload, items: [] })
+    await backend.mutation(internal.x402DirectoryIndexStore.applyPage, { generation, offset: 0, reportedTotal: 2, observedAt: 2, runStartedAt: 1, workload, items })
+    await backend.mutation(internal.x402DirectoryIndexStore.applyPage, { generation, offset: 100, reportedTotal: 2, observedAt: 3, runStartedAt: 1, workload, items: [] })
     const page = await backend.query(api.x402DirectoryIndex.browse, { query: 'research', category: 'research', provider: 'provider.test', network: 'eip155:8453', maxUsdPrice: 1, paginationOpts: { numItems: 20, cursor: null } })
     expect(page).toMatchObject({ kind: 'ok', searchMethod: 'native_full_text', page: [{ entry: { resource: source(2).resource } }] })
     expect(await backend.query(internal.x402DirectoryIndex.selectedSource, { resource: source(1).resource, network: 'base', maxUsdPrice: 1 })).toEqual({ kind: 'unavailable', reason: 'resource_filters_mismatch' })
@@ -152,8 +152,8 @@ describe('complete external directory index', () => {
       source(3, { activity: { payers30d: 0 }, prices: [{ network: 'solana', scheme: 'upto', amount: '1', decimalAmount: '0.001', symbol: 'USDC' }] }),
       source(4, { activity: {}, prices: [{ network: 'base', scheme: 'exact', amount: '30000', decimalAmount: '0.03', symbol: 'USDC' }] }),
     ]
-    await backend.mutation(internal.x402DirectoryIndexStore.applyPage, { generation, offset: 0, reportedTotal: 4, observedAt: 2, workload, items })
-    await backend.mutation(internal.x402DirectoryIndexStore.applyPage, { generation, offset: 100, reportedTotal: 4, observedAt: 3, workload, items: [] })
+    await backend.mutation(internal.x402DirectoryIndexStore.applyPage, { generation, offset: 0, reportedTotal: 4, observedAt: 2, runStartedAt: 1, workload, items })
+    await backend.mutation(internal.x402DirectoryIndexStore.applyPage, { generation, offset: 100, reportedTotal: 4, observedAt: 3, runStartedAt: 1, workload, items: [] })
     const analytics = await backend.query(api.x402DirectoryIndex.analytics, {})
     expect(analytics).toMatchObject({ kind: 'ok', totalTools: 4, price: { totalTools: 4, knownPriceTools: 3, unknownPriceTools: 1, quantiles: { minimum: '0.01', median: '0.03', maximum: '1' } } })
     if (analytics.kind !== 'ok') throw new Error('analytics unavailable')
@@ -183,8 +183,8 @@ describe('complete external directory index', () => {
     const { backend, workload } = await setup()
     const generation = 'coinbase-backfill'
     await seedRefresh(backend, generation)
-    await backend.mutation(internal.x402DirectoryIndexStore.applyPage, { generation, offset: 0, reportedTotal: 1, observedAt: 2, workload, items: [source(1, { activity: { payers30d: 10 } })] })
-    await backend.mutation(internal.x402DirectoryIndexStore.applyPage, { generation, offset: 100, reportedTotal: 1, observedAt: 3, workload, items: [] })
+    await backend.mutation(internal.x402DirectoryIndexStore.applyPage, { generation, offset: 0, reportedTotal: 1, observedAt: 2, runStartedAt: 1, workload, items: [source(1, { activity: { payers30d: 10 } })] })
+    await backend.mutation(internal.x402DirectoryIndexStore.applyPage, { generation, offset: 100, reportedTotal: 1, observedAt: 3, runStartedAt: 1, workload, items: [] })
     const before = await backend.run(async ctx => {
       const row = await ctx.db.query('marketExternalRegistryGenerations').withIndex('by_generation', q => q.eq('generation', generation)).unique()
       await ctx.db.patch(row!._id, { analyticsVersion: undefined, analyticsStatus: undefined })
