@@ -1,5 +1,4 @@
 import { auth } from '@clerk/tanstack-react-start/server'
-import { isLocalE2EAuthBypassEnabled, LOCAL_E2E_OPERATOR_PRINCIPAL } from '@/lib/server/local-e2e-bypass'
 import { readTrimmedEnv } from '@/lib/server/read-trimmed-env'
 import { createCustomerRequestServiceAssertion, toStableHashValue, type CustomerRequestServiceAssertion } from '@/modules/agent-access/service-auth-envelope'
 import { ConvexHttpClient } from 'convex/browser'
@@ -127,40 +126,16 @@ export async function createAuthenticatedConvexClient(
 ): Promise<ConvexHttpClient> {
   const env = options.env ?? process.env
   const convexUrl = readRequiredConvexUrl(env)
-  const localAdminKey = env.CONVEX_SELF_HOSTED_ADMIN_KEY?.trim()
-  let client: ConvexHttpClient
-  if (isLocalE2EAuthBypassEnabled()) {
-    if (localAdminKey === undefined || localAdminKey.length === 0) {
-      throw new ConvexSourceError('missing_auth', 'Local source credentials are unavailable.', 503)
-    }
-    client = new ConvexHttpClient(convexUrl, {
-      ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
-      ...(options.skipConvexDeploymentUrlCheck === undefined
-        ? {}
-        : { skipConvexDeploymentUrlCheck: options.skipConvexDeploymentUrlCheck }),
-    })
-    const setAdminAuth: unknown = Reflect.get(client, 'setAdminAuth')
-    if (typeof setAdminAuth !== 'function') {
-      throw new ConvexSourceError('missing_auth', 'Local source credentials are unsupported by this Convex client.', 503)
-    }
-    Reflect.apply(setAdminAuth, client, [localAdminKey, {
-      issuer: 'https://convex.test',
-      subject: LOCAL_E2E_OPERATOR_PRINCIPAL,
-      tokenIdentifier: `https://convex.test|${LOCAL_E2E_OPERATOR_PRINCIPAL}`,
-      name: 'Dev Seed Owner',
-    }])
-  } else {
-    const authObject = options.authObject ?? (await auth())
-    const token = await readRequiredConvexAuthToken(authObject, options.tokenTemplate)
+  const authObject = options.authObject ?? (await auth())
+  const token = await readRequiredConvexAuthToken(authObject, options.tokenTemplate)
 
-    client = new ConvexHttpClient(convexUrl, {
-      auth: token,
-      ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
-      ...(options.skipConvexDeploymentUrlCheck === undefined
-        ? {}
-        : { skipConvexDeploymentUrlCheck: options.skipConvexDeploymentUrlCheck }),
-    })
-  }
+  const client = new ConvexHttpClient(convexUrl, {
+    auth: token,
+    ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
+    ...(options.skipConvexDeploymentUrlCheck === undefined
+      ? {}
+      : { skipConvexDeploymentUrlCheck: options.skipConvexDeploymentUrlCheck }),
+  })
   let materialized: boolean
   try {
     materialized = await client.mutation(materializeCurrentInteractiveAuthorityMutation, {})

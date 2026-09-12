@@ -93,7 +93,7 @@ function TermsRoute() {
         </section>
 
         <section className="flex flex-wrap gap-related border-t border-border pt-section">
-          <Button asChild variant="default" className="min-h-touch"><Link to="/market" hash="tools">Browse catalog</Link></Button>
+          <Button asChild variant="default" className="min-h-touch"><Link to="/market">Browse catalog</Link></Button>
           <Button asChild variant="secondary" className="min-h-touch"><Link to="/for-providers">Publish a Tool <ArrowRightIcon aria-hidden="true" /></Link></Button>
         </section>
       </div>

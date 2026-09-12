@@ -33,7 +33,7 @@ export function AeAgentDoorPage({ canonicalBaseUrl }: { canonicalBaseUrl: string
           </AeSiteHeadingPair>
           <div className="flex flex-wrap items-center justify-center gap-related">
             <AeSiteButton asChild>
-              <Link to="/market" hash="tools">Browse Tools</Link>
+              <Link to="/market">Browse Tools</Link>
             </AeSiteButton>
             <AeSiteButton asChild variant="outlined">
               <Link to="/SKILL.md">Read the skill</Link>

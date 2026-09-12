@@ -1,5 +1,6 @@
 import { createFileRoute, useRouter } from '@tanstack/react-router'
 import { AePublicPage } from '@/components/ae/layout/AePublicPage'
+import { RouteError, RoutePending } from '@/components/ae/layout/AeRouteStates'
 import { AeSupplyLanding } from '@/components/ae/supply/AeSupplyLanding'
 import { loadSupplyLandingReadbackServer } from '@/lib/server/supply-landing.functions'
 import { buildPublicPageHead } from '@/modules/seo/public'
@@ -13,6 +14,8 @@ export const Route = createFileRoute('/for-providers')({
     },
   },
   loader: () => loadSupplyLandingReadbackServer(),
+  pendingComponent: RoutePending,
+  errorComponent: RouteError,
   head: () => buildPublicPageHead({
     path: '/for-providers',
     title: 'Publish a Tool | Agentic Economy',

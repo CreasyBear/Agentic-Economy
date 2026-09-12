@@ -1,6 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 
 import { discoveryTextResponse } from '@/lib/http/discovery-response'
+import { captureRouteException } from '@/lib/observability/capture-route-exception'
 import { methodNotAllowed } from '@/lib/server/method-guard'
 import { problem } from '@/lib/server/problem'
 
@@ -66,7 +67,8 @@ function readDirectoryPublicKeys(raw: string | undefined): readonly JsonWebKey[]
       return [parsed]
     }
     return undefined
-  } catch {
+  } catch (cause) {
+    captureRouteException(cause, { site: 'readDirectoryPublicKeys' }, 'warning')
     return undefined
   }
 }

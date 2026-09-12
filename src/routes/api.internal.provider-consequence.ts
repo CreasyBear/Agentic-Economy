@@ -1,6 +1,8 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { Agent, fetch as guardedFetch } from 'undici'
 
+import { captureRouteException } from '@/lib/observability/capture-route-exception'
+import { degrade } from '@/lib/observability/degrade'
 import { methodNotAllowed } from '@/lib/server/method-guard'
 import { response as noStore } from '@/lib/server/no-store-response'
 import { readTrimmedEnv, type StringEnvironment } from '@/lib/server/read-trimmed-env'
@@ -111,7 +113,8 @@ function pointerInput(value: unknown): PointerInput | undefined {
         ? Number(value.pointerRevision)
         : (() => { throw new TypeError('pointer_invalid') })(),
     }
-  } catch {
+  } catch (cause) {
+    captureRouteException(cause, { site: 'parseProviderConsequencePointerInput' }, 'warning')
     return undefined
   }
 }
@@ -125,7 +128,8 @@ async function readRequest(request: Request): Promise<TicketSigningRequest | Con
   let value: unknown
   try {
     value = JSON.parse(text)
-  } catch {
+  } catch (cause) {
+    captureRouteException(cause, { site: 'readProviderConsequenceRequestBody' }, 'warning')
     return undefined
   }
   if (!isRecord(value) || (value.action !== 'issue' && value.action !== 'execute')) return undefined
@@ -143,7 +147,8 @@ async function readRequest(request: Request): Promise<TicketSigningRequest | Con
   let digest: string
   try {
     digest = providerConsequenceTicketClaimsDigest(ticket)
-  } catch {
+  } catch (cause) {
+    captureRouteException(cause, { site: 'readProviderConsequenceTicketDigest' }, 'warning')
     return undefined
   }
   if (digest !== value.ticketClaimsDigest) return undefined
@@ -377,7 +382,8 @@ function x402RuntimeFactory(
           paymentIdentifier: String(value.paymentIdentifier),
           credential: credentialRef,
         }
-      } catch {
+      } catch (cause) {
+        captureRouteException(cause, { site: 'readProviderConsequenceAuthorizationChallenge' }, 'warning')
         return undefined
       }
       let signature: string | undefined
@@ -556,8 +562,11 @@ export async function handleProviderConsequenceRequest(
   try {
     options = secretRuntimeOptions(request, environment)
     origin = convexSiteOrigin(environment)
-  } catch {
-    return noStore({ kind: 'unavailable' }, 503)
+  } catch (cause) {
+    return noStore(degrade(cause, { kind: 'unavailable' }, {
+      site: 'providerConsequenceConfigureRuntime',
+      reason: 'source_unavailable',
+    }), 503)
   }
   if (request.action === 'issue') {
     try {
@@ -578,8 +587,11 @@ export async function handleProviderConsequenceRequest(
         return noStore({ kind: 'unavailable' }, 409)
       }
       return noStore({ signedTicket: await signedTicket(request, options) }, 200)
-    } catch {
-      return noStore({ kind: 'unavailable' }, 503)
+    } catch (cause) {
+      return noStore(degrade(cause, { kind: 'unavailable' }, {
+        site: 'providerConsequenceIssueTicket',
+        reason: 'source_unavailable',
+      }), 503)
     }
   }
   const { createGuardedLookup, defaultDnsResolver, isPublicHttpTarget } =
@@ -605,8 +617,11 @@ export async function handleProviderConsequenceRequest(
     })
     const observation = await boundary.execute({ ticket: request.signedTicket, invocation: request.invocation })
     return noStore(observation, 200)
-  } catch {
-    return noStore({ kind: 'unavailable' }, 503)
+  } catch (cause) {
+    return noStore(degrade(cause, { kind: 'unavailable' }, {
+      site: 'providerConsequenceExecuteBoundary',
+      reason: 'source_unavailable',
+    }), 503)
   } finally {
     await dispatcher.close().catch(() => undefined)
   }

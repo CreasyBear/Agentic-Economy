@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
+import { degrade } from '@/lib/observability/degrade'
 import { operatorRouteOptions } from '@/lib/operator/route-options'
 import {
   cancelOwnerProviderConnectionAttemptServer,
@@ -164,8 +165,12 @@ function OwnerProviderConnectionHandoffRoute() {
           setError(readback.kind === 'available' && readback.attempt.state === 'pending'
             ? 'AE could not confirm whether the connection is still completing. Reload this request to check its status before submitting again.'
             : 'AE could not confirm the connection. Reload this request to check its current status.')
-        } catch {
-          setError('AE could not confirm the connection or read its current status. Reload this request before submitting again.')
+        } catch (readbackCause) {
+          setError(degrade(
+            readbackCause,
+            'AE could not confirm the connection or read its current status. Reload this request before submitting again.',
+            { site: 'ownerProviderConnectionReadbackRetry', reason: 'source_unavailable' },
+          ))
         }
       }
     } finally {

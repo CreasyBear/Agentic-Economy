@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
 import { AeSupplySourceNativeStart } from '@/components/ae/supply/AeSupplySourceNativeStart'
 import { readProviderWorkspaceIdentityDetailServer } from '@/components/ae/offerings/provider-workspace.functions'
+import { degrade } from '@/lib/observability/degrade'
 import {
   filterOwnerSupplyAuthorityOptions,
   previewOwnerSupplySourceServer,
@@ -17,7 +18,6 @@ import {
   startOwnerSupplySourceConnectionServer,
 } from '@/modules/capability-supply/supply-funnel.functions'
 import { operatorRouteOptions } from '@/lib/operator/route-options'
-import { isLocalE2EAuthBypassEnabled } from '@/lib/client/local-e2e-auth'
 import { z } from 'zod'
 
 export const Route = createFileRoute('/_operator/owner/offerings/new')({
@@ -33,7 +33,9 @@ export const Route = createFileRoute('/_operator/owner/offerings/new')({
     let sourceUnavailable = false
     let connections: Awaited<ReturnType<typeof readOwnerProviderConnectionsServer>> = []
     if (identity.kind === 'available') {
-      try { connections = await readOwnerProviderConnectionsServer() } catch { sourceUnavailable = true }
+      try { connections = await readOwnerProviderConnectionsServer() } catch (cause) {
+        sourceUnavailable = degrade(cause, true, { site: 'ownerOfferingsNewLoadConnections', reason: 'source_unavailable' })
+      }
     }
     let resume: Awaited<ReturnType<typeof resumeOwnerSupplySourceDraftServer>> = { kind: 'not_found' }
     try { if (!sourceUnavailable && identity.kind === 'available'
@@ -58,7 +60,9 @@ export const Route = createFileRoute('/_operator/owner/offerings/new')({
         draftRef: deps.draftRef,
         ...(deps.environment === undefined ? {} : { environment: deps.environment }),
       } })
-    } } catch { sourceUnavailable = true }
+    } } catch (cause) {
+      sourceUnavailable = degrade(cause, true, { site: 'ownerOfferingsNewResumeDraft', reason: 'source_unavailable' })
+    }
     return { identity, connections, resume, resumeRequested: deps.draftRef !== undefined, sourceUnavailable }
   },
   head: () => ({ meta: [{ title: 'Add Tool | Agentic Economy' }, { name: 'robots', content: 'noindex' }] }),
@@ -66,19 +70,8 @@ export const Route = createFileRoute('/_operator/owner/offerings/new')({
 })
 
 function NewOwnerOfferingRoute() {
-  return isLocalE2EAuthBypassEnabled()
-    ? <LocalNewOwnerOfferingRoute />
-    : <ClerkNewOwnerOfferingRoute />
-}
-
-function ClerkNewOwnerOfferingRoute() {
   const publishRequest = useServerFn(publishOwnerSupplySourceServer)
   const publish = useReverification(publishRequest)
-  return <NewOwnerOfferingRouteView publish={publish} />
-}
-
-function LocalNewOwnerOfferingRoute() {
-  const publish = useServerFn(publishOwnerSupplySourceServer)
   return <NewOwnerOfferingRouteView publish={publish} />
 }
 

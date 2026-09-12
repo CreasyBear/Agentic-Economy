@@ -1,5 +1,7 @@
 import type { Response as UndiciResponse } from 'undici'
 
+import { degradeBackend } from '@/lib/observability/degrade-backend'
+
 export type BoundedRequestBody =
   | Pick<Request | Response, 'body' | 'headers'>
   | Pick<UndiciResponse, 'body' | 'headers'>
@@ -85,7 +87,7 @@ export async function readBoundedRequestJson(
   if (!bounded.ok) return bounded
   try {
     return { ok: true, value: JSON.parse(bounded.text) as unknown }
-  } catch {
-    return { ok: false, code: 'invalid_json' }
+  } catch (cause) {
+    return degradeBackend(cause, { ok: false, code: 'invalid_json' } as const, { site: 'readBoundedRequestJson', reason: 'invalid_response' })
   }
 }

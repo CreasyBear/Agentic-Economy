@@ -1,6 +1,7 @@
 import { createServerFn } from '@tanstack/react-start'
 import { getRequest } from '@tanstack/react-start/server'
 
+import { degrade } from '@/lib/observability/degrade'
 import { resolveCanonicalBaseUrl } from '@/lib/server/canonical-url'
 import { readServerReadiness } from '@/lib/server/readiness'
 import { readRequestCorrelationId } from '@/lib/server/request-correlation'
@@ -115,7 +116,7 @@ function isHttpOrigin(value: string): boolean {
     const url = new URL(value)
     return (url.protocol === 'https:' || url.protocol === 'http:')
       && url.origin === value.replace(/\/$/u, '')
-  } catch {
-    return false
+  } catch (cause) {
+    return degrade(cause, false, { site: 'isHttpOrigin', reason: 'invalid_response' })
   }
 }

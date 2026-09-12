@@ -2,14 +2,15 @@ import { Link } from '@tanstack/react-router'
 import { ArrowUpRight, Code2, Image, Search, ShoppingBag, ShieldCheck, TrendingUp } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious } from '@/components/ui/carousel'
+import type { ProviderListedCatalogProjection } from '@/modules/market/server'
 import type { X402MarketplaceHome, X402MarketplaceRail } from '@/modules/market/x402-marketplace-home'
 import type { SavedDirectoryTool } from './DirectorySavedTools'
+import { DirectoryProviderListedRail } from './DirectoryProviderListedRail'
 import { DirectoryToolCard } from './DirectoryToolCard'
-import type { MarketReturnContext } from './market-return-context'
 
 type Props = Readonly<{
   home: X402MarketplaceHome
-  returnTo?: MarketReturnContext
+  providerListed?: ProviderListedCatalogProjection
   onSave: (item: SavedDirectoryTool) => void
   isSaved: (resource: string) => boolean
   onCompare: (item: SavedDirectoryTool) => void
@@ -33,9 +34,10 @@ function collectionSearch(rail: X402MarketplaceRail) {
 }
 
 /** Editorial collections of live directory matches, using the installed Embla carousel. */
-export function DirectoryHomeDiscovery({ home, returnTo, onSave, isSaved, onCompare, isComparing, compareDisabled }: Props) {
+export function DirectoryHomeDiscovery({ home, providerListed, onSave, isSaved, onCompare, isComparing, compareDisabled }: Props) {
   const rails = editorialOrder.flatMap(id => home.rails.filter(rail => rail.id === id))
   return <div className="pb-8">
+    {providerListed?.kind === 'ok' ? <DirectoryProviderListedRail items={providerListed.items} /> : null}
     <nav aria-label="Discover Tools by job" className="mb-10 flex gap-2 overflow-x-auto border-b border-border pb-5 sm:justify-center sm:gap-3">
       {rails.map(rail => {
         const item = navigation[rail.id]
@@ -70,7 +72,7 @@ export function DirectoryHomeDiscovery({ home, returnTo, onSave, isSaved, onComp
               {rail.items.slice(0, 8).map(entry => {
                 const item = { entry, search: rail.search }
                 return <CarouselItem key={entry.resource} className="basis-[85%] pl-4 sm:basis-1/2 lg:basis-1/3 xl:basis-1/4">
-                  <DirectoryToolCard entry={entry} {...(returnTo === undefined ? {} : { returnTo })} onSave={() => onSave(item)} saved={isSaved(entry.resource)}
+                  <DirectoryToolCard entry={entry} onSave={() => onSave(item)} saved={isSaved(entry.resource)}
                     onCompare={() => onCompare(item)} comparing={isComparing(entry.resource)} compareDisabled={compareDisabled(entry.resource)} />
                 </CarouselItem>
               })}

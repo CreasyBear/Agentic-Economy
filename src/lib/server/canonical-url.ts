@@ -1,3 +1,4 @@
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { trimTrailingSlashes } from '@/modules/common/trim-trailing-slashes'
 
 export type CanonicalBaseUrlResolution =
@@ -78,8 +79,8 @@ function readRequestUrl(request?: Request): URL | undefined {
 
   try {
     return new URL(request.url)
-  } catch {
-    return undefined
+  } catch (cause) {
+    return degradeBackend(cause, undefined, { site: 'readRequestUrl', reason: 'invalid_response' })
   }
 }
 
@@ -96,7 +97,7 @@ function readHttpUrl(value: string | undefined): URL | undefined {
     }
 
     return url
-  } catch {
-    return undefined
+  } catch (cause) {
+    return degradeBackend(cause, undefined, { site: 'readHttpUrl', reason: 'invalid_response' })
   }
 }

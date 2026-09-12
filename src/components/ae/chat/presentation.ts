@@ -4,6 +4,7 @@ import {
   serializeToolCard,
   type ToolCardProjection,
 } from '@/modules/chat/tool-card'
+import { captureRouteException } from '@/lib/observability/capture-route-exception'
 
 export {
   CHAT_TOOL_IDS,
@@ -66,8 +67,9 @@ export async function fetchAnonymousChat(
   try {
     const body = await response.clone().json() as unknown
     if (isRecord(body) && typeof body.code === 'string') code = body.code
-  } catch {
+  } catch (cause) {
     // The status and request reference still provide a truthful recovery path.
+    captureRouteException(cause, { site: 'fetchAnonymousChat' }, 'warning')
   }
   throw new AnonymousChatResponseError(
     code,

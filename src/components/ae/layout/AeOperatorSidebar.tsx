@@ -1,7 +1,6 @@
 'use client'
 
 import { useMemo } from 'react'
-import { UserRoundIcon } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { UserButton, useUser } from '@clerk/tanstack-react-start'
 import { Link, useRouter } from '@tanstack/react-router'
@@ -25,7 +24,6 @@ import {
 } from '@/components/ui/sidebar'
 
 import { useOperatorSidebarChrome } from '@/components/ae/layout/AeOperatorPage'
-import { isLocalE2EAuthBypassEnabled } from '@/lib/client/local-e2e-auth'
 import {
   ownerWorkspaceOwnerForPath,
   roleHomeHref,
@@ -136,20 +134,6 @@ function AuthenticatedOwnerAccount({ isCollapsed }: { isCollapsed: boolean }) {
   )
 }
 
-function LocalPreviewOwnerAccount({ isCollapsed }: { isCollapsed: boolean }) {
-  return (
-    <div
-      role="group"
-      aria-label="Local preview account context"
-      className="flex min-h-8 min-w-0 items-center gap-2 p-2 text-muted-foreground group-data-[collapsible=icon]:size-8!"
-    >
-      <UserRoundIcon aria-hidden="true" className="size-4 shrink-0" />
-      <span className={isCollapsed ? 'sr-only' : 'min-w-0 truncate text-xs'}>Local preview</span>
-    </div>
-  )
-}
-
-
 export function AeOperatorSidebar({ operatorRole, operatorContext, currentPath, navBadges: navBadgesProp, suppressSurfaceNavigation = false, className }: AeOperatorSidebarProps) {
   const navBadges = useResolvedNavBadges(navBadgesProp)
   const { state, isMobile, open, openMobile, setOpenMobile } = useSidebar()
@@ -202,7 +186,6 @@ export function AeOperatorSidebar({ operatorRole, operatorContext, currentPath, 
     [operatorRole, currentPath, navGroups],
   )
 
-  const localPreview = isLocalE2EAuthBypassEnabled()
   const closeMobileNavigation = () => {
     if (isMobile) setOpenMobile(false)
   }
@@ -294,15 +277,11 @@ export function AeOperatorSidebar({ operatorRole, operatorContext, currentPath, 
               )
             })}
           </SidebarMenu>
-          {operatorRole === 'owner' ? (
-            <SidebarMenu>
-              <SidebarMenuItem>
-                {localPreview
-                  ? <LocalPreviewOwnerAccount isCollapsed={isCollapsed} />
-                  : <AuthenticatedOwnerAccount isCollapsed={isCollapsed} />}
-              </SidebarMenuItem>
-            </SidebarMenu>
-          ) : null}
+          <SidebarMenu>
+            <SidebarMenuItem>
+              <AuthenticatedOwnerAccount isCollapsed={isCollapsed} />
+            </SidebarMenuItem>
+          </SidebarMenu>
         </SidebarFooter>
       </nav>
       <SidebarRail

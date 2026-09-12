@@ -1,5 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 
+import { captureRouteException } from '@/lib/observability/capture-route-exception'
+import { degrade } from '@/lib/observability/degrade'
 import { methodNotAllowed } from '@/lib/server/method-guard'
 import { response as noStore } from '@/lib/server/no-store-response'
 import { readTrimmedEnv, type StringEnvironment } from '@/lib/server/read-trimmed-env'
@@ -90,7 +92,8 @@ async function readRequest(request: Request): Promise<CleanupRequest | undefined
   let value: unknown
   try {
     value = JSON.parse(text)
-  } catch {
+  } catch (cause) {
+    captureRouteException(cause, { site: 'readProviderConnectionCleanupRequestBody' }, 'warning')
     return undefined
   }
   if (!isRecord(value) || !exactKeys(value, [
@@ -123,12 +126,12 @@ export async function handleProviderConnectionCleanupRequest(
       '@/modules/capability-supply/internal/supply-funnel/provider-connection-handoff'
     )).readActiveCustomerSecret
     material = await readSecret(input.secret)
-  } catch {
-    return noStore({
+  } catch (cause) {
+    return noStore(degrade(cause, {
       outcome: 'outcome_unknown',
       reasonCode: 'oauth_credential_unavailable',
       evidenceRefs: ['provider_cleanup:oauth_credential_unavailable'],
-    }, 200)
+    }, { site: 'providerConnectionCleanupReadSecret', reason: 'source_unavailable' }), 200)
   }
   try {
     const revoke = runtime.revoke ?? (await import(

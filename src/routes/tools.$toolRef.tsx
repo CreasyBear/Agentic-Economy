@@ -1,16 +1,11 @@
-import { Link, createFileRoute } from '@tanstack/react-router'
+import { Link, createFileRoute, redirect, useRouter } from '@tanstack/react-router'
 import { ArrowLeftIcon } from 'lucide-react'
 
 import { AePublicPage } from '@/components/ae/layout/AePublicPage'
 import { AePageSkeleton, AePageState } from '@/components/ae/layout/AePageState'
 import { AeToolInspector } from '@/components/ae/market/tool-detail'
 import { REASON_COPY, REASON_COPY_FALLBACK } from '@/content/reason-copy'
-import {
-  FALLBACK_MARKET_RETURN_CONTEXT,
-  readMarketReturnContext,
-  toMarketReturnNavigation,
-  type MarketReturnContext,
-} from '@/components/ae/market/market-return-context'
+import { useMarketBackNavigation } from '@/components/ae/market/market-return-context'
 import { Button } from '@/components/ui/button'
 import {
   isPublicToolRef,
@@ -19,8 +14,9 @@ import {
 import type { MarketListingEvidenceProjection } from '@/modules/market/listing-evidence'
 import { readToolListingEvidence } from '@/modules/market/server'
 import { toolDisplayTitle } from '@/modules/market/tool-view-model'
-import { readX402PendingResource, type X402DirectoryResolution } from '@/modules/market/x402-directory'
+import type { X402DirectoryResolution } from '@/modules/market/x402-directory'
 import { prepareX402DirectoryResourceServer } from '@/modules/market/x402-directory.functions'
+import { readX402DirectoryCanonicalUrlForToolServer } from '@/modules/market/x402-directory-index.functions'
 import {
   readPublicToolDetailRouteServer,
   type PublicToolDetailRouteResult,
@@ -30,48 +26,56 @@ export type ToolDetailPresentationResult =
   | PublicToolDetailRouteResult
   | Readonly<{ kind: 'invalid_ref'; toolRef: string }>
 
-export function validateToolDetailSearch(
-  search: Record<string, unknown>,
-): Readonly<{ from?: MarketReturnContext }> {
-  const from = readMarketReturnContext(search.from)
-  return from === undefined ? {} : { from }
+export type ToolDetailPresentation = Readonly<{
+  result: ToolDetailPresentationResult
+  evidence?: MarketListingEvidenceProjection
+}>
+
+/**
+ * Resolves a directory resource to its Tool detail, admitting it first when
+ * `knownToolRef` (an already-attached join from convex/x402DirectoryIndex.ts)
+ * is not present. Shared by the canonical `/tools/$providerHost/$slug` route
+ * (which may already know the toolRef from that join) so both routes render
+ * the identical Tool detail once resolved.
+ */
+export async function resolveDirectoryToolDetail(
+  resource: string,
+  knownToolRef?: string,
+): Promise<ToolDetailPresentation> {
+  let toolRef: string
+  if (knownToolRef !== undefined) {
+    toolRef = knownToolRef
+  } else {
+    const resolution = await prepareX402DirectoryResourceServer({ data: { resource } })
+      .catch((): X402DirectoryResolution => ({ kind: 'unavailable', reason: 'source_unavailable' }))
+    if (resolution.kind !== 'ready') {
+      return { result: { kind: 'source_unavailable', toolRef: resource } }
+    }
+    toolRef = resolution.toolRef
+  }
+  const result = await readPublicToolDetailRouteServer({ data: { toolRef } })
+    .catch((): PublicToolDetailRouteResult => ({ kind: 'source_unavailable', toolRef }))
+  const evidence = result.kind === 'found' ? await readToolListingEvidence(result.tool) : undefined
+  return { result, ...(evidence === undefined ? {} : { evidence }) }
 }
 
 export const Route = createFileRoute('/tools/$toolRef')({
-  validateSearch: validateToolDetailSearch,
   loader: async ({ params }) => {
-    const pendingResource = readX402PendingResource(params.toolRef)
-    let toolRef: string
-    if (pendingResource !== undefined) {
-      // A catalogue entry that has not yet been admitted as a Tool. Resolve
-      // it the same way the retired Tool detail dialog did, then continue
-      // exactly like a direct toolRef visit.
-      const resolution = await prepareX402DirectoryResourceServer({ data: { resource: pendingResource } })
-        .catch((): X402DirectoryResolution => ({ kind: 'unavailable', reason: 'source_unavailable' }))
-      if (resolution.kind !== 'ready') {
-        return {
-          result: { kind: 'source_unavailable' as const, toolRef: params.toolRef },
-          evidence: undefined,
-        }
-      }
-      toolRef = resolution.toolRef
-    } else if (isPublicToolRef(params.toolRef)) {
-      toolRef = params.toolRef
-    } else {
-      return {
-        result: { kind: 'invalid_ref' as const, toolRef: params.toolRef },
-        evidence: undefined,
+    if (!isPublicToolRef(params.toolRef)) {
+      return { result: { kind: 'invalid_ref' as const, toolRef: params.toolRef }, evidence: undefined }
+    }
+    const result = await readPublicToolDetailRouteServer({ data: { toolRef: params.toolRef } })
+      .catch((): PublicToolDetailRouteResult => ({ kind: 'source_unavailable', toolRef: params.toolRef }))
+    if (result.kind === 'found') {
+      // Agents use `operation:v1:` refs; a human landing here from a shared
+      // link gets the canonical, legible URL when this Tool has one.
+      const canonical = await readX402DirectoryCanonicalUrlForToolServer({ data: { toolRef: params.toolRef } }).catch(() => null)
+      if (canonical !== null) {
+        throw redirect({ to: '/tools/$providerHost/$slug', params: canonical, replace: true })
       }
     }
-    const result = await readPublicToolDetailRouteServer({ data: { toolRef } })
-      .catch((): PublicToolDetailRouteResult => ({ kind: 'source_unavailable', toolRef }))
-    const evidence = result.kind === 'found'
-      ? await readToolListingEvidence(result.tool)
-      : undefined
-    return {
-      result,
-      evidence,
-    }
+    const evidence = result.kind === 'found' ? await readToolListingEvidence(result.tool) : undefined
+    return { result, evidence }
   },
   head: ({ loaderData }) => {
     if (loaderData?.result.kind !== 'found') {
@@ -92,12 +96,10 @@ export const Route = createFileRoute('/tools/$toolRef')({
 
 function ToolDetailRoute() {
   const data = Route.useLoaderData()
-  const search = Route.useSearch()
   return (
     <PublicToolDetail
       result={data.result}
       {...(data.evidence === undefined ? {} : { evidence: data.evidence })}
-      {...(search.from === undefined ? {} : { returnTo: search.from })}
     />
   )
 }
@@ -105,49 +107,50 @@ function ToolDetailRoute() {
 export function PublicToolDetail({
   result,
   evidence,
-  returnTo = FALLBACK_MARKET_RETURN_CONTEXT,
-}: Readonly<{
-  result: ToolDetailPresentationResult
-  evidence?: MarketListingEvidenceProjection
-  returnTo?: MarketReturnContext
-}>) {
-  if (result.kind !== 'found') return <ToolUnavailable result={result} returnTo={returnTo} />
+}: ToolDetailPresentation) {
+  if (result.kind !== 'found') return <ToolUnavailable result={result} />
   return (
     <CurrentToolDetail
       tool={result.tool}
       {...(evidence === undefined ? {} : { evidence })}
-      returnTo={returnTo}
     />
+  )
+}
+
+export function MarketBackButton({ label, ...buttonProps }: Readonly<{ label: string; variant?: 'ghost'; className: string }>) {
+  const router = useRouter()
+  const back = useMarketBackNavigation()
+  if (back === 'history') {
+    return (
+      <Button type="button" onClick={() => router.history.back()} {...buttonProps}>
+        <ArrowLeftIcon aria-hidden="true" />
+        {label}
+      </Button>
+    )
+  }
+  return (
+    <Button asChild {...buttonProps}>
+      <Link to="/market">
+        <ArrowLeftIcon aria-hidden="true" />
+        {label}
+      </Link>
+    </Button>
   )
 }
 
 function CurrentToolDetail({
   tool,
   evidence,
-  returnTo,
 }: Readonly<{
   tool: PublicToolDescriptor
   evidence?: MarketListingEvidenceProjection
-  returnTo: MarketReturnContext
 }>) {
-  const returnNavigation = toMarketReturnNavigation(returnTo)
   return (
     <AePublicPage
       kind="workspace"
       title={toolDisplayTitle(tool)}
       description={`${tool.business.name} · ${tool.contract.capabilityId}`}
-      actions={
-        <Button asChild variant="ghost" className="min-h-touch">
-          <Link
-            to="/market"
-            search={returnNavigation.search}
-            {...(returnNavigation.hash === undefined ? {} : { hash: returnNavigation.hash })}
-          >
-            <ArrowLeftIcon aria-hidden="true" />
-            {marketReturnLabel(returnTo, 'Catalog')}
-          </Link>
-        </Button>
-      }
+      actions={<MarketBackButton label="Catalog" className="min-h-touch" variant="ghost" />}
     >
       <AeToolInspector
         tool={tool}
@@ -160,12 +163,9 @@ function CurrentToolDetail({
 
 function ToolUnavailable({
   result,
-  returnTo = FALLBACK_MARKET_RETURN_CONTEXT,
 }: Readonly<{
   result: Exclude<ToolDetailPresentationResult, { kind: 'found' }>
-  returnTo?: MarketReturnContext
 }>) {
-  const returnNavigation = toMarketReturnNavigation(returnTo)
   const presentation = result.kind === 'invalid_ref'
     ? {
         tone: 'neutral' as const,
@@ -194,17 +194,7 @@ function ToolUnavailable({
       tone={presentation.tone}
       title={presentation.title}
       description={presentation.description}
-      action={
-        <Button asChild className="min-h-touch">
-          <Link
-            to="/market"
-            search={returnNavigation.search}
-            {...(returnNavigation.hash === undefined ? {} : { hash: returnNavigation.hash })}
-          >
-            {marketReturnLabel(returnTo, 'Browse current Tools')}
-          </Link>
-        </Button>
-      }
+      action={<MarketBackButton label="Browse current Tools" className="min-h-touch" />}
     />
   )
 }
@@ -214,20 +204,5 @@ function ToolDetailPending() {
 }
 
 function ToolDetailError() {
-  const search = Route.useSearch()
-  return (
-    <ToolUnavailable
-      result={{ kind: 'source_unavailable', toolRef: 'Requested reference' }}
-      {...(search.from === undefined ? {} : { returnTo: search.from })}
-    />
-  )
-}
-
-function marketReturnLabel(
-  returnTo: MarketReturnContext,
-  fallback: string,
-): string {
-  const url = new URL(returnTo, 'https://agentic-economy.invalid')
-  if (url.searchParams.has('compare')) return 'Back to comparison'
-  return returnTo === FALLBACK_MARKET_RETURN_CONTEXT ? fallback : 'Back to results'
+  return <ToolUnavailable result={{ kind: 'source_unavailable', toolRef: 'Requested reference' }} />
 }

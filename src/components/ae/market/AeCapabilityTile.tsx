@@ -33,7 +33,7 @@ export function AeCapabilityTile({
     >
       <Link
         to="/market"
-        search={{ capability: group.capabilityId }}
+        search={{ query: group.label }}
         aria-label={`${group.label}, ${listingFact}, ${price}`}
       >
         <ItemContent>

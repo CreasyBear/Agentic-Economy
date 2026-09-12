@@ -9,14 +9,14 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardFooter } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
-import { x402PendingToolRef, type X402DirectoryEntry } from '@/modules/market/x402-directory'
-import type { MarketReturnContext } from './market-return-context'
+import { directoryProviderKey, directorySlugBase } from '@/modules/market/x402-directory-index'
+import type { X402DirectoryEntry } from '@/modules/market/x402-directory'
+import { MARKET_LINK_STATE } from './market-return-context'
 import { DirectoryToolIdentity } from './DirectoryToolIdentity'
 import { directoryDate, directoryNetworkLabel, directoryOutputLabel, directoryPrice, directoryTitle } from './directory-presentation'
 
 type DirectoryToolCardProps = Readonly<{
   entry: X402DirectoryEntry
-  returnTo?: MarketReturnContext
   onSave?: () => void
   saved?: boolean
   onCompare?: () => void
@@ -24,9 +24,10 @@ type DirectoryToolCardProps = Readonly<{
   compareDisabled?: boolean
 }>
 
-export const DirectoryToolCard = memo(function DirectoryToolCard({ entry, returnTo, onSave, saved, onCompare, comparing, compareDisabled }: DirectoryToolCardProps) {
+export const DirectoryToolCard = memo(function DirectoryToolCard({ entry, onSave, saved, onCompare, comparing, compareDisabled }: DirectoryToolCardProps) {
   const network = directoryNetworkLabel(entry)
   const title = directoryTitle(entry)
+  const slug = entry.slug ?? directorySlugBase(entry.resource)
   const description = entry.description !== title ? entry.description : entry.schemaSummary
   const output = directoryOutputLabel(entry)
   return (
@@ -42,7 +43,7 @@ export const DirectoryToolCard = memo(function DirectoryToolCard({ entry, return
           <p className="truncate text-xs text-muted-foreground">{entry.serviceName === undefined ? entry.provider : `${entry.serviceName} · ${entry.provider}`}</p>
           <div className="mt-2 flex items-start justify-between gap-3">
           <h3 className="min-w-0 text-lg font-semibold leading-snug tracking-tight">
-            <Link to="/tools/$toolRef" params={{ toolRef: x402PendingToolRef(entry.resource) }} {...(returnTo === undefined ? {} : { search: { from: returnTo } })} className="line-clamp-3 break-words after:absolute after:inset-0 after:rounded-card focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-ring">{title}</Link>
+            <Link to="/tools/$providerHost/$slug" params={{ providerHost: directoryProviderKey(entry.provider), slug }} state={MARKET_LINK_STATE} className="line-clamp-3 break-words after:absolute after:inset-0 after:rounded-card focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-ring">{title}</Link>
           </h3>
           </div>
         </div>

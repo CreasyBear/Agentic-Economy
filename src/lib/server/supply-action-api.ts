@@ -1,5 +1,6 @@
 import { gatewayFailureToProblem } from '@/lib/errors'
 import { bearerChallenge } from '@/lib/http/oauth-challenge'
+import { degrade } from '@/lib/observability/degrade'
 import { readBoundedRequestText } from '@/lib/server/bounded-request-body'
 import {
   authenticateAgentAccess,
@@ -121,13 +122,13 @@ export async function handleSupplyActionPost(
     let rawBody: unknown
     try {
       rawBody = JSON.parse(bounded.text) as unknown
-    } catch {
-      return withRequestCorrelationHeader(problem({
+    } catch (cause) {
+      return degrade(cause, withRequestCorrelationHeader(problem({
         status: 400,
         kind: 'INVALID_ARGUMENT',
         code: 'invalid_json',
         detail: 'The provider action body must be valid JSON.',
-      }), correlationId)
+      }), correlationId), { site: 'handleSupplyActionPost', reason: 'invalid_response' })
     }
 
     const action: AnyAction = SUPPLY_HTTP_ACTIONS[actionName]
@@ -169,12 +170,12 @@ export async function handleSupplyActionPost(
       return withRequestCorrelationHeader(response(projected.data, 200, {
         'Content-Type': 'application/json; charset=utf-8',
       }), correlationId)
-    } catch {
+    } catch (cause) {
       const failure = gatewayFailureToProblem({ kind: 'error', code: 'source_unavailable', retryable: true })
-      return withRequestCorrelationHeader(problem({
+      return degrade(cause, withRequestCorrelationHeader(problem({
         ...failure,
         detail: 'The Provider Tool source is temporarily unavailable.',
-      }), correlationId)
+      }), correlationId), { site: 'handleSupplyActionPost', reason: 'source_unavailable' })
     }
   })
 }

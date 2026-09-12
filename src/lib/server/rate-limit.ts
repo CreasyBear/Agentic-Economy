@@ -7,7 +7,6 @@ import {
 import { readCookie } from '@/lib/http/cookies'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { problem } from '@/lib/server/problem'
-import { isLocalE2EAuthBypassEnabled } from '@/lib/server/local-e2e-bypass'
 import { httpRateLimitCapacity, httpRateLimitWindowMs } from '@/modules/security/rate-limit-policy'
 
 export type RateLimitName =
@@ -17,6 +16,7 @@ export type RateLimitName =
   | 'oauth-device-poll'
   | 'chat-anonymous'
   | 'chat-anonymous-edge'
+  | 'mcp-anonymous'
 
 type HttpRateLimitName = Exclude<RateLimitName, 'chat-submit' | 'chat-anonymous'>
 type GenericHttpRateLimitName = Exclude<HttpRateLimitName, 'chat-anonymous-edge'>
@@ -66,7 +66,6 @@ export async function assertHttpAdmission(
     ? anonymousChatAdmissionKey(request)
     : requestAdmissionKey(request, options.keySuffix))
   if (admissionForTests !== undefined) return await admissionForTests({ request, name, key })
-  if (isLocalE2EAuthBypassEnabled()) return { ok: true }
   if (name === 'chat-anonymous-edge') {
     const serviceAuth = await createConvexServerFunctionAssertion({
       operation: 'chatAdmission.admitAnonymousEdge',

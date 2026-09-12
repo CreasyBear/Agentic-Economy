@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
-import { Link, Outlet, createFileRoute, useLocation, useNavigate } from '@tanstack/react-router'
+import { Outlet, createFileRoute, useLocation, useNavigate } from '@tanstack/react-router'
 import { useServerFn } from '@tanstack/react-start'
 import { KeyRound } from 'lucide-react'
 
@@ -11,7 +11,6 @@ import { AeAssistantInstallFunnel } from '@/components/ae/console/AeAssistantIns
 import { AeCopyReference } from '@/components/ae/data/AeCopyReference'
 import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
 import { AeSection } from '@/components/ae/layout/AeSection'
-import { isLocalE2EAuthBypassEnabled } from '@/lib/client/local-e2e-auth'
 import { readCanonicalBaseUrlServer } from '@/lib/server/canonical-url.functions'
 import { operatorRouteOptions } from '@/lib/operator/route-options'
 import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
@@ -72,9 +71,7 @@ export const Route = createFileRoute('/_operator/agent-access')({
   validateSearch: validateAgentAccessSearch,
   loader: async () => {
     const canonicalBaseUrl = await readCanonicalBaseUrlServer()
-    const directory = isLocalE2EAuthBypassEnabled()
-      ? emptyAgentDirectory
-      : await readAgentDirectoryServer()
+    const directory = await readAgentDirectoryServer()
     return { canonicalBaseUrl, directory }
   },
   head: () => ({ meta: [
@@ -96,7 +93,6 @@ function AgentAccessHome() {
   const navigate = useNavigate()
   const readDirectory = useServerFn(readAgentDirectoryServer)
   const readDirectoryPage = useServerFn(readAgentDirectoryPageServer)
-  const localE2E = isLocalE2EAuthBypassEnabled()
   const revokeCredential = useServerFn(revokeAgentCredentialServer)
   const disconnectAgent = useServerFn(disconnectAgentServer)
   const disconnectConnection = useServerFn(revokeOwnerConnectionServer)
@@ -167,22 +163,8 @@ function AgentAccessHome() {
   }, [readApprovals])
 
   useEffect(() => {
-    if (localE2E) {
-      setDirectory(emptyAgentDirectory)
-      setDirectoryError(undefined)
-      setLoading(false)
-    }
-  }, [localE2E])
-
-  useEffect(() => {
-    if (localE2E) {
-      setApprovals([])
-      setApprovalsError(undefined)
-      setApprovalsLoading(false)
-      return
-    }
     void loadApprovals()
-  }, [loadApprovals, localE2E])
+  }, [loadApprovals])
 
   useEffect(() => {
     const hash = location.hash.replace(/^#/, '')
@@ -281,7 +263,7 @@ function AgentAccessHome() {
   }
 
   async function decidePendingApproval(callRef: string, toolRef: string, decision: 'approve' | 'deny') {
-    if (localE2E || approvalDecision !== undefined) return
+    if (approvalDecision !== undefined) return
     setApprovalDecision({ callRef, decision })
     setApprovalsError(undefined)
     setApprovalStatus(undefined)
@@ -311,17 +293,6 @@ function AgentAccessHome() {
       description="Connect independent agents, review their access, and manage credential history."
       currentPath="/agent-access"
     >
-      {localE2E ? (
-        <div className="grid gap-3">
-          <Alert>
-            <AlertTitle>Local preview — no agent is connected</AlertTitle>
-            <AlertDescription>
-              <p>This browser journey does not sign in, create access, or authorize work. Browse the public demo to explore the customer experience.</p>
-              <Button asChild variant="secondary" className="mt-2 min-h-touch"><Link to="/">Browse public demo</Link></Button>
-            </AlertDescription>
-          </Alert>
-        </div>
-      ) : null}
       {directoryError === undefined ? null : (
         <Alert variant="destructive">
           <AlertTitle>Agent access unavailable</AlertTitle>
@@ -408,11 +379,6 @@ function AgentAccessHome() {
     </AeOperatorPage>
   )
 }
-
-const emptyAgentDirectory: AgentDirectoryProjection = Object.freeze({
-  items: Object.freeze([]),
-  details: Object.freeze([]),
-})
 
 function operationApprovalErrorCopy(code: 'authentication_required' | 'invocation_not_found' | 'authority_not_pending' | 'grant_not_current' | 'invocation_invalid'): string {
   if (code === 'authentication_required') return 'Sign in as the access owner, then try again.'

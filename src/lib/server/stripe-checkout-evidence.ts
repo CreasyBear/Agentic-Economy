@@ -1,5 +1,6 @@
 import Stripe from "stripe";
 
+import { degradeBackend } from "@/lib/observability/degrade-backend";
 import { canonicalDigest } from "@/modules/common/canonical-digest";
 import {
   compareExactAmounts,
@@ -59,8 +60,11 @@ export async function createOrRecoverCreditPayment(
   try {
     const created = await client.checkout.sessions.create(params, { idempotencyKey });
     return paymentSessionFromCheckoutSession(responseData(created), config, input);
-  } catch {
-    return refusal("credit_topup_outcome_unknown", true);
+  } catch (cause) {
+    return degradeBackend(cause, refusal("credit_topup_outcome_unknown", true), {
+      site: "createOrRecoverCreditPayment",
+      reason: "source_unavailable",
+    });
   }
 }
 
@@ -257,8 +261,11 @@ async function retrieveCheckoutSession(
       expand: ["payment_intent", "line_items.data.price", "line_items.data.taxes.rate"],
     });
     return responseData(response);
-  } catch {
-    return refusal("credit_topup_outcome_unknown", true);
+  } catch (cause) {
+    return degradeBackend(cause, refusal("credit_topup_outcome_unknown", true), {
+      site: "retrieveCheckoutSession",
+      reason: "source_unavailable",
+    });
   }
 }
 
@@ -438,8 +445,11 @@ function validCheckoutUrl(value: string, config: StripeMoneyProviderConfig): boo
   try {
     const url = new URL(value);
     return url.protocol === "https:" && url.hostname === (config.checkoutHost ?? "checkout.stripe.com");
-  } catch {
-    return false;
+  } catch (cause) {
+    return degradeBackend(cause, false, {
+      site: "validCheckoutUrl",
+      reason: "invalid_response",
+    });
   }
 }
 

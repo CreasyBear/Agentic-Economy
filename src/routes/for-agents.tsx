@@ -3,6 +3,7 @@ import { Bot } from 'lucide-react'
 
 import { AeAgentDoorPage } from '@/components/ae/agents/AeAgentDoorPage'
 import { AePublicPage } from '@/components/ae/layout/AePublicPage'
+import { RouteError, RoutePending } from '@/components/ae/layout/AeRouteStates'
 import { AGENT_PAGE } from '@/content/brand-copy'
 import { readCanonicalBaseUrlServer } from '@/lib/server/canonical-url.functions'
 import { buildPublicPageHead } from '@/modules/seo/public'
@@ -17,6 +18,8 @@ export const Route = createFileRoute('/for-agents')({
     },
   },
   loader: () => readCanonicalBaseUrlServer(),
+  pendingComponent: RoutePending,
+  errorComponent: RouteError,
   head: ({ loaderData }) => buildPublicPageHead({
     path: '/for-agents',
     title: AGENT_PAGE.metaTitle,

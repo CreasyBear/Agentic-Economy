@@ -11,6 +11,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { degrade } from '@/lib/observability/degrade'
 import { operatorRouteOptions } from '@/lib/operator/route-options'
 import {
   reviewSourceAuthorityServer,
@@ -129,8 +130,11 @@ export function SourceAuthorityReviewPanel({ review }: { review: SourceAuthority
         expectedSourceDigest: review.expectedSourceDigest,
         evidenceRef: evidenceRef.trim(),
       } }))
-    } catch {
-      setOutcome({ kind: 'error', code: 'source_unavailable' })
+    } catch (cause) {
+      setOutcome(degrade(cause, { kind: 'error', code: 'source_unavailable' }, {
+        site: 'reviewSourceAuthorityConfirm',
+        reason: 'source_unavailable',
+      }))
     } finally {
       setBusy(false)
     }

@@ -1,3 +1,5 @@
+import { degrade } from '@/lib/observability/degrade'
+
 export type CookieSerializeOptions = Readonly<{
   path?: string
   maxAge?: number
@@ -15,8 +17,8 @@ export function readCookie(header: string | null, name: string): string | undefi
     try {
       const decoded = decodeURIComponent(part.slice(separator + 1).trim()).trim()
       return decoded.length > 0 ? decoded : undefined
-    } catch {
-      return undefined
+    } catch (cause) {
+      return degrade(cause, undefined, { site: 'readCookie', reason: 'invalid_response' })
     }
   }
 
@@ -44,7 +46,7 @@ export function isSecureRequest(
 
   try {
     return new URL(request.url).protocol === 'https:'
-  } catch {
-    return false
+  } catch (cause) {
+    return degrade(cause, false, { site: 'isSecureRequest', reason: 'invalid_response' })
   }
 }

@@ -14,6 +14,7 @@ import type { AnyObjectSchema, SchemaOutput } from '@modelcontextprotocol/sdk/se
 import type { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/protocol.js'
 import { z } from 'zod'
 
+import { degrade } from '@/lib/observability/degrade'
 import { base64Codec, tryDecodeBase64Url } from '@/modules/common/base64-codec'
 import { REASON_COPY, REASON_COPY_FALLBACK } from '@/content/reason-copy'
 import { bearerChallenge, bearerModeChallenge } from '@/lib/http/oauth-challenge'
@@ -411,8 +412,11 @@ function decodeMcpToolsListCursor(cursor: string, toolCount: number): number | u
   let text: string
   try {
     text = new TextDecoder('utf-8', { fatal: true }).decode(bytes)
-  } catch {
-    return undefined
+  } catch (cause) {
+    return degrade(cause, undefined, {
+      site: 'decodeMcpToolsListCursor',
+      reason: 'invalid_response',
+    })
   }
   if (!/^\d+$/u.test(text)) return undefined
   const offset = Number.parseInt(text, 10)
@@ -455,8 +459,11 @@ function mcpToolOutputSchema(action: AnyAction): AnyObjectSchema | undefined {
   try {
     toJsonSchemaCompat(wrapped, { strictUnions: true, pipeStrategy: 'output' })
     return wrapped
-  } catch {
-    return undefined
+  } catch (cause) {
+    return degrade(cause, undefined, {
+      site: 'mcpToolOutputSchema',
+      reason: 'invalid_response',
+    })
   }
 }
 
@@ -611,6 +618,17 @@ type McpRequestOptions = Readonly<{
  * JSON-RPC (like authentication and media-type failures), but make it a
  * truthful, retryable HTTP problem with the same request correlation reference.
  */
+/**
+ * Anonymous MCP callers (no bearer token, no API key) get their own,
+ * tighter bucket so an unauthenticated flood cannot exhaust the
+ * `public-read` capacity shared with authenticated agents.
+ */
+function isAnonymousMcpRequest(request: Request): boolean {
+  const hasApiKey = (request.headers.get('x-api-key')?.trim().length ?? 0) > 0
+  const hasBearer = /^Bearer\s+\S+/iu.test(request.headers.get('authorization')?.trim() ?? '')
+  return !hasApiKey && !hasBearer
+}
+
 export async function handleMcpRouteRequest(
   request: Request,
   options: McpRequestOptions = {},
@@ -618,16 +636,20 @@ export async function handleMcpRouteRequest(
   return await runWithRequestCorrelation(request, async ({ correlationId }) => {
     let admission
     try {
-      admission = await assertHttpAdmission(request, 'public-read')
-    } catch {
-      return withRequestCorrelationHeader(problem({
-        status: 503,
-        kind: 'UNAVAILABLE',
-        code: 'mcp_admission_unavailable',
-        retryable: true,
-        detail: 'The MCP endpoint is temporarily unavailable. Retry later.',
-        extras: { correlationId },
-      }), correlationId)
+      admission = await assertHttpAdmission(request, isAnonymousMcpRequest(request) ? 'mcp-anonymous' : 'public-read')
+    } catch (cause) {
+      return degrade(
+        cause,
+        withRequestCorrelationHeader(problem({
+          status: 503,
+          kind: 'UNAVAILABLE',
+          code: 'mcp_admission_unavailable',
+          retryable: true,
+          detail: 'The MCP endpoint is temporarily unavailable. Retry later.',
+          extras: { correlationId },
+        }), correlationId),
+        { site: 'handleMcpRouteRequest', reason: 'source_unavailable' },
+      )
     }
     if (!admission.ok) {
       return withRequestCorrelationHeader(rateLimitedResponse(admission.retryAfter), correlationId)
@@ -785,8 +807,11 @@ async function actionRequiringAuthenticationForRequest(
       return action === undefined ? undefined : { action, generic: true }
     }
     return undefined
-  } catch {
-    return undefined
+  } catch (cause) {
+    return degrade(cause, undefined, {
+      site: 'actionRequiringAuthenticationForRequest',
+      reason: 'invalid_response',
+    })
   }
 }
 

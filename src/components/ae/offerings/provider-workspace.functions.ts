@@ -6,6 +6,7 @@ import { callSourceMutation, callSourceQuery, sourceMutation, sourceQuery } from
 import { requireStrictClerkConsequenceProof } from '@/lib/server/clerk-consequence-proof'
 import { sourceWriteAdmissionFromContext } from '@/lib/server/source-write-admission'
 import { sanitizeTelemetryError } from '@/lib/observability/private-route-safety'
+import { degrade } from '@/lib/observability/degrade'
 import {
   readOwnerProviderConnections,
   readOwnerProviderEarnings,
@@ -217,8 +218,11 @@ export async function readProviderWorkspacePageThroughSource(
       },
       lifecycle: { kind: 'available', value: lifecycle },
     }
-  } catch {
-    return { inventory: { kind: 'unavailable' } }
+  } catch (cause) {
+    return degrade(cause, { inventory: { kind: 'unavailable' } } as const, {
+      site: 'readProviderWorkspacePageThroughSource',
+      reason: 'source_unavailable',
+    })
   }
 }
 
@@ -251,8 +255,11 @@ export const readProviderToolStatusServer = createServerFn()
         ...(result.maintenance === undefined ? {} : { maintenance: result.maintenance }),
         ...(result.resumeCandidateRef === undefined ? {} : { resumeCandidateRef: result.resumeCandidateRef }),
       }
-    } catch {
-      return { kind: 'unavailable' }
+    } catch (cause) {
+      return degrade(cause, { kind: 'unavailable' } as const, {
+        site: 'readProviderToolStatusServer',
+        reason: 'source_unavailable',
+      })
     }
   })
 
@@ -277,8 +284,11 @@ export async function readProviderWorkspaceConnectionsSummaryThroughSource(): Pr
         needsAttention: connections.filter((connection) => !connection.available).length,
       },
     }
-  } catch {
-    return { kind: 'unavailable' }
+  } catch (cause) {
+    return degrade(cause, { kind: 'unavailable' } as const, {
+      site: 'readProviderWorkspaceConnectionsSummaryThroughSource',
+      reason: 'source_unavailable',
+    })
   }
 }
 
@@ -292,8 +302,11 @@ export const readProviderWorkspaceConnectionsDetailServer = createServerFn().han
       return { kind: 'conflict', reason: 'business_mismatch' }
     }
     return { kind: 'available', businessId: identity.businessId, connections }
-  } catch {
-    return { kind: 'unavailable' }
+  } catch (cause) {
+    return degrade(cause, { kind: 'unavailable' } as const, {
+      site: 'readProviderWorkspaceConnectionsDetailServer',
+      reason: 'source_unavailable',
+    })
   }
 })
 
@@ -314,8 +327,11 @@ export async function readProviderWorkspacePayoutSummaryThroughSource(): Promise
       readOwnerProviderEarnings(),
       readOwnerConnectReadinessThroughSource(),
     ])
-  } catch {
-    return { kind: 'unavailable' }
+  } catch (cause) {
+    return degrade(cause, { kind: 'unavailable' } as const, {
+      site: 'readProviderWorkspacePayoutSummaryThroughSource',
+      reason: 'source_unavailable',
+    })
   }
   const [earnings, connect] = reads
   if (earnings.kind === 'not_found' && connect.kind === 'not_found') return { kind: 'not_applicable' }
@@ -352,8 +368,11 @@ export const readOwnerProviderOffboardingServer = createServerFn().handler(async
   if (identity.kind !== 'available') return identity.kind === 'not_found' ? { kind: 'not_found' } : { kind: 'unavailable' }
   try {
     return await callSourceQuery(readProviderOffboardingQuery, { businessId: identity.businessId })
-  } catch {
-    return { kind: 'unavailable' }
+  } catch (cause) {
+    return degrade(cause, { kind: 'unavailable' } as const, {
+      site: 'readOwnerProviderOffboardingServer',
+      reason: 'source_unavailable',
+    })
   }
 })
 
@@ -385,8 +404,11 @@ export const startOwnerProviderOffboardingServer = createServerFn({ method: 'POS
         sourceWrite,
         sourceWriteRequest: sourceWriteRequestFromAdmission(sourceWrite),
       })
-    } catch {
-      return { kind: 'unavailable' }
+    } catch (cause) {
+      return degrade(cause, { kind: 'unavailable' } as const, {
+        site: 'startOwnerProviderOffboardingServer',
+        reason: 'source_unavailable',
+      })
     }
   })
 
@@ -412,8 +434,11 @@ export const resumeOwnerProviderOffboardingServer = createServerFn({ method: 'PO
         sourceWrite,
         sourceWriteRequest: sourceWriteRequestFromAdmission(sourceWrite),
       })
-    } catch {
-      return { kind: 'unavailable' }
+    } catch (cause) {
+      return degrade(cause, { kind: 'unavailable' } as const, {
+        site: 'resumeOwnerProviderOffboardingServer',
+        reason: 'source_unavailable',
+      })
     }
   })
 
@@ -439,8 +464,11 @@ export const cancelOwnerProviderOffboardingServer = createServerFn({ method: 'PO
         sourceWrite,
         sourceWriteRequest: sourceWriteRequestFromAdmission(sourceWrite),
       })
-    } catch {
-      return { kind: 'unavailable' }
+    } catch (cause) {
+      return degrade(cause, { kind: 'unavailable' } as const, {
+        site: 'cancelOwnerProviderOffboardingServer',
+        reason: 'source_unavailable',
+      })
     }
   })
 
@@ -450,8 +478,11 @@ export async function readProviderWorkspacePublicStatusThroughSource(): Promise<
   let result: Awaited<ReturnType<typeof readOwnerStatusThroughSource>>
   try {
     result = await readOwnerStatusThroughSource(undefined)
-  } catch {
-    return { kind: 'unavailable' }
+  } catch (cause) {
+    return degrade(cause, { kind: 'unavailable' } as const, {
+      site: 'readProviderWorkspacePublicStatusThroughSource',
+      reason: 'source_unavailable',
+    })
   }
   if (result.kind === 'not_found') return { kind: 'not_applicable' }
   if (result.kind !== 'available') return { kind: 'unavailable' }

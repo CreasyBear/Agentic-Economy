@@ -1,16 +1,10 @@
-import { Link, useNavigate, useRouter } from '@tanstack/react-router'
+import { useNavigate, useRouter } from '@tanstack/react-router'
 import { useReverification } from '@clerk/tanstack-react-start'
 import { isReverificationCancelledError } from '@clerk/tanstack-react-start/errors'
 import { useServerFn } from '@tanstack/react-start'
 import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from 'react'
 
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { AeConfirmDialog } from '@/components/ae/feedback/AeConfirmDialog'
-import { AeEmptyState } from '@/components/ae/feedback/AeEmptyState'
-import { AeCopyReference } from '@/components/ae/data/AeCopyReference'
 import { AeSection } from '@/components/ae/layout/AeSection'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import {
   checkOwnerX402Server,
   connectOwnerX402Server,
@@ -19,25 +13,21 @@ import {
   type OwnerProviderConnection,
 } from '@/modules/capability-supply/supply-funnel.functions'
 import { utf8ToHex } from '@/modules/capability-supply/public'
-import { providerConnectionTargetId } from './provider-connection-target'
 import { suggestNextAction } from '@/modules/market/suggested-next-action'
-import { formatRelativeTime, formatTimestamp, timestampIso } from '@/lib/ui/format-time'
 import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
+import { captureRouteException } from '@/lib/observability/capture-route-exception'
+import { degrade } from '@/lib/observability/degrade'
 import type { OwnerToolsX402ConnectionIntent } from '@/lib/operator/supply-compatibility'
-
-type X402HandoffIdentity = Readonly<{
-  draft: string
-  resourceUrl: string
-  method: 'GET' | 'POST'
-  environment: 'sandbox' | 'production'
-}>
-
-type PendingX402Return = Readonly<{
-  draft: string
-  connection: string
-  environment: 'sandbox' | 'production'
-  handoff: X402HandoffIdentity
-}>
+import { AeProviderConnectionList } from './AeProviderConnectionList'
+import { AeProviderConnectionForm, type ProviderConnectionInspection } from './AeProviderConnectionForm'
+import {
+  connectionRefFromHash,
+  connectionRefusalCopy,
+  matchesX402Handoff,
+  sameX402Handoff,
+  type PendingX402Return,
+  type X402HandoffIdentity,
+} from './owner-provider-connections-model'
 
 export function AeOwnerProviderConnections({
   businessId,
@@ -59,15 +49,7 @@ export function AeOwnerProviderConnections({
   const revoke = useServerFn(revokeOwnerProviderConnectionServer)
   const [resourceUrl, setResourceUrl] = useState('')
   const [method, setMethod] = useState<'GET' | 'POST'>('POST')
-  const [inspection, setInspection] = useState<Readonly<{
-    digest: string
-    payTo: string
-    amount: string
-    network: string
-    asset: string
-    claimMessage: string
-    claimExpiresAt: number
-  }>>()
+  const [inspection, setInspection] = useState<ProviderConnectionInspection>()
   const [claimSignature, setClaimSignature] = useState<string>()
   const [reauthorizingConnectionRef, setReauthorizingConnectionRef] = useState<string>()
   const [busy, setBusy] = useState<string>()
@@ -110,7 +92,8 @@ export function AeOwnerProviderConnections({
       let targetId: string
       try {
         targetId = decodeURIComponent(window.location.hash.replace(/^#/, ''))
-      } catch {
+      } catch (cause) {
+        captureRouteException(cause, { site: 'focusHashTarget' }, 'warning')
         return
       }
       if (
@@ -373,8 +356,8 @@ export function AeOwnerProviderConnections({
       }
       setClaimSignature(signature)
       setNotice({ kind: 'status', text: `Payee control proved. AE will verify the live challenge again when you ${reauthorizingConnectionRef === undefined ? 'connect' : 'reauthorize'}.` })
-    } catch {
-      setNotice({ kind: 'error', text: 'The payee ownership signature was not completed.' })
+    } catch (cause) {
+      setNotice(degrade(cause, { kind: 'error', text: 'The payee ownership signature was not completed.' }, { site: 'provePayeeControl', reason: 'source_unavailable' }))
     } finally {
       setBusy(undefined)
     }
@@ -527,345 +510,65 @@ export function AeOwnerProviderConnections({
         title="Provider connections"
         description="Connect a hosted x402 endpoint so Agentic Economy can route paid calls without collecting an API key or wallet secret. Then open a Tool and select this connection as its access authority."
       >
-      {connections.length === 0 ? (
-        <AeEmptyState
-          title="No provider connection yet"
-          description="Add the public HTTPS endpoint that returns the x402 payment challenge for your Tool."
-          action={readOnly ? undefined : (
-            <Button type="button" className="min-h-touch" onClick={beginConnection}>
-              {missingConnectionNextAction.label}
-            </Button>
-          )}
+        <AeProviderConnectionList
+          connections={connections}
+          readOnly={readOnly}
+          {...(busy === undefined ? {} : { busy })}
+          refreshRequired={refreshRequired}
+          {...(rebindOfferingRef === undefined ? {} : { rebindOfferingRef })}
+          {...(rebindConnectionRef === undefined ? {} : { rebindConnectionRef })}
+          {...(refreshedForRebind === undefined ? {} : { refreshedForRebind })}
+          rebindLinkRef={rebindLinkRef}
+          missingConnectionActionLabel={missingConnectionNextAction.label}
+          onBeginConnection={beginConnection}
+          onCheckConnection={(connection) => void checkConnection(connection)}
+          onBeginReauthorization={beginReauthorization}
+          onRequestRevoke={requestRevoke}
+          {...(revokeTarget === undefined ? {} : { revokeTarget })}
+          revokePending={revokePending}
+          revokeTriggerRef={revokeTriggerRef}
+          onRevokeOpenChange={(open) => {
+            if (!open) setRevokeTarget(undefined)
+          }}
+          onConfirmRevoke={() => void confirmRevoke()}
         />
-      ) : (
-        <ul className="m-0 grid list-none divide-y divide-border border-y border-border p-0">
-          {connections.map((connection) => (
-            <li
-              key={connection.connectionRef}
-              id={providerConnectionTargetId(connection.connectionRef)}
-              tabIndex={-1}
-              className="grid min-w-0 scroll-mt-6 gap-3 py-4 outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
-            >
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="grid min-w-0 gap-1">
-                  <p className="font-medium text-foreground">{providerConnectionStatus(connection)}</p>
-                  <p className="break-all text-sm text-muted-foreground">
-                    {connection.x402Method ?? 'Method not recorded'} {providerConnectionResource(connection)}
-                  </p>
-                  <p className="break-all text-sm text-muted-foreground">
-                    Permission: route x402 payment to {connection.x402Payee ?? 'an unrecorded payee'} for this exact method and resource.
-                  </p>
-                  <p className="text-sm text-muted-foreground">Authority generation {connection.authorityGeneration}</p>
-                  {connection.expiresAt === undefined ? (
-                    <p className="text-sm text-muted-foreground">No scheduled authority expiry</p>
-                  ) : (
-                    <time
-                      dateTime={timestampIso(connection.expiresAt)}
-                      className="text-sm text-muted-foreground"
-                    >
-                      Authority expires {formatRelativeTime(connection.expiresAt)} · {formatTimestamp(connection.expiresAt)}
-                    </time>
-                  )}
-                  <p className="text-sm text-muted-foreground">{providerConnectionHealth(connection)}</p>
-                  <p className="text-sm text-muted-foreground">Credential rotation: not applicable. x402 stores no provider credential or private key.</p>
-                  <p className="text-sm text-muted-foreground">Tool readiness is checked per Tool and is not implied by connection health.</p>
-                  <AeCopyReference label="connection reference" value={connection.connectionRef} />
-                </div>
-                {(connection.lifecycle === 'active' || connection.lifecycle === 'reauthorization_required') ? (
-                  <div className="flex flex-wrap gap-2">
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      className="min-h-touch"
-                      disabled={readOnly || busy !== undefined || refreshRequired}
-                      onClick={() => void checkConnection(connection)}
-                    >
-                      {busy === connection.connectionRef ? 'Checking…' : 'Check connection'}
-                    </Button>
-                    <Button
-                      variant="secondary"
-                      className="min-h-touch"
-                      disabled={readOnly || busy !== undefined || refreshRequired}
-                      onClick={() => beginReauthorization(connection)}
-                    >
-                      Reauthorize
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="min-h-touch"
-                      disabled={readOnly || busy !== undefined || refreshRequired}
-                      onClick={(event) => requestRevoke(connection, event.currentTarget)}
-                    >
-                      Revoke
-                    </Button>
-                  </div>
-                ) : null}
-              </div>
-              {rebindOfferingRef !== undefined && connection.connectionRef === rebindConnectionRef ? (
-                refreshedForRebind === connection.connectionRef ? (
-                  <Alert>
-                    <AlertTitle>Authority refreshed</AlertTitle>
-                    <AlertDescription className="grid gap-3">
-                      Re-admit {rebindOfferingRef} now so this Tool binds to the refreshed authority snapshot.
-                      <Button asChild className="min-h-touch justify-self-start">
-                        <a
-                          ref={rebindLinkRef}
-                          href={`/owner/supply/${encodeURIComponent(rebindOfferingRef)}#provider`}
-                        >
-                          Re-admit Tool
-                        </a>
-                      </Button>
-                    </AlertDescription>
-                  </Alert>
-                ) : (
-                  <Alert>
-                    <AlertTitle>Two-step authority recovery</AlertTitle>
-                    <AlertDescription>
-                      Refresh this connection first. AE will then continue to {rebindOfferingRef} so its binding can be re-admitted against the new authority generation and digest.
-                    </AlertDescription>
-                  </Alert>
-                )
-              ) : null}
-            </li>
-          ))}
-        </ul>
-      )}
-      <AeConfirmDialog
-        open={revokeTarget !== undefined}
-        onOpenChange={(open) => {
-          if (!open) setRevokeTarget(undefined)
-        }}
-        title="Revoke this provider connection?"
-        description={revokeTarget === undefined
-          ? ''
-          : `Revoke access to ${providerConnectionResource(revokeTarget)}. New calls through this connection will stop. Tools that use it need a replacement connection and re-admission before they can accept new calls.`}
-        confirmLabel="Revoke provider connection"
-        confirmVariant="destructive"
-        pending={revokePending}
-        onConfirm={confirmRevoke}
-        returnFocusRef={revokeTriggerRef}
-      />
-      {canConnect ? (
-        <form className="grid gap-3" onSubmit={submitConnection}>
-          <div className="grid gap-1.5">
-            <label htmlFor="provider-x402-resource-url" className="text-sm font-medium text-foreground">x402 resource URL</label>
-            <Input
-              ref={resourceUrlInputRef}
-              id="provider-x402-resource-url"
-              name="resourceUrl"
-              type="url"
-              inputMode="url"
-              autoComplete="url"
-              maxLength={2_048}
-              placeholder="https://api.example.com/paid-operation"
-              value={resourceUrl}
-              readOnly={reauthorizingConnectionRef !== undefined || x402Handoff !== undefined}
-              onChange={(event) => {
-                setResourceUrl(event.target.value)
-                setInspection(undefined)
-                setClaimSignature(undefined)
-              }}
-              aria-describedby="provider-x402-resource-url-hint"
-              required
-            />
-            <p id="provider-x402-resource-url-hint" className="text-sm text-muted-foreground">Use the exact public route that returns HTTP 402 when called without payment.</p>
-          </div>
-          <div className="grid max-w-40 gap-1.5">
-            <label htmlFor="provider-x402-method" className="text-sm font-medium text-foreground">Request method</label>
-            <select
-              id="provider-x402-method"
-              className="h-10 rounded-md border border-input bg-background px-3 text-sm"
-              value={method}
-              disabled={busy !== undefined || reauthorizingConnectionRef !== undefined || x402Handoff !== undefined}
-              onChange={(event) => {
-                setMethod(event.currentTarget.value === 'GET' ? 'GET' : 'POST')
-                setInspection(undefined)
-                setClaimSignature(undefined)
-              }}
-            >
-              <option value="POST">POST</option>
-              <option value="GET">GET</option>
-            </select>
-          </div>
-          <p className="text-sm text-muted-foreground">Environment: {environment}</p>
-          {inspection === undefined ? null : (
-            <Alert>
-              <AlertTitle>Exact payment lane observed</AlertTitle>
-              <AlertDescription className="grid gap-1">
-                <span>Amount: {inspection.amount}</span>
-                <span>Network: {inspection.network}</span>
-                <span className="break-all">Asset: {inspection.asset}</span>
-                <span className="break-all">Payee: {inspection.payTo}</span>
-              </AlertDescription>
-            </Alert>
-          )}
-          <div className="flex flex-wrap gap-2">
-            <Button
-              type="button"
-              variant="secondary"
-              className="min-h-touch"
-              disabled={busy !== undefined || resourceUrl.trim().length === 0}
-              onClick={() => void inspectConnection()}
-            >
-              {busy === 'inspect' ? 'Inspecting…' : 'Inspect endpoint'}
-            </Button>
-            <Button
-              type="button"
-              variant="secondary"
-              className="min-h-touch"
-              disabled={busy !== undefined || inspection === undefined || claimSignature !== undefined}
-              onClick={() => void provePayeeControl()}
-            >
-              {claimSignature !== undefined ? 'Payee control proved' : busy === 'claim' ? 'Waiting for wallet…' : 'Prove payee control'}
-            </Button>
-            <Button type="submit" className="min-h-touch" disabled={busy !== undefined || refreshRequired || inspection === undefined || claimSignature === undefined}>
-              {busy === 'new'
-                ? reauthorizingConnectionRef === undefined ? 'Connecting…' : 'Reauthorizing…'
-                : reauthorizingConnectionRef === undefined ? 'Connect verified endpoint' : 'Reauthorize verified endpoint'}
-            </Button>
-            {reauthorizingConnectionRef === undefined ? null : (
-              <Button
-                type="button"
-                variant="ghost"
-                className="min-h-touch"
-                disabled={busy !== undefined}
-                onClick={() => {
-                  setReauthorizingConnectionRef(undefined)
-                  setResourceUrl('')
-                  setInspection(undefined)
-                  setClaimSignature(undefined)
-                  setNotice({ kind: 'status', text: 'Reauthorization cancelled. No connection changed.' })
-                }}
-              >
-                Cancel reauthorization
-              </Button>
-            )}
-          </div>
-        </form>
-      ) : readOnly ? null : (
-        <AeEmptyState
-          title="Provider identity is required to connect"
-          description="Create an unpublished provider workspace, then return here to inspect and claim the x402 endpoint."
-          action={
-            <Button asChild className="min-h-touch">
-              <Link to="/owner/offerings">Create provider workspace</Link>
-            </Button>
-          }
+        <AeProviderConnectionForm
+          canConnect={canConnect}
+          readOnly={readOnly}
+          resourceUrl={resourceUrl}
+          method={method}
+          environment={environment}
+          {...(inspection === undefined ? {} : { inspection })}
+          {...(claimSignature === undefined ? {} : { claimSignature })}
+          {...(busy === undefined ? {} : { busy })}
+          refreshRequired={refreshRequired}
+          reauthorizing={reauthorizingConnectionRef !== undefined}
+          fieldsLocked={reauthorizingConnectionRef !== undefined || x402Handoff !== undefined}
+          resourceUrlInputRef={resourceUrlInputRef}
+          onResourceUrlChange={(value) => {
+            setResourceUrl(value)
+            setInspection(undefined)
+            setClaimSignature(undefined)
+          }}
+          onMethodChange={(value) => {
+            setMethod(value)
+            setInspection(undefined)
+            setClaimSignature(undefined)
+          }}
+          onSubmit={submitConnection}
+          onInspect={() => void inspectConnection()}
+          onProvePayeeControl={() => void provePayeeControl()}
+          onCancelReauthorization={() => {
+            setReauthorizingConnectionRef(undefined)
+            setResourceUrl('')
+            setInspection(undefined)
+            setClaimSignature(undefined)
+            setNotice({ kind: 'status', text: 'Reauthorization cancelled. No connection changed.' })
+          }}
+          {...(notice === undefined ? {} : { notice })}
+          onRefresh={() => void refresh()}
         />
-      )}
-      <p
-        role={notice?.kind === 'error' ? 'alert' : 'status'}
-        className={notice?.kind === 'error' ? 'text-sm text-destructive' : 'text-sm text-muted-foreground'}
-      >
-        {notice?.text ?? ''}
-      </p>
-      {refreshRequired ? (
-        <Button
-          type="button"
-          variant="secondary"
-          className="min-h-touch justify-self-start"
-          disabled={busy !== undefined}
-          onClick={() => void refresh()}
-        >
-          Reload current connections
-        </Button>
-      ) : null}
       </AeSection>
     </div>
   )
-}
-
-function providerConnectionResource(connection: OwnerProviderConnection): string {
-  return connection.grantedResources[0] ?? connection.providerAccountRef
-}
-
-function matchesX402Handoff(
-  connection: OwnerProviderConnection,
-  handoff: OwnerToolsX402ConnectionIntent,
-): boolean {
-  return connection.adapterId === 'x402-fetch:v2'
-    && connection.grantedResources.length === 1
-    && canonicalResourceUrl(connection.grantedResources[0] ?? '') === canonicalResourceUrl(handoff.resourceUrl)
-    && connection.x402Method === handoff.method
-    && (connection.sourceEnvironment === undefined || connection.sourceEnvironment === handoff.environment)
-}
-
-function canonicalResourceUrl(resourceUrl: string): string {
-  try {
-    return new URL(resourceUrl).toString()
-  } catch {
-    return resourceUrl
-  }
-}
-
-function sameX402Handoff(
-  left: X402HandoffIdentity | undefined,
-  right: X402HandoffIdentity | undefined,
-): boolean {
-  if (left === undefined || right === undefined) return left === right
-  return left.draft === right.draft
-    && left.resourceUrl === right.resourceUrl
-    && left.method === right.method
-    && left.environment === right.environment
-}
-
-function providerConnectionStatus(connection: OwnerProviderConnection): string {
-  switch (connection.lifecycle) {
-    case 'active':
-      return connection.available ? 'Connection active' : 'Connection authority expired'
-    case 'reauthorization_required':
-      return 'Reconnect required'
-    case 'revocation_pending':
-      return 'Revocation in progress'
-    case 'cleanup_required':
-      return 'Cleanup required'
-    case 'revoked':
-      return 'Revoked'
-    default: {
-      const exhaustive: never = connection.lifecycle
-      return exhaustive
-    }
-  }
-}
-
-function providerConnectionHealth(connection: OwnerProviderConnection): string {
-  if (connection.healthStatus === undefined || connection.healthCheckedAt === undefined) {
-    return 'Connection health not checked yet'
-  }
-  const observed = `${formatRelativeTime(connection.healthCheckedAt)} · ${formatTimestamp(connection.healthCheckedAt)}`
-  if (connection.healthStatus === 'healthy') {
-    return `Healthy unpaid x402 challenge observed ${observed}; payee ${connection.healthSubject ?? 'not recorded'}`
-  }
-  return `Health needs attention (${connection.healthReasonCode ?? 'unavailable'}) · checked ${observed}`
-}
-
-function connectionRefusalCopy(code: string, correlationRef?: string): string {
-  if (code === 'security_control_unavailable') {
-    return `The security control is unavailable, so no provider authority was changed.${correlationRef === undefined ? '' : ` Reference ${correlationRef}.`}`
-  }
-  if (code === 'reauthentication_required' || code === 'proof_stale') return 'Verify your identity again before changing this provider authority.'
-  if (code === 'proof_replayed' || code === 'command_changed') return 'The verified command no longer matches this change. Review the connection and verify again.'
-  if (code === 'rate_limited') return 'Too many provider-authority changes were attempted. Wait, then reload the current connection before trying again.'
-  if (code === 'claim_invalid' || code === 'invalid_identity') return 'The payee claim expired or no longer matches this provider and endpoint. Inspect it and sign again.'
-  if (code === 'inspection_ambiguous') return 'The endpoint now exposes more than one supported payment lane. Make one Base USDC exact lane unambiguous, then inspect again.'
-  if (code === 'inspection_unsupported') return 'The endpoint no longer exposes AE’s supported Base USDC exact payment lane.'
-  if (code.startsWith('inspection_')) return 'The live x402 challenge changed or is no longer valid. Inspect the endpoint again.'
-  if (code === 'connection_resource_conflict') return 'This x402 endpoint is already connected to another provider.'
-  if (code === 'credential_resource_conflict') return 'This endpoint is already connected with a different authority method.'
-  if (code === 'authentication_required' || code === 'authorization_denied') return 'Sign in as the provider owner and try again.'
-  if (code === 'authority_conflict') return 'This connection changed in another session. Reload and try again.'
-  if (code === 'invalid_resource') return 'Enter a public HTTPS x402 resource URL.'
-  return 'The provider connection could not be updated. Reload and try again.'
-}
-
-function connectionRefFromHash(): string | undefined {
-  try {
-    const targetId = decodeURIComponent(window.location.hash.replace(/^#/, ''))
-    return targetId.startsWith('provider-connection-')
-      ? targetId.slice('provider-connection-'.length)
-      : undefined
-  } catch {
-    return undefined
-  }
 }

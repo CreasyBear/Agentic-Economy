@@ -97,7 +97,7 @@ export function ChatComposer({
                       )}
                       {browseMarketOnError ? (
                         <Button asChild type="button" variant="outline" size="sm" className="min-h-touch w-fit">
-                          <a href="/market#tools">{chatRecovery.browse}</a>
+                          <a href="/market">{chatRecovery.browse}</a>
                         </Button>
                       ) : null}
                     </FieldError>

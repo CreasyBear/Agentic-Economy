@@ -2,6 +2,7 @@ import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 
 import { offeringApiDtoToSupplyView, type PublicOfferingSupplyView } from '@/components/ae/offerings/offering-presentation'
+import { degrade } from '@/lib/observability/degrade'
 import { readCanonicalBaseUrlServer } from '@/lib/server/canonical-url.functions'
 import {
   readPublicBusinessPageServer,
@@ -40,7 +41,10 @@ export const readPublicBusinessRouteServer = createServerFn()
         seo,
         supply: offeringApiDtoToSupplyView(offeringDetail.business),
       }
-    } catch {
-      return { kind: 'unavailable', reason: 'source_unavailable', retryable: true }
+    } catch (cause) {
+      return degrade(cause, { kind: 'unavailable', reason: 'source_unavailable', retryable: true } as const, {
+        site: 'readPublicBusinessRouteServer',
+        reason: 'source_unavailable',
+      })
     }
   })

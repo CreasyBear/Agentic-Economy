@@ -23,6 +23,8 @@ import type {
   AccountFundingStartResult,
 } from '@/modules/money/server'
 import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
+import { captureRouteException } from '@/lib/observability/capture-route-exception'
+import { degrade } from '@/lib/observability/degrade'
 
 export type AccountFundingPort = Readonly<{
   begin: (input: AccountFundingBeginInput) => Promise<AccountFundingStartResult>
@@ -87,8 +89,8 @@ export function AeAccountFundingPanel({
       persistRecovery(locator)
       try {
         await onRefresh?.()
-      } catch {
-        setErrorMessage('Payment was read back, but the canonical Account balance is temporarily unavailable.')
+      } catch (cause) {
+        setErrorMessage(degrade(cause, 'Payment was read back, but the canonical Account balance is temporarily unavailable.', { site: 'readCanonicalPayment.onRefresh', reason: 'source_unavailable' }))
       }
     } catch (cause) {
       captureClientExceptionOnClient(cause)
@@ -170,8 +172,9 @@ export function AeAccountFundingPanel({
       const url = new URL(window.location.href)
       for (const key of ['funding', 'checkout_session_id', 'session_id']) url.searchParams.delete(key)
       window.history.replaceState(window.history.state, '', url)
-    } catch {
+    } catch (cause) {
       // The current render can start a new payment even when browser storage is unavailable.
+      captureRouteException(cause, { site: 'startAnotherPayment' }, 'warning')
     }
   }
 
@@ -294,8 +297,9 @@ function persistRecovery(locator: RecoveryLocator): void {
   if (typeof window === 'undefined') return
   try {
     window.sessionStorage.setItem(recoveryStorageKey, JSON.stringify(locator))
-  } catch {
+  } catch (cause) {
     // Browser storage is optional; the in-memory locator still protects this render.
+    captureRouteException(cause, { site: 'persistRecovery' }, 'warning')
   }
 }
 
@@ -307,8 +311,8 @@ function readStoredRecovery(): RecoveryLocator | undefined {
     const parsed: unknown = JSON.parse(raw)
     if (!isRecoveryLocator(parsed)) return undefined
     return parsed
-  } catch {
-    return undefined
+  } catch (cause) {
+    return degrade(cause, undefined, { site: 'readStoredRecovery', reason: 'invalid_response' })
   }
 }
 

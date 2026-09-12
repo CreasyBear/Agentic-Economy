@@ -3,6 +3,7 @@
 import { ToolPriceText } from "@/components/ae/market/AeToolPrice"
 
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react'
+import { Link } from '@tanstack/react-router'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -475,7 +476,7 @@ function SearchRecovery({
           Clear search
         </Button>
         <Button asChild variant="secondary" size="sm" className="min-h-touch">
-          <a href="/market#tools">Browse current Tools</a>
+          <Link to="/market">Browse current Tools</Link>
         </Button>
       </div>
     </div>

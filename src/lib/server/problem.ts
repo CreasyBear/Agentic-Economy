@@ -2,6 +2,7 @@ import type { ZodError } from 'zod'
 
 import { buildProblem, defaultTitle, type ProblemInput } from '@/lib/errors'
 import { currentRequestCorrelationId, REQUEST_CORRELATION_HEADER } from '@/lib/server/request-correlation'
+import { problemFromZodError } from '@/lib/server/zod-problem'
 
 /**
  * Build an RFC 9457 `application/problem+json` Response from a
@@ -28,6 +29,20 @@ export function problem(input: ProblemInput, headers: Readonly<Record<string, st
     status: details.status,
     headers: responseHeaders,
   })
+}
+
+/**
+ * Build a validation Problem response from a caught error. When `error` is a
+ * zod issue set (server-fn `.validator()` failure), the response carries
+ * per-field `invalid-params`; otherwise `fallback` is used unchanged so
+ * existing generic-error behaviour is preserved.
+ */
+export function validationProblem(
+  error: unknown,
+  fallback: Omit<ProblemInput, 'invalidParams'>,
+  headers: Readonly<Record<string, string>> = {},
+): Response {
+  return problem(problemFromZodError(error, fallback) ?? fallback, headers)
 }
 
 /** First zod issue as `"path: message"` (or just `message` for a root-level issue), for a `detail` that names the field. */

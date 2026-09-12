@@ -2,6 +2,8 @@ import { isRedirect } from '@tanstack/react-router'
 import { createServerOnlyFn } from '@tanstack/react-start'
 import { getRequest } from '@tanstack/react-start/server'
 
+import { degradeBackend } from '@/lib/observability/degrade-backend'
+
 export const REQUEST_CORRELATION_HEADER = 'X-AE-Request-Id'
 const CORRELATION_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/u
 
@@ -34,16 +36,16 @@ export function runWithRequestCorrelation<T>(
 const readCurrentRequestCorrelationOnServer = createServerOnlyFn((): RequestCorrelation | undefined => {
   try {
     return correlationsByRequest.get(getRequest())
-  } catch {
-    return undefined
+  } catch (cause) {
+    return degradeBackend(cause, undefined, { site: 'readCurrentRequestCorrelationOnServer', reason: 'source_unavailable' })
   }
 })
 
 export function currentRequestCorrelation(): RequestCorrelation | undefined {
   try {
     return readCurrentRequestCorrelationOnServer()
-  } catch {
-    return undefined
+  } catch (cause) {
+    return degradeBackend(cause, undefined, { site: 'currentRequestCorrelation', reason: 'source_unavailable' })
   }
 }
 

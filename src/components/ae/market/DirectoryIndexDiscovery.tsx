@@ -10,11 +10,9 @@ import type { X402DirectoryCatalogueOverview } from '@/modules/market/x402-direc
 import type { SavedDirectoryTool } from './DirectorySavedTools'
 import { DirectoryToolCard } from './DirectoryToolCard'
 import { directoryDate } from './directory-presentation'
-import type { MarketReturnContext } from './market-return-context'
 
 type Props = Readonly<{
   overview: Extract<X402DirectoryCatalogueOverview, { kind: 'ok' }>
-  returnTo?: MarketReturnContext
   onSave: (item: SavedDirectoryTool) => void
   isSaved: (resource: string) => boolean
   onCompare: (item: SavedDirectoryTool) => void
@@ -23,7 +21,7 @@ type Props = Readonly<{
 }>
 
 /** Ranks and Provider counts come directly from the complete observed directory index. */
-export function DirectoryIndexDiscovery({ overview, returnTo, onSave, isSaved, onCompare, isComparing, compareDisabled }: Props) {
+export function DirectoryIndexDiscovery({ overview, onSave, isSaved, onCompare, isComparing, compareDisabled }: Props) {
   const id = useId()
   const shelves = [
     { key: 'popular', title: 'Popular Tools', description: 'Most Calls reported in the last 30 days.', entries: overview.popular, sort: 'popular' },
@@ -46,7 +44,7 @@ export function DirectoryIndexDiscovery({ overview, returnTo, onSave, isSaved, o
             const item: SavedDirectoryTool = { entry, search: {} }
             return <CarouselItem key={entry.resource} className="basis-[85%] pl-4 sm:basis-1/2 lg:basis-1/3 xl:basis-1/4">
               <div className="flex h-full flex-col gap-2.5">
-                <DirectoryToolCard entry={entry} {...(returnTo === undefined ? {} : { returnTo })} onSave={() => onSave(item)} saved={isSaved(entry.resource)}
+                <DirectoryToolCard entry={entry} onSave={() => onSave(item)} saved={isSaved(entry.resource)}
                   onCompare={() => onCompare(item)} comparing={isComparing(entry.resource)} compareDisabled={compareDisabled(entry.resource)} />
                 {shelf.key === 'updated' && entry.provenance?.updatedAt !== undefined ? <p className="px-1 text-xs text-muted-foreground">Updated {directoryDate(entry.provenance.updatedAt)}</p> : null}
               </div>

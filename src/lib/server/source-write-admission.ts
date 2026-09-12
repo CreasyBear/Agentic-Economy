@@ -14,6 +14,7 @@ import {
   type SourceWriteAdmissionScope,
 } from '@/modules/security/source-write-admission'
 import { isRecord } from '@/modules/common/is-record'
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 
 export { sourceWriteRequestFromAdmission }
 
@@ -131,7 +132,7 @@ function refererOrigin(referer: string | null): string | undefined {
   if (referer === null) return undefined
   try {
     return new URL(referer).origin
-  } catch {
-    return undefined
+  } catch (cause) {
+    return degradeBackend(cause, undefined, { site: 'refererOrigin', reason: 'invalid_response' })
   }
 }

@@ -1,5 +1,6 @@
 import { bearerChallenge } from '@/lib/http/oauth-challenge'
 import { gatewayFailureToProblem } from '@/lib/errors'
+import { degrade } from '@/lib/observability/degrade'
 import { readBoundedRequestText } from '@/lib/server/bounded-request-body'
 import { isJsonContentType } from '@/lib/server/json-content-type'
 import {
@@ -476,13 +477,13 @@ export async function handleToolQuotePost(
     let rawBody: unknown
     try {
       rawBody = JSON.parse(bounded.text) as unknown
-    } catch {
-      return withRequestCorrelationHeader(problem({
+    } catch (cause) {
+      return degrade(cause, withRequestCorrelationHeader(problem({
         status: 400,
         kind: 'INVALID_ARGUMENT',
         code: 'invalid_json',
         detail: 'The request body must be valid JSON.',
-      }), correlationId)
+      }), correlationId), { site: 'handleToolQuotePost', reason: 'invalid_response' })
     }
     const parsed = toolQuoteAction.schema.safeParse(rawBody)
     if (!parsed.success) {
@@ -541,14 +542,14 @@ export async function handleToolCallPost(
     let rawBody: unknown
     try {
       rawBody = JSON.parse(bounded.text) as unknown
-    } catch {
+    } catch (cause) {
       telemetry({ outcome: 'failed', refusalCode: 'invalid_json' })
-      return withRequestCorrelationHeader(problem({
+      return degrade(cause, withRequestCorrelationHeader(problem({
         status: 400,
         kind: 'INVALID_ARGUMENT',
         code: 'invalid_json',
         detail: 'The request body must be valid JSON.',
-      }), correlationId)
+      }), correlationId), { site: 'handleToolCallPost', reason: 'invalid_response' })
     }
     const parsed = callAction.schema.safeParse(rawBody)
     if (!parsed.success) {
@@ -615,8 +616,8 @@ async function parseRecoveryBody(
   if (bounded.text.trim().length > 0) {
     try {
       rawBody = JSON.parse(bounded.text) as unknown
-    } catch {
-      return {
+    } catch (cause) {
+      return degrade(cause, {
         ok: false,
         response: withRequestCorrelationHeader(problem({
           status: 400,
@@ -624,7 +625,7 @@ async function parseRecoveryBody(
           code: 'invalid_json',
           detail: 'The recovery request body must be valid JSON.',
         }), correlationId),
-      }
+      }, { site: 'parseRecoveryBody', reason: 'invalid_response' })
     }
   }
   if (!isRecord(rawBody)) {

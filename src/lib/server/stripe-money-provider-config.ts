@@ -1,5 +1,6 @@
 import type Stripe from "stripe";
 
+import { degradeBackend } from "@/lib/observability/degrade-backend";
 import { canonicalDigest } from "@/modules/common/canonical-digest";
 import {
   exactAmountSchema,
@@ -157,8 +158,11 @@ export function validHttpUrl(value: unknown): value is string {
   try {
     const url = new URL(value);
     return url.protocol === "https:" || url.protocol === "http:";
-  } catch {
-    return false;
+  } catch (cause) {
+    return degradeBackend(cause, false, {
+      site: "validHttpUrl",
+      reason: "invalid_response",
+    });
   }
 }
 

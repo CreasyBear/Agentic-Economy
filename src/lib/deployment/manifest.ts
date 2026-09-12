@@ -1,4 +1,6 @@
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { captureRouteException } from '@/lib/observability/capture-route-exception'
+import { degrade } from '@/lib/observability/degrade'
 import { CALL_ACTION_ID, CALL_HTTP_PATH } from '@/modules/capability-execution/call-entry'
 import {
   SourceWriteAdmissionScopeValues,
@@ -25,7 +27,7 @@ export type DeploymentValidationResult = Readonly<{
   readinessProbes: typeof DEPLOYMENT_MANIFEST.readinessProbes
 }>
 
-type FieldRule = Readonly<{ name: string; kind: 'url' | 'host-list' | 'boolean' | 'credential-ref'; target?: string }>
+export type FieldRule = Readonly<{ name: string; kind: 'url' | 'host-list' | 'boolean' | 'credential-ref'; target?: string }>
 type RequirementGroup = Readonly<{ scope: string; code: string; names: readonly string[]; mode: 'all' | 'one-of'; trigger?: readonly string[] }>
 
 export const SOURCE_WRITE_FAMILIES = ['billing', 'protected', 'catalog', 'operator', 'repair', 'session'] as const
@@ -40,7 +42,6 @@ const sourceWriteDerivedNames = SOURCE_WRITE_FAMILIES.flatMap((family) => {
 })
 const forbiddenProductionNames = Object.freeze([
   'AE_SOURCE_WRITE_SECRET',
-  'VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E',
   'AE_DEV_WBA_SMOKE_ENABLED',
   'AE_DEV_WBA_SMOKE_SECRET',
   'AE_DEV_WBA_SIGNATURE_AGENT',
@@ -161,12 +162,11 @@ export const fieldRules: readonly FieldRule[] = [
   { name: 'AE_X402_CUSTODY_ENABLED', kind: 'boolean' },
   { name: 'AE_ROUTING_PUBLIC_BASE_URL', kind: 'url' }, { name: 'VITE_POSTHOG_HOST', kind: 'url' }, { name: 'POSTHOG_HOST', kind: 'url' },
   { name: 'VITE_POSTHOG_APP_URL', kind: 'url' }, { name: 'POSTHOG_APP_URL', kind: 'url' },
-  { name: 'AUTUMN_API_BASE_URL', kind: 'url' }, { name: 'AUTUMN_PORTAL_RETURN_BASE_URL', kind: 'url' },
   { name: 'AE_WBA_SIGNATURE_AGENT_ALLOWLIST', kind: 'host-list' },
   { name: 'AE_CSP_REPORT_ONLY', kind: 'boolean' },
   { name: 'AE_COOKIE_SECURE', kind: 'boolean' },
   { name: 'AE_DISABLE_OBSERVABILITY', kind: 'boolean' }, { name: 'VITE_AE_DISABLE_OBSERVABILITY', kind: 'boolean' },
-  { name: 'VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E', kind: 'boolean' }, { name: 'VITE_AE_OPERATOR_ADVANCED_NAV', kind: 'boolean' },
+  { name: 'VITE_AE_OPERATOR_ADVANCED_NAV', kind: 'boolean' },
   { name: 'AE_DEV_WBA_SMOKE_ENABLED', kind: 'boolean' },
   { name: 'AE_PACKAGE5_WRITES_ENABLED', kind: 'boolean' },
   { name: 'AE_SUPPLY_HTTP_CREDENTIALS_ENABLED', kind: 'boolean' },
@@ -214,7 +214,6 @@ export const DEPLOYMENT_MANIFEST = Object.freeze({
         'workflow',
         'rate-limiter',
         'agent',
-        'aggregate:ownerActivationByStage',
         'aggregate:marketEvidence',
         'aggregate:marketOperationEvidence',
         'aggregate:marketOperationRatings',
@@ -396,7 +395,8 @@ function validateSourceWriteAuthority(
     if (scope === undefined) throw new Error(`source_write_scope_missing:${family}`)
     try {
       resolveActiveSourceWriteSigningKey(scope, environment)
-    } catch {
+    } catch (cause) {
+      captureRouteException(cause, { site: 'validateSourceWriteAuthority' }, 'warning')
       add(
         'malformed',
         'source_write_authority_invalid',
@@ -509,7 +509,8 @@ function validateX402RpcUrls(
         || new Set(urls).size !== urls.length
       )
     ) throw new Error('invalid')
-  } catch {
+  } catch (cause) {
+    captureRouteException(cause, { site: 'validateX402RpcUrls' }, 'warning')
     add('malformed', 'x402_rpc_urls_invalid', ['AE_X402_RPC_URLS_JSON'], 'x402-payment')
   }
 }
@@ -548,14 +549,14 @@ function validUrl(value: string, production: boolean): boolean {
       && url.password.length === 0
       && url.search.length === 0
       && url.hash.length === 0
-  } catch { return false }
+  } catch (cause) { return degrade(cause, false, { site: 'validUrl', reason: 'invalid_response' }) }
 }
 function validHost(value: string): boolean {
   if (value.length === 0 || /\s/u.test(value) || (!value.includes('://') && /[/?#]/u.test(value))) return false
   try {
     const url = new URL(value.includes('://') ? value : `https://${value}`)
     return (url.protocol === 'http:' || url.protocol === 'https:') && url.hostname.length > 0 && url.pathname === '/' && url.search.length === 0 && url.hash.length === 0
-  } catch { return false }
+  } catch (cause) { return degrade(cause, false, { site: 'validHost', reason: 'invalid_response' }) }
 }
 function present(environment: DeploymentEnvironmentInput, name: string): string | undefined {
   const value = environment[name]?.trim()

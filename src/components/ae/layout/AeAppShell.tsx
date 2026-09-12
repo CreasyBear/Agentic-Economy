@@ -1,5 +1,6 @@
 import { Fragment, useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type ReactNode, type RefObject } from 'react'
 import { Link, useMatchRoute, useRouter } from '@tanstack/react-router'
+import { Show, UserButton } from '@clerk/tanstack-react-start'
 import { MenuIcon, XIcon } from 'lucide-react'
 
 import { AeCommandPanel, CommandPanelProvider } from '@/components/ae/command-panel'
@@ -126,9 +127,11 @@ export function AeAppShell({ children }: { children: ReactNode }) {
               <AppHeaderNav />
               <div className="ms-auto flex items-center gap-intra">
                 <AeCommandPanel />
-                <Button asChild variant="ghost" className="hidden lg:inline-flex">
-                  <Link to="/sign-in/$" params={{ _splat: '' }}>Sign in</Link>
-                </Button>
+                <Show when="signed-out" fallback={<UserButton />}>
+                  <Button asChild variant="ghost" className="hidden lg:inline-flex">
+                    <Link to="/sign-in/$" params={{ _splat: '' }}>Sign in</Link>
+                  </Button>
+                </Show>
                 <SheetTrigger asChild>
                   <AeSiteIconButton
                     ariaLabel={mobileNavOpen ? 'Close public menu' : 'Open public menu'}
@@ -151,9 +154,11 @@ export function AeAppShell({ children }: { children: ReactNode }) {
               </SheetHeader>
               <AeSiteDrawerNav onNavigate={() => setMobileNavOpen(false)} />
               <div className="grid gap-intra border-t border-border p-gutter">
-                <Button asChild variant="outline">
-                  <Link to="/sign-in/$" params={{ _splat: '' }} onClick={() => setMobileNavOpen(false)}>Sign in</Link>
-                </Button>
+                <Show when="signed-out" fallback={<UserButton />}>
+                  <Button asChild variant="outline">
+                    <Link to="/sign-in/$" params={{ _splat: '' }} onClick={() => setMobileNavOpen(false)}>Sign in</Link>
+                  </Button>
+                </Show>
               </div>
             </SheetContent>
           </Sheet>

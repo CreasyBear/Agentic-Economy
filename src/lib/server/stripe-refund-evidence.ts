@@ -1,5 +1,6 @@
 import Stripe from 'stripe'
 
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { isMoneyRefusal, type ExactAmount, type MoneyRefusal } from '@/modules/money/public'
 import {
@@ -32,8 +33,11 @@ export async function readStripeFundingRefund(
   try {
     const refund = responseData(await client.refunds.retrieve(refundId))
     return mapStripeFundingRefundEvidence({ refund, config })
-  } catch {
-    return refusal('credit_topup_pending', true)
+  } catch (cause) {
+    return degradeBackend(cause, refusal('credit_topup_pending', true), {
+      site: 'readStripeFundingRefund',
+      reason: 'source_unavailable',
+    })
   }
 }
 

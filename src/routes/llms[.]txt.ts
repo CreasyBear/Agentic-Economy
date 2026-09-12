@@ -2,6 +2,7 @@ import { createFileRoute } from '@tanstack/react-router'
 
 import { resolveCanonicalBaseUrl } from '@/lib/server/canonical-url'
 import { discoveryTextResponse } from '@/lib/http/discovery-response'
+import { degrade } from '@/lib/observability/degrade'
 import { methodNotAllowed } from '@/lib/server/method-guard'
 import { toolReadUnavailableResponse } from '@/lib/server/tool-read-problem'
 import { readPublicLlmsTxt } from '@/modules/discovery/discovery.functions'
@@ -36,8 +37,11 @@ export async function handleDurableLlmsTxtRequest(request: Request, head = false
       canonicalBaseUrl,
       routingBaseUrl: process.env.AE_ROUTING_PUBLIC_BASE_URL?.trim() || canonicalBaseUrl,
     })
-  } catch {
-    const response = toolReadUnavailableResponse()
+  } catch (cause) {
+    const response = degrade(cause, toolReadUnavailableResponse(), {
+      site: 'handleDurableLlmsTxtRequest',
+      reason: 'source_unavailable',
+    })
     return head ? new Response(null, { status: response.status, headers: response.headers }) : response
   }
 

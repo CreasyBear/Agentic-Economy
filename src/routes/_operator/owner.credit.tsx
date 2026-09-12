@@ -9,7 +9,6 @@ import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
 import { AeSettingsStack } from '@/components/ae/layout/AeSection'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
-import { isLocalE2EAuthBypassEnabled } from '@/lib/client/local-e2e-auth'
 import { operatorRouteOptions } from '@/lib/operator/route-options'
 import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
 import { readAgentDirectoryServer } from '@/lib/server/agent-access-console.functions'
@@ -58,7 +57,6 @@ export const Route = createFileRoute('/_operator/owner/credit')({
 
 function OwnerCreditRoute() {
   const readDirectory = useServerFn(readAgentDirectoryServer)
-  const localE2E = isLocalE2EAuthBypassEnabled()
   const beginAccountFunding = useServerFn(beginAccountFundingServer)
   const readAccountFunding = useServerFn(readAccountFundingServer)
   const readDocuments = useServerFn(readOwnerMoneyDocumentsServer)
@@ -102,14 +100,8 @@ function OwnerCreditRoute() {
   }, [readDirectory, readDocuments, readObligations, readReconciliation])
 
   useEffect(() => {
-    if (localE2E) {
-      setDirectory(emptyAgentDirectory)
-      setError(undefined)
-      setLoading(false)
-      return
-    }
     void load()
-  }, [load, localE2E])
+  }, [load])
 
   return (
     <AeOperatorPage
@@ -124,15 +116,6 @@ function OwnerCreditRoute() {
       }
     >
       <AeSettingsStack>
-        {localE2E ? (
-          <Alert>
-            <AlertTitle>Local preview — credit is not connected</AlertTitle>
-            <AlertDescription>
-              <p>This browser journey does not sign in or add credit. Browse the public demo to explore the customer experience.</p>
-              <Button asChild variant="secondary" className="mt-2 min-h-touch"><Link to="/">Browse public demo</Link></Button>
-            </AlertDescription>
-          </Alert>
-        ) : null}
         {error === undefined ? null : (
           <Alert variant="destructive">
             <AlertTitle>Credit unavailable</AlertTitle>
@@ -152,36 +135,32 @@ function OwnerCreditRoute() {
           documents={documents}
           reconciliationCases={reconciliationCases}
           providerObligations={providerObligations}
-          {...(localE2E
-            ? {}
-            : {
-                onCreateStatement: async () => {
-                  const now = new Date()
-                  const periodStart = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)
-                  const periodEnd = Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1)
-                  const result = await createStatement({ data: { periodStart, periodEnd } })
-                  if (result.kind === 'refused') throw new Error(result.code)
-                  await load()
-                },
-                onCreateDailyClose: async () => {
-                  const today = new Date()
-                  const periodEnd = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate())
-                  const periodStart = periodEnd - 24 * 60 * 60 * 1_000
-                  const result = await createDailyClose({ data: { periodStart, periodEnd } })
-                  if (result.kind === 'refused') throw new Error(result.code)
-                  await load()
-                },
-                onSignDailyClose: async (documentRef: string, expectedRenderInputDigest: string) => {
-                  const result = await signDailyClose({ data: { documentRef, expectedRenderInputDigest } })
-                  if (result.kind === 'refused') throw new Error(result.code)
-                  await load()
-                },
-                onOpenDocument: async (documentRef: string) => {
-                  const url = await renderDocument({ data: { documentRef } })
-                  if (url === null) throw new Error('money_document_url_unavailable')
-                  window.open(url, '_blank', 'noopener,noreferrer')
-                },
-              })}
+          onCreateStatement={async () => {
+            const now = new Date()
+            const periodStart = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)
+            const periodEnd = Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1)
+            const result = await createStatement({ data: { periodStart, periodEnd } })
+            if (result.kind === 'refused') throw new Error(result.code)
+            await load()
+          }}
+          onCreateDailyClose={async () => {
+            const today = new Date()
+            const periodEnd = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate())
+            const periodStart = periodEnd - 24 * 60 * 60 * 1_000
+            const result = await createDailyClose({ data: { periodStart, periodEnd } })
+            if (result.kind === 'refused') throw new Error(result.code)
+            await load()
+          }}
+          onSignDailyClose={async (documentRef: string, expectedRenderInputDigest: string) => {
+            const result = await signDailyClose({ data: { documentRef, expectedRenderInputDigest } })
+            if (result.kind === 'refused') throw new Error(result.code)
+            await load()
+          }}
+          onOpenDocument={async (documentRef: string) => {
+            const url = await renderDocument({ data: { documentRef } })
+            if (url === null) throw new Error('money_document_url_unavailable')
+            window.open(url, '_blank', 'noopener,noreferrer')
+          }}
         />
       </AeSettingsStack>
     </AeOperatorPage>

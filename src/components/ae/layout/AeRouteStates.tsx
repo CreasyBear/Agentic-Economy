@@ -11,7 +11,6 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
-import { isLocalE2EAuthBypassEnabled } from '@/lib/client/local-e2e-auth'
 import { operatorRoleForPath, roleHomeHref } from '@/lib/operator/roles'
 import {
   OPERATOR_SURFACE_FORBIDDEN_MESSAGE,
@@ -201,7 +200,6 @@ export function errorCorrelationRef(error: unknown): string | undefined {
 }
 
 function OperatorForbiddenBody() {
-  const localE2E = isLocalE2EAuthBypassEnabled()
   return (
     <Alert>
       <AlertTitle>You don’t have access to this workspace</AlertTitle>
@@ -214,15 +212,9 @@ function OperatorForbiddenBody() {
           <Button asChild variant="secondary" className="min-h-touch">
             <Link to="/support">Help</Link>
           </Button>
-          {localE2E ? (
-            <Button asChild variant="outline" className="min-h-touch">
-              <Link to="/">Return home</Link>
-            </Button>
-          ) : (
-            <SignOutButton redirectUrl="/">
-              <Button type="button" variant="outline" className="min-h-touch">Sign out</Button>
-            </SignOutButton>
-          )}
+          <SignOutButton redirectUrl="/">
+            <Button type="button" variant="outline" className="min-h-touch">Sign out</Button>
+          </SignOutButton>
         </div>
       </AlertDescription>
     </Alert>

@@ -1,9 +1,6 @@
 import { auth } from '@clerk/tanstack-react-start/server'
 import { reverificationError } from '@clerk/shared/authorization-errors'
 
-import { canonicalDigest } from '@/modules/common/canonical-digest'
-import { isLocalE2EAuthBypassEnabled } from '@/lib/server/local-e2e-bypass'
-
 export type ClerkConsequenceProofInput = Readonly<{
   reverificationId: string
   firstFactorAgeMinutes: number
@@ -12,18 +9,8 @@ export type ClerkConsequenceProofInput = Readonly<{
 
 /** Uses Clerk's maintained strict-reverification contract and returns only signed session evidence. */
 export async function requireStrictClerkConsequenceProof(
-  commandRef: string,
+  _commandRef: string,
 ): Promise<ClerkConsequenceProofInput> {
-  if (isLocalE2EAuthBypassEnabled()) {
-    return {
-      reverificationId: `local-e2e:${canonicalDigest({
-        version: 'ae.local-e2e-consequence-proof:v1',
-        commandRef,
-      })}`,
-      firstFactorAgeMinutes: 0,
-      secondFactorAgeMinutes: -1,
-    }
-  }
   const identity = await auth()
   if (!identity.isAuthenticated || identity.userId === null) {
     throw new Error('authentication_required')

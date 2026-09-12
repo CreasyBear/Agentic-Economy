@@ -1,5 +1,6 @@
 import Stripe from "stripe";
 
+import { degradeBackend } from "@/lib/observability/degrade-backend";
 import { canonicalDigest } from "@/modules/common/canonical-digest";
 import {
   isMoneyRefusal,
@@ -141,8 +142,11 @@ export async function verifyStripeMoneyWebhook(
       config: context.config,
       rawBody: input.rawBody,
     });
-  } catch {
-    return refusal("payment_binding_invalid", false);
+  } catch (cause) {
+    return degradeBackend(cause, refusal("payment_binding_invalid", false), {
+      site: "verifyStripeMoneyWebhook",
+      reason: "invalid_response",
+    });
   }
 }
 

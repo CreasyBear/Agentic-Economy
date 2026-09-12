@@ -53,6 +53,7 @@ import { Route as DotwellKnownOauthAuthorizationServerRouteImport } from './rout
 import { Route as DotwellKnownHttpMessageSignaturesDirectoryRouteImport } from './routes/[.]well-known/http-message-signatures-directory'
 import { Route as DotwellKnownApiCatalogRouteImport } from './routes/[.]well-known/api-catalog'
 import { Route as SlugUcpRouteImport } from './routes/$slug.ucp'
+import { Route as ToolsProviderHostSlugRouteImport } from './routes/tools.$providerHost.$slug'
 import { Route as ApiV1ServicesRouteImport } from './routes/api.v1.services'
 import { Route as ApiV1SandboxReferenceRouteImport } from './routes/api.v1.sandbox-reference'
 import { Route as ApiV1ReleaseRouteImport } from './routes/api.v1.release'
@@ -73,7 +74,6 @@ import { Route as ApiClerkWebhookRouteImport } from './routes/api.clerk.webhook'
 import { Route as ApiChatAnonymousRouteImport } from './routes/api.chat.anonymous'
 import { Route as ApiBusinessesSearchRouteImport } from './routes/api.businesses.search'
 import { Route as ApiBusinessesSlugRouteImport } from './routes/api.businesses.$slug'
-import { Route as OperatorOwnerSupplyRouteImport } from './routes/_operator/owner.supply'
 import { Route as OperatorOwnerSettingsRouteImport } from './routes/_operator/owner.settings'
 import { Route as OperatorOwnerOfferingsRouteImport } from './routes/_operator/owner.offerings'
 import { Route as OperatorOwnerCreditRouteImport } from './routes/_operator/owner.credit'
@@ -107,7 +107,6 @@ import { Route as ApiV1AccountActivityRouteImport } from './routes/api.v1.accoun
 import { Route as ApiStripeWebhookAccountsV2RouteImport } from './routes/api.stripe.webhook.accounts-v2'
 import { Route as OperatorOwnerSupplyOfferingRefRouteImport } from './routes/_operator/owner.supply.$offeringRef'
 import { Route as OperatorOwnerOfferingsNewRouteImport } from './routes/_operator/owner.offerings.new'
-import { Route as OperatorOwnerOfferingsOfferingRefRouteImport } from './routes/_operator/owner.offerings.$offeringRef'
 import { Route as ApiV1SupplyToolsListRouteImport } from './routes/api.v1.supply.tools.list'
 import { Route as ApiV1SupplySourcesPreviewRouteImport } from './routes/api.v1.supply.sources.preview'
 import { Route as ApiV1SupplyOffboardingStatusRouteImport } from './routes/api.v1.supply.offboarding.status'
@@ -347,6 +346,11 @@ const SlugUcpRoute = SlugUcpRouteImport.update({
   path: '/ucp',
   getParentRoute: () => SlugRoute,
 } as any)
+const ToolsProviderHostSlugRoute = ToolsProviderHostSlugRouteImport.update({
+  id: '/tools/$providerHost/$slug',
+  path: '/tools/$providerHost/$slug',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiV1ServicesRoute = ApiV1ServicesRouteImport.update({
   id: '/api/v1/services',
   path: '/api/v1/services',
@@ -450,11 +454,6 @@ const ApiBusinessesSlugRoute = ApiBusinessesSlugRouteImport.update({
   id: '/$slug',
   path: '/$slug',
   getParentRoute: () => ApiBusinessesRoute,
-} as any)
-const OperatorOwnerSupplyRoute = OperatorOwnerSupplyRouteImport.update({
-  id: '/owner/supply',
-  path: '/owner/supply',
-  getParentRoute: () => OperatorRoute,
 } as any)
 const OperatorOwnerSettingsRoute = OperatorOwnerSettingsRouteImport.update({
   id: '/owner/settings',
@@ -621,20 +620,14 @@ const ApiStripeWebhookAccountsV2Route =
   } as any)
 const OperatorOwnerSupplyOfferingRefRoute =
   OperatorOwnerSupplyOfferingRefRouteImport.update({
-    id: '/$offeringRef',
-    path: '/$offeringRef',
-    getParentRoute: () => OperatorOwnerSupplyRoute,
+    id: '/owner/supply/$offeringRef',
+    path: '/owner/supply/$offeringRef',
+    getParentRoute: () => OperatorRoute,
   } as any)
 const OperatorOwnerOfferingsNewRoute =
   OperatorOwnerOfferingsNewRouteImport.update({
     id: '/new',
     path: '/new',
-    getParentRoute: () => OperatorOwnerOfferingsRoute,
-  } as any)
-const OperatorOwnerOfferingsOfferingRefRoute =
-  OperatorOwnerOfferingsOfferingRefRouteImport.update({
-    id: '/$offeringRef',
-    path: '/$offeringRef',
     getParentRoute: () => OperatorOwnerOfferingsRoute,
   } as any)
 const ApiV1SupplyToolsListRoute = ApiV1SupplyToolsListRouteImport.update({
@@ -709,9 +702,9 @@ const ApiV1AccountFundingSessionsFundingSessionIdRoute =
   } as any)
 const OperatorOwnerSupplyConnectionsNewRoute =
   OperatorOwnerSupplyConnectionsNewRouteImport.update({
-    id: '/connections/new',
-    path: '/connections/new',
-    getParentRoute: () => OperatorOwnerSupplyRoute,
+    id: '/owner/supply/connections/new',
+    path: '/owner/supply/connections/new',
+    getParentRoute: () => OperatorRoute,
   } as any)
 const ApiV1AccountFundingSessionsPublicFundingSessionIdRoute =
   ApiV1AccountFundingSessionsPublicFundingSessionIdRouteImport.update({
@@ -721,9 +714,9 @@ const ApiV1AccountFundingSessionsPublicFundingSessionIdRoute =
   } as any)
 const OperatorOwnerSupplyConnectionsOauthCallbackRoute =
   OperatorOwnerSupplyConnectionsOauthCallbackRouteImport.update({
-    id: '/connections/oauth/callback',
-    path: '/connections/oauth/callback',
-    getParentRoute: () => OperatorOwnerSupplyRoute,
+    id: '/owner/supply/connections/oauth/callback',
+    path: '/owner/supply/connections/oauth/callback',
+    getParentRoute: () => OperatorRoute,
   } as any)
 
 export interface FileRoutesByFullPath {
@@ -777,7 +770,6 @@ export interface FileRoutesByFullPath {
   '/owner/credit': typeof OperatorOwnerCreditRoute
   '/owner/offerings': typeof OperatorOwnerOfferingsRouteWithChildren
   '/owner/settings': typeof OperatorOwnerSettingsRoute
-  '/owner/supply': typeof OperatorOwnerSupplyRouteWithChildren
   '/api/businesses/$slug': typeof ApiBusinessesSlugRoute
   '/api/businesses/search': typeof ApiBusinessesSearchRoute
   '/api/chat/anonymous': typeof ApiChatAnonymousRoute
@@ -798,7 +790,7 @@ export interface FileRoutesByFullPath {
   '/api/v1/release': typeof ApiV1ReleaseRoute
   '/api/v1/sandbox-reference': typeof ApiV1SandboxReferenceRoute
   '/api/v1/services': typeof ApiV1ServicesRouteWithChildren
-  '/owner/offerings/$offeringRef': typeof OperatorOwnerOfferingsOfferingRefRoute
+  '/tools/$providerHost/$slug': typeof ToolsProviderHostSlugRoute
   '/owner/offerings/new': typeof OperatorOwnerOfferingsNewRoute
   '/owner/supply/$offeringRef': typeof OperatorOwnerSupplyOfferingRefRoute
   '/api/stripe/webhook/accounts-v2': typeof ApiStripeWebhookAccountsV2Route
@@ -892,7 +884,6 @@ export interface FileRoutesByTo {
   '/owner/credit': typeof OperatorOwnerCreditRoute
   '/owner/offerings': typeof OperatorOwnerOfferingsRouteWithChildren
   '/owner/settings': typeof OperatorOwnerSettingsRoute
-  '/owner/supply': typeof OperatorOwnerSupplyRouteWithChildren
   '/api/businesses/$slug': typeof ApiBusinessesSlugRoute
   '/api/businesses/search': typeof ApiBusinessesSearchRoute
   '/api/chat/anonymous': typeof ApiChatAnonymousRoute
@@ -913,7 +904,7 @@ export interface FileRoutesByTo {
   '/api/v1/release': typeof ApiV1ReleaseRoute
   '/api/v1/sandbox-reference': typeof ApiV1SandboxReferenceRoute
   '/api/v1/services': typeof ApiV1ServicesRouteWithChildren
-  '/owner/offerings/$offeringRef': typeof OperatorOwnerOfferingsOfferingRefRoute
+  '/tools/$providerHost/$slug': typeof ToolsProviderHostSlugRoute
   '/owner/offerings/new': typeof OperatorOwnerOfferingsNewRoute
   '/owner/supply/$offeringRef': typeof OperatorOwnerSupplyOfferingRefRoute
   '/api/stripe/webhook/accounts-v2': typeof ApiStripeWebhookAccountsV2Route
@@ -1009,7 +1000,6 @@ export interface FileRoutesById {
   '/_operator/owner/credit': typeof OperatorOwnerCreditRoute
   '/_operator/owner/offerings': typeof OperatorOwnerOfferingsRouteWithChildren
   '/_operator/owner/settings': typeof OperatorOwnerSettingsRoute
-  '/_operator/owner/supply': typeof OperatorOwnerSupplyRouteWithChildren
   '/api/businesses/$slug': typeof ApiBusinessesSlugRoute
   '/api/businesses/search': typeof ApiBusinessesSearchRoute
   '/api/chat/anonymous': typeof ApiChatAnonymousRoute
@@ -1030,7 +1020,7 @@ export interface FileRoutesById {
   '/api/v1/release': typeof ApiV1ReleaseRoute
   '/api/v1/sandbox-reference': typeof ApiV1SandboxReferenceRoute
   '/api/v1/services': typeof ApiV1ServicesRouteWithChildren
-  '/_operator/owner/offerings/$offeringRef': typeof OperatorOwnerOfferingsOfferingRefRoute
+  '/tools/$providerHost/$slug': typeof ToolsProviderHostSlugRoute
   '/_operator/owner/offerings/new': typeof OperatorOwnerOfferingsNewRoute
   '/_operator/owner/supply/$offeringRef': typeof OperatorOwnerSupplyOfferingRefRoute
   '/api/stripe/webhook/accounts-v2': typeof ApiStripeWebhookAccountsV2Route
@@ -1126,7 +1116,6 @@ export interface FileRouteTypes {
     | '/owner/credit'
     | '/owner/offerings'
     | '/owner/settings'
-    | '/owner/supply'
     | '/api/businesses/$slug'
     | '/api/businesses/search'
     | '/api/chat/anonymous'
@@ -1147,7 +1136,7 @@ export interface FileRouteTypes {
     | '/api/v1/release'
     | '/api/v1/sandbox-reference'
     | '/api/v1/services'
-    | '/owner/offerings/$offeringRef'
+    | '/tools/$providerHost/$slug'
     | '/owner/offerings/new'
     | '/owner/supply/$offeringRef'
     | '/api/stripe/webhook/accounts-v2'
@@ -1241,7 +1230,6 @@ export interface FileRouteTypes {
     | '/owner/credit'
     | '/owner/offerings'
     | '/owner/settings'
-    | '/owner/supply'
     | '/api/businesses/$slug'
     | '/api/businesses/search'
     | '/api/chat/anonymous'
@@ -1262,7 +1250,7 @@ export interface FileRouteTypes {
     | '/api/v1/release'
     | '/api/v1/sandbox-reference'
     | '/api/v1/services'
-    | '/owner/offerings/$offeringRef'
+    | '/tools/$providerHost/$slug'
     | '/owner/offerings/new'
     | '/owner/supply/$offeringRef'
     | '/api/stripe/webhook/accounts-v2'
@@ -1357,7 +1345,6 @@ export interface FileRouteTypes {
     | '/_operator/owner/credit'
     | '/_operator/owner/offerings'
     | '/_operator/owner/settings'
-    | '/_operator/owner/supply'
     | '/api/businesses/$slug'
     | '/api/businesses/search'
     | '/api/chat/anonymous'
@@ -1378,7 +1365,7 @@ export interface FileRouteTypes {
     | '/api/v1/release'
     | '/api/v1/sandbox-reference'
     | '/api/v1/services'
-    | '/_operator/owner/offerings/$offeringRef'
+    | '/tools/$providerHost/$slug'
     | '/_operator/owner/offerings/new'
     | '/_operator/owner/supply/$offeringRef'
     | '/api/stripe/webhook/accounts-v2'
@@ -1481,6 +1468,7 @@ export interface RootRouteChildren {
   ApiV1ReleaseRoute: typeof ApiV1ReleaseRoute
   ApiV1SandboxReferenceRoute: typeof ApiV1SandboxReferenceRoute
   ApiV1ServicesRoute: typeof ApiV1ServicesRouteWithChildren
+  ToolsProviderHostSlugRoute: typeof ToolsProviderHostSlugRoute
   ApiV1FundingConstraintsRoute: typeof ApiV1FundingConstraintsRoute
   ApiV1FundingQuoteRoute: typeof ApiV1FundingQuoteRoute
   ApiV1MarketToolsCompareRoute: typeof ApiV1MarketToolsCompareRoute
@@ -1816,6 +1804,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SlugUcpRouteImport
       parentRoute: typeof SlugRoute
     }
+    '/tools/$providerHost/$slug': {
+      id: '/tools/$providerHost/$slug'
+      path: '/tools/$providerHost/$slug'
+      fullPath: '/tools/$providerHost/$slug'
+      preLoaderRoute: typeof ToolsProviderHostSlugRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/v1/services': {
       id: '/api/v1/services'
       path: '/api/v1/services'
@@ -1955,13 +1950,6 @@ declare module '@tanstack/react-router' {
       fullPath: '/api/businesses/$slug'
       preLoaderRoute: typeof ApiBusinessesSlugRouteImport
       parentRoute: typeof ApiBusinessesRoute
-    }
-    '/_operator/owner/supply': {
-      id: '/_operator/owner/supply'
-      path: '/owner/supply'
-      fullPath: '/owner/supply'
-      preLoaderRoute: typeof OperatorOwnerSupplyRouteImport
-      parentRoute: typeof OperatorRoute
     }
     '/_operator/owner/settings': {
       id: '/_operator/owner/settings'
@@ -2182,23 +2170,16 @@ declare module '@tanstack/react-router' {
     }
     '/_operator/owner/supply/$offeringRef': {
       id: '/_operator/owner/supply/$offeringRef'
-      path: '/$offeringRef'
+      path: '/owner/supply/$offeringRef'
       fullPath: '/owner/supply/$offeringRef'
       preLoaderRoute: typeof OperatorOwnerSupplyOfferingRefRouteImport
-      parentRoute: typeof OperatorOwnerSupplyRoute
+      parentRoute: typeof OperatorRoute
     }
     '/_operator/owner/offerings/new': {
       id: '/_operator/owner/offerings/new'
       path: '/new'
       fullPath: '/owner/offerings/new'
       preLoaderRoute: typeof OperatorOwnerOfferingsNewRouteImport
-      parentRoute: typeof OperatorOwnerOfferingsRoute
-    }
-    '/_operator/owner/offerings/$offeringRef': {
-      id: '/_operator/owner/offerings/$offeringRef'
-      path: '/$offeringRef'
-      fullPath: '/owner/offerings/$offeringRef'
-      preLoaderRoute: typeof OperatorOwnerOfferingsOfferingRefRouteImport
       parentRoute: typeof OperatorOwnerOfferingsRoute
     }
     '/api/v1/supply/tools/list': {
@@ -2287,10 +2268,10 @@ declare module '@tanstack/react-router' {
     }
     '/_operator/owner/supply/connections/new': {
       id: '/_operator/owner/supply/connections/new'
-      path: '/connections/new'
+      path: '/owner/supply/connections/new'
       fullPath: '/owner/supply/connections/new'
       preLoaderRoute: typeof OperatorOwnerSupplyConnectionsNewRouteImport
-      parentRoute: typeof OperatorOwnerSupplyRoute
+      parentRoute: typeof OperatorRoute
     }
     '/api/v1/account/funding-sessions/public/$fundingSessionId': {
       id: '/api/v1/account/funding-sessions/public/$fundingSessionId'
@@ -2301,10 +2282,10 @@ declare module '@tanstack/react-router' {
     }
     '/_operator/owner/supply/connections/oauth/callback': {
       id: '/_operator/owner/supply/connections/oauth/callback'
-      path: '/connections/oauth/callback'
+      path: '/owner/supply/connections/oauth/callback'
       fullPath: '/owner/supply/connections/oauth/callback'
       preLoaderRoute: typeof OperatorOwnerSupplyConnectionsOauthCallbackRouteImport
-      parentRoute: typeof OperatorOwnerSupplyRoute
+      parentRoute: typeof OperatorRoute
     }
   }
 }
@@ -2331,14 +2312,11 @@ const OperatorAgentAccessRouteWithChildren =
   OperatorAgentAccessRoute._addFileChildren(OperatorAgentAccessRouteChildren)
 
 interface OperatorOwnerOfferingsRouteChildren {
-  OperatorOwnerOfferingsOfferingRefRoute: typeof OperatorOwnerOfferingsOfferingRefRoute
   OperatorOwnerOfferingsNewRoute: typeof OperatorOwnerOfferingsNewRoute
 }
 
 const OperatorOwnerOfferingsRouteChildren: OperatorOwnerOfferingsRouteChildren =
   {
-    OperatorOwnerOfferingsOfferingRefRoute:
-      OperatorOwnerOfferingsOfferingRefRoute,
     OperatorOwnerOfferingsNewRoute: OperatorOwnerOfferingsNewRoute,
   }
 
@@ -2346,23 +2324,6 @@ const OperatorOwnerOfferingsRouteWithChildren =
   OperatorOwnerOfferingsRoute._addFileChildren(
     OperatorOwnerOfferingsRouteChildren,
   )
-
-interface OperatorOwnerSupplyRouteChildren {
-  OperatorOwnerSupplyOfferingRefRoute: typeof OperatorOwnerSupplyOfferingRefRoute
-  OperatorOwnerSupplyConnectionsNewRoute: typeof OperatorOwnerSupplyConnectionsNewRoute
-  OperatorOwnerSupplyConnectionsOauthCallbackRoute: typeof OperatorOwnerSupplyConnectionsOauthCallbackRoute
-}
-
-const OperatorOwnerSupplyRouteChildren: OperatorOwnerSupplyRouteChildren = {
-  OperatorOwnerSupplyOfferingRefRoute: OperatorOwnerSupplyOfferingRefRoute,
-  OperatorOwnerSupplyConnectionsNewRoute:
-    OperatorOwnerSupplyConnectionsNewRoute,
-  OperatorOwnerSupplyConnectionsOauthCallbackRoute:
-    OperatorOwnerSupplyConnectionsOauthCallbackRoute,
-}
-
-const OperatorOwnerSupplyRouteWithChildren =
-  OperatorOwnerSupplyRoute._addFileChildren(OperatorOwnerSupplyRouteChildren)
 
 interface OperatorRouteChildren {
   OperatorActivityRoute: typeof OperatorActivityRoute
@@ -2373,7 +2334,9 @@ interface OperatorRouteChildren {
   OperatorOwnerCreditRoute: typeof OperatorOwnerCreditRoute
   OperatorOwnerOfferingsRoute: typeof OperatorOwnerOfferingsRouteWithChildren
   OperatorOwnerSettingsRoute: typeof OperatorOwnerSettingsRoute
-  OperatorOwnerSupplyRoute: typeof OperatorOwnerSupplyRouteWithChildren
+  OperatorOwnerSupplyOfferingRefRoute: typeof OperatorOwnerSupplyOfferingRefRoute
+  OperatorOwnerSupplyConnectionsNewRoute: typeof OperatorOwnerSupplyConnectionsNewRoute
+  OperatorOwnerSupplyConnectionsOauthCallbackRoute: typeof OperatorOwnerSupplyConnectionsOauthCallbackRoute
 }
 
 const OperatorRouteChildren: OperatorRouteChildren = {
@@ -2385,7 +2348,11 @@ const OperatorRouteChildren: OperatorRouteChildren = {
   OperatorOwnerCreditRoute: OperatorOwnerCreditRoute,
   OperatorOwnerOfferingsRoute: OperatorOwnerOfferingsRouteWithChildren,
   OperatorOwnerSettingsRoute: OperatorOwnerSettingsRoute,
-  OperatorOwnerSupplyRoute: OperatorOwnerSupplyRouteWithChildren,
+  OperatorOwnerSupplyOfferingRefRoute: OperatorOwnerSupplyOfferingRefRoute,
+  OperatorOwnerSupplyConnectionsNewRoute:
+    OperatorOwnerSupplyConnectionsNewRoute,
+  OperatorOwnerSupplyConnectionsOauthCallbackRoute:
+    OperatorOwnerSupplyConnectionsOauthCallbackRoute,
 }
 
 const OperatorRouteWithChildren = OperatorRoute._addFileChildren(
@@ -2580,6 +2547,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiV1ReleaseRoute: ApiV1ReleaseRoute,
   ApiV1SandboxReferenceRoute: ApiV1SandboxReferenceRoute,
   ApiV1ServicesRoute: ApiV1ServicesRouteWithChildren,
+  ToolsProviderHostSlugRoute: ToolsProviderHostSlugRoute,
   ApiV1FundingConstraintsRoute: ApiV1FundingConstraintsRoute,
   ApiV1FundingQuoteRoute: ApiV1FundingQuoteRoute,
   ApiV1MarketToolsCompareRoute: ApiV1MarketToolsCompareRoute,

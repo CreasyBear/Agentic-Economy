@@ -16,7 +16,13 @@ export type ScheduledWorkload = Readonly<{
 export const SCHEDULED_WORKLOADS = [
   { name: 'reconcile due facilitator invocations', workloadKind: 'reconciliation', handler: 'reconcileDueFacilitatorInvocations', interval: { minutes: 15 } },
   { name: 'refresh facilitator discovery', workloadKind: 'cron', handler: 'refreshFacilitatorDiscovery' },
-  { name: 'refresh Agentic Economy API registry', workloadKind: 'cron', handler: 'refreshAgenticEconomyApiRegistry', interval: { hours: 24 } },
+  // 7 days (168h), not 24h: refreshAgenticEconomyApiRegistry rewrites ~14,541
+  // resources when it actually runs (~225,000 function calls - see cost
+  // comment in convex/x402DirectoryIndexRefresh.ts:start). Daily was
+  // ~6.75M calls/month, 6.75x the Starter 1M/month allowance, on top of
+  // which x402DirectoryIndexRefresh.start's change-signal guard now usually
+  // short-circuits to 3 calls when the upstream directory hasn't changed.
+  { name: 'refresh Agentic Economy API registry', workloadKind: 'cron', handler: 'refreshAgenticEconomyApiRegistry', interval: { hours: 168 } },
   { name: 'refresh current market presence', workloadKind: 'cron', handler: 'refreshCurrentMarketPresence', interval: { hours: 1 } },
   { name: 'refresh capability supply readiness', workloadKind: 'cron', handler: 'refreshCapabilitySupplyReadiness', interval: { hours: 1 } },
   { name: 'reconcile business supply projections', workloadKind: 'reconciliation', handler: 'reconcileBusinessSupplyProjections', interval: { hours: 1 } },

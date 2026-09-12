@@ -2,6 +2,9 @@
 
 import { useSyncExternalStore } from 'react'
 
+import { degrade } from '@/lib/observability/degrade'
+import { captureRouteException } from '@/lib/observability/capture-route-exception'
+
 const RECENT_TOOL_STORAGE_KEY = 'ae:command-panel:recent-tool-refs:v1'
 const RECENT_TOOL_EVENT = 'ae:command-panel:recent-tools-changed'
 const MAX_RECENT_TOOLS = 5
@@ -27,8 +30,11 @@ function readRecentToolsSnapshot(): string {
   if (typeof window === 'undefined') return EMPTY_RECENTS_SNAPSHOT
   try {
     return window.localStorage.getItem(RECENT_TOOL_STORAGE_KEY) ?? EMPTY_RECENTS_SNAPSHOT
-  } catch {
-    return EMPTY_RECENTS_SNAPSHOT
+  } catch (cause) {
+    return degrade(cause, EMPTY_RECENTS_SNAPSHOT, {
+      site: 'readRecentToolsSnapshot',
+      reason: 'source_unavailable',
+    })
   }
 }
 
@@ -37,8 +43,8 @@ function parseRecentToolRefs(snapshot: string): readonly string[] {
     const parsed: unknown = JSON.parse(snapshot)
     if (!Array.isArray(parsed)) return []
     return [...new Set(parsed.filter(isPublicToolRef))].slice(0, MAX_RECENT_TOOLS)
-  } catch {
-    return []
+  } catch (cause) {
+    return degrade(cause, [], { site: 'parseRecentToolRefs', reason: 'invalid_response' })
   }
 }
 
@@ -52,8 +58,9 @@ export function rememberRecentToolRef(toolRef: string): void {
   try {
     window.localStorage.setItem(RECENT_TOOL_STORAGE_KEY, JSON.stringify(recents))
     window.dispatchEvent(new Event(RECENT_TOOL_EVENT))
-  } catch {
+  } catch (cause) {
     // Storage can be unavailable in private or locked-down browser contexts.
+    captureRouteException(cause, { site: 'rememberRecentToolRef' }, 'warning')
   }
 }
 

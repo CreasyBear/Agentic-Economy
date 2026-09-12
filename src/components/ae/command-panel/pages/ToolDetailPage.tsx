@@ -79,7 +79,6 @@ export function ToolDetailPage({
           <Button asChild size="sm" className="min-h-touch justify-self-start">
             <Link
               to="/market"
-              hash="tools"
               onClick={onNavigate}
             >
               Browse current Tools

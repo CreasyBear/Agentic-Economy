@@ -1,5 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 
+import { captureRouteException } from '@/lib/observability/capture-route-exception'
 import { methodNotAllowed } from '@/lib/server/method-guard'
 import { response as noStore } from '@/lib/server/no-store-response'
 import { readTrimmedEnv, type StringEnvironment } from '@/lib/server/read-trimmed-env'
@@ -115,7 +116,8 @@ function parseLifecycleRecord(value: SecretLifecycleJsonValue): SecretLifecycleR
       createdAt: Number(value.createdAt),
       updatedAt: Number(value.updatedAt),
     })
-  } catch {
+  } catch (cause) {
+    captureRouteException(cause, { site: 'parseSecretLifecycleRecord' }, 'warning')
     return undefined
   }
 }
@@ -159,7 +161,8 @@ async function readRequest(request: Request): Promise<LifecycleRequest | undefin
   let value: unknown
   try {
     value = JSON.parse(text)
-  } catch {
+  } catch (cause) {
+    captureRouteException(cause, { site: 'readSecretLifecycleRequestBody' }, 'warning')
     return undefined
   }
   if (!isRecord(value) || !['provision', 'rotate', 'reconcile'].includes(String(value.action))) return undefined
@@ -187,7 +190,8 @@ async function readRequest(request: Request): Promise<LifecycleRequest | undefin
       idempotencyRef,
       materialBase64: value.materialBase64,
     })
-  } catch {
+  } catch (cause) {
+    captureRouteException(cause, { site: 'readSecretLifecycleRequestAuthority' }, 'warning')
     return undefined
   }
 }

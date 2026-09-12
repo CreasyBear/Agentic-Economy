@@ -1,5 +1,6 @@
 import type Stripe from "stripe";
 
+import { degradeBackend } from "@/lib/observability/degrade-backend";
 import { canonicalDigest } from "@/modules/common/canonical-digest";
 import {
   isMoneyRefusal,
@@ -108,8 +109,11 @@ export async function createOrRecoverConnectAccount(
       stripeAccountId: account.id,
       evidenceRef: accountEvidenceRef(account),
     };
-  } catch {
-    return refusal("stripe_setup_required", true);
+  } catch (cause) {
+    return degradeBackend(cause, refusal("stripe_setup_required", true), {
+      site: "createOrRecoverConnectAccount",
+      reason: "source_unavailable",
+    });
   }
 }
 
@@ -171,8 +175,11 @@ export async function createOnboardingLink(
       url: link.url,
       evidenceRef: `stripe:account_link:${canonicalDigest({ account: link.account, created: link.created, expiresAt: link.expires_at })}`,
     };
-  } catch {
-    return refusal("stripe_setup_required", true);
+  } catch (cause) {
+    return degradeBackend(cause, refusal("stripe_setup_required", true), {
+      site: "createOnboardingLink",
+      reason: "source_unavailable",
+    });
   }
 }
 
@@ -242,8 +249,11 @@ export async function readConnectAccount(
       providerObjectDigest: accountObjectDigest(account),
       observedAt: Number.isFinite(observedAt) ? observedAt : Date.now(),
     };
-  } catch {
-    return refusal("stripe_setup_required", true);
+  } catch (cause) {
+    return degradeBackend(cause, refusal("stripe_setup_required", true), {
+      site: "readConnectAccount",
+      reason: "source_unavailable",
+    });
   }
 }
 

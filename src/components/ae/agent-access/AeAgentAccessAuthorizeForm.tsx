@@ -13,7 +13,6 @@ import { Label } from '@/components/ui/label'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
-import { isLocalE2EAuthBypassEnabled } from '@/lib/client/local-e2e-auth'
 import { agentAuthorityModeAllows, type AgentAccessAuthorityMode } from '@/modules/agent-access/contract'
 import {
   searchMarketTools,
@@ -25,6 +24,7 @@ import {
   type AgentConsentTarget,
 } from '@/modules/agent-access/consent-read-model'
 import { presentConnectionProblem } from '@/modules/agent-access/public'
+import { degrade } from '@/lib/observability/degrade'
 
 type PublicAuthorityMode = Exclude<AgentAccessAuthorityMode, 'unrestricted_test_only'>
 
@@ -163,20 +163,7 @@ type AgentAccessAuthorizeFormProps = Readonly<{
 
 type SubmitApproval = (body: string) => Promise<ConsentActionResult>
 
-const submitLocalApproval: SubmitApproval = async (body) => await fetch('/oauth/authorize', {
-  method: 'POST',
-  credentials: 'same-origin',
-  headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-  body,
-}).then(async (response) => await response.json() as ConsentActionResult)
-
 export function AeAgentAccessAuthorizeForm(props: AgentAccessAuthorizeFormProps) {
-  return isLocalE2EAuthBypassEnabled()
-    ? <LocalAgentAccessAuthorizeForm {...props} />
-    : <ClerkAgentAccessAuthorizeForm {...props} />
-}
-
-function ClerkAgentAccessAuthorizeForm(props: AgentAccessAuthorizeFormProps) {
   const submitApproval = useReverification(async (body: string) => await fetch('/oauth/authorize', {
     method: 'POST',
     credentials: 'same-origin',
@@ -184,10 +171,6 @@ function ClerkAgentAccessAuthorizeForm(props: AgentAccessAuthorizeFormProps) {
     body,
   }).then(async (response) => await response.json() as ConsentActionResult))
   return <AgentAccessAuthorizeForm {...props} submitApproval={submitApproval} />
-}
-
-function LocalAgentAccessAuthorizeForm(props: AgentAccessAuthorizeFormProps) {
-  return <AgentAccessAuthorizeForm {...props} submitApproval={submitLocalApproval} />
 }
 
 function AgentAccessAuthorizeForm({ locator, oauthState, details, submitApproval }: AgentAccessAuthorizeFormProps & Readonly<{
@@ -227,8 +210,8 @@ function AgentAccessAuthorizeForm({ locator, oauthState, details, submitApproval
     setToolSearch({ pending: true })
     try {
       setToolSearch({ pending: false, result: await searchMarketTools({ query, limit: 8 }) })
-    } catch {
-      setToolSearch({ pending: false, error: 'Tool search is temporarily unavailable. Try again.' })
+    } catch (cause) {
+      setToolSearch(degrade(cause, { pending: false, error: 'Tool search is temporarily unavailable. Try again.' }, { site: 'findTools', reason: 'source_unavailable' }))
     }
   }
 
@@ -256,8 +239,8 @@ function AgentAccessAuthorizeForm({ locator, oauthState, details, submitApproval
         targets: next.agentTargets,
         ...(next.agentTargetsNextCursor === undefined ? {} : { nextCursor: next.agentTargetsNextCursor }),
       })
-    } catch {
-      dispatch({ kind: 'page_failed' })
+    } catch (cause) {
+      dispatch(degrade(cause, { kind: 'page_failed' }, { site: 'loadAgentTargets', reason: 'source_unavailable' }))
     }
   }
 
@@ -335,8 +318,8 @@ function AgentAccessAuthorizeForm({ locator, oauthState, details, submitApproval
         return await response.json() as ConsentActionResult
       })
       dispatch({ kind: 'decision_finished', status: result.kind === 'denied' ? 'denied' : 'error' })
-    } catch {
-      dispatch({ kind: 'decision_finished', status: 'error' })
+    } catch (cause) {
+      dispatch(degrade(cause, { kind: 'decision_finished', status: 'error' } as const, { site: 'deny', reason: 'source_unavailable' }))
     }
   }
 

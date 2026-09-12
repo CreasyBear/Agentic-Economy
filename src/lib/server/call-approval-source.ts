@@ -4,7 +4,6 @@ import {
   sourceMutation,
   sourceQuery,
 } from '@/lib/server/convex-source'
-import { isLocalE2EAuthBypassEnabled } from '@/lib/server/local-e2e-bypass'
 
 import type {
   CallApprovalDecisionResult,
@@ -20,15 +19,11 @@ const decideCallApprovalMutation = sourceMutation<
 >('capabilityCalls:decideCallApproval')
 
 export async function listPendingCallApprovalsThroughSource(): Promise<readonly PendingCallApproval[]> {
-  if (isLocalE2EAuthBypassEnabled()) return []
   return callSourceQuery(listPendingCallApprovalsQuery, {})
 }
 
 export async function decideCallApprovalThroughSource(
   data: Readonly<{ callRef: string; decision: 'approve' | 'deny' }>,
 ): Promise<CallApprovalDecisionResult> {
-  if (isLocalE2EAuthBypassEnabled()) {
-    return { kind: 'refused', code: 'authentication_required' }
-  }
   return callSourceMutation(decideCallApprovalMutation, data)
 }

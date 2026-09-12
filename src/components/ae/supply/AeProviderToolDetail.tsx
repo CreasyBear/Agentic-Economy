@@ -1,6 +1,7 @@
 import { useState } from 'react'
 
 import { AeFactList } from '@/components/ae/data/AeFactList'
+import { degrade } from '@/lib/observability/degrade'
 import { AeConfirmDialog } from '@/components/ae/feedback/AeConfirmDialog'
 import { AeSection } from '@/components/ae/layout/AeSection'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -51,11 +52,11 @@ export function AeProviderToolDetail({
       const result = await action()
       setFeedback(result)
       if (result.kind === 'applied') setConfirmation(undefined)
-    } catch {
-      setFeedback({
+    } catch (cause) {
+      setFeedback(degrade(cause, {
         kind: 'refused',
         message: 'AE could not confirm the result. Reload this Tool before trying another action.',
-      })
+      }, { site: 'runProviderToolAction', reason: 'source_unavailable' }))
     } finally {
       setPending(false)
     }

@@ -5,6 +5,8 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { z } from 'zod'
 import { x402DirectoryInputSchema, type X402DirectoryEntry, type X402DirectoryInput } from '@/modules/market/x402-directory'
+import { degrade } from '@/lib/observability/degrade'
+import { captureRouteException } from '@/lib/observability/capture-route-exception'
 
 export const DIRECTORY_SAVED_TOOLS_STORAGE_KEY = 'ae:directory:saved-tools:v1'
 export const DIRECTORY_SAVED_TOOLS_LIMIT = 100
@@ -24,10 +26,10 @@ type SavedToolsContextValue = Readonly<{
 
 const publicLinkSchema = z.string().max(2048).refine(value => {
   if (/[\u0000-\u0020\u007f]/u.test(value)) return false
-  try { const url = new URL(value); return ['http:', 'https:'].includes(url.protocol) && !url.username && !url.password } catch { return false }
+  try { const url = new URL(value); return ['http:', 'https:'].includes(url.protocol) && !url.username && !url.password } catch (cause) { return degrade(cause, false, { site: 'publicLinkSchema', reason: 'invalid_response' }) }
 })
 const jsonText = (maximum: number) => z.string().max(maximum).refine(value => {
-  try { JSON.parse(value); return true } catch { return false }
+  try { JSON.parse(value); return true } catch (cause) { return degrade(cause, false, { site: 'jsonTextSchema', reason: 'invalid_response' }) }
 })
 const contractSchema = z.object({
   type: z.string().max(100).exactOptional(),
@@ -50,6 +52,7 @@ const entrySchema: z.ZodType<X402DirectoryEntry> = z.object({
   method: z.string().max(100).exactOptional(), methodLabel: z.string().max(200).exactOptional(),
   outputSummary: z.string().max(8192).exactOptional(), schemaSummary: z.string().max(8192).exactOptional(),
   tags: z.array(z.string().max(200)).max(64).exactOptional(),
+  slug: z.string().max(200).exactOptional(),
   provenance: z.object({
     directory: z.literal('Coinbase Bazaar'), metadata: z.literal('provider_declared'), updatedAt: z.string().max(100).exactOptional(),
   }).exactOptional(),
@@ -98,9 +101,10 @@ export function DirectorySavedToolsProvider({ children }: Readonly<{ children: R
         setSavedTools(loaded)
         setStorageState('browser')
         setSaveError(undefined)
-      } catch {
+      } catch (cause) {
         // Preserve the saved document. Corruption, unavailable storage and an
         // unsupported version must never trigger the upstream initial wipe.
+        captureRouteException(cause, { site: 'readStorage' }, 'warning')
         persistenceAllowed.current = false
         setStorageState('session')
         setSaveError(STORAGE_READ_ERROR)
@@ -125,7 +129,8 @@ export function DirectorySavedToolsProvider({ children }: Readonly<{ children: R
         // A storage event may still be queued. Apply the visible Save/Remove
         // intent to the latest document instead of overwriting another tab's saves.
         latest = parseSavedTools(window.localStorage.getItem(DIRECTORY_SAVED_TOOLS_STORAGE_KEY))
-      } catch {
+      } catch (cause) {
+        captureRouteException(cause, { site: 'toggleSavedTool' }, 'warning')
         persistenceAllowed.current = false
         setStorageState('session')
         setSaveError(STORAGE_READ_ERROR)
@@ -166,7 +171,8 @@ export function DirectorySavedToolsProvider({ children }: Readonly<{ children: R
       window.localStorage.setItem(DIRECTORY_SAVED_TOOLS_STORAGE_KEY, serialized)
       setStorageState('browser')
       setSaveError(undefined)
-    } catch {
+    } catch (cause) {
+      captureRouteException(cause, { site: 'persistSavedTools' }, 'warning')
       persistenceAllowed.current = false
       setStorageState('session')
       setSaveError('Browser storage is unavailable or full. Changes to saved Tools will last for this session only.')
