@@ -9,12 +9,19 @@ import { configureLocalConvexServerFunctionToken, configureLocalSourceWriteSecre
 
 const DEFAULT_VITE_ARGS = ['--port', '3024', '--strictPort', '--host', '127.0.0.1']
 const DEFAULT_VITE_URL = 'http://127.0.0.1:3024'
+// Outer readiness cap for launcher-spawned children in general. The Convex
+// dev child overrides this from CONVEX_LOCAL_BACKEND_STARTUP_TIMEOUT_SECS
+// (see convexDevTimeoutMs) since a 2GB local backend can take several
+// minutes to cold-start, well past this generic default.
 const LOCAL_STARTUP_TIMEOUT_MS = 120_000
 // A grown local database (tens of thousands of rows) can take well past the
 // Convex CLI's own 30s default to cold-start; a fresh clone never notices
 // this because its database is empty.
-export const DEFAULT_LOCAL_BACKEND_STARTUP_TIMEOUT_SECS = 180
+export const DEFAULT_LOCAL_BACKEND_STARTUP_TIMEOUT_SECS = 300
 const CONVEX_LOCAL_BACKEND_STARTUP_TIMEOUT_SECS_ENV = 'CONVEX_LOCAL_BACKEND_STARTUP_TIMEOUT_SECS'
+// Margin above CONVEX_LOCAL_BACKEND_STARTUP_TIMEOUT_SECS so the launcher's
+// outer timeout never fires before the Convex CLI's own inner timeout does.
+const CONVEX_DEV_TIMEOUT_MARGIN_MS = 30_000
 const STAGE_TIMEOUT_MS = 90_000
 const DOCTOR_TIMEOUT_MS = 120_000
 const CHILD_KILL_GRACE_MS = 1_000
@@ -170,6 +177,21 @@ export function convexChildEnv(
     next.CONVEX_AGENT_MODE = 'anonymous'
   }
   return next
+}
+
+/**
+ * The launcher's own outer readiness cap for the `convex dev` child. This
+ * must exceed `CONVEX_LOCAL_BACKEND_STARTUP_TIMEOUT_SECS` (the Convex CLI's
+ * inner cold-start budget, forwarded via `convexChildEnv`) or the launcher
+ * kills a still-starting backend before the CLI's own timeout has a chance
+ * to fire. Falls back to the generic `LOCAL_STARTUP_TIMEOUT_MS` when the env
+ * var is absent or unparseable.
+ */
+export function convexDevTimeoutMs(env: EnvRecord): number {
+  const raw = env[CONVEX_LOCAL_BACKEND_STARTUP_TIMEOUT_SECS_ENV]
+  const secs = raw === undefined ? Number.NaN : Number(raw)
+  if (!Number.isFinite(secs) || secs <= 0) return LOCAL_STARTUP_TIMEOUT_MS
+  return secs * 1_000 + CONVEX_DEV_TIMEOUT_MARGIN_MS
 }
 
 const CONVEX_TIMEOUT_FAILURE_PATTERN = /did not start on port/u
@@ -337,6 +359,38 @@ function sameOrigin(left: string, right: string): boolean {
   } catch {
     return false
   }
+}
+
+type ConvexUrlSource = { url: string, name: string, file: string }
+
+/**
+ * `convex dev` prints the live backend URL on every startup path this
+ * launcher spawns it on; a dotenv file can carry a stale URL from a previous
+ * port (Vite's own precedence lets `.env.development.local` beat the
+ * `.env.local` `convex dev` just wrote). The printed URL is authoritative for
+ * the children this launcher spawns; the dotenv value is used only when
+ * nothing was parsed (an already-running backend this launcher reused, or a
+ * path where `convex dev` did not print a URL).
+ */
+export function resolveEffectiveConvexUrl(
+  dotenvUrl: ConvexUrlSource | undefined,
+  printedUrl: string | undefined,
+): ConvexUrlSource | undefined {
+  if (printedUrl === undefined) return dotenvUrl
+  return { url: printedUrl, name: 'CONVEX_URL', file: 'the running convex dev process' }
+}
+
+/**
+ * A single warning line when the dotenv value and the printed value disagree,
+ * naming the file that holds the stale value. Undefined when there is nothing
+ * to warn about (no printed URL, no dotenv URL, or the two already agree).
+ */
+export function stalePrintedUrlWarning(
+  dotenvUrl: ConvexUrlSource | undefined,
+  printedUrl: string | undefined,
+): string | undefined {
+  if (printedUrl === undefined || dotenvUrl === undefined || sameOrigin(printedUrl, dotenvUrl.url)) return undefined
+  return `convex dev is serving ${printedUrl} but ${dotenvUrl.name} in ${dotenvUrl.file} is stale (${dotenvUrl.url}); the running backend wins`
 }
 
 type ConvexProbeResult =
@@ -1019,7 +1073,7 @@ async function startConvex(supervisor: Supervisor, env: EnvRecord): Promise<{ co
     'npx',
     buildConvexDevArgs(),
     convexEnv,
-    { label: 'Convex dev', readyPattern: isConvexReadyOutput },
+    { label: 'Convex dev', readyPattern: isConvexReadyOutput, timeoutMs: convexDevTimeoutMs(convexEnv) },
   ))
   const readiness = await convex.ready
   if (!readiness.ready) {
@@ -1076,20 +1130,20 @@ async function runLocalStack({ viteArgs, skipScan, skipSeed, runDoctor }: Launch
       log(`a local backend is already running at ${existing!.url}; reusing it`)
     }
 
-    const convexUrl = resolveConvexUrl(env, sources)
+    const dotenvUrl = resolveConvexUrl(env, sources)
+    const printed = convex === null ? undefined : convexPrintedUrl(convex.output())
+    const staleWarning = stalePrintedUrlWarning(dotenvUrl, printed)
+    if (staleWarning !== undefined) log(staleWarning)
+    const convexUrl = resolveEffectiveConvexUrl(dotenvUrl, printed)
     if (convexUrl === undefined) {
       log('no CONVEX_URL or VITE_CONVEX_URL is set after Convex started')
       log('fix: let `npx convex dev` write .env.local, or set CONVEX_URL to the backend you want Vite to use')
       supervisor.terminateAll('SIGINT', 'peer-failure')
       return 1
     }
-
-    const printed = convex === null ? undefined : convexPrintedUrl(convex.output())
-    if (printed !== undefined && !sameOrigin(printed, convexUrl.url)) {
-      log(`convex dev is serving ${printed} but Vite would use ${convexUrl.url} (${convexUrl.name} in ${convexUrl.file})`)
-      log(`fix: remove the stale ${convexUrl.name} from ${convexUrl.file} or start the backend it points at`)
-      supervisor.terminateAll('SIGINT', 'peer-failure')
-      return 1
+    if (printed !== undefined) {
+      env.CONVEX_URL = printed
+      env.VITE_CONVEX_URL = printed
     }
 
     const probe = await probeConvexUrl(convexUrl.url)

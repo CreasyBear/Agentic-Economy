@@ -108,6 +108,13 @@ export const startInstance = createStart(() => ({
     agentContentNegotiationMiddleware,
     csrfMiddleware,
     sourceWriteAdmissionMiddleware,
-    clerkMiddleware(() => ({ authorizedParties: [resolveCanonicalOrigin()] })),
+    clerkMiddleware(() => {
+      // Clerk recommends the authorized-party allowlist for public origins.
+      // Backend-API session tokens (local `connect:local`) carry no `azp`
+      // claim and @clerk/backend >= 3.17 rejects them whenever the list is
+      // set, so local http origins follow Clerk's default of no allowlist.
+      const origin = resolveCanonicalOrigin()
+      return origin.startsWith('https://') ? { authorizedParties: [origin] } : {}
+    }),
   ],
 }))

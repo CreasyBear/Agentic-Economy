@@ -2,102 +2,22 @@ import { EventEmitter } from 'node:events'
 import { describe, expect, it } from 'vitest'
 
 import {
-  approveLocalConsent,
-  assertConnected,
-  buildApprovalBody,
   buildConnectArgs,
   isLoopback,
-  mintOwnerSessionToken,
-  parseConsentAttributes,
-  parseFinalJson,
   parseFlags,
-  parseUserCode,
   runLocalConnect,
 } from '../../../tools/dev/local-connect.ts'
 
 const BASE_URL = 'http://127.0.0.1:3024'
 
-const consentPage = (overrides: Partial<Record<string, string>> = {}) => {
-  const attributes = {
-    'data-grant-ref': 'device:grant-1',
-    'data-grant-revision': '1',
-    'data-flow': 'device_code',
-    'data-authority-mode': 'spending_policy',
-    'data-tool-access': 'all_admitted',
-    ...overrides,
-  }
-  const rendered = Object.entries(attributes)
-    .filter(([, value]) => value !== undefined)
-    .map(([name, value]) => `${name}="${value}"`)
-    .join(' ')
-  return `<main data-ae-consent ${rendered}><form method="post" action="/oauth/authorize"></form></main>`
-}
-
-const progressBlock = (userCode = 'WDJB-MJHT') =>
-  `Approve: ${BASE_URL}/oauth/authorize?user_code=${userCode}\nUser code: ${userCode}\nWaiting for authorization…\n`
-
-type FetchCall = {
-  url: string
-  init: {
-    method?: string
-    headers?: Record<string, string>
-    body?: string
-    redirect?: string
-  }
-}
-
-type StubResponse = { status: number, body: string, headers?: Record<string, string> }
-
-function fetchStub(responses: readonly StubResponse[]) {
-  const calls: FetchCall[] = []
-  const queue = [...responses]
-  const fetchImpl = async (url: string, init: FetchCall['init'] = {}) => {
-    calls.push({ url, init })
-    const next = queue.shift() ?? { status: 500, body: 'no stubbed response' }
-    const headers = next.headers ?? {}
-    return {
-      status: next.status,
-      text: async () => next.body,
-      headers: { get: (name: string) => headers[name] ?? headers[name.toLowerCase()] ?? null },
-    }
-  }
-  return { calls, fetchImpl }
-}
-
 class FakeChild extends EventEmitter {
   readonly stdout = new EventEmitter()
   readonly stderr = new EventEmitter()
-  readonly signals: string[] = []
-
-  kill(signal: string) {
-    this.signals.push(signal)
-    return true
-  }
-
-  finish(stdoutJson: unknown, code = 0) {
-    this.stdout.emit('data', `${JSON.stringify(stdoutJson, undefined, 2)}\n`)
-    this.emit('close', code, null)
-  }
 }
 
 function recorder() {
   const chunks: string[] = []
   return { chunks, write: (text: string) => { chunks.push(text) } }
-}
-
-const connectedResult = {
-  kind: 'connected',
-  clientId: 'client-1',
-  profile: 'market',
-  authorityMode: 'spending_policy',
-  credentialStored: true,
-}
-
-const pendingResult = {
-  kind: 'pending',
-  clientId: 'client-1',
-  verificationUri: `${BASE_URL}/oauth/authorize`,
-  userCode: 'WDJB-MJHT',
 }
 
 describe('isLoopback', () => {
@@ -118,164 +38,29 @@ describe('isLoopback', () => {
   })
 })
 
-describe('parseUserCode', () => {
-  it('reads the code and verification URI out of the progress block', () => {
-    expect(parseUserCode(progressBlock())).toEqual({
-      userCode: 'WDJB-MJHT',
-      verificationUri: `${BASE_URL}/oauth/authorize?user_code=WDJB-MJHT`,
-    })
-  })
-
-  it('returns the code alone when only that line has arrived', () => {
-    expect(parseUserCode('User code: ABCD-EFGH\n')).toEqual({ userCode: 'ABCD-EFGH' })
-  })
-
-  it('waits for a complete line and returns undefined otherwise', () => {
-    expect(parseUserCode(`Approve: ${BASE_URL}\nUser code: WDJ`)).toBeUndefined()
-    expect(parseUserCode('Waiting for authorization…\n')).toBeUndefined()
-    expect(parseUserCode('')).toBeUndefined()
-    expect(parseUserCode(undefined)).toBeUndefined()
-  })
-})
-
-describe('parseConsentAttributes', () => {
-  it('reads the grant ref, revision, tool access, and requested mode', () => {
-    expect(parseConsentAttributes(consentPage())).toEqual({
-      grantRef: 'device:grant-1',
-      grantRevision: 1,
-      toolAccess: 'all_admitted',
-      requestedAuthorityMode: 'spending_policy',
-    })
-  })
-
-  it('unescapes attribute entities', () => {
-    const parsed = parseConsentAttributes(consentPage({ 'data-grant-ref': 'device:a&amp;b' }))
-    expect(parsed?.grantRef).toBe('device:a&b')
-  })
-
-  it('omits an unrecognised requested authority mode', () => {
-    const parsed = parseConsentAttributes(consentPage({ 'data-authority-mode': 'made_up' }))
-    expect(parsed).toEqual({ grantRef: 'device:grant-1', grantRevision: 1, toolAccess: 'all_admitted' })
-  })
-
-  it('rejects pages that are not a consent form or carry invalid fields', () => {
-    expect(parseConsentAttributes('<html><body>Sign in</body></html>')).toBeUndefined()
-    expect(parseConsentAttributes(consentPage({ 'data-grant-ref': '' }))).toBeUndefined()
-    expect(parseConsentAttributes(consentPage({ 'data-grant-revision': '0' }))).toBeUndefined()
-    expect(parseConsentAttributes(consentPage({ 'data-grant-revision': 'x' }))).toBeUndefined()
-    expect(parseConsentAttributes(consentPage({ 'data-tool-access': 'anything' }))).toBeUndefined()
-    expect(parseConsentAttributes(undefined)).toBeUndefined()
-  })
-})
-
-describe('buildApprovalBody', () => {
-  it('builds a new-agent approval whose expected target revision is the grant revision', () => {
-    const body = new URLSearchParams(buildApprovalBody({
-      grantRef: 'device:grant-1',
-      grantRevision: 3,
-      toolAccess: 'all_admitted',
-      authorityMode: 'spending_policy',
-    }))
-    expect(Object.fromEntries(body)).toEqual({
-      grant_ref: 'device:grant-1',
-      expected_grant_revision: '3',
-      expected_target_revision: '3',
-      decision: 'approve',
-      authority_mode: 'spending_policy',
-      approved_tool_access: 'all_admitted',
-      connection_target: 'new_agent',
-    })
-  })
-
-  it('defaults to spending policy over all admitted tools and appends selected tool refs', () => {
-    expect(buildApprovalBody({ grantRef: 'device:grant-1', grantRevision: 1 }))
-      .toContain('authority_mode=spending_policy')
-    const selected = new URLSearchParams(buildApprovalBody({
-      grantRef: 'device:grant-1',
-      grantRevision: 1,
-      toolAccess: 'selected_tools',
-      toolRefs: ['tool-a', 'tool-b'],
-      state: 'xyz',
-    }))
-    expect(selected.getAll('approved_tool_ref')).toEqual(['tool-a', 'tool-b'])
-    expect(selected.get('approved_tool_access')).toBe('selected_tools')
-    expect(selected.get('state')).toBe('xyz')
-  })
-
-  it('throws on missing or invalid fields', () => {
-    expect(() => buildApprovalBody({ grantRef: '', grantRevision: 1 })).toThrow(/grant_ref/u)
-    expect(() => buildApprovalBody({ grantRef: 'g', grantRevision: 0 })).toThrow(/expected_grant_revision/u)
-    expect(() => buildApprovalBody({ grantRef: 'g', grantRevision: 1, authorityMode: 'nope' as never }))
-      .toThrow(/authority_mode/u)
-    expect(() => buildApprovalBody({ grantRef: 'g', grantRevision: 1, toolAccess: 'nope' as never }))
-      .toThrow(/approved_tool_access/u)
-    expect(() => buildApprovalBody({ grantRef: 'g', grantRevision: 1, toolAccess: 'selected_tools' }))
-      .toThrow(/approved_tool_ref/u)
-  })
-})
-
-describe('assertConnected', () => {
-  it('returns the connected payload', () => {
-    expect(assertConnected(connectedResult)).toBe(connectedResult)
-  })
-
-  it('throws for pending, non-objects, and missing output', () => {
-    expect(() => assertConnected(pendingResult)).toThrow(/kind "pending"/u)
-    expect(() => assertConnected({ nope: true })).toThrow(/kind "unknown"/u)
-    expect(() => assertConnected(undefined)).toThrow(/JSON object/u)
-    expect(() => assertConnected([])).toThrow(/JSON object/u)
-  })
-})
-
 describe('parseFlags', () => {
-  it('defaults to the local dev server with no authority mode override and a buyer (non-provider) run', () => {
-    expect(parseFlags([])).toEqual({
-      baseUrl: 'http://127.0.0.1:3024',
-      json: false,
-      provider: false,
-    })
+  it('defaults to the local dev server and a buyer (non-provider) run', () => {
+    expect(parseFlags([])).toEqual({ baseUrl: 'http://127.0.0.1:3024', provider: false })
   })
 
   it('reads spaced and inline values', () => {
-    expect(parseFlags(['--base-url', 'http://localhost:9', '--authority-mode', 'read_only', '--json']))
-      .toEqual({ baseUrl: 'http://localhost:9', authorityMode: 'read_only', json: true, provider: false })
+    expect(parseFlags(['--base-url', 'http://localhost:9'])).toEqual({ baseUrl: 'http://localhost:9', provider: false })
     expect(parseFlags(['--base-url=http://localhost:9']).baseUrl).toBe('http://localhost:9')
   })
 
-  it('rejects unknown options, missing values, and invalid modes', () => {
+  it('rejects unknown options and missing values', () => {
     expect(() => parseFlags(['--wat'])).toThrow(/Unknown option/u)
     expect(() => parseFlags(['--base-url'])).toThrow(/requires a value/u)
-    expect(() => parseFlags(['--authority-mode', 'root'])).toThrow(/authority-mode/u)
   })
 
   it('sets provider without a business id when none is given', () => {
-    expect(parseFlags(['--provider'])).toEqual({
-      baseUrl: 'http://127.0.0.1:3024',
-      json: false,
-      provider: true,
-    })
+    expect(parseFlags(['--provider'])).toEqual({ baseUrl: 'http://127.0.0.1:3024', provider: true })
   })
 
   it('reads an optional business id after --provider without swallowing a following flag', () => {
     expect(parseFlags(['--provider', 'biz-1'])).toMatchObject({ provider: true, businessId: 'biz-1' })
     expect(parseFlags(['--provider=biz-1'])).toMatchObject({ provider: true, businessId: 'biz-1' })
-    expect(parseFlags(['--provider', '--json'])).toEqual({
-      baseUrl: 'http://127.0.0.1:3024',
-      json: true,
-      provider: true,
-    })
-  })
-})
-
-describe('parseFinalJson', () => {
-  it('parses the single JSON value ae writes on stdout', () => {
-    expect(parseFinalJson(`${JSON.stringify(connectedResult, undefined, 2)}\n`)).toEqual(connectedResult)
-  })
-
-  it('falls back to the outermost braces and gives up on garbage', () => {
-    expect(parseFinalJson('noise\n{"kind":"pending"}\n')).toEqual({ kind: 'pending' })
-    expect(parseFinalJson('no json here')).toBeUndefined()
-    expect(parseFinalJson('')).toBeUndefined()
+    expect(parseFlags(['--provider', '--base-url', BASE_URL])).toEqual({ baseUrl: BASE_URL, provider: true })
   })
 })
 
@@ -293,202 +78,11 @@ describe('buildConnectArgs', () => {
   })
 })
 
-describe('approveLocalConsent', () => {
-  it('reads the consent page then posts an origin-bound approval', async () => {
-    const { calls, fetchImpl } = fetchStub([
-      { status: 200, body: consentPage() },
-      { status: 200, body: JSON.stringify({ kind: 'approved', grantRef: 'device:grant-1' }) },
-    ])
-
-    const approval = await approveLocalConsent({
-      baseUrl: BASE_URL,
-      userCode: 'WDJB-MJHT',
-      authorityMode: 'spending_policy',
-      fetchImpl,
-    })
-
-    expect(approval).toEqual({
-      kind: 'approved',
-      grantRef: 'device:grant-1',
-      requestedAuthorityMode: 'spending_policy',
-    })
-    expect(calls[0]?.url).toBe(`${BASE_URL}/oauth/authorize?user_code=WDJB-MJHT`)
-    expect(calls[0]?.init.method).toBe('GET')
-    expect(calls[0]?.init.redirect).toBe('manual')
-    expect(calls[1]?.url).toBe(`${BASE_URL}/oauth/authorize`)
-    expect(calls[1]?.init.method).toBe('POST')
-    expect(calls[1]?.init.headers).toEqual({
-      'Content-Type': 'application/x-www-form-urlencoded',
-      Origin: BASE_URL,
-    })
-    expect(Object.fromEntries(new URLSearchParams(calls[1]?.init.body ?? ''))).toEqual({
-      grant_ref: 'device:grant-1',
-      expected_grant_revision: '1',
-      expected_target_revision: '1',
-      decision: 'approve',
-      authority_mode: 'spending_policy',
-      approved_tool_access: 'all_admitted',
-      connection_target: 'new_agent',
-    })
-  })
-
-  it('reports the redirect body when no Location header is given', async () => {
-    const { calls, fetchImpl } = fetchStub([{ status: 302, body: '' }])
-
-    const approval = await approveLocalConsent({ baseUrl: BASE_URL, userCode: 'WDJB-MJHT', fetchImpl })
-
-    expect(approval).toEqual({ kind: 'failed', stage: 'consent_page', status: 302, body: '' })
-    expect(calls).toHaveLength(1)
-  })
-
-  it('follows a same-origin redirect to the consent page and posts to its form action', async () => {
-    const { calls, fetchImpl } = fetchStub([
-      { status: 307, body: '', headers: { location: `${BASE_URL}/oauth/authorize?user_code=WDJB-MJHT&hop=1` } },
-      { status: 200, body: consentPage() },
-      { status: 200, body: JSON.stringify({ kind: 'approved', grantRef: 'device:grant-1' }) },
-    ])
-
-    const approval = await approveLocalConsent({ baseUrl: BASE_URL, userCode: 'WDJB-MJHT', fetchImpl })
-
-    expect(approval).toMatchObject({ kind: 'approved', grantRef: 'device:grant-1' })
-    expect(calls.map((call) => `${call.init.method} ${call.url}`)).toEqual([
-      `GET ${BASE_URL}/oauth/authorize?user_code=WDJB-MJHT`,
-      `GET ${BASE_URL}/oauth/authorize?user_code=WDJB-MJHT&hop=1`,
-      `POST ${BASE_URL}/oauth/authorize`,
-    ])
-  })
-
-  it('never follows a redirect off the base origin, and reports that the owner session was not accepted when it is a Clerk handshake', async () => {
-    const { calls, fetchImpl } = fetchStub([
-      { status: 307, body: '', headers: { location: 'https://composed-stallion-40.clerk.accounts.dev/v1/client/handshake' } },
-    ])
-
-    const approval = await approveLocalConsent({ baseUrl: BASE_URL, userCode: 'WDJB-MJHT', fetchImpl })
-
-    expect(approval).toEqual({
-      kind: 'failed',
-      stage: 'owner_session_not_accepted',
-      status: 307,
-      body: '',
-      message: 'the minted owner session was not accepted; check that CLERK_SECRET_KEY and AE_E2E_OWNER_EMAIL name a real user on this Clerk development instance',
-    })
-    expect(calls).toHaveLength(1)
-  })
-
-  it('also recognises the Clerk handshake from an x-clerk-auth-status header on an off-origin redirect', async () => {
-    const { fetchImpl } = fetchStub([
-      {
-        status: 307,
-        body: '',
-        headers: {
-          location: 'https://accounts.example.com/sign-in',
-          'x-clerk-auth-status': 'signed-out',
-        },
-      },
-    ])
-
-    const approval = await approveLocalConsent({ baseUrl: BASE_URL, userCode: 'WDJB-MJHT', fetchImpl })
-
-    expect(approval).toMatchObject({
-      stage: 'owner_session_not_accepted',
-      message: expect.stringContaining('the minted owner session was not accepted'),
-    })
-  })
-
-  it('does not mistake an ordinary off-origin redirect for a Clerk handshake', async () => {
-    const { fetchImpl } = fetchStub([
-      { status: 307, body: '', headers: { location: 'https://other-service.example/redirect' } },
-    ])
-
-    const approval = await approveLocalConsent({ baseUrl: BASE_URL, userCode: 'WDJB-MJHT', fetchImpl })
-
-    expect(approval).toEqual({ kind: 'failed', stage: 'consent_page', status: 307, body: '' })
-  })
-
-  it('gives up after too many same-origin redirects instead of looping forever', async () => {
-    const responses = Array.from({ length: 7 }, (_unused, index) => ({
-      status: 307,
-      body: '',
-      headers: { location: `${BASE_URL}/oauth/authorize?user_code=WDJB-MJHT&hop=${index + 1}` },
-    }))
-    const { calls, fetchImpl } = fetchStub(responses)
-
-    const approval = await approveLocalConsent({ baseUrl: BASE_URL, userCode: 'WDJB-MJHT', fetchImpl })
-
-    expect(approval).toMatchObject({ kind: 'failed', stage: 'consent_page', status: 307 })
-    expect(calls).toHaveLength(6)
-  })
-
-  it('reports the server body when the approval is rejected', async () => {
-    const { fetchImpl } = fetchStub([
-      { status: 200, body: consentPage() },
-      { status: 400, body: JSON.stringify({ error: 'invalid_scope' }) },
-    ])
-
-    const approval = await approveLocalConsent({
-      baseUrl: BASE_URL,
-      userCode: 'WDJB-MJHT',
-      authorityMode: 'read_only',
-      fetchImpl,
-    })
-
-    expect(approval).toEqual({
-      kind: 'failed',
-      stage: 'approval',
-      status: 400,
-      body: '{"error":"invalid_scope"}',
-      requestedAuthorityMode: 'spending_policy',
-    })
-  })
-
-  it('uses the consent page authority mode (e.g. a provider grant) when no explicit override is given', async () => {
-    const { calls, fetchImpl } = fetchStub([
-      { status: 200, body: consentPage({ 'data-authority-mode': 'read_only' }) },
-      { status: 200, body: JSON.stringify({ kind: 'approved', grantRef: 'device:grant-1' }) },
-    ])
-
-    const approval = await approveLocalConsent({ baseUrl: BASE_URL, userCode: 'WDJB-MJHT', fetchImpl })
-
-    expect(approval).toMatchObject({ kind: 'approved', requestedAuthorityMode: 'read_only' })
-    expect(new URLSearchParams(calls[1]?.init.body ?? '').get('authority_mode')).toBe('read_only')
-  })
-
-  it('lets an explicit authorityMode override the consent page attribute', async () => {
-    const { calls, fetchImpl } = fetchStub([
-      { status: 200, body: consentPage({ 'data-authority-mode': 'read_only' }) },
-      { status: 200, body: JSON.stringify({ kind: 'approved', grantRef: 'device:grant-1' }) },
-    ])
-
-    const approval = await approveLocalConsent({
-      baseUrl: BASE_URL,
-      userCode: 'WDJB-MJHT',
-      authorityMode: 'approval_required',
-      fetchImpl,
-    })
-
-    expect(approval).toMatchObject({ kind: 'approved', requestedAuthorityMode: 'read_only' })
-    expect(new URLSearchParams(calls[1]?.init.body ?? '').get('authority_mode')).toBe('approval_required')
-  })
-
-  it('falls back to the default authority mode when the consent page carries none and no override is given', async () => {
-    const { calls, fetchImpl } = fetchStub([
-      { status: 200, body: consentPage({ 'data-authority-mode': undefined }) },
-      { status: 200, body: JSON.stringify({ kind: 'approved', grantRef: 'device:grant-1' }) },
-    ])
-
-    const approval = await approveLocalConsent({ baseUrl: BASE_URL, userCode: 'WDJB-MJHT', fetchImpl })
-
-    expect(approval).toEqual({ kind: 'approved', grantRef: 'device:grant-1' })
-    expect(new URLSearchParams(calls[1]?.init.body ?? '').get('authority_mode')).toBe('spending_policy')
-  })
-})
-
 describe('runLocalConnect', () => {
-  const harness = (responses: readonly StubResponse[]) => {
+  const harness = () => {
     const child = new FakeChild()
     const stdout = recorder()
     const stderr = recorder()
-    const { calls, fetchImpl } = fetchStub(responses)
     const spawned: Array<{ baseUrl: string, provider: boolean }> = []
     const run = (argv: readonly string[]) => runLocalConnect({
       argv,
@@ -496,16 +90,14 @@ describe('runLocalConnect', () => {
         spawned.push({ baseUrl, provider })
         return child as never
       },
-      fetchImpl,
       stdout: stdout.write,
       stderr: stderr.write,
-      ownerSessionToken: 'test-owner-session-token',
     })
-    return { child, stdout, stderr, calls, spawned, run }
+    return { child, stdout, stderr, spawned, run }
   }
 
   it('refuses a non-loopback base URL without spawning anything', async () => {
-    const { spawned, stderr, run } = harness([])
+    const { spawned, stderr, run } = harness()
 
     const outcome = await run(['--base-url', 'https://agenticeconomy.example'])
 
@@ -514,55 +106,8 @@ describe('runLocalConnect', () => {
     expect(stderr.chunks.join('')).toContain('refusing https://agenticeconomy.example')
   })
 
-  it('exits 2 without spawning anything when required Clerk env is missing', async () => {
-    const child = new FakeChild()
-    const stderr = recorder()
-    const spawned: Array<{ baseUrl: string, provider: boolean }> = []
-
-    const outcome = await runLocalConnect({
-      argv: [],
-      env: {},
-      spawnImpl: (baseUrl: string, provider: boolean) => {
-        spawned.push({ baseUrl, provider })
-        return child as never
-      },
-      stderr: stderr.write,
-    })
-
-    expect(outcome.exitCode).toBe(2)
-    expect(spawned).toEqual([])
-    expect(stderr.chunks.join('')).toContain('missing required Clerk env: CLERK_PUBLISHABLE_KEY, CLERK_SECRET_KEY, AE_E2E_OWNER_EMAIL')
-  })
-
-  it('exits 1 without spawning anything when minting the owner session fails', async () => {
-    const child = new FakeChild()
-    const stderr = recorder()
-    const spawned: Array<{ baseUrl: string, provider: boolean }> = []
-
-    const outcome = await runLocalConnect({
-      argv: [],
-      env: {
-        CLERK_PUBLISHABLE_KEY: 'pk_test_x',
-        CLERK_SECRET_KEY: 'sk_test_x',
-        AE_E2E_OWNER_EMAIL: 'owner@example.com',
-      },
-      mintOwnerSessionToken: async () => {
-        throw new Error('no Clerk user found for AE_E2E_OWNER_EMAIL owner@example.com on this Clerk development instance')
-      },
-      spawnImpl: (baseUrl: string, provider: boolean) => {
-        spawned.push({ baseUrl, provider })
-        return child as never
-      },
-      stderr: stderr.write,
-    })
-
-    expect(outcome.exitCode).toBe(1)
-    expect(spawned).toEqual([])
-    expect(stderr.chunks.join('')).toContain('could not mint the owner session: no Clerk user found for AE_E2E_OWNER_EMAIL owner@example.com')
-  })
-
-  it('exits 2 on an unknown flag', async () => {
-    const { spawned, stderr, run } = harness([])
+  it('exits 2 on an unknown flag without spawning anything', async () => {
+    const { spawned, stderr, run } = harness()
 
     const outcome = await run(['--nope'])
 
@@ -571,212 +116,60 @@ describe('runLocalConnect', () => {
     expect(stderr.chunks.join('')).toContain('Unknown option --nope')
   })
 
-  it('approves the printed user code and exits 0 when ae reports connected', async () => {
-    const { child, stdout, calls, spawned, run } = harness([
-      { status: 200, body: consentPage({ 'data-grant-revision': '2' }) },
-      { status: 200, body: JSON.stringify({ kind: 'approved', grantRef: 'device:grant-1' }) },
-    ])
+  it('streams the child stdout and stderr straight through and reports its exit code', async () => {
+    const { child, stdout, stderr, spawned, run } = harness()
 
-    const running = run(['--base-url', BASE_URL, '--json'])
-    child.stderr.emit('data', progressBlock())
-    await Promise.resolve()
-    child.finish(connectedResult)
+    const running = run(['--base-url', BASE_URL])
+    child.stderr.emit('data', 'Approve: http://127.0.0.1:3024/oauth/authorize?user_code=WDJB-MJHT\nUser code: WDJB-MJHT\nWaiting for authorization…\n')
+    child.stdout.emit('data', `${JSON.stringify({ kind: 'pending' })}\n`)
+    child.emit('close', 0, null)
     const outcome = await running
 
     expect(spawned).toEqual([{ baseUrl: BASE_URL, provider: false }])
     expect(outcome.exitCode).toBe(0)
-    expect(outcome.approval).toMatchObject({ kind: 'approved', grantRef: 'device:grant-1' })
-    expect(calls.map((call) => `${call.init.method} ${call.url}`)).toEqual([
-      `GET ${BASE_URL}/oauth/authorize?user_code=WDJB-MJHT`,
-      `POST ${BASE_URL}/oauth/authorize`,
-    ])
-    expect(new URLSearchParams(calls[1]?.init.body ?? '').get('expected_target_revision')).toBe('2')
-    expect(JSON.parse(stdout.chunks.join(''))).toEqual(connectedResult)
-    expect(child.signals).toEqual([])
+    expect(stderr.chunks.join('')).toContain('User code: WDJB-MJHT')
+    expect(stdout.chunks.join('')).toContain('"kind":"pending"')
+    expect(stderr.chunks.join('')).toContain('next: npm run ae -- account status')
   })
 
-  it('forwards --provider to the child and approves with the mode the provider consent page requests', async () => {
-    const { child, calls, spawned, run } = harness([
-      { status: 200, body: consentPage({ 'data-authority-mode': 'read_only' }) },
-      { status: 200, body: JSON.stringify({ kind: 'approved', grantRef: 'device:grant-1' }) },
-    ])
+  it('forwards --provider to the child spawn', async () => {
+    const { child, spawned, run } = harness()
 
-    const running = run(['--base-url', BASE_URL, '--json', '--provider'])
-    child.stderr.emit('data', progressBlock())
-    await Promise.resolve()
-    child.finish({ ...connectedResult, profile: 'provider' })
-    const outcome = await running
+    const running = run(['--base-url', BASE_URL, '--provider'])
+    child.emit('close', 0, null)
+    await running
 
     expect(spawned).toEqual([{ baseUrl: BASE_URL, provider: true }])
-    expect(outcome.exitCode).toBe(0)
-    expect(new URLSearchParams(calls[1]?.init.body ?? '').get('authority_mode')).toBe('read_only')
   })
 
-  it('lets an explicit --authority-mode win over the consent page even for a provider run', async () => {
-    const { child, calls, run } = harness([
-      { status: 200, body: consentPage({ 'data-authority-mode': 'read_only' }) },
-      { status: 200, body: JSON.stringify({ kind: 'approved', grantRef: 'device:grant-1' }) },
-    ])
+  it('reports a non-zero child exit code', async () => {
+    const { child, run } = harness()
 
-    const running = run(['--base-url', BASE_URL, '--json', '--provider', '--authority-mode', 'spending_policy'])
-    child.stderr.emit('data', progressBlock())
-    await Promise.resolve()
-    child.finish({ ...connectedResult, profile: 'provider' })
-    await running
-
-    expect(new URLSearchParams(calls[1]?.init.body ?? '').get('authority_mode')).toBe('spending_policy')
-  })
-
-  it('approves once even when the code arrives across several chunks', async () => {
-    const { child, calls, run } = harness([
-      { status: 200, body: consentPage() },
-      { status: 200, body: JSON.stringify({ kind: 'approved', grantRef: 'device:grant-1' }) },
-    ])
-
-    const running = run(['--json'])
-    child.stderr.emit('data', 'Approve: http://127.0.0.1:3024/oauth/authorize\nUser co')
-    child.stderr.emit('data', 'de: WDJB-MJHT\n')
-    child.stderr.emit('data', 'Waiting for authorization…\n')
-    await Promise.resolve()
-    child.finish(connectedResult)
-    await running
-
-    expect(calls).toHaveLength(2)
-  })
-
-  it('forwards a pending result and exits 1 without redacted secrets', async () => {
-    const { child, stdout, stderr, calls, run } = harness([])
-
-    const running = run(['--json'])
-    child.finish({ ...pendingResult, access_token: 'ae_secret_value' }, 0)
+    const running = run([])
+    child.emit('close', 1, null)
     const outcome = await running
 
     expect(outcome.exitCode).toBe(1)
-    expect(calls).toEqual([])
-    const printed = stdout.chunks.join('')
-    expect(JSON.parse(printed)).toEqual(pendingResult)
-    expect(printed).not.toContain('ae_secret_value')
-    expect(stderr.chunks.join('')).toContain('kind "pending"')
-    expect(stderr.chunks.join('')).toContain('no user code appeared')
-  })
-
-  it('stops the child and reports the server body when approval is rejected', async () => {
-    const { child, stderr, run } = harness([
-      { status: 200, body: consentPage() },
-      { status: 409, body: JSON.stringify({ kind: 'conflict', code: 'grant_revision_mismatch' }) },
-    ])
-
-    const running = run(['--json'])
-    child.stderr.emit('data', progressBlock())
-    await Promise.resolve()
-    await Promise.resolve()
-    child.finish(pendingResult)
-    const outcome = await running
-
-    expect(outcome.exitCode).toBe(1)
-    expect(outcome.approval).toMatchObject({ kind: 'failed', stage: 'approval', status: 409 })
-    expect(child.signals).toEqual(['SIGTERM'])
-    const errors = stderr.chunks.join('')
-    expect(errors).toContain('approval failed at approval (HTTP 409)')
-    expect(errors).toContain('grant_revision_mismatch')
-  })
-
-  it('suggests the requested mode when the chosen mode is refused', async () => {
-    const { child, stderr, run } = harness([
-      { status: 200, body: consentPage() },
-      { status: 400, body: JSON.stringify({ error: 'invalid_scope' }) },
-    ])
-
-    const running = run(['--json', '--authority-mode', 'read_only'])
-    child.stderr.emit('data', progressBlock())
-    await Promise.resolve()
-    await Promise.resolve()
-    child.finish(pendingResult)
-    await running
-
-    expect(stderr.chunks.join('')).toContain('rerun with --authority-mode spending_policy')
-  })
-
-  it('prints the owner-session guidance instead of the generic HTTP status when the redirect is a Clerk handshake', async () => {
-    const { child, stderr, run } = harness([
-      { status: 307, body: '', headers: { location: 'https://composed-stallion-40.clerk.accounts.dev/v1/client/handshake' } },
-    ])
-
-    const running = run(['--json', '--base-url', BASE_URL])
-    child.stderr.emit('data', progressBlock())
-    await Promise.resolve()
-    await Promise.resolve()
-    child.finish(pendingResult)
-    const outcome = await running
-
-    expect(outcome.exitCode).toBe(1)
-    const errors = stderr.chunks.join('')
-    expect(errors).toContain(
-      'local-connect: the minted owner session was not accepted; check that CLERK_SECRET_KEY and AE_E2E_OWNER_EMAIL name a real user on this Clerk development instance',
-    )
-    expect(errors).not.toContain('HTTP 307')
   })
 
   it('exits 1 when the child cannot be started', async () => {
-    const { child, stderr, run } = harness([])
+    const { child, stderr, run } = harness()
 
-    const running = run(['--json'])
+    const running = run([])
     child.emit('error', new Error('spawn npm ENOENT'))
     const outcome = await running
 
     expect(outcome.exitCode).toBe(1)
     expect(stderr.chunks.join('')).toContain('spawn npm ENOENT')
   })
-})
 
-describe('mintOwnerSessionToken', () => {
-  it('resolves the owner email to a user, opens a session for it, and returns the session JWT', async () => {
-    const calls: string[] = []
-    const clerkClientFactory = (options: { secretKey: string }) => {
-      calls.push(`client:${options.secretKey}`)
-      return {
-        users: {
-          getUserList: async ({ emailAddress }: { emailAddress: readonly string[] }) => {
-            calls.push(`users:${emailAddress.join(',')}`)
-            return { data: [{ id: 'user_123' }] }
-          },
-        },
-        sessions: {
-          createSession: async ({ userId }: { userId: string }) => {
-            calls.push(`createSession:${userId}`)
-            return { id: 'sess_123' }
-          },
-          getToken: async (sessionId: string) => {
-            calls.push(`getToken:${sessionId}`)
-            return { jwt: 'session.jwt.value' }
-          },
-        },
-      }
-    }
+  it('prints a base-url-aware next command when a non-default base URL was used', async () => {
+    const { child, stderr, run } = harness()
 
-    const token = await mintOwnerSessionToken({
-      env: { CLERK_SECRET_KEY: 'sk_test_x', AE_E2E_OWNER_EMAIL: 'owner@example.com' },
-      clerkClientFactory,
-    })
+    const running = run(['--base-url', 'http://127.0.0.1:9999'])
+    child.emit('close', 0, null)
+    await running
 
-    expect(token).toBe('session.jwt.value')
-    expect(calls).toEqual([
-      'client:sk_test_x',
-      'users:owner@example.com',
-      'createSession:user_123',
-      'getToken:sess_123',
-    ])
-  })
-
-  it('throws when no Clerk user matches the owner email', async () => {
-    const clerkClientFactory = () => ({
-      users: { getUserList: async () => ({ data: [] }) },
-      sessions: { createSession: async () => ({ id: 'sess_123' }), getToken: async () => ({ jwt: 'x' }) },
-    })
-
-    await expect(mintOwnerSessionToken({
-      env: { CLERK_SECRET_KEY: 'sk_test_x', AE_E2E_OWNER_EMAIL: 'missing@example.com' },
-      clerkClientFactory,
-    })).rejects.toThrow('no Clerk user found for AE_E2E_OWNER_EMAIL missing@example.com')
+    expect(stderr.chunks.join('')).toContain('next: npm run ae -- account status --base-url http://127.0.0.1:9999')
   })
 })

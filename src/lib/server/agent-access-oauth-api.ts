@@ -167,6 +167,16 @@ export {
   AGENT_ACCESS_OAUTH_CODE_CHALLENGE_METHODS,
 }
 
+/**
+ * `Response.redirect` returns a response whose Headers are immutable per the
+ * Fetch spec, which crashes `clerkMiddleware` when it appends its own headers
+ * to the authorize response. Build the redirect by hand so its headers stay
+ * mutable.
+ */
+function redirectTo(url: URL | string): Response {
+  return new Response(null, { status: 302, headers: { location: url.toString() } })
+}
+
 const OAUTH_AUTHORIZATION_UNAVAILABLE: ProblemInput = {
   status: 503,
   kind: 'UNAVAILABLE',
@@ -360,7 +370,7 @@ export async function handleOAuthAuthorizeGet(request: Request, options: OAuthAp
   if (!owner.isAuthenticated || owner.userId === null) {
     const login = new URL('/sign-in', baseUrl(request, options))
     login.searchParams.set('redirect_url', url.toString())
-    return Response.redirect(login, 302)
+    return redirectTo(login)
   }
   const result = await beginAuthorizationCodeGrant(requireStore(options), {
     client,
@@ -378,7 +388,7 @@ export async function handleOAuthAuthorizeGet(request: Request, options: OAuthAp
   const gate = new URL(AGENT_ACCESS_OAUTH_PATHS.deviceVerification, baseUrl(request, options))
   gate.searchParams.set('grant_ref', result.value.grant.grantRef)
   gate.searchParams.set('state', state)
-  return Response.redirect(gate, 302)
+  return redirectTo(gate)
 }
 
 function defaultOAuthScopeText(includeOfflineAccess: boolean): string {
@@ -411,7 +421,7 @@ async function locatedConsentResponse(
   if (limited !== undefined) return limited
   const owner = await ownerIdentity(options)
   if (!owner.isAuthenticated || owner.userId === null) {
-    return Response.redirect(new URL('/sign-in', baseUrl(request, options)), 302)
+    return redirectTo(new URL('/sign-in', baseUrl(request, options)))
   }
   let result: Awaited<ReturnType<typeof readGrantForConsent>>
   try {
