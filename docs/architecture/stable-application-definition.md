@@ -46,7 +46,7 @@ Gold: `research/LOCUS-AE-MATURITY.md` operating-parity matrix; `research/WHOP-AE
 | # | Invariant | Gold standard | Current gap | Real-use proof | Status |
 |---|---|---|---|---|---|
 | 1 | Every reason code a caller can receive maps to one written human sentence from the content catalogue. | LOCUS operating-parity matrix | Resolved: `src/content/reason-copy.ts` maps reason codes to one sentence with a fallback sentence; consuming sites `AeSupplySourceNativeStart.tsx` and `src/routes/tools.$toolRef.tsx` (was `src/modules/discovery/tool-inspector-model.ts`, W7-005/006). | Lane 3: a refusal shows a sentence, not a slug. | Met (2026-09-11) |
-| 2 | One noun per commercial object everywhere: Tool, Quote, Call, Provider, Customer. | WHOP-AE-MATURITY.md | Resolved for the supply landing, for-providers, the Provider connection page and Operations pages (W7-001/002); residual sweep recorded as a smell if any remain. | Lane 3: the same Tool inspected via MCP and via `curl /api/v1/...` returns identically shaped results. | Met (2026-09-11) |
+| 2 | One noun per commercial object everywhere: Tool, Quote, Call, Provider, Customer. | WHOP-AE-MATURITY.md | Resolved for the supply landing, for-providers, the Provider connection page and Operations pages (W7-001/002). Well 8 Lane A (done, commit 951fd6626) closed the residual public-boundary sweep: wire field `offering`→`listing` end to end (CLI 0.2.0 rebuilt); `/owner/offerings*`→`/owner/operations*` with no alias (old paths 404); `/owner/supply/$offeringRef`→`/owner/operations/$toolRef` (value still an `offering:` ref until Lane C supplies slugs); `/api/v1/services*`→`/api/v1/businesses*` (`serviceId`→`businessId`); Stripe Connect return links (`payout-connect-http.ts`) and MCP OAuth `authenticationUrl` (`mcp-source-discovery.ts`) repointed; owner-console copy says Tools. Internal tables (`capabilityOfferings`, `catalogOfferingMutations.ts`) intentionally keep the `offering` name; only public boundaries changed. | Lane 3: the same Tool inspected via MCP and via `curl /api/v1/...` returns identically shaped results. Well 8 Lane A: `/owner/operations` 307 to sign-in, `/owner/offerings` 404, `/api/v1/businesses` 200, `/api/v1/services` 404; `ae describe` and MCP describe show `listing`. | Met (2026-09-11); Lane A closed (2026-09-12) |
 | 3 | Quote is an executable, expiring commitment that invoke presents unchanged; drift fails closed. | Locus "Preflight" row (LOCUS doc l.71/111) | Stale: `callAction` requires `quoteRef` (`src/modules/capability-execution/call-contracts.ts:65-68`); `convex/capabilityQuotes.ts` `readForCall` (ll.954-994) validates principal/account/credential/environment binding, state issued and expiry, refusing with `operation_not_current`. The original "cannot present the inspected plan ref" gap predates this and the Locus paper's `inspectPlanRef` sentence is superseded. | Lane 3: `npm run ae -- quote <toolRef>` succeeds. | Met (2026-09-11) |
 | 4 | Only a verified Qualified Use establishes "useful outcome"; never payment success or a rating alone. | PACKAGE-5 §5C item 6 | Rating mutation accepts any authenticated principal (WHOP doc l.89/144). | Not yet covered by a lane; no proof step defined in the pathway. | Open |
 
@@ -110,6 +110,22 @@ Each lane leaves a working app. Every subagent brief carries: reference followed
 - **Decisions taken 2026-09-12:** retire analytics outright, not soften them; anonymity floor k=5, demand signal stays private, never surfaced per-Tool; owner leaning to concept E (agent's-eye view) first, but the pain-path doc argues fix the catalogue first.
 - **Proof:** real browser on `/market` and a Tool page; `ae search`/`ae describe` against production once `/api/ready` is 200.
 
+## Well 8 (2026-09-12 onward)
+
+| Lane | Goal | Status | Proof |
+|---|---|---|---|
+| A | Vocabulary at public boundaries: `offering`→`listing`, `services`→`businesses`, `/owner/offerings`→`/owner/operations` | Done, commit 951fd6626 | `/owner/operations` 307 to sign-in, `/owner/offerings` 404, `/api/v1/businesses` 200, `/api/v1/services` 404; `ae describe` and MCP describe show `listing` |
+| B | Incremental upsert (catalogue writes avoid full re-derivation) | Done, commit 372ec777d | second live-dev run against the upstream: 0 inserted, 14,430 unchanged, 12 activity patches, 0 rewritten, 3 swept; facet totals identical; status ready throughout |
+| C | One read model (single source for catalogue/registry reads, replaces `offering:` refs with real slugs) | Queued | — |
+| D | Credit reads: `readCreditAccount`/`listCreditActivity`/`readKeyUsage` back real Formance balances, refuse honestly where no ledger exists | Done, commit 951fd6626 | local `npx convex run` returns expected refusals; 159 tests |
+| E | OpenAPI (public HTTP surface gets a generated spec) | Queued | — |
+
+- **Lane A detail:** wire field `offering`→`listing` end to end (CLI 0.2.0 rebuilt); `/owner/offerings*`→`/owner/operations*` with no alias (old paths 404); `/owner/supply/$offeringRef`→`/owner/operations/$toolRef` (value still an `offering:` ref until Lane C supplies slugs); `/api/v1/services*`→`/api/v1/businesses*` (`serviceId`→`businessId`); Stripe Connect return links (`payout-connect-http.ts`) and MCP OAuth `authenticationUrl` (`mcp-source-discovery.ts`) repointed; owner-console copy says Tools. Internal tables (`capabilityOfferings`, `catalogOfferingMutations.ts`) intentionally keep the `offering` name.
+- **Lane D detail:** `readCreditAccount` reads the real balance via the production Formance balance action (`moneyFormance.readDisplayBalance`) with the principal derived from the owner session; `listCreditActivity`/`readKeyUsage` refuse with `credential_activity_unavailable`/`credential_usage_unavailable` because no per-credential ledger address exists (honest, not fabricated); Formance unreachable → `source_unavailable`. Finding: the owner credit page never used these three; they back the agent-usage port.
+- **Catalogue perf finding:** every registry row re-ran qualification twice via `readManagedX402InspectionTarget`; now threaded from the already-fetched publication/binding/contract (`capabilitySupplyToolShared.ts`, `capabilitySupplyCurrentTool.ts`). The gate's flaky timeout was this cost.
+- **Discoverability finding:** aecon is an x402 buyer, not a seller; Bazaar lists only 402-returning endpoints settled via the CDP facilitator. Owner product decision, not a defect.
+- **Observability:** production has no Sentry DSN or PostHog key set (owner item).
+
 ## Closeout notes
 
 PACKAGE-5 closure item 8 (no-handroll repository scan): recorded 2026-09-11, clean; see Source 2.
@@ -136,6 +152,9 @@ Hosted cutover 2026-09-12: Convex prod deployed and configured from 5b8a423cf; V
 - The operator utility rail now shows the shared destination label (Market, For agents, Help) rather than the old Catalog/Agent setup/Help; this is the one-name invariant working, recorded so nobody "fixes" it back.
 - aecon.ai (marketing project) serves the app's readiness route with no environment and always reports 503; probes must target app.aecon.ai.
 - Production catalogue was empty for the whole of Wells 0-7 because the Convex prod deployment had never been deployed; discovered only by curl.
+- `/owner/operations/$toolRef` value is an `offering:` ref until Lane C supplies real slugs.
+- `.env.local` is permission-denied to subagents; owner must run scripts that need it directly (owner-run scripts pattern).
+- category stats are computed from a per-category facet scan, not a sum aggregate; acceptable at 82 categories, revisit if categories grow.
 
 ## Out of scope
 

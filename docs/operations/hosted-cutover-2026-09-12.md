@@ -129,11 +129,17 @@ once its Convex bundle import direction is fixed: shared modules import
    `backfillDirectoryEligibility` →
    `backfillEligibleFacetMembership` (refuses to run until the first is
    done; `convex/migrations.ts` checks the prerequisite's status itself
-   before writing) → `backfillDirectorySourceRouteRefAndSlug`. Run each
-   with `npx convex run --prod migrations:<name> '{}'`. Check status
-   (installed migrations component, default name `migrations`) with
-   `npx convex run --prod --component migrations lib:getStatus '{"migrations":["migrations:backfillDirectoryEligibility","migrations:backfillEligibleFacetMembership","migrations:backfillDirectorySourceRouteRefAndSlug"]}'`
-   (add `--watch` to live-update).
+   before writing) → `backfillDirectorySourceRouteRefAndSlug` →
+   `backfillDirectoryListingDigestAndLastSeenRunAt` (Well 8 Lane B;
+   backfills the active generation only). Run each with `npx convex run
+   --prod migrations:<name> '{}'`. Check status (installed migrations
+   component, default name `migrations`) with
+   `npx convex run --prod --component migrations lib:getStatus '{"migrations":["migrations:backfillDirectoryEligibility","migrations:backfillEligibleFacetMembership","migrations:backfillDirectorySourceRouteRefAndSlug","migrations:backfillDirectoryListingDigestAndLastSeenRunAt"]}'`
+   (add `--watch` to live-update). The directory refresh now updates the
+   one live generation in place (no generation swap), so
+   `x402DirectoryIndex:status` stays `ready` throughout a refresh, including
+   the one triggered in step 4 below. Record the first production
+   refresh's Convex call count here after the run: TBC.
 4. `npx convex run --prod x402DirectoryIndexRefresh:start '{}'` (returns
    `unchanged`/`refreshing`/`started`; the weekly cron now guards by
    upstream total), then

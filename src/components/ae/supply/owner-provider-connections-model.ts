@@ -1,7 +1,50 @@
 import { formatRelativeTime, formatTimestamp } from '@/lib/ui/format-time'
+import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
 import { degrade } from '@/lib/observability/degrade'
 import type { OwnerProviderConnection } from '@/modules/capability-supply/supply-funnel.functions'
 import type { OwnerToolsX402ConnectionIntent } from '@/lib/operator/supply-compatibility'
+
+export type CommandFailure =
+  | Readonly<{ kind: 'refused'; code: string; correlationRef?: string }>
+  | Readonly<{ kind: 'error'; cause: unknown }>
+
+export type UnconfirmedTexts = Readonly<{ unavailable: string; unconfirmed: string }>
+
+export const PROVIDER_CONNECTION_UNCONFIRMED_TEXTS: UnconfirmedTexts = {
+  unavailable: 'The provider connection outcome was not confirmed. Reload current connections before repeating it.',
+  unconfirmed: 'The provider connection outcome was not confirmed. Reload current connections first; an unchanged retry will reuse the same command reference.',
+}
+
+export const HEALTH_CHECK_UNCONFIRMED_TEXTS: UnconfirmedTexts = {
+  unavailable: 'The health-check outcome was not confirmed. Reload current connections before repeating it.',
+  unconfirmed: 'The health-check outcome was not confirmed. Reload current connections first; an unchanged retry will reuse the same command reference.',
+}
+
+/** Shared refusal/error reporting for the connect, revoke and check command flows. */
+export function reportCommandFailure(
+  outcome: CommandFailure,
+  commandKey: string,
+  texts: UnconfirmedTexts,
+  effects: Readonly<{
+    setNotice: (notice: Readonly<{ kind: 'error' | 'status'; text: string }>) => void
+    setRefreshRequired: (value: boolean) => void
+    clearCommand: (key: string) => void
+  }>,
+): void {
+  if (outcome.kind === 'error') {
+    captureClientExceptionOnClient(outcome.cause)
+    effects.setRefreshRequired(true)
+    effects.setNotice({ kind: 'error', text: texts.unconfirmed })
+    return
+  }
+  if (outcome.code === 'source_unavailable') {
+    effects.setRefreshRequired(true)
+    effects.setNotice({ kind: 'error', text: texts.unavailable })
+    return
+  }
+  effects.clearCommand(commandKey)
+  effects.setNotice({ kind: 'error', text: connectionRefusalCopy(outcome.code, outcome.correlationRef) })
+}
 
 export type X402HandoffIdentity = Readonly<{
   draft: string
