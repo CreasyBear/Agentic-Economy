@@ -5,43 +5,43 @@ function isCompact(page: Page): boolean {
 }
 
 /**
- * Reaches Operations (`/owner/operations`) from `/market` by clicking real
- * in-app links only, mirroring how a visitor actually gets there: header
- * "Publish" (desktop) or the mobile drawer's "Publish" link, then the
- * supply-landing "List a service" CTA (see AeSupplyLanding.tsx).
+ * Reaches `/for-providers` from `/market` by clicking real in-app links
+ * only, mirroring how a visitor actually gets there: header "For providers"
+ * (desktop) or the mobile drawer's "For providers" link. Stays within
+ * public pages: `/owner/*` now requires an operator session (see
+ * requireOperatorBeforeLoad), so it is out of scope for this
+ * unauthenticated shell-identity check.
  */
-async function navigateMarketToOwner(page: Page) {
+async function navigateMarketToForProviders(page: Page) {
   if (isCompact(page)) {
     await page.getByRole('button', { name: 'Open public menu' }).click()
-    await page.getByRole('dialog').getByRole('link', { name: 'Publish' }).click()
+    await page.getByRole('dialog').getByRole('link', { name: 'For providers' }).click()
   } else {
-    await page.getByRole('link', { name: 'Publish', exact: true }).click()
+    await page.getByRole('link', { name: 'For providers', exact: true }).click()
   }
   await expect(page).toHaveURL(/\/for-providers$/)
   await expect(page.locator('[data-shell="app-header"][data-probe="alive"]'), 'header remounted on market -> for-providers').toHaveCount(1)
-  await page.getByRole('link', { name: 'List a service' }).click()
-  await expect(page).toHaveURL(/\/owner\/offerings$/)
 }
 
-/** Navigates back to `/market` by clicking the persistent header's "Discover" link. */
+/** Navigates back to `/market` by clicking the persistent header's "Market" link. */
 async function navigateHeaderToMarket(page: Page) {
   if (isCompact(page)) {
     await page.getByRole('button', { name: 'Open public menu' }).click()
     await page
       .getByRole('navigation', { name: 'Public navigation' })
-      .getByRole('link', { name: 'Discover' })
+      .getByRole('link', { name: 'Market' })
       .click()
   } else {
     await page
       .getByRole('navigation', { name: 'Primary' })
-      .getByRole('link', { name: 'Discover' })
+      .getByRole('link', { name: 'Market' })
       .click()
   }
   await expect(page).toHaveURL(/\/market/)
 }
 
 test.describe('app shell persistence', () => {
-  test('header node survives market -> owner -> market', async ({ page }) => {
+  test('header node survives market -> for-providers -> market', async ({ page }) => {
     const hydrationErrors: string[] = []
     page.on('console', (message) => {
       if (/hydrat|Minified React error #4(18|23|25)/iu.test(message.text())) hydrationErrors.push(message.text())
@@ -58,8 +58,8 @@ test.describe('app shell persistence', () => {
       return node.getBoundingClientRect().height
     })
 
-    await navigateMarketToOwner(page)
-    await expect(page.getByRole('heading', { level: 1, name: 'Tools' })).toBeVisible()
+    await navigateMarketToForProviders(page)
+    await expect(page.getByRole('heading', { level: 1, name: 'List a Tool.' })).toBeVisible()
 
     const stillAlive = page.locator('[data-shell="app-header"][data-probe="alive"]')
     await expect(stillAlive).toHaveCount(1)
@@ -103,7 +103,7 @@ test.describe('app shell persistence', () => {
     const hasViewTransitions = await page.evaluate(() => 'startViewTransition' in document)
     test.skip(!hasViewTransitions, 'no View Transitions API')
 
-    await navigateMarketToOwner(page)
+    await navigateMarketToForProviders(page)
 
     const headerViewTransitionName = await page.evaluate(() => {
       const node = document.querySelector('[data-shell="app-header"]') as HTMLElement | null

@@ -75,7 +75,7 @@ function skippedQuoteCheck(reason: string, nextCommand?: string, code?: string) 
 }
 
 function unconnectedQuoteCheck(connectCommand: string) {
-  return skippedQuoteCheck('no buyer credential for this origin', connectCommand)
+  return skippedQuoteCheck('no buyer credential for this origin', connectCommand, 'no_buyer_credential')
 }
 
 // Every case here spawns the real CLI under tsx, which costs roughly a second

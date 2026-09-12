@@ -20,10 +20,10 @@ const admitOperatorSessionServer = createServerFn()
   })
 
 /**
- * Shared beforeLoad guard for every /owner/*, /admin/*, and /developers/*
- * route. Unauthenticated visitors are redirected to /sign-in with a
- * `redirect` search param honored after auth completes. Authenticated callers
- * must also have canonical Account ownership and the requested surface.
+ * Shared beforeLoad guard for every /owner/* and /admin/* route.
+ * Unauthenticated visitors are redirected to /sign-in with a `redirect`
+ * search param honored after auth completes. Authenticated callers must
+ * also have canonical Account ownership and the requested surface.
  */
 export async function requireOperatorBeforeLoad({ location }: { location: { href: string } }) {
   const result = await admitOperatorSessionServer({ data: { redirectTo: location.href } })
