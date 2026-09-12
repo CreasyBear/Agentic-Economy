@@ -18,7 +18,33 @@ import { pathToFileURL } from 'node:url'
 
 const repoRoot = process.cwd()
 
-async function main() {
+type RegisteredAction = {
+  id: string
+  surfaces: readonly string[]
+  readOnly: boolean
+  invocationContract?: unknown
+}
+
+type CallRouteDescriptor = {
+  actionId: string
+  routerPath: string
+}
+
+type ActionContract = {
+  consequenceClass: string
+}
+
+type ActionRegistryModule = {
+  listActions(): readonly RegisteredAction[]
+  listCallRouteDescriptors(): readonly CallRouteDescriptor[]
+  resolveActionContract(action: RegisteredAction): ActionContract
+}
+
+type MissingAdapterRow = { id: string, surface: string }
+type UnclassifiedWriteRow = { id: string, consequenceClass: string }
+type UnreferencedRow = { id: string }
+
+async function main(): Promise<void> {
   const registry = await loadRegistry()
   const callRouteDescriptors = registry.listCallRouteDescriptors()
   const routeFiles = await collectSourceFiles(path.join(repoRoot, 'src/routes'))
@@ -27,14 +53,14 @@ async function main() {
   const serverLibFiles = await collectSourceFiles(path.join(repoRoot, 'src/lib/server'))
   const apiRouteFiles = [...routeFiles.filter((file) => path.basename(file).startsWith('api.')), ...serverLibFiles]
 
-  const sources = new Map()
+  const sources = new Map<string, string>()
   for (const file of [...routeFiles, ...componentFiles, ...moduleFiles, ...serverLibFiles]) {
     sources.set(file, readFileSync(file, 'utf8'))
   }
 
-  const missingAdapter = []
-  const unclassifiedWrites = []
-  const unreferenced = []
+  const missingAdapter: MissingAdapterRow[] = []
+  const unclassifiedWrites: UnclassifiedWriteRow[] = []
+  const unreferenced: UnreferencedRow[] = []
 
   for (const action of registry.listActions()) {
     const exportName = findExportName(moduleFiles, sources, action.id)
@@ -97,7 +123,7 @@ async function main() {
   process.exit(0)
 }
 
-function report(title, rows, format) {
+function report<T>(title: string, rows: readonly T[], format: (row: T) => string): void {
   process.stdout.write(`${title}: ${rows.length}\n`)
   for (const row of rows) {
     process.stdout.write(`  - ${format(row)}\n`)
@@ -106,7 +132,7 @@ function report(title, rows, format) {
 }
 
 /** Actions are referenced by their exported const, not by their string id. */
-function findExportName(moduleFiles, sources, actionId) {
+function findExportName(moduleFiles: readonly string[], sources: Map<string, string>, actionId: string): string | undefined {
   const escapedActionId = escapeRegExp(actionId)
   const pattern = new RegExp(`export const (\\w+) = defineAction(?:<[^;]{0,500}?>)?\\(\\{[\\s\\S]{0,500}?id:\\s*['"]${escapedActionId}['"]`, 'u')
   for (const file of moduleFiles) {
@@ -132,17 +158,17 @@ function findExportName(moduleFiles, sources, actionId) {
   return undefined
 }
 
-function escapeRegExp(value) {
+function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')
 }
 
-function mentionsAction(source, actionId, exportName) {
+function mentionsAction(source: string, actionId: string, exportName: string | undefined): boolean {
   if (source.includes(`'${actionId}'`) || source.includes(`"${actionId}"`)) return true
   return exportName !== undefined && new RegExp(`\\b${exportName}\\b`, 'u').test(source)
 }
 
-async function collectSourceFiles(root) {
-  const found = []
+async function collectSourceFiles(root: string): Promise<string[]> {
+  const found: string[] = []
   try {
     for await (const file of glob(['**/*.ts', '**/*.tsx'], { cwd: root })) {
       const name = path.basename(file)
@@ -155,11 +181,11 @@ async function collectSourceFiles(root) {
   return found.toSorted()
 }
 
-async function loadRegistry() {
-  const { register } = await import('tsx/esm/api')
+async function loadRegistry(): Promise<ActionRegistryModule> {
+  const { register } = await import('tsx/esm/api') as { register: () => () => void }
   const unregister = register()
   try {
-    return await import(pathToFileURL(path.join(repoRoot, 'src/modules/actions/index.ts')).href)
+    return await import(pathToFileURL(path.join(repoRoot, 'src/modules/actions/index.ts')).href) as unknown as ActionRegistryModule
   } finally {
     unregister()
   }

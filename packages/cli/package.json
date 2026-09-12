@@ -15,9 +15,9 @@
     "node": ">=20"
   },
   "scripts": {
-    "build": "node ../../scripts/build-cli.mjs",
+    "build": "node ../../scripts/build-cli.ts",
     "prepack": "npm run build",
-    "test": "node ../../scripts/test-cli-package.mjs"
+    "test": "node ../../scripts/test-cli-package.ts"
   },
   "publishConfig": {
     "access": "public"

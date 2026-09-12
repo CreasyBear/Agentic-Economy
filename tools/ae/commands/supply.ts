@@ -53,7 +53,7 @@ export const SUPPLY_COMMAND_DESCRIPTORS = Object.freeze([
   { actionId: supplyConnectionDetailAction.id, command: 'supply', subcommand: 'connection', route: SUPPLY_ACTION_ROUTE_CONTRACTS.connectionDetail, action: supplyConnectionDetailAction },
   { actionId: supplyConnectionConnectAction.id, command: 'supply', subcommand: 'connect', route: SUPPLY_ACTION_ROUTE_CONTRACTS.connectionConnect, action: supplyConnectionConnectAction },
   { actionId: supplyConnectionReconnectAction.id, command: 'supply', subcommand: 'reconnect', route: SUPPLY_ACTION_ROUTE_CONTRACTS.connectionReconnect, action: supplyConnectionReconnectAction },
-  { actionId: supplyConnectionRevokeAction.id, command: 'supply', subcommand: 'revoke', route: SUPPLY_ACTION_ROUTE_CONTRACTS.connectionRevoke, action: supplyConnectionRevokeAction },
+  { actionId: supplyConnectionRevokeAction.id, command: 'supply', subcommand: 'disconnect', route: SUPPLY_ACTION_ROUTE_CONTRACTS.connectionRevoke, action: supplyConnectionRevokeAction },
   { actionId: supplyOffboardingStatusAction.id, command: 'supply', subcommand: 'offboarding', route: SUPPLY_ACTION_ROUTE_CONTRACTS.offboardingStatus, action: supplyOffboardingStatusAction },
 ] as const)
 

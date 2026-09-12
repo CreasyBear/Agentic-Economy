@@ -20,7 +20,7 @@ The Well 3 live proof listed the seeded sandbox Tool because the seed wrote its 
 
 ## What changed
 
-### Launcher (`tools/dev/local-dev.mjs`)
+### Launcher (`tools/dev/local-dev.ts`)
 
 Staged x402-era launcher, own flags separated from Vite passthrough, each stage fails hard with
 the exact fix:
@@ -75,7 +75,7 @@ section rather than silently dropped.
 
 ### CI
 
-- CLI tarball is built at deploy time, not committed; `scripts/test-cli-package.mjs` asserts a
+- CLI tarball is built at deploy time, not committed; `scripts/test-cli-package.ts` asserts a
   reproducible pack (two packs, equal digest).
 - New `fresh-checkout-proof` job: anonymous backend, `connect:local`, `ae doctor --json`
   uploaded as an artifact; accepts quoting `warn`, fails on any missing/skipped/failed quote

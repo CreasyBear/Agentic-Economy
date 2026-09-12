@@ -114,12 +114,41 @@ gated by the four external items below.
    `AE_FORMANCE_REQUEST_TIMEOUT_MS=10000`, and the Formance access
    client ID/secret pair. Verify with an unauthenticated GET to the
    gateway, which should return 401.
-5. **Apply and verify.** Place the values above in
-   `/Users/joelchan/.claude/jobs/9c5caaff/tmp/human-secrets.env` (mode
-   600, `NAME=value` lines), then run
-   `bash /Users/joelchan/.claude/jobs/9c5caaff/tmp/cutover-3.sh`. This
-   pushes the values to Vercel (and to Convex for the Formance names),
-   redeploys, and probes `/api/ready`.
+## Go-live sequence
+
+Preconditions: Convex deployment re-enabled by the owner (plan limits);
+working tree committed. The external observability sweep is included only
+once its Convex bundle import direction is fixed: shared modules import
+`degrade-backend`, never `degrade`.
+
+1. `npx tsc --noEmit -p convex/tsconfig.json` and `npm run typecheck`
+   clean.
+2. `npx convex deploy --typecheck disable` from the deploy worktree at the
+   release commit.
+3. Migrations in order, each followed by a status check until done:
+   `backfillDirectoryEligibility` →
+   `backfillEligibleFacetMembership` (refuses to run until the first is
+   done; `convex/migrations.ts` checks the prerequisite's status itself
+   before writing) → `backfillDirectorySourceRouteRefAndSlug`. Run each
+   with `npx convex run --prod migrations:<name> '{}'`. Check status
+   (installed migrations component, default name `migrations`) with
+   `npx convex run --prod --component migrations lib:getStatus '{"migrations":["migrations:backfillDirectoryEligibility","migrations:backfillEligibleFacetMembership","migrations:backfillDirectorySourceRouteRefAndSlug"]}'`
+   (add `--watch` to live-update).
+4. `npx convex run --prod x402DirectoryIndexRefresh:start '{}'` (returns
+   `unchanged`/`refreshing`/`started`; the weekly cron now guards by
+   upstream total), then
+   `npx convex run --prod capabilitySupplyProjection:rebuildAllBusinessSupplyProjections '{}'`
+   once — it self-schedules to completion.
+5. Set `AE_RELEASE_SOURCE_REVISION` to the release sha on Vercel
+   production and Convex prod; `vercel deploy --prod` from the worktree.
+6. Probes: `/api/health`, `/api/ready` (still 503 until the four external
+   items above: Stripe restricted key, Clerk webhook secret, Infisical,
+   Formance), `/api/v1/release`, `/market`, `/tools/<host>/<slug>` from a
+   card, MCP `tools/list`, `ae search "wallet balance" --base-url
+   https://app.aecon.ai`, `ae describe <ref> --base-url ...` showing the
+   `Page:` line.
+7. Idle-cost check after 24 h: Convex dashboard function calls should be
+   in the hundreds per day, not hundreds of thousands.
 
 ## Smells
 
@@ -137,6 +166,17 @@ gated by the four external items below.
 - The marketing site at aecon.ai serves the same readiness route and
   reports 503 with no environment configured at all, which can be
   mistaken for an app outage by probes that do not distinguish surfaces.
+- A shared module reachable from `convex/` imported the browser-only
+  `degrade` (`src/lib/observability/degrade.ts`, built on TanStack
+  Start's `createIsomorphicFn`) instead of the zero-dependency
+  `degradeBackend` (`src/lib/observability/degrade-backend.ts`), which
+  broke the Convex bundle. Shared/server modules must import
+  `degrade-backend`, never `degrade`.
+- A `package.json` revert during the sweep silently dropped dependency
+  changes; dependency hygiene had to be redone by hand before deploying.
+- The installed migrations component's `lib:getStatus` (see the go-live
+  sequence above) is the only way to see backfill progress; running a
+  migration itself does not report completion.
 
 ## Later on 2026-09-12: catalogue live
 

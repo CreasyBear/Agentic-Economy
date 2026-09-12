@@ -5,7 +5,7 @@ import { delimiter, dirname, resolve as resolvePath } from 'node:path'
 import { parseEnv } from 'node:util'
 import { fileURLToPath } from 'node:url'
 
-import { configureLocalConvexServerFunctionToken, configureLocalSourceWriteSecret } from './local-source-write-secret.mjs'
+import { configureLocalConvexServerFunctionToken, configureLocalSourceWriteSecret } from './local-source-write-secret.ts'
 
 const DEFAULT_VITE_ARGS = ['--port', '3024', '--strictPort', '--host', '127.0.0.1']
 const DEFAULT_VITE_URL = 'http://127.0.0.1:3024'
@@ -26,7 +26,7 @@ const RELEASE_REVISION_ENV = 'AE_RELEASE_SOURCE_REVISION'
 const CONVEX_DEPLOYMENT_ENV = 'CONVEX_DEPLOYMENT'
 // Vite's own precedence: later files win, `.env.[mode].local` last.
 const ENV_FILES = ['.env', '.env.local', '.env.development', '.env.development.local']
-const ANSI_PATTERN = /\u001B\[[0-9;]*m/gu
+const ANSI_PATTERN = /\[[0-9;]*m/gu
 const CONVEX_READY_PATTERN = /Convex functions ready!/u
 const VITE_READY_PATTERN = /\bLocal:\s+https?:\/\//u
 // Vite's own "ready in Nms" line lands in the same banner flush as `Local:`
@@ -41,29 +41,31 @@ const CONVEX_URL_PATTERN = /^(?![^\n]*[Dd]ashboard)[^\n]*\b(?:deployment|backend
 const RELEASE_REVISION_PATTERN = /^[0-9a-f]{40}$/u
 const LAUNCHER_LOG_PREFIX = 'local-dev'
 
-export function isConvexReadyOutput(output) {
+type EnvRecord = Record<string, string | undefined>
+
+export function isConvexReadyOutput(output: string): boolean {
   return CONVEX_READY_PATTERN.test(output)
 }
 
-export function isViteReadyOutput(output) {
+export function isViteReadyOutput(output: string): boolean {
   const text = stripAnsi(output)
   return VITE_READY_PATTERN.test(text) || VITE_READY_IN_PATTERN.test(text)
 }
 
-function stripAnsi(text) {
+function stripAnsi(text: unknown): string {
   return String(text ?? '').replace(ANSI_PATTERN, '')
 }
 
-function nonEmpty(value) {
+function nonEmpty(value: unknown): string | undefined {
   const trimmed = typeof value === 'string' ? value.trim() : ''
   return trimmed.length === 0 ? undefined : trimmed
 }
 
-function log(message) {
+function log(message: string): void {
   process.stderr.write(`${LAUNCHER_LOG_PREFIX}: ${message}\n`)
 }
 
-export function buildConvexSelectArgs() {
+export function buildConvexSelectArgs(): string[] {
   return ['convex', 'deployment', 'select', 'local']
 }
 
@@ -84,7 +86,7 @@ export function buildConvexSelectArgs() {
  * initializing an agent (`node_modules/convex/dist/cli.bundle.cjs:130776`):
  * `CONVEX_AGENT_MODE=anonymous && npx convex init && npx convex env set ... && npx convex dev`.
  */
-export function isAnonymousLocalDeployment(env = process.env) {
+export function isAnonymousLocalDeployment(env: EnvRecord = process.env): boolean {
   if (env.CONVEX_AGENT_MODE === 'anonymous') return true
 
   const statePath = resolvePath('.convex/local/default/config.json')
@@ -98,7 +100,7 @@ export function isAnonymousLocalDeployment(env = process.env) {
   }
 }
 
-export function buildConvexDevArgs() {
+export function buildConvexDevArgs(): string[] {
   return ['convex', 'dev', '--typecheck', 'disable', '--local-force-upgrade']
 }
 
@@ -111,11 +113,11 @@ export function buildConvexDevArgs() {
  * credentials without reconfiguring anything, so this is safe to run
  * unconditionally rather than guarding it on `.convex/local/default/config.json`.
  */
-export function buildConvexInitArgs() {
+export function buildConvexInitArgs(): string[] {
   return ['convex', 'init']
 }
 
-export function buildConvexEnvSetArgs(value) {
+export function buildConvexEnvSetArgs(value: string): string[] {
   return ['convex', 'env', 'set', 'CLERK_JWT_ISSUER_DOMAIN', value]
 }
 
@@ -130,7 +132,7 @@ const ANONYMOUS_CLERK_JWT_ISSUER_DOMAIN = 'https://release-proof.invalid'
  * (a real tenant, or one set by a previous run) means Clerk is configured
  * and no placeholder work is needed in the child environment.
  */
-export function needsClerkPlaceholder(env) {
+export function needsClerkPlaceholder(env: EnvRecord): boolean {
   return env.CLERK_JWT_ISSUER_DOMAIN === undefined
 }
 
@@ -139,7 +141,7 @@ export function needsClerkPlaceholder(env) {
  * value if present, else the placeholder. This is always idempotent; `convex env set`
  * can be called unconditionally.
  */
-export function anonymousDeploymentEnvSeed(env) {
+export function anonymousDeploymentEnvSeed(env: EnvRecord): string {
   return env.CLERK_JWT_ISSUER_DOMAIN ?? ANONYMOUS_CLERK_JWT_ISSUER_DOMAIN
 }
 
@@ -150,7 +152,10 @@ export function anonymousDeploymentEnvSeed(env) {
  * proof uses; a real deployment (or one where Clerk is already configured)
  * is returned unchanged.
  */
-export function convexChildEnv(env, { anonymous = false, log: write = log } = {}) {
+export function convexChildEnv(
+  env: EnvRecord,
+  { anonymous = false, log: write = log }: { anonymous?: boolean, log?: (message: string) => void } = {},
+): EnvRecord {
   const needsTimeout = env[CONVEX_LOCAL_BACKEND_STARTUP_TIMEOUT_SECS_ENV] === undefined
   const needsPlaceholder = anonymous && needsClerkPlaceholder(env)
   if (!needsTimeout && !needsPlaceholder) return env
@@ -175,7 +180,7 @@ const CONVEX_CLERK_FAILURE_PATTERN = /CLERK_JWT_ISSUER_DOMAIN/u
  * its ready pattern, by matching the captured output against the two known
  * causes; anything else gets a generic pointer back at the output above.
  */
-export function convexExitFix(output, env = {}) {
+export function convexExitFix(output: string, env: EnvRecord = {}): string {
   const text = stripAnsi(output ?? '')
   if (CONVEX_TIMEOUT_FAILURE_PATTERN.test(text)) {
     const used = env[CONVEX_LOCAL_BACKEND_STARTUP_TIMEOUT_SECS_ENV] ?? String(DEFAULT_LOCAL_BACKEND_STARTUP_TIMEOUT_SECS)
@@ -187,14 +192,21 @@ export function convexExitFix(output, env = {}) {
   return 'read the Convex output above'
 }
 
+type LauncherFlags = {
+  skipScan: boolean
+  skipSeed: boolean
+  runDoctor: boolean
+  viteArgs: string[]
+}
+
 /**
  * Launcher flags are consumed here; every other argument belongs to Vite.
  */
-export function parseLauncherFlags(argv = []) {
+export function parseLauncherFlags(argv: readonly string[] = []): LauncherFlags {
   let skipScan = false
   let skipSeed = false
   let runDoctor = true
-  const viteArgs = []
+  const viteArgs: string[] = []
   for (const arg of argv) {
     if (arg === '--skip-scan') {
       skipScan = true
@@ -213,10 +225,18 @@ export function parseLauncherFlags(argv = []) {
   return { skipScan, skipSeed, runDoctor, viteArgs }
 }
 
-function readEnvFiles(names = ENV_FILES) {
+type DotenvFile = { name: string, contents: string }
+
+function readEnvFiles(names: readonly string[] = ENV_FILES): DotenvFile[] {
   return names.flatMap((name) => existsSync(name)
     ? [{ name, contents: readFileSync(name, 'utf8') }]
     : [])
+}
+
+type EffectiveEnv = {
+  env: EnvRecord
+  sources: Record<string, string | undefined>
+  dropped: string[]
 }
 
 /**
@@ -236,9 +256,9 @@ function readEnvFiles(names = ENV_FILES) {
  * carry a deployment choice from another checkout, and `convex dev` resolves
  * the local deployment from `.convex/` itself.
  */
-export function effectiveEnv(baseEnv = process.env, files = readEnvFiles()) {
-  const env = { ...baseEnv }
-  const sources = {}
+export function effectiveEnv(baseEnv: EnvRecord = process.env, files: readonly DotenvFile[] = readEnvFiles()): EffectiveEnv {
+  const env: EnvRecord = { ...baseEnv }
+  const sources: Record<string, string | undefined> = {}
   for (const [key, value] of Object.entries(baseEnv)) {
     if (value !== undefined) sources[key] = 'process'
   }
@@ -249,7 +269,7 @@ export function effectiveEnv(baseEnv = process.env, files = readEnvFiles()) {
       sources[key] = name
     }
   }
-  const dropped = []
+  const dropped: string[] = []
   if (env[CONVEX_DEPLOYMENT_ENV] !== undefined) {
     delete env[CONVEX_DEPLOYMENT_ENV]
     delete sources[CONVEX_DEPLOYMENT_ENV]
@@ -258,7 +278,7 @@ export function effectiveEnv(baseEnv = process.env, files = readEnvFiles()) {
   return { env, sources, dropped }
 }
 
-function launcherEnv() {
+function launcherEnv(): EffectiveEnv {
   const merged = effectiveEnv()
   // npm/npx use `#!/usr/bin/env node`; keep every child on this verified
   // Node 22 binary even when the interactive shell's PATH still prefers a
@@ -271,7 +291,10 @@ function launcherEnv() {
  * `convex dev` owns `.env.local`, so the launcher reads the URL back out of the
  * merged env rather than writing it.
  */
-export function resolveConvexUrl(env = {}, sources = {}) {
+export function resolveConvexUrl(
+  env: EnvRecord = {},
+  sources: Record<string, string | undefined> = {},
+): { url: string, name: string, file: string } | undefined {
   const direct = nonEmpty(env.CONVEX_URL)
   if (direct !== undefined) {
     return { url: direct, name: 'CONVEX_URL', file: sources.CONVEX_URL ?? 'the environment' }
@@ -283,37 +306,32 @@ export function resolveConvexUrl(env = {}, sources = {}) {
   return undefined
 }
 
-const AUTH_BYPASS_ENV = 'VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E'
+const REQUIRED_CLERK_ENV_NAMES = ['CLERK_PUBLISHABLE_KEY', 'CLERK_SECRET_KEY', 'AE_E2E_OWNER_EMAIL']
 
 /**
- * One startup line naming whether the local Clerk bypass is on (the
- * `dev:local` default) or off, and — when off — which file (or the process
- * environment) set it, so a `local-connect` run that needs browser approval
- * is traceable to its cause instead of a mysterious off-origin redirect.
+ * `dev:local` mounts the real `ClerkProvider` and signs in through the same
+ * Clerk development instance CI's authenticated e2e suite uses
+ * (`tests/e2e/authenticated/environment.ts`), so these three names must be
+ * present the same way CI requires them before Vite starts.
  */
-export function authModeLine(env = {}, sources = {}) {
-  const value = env[AUTH_BYPASS_ENV] ?? 'true'
-  if (value === 'true') {
-    return `auth: local Clerk bypass ON (${AUTH_BYPASS_ENV}=true; connect:local can approve)`
-  }
-  const source = sources[AUTH_BYPASS_ENV] ?? 'process'
-  return `auth: local Clerk bypass OFF (source: ${source}); ae connect needs browser approval`
+export function missingClerkEnvNames(env: EnvRecord = {}): string[] {
+  return REQUIRED_CLERK_ENV_NAMES.filter((name) => nonEmpty(env[name]) === undefined)
 }
 
-export function viteLocalUrl(output) {
+export function viteLocalUrl(output: string): string | undefined {
   const match = VITE_URL_PATTERN.exec(stripAnsi(output))
   return match?.[1]
 }
 
-export function convexPrintedUrl(output) {
+export function convexPrintedUrl(output: string): string | undefined {
   const text = stripAnsi(output)
-  let last
+  let last: string | undefined
   CONVEX_URL_PATTERN.lastIndex = 0
   for (const match of text.matchAll(CONVEX_URL_PATTERN)) last = match[1]
   return last
 }
 
-function sameOrigin(left, right) {
+function sameOrigin(left: string, right: string): boolean {
   try {
     return new URL(left).origin === new URL(right).origin
   } catch {
@@ -321,12 +339,20 @@ function sameOrigin(left, right) {
   }
 }
 
+type ConvexProbeResult =
+  | { ok: true }
+  | { ok: false, reason: 'refused' | 'timeout' | 'invalid_url' | 'unexpected_status', status?: number }
+
 /**
  * A liveness probe, not a health check: Convex backends answer `/version`
  * before any function is pushed.
  */
-export async function probeConvexUrl(url, fetchImpl = fetch, timeoutMs = PROBE_TIMEOUT_MS) {
-  let probeUrl
+export async function probeConvexUrl(
+  url: string,
+  fetchImpl: (url: URL, init?: RequestInit) => Promise<{ status: number }> = fetch,
+  timeoutMs: number = PROBE_TIMEOUT_MS,
+): Promise<ConvexProbeResult> {
+  let probeUrl: URL
   try {
     probeUrl = new URL('/version', url)
   } catch {
@@ -338,8 +364,8 @@ export async function probeConvexUrl(url, fetchImpl = fetch, timeoutMs = PROBE_T
 
   const controller = new AbortController()
   const timeout = Symbol('timeout')
-  let timer
-  const expiry = new Promise((resolve) => {
+  let timer: ReturnType<typeof setTimeout>
+  const expiry = new Promise<typeof timeout>((resolve) => {
     timer = setTimeout(() => {
       controller.abort()
       resolve(timeout)
@@ -351,7 +377,7 @@ export async function probeConvexUrl(url, fetchImpl = fetch, timeoutMs = PROBE_T
       expiry,
     ])
     if (response === timeout) return { ok: false, reason: 'timeout' }
-    const status = Number(response?.status)
+    const status = Number(response.status)
     if (status >= 200 && status < 300) return { ok: true }
     return { ok: false, reason: 'unexpected_status', status }
   } catch (error) {
@@ -359,14 +385,14 @@ export async function probeConvexUrl(url, fetchImpl = fetch, timeoutMs = PROBE_T
     if (name === 'AbortError' || name === 'TimeoutError') return { ok: false, reason: 'timeout' }
     return { ok: false, reason: 'refused' }
   } finally {
-    clearTimeout(timer)
+    clearTimeout(timer!)
   }
 }
 
 /**
  * Never disturb a backend this launcher did not start.
  */
-export function shouldSpawnConvex(probeResult) {
+export function shouldSpawnConvex(probeResult?: ConvexProbeResult): boolean {
   return probeResult?.ok !== true
 }
 
@@ -374,7 +400,7 @@ export function shouldSpawnConvex(probeResult) {
  * `git rev-parse HEAD` outside a repository exits non-zero; that is not a
  * launcher failure, the release identity is simply unknown.
  */
-export function releaseRevision(execImpl = defaultExec) {
+export function releaseRevision(execImpl: (command: string, args: readonly string[]) => string = defaultExec): string | undefined {
   try {
     const revision = String(execImpl('git', ['rev-parse', 'HEAD']) ?? '').trim()
     return RELEASE_REVISION_PATTERN.test(revision) ? revision : undefined
@@ -383,15 +409,15 @@ export function releaseRevision(execImpl = defaultExec) {
   }
 }
 
-function defaultExec(command, args) {
-  return execFileSync(command, args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] })
+function defaultExec(command: string, args: readonly string[]): string {
+  return execFileSync(command, args as string[], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] })
 }
 
 /**
  * `convex run` prints its result with `console.log`, so stdout can carry a
  * banner ahead of the JSON. Widest slice first, then narrower ones.
  */
-function jsonTail(text) {
+function jsonTail(text: string): { kind?: string, coverage?: { completeness?: string }, checks?: unknown, tier?: unknown } | undefined {
   const source = stripAnsi(text).trim()
   const end = source.lastIndexOf('}')
   for (let start = source.indexOf('{'); start !== -1 && start < end; start = source.indexOf('{', start + 1)) {
@@ -412,7 +438,7 @@ function jsonTail(text) {
  * this skip relies on; `refreshState` describes the last attempt, not the
  * active generation, so it cannot stand in for it.
  */
-export function isCatalogueComplete(stdout) {
+export function isCatalogueComplete(stdout: string): boolean {
   const status = jsonTail(stdout)
   return status?.kind === 'ready' && status?.coverage?.completeness === 'completed_observed_scan'
 }
@@ -421,13 +447,13 @@ export function isCatalogueComplete(stdout) {
  * The `--json` doctor prints a `DoctorResult`; the human renderer's `Next:`
  * line is derived from the same first-failure-then-warning order.
  */
-export function doctorNextCommand(stdout) {
+export function doctorNextCommand(stdout: string): string | undefined {
   const text = stripAnsi(stdout)
   const printed = /^Next:\s*(.+)$/mu.exec(text)
   if (printed !== null) return printed[1]?.trim()
   const checks = jsonTail(text)?.checks
   if (!Array.isArray(checks)) return undefined
-  const withCommand = (state) => checks.find((check) => check?.state === state && typeof check?.nextCommand === 'string')
+  const withCommand = (state: string) => checks.find((check) => check?.state === state && typeof check?.nextCommand === 'string')
   const failing = checks.find((check) => check?.state === 'fail')
   if (failing !== undefined) return nonEmpty(failing.nextCommand)
   return nonEmpty(withCommand('warn')?.nextCommand) ?? nonEmpty(withCommand('pass')?.nextCommand)
@@ -439,18 +465,18 @@ export function doctorNextCommand(stdout) {
  * `tier ${level} (missing: ${missing.join(', ')})` when missing dependencies exist.
  * Returns undefined if the tier field is absent or unparseable.
  */
-export function doctorTierLine(stdout) {
+export function doctorTierLine(stdout: string): string | undefined {
   const text = stripAnsi(stdout)
   const result = jsonTail(text)
-  if (result?.tier === undefined || typeof result.tier !== 'object') return undefined
-  const { level, missing } = result.tier
+  if (result?.tier === undefined || typeof result.tier !== 'object' || result.tier === null) return undefined
+  const { level, missing } = result.tier as { level?: unknown, missing?: unknown }
   if (typeof level !== 'number') return undefined
   const baseLine = `tier ${level}`
   if (!Array.isArray(missing) || missing.length === 0) return baseLine
   return `${baseLine} (missing: ${missing.join(', ')})`
 }
 
-function stderrTail(text, lines = 4) {
+function stderrTail(text: string, lines = 4): string {
   const kept = stripAnsi(text)
     .split('\n')
     .map((line) => line.trim())
@@ -459,21 +485,45 @@ function stderrTail(text, lines = 4) {
   return kept.length === 0 ? 'no output' : kept.join(' | ')
 }
 
+type StageOutcome = {
+  ok: boolean
+  stdout?: string
+  stderr?: string
+  skipped?: boolean
+  reason?: string
+  fix?: string
+}
+
+type StageContext = {
+  log?: (message: string) => void
+}
+
+type LaunchStage = {
+  id: string
+  skip?: boolean
+  skipReason?: string
+  fix?: string
+  run: (ctx: StageContext) => Promise<StageOutcome | undefined>
+}
+
 /**
  * Ordered, fail-closed startup stages. A stage stops the launcher so a broken
  * local stack is never presented as a working one.
  */
-export async function runStages(stages, ctx = {}) {
+export async function runStages(
+  stages: readonly LaunchStage[],
+  ctx: StageContext = {},
+): Promise<{ ok: boolean, id?: string, ran: string[], skipped: string[] }> {
   const write = ctx.log ?? log
-  const ran = []
-  const skipped = []
+  const ran: string[] = []
+  const skipped: string[] = []
   for (const stage of stages) {
     if (stage.skip === true) {
       skipped.push(stage.id)
       write(`stage ${stage.id} skipped: ${stage.skipReason ?? 'no reason given'}`)
       continue
     }
-    let outcome
+    let outcome: StageOutcome
     try {
       outcome = (await stage.run(ctx)) ?? { ok: true }
     } catch (error) {
@@ -494,9 +544,13 @@ export async function runStages(stages, ctx = {}) {
   return { ok: true, ran, skipped }
 }
 
-const seedFix = (reference) => `${reference} must exist and be idempotent; add it in convex/devSeed.ts or rerun \`npm run dev:local -- --skip-seed\``
+const seedFix = (reference: string) => `${reference} must exist and be idempotent; add it in convex/devSeed.ts or rerun \`npm run dev:local -- --skip-seed\``
 
-export function buildStages({ skipScan = false, skipSeed = false, run }) {
+export function buildStages({ skipScan = false, skipSeed = false, run }: {
+  skipScan?: boolean
+  skipSeed?: boolean
+  run: (reference: string, args?: string) => Promise<StageOutcome>
+}): LaunchStage[] {
   return [
     {
       id: 'identities',
@@ -504,10 +558,6 @@ export function buildStages({ skipScan = false, skipSeed = false, run }) {
         const fleet = await run('workloadCron:ensurePlatformWorkloadIdentities')
         if (!fleet.ok) {
           return { ...fleet, fix: 'workloadCron:ensurePlatformWorkloadIdentities must succeed before the cron fleet can act; read the Convex error above' }
-        }
-        const owner = await run('devSeed:ensureLocalE2EOwnerIdentity')
-        if (!owner.ok) {
-          return { ...owner, fix: 'devSeed:ensureLocalE2EOwnerIdentity must succeed before the local consent loop can run' }
         }
         return { ok: true }
       },
@@ -530,7 +580,7 @@ export function buildStages({ skipScan = false, skipSeed = false, run }) {
         if (!status.ok) {
           return { ...status, fix: 'x402DirectoryIndex:status must be readable before the catalogue can be refreshed' }
         }
-        if (isCatalogueComplete(status.stdout)) {
+        if (isCatalogueComplete(status.stdout ?? '')) {
           return { ok: true, skipped: true, reason: 'catalogue already complete' }
         }
         // The scan is a workflow; starting it is the contract, completion is not.
@@ -552,7 +602,7 @@ export function buildStages({ skipScan = false, skipSeed = false, run }) {
   ]
 }
 
-function assertSupportedNode() {
+function assertSupportedNode(): void {
   const major = Number.parseInt(process.versions.node.split('.')[0] ?? '', 10)
   if (major === 22) return
 
@@ -561,9 +611,14 @@ function assertSupportedNode() {
   )
 }
 
-function signalExitStatus(signal) {
-  const signalNumber = osConstants.signals[signal]
+function signalExitStatus(signal: NodeJS.Signals): number {
+  const signalNumber = (osConstants.signals as Record<string, number>)[signal]
   return signalNumber === undefined ? 1 : 128 + signalNumber
+}
+
+type LocalDevChild = {
+  pid?: number | undefined
+  kill: (signal: NodeJS.Signals) => void
 }
 
 export function childExitStatus({
@@ -571,7 +626,12 @@ export function childExitStatus({
   signal,
   requestedSignal = null,
   reason = null,
-}) {
+}: {
+  code: number | null
+  signal: NodeJS.Signals | null
+  requestedSignal?: NodeJS.Signals | null
+  reason?: string | null
+}): number {
   if (reason === 'timeout') return 124
   if (requestedSignal !== null) return signalExitStatus(requestedSignal)
   if (code !== null) return code
@@ -579,11 +639,15 @@ export function childExitStatus({
   return 1
 }
 
-export function signalProcessTree(child, signal, kill = process.kill) {
+export function signalProcessTree(
+  child: LocalDevChild,
+  signal: NodeJS.Signals,
+  kill: (pid: number, signal: NodeJS.Signals) => void = process.kill as (pid: number, signal: NodeJS.Signals) => void,
+): boolean {
   if (!Number.isInteger(child?.pid)) return false
 
   try {
-    kill(-child.pid, signal)
+    kill(-(child.pid as number), signal)
     return true
   } catch {
     try {
@@ -595,11 +659,23 @@ export function signalProcessTree(child, signal, kill = process.kill) {
   }
 }
 
-export function terminateProcessTrees(children, signal, kill = process.kill) {
+export function terminateProcessTrees(
+  children: readonly LocalDevChild[],
+  signal: NodeJS.Signals,
+  kill?: (pid: number, signal: NodeJS.Signals) => void,
+): boolean[] {
   return children.map((child) => signalProcessTree(child, signal, kill))
 }
 
-function formatChildFailure(label, result) {
+type ChildFailureResult = {
+  reason: string | null
+  timeoutMs?: number | null
+  error?: Error
+  signal: NodeJS.Signals | null
+  code: number | null
+}
+
+function formatChildFailure(label: string, result: ChildFailureResult): string {
   if (result.reason === 'timeout') {
     return `${label} timed out after ${result.timeoutMs}ms`
   }
@@ -615,12 +691,12 @@ function formatChildFailure(label, result) {
   return `${label} exited unexpectedly`
 }
 
-function reportChildFailure(label, result) {
-  if (result.requestedSignal !== null) return
+function reportChildFailure(label: string, result: ChildFailureResult & { requestedSignal?: NodeJS.Signals | null }): void {
+  if (result.requestedSignal !== null && result.requestedSignal !== undefined) return
   log(formatChildFailure(label, result))
 }
 
-export function readViteArgs(env = process.env) {
+export function readViteArgs(env: EnvRecord = process.env): string[] {
   const raw = env[VITE_ARGS_ENV]
   if (raw === undefined) return []
 
@@ -631,13 +707,48 @@ export function readViteArgs(env = process.env) {
   return parsed
 }
 
-function createManagedChild(command, args, env, {
+type ManagedChildResult = {
+  label: string
+  requestedSignal: NodeJS.Signals | null
+  reason: string | null
+  timeoutMs: number | null
+  stdout: string
+  stderr: string
+  error?: Error
+  code: number | null
+  signal: NodeJS.Signals | null
+}
+
+type ManagedChild = {
+  child: ReturnType<typeof spawn>
+  done: Promise<ManagedChildResult>
+  ready: Promise<{ ready: boolean, result?: ManagedChildResult }>
+  terminate: (signal?: NodeJS.Signals, reason?: string, statusSignal?: NodeJS.Signals | null) => void
+  output: () => string
+}
+
+// The minimal shape `Supervisor.add`/`createSupervisor` require. Kept
+// intentionally looser than the concrete `ManagedChild` `createManagedChild`
+// returns, since callers outside this module (tests) construct supervised
+// values that only need `done` and `terminate` to participate in shutdown.
+type SupervisorChild = {
+  done: Promise<unknown>
+  terminate: (signal?: NodeJS.Signals, reason?: string, requestedSignal?: NodeJS.Signals | null) => void
+}
+
+function createManagedChild(command: string, args: string[], env: EnvRecord, {
   label,
   readyPattern,
   timeoutMs = LOCAL_STARTUP_TIMEOUT_MS,
   capture = false,
   quiet = false,
-} = {}) {
+}: {
+  label: string
+  readyPattern?: (output: string) => boolean
+  timeoutMs?: number | null
+  capture?: boolean
+  quiet?: boolean
+} = { label: 'child' }): ManagedChild {
   const child = spawn(command, args, {
     cwd: process.cwd(),
     env,
@@ -650,17 +761,17 @@ function createManagedChild(command, args, env, {
   let output = ''
   let stdout = ''
   let stderr = ''
-  let requestedSignal = null
-  let reason = null
-  let timeoutHandle = null
-  let killHandle = null
-  let resolveReady
-  const readyPromise = new Promise((resolve) => {
+  let requestedSignal: NodeJS.Signals | null = null
+  let reason: string | null = null
+  let timeoutHandle: ReturnType<typeof setTimeout> | null = null
+  let killHandle: ReturnType<typeof setTimeout> | null = null
+  let resolveReady: (value: { ready: boolean, result?: ManagedChildResult }) => void
+  const readyPromise = new Promise<{ ready: boolean, result?: ManagedChildResult }>((resolve) => {
     resolveReady = resolve
   })
-  if (ready) resolveReady({ ready: true })
+  if (ready) resolveReady!({ ready: true })
 
-  const forwardOutput = (target, chunk, isStdout) => {
+  const forwardOutput = (target: NodeJS.WritableStream, chunk: Buffer, isStdout: boolean) => {
     if (!quiet) target.write(chunk)
     const text = chunk.toString('utf8')
     if (capture) {
@@ -681,17 +792,17 @@ function createManagedChild(command, args, env, {
   child.stdout?.on('data', (chunk) => forwardOutput(process.stdout, chunk, true))
   child.stderr?.on('data', (chunk) => forwardOutput(process.stderr, chunk, false))
 
-  let resolveDone
-  const done = new Promise((resolve) => {
+  let resolveDone: (value: ManagedChildResult) => void
+  const done = new Promise<ManagedChildResult>((resolve) => {
     resolveDone = resolve
   })
 
-  const settle = (result) => {
+  const settle = (result: { error?: Error, code: number | null, signal: NodeJS.Signals | null }) => {
     if (settled) return
     settled = true
-    clearTimeout(timeoutHandle)
-    clearTimeout(killHandle)
-    const completed = {
+    if (timeoutHandle !== null) clearTimeout(timeoutHandle)
+    if (killHandle !== null) clearTimeout(killHandle)
+    const completed: ManagedChildResult = {
       ...result,
       label,
       requestedSignal,
@@ -711,9 +822,9 @@ function createManagedChild(command, args, env, {
   child.once('exit', (code, signal) => settle({ code, signal }))
 
   const terminate = (
-    signal = 'SIGTERM',
+    signal: NodeJS.Signals = 'SIGTERM',
     terminationReason = 'signal',
-    statusSignal = signal,
+    statusSignal: NodeJS.Signals | null = signal,
   ) => {
     if (settled) return
     if (terminationReason === 'timeout') reason = 'timeout'
@@ -735,11 +846,19 @@ function createManagedChild(command, args, env, {
   return { child, done, ready: readyPromise, terminate, output: () => output }
 }
 
-export function createSupervisor() {
-  const children = new Set()
-  let parentSignal = null
+type Supervisor = {
+  add: <T extends SupervisorChild>(managed: T) => T
+  signal: (signal: NodeJS.Signals) => void
+  terminateAll: (signal?: NodeJS.Signals, reason?: string, statusSignal?: NodeJS.Signals | null) => void
+  waitForChildren: () => Promise<unknown[]>
+  readonly parentSignal: NodeJS.Signals | null
+}
 
-  const add = (managed) => {
+export function createSupervisor(): Supervisor {
+  const children = new Set<SupervisorChild>()
+  let parentSignal: NodeJS.Signals | null = null
+
+  const add = <T extends SupervisorChild>(managed: T): T => {
     children.add(managed)
     void managed.done.then(() => children.delete(managed), () => children.delete(managed))
     if (parentSignal !== null) {
@@ -751,13 +870,13 @@ export function createSupervisor() {
     }
     return managed
   }
-  const terminateAll = (signal, reason, statusSignal = signal) => {
+  const terminateAll = (signal: NodeJS.Signals = 'SIGTERM', reason?: string, statusSignal: NodeJS.Signals | null = signal) => {
     for (const managed of children) managed.terminate(signal, reason, statusSignal)
   }
   const waitForChildren = async () => {
-    await Promise.all([...children].map(({ done }) => done))
+    return Promise.all([...children].map(({ done }) => done))
   }
-  const signal = (receivedSignal) => {
+  const signal = (receivedSignal: NodeJS.Signals) => {
     if (parentSignal === null) parentSignal = receivedSignal
     terminateAll(
       receivedSignal === 'SIGTERM' ? 'SIGINT' : receivedSignal,
@@ -777,7 +896,7 @@ export function createSupervisor() {
   }
 }
 
-function convexRunner(supervisor, env) {
+function convexRunner(supervisor: Supervisor, env: EnvRecord): (reference: string, args?: string) => Promise<StageOutcome> {
   return async (reference, args) => {
     const managed = supervisor.add(createManagedChild(
       'npx',
@@ -794,9 +913,9 @@ function convexRunner(supervisor, env) {
   }
 }
 
-async function runVite(viteArgs, supervisor, baseEnv, sources = {}) {
-  const env = { ...baseEnv }
-  log(authModeLine(env, sources))
+async function runVite(viteArgs: string[], supervisor: Supervisor, baseEnv: EnvRecord): Promise<ManagedChild> {
+  const env: EnvRecord = { ...baseEnv }
+  log('auth: mounting the real ClerkProvider (CLERK_PUBLISHABLE_KEY/CLERK_SECRET_KEY/AE_E2E_OWNER_EMAIL present)')
   const { secret, adminKey } = await configureLocalSourceWriteSecret({ env })
   const { token: serverFunctionToken } = await configureLocalConvexServerFunctionToken({ env })
   const appArgs = viteArgs.length > 0 ? viteArgs : DEFAULT_VITE_ARGS
@@ -805,8 +924,6 @@ async function runVite(viteArgs, supervisor, baseEnv, sources = {}) {
     AE_SOURCE_WRITE_SECRET: secret,
     AE_CONVEX_SERVER_FUNCTION_TOKEN: serverFunctionToken,
     CONVEX_SELF_HOSTED_ADMIN_KEY: adminKey,
-    VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E:
-      env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E ?? 'true',
     // An explicit revision (CI, a release rehearsal) stays authoritative.
     ...(revision === undefined || nonEmpty(env[RELEASE_REVISION_ENV]) !== undefined
       ? {}
@@ -825,7 +942,7 @@ async function runVite(viteArgs, supervisor, baseEnv, sources = {}) {
   ))
 }
 
-async function reportDoctor(supervisor, env, baseUrl) {
+async function reportDoctor(supervisor: Supervisor, env: EnvRecord, baseUrl: string): Promise<void> {
   const managed = supervisor.add(createManagedChild(
     'npm',
     ['run', '--silent', 'ae', '--', 'doctor', '--json', '--base-url', baseUrl],
@@ -849,7 +966,7 @@ async function reportDoctor(supervisor, env, baseUrl) {
     : `doctor could not run (${formatChildFailure('AE doctor', result)}); the stack is still up`)
 }
 
-async function startConvex(supervisor, env) {
+async function startConvex(supervisor: Supervisor, env: EnvRecord): Promise<{ convex?: ManagedChild, status?: number }> {
   const anonymous = isAnonymousLocalDeployment(env)
   const convexEnv = convexChildEnv(env, { anonymous })
   if (anonymous) {
@@ -920,7 +1037,7 @@ async function startConvex(supervisor, env) {
   return { convex }
 }
 
-function reportUnreachableConvex(convexUrl, probe) {
+function reportUnreachableConvex(convexUrl: { url: string, name: string, file: string }, probe: ConvexProbeResult & { ok: false }): void {
   const detail = probe.reason === 'unexpected_status'
     ? `answered ${probe.status}`
     : `is ${probe.reason.replace('_', ' ')}`
@@ -928,9 +1045,15 @@ function reportUnreachableConvex(convexUrl, probe) {
   log(`fix: remove the stale ${convexUrl.name} from ${convexUrl.file} or start the backend it points at`)
 }
 
-async function runLocalStack({ viteArgs, skipScan, skipSeed, runDoctor }) {
+async function runLocalStack({ viteArgs, skipScan, skipSeed, runDoctor }: LauncherFlags): Promise<number> {
   let { env, sources, dropped } = launcherEnv()
   for (const name of dropped) log(`ignoring inherited ${name}; convex dev resolves the local deployment`)
+  const missingClerk = missingClerkEnvNames(env)
+  if (missingClerk.length > 0) {
+    log(`missing required Clerk env: ${missingClerk.join(', ')}`)
+    log('fix: set CLERK_PUBLISHABLE_KEY, CLERK_SECRET_KEY, and AE_E2E_OWNER_EMAIL in .env.local (the same Clerk development-instance credentials tests/e2e/authenticated uses); dev:local mounts the real ClerkProvider and has no bypass')
+    return 1
+  }
   const supervisor = createSupervisor()
   const onSigint = () => supervisor.signal('SIGINT')
   const onSigterm = () => supervisor.signal('SIGTERM')
@@ -939,18 +1062,18 @@ async function runLocalStack({ viteArgs, skipScan, skipSeed, runDoctor }) {
 
   try {
     const existing = resolveConvexUrl(env, sources)
-    const existingProbe = existing === undefined
+    const existingProbe: ConvexProbeResult = existing === undefined
       ? { ok: false, reason: 'invalid_url' }
       : await probeConvexUrl(existing.url)
-    let convex = null
+    let convex: ManagedChild | null = null
     if (shouldSpawnConvex(existingProbe)) {
       const started = await startConvex(supervisor, env)
-      if (started.convex === undefined) return started.status
+      if (started.convex === undefined) return started.status ?? 1
       convex = started.convex
       // `convex dev` writes the local URL into `.env.local`; re-read the files.
       ;({ env, sources } = launcherEnv())
     } else {
-      log(`a local backend is already running at ${existing.url}; reusing it`)
+      log(`a local backend is already running at ${existing!.url}; reusing it`)
     }
 
     const convexUrl = resolveConvexUrl(env, sources)
@@ -989,13 +1112,13 @@ async function runLocalStack({ viteArgs, skipScan, skipSeed, runDoctor }) {
       return signalExitStatus(supervisor.parentSignal)
     }
 
-    let vite
+    let vite: ManagedChild
     try {
-      vite = await runVite(viteArgs, supervisor, env, sources)
+      vite = await runVite(viteArgs, supervisor, env)
     } catch (error) {
       supervisor.terminateAll('SIGINT', 'peer-failure')
       if (convex !== null) await convex.done
-      reportChildFailure('Vite setup', { error, code: null, signal: null, requestedSignal: null, reason: null })
+      reportChildFailure('Vite setup', { error: error instanceof Error ? error : new Error(String(error)), code: null, signal: null, requestedSignal: null, reason: null })
       return 1
     }
 
@@ -1030,7 +1153,7 @@ async function runLocalStack({ viteArgs, skipScan, skipSeed, runDoctor }) {
   }
 }
 
-async function main() {
+async function main(): Promise<number> {
   assertSupportedNode()
   const flags = parseLauncherFlags(process.argv.slice(2))
   return runLocalStack({

@@ -24,7 +24,8 @@ try {
 }
 let command = ''
 try {
-  command = String(JSON.parse(input)?.tool_input?.command ?? '')
+  const parsed = JSON.parse(input) as { tool_input?: { command?: unknown } }
+  command = String(parsed?.tool_input?.command ?? '')
 } catch {
   process.exit(0)
 }

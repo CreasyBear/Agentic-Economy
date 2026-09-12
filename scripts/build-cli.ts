@@ -24,7 +24,18 @@ await build({
   // Coinbase's SDK advertises Solana support through an optional dynamic peer.
   // Preserve that boundary instead of forcing every AE CLI install to ship the
   // SVM stack when AE's configured payment lane is Base USDC.
-  external: ["@x402/svm", "@x402/svm/*"],
+  // TanStack Start injects these subpath specifiers through its Vite plugin at
+  // build time. They are not declared in start-server-core's "imports" map and
+  // can never resolve in an esbuild CLI bundle, so any transitive reach into
+  // @tanstack/react-start breaks the build. The CLI never executes a request
+  // handler, so excluding them is correct rather than cosmetic.
+  external: [
+    "@x402/svm",
+    "@x402/svm/*",
+    "#tanstack-router-entry",
+    "#tanstack-start-entry",
+    "tanstack-start-manifest:v",
+  ],
   sourcemap: false,
   legalComments: "none",
   define: { __AE_CLI_BUILD_REVISION__: JSON.stringify(buildRevision) },

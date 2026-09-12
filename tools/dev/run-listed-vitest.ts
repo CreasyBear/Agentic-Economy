@@ -16,7 +16,7 @@ if (missing.length > 0) {
 
 const child = spawn(
   process.execPath,
-  ['tools/dev/run-with-cleanup.mjs', 'vitest', 'run', ...files, ...vitestArgs],
+  ['tools/dev/run-with-cleanup.ts', 'vitest', 'run', ...files, ...vitestArgs],
   { cwd: PROJECT_ROOT, stdio: 'inherit', env: process.env },
 )
 child.on('exit', (code, signal) => {

@@ -275,7 +275,7 @@ export const COMMANDS: Readonly<Record<string, RootCommandManifestEntry>> = {
   },
   supply: {
     summary: 'Manage your provider Tools, connections, earnings and recovery with an owner-issued provider credential.',
-    args: '<preview|tools|status|publish|withdraw|recheck|republish|earnings|calls|connections|connection|connect|reconnect|revoke|offboarding>',
+    args: '<preview|tools|status|publish|withdraw|recheck|republish|earnings|calls|connections|connection|connect|reconnect|disconnect|offboarding>',
     json: true,
     group: 'supply',
     rootOrder: 1,
@@ -297,7 +297,7 @@ export const COMMANDS: Readonly<Record<string, RootCommandManifestEntry>> = {
       connection: { summary: 'Inspect one exact provider connection and its current concurrency identity.', args: '<connectionRef>', json: true },
       connect: { summary: 'Connect one public credentialless x402 endpoint.', args: "--input '<json>' [--idempotency-key <key>]", json: true, guidance: requiredInputFieldsGuidance(supplyConnectionConnectAction.schema) },
       reconnect: { summary: 'Refresh one exact provider connection using its current generation and digest.', args: "--input '<json>' [--idempotency-key <key>]", json: true, guidance: requiredInputFieldsGuidance(supplyConnectionReconnectAction.schema) },
-      revoke: { summary: 'Begin revocation and cleanup for one exact provider connection.', args: "--input '<json>' [--idempotency-key <key>]", json: true, guidance: requiredInputFieldsGuidance(supplyConnectionRevokeAction.schema) },
+      disconnect: { summary: 'Begin revocation and cleanup for one exact provider connection.', args: "--input '<json>' [--idempotency-key <key>]", json: true, guidance: requiredInputFieldsGuidance(supplyConnectionRevokeAction.schema) },
       offboarding: { summary: 'Read one durable Provider offboarding case. Starting and resuming remain owner-only.', args: '<businessRef>', json: true },
     },
   },

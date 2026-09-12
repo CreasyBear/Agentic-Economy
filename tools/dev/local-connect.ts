@@ -3,22 +3,37 @@
  *
  * Runs `ae connect --json` against a loopback deployment, reads the device
  * user code off the child's progress output, and approves the consent grant
- * through the local auth bypass (`VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E=true`)
- * so a developer gets a spending-policy agent key without a browser round
- * trip. Refuses any non-loopback base URL: the approval it performs is only
- * unauthenticated because the local bypass is on.
+ * as the seeded owner so a developer gets a spending-policy agent key
+ * without a browser round trip. There is no auth bypass: the app always
+ * mounts the real `ClerkProvider`, so this driver signs in as the owner
+ * itself before it ever touches the consent page.
  *
- * The issued key is never read, printed, or persisted here — `ae connect`
- * stores it exactly as it would in an interactive run.
+ * It has no browser (unlike `tests/e2e/authenticated/*.spec.ts`, which drive
+ * a Playwright `page` through `@clerk/testing`'s `clerk.signIn`), so it uses
+ * `@clerk/backend`'s server-to-server session flow instead:
+ * `users.getUserList` to resolve `AE_E2E_OWNER_EMAIL` to a Clerk user,
+ * `sessions.createSession` to open a session for it, and `sessions.getToken`
+ * to mint a session JWT — the same Backend API surface `@clerk/testing`
+ * itself uses under the hood, without needing a page to click through.
+ * That JWT rides as a bearer token on every consent-page request, which
+ * `@clerk/backend`'s `authenticateRequest` accepts the same way it accepts a
+ * native/mobile client's session token.
+ *
+ * The issued agent key is never read, printed, or persisted here — `ae
+ * connect` stores it exactly as it would in an interactive run.
  */
+import { createClerkClient } from '@clerk/backend'
 import { spawn } from 'node:child_process'
 import { dirname, resolve as resolvePath } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
+import { effectiveEnv, missingClerkEnvNames } from './local-dev.ts'
+
 const DEFAULT_BASE_URL = 'http://127.0.0.1:3024'
 const CONSENT_PATH = '/oauth/authorize'
 // src/modules/agent-access/contract.ts:16 — AGENT_ACCESS_AUTHORITY_MODE_VALUES.
-const AUTHORITY_MODES = ['read_only', 'approval_required', 'spending_policy', 'unrestricted_test_only']
+const AUTHORITY_MODES = ['read_only', 'approval_required', 'spending_policy', 'unrestricted_test_only'] as const
+type AuthorityMode = typeof AUTHORITY_MODES[number]
 // The buyer flow (`ae connect`) requests `customer_requests:spending_policy`
 // (tools/ae/commands/connect.ts:229-231, buyer branch), and approveGrant
 // refuses a mode that differs from the requested one
@@ -30,24 +45,114 @@ const AUTHORITY_MODES = ['read_only', 'approval_required', 'spending_policy', 'u
 // covers both profiles. Still, the consent page's own `data-authority-mode`
 // attribute is preferred over this default whenever it is present, since it
 // reflects what the pending grant actually requested.
-const DEFAULT_AUTHORITY_MODE = 'spending_policy'
+const DEFAULT_AUTHORITY_MODE: AuthorityMode = 'spending_policy'
 // src/lib/server/agent-access-oauth-api.ts:1345 — parseApprovedToolSelection.
-const TOOL_ACCESS_VALUES = ['all_admitted', 'selected_tools']
+const TOOL_ACCESS_VALUES = ['all_admitted', 'selected_tools'] as const
+type ToolAccess = typeof TOOL_ACCESS_VALUES[number]
 const LOG_PREFIX = 'local-connect'
 const USER_CODE_PATTERN = /^User code:[ \t]*(\S+)[ \t]*\r?\n/mu
 const VERIFICATION_URI_PATTERN = /^Approve:[ \t]*(\S+)[ \t]*\r?\n/mu
 const CONSENT_MARKER_PATTERN = /<main[^>]*\sdata-ae-consent[\s>]/u
 const FORM_ACTION_PATTERN = /<form\b[^>]*\baction="([^"]*)"/u
 const LOOPBACK_IPV4_PATTERN = /^127(?:\.(?:25[0-5]|2[0-4]\d|1?\d?\d)){3}$/u
-const HTML_ENTITIES = { '&amp;': '&', '&lt;': '<', '&gt;': '>', '&quot;': '"', '&#39;': "'" }
+const HTML_ENTITIES: Record<string, string> = { '&amp;': '&', '&lt;': '<', '&gt;': '>', '&quot;': '"', '&#39;': "'" }
 const REDACTED_KEYS = new Set(['access_token', 'accessToken', 'secret', 'apiKey', 'api_key'])
 // A redirect chain that never lands within this many hops is treated as
 // broken rather than followed forever.
 const MAX_CONSENT_REDIRECTS = 5
 
-/** True when the URL is an http(s) loopback address safe for the local bypass. */
-export function isLoopback(url) {
-  let parsed
+type LocatedUserCode = {
+  userCode: string
+  verificationUri?: string
+}
+
+type ConsentAttributes = {
+  grantRef: string
+  grantRevision: number
+  toolAccess: ToolAccess
+  requestedAuthorityMode?: AuthorityMode
+}
+
+type ApprovalBodyInput = {
+  grantRef: string
+  grantRevision: number
+  toolAccess?: ToolAccess
+  authorityMode?: AuthorityMode
+  toolRefs?: readonly string[]
+  state?: string
+}
+
+type ApprovalResult =
+  | { kind: 'approved', grantRef: string, requestedAuthorityMode?: AuthorityMode }
+  | {
+    kind: 'failed'
+    stage: 'consent_page' | 'approval'
+    status: number
+    body: string
+    requestedAuthorityMode?: AuthorityMode
+  }
+  | {
+    kind: 'failed'
+    stage: 'owner_session_not_accepted'
+    status: number
+    body: string
+    message: string
+    requestedAuthorityMode?: AuthorityMode
+  }
+
+type FetchLike = (
+  url: string,
+  init?: {
+    method?: string
+    headers?: Record<string, string>
+    body?: string
+    redirect?: string
+  },
+) => Promise<{
+  status: number
+  text: () => Promise<string>
+  headers?: { get: (name: string) => string | null }
+}>
+
+type ConnectChildStream = {
+  on: (event: 'data', listener: (chunk: unknown) => void) => unknown
+}
+
+type ConnectChild = {
+  stdout?: ConnectChildStream | null
+  stderr?: ConnectChildStream | null
+  on: (event: 'close' | 'error', listener: (...args: never[]) => void) => unknown
+  kill?: (signal?: NodeJS.Signals) => unknown
+}
+
+type LocalConnectFlags = {
+  baseUrl: string
+  authorityMode?: AuthorityMode
+  json: boolean
+  provider: boolean
+  businessId?: string
+}
+
+type LocalConnectOptions = {
+  argv?: readonly string[]
+  spawnImpl?: (baseUrl: string, provider: boolean) => ConnectChild
+  fetchImpl?: FetchLike
+  stdout?: (text: string) => void
+  stderr?: (text: string) => void
+  env?: Record<string, string | undefined>
+  ownerSessionToken?: string
+  mintOwnerSessionToken?: (input: { env: Record<string, string | undefined> }) => Promise<string>
+}
+
+type LocalConnectOutcome = {
+  exitCode: number
+  result?: unknown
+  approval?: ApprovalResult
+}
+
+/** True when the URL is an http(s) loopback address safe for this driver to sign in against. */
+export function isLoopback(url: unknown): boolean {
+  let parsed: URL
   try {
     parsed = new URL(String(url ?? ''))
   } catch {
@@ -64,7 +169,7 @@ export function isLoopback(url) {
  * progress block `ae connect --json` writes to stderr.
  * Returns undefined until a complete `User code:` line has arrived.
  */
-export function parseUserCode(text) {
+export function parseUserCode(text: unknown): LocatedUserCode | undefined {
   const source = String(text ?? '')
   const userCode = USER_CODE_PATTERN.exec(source)?.[1]
   if (userCode === undefined || userCode.length === 0) return undefined
@@ -75,20 +180,20 @@ export function parseUserCode(text) {
   }
 }
 
-function unescapeHtml(value) {
+function unescapeHtml(value: string): string {
   return value.replace(/&(?:amp|lt|gt|quot|#39);/gu, (entity) => HTML_ENTITIES[entity] ?? entity)
 }
 
-function attribute(html, name) {
+function attribute(html: string, name: string): string | undefined {
   const match = new RegExp(`data-${name}="([^"]*)"`, 'u').exec(html)
-  return match === null ? undefined : unescapeHtml(match[1])
+  return match === null ? undefined : unescapeHtml(match[1] as string)
 }
 
 /**
  * Pull the fields the approval POST needs out of the consent page rendered by
  * `consentHtml` (src/lib/server/agent-access-oauth/protocol.ts:276).
  */
-export function parseConsentAttributes(html) {
+export function parseConsentAttributes(html: unknown): ConsentAttributes | undefined {
   const source = String(html ?? '')
   if (!CONSENT_MARKER_PATTERN.test(source)) return undefined
   const grantRef = attribute(source, 'grant-ref')
@@ -97,14 +202,14 @@ export function parseConsentAttributes(html) {
   const requestedAuthorityMode = attribute(source, 'authority-mode')
   if (grantRef === undefined || grantRef.trim().length === 0) return undefined
   if (!Number.isSafeInteger(grantRevision) || grantRevision <= 0) return undefined
-  if (toolAccess === undefined || !TOOL_ACCESS_VALUES.includes(toolAccess)) return undefined
+  if (toolAccess === undefined || !TOOL_ACCESS_VALUES.includes(toolAccess as ToolAccess)) return undefined
   return {
     grantRef,
     grantRevision,
-    toolAccess,
-    ...(requestedAuthorityMode === undefined || !AUTHORITY_MODES.includes(requestedAuthorityMode)
+    toolAccess: toolAccess as ToolAccess,
+    ...(requestedAuthorityMode === undefined || !AUTHORITY_MODES.includes(requestedAuthorityMode as AuthorityMode)
       ? {}
-      : { requestedAuthorityMode }),
+      : { requestedAuthorityMode: requestedAuthorityMode as AuthorityMode }),
   }
 }
 
@@ -114,25 +219,24 @@ export function parseConsentAttributes(html) {
  * redirect target's host names Clerk, or the response already carries
  * Clerk's own auth-status header.
  */
-function isClerkRedirect(next, response) {
+function isClerkRedirect(next: URL, response: { headers?: { get: (name: string) => string | null } }): boolean {
   if (next.hostname.toLowerCase().includes('clerk.')) return true
   const status = response.headers?.get?.('x-clerk-auth-status')
   return status !== null && status !== undefined
 }
 
 /**
- * GET the consent page, following same-origin redirects (a canonical-path
- * hop, for example) up to `MAX_CONSENT_REDIRECTS` times. A redirect that
- * leaves the base origin — Clerk's hosted sign-in handshake when the local
- * bypass (`VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E`) is off, most commonly — is
- * never followed: this tool only ever acts as that unauthenticated local
- * bypass, never a browser completing a real sign-in, so it is returned
- * as-is for `approveLocalConsent` to report as a failure. When that
- * off-origin hop is identifiable as Clerk, `clerkRedirect: true` is set so
- * the caller can give the specific bypass-is-off guidance instead of a bare
- * HTTP status.
+ * GET the consent page, sending the minted owner session as a bearer token
+ * (`@clerk/backend`'s `authenticateRequest` accepts this the same way it
+ * accepts a native/mobile client's session token) and following same-origin
+ * redirects (a canonical-path hop, for example) up to
+ * `MAX_CONSENT_REDIRECTS` times. A redirect that leaves the base origin is
+ * never followed — it is returned as-is for `approveLocalConsent` to report
+ * as a failure. When that off-origin hop is identifiable as Clerk's hosted
+ * sign-in, `clerkRedirect: true` is set so the caller can explain that the
+ * minted session was not accepted instead of printing a bare HTTP status.
  */
-async function fetchConsentPage(fetchImpl, baseUrl, userCode) {
+async function fetchConsentPage(fetchImpl: FetchLike, baseUrl: string, userCode: string, ownerSessionToken?: string) {
   const origin = new URL(baseUrl).origin
   const initial = new URL(CONSENT_PATH, baseUrl)
   initial.searchParams.set('user_code', userCode)
@@ -140,13 +244,16 @@ async function fetchConsentPage(fetchImpl, baseUrl, userCode) {
   for (let hop = 0; hop <= MAX_CONSENT_REDIRECTS; hop += 1) {
     const response = await fetchImpl(target.toString(), {
       method: 'GET',
-      headers: { Accept: 'text/html' },
+      headers: {
+        Accept: 'text/html',
+        ...(ownerSessionToken === undefined ? {} : { Authorization: `Bearer ${ownerSessionToken}` }),
+      },
       redirect: 'manual',
     })
     if (response.status < 300 || response.status >= 400) return { response, url: target.toString() }
     const location = response.headers?.get?.('location')
     if (location === null || location === undefined || location.length === 0) return { response, url: target.toString() }
-    let next
+    let next: URL
     try {
       next = new URL(location, target)
     } catch {
@@ -162,7 +269,7 @@ async function fetchConsentPage(fetchImpl, baseUrl, userCode) {
 }
 
 /** Resolve the `action` of the landed page's consent form against its URL. */
-function formActionUrl(html, pageUrl) {
+function formActionUrl(html: string, pageUrl: string): string {
   const action = FORM_ACTION_PATTERN.exec(html)?.[1]
   return new URL(action === undefined ? CONSENT_PATH : unescapeHtml(action), pageUrl).toString()
 }
@@ -172,7 +279,7 @@ function formActionUrl(html, pageUrl) {
  * src/components/ae/agent-access/AeAgentAccessAuthorizeForm.tsx:266-281, where
  * the expected target revision is the grant revision for a new agent.
  */
-export function buildApprovalBody(input) {
+export function buildApprovalBody(input: ApprovalBodyInput): string {
   const {
     grantRef,
     grantRevision,
@@ -211,16 +318,17 @@ export function buildApprovalBody(input) {
 }
 
 /** Return the connect result when it reports `kind: 'connected'`, else throw. */
-export function assertConnected(json) {
+export function assertConnected(json: unknown): Record<string, unknown> {
   if (json === null || typeof json !== 'object' || Array.isArray(json)) {
     throw new Error('ae connect did not emit a JSON object on stdout.')
   }
-  if (json.kind === 'connected') return json
-  const kind = typeof json.kind === 'string' ? json.kind : 'unknown'
+  const record = json as Record<string, unknown>
+  if (record.kind === 'connected') return record
+  const kind = typeof record.kind === 'string' ? record.kind : 'unknown'
   throw new Error(`ae connect finished with kind "${kind}" instead of "connected".`)
 }
 
-function safeJson(text) {
+function safeJson(text: string): unknown {
   try {
     return JSON.parse(text)
   } catch {
@@ -229,7 +337,7 @@ function safeJson(text) {
 }
 
 /** Parse the single JSON value `ae ... --json` writes to stdout. */
-export function parseFinalJson(text) {
+export function parseFinalJson(text: unknown): unknown {
   const source = String(text ?? '').trim()
   if (source.length === 0) return undefined
   const direct = safeJson(source)
@@ -239,34 +347,40 @@ export function parseFinalJson(text) {
   return start === -1 || end <= start ? undefined : safeJson(source.slice(start, end + 1))
 }
 
-function redactSecrets(value) {
+function redactSecrets(value: unknown): unknown {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) return value
   return Object.fromEntries(
-    Object.entries(value).filter(([key]) => !REDACTED_KEYS.has(key)),
+    Object.entries(value as Record<string, unknown>).filter(([key]) => !REDACTED_KEYS.has(key)),
   )
 }
 
 /**
- * Approve the pending device grant through the local auth bypass. `authorityMode`
+ * Approve the pending device grant as the signed-in owner. `authorityMode`
  * is an explicit override; when omitted, the consent page's own
  * `data-authority-mode` attribute (what the pending grant actually requested)
  * is used, falling back to `DEFAULT_AUTHORITY_MODE` only if the page carries
  * no recognised mode.
  */
-export async function approveLocalConsent(input) {
-  const { baseUrl, userCode, authorityMode, fetchImpl = fetch } = input
+export async function approveLocalConsent(input: {
+  baseUrl: string
+  userCode: string
+  authorityMode?: AuthorityMode | undefined
+  fetchImpl?: FetchLike | undefined
+  ownerSessionToken?: string | undefined
+}): Promise<ApprovalResult> {
+  const { baseUrl, userCode, authorityMode, fetchImpl = fetch as unknown as FetchLike, ownerSessionToken } = input
   const origin = new URL(baseUrl).origin
-  const { response: page, url: landedUrl, clerkRedirect } = await fetchConsentPage(fetchImpl, baseUrl, userCode)
+  const { response: page, url: landedUrl, clerkRedirect } = await fetchConsentPage(fetchImpl, baseUrl, userCode, ownerSessionToken)
   const html = await page.text()
   const attributes = page.status === 200 ? parseConsentAttributes(html) : undefined
   if (attributes === undefined) {
     if (clerkRedirect === true) {
       return {
         kind: 'failed',
-        stage: 'clerk_bypass_off',
+        stage: 'owner_session_not_accepted',
         status: page.status,
         body: html,
-        message: `this server runs with the Clerk bypass OFF; approve in the browser with 'npm run ae -- connect --base-url ${baseUrl}' or restart with 'VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E=true npm run dev:local'`,
+        message: 'the minted owner session was not accepted; check that CLERK_SECRET_KEY and AE_E2E_OWNER_EMAIL name a real user on this Clerk development instance',
       }
     }
     return {
@@ -280,13 +394,17 @@ export async function approveLocalConsent(input) {
   const body = buildApprovalBody({ ...attributes, authorityMode: chosenAuthorityMode })
   const response = await fetchImpl(formActionUrl(html, landedUrl), {
     method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded', Origin: origin },
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      Origin: origin,
+      ...(ownerSessionToken === undefined ? {} : { Authorization: `Bearer ${ownerSessionToken}` }),
+    },
     body,
   })
   const text = await response.text()
   const requested = attributes.requestedAuthorityMode
-  const result = safeJson(text)
-  if (response.status === 200 && result !== null && typeof result === 'object' && result.kind === 'approved') {
+  const result = safeJson(text) as { kind?: string } | undefined
+  if (response.status === 200 && result !== null && typeof result === 'object' && result?.kind === 'approved') {
     return {
       kind: 'approved',
       grantRef: attributes.grantRef,
@@ -302,15 +420,15 @@ export async function approveLocalConsent(input) {
   }
 }
 
-const USAGE = 'Usage: node tools/dev/local-connect.mjs [--base-url <url>] [--provider [businessId]] [--authority-mode <mode>] [--json]'
+const USAGE = 'Usage: node tools/dev/local-connect.ts [--base-url <url>] [--provider [businessId]] [--authority-mode <mode>] [--json]'
 
 /** Parse the CLI flags. Throws with a usage message on anything unknown. */
-export function parseFlags(argv = []) {
+export function parseFlags(argv: readonly string[] = []): LocalConnectFlags {
   let baseUrl = DEFAULT_BASE_URL
-  let authorityMode
+  let authorityMode: AuthorityMode | undefined
   let json = false
   let provider = false
-  let businessId
+  let businessId: string | undefined
   for (let index = 0; index < argv.length; index += 1) {
     const arg = String(argv[index])
     const [name, inlineValue] = arg.startsWith('--') && arg.includes('=')
@@ -324,7 +442,7 @@ export function parseFlags(argv = []) {
       return String(next)
     }
     if (name === '--base-url') baseUrl = readValue()
-    else if (name === '--authority-mode') authorityMode = readValue()
+    else if (name === '--authority-mode') authorityMode = readValue() as AuthorityMode
     else if (name === '--json') json = true
     else if (name === '--provider') {
       provider = true
@@ -351,7 +469,7 @@ export function parseFlags(argv = []) {
   }
 }
 
-function repoRoot() {
+function repoRoot(): string {
   return resolvePath(dirname(fileURLToPath(import.meta.url)), '..', '..')
 }
 
@@ -361,47 +479,99 @@ function repoRoot() {
  * id even for the provider profile — only the bare `--provider` flag is
  * passed through (tools/ae/cli.ts:47,65).
  */
-export function buildConnectArgs(baseUrl, provider = false) {
+export function buildConnectArgs(baseUrl: string, provider = false): string[] {
   return ['run', '--silent', 'ae', '--', 'connect', ...(provider ? ['--provider'] : []), '--base-url', baseUrl, '--json']
 }
 
-function defaultSpawn(baseUrl, provider) {
+function defaultSpawn(baseUrl: string, provider: boolean): ConnectChild {
   return spawn('npm', buildConnectArgs(baseUrl, provider), {
     cwd: repoRoot(),
     env: { ...process.env, AE_DISABLE_BROWSER_OPEN: '1' },
     stdio: ['ignore', 'pipe', 'pipe'],
     shell: process.platform === 'win32',
-  })
+  }) as unknown as ConnectChild
+}
+
+/**
+ * Mint a session JWT for `AE_E2E_OWNER_EMAIL` on the Clerk development
+ * instance named by `CLERK_SECRET_KEY` — the same credentials
+ * `tests/e2e/authenticated/environment.ts` requires. `createSession` +
+ * `getToken` is the Backend API's direct route to a usable session (no
+ * Frontend API ticket exchange, no browser), which is why this — rather than
+ * `@clerk/testing`'s Playwright `clerk.signIn` — is what a headless CLI
+ * driver uses.
+ */
+type OwnerSessionClerkClient = {
+  users: {
+    getUserList: (input: { emailAddress: readonly string[] }) => Promise<{ data: readonly { id: string }[] }>
+  }
+  sessions: {
+    createSession: (input: { userId: string }) => Promise<{ id: string }>
+    getToken: (sessionId: string) => Promise<{ jwt: string }>
+  }
+}
+
+export async function mintOwnerSessionToken({ env, clerkClientFactory = createClerkClient }: {
+  env: Record<string, string | undefined>
+  clerkClientFactory?: (options: { secretKey: string }) => unknown
+}): Promise<string> {
+  const secretKey = env.CLERK_SECRET_KEY
+  const ownerEmail = env.AE_E2E_OWNER_EMAIL
+  const clerkClient = clerkClientFactory({ secretKey: secretKey as string }) as OwnerSessionClerkClient
+  const users = await clerkClient.users.getUserList({ emailAddress: ownerEmail === undefined ? [] : [ownerEmail] })
+  const user = users.data?.[0]
+  if (user === undefined) {
+    throw new Error(`no Clerk user found for AE_E2E_OWNER_EMAIL ${ownerEmail} on this Clerk development instance`)
+  }
+  const session = await clerkClient.sessions.createSession({ userId: user.id })
+  const token = await clerkClient.sessions.getToken(session.id)
+  return token.jwt
 }
 
 /**
  * Drive one local connect: spawn `ae connect --json`, approve the grant it
  * prints, forward the child's final JSON, and report the exit code.
  */
-export async function runLocalConnect(options = {}) {
-  const stdout = options.stdout ?? ((text) => { process.stdout.write(text) })
-  const stderr = options.stderr ?? ((text) => { process.stderr.write(text) })
+export async function runLocalConnect(options: LocalConnectOptions = {}): Promise<LocalConnectOutcome> {
+  const stdout = options.stdout ?? ((text: string) => { process.stdout.write(text) })
+  const stderr = options.stderr ?? ((text: string) => { process.stderr.write(text) })
   const spawnImpl = options.spawnImpl ?? defaultSpawn
-  const fetchImpl = options.fetchImpl ?? fetch
+  const fetchImpl = options.fetchImpl ?? (fetch as unknown as FetchLike)
 
-  let flags
+  let flags: LocalConnectFlags
   try {
     flags = parseFlags(options.argv ?? process.argv.slice(2))
   } catch (error) {
-    stderr(`${LOG_PREFIX}: ${error.message}\n`)
+    stderr(`${LOG_PREFIX}: ${error instanceof Error ? error.message : String(error)}\n`)
     return { exitCode: 2 }
   }
   if (!isLoopback(flags.baseUrl)) {
-    stderr(`${LOG_PREFIX}: refusing ${flags.baseUrl}. This tool approves consent without signing in and only runs against a loopback deployment started with VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E=true.\n`)
+    stderr(`${LOG_PREFIX}: refusing ${flags.baseUrl}. This tool signs in and approves consent as the seeded owner, and only runs against a loopback deployment.\n`)
     return { exitCode: 2 }
+  }
+
+  let ownerSessionToken = options.ownerSessionToken
+  if (ownerSessionToken === undefined) {
+    const env = options.env ?? effectiveEnv().env
+    const missing = missingClerkEnvNames(env)
+    if (missing.length > 0) {
+      stderr(`${LOG_PREFIX}: missing required Clerk env: ${missing.join(', ')}\n`)
+      return { exitCode: 2 }
+    }
+    try {
+      ownerSessionToken = await (options.mintOwnerSessionToken ?? mintOwnerSessionToken)({ env })
+    } catch (error) {
+      stderr(`${LOG_PREFIX}: could not mint the owner session: ${error instanceof Error ? error.message : String(error)}\n`)
+      return { exitCode: 1 }
+    }
   }
 
   const child = spawnImpl(flags.baseUrl, flags.provider)
   let stdoutText = ''
   let stderrText = ''
-  let approval
+  let approval: ApprovalResult | undefined
   let approving = false
-  const pending = []
+  const pending: Promise<unknown>[] = []
 
   const tryApprove = () => {
     if (approving) return
@@ -419,9 +589,10 @@ export async function runLocalConnect(options = {}) {
           userCode: located.userCode,
           authorityMode: flags.authorityMode,
           fetchImpl,
+          ownerSessionToken,
         })
       } catch (error) {
-        approval = { kind: 'failed', stage: 'approval', status: 0, body: String(error?.message ?? error) }
+        approval = { kind: 'failed', stage: 'approval', status: 0, body: String(error instanceof Error ? error.message : error) }
       }
       if (approval.kind !== 'approved') child.kill?.('SIGTERM')
     })())
@@ -438,9 +609,9 @@ export async function runLocalConnect(options = {}) {
     tryApprove()
   })
 
-  const closed = await new Promise((resolve) => {
-    child.on('error', (error) => { resolve({ code: 1, error }) })
-    child.on('close', (code, signal) => { resolve({ code, signal }) })
+  const closed = await new Promise<{ code: number | null, signal?: NodeJS.Signals | null, error?: Error }>((resolve) => {
+    child.on('error', (error: Error) => { resolve({ code: 1, error }) })
+    child.on('close', (code: number | null, signal: NodeJS.Signals | null) => { resolve({ code, signal }) })
   })
   await Promise.all(pending)
 
@@ -457,10 +628,10 @@ export async function runLocalConnect(options = {}) {
     assertConnected(result)
     connected = true
   } catch (error) {
-    stderr(`${LOG_PREFIX}: ${error.message}\n`)
+    stderr(`${LOG_PREFIX}: ${error instanceof Error ? error.message : String(error)}\n`)
   }
   if (approval !== undefined && approval.kind === 'failed') {
-    if (approval.message !== undefined) {
+    if ('message' in approval && approval.message !== undefined) {
       stderr(`${LOG_PREFIX}: ${approval.message}\n`)
     } else {
       stderr(`${LOG_PREFIX}: approval failed at ${approval.stage} (HTTP ${approval.status}).\n${approval.body}\n`)

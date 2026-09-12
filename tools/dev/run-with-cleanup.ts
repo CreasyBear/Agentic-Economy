@@ -1,4 +1,4 @@
-import { execFile, spawn } from 'node:child_process'
+import { execFile, spawn, type ChildProcess } from 'node:child_process'
 import { lstat, rm } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -21,9 +21,19 @@ const TEST_MARKER = /playwright|puppeteer/i
 const TEST_PROFILE = /(?:puppeteer_dev_chrome_profile|playwright(?:[_-][a-z0-9]+)*[_-]?profile)/i
 const BROWSER_EXECUTABLE = /(?:^|[\/\s])(?:google chrome|chrom(?:e|ium)?|firefox|webkit|headless[_-]?shell)(?:[-_][\w-]+)?(?:\.app)?(?:[\/\s]|$)/i
 const PROTECTED_PROFILE = /\borca\b|omp-chrome-profile|(?:^|[\/_=\s-])interactive(?:[\/_.\s-]|$)/i
-const SIGNAL_EXIT_CODES = { SIGHUP: 129, SIGINT: 130, SIGTERM: 143 }
+const SIGNAL_EXIT_CODES: Record<string, number> = { SIGHUP: 129, SIGINT: 130, SIGTERM: 143 }
 
-function parseCli(argv) {
+type ProcessEntry = { pid: number, ppid: number, command: string }
+
+type Cli = {
+  cleanupOnly: boolean
+  dryRun: boolean
+  command: string
+  args: string[]
+  env: Record<string, string | undefined>
+}
+
+function parseCli(argv: string[]): Cli {
   let index = 0
   let dryRun = false
   let cleanupOnly = false
@@ -49,9 +59,9 @@ function parseCli(argv) {
   }
 
   const commandArgs = argv.slice(index)
-  const env = { ...process.env }
-  while (commandArgs.length > 0 && ENV_ASSIGNMENT.test(commandArgs[0])) {
-    const assignment = commandArgs.shift()
+  const env: Record<string, string | undefined> = { ...process.env }
+  while (commandArgs.length > 0 && ENV_ASSIGNMENT.test(commandArgs[0] ?? '')) {
+    const assignment = commandArgs.shift() as string
     const separator = assignment.indexOf('=')
     env[assignment.slice(0, separator)] = assignment.slice(separator + 1)
   }
@@ -60,24 +70,24 @@ function parseCli(argv) {
   return {
     cleanupOnly,
     dryRun,
-    command: commandArgs[0],
+    command: commandArgs[0] as string,
     args: commandArgs.slice(1),
     env,
   }
 }
 
-async function listProcesses() {
+async function listProcesses(): Promise<ProcessEntry[] | null> {
   try {
     const { stdout } = await execFileAsync('ps', PROCESS_LIST_ARGS, {
       cwd: PROJECT_ROOT,
       encoding: 'utf8',
       maxBuffer: 16 * 1024 * 1024,
     })
-    const processes = []
+    const processes: ProcessEntry[] = []
     for (const line of stdout.split('\n')) {
-      const match = line.match(/^\s*(\d+)\s+(\d+)\s+(.*)$/)
+      const match = /^\s*(\d+)\s+(\d+)\s+(.*)$/.exec(line)
       if (match === null) continue
-      processes.push({ pid: Number(match[1]), ppid: Number(match[2]), command: match[3] })
+      processes.push({ pid: Number(match[1]), ppid: Number(match[2]), command: match[3] ?? '' })
     }
     return processes
   } catch {
@@ -85,12 +95,12 @@ async function listProcesses() {
   }
 }
 
-function processMap(processes) {
+function processMap(processes: ProcessEntry[]): Map<number, ProcessEntry> {
   return new Map(processes.map((entry) => [entry.pid, entry]))
 }
 
-function childMap(processes) {
-  const children = new Map()
+function childMap(processes: ProcessEntry[]): Map<number, number[]> {
+  const children = new Map<number, number[]>()
   for (const entry of processes) {
     const siblings = children.get(entry.ppid)
     if (siblings === undefined) children.set(entry.ppid, [entry.pid])
@@ -99,8 +109,8 @@ function childMap(processes) {
   return children
 }
 
-function descendantsOf(rootPid, children) {
-  const descendants = new Set()
+function descendantsOf(rootPid: number, children: Map<number, number[]>): Set<number> {
+  const descendants = new Set<number>()
   const pending = [...(children.get(rootPid) ?? [])]
   while (pending.length > 0) {
     const pid = pending.pop()
@@ -111,22 +121,22 @@ function descendantsOf(rootPid, children) {
   return descendants
 }
 
-function isTestBrowser(command) {
+function isTestBrowser(command: string): boolean {
   if (PROTECTED_PROFILE.test(command)) return false
   if (!BROWSER_EXECUTABLE.test(command)) return false
   if (!TEST_MARKER.test(command)) return false
   return HEADLESS_FLAG.test(command) || TEST_PROFILE.test(command)
 }
 
-function isProtected(command) {
+function isProtected(command: string): boolean {
   return PROTECTED_PROFILE.test(command)
 }
 
-function selectBrowserProcesses(processes, baseline) {
+function selectBrowserProcesses(processes: ProcessEntry[], baseline: Map<number, ProcessEntry> | null): number[] {
   if (baseline === null) return []
   const byPid = processMap(processes)
   const children = childMap(processes)
-  const selected = new Set()
+  const selected = new Set<number>()
 
   for (const entry of processes) {
     if (entry.pid === process.pid || baseline.has(entry.pid)) continue
@@ -142,12 +152,12 @@ function selectBrowserProcesses(processes, baseline) {
   return [...selected]
 }
 
-function orderedPids(pids, processes) {
+function orderedPids(pids: readonly number[], processes: ProcessEntry[]): number[] {
   const byPid = processMap(processes)
-  const depth = (pid) => {
+  const depth = (pid: number): number => {
     let value = 0
     let current = byPid.get(pid)
-    const seen = new Set()
+    const seen = new Set<number>()
     while (current !== undefined && current.ppid !== 0 && !seen.has(current.ppid)) {
       seen.add(current.ppid)
       current = byPid.get(current.ppid)
@@ -158,7 +168,7 @@ function orderedPids(pids, processes) {
   return [...pids].sort((left, right) => depth(right) - depth(left) || right - left)
 }
 
-async function cleanupCaches(dryRun) {
+async function cleanupCaches(dryRun: boolean): Promise<{ count: number, failures: number }> {
   let count = 0
   let failures = 0
   for (const relativePath of TRANSIENT_CACHE_PATHS) {
@@ -166,7 +176,7 @@ async function cleanupCaches(dryRun) {
     try {
       await lstat(target)
     } catch (error) {
-      if (error?.code === 'ENOENT') continue
+      if ((error as NodeJS.ErrnoException)?.code === 'ENOENT') continue
       failures += 1
       continue
     }
@@ -184,16 +194,16 @@ async function cleanupCaches(dryRun) {
   return { count, failures }
 }
 
-async function terminateBrowsers(pids, processes, dryRun) {
+async function terminateBrowsers(pids: readonly number[], processes: ProcessEntry[], dryRun: boolean): Promise<{ count: number, failures: number }> {
   if (dryRun) return { count: pids.length, failures: 0 }
-  const terminated = new Set()
+  const terminated = new Set<number>()
   let failures = 0
   for (const pid of orderedPids(pids, processes)) {
     try {
       process.kill(pid, 'SIGTERM')
       terminated.add(pid)
     } catch (error) {
-      if (error?.code !== 'ESRCH') failures += 1
+      if ((error as NodeJS.ErrnoException)?.code !== 'ESRCH') failures += 1
     }
   }
   if (terminated.size === 0) return { count: 0, failures }
@@ -203,19 +213,23 @@ async function terminateBrowsers(pids, processes, dryRun) {
     try {
       process.kill(pid, 0)
     } catch (error) {
-      if (error?.code !== 'ESRCH') failures += 1
+      if ((error as NodeJS.ErrnoException)?.code !== 'ESRCH') failures += 1
       continue
     }
     try {
       process.kill(pid, 'SIGKILL')
     } catch (error) {
-      if (error?.code !== 'ESRCH') failures += 1
+      if ((error as NodeJS.ErrnoException)?.code !== 'ESRCH') failures += 1
     }
   }
   return { count: terminated.size, failures }
 }
 
-async function cleanup({ baseline, cleanupOnly, dryRun }) {
+async function cleanup({ baseline, cleanupOnly, dryRun }: {
+  baseline: Map<number, ProcessEntry> | null
+  cleanupOnly: boolean
+  dryRun: boolean
+}): Promise<void> {
   // Build-tool caches are shared with a concurrently running Vite server.
   // Deleting them after an ordinary test run invalidates the live module graph
   // and causes transient missing-module/CSS failures. Cache removal is therefore
@@ -241,7 +255,14 @@ async function cleanup({ baseline, cleanupOnly, dryRun }) {
   }
 }
 
-function runCommand(command, args, env) {
+type CommandResult = {
+  child: ChildProcess | null
+  code: number | null
+  signal: NodeJS.Signals | null
+  error: Error | null
+}
+
+function runCommand(command: string, args: string[], env: Record<string, string | undefined>): Promise<CommandResult> {
   return new Promise((resolvePromise) => {
     const child = spawn(command, args, {
       cwd: PROJECT_ROOT,
@@ -249,14 +270,14 @@ function runCommand(command, args, env) {
       shell: false,
       stdio: 'inherit',
     })
-    const forwardSignal = (signal) => {
+    const forwardSignal = (signal: NodeJS.Signals) => {
       try {
         child.kill(signal)
       } catch {
         // The child may have exited between the signal and this handler.
       }
     }
-    const signalHandlers = {
+    const signalHandlers: Record<string, () => void> = {
       SIGHUP: () => forwardSignal('SIGHUP'),
       SIGINT: () => forwardSignal('SIGINT'),
       SIGTERM: () => forwardSignal('SIGTERM'),
@@ -276,19 +297,19 @@ function runCommand(command, args, env) {
   })
 }
 
-async function main() {
-  let cli
+async function main(): Promise<number> {
+  let cli: Cli
   try {
     cli = parseCli(process.argv.slice(2))
   } catch (error) {
-    console.error(`run-with-cleanup: ${error.message}`)
-    console.error('usage: node tools/dev/run-with-cleanup.mjs [--dry-run] [--cleanup-only | command args...]')
+    console.error(`run-with-cleanup: ${error instanceof Error ? error.message : String(error)}`)
+    console.error('usage: node tools/dev/run-with-cleanup.ts [--dry-run] [--cleanup-only | command args...]')
     return 2
   }
 
   const processSnapshot = cli.cleanupOnly ? null : await listProcesses()
   const baseline = processSnapshot === null ? null : processMap(processSnapshot)
-  let result = { code: 0, signal: null, error: null, child: null }
+  let result: CommandResult = { code: 0, signal: null, error: null, child: null }
   try {
     if (!cli.cleanupOnly) result = await runCommand(cli.command, cli.args, cli.env)
   } finally {
@@ -300,7 +321,7 @@ async function main() {
     return 1
   }
   if (result.code !== null) return result.code
-  return SIGNAL_EXIT_CODES[result.signal] ?? 1
+  return (result.signal === null ? undefined : SIGNAL_EXIT_CODES[result.signal]) ?? 1
 }
 
 process.exitCode = await main()

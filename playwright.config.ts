@@ -29,9 +29,6 @@ export default defineConfig({
       timeout: 120_000,
       stdout: 'pipe' as const,
       stderr: 'pipe' as const,
-      env: {
-        VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E: 'true',
-      },
     },
   } : {}),
 })

@@ -97,3 +97,48 @@ Revised 2026-09-12: the immediate ICP is agent builders and developers; CLI and 
 - Drawer traps focus correctly.
 - Sidebar state persists (cookie-backed).
 - Search relevance is sound for well-formed queries.
+
+## Platform completion audit (2026-09-12)
+
+Scope: six lens audits (architecture, Convex, security, frontend, code quality, contracts) plus three source traces, run today across the whole platform, not just the surfaces above. This section is a register of the verdicts, what was fixed today, and what remains open.
+
+### Verdict by lens
+
+| lens | verdict |
+| --- | --- |
+| Architecture | Boundary law real, 0 exceptions. Rot was concentrated: storefront dead module, legacy routes, vocabulary leak ("offering" occurs 3,654 times). |
+| Convex | 364 functions, 90 tables, mechanically clean: no unbounded scans, validators in place, batching used. Semantic gaps were schema-only tables, a dead aggregate, untyped env reads, missing return validators, uncalled public functions. |
+| Security | No exploitable findings; hardening only. |
+| Frontend | Solid bones, accreted skin: two market trees, 14 components over 300 lines, thin route boundaries, no code splitting. |
+| Code quality | Strict TS, zero real `any`/`ts-ignore`, 18 `.mjs` files, 12 unused deps, Convex tsconfig weaker than the app's. |
+| Contracts | "One registry, three surfaces" holds for 36 of 40 actions. |
+
+### Fixed today
+
+| id | area | fix |
+| --- | --- | --- |
+| PA-01 | Architecture rot | Storefront module deleted; 56 legacy files pruned with deprecated exports and Autumn/Novu remnants; Stripe Connect and MCP OAuth return URLs repointed off the deleted route; dead `#tools` anchor removed (12 sites). |
+| PA-02 | Frontend robustness | Shiki lazy-loaded; error/pending boundaries added on funding and landing routes; duplicate formatter removed; AeAgentOperatorConsole split into 7 files (each ≤300 lines); AeSupplySourceNativeStart split into 8 files; AeProviderWorkspace split into sections. |
+| PA-03 | Market consolidation | `/market` consolidated onto the directory tree; AeMarketPage, Toolbar, ComparisonView, AeToolCard, AeCompareTray deleted (1,395 lines); Provider listings rail added; card slug fallback added; canonical `/tools/<host>/<slug>` now used in describe output and the CLI `Page:` line. |
+| PA-04 | Code quality / deps | `@clerk/backend` made an explicit dependency; 8 unused deps removed; alias exports collapsed; 12 `.mjs` files migrated to `.ts` (hook tested); Convex tsconfig strictness aligned with the app. |
+| PA-05 | Convex semantic gaps | Eligibility rule enforced on the admitted registry (Provider-owned exempt, fails open when no directory row); migration ordering enforced in code; missing telemetry set to default-deny; 64-char index names shortened; schema-only tables deleted (Package 7 reintroduces recovery tables when built); dead aggregate unmounted; 13 env reads typed; return validators added; 9 uncalled functions deleted; reason copy type-safe for all refusal unions; Convex bundle break fixed, with a node-only boundary test enforcing that shared modules import `degrade-backend`. |
+| PA-06 | Contracts / API consistency | `market-requests` rate-limited with an `mcp-anonymous` scope; `registry.list` and `services` actions registered HTTP-only with common pagination; `NO_DATA` casing fixed; `supply disconnect` fixed; one idempotencyKey schema (min 8, max 200) replacing 13; funding return actions fixed. |
+| PA-07 | Auth / UX | Sign in gated by Clerk `Show`; `UserButton` now shown for all roles. |
+
+### Open, owner decision or next sprint
+
+| id | item | status |
+| --- | --- | --- |
+| PA-08 | "offering/service/capability" rename debt on public surfaces | next sprint |
+| PA-09 | Incremental directory upsert: count-equality guard rarely fires on a live directory; weekly cadence is the cost cap | owner decision |
+| PA-10 | One read model for the market including Provider-owned Tools (rail is the interim) | owner decision |
+| PA-11 | Credit query stubs in `convex/moneyLedger.ts` return a fixed refusal | feature gap |
+| PA-12 | AeOwnerProviderConnections container remains 574 lines | next sprint |
+| PA-13 | No component-level tests | fact, not a proposal |
+| PA-14 | OpenAPI for HTTP v1 from the zod contracts | next sprint |
+| PA-15 | The four external readiness items | owner decision |
+| PA-16 | `api.v1.services` noun | owner decision |
+
+### Verdict
+
+Is the platform engineered? Foundations, yes: the boundary law holds with zero exceptions, and the mechanical layer (Convex, security) was already clean. Today's work removed the accreted layer (storefront, legacy routes, duplicate market trees, 56 dead files) and turned soft conventions into enforced code (eligibility, migration ordering, telemetry default-deny, the module boundary test). Remaining debt is named and bounded, not hidden: a vocabulary rename, a handful of owner-decision items, and one feature gap in credit queries. Production rollout is gated only by the Convex re-enable and the commit decision, nothing else.

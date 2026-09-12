@@ -34,7 +34,9 @@ const expectedCommands = [
   "wait",
 ];
 
-async function runNode(version, args, options) {
+type ExecOptions = { cwd?: string, maxBuffer?: number }
+
+async function runNode(version: number, args: readonly string[], options: ExecOptions) {
   return run(
     "npm",
     ["exec", "--yes", `--package=node@${version}`, "--", "node", ...args],
@@ -42,12 +44,12 @@ async function runNode(version, args, options) {
   );
 }
 
-function assert(condition, message) {
+function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
 }
 
-async function listPackageFiles(root, relative = "") {
-  const files = [];
+async function listPackageFiles(root: string, relative = ""): Promise<string[]> {
+  const files: string[] = [];
   for (const entry of await readdir(join(root, relative), { withFileTypes: true })) {
     const path = join(relative, entry.name);
     if (entry.isDirectory()) {
@@ -80,12 +82,12 @@ try {
   const sourceManifest = JSON.parse(
     await readFile(resolve(repositoryRoot, "packages/cli/package.json"), "utf8"),
   );
-  let tarball;
-  let digest;
-  let reproducedDigest;
+  let tarball: string;
+  let digest: string;
+  let reproducedDigest: string | undefined;
 
   if (mode === "prepacked") {
-    tarball = resolve(suppliedTarball);
+    tarball = resolve(suppliedTarball as string);
     let artifactStat;
     try {
       artifactStat = await stat(tarball);
@@ -121,7 +123,7 @@ try {
     const artifact = packReport[0];
     const filename = verifiedPack.filename;
     assert(typeof filename === "string", "CLI package tarball was not created.");
-    const packedFiles = (artifact.files ?? []).map((file) => file.path).sort();
+    const packedFiles = (artifact.files ?? []).map((file: { path: string }) => file.path).sort();
     assert(
       JSON.stringify(packedFiles) === JSON.stringify(expectedFiles),
       `CLI tarball files must be exactly ${expectedFiles.join(", ")}; received ${packedFiles.join(", ")}.`,

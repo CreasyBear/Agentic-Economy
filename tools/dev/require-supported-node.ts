@@ -15,10 +15,10 @@ import { delimiter, dirname } from 'node:path'
 import { argv, env, exit } from 'node:process'
 
 const SEPARATOR_INDEX = argv.indexOf('--')
-const PASSTHROUGH = SEPARATOR_INDEX === -1 ? [] : argv.slice(SEPARATOR_INDEX + 1)
+const PASSTHROUGH: string[] = SEPARATOR_INDEX === -1 ? [] : argv.slice(SEPARATOR_INDEX + 1)
 const INVOKED_AS = env.npm_lifecycle_event ?? 'this script'
 
-function currentMajor() {
+function currentMajor(): number {
   const match = /^v(\d+)\./u.exec(process.version)
   return match === null ? Number.NaN : Number(match[1])
 }
@@ -43,7 +43,7 @@ if (major !== 22) {
 }
 
 if (PASSTHROUGH.length === 0) {
-  console.error('require-supported-node.mjs requires "-- <command...>"')
+  console.error('require-supported-node.ts requires "-- <command...>"')
   exit(1)
 }
 

@@ -18,16 +18,20 @@ const DEPCRUISE_BIN = resolve(PROJECT_ROOT, 'node_modules/.bin/depcruise')
 const CONFIG_PATH = resolve(PROJECT_ROOT, '.dependency-cruiser.cjs')
 const CRUISE_TARGETS = ['src', 'convex', 'tools']
 
+type ViolationRule = { name: string }
+type Violation = { rule: ViolationRule }
+type DepcruiseReport = { summary: { violations: Violation[] } }
+
 // Ceilings, one per dependency-cruiser rule name. A rule not listed here has
 // no ceiling (any count is a failure, matching depcruise's own default
 // error-on-any-violation behaviour for that rule).
-const RATCHET = {
+const RATCHET: Record<string, number> = {
   'no-circular': 0,
   'no-circular-via-barrel': 258,
   'no-circular-capability-supply-internal': 34,
 }
 
-function runDepcruise() {
+function runDepcruise(): DepcruiseReport {
   const args = [
     '--config',
     CONFIG_PATH,
@@ -48,8 +52,8 @@ function runDepcruise() {
   return JSON.parse(result)
 }
 
-function countViolationsByRule(report) {
-  const counts = {}
+function countViolationsByRule(report: DepcruiseReport): Record<string, number> {
+  const counts: Record<string, number> = {}
   for (const violation of report.summary.violations) {
     const name = violation.rule.name
     counts[name] = (counts[name] ?? 0) + 1
@@ -57,17 +61,17 @@ function countViolationsByRule(report) {
   return counts
 }
 
-function main() {
-  let report
+function main(): void {
+  let report: DepcruiseReport
   try {
     report = runDepcruise()
   } catch (error) {
     // depcruise exits non-zero when error-severity rules fire; stdout still
     // carries the JSON report in that case.
-    const stdout = error.stdout?.toString()
-    if (!stdout) {
+    const stdout = (error as { stdout?: { toString(): string } }).stdout?.toString()
+    if (stdout === undefined || stdout.length === 0) {
       console.error('deps-ratchet: depcruise produced no output to parse.')
-      console.error(error.message)
+      console.error(error instanceof Error ? error.message : String(error))
       process.exit(1)
     }
     report = JSON.parse(stdout)
