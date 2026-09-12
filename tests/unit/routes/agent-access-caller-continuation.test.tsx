@@ -64,10 +64,6 @@ vi.mock('@/components/ae/layout/AeOperatorPage', () => ({
   AeOperatorPage: ({ children }: { children?: ReactNode }) => children ?? null,
 }))
 
-vi.mock('@/lib/client/local-e2e-auth', () => ({
-  isLocalE2EAuthBypassEnabled: () => false,
-}))
-
 vi.mock('@/lib/operator/route-options', () => ({ operatorRouteOptions: {} }))
 
 vi.mock('@/lib/server/canonical-url.functions', () => ({

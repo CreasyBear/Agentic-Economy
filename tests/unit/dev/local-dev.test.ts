@@ -5,7 +5,6 @@ import { afterEach, describe, expect, it } from 'vitest'
 
 import {
   anonymousDeploymentEnvSeed,
-  authModeLine,
   buildConvexDevArgs,
   buildConvexEnvSetArgs,
   buildConvexInitArgs,
@@ -24,6 +23,7 @@ import {
   isCatalogueComplete,
   isConvexReadyOutput,
   isViteReadyOutput,
+  missingClerkEnvNames,
   needsClerkPlaceholder,
   parseLauncherFlags,
   probeConvexUrl,
@@ -34,7 +34,7 @@ import {
   signalProcessTree,
   terminateProcessTrees,
   viteLocalUrl,
-} from '../../../tools/dev/local-dev.mjs'
+} from '../../../tools/dev/local-dev.ts'
 
 type StageOutcome = {
   ok: boolean
@@ -400,24 +400,24 @@ describe('effective environment', () => {
   })
 })
 
-describe('local Clerk bypass startup line', () => {
-  it('reports ON, with no source, when unset or explicitly true', () => {
-    expect(authModeLine({}, {})).toBe(
-      'auth: local Clerk bypass ON (VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E=true; connect:local can approve)',
-    )
-    expect(authModeLine({ VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E: 'true' }, {})).toBe(
-      'auth: local Clerk bypass ON (VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E=true; connect:local can approve)',
-    )
+describe('missingClerkEnvNames', () => {
+  it('lists all three required names when none are set', () => {
+    expect(missingClerkEnvNames({})).toEqual(['CLERK_PUBLISHABLE_KEY', 'CLERK_SECRET_KEY', 'AE_E2E_OWNER_EMAIL'])
   })
 
-  it('reports OFF with its source when the value is anything other than true', () => {
-    expect(authModeLine(
-      { VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E: 'false' },
-      { VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E: '.env.local' },
-    )).toBe('auth: local Clerk bypass OFF (source: .env.local); ae connect needs browser approval')
-    expect(authModeLine({ VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E: 'false' }, {})).toBe(
-      'auth: local Clerk bypass OFF (source: process); ae connect needs browser approval',
-    )
+  it('lists only the names still missing', () => {
+    expect(missingClerkEnvNames({ CLERK_PUBLISHABLE_KEY: 'pk_test_x', CLERK_SECRET_KEY: '' })).toEqual([
+      'CLERK_SECRET_KEY',
+      'AE_E2E_OWNER_EMAIL',
+    ])
+  })
+
+  it('reports none missing once all three are set', () => {
+    expect(missingClerkEnvNames({
+      CLERK_PUBLISHABLE_KEY: 'pk_test_x',
+      CLERK_SECRET_KEY: 'sk_test_x',
+      AE_E2E_OWNER_EMAIL: 'owner@example.com',
+    })).toEqual([])
   })
 })
 
@@ -550,7 +550,6 @@ describe('x402-era stage set', () => {
     expect((await runStages(buildStages({ run: empty.run }), { log: () => {} })).ok).toBe(true)
     expect(empty.calls).toEqual([
       'workloadCron:ensurePlatformWorkloadIdentities',
-      'devSeed:ensureLocalE2EOwnerIdentity',
       'devSeed:seedSandboxSpendingPolicy',
       'x402DirectoryIndex:status',
       'x402DirectoryIndexRefresh:start',
@@ -565,7 +564,6 @@ describe('x402-era stage set', () => {
       .toEqual({ ok: true, ran: ['identities'], skipped: ['authority', 'scan', 'sandbox-tool'] })
     expect(calls).toEqual([
       'workloadCron:ensurePlatformWorkloadIdentities',
-      'devSeed:ensureLocalE2EOwnerIdentity',
     ])
     expect(lines).toEqual([
       'stage authority skipped: --skip-seed',

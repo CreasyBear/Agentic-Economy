@@ -2,6 +2,7 @@ import { convexTest } from 'convex-test'
 import { describe, expect, it } from 'vitest'
 
 import { internal } from '../../../convex/_generated/api'
+import { requireLocalE2EOwnerAuthority } from '../../../convex/devSeed'
 import { persistDevSeedCatalogState } from '../../../convex/devSeedStore'
 import schema from '../../../convex/schema'
 import {
@@ -84,15 +85,14 @@ describe('dev seed local E2E owner identity', () => {
   it('provisions the one canonical owner identity the bypass connect flow reuses', async () => {
     const backend = convexTest(schema, modules)
 
-    const first = await backend.mutation(internal.devSeed.ensureLocalE2EOwnerIdentity, {})
-    expect(first.kind).toBe('ensured')
+    const first = await backend.run((ctx) => requireLocalE2EOwnerAuthority(ctx))
     expect(first.principalRef).toMatch(/^prn_[0-9a-f]{32}$/u)
     expect(first.accountRef).toMatch(/^acc_[0-9a-f]{32}$/u)
 
     // The interactive owner path keys provisioning on the provider token
     // identifier, so a rerun (and a later `ae connect`) must find this exact
     // Principal + Account instead of minting a second identity.
-    const replay = await backend.mutation(internal.devSeed.ensureLocalE2EOwnerIdentity, {})
+    const replay = await backend.run((ctx) => requireLocalE2EOwnerAuthority(ctx))
     expect(replay).toEqual(first)
 
     const rows = await backend.run(async (ctx) => ({
@@ -160,7 +160,7 @@ describe('dev seed sandbox spending policy', () => {
 
   it('refuses to seed sandbox money authority into an owner account holding a production agent', async () => {
     const backend = convexTest(schema, modules)
-    const owner = await backend.mutation(internal.devSeed.ensureLocalE2EOwnerIdentity, {})
+    const owner = await backend.run((ctx) => requireLocalE2EOwnerAuthority(ctx))
     await backend.run(async (ctx) => {
       await ctx.db.insert('agentAccessPrincipals', {
         principalId: 'prn_00000000000000000000000000000001',

@@ -9,10 +9,10 @@ import {
   type CdpX402RequestFingerprintContext,
 } from '@/modules/capability-supply/public'
 import {
-  BASE_NETWORK,
+  BASE_MAINNET_NETWORK,
+  BASE_MAINNET_USDC_ADDRESS,
   BASE_SEPOLIA_NETWORK,
   BASE_SEPOLIA_USDC_ADDRESS,
-  BASE_USDC_ADDRESS,
   cdpX402PolicyRulesDigest,
   cdpX402RequestFingerprint,
   createCdpEvmX402PaymentSignature,
@@ -106,9 +106,9 @@ const POLICY_RULES_DIGEST = canonicalDigest({
 })
 const requirement = {
   scheme: 'exact',
-  network: BASE_NETWORK,
+  network: BASE_MAINNET_NETWORK,
   amount: '10000',
-  asset: BASE_USDC_ADDRESS,
+  asset: BASE_MAINNET_USDC_ADDRESS,
   payTo: '0x209693Bc6afc0C5328bA36FaF03C514EF312287C',
   maxTimeoutSeconds: 60,
   extra: { assetTransferMethod: 'eip3009', name: 'USDC', version: '2' },
@@ -338,7 +338,7 @@ describe('CDP x402 custody signer', () => {
     ['sandbox with crossed mainnet asset', 'sandbox', {
       ...requirement,
       network: BASE_SEPOLIA_NETWORK,
-      asset: BASE_USDC_ADDRESS,
+      asset: BASE_MAINNET_USDC_ADDRESS,
     }],
     ['sandbox over the atomic cap', 'sandbox', {
       ...requirement,

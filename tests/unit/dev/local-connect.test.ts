@@ -7,12 +7,13 @@ import {
   buildApprovalBody,
   buildConnectArgs,
   isLoopback,
+  mintOwnerSessionToken,
   parseConsentAttributes,
   parseFinalJson,
   parseFlags,
   parseUserCode,
   runLocalConnect,
-} from '../../../tools/dev/local-connect.mjs'
+} from '../../../tools/dev/local-connect.ts'
 
 const BASE_URL = 'http://127.0.0.1:3024'
 
@@ -331,7 +332,7 @@ describe('approveLocalConsent', () => {
     })
   })
 
-  it('reports the redirect body when the local bypass is off and no Location header is given', async () => {
+  it('reports the redirect body when no Location header is given', async () => {
     const { calls, fetchImpl } = fetchStub([{ status: 302, body: '' }])
 
     const approval = await approveLocalConsent({ baseUrl: BASE_URL, userCode: 'WDJB-MJHT', fetchImpl })
@@ -357,7 +358,7 @@ describe('approveLocalConsent', () => {
     ])
   })
 
-  it('never follows a redirect off the base origin, and reports the Clerk bypass guidance when it is a Clerk handshake', async () => {
+  it('never follows a redirect off the base origin, and reports that the owner session was not accepted when it is a Clerk handshake', async () => {
     const { calls, fetchImpl } = fetchStub([
       { status: 307, body: '', headers: { location: 'https://composed-stallion-40.clerk.accounts.dev/v1/client/handshake' } },
     ])
@@ -366,15 +367,15 @@ describe('approveLocalConsent', () => {
 
     expect(approval).toEqual({
       kind: 'failed',
-      stage: 'clerk_bypass_off',
+      stage: 'owner_session_not_accepted',
       status: 307,
       body: '',
-      message: `this server runs with the Clerk bypass OFF; approve in the browser with 'npm run ae -- connect --base-url ${BASE_URL}' or restart with 'VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E=true npm run dev:local'`,
+      message: 'the minted owner session was not accepted; check that CLERK_SECRET_KEY and AE_E2E_OWNER_EMAIL name a real user on this Clerk development instance',
     })
     expect(calls).toHaveLength(1)
   })
 
-  it('also recognises the Clerk bypass from an x-clerk-auth-status header on an off-origin redirect', async () => {
+  it('also recognises the Clerk handshake from an x-clerk-auth-status header on an off-origin redirect', async () => {
     const { fetchImpl } = fetchStub([
       {
         status: 307,
@@ -389,8 +390,8 @@ describe('approveLocalConsent', () => {
     const approval = await approveLocalConsent({ baseUrl: BASE_URL, userCode: 'WDJB-MJHT', fetchImpl })
 
     expect(approval).toMatchObject({
-      stage: 'clerk_bypass_off',
-      message: expect.stringContaining("VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E=true npm run dev:local'"),
+      stage: 'owner_session_not_accepted',
+      message: expect.stringContaining('the minted owner session was not accepted'),
     })
   })
 
@@ -498,6 +499,7 @@ describe('runLocalConnect', () => {
       fetchImpl,
       stdout: stdout.write,
       stderr: stderr.write,
+      ownerSessionToken: 'test-owner-session-token',
     })
     return { child, stdout, stderr, calls, spawned, run }
   }
@@ -510,6 +512,53 @@ describe('runLocalConnect', () => {
     expect(outcome.exitCode).toBe(2)
     expect(spawned).toEqual([])
     expect(stderr.chunks.join('')).toContain('refusing https://agenticeconomy.example')
+  })
+
+  it('exits 2 without spawning anything when required Clerk env is missing', async () => {
+    const child = new FakeChild()
+    const stderr = recorder()
+    const spawned: Array<{ baseUrl: string, provider: boolean }> = []
+
+    const outcome = await runLocalConnect({
+      argv: [],
+      env: {},
+      spawnImpl: (baseUrl: string, provider: boolean) => {
+        spawned.push({ baseUrl, provider })
+        return child as never
+      },
+      stderr: stderr.write,
+    })
+
+    expect(outcome.exitCode).toBe(2)
+    expect(spawned).toEqual([])
+    expect(stderr.chunks.join('')).toContain('missing required Clerk env: CLERK_PUBLISHABLE_KEY, CLERK_SECRET_KEY, AE_E2E_OWNER_EMAIL')
+  })
+
+  it('exits 1 without spawning anything when minting the owner session fails', async () => {
+    const child = new FakeChild()
+    const stderr = recorder()
+    const spawned: Array<{ baseUrl: string, provider: boolean }> = []
+
+    const outcome = await runLocalConnect({
+      argv: [],
+      env: {
+        CLERK_PUBLISHABLE_KEY: 'pk_test_x',
+        CLERK_SECRET_KEY: 'sk_test_x',
+        AE_E2E_OWNER_EMAIL: 'owner@example.com',
+      },
+      mintOwnerSessionToken: async () => {
+        throw new Error('no Clerk user found for AE_E2E_OWNER_EMAIL owner@example.com on this Clerk development instance')
+      },
+      spawnImpl: (baseUrl: string, provider: boolean) => {
+        spawned.push({ baseUrl, provider })
+        return child as never
+      },
+      stderr: stderr.write,
+    })
+
+    expect(outcome.exitCode).toBe(1)
+    expect(spawned).toEqual([])
+    expect(stderr.chunks.join('')).toContain('could not mint the owner session: no Clerk user found for AE_E2E_OWNER_EMAIL owner@example.com')
   })
 
   it('exits 2 on an unknown flag', async () => {
@@ -648,7 +697,7 @@ describe('runLocalConnect', () => {
     expect(stderr.chunks.join('')).toContain('rerun with --authority-mode spending_policy')
   })
 
-  it('prints the Clerk bypass guidance instead of the generic HTTP status when the bypass is off', async () => {
+  it('prints the owner-session guidance instead of the generic HTTP status when the redirect is a Clerk handshake', async () => {
     const { child, stderr, run } = harness([
       { status: 307, body: '', headers: { location: 'https://composed-stallion-40.clerk.accounts.dev/v1/client/handshake' } },
     ])
@@ -663,7 +712,7 @@ describe('runLocalConnect', () => {
     expect(outcome.exitCode).toBe(1)
     const errors = stderr.chunks.join('')
     expect(errors).toContain(
-      `local-connect: this server runs with the Clerk bypass OFF; approve in the browser with 'npm run ae -- connect --base-url ${BASE_URL}' or restart with 'VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E=true npm run dev:local'`,
+      'local-connect: the minted owner session was not accepted; check that CLERK_SECRET_KEY and AE_E2E_OWNER_EMAIL name a real user on this Clerk development instance',
     )
     expect(errors).not.toContain('HTTP 307')
   })
@@ -677,5 +726,57 @@ describe('runLocalConnect', () => {
 
     expect(outcome.exitCode).toBe(1)
     expect(stderr.chunks.join('')).toContain('spawn npm ENOENT')
+  })
+})
+
+describe('mintOwnerSessionToken', () => {
+  it('resolves the owner email to a user, opens a session for it, and returns the session JWT', async () => {
+    const calls: string[] = []
+    const clerkClientFactory = (options: { secretKey: string }) => {
+      calls.push(`client:${options.secretKey}`)
+      return {
+        users: {
+          getUserList: async ({ emailAddress }: { emailAddress: readonly string[] }) => {
+            calls.push(`users:${emailAddress.join(',')}`)
+            return { data: [{ id: 'user_123' }] }
+          },
+        },
+        sessions: {
+          createSession: async ({ userId }: { userId: string }) => {
+            calls.push(`createSession:${userId}`)
+            return { id: 'sess_123' }
+          },
+          getToken: async (sessionId: string) => {
+            calls.push(`getToken:${sessionId}`)
+            return { jwt: 'session.jwt.value' }
+          },
+        },
+      }
+    }
+
+    const token = await mintOwnerSessionToken({
+      env: { CLERK_SECRET_KEY: 'sk_test_x', AE_E2E_OWNER_EMAIL: 'owner@example.com' },
+      clerkClientFactory,
+    })
+
+    expect(token).toBe('session.jwt.value')
+    expect(calls).toEqual([
+      'client:sk_test_x',
+      'users:owner@example.com',
+      'createSession:user_123',
+      'getToken:sess_123',
+    ])
+  })
+
+  it('throws when no Clerk user matches the owner email', async () => {
+    const clerkClientFactory = () => ({
+      users: { getUserList: async () => ({ data: [] }) },
+      sessions: { createSession: async () => ({ id: 'sess_123' }), getToken: async () => ({ jwt: 'x' }) },
+    })
+
+    await expect(mintOwnerSessionToken({
+      env: { CLERK_SECRET_KEY: 'sk_test_x', AE_E2E_OWNER_EMAIL: 'missing@example.com' },
+      clerkClientFactory,
+    })).rejects.toThrow('no Clerk user found for AE_E2E_OWNER_EMAIL missing@example.com')
   })
 })

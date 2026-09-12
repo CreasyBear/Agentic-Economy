@@ -6,10 +6,9 @@ import '../../setup/jsdom-platform'
 import { DirectoryIndexDiscovery } from '@/components/ae/market/DirectoryIndexDiscovery'
 import type { X402DirectoryCatalogueOverview } from '@/modules/market/x402-directory-catalogue'
 import type { X402IndexedDirectoryEntry } from '@/modules/market/x402-directory-index'
-import { x402PendingToolRef } from '@/modules/market/x402-directory'
 
 function indexed(id: number, provider = 'repeat.example.com'): X402IndexedDirectoryEntry {
-  return { entry: { resource: `https://${provider}/tool/${id}`, title: `Tool ${id}`, description: `Description ${id}`, provider, protocol: 'http', prices: [], metadataJson: '{}', activity: { calls30d: 1_000 - id }, provenance: { directory: 'Coinbase Bazaar', metadata: 'provider_declared', updatedAt: '2026-09-08T12:00:00Z' } }, category: 'unclassified', categorySource: 'unclassified', observedAt: 1, sourceDigest: `digest-${id}` }
+  return { entry: { resource: `https://${provider}/tool/${id}`, title: `Tool ${id}`, description: `Description ${id}`, provider, protocol: 'http', prices: [], metadataJson: '{}', activity: { calls30d: 1_000 - id }, provenance: { directory: 'Coinbase Bazaar', metadata: 'provider_declared', updatedAt: '2026-09-08T12:00:00Z' }, slug: `tool-${id}` }, category: 'unclassified', categorySource: 'unclassified', observedAt: 1, sourceDigest: `digest-${id}` }
 }
 type Overview = Extract<X402DirectoryCatalogueOverview, { kind: 'ok' }>
 const popular = Array.from({ length: 12 }, (_, index) => indexed(index, index < 3 ? 'repeat.example.com' : `provider${index}.example.com`))
@@ -25,7 +24,7 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.unstubAllGlobals() })
 function show(data = overview) {
   const root = createRootRoute()
-  const router = createRouter({ routeTree: root.addChildren([createRoute({ getParentRoute: () => root, path: '/market' }), createRoute({ getParentRoute: () => root, path: '/tools/$toolRef' })]), history: createMemoryHistory({ initialEntries: ['/market'] }) })
+  const router = createRouter({ routeTree: root.addChildren([createRoute({ getParentRoute: () => root, path: '/market' }), createRoute({ getParentRoute: () => root, path: '/tools/$providerHost/$slug' })]), history: createMemoryHistory({ initialEntries: ['/market'] }) })
   const save = vi.fn(), compare = vi.fn()
   render(<RouterContextProvider router={router}><DirectoryIndexDiscovery overview={data} onSave={save} onCompare={compare} isSaved={resource => resource === popular[1]!.entry.resource} isComparing={resource => resource === popular[1]!.entry.resource} compareDisabled={resource => resource === popular[2]!.entry.resource} /></RouterContextProvider>)
   return { save, compare }
@@ -50,7 +49,7 @@ it('preserves all source-ranked entries including repeated Providers and uses tr
 it('passes exact resources with an empty source search and preserves saved and comparison control state', () => {
   const { save, compare } = show()
   const toolUrl = new URL(screen.getByRole('link', { name: 'Tool 0' }).getAttribute('href')!, 'https://aecon.ai')
-  expect(decodeURIComponent(toolUrl.pathname.replace('/tools/', ''))).toBe(x402PendingToolRef(popular[0]!.entry.resource))
+  expect(toolUrl.pathname).toBe(`/tools/${popular[0]!.entry.provider}/${popular[0]!.entry.slug}`)
   fireEvent.click(screen.getByRole('button', { name: 'Save Tool 0' }))
   fireEvent.click(screen.getByRole('button', { name: 'Add Tool 0 to comparison' }))
   for (const callback of [save, compare]) expect(callback).toHaveBeenCalledWith({ entry: popular[0]!.entry, search: {} })

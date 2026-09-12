@@ -54,7 +54,7 @@ function workflowSteps(workflow: Workflow): WorkflowStep[] {
   return Object.values(workflow.jobs ?? {}).flatMap((job) => job.steps ?? [])
 }
 
-const LISTED_VITEST_RUNNER = 'node tools/dev/run-listed-vitest.mjs'
+const LISTED_VITEST_RUNNER = 'node tools/dev/run-listed-vitest.ts'
 
 function listedVitestFiles(name: string): string[] {
   const command = scripts[name]
@@ -79,7 +79,7 @@ describe('green release baseline', () => {
 
   it('runs a guarded command on Node 22 and preserves its exit status', () => {
     const result = spawnSync(process.execPath, [
-      'tools/dev/require-supported-node.mjs', '--', 'node', '-e',
+      'tools/dev/require-supported-node.ts', '--', 'node', '-e',
       'console.log(process.versions.node); process.exit(17)',
     ], { cwd: root, encoding: 'utf8' })
     if (process.versions.node.startsWith('22.')) {
@@ -115,7 +115,7 @@ describe('green release baseline', () => {
     const missingPath = 'tests/unit/release/__missing-listed-vitest-path__.test.ts'
     const preflight = spawnSync(
       process.execPath,
-      ['tools/dev/run-listed-vitest.mjs', missingPath],
+      ['tools/dev/run-listed-vitest.ts', missingPath],
       { cwd: root, encoding: 'utf8' },
     )
     expect(preflight.status).toBe(1)
@@ -162,11 +162,11 @@ describe('green release baseline', () => {
         sourceScript.indexOf(`npm run ${orderedSourceGates[index - 1]!}`),
       )
     }
-    const nodeGuard = 'node tools/dev/require-supported-node.mjs --'
+    const nodeGuard = 'node tools/dev/require-supported-node.ts --'
     expect(scripts['generate:convex']).toBe(`${nodeGuard} convex codegen --typecheck=disable`)
     expect(scripts['check:convex-codegen']).toBe(`${nodeGuard} convex codegen --dry-run --typecheck=disable`)
     expect(scripts['gate']).toBe(`${nodeGuard} npm run test:release:source`)
-    expect(scripts['dev:local']).toBe(`${nodeGuard} node tools/dev/local-dev.mjs`)
+    expect(scripts['dev:local']).toBe(`${nodeGuard} node tools/dev/local-dev.ts`)
     expect(scripts['test:all']).toBeUndefined()
     expect(scripts['gate:release']).toBeUndefined()
     expect(scripts['verify:convex-generated:anonymous']).toBe(
@@ -194,13 +194,13 @@ describe('green release baseline', () => {
       'tsx tools/release/verify-release-integrity.ts -- npm run build',
     )
     expect(scripts['smoke:chat:staging']).toBe(
-      'node tools/dev/run-with-cleanup.mjs playwright test --config=tests/config/playwright.chat-staging.config.ts',
+      'node tools/dev/run-with-cleanup.ts playwright test --config=tests/config/playwright.chat-staging.config.ts',
     )
     expect(scripts['test:release:source:after-codegen']).toContain('npm run test:e2e')
     expect(scripts['test:release:source:after-codegen']).toContain('npm run test:e2e:a11y')
     expect(scripts['test:release:source:after-codegen']).not.toContain('test:e2e:authenticated')
     expect(scripts['test:release:authenticated']).toBe('npm run test:e2e:authenticated:required')
-    expect(scripts['test:e2e']).toBe('node tools/dev/run-with-cleanup.mjs playwright test tests/e2e')
+    expect(scripts['test:e2e']).toBe('node tools/dev/run-with-cleanup.ts playwright test tests/e2e')
     expect(scripts['test:e2e']).not.toMatch(/--grep|testMatch|ignore|\.spec\.ts/u)
     for (const staleFile of [
       'tests/e2e/paid-operation-development-surface.spec.ts',

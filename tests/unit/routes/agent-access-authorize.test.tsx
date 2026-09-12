@@ -25,7 +25,6 @@ const serverMocks = vi.hoisted(() => ({
     const result = await fetcher(...args)
     return result instanceof Response ? await result.json() : result
   }),
-  localE2E: false,
 }))
 
 vi.mock('@/lib/server/agent-access-consent.functions', () => ({
@@ -48,10 +47,6 @@ vi.mock('@clerk/tanstack-react-start', async (importOriginal) => ({
   useReverification: serverMocks.useReverification,
 }))
 
-vi.mock('@/lib/client/local-e2e-auth', () => ({
-  isLocalE2EAuthBypassEnabled: () => serverMocks.localE2E,
-}))
-
 vi.mock('@clerk/tanstack-react-start/errors', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@clerk/tanstack-react-start/errors')>()),
   isReverificationCancelledError: (error: unknown) =>
@@ -71,7 +66,6 @@ afterEach(() => {
   vi.clearAllMocks()
   vi.unstubAllGlobals()
   serverMocks.reverifyMode = 'pass'
-  serverMocks.localE2E = false
 })
 
 describe('/agent-access/authorize consent loading', () => {
@@ -214,25 +208,6 @@ describe('/agent-access/authorize consent loading', () => {
     expect(document.body.textContent).toContain('Request revision')
     expect(document.body.textContent).toContain('Request reference')
     expect(screen.queryByText('Loading access request')).toBeNull()
-  })
-
-  it('uses the existing local-E2E bypass without mounting Clerk reverification', async () => {
-    serverMocks.localE2E = true
-    mockConsent({ userCode: 'LOCAL-E2E', grantRef: 'grant-local', clientName: 'Local CLI', mode: 'read_only' })
-    const fetchMock = vi.fn<typeof fetch>().mockResolvedValueOnce(Response.json({
-      kind: 'approved',
-      grantRef: 'grant-local',
-    }))
-    vi.stubGlobal('fetch', fetchMock)
-
-    renderComponent()
-    fireEvent.click(await screen.findByRole('button', { name: 'Connect agent' }))
-
-    expect(await screen.findByText('Connected to Local CLI')).toBeTruthy()
-    expect(screen.getByText('Return there to continue. This connection remains signed in until it expires or you disconnect it.')).toBeTruthy()
-    expect(screen.queryByText(/delivers the caller key/i)).toBeNull()
-    expect(serverMocks.useReverification).not.toHaveBeenCalled()
-    expect(fetchMock).toHaveBeenCalledOnce()
   })
 
   it('keeps the security-control correlation reference when approval fails closed', async () => {

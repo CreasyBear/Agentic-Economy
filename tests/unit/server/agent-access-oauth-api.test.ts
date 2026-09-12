@@ -12,8 +12,6 @@ import {
   type OAuthApiOptions,
 } from '@/lib/server/agent-access-oauth-api'
 import { consentAccessSummary, parseAuthorizationDetails } from '@/lib/server/agent-access-oauth/protocol'
-import { createLocalE2EAgentAccessKeyApi } from '@/lib/server/local-e2e-agent-key'
-import { LOCAL_E2E_OPERATOR_PRINCIPAL } from '@/lib/server/local-e2e-bypass'
 import { defaultSandboxAgentAccessPolicy } from '@/modules/agent-access/sandbox-policy'
 import {
   buildProductionAgentAccessPolicy,
@@ -1725,98 +1723,71 @@ describe('Customer Request OAuth HTTP adapter', () => {
     }
     expect(issueKey).toHaveBeenCalledTimes(1)
   })
-  it('uses the production-guarded local E2E identity and one deterministic proof per consent command', async () => {
-    vi.stubEnv('VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E', 'true')
+  it('registers one deterministic consent binding and delivers its issued secret through the OAuth seams', async () => {
     const store = storeFixture()
-    await store.insertClient({ clientId: 'client-local', clientName: 'Local E2E assistant', redirectUris: ['http://localhost/callback'], grantTypes: ['urn:ietf:params:oauth:grant-type:device_code'], tokenEndpointAuthMethod: 'none', createdAt: 1_000 })
-    await store.insertGrant({ grantRef: 'device:local-e2e-consent', revision: 1, flow: 'device_code', clientId: 'client-local', requestedScopes: ['market_tools:call', 'customer_requests:read_only'], requestedAccess: { environment: 'sandbox', ...allTools, expiresInSeconds: AGENT_ACCESS_KEY_TTL_SECONDS }, approvedAccess: { environment: 'sandbox', ...allTools, expiresInSeconds: AGENT_ACCESS_KEY_TTL_SECONDS }, deviceCodeHash: await hashOAuthValue('local-e2e-device'), userCodeHash: 'u-local-e2e', status: 'pending', createdAt: 1_000, expiresAt: 601_000, nextPollAt: 1_000, displayName: 'Local E2E assistant' })
-    const security = consentSecurity(store, LOCAL_E2E_OPERATOR_PRINCIPAL)
+    await store.insertClient({ clientId: 'client-local', clientName: 'Test device assistant', redirectUris: ['http://localhost/callback'], grantTypes: ['urn:ietf:params:oauth:grant-type:device_code'], tokenEndpointAuthMethod: 'none', createdAt: 1_000 })
+    await store.insertGrant({ grantRef: 'device:test-consent', revision: 1, flow: 'device_code', clientId: 'client-local', requestedScopes: ['market_tools:call', 'customer_requests:read_only'], requestedAccess: { environment: 'sandbox', ...allTools, expiresInSeconds: AGENT_ACCESS_KEY_TTL_SECONDS }, approvedAccess: { environment: 'sandbox', ...allTools, expiresInSeconds: AGENT_ACCESS_KEY_TTL_SECONDS }, deviceCodeHash: await hashOAuthValue('test-device-code'), userCodeHash: 'u-test-consent', status: 'pending', createdAt: 1_000, expiresAt: 601_000, nextPollAt: 1_000, displayName: 'Test device assistant' })
+    const security = consentSecurity(store)
     const reserveConsent = vi.fn(security.reserveConsent!)
-    const localApi = createLocalE2EAgentAccessKeyApi()
-    let issuedSecret: string | undefined
-    const registerBinding = vi.fn<NonNullable<OAuthApiOptions['registerBinding']>>(async (input) => {
-      issuedSecret = (await localApi.getSecret(input.credentialId)).secret
-      return {
-        kind: 'recorded',
-        grantRef: input.grantRef,
-        generation: 1,
-        spendingPolicyDigest: 'sha256:local-e2e-policy',
-        lifecycle: 'active',
-        expiresAt: input.expiresAt,
-      }
-    })
+    const issuedSecret = 'ae_test_device_secret'
+    const issueKey = vi.fn<NonNullable<OAuthApiOptions['issueKey']>>(async () => ({ keyId: 'ak_test_device' }))
     const request = () => formRequest('http://localhost/oauth/authorize', {
-      grant_ref: 'device:local-e2e-consent',
+      grant_ref: 'device:test-consent',
       expected_grant_revision: '1',
       expected_target_revision: '1',
       decision: 'approve',
       authority_mode: 'read_only',
       connection_target: 'new_agent',
     })
-
-    try {
-      const first = await handleOAuthConsentPost(request(), {
-        store,
-        reserveConsent,
-        registerBinding,
-        now: () => 1_000,
-        canonicalBaseUrl: 'http://localhost',
-      })
-      const replay = await handleOAuthConsentPost(request(), {
-        store,
-        reserveConsent,
-        registerBinding,
-        now: () => 1_000,
-        canonicalBaseUrl: 'http://localhost',
-      })
-
-      expect(first.status).toBe(200)
-      expect(replay.status).toBe(200)
-      expect(registerBinding).toHaveBeenCalledTimes(1)
-      expect(reserveConsent).toHaveBeenCalledTimes(2)
-      const firstReservation = reserveConsent.mock.calls[0]?.[0]
-      const replayReservation = reserveConsent.mock.calls[1]?.[0]
-      expect(registerBinding.mock.calls[0]?.[0]).toMatchObject({
-        displayName: 'Local E2E assistant',
-        toolAccess: 'all_admitted',
-        toolRefs: [],
-      })
-      expect(firstReservation?.proof).toMatchObject({
-        firstFactorAgeMinutes: 0,
-        secondFactorAgeMinutes: -1,
-      })
-      expect(replayReservation?.proof?.reverificationId).toBe(firstReservation?.proof?.reverificationId)
-
-      const tokenRequest = () => formRequest('http://localhost/oauth/token', {
-        grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
-        client_id: 'client-local',
-        device_code: 'local-e2e-device',
-      })
-      const delivered = await handleOAuthTokenPost(tokenRequest(), {
-        store,
-        now: () => 1_000,
-      })
-      const deliveryReplay = await handleOAuthTokenPost(tokenRequest(), {
-        store,
-        now: () => 1_000,
-      })
-      expect(await delivered.json()).toMatchObject({
-        access_token: issuedSecret,
-        token_type: 'Bearer',
-      })
-      expect(await deliveryReplay.json()).toMatchObject({
-        access_token: issuedSecret,
-        token_type: 'Bearer',
-      })
-      expect(registerBinding).toHaveBeenCalledTimes(1)
-    } finally {
-      vi.unstubAllEnvs()
+    const consentOptions: OAuthApiOptions = {
+      store,
+      ...(security.authObject === undefined ? {} : { authObject: security.authObject }),
+      reserveConsent,
+      issueKey,
+      now: () => 1_000,
+      canonicalBaseUrl: 'http://localhost',
     }
+
+    const first = await handleOAuthConsentPost(request(), consentOptions)
+    const replay = await handleOAuthConsentPost(request(), consentOptions)
+
+    expect(first.status).toBe(200)
+    expect(replay.status).toBe(200)
+    expect(issueKey).toHaveBeenCalledTimes(1)
+    expect(reserveConsent).toHaveBeenCalledTimes(2)
+    const firstReservation = reserveConsent.mock.calls[0]?.[0]
+    const replayReservation = reserveConsent.mock.calls[1]?.[0]
+    expect(issueKey.mock.calls[0]?.[0]).toMatchObject({
+      name: 'Test device assistant',
+      target: { kind: 'new_agent' },
+    })
+    expect(firstReservation?.proof).toMatchObject({
+      firstFactorAgeMinutes: 0,
+      secondFactorAgeMinutes: 0,
+    })
+    expect(replayReservation?.proof?.reverificationId).toBe(firstReservation?.proof?.reverificationId)
+
+    const tokenRequest = () => formRequest('http://localhost/oauth/token', {
+      grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
+      client_id: 'client-local',
+      device_code: 'test-device-code',
+    })
+    const tokenOptions = { store, now: () => 1_000, getSecret: async () => ({ secret: issuedSecret }) }
+    const delivered = await handleOAuthTokenPost(tokenRequest(), tokenOptions)
+    const deliveryReplay = await handleOAuthTokenPost(tokenRequest(), tokenOptions)
+    expect(await delivered.json()).toMatchObject({
+      access_token: issuedSecret,
+      token_type: 'Bearer',
+    })
+    expect(await deliveryReplay.json()).toMatchObject({
+      access_token: issuedSecret,
+      token_type: 'Bearer',
+    })
+    expect(issueKey).toHaveBeenCalledTimes(1)
   })
-  it('keeps local E2E credential replacement on the selected Principal lifecycle', async () => {
-    vi.stubEnv('VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E', 'true')
+  it('keeps credential replacement on the selected Principal lifecycle', async () => {
     const store = storeFixture()
-    await store.insertClient({ clientId: 'client-local-replacement', clientName: 'Local replacement', redirectUris: ['http://localhost/callback'], grantTypes: ['urn:ietf:params:oauth:grant-type:device_code'], tokenEndpointAuthMethod: 'none', createdAt: 1_000 })
+    await store.insertClient({ clientId: 'client-local-replacement', clientName: 'Test replacement', redirectUris: ['http://localhost/callback'], grantTypes: ['urn:ietf:params:oauth:grant-type:device_code'], tokenEndpointAuthMethod: 'none', createdAt: 1_000 })
     await store.insertGrant({ grantRef: 'device:local-replacement', revision: 1, flow: 'device_code', clientId: 'client-local-replacement', requestedScopes: ['market_tools:call', 'customer_requests:read_only'], requestedAccess: { environment: 'sandbox', ...allTools, expiresInSeconds: AGENT_ACCESS_KEY_TTL_SECONDS }, approvedAccess: { environment: 'sandbox', ...allTools, expiresInSeconds: AGENT_ACCESS_KEY_TTL_SECONDS }, deviceCodeHash: await hashOAuthValue('local-replacement-device'), userCodeHash: 'u-local-replacement', status: 'pending', createdAt: 1_000, expiresAt: 601_000, nextPollAt: 1_000, displayName: 'Local replacement' })
     const replacement = {
       principalRef: 'prn_selected_agent',
@@ -1826,40 +1797,39 @@ describe('Customer Request OAuth HTTP adapter', () => {
       predecessorKeyId: 'ak_local_predecessor',
       successorGrantRef: 'grt_local_successor',
     } as const
-    const prepareReplacement = vi.fn<NonNullable<OAuthApiOptions['prepareReplacement']>>(async (input) => {
-      expect(input.principalRef).toBe('prn_selected_agent')
-      expect(input.toolAccess).toBe('all_admitted')
-      expect(input.toolRefs).toEqual([])
-      return { kind: 'recorded', ...replacement }
+    const issueKey = vi.fn<NonNullable<OAuthApiOptions['issueKey']>>(async (input) => {
+      expect(input.target).toEqual({
+        kind: 'replace_credential',
+        principalRef: 'prn_selected_agent',
+        replacementMode: 'planned',
+      })
+      return { keyId: 'ak_local_successor', replacement }
     })
 
-    try {
-      const response = await handleOAuthConsentPost(formRequest('http://localhost/oauth/authorize', {
-        grant_ref: 'device:local-replacement',
-        expected_grant_revision: '1',
-        expected_target_revision: '4',
-        decision: 'approve',
-        authority_mode: 'read_only',
-        connection_target: 'replace_credential',
-        principal_ref: 'prn_selected_agent',
-      }), {
-        store,
-        ...consentSecurity(store, LOCAL_E2E_OPERATOR_PRINCIPAL),
-        prepareReplacement,
-        now: () => 1_000,
-        canonicalBaseUrl: 'http://localhost',
-      })
+    const response = await handleOAuthConsentPost(formRequest('http://localhost/oauth/authorize', {
+      grant_ref: 'device:local-replacement',
+      expected_grant_revision: '1',
+      expected_target_revision: '4',
+      decision: 'approve',
+      authority_mode: 'read_only',
+      connection_target: 'replace_credential',
+      principal_ref: 'prn_selected_agent',
+    }), {
+      store,
+      ...consentSecurity(store),
+      authenticateOwner: async () => ({ isAuthenticated: true, userId: 'user_local' }),
+      issueKey,
+      now: () => 1_000,
+      canonicalBaseUrl: 'http://localhost',
+    })
 
-      expect(response.status).toBe(200)
-      expect(prepareReplacement).toHaveBeenCalledTimes(1)
-      expect(store.grants.get('device:local-replacement')).toMatchObject({
-        status: 'approved',
-        connectionTarget: { kind: 'replace_credential', principalRef: 'prn_selected_agent' },
-        replacement,
-      })
-    } finally {
-      vi.unstubAllEnvs()
-    }
+    expect(response.status).toBe(200)
+    expect(issueKey).toHaveBeenCalledTimes(1)
+    expect(store.grants.get('device:local-replacement')).toMatchObject({
+      status: 'approved',
+      connectionTarget: { kind: 'replace_credential', principalRef: 'prn_selected_agent' },
+      replacement,
+    })
   })
   it('returns Clerk reverification hints before reservation and terminal JSON when signed evidence is unavailable', async () => {
     const store = storeFixture()

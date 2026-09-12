@@ -26,7 +26,6 @@ export type JsonRpcBody = {
 }
 
 function pinEnv(): void {
-  vi.stubEnv('VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E', 'true')
   vi.stubEnv('CONVEX_URL', undefined)
   vi.stubEnv('VITE_CONVEX_URL', undefined)
 }

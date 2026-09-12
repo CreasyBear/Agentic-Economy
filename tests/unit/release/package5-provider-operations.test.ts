@@ -169,7 +169,7 @@ function successfulFetch(requests: Request[]): typeof globalThis.fetch {
         account: { accountRef: 'account:fixture', available: { currency: 'AUD', units: '1000000', exponent: 6 } },
         budget: { principalRef: 'principal:buyer', maximumPerCall: { currency: 'AUD', units: '1000000', exponent: 6 } },
         policyRefs: ['policy:fixture'], evidenceDigest: sha('e'),
-        continuation: { action: 'tool.call', method: 'POST', path: '/api/v1/tools/call', input: { quoteRef, idempotencyKey: `call-${index}` } },
+        continuation: { action: 'tool.call', method: 'POST', path: '/api/v1/tools/call', input: { quoteRef, idempotencyKey: `call-fixture-${index}` } },
       })
     }
     if (path.endsWith('/tools/call')) {

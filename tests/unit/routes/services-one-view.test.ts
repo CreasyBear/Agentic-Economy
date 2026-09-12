@@ -3,15 +3,26 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { Route as AgentsRoute } from '@/routes/for-agents'
 import { handleDurableListServicesRequest } from '@/routes/api.v1.services'
 import { handleDurableServiceDetailRequest } from '@/routes/api.v1.services.$serviceId'
-import type { PublicBusinessCatalogApiV2Page } from '@/modules/registry/public'
+import type { PublicBusinessCatalogApiV2Page, PublicServicesApiPage } from '@/modules/registry/public'
 import { projectPublicServicesPage } from '@/modules/registry/public'
 import { registryServicesDetailAction, registryServicesListAction } from '@/modules/registry/registry.actions'
+
+/** Action-boundary envelope: `hasMore`/`nextCursor`, not the source projection's raw `isDone`/`continueCursor`. */
+function toListResult(projected: PublicServicesApiPage) {
+  return {
+    kind: projected.kind,
+    schemaVersion: projected.schemaVersion,
+    services: projected.services,
+    hasMore: !projected.isDone,
+    ...(projected.isDone ? {} : { nextCursor: projected.continueCursor }),
+  }
+}
 
 describe('services public route', () => {
   beforeEach(() => vi.clearAllMocks())
 
   it('lists the V2 catalog through /api/v1/services', async () => {
-    const expected = projectPublicServicesPage(page())
+    const expected = toListResult(projectPublicServicesPage(page()))
     const run = vi.spyOn(registryServicesListAction, 'run').mockResolvedValue(expected)
     const request = new Request('https://ae.example/api/v1/services?limit=5')
 
@@ -57,7 +68,7 @@ describe('services public route', () => {
     })
   })
   it('returns the exact canonical Service item for detail as list', async () => {
-    const expected = projectPublicServicesPage(page())
+    const expected = toListResult(projectPublicServicesPage(page()))
     vi.spyOn(registryServicesListAction, 'run').mockResolvedValue(expected)
     const listResponse = await handleDurableListServicesRequest(
       new Request('https://ae.example/api/v1/services?limit=5'),

@@ -160,7 +160,11 @@ describe('complete external directory index', () => {
     expect(analytics.adoption.reduce((sum, bucket) => sum + bucket.count, 0)).toBe(4)
     expect(analytics.metadata.find(item => item.key === 'hasOutputExample')?.count).toBe(1)
     expect(analytics.price.bands.find(item => item.key === '0_01_to_0_03')?.count).toBe(1)
-    expect(await backend.query(api.x402DirectoryIndex.analytics, { network: 'base' })).toMatchObject({ kind: 'ok', totalTools: 4, price: { scope: 'network', totalTools: 3, unknownPriceTools: 0 } })
+    // Price facet memberships are only ever written for the aggregate '*' row
+    // (cost fix: dropped per-network price_band/price fan-out), so the reader
+    // always reports the whole-generation aggregate for price, regardless of
+    // the requested network - it never silently returns zero.
+    expect(await backend.query(api.x402DirectoryIndex.analytics, { network: 'base' })).toMatchObject({ kind: 'ok', totalTools: 4, price: { scope: 'whole_generation', totalTools: 4, knownPriceTools: 3, unknownPriceTools: 1, quantiles: { minimum: '0.01', median: '0.03', maximum: '1' } } })
     const browse = (filters: Record<string, unknown>) => backend.query(api.x402DirectoryIndex.browse, { ...filters, paginationOpts: { cursor: null, numItems: 12 } })
     const adoption = await browse({ sort: 'adoption', provider: 'provider.test' })
     expect(adoption.kind === 'ok' && adoption.page.map(item => item.entry.resource)).toEqual([source(2).resource, source(1).resource, source(3).resource, source(4).resource])

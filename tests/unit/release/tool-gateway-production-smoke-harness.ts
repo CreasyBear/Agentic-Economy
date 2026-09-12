@@ -121,7 +121,7 @@ export function committedQuote(
       action: "tool.call",
       method: "POST",
       path: "/api/v1/tools/call",
-      input: { quoteRef, idempotencyKey: "run:key" },
+      input: { quoteRef, idempotencyKey: "run:key1" },
     },
   };
 }
@@ -602,8 +602,9 @@ export function servicePage(
     kind: "ok",
     schemaVersion: "public-services-api:v3",
     services,
-    isDone,
-    continueCursor,
+    // Action-boundary envelope: hasMore/nextCursor, not the source projection's raw isDone/continueCursor.
+    hasMore: !isDone,
+    ...(isDone ? {} : { nextCursor: continueCursor }),
   };
 }
 

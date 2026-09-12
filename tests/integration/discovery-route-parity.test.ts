@@ -381,9 +381,17 @@ async function resolveAdvertisedRoute(route: AdvertisedRoute, state: DiscoverySo
   }
 
   if (path === '/api/businesses') {
-    const body = listPublicBusinessOfferingSupply(state, {
+    const page = listPublicBusinessOfferingSupply(state, {
       paginationOpts: { cursor: null, numItems: 20 },
     })
+    // Action-boundary envelope: hasMore/nextCursor, not the source projection's raw isDone/continueCursor.
+    const body = {
+      kind: page.kind,
+      schemaVersion: page.schemaVersion,
+      page: page.page,
+      hasMore: !page.isDone,
+      ...(page.isDone ? {} : { nextCursor: page.continueCursor }),
+    }
     return route.method === 'GET' && registryListAction.outputSchema.safeParse(body).success
   }
 

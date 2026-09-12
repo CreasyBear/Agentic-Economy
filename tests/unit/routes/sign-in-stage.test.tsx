@@ -32,24 +32,19 @@ vi.mock('@clerk/tanstack-react-start', () => ({
   SignIn: () => <div>clerk-sign-in</div>,
 }))
 
-vi.mock('@/lib/client/local-e2e-auth', () => ({
-  isLocalE2EAuthBypassEnabled: () => true,
-}))
-
 import '@/routes/sign-in.$'
 
 afterEach(cleanup)
 
 describe('sign-in site stage', () => {
-  it('keeps the local preview heading inside site chrome, not a Clerk card', () => {
+  it('renders the real Clerk sign-in card inside site chrome', () => {
     const Component = routeState.SignIn
     if (Component === undefined || Component === null) throw new Error('Sign-in route was not captured.')
     render(<Component />)
 
-    expect(screen.getByRole('heading', { name: 'Local preview sign-in is off' })).toBeTruthy()
-    expect(screen.getByText(/Nothing is signed in or authorized/)).toBeTruthy()
-    expect(screen.getByRole('link', { name: 'Open agent access preview' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Sign in to connect an agent' })).toBeTruthy()
+    expect(screen.getByText(/return to the agent connection you started/)).toBeTruthy()
     expect(document.querySelector('[data-slot="ae-site-browser"]')?.textContent).toContain('/sign-in')
-    expect(screen.queryByText('clerk-sign-in')).toBeNull()
+    expect(screen.getByText('clerk-sign-in')).toBeTruthy()
   })
 })

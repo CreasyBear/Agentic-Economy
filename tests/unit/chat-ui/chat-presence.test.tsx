@@ -143,7 +143,7 @@ describe('ChatComposer recovery evidence', () => {
     expect(screen.getByText('chat-request-7')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Copy chat support reference' })).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Browse Tools' }).getAttribute('href'))
-      .toBe('/market#tools')
+      .toBe('/market')
   })
 })
 

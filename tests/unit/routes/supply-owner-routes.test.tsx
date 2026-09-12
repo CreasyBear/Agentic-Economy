@@ -39,7 +39,6 @@ vi.mock('@tanstack/react-router', async (importOriginal) => {
   }
 })
 
-import { Route as OwnerSupplyRoute } from '@/routes/_operator/owner.supply'
 import { Route as OwnerSupplyDetailRoute } from '@/routes/_operator/owner.supply.$offeringRef'
 
 afterEach(() => {
@@ -60,8 +59,7 @@ function createTestRouter() {
 }
 
 describe('owner supply routes', () => {
-  it('exports both authenticated publisher hosts', () => {
-    expect(OwnerSupplyRoute).toBeDefined()
+  it('exports the authenticated publisher host', () => {
     expect(OwnerSupplyDetailRoute).toBeDefined()
   })
 

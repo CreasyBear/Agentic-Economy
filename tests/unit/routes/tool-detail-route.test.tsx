@@ -4,16 +4,12 @@
 
 import { toToolInspectorModel } from '@/components/ae/market/tool-detail/tool-inspector-model'
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
-import { RouterContextProvider, createMemoryHistory, createRootRoute, createRoute, createRouter } from '@tanstack/react-router'
+import { RouterContextProvider, createMemoryHistory, createRootRoute, createRoute, createRouter, isRedirect } from '@tanstack/react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import '../../setup/jsdom-platform'
 
 import { CURRENT_TOOL_PROJECTION_NAVIGATION } from '@/modules/actions/contract'
 import { AeToolInspector } from '@/components/ae/market/tool-detail'
-import {
-  buildMarketReturnContext,
-  type MarketReturnContext,
-} from '@/components/ae/market/market-return-context'
 import {
   PublicToolRegistrySchemaVersion,
   projectCapabilityTool as projectCapabilityToolWithNavigation,
@@ -30,15 +26,18 @@ import {
 } from '@/modules/market/suggested-next-action'
 
 const readDetailMock = vi.hoisted(() => vi.fn())
+const readCanonicalMock = vi.hoisted(() => vi.fn())
 
 vi.mock('@/modules/registry/tool-detail-route.functions', () => ({
   readPublicToolDetailRouteServer: readDetailMock,
+}))
+vi.mock('@/modules/market/x402-directory-index.functions', () => ({
+  readX402DirectoryCanonicalUrlForToolServer: readCanonicalMock,
 }))
 
 import {
   PublicToolDetail,
   Route,
-  validateToolDetailSearch,
   type ToolDetailPresentationResult,
 } from '@/routes/tools.$toolRef'
 
@@ -163,20 +162,20 @@ const tool = projectCapabilityTool(sourceRecord, 2_000)
 function renderWithRouter(
   result: ToolDetailPresentationResult,
   _hasBuyerCredential = false,
-  returnTo?: MarketReturnContext,
 ) {
   const rootRoute = createRootRoute()
   const routeTree = rootRoute.addChildren([
     createRoute({ getParentRoute: () => rootRoute, path: '/' }),
+    createRoute({ getParentRoute: () => rootRoute, path: '/market' }),
     createRoute({ getParentRoute: () => rootRoute, path: '/$slug' }),
   ])
+  // A single history entry: `useMarketBackNavigation` always falls back to a
+  // plain `<Link to="/market">` here (no prior entry to go back to), the
+  // same as a fresh visit in the real app.
   const router = createRouter({ routeTree, history: createMemoryHistory({ initialEntries: ['/'] }) })
   return render(
     <RouterContextProvider router={router}>
-      <PublicToolDetail
-        result={result}
-        {...(returnTo === undefined ? {} : { returnTo })}
-      />
+      <PublicToolDetail result={result} />
     </RouterContextProvider>,
   )
 }
@@ -214,20 +213,10 @@ function expectRenderedHrefToMatchProducer(renderedHref: string | null, producer
 afterEach(() => {
   cleanup()
   readDetailMock.mockReset()
+  readCanonicalMock.mockReset()
 })
 
 describe('/tools/$toolRef', () => {
-  it('accepts only bounded local market return contexts', () => {
-    const returnTo = buildMarketReturnContext({
-      query: 'invoice',
-      availability: 'routeable',
-    }, 'tools')
-
-    expect(validateToolDetailSearch({ from: returnTo })).toEqual({ from: returnTo })
-    expect(validateToolDetailSearch({ from: 'https://evil.example/market?window=7d' })).toEqual({})
-    expect(validateToolDetailSearch({ from: '/market?window=7d&next=/admin' })).toEqual({})
-  })
-
   it('fills the track record from observed market evidence', () => {
     const evidence = projectMarketListingEvidence({
       toolRef: tool.toolRef,
@@ -374,21 +363,11 @@ describe('/tools/$toolRef', () => {
     }))
   })
 
-  it('preserves an exact comparison origin in the explicit return action', () => {
-    const second = `operation:v1:${'d'.repeat(64)}` as typeof tool.toolRef
-    const returnTo = buildMarketReturnContext({
-      query: 'invoice',
-      compare: `${tool.toolRef},${second}`,
-    })
+  it('offers a plain Catalog link back when there is no prior history entry to go back to', () => {
+    renderWithRouter({ kind: 'found', schemaVersion: PublicToolRegistrySchemaVersion, tool })
 
-    renderWithRouter(
-      { kind: 'found', schemaVersion: PublicToolRegistrySchemaVersion, tool },
-      false,
-      returnTo,
-    )
-
-    expect(screen.getByRole('link', { name: 'Back to comparison' }).getAttribute('href'))
-      .toBe(returnTo)
+    const back = screen.getByRole('link', { name: 'Catalog' })
+    expect(new URL(back.getAttribute('href')!, 'https://market.example').pathname).toBe('/market')
   })
 
   it('projects canonical public facts and hands the exact reference to the existing agent client', () => {
@@ -574,16 +553,12 @@ const x402Tool = projectCapabilityTool({
     expect(screen.queryByText(/npm run -s ae -- recover/)).toBeNull()
   })
 
-  it('renders malformed references distinctly and preserves a known result origin', () => {
-    const returnTo = buildMarketReturnContext({
-      query: 'invoice',
-      capability: 'invoice.extract',
-    }, 'tools')
-
-    renderWithRouter({ kind: 'invalid_ref', toolRef: 'not-an-tool' }, false, returnTo)
+  it('renders malformed references distinctly and offers a plain way back', () => {
+    renderWithRouter({ kind: 'invalid_ref', toolRef: 'not-an-tool' })
 
     expect(screen.getByRole('heading', { name: /reference is invalid/i })).toBeTruthy()
-    expect(screen.getByRole('link', { name: 'Back to results' }).getAttribute('href')).toBe(returnTo)
+    const back = screen.getByRole('link', { name: 'Browse current Tools' })
+    expect(new URL(back.getAttribute('href')!, 'https://market.example').pathname).toBe('/market')
     expect(screen.queryByText('USD 1.25')).toBeNull()
     expect(screen.queryByRole('complementary', { name: 'What you can do next' })).toBeNull()
   })
@@ -610,6 +585,37 @@ const x402Tool = projectCapabilityTool({
       evidence: undefined,
     })
     expect(readDetailMock).toHaveBeenCalledWith({ data: { toolRef: tool.toolRef } })
+  })
+
+  it('redirects agent-facing operation:v1: refs to the canonical URL once this Tool has one', async () => {
+    readDetailMock.mockResolvedValue({ kind: 'found', schemaVersion: PublicToolRegistrySchemaVersion, tool })
+    readCanonicalMock.mockResolvedValue({ providerHost: 'ledger-labs.example', slug: 'invoice-extract' })
+    const loader = Route.options.loader as (input: { params: { toolRef: string } }) => Promise<unknown>
+
+    let caught: unknown
+    try {
+      await loader({ params: { toolRef: tool.toolRef } })
+      throw new Error('expected a redirect to be thrown')
+    } catch (error) {
+      caught = error
+    }
+    expect(isRedirect(caught)).toBe(true)
+    expect((caught as { options: { to: string; params: unknown; replace: boolean } }).options).toMatchObject({
+      to: '/tools/$providerHost/$slug',
+      params: { providerHost: 'ledger-labs.example', slug: 'invoice-extract' },
+      replace: true,
+    })
+    expect(readCanonicalMock).toHaveBeenCalledWith({ data: { toolRef: tool.toolRef } })
+  })
+
+  it('stays on `/tools/$toolRef` when this Tool has no canonical directory URL', async () => {
+    readDetailMock.mockResolvedValue({ kind: 'found', schemaVersion: PublicToolRegistrySchemaVersion, tool })
+    readCanonicalMock.mockResolvedValue(null)
+    const loader = Route.options.loader as (input: { params: { toolRef: string } }) => Promise<{ result: ToolDetailPresentationResult }>
+
+    await expect(loader({ params: { toolRef: tool.toolRef } })).resolves.toMatchObject({
+      result: { kind: 'found' },
+    })
   })
 
 })

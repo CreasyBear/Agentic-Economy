@@ -100,3 +100,82 @@ describe('migrations.removeOfferingPrice', () => {
     expect(offering?.presentation.price).toBeUndefined()
   })
 })
+
+describe('migrations.backfillDirectorySourceRouteRefAndSlug', () => {
+  it('computes sourceRouteRef from the retained source JSON and a path slug, and is idempotent', async () => {
+    const backend = convexTest(schema, convexModules)
+    registerMigrations(backend)
+    const generation = 'coinbase-slug-migration'
+    const resource = 'https://provider.test/tools/weather'
+    const entryId = await backend.run((ctx) => ctx.db.insert('marketExternalRegistryEntries', {
+      generation, documentId: 'registry:slug-migration-fixture', source: 'coinbase',
+      upstreamServiceId: 'weather', upstreamEndpointId: resource,
+      sourceUrl: 'https://api.cdp.coinbase.com/platform/v2/x402/discovery/resources', endpointUrl: resource,
+      name: 'Weather', summary: 'Weather tool', provider: 'provider.test', category: 'weather',
+      method: 'POST', tags: [], networks: ['base'], access: 'x402', authority: 'source_metadata_only',
+      sourceDigest: `sha256:${'0'.repeat(64)}`, searchText: 'weather', updatedAt: 1,
+      directorySourceJson: JSON.stringify({ resourceUrl: resource, method: 'POST' }),
+    }))
+    // Pre-migration shape: no sourceRouteRef/slug, same as every row written before Well-7.
+    await backend.run((ctx) => ctx.db.insert('marketDirectorySearchEntries', {
+      generation, resource, entryId, network: '*', category: 'weather', provider: 'provider.test',
+      providerKey: 'provider.test', eligible: true, searchText: 'weather', popularOrder: 0, updatedOrder: 0, minimumUsdPriceOrder: Number.MAX_VALUE,
+    }))
+
+    const status = await backend.mutation(internal.migrations.backfillDirectorySourceRouteRefAndSlug, {
+      cursor: null, dryRun: false, oneBatchOnly: true,
+    })
+    expect(status.isDone).toBe(true)
+
+    const row = () => backend.run((ctx) => ctx.db.query('marketDirectorySearchEntries')
+      .withIndex('by_generation_and_network_and_resource', (q) => q.eq('generation', generation).eq('network', '*').eq('resource', resource))
+      .unique())
+    const first = await row()
+    expect(first?.slug).toBe('tools-weather')
+    expect(first?.sourceRouteRef).toMatch(/^sha256:[0-9a-f]{64}$/u)
+
+    const second = await backend.mutation(internal.migrations.backfillDirectorySourceRouteRefAndSlug, {
+      cursor: null, dryRun: false, oneBatchOnly: true,
+    })
+    expect(second.isDone).toBe(true)
+    expect(await row()).toEqual(first)
+  })
+
+  it('qualifies a colliding path slug with its method instead of touching the earlier resource', async () => {
+    const backend = convexTest(schema, convexModules)
+    registerMigrations(backend)
+    const generation = 'coinbase-slug-collision'
+    const getResource = 'https://provider.test/tools/weather'
+    const postResource = 'https://provider.test/tools/weather?refresh=true'
+    async function insertRow(resource: string, method: string, documentId: string) {
+      const entryId = await backend.run((ctx) => ctx.db.insert('marketExternalRegistryEntries', {
+        generation, documentId, source: 'coinbase',
+        upstreamServiceId: 'weather', upstreamEndpointId: resource,
+        sourceUrl: 'https://api.cdp.coinbase.com/platform/v2/x402/discovery/resources', endpointUrl: resource,
+        name: 'Weather', summary: 'Weather tool', provider: 'provider.test', category: 'weather',
+        method, tags: [], networks: ['base'], access: 'x402', authority: 'source_metadata_only',
+        sourceDigest: `sha256:${'0'.repeat(64)}`, searchText: 'weather', updatedAt: 1,
+        directorySourceJson: JSON.stringify({ resourceUrl: resource, method }),
+      }))
+      await backend.run((ctx) => ctx.db.insert('marketDirectorySearchEntries', {
+        generation, resource, entryId, network: '*', category: 'weather', provider: 'provider.test',
+        providerKey: 'provider.test', eligible: true, searchText: 'weather', popularOrder: 0, updatedOrder: 0, minimumUsdPriceOrder: Number.MAX_VALUE,
+      }))
+    }
+    await insertRow(getResource, 'GET', 'registry:slug-collision-get')
+    await insertRow(postResource, 'POST', 'registry:slug-collision-post')
+
+    let done = false
+    while (!done) {
+      const status = await backend.mutation(internal.migrations.backfillDirectorySourceRouteRefAndSlug, {
+        cursor: null, dryRun: false, oneBatchOnly: true,
+      })
+      done = status.isDone
+    }
+
+    const slugs = await backend.run((ctx) => ctx.db.query('marketDirectorySearchEntries')
+      .withIndex('by_generation_and_resource', (q) => q.eq('generation', generation))
+      .collect())
+    expect(new Set(slugs.map((entry) => entry.slug)).size).toBe(2)
+  })
+})

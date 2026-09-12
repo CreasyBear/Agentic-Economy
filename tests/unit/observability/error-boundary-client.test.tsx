@@ -86,7 +86,7 @@ describe('AeObservabilityErrorBoundary', () => {
     expect(retryButton.getAttribute('type')).toBe('button')
     expect(retryButton.classList.contains('min-h-touch')).toBe(true)
     expect(marketLink.tagName).toBe('A')
-    expect(marketLink.getAttribute('href')).toBe('/market#tools')
+    expect(marketLink.getAttribute('href')).toBe('/market')
     expect(marketLink.classList.contains('min-h-touch')).toBe(true)
     expect(document.querySelector('a[href="/t/new"]')).toBeNull()
     expect(screen.queryByRole('link', { name: /chat/i })).toBeNull()

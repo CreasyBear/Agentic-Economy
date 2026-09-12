@@ -22,11 +22,32 @@ const CRITICAL_FILES = [
   'src/modules/capability-supply/provider-connection.ts',
 ]
 
-function addedLines(file) {
+type Location = { start: { line: number, column: number }, end: { line: number, column: number } }
+type FunctionDefinition = { decl: Location, loc: Location, name?: string }
+type BranchDefinition = { loc: Location, locations: Location[] }
+type CoverageEntry = {
+  statementMap: Record<string, Location>
+  s: Record<string, number>
+  fnMap: Record<string, FunctionDefinition>
+  f: Record<string, number>
+  branchMap: Record<string, BranchDefinition>
+  b: Record<string, number[]>
+}
+type CoverageReport = Record<string, CoverageEntry>
+
+type MetricTotals = { covered: number, total: number }
+type Totals = {
+  statements: MetricTotals
+  branches: MetricTotals
+  functions: MetricTotals
+  lines: MetricTotals
+}
+
+function addedLines(file: string): Set<number> {
   const diff = execFileSync('git', ['diff', '--unified=0', '--no-color', BASE_REF, '--', file], {
     encoding: 'utf8',
   })
-  const lines = new Set()
+  const lines = new Set<number>()
   for (const line of diff.split('\n')) {
     const match = /^@@ -(?:\d+)(?:,\d+)? \+(\d+)(?:,(\d+))? @@/.exec(line)
     if (match === null) continue
@@ -37,33 +58,33 @@ function addedLines(file) {
   return lines
 }
 
-function rangeLines(location) {
-  const lines = []
+function rangeLines(location: Location): number[] {
+  const lines: number[] = []
   for (let line = location.start.line; line <= location.end.line; line += 1) lines.push(line)
   return lines
 }
 
-function intersects(location, changed) {
+function intersects(location: Location, changed: Set<number>): boolean {
   return rangeLines(location).some((line) => changed.has(line))
 }
 
-function percent(covered, total) {
+function percent(covered: number, total: number): string {
   return total === 0 ? '100.00' : ((covered / total) * 100).toFixed(2)
 }
 
-function isExportOnlyModule(file) {
+function isExportOnlyModule(file: string): boolean {
   const source = ts.createSourceFile(file, readFileSync(file, 'utf8'), ts.ScriptTarget.Latest, true)
   return source.statements.every((statement) => ts.isExportDeclaration(statement))
 }
 
-const coverage = JSON.parse(readFileSync(COVERAGE_PATH, 'utf8'))
-const totals = {
+const coverage: CoverageReport = JSON.parse(readFileSync(COVERAGE_PATH, 'utf8'))
+const totals: Totals = {
   statements: { covered: 0, total: 0 },
   branches: { covered: 0, total: 0 },
   functions: { covered: 0, total: 0 },
   lines: { covered: 0, total: 0 },
 }
-const missing = []
+const missing: string[] = []
 
 for (const file of CRITICAL_FILES) {
   const absolute = resolve(file)
@@ -78,7 +99,7 @@ for (const file of CRITICAL_FILES) {
     continue
   }
 
-  const fileTotals = {
+  const fileTotals: Totals = {
     statements: { covered: 0, total: 0 },
     branches: { covered: 0, total: 0 },
     functions: { covered: 0, total: 0 },
@@ -87,7 +108,7 @@ for (const file of CRITICAL_FILES) {
   const changedStatements = Object.entries(entry.statementMap)
     .filter(([, location]) => intersects(location, changed))
   for (const [id, location] of changedStatements) {
-    const hit = entry.s[id] > 0
+    const hit = (entry.s[id] ?? 0) > 0
     fileTotals.statements.total += 1
     fileTotals.statements.covered += Number(hit)
     if (!hit) missing.push(`${file}: statement ${id} ${location.start.line}:${location.start.column}-${location.end.line}:${location.end.column}`)
@@ -95,7 +116,7 @@ for (const file of CRITICAL_FILES) {
 
   for (const [id, definition] of Object.entries(entry.fnMap)) {
     if (!intersects(definition.decl, changed) && !intersects(definition.loc, changed)) continue
-    const hit = entry.f[id] > 0
+    const hit = (entry.f[id] ?? 0) > 0
     fileTotals.functions.total += 1
     fileTotals.functions.covered += Number(hit)
     if (!hit) missing.push(`${file}: function ${id} ${definition.name} ${definition.loc.start.line}:${definition.loc.start.column}`)
@@ -105,7 +126,7 @@ for (const file of CRITICAL_FILES) {
     const branchChanged = intersects(definition.loc, changed)
       || definition.locations.some((location) => intersects(location, changed))
     if (!branchChanged) continue
-    for (const [side, hits] of entry.b[id].entries()) {
+    for (const [side, hits] of (entry.b[id] ?? []).entries()) {
       const hit = hits > 0
       fileTotals.branches.total += 1
       fileTotals.branches.covered += Number(hit)
@@ -121,13 +142,13 @@ for (const file of CRITICAL_FILES) {
   )))
   for (const line of executableChangedLines) {
     const statements = changedStatements.filter(([, location]) => line >= location.start.line && line <= location.end.line)
-    const hit = statements.every(([id]) => entry.s[id] > 0)
+    const hit = statements.every(([id]) => (entry.s[id] ?? 0) > 0)
     fileTotals.lines.total += 1
     fileTotals.lines.covered += Number(hit)
     if (!hit) missing.push(`${file}: executable line ${line}`)
   }
 
-  for (const metric of Object.keys(totals)) {
+  for (const metric of Object.keys(totals) as (keyof Totals)[]) {
     totals[metric].covered += fileTotals[metric].covered
     totals[metric].total += fileTotals[metric].total
   }

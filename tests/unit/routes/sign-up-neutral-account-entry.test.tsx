@@ -34,10 +34,6 @@ vi.mock('@clerk/tanstack-react-start', () => ({
   },
 }))
 
-vi.mock('@/lib/client/local-e2e-auth', () => ({
-  isLocalE2EAuthBypassEnabled: () => false,
-}))
-
 import '@/routes/sign-up.$'
 
 afterEach(() => {

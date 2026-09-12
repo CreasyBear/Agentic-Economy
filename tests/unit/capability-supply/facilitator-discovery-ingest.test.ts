@@ -153,6 +153,7 @@ describe("facilitator discovery ingest", () => {
     const decision = decideFacilitatorDiscoveryItem(
       {
         ...noBazaarItem,
+        quality: { l30DaysUniquePayers: 4 },
         resource: {
           url: "https://api.example.test/api/v1/amazon-search",
           description: "Search Amazon product listings and return structured results.",

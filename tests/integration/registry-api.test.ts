@@ -307,8 +307,8 @@ describe('registry public API routes', () => {
             ],
           },
         ],
-        isDone: false,
-        continueCursor: '1',
+        hasMore: true,
+        nextCursor: '1',
       })
       expect(typeof body.page[0].observedAt).toBe('number')
       // v2 publishes a business identifier by contract.

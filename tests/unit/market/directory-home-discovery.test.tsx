@@ -5,9 +5,9 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import '../../setup/jsdom-platform'
 import { DirectoryHomeDiscovery } from '@/components/ae/market/DirectoryHomeDiscovery'
 import { X402_MARKETPLACE_COLLECTIONS, type X402MarketplaceHome } from '@/modules/market/x402-marketplace-home'
-import { x402PendingToolRef, type X402DirectoryEntry } from '@/modules/market/x402-directory'
+import type { X402DirectoryEntry } from '@/modules/market/x402-directory'
 
-const entry: X402DirectoryEntry = { resource: 'https://example.com/generate', title: 'Generate a picture', description: 'Create a picture from a text prompt.', provider: 'example.com', protocol: 'http', prices: [], metadataJson: '{}' }
+const entry: X402DirectoryEntry = { resource: 'https://example.com/generate', title: 'Generate a picture', description: 'Create a picture from a text prompt.', provider: 'example.com', protocol: 'http', prices: [], metadataJson: '{}', slug: 'generate' }
 const home: X402MarketplaceHome = { observedAt: '2026-09-08T13:00:00Z', rails: X402_MARKETPLACE_COLLECTIONS.map(collection => ({ ...collection, kind: 'ok', search: { query: collection.query }, items: collection.id === 'creative' ? [entry] : [], returnedCount: collection.id === 'creative' ? 1 : 0, partialResults: false })) }
 const noop = () => false
 beforeEach(() => {
@@ -17,7 +17,7 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.unstubAllGlobals() })
 function show(data = home) {
   const root = createRootRoute()
-  const router = createRouter({ routeTree: root.addChildren([createRoute({ getParentRoute: () => root, path: '/market' }), createRoute({ getParentRoute: () => root, path: '/tools/$toolRef' })]), history: createMemoryHistory({ initialEntries: ['/market'] }) })
+  const router = createRouter({ routeTree: root.addChildren([createRoute({ getParentRoute: () => root, path: '/market' }), createRoute({ getParentRoute: () => root, path: '/tools/$providerHost/$slug' })]), history: createMemoryHistory({ initialEntries: ['/market'] }) })
   const save = vi.fn(), compare = vi.fn()
   render(<RouterContextProvider router={router}><DirectoryHomeDiscovery home={data} onSave={save} onCompare={compare} isSaved={noop} isComparing={noop} compareDisabled={noop} /></RouterContextProvider>)
   return { save, compare }
@@ -30,7 +30,7 @@ it('orders editorial collections and preserves each source search in links and c
   const url = new URL(href, 'https://aecon.ai')
   expect(url.searchParams.get('query')).toBe('image generation creative')
   const toolUrl = toolHref(entry.title)
-  expect(decodeURIComponent(toolUrl.pathname.replace('/tools/', ''))).toBe(x402PendingToolRef(entry.resource))
+  expect(toolUrl.pathname).toBe(`/tools/${entry.provider}/${entry.slug}`)
   fireEvent.click(screen.getByRole('button', { name: `Save ${entry.title}` }))
   fireEvent.click(screen.getByRole('button', { name: `Add ${entry.title} to comparison` }))
   for (const callback of [save, compare]) expect(callback).toHaveBeenCalledWith({ entry, search: { query: 'image generation creative' } })

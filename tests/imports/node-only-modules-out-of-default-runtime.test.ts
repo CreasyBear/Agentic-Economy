@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 
 // Reuses the dependency graph the repo already computes for
-// `npm run deps:check` (see tools/dev/deps-ratchet.mjs): one `depcruise`
+// `npm run deps:check` (see tools/dev/deps-ratchet.ts): one `depcruise`
 // run against the shared `.dependency-cruiser.cjs` config, cached at module
 // scope so every `it` below (and any future one) shares the single run.
 const PROJECT_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
@@ -34,7 +34,7 @@ function runDepcruise(): readonly DepcruiseModule[] {
     })
   } catch (error) {
     // depcruise exits non-zero when any error-severity rule fires; stdout
-    // still carries the JSON report in that case (see deps-ratchet.mjs).
+    // still carries the JSON report in that case (see deps-ratchet.ts).
     const stdoutFromError = (error as { stdout?: unknown }).stdout
     if (typeof stdoutFromError !== 'string' || stdoutFromError.length === 0) throw error
     stdout = stdoutFromError
@@ -50,6 +50,13 @@ const MODULES = runDepcruise()
 // `crypto`) survive. Detect the npm package by reading the importing
 // file's own source text instead.
 const CDP_SDK_IMPORT = /(?:from|import)\s*\(?\s*["']@coinbase\/cdp-sdk["']/
+
+// `@sentry/node` (imported only by `src/lib/observability/sentry.server.ts`)
+// pulls in `@sentry/node-core`, which imports `node:http`/`node:https`/`path`
+// - none of which esbuild can resolve inside a Convex bundle. depcruise
+// excludes node_modules from the graph, so (like the CDP SDK above) this
+// leaf is detected by reading the importing file's own source text.
+const SENTRY_NODE_IMPORT = /(?:from|import)\s*\(?\s*["']@sentry\/node["']/
 
 function isValueEdge(dependency: DepcruiseDependency): boolean {
   // Type-only import/export specifiers are erased at compile time and
@@ -73,6 +80,10 @@ function importsCdpSdkDirectly(source: string): boolean {
   return isRepoFile(source) && CDP_SDK_IMPORT.test(fileText(source))
 }
 
+function importsSentryNodeDirectly(source: string): boolean {
+  return isRepoFile(source) && SENTRY_NODE_IMPORT.test(fileText(source))
+}
+
 function importsCryptoAsValue(module: DepcruiseModule): boolean {
   return module.dependencies.some(
     (dependency) =>
@@ -81,9 +92,12 @@ function importsCryptoAsValue(module: DepcruiseModule): boolean {
 }
 
 const NODE_ONLY_MODULES = new Set(
-  MODULES.filter((module) => importsCryptoAsValue(module) || importsCdpSdkDirectly(module.source)).map(
-    (module) => module.source,
-  ),
+  MODULES.filter(
+    (module) =>
+      importsCryptoAsValue(module)
+      || importsCdpSdkDirectly(module.source)
+      || importsSentryNodeDirectly(module.source),
+  ).map((module) => module.source),
 )
 
 const VALUE_EDGES_BY_SOURCE = new Map<string, readonly string[]>(

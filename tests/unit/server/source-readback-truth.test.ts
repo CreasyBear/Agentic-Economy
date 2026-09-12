@@ -23,7 +23,7 @@ import { createLocalE2eRegistrySourcePort } from '../../helpers/registry-local-e
 
 describe('source readback truth seams', () => {
   it('distinguishes configured-source not_found from an available owner readback', async () => {
-    await withLocalSource(async () => withLocalBypass(async () => {
+    await withLocalSource(async () => {
       const missing = await readOwnerStatusThroughSource('missing-local-slug')
       expect(missing).toEqual({ kind: 'not_found', reason: 'not_public' })
       expect(JSON.stringify(missing)).not.toContain('Fremantle listed provider')
@@ -36,7 +36,7 @@ describe('source readback truth seams', () => {
 
       expect(configured.kind === 'available' ? configured.readback.projectionMode : undefined).toBe('public_source')
       expect(configured.kind === 'available' ? configured.readback.nextAction : '').toContain('Share the public page')
-    }))
+    })
   })
 
   it('reports source unavailability instead of default owner readback when Convex config is missing', async () => {
@@ -48,7 +48,7 @@ describe('source readback truth seams', () => {
   })
 
   it('rejects privacy removal for unknown local slugs without targeting the default business', async () => {
-    await withLocalSource(async (removalMutationTargets) => withLocalBypass(async () => {
+    await withLocalSource(async (removalMutationTargets) => {
       vi.stubEnv('AE_SOURCE_WRITE_SECRET', 'local-source-write-secret-that-is-long-enough')
 
       const missing = await openRemovalDisputeThroughSource(removalInput({ slug: 'missing-local-slug' }), removalSourceWriteContext())
@@ -62,7 +62,7 @@ describe('source readback truth seams', () => {
       )
       expect(recorded).toMatchObject({ kind: 'ok', receipt: { targetRef: 'business:fremantle-listed-provider' } })
       expect(removalMutationTargets).toEqual(['business:fremantle-listed-provider'])
-    }))
+    })
   })
 })
 
@@ -78,18 +78,7 @@ function removalInput(
   }
 }
 
-async function withLocalBypass(run: () => Promise<void>) {
-  vi.stubEnv('VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E', 'true')
-
-  try {
-    await run()
-  } finally {
-    vi.unstubAllEnvs()
-  }
-}
-
 async function withoutSourceConfig(run: () => Promise<void>) {
-  vi.stubEnv('VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E', undefined)
   vi.stubEnv('CONVEX_URL', undefined)
   vi.stubEnv('VITE_CONVEX_URL', undefined)
 

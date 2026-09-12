@@ -290,12 +290,12 @@ describe('market-terminal CLI error contracts', () => {
     expect(JSON.stringify(thrown)).not.toContain('Authentication')
   })
 
-  it('does not accept no_data as a non-2xx problem kind', () => {
+  it('does not accept NO_DATA as a non-2xx problem kind', () => {
     const body = {
       type: 'https://agentic-economy.invalid/problems/no-data',
       title: 'No data',
       status: 401,
-      kind: 'no_data',
+      kind: 'NO_DATA',
       code: 'remote_no_data',
       detail: 'No data available.',
     }

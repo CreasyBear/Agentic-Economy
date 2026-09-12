@@ -42,7 +42,6 @@ describe('public business SEO builder', () => {
    * of whatever happens to be in a shared deployment.
    */
   it('serves the public business JSON route as a public catalog subset only', async () => {
-    vi.stubEnv('VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E', 'true')
     vi.stubEnv('CONVEX_URL', undefined)
     vi.stubEnv('VITE_CONVEX_URL', undefined)
     const restoreRegistrySource = installLocalE2eRegistrySourceForTests()

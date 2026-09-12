@@ -37,9 +37,6 @@ const durableTables = [
   'accounts',
   'accountOwnerships',
   'memberships',
-  'accountRecoveryParticipantApprovals',
-  'accountSuccessionAuthorizations',
-  'accountSuccessionAuthorizationParticipants',
   'externalIdentityBindings',
   'credentials',
   'consequenceProofUses',
@@ -65,7 +62,6 @@ const durableTables = [
   'moneyProviderObligations',
   'moneyConnectAccountCommands',
   'moneyUsageEvents',
-  'moneyCredentialUsageSummaries',
   'moneyX402PaymentAttempts',
   'moneyStripeWebhookInbox',
   'moneyStripeEvents',
@@ -144,21 +140,6 @@ const requiredIndexes = {
     'by_memberPrincipalRef_and_lifecycle',
     'by_accountRef_and_memberPrincipalRef_and_lifecycle',
   ],
-  accountRecoveryParticipantApprovals: [
-    'by_approvalRef',
-    'by_accountRef_and_lifecycle',
-    'by_participantPrincipalRef_and_lifecycle',
-  ],
-  accountSuccessionAuthorizations: [
-    'by_authorizationRef',
-    'by_accountRef_and_lifecycle',
-    'by_accountRef_and_successorOwnerPrincipalRef_and_lifecycle',
-  ],
-  accountSuccessionAuthorizationParticipants: [
-    'by_authorizationRef',
-    'by_accountRef_and_createdAt',
-    'by_participantPrincipalRef_and_createdAt',
-  ],
   externalIdentityBindings: [
     'by_bindingRef',
     'by_providerNamespace_and_providerIdentifier',
@@ -205,7 +186,6 @@ const requiredIndexes = {
     'by_paymentIdentifier',
   ],
   moneyUsageEvents: ['by_principalId_and_credentialId_and_currency_and_observedAt', 'by_businessId_and_observedAt', 'by_callRef', 'by_usageRef'],
-  moneyCredentialUsageSummaries: ['by_principalId_and_credentialId_and_currency'],
   moneyCommercialPolicies: ['by_policyRef', 'by_environment_and_family_and_lifecycle'],
   moneyReconciliationCases: ['by_caseRef', 'by_accountRef_and_createdAt', 'by_accountRef_and_status_and_createdAt', 'by_scopeType_and_scopeRef_and_status'],
   moneyDocuments: ['by_documentRef', 'by_accountRef_and_createdAt'],
@@ -379,7 +359,7 @@ describe('Convex schema', () => {
   const exported = SchemaExport.parse(JSON.parse(String(exportSchema.call(schema))))
 
   it('contains exactly the source-owned durable tables', () => {
-    expect(durableTables).toHaveLength(90)
+    expect(durableTables).toHaveLength(86)
     expect(exported.tables.map((table) => table.tableName).sort()).toEqual([...durableTables].sort())
   })
 

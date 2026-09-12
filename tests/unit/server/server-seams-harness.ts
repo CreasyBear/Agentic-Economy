@@ -98,7 +98,6 @@ export function novuDispatchSendReadback(overrides: Record<string, unknown> = {}
       ...dispatchSendReadback().send,
       dispatch: {
         ...dispatchProjection(),
-        providerFamily: 'novu' as const,
         ...overrides,
       },
     },

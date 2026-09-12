@@ -17,7 +17,6 @@ import '../setup/jsdom-platform'
 
 const shellMocks = vi.hoisted(() => ({
   readAgentKeys: vi.fn(async (): Promise<unknown[]> => []),
-  localPreview: false,
   useUser: vi.fn(() => ({
     isLoaded: true,
     isSignedIn: true,
@@ -43,9 +42,9 @@ vi.mock('@clerk/tanstack-react-start', async (importOriginal) => ({
     return <button type="button" aria-label="Account menu" />
   },
   SignOutButton: ({ children }: { children: ReactElement }) => children,
-}))
-vi.mock('@/lib/client/local-e2e-auth', () => ({
-  isLocalE2EAuthBypassEnabled: () => shellMocks.localPreview,
+  Show: ({ when, children, fallback }: { when: string; children: ReactElement; fallback?: ReactElement }) =>
+    when === 'signed-out' ? (shellMocks.useUser().isSignedIn ? (fallback ?? null) : children)
+      : (shellMocks.useUser().isSignedIn ? children : (fallback ?? null)),
 }))
 vi.mock('@/components/ae/command-panel', () => ({
   CommandPanelProvider: ({ children }: { children: ReactElement }) => children,
@@ -71,7 +70,6 @@ afterEach(() => {
   cleanup()
   shellMocks.readAgentKeys.mockReset()
   shellMocks.readAgentKeys.mockResolvedValue([])
-  shellMocks.localPreview = false
   shellMocks.useUser.mockClear()
   shellMocks.userButton.mockClear()
 })
@@ -284,16 +282,14 @@ describe('operator shell nested chrome', () => {
     expect(screen.queryByText('Couldn’t load this page')).toBeNull()
   })
 
-  it('renders forbidden recovery without requiring Clerk in the local auth preview', async () => {
-    shellMocks.localPreview = true
+  it('renders forbidden recovery with a Clerk sign-out control', async () => {
     renderAt(
       <OperatorRouteError error={new OperatorSurfaceForbiddenError('admin')} />,
       '/admin/index-health',
     )
 
     expect(await screen.findByText('You don’t have access to this workspace')).toBeTruthy()
-    expect(screen.getByRole('link', { name: 'Return home' }).getAttribute('href')).toBe('/')
-    expect(screen.queryByRole('button', { name: 'Sign out' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Sign out' })).toBeTruthy()
     expect(screen.queryByRole('link', { name: 'Catalog health' })).toBeNull()
     expect(screen.queryByRole('link', { name: 'Audit' })).toBeNull()
   })
@@ -459,19 +455,6 @@ describe('owner account identity', () => {
     }
   })
 
-  it('renders an explicit local context without invoking Clerk identity primitives', async () => {
-    shellMocks.localPreview = true
-
-    renderOperatorShell('owner', '/owner/offerings')
-
-    const account = await screen.findByRole('group', { name: 'Local preview account context' })
-    expect(within(account).getByText('Local preview')).toBeTruthy()
-    expect(screen.queryByRole('button', { name: 'Account menu' })).toBeNull()
-    expect(shellMocks.useUser).not.toHaveBeenCalled()
-    expect(shellMocks.userButton).not.toHaveBeenCalled()
-    expect(document.body.textContent).not.toContain('user_private_ada')
-    expect(document.body.textContent).not.toContain('session_private_ada')
-  })
 })
 
 function OperatorShellHarness() {

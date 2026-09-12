@@ -70,7 +70,7 @@ function postWithContentType(
   return request
 }
 
-function invokeBody(idempotencyKey = 'key-1') {
+function invokeBody(idempotencyKey = 'key-12345') {
   return { quoteRef: commitmentRef, idempotencyKey }
 }
 

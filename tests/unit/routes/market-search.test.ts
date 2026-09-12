@@ -6,7 +6,7 @@ import { resolveCanonicalBaseUrl } from "@/lib/server/canonical-url";
 vi.mock("@/lib/server/canonical-url.functions", () => ({
   readCanonicalBaseUrlServer: async () => resolveCanonicalBaseUrl(new Request("https://untrusted.example/market")).baseUrl,
 }));
-const reads = vi.hoisted(() => ({ catalogue: vi.fn(), providers: vi.fn(), overview: vi.fn(), resource: vi.fn(), canonical: vi.fn(), home: vi.fn() }));
+const reads = vi.hoisted(() => ({ catalogue: vi.fn(), providers: vi.fn(), overview: vi.fn(), resource: vi.fn(), home: vi.fn() }));
 vi.mock("@/modules/market/x402-directory-index.functions", () => ({
   readX402DirectoryCatalogueServer: reads.catalogue,
   readX402DirectoryProvidersServer: reads.providers,
@@ -18,9 +18,6 @@ vi.mock("@/modules/market/x402-directory.functions", () => ({
   readX402DirectoryServer: async () => ({ kind: "ok", items: [], offset: 0, limit: 20 }),
   prepareX402DirectoryResourceServer: vi.fn(),
 }));
-vi.mock("@/modules/market/market.functions", () => ({
-  readMarketRouteServer: reads.canonical,
-}));
 
 beforeEach(() => {
   for (const read of Object.values(reads)) read.mockReset();
@@ -28,7 +25,6 @@ beforeEach(() => {
   reads.providers.mockResolvedValue({ kind: "unavailable", reason: "index_unavailable" });
   reads.overview.mockResolvedValue({ kind: "unavailable", reason: "index_unavailable" });
   reads.resource.mockResolvedValue({ kind: "not_found" });
-  reads.canonical.mockResolvedValue({ window: "30d", catalog: { kind: "unavailable" } });
   reads.home.mockResolvedValue({ observedAt: "2026-09-08T00:00:00Z", rails: [] });
 });
 afterEach(() => vi.unstubAllEnvs());
@@ -36,7 +32,7 @@ afterEach(() => vi.unstubAllEnvs());
 describe("market entry metadata", () => {
   it.each([
     ["https://app.aecon.ai", {}],
-    ["https://preview.example.test", { category: "developer-tools" }],
+    ["https://preview.example.test", { directoryCategory: "developer-tools" }],
   ])("uses configured app origin %s for canonical and site metadata", async (origin, filters) => {
     vi.stubEnv("AE_CANONICAL_BASE_URL", origin);
     const loader = Route.options.loader;
@@ -56,56 +52,36 @@ describe("market entry metadata", () => {
 });
 
 describe("market search validation", () => {
-  it("retains known presentation categories and drops unknown categories", () => {
+  it("drops the retired capability-catalog parameters instead of erroring", () => {
     expect(
-      validateMarketSearch({
-        category: "identity-compliance",
-      }),
-    ).toEqual({ category: "identity-compliance" });
-
-    expect(
-      validateMarketSearch({ category: "not-a-category" }),
+      validateMarketSearch({ category: "identity-compliance", capability: "web-search", availability: "routeable", cursor: "page-2" }),
     ).toEqual({});
-    expect(validateMarketSearch({ category: "all" })).toEqual({});
   });
+});
 
-  it("keeps two to four unique canonical comparison references in one readable parameter", () => {
-    const first = `operation:v1:${"a".repeat(64)}`;
-    const second = `operation:v1:${"b".repeat(64)}`;
+describe("legacy compare mapping", () => {
+  it("keeps one to four unique, bounded resource identifiers in one readable parameter", () => {
+    const first = "https://api.example.com/tools/first";
+    const second = "https://api.example.com/tools/second";
 
     expect(parseMarketCompareRefs(`${first},${second}`)).toEqual([first, second]);
-    expect(validateMarketSearch({
+    expect(validateMarketSearch({ query: "company", compare: `${first},${second}` })).toEqual({
       query: "company",
-      category: "identity-compliance",
-      cursor: "page-2",
-      compare: `${first},${second}`,
-    })).toEqual({
-      query: "company",
-      category: "identity-compliance",
-      cursor: "page-2",
       compare: `${first},${second}`,
     });
   });
 
-  it("deduplicates references and drops malformed, short, and oversized comparisons", () => {
-    const first = `operation:v1:${"a".repeat(64)}`;
-    const second = `operation:v1:${"b".repeat(64)}`;
-    const third = `operation:v1:${"c".repeat(64)}`;
-    const fourth = `operation:v1:${"d".repeat(64)}`;
-    const fifth = `operation:v1:${"e".repeat(64)}`;
+  it("deduplicates references and drops empty or oversized comparisons", () => {
+    const first = "https://api.example.com/tools/first";
+    const second = "https://api.example.com/tools/second";
+    const third = "https://api.example.com/tools/third";
+    const fourth = "https://api.example.com/tools/fourth";
+    const fifth = "https://api.example.com/tools/fifth";
 
-    expect(validateMarketSearch({
-      compare: `${first},${second},${first}`,
-    })).toEqual({ compare: `${first},${second}` });
-
-    for (const compare of [
-      first,
-      `${first},${first}`,
-      `${first},operation:v1:short`,
-      `${first},${second},${third},${fourth},${fifth}`,
-    ]) {
-      expect(validateMarketSearch({ compare })).toEqual({});
-    }
+    expect(validateMarketSearch({ compare: `${first},${second},${first}` })).toEqual({ compare: `${first},${second}` });
+    expect(validateMarketSearch({ compare: `${first},${second},${third},${fourth},${fifth}` })).toEqual({});
+    expect(validateMarketSearch({ compare: "" })).toEqual({});
+    expect(validateMarketSearch({ compare: `${first},   ,${second}` })).toEqual({ compare: `${first},${second}` });
   });
 });
 
@@ -124,16 +100,16 @@ describe('indexed directory route', () => {
     const loader = Route.options.loader;
     if (typeof loader !== 'function') throw new Error('loader_missing');
     const data = await loader({ deps: search } as never);
-    expect(data).toMatchObject({ kind: 'directory' });
+    expect(data).toMatchObject({ catalogue: { coverage: { indexedTotal: 4000 } } });
     expect(reads.catalogue).toHaveBeenCalledWith({ data: { directoryCategory: 'creative', indexCursor: 'native-next', sort: 'updated' } });
-    expect(reads.canonical).not.toHaveBeenCalled();
     expect(reads.home).not.toHaveBeenCalled();
   });
 
   it('loads adoption-ranked Tools by default without fetching collections', async () => {
     const loader = Route.options.loader;
     if (typeof loader !== 'function') throw new Error('loader_missing');
-    expect(await loader({ deps: {} } as never)).toMatchObject({ kind: 'directory' });
+    const data = await loader({ deps: {} } as never);
+    expect(data).toMatchObject({ catalogue: { coverage: { indexedTotal: 4000 } } });
     expect(reads.catalogue).toHaveBeenCalledWith({ data: { sort: 'adoption' } });
     expect(reads.home).not.toHaveBeenCalled();
   });
@@ -142,8 +118,7 @@ describe('indexed directory route', () => {
     const loader = Route.options.loader;
     if (typeof loader !== 'function') throw new Error('loader_missing');
     const data = await loader({ deps: { provider: 'example.com' } } as never);
-    expect(data).toMatchObject({ kind: 'directory', catalogue: { coverage: { indexedTotal: 4000 } } });
-    if (data?.kind !== 'directory') throw new Error('directory_missing');
+    expect(data).toMatchObject({ catalogue: { coverage: { indexedTotal: 4000 } } });
     if (data.page.kind !== 'ok') throw new Error('page_missing');
     expect(data.page.total).toBeUndefined();
   });

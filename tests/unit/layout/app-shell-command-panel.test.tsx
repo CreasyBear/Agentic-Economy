@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 
+import type { ReactNode } from 'react'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import {
   RouterContextProvider,
@@ -16,6 +17,13 @@ import { AeAppShell } from '@/components/ae/layout/AeAppShell'
 
 vi.mock('@/lib/observability/funnel-client', () => ({
   emitFunnelEventOnce: vi.fn(),
+}))
+
+vi.mock('@clerk/tanstack-react-start', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@clerk/tanstack-react-start')>()),
+  Show: ({ when, children, fallback }: { when: string; children: ReactNode; fallback?: ReactNode }) =>
+    when === 'signed-out' ? children : (fallback ?? null),
+  UserButton: () => <button type="button" aria-label="Account menu" />,
 }))
 
 afterEach(() => {

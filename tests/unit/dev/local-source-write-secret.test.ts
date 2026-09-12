@@ -3,14 +3,13 @@ import { describe, expect, it } from 'vitest'
 import {
   resolveLocalSourceWriteSecret,
   sourceWriteEnvAssignment,
-} from '../../../tools/dev/local-source-write-secret.mjs'
+} from '../../../tools/dev/local-source-write-secret.ts'
 
 describe('local source-write secret provisioning', () => {
   it('red-covers the cold local answer setup by deriving one secret for app and Convex', () => {
     const result = resolveLocalSourceWriteSecret({
       env: {
         VITE_CONVEX_URL: 'http://127.0.0.1:3210',
-        VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E: 'true',
       },
       dotenvFiles: [
         { path: '.env.local', content: 'VITE_CONVEX_URL=http://127.0.0.1:3210\n' },

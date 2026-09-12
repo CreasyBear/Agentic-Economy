@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 
 import { describe, expect, it } from 'vitest'
 import { listTsFiles } from '../helpers/source-files'
@@ -132,9 +132,7 @@ describe('capability supply boundaries', () => {
     for (const name of retiredCeremonies) {
       expect(serverSurface).not.toMatch(new RegExp(`export const ${name}\\b`, 'u'))
     }
-    expect(readFileSync('src/routes/_operator/owner.offerings.$offeringRef.tsx', 'utf8')).toContain(
-      "to: '/owner/supply/$offeringRef'",
-    )
+    expect(existsSync('src/routes/_operator/owner.offerings.$offeringRef.tsx')).toBe(false)
     expect(readFileSync('src/modules/capability-supply/supply-actions.ts', 'utf8')).toContain(
       "publish: 'supply.publish'",
     )
