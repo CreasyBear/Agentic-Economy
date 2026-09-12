@@ -384,6 +384,8 @@ hostedAlphaReadback:
       removedVariable: AE_SOURCE_WRITE_SECRET
       providerConfigurationRemoval: verified
       liveDeploymentRemoval: pending_redeployment
+      latestStripeAndInfisicalBindings: pending_redeployment
+      redeployedAfterBindingChanges: false
   backend:
     provider: convex
     team: joel-chan
@@ -415,21 +417,53 @@ hostedAlphaReadback:
       id: ed_test_61VO4O26zMNAz9Nn616UvBfU9V8SqsP28ZeVu4UQaSGu
       route: https://app.aecon.ai/api/stripe/webhook/accounts-v2
       state: enabled_exact_path_verified
-    readbackKey: missing
+    readbackKey:
+      name: agentic-economy-alpha-readback
+      type: rk_test
+      bindings: [vercel_production, convex_cautious_zebra_473]
+      bindingCommandsExit: 0
+      temporaryCredentialFile: deleted
+      sdkReadChecks: {tax: passed, checkout: passed, paymentIntent: passed, price: passed, refund: passed}
+      coreReadDashboardPermission: user_applied_saved_ui_verified
+      installedKeyMatchesEditedKeySuffix: verified
+      accountsV2List: http_403_missing_v2_account_storer_read
+      platformAccountRetrieve: http_403
+      connectedAccountCanary: not_successful
+    inclusiveGstTaxRate:
+      id: txr_1UBZhn70N4UjLqHtDjJ74oie
+      convexBinding: installed
     livePurchaseProof: not_verified
   secretCustody:
     provider: infisical
     organizationId: 8d09981b-9b5e-4a59-aa6d-5561c4f4642a
-    platformProjectId: 7a7f4820-5412-4a0f-92b6-c4106051333f
-    customerProjectId: cae7a337-b1f1-4634-8302-cf36b60edf74
-    existingPlatformStagingIdentityId: 3e45be0b-6907-4fe3-90bf-a4c2701e7e1b
-    existingIdentityTrust: vercel_preview_not_alpha
-    alphaPlatformIdentityId: 18030256-9085-4e51-8758-5a0e60599def
-    alphaPlatformIdentityName: ae-alpha-platform
-    alphaPlatformIdentityAccess: no_access
-    alphaPlatformOidcTrust: prepared_not_saved_pending_browser_confirmation
-    alphaAuthenticationAndSecretAccess: inactive
-    alphaIdentitiesAndBindings: incomplete
+    platform:
+      projectId: 8b470821-5cfc-4f9a-a37a-c0e80f6779c7
+      environment: dev
+      secretPath: /platform
+      machineIdentityId: 13040b65-e776-4e5c-9ad0-fccad1ccb79d
+      machineIdentityName: ae-alpha-platform
+    customer:
+      projectId: 5c61916a-4cdd-4fdd-9067-a145291de7d9
+      environment: dev
+      secretPath: /customer
+      machineIdentityId: bd5a7a70-01ba-43a4-a7ea-6a7482f87a2a
+      machineIdentityName: ae-alpha-customer
+    isolation: each_identity_member_only_in_its_dedicated_project
+    machineIdentityDeletionProtection: enabled
+    roleChoice: isolated_project_member_custom_roles_require_paid_plan
+    oidc:
+      issuer: https://oidc.vercel.com/creasybears-projects
+      audience: https://vercel.com/creasybears-projects
+      subject: owner:creasybears-projects:project:agentic-economy:environment:production
+      ttlSeconds: 3600
+      trustConfiguration: saved
+    vercelProductionBindings: all_nine_AE_INFISICAL_variables_bound_exit_0
+    hostedAuthenticationAndSecretCrud: not_verified
+    localCanary: aborted_on_vercel_cli_development_subject_before_secret_creation
+    supersededUnusedNoAccessIdentity:
+      id: 18030256-9085-4e51-8758-5a0e60599def
+      deletion: verified
+    existingStagingProjects: untouched
   financialAuthority:
     freshIsolatedInfrastructure: not_deployed
     requiredFormanceVariables: all_six_missing

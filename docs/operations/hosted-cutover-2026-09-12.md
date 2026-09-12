@@ -266,17 +266,36 @@ Earlier commands and receipts remain historical, not an active runbook.
   `ed_test_61VO4O26zMNAz9Nn616UvBfU9V8SqsP28ZeVu4UQaSGu` are enabled at
   `https://app.aecon.ai/api/stripe/webhook` and
   `https://app.aecon.ai/api/stripe/webhook/accounts-v2`, respectively. Exact
-  paths were verified. `STRIPE_READBACK_KEY` remains missing; destination
-  existence is not delivery, replay or purchase proof.
-- **Infisical:** organization `8d09981b-9b5e-4a59-aa6d-5561c4f4642a` already
-  contains platform project `7a7f4820-5412-4a0f-92b6-c4106051333f` and customer
-  project `cae7a337-b1f1-4634-8302-cf36b60edf74`. Existing platform staging
-  identity `3e45be0b-6907-4fe3-90bf-a4c2701e7e1b` trusts Vercel preview;
-  new project-managed identity `ae-alpha-platform`
-  (`18030256-9085-4e51-8758-5a0e60599def`) exists with No Access. Its exact
-  Vercel production OIDC subject and 3,600-second TTL are prepared but not
-  saved, pending mandatory browser confirmation. Alpha authentication and
-  secret access are inactive; bindings remain incomplete.
+  paths were verified. Fresh `agentic-economy-alpha-readback` restricted test
+  key installed as `STRIPE_READBACK_KEY` in Vercel production and Convex
+  `cautious-zebra-473`; both commands exited 0 and its temporary file was
+  deleted. SDK tax, Checkout, PaymentIntent, Price and Refund reads passed.
+  Tax rate `txr_1UBZhn70N4UjLqHtDjJ74oie` is installed in Convex. The user
+  applied Core Read, the saved UI was verified, and the installed key matches
+  the edited key's suffix. Nevertheless, `v2.core.accounts.list` returns 403
+  missing `v2_account_storer_read`; platform account retrieval also returns
+  403. Core Read has not established Accounts v2 access. There is no successful
+  connected-account canary, delivery/replay or purchase proof.
+- **Infisical:** organization `8d09981b-9b5e-4a59-aa6d-5561c4f4642a` has two
+  new dedicated alpha projects. Both machine identities have verified deletion
+  protection. Platform project
+  `8b470821-5cfc-4f9a-a37a-c0e80f6779c7` uses environment `dev`, path
+  `/platform`, and identity `ae-alpha-platform`
+  (`13040b65-e776-4e5c-9ad0-fccad1ccb79d`). Customer project
+  `5c61916a-4cdd-4fdd-9067-a145291de7d9` uses environment `dev`, path
+  `/customer`, and identity `ae-alpha-customer`
+  (`bd5a7a70-01ba-43a4-a7ea-6a7482f87a2a`). Each identity is a member only of
+  its dedicated project; project isolation was chosen because custom roles
+  require a paid plan. Both saved OIDC trusts use issuer
+  `https://oidc.vercel.com/creasybears-projects`, audience
+  `https://vercel.com/creasybears-projects`, subject
+  `owner:creasybears-projects:project:agentic-economy:environment:production`,
+  and TTL 3,600 seconds. All nine `AE_INFISICAL_*` variables were bound in
+  Vercel production with exit 0. The superseded unused No Access identity
+  `18030256-9085-4e51-8758-5a0e60599def` was deleted and deletion verified;
+  old staging projects were untouched. Hosted OIDC authentication and secret
+  CRUD remain unverified: the local Vercel CLI token had a development subject,
+  so the canary aborted before any secret creation.
 - **Ledger and AWS:** all six required Formance variables remain missing and
   fresh isolated financial infrastructure is not deployed. Existing synthetic
   EC2/RDS remain stopped and must never be promoted in place. Fresh AWS
@@ -289,6 +308,9 @@ Earlier commands and receipts remain historical, not an active runbook.
   after consumers were bound. The full
   gate, successful authenticated sign-in and live purchases are not proven.
 
-Alpha remains blocked on current manifest/binding requirements, the fresh
+No redeployment followed these binding changes: the live deployment remains
+`dpl_4v9d2G9cmbnHFbsDmubdkkbrfV5t` at source
+`a269f9b4ad863798d2ff79b91eed0014a3886f01`, with readiness 503. Alpha remains
+blocked on deploying current bindings, Stripe account access, the fresh
 isolated ledger boundary and end-to-end verification. Health 200 and passing
 source checks do not establish alpha readiness.

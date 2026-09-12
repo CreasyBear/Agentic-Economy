@@ -223,15 +223,17 @@ Exact identities and revisions are in the
 | --- | --- | --- |
 | Web and backend | New Vercel deployment and Convex project deployed; `/api/health` 200. | `/api/ready` 503 `deployment_manifest_invalid`; consecutive sign-in requests return 500 and consistently fail closed. Removal of forbidden `AE_SOURCE_WRITE_SECRET` from Vercel configuration awaits a new deployment. |
 | Clerk | Production instance and four-event webhook created; user-saved signing secret deployed in Vercel. | Signed delivery and authenticated sign-in unverified. |
-| Stripe | Existing sandbox snapshot and Accounts v2 thin destinations enabled at their exact app paths. | `STRIPE_READBACK_KEY` missing; delivery, replay and purchase success unverified. |
-| Infisical | Existing separate platform and customer projects verified. | Existing platform staging identity trusts Vercel preview; `ae-alpha-platform` exists with No Access; its OIDC trust is prepared but unsaved pending browser confirmation. Alpha authentication and secret access remain inactive; bindings are incomplete. Earlier “Example Project only” and “nothing exists” claims are superseded. |
+| Stripe | Fresh restricted test readback key installed in Vercel production and Convex; tax, Checkout, PaymentIntent, Price and Refund SDK reads passed. GST tax rate bound in Convex; existing destinations remain enabled. | Saved Core Read permission and matching installed key suffix verified, but Accounts v2 list returns 403 `v2_account_storer_read`; platform account retrieval also returns 403. No successful connected-account canary, delivery/replay or purchase proof. |
+| Infisical | Two new dedicated alpha projects have separate, deletion-protected member identities and saved Vercel production OIDC trust. All nine variables bound in Vercel production. Unused No Access identity deleted and verified; old staging projects untouched. | Hosted OIDC authentication and secret CRUD unverified. Local CLI token had a development subject, so its canary aborted before creating a secret. Project isolation uses member roles because custom roles require a paid plan. |
 | Financial authority | All six required Formance variables missing; fresh isolated infrastructure not deployed. | Existing synthetic EC2/RDS remain stopped and cannot be promoted; historical RPO 308 seconds still exceeds the 300-second target. |
 | AWS cost | Fresh forecast readback returned `DataUnavailable` with insufficient history. | No current forecast proof; earlier spend evidence is dated. |
 | Source checks | Node 22.22.0/npm 11.5.1; Rolldown 1.2.7 fixed the build. Focused tests 161/161 across four files and diagnostic tests 30/30 passed; lint, typecheck, dependency check, server build and `env:example:check` passed. | Full gate and live purchases remain unproven. Source checks do not establish runtime readiness. |
 
 Ten old Convex projects were deleted with the user's approval. Historical
 resource references are evidence, not current deployment targets. Next proof
-requires deploying the pending configuration change, resolving the remaining
-bindings and isolated ledger boundary, then verifying readiness, signed events
-and authenticated journeys. Alpha must remain below ready until those checks
-succeed.
+requires deploying the pending configuration changes (including the Stripe and
+Infisical bindings), resolving Stripe account access and the isolated ledger
+boundary, then verifying hosted OIDC/secret CRUD, readiness, signed events and
+authenticated journeys. No redeployment followed these binding changes; the
+observed live deployment and readiness 503 are unchanged. Alpha must remain
+below ready until those checks succeed.
