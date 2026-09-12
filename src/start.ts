@@ -12,11 +12,14 @@ import { sanitizeTelemetryError, sanitizeTelemetryValue } from '@/lib/observabil
 
 // TanStack Start's client/server shared entry means this module is evaluated
 // in the browser too, so the validation can't run at module load like a
-// classic server-only boot check. Instead it runs once, on the first
-// request, via an idempotent guard in ensureBootEnvironmentValidated: in
-// production the throw fails that first request (and the health check)
-// loudly rather than serving anything half-configured.
+// classic server-only boot check. Instead successful validation is cached
+// across requests by ensureBootEnvironmentValidated; in
+// production invalid configuration fails application requests closed. Health
+// remains a liveness check; readiness reports its own configuration failures.
 const bootEnvironmentMiddleware = createMiddleware().server(async (ctx) => {
+  const url = new URL(ctx.request.url)
+  if (url.pathname === '/api/health' || url.pathname === '/api/ready') return ctx.next()
+
   const { ensureBootEnvironmentValidated } = await import('@/lib/deployment/validate-boot-env.server')
   ensureBootEnvironmentValidated()
   return ctx.next()

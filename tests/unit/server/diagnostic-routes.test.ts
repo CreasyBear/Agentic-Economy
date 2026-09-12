@@ -103,6 +103,54 @@ function productionReadinessEnvironment(): Record<string, string> {
   }
 }
 
+describe('diagnostics through the registered boot middleware', () => {
+  beforeEach(() => {
+    vi.resetModules()
+    vi.stubEnv('NODE_ENV', 'production')
+    vi.stubEnv('AE_CANONICAL_BASE_URL', '')
+  })
+
+  afterEach(() => {
+    vi.unstubAllEnvs()
+  })
+
+  async function throughBootMiddleware(request: Request, next: () => Promise<{ response: Response }>) {
+    const { startInstance } = await import('@/start')
+    const options = await startInstance.getOptions()
+    const middleware = options.requestMiddleware?.[0]?.options.server
+    if (middleware === undefined) throw new Error('boot middleware missing')
+    const result = await middleware({ request, next } as Parameters<typeof middleware>[0])
+    return result instanceof Response ? result : result.response
+  }
+
+  it('keeps consecutive application requests closed after invalid production configuration', async () => {
+    const next = vi.fn(async () => ({ response: new Response('unexpected') }))
+    for (const path of ['/sign-in', '/api/v1/tools', '/api/health/extra']) {
+      await expect(throughBootMiddleware(new Request(`https://ae.example${path}`), next))
+        .rejects.toThrow('Invalid environment configuration:')
+    }
+    expect(next).not.toHaveBeenCalled()
+  })
+
+  it('reaches liveness and readiness handlers despite invalid production configuration', async () => {
+    const healthRequest = new Request('https://ae.example/api/health')
+    const health = await throughBootMiddleware(healthRequest, async () => ({
+      response: await handleHealthRequest(healthRequest),
+    }))
+    expect(health.status).toBe(200)
+    await expect(health.json()).resolves.toEqual({ status: 'ok' })
+
+    const readyRequest = new Request('https://ae.example/api/ready')
+    const fetch = vi.fn()
+    const ready = await throughBootMiddleware(readyRequest, async () => ({
+      response: await handleReadyRequest(readyRequest, { env: {}, fetch }),
+    }))
+    expect(ready.status).toBe(503)
+    await expect(ready.json()).resolves.toMatchObject({ code: 'server_not_ready' })
+    expect(fetch).not.toHaveBeenCalled()
+  })
+})
+
 describe('operational diagnostics routes', () => {
   beforeEach(() => {
     vi.stubEnv('SENTRY_DSN', 'https://public@example.ingest.sentry.io/1')
