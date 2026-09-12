@@ -77,7 +77,7 @@ describe('admin source authority review', () => {
       },
     }))
     expect((await screen.findByRole('status')).textContent).toContain('Source authority confirmed')
-    expect(screen.getByRole('status').textContent).toContain('rerun the same Package 5 release task')
+    expect(screen.getByRole('status').textContent).toContain('Rerun the same deployment check to resume from the verified state.')
   })
 
   it('does not claim approval when the canonical review is refused', async () => {
