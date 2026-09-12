@@ -26,11 +26,10 @@ import { DirectoryProviderCards } from './DirectoryProviderCards'
 import { DirectorySavedToolsProvider, useDirectorySavedTools, type SavedDirectoryTool } from './DirectorySavedTools'
 import { DirectoryToolCard } from './DirectoryToolCard'
 import type { X402DirectoryEntry, X402DirectoryFilters, X402DirectoryInput, X402DirectoryPage } from '@/modules/market/x402-directory'
-import type { ProviderListedCatalogProjection } from '@/modules/market/server'
 
 type DirectorySearch = MarketReturnSearch
 
-type DirectoryProps = Readonly<{ page: X402DirectoryPage; search: DirectorySearch; home?: X402MarketplaceHome; catalogue?: X402DirectoryCatalogue; overview?: X402DirectoryCatalogueOverview; providers?: X402DirectoryProvidersPage; providerListed?: ProviderListedCatalogProjection }>
+type DirectoryProps = Readonly<{ page: X402DirectoryPage; search: DirectorySearch; home?: X402MarketplaceHome; catalogue?: X402DirectoryCatalogue; overview?: X402DirectoryCatalogueOverview; providers?: X402DirectoryProvidersPage }>
 
 export function AeX402Directory(props: DirectoryProps) {
   return <DirectorySavedToolsProvider><DirectoryMarketplace {...props} /></DirectorySavedToolsProvider>
@@ -46,7 +45,7 @@ function directoryInput(search: X402DirectoryInput) {
   }
 }
 
-function DirectoryMarketplace({ page, search, home, catalogue, overview, providers, providerListed }: DirectoryProps) {
+function DirectoryMarketplace({ page, search, home, catalogue, overview, providers }: DirectoryProps) {
   const navigate = useNavigate()
   const [comparison, setComparison] = useState<readonly SavedDirectoryTool[]>([])
   const [compareOpen, setCompareOpen] = useState(false)
@@ -226,7 +225,7 @@ function DirectoryMarketplace({ page, search, home, catalogue, overview, provide
         <TabsContent value="discover" className="pt-7">
           {overview?.kind === 'ok' ? <DirectoryIndexDiscovery overview={overview} onSave={saved.toggleSavedTool} isSaved={saved.isSaved} onCompare={toggleComparison}
             isComparing={resource => comparison.some(item => item.entry.resource === resource)} compareDisabled={resource => comparison.length >= 4 && !comparison.some(item => item.entry.resource === resource)} /> : null}
-          {home === undefined ? <AeEmptyState title="Explore the Tool catalogue" description="Open All Tools to browse the current directory, or search for a service above." action={<Button asChild variant="outline"><Link to="/market" search={{ view: 'tools' }}>Browse all Tools</Link></Button>} /> : <DirectoryHomeDiscovery home={home} {...(providerListed === undefined ? {} : { providerListed })} onSave={saved.toggleSavedTool} isSaved={saved.isSaved} onCompare={toggleComparison}
+          {home === undefined ? <AeEmptyState title="Explore the Tool catalogue" description="Open All Tools to browse the current directory, or search for a service above." action={<Button asChild variant="outline"><Link to="/market" search={{ view: 'tools' }}>Browse all Tools</Link></Button>} /> : <DirectoryHomeDiscovery home={home} onSave={saved.toggleSavedTool} isSaved={saved.isSaved} onCompare={toggleComparison}
             isComparing={resource => comparison.some(item => item.entry.resource === resource)} compareDisabled={resource => comparison.length >= 4 && !comparison.some(item => item.entry.resource === resource)} />}
         </TabsContent>
         <TabsContent value="saved" className="pt-5">

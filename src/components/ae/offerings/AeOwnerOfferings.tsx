@@ -239,7 +239,11 @@ export function AeOwnerOfferingsList({
           rowAction={{
             kind: 'link',
             label: 'Open',
-            getHref: (item) => `/owner/operations/${encodeURIComponent(item.offering.offeringRef)}`,
+            // Well 8 Lane C: prefer the slug-resolved continuation href when
+            // this row came through the provider workspace projection - it
+            // is more precise than reconstructing one from offeringRef alone
+            // (which the route still accepts for pre-publish Tools).
+            getHref: (item) => item.continuation?.href ?? `/owner/operations/${encodeURIComponent(item.offering.offeringRef)}`,
             getAccessibleLabel: (item) => `Open ${item.offering.name}`,
           }}
         />

@@ -32,6 +32,10 @@ export type ProviderWorkspaceInventoryRow = Readonly<{
   summary: string
   status: 'draft' | 'published' | 'paused' | 'retired'
   accessPathCount: number
+  // Well 8 Lane C: the canonical `/tools/<providerKey>/<slug>` slug for this
+  // Tool's current publication, when one has been indexed - undefined until
+  // the publish hook / hourly reconcile catches up.
+  slug?: string
 }>
 
 export type ProviderWorkspaceInventoryResult =
@@ -258,6 +262,38 @@ export const readProviderToolStatusServer = createServerFn()
     } catch (cause) {
       return degrade(cause, { kind: 'unavailable' } as const, {
         site: 'readProviderToolStatusServer',
+        reason: 'source_unavailable',
+      })
+    }
+  })
+
+const resolveOwnerToolSlugQuery = sourceQuery<
+  { businessId: string; slug: string },
+  { offeringRef: string } | null
+>('capabilityProviderTools:resolveOwnerToolSlug')
+
+export type OwnerToolSlugResult =
+  | Readonly<{ kind: 'available'; offeringRef: string }>
+  | Readonly<{ kind: 'not_found' }>
+
+/**
+ * Well 8 Lane C: resolves the `/owner/operations/<slug>` route param to the
+ * catalog offeringRef `readProviderToolStatusServer` expects, scoped
+ * server-side to the current owner's own business - never a client-supplied
+ * providerKey.
+ */
+export const readOwnerToolBySlugServer = createServerFn()
+  .validator((data) => z.strictObject({ slug: z.string().trim().min(1) }).parse(data))
+  .handler(async ({ data }): Promise<OwnerToolSlugResult> => {
+    privateOwnerResponse()
+    const identity = await readCurrentOwnerIdentity()
+    if (identity.kind !== 'available') return { kind: 'not_found' }
+    try {
+      const resolved = await callSourceQuery(resolveOwnerToolSlugQuery, { businessId: identity.businessId, slug: data.slug })
+      return resolved === null ? { kind: 'not_found' } : { kind: 'available', offeringRef: resolved.offeringRef }
+    } catch (cause) {
+      return degrade(cause, { kind: 'not_found' } as const, {
+        site: 'readOwnerToolBySlugServer',
         reason: 'source_unavailable',
       })
     }

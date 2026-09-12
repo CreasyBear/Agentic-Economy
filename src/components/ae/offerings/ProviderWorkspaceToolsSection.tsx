@@ -20,7 +20,14 @@ export function ProviderWorkspaceToolsSection({ inventory, lifecycle, compatibil
     ...row,
     lifecycleLabel: 'Loading',
     availability: 'unknown',
-    continuation: { kind: 'navigate', label: 'View status', href: `/owner/operations/${encodeURIComponent(row.offeringRef)}` },
+    // Well 8 Lane C: a live reviewed-tier Tool resolves by its canonical
+    // slug; one with no current publication yet (draft/unready/incompatible)
+    // has none, so it falls back to its offeringRef - the route resolves
+    // both, each for a different lifecycle phase.
+    continuation: {
+      kind: 'navigate', label: 'View status',
+      href: `/owner/operations/${encodeURIComponent(row.slug ?? row.offeringRef)}`,
+    },
     lifecyclePending: true,
   }))
 

@@ -7,6 +7,7 @@ import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
 import {
   readProviderWorkspaceIdentityDetailServer,
   readProviderToolStatusServer,
+  readOwnerToolBySlugServer,
 } from '@/components/ae/offerings/provider-workspace.functions'
 import {
   AeProviderToolDetail,
@@ -29,12 +30,28 @@ export const Route = createFileRoute('/_operator/owner/operations/$toolRef')({
   ...operatorRouteOptions,
   loader: async ({ params }) => {
     const identity = await readProviderWorkspaceIdentityDetailServer()
-    if (identity.kind !== 'available' || !params.toolRef.startsWith('offering:')) {
+    if (identity.kind !== 'available') {
+      return { identity, status: { kind: 'not_found' as const } }
+    }
+    // Well 8 Lane C: a live reviewed-tier Tool resolves by its canonical
+    // slug now (never a colon - see directorySlugBase), server-side and
+    // scoped to the owner's own providerKey. A Tool with no current
+    // publication yet (draft/unready/incompatible) has no slug at all - it
+    // never earns a directory row - so its offeringRef (always
+    // `offering:<businessId>:<slug>`, see publish-reconcile.ts) still
+    // resolves directly; this is two distinct reference kinds for two
+    // distinct lifecycle phases, not a compatibility alias for one.
+    let offeringRef: string | undefined = params.toolRef.startsWith('offering:') ? params.toolRef : undefined
+    if (offeringRef === undefined) {
+      const resolved = await readOwnerToolBySlugServer({ data: { slug: params.toolRef } })
+      if (resolved.kind === 'available') offeringRef = resolved.offeringRef
+    }
+    if (offeringRef === undefined) {
       return { identity, status: { kind: 'not_found' as const } }
     }
     const status = await readProviderToolStatusServer({ data: {
       businessId: identity.businessId,
-      offeringRef: params.toolRef,
+      offeringRef,
     } })
     return { identity, status }
   },
@@ -60,8 +77,11 @@ function OwnerSupplyDetailRoute() {
   if (result.identity.kind !== 'available' || result.status.kind !== 'available') {
     return <UnavailableTool toolRef={toolRef} unavailable={result.status.kind === 'unavailable'} />
   }
+  // Well 8 Lane C: the URL held either this Tool's slug (live reviewed-tier
+  // publication) or its offeringRef (no publication yet) - only one matches
+  // depending on lifecycle phase, so accept whichever the loader resolved.
   if (
-    result.status.tool.offeringRef !== toolRef
+    (result.status.tool.slug !== toolRef && result.status.tool.offeringRef !== toolRef)
     || result.status.status.businessRef !== result.identity.businessId
   ) {
     return <UnavailableTool toolRef={toolRef} unavailable={false} />

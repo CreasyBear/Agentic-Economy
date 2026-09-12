@@ -483,6 +483,10 @@ export async function refreshCapabilitySupplyReadinessHandler(ctx: WorkloadCronM
 export async function reconcileBusinessSupplyProjectionsHandler(ctx: WorkloadCronMutationContext): Promise<null> {
   await admitWorkloadCron(ctx as Pick<QueryCtx, 'db'>, 'reconcile business supply projections')
   await ctx.runMutation(internal.capabilitySupplyProjection.rebuildAllBusinessSupplyProjections, {})
+  // Well 8 Lane C: the reconciling safety net for provider directory rows -
+  // the publish/withdraw command handlers keep rows in step immediately;
+  // this sweep catches any disposition change that bypasses those hooks.
+  await ctx.runMutation(internal.x402DirectoryIndexStore.reconcileProviderDirectoryRows, {})
   return null
 }
 

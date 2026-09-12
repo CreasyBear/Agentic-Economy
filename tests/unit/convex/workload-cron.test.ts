@@ -346,7 +346,10 @@ describe('System workload cron boundary', () => {
     for (const handler of MUTATION_HANDLERS) await expect(handler(context.mutation())).resolves.toBeNull()
 
     expect(context.admissions).toEqual([...ACTION_HANDLER_WORKLOAD_NAMES])
-    expect(context.dispatches).toHaveLength(9)
+    // 10, not 9: reconcileBusinessSupplyProjectionsHandler now dispatches two
+    // mutations - rebuildAllBusinessSupplyProjections and (Well 8 Lane C)
+    // x402DirectoryIndexStore.reconcileProviderDirectoryRows - under one admission.
+    expect(context.dispatches).toHaveLength(10)
     expect([...context.db.queries].sort()).toEqual(Array.from({ length: 9 }, () => [
       'principals',
       'accounts',

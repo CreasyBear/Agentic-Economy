@@ -51,7 +51,15 @@ export const marketTables = {
   marketExternalRegistryEntries: defineTable({
     generation: v.string(),
     documentId: v.string(),
-    source: v.literal('coinbase'),
+    // Well 8 Lane C: 'provider' rows are the reviewed-tier (provider_owned/
+    // ae_curated_external) publication projection written by
+    // x402DirectoryIndexStore.upsertProviderDirectoryRows - a synthetic
+    // Coinbase-shaped entry so storedDirectoryEntry/indexedDirectoryEntry and
+    // every browse/search/facets/bySlug/canonical reader need no
+    // provider-specific branch. Keyed by a documentId digest over
+    // sourceRouteRef (not resource), a wholly separate identity namespace
+    // from Coinbase's resource-keyed rows.
+    source: v.union(v.literal('coinbase'), v.literal('provider')),
     upstreamServiceId: v.string(),
     upstreamEndpointId: v.string(),
     sourceUrl: v.string(),
@@ -136,6 +144,13 @@ export const marketTables = {
     // resources on the same host collide). Optional for the same backfill
     // reason as providerKey/eligible.
     slug: v.optional(v.string()),
+    // Well 8 Lane C: 'provider' rows are written from a current reviewed-tier
+    // publication (provider_owned/ae_curated_external) by
+    // x402DirectoryIndexStore.upsertProviderDirectoryRows; optional and
+    // absent on every pre-existing row, which means 'coinbase'. A provider
+    // row wins a shared sourceRouteRef over a Coinbase-sourced one (see
+    // upsertProviderDirectoryRows and the suppression check in writeSource).
+    source: v.optional(v.union(v.literal('coinbase'), v.literal('provider'))),
     searchText: v.string(),
     popularOrder: v.number(),
     updatedOrder: v.number(),

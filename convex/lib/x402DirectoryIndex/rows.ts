@@ -46,7 +46,11 @@ export function directoryCoverage(row: Doc<'marketExternalRegistryGenerations'>)
 }
 
 export function storedDirectoryEntry(row: Doc<'marketExternalRegistryEntries'>): DirectoryEntry {
-  if (row.source !== 'coinbase' || row.directoryEntryJson === undefined || row.directorySourceJson === undefined) throw new Error('directory_entry_invalid')
+  // Well 8 Lane C: 'provider' rows (upsertProviderDirectoryRows) are written
+  // through the exact same directoryEntryJson/directorySourceJson shape as
+  // Coinbase rows, so every reader below runs with no provider-specific
+  // branch - only the write path differs.
+  if ((row.source !== 'coinbase' && row.source !== 'provider') || row.directoryEntryJson === undefined || row.directorySourceJson === undefined) throw new Error('directory_entry_invalid')
   // The internal write validates this shape before persisting it. Source JSON
   // lives once in the row, rather than duplicating it inside the presentation.
   const entry = JSON.parse(row.directoryEntryJson) as DirectoryEntry
@@ -93,4 +97,26 @@ export function indexedDirectoryEntry(row: Doc<'marketExternalRegistryEntries'>,
     observedAt: row.updatedAt, sourceDigest: row.sourceDigest,
     ...(analytics === undefined ? {} : { analytics }),
   }
+}
+
+/**
+ * An admitted Tool's canonical `/tools/<providerKey>/<slug>` address, joined
+ * live off its current publication's sourceRouteRef - shared by the
+ * `/tools/$toolRef` redirect (x402DirectoryIndex.ts:canonicalUrlForTool) and
+ * the owner workspace (capabilityProviderTools.ts:readOwner/listOwner), which
+ * both need the same reverse lookup and neither should re-derive it.
+ */
+export async function canonicalSlugForToolRef(
+  ctx: Pick<QueryCtx, 'db'>, toolRef: string,
+): Promise<Readonly<{ providerHost: string; slug: string }> | null> {
+  const publication = await ctx.db.query('capabilityPublications')
+    .withIndex('by_toolRef_and_disposition', (query) => query.eq('toolRef', toolRef).eq('disposition', 'current')).unique()
+  if (publication === null || publication.sourceRouteRef === undefined) return null
+  const generation = await activeDirectoryGeneration(ctx)
+  if (generation === null) return null
+  const row = await ctx.db.query('marketDirectorySearchEntries')
+    .withIndex('by_generation_and_sourceRouteRef', (query) => query.eq('generation', generation.generation).eq('sourceRouteRef', publication.sourceRouteRef))
+    .filter((query) => query.eq(query.field('network'), '*'))
+    .first()
+  return row === null || row.providerKey === undefined || row.slug === undefined ? null : { providerHost: row.providerKey, slug: row.slug }
 }

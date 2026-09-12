@@ -2,10 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
 import { marketWindowSchema } from "./contracts";
-import {
-  readMarketRouteProjection,
-  readProviderListedToolsProjection,
-} from "./server";
+import { readMarketRouteProjection } from "./server";
 
 const inputSchema = z.object({
   window: marketWindowSchema,
@@ -26,6 +23,3 @@ export const readMarketRouteServer = createServerFn({ method: "GET" })
         ...(data.cursor === undefined ? {} : { cursor: data.cursor }),
       }),
   );
-
-export const readProviderListedToolsServer = createServerFn({ method: "GET" })
-  .handler(async () => await readProviderListedToolsProjection());

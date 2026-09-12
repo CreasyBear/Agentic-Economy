@@ -11,7 +11,6 @@ import { readX402DirectoryCatalogueServer, readX402DirectoryCatalogueOverviewSer
 import { x402DirectoryCatalogueInputSchema } from "@/modules/market/x402-directory-catalogue";
 import { directoryCatalogueSearchValues } from '@/modules/market/x402-directory-navigation';
 import { readX402MarketplaceHomeServer } from "@/modules/market/x402-marketplace-home.functions";
-import { readProviderListedToolsServer } from "@/modules/market/market.functions";
 import { buildPublicPageHead, buildSiteJsonLd } from "@/modules/seo/public";
 
 export type MarketSearch = MarketReturnSearch;
@@ -65,16 +64,15 @@ export const Route = createFileRoute("/market")({
   loader: async ({ deps }) => {
     const catalogueInput = x402DirectoryCatalogueInputSchema.parse(directoryCatalogueSearchValues(deps))
     const showHome = deps.view === 'discover'
-    const [catalogue, canonicalBaseUrl, home, overview, providers, providerListed] = await Promise.all([
+    const [catalogue, canonicalBaseUrl, home, overview, providers] = await Promise.all([
       readX402DirectoryCatalogueServer({ data: { ...catalogueInput, ...(catalogueInput.query || catalogueInput.sort ? {} : { sort: 'adoption' }) } }),
       readCanonicalBaseUrlServer(),
       showHome ? readX402MarketplaceHomeServer().catch(() => undefined) : Promise.resolve(undefined),
       readX402DirectoryCatalogueOverviewServer(),
       deps.view === 'providers' && deps.query === undefined && deps.network === undefined && deps.provider === undefined && deps.maxUsdPrice === undefined && deps.directoryCategory === undefined ? readX402DirectoryProvidersServer({ data: { ...(deps.providerCursor === undefined ? {} : { providerCursor: deps.providerCursor }) } }) : Promise.resolve(undefined),
-      showHome ? readProviderListedToolsServer().catch(() => undefined) : Promise.resolve(undefined),
     ])
     const page = catalogue?.kind === 'ok' ? catalogue.page : { kind: 'unavailable' as const, reason: catalogue?.reason === 'query_invalid' ? 'query_invalid' as const : 'source_unavailable' as const }
-    return { page, catalogue, overview, canonicalBaseUrl, home, providers, providerListed }
+    return { page, catalogue, overview, canonicalBaseUrl, home, providers }
   },
   staleTime: 30_000,
   preloadStaleTime: 30_000,
@@ -127,7 +125,7 @@ function MarketRoute() {
 
   return (
     <AePublicPage>
-      <AeX402Directory page={data.page} search={search} catalogue={data.catalogue} overview={data.overview} {...(data.providers === undefined ? {} : { providers: data.providers })} {...(data.home === undefined ? {} : { home: data.home })} {...(data.providerListed === undefined ? {} : { providerListed: data.providerListed })} />
+      <AeX402Directory page={data.page} search={search} catalogue={data.catalogue} overview={data.overview} {...(data.providers === undefined ? {} : { providers: data.providers })} {...(data.home === undefined ? {} : { home: data.home })} />
     </AePublicPage>
   );
 }

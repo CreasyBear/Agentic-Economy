@@ -14,7 +14,7 @@ import {
 } from './lib/x402DirectoryIndex/contracts'
 import { directoryFacets } from './lib/x402DirectoryIndex/facets'
 import {
-  activeDirectoryGeneration, directoryCoverage, directoryState, indexedDirectoryEntry, storedDirectoryEntry,
+  activeDirectoryGeneration, canonicalSlugForToolRef, directoryCoverage, directoryState, indexedDirectoryEntry, storedDirectoryEntry,
 } from './lib/x402DirectoryIndex/rows'
 
 import { ANALYTICS_VERSION, analyticsNamespace, eligibleFacetsNamespace } from './lib/x402DirectoryIndex/analytics'
@@ -209,18 +209,7 @@ export const bySlug = query({
 export const canonicalUrlForTool = query({
   args: { toolRef: v.string() },
   returns: v.union(v.null(), v.object({ providerHost: v.string(), slug: v.string() })),
-  handler: async (ctx, args) => {
-    const publication = await ctx.db.query('capabilityPublications')
-      .withIndex('by_toolRef_and_disposition', q => q.eq('toolRef', args.toolRef).eq('disposition', 'current')).unique()
-    if (publication === null || publication.sourceRouteRef === undefined) return null
-    const generation = await activeDirectoryGeneration(ctx)
-    if (generation === null) return null
-    const row = await ctx.db.query('marketDirectorySearchEntries')
-      .withIndex('by_generation_and_sourceRouteRef', q => q.eq('generation', generation.generation).eq('sourceRouteRef', publication.sourceRouteRef))
-      .filter(q => q.eq(q.field('network'), '*'))
-      .first()
-    return row === null || row.providerKey === undefined || row.slug === undefined ? null : { providerHost: row.providerKey, slug: row.slug }
-  },
+  handler: async (ctx, args) => canonicalSlugForToolRef(ctx, args.toolRef),
 })
 
 /**

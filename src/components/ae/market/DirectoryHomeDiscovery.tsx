@@ -2,15 +2,12 @@ import { Link } from '@tanstack/react-router'
 import { ArrowUpRight, Code2, Image, Search, ShoppingBag, ShieldCheck, TrendingUp } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious } from '@/components/ui/carousel'
-import type { ProviderListedCatalogProjection } from '@/modules/market/server'
 import type { X402MarketplaceHome, X402MarketplaceRail } from '@/modules/market/x402-marketplace-home'
 import type { SavedDirectoryTool } from './DirectorySavedTools'
-import { DirectoryProviderListedRail } from './DirectoryProviderListedRail'
 import { DirectoryToolCard } from './DirectoryToolCard'
 
 type Props = Readonly<{
   home: X402MarketplaceHome
-  providerListed?: ProviderListedCatalogProjection
   onSave: (item: SavedDirectoryTool) => void
   isSaved: (resource: string) => boolean
   onCompare: (item: SavedDirectoryTool) => void
@@ -34,10 +31,9 @@ function collectionSearch(rail: X402MarketplaceRail) {
 }
 
 /** Editorial collections of live directory matches, using the installed Embla carousel. */
-export function DirectoryHomeDiscovery({ home, providerListed, onSave, isSaved, onCompare, isComparing, compareDisabled }: Props) {
+export function DirectoryHomeDiscovery({ home, onSave, isSaved, onCompare, isComparing, compareDisabled }: Props) {
   const rails = editorialOrder.flatMap(id => home.rails.filter(rail => rail.id === id))
   return <div className="pb-8">
-    {providerListed?.kind === 'ok' ? <DirectoryProviderListedRail items={providerListed.items} /> : null}
     <nav aria-label="Discover Tools by job" className="mb-10 flex gap-2 overflow-x-auto border-b border-border pb-5 sm:justify-center sm:gap-3">
       {rails.map(rail => {
         const item = navigation[rail.id]

@@ -153,52 +153,6 @@ export async function readMarketRouteProjection(
   return { window, catalog: projectedCatalog };
 }
 
-export type ProviderListedCatalogProjection =
-  | Readonly<{ kind: "ok"; items: readonly ToolCardViewModel[] }>
-  | Readonly<{ kind: "unavailable" }>;
-
-/**
- * Provider-owned Tools admitted to the live registry (`registry.tools.search`
- * with `source: "current"`), narrowed to `provenance.publisher ===
- * "provider_owned"`. `readMarketRouteProjection` above only reads the
- * Coinbase-indexed catalog (`source: "coinbase"`), so a Provider's own
- * publication never appears there even once admitted. This is the interim,
- * honest fix: read the same admitted registry a second way rather than
- * standing up a new read model, for the directory landing's
- * "Listed by Providers" rail.
- */
-export async function readProviderListedToolsProjection(
-  window: MarketWindow = "30d",
-): Promise<ProviderListedCatalogProjection> {
-  const generatedAt = Date.now();
-  let catalog: ToolSearchResult;
-  try {
-    catalog = await readCapabilityToolSearch({
-      source: "current",
-      query: "",
-      limit: 12,
-    });
-  } catch (cause) {
-    captureRouteException(
-      cause,
-      { site: "readProviderListedToolsProjection" },
-      "warning",
-    );
-    return { kind: "unavailable" };
-  }
-  if (catalog.kind !== "ok") return { kind: "unavailable" };
-  const providerOwned = {
-    ...catalog,
-    items: catalog.items.filter(
-      (tool) => tool.provenance.publisher === "provider_owned",
-    ),
-  };
-  const projected = await projectCatalog(providerOwned, window, generatedAt);
-  return projected.kind === "ok"
-    ? { kind: "ok", items: projected.items }
-    : { kind: "unavailable" };
-}
-
 export async function readMarketPageProjection(
   window: MarketWindow,
 ): Promise<MarketPageProjection> {

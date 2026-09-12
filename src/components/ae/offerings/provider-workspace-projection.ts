@@ -65,10 +65,14 @@ function projectRow(
   lifecycle: ProviderWorkspaceLifecycleRow | undefined,
   lifecycleKind: ProviderWorkspaceLifecycleResult['kind'],
 ): ProviderWorkspaceProjectionRow {
+  // Well 8 Lane C: a live reviewed-tier Tool resolves by its canonical slug;
+  // one with no current publication yet (draft/unready/incompatible) has
+  // none, so it falls back to its offeringRef - the route resolves both,
+  // each for a different lifecycle phase.
   const detail = {
     kind: 'navigate' as const,
     label: 'View status',
-    href: `/owner/operations/${encodeURIComponent(definition.offeringRef)}`,
+    href: `/owner/operations/${encodeURIComponent(definition.slug ?? definition.offeringRef)}`,
   }
   if (lifecycle === undefined) {
     return {
