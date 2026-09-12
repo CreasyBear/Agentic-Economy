@@ -230,6 +230,6 @@ function reviewOutcomePresentation(result: SourceAuthorityReviewResult): Readonl
   return {
     success: true,
     title: 'Source authority confirmed',
-    description: 'The exact publication is verified. Return to the release task and rerun the same Package 5 release task; it will resume from authoritative state.',
+    description: 'The publication is verified. Rerun the same deployment check to resume from the verified state.',
   }
 }
