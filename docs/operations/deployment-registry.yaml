@@ -355,7 +355,7 @@ operatingPause:
 
 
 hostedAlphaReadback:
-  capturedOn: "2026-09-12"
+  capturedOn: "2026-09-13"
   evidenceSource: orchestrator_verified_provider_readback_and_local_checks
   evidence: docs/operations/hosted-cutover-2026-09-12.md
   supersedes: earlier_hosted_cutover_topology_identity_configuration_and_usability_claims
@@ -373,19 +373,34 @@ hostedAlphaReadback:
     projectId: prj_dK5mDpjBYuAXMwvLr0pWO0h8DoH9
     scope: creasybears-projects
     canonicalUrl: https://app.aecon.ai
-    observedDeploymentId: dpl_4v9d2G9cmbnHFbsDmubdkkbrfV5t
-    observedSourceRevision: a269f9b4ad863798d2ff79b91eed0014a3886f01
+    observedDeploymentId: dpl_4pS5h6962eGWnXXNScgPQTrcmRcE
+    deploymentUrl: https://agentic-economy-isy77u3ki-creasybears-projects.vercel.app
+    observedSourceRevision: ae60dfa3d67818b24ed1fd9a392ece998d1005f8
+    configuredReleaseSourceRevision: ae60dfa3d67818b24ed1fd9a392ece998d1005f8
+    sourceIdentityEvidence: deployment_metadata_and_configured_revision_not_release_endpoint
     healthHttp: 200
+    serverRenderingBoot: fixed
     readyHttp: 503
     readyReason: deployment_manifest_invalid
-    consecutiveSignInHttp: 500
-    signInState: consistently_fail_closed
-    pendingConfigurationChange:
+    convexProbe: convex_probe_skipped
+    catalogue: absent
+    quoting: unavailable
+    funding: configured
+    sellable: false
+    releaseHttp: 500
+    releaseFailure: boot_guard_pending_six_formance_bindings
+    runtimeLog:
+      bundlerSyntaxError: absent
+      missingBootVariables: [AE_FORMANCE_ENVIRONMENT, AE_FORMANCE_GATEWAY_URL, AE_FORMANCE_LEDGER, AE_FORMANCE_REQUEST_TIMEOUT_MS, AE_FORMANCE_ACCESS_CLIENT_ID, AE_FORMANCE_ACCESS_CLIENT_SECRET]
+    signInState: not_reverified_after_new_deployment
+    configurationChange:
       removedVariable: AE_SOURCE_WRITE_SECRET
       providerConfigurationRemoval: verified
-      liveDeploymentRemoval: pending_redeployment
-      latestStripeAndInfisicalBindings: pending_redeployment
-      redeployedAfterBindingChanges: false
+      redeployedAfterBindingChanges: true
+    mainAutodeployBundlerRegression:
+      recovery: reviewed_branch_deployed
+      fixMergedToMain: false
+      recurrenceRisk: persists_until_merge
   backend:
     provider: convex
     team: joel-chan
@@ -465,23 +480,72 @@ hostedAlphaReadback:
       deletion: verified
     existingStagingProjects: untouched
   financialAuthority:
-    freshIsolatedInfrastructure: not_deployed
+    freshIsolatedInfrastructure: planned_not_applied
     requiredFormanceVariables: all_six_missing
     existingSyntheticEc2AndRds: stopped_never_promote_in_place
-    awsForecast: DataUnavailable_insufficient_history
     historicalRecoveryRpoSeconds: 308
     requiredRecoveryRpoSeconds: 300
+    alphaPlan:
+      file: /private/tmp/ae-alpha-plan-t6sl85yp/alpha-fixed-storage.tfplan
+      sourceRevision: 535598cb5a32b7e3c1bc976f0eeb18ef6fa995f1
+      creates: 80
+      reads: 6
+      existingUpdates: 0
+      deletes: 0
+      databaseStorageGiB: 50
+      databaseStorageAutoscaling: disabled
+      applyState: blocked_pending_budget_resolution_and_old_resource_retirement_approval
+    monthlyCostEstimateUsd:
+      assumption: low_traffic_before_tax
+      freshAlpha: "311.29"
+      oldPausedBaseline: "79.17"
+      combined: "390.45"
+      oldRdsAutomaticRestartPerth: "2026-09-13 09:44–09:49"
+    deployerAccess:
+      cloudFormationStack: ae-alpha-deployer-access
+      state: CREATE_COMPLETE
+      executedChangeSet: alpha-runtime-access-20260913
+      authorization: user_authorized_root_browser_once
+      grantScope: two_alpha_runtime_roles_and_one_instance_profile
+      subsequentRoutineCliIdentity: verified_assumed_role_Package4ReleaseOpenTofu
+      rootCliUsed: false
+    oldResourceCensus:
+      ec2: {id: i-063c00d935d85d74f, state: stopped}
+      rds:
+        - {id: package4-release-formance, state: stopped, storageGiB: 50, automatedSnapshots: 5, latestAutomatedSnapshotDate: "2026-09-05"}
+        - {id: package4-release-restore-20260904, state: stopped, storageGiB: 50, automatedSnapshots: 0}
+      natGateway: {id: nat-0aabc2385d7704d2d, state: active}
+      primaryVaultRecoveryPoints: 0
+      disasterRecoveryVaultRecoveryPoints: 0
+      retirement: proposed_not_authorized
+      pendingUserApproval: snapshot_both_old_rds_and_host_disk_then_retire_old_host_rds_nat_and_eip
+      retirementRequires: [fresh_snapshots, retain_kms_key, retain_audit, retain_state, retain_evidence]
+      retainedKmsKeyId: 5979d934-bd8d-4809-bd2e-5cf22092922e
+    cloudflareDeploymentCredential:
+      state: active
+      expiry: "2026-09-20T23:59:59Z"
+      temporaryFile: present
+      temporaryFileMode: "0600"
   sourceVerification:
+    sourceRevision: ae60dfa3d67818b24ed1fd9a392ece998d1005f8
+    includes: merged_main_and_bundler_fix
     nodeVersion: 22.22.0
     npmVersion: 11.5.1
     buildFix: rolldown_1.2.7
-    focusedTests: 161_of_161_passed_across_four_files
-    diagnosticTests: 30_of_30_passed
-    lint: passed
-    typecheck: passed
-    dependencyCheck: passed
-    serverBuild: passed
-    environmentExampleCheck: passed
-    fullGate: not_proven
+    initialGate:
+      unitPassed: 4593
+      integrationPassed: 1251
+      integrationSkipped: 5
+      integrationTodo: 3
+      e2e: two_provider_page_failures_subsequently_fixed
+    subsequentChecks:
+      e2ePassed: 24
+      authenticatedE2eSkipped: 8
+      accessibilityPassed: 10
+      focusedUnitPassed: 5
+      typecheck: passed
+      build: passed
+      cli: passed
+    fullGate: not_rerun_green
     authenticatedSignIn: not_proven
     livePurchases: not_proven

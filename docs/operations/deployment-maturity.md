@@ -210,7 +210,8 @@ readback key, Stripe destinations and Cloudflare alerts.
 
 ## Hosted alpha assessment — 12 September 2026
 
-**Alpha is deployed but not ready.** Authority is `hosted_alpha`, sandbox only;
+**Updated 13 September: alpha is deployed but not ready.** Authority is
+`hosted_alpha`, sandbox only;
 custody, writes and recurring workloads remain disabled. Provider labels
 `production` and `prod` do not confer production authority. This assessment
 supersedes earlier hosted topology, identity, configuration and usability
@@ -221,19 +222,19 @@ Exact identities and revisions are in the
 
 | Boundary | Current evidence | Remaining gap |
 | --- | --- | --- |
-| Web and backend | New Vercel deployment and Convex project deployed; `/api/health` 200. | `/api/ready` 503 `deployment_manifest_invalid`; consecutive sign-in requests return 500 and consistently fail closed. Removal of forbidden `AE_SOURCE_WRITE_SECRET` from Vercel configuration awaits a new deployment. |
+| Web and backend | Reviewed branch deployed as `dpl_4pS5h6962eGWnXXNScgPQTrcmRcE` at app source `ae60dfa3d67818b24ed1fd9a392ece998d1005f8`; `/api/health` 200 proves server rendering boot recovered. | `/api/ready` 503 `deployment_manifest_invalid`: Convex probe skipped, catalogue absent, quoting unavailable, funding configured, sellable false. `/api/v1/release` 500 at the boot guard; source identity comes from deployment metadata and configured revision. Runtime logs identify only the six missing Formance settings. Branch remains unmerged to main, so automatic deployment can repeat the bundler regression. |
 | Clerk | Production instance and four-event webhook created; user-saved signing secret deployed in Vercel. | Signed delivery and authenticated sign-in unverified. |
 | Stripe | Fresh restricted test readback key installed in Vercel production and Convex; tax, Checkout, PaymentIntent, Price and Refund SDK reads passed. GST tax rate bound in Convex; existing destinations remain enabled. | Saved Core Read permission and matching installed key suffix verified, but Accounts v2 list returns 403 `v2_account_storer_read`; platform account retrieval also returns 403. No successful connected-account canary, delivery/replay or purchase proof. |
 | Infisical | Two new dedicated alpha projects have separate, deletion-protected member identities and saved Vercel production OIDC trust. All nine variables bound in Vercel production. Unused No Access identity deleted and verified; old staging projects untouched. | Hosted OIDC authentication and secret CRUD unverified. Local CLI token had a development subject, so its canary aborted before creating a secret. Project isolation uses member roles because custom roles require a paid plan. |
-| Financial authority | All six required Formance variables missing; fresh isolated infrastructure not deployed. | Existing synthetic EC2/RDS remain stopped and cannot be promoted; historical RPO 308 seconds still exceeds the 300-second target. |
-| AWS cost | Fresh forecast readback returned `DataUnavailable` with insufficient history. | No current forecast proof; earlier spend evidence is dated. |
-| Source checks | Node 22.22.0/npm 11.5.1; Rolldown 1.2.7 fixed the build. Focused tests 161/161 across four files and diagnostic tests 30/30 passed; lint, typecheck, dependency check, server build and `env:example:check` passed. | Full gate and live purchases remain unproven. Source checks do not establish runtime readiness. |
+| Financial authority | Fresh alpha plan: 80 creates, six reads, no existing updates/deletes; fixed 50 GiB database without autoscaling. Bounded deployer-access stack is `CREATE_COMPLETE`; routine assumed-role CLI verified. | Plan not applied and Formance unprovisioned. Existing synthetic resources cannot be promoted; historical RPO 308 seconds exceeds the 300-second target. |
+| AWS cost and retention | Low-traffic alpha estimate USD 311.29/month; paused old baseline USD 79.17; combined estimate USD 390.45 before tax. Both old 50 GiB RDS instances and EC2 stopped; NAT active. Vaults have zero recovery points; source has five automated snapshots, latest 5 September; drill has none. | Old RDS auto-restarts 13 September 09:44–09:49 Perth. Budget blocks alpha apply pending approval to retire old resources with fresh snapshots and retained KMS, audit, state and evidence. Retirement is not authorized. |
+| Source checks | Committed app `ae60dfa3d67818b24ed1fd9a392ece998d1005f8` includes merged main and the bundler fix. Initial gate: 4,593 unit and 1,251 integration passed (five skipped, three todo); two provider-page E2E failures fixed. Subsequent checks: 24 E2E, ten accessibility and five focused unit passed; typecheck, build and CLI passed. | Full `npm run gate` has not been rerun green. Eight authenticated E2E checks skipped; authenticated sign-in and live purchases remain unproven. |
 
 Ten old Convex projects were deleted with the user's approval. Historical
 resource references are evidence, not current deployment targets. Next proof
-requires deploying the pending configuration changes (including the Stripe and
-Infisical bindings), resolving Stripe account access and the isolated ledger
-boundary, then verifying hosted OIDC/secret CRUD, readiness, signed events and
-authenticated journeys. No redeployment followed these binding changes; the
-observed live deployment and readiness 503 are unchanged. Alpha must remain
-below ready until those checks succeed.
+requires resolving the six missing Formance bindings, Stripe account access
+and the isolated ledger boundary, then verifying hosted OIDC/secret CRUD, readiness, signed
+events and authenticated journeys. Approval is pending to snapshot both old
+RDS instances and the host disk before retiring the old host, RDS, NAT and EIP;
+no deletion is authorized. The new web deployment restores server boot but
+readiness remains 503. Alpha must remain below ready until those checks succeed.

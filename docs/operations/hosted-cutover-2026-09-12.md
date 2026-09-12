@@ -234,8 +234,8 @@ exists in this build.
 
 ## Current hosted alpha evidence — 12 September 2026
 
-The orchestrator verified the following provider state and local checks. This
-receipt supersedes the earlier same-day claims that the app is usable, that
+**Updated 13 September 2026.** The orchestrator verified the following provider
+state and local checks. This receipt supersedes the earlier 12 September claims that the app is usable, that
 Clerk/Infisical resources still need creating, that the previous Convex target
 is current, and that the synthetic Formance stack can supply the new boundary.
 Earlier commands and receipts remain historical, not an active runbook.
@@ -244,18 +244,30 @@ Earlier commands and receipts remain historical, not an active runbook.
   workloads are disabled; provider production labels do not change that scope.
 - **Vercel:** project `agentic-economy`,
   `prj_dK5mDpjBYuAXMwvLr0pWO0h8DoH9`, scope `creasybears-projects`;
-  `https://app.aecon.ai` points to `dpl_4v9d2G9cmbnHFbsDmubdkkbrfV5t`,
-  source `a269f9b4ad863798d2ff79b91eed0014a3886f01`.
+  `https://app.aecon.ai` points to `dpl_4pS5h6962eGWnXXNScgPQTrcmRcE`, also at
+  `https://agentic-economy-isy77u3ki-creasybears-projects.vercel.app`, source
+  `ae60dfa3d67818b24ed1fd9a392ece998d1005f8`. Vercel production
+  `AE_RELEASE_SOURCE_REVISION` was updated to that exact revision. Source
+  identity is supported by deployment metadata and the configured revision,
+  not by the failing release endpoint.
 - **Convex:** team `joel-chan`, new project `agentic-economy`, development
   `cool-crab-306`, provider production `cautious-zebra-473`; source
   `fbd22a563f204312f26aa9b8a53c55ca5969e02f` deployed. Ten old projects were
   deleted with the user's approval. Previous targets are historical only.
-- **Observed HTTP:** `/api/health` 200; `/api/ready` 503 with
-  `deployment_manifest_invalid`; consecutive sign-in requests consistently
-  return 500 and fail closed. The forbidden legacy `AE_SOURCE_WRITE_SECRET`
-  was removed from Vercel production configuration through the official CLI.
-  That removal requires a new deployment before it affects live requests; no
-  secret read or external revocation occurred.
+- **Observed HTTP:** `/api/health` 200 proves server rendering boot recovered.
+  `/api/ready` remains 503 `deployment_manifest_invalid`, with
+  `convex_probe_skipped`, catalogue absent, quoting unavailable, funding
+  configured and sellable false. `/api/v1/release` returns 500 from the boot
+  guard. Runtime logs confirm the bundler syntax error is gone and identify
+  exactly six missing boot settings: `AE_FORMANCE_ENVIRONMENT`,
+  `AE_FORMANCE_GATEWAY_URL`, `AE_FORMANCE_LEDGER`,
+  `AE_FORMANCE_REQUEST_TIMEOUT_MS`, `AE_FORMANCE_ACCESS_CLIENT_ID` and
+  `AE_FORMANCE_ACCESS_CLIENT_SECRET`. Authenticated sign-in has not
+  been verified after deployment. The forbidden legacy `AE_SOURCE_WRITE_SECRET`
+  was removed from Vercel configuration before this deployment. The reviewed
+  branch deployment recovers server boot after the main automatic deployment
+  introduced a bundler regression. The branch remains unmerged to main, so
+  recurrence risk persists.
 - **Clerk:** production instance `ins_3JEJtsKq3rdCZG94s6tAkkut9Y7`, issuer
   `clerk.aecon.ai`; endpoint `ep_3JET0Um63P5BmiF8x6Guz5ToyUZ` created at
   `https://app.aecon.ai/api/clerk/webhook` for `session.created`,
@@ -296,21 +308,45 @@ Earlier commands and receipts remain historical, not an active runbook.
   old staging projects were untouched. Hosted OIDC authentication and secret
   CRUD remain unverified: the local Vercel CLI token had a development subject,
   so the canary aborted before any secret creation.
-- **Ledger and AWS:** all six required Formance variables remain missing and
-  fresh isolated financial infrastructure is not deployed. Existing synthetic
-  EC2/RDS remain stopped and must never be promoted in place. Fresh AWS
-  forecast readback returned `DataUnavailable` with insufficient history.
-  Historical restore RPO remains 308 seconds against a 300-second target.
-- **Local verification:** Node 22.22.0/npm 11.5.1; build fixed with Rolldown
-  1.2.7. Four focused test files passed 161/161 tests; diagnostics passed
-  30/30. Lint, typecheck, dependency check, server build and
-  `env:example:check` passed. Four temporary credential files were deleted
-  after consumers were bound. The full
-  gate, successful authenticated sign-in and live purchases are not proven.
+- **Ledger plan:** Formance is unprovisioned and all six required variables
+  remain missing. Saved plan
+  `/private/tmp/ae-alpha-plan-t6sl85yp/alpha-fixed-storage.tfplan`, source
+  `535598cb5a32b7e3c1bc976f0eeb18ef6fa995f1`, proposes 80 creates and six reads,
+  with no existing-resource updates or deletes. Database storage is fixed at
+  50 GiB with no autoscaling. The plan has not been applied.
+- **Budget and old resources:** low-traffic fresh alpha estimate is USD
+  311.29/month; paused old baseline is USD 79.17; combined estimate is USD
+  390.45 before tax. Old RDS auto-restarts 13 September at 09:44–09:49 Perth,
+  so budget blocks apply pending approved retirement of old resources. Scoped
+  live census found EC2 `i-063c00d935d85d74f` and both old RDS instances stopped,
+  each RDS at 50 GiB; NAT `nat-0aabc2385d7704d2d` remains active. Primary and DR
+  vaults currently have zero recovery points. Source RDS has five automated
+  snapshots, latest 5 September; the drill has none. Retirement is proposed,
+  not authorized: approval is pending to snapshot both old RDS instances and
+  the host disk before retiring the old host, RDS, NAT and EIP. It requires
+  retention of KMS key
+  `5979d934-bd8d-4809-bd2e-5cf22092922e`, audit, state and evidence. These
+  resources must never be promoted in place. Historical restore RPO remains
+  308 seconds against the 300-second target.
+- **Deployer access:** standalone CloudFormation stack
+  `ae-alpha-deployer-access` is `CREATE_COMPLETE`. Exact prepared change set
+  `alpha-runtime-access-20260913` was executed once through the user-authorized
+  root browser. Its grant covers only two alpha runtime roles and one instance
+  profile. Subsequent routine CLI identity was verified as assumed role
+  `Package4ReleaseOpenTofu`; no root CLI was used. The Cloudflare deployment
+  credential remains active until `2026-09-20T23:59:59Z`; its temporary file
+  remains present with mode `0600`.
+- **Source verification:** committed app
+  `ae60dfa3d67818b24ed1fd9a392ece998d1005f8` includes merged main and the
+  bundler fix (Rolldown 1.2.7), using Node 22.22.0/npm 11.5.1. Initial gate
+  stages passed 4,593 unit and 1,251 integration tests (five integration
+  skipped, three todo), then found two provider-page E2E failures. After their
+  fix, 24 E2E, ten accessibility and five focused unit checks passed;
+  typecheck, build and CLI checks passed. Eight authenticated E2E checks were
+  skipped. Full `npm run gate` has not been rerun green; authenticated sign-in
+  and live purchases remain unproven.
 
-No redeployment followed these binding changes: the live deployment remains
-`dpl_4v9d2G9cmbnHFbsDmubdkkbrfV5t` at source
-`a269f9b4ad863798d2ff79b91eed0014a3886f01`, with readiness 503. Alpha remains
-blocked on deploying current bindings, Stripe account access, the fresh
-isolated ledger boundary and end-to-end verification. Health 200 and passing
-source checks do not establish alpha readiness.
+The new deployment restores server boot; alpha remains blocked on six missing
+Formance bindings, Stripe account access, the unapplied isolated ledger
+boundary and end-to-end verification. Health 200 and passing source checks do not establish
+alpha readiness.
