@@ -53,7 +53,7 @@ function showsAdvancedOperatorNav(): boolean {
 function resolveCurrentHref(role: OperatorRole, currentPath: string, hrefs: readonly string[]): string | undefined {
   if (role === 'owner') {
     const owner = ownerWorkspaceOwnerForPath(currentPath)
-    const canonicalHref = owner === 'operations' ? '/owner/offerings' : owner === 'account' ? '/owner/settings' : undefined
+    const canonicalHref = owner === 'operations' ? '/owner/operations' : owner === 'account' ? '/owner/settings' : undefined
     if (canonicalHref !== undefined) {
       return hrefs.includes(canonicalHref) ? canonicalHref : undefined
     }

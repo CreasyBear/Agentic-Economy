@@ -173,7 +173,7 @@ function PrimaryAction({
   }
   switch (status.continuation?.action) {
     case 'supply.source.preview':
-      return <Button asChild className="min-h-touch w-fit"><a href={resumeHref ?? '/owner/offerings/new'}>Continue setup</a></Button>
+      return <Button asChild className="min-h-touch w-fit"><a href={resumeHref ?? '/owner/operations/new'}>Continue setup</a></Button>
     case 'supply.status':
     case 'supply.offboarding.status':
       return onRefresh === undefined ? null : <Button type="button" className="min-h-touch w-fit" disabled={pending} onClick={onRefresh}>{pending ? 'Refreshing…' : 'Refresh status'}</Button>

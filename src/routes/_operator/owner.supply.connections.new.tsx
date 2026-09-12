@@ -62,7 +62,7 @@ function OwnerProviderConnectionHandoffRoute() {
         return
       }
       const draftRef = attempt.draftRef ?? attempt.candidateDraftRef
-      void navigate({ to: '/owner/offerings/new', search: result.state === 'consumed' && attempt.connectionRef !== undefined
+      void navigate({ to: '/owner/operations/new', search: result.state === 'consumed' && attempt.connectionRef !== undefined
         ? { connection: attempt.connectionRef, environment: attempt.environment, ...(draftRef === undefined ? {} : { draft: draftRef }) }
         : (draftRef === undefined ? {} : { draft: draftRef }) })
     } catch (cause) {
@@ -139,7 +139,7 @@ function OwnerProviderConnectionHandoffRoute() {
       setCredential('')
       if (result.kind !== 'refused') {
         const draftRef = attempt.draftRef ?? attempt.candidateDraftRef
-        void navigate({ to: '/owner/offerings/new', search: {
+        void navigate({ to: '/owner/operations/new', search: {
           connection: result.connection.connectionRef,
           environment: result.connection.sourceEnvironment ?? attempt.environment,
           ...(draftRef === undefined ? {} : { draft: draftRef }),
@@ -155,7 +155,7 @@ function OwnerProviderConnectionHandoffRoute() {
           const readback = await readAttempt({ data: { attemptRef: attempt.attemptRef } })
           if (readback.kind === 'available' && readback.attempt.state === 'consumed' && readback.attempt.connectionRef !== undefined) {
             const readbackDraftRef = readback.attempt.draftRef ?? readback.attempt.candidateDraftRef
-            void navigate({ to: '/owner/offerings/new', search: {
+            void navigate({ to: '/owner/operations/new', search: {
               connection: readback.attempt.connectionRef,
               environment: readback.attempt.environment,
               ...(readbackDraftRef === undefined ? {} : { draft: readbackDraftRef }),
@@ -301,8 +301,8 @@ function Shell({ children }: Readonly<{ children: React.ReactNode }>) {
       operatorRole="owner"
       title="Connect Provider"
       description="Connect the credential required by this Provider source."
-      currentPath="/owner/offerings/new"
-      breadcrumbs={[{ label: 'Operations', href: '/owner/offerings' }, { label: 'Add Tool', href: '/owner/offerings/new' }, { label: 'Connect Provider' }]}
+      currentPath="/owner/operations/new"
+      breadcrumbs={[{ label: 'Operations', href: '/owner/operations' }, { label: 'Add Tool', href: '/owner/operations/new' }, { label: 'Connect Provider' }]}
     >
       <AeSettingsStack>{children}</AeSettingsStack>
     </AeOperatorPage>
@@ -319,7 +319,7 @@ function ReturnToAddTool({ connectionRef, environment, draftRef }: Readonly<{
     : { connection: connectionRef, environment, ...(draftRef === undefined ? {} : { draft: draftRef }) }
   return (
     <Button asChild variant="secondary" className="mt-4 min-h-touch">
-      <Link to="/owner/offerings/new" search={search}>Return to Add Tool</Link>
+      <Link to="/owner/operations/new" search={search}>Return to Add Tool</Link>
     </Button>
   )
 }

@@ -396,7 +396,7 @@ export async function reserveConnectAccountHandler(
     resourceRefs: [`business:${args.businessId}`, `currency:${args.currency}`],
     budgetAmount: 0,
     consequenceSummary: 'Create this Stripe-hosted payout authority for the owner Account.',
-    statusReadbackRef: '/owner/offerings#earnings',
+    statusReadbackRef: '/owner/operations#earnings',
     command: {
       version: 'ae.payout-authority-consequence:v1',
       action: 'payout_authority.create',
@@ -561,7 +561,7 @@ export async function authorizeConnectOnboardingHandler(
     ],
     budgetAmount: 0,
     consequenceSummary: 'Reopen Stripe-hosted onboarding for this payout authority.',
-    statusReadbackRef: '/owner/offerings#earnings',
+    statusReadbackRef: '/owner/operations#earnings',
     command: {
       version: 'ae.payout-authority-replace-consequence:v1',
       businessId: args.businessId,

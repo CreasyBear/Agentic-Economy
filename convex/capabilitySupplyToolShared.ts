@@ -30,7 +30,8 @@ import type { Doc } from './_generated/dataModel'
 import type { QueryCtx } from './_generated/server'
 import { getExactRegisteredCapabilityContract } from './capabilityContractDocuments'
 import { capabilitySupplyGraphPorts } from './capabilitySupplyGraphPorts'
-import { readManagedX402InspectionTarget } from './capabilitySupplyCurrentTool'
+import { readManagedX402InspectionTargetForQualifiedCandidate } from './capabilitySupplyCurrentTool'
+import { toolProviderRouteabilityIsFrozen } from './lib/providerOffboardingFreeze'
 import { toCapabilityBindingRow, toCapabilityOfferingRow } from './capabilitySupplyRowMappers'
 import { directoryListingEntry } from './capabilitySupplyDirectoryEligibility'
 
@@ -194,8 +195,17 @@ export async function toolRecordProjection(
     && bindingRow.admission === 'admitted'
     && bindingRow.conformance === 'conformant'
   const routeable = qualification.status === 'eligible'
+  // Reuse this row's already-fetched binding/contract docs and the
+  // qualification just computed above instead of calling the standalone
+  // `readManagedX402InspectionTarget(ctx, toolRef, now)` - it would re-fetch
+  // the same publication, re-run `qualifySuppliedCandidate` (publication +
+  // business + contract + offering + binding reads) and re-fetch the
+  // binding/contract a second time for every row of every catalogue page.
   const awaitingInspection = !routeable && binding.adapter.adapterId === 'x402-fetch:v2'
-    && await readManagedX402InspectionTarget(ctx, publication.toolRef, now) !== undefined
+    && !(await toolProviderRouteabilityIsFrozen(ctx, publication.toolRef))
+    && await readManagedX402InspectionTargetForQualifiedCandidate(ctx, {
+      publication, binding: bindingDoc, contract: contractResult, qualification,
+    }) !== undefined
   const unavailableReason = routeable ? undefined : awaitingInspection ? 'inspection_required' as const : publicUnavailableReason(publication, qualification)
   const authorityMode = publication.authorityMode
   // Display price is derived from the publication's pinned pricing config
@@ -240,8 +250,8 @@ export async function toolRecordProjection(
     networkId: publication.networkId,
     contract: contractResult.contract,
     business: { businessId: String(business._id), slug: business.slug, name: business.name },
-    offering: {
-      offeringRef: offering.origin?.kind === 'catalog_offering' ? offering.origin.offeringRef : offering.offeringId,
+    listing: {
+      listingRef: offering.origin?.kind === 'catalog_offering' ? offering.origin.offeringRef : offering.offeringId,
       revision: offering.origin?.kind === 'catalog_offering' ? offering.origin.offeringRevision : 1,
       label: offering.presentation.label,
       summary: offering.presentation.summary,

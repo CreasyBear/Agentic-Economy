@@ -195,7 +195,7 @@ export function buildCatalogMarkdown(
     ...(shown.length === 0
       ? ['No published business matched this read.', '', `Browse everything with \`GET ${base}/api/businesses\`.`]
       : [
-          '| Business | Category | Where | Offerings | Price | Page |',
+          '| Business | Category | Where | Listings | Price | Page |',
           '| --- | --- | --- | --- | --- | --- |',
           ...shown.map((business) => catalogRow(business, base)),
           '',
@@ -227,10 +227,10 @@ export function buildBusinessMarkdown(
     `- JSON: \`GET ${base}/api/businesses/${business.slug}\``,
     `- Discovery manifest: \`GET ${base}/${business.slug}/ucp\``,
     '',
-    '## Offerings',
+    '## Listings',
     '',
     ...(business.offerings.length === 0
-      ? ['No published offering.']
+      ? ['No published listing.']
       : business.offerings.flatMap((offering) => [
           `### ${oneLine(offering.name)}`,
           '',
@@ -239,7 +239,7 @@ export function buildBusinessMarkdown(
           ...(offering.availabilitySummary === undefined ? [] : [`- Availability: ${oneLine(offering.availabilitySummary)}`]),
           ...(offering.price === undefined ? [] : [`- Price: ${oneLine(formatOfferingPrice(offering.price))}`]),
           ...(offering.pricingSummary === undefined ? [] : [`- Published price note: ${oneLine(offering.pricingSummary)}`]),
-          `- AE can act on this offering: ${offering.support.aeSupportedAction ? 'yes' : 'no'}`,
+          `- AE can act on this listing: ${offering.support.aeSupportedAction ? 'yes' : 'no'}`,
           '',
         ])),
     DiscoveryListingBoundaryLine,

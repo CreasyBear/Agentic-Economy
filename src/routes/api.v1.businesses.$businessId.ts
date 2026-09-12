@@ -6,10 +6,10 @@ import { methodNotAllowed } from '@/lib/server/method-guard'
 import { registryServicesDetailAction } from '@/modules/registry/registry.actions'
 import { jsonResponse } from './api.businesses'
 
-export const Route = createFileRoute('/api/v1/services/$serviceId')({
+export const Route = createFileRoute('/api/v1/businesses/$businessId')({
   server: {
     handlers: {
-      GET: ({ params, request }) => withHttpRateLimit(request, 'public-read', () => handleDurableServiceDetailRequest(params.serviceId, request)),
+      GET: ({ params, request }) => withHttpRateLimit(request, 'public-read', () => handleDurableServiceDetailRequest(params.businessId, request)),
       POST: () => methodNotAllowed(['GET']),
       PUT: () => methodNotAllowed(['GET']),
       PATCH: () => methodNotAllowed(['GET']),

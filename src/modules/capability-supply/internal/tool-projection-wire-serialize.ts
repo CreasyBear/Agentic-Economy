@@ -72,11 +72,11 @@ export function serializeToolDescriptor(
       slug: tool.business.slug,
       name: tool.business.name,
     },
-    offering: {
-      offeringRef: tool.offering.offeringRef,
-      revision: tool.offering.revision,
-      label: tool.offering.label,
-      summary: tool.offering.summary,
+    listing: {
+      listingRef: tool.listing.listingRef,
+      revision: tool.listing.revision,
+      label: tool.listing.label,
+      summary: tool.listing.summary,
     },
     summary: tool.summary,
     commercial: {

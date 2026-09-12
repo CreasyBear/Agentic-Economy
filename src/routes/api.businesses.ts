@@ -59,7 +59,7 @@ export async function runRegistryListRequest<Input, Result extends ActionResult>
   if (duplicateParam !== undefined) return duplicateParam
   const unsupported = uniqueSorted([...url.searchParams.keys()].filter((key) => !LIST_QUERY_PARAMS.has(key)))
   if (unsupported.length > 0) {
-    const searchPath = options.collection === 'businesses' ? '/api/businesses/search?q=' : '/api/v1/services/search?q='
+    const searchPath = options.collection === 'businesses' ? '/api/businesses/search?q=' : '/api/v1/businesses/search?q='
     return problem({
       status: 400,
       kind: 'FAILED_PRECONDITION',

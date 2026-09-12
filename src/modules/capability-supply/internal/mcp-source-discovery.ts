@@ -121,7 +121,7 @@ export async function discoverMcpSource(input: Readonly<{
       if (status === 401 || status === 403) {
         return {
           kind: 'authentication_required',
-          authenticationUrl: `/owner/offerings?source=mcp&serverUrl=${encodeURIComponent(serverUrl)}`,
+          authenticationUrl: `/owner/operations?source=mcp&serverUrl=${encodeURIComponent(serverUrl)}`,
           serverUrl,
         }
       }
@@ -143,7 +143,7 @@ export async function discoverMcpSource(input: Readonly<{
         if (status === 401 || status === 403) {
           return {
             kind: 'authentication_required',
-            authenticationUrl: `/owner/offerings?source=mcp&serverUrl=${encodeURIComponent(serverUrl)}`,
+            authenticationUrl: `/owner/operations?source=mcp&serverUrl=${encodeURIComponent(serverUrl)}`,
             serverUrl,
           }
         }

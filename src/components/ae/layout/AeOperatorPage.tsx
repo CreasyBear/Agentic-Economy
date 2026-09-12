@@ -23,7 +23,7 @@ import type { OperatorContext } from '@/lib/operator/operator-context'
  * breadcrumbs prop is needed.
  *
  * Owner routes under /owner/supply/* and /owner/settings/{connections,payouts}
- * are not route-tree descendants of the /owner/offerings sidebar item that
+ * are not route-tree descendants of the /owner/operations sidebar item that
  * owns them, so that one owner-specific mapping is preserved on top of the
  * useMatches() ancestor walk.
  */
@@ -31,8 +31,8 @@ function useOperatorListCrumb(operatorRole: OperatorRole, currentPath: string): 
   const matches = useMatches()
 
   return useMemo(() => {
-    if (operatorRole === 'owner' && ownerWorkspaceOwnerForPath(currentPath) === 'operations' && currentPath !== '/owner/offerings') {
-      return { label: 'Operations', href: '/owner/offerings' }
+    if (operatorRole === 'owner' && ownerWorkspaceOwnerForPath(currentPath) === 'operations' && currentPath !== '/owner/operations') {
+      return { label: 'Operations', href: '/owner/operations' }
     }
 
     const ancestor = matches.slice(0, -1).findLast((match) => match.staticData.nav?.label !== undefined)

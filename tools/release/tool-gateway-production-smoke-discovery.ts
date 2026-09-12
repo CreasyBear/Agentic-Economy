@@ -110,7 +110,7 @@ export async function discoverGatewayServices(
   let cursor: string | undefined;
 
   for (let pageNumber = 0; pageNumber < MAX_SERVICE_PAGES; pageNumber += 1) {
-    const url = new URL("/api/v1/services", config.baseUrl);
+    const url = new URL("/api/v1/businesses", config.baseUrl);
     url.searchParams.set("limit", String(SERVICES_PAGE_LIMIT));
     if (cursor !== undefined) url.searchParams.set("cursor", cursor);
     const response: GatewayHttpResponse = await requestJson(

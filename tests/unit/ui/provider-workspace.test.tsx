@@ -8,7 +8,7 @@ const calls = vi.hoisted(() => ({
   connections: vi.fn(), earnings: vi.fn(), connect: vi.fn(), identity: vi.fn(), ensure: vi.fn(), rename: vi.fn(), invalidate: vi.fn(async () => undefined),
 }))
 const tokens = vi.hoisted(() => ({ connections: Symbol('connections'), earnings: Symbol('earnings'), connect: Symbol('connect'), identity: Symbol('identity'), ensure: Symbol('ensure'), rename: Symbol('rename') }))
-const routeState = vi.hoisted(() => ({ location: { pathname: '/owner/offerings', hash: '', search: {} as Record<string, unknown> } }))
+const routeState = vi.hoisted(() => ({ location: { pathname: '/owner/operations', hash: '', search: {} as Record<string, unknown> } }))
 const rendered = vi.hoisted(() => ({ status: vi.fn(), capabilities: vi.fn(), identity: vi.fn(), connections: vi.fn() }))
 
 vi.mock('@tanstack/react-start', async (importOriginal) => ({
@@ -59,7 +59,7 @@ afterEach(() => {
   for (const mock of Object.values(calls)) mock.mockReset()
   for (const mock of Object.values(rendered)) mock.mockReset()
   calls.invalidate.mockResolvedValue(undefined)
-  routeState.location = { pathname: '/owner/offerings', hash: '', search: {} }
+  routeState.location = { pathname: '/owner/operations', hash: '', search: {} }
 })
 
 describe('Tools management disclosure', () => {
@@ -164,7 +164,7 @@ describe('Tools management disclosure', () => {
   })
 
   it('opens authoritative earnings readback for a Connect return', async () => {
-    routeState.location = { pathname: '/owner/offerings', hash: 'earnings', search: { connect: 'return' } }
+    routeState.location = { pathname: '/owner/operations', hash: 'earnings', search: { connect: 'return' } }
     calls.earnings.mockResolvedValue({ kind: 'not_found' })
     calls.connect.mockResolvedValue({ kind: 'not_found' })
     render(<AeProviderWorkspace inventory={inventory} lifecycle={unavailable} connections={unavailable} payouts={unavailable} publicStatus={unavailable} />)
@@ -182,7 +182,7 @@ describe('Tools management disclosure', () => {
       method: 'GET',
       environment: 'sandbox',
     } as const
-    routeState.location = { pathname: '/owner/offerings', hash: '', search: handoff }
+    routeState.location = { pathname: '/owner/operations', hash: '', search: handoff }
     calls.connections.mockResolvedValue({ kind: 'available', businessId: 'biz:one', connections: [] })
     render(<AeProviderWorkspace inventory={inventory} lifecycle={unavailable} connections={unavailable} payouts={unavailable} publicStatus={unavailable} />)
 
@@ -208,7 +208,7 @@ describe('Tools management disclosure', () => {
   })
 
   it('owns a missing rebind target without changing a connection', async () => {
-    routeState.location = { pathname: '/owner/offerings', hash: 'provider-connection-connection:missing', search: { rebind: 'offering:one' } }
+    routeState.location = { pathname: '/owner/operations', hash: 'provider-connection-connection:missing', search: { rebind: 'offering:one' } }
     calls.connections.mockResolvedValue({ kind: 'available', businessId: 'biz:one', connections: [] })
     render(<AeProviderWorkspace inventory={inventory} lifecycle={unavailable} connections={unavailable} payouts={unavailable} publicStatus={unavailable} />)
 

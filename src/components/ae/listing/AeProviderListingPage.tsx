@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button'
 import { formatTimestamp, timestampIso } from '@/lib/ui/format-time'
 import { telUri } from '@/lib/ui/tel-uri'
 import { formatOfferingPrice } from '@/modules/catalog/public'
-import type { PublicBusinessCatalogApiV2Dto, PublicOfferingDto } from '@/modules/registry/public'
+import type { PublicBusinessCatalogApiV2Dto, PublicListingDto } from '@/modules/registry/public'
 import type { PublicOfferingSupplyView } from '@/components/ae/offerings/offering-presentation'
 
 export type AeProviderListingPageProps = {
@@ -132,7 +132,7 @@ export function ListingFirstScreen({
   offerings = catalog.offerings,
 }: {
   catalog: PublicBusinessCatalogApiV2Dto
-  offerings?: readonly PublicOfferingDto[]
+  offerings?: readonly PublicListingDto[]
 }) {
   const readyCount = offerings.filter((offering) => offering.support.aeSupportedAction).length
 
@@ -154,7 +154,7 @@ export function ListingFirstScreen({
   )
 }
 
-function OperationRow({ offering, catalog }: { offering: PublicOfferingDto; catalog: PublicBusinessCatalogApiV2Dto }) {
+function OperationRow({ offering, catalog }: { offering: PublicListingDto; catalog: PublicBusinessCatalogApiV2Dto }) {
   const operationPath = offering.accessPaths.find((path) => path.kind === 'external_operation')
   const webPath = offering.accessPaths.find((path) => path.kind === 'human_request' && path.channel === 'website' && path.url !== undefined)
   const phone = catalog.businessContext.kind === 'local_human' ? catalog.businessContext.publishedPhone : undefined
@@ -214,7 +214,7 @@ function OperationRow({ offering, catalog }: { offering: PublicOfferingDto; cata
   )
 }
 
-function supplyOfferingToDto(item: PublicOfferingSupplyView['offerings'][number]): PublicOfferingDto {
+function supplyOfferingToDto(item: PublicOfferingSupplyView['offerings'][number]): PublicListingDto {
   return {
     offeringRef: item.offering.offeringRef,
     revision: item.offering.revision,

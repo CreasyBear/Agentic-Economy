@@ -150,7 +150,7 @@ export function AeProviderConnectionForm({
           description="Create an unpublished provider workspace, then return here to inspect and claim the x402 endpoint."
           action={
             <Button asChild className="min-h-touch">
-              <Link to="/owner/offerings">Create provider workspace</Link>
+              <Link to="/owner/operations">Create provider workspace</Link>
             </Button>
           }
         />

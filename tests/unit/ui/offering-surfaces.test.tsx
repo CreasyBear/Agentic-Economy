@@ -23,11 +23,11 @@ afterEach(cleanup)
 
 describe('Provider Tool directory', () => {
   it('starts the source-native Add Tool journey', () => {
-    renderAt(<AeOwnerOfferingsList offerings={[]} />, '/owner/offerings')
+    renderAt(<AeOwnerOfferingsList offerings={[]} />, '/owner/operations')
 
     expect(screen.getByRole('heading', { name: 'No Tools yet' })).toBeTruthy()
     expect(screen.getByText('Connect a source and choose the exact Tool AE should validate.')).toBeTruthy()
-    expect(screen.getByRole('link', { name: 'Add Tool' }).getAttribute('href')).toBe('/owner/offerings/new')
+    expect(screen.getByRole('link', { name: 'Add Tool' }).getAttribute('href')).toBe('/owner/operations/new')
   })
 
   it('opens the authoritative Provider Tool readback', () => {
@@ -38,13 +38,13 @@ describe('Provider Tool directory', () => {
         projectionState="projection_pending"
         onRetryProjection={vi.fn()}
       />,
-      '/owner/offerings',
+      '/owner/operations',
     )
 
     expect(screen.getByText('Your public page is still updating')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Refresh public status' })).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Open Blockchain data query' }).getAttribute('href'))
-      .toBe('/owner/supply/offering%3Ablockchain-query')
+      .toBe('/owner/operations/offering%3Ablockchain-query')
   })
 
   it('orders compact rows as Tool, lifecycle, blocker, and one continuation', () => {
@@ -53,10 +53,10 @@ describe('Provider Tool directory', () => {
       lifecycleLabel: 'Published',
       availability: 'available' as const,
       blocker: 'Reconnect the provider',
-      continuation: { label: 'Manage connection', href: '/owner/offerings#supplier-connections' },
+      continuation: { label: 'Manage connection', href: '/owner/operations#supplier-connections' },
     }
 
-    renderAt(<AeOwnerOfferingsList offerings={[offering]} />, '/owner/offerings')
+    renderAt(<AeOwnerOfferingsList offerings={[offering]} />, '/owner/operations')
 
     const compactList = screen.getByTestId('provider-workspace-compact-list')
     const row = within(compactList).getByRole('listitem')
@@ -108,8 +108,8 @@ function projectionFixture(): PublicOfferingSupplyProjection {
 function renderAt(ui: ReactElement, pathname: string) {
   const rootRoute = createRootRoute()
   const routeTree = rootRoute.addChildren([
-    createRoute({ getParentRoute: () => rootRoute, path: '/owner/offerings' }),
-    createRoute({ getParentRoute: () => rootRoute, path: '/owner/supply/$offeringRef' }),
+    createRoute({ getParentRoute: () => rootRoute, path: '/owner/operations' }),
+    createRoute({ getParentRoute: () => rootRoute, path: '/owner/operations/$toolRef' }),
   ])
   const router = createRouter({
     routeTree,

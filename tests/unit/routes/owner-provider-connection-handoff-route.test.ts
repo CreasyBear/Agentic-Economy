@@ -53,7 +53,7 @@ vi.mock('@clerk/tanstack-react-start', () => ({ useReverification: (fn: unknown)
 
 import { Route } from '@/routes/_operator/owner.supply.connections.new'
 import { Route as CallbackRoute } from '@/routes/_operator/owner.supply.connections.oauth.callback'
-import { Route as DestinationRoute } from '@/routes/_operator/owner.offerings.new'
+import { Route as DestinationRoute } from '@/routes/_operator/owner.operations.new'
 
 afterEach(() => {
   cleanup()
@@ -136,7 +136,7 @@ describe('Provider connection handoff route', () => {
     const RouterProvider = RouterContextProvider as ComponentType<{ router: typeof router }>
     render(createElement(RouterProvider, { router }, createElement(Component)))
     const href = screen.getByRole('link', { name: 'Return to Add Tool' }).getAttribute('href')
-    expect(href).toBe('/owner/offerings/new?connection=connection%3Amcp&environment=production&draft=sds_exact_source')
+    expect(href).toBe('/owner/operations/new?connection=connection%3Amcp&environment=production&draft=sds_exact_source')
 
     mocks.readIdentity.mockResolvedValue({ kind: 'available', businessId: 'business:one' })
     mocks.readConnections.mockResolvedValue([{ connectionRef: 'connection:mcp', businessId: 'business:one', available: true }])
@@ -230,7 +230,7 @@ describe('Provider connection handoff route', () => {
       },
     })).rejects.toMatchObject({
       options: {
-        to: '/owner/offerings/new',
+        to: '/owner/operations/new',
         search: { connection: 'connection:mcp', environment: 'production', draft: 'sds_exact_source' },
         replace: true,
       },

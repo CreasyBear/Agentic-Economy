@@ -45,7 +45,7 @@ export function ProviderWorkspaceReadinessSection({
         </DeferredSection>
         <DeferredSection promise={publicStatus} loadingLabel="Loading public status" unavailableTitle="Public status unavailable">
           {(result) => result.kind === 'available' ? (
-            <SummaryCard title="Public status" detail={`${result.value.catalog.offerings.length} public offerings`} action="Review public status" onAction={() => focusSection('provider-status')} />
+            <SummaryCard title="Public status" detail={`${result.value.catalog.offerings.length} public Tools`} action="Review public status" onAction={() => focusSection('provider-status')} />
           ) : <SecondarySummary result={result} subject="Public status" notApplicableTitle="Public status not published" unavailableTitle="Public status unavailable" />}
         </DeferredSection>
       </div>

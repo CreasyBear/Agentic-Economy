@@ -17,7 +17,7 @@ type MobileNavItem = { href: string; label: string; icon: LucideIcon; mobileOrde
  * route-tree descendants of the sidebar item that owns them. */
 function resolveCurrentHref(currentPath: string, hrefs: readonly string[]): string | undefined {
   const owner = ownerWorkspaceOwnerForPath(currentPath)
-  const canonicalHref = owner === 'operations' ? '/owner/offerings' : owner === 'account' ? '/owner/settings' : undefined
+  const canonicalHref = owner === 'operations' ? '/owner/operations' : owner === 'account' ? '/owner/settings' : undefined
   if (canonicalHref !== undefined) {
     return hrefs.includes(canonicalHref) ? canonicalHref : undefined
   }

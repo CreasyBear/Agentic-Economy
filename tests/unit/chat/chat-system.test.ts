@@ -439,7 +439,7 @@ describe('transcript projector', () => {
           tools: [
             {
               toolRef: skyRef,
-              offering: { label: 'Weather finder' },
+              listing: { label: 'Weather finder' },
               business: { name: 'Sky Co' },
               commercial: { price: { kind: 'fixed', amount: { currency: 'USD', units: '50', exponent: 2 } } },
               authentication: { kind: 'ae_api_key' },
@@ -447,7 +447,7 @@ describe('transcript projector', () => {
             },
             {
               toolRef: rainRef,
-              offering: { label: 'Rain lookup' },
+              listing: { label: 'Rain lookup' },
               business: { name: 'Nimbus' },
               commercial: { price: { kind: 'fixed', amount: { currency: 'USD', units: '75', exponent: 2 } } },
               authentication: { kind: 'x402' },

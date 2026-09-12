@@ -76,7 +76,7 @@ afterEach(() => {
 
 describe('operator shell nested chrome', () => {
   it('moves focus to committed content only after a pathname change', async () => {
-    renderAt(<FocusTransitionHarness />, '/owner/offerings')
+    renderAt(<FocusTransitionHarness />, '/owner/operations')
 
     const calls = await screen.findByRole('link', { name: 'Open Calls' })
     const main = screen.getByTestId('operator-content')
@@ -92,7 +92,7 @@ describe('operator shell nested chrome', () => {
   })
 
   it('does not move focus for hash-only navigation', async () => {
-    renderAt(<FocusTransitionHarness />, '/owner/offerings')
+    renderAt(<FocusTransitionHarness />, '/owner/operations')
 
     const earnings = await screen.findByRole('link', { name: 'Open earnings' })
     earnings.focus()
@@ -192,11 +192,11 @@ describe('operator shell nested chrome', () => {
         operatorRole="owner"
         title="Tools"
         description="Publish the exact tools agents can inspect and call."
-        currentPath="/owner/offerings"
+        currentPath="/owner/operations"
       >
         <div>Tools body</div>
       </AeOperatorPage>,
-      '/owner/offerings',
+      '/owner/operations',
     )
 
     const heading = await screen.findByRole('heading', { level: 1, name: 'Tools' })
@@ -209,7 +209,7 @@ describe('operator shell nested chrome', () => {
         operatorRole="owner"
         title="Tools"
         description="Publish the exact tools agents can inspect and call."
-        currentPath="/owner/offerings"
+        currentPath="/owner/operations"
       >
         <OperatorRoutePending />
       </AeOperatorPage>,
@@ -227,7 +227,7 @@ describe('operator shell nested chrome', () => {
         operatorRole="owner"
         title="Tools"
         description="Publish the exact tools agents can inspect and call."
-        currentPath="/owner/offerings"
+        currentPath="/owner/operations"
       >
         <OperatorRouteError error={new Error('unavailable')} />
       </AeOperatorPage>,
@@ -298,7 +298,7 @@ describe('operator shell nested chrome', () => {
 
 describe('owner mobile navigation', () => {
   it('moves between workspace routes without a document navigation', async () => {
-    renderOperatorShell('owner', '/owner/offerings')
+    renderOperatorShell('owner', '/owner/operations')
 
     const mobileNav = await screen.findByRole('navigation', { name: 'Owner primary navigation' })
     const calls = within(mobileNav).getByRole('link', { name: 'Calls' })
@@ -308,7 +308,7 @@ describe('owner mobile navigation', () => {
   })
 
   it('renders the exact owner shortcuts from the shared navigation model in order', async () => {
-    renderOperatorShell('owner', '/owner/offerings')
+    renderOperatorShell('owner', '/owner/operations')
 
     const mobileNav = await screen.findByRole('navigation', { name: 'Owner primary navigation' })
     const links = within(mobileNav).getAllByRole('link')
@@ -317,7 +317,7 @@ describe('owner mobile navigation', () => {
     expect(links.map((link) => link.getAttribute('href'))).toEqual([
       '/activity',
       '/agent-access',
-      '/owner/offerings',
+      '/owner/operations',
     ])
     expect(links.filter((link) => link.getAttribute('aria-current') === 'page').map((link) => link.textContent))
       .toEqual(['Operations'])
@@ -325,7 +325,7 @@ describe('owner mobile navigation', () => {
   })
 
   it('does not mislabel secondary owner routes as a buyer shortcut', async () => {
-    const descendant = renderOperatorShell('owner', '/owner/offerings/new')
+    const descendant = renderOperatorShell('owner', '/owner/operations/new')
     const descendantNav = await screen.findByRole('navigation', { name: 'Owner primary navigation' })
 
     expect(within(descendantNav).getAllByRole('link')
@@ -343,7 +343,7 @@ describe('owner mobile navigation', () => {
   })
 
   it('is owner-only while preserving the full sidebar navigation', async () => {
-    const owner = renderOperatorShell('owner', '/owner/offerings')
+    const owner = renderOperatorShell('owner', '/owner/operations')
     const sidebarNav = await screen.findByRole('navigation', { name: 'Operator navigation' })
 
     expect(within(sidebarNav).getByRole('link', { name: 'Operations' })).toBeTruthy()
@@ -362,7 +362,7 @@ describe('owner mobile navigation', () => {
   })
 
   it('hides at md, clears mobile content, preserves desktop padding, and respects the safe area', async () => {
-    renderOperatorShell('owner', '/owner/offerings')
+    renderOperatorShell('owner', '/owner/operations')
 
     const mobileNav = await screen.findByRole('navigation', { name: 'Owner primary navigation' })
     const content = screen.getByTestId('operator-content')
@@ -385,7 +385,7 @@ describe('owner mobile navigation', () => {
 
 describe('owner account identity', () => {
   it('keeps the active account and maintained Clerk menu visible in expanded owner chrome', async () => {
-    renderOperatorShell('owner', '/owner/offerings')
+    renderOperatorShell('owner', '/owner/operations')
 
     const account = await screen.findByRole('group', { name: 'Signed in as ada@supply.example' })
     expect(within(account).getByText('ada@supply.example').classList.contains('sr-only')).toBe(false)
@@ -405,7 +405,7 @@ describe('owner account identity', () => {
   })
 
   it('retains identity semantics when the desktop sidebar is collapsed', async () => {
-    renderOperatorShell('owner', '/owner/offerings')
+    renderOperatorShell('owner', '/owner/operations')
 
     fireEvent.click(await screen.findByRole('button', { name: 'Collapse navigation' }))
 
@@ -432,7 +432,7 @@ describe('owner account identity', () => {
     shellMocks.useUser.mockReturnValueOnce(noEmailUser)
     shellMocks.useUser.mockReturnValueOnce(noEmailUser)
 
-    renderOperatorShell('owner', '/owner/offerings')
+    renderOperatorShell('owner', '/owner/operations')
 
     const account = await screen.findByRole('group', { name: 'Signed in as Ada Lovelace' })
     expect(within(account).getByText('Ada Lovelace')).toBeTruthy()
@@ -444,7 +444,7 @@ describe('owner account identity', () => {
     Object.defineProperty(window, 'innerWidth', { configurable: true, value: 390 })
 
     try {
-      renderOperatorShell('owner', '/owner/offerings')
+      renderOperatorShell('owner', '/owner/operations')
       fireEvent.click(await screen.findByRole('button', { name: 'Open operator navigation' }))
 
       const account = await screen.findByRole('group', { name: 'Signed in as ada@supply.example' })
@@ -504,10 +504,10 @@ function FocusTransitionHarness() {
         operatorRole="owner"
         title="Outer workspace"
         description="Outer workspace."
-        currentPath="/owner/offerings"
+        currentPath="/owner/operations"
       >
         <Link to="/activity">Open Calls</Link>
-        <Link to="/owner/offerings" hash="earnings">Open earnings</Link>
+        <Link to="/owner/operations" hash="earnings">Open earnings</Link>
         <AeOperatorPage
           operatorRole="owner"
           title={calls ? 'Calls' : 'Tools'}
@@ -557,10 +557,10 @@ function renderAt(ui: ReactElement, pathname: string) {
       staticData: { nav: { label: 'Agents', operator: { roles: ['owner'], group: 'Buy', groupOrder: 0, order: 1, icon: NavIcon, tier: 'core', mobilePrimary: true, mobileOrder: 20 } } },
     }),
     createRoute({ getParentRoute: () => rootRoute, path: '/agent-access/$' }),
-    createRoute({ getParentRoute: () => rootRoute, path: '/owner/offerings/new' }),
+    createRoute({ getParentRoute: () => rootRoute, path: '/owner/operations/new' }),
     createRoute({
       getParentRoute: () => rootRoute,
-      path: '/owner/offerings',
+      path: '/owner/operations',
       staticData: { nav: { label: 'Operations', operator: { roles: ['owner'], group: 'Supply', groupOrder: 1, order: 0, icon: NavIcon, tier: 'core', mobilePrimary: true, mobileOrder: 30 } } },
     }),
     createRoute({

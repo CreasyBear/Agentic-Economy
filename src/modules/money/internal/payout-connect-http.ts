@@ -514,8 +514,8 @@ export async function createOwnerOnboardingLinkThroughSource(
     businessId: input.businessId,
     currency: currency.currency,
     stripeAccountId,
-    refreshRef: `${baseUrl}/owner/offerings?connect=refresh`,
-    returnRef: `${baseUrl}/owner/offerings?connect=return`,
+    refreshRef: `${baseUrl}/owner/operations?connect=refresh`,
+    returnRef: `${baseUrl}/owner/operations?connect=return`,
     idempotencyKey: input.idempotencyKey,
   })
   if (isMoneyRefusal(link)) return link

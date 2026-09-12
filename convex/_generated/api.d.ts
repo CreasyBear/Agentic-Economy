@@ -145,6 +145,7 @@ import type * as lib_x402DirectoryIndex_analytics from "../lib/x402DirectoryInde
 import type * as lib_x402DirectoryIndex_categoryStats from "../lib/x402DirectoryIndex/categoryStats.js";
 import type * as lib_x402DirectoryIndex_contracts from "../lib/x402DirectoryIndex/contracts.js";
 import type * as lib_x402DirectoryIndex_facets from "../lib/x402DirectoryIndex/facets.js";
+import type * as lib_x402DirectoryIndex_listingDigest from "../lib/x402DirectoryIndex/listingDigest.js";
 import type * as lib_x402DirectoryIndex_rows from "../lib/x402DirectoryIndex/rows.js";
 import type * as marketDemandSignals from "../marketDemandSignals.js";
 import type * as marketDispatchWorkpool from "../marketDispatchWorkpool.js";
@@ -350,6 +351,7 @@ declare const fullApi: ApiFromModules<{
   "lib/x402DirectoryIndex/categoryStats": typeof lib_x402DirectoryIndex_categoryStats;
   "lib/x402DirectoryIndex/contracts": typeof lib_x402DirectoryIndex_contracts;
   "lib/x402DirectoryIndex/facets": typeof lib_x402DirectoryIndex_facets;
+  "lib/x402DirectoryIndex/listingDigest": typeof lib_x402DirectoryIndex_listingDigest;
   "lib/x402DirectoryIndex/rows": typeof lib_x402DirectoryIndex_rows;
   marketDemandSignals: typeof marketDemandSignals;
   marketDispatchWorkpool: typeof marketDispatchWorkpool;

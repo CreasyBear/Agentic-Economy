@@ -121,7 +121,7 @@ describe("Package 5 owner connection rollout", () => {
       kind: "action_required",
       requiredAction: {
         blockedCapabilities: ["supply.publish"],
-        cta: "/owner/offerings",
+        cta: "/owner/operations",
       },
     });
     expect(sourceMocks.callSourceQuery).not.toHaveBeenCalled();
@@ -137,7 +137,7 @@ describe("Package 5 owner connection rollout", () => {
       requiredAction: {
         action: "supply.source.preview",
         blockedCapabilities: ["supply.publish"],
-        cta: "/owner/offerings?connect=x402",
+        cta: "/owner/operations?connect=x402",
         ctaLabel: "Connect service",
         description: "Inspect the exact x402 lane.",
         iconUrl: null,

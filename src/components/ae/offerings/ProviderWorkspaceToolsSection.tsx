@@ -20,7 +20,7 @@ export function ProviderWorkspaceToolsSection({ inventory, lifecycle, compatibil
     ...row,
     lifecycleLabel: 'Loading',
     availability: 'unknown',
-    continuation: { kind: 'navigate', label: 'View status', href: `/owner/supply/${encodeURIComponent(row.offeringRef)}` },
+    continuation: { kind: 'navigate', label: 'View status', href: `/owner/operations/${encodeURIComponent(row.offeringRef)}` },
     lifecyclePending: true,
   }))
 
@@ -71,12 +71,12 @@ export function ProviderWorkspaceToolsSection({ inventory, lifecycle, compatibil
         <nav aria-label="Tool pages" className="flex flex-wrap gap-intra">
           {compatibilityCursor === undefined ? null : (
             <Button asChild variant="secondary" className="min-h-touch">
-              <a href="/owner/offerings">First 50 Tools</a>
+              <a href="/owner/operations">First 50 Tools</a>
             </Button>
           )}
           {inventory.isDone ? null : (
             <Button asChild variant="secondary" className="min-h-touch">
-              <a href={`/owner/offerings?cursor=${encodeURIComponent(inventory.continueCursor)}`}>Next 50 Tools</a>
+              <a href={`/owner/operations?cursor=${encodeURIComponent(inventory.continueCursor)}`}>Next 50 Tools</a>
             </Button>
           )}
         </nav>

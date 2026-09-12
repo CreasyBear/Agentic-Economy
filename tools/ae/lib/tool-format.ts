@@ -5,8 +5,8 @@ type ToolIdentity = PublicToolDescriptor | PublicToolChoice
 
 export function toolLabel(tool: ToolIdentity): string {
   const provider = ('business' in tool ? tool.business.name : tool.provider.name).trim()
-  const offering = ('offering' in tool ? tool.offering.label : tool.title).trim()
-  return [provider, offering]
+  const listing = ('listing' in tool ? tool.listing.label : tool.title).trim()
+  return [provider, listing]
     .filter((value) => value.length > 0)
     .join(' — ') || tool.toolRef
 }

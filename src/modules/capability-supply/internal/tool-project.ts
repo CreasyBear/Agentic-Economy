@@ -123,10 +123,10 @@ export function projectCapabilityTool(
         : { inputExamples: record.contract.inputExamples }),
     },
     business: record.business,
-    offering: {
-      ...record.offering,
-      label: sanitizeText(record.offering.label, 160),
-      summary: sanitizeText(record.offering.summary, 1_000),
+    listing: {
+      ...record.listing,
+      label: sanitizeText(record.listing.label, 160),
+      summary: sanitizeText(record.listing.summary, 1_000),
     },
     summary: sanitizeText(record.contract.description, 1_000),
     commercial: {

@@ -86,7 +86,7 @@ describe('GET /api/v1/registry backed by the x402 directory browse index', () =>
   it('is unavailable (503 registry_unavailable) while the Coinbase generation is still refreshing', async () => {
     const { backend, workload } = await setup()
     await seedRefresh(backend, 'coinbase-search-refreshing')
-    await backend.mutation(internal.x402DirectoryIndexStore.applyPage, { generation: 'coinbase-search-refreshing', offset: 0, reportedTotal: 2, observedAt: 2, workload, items: [source(1), source(2)] })
+    await backend.mutation(internal.x402DirectoryIndexStore.applyPage, { generation: 'coinbase-search-refreshing', offset: 0, reportedTotal: 2, observedAt: 2, runStartedAt: 1, workload, items: [source(1), source(2)] })
 
     const response = await getRegistry()
     expect(response.status).toBe(503)
@@ -97,8 +97,8 @@ describe('GET /api/v1/registry backed by the x402 directory browse index', () =>
     const { backend, workload } = await setup()
     const generation = 'coinbase-search-complete'
     await seedRefresh(backend, generation)
-    await backend.mutation(internal.x402DirectoryIndexStore.applyPage, { generation, offset: 0, reportedTotal: 2, observedAt: 2, workload, items: [source(1), source(2)] })
-    await backend.mutation(internal.x402DirectoryIndexStore.applyPage, { generation, offset: 100, reportedTotal: 2, observedAt: 3, workload, items: [] })
+    await backend.mutation(internal.x402DirectoryIndexStore.applyPage, { generation, offset: 0, reportedTotal: 2, observedAt: 2, runStartedAt: 1, workload, items: [source(1), source(2)] })
+    await backend.mutation(internal.x402DirectoryIndexStore.applyPage, { generation, offset: 100, reportedTotal: 2, observedAt: 3, runStartedAt: 1, workload, items: [] })
 
     const browseResponse = await getRegistry()
     expect(browseResponse.status).toBe(200)
@@ -160,8 +160,8 @@ describe('GET /api/v1/registry backed by the x402 directory browse index', () =>
     const generation = 'coinbase-search-paged'
     await seedRefresh(backend, generation)
     const items = Array.from({ length: 13 }, (_, index) => source(index + 1))
-    await backend.mutation(internal.x402DirectoryIndexStore.applyPage, { generation, offset: 0, reportedTotal: 13, observedAt: 2, workload, items })
-    await backend.mutation(internal.x402DirectoryIndexStore.applyPage, { generation, offset: 100, reportedTotal: 13, observedAt: 3, workload, items: [] })
+    await backend.mutation(internal.x402DirectoryIndexStore.applyPage, { generation, offset: 0, reportedTotal: 13, observedAt: 2, runStartedAt: 1, workload, items })
+    await backend.mutation(internal.x402DirectoryIndexStore.applyPage, { generation, offset: 100, reportedTotal: 13, observedAt: 3, runStartedAt: 1, workload, items: [] })
 
     const first = await getRegistry({ limit: 24 })
     expect(first.status).toBe(200)

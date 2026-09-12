@@ -163,7 +163,7 @@ export function AeOwnerProviderConnections({
         } else {
           navigationAttempted = true
           await navigate({
-            to: '/owner/offerings/new',
+            to: '/owner/operations/new',
             search: {
               draft: pendingReturn.draft,
               connection: pendingReturn.connection,

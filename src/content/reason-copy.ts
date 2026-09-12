@@ -166,6 +166,13 @@ export const REASON_COPY: Record<string, string> = {
   funding_idempotency_conflict: 'This idempotency key was already used with a different funding amount. Use a new idempotency key for a different funding session.',
   payment_binding_invalid: 'This payment does not match the funding session it claims to complete. Create a new funding session and try again.',
 
+  // Owner credit reads (`moneyLedger.readCreditAccount`/`.listCreditActivity`/
+  // `.readKeyUsage`); `unauthenticated` and `source_unavailable` reuse the
+  // sentences above.
+  billing_identity_mismatch: 'This request does not match the signed-in Account. Reload the page and try again.',
+  credential_activity_unavailable: 'Per-credential activity is not available from the current ledger yet. The Account balance above remains accurate.',
+  credential_usage_unavailable: 'Per-credential usage is not available from the current ledger yet.',
+
   ...TYPED_REASON_COPY,
 }
 

@@ -20,7 +20,7 @@ import {
 import { operatorRouteOptions } from '@/lib/operator/route-options'
 import { z } from 'zod'
 
-export const Route = createFileRoute('/_operator/owner/offerings/new')({
+export const Route = createFileRoute('/_operator/owner/operations/new')({
   ...operatorRouteOptions,
   validateSearch: z.object({
     connection: z.string().trim().min(1).max(300).optional(),
@@ -86,13 +86,13 @@ function NewOwnerOfferingRouteView({ publish }: Readonly<{
   const saveDraft = useServerFn(saveOwnerSupplySourceDraftServer)
 
   return (
-    <AeOperatorPage operatorRole="owner" title="Add Tool" description="Connect the interface you already operate. AE discovers the Tools and validates the one you submit." currentPath="/owner/offerings/new" breadcrumbs={[{ label: 'Operations', href: '/owner/offerings' }, { label: 'Add Tool' }]}>
+    <AeOperatorPage operatorRole="owner" title="Add Tool" description="Connect the interface you already operate. AE discovers the Tools and validates the one you submit." currentPath="/owner/operations/new" breadcrumbs={[{ label: 'Operations', href: '/owner/operations' }, { label: 'Add Tool' }]}>
       {identity.kind !== 'available' ? (
         <Alert variant="destructive">
           <AlertTitle>Provider workspace unavailable</AlertTitle>
           <AlertDescription className="grid gap-related">
             <p>AE could not confirm the current Business. Return to Operations and try again.</p>
-            <Button asChild variant="outline" className="justify-self-start min-h-touch"><Link to="/owner/offerings">Return to Operations</Link></Button>
+            <Button asChild variant="outline" className="justify-self-start min-h-touch"><Link to="/owner/operations">Return to Operations</Link></Button>
           </AlertDescription>
         </Alert>
       ) : sourceUnavailable ? (

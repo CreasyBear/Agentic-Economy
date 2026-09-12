@@ -51,7 +51,7 @@ function SupportRoute() {
         >
           <div className="flex flex-wrap gap-related">
             <Button asChild className="min-h-touch"><Link to="/activity">Open Calls</Link></Button>
-            <Button asChild variant="outline" className="min-h-touch"><Link to="/owner/offerings">Continue Provider setup</Link></Button>
+            <Button asChild variant="outline" className="min-h-touch"><Link to="/owner/operations">Continue Provider setup</Link></Button>
             <Button asChild variant="outline" className="min-h-touch"><Link to="/owner/credit">Review account credit</Link></Button>
           </div>
         </AeSection>

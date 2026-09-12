@@ -63,8 +63,8 @@ export const tool = {
     slug: "provider",
     name: "Provider",
   },
-  offering: {
-    offeringRef: "offering:provider:paid",
+  listing: {
+    listingRef: "listing:provider:paid",
     revision: 1,
     label: "Paid Tool",
     summary: "Paid Tool",
@@ -197,11 +197,11 @@ export function publicBusinessDetailResponse(
       disposition: "current",
       offerings: [
         {
-          offeringRef: tool.offering.offeringRef,
-          revision: tool.offering.revision,
-          name: tool.offering.label,
+          offeringRef: tool.listing.listingRef,
+          revision: tool.listing.revision,
+          name: tool.listing.label,
           category: "release-smoke",
-          summary: tool.offering.summary,
+          summary: tool.listing.summary,
           accessPaths: [],
           support: {
             integrated: true,
@@ -615,7 +615,7 @@ export function linkedService(
     | { kind: "ae_api_key" }
     | { kind: "platform_credential"; scheme: "bearer" }
     | { kind: "x402" } = { kind: "ae_api_key" },
-  offeringRef = tool.offering.offeringRef,
+  offeringRef = tool.listing.listingRef,
 ): unknown {
   return {
     id: serviceId,

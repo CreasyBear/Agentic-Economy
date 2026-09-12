@@ -839,8 +839,8 @@ export function detailFixture(toolRef: string = TEST_OPERATION_REF): PublicToolD
         }],
       },
       business: { businessId: 'b_acme', slug: 'acme-tools', name: 'Acme Tools' },
-      offering: {
-        offeringRef: 'offering:v1:x',
+      listing: {
+        listingRef: 'listing:v1:x',
         revision: 2,
         label: 'Currency conversion',
         summary: 'Convert between currencies.',

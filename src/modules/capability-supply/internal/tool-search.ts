@@ -605,8 +605,8 @@ function toolSearchText(
     tool.summary,
     tool.business.slug,
     tool.business.name,
-    tool.offering.label,
-    tool.offering.summary,
+    tool.listing.label,
+    tool.listing.summary,
     ...tool.contract.customerAnnotations.map(
       (annotation) => annotation.label,
     ),

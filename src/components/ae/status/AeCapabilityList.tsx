@@ -9,19 +9,19 @@ import {
   AeRecordTable,
 } from '@/components/ae/operator/AeOperatorDataTable'
 import { Button } from '@/components/ui/button'
-import type { PublicBusinessCatalogApiV2Dto, PublicOfferingDto } from '@/modules/registry/public'
+import type { PublicBusinessCatalogApiV2Dto, PublicListingDto } from '@/modules/registry/public'
 
 type AeCapabilityListProps = {
   catalog: PublicBusinessCatalogApiV2Dto
 }
 
 export function AeCapabilityList({ catalog }: AeCapabilityListProps) {
-  const columns = useMemo<ColumnDef<PublicOfferingDto, unknown>[]>(
+  const columns = useMemo<ColumnDef<PublicListingDto, unknown>[]>(
     () => [
       {
         id: 'name',
         accessorFn: (item) => item.name,
-        header: ({ column }) => <AeOperatorSortableHeader label="Offering" column={column} />,
+        header: ({ column }) => <AeOperatorSortableHeader label="Tool" column={column} />,
         cell: ({ row }) => (
           <div className="grid min-w-[12rem] gap-0.5">
             <span className="font-medium">{row.original.name}</span>
@@ -50,11 +50,11 @@ export function AeCapabilityList({ catalog }: AeCapabilityListProps) {
   if (catalog.offerings.length === 0) {
     return (
       <AeEmptyState
-        title="No published offerings yet"
-        description="Add a service offering so visitors can inspect its published facts and price."
+        title="No published Tools yet"
+        description="Add a Tool so visitors can inspect its published facts and price."
         action={
           <Button asChild className="min-h-touch">
-            <a href="/owner/offerings/new">Add service</a>
+            <a href="/owner/operations/new">Add Tool</a>
           </Button>
         }
       />
@@ -65,15 +65,15 @@ export function AeCapabilityList({ catalog }: AeCapabilityListProps) {
     <AeRecordTable
       columns={columns}
       data={catalog.offerings}
-      caption="Published offerings"
-      countLabel="Offerings"
-      filterPlaceholder="Filter offerings…"
+      caption="Published Tools"
+      countLabel="Tools"
+      filterPlaceholder="Filter Tools…"
       hideFilter={catalog.offerings.length <= 1}
       getRowId={(item) => item.offeringRef}
       rowAction={{
         kind: 'link',
         label: 'Open',
-        getHref: (item) => `/owner/supply/${encodeURIComponent(item.offeringRef)}`,
+        getHref: (item) => `/owner/operations/${encodeURIComponent(item.offeringRef)}`,
         getAccessibleLabel: (item) => `Open ${item.name}`,
       }}
     />

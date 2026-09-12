@@ -14,7 +14,7 @@ import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
 import { operatorRouteOptions } from '@/lib/operator/route-options'
 import { parseOwnerToolsCompatibilitySearch } from '@/lib/operator/supply-compatibility'
 
-export const Route = createFileRoute('/_operator/owner/offerings')({
+export const Route = createFileRoute('/_operator/owner/operations')({
   staticData: {
     nav: {
       label: 'Operations',
@@ -54,7 +54,7 @@ export const Route = createFileRoute('/_operator/owner/offerings')({
 function OwnerOfferingsRoute() {
   const location = useLocation()
   const data = Route.useLoaderData()
-  if (location.pathname !== '/owner/offerings') return <Outlet />
+  if (location.pathname !== '/owner/operations') return <Outlet />
   return <AeProviderWorkspace {...data} />
 }
 
@@ -64,7 +64,7 @@ function OwnerOfferingsPending() {
       operatorRole="owner"
       title="Operations"
       description="Publish the exact tools agents can inspect and call."
-      currentPath="/owner/offerings"
+      currentPath="/owner/operations"
     >
       <AeOwnerOfferingsList offerings={[]} loading />
     </AeOperatorPage>

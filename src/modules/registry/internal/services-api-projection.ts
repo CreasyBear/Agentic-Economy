@@ -25,7 +25,7 @@ import type {
 import type {
   PublicBusinessCatalogApiV2Page,
   PublicBusinessCatalogApiV2SearchPage,
-  PublicOfferingAccessPathDto,
+  PublicListingAccessPathDto,
 } from './offering-api-projection'
 
 export const PublicServicesApiSchemaVersion = 'public-services-api:v3' as const
@@ -114,7 +114,7 @@ function projectServiceFromBusinessDto(
   }))
   const endpoints = business.offerings.flatMap((offering) => {
     const externalPaths = offering.accessPaths.filter(
-      (path): path is Extract<PublicOfferingAccessPathDto, { kind: 'external_operation' }> =>
+      (path): path is Extract<PublicListingAccessPathDto, { kind: 'external_operation' }> =>
         path.kind === 'external_operation' && isValidEndpointUrl(path.url),
     )
     return externalPaths.map((path) =>
@@ -183,7 +183,7 @@ function projectServiceFromBusinessDto(
 }
 
 function projectEndpoint(
-  path: Extract<PublicOfferingAccessPathDto, { kind: 'external_operation' }>,
+  path: Extract<PublicListingAccessPathDto, { kind: 'external_operation' }>,
   businessName: string,
   offeringRef: string,
   offeringRevision: number,

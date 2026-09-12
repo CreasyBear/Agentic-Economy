@@ -52,7 +52,7 @@ export function AeToolInspector({
   const trackRecord = evidence ?? emptyMarketListingEvidence(
     tool.toolRef,
     tool.contract.capabilityId,
-    `${tool.offering.label} ${model.summary}`,
+    `${tool.listing.label} ${model.summary}`,
   )
   const fullInspectorRef = useRef<HTMLElement>(null)
   const [technicalContractOpen, setTechnicalContractOpen] = useState(false)
@@ -149,7 +149,7 @@ export function AeToolInspector({
     <article
       ref={fullInspectorRef}
       tabIndex={-1}
-      aria-label={`${tool.offering.label} Tool details`}
+      aria-label={`${tool.listing.label} Tool details`}
       data-tool-inspector="full"
       className="ae-nav flex min-h-0 w-full flex-1 flex-col overflow-hidden pb-3 focus:outline-none"
     >

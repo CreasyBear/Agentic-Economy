@@ -58,7 +58,7 @@ export type {
   PublicToolBusinessRef,
   PublicToolCatalogPrice,
   PublicToolDescriptor,
-  PublicToolOfferingRef,
+  PublicToolListingRef,
   PublicToolParameter,
   PublicToolPrice,
   PublicToolRef,
@@ -75,8 +75,8 @@ export type {
   PublicBusinessCatalogApiV2Page,
   PublicBusinessCatalogApiV2SearchPage,
   PublicBusinessCatalogV2DetailResult,
-  PublicOfferingAccessPathDto,
-  PublicOfferingDto,
+  PublicListingAccessPathDto,
+  PublicListingDto,
 } from './internal/offering-api-projection'
 export {
   PublicServicesApiSchemaVersion,

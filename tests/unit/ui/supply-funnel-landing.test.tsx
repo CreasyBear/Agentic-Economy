@@ -17,7 +17,7 @@ describe("supply landing", () => {
       screen
         .getByRole("link", { name: "List a Tool" })
         .getAttribute("href"),
-    ).toBe("/owner/offerings");
+    ).toBe("/owner/operations");
     expect(screen.getByRole("heading", { name: "Check whether your Tool is a fit." })).toBeDefined();
     expect(screen.getByText(/List one Tool an agent can search/i)).toBeDefined();
     expect(screen.getByText(/supported OpenAPI document, remote MCP server/i)).toBeDefined();

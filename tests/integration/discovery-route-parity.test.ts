@@ -287,8 +287,8 @@ const MARKET_TOOL_DETAIL_WIRE_DESCRIPTOR = {
     customerAnnotations: [],
   },
   business: { businessId: 'business:reference', slug: 'reference-business', name: 'Reference Business' },
-  offering: {
-    offeringRef: 'offering:reference',
+  listing: {
+    listingRef: 'listing:reference',
     revision: 1,
     label: 'Reference lookup',
     summary: 'Reference lookup Tool.',

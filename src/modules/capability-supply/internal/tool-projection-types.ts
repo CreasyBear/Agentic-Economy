@@ -17,8 +17,8 @@ export type PublicToolBusinessRef = Readonly<{
   slug: string;
   name: string;
 }>;
-export type PublicToolOfferingRef = Readonly<{
-  offeringRef: string;
+export type PublicToolListingRef = Readonly<{
+  listingRef: string;
   revision: number;
   label: string;
   summary: string;
@@ -248,7 +248,7 @@ export type PublicToolDescriptor = Readonly<{
     inputExamples?: readonly CapabilityInputExample[];
   }>;
   business: PublicToolBusinessRef;
-  offering: PublicToolOfferingRef;
+  listing: PublicToolListingRef;
   summary: string;
   commercial: PublicCommercialTerms;
   dataUse: PublicDataUsePolicy;
@@ -296,7 +296,7 @@ export type CapabilityToolSourceRecord = Readonly<{
   networkId: string;
   contract: CapabilityContract;
   business: PublicToolBusinessRef;
-  offering: PublicToolOfferingRef;
+  listing: PublicToolListingRef;
   price: PublicToolPrice;
   priceEvidence?: PublicToolPriceEvidence;
   priceBreakdown?: PublicToolPriceBreakdown;

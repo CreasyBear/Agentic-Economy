@@ -139,7 +139,7 @@ export function AeProviderConnectionList({
                       <Button asChild className="min-h-touch justify-self-start">
                         <a
                           ref={rebindLinkRef}
-                          href={`/owner/supply/${encodeURIComponent(rebindOfferingRef)}#provider`}
+                          href={`/owner/operations/${encodeURIComponent(rebindOfferingRef)}#provider`}
                         >
                           Re-admit Tool
                         </a>

@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { Route as AgentsRoute } from '@/routes/for-agents'
-import { handleDurableListServicesRequest } from '@/routes/api.v1.services'
-import { handleDurableServiceDetailRequest } from '@/routes/api.v1.services.$serviceId'
+import { handleDurableListServicesRequest } from '@/routes/api.v1.businesses'
+import { handleDurableServiceDetailRequest } from '@/routes/api.v1.businesses.$businessId'
 import type { PublicBusinessCatalogApiV2Page, PublicServicesApiPage } from '@/modules/registry/public'
 import { projectPublicServicesPage } from '@/modules/registry/public'
 import { registryServicesDetailAction, registryServicesListAction } from '@/modules/registry/registry.actions'
@@ -21,10 +21,10 @@ function toListResult(projected: PublicServicesApiPage) {
 describe('services public route', () => {
   beforeEach(() => vi.clearAllMocks())
 
-  it('lists the V2 catalog through /api/v1/services', async () => {
+  it('lists the V2 catalog through /api/v1/businesses', async () => {
     const expected = toListResult(projectPublicServicesPage(page()))
     const run = vi.spyOn(registryServicesListAction, 'run').mockResolvedValue(expected)
-    const request = new Request('https://ae.example/api/v1/services?limit=5')
+    const request = new Request('https://ae.example/api/v1/businesses?limit=5')
 
     const response = await handleDurableListServicesRequest(request)
 
@@ -71,7 +71,7 @@ describe('services public route', () => {
     const expected = toListResult(projectPublicServicesPage(page()))
     vi.spyOn(registryServicesListAction, 'run').mockResolvedValue(expected)
     const listResponse = await handleDurableListServicesRequest(
-      new Request('https://ae.example/api/v1/services?limit=5'),
+      new Request('https://ae.example/api/v1/businesses?limit=5'),
     )
     const listBody = await listResponse.json() as { services: readonly [typeof expected.services[number]] }
 
@@ -81,7 +81,7 @@ describe('services public route', () => {
       service: expected.services[0]!,
     }
     const detailRun = vi.spyOn(registryServicesDetailAction, 'run').mockResolvedValue(detail)
-    const detailRequest = new Request('https://ae.example/api/v1/services/acme-plumbing')
+    const detailRequest = new Request('https://ae.example/api/v1/businesses/acme-plumbing')
     const detailResponse = await handleDurableServiceDetailRequest('acme-plumbing', detailRequest)
 
     expect(detailResponse.status).toBe(200)
@@ -97,7 +97,7 @@ describe('services public route', () => {
   it('refuses a search query on the list route', async () => {
     const run = vi.spyOn(registryServicesListAction, 'run')
     const response = await handleDurableListServicesRequest(
-      new Request('https://ae.example/api/v1/services?q=emergency+plumbing'),
+      new Request('https://ae.example/api/v1/businesses?q=emergency+plumbing'),
     )
 
     expect(response.status).toBe(400)

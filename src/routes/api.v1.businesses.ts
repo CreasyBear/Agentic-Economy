@@ -2,13 +2,14 @@ import { createFileRoute } from '@tanstack/react-router'
 
 import { withHttpRateLimit } from '@/lib/server/rate-limit'
 import { methodNotAllowed } from '@/lib/server/method-guard'
-import { registryServicesSearchAction } from '@/modules/registry/registry.actions'
-import { runRegistrySearchRequest } from './api.businesses'
+import { registryServicesListAction } from '@/modules/registry/registry.actions'
+import { runRegistryListRequest } from './api.businesses'
 
-export const Route = createFileRoute('/api/v1/services/search')({
+
+export const Route = createFileRoute('/api/v1/businesses')({
   server: {
     handlers: {
-      GET: ({ request }) => withHttpRateLimit(request, 'public-read', () => handleDurableSearchServicesRequest(request)),
+      GET: ({ request }) => withHttpRateLimit(request, 'public-read', () => handleDurableListServicesRequest(request)),
       POST: () => methodNotAllowed(['GET']),
       PUT: () => methodNotAllowed(['GET']),
       PATCH: () => methodNotAllowed(['GET']),
@@ -21,6 +22,6 @@ export const Route = createFileRoute('/api/v1/services/search')({
   },
 })
 
-export async function handleDurableSearchServicesRequest(request: Request): Promise<Response> {
-  return runRegistrySearchRequest(request, registryServicesSearchAction)
+export async function handleDurableListServicesRequest(request: Request): Promise<Response> {
+  return runRegistryListRequest(request, { collection: 'services', action: registryServicesListAction })
 }

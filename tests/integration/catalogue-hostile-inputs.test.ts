@@ -70,8 +70,8 @@ describe('GET /api/v1/registry hostile inputs', () => {
     })
     const workload = await backend.query(internal.workloadCron.admit, { name: 'refresh Agentic Economy API registry' })
     const items = Array.from({ length: count }, (_, index) => source(index + 1))
-    await backend.mutation(internal.x402DirectoryIndexStore.applyPage, { generation, offset: 0, reportedTotal: count, observedAt: 2, workload, items })
-    await backend.mutation(internal.x402DirectoryIndexStore.applyPage, { generation, offset: 100, reportedTotal: count, observedAt: 3, workload, items: [] })
+    await backend.mutation(internal.x402DirectoryIndexStore.applyPage, { generation, offset: 0, reportedTotal: count, observedAt: 2, runStartedAt: 1, workload, items })
+    await backend.mutation(internal.x402DirectoryIndexStore.applyPage, { generation, offset: 100, reportedTotal: count, observedAt: 3, runStartedAt: 1, workload, items: [] })
   }
 
   async function setup() {

@@ -77,7 +77,7 @@ export function AeSupplyLanding({
             </div>
           </AeSiteHeadingPair>
           <AeSiteButton asChild>
-            <Link to="/owner/offerings">List a Tool</Link>
+            <Link to="/owner/operations">List a Tool</Link>
           </AeSiteButton>
         </AeSiteHeroIntro>
       </AeSiteSection>
@@ -143,7 +143,7 @@ export function AeSupplyLanding({
             You control the listing and the source. Agents can inspect only the facts that are published. Publication means the current Tool passed Agentic Economy’s admission and readiness checks; it does not guarantee demand, payment, delivery, or payout. Setup and test calls do not create settled earnings or payouts.
           </AeSiteBody>
           <Link
-            to="/owner/offerings"
+            to="/owner/operations"
             className="inline-flex min-h-touch items-center justify-self-start text-sm font-medium underline underline-offset-4"
           >
             Manage listed Tools

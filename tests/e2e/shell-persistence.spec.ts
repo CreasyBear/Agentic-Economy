@@ -5,7 +5,7 @@ function isCompact(page: Page): boolean {
 }
 
 /**
- * Reaches Operations (`/owner/offerings`) from `/market` by clicking real
+ * Reaches Operations (`/owner/operations`) from `/market` by clicking real
  * in-app links only, mirroring how a visitor actually gets there: header
  * "Publish" (desktop) or the mobile drawer's "Publish" link, then the
  * supply-landing "List a service" CTA (see AeSupplyLanding.tsx).
@@ -131,7 +131,7 @@ test.describe('app shell persistence', () => {
     await expect(page.locator('[data-shell="app-header"]')).toHaveCount(1)
     await expect(page.getByTestId('skip-to-content')).toHaveCount(1)
 
-    await page.goto('/owner/offerings')
+    await page.goto('/owner/operations')
     await page.locator('[data-shell="app-header"][data-hydrated="true"]').waitFor()
     await expect(page.locator('[data-shell="app-header"]')).toHaveCount(1)
     await expect(page.getByTestId('skip-to-content')).toHaveCount(1)

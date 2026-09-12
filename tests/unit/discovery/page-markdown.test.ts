@@ -154,7 +154,7 @@ describe('business markdown', () => {
     expect(body).toContain('# Adelaide Emergency Plumbing')
     expect(body).toContain('### Emergency callout')
     expect(body).toContain('- Availability: Same day')
-    expect(body).toContain('- AE can act on this offering: no')
+    expect(body).toContain('- AE can act on this listing: no')
     expect(body).toContain('GET https://ae.example/api/businesses/adelaide-emergency-plumbing')
   })
 

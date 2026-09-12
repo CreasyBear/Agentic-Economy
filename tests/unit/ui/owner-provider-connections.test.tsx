@@ -217,7 +217,7 @@ describe('owner x402 connection controls', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Reload current connections' }))
     await waitFor(() => expect(mocks.navigate).toHaveBeenCalledTimes(navigationCount))
     expect(mocks.navigate).toHaveBeenLastCalledWith({
-      to: '/owner/offerings/new',
+      to: '/owner/operations/new',
       search: {
         draft: handoff.draft,
         connection: 'connection:x402:confirmed',

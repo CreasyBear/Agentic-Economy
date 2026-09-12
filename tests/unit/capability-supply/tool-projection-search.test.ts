@@ -37,7 +37,7 @@ const sourceRecord = (operationId: string, summary: string, searchTerms: readonl
     ...(inputExamples === undefined ? {} : { inputExamples }),
   },
   business: { businessId: 'business:reference', slug: 'reference', name: 'Reference' },
-  offering: { offeringRef: 'offering:reference', revision: 1, label: summary, summary },
+  listing: { listingRef: 'listing:reference', revision: 1, label: summary, summary },
   price: { kind: 'fixed', amount: { currency: 'USD', units: '125', exponent: 2 } },
   priceEvidence: {
     priceDigest: 'digest:publication-price',

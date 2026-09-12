@@ -16,12 +16,12 @@ const recoveryChecks = [
   {
     title: 'Revoke or reauthorize Provider connections',
     description: 'Review x402 wallet-control authority and its current generation separately from Tool readiness.',
-    href: '/owner/offerings#provider-connections',
+    href: '/owner/operations#provider-connections',
   },
   {
     title: 'Review Provider payout authority',
     description: 'Check the current Stripe-hosted payout destination and readiness before allowing another transfer.',
-    href: '/owner/offerings#earnings',
+    href: '/owner/operations#earnings',
   },
   {
     title: 'Retain evidence and contact support',

@@ -419,7 +419,7 @@ type AgentAccessToolCompareResult =
       kind: 'ok'
       tools: readonly Readonly<{
         toolRef: string
-        offering: Readonly<{ label: string }>
+        listing: Readonly<{ label: string }>
         business: Readonly<{ name: string }>
       }>[]
     }>
@@ -461,7 +461,7 @@ export async function enrichAgentDirectoryActivity(
   const labels = new Map<string, Readonly<{ label: string; provider: string }>>(comparisons.flatMap((comparison) => (
     comparison?.kind === 'ok'
       ? comparison.tools.map((tool) => [tool.toolRef, {
-        label: tool.offering.label,
+        label: tool.listing.label,
         provider: tool.business.name,
       }] as const)
       : []

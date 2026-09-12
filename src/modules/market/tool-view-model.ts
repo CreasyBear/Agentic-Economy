@@ -79,13 +79,13 @@ const readinessFacts = {
  * the Tool detail page so the same Tool never shows two different titles.
  */
 export function toolDisplayTitle(tool: PublicToolDescriptor): string {
-  const summary = catalogJobSummary(tool.summary || tool.offering.summary);
+  const summary = catalogJobSummary(tool.summary || tool.listing.summary);
   const capability = catalogJobLabel(
     tool.contract.capabilityId,
-    tool.offering.label,
+    tool.listing.label,
     summary,
   );
-  return catalogOfferingTitle(tool.offering.label, capability);
+  return catalogOfferingTitle(tool.listing.label, capability);
 }
 
 export function toToolCardViewModel(
@@ -103,18 +103,18 @@ export function toToolCardViewModel(
         : "Unavailable";
   const lastVerifiedAt = tool.availability.observedAt ?? tool.commercial.priceEvidence?.observedAt;
   const summary = catalogJobSummary(
-    tool.summary || tool.offering.summary,
+    tool.summary || tool.listing.summary,
   );
   const capability = catalogJobLabel(
     tool.contract.capabilityId,
-    tool.offering.label,
+    tool.listing.label,
     summary,
   );
   const priceAmount = toolPriceAmount(tool);
 
   return {
     toolRef: tool.toolRef,
-    title: catalogOfferingTitle(tool.offering.label, capability),
+    title: catalogOfferingTitle(tool.listing.label, capability),
     summary,
     providerName: tool.business.name,
     providerSlug: tool.business.slug,

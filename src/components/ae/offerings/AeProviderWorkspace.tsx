@@ -65,7 +65,7 @@ export function AeProviderWorkspace(props: WorkspaceProps) {
       operatorRole="owner"
       title="Operations"
       description="Publish the exact tools agents can inspect and call."
-      currentPath="/owner/offerings"
+      currentPath="/owner/operations"
       {...(actions === undefined ? {} : { actions })}
     >
       {props.inventory.kind === 'not_found' ? (
@@ -271,5 +271,5 @@ function AvailableWorkspace({
 }
 
 function AddToolAction() {
-  return <Button asChild><Link to="/owner/offerings/new">Add Tool</Link></Button>
+  return <Button asChild><Link to="/owner/operations/new">Add Tool</Link></Button>
 }

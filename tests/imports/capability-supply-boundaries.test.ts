@@ -132,7 +132,7 @@ describe('capability supply boundaries', () => {
     for (const name of retiredCeremonies) {
       expect(serverSurface).not.toMatch(new RegExp(`export const ${name}\\b`, 'u'))
     }
-    expect(existsSync('src/routes/_operator/owner.offerings.$offeringRef.tsx')).toBe(false)
+    expect(existsSync('src/routes/_operator/owner.operations.$offeringRef.tsx')).toBe(false)
     expect(readFileSync('src/modules/capability-supply/supply-actions.ts', 'utf8')).toContain(
       "publish: 'supply.publish'",
     )

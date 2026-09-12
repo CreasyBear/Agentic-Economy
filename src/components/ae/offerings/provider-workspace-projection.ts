@@ -68,7 +68,7 @@ function projectRow(
   const detail = {
     kind: 'navigate' as const,
     label: 'View status',
-    href: `/owner/supply/${encodeURIComponent(definition.offeringRef)}`,
+    href: `/owner/operations/${encodeURIComponent(definition.offeringRef)}`,
   }
   if (lifecycle === undefined) {
     return {

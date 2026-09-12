@@ -35,7 +35,7 @@ export const Route = createFileRoute('/_operator/owner/supply/connections/oauth/
     } })
     if (result.kind === 'connected' || result.kind === 'replayed') {
       throw redirect({
-        to: '/owner/offerings/new',
+        to: '/owner/operations/new',
         search: {
           connection: result.connection.connectionRef,
           environment: attempt.attempt.environment,
@@ -67,10 +67,10 @@ function OwnerMcpOAuthCallbackRoute() {
       operatorRole="owner"
       title="Service connection"
       description="Return to Add service after the source confirms authentication."
-      currentPath="/owner/offerings/new"
+      currentPath="/owner/operations/new"
       breadcrumbs={[
-        { label: 'Operations', href: '/owner/offerings' },
-        { label: 'Add service', href: '/owner/offerings/new' },
+        { label: 'Operations', href: '/owner/operations' },
+        { label: 'Add service', href: '/owner/operations/new' },
         { label: 'Service connection' },
       ]}
     >
@@ -82,7 +82,7 @@ function OwnerMcpOAuthCallbackRoute() {
               ? 'AE verified the live MCP source and stored its connection. Return to Add service to continue.'
               : 'AE could not confirm the source connection. Return to Add service to review the saved source and current connection status before retrying.'}</p>
               <Button asChild variant="secondary" className="mt-4 min-h-touch">
-              <Link to="/owner/offerings/new" search={'continuationDraftRef' in result && result.continuationDraftRef !== undefined
+              <Link to="/owner/operations/new" search={'continuationDraftRef' in result && result.continuationDraftRef !== undefined
                 ? { draft: result.continuationDraftRef }
                 : {}}>Return to Add service</Link>
             </Button>

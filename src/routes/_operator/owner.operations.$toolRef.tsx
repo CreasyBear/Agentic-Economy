@@ -25,14 +25,16 @@ import {
 } from '@/modules/capability-supply/supply-funnel.functions'
 import { operatorRouteOptions } from '@/lib/operator/route-options'
 
-export const Route = createFileRoute('/_operator/owner/supply/$offeringRef')({
+export const Route = createFileRoute('/_operator/owner/operations/$toolRef')({
   ...operatorRouteOptions,
   loader: async ({ params }) => {
     const identity = await readProviderWorkspaceIdentityDetailServer()
-    if (identity.kind !== 'available') return { identity, status: { kind: 'not_found' as const } }
+    if (identity.kind !== 'available' || !params.toolRef.startsWith('offering:')) {
+      return { identity, status: { kind: 'not_found' as const } }
+    }
     const status = await readProviderToolStatusServer({ data: {
       businessId: identity.businessId,
-      offeringRef: params.offeringRef,
+      offeringRef: params.toolRef,
     } })
     return { identity, status }
   },
@@ -46,7 +48,7 @@ export const Route = createFileRoute('/_operator/owner/supply/$offeringRef')({
 })
 
 function OwnerSupplyDetailRoute() {
-  const { offeringRef } = Route.useParams()
+  const { toolRef } = Route.useParams()
   const result = Route.useLoaderData()
   const router = useRouter()
   const [toolKeys] = useState(() => new Map<string, string>())
@@ -56,13 +58,13 @@ function OwnerSupplyDetailRoute() {
   const republish = useReverification(republishRequest)
 
   if (result.identity.kind !== 'available' || result.status.kind !== 'available') {
-    return <UnavailableTool offeringRef={offeringRef} unavailable={result.status.kind === 'unavailable'} />
+    return <UnavailableTool toolRef={toolRef} unavailable={result.status.kind === 'unavailable'} />
   }
   if (
-    result.status.tool.offeringRef !== offeringRef
+    result.status.tool.offeringRef !== toolRef
     || result.status.status.businessRef !== result.identity.businessId
   ) {
-    return <UnavailableTool offeringRef={offeringRef} unavailable={false} />
+    return <UnavailableTool toolRef={toolRef} unavailable={false} />
   }
   const context: SupplyFunnelActionContext | undefined = result.status.maintenance === undefined
     ? undefined
@@ -70,7 +72,7 @@ function OwnerSupplyDetailRoute() {
   const name = result.status.tool.name
   const resumeHref = result.status.resumeCandidateRef === undefined
     ? undefined
-    : `/owner/offerings/new?draft=${encodeURIComponent(result.status.resumeCandidateRef)}`
+    : `/owner/operations/new?draft=${encodeURIComponent(result.status.resumeCandidateRef)}`
 
   function maintenanceAction(
     action: 'recheck' | 'withdraw' | 'republish',
@@ -100,8 +102,8 @@ function OwnerSupplyDetailRoute() {
       operatorRole="owner"
       title={name}
       description="Current publication, source health, delivery and Qualified Use."
-      currentPath={`/owner/supply/${encodeURIComponent(offeringRef)}`}
-      breadcrumbs={[{ label: 'Operations', href: '/owner/offerings' }, { label: name }]}
+      currentPath={`/owner/operations/${encodeURIComponent(toolRef)}`}
+      breadcrumbs={[{ label: 'Operations', href: '/owner/operations' }, { label: name }]}
     >
       <AeProviderToolDetail
         name={name}
@@ -119,13 +121,13 @@ function OwnerSupplyDetailRoute() {
   )
 }
 
-function UnavailableTool({ offeringRef, unavailable }: Readonly<{ offeringRef: string; unavailable: boolean }>) {
+function UnavailableTool({ toolRef, unavailable }: Readonly<{ toolRef: string; unavailable: boolean }>) {
   return (
     <AeOperatorPage
       operatorRole="owner"
       title="Tool status"
       description="AE could not confirm this Tool."
-      currentPath={`/owner/supply/${encodeURIComponent(offeringRef)}`}
+      currentPath={`/owner/operations/${encodeURIComponent(toolRef)}`}
     >
       <div className="grid gap-related">
         <Alert variant={unavailable ? 'destructive' : 'default'}>
@@ -137,7 +139,7 @@ function UnavailableTool({ offeringRef, unavailable }: Readonly<{ offeringRef: s
           </AlertDescription>
         </Alert>
         <Button asChild variant="secondary" className="min-h-touch w-fit">
-          <Link to="/owner/offerings">Return to Tools</Link>
+          <Link to="/owner/operations">Return to Tools</Link>
         </Button>
       </div>
     </AeOperatorPage>

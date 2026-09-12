@@ -35,7 +35,7 @@ export {
 export type {
   ToolProjectionNavigationContract,
   PublicToolBusinessRef,
-  PublicToolOfferingRef,
+  PublicToolListingRef,
   PublicToolPrice,
   PublicToolPriceEvidence,
   PublicCommercialTerms,

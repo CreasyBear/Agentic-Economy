@@ -5,7 +5,7 @@ import type {
   PublicToolParameter,
 } from '@/modules/capability-supply/public'
 /**
- * Published-business portfolio wire model retained by `/api/v1/services`.
+ * Published-business portfolio wire model retained by `/api/v1/businesses`.
  *
  * One record represents one published business and rolls up its offerings and
  * external endpoint links. It is not an Agent Service: that term is reserved

@@ -1,7 +1,7 @@
 export type OperatorRole = 'owner' | 'admin' | 'developer'
 
 export const roleHomeHref: Record<OperatorRole, string> = {
-  owner: '/owner/offerings',
+  owner: '/owner/operations',
   admin: '/admin/index-health',
   developer: '/developers/discovery',
 }
@@ -32,7 +32,7 @@ export function operatorRoleForPath(pathname: string): OperatorRole | undefined 
 export type OwnerWorkspaceOwner = 'operations' | 'account' | undefined
 
 export function ownerWorkspaceOwnerForPath(pathname: string): OwnerWorkspaceOwner {
-  if (pathname === '/owner/offerings' || pathname.startsWith('/owner/offerings/')) return 'operations'
+  if (pathname === '/owner/operations' || pathname.startsWith('/owner/operations/')) return 'operations'
   if (pathname === '/owner/supply' || pathname.startsWith('/owner/supply/')) return 'operations'
   if (pathname === '/owner/settings') return 'account'
   return undefined

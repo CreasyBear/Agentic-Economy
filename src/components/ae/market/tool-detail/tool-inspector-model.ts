@@ -103,5 +103,5 @@ function nextActionDescription(nextAction: SuggestedNextAction): string {
 
 function catalogSummary(tool: PublicToolDescriptor): string {
   const summary = tool.summary.trim()
-  return summary === '' ? tool.offering.summary : summary
+  return summary === '' ? tool.listing.summary : summary
 }

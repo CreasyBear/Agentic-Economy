@@ -231,7 +231,7 @@ function projectCompactTool(tool: PublicToolDescriptor) {
   return compactToolCandidateSchema.parse({
     toolRef: tool.toolRef,
     capabilityId: tool.contract.capabilityId,
-    title: tool.offering.label,
+    title: tool.listing.label,
     description: tool.summary,
     provider: { name: tool.business.name, slug: tool.business.slug },
     priceLabel: priceLabel(tool),
@@ -324,7 +324,7 @@ export function projectToolDescription(result: ToolDetailResult) {
     tool: {
       toolRef: tool.toolRef,
       capabilityId: tool.contract.capabilityId,
-      title: tool.offering.label,
+      title: tool.listing.label,
       description: tool.summary,
       provider: { name: tool.business.name, slug: tool.business.slug },
       priceLabel: priceLabel(tool),

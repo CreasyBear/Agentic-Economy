@@ -39,7 +39,7 @@ vi.mock('@tanstack/react-router', async (importOriginal) => {
   }
 })
 
-import { Route as OwnerSupplyDetailRoute } from '@/routes/_operator/owner.supply.$offeringRef'
+import { Route as OwnerSupplyDetailRoute } from '@/routes/_operator/owner.operations.$toolRef'
 
 afterEach(() => {
   cleanup()
@@ -68,7 +68,7 @@ describe('owner supply routes', () => {
     if (Component === undefined) throw new Error('owner_supply_detail_component_missing')
     const router = createTestRouter()
     const renderDetail = (businessRef: string) => {
-      vi.spyOn(OwnerSupplyDetailRoute, 'useParams').mockReturnValue({ offeringRef: 'offering:one' } as never)
+      vi.spyOn(OwnerSupplyDetailRoute, 'useParams').mockReturnValue({ toolRef: 'offering:one' } as never)
       vi.spyOn(OwnerSupplyDetailRoute, 'useLoaderData').mockReturnValue({
         identity: { kind: 'available', businessId: 'business:one' },
         status: {
@@ -98,7 +98,7 @@ describe('owner supply routes', () => {
   ])('keeps %s readback refusal at the render boundary', (status, title) => {
     const Component = OwnerSupplyDetailRoute.options.component
     if (Component === undefined) throw new Error('owner_supply_detail_component_missing')
-    vi.spyOn(OwnerSupplyDetailRoute, 'useParams').mockReturnValue({ offeringRef: 'offering:one' } as never)
+    vi.spyOn(OwnerSupplyDetailRoute, 'useParams').mockReturnValue({ toolRef: 'offering:one' } as never)
     vi.spyOn(OwnerSupplyDetailRoute, 'useLoaderData').mockReturnValue({
       identity: { kind: 'available', businessId: 'business:one' },
       status,

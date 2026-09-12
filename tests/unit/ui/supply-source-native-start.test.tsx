@@ -98,7 +98,7 @@ describe('source-native Provider start', () => {
       requiredAction: {
         action: 'supply.source.preview',
         blockedCapabilities: ['supply.publish'],
-        cta: '/owner/offerings?connect=x402',
+        cta: '/owner/operations?connect=x402',
         ctaLabel: 'Connect service',
         description: 'Inspect the exact x402 payment lane, prove payee control with your wallet, then AE will return to this Tool.',
         iconUrl: null,
@@ -130,7 +130,7 @@ describe('source-native Provider start', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Connect service' }))
     const handoff = await screen.findByRole('link', { name: 'Connect service' })
-    expect(handoff.getAttribute('href')).toBe('/owner/offerings?connect=x402')
+    expect(handoff.getAttribute('href')).toBe('/owner/operations?connect=x402')
     expect(onConnect).toHaveBeenCalledWith({
       businessId: 'business:one',
       source: { kind: 'x402', resourceUrl: 'https://seller.example/paid', method: 'POST', environment: 'sandbox' },

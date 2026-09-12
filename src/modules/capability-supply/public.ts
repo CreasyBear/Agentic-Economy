@@ -268,7 +268,7 @@ export type {
   PublicToolCanonical,
   PublicToolCatalogPrice,
   PublicToolDescriptor,
-  PublicToolOfferingRef,
+  PublicToolListingRef,
   PublicToolParameter,
   PublicToolParameterMapping,
   PublicToolPayment,

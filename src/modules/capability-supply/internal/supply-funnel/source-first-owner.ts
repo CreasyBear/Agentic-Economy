@@ -711,7 +711,7 @@ function unavailablePreview(): SupplySourcePreview {
     requiredAction: {
       action: 'supply.source.preview',
       blockedCapabilities: ['supply.publish'],
-      cta: '/owner/offerings',
+      cta: '/owner/operations',
       ctaLabel: 'Return to Tools',
       description: 'The current Business could not be confirmed. Return to Tools and try again.',
       iconUrl: null,
@@ -760,7 +760,7 @@ function x402ConnectionCta(input: Readonly<{
     method: input.method,
     environment: input.environment,
   })
-  return `/owner/offerings?${search.toString()}`
+  return `/owner/operations?${search.toString()}`
 }
 
 function canonicalResourceUrl(resourceUrl: string): string {

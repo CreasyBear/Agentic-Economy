@@ -217,7 +217,7 @@ describe('canonical Tool reads', () => {
           contractDigest: snapshot.identity.contractDigest,
         },
       })).toBe(toolRef)
-      expect(searched.offering.revision).toBe(snapshot.offering.origin?.kind === 'catalog_offering'
+      expect(searched.listing.revision).toBe(snapshot.offering.origin?.kind === 'catalog_offering'
         ? snapshot.offering.origin.offeringRevision
         : 1)
       expect(searched.commercial.price).toEqual(snapshot.identity.price)

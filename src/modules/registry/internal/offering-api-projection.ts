@@ -14,7 +14,7 @@ import { isPubliclyDiscoverable, normalizeTrustTier, type BusinessContext } from
 // is not worth forcing every pinned reader to re-pin for.
 export const PublicBusinessCatalogApiSchemaVersion = 'public-business-catalog-api:v2' as const
 
-export type PublicOfferingAccessPathDto =
+export type PublicListingAccessPathDto =
   | Readonly<{
       accessPathRef: string
       offeringRevision: number
@@ -38,7 +38,7 @@ export type PublicOfferingAccessPathDto =
       provenance: 'business_declared' | 'publicly_observed'
     }>
 
-export type PublicOfferingDto = Readonly<{
+export type PublicListingDto = Readonly<{
   offeringRef: string
   revision: number
   name: string
@@ -49,7 +49,7 @@ export type PublicOfferingDto = Readonly<{
   pricingSummary?: string
   /** The comparable form of the same fact. Never derived from `pricingSummary`. */
   price?: OfferingPrice
-  accessPaths: readonly PublicOfferingAccessPathDto[]
+  accessPaths: readonly PublicListingAccessPathDto[]
   support: Readonly<{
     integrated: boolean
     aeSupportedAction: boolean
@@ -71,7 +71,7 @@ export type PublicBusinessCatalogApiV2Dto = Readonly<{
   photos: readonly Readonly<{ url: string; alt: string }>[]
   observedAt: number
   disposition: BusinessSupplyProjection['disposition']
-  offerings: readonly PublicOfferingDto[]
+  offerings: readonly PublicListingDto[]
   accessSummary: Readonly<{
     humanRequest: boolean
     externalOperation: boolean
@@ -145,7 +145,7 @@ export function projectBusinessSupplyToPublicApi(
   /** A phone access path is actionable only when the profile publishes a number. */
   const dialable = projection.business.businessContext.kind === 'local_human'
     && (projection.business.businessContext.publishedPhone ?? '').trim().length > 0
-  const offerings = projection.offerings.map((item): PublicOfferingDto => {
+  const offerings = projection.offerings.map((item): PublicListingDto => {
     const accessPaths = sanitizeAccessPaths(item.accessPaths)
     return {
       offeringRef: item.offering.offeringRef,
@@ -157,7 +157,7 @@ export function projectBusinessSupplyToPublicApi(
       ...spreadAvailability(item.offering.availabilitySummary),
       ...(item.offering.pricingSummary === undefined ? {} : { pricingSummary: item.offering.pricingSummary }),
       ...(item.offering.price === undefined ? {} : { price: item.offering.price }),
-      accessPaths: accessPaths.reduce<PublicOfferingAccessPathDto[]>((acc, path) => {
+      accessPaths: accessPaths.reduce<PublicListingAccessPathDto[]>((acc, path) => {
         if (dialable || path.descriptor.kind !== 'human_request' || path.descriptor.channel !== 'phone') acc.push(projectAccessPath(path))
         return acc
       }, []),
@@ -305,7 +305,7 @@ function sanitizeAccessPaths(value: unknown): PublicAccessPath[] {
 
 
 
-function projectAccessPath(path: PublicAccessPath): PublicOfferingAccessPathDto {
+function projectAccessPath(path: PublicAccessPath): PublicListingAccessPathDto {
   return path.descriptor.kind === 'human_request'
     ? {
         accessPathRef: path.accessPathRef,

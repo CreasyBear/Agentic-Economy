@@ -86,11 +86,11 @@ export async function readToolListingEvidence(
   window: MarketWindow = "30d",
 ): Promise<MarketListingEvidenceProjection> {
   const summary = catalogJobSummary(
-    tool.summary || tool.offering.summary,
+    tool.summary || tool.listing.summary,
   );
   const catalogText = `${catalogJobLabel(
     tool.contract.capabilityId,
-    tool.offering.label,
+    tool.listing.label,
     summary,
   )} ${summary}`;
   try {
@@ -364,11 +364,11 @@ async function projectCatalog(
     kind: "ok",
     items: catalog.items.map((tool) => {
       const summary = catalogJobSummary(
-        tool.summary || tool.offering.summary,
+        tool.summary || tool.listing.summary,
       );
       const catalogText = `${catalogJobLabel(
         tool.contract.capabilityId,
-        tool.offering.label,
+        tool.listing.label,
         summary,
       )} ${summary}`;
       const source = evidenceByToolRef.get(tool.toolRef);

@@ -113,8 +113,8 @@ const sourceRecord = {
     lifecycle: { idempotency: 'required', recovery: 'reconcile_required' },
   }),
   business: { businessId: 'business:ledger-labs', slug: 'ledger-labs', name: 'Ledger Labs' },
-  offering: {
-    offeringRef: 'offering:invoice-extraction',
+  listing: {
+    listingRef: 'listing:invoice-extraction',
     revision: 3,
     label: 'Invoice line-item extraction',
     summary: 'Structured invoice data.',

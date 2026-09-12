@@ -133,7 +133,7 @@ const descriptor = z.strictObject({
     inputExamples: z.array(inputExample).max(32).optional(),
   }),
   business: z.strictObject({ businessId: z.string(), slug: z.string(), name: z.string() }),
-  offering: z.strictObject({ offeringRef: z.string(), revision: z.number().int().positive(), label: z.string(), summary: z.string() }),
+  listing: z.strictObject({ listingRef: z.string(), revision: z.number().int().positive(), label: z.string(), summary: z.string() }),
   summary: z.string(),
   commercial: z.strictObject({ displayPrice: publicToolDisplayPriceSchema.optional(), price: publicToolPriceSchema, priceEvidence: priceEvidence.optional(), priceBreakdown: priceBreakdown.optional(), materialTerms: z.array(materialTerm), relationship }),
   dataUse: z.array(dataUse), effects: z.array(effect), evidence: z.array(evidence),
