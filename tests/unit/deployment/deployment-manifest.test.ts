@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import convexCrons from '../../../convex/crons'
 import {
@@ -7,6 +7,7 @@ import {
   validateDeploymentManifest,
   type DeploymentEnvironmentInput,
 } from '../../../src/lib/deployment/manifest'
+import { resolveServiceMode, serviceModeAllowsEnvironment } from '../../../src/lib/deployment/service-mode'
 
 function productionEnvironment(): Record<string, string> {
   return {
@@ -112,6 +113,30 @@ describe('deployment manifest validator', () => {
     const manifestJobNames = [...(scheduledJobs as { jobs: readonly string[] }).jobs].sort()
 
     expect(manifestJobNames).toEqual(registeredJobNames)
+  })
+
+  it.each([undefined, 'true', 'false'])('registers recurring jobs according to the deployment switch %s', async (value) => {
+    vi.stubEnv('AE_SCHEDULED_WORKLOADS_ENABLED', value)
+    vi.resetModules()
+    try {
+      const { default: crons } = await import('../../../convex/crons')
+      const registered = Object.keys(crons.crons).sort()
+      expect(registered).toEqual(value === 'false' ? [] : Object.keys(convexCrons.crons).sort())
+    } finally {
+      vi.unstubAllEnvs()
+      vi.resetModules()
+    }
+  })
+
+  it('refuses to register recurring jobs with an invalid explicit switch', async () => {
+    vi.stubEnv('AE_SCHEDULED_WORKLOADS_ENABLED', 'invalid')
+    vi.resetModules()
+    try {
+      await expect(import('../../../convex/crons')).rejects.toThrow('invalid_scheduled_workloads_configuration')
+    } finally {
+      vi.unstubAllEnvs()
+      vi.resetModules()
+    }
   })
 
   it('fails closed for missing core source, auth, canonical, model, and source-write configuration', () => {
@@ -289,6 +314,98 @@ describe('deployment manifest validator', () => {
       'stripe_secret_key_invalid',
       'formance_environment_mismatch',
     ]))
+  })
+
+  it('admits hosted alpha with production identity and sandbox money', () => {
+    const environment = {
+      ...productionEnvironment(),
+      AE_SERVICE_MODE: 'hosted_alpha',
+      STRIPE_SECRET_KEY: 'rk_test_alpha',
+      STRIPE_READBACK_KEY: 'rk_test_alpha_readback',
+      AE_FORMANCE_ENVIRONMENT: 'sandbox',
+      AE_SCHEDULED_WORKLOADS_ENABLED: 'false',
+    }
+    expect(validateDeploymentManifest(environment)).toMatchObject({ ok: true, findings: [] })
+    expect(resolveServiceMode(environment)).toBe('hosted_alpha')
+    expect(serviceModeAllowsEnvironment(resolveServiceMode(environment), 'sandbox')).toBe(true)
+    expect(serviceModeAllowsEnvironment(resolveServiceMode(environment), 'production')).toBe(false)
+  })
+
+  it.each([
+    ['VITE_CLERK_PUBLISHABLE_KEY', 'pk_test_alpha', 'clerk_publishable_key_invalid'],
+    ['CLERK_SECRET_KEY', 'sk_test_alpha', 'clerk_secret_key_invalid'],
+    ['STRIPE_SECRET_KEY', 'rk_live_alpha', 'stripe_secret_key_invalid'],
+    ['STRIPE_SECRET_KEY', 'sk_test_alpha', 'stripe_secret_key_invalid'],
+    ['STRIPE_READBACK_KEY', 'rk_live_alpha', 'stripe_readback_key_invalid'],
+    ['AE_FORMANCE_ENVIRONMENT', 'production', 'formance_environment_mismatch'],
+  ])('refuses hosted alpha with incompatible %s', (name, value, code) => {
+    const result = validateDeploymentManifest({
+      ...productionEnvironment(),
+      AE_SERVICE_MODE: 'hosted_alpha',
+      STRIPE_SECRET_KEY: 'rk_test_alpha',
+      STRIPE_READBACK_KEY: 'rk_test_alpha_readback',
+      AE_FORMANCE_ENVIRONMENT: 'sandbox',
+      [name]: value,
+    })
+    expect(result.ok).toBe(false)
+    expect(result.findings).toContainEqual(expect.objectContaining({ code, names: [name] }))
+  })
+
+  it('keeps hosted alpha identity requirements on non-production deployment classes', () => {
+    const result = validateDeploymentManifest({
+      ...productionEnvironment(),
+      NODE_ENV: 'development',
+      AE_SERVICE_MODE: 'hosted_alpha',
+      STRIPE_SECRET_KEY: 'rk_test_alpha',
+      STRIPE_READBACK_KEY: 'rk_test_alpha_readback',
+      AE_FORMANCE_ENVIRONMENT: 'sandbox',
+      CLERK_SECRET_KEY: undefined,
+    })
+    expect(result.ok).toBe(false)
+    expect(result.findings).toContainEqual(expect.objectContaining({
+      kind: 'missing', scope: 'clerk', names: ['CLERK_SECRET_KEY'],
+    }))
+  })
+
+  it.each([
+    { AE_SERVICE_MODE: '' },
+    { AE_SERVICE_MODE: ' ' },
+    { AE_SERVICE_MODE: 'standard' },
+    { AE_SERVICE_MODE: 'hosted_alpha ' },
+    { AE_SERVICE_MODE: 'unknown' },
+    { AE_SERVICE_MODE: 'hosted_alpha', AE_PACKAGE4_SANDBOX_DEPLOYMENT_PROFILE: 'synthetic_vps_fixture' },
+    { AE_SERVICE_MODE: 'hosted_alpha', AE_PACKAGE4_SANDBOX_DEPLOYMENT_PROFILE: '' },
+  ])('fails closed for invalid or conflicting explicit service configuration %j', (configuration) => {
+    const environment = { ...productionEnvironment(), ...configuration }
+    expect(resolveServiceMode(environment)).toBe('invalid')
+    expect(serviceModeAllowsEnvironment(resolveServiceMode(environment), 'sandbox')).toBe(false)
+    expect(serviceModeAllowsEnvironment(resolveServiceMode(environment), 'production')).toBe(false)
+    const result = validateDeploymentManifest(environment)
+    expect(result.ok).toBe(false)
+    expect(result.findings).toContainEqual(expect.objectContaining({ code: 'service_mode_invalid' }))
+  })
+
+  it('preserves existing environment checks when service mode is unset', () => {
+    const mode = resolveServiceMode(productionEnvironment())
+    expect(mode).toBe('standard')
+    expect(serviceModeAllowsEnvironment(mode, 'sandbox')).toBe(true)
+    expect(serviceModeAllowsEnvironment(mode, 'production')).toBe(true)
+  })
+
+  it.each([undefined, 'true', 'false'])('accepts optional scheduled-workload setting %s', (value) => {
+    expect(validateDeploymentManifest({
+      ...productionEnvironment(), AE_SCHEDULED_WORKLOADS_ENABLED: value,
+    }).ok).toBe(true)
+  })
+
+  it.each(['', ' ', 'TRUE', '0', '1', 'false ', 'unknown'])('rejects malformed scheduled-workload setting %j', (value) => {
+    const result = validateDeploymentManifest({
+      ...productionEnvironment(), AE_SCHEDULED_WORKLOADS_ENABLED: value,
+    })
+    expect(result.ok).toBe(false)
+    expect(result.findings).toContainEqual(expect.objectContaining({
+      code: 'ae_scheduled_workloads_enabled_invalid', names: ['AE_SCHEDULED_WORKLOADS_ENABLED'],
+    }))
   })
 
   it('does not allow production CSP enforcement to be downgraded', () => {

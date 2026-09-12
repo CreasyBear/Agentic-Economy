@@ -145,7 +145,7 @@ function path(reference: unknown): string {
 }
 
 function agentContext(
-  result: typeof canonicalPrincipal | null = canonicalPrincipal,
+  result: (Omit<typeof canonicalPrincipal, 'environment'> & { environment: 'sandbox' | 'production' }) | null = canonicalPrincipal,
   committedOperationRef = OPERATION_REF,
 ) {
   return {
@@ -486,6 +486,51 @@ afterEach(() => {
 })
 
 describe('capability operation canonical authority boundary', () => {
+  it('refuses a new production Call in hosted alpha before inspection or dispatch', async () => {
+    vi.stubEnv('AE_SERVICE_MODE', 'hosted_alpha')
+    try {
+      const ctx = { ...agentContext(), runAction: vi.fn() }
+      await expect(callBoundary(ctx, agentArgs())).resolves.toMatchObject({
+        kind: 'refused', code: 'environment_mismatch', retryable: false,
+      })
+      expect(ctx.runAction).not.toHaveBeenCalled()
+      expect(mocks.call).not.toHaveBeenCalled()
+    } finally { vi.unstubAllEnvs() }
+  })
+
+  it('allows a sandbox Call through the canonical boundary in hosted alpha', async () => {
+    vi.stubEnv('AE_SERVICE_MODE', 'hosted_alpha')
+    try {
+      const principal = { ...canonicalPrincipal, environment: 'sandbox' as const }
+      const ctx = agentContext(principal)
+      await expect(callBoundary(ctx, { ...agentArgs(), principal })).resolves.toEqual(principal)
+      expect(mocks.call).toHaveBeenCalledOnce()
+    } finally { vi.unstubAllEnvs() }
+  })
+
+  it('replays a previously consumed production Call after switching to hosted alpha', async () => {
+    vi.stubEnv('AE_SERVICE_MODE', 'hosted_alpha')
+    try {
+      const consumedCallRef = 'invocation:already-consumed'
+      const ctx = {
+        ...agentContext(),
+        runQuery: vi.fn(async (reference: unknown) => {
+          if (path(reference) === 'capabilityQuotes:readForCall') return {
+            toolRef: OPERATION_REF, quoteRef: COMMITMENT_REF, consumedCallRef,
+          }
+          if (path(reference) === 'capabilityCalls:readReplay') return { state: 'pending' }
+          throw new Error(`unexpected_query:${path(reference)}`)
+        }),
+        runAction: vi.fn(),
+      }
+      await expect(callBoundary(ctx, agentArgs())).resolves.toEqual({
+        kind: 'pending', callRef: consumedCallRef, toolRef: OPERATION_REF, retryAfterMs: 1_000,
+      })
+      expect(mocks.call).not.toHaveBeenCalled()
+      expect(ctx.runAction).not.toHaveBeenCalled()
+    } finally { vi.unstubAllEnvs() }
+  })
+
   it.each(ISOLATION_CASES)(
     'drives the %s isolation case through the registered cancel action and its real current-agent sink',
     async (caseKind) => {

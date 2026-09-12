@@ -9,6 +9,7 @@ import {
 } from '@/modules/security/source-write-admission'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 import { SCHEDULED_WORKLOAD_JOB_NAMES } from './scheduled-workloads'
+import { resolveServiceMode } from './service-mode'
 
 export type DeploymentEnvironment = 'production' | 'preview' | 'development' | 'test'
 export type DeploymentEnvironmentInput = Readonly<Record<string, string | undefined>>
@@ -149,11 +150,13 @@ const optionalNames = Object.freeze([
   'VITE_POSTHOG_APP_URL', 'POSTHOG_APP_URL',   'AE_WBA_SIGNATURE_AGENT_ALLOWLIST', 'AE_WBA_DIRECTORY_PUBLIC_JWK_JSON',
   'AE_CLI_BASE_URL',
   'AE_PACKAGE4_SANDBOX_DEPLOYMENT_PROFILE',
+  'AE_SERVICE_MODE',
   'AE_INFISICAL_CUSTOMER_ORGANIZATION_SLUG',
   'AE_INFISICAL_PLATFORM_ORGANIZATION_SLUG',
 ])
 
 export const fieldRules: readonly FieldRule[] = [
+  { name: 'AE_SCHEDULED_WORKLOADS_ENABLED', kind: 'boolean' },
   { name: 'AE_CANONICAL_BASE_URL', kind: 'url' }, { name: 'AE_CANONICAL_HOST_ALLOWLIST', kind: 'host-list' },
   { name: 'CONVEX_URL', kind: 'url' }, { name: 'VITE_CONVEX_URL', kind: 'url' }, { name: 'CLERK_JWT_ISSUER_DOMAIN', kind: 'url' },
   { name: 'AE_GATEWAY_SMOKE_BASE_URL', kind: 'url' }, { name: 'AE_RELEASE_CONVEX_URL', kind: 'url' },
@@ -266,8 +269,11 @@ export function validateDeploymentManifest(environment: DeploymentEnvironmentInp
     findings.push(Object.freeze({ kind, code, names: Object.freeze(sortedNames), scope }))
   }
   const envClass = resolveEnvironment(environment, options.environment, add)
-  const production = envClass === 'production'
+  const serviceMode = resolveServiceMode(environment)
+  const production = envClass === 'production' || serviceMode === 'hosted_alpha'
   const package4Release = present(environment, 'AE_PACKAGE4_SANDBOX_DEPLOYMENT_PROFILE') === 'synthetic_vps_fixture'
+  const sandboxMoney = package4Release || serviceMode === 'hosted_alpha'
+  if (serviceMode === 'invalid') add('malformed', 'service_mode_invalid', ['AE_SERVICE_MODE'], 'environment')
   const package5Controlled = production || package4Release
   const compatible = options.nodeMajor === undefined || options.nodeMajor === 22
   if (!compatible) add('runtime', 'node_runtime_incompatible', ['NODE_RUNTIME'], 'runtime')
@@ -284,8 +290,8 @@ export function validateDeploymentManifest(environment: DeploymentEnvironmentInp
   for (const group of package5ControlledRequirements) if (package5Controlled) requireGroup(environment, group, add)
   for (const group of conditional) if (group.trigger?.some((name) => present(environment, name)) === true) requireGroup(environment, group, add)
   if (production) validateProductionClerkCredentials(environment, add, package4Release)
-  if (production) validateProductionStripeCredentials(environment, add, package4Release)
-  if (production) validateProductionFormanceConfiguration(environment, add, package4Release)
+  if (production) validateProductionStripeCredentials(environment, add, sandboxMoney)
+  if (production) validateProductionFormanceConfiguration(environment, add, sandboxMoney)
   if (production) validateProductionBrowserSecurity(environment, add)
   if (production) validateSourceWriteAuthority(environment, add)
   if (package5Controlled) validatePackage5Rollout(environment, add)
@@ -528,7 +534,7 @@ function validateX402Custody(
   }
 }
 function validateField(environment: DeploymentEnvironmentInput, rule: FieldRule, production: boolean, add: (kind: DeploymentFindingKind, code: string, names: readonly string[], scope: string) => void): void {
-  const value = present(environment, rule.name)
+  const value = rule.name === 'AE_SCHEDULED_WORKLOADS_ENABLED' ? environment[rule.name] : present(environment, rule.name)
   if (value === undefined || !isMalformed(rule, value, production)) return
   const code = rule.name === 'AE_CANONICAL_BASE_URL' ? 'url_configuration_invalid' : rule.name === 'AE_CANONICAL_HOST_ALLOWLIST' ? 'canonical_host_allowlist_invalid' : `${rule.name.toLowerCase()}_invalid`
   add('malformed', code, [rule.name], rule.name.startsWith('AE_') ? 'ae-config' : 'configuration')
