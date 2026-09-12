@@ -1,5 +1,6 @@
 import { v, type Infer } from 'convex/values'
 import { degradeBackend } from '@/lib/observability/degrade-backend'
+import { resolveServiceMode, serviceModeAllowsEnvironment } from '@/lib/deployment/service-mode'
 
 import { internal } from './_generated/api'
 import type { Doc } from './_generated/dataModel'
@@ -348,6 +349,9 @@ async function prepareFinancialSubjectsHandler(
     { kind: 'new_operation', toolRef: args.toolRef },
   )
   if (authority === null) return { kind: 'refused', code: 'grant_not_found' }
+  if (!serviceModeAllowsEnvironment(resolveServiceMode(env), authority.principal.environment)) {
+    return { kind: 'refused', code: 'tool_unsupported', reason: 'This deployment does not admit purchases in this environment.' }
+  }
   if (await toolProviderRouteabilityIsFrozen(ctx, args.toolRef)) {
     return { kind: 'refused', code: 'tool_not_ready' }
   }
@@ -472,11 +476,18 @@ async function issueQuoteHandler(
     { kind: 'new_operation', toolRef: args.toolRef },
   )
   if (authority === null) return refuse(args, 'grant_not_found', false)
+  if (!serviceModeAllowsEnvironment(resolveServiceMode(env), authority.principal.environment)) {
+    return refuse(args, 'tool_unsupported', false, { reason: 'This deployment does not admit purchases in this environment.' })
+  }
   if (await toolProviderRouteabilityIsFrozen(ctx, args.toolRef)) {
     return refuse(args, 'tool_not_ready', false)
   }
   const operation = await readCurrentPublishedTool(ctx, args.toolRef, now)
   if (operation === undefined) return refuse(args, 'tool_not_found', false)
+  if (!serviceModeAllowsEnvironment(resolveServiceMode(env), operation.runtimeEnvironment)
+    || operation.runtimeEnvironment !== authority.principal.environment) {
+    return refuse(args, 'tool_unsupported', false, { reason: 'The current Tool environment is not permitted for this purchase.' })
+  }
   let descriptor
   try {
     descriptor = materializeRuntimePublishedTool(operation)
