@@ -38,6 +38,17 @@ describe("supply landing", () => {
     ).toBeNull();
   });
 
+  it("keeps provider guidance available while current Tool information loads", () => {
+    renderWithRouter(<AeSupplyLanding tools={[]} publishedTools={[]} sourcePending />);
+
+    expect(screen.getByRole("heading", { name: "List a Tool." })).toBeDefined();
+    expect(screen.getByRole("link", { name: "List a Tool" }).getAttribute("href")).toBe("/owner/operations");
+    expect(screen.getByRole("heading", { name: "Check whether your Tool is a fit." })).toBeDefined();
+    expect(screen.getByRole("status").textContent).toContain("Loading current Tool information…");
+    expect(screen.queryByText(/No Tools are published yet/)).toBeNull();
+    expect(screen.queryByText("Provider information is unavailable")).toBeNull();
+  });
+
   it("renders the honest empty state", () => {
     renderWithRouter(<AeSupplyLanding tools={[]} publishedTools={[]} />);
     expect(screen.getByText(/No Tools are published yet/)).toBeDefined();

@@ -1,6 +1,6 @@
 import { createFileRoute, useRouter } from '@tanstack/react-router'
 import { AePublicPage } from '@/components/ae/layout/AePublicPage'
-import { RouteError, RoutePending } from '@/components/ae/layout/AeRouteStates'
+import { RouteError } from '@/components/ae/layout/AeRouteStates'
 import { AeSupplyLanding } from '@/components/ae/supply/AeSupplyLanding'
 import { loadSupplyLandingReadbackServer } from '@/lib/server/supply-landing.functions'
 import { buildPublicPageHead } from '@/modules/seo/public'
@@ -14,7 +14,7 @@ export const Route = createFileRoute('/for-providers')({
     },
   },
   loader: () => loadSupplyLandingReadbackServer(),
-  pendingComponent: RoutePending,
+  pendingComponent: SupplyLandingPending,
   errorComponent: RouteError,
   head: () => buildPublicPageHead({
     path: '/for-providers',
@@ -23,6 +23,14 @@ export const Route = createFileRoute('/for-providers')({
   }),
   component: SupplyLandingRoute,
 })
+
+function SupplyLandingPending() {
+  return (
+    <AePublicPage>
+      <AeSupplyLanding tools={[]} publishedTools={[]} sourcePending />
+    </AePublicPage>
+  )
+}
 
 function SupplyLandingRoute() {
   const readback = Route.useLoaderData()
