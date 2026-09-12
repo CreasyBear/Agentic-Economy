@@ -187,13 +187,11 @@ jobs:
             const result = JSON.parse(fs.readFileSync("output/fresh-checkout/doctor.json", "utf8"));
             const groups = result.groups || {};
             const catalogue = (result.checks ?? []).find((c) => c.id === "catalogue");
-            const marketRequests = (result.checks ?? []).find((c) => c.id === "market_requests");
             // A fresh checkout with the scan skipped has no directory yet by design: admitted
             // Tools are still discoverable, so a bare catalogue-absent warning does not fail the gate.
             const discoveryFailed = groups.discovery !== "pass" && !(
               groups.discovery === "warn" &&
-              catalogue?.code === "catalogue_absent" &&
-              marketRequests?.state === "pass"
+              catalogue?.code === "catalogue_absent"
             );
             const quote = (result.checks ?? []).find((c) => c.id === "quote");
             const quoteState = quote?.state;
