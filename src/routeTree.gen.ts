@@ -9,7 +9,6 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as ToolsRouteImport } from './routes/tools'
 import { Route as TermsRouteImport } from './routes/terms'
 import { Route as SupportRouteImport } from './routes/support'
 import { Route as StatusRouteImport } from './routes/status'
@@ -19,11 +18,8 @@ import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as McpRouteImport } from './routes/mcp'
 import { Route as MarketRouteImport } from './routes/market'
 import { Route as LlmsDottxtRouteImport } from './routes/llms[.]txt'
-import { Route as HelpRouteImport } from './routes/help'
 import { Route as ForProvidersRouteImport } from './routes/for-providers'
 import { Route as ForAgentsRouteImport } from './routes/for-agents'
-import { Route as EngineRouteImport } from './routes/engine'
-import { Route as ContactRouteImport } from './routes/contact'
 import { Route as AboutRouteImport } from './routes/about'
 import { Route as OperatorRouteImport } from './routes/_operator'
 import { Route as SKILLDotmdRouteImport } from './routes/SKILL[.]md'
@@ -109,9 +105,6 @@ import { Route as ApiV1AccountBalanceRouteImport } from './routes/api.v1.account
 import { Route as ApiV1AccountActivityRouteImport } from './routes/api.v1.account.activity'
 import { Route as ApiStripeWebhookAccountsV2RouteImport } from './routes/api.stripe.webhook.accounts-v2'
 import { Route as OperatorOwnerSupplyOfferingRefRouteImport } from './routes/_operator/owner.supply.$offeringRef'
-import { Route as OperatorOwnerSettingsPayoutsRouteImport } from './routes/_operator/owner.settings.payouts'
-import { Route as OperatorOwnerSettingsDevelopersRouteImport } from './routes/_operator/owner.settings.developers'
-import { Route as OperatorOwnerSettingsConnectionsRouteImport } from './routes/_operator/owner.settings.connections'
 import { Route as OperatorOwnerOfferingsNewRouteImport } from './routes/_operator/owner.offerings.new'
 import { Route as OperatorOwnerOfferingsOfferingRefRouteImport } from './routes/_operator/owner.offerings.$offeringRef'
 import { Route as ApiV1SupplyToolsListRouteImport } from './routes/api.v1.supply.tools.list'
@@ -130,11 +123,6 @@ import { Route as OperatorOwnerSupplyConnectionsNewRouteImport } from './routes/
 import { Route as ApiV1AccountFundingSessionsPublicFundingSessionIdRouteImport } from './routes/api.v1.account.funding-sessions.public.$fundingSessionId'
 import { Route as OperatorOwnerSupplyConnectionsOauthCallbackRouteImport } from './routes/_operator/owner.supply.connections.oauth.callback'
 
-const ToolsRoute = ToolsRouteImport.update({
-  id: '/tools',
-  path: '/tools',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const TermsRoute = TermsRouteImport.update({
   id: '/terms',
   path: '/terms',
@@ -180,11 +168,6 @@ const LlmsDottxtRoute = LlmsDottxtRouteImport.update({
   path: '/llms.txt',
   getParentRoute: () => rootRouteImport,
 } as any)
-const HelpRoute = HelpRouteImport.update({
-  id: '/help',
-  path: '/help',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const ForProvidersRoute = ForProvidersRouteImport.update({
   id: '/for-providers',
   path: '/for-providers',
@@ -193,16 +176,6 @@ const ForProvidersRoute = ForProvidersRouteImport.update({
 const ForAgentsRoute = ForAgentsRouteImport.update({
   id: '/for-agents',
   path: '/for-agents',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const EngineRoute = EngineRouteImport.update({
-  id: '/engine',
-  path: '/engine',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ContactRoute = ContactRouteImport.update({
-  id: '/contact',
-  path: '/contact',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AboutRoute = AboutRouteImport.update({
@@ -646,24 +619,6 @@ const OperatorOwnerSupplyOfferingRefRoute =
     path: '/$offeringRef',
     getParentRoute: () => OperatorOwnerSupplyRoute,
   } as any)
-const OperatorOwnerSettingsPayoutsRoute =
-  OperatorOwnerSettingsPayoutsRouteImport.update({
-    id: '/payouts',
-    path: '/payouts',
-    getParentRoute: () => OperatorOwnerSettingsRoute,
-  } as any)
-const OperatorOwnerSettingsDevelopersRoute =
-  OperatorOwnerSettingsDevelopersRouteImport.update({
-    id: '/developers',
-    path: '/developers',
-    getParentRoute: () => OperatorOwnerSettingsRoute,
-  } as any)
-const OperatorOwnerSettingsConnectionsRoute =
-  OperatorOwnerSettingsConnectionsRouteImport.update({
-    id: '/connections',
-    path: '/connections',
-    getParentRoute: () => OperatorOwnerSettingsRoute,
-  } as any)
 const OperatorOwnerOfferingsNewRoute =
   OperatorOwnerOfferingsNewRouteImport.update({
     id: '/new',
@@ -770,11 +725,8 @@ export interface FileRoutesByFullPath {
   '/$slug': typeof SlugRouteWithChildren
   '/SKILL.md': typeof SKILLDotmdRoute
   '/about': typeof AboutRoute
-  '/contact': typeof ContactRoute
-  '/engine': typeof EngineRoute
   '/for-agents': typeof ForAgentsRoute
   '/for-providers': typeof ForProvidersRoute
-  '/help': typeof HelpRoute
   '/llms.txt': typeof LlmsDottxtRoute
   '/market': typeof MarketRoute
   '/mcp': typeof McpRoute
@@ -784,7 +736,6 @@ export interface FileRoutesByFullPath {
   '/status': typeof StatusRoute
   '/support': typeof SupportRoute
   '/terms': typeof TermsRoute
-  '/tools': typeof ToolsRouteWithChildren
   '/$slug/ucp': typeof SlugUcpRoute
   '/.well-known/api-catalog': typeof DotwellKnownApiCatalogRoute
   '/.well-known/http-message-signatures-directory': typeof DotwellKnownHttpMessageSignaturesDirectoryRoute
@@ -818,7 +769,7 @@ export interface FileRoutesByFullPath {
   '/developers/discovery': typeof OperatorDevelopersDiscoveryRoute
   '/owner/credit': typeof OperatorOwnerCreditRoute
   '/owner/offerings': typeof OperatorOwnerOfferingsRouteWithChildren
-  '/owner/settings': typeof OperatorOwnerSettingsRouteWithChildren
+  '/owner/settings': typeof OperatorOwnerSettingsRoute
   '/owner/supply': typeof OperatorOwnerSupplyRouteWithChildren
   '/api/businesses/$slug': typeof ApiBusinessesSlugRoute
   '/api/businesses/search': typeof ApiBusinessesSearchRoute
@@ -842,9 +793,6 @@ export interface FileRoutesByFullPath {
   '/api/v1/services': typeof ApiV1ServicesRouteWithChildren
   '/owner/offerings/$offeringRef': typeof OperatorOwnerOfferingsOfferingRefRoute
   '/owner/offerings/new': typeof OperatorOwnerOfferingsNewRoute
-  '/owner/settings/connections': typeof OperatorOwnerSettingsConnectionsRoute
-  '/owner/settings/developers': typeof OperatorOwnerSettingsDevelopersRoute
-  '/owner/settings/payouts': typeof OperatorOwnerSettingsPayoutsRoute
   '/owner/supply/$offeringRef': typeof OperatorOwnerSupplyOfferingRefRoute
   '/api/stripe/webhook/accounts-v2': typeof ApiStripeWebhookAccountsV2Route
   '/api/v1/account/activity': typeof ApiV1AccountActivityRoute
@@ -891,11 +839,8 @@ export interface FileRoutesByTo {
   '/$slug': typeof SlugRouteWithChildren
   '/SKILL.md': typeof SKILLDotmdRoute
   '/about': typeof AboutRoute
-  '/contact': typeof ContactRoute
-  '/engine': typeof EngineRoute
   '/for-agents': typeof ForAgentsRoute
   '/for-providers': typeof ForProvidersRoute
-  '/help': typeof HelpRoute
   '/llms.txt': typeof LlmsDottxtRoute
   '/market': typeof MarketRoute
   '/mcp': typeof McpRoute
@@ -905,7 +850,6 @@ export interface FileRoutesByTo {
   '/status': typeof StatusRoute
   '/support': typeof SupportRoute
   '/terms': typeof TermsRoute
-  '/tools': typeof ToolsRouteWithChildren
   '/$slug/ucp': typeof SlugUcpRoute
   '/.well-known/api-catalog': typeof DotwellKnownApiCatalogRoute
   '/.well-known/http-message-signatures-directory': typeof DotwellKnownHttpMessageSignaturesDirectoryRoute
@@ -939,7 +883,7 @@ export interface FileRoutesByTo {
   '/developers/discovery': typeof OperatorDevelopersDiscoveryRoute
   '/owner/credit': typeof OperatorOwnerCreditRoute
   '/owner/offerings': typeof OperatorOwnerOfferingsRouteWithChildren
-  '/owner/settings': typeof OperatorOwnerSettingsRouteWithChildren
+  '/owner/settings': typeof OperatorOwnerSettingsRoute
   '/owner/supply': typeof OperatorOwnerSupplyRouteWithChildren
   '/api/businesses/$slug': typeof ApiBusinessesSlugRoute
   '/api/businesses/search': typeof ApiBusinessesSearchRoute
@@ -963,9 +907,6 @@ export interface FileRoutesByTo {
   '/api/v1/services': typeof ApiV1ServicesRouteWithChildren
   '/owner/offerings/$offeringRef': typeof OperatorOwnerOfferingsOfferingRefRoute
   '/owner/offerings/new': typeof OperatorOwnerOfferingsNewRoute
-  '/owner/settings/connections': typeof OperatorOwnerSettingsConnectionsRoute
-  '/owner/settings/developers': typeof OperatorOwnerSettingsDevelopersRoute
-  '/owner/settings/payouts': typeof OperatorOwnerSettingsPayoutsRoute
   '/owner/supply/$offeringRef': typeof OperatorOwnerSupplyOfferingRefRoute
   '/api/stripe/webhook/accounts-v2': typeof ApiStripeWebhookAccountsV2Route
   '/api/v1/account/activity': typeof ApiV1AccountActivityRoute
@@ -1014,11 +955,8 @@ export interface FileRoutesById {
   '/SKILL.md': typeof SKILLDotmdRoute
   '/_operator': typeof OperatorRouteWithChildren
   '/about': typeof AboutRoute
-  '/contact': typeof ContactRoute
-  '/engine': typeof EngineRoute
   '/for-agents': typeof ForAgentsRoute
   '/for-providers': typeof ForProvidersRoute
-  '/help': typeof HelpRoute
   '/llms.txt': typeof LlmsDottxtRoute
   '/market': typeof MarketRoute
   '/mcp': typeof McpRoute
@@ -1028,7 +966,6 @@ export interface FileRoutesById {
   '/status': typeof StatusRoute
   '/support': typeof SupportRoute
   '/terms': typeof TermsRoute
-  '/tools': typeof ToolsRouteWithChildren
   '/$slug/ucp': typeof SlugUcpRoute
   '/.well-known/api-catalog': typeof DotwellKnownApiCatalogRoute
   '/.well-known/http-message-signatures-directory': typeof DotwellKnownHttpMessageSignaturesDirectoryRoute
@@ -1062,7 +999,7 @@ export interface FileRoutesById {
   '/_operator/developers/discovery': typeof OperatorDevelopersDiscoveryRoute
   '/_operator/owner/credit': typeof OperatorOwnerCreditRoute
   '/_operator/owner/offerings': typeof OperatorOwnerOfferingsRouteWithChildren
-  '/_operator/owner/settings': typeof OperatorOwnerSettingsRouteWithChildren
+  '/_operator/owner/settings': typeof OperatorOwnerSettingsRoute
   '/_operator/owner/supply': typeof OperatorOwnerSupplyRouteWithChildren
   '/api/businesses/$slug': typeof ApiBusinessesSlugRoute
   '/api/businesses/search': typeof ApiBusinessesSearchRoute
@@ -1086,9 +1023,6 @@ export interface FileRoutesById {
   '/api/v1/services': typeof ApiV1ServicesRouteWithChildren
   '/_operator/owner/offerings/$offeringRef': typeof OperatorOwnerOfferingsOfferingRefRoute
   '/_operator/owner/offerings/new': typeof OperatorOwnerOfferingsNewRoute
-  '/_operator/owner/settings/connections': typeof OperatorOwnerSettingsConnectionsRoute
-  '/_operator/owner/settings/developers': typeof OperatorOwnerSettingsDevelopersRoute
-  '/_operator/owner/settings/payouts': typeof OperatorOwnerSettingsPayoutsRoute
   '/_operator/owner/supply/$offeringRef': typeof OperatorOwnerSupplyOfferingRefRoute
   '/api/stripe/webhook/accounts-v2': typeof ApiStripeWebhookAccountsV2Route
   '/api/v1/account/activity': typeof ApiV1AccountActivityRoute
@@ -1137,11 +1071,8 @@ export interface FileRouteTypes {
     | '/$slug'
     | '/SKILL.md'
     | '/about'
-    | '/contact'
-    | '/engine'
     | '/for-agents'
     | '/for-providers'
-    | '/help'
     | '/llms.txt'
     | '/market'
     | '/mcp'
@@ -1151,7 +1082,6 @@ export interface FileRouteTypes {
     | '/status'
     | '/support'
     | '/terms'
-    | '/tools'
     | '/$slug/ucp'
     | '/.well-known/api-catalog'
     | '/.well-known/http-message-signatures-directory'
@@ -1209,9 +1139,6 @@ export interface FileRouteTypes {
     | '/api/v1/services'
     | '/owner/offerings/$offeringRef'
     | '/owner/offerings/new'
-    | '/owner/settings/connections'
-    | '/owner/settings/developers'
-    | '/owner/settings/payouts'
     | '/owner/supply/$offeringRef'
     | '/api/stripe/webhook/accounts-v2'
     | '/api/v1/account/activity'
@@ -1258,11 +1185,8 @@ export interface FileRouteTypes {
     | '/$slug'
     | '/SKILL.md'
     | '/about'
-    | '/contact'
-    | '/engine'
     | '/for-agents'
     | '/for-providers'
-    | '/help'
     | '/llms.txt'
     | '/market'
     | '/mcp'
@@ -1272,7 +1196,6 @@ export interface FileRouteTypes {
     | '/status'
     | '/support'
     | '/terms'
-    | '/tools'
     | '/$slug/ucp'
     | '/.well-known/api-catalog'
     | '/.well-known/http-message-signatures-directory'
@@ -1330,9 +1253,6 @@ export interface FileRouteTypes {
     | '/api/v1/services'
     | '/owner/offerings/$offeringRef'
     | '/owner/offerings/new'
-    | '/owner/settings/connections'
-    | '/owner/settings/developers'
-    | '/owner/settings/payouts'
     | '/owner/supply/$offeringRef'
     | '/api/stripe/webhook/accounts-v2'
     | '/api/v1/account/activity'
@@ -1380,11 +1300,8 @@ export interface FileRouteTypes {
     | '/SKILL.md'
     | '/_operator'
     | '/about'
-    | '/contact'
-    | '/engine'
     | '/for-agents'
     | '/for-providers'
-    | '/help'
     | '/llms.txt'
     | '/market'
     | '/mcp'
@@ -1394,7 +1311,6 @@ export interface FileRouteTypes {
     | '/status'
     | '/support'
     | '/terms'
-    | '/tools'
     | '/$slug/ucp'
     | '/.well-known/api-catalog'
     | '/.well-known/http-message-signatures-directory'
@@ -1452,9 +1368,6 @@ export interface FileRouteTypes {
     | '/api/v1/services'
     | '/_operator/owner/offerings/$offeringRef'
     | '/_operator/owner/offerings/new'
-    | '/_operator/owner/settings/connections'
-    | '/_operator/owner/settings/developers'
-    | '/_operator/owner/settings/payouts'
     | '/_operator/owner/supply/$offeringRef'
     | '/api/stripe/webhook/accounts-v2'
     | '/api/v1/account/activity'
@@ -1503,11 +1416,8 @@ export interface RootRouteChildren {
   SKILLDotmdRoute: typeof SKILLDotmdRoute
   OperatorRoute: typeof OperatorRouteWithChildren
   AboutRoute: typeof AboutRoute
-  ContactRoute: typeof ContactRoute
-  EngineRoute: typeof EngineRoute
   ForAgentsRoute: typeof ForAgentsRoute
   ForProvidersRoute: typeof ForProvidersRoute
-  HelpRoute: typeof HelpRoute
   LlmsDottxtRoute: typeof LlmsDottxtRoute
   MarketRoute: typeof MarketRoute
   McpRoute: typeof McpRoute
@@ -1517,7 +1427,6 @@ export interface RootRouteChildren {
   StatusRoute: typeof StatusRoute
   SupportRoute: typeof SupportRoute
   TermsRoute: typeof TermsRoute
-  ToolsRoute: typeof ToolsRouteWithChildren
   DotwellKnownApiCatalogRoute: typeof DotwellKnownApiCatalogRoute
   DotwellKnownHttpMessageSignaturesDirectoryRoute: typeof DotwellKnownHttpMessageSignaturesDirectoryRoute
   DotwellKnownOauthAuthorizationServerRoute: typeof DotwellKnownOauthAuthorizationServerRoute
@@ -1585,13 +1494,6 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/tools': {
-      id: '/tools'
-      path: '/tools'
-      fullPath: '/tools'
-      preLoaderRoute: typeof ToolsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/terms': {
       id: '/terms'
       path: '/terms'
@@ -1655,13 +1557,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LlmsDottxtRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/help': {
-      id: '/help'
-      path: '/help'
-      fullPath: '/help'
-      preLoaderRoute: typeof HelpRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/for-providers': {
       id: '/for-providers'
       path: '/for-providers'
@@ -1674,20 +1569,6 @@ declare module '@tanstack/react-router' {
       path: '/for-agents'
       fullPath: '/for-agents'
       preLoaderRoute: typeof ForAgentsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/engine': {
-      id: '/engine'
-      path: '/engine'
-      fullPath: '/engine'
-      preLoaderRoute: typeof EngineRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/contact': {
-      id: '/contact'
-      path: '/contact'
-      fullPath: '/contact'
-      preLoaderRoute: typeof ContactRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/about': {
@@ -2285,27 +2166,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OperatorOwnerSupplyOfferingRefRouteImport
       parentRoute: typeof OperatorOwnerSupplyRoute
     }
-    '/_operator/owner/settings/payouts': {
-      id: '/_operator/owner/settings/payouts'
-      path: '/payouts'
-      fullPath: '/owner/settings/payouts'
-      preLoaderRoute: typeof OperatorOwnerSettingsPayoutsRouteImport
-      parentRoute: typeof OperatorOwnerSettingsRoute
-    }
-    '/_operator/owner/settings/developers': {
-      id: '/_operator/owner/settings/developers'
-      path: '/developers'
-      fullPath: '/owner/settings/developers'
-      preLoaderRoute: typeof OperatorOwnerSettingsDevelopersRouteImport
-      parentRoute: typeof OperatorOwnerSettingsRoute
-    }
-    '/_operator/owner/settings/connections': {
-      id: '/_operator/owner/settings/connections'
-      path: '/connections'
-      fullPath: '/owner/settings/connections'
-      preLoaderRoute: typeof OperatorOwnerSettingsConnectionsRouteImport
-      parentRoute: typeof OperatorOwnerSettingsRoute
-    }
     '/_operator/owner/offerings/new': {
       id: '/_operator/owner/offerings/new'
       path: '/new'
@@ -2466,23 +2326,6 @@ const OperatorOwnerOfferingsRouteWithChildren =
     OperatorOwnerOfferingsRouteChildren,
   )
 
-interface OperatorOwnerSettingsRouteChildren {
-  OperatorOwnerSettingsConnectionsRoute: typeof OperatorOwnerSettingsConnectionsRoute
-  OperatorOwnerSettingsDevelopersRoute: typeof OperatorOwnerSettingsDevelopersRoute
-  OperatorOwnerSettingsPayoutsRoute: typeof OperatorOwnerSettingsPayoutsRoute
-}
-
-const OperatorOwnerSettingsRouteChildren: OperatorOwnerSettingsRouteChildren = {
-  OperatorOwnerSettingsConnectionsRoute: OperatorOwnerSettingsConnectionsRoute,
-  OperatorOwnerSettingsDevelopersRoute: OperatorOwnerSettingsDevelopersRoute,
-  OperatorOwnerSettingsPayoutsRoute: OperatorOwnerSettingsPayoutsRoute,
-}
-
-const OperatorOwnerSettingsRouteWithChildren =
-  OperatorOwnerSettingsRoute._addFileChildren(
-    OperatorOwnerSettingsRouteChildren,
-  )
-
 interface OperatorOwnerSupplyRouteChildren {
   OperatorOwnerSupplyOfferingRefRoute: typeof OperatorOwnerSupplyOfferingRefRoute
   OperatorOwnerSupplyConnectionsNewRoute: typeof OperatorOwnerSupplyConnectionsNewRoute
@@ -2508,7 +2351,7 @@ interface OperatorRouteChildren {
   OperatorDevelopersDiscoveryRoute: typeof OperatorDevelopersDiscoveryRoute
   OperatorOwnerCreditRoute: typeof OperatorOwnerCreditRoute
   OperatorOwnerOfferingsRoute: typeof OperatorOwnerOfferingsRouteWithChildren
-  OperatorOwnerSettingsRoute: typeof OperatorOwnerSettingsRouteWithChildren
+  OperatorOwnerSettingsRoute: typeof OperatorOwnerSettingsRoute
   OperatorOwnerSupplyRoute: typeof OperatorOwnerSupplyRouteWithChildren
 }
 
@@ -2520,7 +2363,7 @@ const OperatorRouteChildren: OperatorRouteChildren = {
   OperatorDevelopersDiscoveryRoute: OperatorDevelopersDiscoveryRoute,
   OperatorOwnerCreditRoute: OperatorOwnerCreditRoute,
   OperatorOwnerOfferingsRoute: OperatorOwnerOfferingsRouteWithChildren,
-  OperatorOwnerSettingsRoute: OperatorOwnerSettingsRouteWithChildren,
+  OperatorOwnerSettingsRoute: OperatorOwnerSettingsRoute,
   OperatorOwnerSupplyRoute: OperatorOwnerSupplyRouteWithChildren,
 }
 
@@ -2538,16 +2381,6 @@ const PrivacyRouteChildren: PrivacyRouteChildren = {
 
 const PrivacyRouteWithChildren =
   PrivacyRoute._addFileChildren(PrivacyRouteChildren)
-
-interface ToolsRouteChildren {
-  ToolsToolRefRoute: typeof ToolsToolRefRoute
-}
-
-const ToolsRouteChildren: ToolsRouteChildren = {
-  ToolsToolRefRoute: ToolsToolRefRoute,
-}
-
-const ToolsRouteWithChildren = ToolsRoute._addFileChildren(ToolsRouteChildren)
 
 interface ApiBusinessesRouteChildren {
   ApiBusinessesSlugRoute: typeof ApiBusinessesSlugRoute
@@ -2669,11 +2502,8 @@ const rootRouteChildren: RootRouteChildren = {
   SKILLDotmdRoute: SKILLDotmdRoute,
   OperatorRoute: OperatorRouteWithChildren,
   AboutRoute: AboutRoute,
-  ContactRoute: ContactRoute,
-  EngineRoute: EngineRoute,
   ForAgentsRoute: ForAgentsRoute,
   ForProvidersRoute: ForProvidersRoute,
-  HelpRoute: HelpRoute,
   LlmsDottxtRoute: LlmsDottxtRoute,
   MarketRoute: MarketRoute,
   McpRoute: McpRoute,
@@ -2683,7 +2513,6 @@ const rootRouteChildren: RootRouteChildren = {
   StatusRoute: StatusRoute,
   SupportRoute: SupportRoute,
   TermsRoute: TermsRoute,
-  ToolsRoute: ToolsRouteWithChildren,
   DotwellKnownApiCatalogRoute: DotwellKnownApiCatalogRoute,
   DotwellKnownHttpMessageSignaturesDirectoryRoute:
     DotwellKnownHttpMessageSignaturesDirectoryRoute,

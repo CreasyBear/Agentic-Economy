@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, createFileRoute } from '@tanstack/react-router'
 import { useServerFn } from '@tanstack/react-start'
+import { Wallet } from 'lucide-react'
 
 import { AeOwnerCredit } from '@/components/ae/console/AeOwnerCredit'
 import type { AccountFundingPort } from '@/components/ae/console/AeCreditTopUpPanel'
@@ -32,6 +33,19 @@ import {
 import type { AccountFundingBalance } from '@/modules/money/server'
 
 export const Route = createFileRoute('/_operator/owner/credit')({
+  staticData: {
+    nav: {
+      label: 'Credit',
+      operator: {
+        roles: ['owner'],
+        group: 'Buy',
+        groupOrder: 0,
+        order: 2,
+        icon: Wallet,
+        tier: 'core',
+      },
+    },
+  },
   ...operatorRouteOptions,
   head: () => ({
     meta: [

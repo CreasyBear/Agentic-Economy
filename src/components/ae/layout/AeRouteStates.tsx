@@ -12,7 +12,7 @@ import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
 import { isLocalE2EAuthBypassEnabled } from '@/lib/client/local-e2e-auth'
-import { operatorRoleForPath, roleHomeHref } from '@/lib/operator/navigation'
+import { operatorRoleForPath, roleHomeHref } from '@/lib/operator/roles'
 import {
   OPERATOR_SURFACE_FORBIDDEN_MESSAGE,
   OperatorSurfaceForbiddenError,
@@ -209,10 +209,10 @@ function OperatorForbiddenBody() {
         <p>Use the account that owns this workspace, or return to the public market.</p>
         <div className="flex w-full flex-wrap gap-intra">
           <Button asChild type="button" className="min-h-touch">
-            <Link to="/market" search={{ window: '30d' }}>Return to market</Link>
+            <Link to="/market">Return to market</Link>
           </Button>
           <Button asChild variant="secondary" className="min-h-touch">
-            <Link to="/support">Get help</Link>
+            <Link to="/support">Help</Link>
           </Button>
           {localE2E ? (
             <Button asChild variant="outline" className="min-h-touch">

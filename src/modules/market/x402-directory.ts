@@ -100,3 +100,23 @@ export const x402DirectoryResolveInputSchema = x402DirectoryInputSchema.extend({
 export type X402DirectoryInput = z.infer<typeof x402DirectoryInputSchema>
 export type X402DirectoryResolveInput = z.infer<typeof x402DirectoryResolveInputSchema>
 export type X402DirectoryResolution = Readonly<{ kind: 'ready'; toolRef: string }> | Readonly<{ kind: 'unavailable'; reason: string }>
+
+const X402_PENDING_TOOL_REF_PREFIX = 'x402:'
+
+/**
+ * The `/tools/$toolRef` route's one identifier for a catalogue entry that has
+ * not yet been admitted into the capability supply as a Tool. The route
+ * loader resolves it (the same server round trip the retired Tool detail
+ * dialog performed) before reading the Tool descriptor.
+ */
+export function x402PendingToolRef(resource: string): string {
+  return `${X402_PENDING_TOOL_REF_PREFIX}${encodeURIComponent(resource)}`
+}
+
+export function readX402PendingResource(toolRef: string): string | undefined {
+  if (!toolRef.startsWith(X402_PENDING_TOOL_REF_PREFIX)) return undefined
+  try {
+    const resource = decodeURIComponent(toolRef.slice(X402_PENDING_TOOL_REF_PREFIX.length))
+    return resource.length > 0 ? resource : undefined
+  } catch { return undefined }
+}

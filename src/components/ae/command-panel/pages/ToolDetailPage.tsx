@@ -79,7 +79,6 @@ export function ToolDetailPage({
           <Button asChild size="sm" className="min-h-touch justify-self-start">
             <Link
               to="/market"
-              search={{ window: '30d' }}
               hash="tools"
               onClick={onNavigate}
             >

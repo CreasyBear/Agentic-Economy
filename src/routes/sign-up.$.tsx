@@ -63,7 +63,7 @@ function SignUpRoute() {
             body={body}
           >
             <AeSiteButton asChild>
-              <Link to="/market" search={{ window: '30d' }} hash="tools">
+              <Link to="/market" hash="tools">
                 Browse the catalog
               </Link>
             </AeSiteButton>

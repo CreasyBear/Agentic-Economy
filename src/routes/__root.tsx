@@ -109,7 +109,7 @@ function ChatConvexProvider({ children }: { children: ReactNode }) {
         tone="warning"
         action={(
           <Button asChild className="min-h-touch">
-            <Link to="/market" search={{ window: '30d' }} hash="tools">
+            <Link to="/market" hash="tools">
               Browse Tools
             </Link>
           </Button>

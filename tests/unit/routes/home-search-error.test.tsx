@@ -30,7 +30,7 @@ describe('application entry navigation', () => {
     expect(await screen.findByRole('heading', { name: 'Tool market' })).toBeTruthy()
     expect(router.state.location.pathname).toBe('/market')
     expect(router.state.location.search).toMatchObject(entry.includes('?')
-      ? { window: '30d', query: 'weather' }
-      : { window: '30d' })
+      ? { query: 'weather' }
+      : {})
   })
 })

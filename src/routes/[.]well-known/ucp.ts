@@ -12,6 +12,12 @@ import { buildSiteDiscoveryManifest, projectCompactSiteDiscoveryManifest } from 
  * SKILL.md, and the developer discovery surface, so it needs no source read.
  */
 export const Route = createFileRoute('/.well-known/ucp')({
+  staticData: {
+    nav: {
+      label: '.well-known/ucp',
+      footer: { column: 'Machines', order: 2 },
+    },
+  },
   server: {
     handlers: {
       GET: ({ request }) => handleSiteDiscoveryManifestRequest(request),

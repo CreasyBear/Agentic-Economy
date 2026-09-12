@@ -1,4 +1,5 @@
 import { createFileRoute, Outlet, useLocation } from '@tanstack/react-router'
+import { Boxes } from 'lucide-react'
 
 import { AeProviderWorkspace } from '@/components/ae/offerings/AeProviderWorkspace'
 import { AeOwnerOfferingsList } from '@/components/ae/offerings/AeOwnerOfferings'
@@ -14,6 +15,21 @@ import { operatorRouteOptions } from '@/lib/operator/route-options'
 import { parseOwnerToolsCompatibilitySearch } from '@/lib/operator/supply-compatibility'
 
 export const Route = createFileRoute('/_operator/owner/offerings')({
+  staticData: {
+    nav: {
+      label: 'Operations',
+      operator: {
+        roles: ['owner'],
+        group: 'Supply',
+        groupOrder: 1,
+        order: 0,
+        icon: Boxes,
+        tier: 'core',
+        mobilePrimary: true,
+        mobileOrder: 30,
+      },
+    },
+  },
   ...operatorRouteOptions,
   validateSearch: parseOwnerToolsCompatibilitySearch,
   loaderDeps: ({ search }) => ({ cursor: search.cursor }),
@@ -31,7 +47,7 @@ export const Route = createFileRoute('/_operator/owner/offerings')({
       offboarding: readOwnerProviderOffboardingServer().catch(() => ({ kind: 'unavailable' as const })),
     }
   },
-  head: () => ({ meta: [{ title: 'Tools | Agentic Economy' }, { name: 'robots', content: 'noindex' }] }),
+  head: () => ({ meta: [{ title: 'Operations | Agentic Economy' }, { name: 'robots', content: 'noindex' }] }),
   component: OwnerOfferingsRoute,
 })
 
@@ -46,7 +62,7 @@ function OwnerOfferingsPending() {
   return (
     <AeOperatorPage
       operatorRole="owner"
-      title="Tools"
+      title="Operations"
       description="Publish the exact tools agents can inspect and call."
       currentPath="/owner/offerings"
     >

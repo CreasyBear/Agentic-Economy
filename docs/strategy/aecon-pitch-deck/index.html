@@ -1,0 +1,646 @@
+<!DOCTYPE html>
+<html lang="en-AU">
+<head>
+<meta charset="utf-8">
+<title>aecon: The Market for the Agentic Economy</title>
+<style>
+  @font-face{font-family:"Manrope";font-style:normal;font-weight:200 800;font-display:block;
+    src:url("assets/manrope-latin.woff2") format("woff2")}
+
+  :root{
+    --charcoal:#141414; --chalk:#E8E4DA; --forest:#24543D; --stone:#AAA89E;
+    --ground:#EFEDE7; --ground-d:#141414;
+    --panel-d:#0D0D0C;
+    --ink:rgba(20,20,20,.84); --ink-2:rgba(20,20,20,.52);
+    --rule:rgba(20,20,20,.16); --rule-2:rgba(20,20,20,.34);
+    --c-ink:rgba(232,228,218,.86); --c-ink-2:rgba(232,228,218,.54);
+    --rule-d:rgba(232,228,218,.18); --rule-d2:rgba(232,228,218,.38);
+  }
+
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{background:#0A0A0A;font-family:"Manrope",system-ui,sans-serif;
+    -webkit-font-smoothing:antialiased;text-rendering:geometricPrecision}
+  #stage{transform-origin:top left}
+
+  .slide{position:relative;width:1920px;height:1080px;overflow:hidden;background:var(--ground);
+    color:var(--charcoal);display:block;margin:0 auto 26px;
+    -webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .slide.dark{background:var(--ground-d);color:var(--chalk)}
+
+  .mark{position:absolute;top:64px;left:64px;width:54px;height:54px;z-index:20}
+  .mark img{width:100%;height:100%;display:block}
+
+  /* ── rail + panel grammar ───────────────────────────────────────── */
+  .split{display:grid;grid-template-columns:460px 1fr;width:100%;height:100%}
+  .rail{padding:150px 52px 64px 64px;display:flex;flex-direction:column}
+  .rail .ln{font-size:15px;font-weight:500;letter-spacing:.14em;text-transform:uppercase;
+    color:var(--forest);margin-bottom:22px;display:block}
+  .rail p{font-size:19px;font-weight:400;line-height:1.5;color:var(--ink);max-width:20em}
+  .rail .src{font-size:13px;font-weight:400;line-height:1.55;color:var(--ink-2);
+    margin-top:auto;margin-bottom:34px;max-width:20em}
+  .pager{font-size:34px;font-weight:200;letter-spacing:-.03em;line-height:1;color:var(--charcoal)}
+  .meta{margin-top:10px;font-size:13px;font-weight:400;line-height:1.45;color:var(--ink-2)}
+
+  .panel{background:var(--chalk);margin:64px 64px 64px 0;padding:86px 88px 88px 88px;
+    display:flex;flex-direction:column;justify-content:flex-start}
+  .slide.dark .panel{background:var(--panel-d)}
+
+  .slide.dark .pager{color:var(--chalk)}
+  .slide.dark .meta{color:var(--c-ink-2)}
+  .slide.dark .rail p{color:var(--c-ink)}
+  .slide.dark .rail .src{color:var(--c-ink-2)}
+  .slide.dark .rail .ln{color:var(--chalk)}
+
+  /* ── type ───────────────────────────────────────────────────────── */
+  .display{font-size:96px;font-weight:200;line-height:1.04;letter-spacing:-.04em}
+  .display.sm{font-size:62px;font-weight:200;line-height:1.09;letter-spacing:-.033em}
+  .display.xs{font-size:46px;font-weight:200;line-height:1.14;letter-spacing:-.028em}
+  b{font-weight:500}
+  .lede{font-size:22px;font-weight:400;line-height:1.5;color:var(--ink);margin-top:30px;max-width:30em}
+  .slide.dark .lede{color:var(--c-ink)}
+  .sup{font-size:15px;font-weight:500;letter-spacing:.02em;color:var(--ink-2)}
+  .slide.dark .sup{color:var(--c-ink-2)}
+
+  /* ── full-bleed image slides ────────────────────────────────────── */
+  .bleed{position:absolute;inset:0}
+  .bleed img{width:100%;height:100%;object-fit:cover;display:block}
+  .bleed::after{content:"";position:absolute;inset:0;
+    background:linear-gradient(90deg,rgba(10,10,10,.95) 0%,rgba(10,10,10,.80) 46%,rgba(10,10,10,.42) 100%)}
+  .bleed.hard::after{background:linear-gradient(180deg,rgba(10,10,10,.86) 0%,rgba(10,10,10,.62) 42%,rgba(10,10,10,.94) 100%)}
+  .overlay{position:relative;z-index:2;height:100%;padding:150px 64px 64px;display:flex;flex-direction:column}
+  .foot{display:flex;justify-content:space-between;align-items:flex-end;width:100%;margin-top:auto}
+
+  /* ── statistic wall: flat solid blocks, no radius, no border ────── */
+  .wall{display:grid;gap:0;margin-top:38px}
+  .wall.c4{grid-template-columns:repeat(4,1fr)}
+  .wall.c3{grid-template-columns:repeat(3,1fr)}
+  .tile{background:var(--charcoal);color:var(--chalk);padding:32px 26px 30px;min-height:196px;
+    display:flex;flex-direction:column;justify-content:flex-end}
+  .tile + .tile{margin-left:2px}
+  .tile.forest{background:var(--forest)}
+  .tile.hair{background:transparent;border:1px solid var(--rule-2);color:var(--charcoal)}
+  .tile .v{font-size:66px;font-weight:200;letter-spacing:-.045em;line-height:.96}
+  .tile .l{font-size:16px;font-weight:500;line-height:1.35;margin-top:20px}
+  .tile .s{font-size:13px;font-weight:400;line-height:1.4;margin-top:7px;color:rgba(232,228,218,.6)}
+  .tile.hair .s{color:var(--ink-2)}
+  .slide.dark .tile{background:var(--chalk);color:var(--charcoal)}
+  .slide.dark .tile.forest{background:var(--forest);color:var(--chalk)}
+  .slide.dark .tile .s{color:rgba(20,20,20,.55)}
+  .slide.dark .tile.forest .s{color:rgba(232,228,218,.62)}
+  .slide.dark .tile.hair{background:transparent;border-color:var(--rule-d2);color:var(--chalk)}
+  .slide.dark .tile.hair .s{color:var(--c-ink-2)}
+
+  /* hero number + supporting stack (slide 09) */
+  .hero-split{display:grid;grid-template-columns:380px 1fr;gap:2px;margin-top:38px;align-items:stretch}
+  .hero-block{background:var(--forest);color:var(--chalk);padding:34px 30px;display:flex;flex-direction:column;justify-content:flex-end}
+  .hero-block .v{font-size:112px;font-weight:200;letter-spacing:-.05em;line-height:.9}
+  .hero-block .l{font-size:17px;font-weight:500;margin-top:22px;line-height:1.35}
+  .hero-block .s{font-size:13px;color:rgba(232,228,218,.62);margin-top:7px;line-height:1.4}
+  .hero-stack{display:grid;grid-template-rows:repeat(3,1fr);gap:2px}
+  .hero-row{background:var(--charcoal);color:var(--chalk);padding:22px 28px;
+    display:grid;grid-template-columns:150px 1fr;gap:24px;align-items:center}
+  .hero-row .v{font-size:34px;font-weight:200;letter-spacing:-.035em;line-height:1}
+  .hero-row .l{font-size:16px;font-weight:500;line-height:1.3}
+  .hero-row .s{font-size:13px;color:rgba(232,228,218,.58);margin-top:5px;line-height:1.35}
+
+  /* ── four-step chain ────────────────────────────────────────────── */
+  .chain{display:grid;grid-template-columns:repeat(4,1fr);gap:2px;margin-top:40px;align-items:stretch}
+  .chain .step{background:transparent;border-top:2px solid var(--rule-2);padding:26px 22px 0 0;
+    display:flex;flex-direction:column;min-height:340px}
+  .chain .step .num{font-size:13px;font-weight:500;letter-spacing:.14em;text-transform:uppercase;
+    color:var(--ink-2);margin-bottom:22px}
+  .chain .step .h{font-size:27px;font-weight:400;line-height:1.18;letter-spacing:-.022em;margin-bottom:18px}
+  .chain .step p{font-size:16.5px;font-weight:400;line-height:1.5;color:var(--ink)}
+  .chain .step.last{background:var(--forest);border-top-color:var(--forest);padding:26px 22px 22px}
+  .chain .step.last .num{color:rgba(232,228,218,.66)}
+  .chain .step.last .h{color:var(--chalk)}
+  .chain .step.last p{color:rgba(232,228,218,.82)}
+
+  /* ── data table ─────────────────────────────────────────────────── */
+  table.matrix{width:100%;border-collapse:collapse;margin-top:36px}
+  table.matrix th{font-size:12.5px;font-weight:500;letter-spacing:.13em;text-transform:uppercase;
+    color:var(--ink-2);text-align:left;padding:0 20px 14px 0;border-bottom:1px solid var(--rule-2);
+    vertical-align:bottom;font-weight:500}
+  table.matrix td{font-size:17px;font-weight:400;line-height:1.42;padding:22px 20px 22px 0;
+    border-bottom:1px solid var(--rule);vertical-align:top;color:var(--ink)}
+  table.matrix td.k{font-weight:500;color:var(--charcoal)}
+  table.matrix tr.focus td{background:var(--forest);color:rgba(232,228,218,.9);border-bottom-color:var(--forest)}
+  table.matrix tr.focus td.k{color:var(--chalk);font-weight:500}
+  table.matrix td:last-child,table.matrix th:last-child{padding-right:0}
+
+  /* ── status list (five pillars) ─────────────────────────────────── */
+  .pillars{margin-top:34px}
+  .pillar{display:grid;grid-template-columns:280px 130px 1fr;gap:26px;align-items:baseline;
+    padding:19px 0;border-top:1px solid var(--rule)}
+  .pillar:last-child{border-bottom:1px solid var(--rule)}
+  .pillar .k{font-size:19px;font-weight:500;line-height:1.32}
+  .pillar .mark-tag{font-size:12px;font-weight:500;letter-spacing:.13em;text-transform:uppercase}
+  .pillar .mark-tag.yes{color:var(--forest)}
+  .pillar .mark-tag.no{color:var(--ink-2)}
+  .pillar .d{font-size:17.5px;font-weight:400;line-height:1.45;color:var(--ink)}
+
+  /* ── schema / terminal field ────────────────────────────────────── */
+  .field{background:var(--charcoal);color:var(--chalk);padding:34px 38px;margin-top:34px;
+    font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:17.5px;line-height:1.78}
+  .slide.dark .field{background:#000;border:1px solid rgba(232,228,218,.13)}
+  .field .fn{color:#95DEB6}
+  .field .val{color:#F2C67C}
+  .field .cm{color:rgba(232,228,218,.42)}
+  .field .ok{color:#95DEB6}
+
+  /* ── three-up content blocks ────────────────────────────────────── */
+  .trio{display:grid;grid-template-columns:repeat(3,1fr);gap:34px;margin-top:40px}
+  .blk{border-top:3px solid var(--forest);padding-top:22px;display:flex;flex-direction:column}
+  .blk .cap{font-size:12.5px;font-weight:500;letter-spacing:.14em;text-transform:uppercase;
+    color:var(--ink-2);margin-bottom:16px}
+  .blk .h{font-size:28px;font-weight:400;line-height:1.16;letter-spacing:-.024em;margin-bottom:16px}
+  .blk p{font-size:17px;font-weight:400;line-height:1.5;color:var(--ink)}
+  .slide.dark .blk .cap{color:var(--c-ink-2)}
+
+  /* ── falsifier rows ─────────────────────────────────────────────── */
+  .fals{margin-top:32px}
+  .frow{display:grid;grid-template-columns:300px 1fr;gap:40px;padding:26px 0;border-top:1px solid var(--rule)}
+  .frow:last-child{border-bottom:1px solid var(--rule)}
+  .frow .fh{font-size:12.5px;font-weight:500;letter-spacing:.14em;text-transform:uppercase;
+    color:var(--ink-2);margin-bottom:10px}
+  .frow .hn{font-size:27px;font-weight:400;line-height:1.16;letter-spacing:-.024em}
+  .frow .fb{font-size:17.5px;font-weight:400;line-height:1.5;color:var(--ink)}
+  .frow .fb div + div{margin-top:14px}
+  .frow .fb b{font-weight:500;color:var(--charcoal)}
+
+  /* ── ask definition list ────────────────────────────────────────── */
+  .asklist{margin-top:38px;border-top:2px solid var(--charcoal)}
+  .arow{display:grid;grid-template-columns:260px 1fr;gap:44px;padding:26px 0;
+    border-bottom:1px solid var(--rule);align-items:baseline}
+  .arow .ak{font-size:12.5px;font-weight:500;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-2)}
+  .arow .av{font-size:23px;font-weight:400;line-height:1.42}
+  .arow .av b{font-weight:500}
+
+  /* ── logo marks ─────────────────────────────────────────────────── */
+  .chips{display:flex;flex-wrap:wrap;gap:0;margin-top:34px}
+  .chip{display:inline-flex;align-items:center;gap:11px;font-size:15px;font-weight:500;
+    padding:12px 22px 12px 16px;border:1px solid var(--rule-d2);margin-right:-1px}
+  .chip .lg{width:20px;height:20px;display:inline-block;background:currentColor;
+    -webkit-mask-repeat:no-repeat;-webkit-mask-position:center;-webkit-mask-size:contain;
+    mask-repeat:no-repeat;mask-position:center;mask-size:contain}
+
+  @media print{
+    @page{size:1280px 720px;margin:0}
+    html,body{background:#fff;width:1280px !important;height:auto}
+    #stage{zoom:.6666667;width:1920px;height:auto !important;transform:none !important}
+    .slide{margin:0;page-break-after:always;break-after:page;
+      -webkit-print-color-adjust:exact !important;print-color-adjust:exact !important}
+    .slide:last-child{page-break-after:auto;break-after:auto}
+  }
+</style>
+</head>
+<body>
+<div id="stage">
+
+<!-- ══ 01 COVER ══════════════════════════════════════════════════ -->
+<section class="slide dark">
+  <div class="bleed"><img src="assets/img/exchange-hall.webp" alt=""></div>
+  <div class="overlay">
+    <div class="mark"><img src="assets/symbol-chalk-gold.svg" alt="Agentic Economy"></div>
+    <div style="margin-top:auto;margin-bottom:auto">
+      <span class="ln" style="font-size:16px;font-weight:500;letter-spacing:.16em;text-transform:uppercase;color:rgba(232,228,218,.62)">aecon.ai</span>
+      <h1 class="display" style="font-size:88px;max-width:17em;margin-top:28px">The agent is the new buyer. aecon is<br>the economy behind it.</h1>
+      <p class="lede" style="font-size:26px;line-height:1.48;color:rgba(232,228,218,.84);max-width:30em;margin-top:34px">As autonomous software becomes the buyer of work, aecon enables traditional businesses to package their services into machine-callable products that AI agents can hire and settle directly.</p>
+    </div>
+    <div class="foot">
+      <div class="sup" style="font-size:17px">Pre-seed. Built on Base. Perth, Western Australia.</div>
+      <div class="sup" style="font-size:17px">September 2026</div>
+    </div>
+  </div>
+</section>
+
+<!-- ══ 02 THE INFLECTION ═════════════════════════════════════════ -->
+<section class="slide dark">
+  <div class="bleed hard"><img src="assets/img/switchyard.webp" alt=""></div>
+  <div class="mark"><img src="assets/symbol-chalk-gold.svg" alt=""></div>
+  <div class="overlay" style="padding:150px 64px 64px">
+    <span class="rail-ln" style="font-size:15px;font-weight:500;letter-spacing:.15em;text-transform:uppercase;color:rgba(232,228,218,.62)">01 / The Inflection</span>
+    <h1 class="display sm" style="color:#E8E4DA;max-width:19em;margin-top:26px">Machine traffic has overtaken human traffic. The ad-funded internet is breaking.</h1>
+    <p class="lede" style="color:rgba(232,228,218,.82);max-width:34em;margin-top:28px">For 30 years, web services monetized human attention via ads and referrals. When AI agents summarize and execute tasks directly, attention hits zero. The only surviving monetization model is charging the agent at the millisecond of the request.</p>
+    <div class="wall c4" style="margin-top:44px">
+      <div class="tile" style="background:#E8E4DA;color:#141414">
+        <div class="v">60%</div><div class="l" style="color:#141414">Machine traffic share</div>
+        <div class="s">Bots &amp; agents vs 38.2% human</div>
+      </div>
+      <div class="tile" style="background:#E8E4DA;color:#141414">
+        <div class="v">4,200:1</div><div class="l" style="color:#141414">Crawl-to-referral ratio</div>
+        <div class="s">AI bots scrape with zero visits</div>
+      </div>
+      <div class="tile" style="background:#E8E4DA;color:#141414">
+        <div class="v">-47%</div><div class="l" style="color:#141414">Search clickthrough collapse</div>
+        <div class="s">AI summaries intercept traffic</div>
+      </div>
+      <div class="tile forest">
+        <div class="v">$0.00</div><div class="l">Ad revenue from agents</div>
+        <div class="s">Bots don't click banners</div>
+      </div>
+    </div>
+    <div class="foot" style="margin-top:auto;align-items:flex-end">
+      <div class="chips">
+        <span class="chip"><i class="lg" style="-webkit-mask-image:url(assets/logos/cloudflare.svg);mask-image:url(assets/logos/cloudflare.svg)"></i>Cloudflare</span>
+        <span class="chip"><i class="lg" style="-webkit-mask-image:url(assets/logos/coinbase.svg);mask-image:url(assets/logos/coinbase.svg)"></i>Coinbase</span>
+        <span class="chip"><i class="lg" style="-webkit-mask-image:url(assets/logos/stripe.svg);mask-image:url(assets/logos/stripe.svg)"></i>Stripe</span>
+        <span class="chip"><i class="lg" style="-webkit-mask-image:url(assets/logos/google.svg);mask-image:url(assets/logos/google.svg)"></i>Google</span>
+      </div>
+      <div class="sup" style="text-align:right;max-width:22em;line-height:1.5">Cloudflare Network Telemetry, Aug 2026; Pew Research 2025; Shoal Research Sep 2026.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ══ 03 THE PROOF ══════════════════════════════════════════════ -->
+<section class="slide">
+  <div class="mark"><img src="assets/symbol-forest.svg" alt=""></div>
+  <div class="split">
+    <div class="rail">
+      <span class="ln">02 / The Proof</span>
+      <p>Software is already paying software directly. Machine micropayments have arrived and scaled past 100M transactions on Base.</p>
+      <p class="src">x402 protocol metrics, 30 days to 25 Aug 2026. Chainalysis, Jun 2026.</p>
+      <div class="pager">03</div><div class="meta">Agentic Economy<br>aecon.ai</div>
+    </div>
+    <div class="panel">
+      <h1 class="display sm">Software already pays for tools mid-task. But the rails are empty of real work.</h1>
+      <div class="wall c4">
+        <div class="tile"><div class="v">75.4M</div><div class="l">Monthly payments settled</div><div class="s">x402 protocol over Base</div></div>
+        <div class="tile"><div class="v">$24.2M</div><div class="l">Monthly settled volume</div><div class="s">100% stablecoin settlement</div></div>
+        <div class="tile"><div class="v">15,000+</div><div class="l">Active endpoints</div><div class="s">Coinbase Developer Platform</div></div>
+        <div class="tile forest"><div class="v">32¢</div><div class="l">Average transaction</div><div class="s">Developer compute &amp; scrapes only</div></div>
+      </div>
+      <p class="lede">The payment rails exist. But at an average ticket of 32 cents, agents only buy raw tokens and scraper proxies. They cannot buy commercial services because no market coordinates price, delivery, and trust.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ══ 04 THE THESIS ═════════════════════════════════════════════ -->
+<section class="slide">
+  <div class="mark"><img src="assets/symbol-forest.svg" alt=""></div>
+  <div class="split">
+    <div class="rail">
+      <span class="ln">03 / The Thesis</span>
+      <p>Four structural shifts are arriving simultaneously. They point to one inevitable outcome: a new economic coordination layer.</p>
+      <p class="src">aecon core investment thesis, September 2026.</p>
+      <div class="pager">04</div><div class="meta">Agentic Economy<br>aecon.ai</div>
+    </div>
+    <div class="panel">
+      <h1 class="display sm">The four-step chain that creates the Agentic Economy.</h1>
+      <div class="chain">
+        <div class="step">
+          <div class="num">Step 01</div><div class="h">Software Has Agency</div>
+          <p>An agent working a task decides for itself which tools it needs mid-execution. It does not wait for a developer to integrate an API in advance.</p>
+        </div>
+        <div class="step">
+          <div class="num">Step 02</div><div class="h">Software Can Pay</div>
+          <p>Protocols like x402 let software meet a price and settle instantly on-chain. Software moved from choosing tools to buying them on demand.</p>
+        </div>
+        <div class="step">
+          <div class="num">Step 03</div><div class="h">Everyone Becomes a Seller</div>
+          <p>When there is a buyer that never sleeps and pays per call, every business with data or capability has an incentive to expose it to software.</p>
+        </div>
+        <div class="step last">
+          <div class="num">Step 04</div><div class="h">A New Economy Needs a Market</div>
+          <p>The rails move money; gateways pass requests. But nobody coordinates binding price discovery, verified delivery, or reputation.</p>
+        </div>
+      </div>
+      <p class="lede">Just as App Stores turned smartphone users into buyers, autonomous agents turn software into the primary consumer of services. aecon is the market that coordinates them.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ══ 05 HISTORICAL PATTERN ═════════════════════════════════════ -->
+<section class="slide">
+  <div class="mark"><img src="assets/symbol-forest.svg" alt=""></div>
+  <div class="split">
+    <div class="rail">
+      <span class="ln">04 / Historical Pattern</span>
+      <p>Every platform shift forces capability to be re-packaged for the new buyer, and the platform that enables the transition captures the market.</p>
+      <p class="src">Commercial history: Web E-commerce, App Stores, Programmatic Ad Exchanges.</p>
+      <div class="pager">05</div><div class="meta">Agentic Economy<br>aecon.ai</div>
+    </div>
+    <div class="panel">
+      <h1 class="display sm">Every new buyer requires businesses to re-package how they sell.</h1>
+      <table class="matrix">
+        <thead>
+          <tr>
+            <th style="width:23%">The New Buyer</th>
+            <th style="width:22%">How Capability Was Sold</th>
+            <th style="width:24%">The Packaging Transition</th>
+            <th style="width:31%">The Platform That Won</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="k">Web Shoppers (1995)</td>
+            <td>Physical retail &amp; mail catalogs</td>
+            <td>Inventory re-packaged as web pages &amp; online checkout</td>
+            <td class="k">Amazon &amp; Shopify</td>
+          </tr>
+          <tr>
+            <td class="k">Smartphone Users (2008)</td>
+            <td>Desktop software &amp; CD-ROMs</td>
+            <td>Software re-packaged as mobile-native apps</td>
+            <td class="k">Apple &amp; Google App Stores</td>
+          </tr>
+          <tr>
+            <td class="k">Programmatic Bots (2012)</td>
+            <td>Direct insertion orders &amp; emails</td>
+            <td>Ad inventory re-packaged into real-time API bids</td>
+            <td class="k">Doubleclick &amp; Ad Exchanges</td>
+          </tr>
+          <tr class="focus">
+            <td class="k">Autonomous Agents (Today)</td>
+            <td>Phone calls, PDFs &amp; 30-day terms</td>
+            <td>Services re-packaged as machine-callable Tools</td>
+            <td class="k">aecon (Agentic Economy)</td>
+          </tr>
+        </tbody>
+      </table>
+      <p class="lede">Payment rails only move money. aecon is the infrastructure that allows traditional businesses to turn their human capability into machine-callable productised services.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ══ 06 THE MISSING PIECE ══════════════════════════════════════ -->
+<section class="slide">
+  <div class="mark"><img src="assets/symbol-forest.svg" alt=""></div>
+  <div class="split">
+    <div class="rail">
+      <span class="ln">05 / The Missing Piece</span>
+      <p>Markets require five pillars before supply switches on. In 2026, the agentic economy has rails and endpoints, but lacks the core commercial layer.</p>
+      <p class="src">Five-things market framework: eBay, App Store, Airbnb, Upwork.</p>
+      <div class="pager">06</div><div class="meta">Agentic Economy<br>aecon.ai</div>
+    </div>
+    <div class="panel">
+      <h1 class="display sm">A market cannot function without price discovery, delivery proof, and reputation.</h1>
+      <div class="pillars">
+        <div class="pillar">
+          <div class="k">1. Trusted Settlement</div>
+          <div class="mark-tag yes">Solved</div>
+          <div class="d">x402 on Base settles funds in milliseconds per request</div>
+        </div>
+        <div class="pillar">
+          <div class="k">2. Low Onboarding Friction</div>
+          <div class="mark-tag yes">Solved</div>
+          <div class="d">Any HTTP endpoint or cloud function can be published</div>
+        </div>
+        <div class="pillar">
+          <div class="k">3. Binding Price Discovery</div>
+          <div class="mark-tag no">Missing</div>
+          <div class="d">Agents encounter opaque rates or surprise invoices. Price must be bound upfront</div>
+        </div>
+        <div class="pillar">
+          <div class="k">4. Verified Delivery Evidence</div>
+          <div class="mark-tag no">Missing</div>
+          <div class="d">Payments settle even if an endpoint times out, hallucinates, or returns corrupt data</div>
+        </div>
+        <div class="pillar">
+          <div class="k">5. Portable Seller Reputation</div>
+          <div class="mark-tag no">Missing</div>
+          <div class="d">No verifiable track record of uptime, latency, and delivery accuracy across calls</div>
+        </div>
+      </div>
+      <p class="lede">aecon delivers the three missing pieces: binding quotes before invocation, cryptographic delivery verification, and reputation scores that track real execution.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ══ 07 THE MARKET UNIT ════════════════════════════════════════ -->
+<section class="slide">
+  <div class="mark"><img src="assets/symbol-forest.svg" alt=""></div>
+  <div class="split">
+    <div class="rail">
+      <span class="ln">06 / The Market Unit</span>
+      <p>Services cannot be traded by machines as vague websites or opaque LLM prompts. They must be packaged as bounded, callable Tools.</p>
+      <p class="src">aecon Tool schema specification.</p>
+      <div class="pager">07</div><div class="meta">Agentic Economy<br>aecon.ai</div>
+    </div>
+    <div class="panel">
+      <h1 class="display sm">The Tool: the standardized unit of exchange for the agentic economy.</h1>
+      <div class="field">
+<span class="cm">// One versioned, machine-purchasable Tool</span><br>
+<span class="fn">tool</span>: <span class="val">"operation:v1:c41f…9a2b"</span>&nbsp;&nbsp;<span class="cm">// Landgate: WA certificate of title search</span><br>
+&nbsp;&nbsp;<span class="fn">inputs</span>:&nbsp;&nbsp;&nbsp;&nbsp;{ lot_on_plan: <span class="val">"Lot 402 on Diagram 18241"</span>, tenure: <span class="val">"freehold"</span> },<br>
+&nbsp;&nbsp;<span class="fn">output</span>:&nbsp;&nbsp;&nbsp;&nbsp;{ title_ref, registered_proprietor, encumbrances[], certificate_hash },<br>
+&nbsp;&nbsp;<span class="fn">price</span>:&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="val">"$33.90 AUD"</span>&nbsp;&nbsp;<span class="cm">// regulated Landgate fee, bound before the Call</span>,<br>
+&nbsp;&nbsp;<span class="fn">delivery</span>:&nbsp;&nbsp;<span class="val">"&le; 90 s"</span>&nbsp;&nbsp;<span class="cm">// auto-cancel and refund on breach</span>,<br>
+&nbsp;&nbsp;<span class="fn">remedy</span>:&nbsp;&nbsp;&nbsp;&nbsp;<span class="val">"reissue or full credit"</span>,<br>
+&nbsp;&nbsp;<span class="fn">evidence</span>:&nbsp;&nbsp;{ authority: <span class="val">"did:web:landgate.wa.gov.au"</span>, signature: <span class="val">"EIP-712"</span> }<br>
+}
+      </div>
+      <p class="lede">Crucial dynamic: the Tool contract works whether a person performs the work today or an automated model fulfills it tomorrow. The buyer receives the exact same schema, at the exact same price, with verified evidence.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ══ 08 SUPPLY DEFENSIBILITY ═══════════════════════════════════ -->
+<section class="slide">
+  <div class="mark"><img src="assets/symbol-forest.svg" alt=""></div>
+  <div class="split">
+    <div class="rail">
+      <span class="ln">07 / Supply Defensibility</span>
+      <p>Shoal Research and Cloudflare proved that static content loses pricing power instantly. Only three categories of supply can sustain machine monetization.</p>
+      <p class="src">Shoal Research, "How AI Is Breaking the Internet Economy", Sep 2026.</p>
+      <div class="pager">08</div><div class="meta">Agentic Economy<br>aecon.ai</div>
+    </div>
+    <div class="panel">
+      <h1 class="display sm">Static web data is dead. Only three things command a price from AI agents.</h1>
+      <div class="trio">
+        <div class="blk">
+          <div class="cap">Category 01</div>
+          <div class="h">Live, Ephemeral State</div>
+          <p>Real-time order books, power grid dispatch, live shipping rates, sub-second telemetry. An LLM cannot answer today's state from last month's training weights.</p>
+        </div>
+        <div class="blk">
+          <div class="cap">Category 02</div>
+          <div class="h">Gated Offline Records</div>
+          <p>Statutory land titles, corporate share registers, court filings, private market cap tables. Information that never touches the open web and cannot be scraped.</p>
+        </div>
+        <div class="blk">
+          <div class="cap">Category 03</div>
+          <div class="h">Licensed Human Authority</div>
+          <p>Fire engineering reviews, legal precedent opinions, geotechnical sign-offs. Outcomes that require licensed human accountability and professional standing.</p>
+        </div>
+      </div>
+      <p class="lede">aecon deliberately ignores generic web scraping and static articles. We anchor our marketplace entirely on the three categories that models cannot absorb for free.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ══ 09 BEACHHEAD ══════════════════════════════════════════════ -->
+<section class="slide">
+  <div class="mark"><img src="assets/symbol-forest.svg" alt=""></div>
+  <div class="split">
+    <div class="rail">
+      <span class="ln">08 / Beachhead</span>
+      <p>A national economy is the exact right size to prove a complete market of agents buying from suppliers runs as ordinary commerce.</p>
+      <p class="src">ABS Business Indicators 2025; Gartner Cloud Forecast 2025.</p>
+      <div class="pager">09</div><div class="meta">Agentic Economy<br>aecon.ai</div>
+    </div>
+    <div class="panel" style="padding:86px 0 88px 88px;display:grid;grid-template-columns:1fr 380px">
+      <div style="padding-right:88px;display:flex;flex-direction:column">
+        <h1 class="display sm">Australia is the ideal testbed: 900,000 specialist firms, one regulatory perimeter.</h1>
+        <div class="hero-split">
+          <div class="hero-block">
+            <div class="v">92.6%</div>
+            <div class="l">Firms under 20 staff</div>
+            <div class="s">900,000 employing businesses</div>
+          </div>
+          <div class="hero-stack">
+            <div class="hero-row">
+              <div class="v">$13B</div>
+              <div><div class="l">Annual SaaS spend</div><div class="s">Migrating to pay-per-outcome</div></div>
+            </div>
+            <div class="hero-row">
+              <div class="v">100%</div>
+              <div><div class="l">Unified national law</div><div class="s">Single GST code &amp; ASIC register</div></div>
+            </div>
+            <div class="hero-row">
+              <div class="v">1.44x</div>
+              <div><div class="l">WA AI compliance adoption</div><div class="s">Above global average (Anthropic index)</div></div>
+            </div>
+          </div>
+        </div>
+        <p class="lede">Australia is a nation of credentialed specialists: surveyors, labs, planners, engineers. Today, their capability is stranded in local postcodes. By structuring them as callable Tools, aecon turns an entire national economy into programmatic supply.</p>
+      </div>
+      <div style="position:relative;overflow:hidden;margin:-86px 0 -88px 0">
+        <img src="assets/img/basalt-coast.webp" alt="" style="width:100%;height:100%;object-fit:cover;display:block">
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══ 10 EXECUTION ══════════════════════════════════════════════ -->
+<section class="slide dark">
+  <div class="mark"><img src="assets/symbol-chalk-gold.svg" alt=""></div>
+  <div class="split">
+    <div class="rail">
+      <span class="ln">09 / Execution</span>
+      <p>The transaction engine is built and verified. The 2026 milestone is the first purchase resolution: executing the first complete trade between strangers.</p>
+      <p class="src">Verified repository state, Sep 2026. START_LINE.md criteria.</p>
+      <div class="pager">10</div><div class="meta">Agentic Economy<br>aecon.ai</div>
+    </div>
+    <div class="panel">
+      <h1 class="display sm">The engine is built. We are executing the first end-to-end commercial trade.</h1>
+      <div class="field">
+$ ae search --capability <span class="val">"land-titles"</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="cm"># Discover callable Tool</span><br>
+$ ae call operation:v1:c41f…9a2b&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="cm"># Landgate title search, verified x402 purchase</span><br>
+<span class="ok">✓</span> Spending policy: Approved budget ceiling | Category authorized<br>
+<span class="ok">✓</span> Upstream Settle: x402 challenge verified on Base (EIP-712 / did:web)<br>
+<span class="ok">✓</span> Ledger Balance:&nbsp;&nbsp;Formance double-entry engine debited AUD, reserved USDC<br>
+<span class="ok">✓</span> Purchase resolution: Receipt hash validated, Australian Tax Invoice issued
+      </div>
+      <div class="trio" style="margin-top:36px;gap:2px">
+        <div class="blk" style="border-top-color:rgba(232,228,218,.34);padding:26px 24px 0 0">
+          <div class="cap">The Engine</div>
+          <div class="h" style="color:#E8E4DA;font-size:25px">Built &amp; Running</div>
+          <p style="color:rgba(232,228,218,.78)">19-command CLI, MCP endpoint, x402 verification, double-entry ledger. All operational in test environments.</p>
+        </div>
+        <div class="blk" style="border-top-color:rgba(232,228,218,.34);padding:26px 24px 0 24px">
+          <div class="cap">The Supply Beachhead</div>
+          <div class="h" style="color:#E8E4DA;font-size:25px">12 Mapped Registers</div>
+          <p style="color:rgba(232,228,218,.78)">Landgate titles, ASIC registers, DWER contaminated sites, AEMO grid dispatch. Real data with statutory standing.</p>
+        </div>
+        <div class="blk" style="border-top-color:rgba(232,228,218,.34);padding:26px 0 0 24px">
+          <div class="cap">The 2026 Milestone</div>
+          <div class="h" style="color:#E8E4DA;font-size:25px">Purchase Resolution</div>
+          <p style="color:rgba(232,228,218,.78)">One outside firm converts its capability into a Tool, and a stranger's software buys it end-to-end.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══ 11 DILIGENCE ══════════════════════════════════════════════ -->
+<section class="slide">
+  <div class="mark"><img src="assets/symbol-forest.svg" alt=""></div>
+  <div class="split">
+    <div class="rail">
+      <span class="ln">10 / Diligence</span>
+      <p>A thesis is only as strong as its kill conditions. Here are the three structural tests that determine whether this market forms.</p>
+      <p class="src">australia.md §8 failure modes and Shoal Research 2026 market realities.</p>
+      <div class="pager">11</div><div class="meta">Agentic Economy<br>aecon.ai</div>
+    </div>
+    <div class="panel">
+      <h1 class="display sm">The three kill conditions for the agentic economy, and how we test them.</h1>
+      <div class="fals">
+        <div class="frow">
+          <div><div class="fh">Kill Condition 01</div><div class="hn">The Scraping Trap</div></div>
+          <div class="fb">
+            <div><b>The Threat:</b> If services provide static info, AI crawlers scrape them once and models answer for free forever.</div>
+            <div><b>The Falsifier:</b> We only onboard <i>ephemeral state</i> and <i>statutory offline records</i> that require fresh runtime queries.</div>
+          </div>
+        </div>
+        <div class="frow">
+          <div><div class="fh">Kill Condition 02</div><div class="hn">The Demand Lag</div></div>
+          <div class="fb">
+            <div><b>The Threat:</b> If autonomous enterprise agents take two years to arrive, machine purchasing volume stays near zero.</div>
+            <div><b>The Falsifier:</b> Tools sell to human developers and software scripts today. We do not wait for autonomous agents.</div>
+          </div>
+        </div>
+        <div class="frow">
+          <div><div class="fh">Kill Condition 03</div><div class="hn">The SME Conversion Wall</div></div>
+          <div class="fb">
+            <div><b>The Threat:</b> Small firms will not spend time drafting API schemas for speculative software revenue.</div>
+            <div><b>The Falsifier:</b> aecon wraps existing web portals and handles contract mapping on the supplier's behalf.</div>
+          </div>
+        </div>
+      </div>
+      <p class="lede">Every parallel in history shows that exchanges take 3 to 5 years to mature. We test these three conditions across 10 core providers in 12 months.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ══ 12 THE ASK ════════════════════════════════════════════════ -->
+<section class="slide">
+  <div class="mark"><img src="assets/symbol-forest.svg" alt=""></div>
+  <div class="split">
+    <div class="rail">
+      <span class="ln">11 / The Ask</span>
+      <p>Pre-seed funding to execute the first 1,000 commercial trades across 10 core Australian statutory and professional providers.</p>
+      <p class="src"></p>
+      <div class="pager">12</div><div class="meta">Agentic Economy<br>aecon.ai</div>
+    </div>
+    <div class="panel">
+      <h1 class="display sm">Raising pre-seed capital to turn the traditional service economy into machine-callable supply.</h1>
+      <div class="asklist">
+        <div class="arow">
+          <div class="ak">The Round</div>
+          <div class="av"><b>Pre-seed round</b> via standard SAFE / Convertible Note.</div>
+        </div>
+        <div class="arow">
+          <div class="ak">12-Month Target</div>
+          <div class="av"><b>1,000+ paid commercial transactions</b> across 10 onboarded Australian statutory, data, and engineering providers.</div>
+        </div>
+        <div class="arow">
+          <div class="ak">Use of Capital</div>
+          <div class="av">Onboard the first 10 high-value WA data &amp; consulting Tools; complete production settlement rails on Base.</div>
+        </div>
+        <div class="arow">
+          <div class="ak">Strategic Value</div>
+          <div class="av">Distribution across Base ecosystem &amp; introductions to enterprise teams deploying autonomous agents.</div>
+        </div>
+      </div>
+      <p class="lede" style="font-size:21px">The rails move money. aecon enables the supply. We are raising to turn it on.</p>
+    </div>
+  </div>
+</section>
+
+</div>
+<script>
+  (function(){
+    var stage=document.getElementById('stage');
+    var slides=document.querySelectorAll('.slide');
+    function fit(){
+      var s=Math.min(window.innerWidth/1920,1);
+      stage.style.transform='scale('+s+')';
+      stage.style.height=(1080*s*slides.length+26*s*(slides.length-1))+'px';
+      document.body.style.width=(1920*s)+'px';
+    }
+    window.addEventListener('resize',fit); fit();
+  })();
+</script>
+</body>
+</html>

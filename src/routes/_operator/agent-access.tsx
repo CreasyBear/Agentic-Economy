@@ -3,6 +3,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Link, Outlet, createFileRoute, useLocation, useNavigate } from '@tanstack/react-router'
 import { useServerFn } from '@tanstack/react-start'
+import { KeyRound } from 'lucide-react'
 
 import { AeAgentOperatorConsole } from '@/components/ae/console/AeAgentOperatorConsole'
 import { AeAgentSecurityHistory } from '@/components/ae/agent-access/AeAgentSecurityHistory'
@@ -52,6 +53,21 @@ export function validateAgentAccessSearch(search: Record<string, unknown>): Agen
 }
 
 export const Route = createFileRoute('/_operator/agent-access')({
+  staticData: {
+    nav: {
+      label: 'Agents',
+      operator: {
+        roles: ['owner'],
+        group: 'Buy',
+        groupOrder: 0,
+        order: 1,
+        icon: KeyRound,
+        tier: 'core',
+        mobilePrimary: true,
+        mobileOrder: 20,
+      },
+    },
+  },
   ...operatorRouteOptions,
   validateSearch: validateAgentAccessSearch,
   loader: async () => {

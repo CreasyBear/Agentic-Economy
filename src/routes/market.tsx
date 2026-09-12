@@ -1,5 +1,6 @@
 import { createFileRoute, type ErrorComponentProps } from "@tanstack/react-router";
 import { createServerFn } from "@tanstack/react-start";
+import { Store } from "lucide-react";
 
 import { AePublicPage } from "@/components/ae/layout/AePublicPage";
 import { AePageSkeleton, AePageState } from "@/components/ae/layout/AePageState";
@@ -13,15 +14,12 @@ import {
   isPublicToolRef,
   toolCompareInputSchema,
 } from "@/modules/capability-supply/public";
-import {
-  marketWindowSchema,
-  type MarketWindow,
-} from "@/modules/market/contracts";
+import type { MarketWindow } from "@/modules/market/contracts";
 import {
   isMarketCategoryId,
 } from "@/modules/market/listing-evidence";
 import { readMarketRouteServer } from "@/modules/market/market.functions";
-import { readX402DirectoryCatalogueServer, readX402DirectoryCatalogueOverviewServer, readX402DirectoryCatalogueResourceServer, readX402DirectoryProvidersServer, readX402DirectoryAnalyticsServer } from "@/modules/market/x402-directory-index.functions";
+import { readX402DirectoryCatalogueServer, readX402DirectoryCatalogueOverviewServer, readX402DirectoryProvidersServer } from "@/modules/market/x402-directory-index.functions";
 import { x402DirectoryCatalogueInputSchema } from "@/modules/market/x402-directory-catalogue";
 import { directoryCatalogueSearchValues } from '@/modules/market/x402-directory-navigation';
 import { readX402MarketplaceHomeServer } from "@/modules/market/x402-marketplace-home.functions";
@@ -29,6 +27,11 @@ import { projectToolCompareChoices } from "@/modules/registry/tool-choice-contra
 import { buildPublicPageHead, buildSiteJsonLd } from "@/modules/seo/public";
 
 export type MarketSearch = MarketReturnSearch;
+
+// Comparable-Tool evidence (rating, popularity, latency) is still computed
+// over a rolling window internally; the public search surface no longer
+// exposes a time-window control, so this is a fixed internal default.
+const MARKET_EVIDENCE_WINDOW: MarketWindow = "30d";
 
 const readMarketComparisonServer = createServerFn({ method: "GET" })
   .validator((data) => toolCompareInputSchema.parse(data))
@@ -60,11 +63,7 @@ export function validateMarketSearch(
   return {
     ...directory,
     ...(typeof search.providerCursor === 'string' ? { providerCursor: search.providerCursor } : {}),
-    ...(search.view === 'overview' || search.view === "leaderboard" || search.view === "discover" || search.view === "tools" || search.view === "providers" || search.view === "saved" ? { view: search.view } : {}),
-    ...(search.layout === 'grid' || search.layout === 'table' ? { layout: search.layout } : {}),
-    window: marketWindowSchema.safeParse(search.window).success
-      ? (search.window as MarketWindow)
-      : "30d",
+    ...(search.view === "discover" || search.view === "tools" || search.view === "providers" || search.view === "saved" ? { view: search.view } : {}),
     ...(typeof search.query === "string" &&
     search.query.length <= 200 &&
     search.query.trim().length > 0
@@ -97,15 +96,22 @@ export function validateMarketSearch(
 }
 
 export const Route = createFileRoute("/market")({
+  staticData: {
+    nav: {
+      label: 'Market',
+      search: {},
+      header: { order: 0 },
+      footer: { column: 'Market', order: 0 },
+      operatorUtility: { roles: ['owner', 'admin', 'developer'], order: 0, icon: Store },
+    },
+  },
   validateSearch: validateMarketSearch,
   loaderDeps: ({ search }) => ({
-    window: search.window,
     ...directoryCatalogueSearchValues(search),
     ...(search.providerCursor === undefined ? {} : { providerCursor: search.providerCursor }),
     ...(search.directoryCategory === undefined ? {} : { directoryCategory: search.directoryCategory }),
     ...(search.indexCursor === undefined ? {} : { indexCursor: search.indexCursor }),
     ...(search.sort === undefined ? {} : { sort: search.sort }),
-    ...(search.resource === undefined ? {} : { resource: search.resource }),
     ...(search.view === undefined ? {} : { view: search.view }),
     ...(search.network === undefined ? {} : { network: search.network }),
     ...(search.provider === undefined ? {} : { provider: search.provider }),
@@ -127,24 +133,21 @@ export const Route = createFileRoute("/market")({
       && deps.availability === undefined && deps.category === undefined) {
       const catalogueInput = x402DirectoryCatalogueInputSchema.parse(directoryCatalogueSearchValues(deps))
       const showHome = deps.view === 'discover'
-      const showAnalytics = deps.view === 'overview' || deps.view === 'leaderboard' || (deps.view === undefined && Object.keys(catalogueInput).length === 0)
-      const [catalogue, canonicalBaseUrl, home, overview, resource, providers, analytics] = await Promise.all([
+      const [catalogue, canonicalBaseUrl, home, overview, providers] = await Promise.all([
         readX402DirectoryCatalogueServer({ data: { ...catalogueInput, ...(catalogueInput.query || catalogueInput.sort ? {} : { sort: 'adoption' }) } }),
         readCanonicalBaseUrlServer(),
         showHome ? readX402MarketplaceHomeServer().catch(() => undefined) : Promise.resolve(undefined),
         readX402DirectoryCatalogueOverviewServer(),
-        deps.resource === undefined ? Promise.resolve(undefined) : readX402DirectoryCatalogueResourceServer({ data: { resource: deps.resource } }),
         deps.view === 'providers' && deps.query === undefined && deps.network === undefined && deps.provider === undefined && deps.maxUsdPrice === undefined && deps.directoryCategory === undefined ? readX402DirectoryProvidersServer({ data: { ...(deps.providerCursor === undefined ? {} : { providerCursor: deps.providerCursor }) } }) : Promise.resolve(undefined),
-        showAnalytics ? readX402DirectoryAnalyticsServer({ data: { ...(deps.network === undefined ? {} : { network: deps.network }) } }) : Promise.resolve(undefined),
       ])
       const page = catalogue?.kind === 'ok' ? catalogue.page : { kind: 'unavailable' as const, reason: catalogue?.reason === 'query_invalid' ? 'query_invalid' as const : 'source_unavailable' as const }
-      return { kind: 'directory' as const, page, catalogue, overview, canonicalBaseUrl, home, providers, analytics, selectedEntry: resource?.kind === 'found' ? resource.item.entry : undefined }
+      return { kind: 'directory' as const, page, catalogue, overview, canonicalBaseUrl, home, providers }
     }
     const toolRefs = parseMarketCompareRefs(deps.compare);
     const [projection, comparison, canonicalBaseUrl] = await Promise.all([
       readMarketRouteServer({
         data: {
-          window: deps.window,
+          window: MARKET_EVIDENCE_WINDOW,
           ...(deps.query === undefined ? {} : { query: deps.query }),
           ...(deps.availability === undefined
             ? {}
@@ -203,10 +206,9 @@ function MarketRoute() {
 
   return (
     <AePublicPage>
-      {data.kind === 'directory' ? <AeX402Directory page={data.page} search={search} catalogue={data.catalogue} overview={data.overview} {...(data.analytics === undefined ? {} : { analytics: data.analytics })} {...(data.providers === undefined ? {} : { providers: data.providers })} {...(data.selectedEntry === undefined ? {} : { selectedEntry: data.selectedEntry })} {...(data.home === undefined ? {} : { home: data.home })} /> : <AeMarketPage
+      {data.kind === 'directory' ? <AeX402Directory page={data.page} search={search} catalogue={data.catalogue} overview={data.overview} {...(data.providers === undefined ? {} : { providers: data.providers })} {...(data.home === undefined ? {} : { home: data.home })} /> : <AeMarketPage
         projection={data.projection}
         search={{
-          window: search.window,
           ...(search.query === undefined ? {} : { query: search.query }),
           ...(search.availability === undefined ? {} : { availability: search.availability }),
           ...(search.category === undefined ? {} : { category: search.category }),

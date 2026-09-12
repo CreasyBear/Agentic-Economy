@@ -4,7 +4,7 @@ import { ArrowLeftIcon } from 'lucide-react'
 import { AePublicPage } from '@/components/ae/layout/AePublicPage'
 import { AePageSkeleton, AePageState } from '@/components/ae/layout/AePageState'
 import { AeToolInspector } from '@/components/ae/market/tool-detail'
-import { toolLabel } from '@/components/ae/market/tool-detail/tool-inspector-model'
+import { REASON_COPY, REASON_COPY_FALLBACK } from '@/content/reason-copy'
 import {
   FALLBACK_MARKET_RETURN_CONTEXT,
   readMarketReturnContext,
@@ -18,6 +18,8 @@ import {
 } from '@/modules/capability-supply/public'
 import type { MarketListingEvidenceProjection } from '@/modules/market/listing-evidence'
 import { readToolListingEvidence } from '@/modules/market/server'
+import { readX402PendingResource, type X402DirectoryResolution } from '@/modules/market/x402-directory'
+import { prepareX402DirectoryResourceServer } from '@/modules/market/x402-directory.functions'
 import {
   readPublicToolDetailRouteServer,
   type PublicToolDetailRouteResult,
@@ -37,14 +39,31 @@ export function validateToolDetailSearch(
 export const Route = createFileRoute('/tools/$toolRef')({
   validateSearch: validateToolDetailSearch,
   loader: async ({ params }) => {
-    if (!isPublicToolRef(params.toolRef)) {
+    const pendingResource = readX402PendingResource(params.toolRef)
+    let toolRef: string
+    if (pendingResource !== undefined) {
+      // A catalogue entry that has not yet been admitted as a Tool. Resolve
+      // it the same way the retired Tool detail dialog did, then continue
+      // exactly like a direct toolRef visit.
+      const resolution = await prepareX402DirectoryResourceServer({ data: { resource: pendingResource } })
+        .catch((): X402DirectoryResolution => ({ kind: 'unavailable', reason: 'source_unavailable' }))
+      if (resolution.kind !== 'ready') {
+        return {
+          result: { kind: 'source_unavailable' as const, toolRef: params.toolRef },
+          evidence: undefined,
+        }
+      }
+      toolRef = resolution.toolRef
+    } else if (isPublicToolRef(params.toolRef)) {
+      toolRef = params.toolRef
+    } else {
       return {
         result: { kind: 'invalid_ref' as const, toolRef: params.toolRef },
         evidence: undefined,
       }
     }
-    const result = await readPublicToolDetailRouteServer({ data: { toolRef: params.toolRef } })
-      .catch((): PublicToolDetailRouteResult => ({ kind: 'source_unavailable', toolRef: params.toolRef }))
+    const result = await readPublicToolDetailRouteServer({ data: { toolRef } })
+      .catch((): PublicToolDetailRouteResult => ({ kind: 'source_unavailable', toolRef }))
     const evidence = result.kind === 'found'
       ? await readToolListingEvidence(result.tool)
       : undefined
@@ -167,7 +186,7 @@ function ToolUnavailable({
       : {
           tone: 'warning' as const,
           title: 'This Tool is not currently available',
-          description: `AE reports ${toolLabel(result.reason)} for this exact reference. No commercial facts or Call steps are shown.`,
+          description: `${REASON_COPY[result.reason] ?? REASON_COPY_FALLBACK} No commercial facts or Call steps are shown.`,
         }
   return (
     <AePageState

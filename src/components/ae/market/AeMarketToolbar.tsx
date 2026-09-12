@@ -22,14 +22,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import type { MarketWindow } from "@/modules/market/contracts";
 import type { MarketCategoryId } from "@/modules/market/listing-evidence";
 
 type Availability = "routeable" | "setup_required" | "unavailable";
 type AvailabilityChoice = Availability | "all";
 
 export type AeMarketToolbarSearch = Readonly<{
-  window: MarketWindow;
   query?: string;
   availability?: Availability;
   category?: MarketCategoryId;
@@ -61,7 +59,6 @@ export function AeMarketToolbar({
     void navigate({
       to: "/market",
       search: {
-        window: search.window,
         ...(search.query === undefined ? {} : { query: search.query }),
         ...(value === "all" ? {} : { availability: value }),
         ...(search.category === undefined ? {} : { category: search.category }),
@@ -84,7 +81,6 @@ export function AeMarketToolbar({
           role="search"
           className="min-w-0 flex-1"
         >
-          <input type="hidden" name="window" value={search.window} />
           {search.availability !== undefined ? (
             <input
               type="hidden"
@@ -176,7 +172,7 @@ export function AeMarketToolbar({
           >
             <Link
               to="/market"
-              search={{ window: search.window }}
+              search={{}}
               aria-label="Clear all filters"
             >
               Clear all
@@ -216,7 +212,6 @@ function withoutFilter(
   filter: "query" | "availability",
 ): AeMarketToolbarSearch {
   return {
-    window: search.window,
     ...(filter === "query" || search.query === undefined
       ? {}
       : { query: search.query }),

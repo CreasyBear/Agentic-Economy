@@ -10,9 +10,12 @@ import {
   type CallMachineResult,
 } from '@/modules/capability-execution/call-contracts'
 import {
+  TOOL_QUOTE_ACTION_ID,
   TOOL_QUOTE_PATH,
   toolQuoteInputSchema,
   toolQuoteResultSchema,
+  type ToolQuoteInput,
+  type ToolQuoteResult,
 } from '@/modules/capability-execution/quote'
 import type { CallStatusResult } from '@/modules/capability-execution/call-recovery-contracts'
 import { AGENT_ACCOUNT_SELF_ROUTE_CONTRACT, agentAccountSelfResultSchema } from '@/modules/agent-access/account.actions'
@@ -21,6 +24,7 @@ import { resolveAgentAccessCredential } from '../lib/config'
 import { acknowledgeCallRecovery, findCallRecovery, readCallRecovery, retainCallRecovery, type CallRecoveryRecord } from '../lib/call-recovery-journal'
 import { CliFailure, callJson, heading, line, printJson, requireOk, table } from '../lib/output'
 import { usageFailure } from '../lib/help'
+import { toolCallCommand } from '../lib/tool-format'
 import { cliContinuation, continuationCommand } from '../lib/continuation-command'
 import {
   connectionContinuationForCli,
@@ -302,70 +306,22 @@ function quoteRefusalContinuation(
   return undefined
 }
 
-export async function runCallCommand(
-  args: readonly string[],
+/**
+ * The one place that calls `tool.quote:v2`. `ae call` uses this to prepare a
+ * Call and `ae quote` uses it standalone to inspect price, budget, and
+ * readiness without calling. A refusal, an invalid gateway response, or a
+ * quote for a different Tool all throw the same way for both callers.
+ */
+async function resolveToolQuote(
+  toolRef: string,
+  quoteInputData: ToolQuoteInput,
+  apiKey: string,
   options: CliOptions,
-  stdin: Readable = process.stdin,
-): Promise<void> {
-  if (args[0] === 'resume') return resumeCall(args, options)
-  const toolRef = args[0]?.trim()
-  if (
-    args.length !== 1
-    || toolRef === undefined
-    || toolRef.length === 0
-  ) {
-    throw usageFailure('call', 'call-usage')
-  }
-
-  const configuredInput = options.input?.trim()
-  if (configuredInput === undefined || configuredInput.length === 0) {
-    throw usageFailure('call', 'call-usage')
-  }
-  const rawInput = (configuredInput === '-' ? await readBoundedStdin(stdin) : configuredInput).trim()
-  if (rawInput.length === 0) throw usageFailure('call', 'call-usage')
-  let input: unknown
-  try {
-    input = JSON.parse(rawInput)
-  } catch {
-    throw new CliFailure('Tool input must be valid JSON.', { kind: 'INVALID_ARGUMENT', code: 'call-input' })
-  }
-  if (!isRecord(input)) {
-    throw new CliFailure('Tool input must be a JSON object.', { kind: 'INVALID_ARGUMENT', code: 'call-input' })
-  }
-  const quoteInput = toolQuoteInputSchema.safeParse({ toolRef, input })
-  if (!quoteInput.success) {
-    throw new CliFailure('Tool input or identity does not match tool.quote:v2.', {
-      kind: 'INVALID_ARGUMENT',
-      code: 'call-input',
-    })
-  }
-  const credential = resolveAgentAccessCredential(options.baseUrl)
-  if (credential === undefined) {
-    const continuation = connectionContinuationForCli('buyer')
-    throw new CliFailure('No AE agent credential is configured. Run ae connect, then repeat the same call.', {
-      kind: 'UNAUTHENTICATED',
-      code: 'agent_access_key_required',
-      detail: { toolRef, ...(continuation.command === undefined ? {} : { nextAction: continuation.command }) },
-      suggestion: continuation.label,
-      ...(continuation.command === undefined ? {} : { nextCommand: continuation.command }),
-    })
-  }
-
-  const apiKey = requireAgentAccessKey('call', options)
-
-  const recoveryRequest = { origin: options.baseUrl, toolRef, input: quoteInput.data.input,
-    ...(options.idempotencyKey?.trim() ? { idempotencyKey: options.idempotencyKey.trim() } : {}),
-  }
-  const previous = findCallRecovery(recoveryRequest)
-  if (previous !== undefined) {
-    if (recoveryRequest.idempotencyKey === previous.command.idempotencyKey) return resumeRetainedCall(previous, options)
-    throw pendingRecoveryFailure(previous, options)
-  }
-
+): Promise<Extract<ToolQuoteResult, { kind: 'committed' }>> {
   const quoteOutcome = await callJson(options.baseUrl, TOOL_QUOTE_PATH, {
     method: 'POST',
     headers: { Authorization: `Bearer ${apiKey}` },
-    body: JSON.stringify(quoteInput.data),
+    body: JSON.stringify(quoteInputData),
   })
   if (quoteOutcome.status === 401) {
     throw new CliFailure('Your AE connection is no longer valid. Reconnect, then repeat the call.', {
@@ -395,14 +351,104 @@ export async function runCallCommand(
   if (quote.data.toolRef !== toolRef) {
     throw new CliFailure('The gateway returned a Quote for a different Tool.', { kind: 'UNAVAILABLE', code: 'tool-quote-result-invalid' })
   }
+  return quote.data
+}
+
+async function parseToolRefAndInput(
+  command: 'call' | 'quote',
+  args: readonly string[],
+  options: CliOptions,
+  stdin: Readable,
+): Promise<{ toolRef: string; quoteInputData: ToolQuoteInput }> {
+  const toolRef = args[0]?.trim()
+  if (args.length !== 1 || toolRef === undefined || toolRef.length === 0) {
+    throw usageFailure(command, `${command}-usage`)
+  }
+  const configuredInput = options.input?.trim()
+  if (configuredInput === undefined || configuredInput.length === 0) {
+    throw usageFailure(command, `${command}-usage`)
+  }
+  const rawInput = (configuredInput === '-' ? await readBoundedStdin(stdin) : configuredInput).trim()
+  if (rawInput.length === 0) throw usageFailure(command, `${command}-usage`)
+  let input: unknown
+  try {
+    input = JSON.parse(rawInput)
+  } catch {
+    throw new CliFailure('Tool input must be valid JSON.', { kind: 'INVALID_ARGUMENT', code: `${command}-input` })
+  }
+  if (!isRecord(input)) {
+    throw new CliFailure('Tool input must be a JSON object.', { kind: 'INVALID_ARGUMENT', code: `${command}-input` })
+  }
+  const quoteInput = toolQuoteInputSchema.safeParse({ toolRef, input })
+  if (!quoteInput.success) {
+    throw new CliFailure('Tool input or identity does not match tool.quote:v2.', {
+      kind: 'INVALID_ARGUMENT',
+      code: `${command}-input`,
+    })
+  }
+  return { toolRef, quoteInputData: quoteInput.data }
+}
+
+export async function runQuoteCommand(
+  args: readonly string[],
+  options: CliOptions,
+  stdin: Readable = process.stdin,
+): Promise<void> {
+  const { toolRef, quoteInputData } = await parseToolRefAndInput('quote', args, options, stdin)
+  const apiKey = requireAgentAccessKey('quote', options)
+  const quote = await resolveToolQuote(toolRef, quoteInputData, apiKey, options)
+  if (options.json) {
+    printJson(quote)
+    return
+  }
+  heading(`Tool quote ${toolRef}`)
+  table([
+    ['price', `${quote.price.units} × 10^-${quote.price.exponent} ${quote.price.currency}`],
+    ['expires', new Date(quote.expiresAt).toISOString()],
+    ['next', toolCallCommand(toolRef)],
+  ])
+  line(JSON.stringify(quote, undefined, 2))
+}
+
+export async function runCallCommand(
+  args: readonly string[],
+  options: CliOptions,
+  stdin: Readable = process.stdin,
+): Promise<void> {
+  if (args[0] === 'resume') return resumeCall(args, options)
+  const { toolRef, quoteInputData } = await parseToolRefAndInput('call', args, options, stdin)
+  const credential = resolveAgentAccessCredential(options.baseUrl)
+  if (credential === undefined) {
+    const continuation = connectionContinuationForCli('buyer')
+    throw new CliFailure('No AE agent credential is configured. Run ae connect, then repeat the same call.', {
+      kind: 'UNAUTHENTICATED',
+      code: 'agent_access_key_required',
+      detail: { toolRef, ...(continuation.command === undefined ? {} : { nextAction: continuation.command }) },
+      suggestion: continuation.label,
+      ...(continuation.command === undefined ? {} : { nextCommand: continuation.command }),
+    })
+  }
+
+  const apiKey = requireAgentAccessKey('call', options)
+
+  const recoveryRequest = { origin: options.baseUrl, toolRef, input: quoteInputData.input,
+    ...(options.idempotencyKey?.trim() ? { idempotencyKey: options.idempotencyKey.trim() } : {}),
+  }
+  const previous = findCallRecovery(recoveryRequest)
+  if (previous !== undefined) {
+    if (recoveryRequest.idempotencyKey === previous.command.idempotencyKey) return resumeRetainedCall(previous, options)
+    throw pendingRecoveryFailure(previous, options)
+  }
+
+  const quote = await resolveToolQuote(toolRef, quoteInputData, apiKey, options)
   const idempotencyKey = resolveIdempotencyKey(options)
   const parsedCall = callCommandDescriptor.inputSchema.safeParse({
-    quoteRef: quote.data.quoteRef,
+    quoteRef: quote.quoteRef,
     idempotencyKey,
   })
   if (!parsedCall.success) throw new Error('tool_quote_projection_invalid')
   const retained = retainCallRecovery(recoveryRequest, {
-    quoteRef: parsedCall.data.quoteRef, accountRef: quote.data.account.accountRef, principalRef: quote.data.budget.principalRef,
+    quoteRef: parsedCall.data.quoteRef, accountRef: quote.account.accountRef, principalRef: quote.budget.principalRef,
   }, parsedCall.data.idempotencyKey)
   if (!retained.created) throw pendingRecoveryFailure(retained.record, options)
   if (!options.json) process.stderr.write(`Call prepared: toolRef=${toolRef}. Recovery: ${resumeCommand(retained.record, options)}\n`)
@@ -416,4 +462,15 @@ export const callCommandDescriptor = {
   inputSchema: callInputSchema,
   outputSchema: callMachineResultSchema,
   run: runCallCommand,
+} as const
+
+/** Same dispatch path `call` uses for `tool.quote:v2`, exposed standalone. */
+export const quoteCommandDescriptor = {
+  command: 'quote',
+  actionId: TOOL_QUOTE_ACTION_ID,
+  path: TOOL_QUOTE_PATH,
+  method: 'POST' as const,
+  inputSchema: toolQuoteInputSchema,
+  outputSchema: toolQuoteResultSchema,
+  run: runQuoteCommand,
 } as const

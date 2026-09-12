@@ -94,4 +94,11 @@ export const ABOUT = {
 /** Public footer wordmark line. */
 export const FOOTER = {
   tagline: 'The marketplace built for agents.',
+  /**
+   * Column order for the public footer nav, following Twenty's labelled
+   * footer pattern: market, help, legal, and machine-readable artifacts.
+   * Column contents are read from route `staticData.nav.footer`.
+   */
+  columns: ['Market', 'Help', 'Legal', 'Machines'] as const,
+  copyright: (year: number) => `© ${year} Agentic Economy`,
 } as const

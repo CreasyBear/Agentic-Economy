@@ -4,11 +4,9 @@ import type { ReactNode } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { DirectoryToolIdentity } from './DirectoryToolIdentity'
 import type { X402MarketplaceHome } from '@/modules/market/x402-marketplace-home'
-import type { MarketWindow } from '@/modules/market/contracts'
 
-export function DirectoryHero({ home, window, children, compact = false, compactTitle = "Find your next capability." }: Readonly<{
+export function DirectoryHero({ home, children, compact = false, compactTitle = "Find your next capability." }: Readonly<{
   home?: X402MarketplaceHome
-  window: MarketWindow
   children: ReactNode
   compact?: boolean
   compactTitle?: string
@@ -24,9 +22,9 @@ export function DirectoryHero({ home, window, children, compact = false, compact
       <h1 className="max-w-xl text-[2.75rem] leading-[1.02] font-extralight tracking-[-0.055em] lg:text-6xl xl:text-7xl">Tools for<br />what’s next.</h1>
       <p className="max-w-lg text-sm leading-relaxed text-muted-foreground lg:text-base">Search the web. Work with data. Make something new. Give your agent the capability to take the next step.</p>
       {children}
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-muted-foreground"><span>Start with an idea</span><Link to="/market" search={{ window, query: 'web search research' }} className="underline decoration-border-strong underline-offset-4 hover:text-foreground">Research a topic</Link><Link to="/market" search={{ window, query: 'image generation creative' }} className="underline decoration-border-strong underline-offset-4 hover:text-foreground">Create an image</Link><Link to="/market" search={{ window, query: 'financial market data prices' }} className="underline decoration-border-strong underline-offset-4 hover:text-foreground">Explore markets</Link></div>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-muted-foreground"><span>Start with an idea</span><Link to="/market" search={{ query: 'web search research' }} className="underline decoration-border-strong underline-offset-4 hover:text-foreground">Research a topic</Link><Link to="/market" search={{ query: 'image generation creative' }} className="underline decoration-border-strong underline-offset-4 hover:text-foreground">Create an image</Link><Link to="/market" search={{ query: 'financial market data prices' }} className="underline decoration-border-strong underline-offset-4 hover:text-foreground">Explore markets</Link></div>
     </div>
-    <Link to="/market" search={{ window, query: creative?.query ?? 'image generation creative' }} className="group relative isolate flex min-h-44 flex-col justify-between overflow-hidden rounded-2xl bg-foreground p-5 text-background focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring md:min-h-80 md:p-6 lg:min-h-96 xl:min-h-[27rem] xl:p-8">
+    <Link to="/market" search={{ query: creative?.query ?? 'image generation creative' }} className="group relative isolate flex min-h-44 flex-col justify-between overflow-hidden rounded-2xl bg-foreground p-5 text-background focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring md:min-h-80 md:p-6 lg:min-h-96 xl:min-h-[27rem] xl:p-8">
       {/* Approved aecon.ai editorial artwork represents a collection, not a Tool output. */}
       <img src="/media/market/lunar-limb-medium.webp" width={800} height={800} alt="" className="absolute inset-0 -z-20 size-full object-cover transition-transform duration-700 group-hover:scale-105 motion-reduce:transition-none" />
       <div className="absolute inset-0 -z-10 bg-linear-to-t from-foreground/95 via-foreground/20 to-foreground/30" />

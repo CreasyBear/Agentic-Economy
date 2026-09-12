@@ -2,20 +2,21 @@
 // Copyright (c) 2026 Vendo Connect Inc., Vendo Sp. z o.o.
 // See docs/licenses/spree-storefront.txt for licence and source provenance.
 import { Link } from '@tanstack/react-router'
-import { ActivityIcon, ArrowUpRightIcon, CheckIcon, HeartIcon, PlusIcon } from 'lucide-react'
+import { ArrowUpRightIcon, CheckIcon, HeartIcon, PlusIcon } from 'lucide-react'
 import { memo } from 'react'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardFooter } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
-import type { X402DirectoryEntry } from '@/modules/market/x402-directory'
+import { x402PendingToolRef, type X402DirectoryEntry } from '@/modules/market/x402-directory'
+import type { MarketReturnContext } from './market-return-context'
 import { DirectoryToolIdentity } from './DirectoryToolIdentity'
-import { directoryCount, directoryNetworkLabel, directoryOutputLabel, directoryPrice, directoryTitle } from './directory-presentation'
+import { directoryNetworkLabel, directoryOutputLabel, directoryPrice, directoryTitle } from './directory-presentation'
 
 type DirectoryToolCardProps = Readonly<{
   entry: X402DirectoryEntry
-  onSelect?: (entry: X402DirectoryEntry) => void
+  returnTo?: MarketReturnContext
   onSave?: () => void
   saved?: boolean
   onCompare?: () => void
@@ -23,7 +24,7 @@ type DirectoryToolCardProps = Readonly<{
   compareDisabled?: boolean
 }>
 
-export const DirectoryToolCard = memo(function DirectoryToolCard({ entry, onSelect, onSave, saved, onCompare, comparing, compareDisabled }: DirectoryToolCardProps) {
+export const DirectoryToolCard = memo(function DirectoryToolCard({ entry, returnTo, onSave, saved, onCompare, comparing, compareDisabled }: DirectoryToolCardProps) {
   const network = directoryNetworkLabel(entry)
   const title = directoryTitle(entry)
   const description = entry.description !== title ? entry.description : entry.schemaSummary
@@ -41,11 +42,7 @@ export const DirectoryToolCard = memo(function DirectoryToolCard({ entry, onSele
           <p className="truncate text-xs text-muted-foreground">{entry.serviceName === undefined ? entry.provider : `${entry.serviceName} · ${entry.provider}`}</p>
           <div className="mt-2 flex items-start justify-between gap-3">
           <h3 className="min-w-0 text-lg font-semibold leading-snug tracking-tight">
-            {onSelect === undefined ? (
-              <Link to="/market" search={{ window: '30d', resource: entry.resource }} className="line-clamp-3 break-words after:absolute after:inset-0 after:rounded-card focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-ring">{title}</Link>
-            ) : (
-              <button type="button" onClick={() => onSelect(entry)} className="line-clamp-3 break-words text-left after:absolute after:inset-0 after:rounded-card focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-ring">{title}</button>
-            )}
+            <Link to="/tools/$toolRef" params={{ toolRef: x402PendingToolRef(entry.resource) }} {...(returnTo === undefined ? {} : { search: { from: returnTo } })} className="line-clamp-3 break-words after:absolute after:inset-0 after:rounded-card focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-ring">{title}</Link>
           </h3>
           </div>
         </div>
@@ -54,7 +51,7 @@ export const DirectoryToolCard = memo(function DirectoryToolCard({ entry, onSele
         {description ? <p className="line-clamp-3 text-sm leading-relaxed text-muted-foreground">{description}</p> : null}
         {entry.tags?.length || entry.category ? <div className="flex flex-wrap gap-1.5">{[...new Set([...(entry.category === undefined ? [] : [entry.category]), ...(entry.tags ?? [])])].slice(0, 2).map(tag => <Badge key={tag} variant="secondary" className="max-w-full truncate">{tag}</Badge>)}</div> : null}
         {output === undefined ? null : <p className="truncate text-xs text-muted-foreground" title={output}>Returns {output}</p>}
-        {entry.activity?.calls30d === undefined ? null : <p className="flex items-center gap-1.5 text-xs text-muted-foreground" title="Calls reported by Coinbase Bazaar in the past 30 days"><ActivityIcon className="size-3.5" />{directoryCount(entry.activity.calls30d)} Calls in 30 days</p>}
+        {entry.activity?.calls30d === undefined || entry.activity.calls30d <= 0 ? null : <p className="text-xs text-muted-foreground" title="Reported by Coinbase Bazaar in the past 30 days">Used recently by other agents</p>}
       </CardContent>
       <CardFooter className="flex-wrap justify-between gap-2 border-t border-border px-5 py-3">
         <div className="min-w-0">

@@ -60,7 +60,7 @@ export const Route = createFileRoute('/_operator/owner/offerings/new')({
     } } catch { sourceUnavailable = true }
     return { identity, connections, resume, resumeRequested: deps.draftRef !== undefined, sourceUnavailable }
   },
-  head: () => ({ meta: [{ title: 'Add service | Agentic Economy' }, { name: 'robots', content: 'noindex' }] }),
+  head: () => ({ meta: [{ title: 'Add Tool | Agentic Economy' }, { name: 'robots', content: 'noindex' }] }),
   component: NewOwnerOfferingRoute,
 })
 
@@ -92,12 +92,12 @@ function NewOwnerOfferingRouteView({ publish }: Readonly<{
   const saveDraft = useServerFn(saveOwnerSupplySourceDraftServer)
 
   return (
-    <AeOperatorPage operatorRole="owner" title="Add service" description="Connect the interface you already operate. AE discovers the Tools and validates the one you submit." currentPath="/owner/offerings/new" breadcrumbs={[{ label: 'Tools', href: '/owner/offerings' }, { label: 'Add service' }]}>
-      {identity.kind !== 'available' ? <Alert variant="destructive"><AlertTitle>Provider workspace unavailable</AlertTitle><AlertDescription>AE could not confirm the current Business. Return to Tools and try again.</AlertDescription></Alert> : sourceUnavailable ? (
+    <AeOperatorPage operatorRole="owner" title="Add Tool" description="Connect the interface you already operate. AE discovers the Tools and validates the one you submit." currentPath="/owner/offerings/new" breadcrumbs={[{ label: 'Operations', href: '/owner/offerings' }, { label: 'Add Tool' }]}>
+      {identity.kind !== 'available' ? <Alert variant="destructive"><AlertTitle>Provider workspace unavailable</AlertTitle><AlertDescription>AE could not confirm the current Business. Return to Operations and try again.</AlertDescription></Alert> : sourceUnavailable ? (
         <Alert variant="destructive"><AlertTitle>Saved source unavailable</AlertTitle><AlertDescription>AE could not read the saved source or current connections. Reload before starting or submitting another connection.</AlertDescription></Alert>
       ) : (<>
         {resumeRequested && resume.kind !== 'available' ? (
-          <Alert variant="destructive" className="mb-5"><AlertTitle>Saved source could not be resumed</AlertTitle><AlertDescription>The saved source is unavailable or changed. Review it from Add service before starting another connection.</AlertDescription></Alert>
+          <Alert variant="destructive" className="mb-5"><AlertTitle>Saved source could not be resumed</AlertTitle><AlertDescription>The saved source is unavailable or changed. Review it from Add Tool before starting another connection.</AlertDescription></Alert>
         ) : null}
         <AeSupplySourceNativeStart
           businessRef={identity.businessId}

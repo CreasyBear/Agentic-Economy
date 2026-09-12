@@ -7,6 +7,12 @@ import { toolReadUnavailableResponse } from '@/lib/server/tool-read-problem'
 import { readPublicLlmsTxt } from '@/modules/discovery/discovery.functions'
 
 export const Route = createFileRoute('/llms.txt')({
+  staticData: {
+    nav: {
+      label: 'llms.txt',
+      footer: { column: 'Machines', order: 0 },
+    },
+  },
   server: {
     handlers: {
       GET: ({ request }) => handleDurableLlmsTxtRequest(request),

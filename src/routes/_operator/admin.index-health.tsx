@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { createServerFn, useServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
+import { Activity } from 'lucide-react'
 
 import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
 import { AeSection } from '@/components/ae/layout/AeSection'
@@ -22,6 +23,19 @@ import {
 const readAdminIndexHealthServer = createServerFn().handler(() => readAdminIndexHealthThroughSource())
 
 export const Route = createFileRoute('/_operator/admin/index-health')({
+  staticData: {
+    nav: {
+      label: 'Catalog health',
+      operator: {
+        roles: ['admin'],
+        group: 'Records',
+        groupOrder: 0,
+        order: 0,
+        icon: Activity,
+        tier: 'core',
+      },
+    },
+  },
   ...operatorRouteOptions,
   validateSearch: z.object({
     publicationRef: z.string().trim().min(1).max(300).optional(),

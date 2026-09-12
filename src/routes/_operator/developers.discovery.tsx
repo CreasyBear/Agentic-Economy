@@ -1,4 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
+import { SearchCode } from 'lucide-react'
 import { CodeBlock } from '@/components/ai-elements/code-block'
 
 import { Badge } from '@/components/ui/badge'
@@ -11,6 +12,19 @@ import { operatorRouteOptions } from '@/lib/operator/route-options'
 import { loadDeveloperDiscoveryRouteServer } from '@/modules/discovery/developer-discovery-route'
 
 export const Route = createFileRoute('/_operator/developers/discovery')({
+  staticData: {
+    nav: {
+      label: 'Discovery',
+      operator: {
+        roles: ['developer'],
+        group: 'Records',
+        groupOrder: 0,
+        order: 0,
+        icon: SearchCode,
+        tier: 'core',
+      },
+    },
+  },
   ...operatorRouteOptions,
   loader: () => loadDeveloperDiscoveryRouteServer(),
   head: () => ({

@@ -21,7 +21,7 @@ import {
   AeMarketToolbar,
   type AeMarketToolbarSearch,
 } from "@/components/ae/market/AeMarketToolbar";
-import { AeToolTable } from "@/components/ae/market/AeToolTable";
+import { AeToolCard } from "@/components/ae/market/AeToolCard";
 import {
   buildMarketReturnContext,
   type MarketReturnContext,
@@ -34,7 +34,6 @@ import { Pagination, PaginationContent, PaginationItem } from "@/components/ui/p
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AGENT_DOOR } from "@/content/brand-copy";
 import { resolveToolCategoryIcon } from "@/lib/public/tool-icons";
-import type { MarketWindow } from "@/modules/market/contracts";
 import {
   marketCategories,
   type MarketCategoryId,
@@ -65,14 +64,13 @@ export function AeMarketPage({
   comparison?: MarketComparison;
   onCompareTools?: (toolRefs: readonly string[]) => void;
 }) {
-  const { window, catalog } = projection;
+  const { catalog } = projection;
   const navigate = useNavigate();
   const router = useRouter();
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
   const [isEditingComparison, setIsEditingComparison] = useState(false);
   const selectionFallbackRef = useRef<HTMLAnchorElement>(null);
   const catalogContextKey = [
-    search.window,
     search.query,
     search.availability,
     search.category,
@@ -188,7 +186,6 @@ export function AeMarketPage({
     void navigate({
       to: "/market",
       search: {
-        window,
         ...(search.query === undefined ? {} : { query: search.query }),
         ...(search.availability === undefined
           ? {}
@@ -200,8 +197,8 @@ export function AeMarketPage({
 
   const catalogLink = (
     <Button asChild variant="ghost" className="min-h-touch">
-      <Link ref={selectionFallbackRef} to="/market" search={{ window }}>
-        Catalog
+      <Link ref={selectionFallbackRef} to="/market" search={{}}>
+        Market
       </Link>
     </Button>
   );
@@ -217,7 +214,7 @@ export function AeMarketPage({
     description = `${drilledGroup.category.label} · ${count.toLocaleString()} listed · ${capabilityFromPrice(drilledGroup.tools)}`;
     actions = catalogLink;
     body = (
-      <AeToolTable
+      <ToolCardGrid
         tools={drilledGroup.tools}
         returnTo={marketTableReturnTo}
         {...(marketSelection === undefined ? {} : { selection: marketSelection })}
@@ -235,7 +232,6 @@ export function AeMarketPage({
         <ToolResults
           groups={capabilityGroups}
           catalog={catalog}
-          window={window}
           search={search}
           returnTo={marketTableReturnTo}
           {...(marketSelection === undefined ? {} : { selection: marketSelection })}
@@ -259,7 +255,6 @@ export function AeMarketPage({
       <CatalogTabs
         categoryId={categoryId}
         shelves={shelves}
-        window={window}
         search={search}
         pagination={catalog.kind === "ok" ? catalog.pagination : { limit: 12, hasMore: false }}
         onCategoryChange={handleCategoryChange}
@@ -314,7 +309,7 @@ function CatalogEmpty({ unavailable }: { unavailable: boolean }) {
       description="Try again shortly. Existing Tool links continue to work."
       action={
         <Button asChild className="min-h-touch">
-          <Link to="/market" search={{ window: "30d" }}>Try again</Link>
+          <Link to="/market" search={{}}>Try again</Link>
         </Button>
       }
     />
@@ -325,7 +320,7 @@ function CatalogEmpty({ unavailable }: { unavailable: boolean }) {
       description="Try a broader search, another category, or a different availability."
       action={
         <Button asChild className="min-h-touch">
-          <Link to="/market" search={{ window: "30d" }}>Clear filters</Link>
+          <Link to="/market" search={{}}>Clear filters</Link>
         </Button>
       }
     />
@@ -335,14 +330,12 @@ function CatalogEmpty({ unavailable }: { unavailable: boolean }) {
 function CatalogTabs({
   categoryId,
   shelves,
-  window,
   search,
   pagination,
   onCategoryChange,
 }: {
   categoryId: MarketCategoryId | "all";
   shelves: readonly CategoryShelfViewModel[];
-  window: MarketWindow;
   search: MarketPageSearch;
   pagination: Extract<MarketRouteProjection["catalog"], { kind: "ok" }>["pagination"];
   onCategoryChange: (value: MarketCategoryId | "all") => void;
@@ -399,7 +392,7 @@ function CatalogTabs({
       </TabsList>
       <TabsContent value="all" className="grid gap-section">
         {shelves.map((shelf) => (
-          <CategoryShelf key={shelf.category.id} shelf={shelf} window={window} />
+          <CategoryShelf key={shelf.category.id} shelf={shelf} />
         ))}
       </TabsContent>
       {marketCategories.map((category) => {
@@ -415,23 +408,21 @@ function CatalogTabs({
                 No capability groups in {category.label} on this loaded page.
               </p>
             ) : (
-              <CategoryShelf shelf={shelf} window={window} />
+              <CategoryShelf shelf={shelf} />
             )}
           </TabsContent>
         );
       })}
     </Tabs>
-    <CatalogPagination pagination={pagination} window={window} search={search} />
+    <CatalogPagination pagination={pagination} search={search} />
     </div>
   );
 }
 
 function CategoryShelf({
   shelf,
-  window,
 }: {
   shelf: CategoryShelfViewModel;
-  window: MarketWindow;
 }) {
   const headingId = `catalog-${shelf.category.id}`;
 
@@ -451,7 +442,7 @@ function CategoryShelf({
       <ItemGroup className="grid gap-related sm:grid-cols-2">
         {shelf.capabilities.map((group) => (
           <li key={group.capabilityId}>
-            <AeCapabilityTile group={group} window={window} />
+            <AeCapabilityTile group={group} />
           </li>
         ))}
       </ItemGroup>
@@ -462,14 +453,12 @@ function CategoryShelf({
 function ToolResults({
   groups,
   catalog,
-  window,
   search,
   selection,
   returnTo,
 }: {
   groups: readonly CapabilityGroupViewModel[];
   catalog: Extract<MarketRouteProjection["catalog"], { kind: "ok" }>;
-  window: MarketWindow;
   search: MarketPageSearch;
   selection?: AeRecordTableSelection<ToolCardViewModel>;
   returnTo: MarketReturnContext;
@@ -494,7 +483,7 @@ function ToolResults({
               {group.providerCount === 1 ? "provider" : "providers"}
             </p>
           </div>
-          <AeToolTable
+          <ToolCardGrid
             tools={group.tools}
             returnTo={returnTo}
             {...(selection === undefined ? {} : { selection })}
@@ -503,7 +492,6 @@ function ToolResults({
       ))}
       <CatalogPagination
         pagination={catalog.pagination}
-        window={window}
         search={search}
       />
     </div>
@@ -512,11 +500,9 @@ function ToolResults({
 
 function CatalogPagination({
   pagination,
-  window,
   search,
 }: {
   pagination: Extract<MarketRouteProjection["catalog"], { kind: "ok" }>["pagination"];
-  window: MarketWindow;
   search: MarketPageSearch;
 }) {
   if (!pagination.hasMore || pagination.nextCursor === undefined) return null;
@@ -529,7 +515,6 @@ function CatalogPagination({
                   to="/market"
                   reloadDocument
                   search={{
-                window,
                 ...(search.query === undefined ? {} : { query: search.query }),
                 ...(search.availability === undefined
                   ? {}
@@ -546,6 +531,52 @@ function CatalogPagination({
         </PaginationItem>
       </PaginationContent>
     </Pagination>
+  );
+}
+
+function ToolCardGrid({
+  tools,
+  returnTo,
+  selection,
+}: {
+  tools: readonly ToolCardViewModel[];
+  returnTo?: MarketReturnContext;
+  selection?: AeRecordTableSelection<ToolCardViewModel>;
+}) {
+  if (tools.length === 0) {
+    return (
+      <p className="rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground">
+        No Tools on this page. Adjust the filters or continue to the next page.
+      </p>
+    );
+  }
+  return (
+    <ul className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+      {tools.map((tool) => {
+        const comparing = selection?.state[tool.toolRef] === true;
+        return (
+          <li key={tool.toolRef} className="min-w-0">
+            <AeToolCard
+              operation={tool}
+              {...(returnTo === undefined ? {} : { returnTo })}
+              {...(selection === undefined
+                ? {}
+                : {
+                    onCompare: () => {
+                      selection.onChange((current) => ({
+                        ...current,
+                        [tool.toolRef]: !(current[tool.toolRef] === true),
+                      }));
+                    },
+                    comparing,
+                    compareDisabled:
+                      !comparing && selection.canSelectRow?.(tool) === false,
+                  })}
+            />
+          </li>
+        );
+      })}
+    </ul>
   );
 }
 

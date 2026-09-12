@@ -1,4 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
+import { Bot } from 'lucide-react'
 
 import { AeAgentDoorPage } from '@/components/ae/agents/AeAgentDoorPage'
 import { AePublicPage } from '@/components/ae/layout/AePublicPage'
@@ -7,6 +8,14 @@ import { readCanonicalBaseUrlServer } from '@/lib/server/canonical-url.functions
 import { buildPublicPageHead } from '@/modules/seo/public'
 
 export const Route = createFileRoute('/for-agents')({
+  staticData: {
+    nav: {
+      label: 'For agents',
+      header: { order: 1 },
+      footer: { column: 'Market', order: 1 },
+      operatorUtility: { roles: ['owner', 'admin', 'developer'], order: 1, icon: Bot },
+    },
+  },
   loader: () => readCanonicalBaseUrlServer(),
   head: ({ loaderData }) => buildPublicPageHead({
     path: '/for-agents',

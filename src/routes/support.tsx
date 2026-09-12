@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from '@tanstack/react-router'
-import { ArrowUpRightIcon } from 'lucide-react'
+import { ArrowUpRightIcon, CircleHelp } from 'lucide-react'
 
 import { AeCopyCommand } from '@/components/ae/data/AeCopyCommand'
 import { AePublicPage } from '@/components/ae/layout/AePublicPage'
@@ -13,10 +13,17 @@ const ISSUE_URL = 'https://github.com/CreasyBear/Agentic-Economy/issues/new/choo
 const SUPPORT_EMAIL = 'mailto:support@aecon.ai'
 
 export const Route = createFileRoute('/support')({
+  staticData: {
+    nav: {
+      label: 'Help',
+      footer: { column: 'Help', order: 0 },
+      operatorUtility: { roles: ['owner', 'admin', 'developer'], order: 2, icon: CircleHelp },
+    },
+  },
   loader: () => readCanonicalBaseUrlServer(),
   head: () => buildPublicPageHead({
     path: '/support',
-    title: 'Get help | Agentic Economy',
+    title: 'Help | Agentic Economy',
     description: 'Check a Call, continue Provider setup, or contact private support with a safe request reference.',
   }),
   component: SupportRoute,
@@ -28,7 +35,7 @@ function SupportRoute() {
     <AePublicPage
       kind="document"
       eyebrow="Support"
-      title="Get help"
+      title="Help"
       description="Keep the request or Call reference shown with the problem. It helps us find the right record without asking you to share private inputs."
       actions={
         <Button asChild className="min-h-touch">

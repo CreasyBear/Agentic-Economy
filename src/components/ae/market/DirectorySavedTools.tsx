@@ -137,8 +137,8 @@ export function DirectorySavedToolsProvider({ children }: Readonly<{ children: R
     } else if (latest.some(({ entry }) => entry.resource === tool.entry.resource)) {
       next = latest
     } else {
-      // Route state can contain window/view/comparison fields. Persist only
-      // the canonical discovery inputs needed to re-resolve this observation.
+      // Route state can contain view/comparison fields. Persist only the
+      // canonical discovery inputs needed to re-resolve this observation.
       const { query, offset, network, provider, maxUsdPrice } = tool.search
       const parsed = savedToolSchema.safeParse({ entry: tool.entry, search: {
         ...(query === undefined ? {} : { query }), ...(offset === undefined ? {} : { offset }),

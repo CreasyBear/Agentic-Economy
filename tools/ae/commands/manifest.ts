@@ -5,6 +5,7 @@ import {
 } from '@/modules/agent-access/account.actions'
 import {
   findAction,
+  listActions,
   listCallRouteDescriptors,
   mcpToolName,
 } from '@/modules/actions'
@@ -30,10 +31,11 @@ import {
   supplySourcePreviewAction,
   supplyWithdrawAction,
 } from '@/modules/capability-supply/supply-actions'
-import { describeActionForAgent } from '@/modules/common/action'
+import { describeActionForAgent, type ActionParameter } from '@/modules/common/action'
 import {
   TOOL_MARKET_ACTION_ENTRIES,
 } from '@/modules/registry/tool-entry'
+import { MARKET_REQUEST_ROUTE_CONTRACTS } from '@/modules/market-demand/market-demand.actions'
 
 import { TOOL_QUOTE_ACTION_ID } from '@/modules/capability-execution/quote'
 
@@ -89,6 +91,64 @@ export type CommandManifestEntry = Readonly<{
   guidance?: readonly string[]
   commands?: Readonly<Record<string, CommandManifestEntry>>
 }>
+
+function kebabCase(name: string): string {
+  return name.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase()
+}
+
+/**
+ * One CLI argument syntax per action parameter: `idempotencyKey` is always a
+ * flag (every write command in this CLI takes it that way, see
+ * `JSON_HELP_FLAGS['--idempotency-key']` in cli.ts); an object-typed
+ * parameter becomes a `--flag '<json>'` flag, matching `--input` on `call`,
+ * `quote`, and `supply`; every other parameter is a positional when required
+ * and a flag when optional. This is the literal one-line fallback formatter
+ * the manifest derivation allows when no richer one exists — it is not a fit
+ * for every action (see the explicit `args` overrides in `COMMANDS` where
+ * the CLI's real argument surface has diverged from the action's own
+ * parameter list, each with a comment explaining why).
+ */
+function formatCliArgs(parameters: readonly ActionParameter[]): string {
+  return parameters.map((parameter) => {
+    const kebab = kebabCase(parameter.name)
+    if (parameter.name === 'idempotencyKey') {
+      return parameter.required ? '--idempotency-key <key>' : '[--idempotency-key <key>]'
+    }
+    if (parameter.type === 'object') {
+      const flag = `--${kebab} '<json>'`
+      return parameter.required ? flag : `[${flag}]`
+    }
+    if (parameter.required) return `<${kebab}>`
+    const placeholder = parameter.enum !== undefined ? parameter.enum.join('|') : kebab
+    return `[--${kebab} <${placeholder}>]`
+  }).join(' ')
+}
+
+/** The exact set `src/lib/server/mcp-api.ts` and the CLI both read: every action that declares the 'cli' surface. */
+const CLI_SURFACE_ACTION_IDS = new Set(
+  listActions().filter((action) => action.surfaces.includes('cli')).map((action) => action.id),
+)
+
+/**
+ * One derived base for every action-backed CLI command: `summary`, `json`,
+ * and `authentication` come straight from the action (every action currently
+ * on the 'cli' surface declares `credentialAdmission`, so this always
+ * resolves to `'buyer'`); `args` comes from `formatCliArgs`. Callers override
+ * `args` (and only `args`) where the CLI's real argument surface has
+ * diverged from the action's own parameter list.
+ */
+function deriveCliCommand(actionId: string): Pick<CommandManifestEntry, 'summary' | 'args' | 'json' | 'authentication'> {
+  const action = requireRegisteredAction(actionId)
+  if (!CLI_SURFACE_ACTION_IDS.has(actionId)) {
+    throw new Error(`Manifest command derivation requires the 'cli' surface: ${actionId}`)
+  }
+  return {
+    summary: action.summary,
+    args: formatCliArgs(action.parameters),
+    json: true,
+    ...(action.credentialAdmission === undefined ? {} : { authentication: 'buyer' as const }),
+  }
+}
 
 export const ROOT_COMMAND_GROUPS = [
   { id: 'discover_compare', title: 'Discover and compare' },
@@ -154,9 +214,10 @@ export const COMMANDS: Readonly<Record<string, RootCommandManifestEntry>> = {
       'Create refuses when a current canonical Tool already matches; search and describe that Tool instead.',
     ],
     commands: {
-      create: { summary: 'Record one no-result job with replay-safe identity.', args: '"<job>" [--idempotency-key <key>]', json: true },
-      list: { summary: 'List this connection’s private missing-job requests, newest first.', args: '[--limit <1-100>] [--cursor <cursor>]', json: true },
-      status: { summary: 'Check whether current canonical Tools now match one private request.', args: '<request-ref>', json: true },
+      // marketRequestCreateAction.parameters marks idempotencyKey required, but the CLI generates one when --idempotency-key is omitted; args keeps the CLI-observed shape.
+      create: { ...deriveCliCommand(MARKET_REQUEST_ROUTE_CONTRACTS.create.actionId), args: '"<job>" [--idempotency-key <key>]' },
+      list: { ...deriveCliCommand(MARKET_REQUEST_ROUTE_CONTRACTS.list.actionId) },
+      status: { ...deriveCliCommand(MARKET_REQUEST_ROUTE_CONTRACTS.status.actionId) },
     },
   },
   describe: {
@@ -203,9 +264,11 @@ export const COMMANDS: Readonly<Record<string, RootCommandManifestEntry>> = {
     rootOrder: 2,
     authentication: 'buyer',
     commands: {
-      status: { summary: 'Read one buyer or provider credential profile’s principal, owner account, scopes, and authority mode.', args: '[market|provider]', json: true },
-      balance: { summary: 'Read exact buyer credit and the owner-browser funding continuation.', args: '[currency]', json: true },
-      activity: { summary: 'List this credential profile’s bounded charge activity, newest first.', args: '[currency] [--limit <1-100>] [--cursor <cursor>]', json: true },
+      // agentAccountSelfAction takes no parameters; market|provider only selects which local credential scope the CLI sends, so args stays hand-specified.
+      status: { ...deriveCliCommand(AGENT_ACCOUNT_SELF_ROUTE_CONTRACT.actionId), args: '[market|provider]' },
+      // currency is a positional CLI argument, not a flag; formatCliArgs's generic optional-scalar rule would render it as one.
+      balance: { ...deriveCliCommand(AGENT_ACCOUNT_MONEY_ROUTE_CONTRACTS.balance.actionId), args: '[currency]' },
+      activity: { ...deriveCliCommand(AGENT_ACCOUNT_MONEY_ROUTE_CONTRACTS.activity.actionId), args: '[currency] [--limit <1-100>] [--cursor <cursor>]' },
       connections: { summary: 'List locally stored origin-bound AE connections without revealing bearer material.', args: '', json: true },
       disconnect: { summary: 'Remove one local credential profile (buyer by default; provider with `provider`). Server-side revocation stays with the owner.', args: '[market|provider]', json: true },
     },
@@ -246,6 +309,15 @@ export const COMMANDS: Readonly<Record<string, RootCommandManifestEntry>> = {
     rootOrder: 3,
     guidance: ['Open the returned /owner/credit#fund continuation as the owner. No agent credential is used.'],
   },
+  quote: {
+    ...deriveCliCommand(TOOL_QUOTE_ACTION_ID),
+    group: 'call_recover',
+    rootOrder: 0,
+    guidance: [
+      `${toolCallCommand()} performs quote and call together; run quote alone first to inspect price, budget, and readiness without calling.`,
+    ],
+  },
+  // callAction.parameters are quoteRef and idempotencyKey (the internal purchase step); the CLI's `call` wraps tool.quote and tool.call together and takes tool-ref/--input/--wait, so summary and args stay hand-specified here.
   call: {
     summary: 'Call one capability: anonymous MCP for eligible free keyless reads, otherwise the connected AE gateway.',
     args: "<tool-ref> --input '<json>' [--wait]",
@@ -263,15 +335,18 @@ export const COMMANDS: Readonly<Record<string, RootCommandManifestEntry>> = {
     },
   },
   history: {
-    summary: 'List this Agent’s Call summaries, including those made before credential replacement, newest first.',
-    args: '[--limit <1-100>] [--cursor <cursor>] [--state <state>]',
-    json: true,
+    ...deriveCliCommand(CALL_ROUTE_CONTRACT.list.actionId),
     group: 'call_recover',
     rootOrder: 2,
-    authentication: 'buyer',
     guidance: ['Use the returned callRef with status for one snapshot or wait for a bounded recorded outcome.'],
   },
-  status: { summary: 'Read one authenticated Call status and evidence projection.', args: '<call-ref>', json: true, group: 'call_recover', rootOrder: 3, authentication: 'buyer' },
+  status: {
+    ...deriveCliCommand(CALL_ROUTE_CONTRACT.status.actionId),
+    // callStatusAction also accepts afterVersion, but the CLI has no flag for it (COMMAND_OPTIONS['status'] is empty in cli.ts); args keeps the CLI-observed shape.
+    args: '<call-ref>',
+    group: 'call_recover',
+    rootOrder: 3,
+  },
   wait: {
     summary: 'Wait boundedly for one recorded Call to reach a durable outcome.',
     args: '<call-ref>',
@@ -284,14 +359,19 @@ export const COMMANDS: Readonly<Record<string, RootCommandManifestEntry>> = {
       'A timeout preserves the Call identity and returns the exact wait command to continue later.',
     ],
   },
-  cancel: { summary: 'Cancel one authenticated Call explicitly.', args: '<call-ref> --idempotency-key <key>', json: true, group: 'call_recover', rootOrder: 5, authentication: 'buyer' },
+  cancel: {
+    ...deriveCliCommand(CALL_ROUTE_CONTRACT.cancel.actionId),
+    // callCancelAction.parameters also inherits afterVersion from statusParameters, but cancel.ts never reads it and the CLI has no flag for it (COMMAND_OPTIONS['cancel'] is idempotency-key only); args keeps the CLI-observed shape.
+    args: '<call-ref> --idempotency-key <key>',
+    group: 'call_recover',
+    rootOrder: 5,
+  },
   recover: {
-    summary: 'Reconcile a genuinely uncertain Call with canonical evidence after a real uncertain outcome; this is not a replay.',
+    ...deriveCliCommand(CALL_ROUTE_CONTRACT.reconcile.actionId),
+    // evidence is a positional JSON argument in the real CLI (recover.ts reads args[1]), not a --evidence flag; args keeps the CLI-observed shape.
     args: "<call-ref> '<evidence-json>' --idempotency-key <key>",
-    json: true,
     group: 'call_recover',
     rootOrder: 6,
-    authentication: 'buyer',
     guidance: [
       'Inspect status first and use this only when the Call outcome remains genuinely uncertain.',
       'Provide canonical evidence for the same Call and stable idempotency key; recover reconciles the outcome and does not replay a known result.',

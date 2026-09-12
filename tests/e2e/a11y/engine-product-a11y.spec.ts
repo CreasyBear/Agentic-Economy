@@ -45,7 +45,7 @@ test.describe('market product accessibility', () => {
   })
 
   test('catalogue and controls do not widen the viewport', async ({ page }) => {
-    await gotoSettled(page, '/market?window=30d')
+    await gotoSettled(page, '/market')
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
     const viewportWidth = await page.evaluate(() => window.innerWidth)
     const documentWidth = await page.evaluate(() => document.documentElement.scrollWidth)

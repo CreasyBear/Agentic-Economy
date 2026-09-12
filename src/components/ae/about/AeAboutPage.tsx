@@ -68,8 +68,6 @@ export function AeAboutPage() {
                 headingId="about-agent-door"
                 heading={AGENT_DOOR.heading}
                 body={AGENT_DOOR.body}
-                href="/for-agents"
-                cta={AGENT_DOOR.cta}
               />
             }
             right={
@@ -77,8 +75,6 @@ export function AeAboutPage() {
                 headingId="about-provider-door"
                 heading={BUSINESS_DOOR.heading}
                 body={BUSINESS_DOOR.body}
-                href="/for-providers"
-                cta={BUSINESS_DOOR.cta}
               />
             }
           />
@@ -103,7 +99,7 @@ export function AeAboutPage() {
                 <AeSiteBody muted>{ABOUT.providersBody}</AeSiteBody>
               </div>
               <AeSiteButton asChild variant="outlined" className="w-fit">
-                <Link to="/market" search={{ window: '30d' }}>
+                <Link to="/market">
                   Browse the live catalog
                 </Link>
               </AeSiteButton>
@@ -113,9 +109,9 @@ export function AeAboutPage() {
             <AeSiteCover
               className="max-w-none"
               eyebrow="Catalog"
-              title="Live list"
+              title="Market"
               meta="Inspect before you call"
-              href="/market?window=30d"
+              href="/market"
             />
           }
         />
@@ -143,14 +139,10 @@ export function AeAboutPage() {
 function AboutDoor({
   heading,
   body,
-  href,
-  cta,
   headingId,
 }: Readonly<{
   heading: string
   body: string
-  href: '/for-agents' | '/for-providers'
-  cta: string
   headingId: string
 }>) {
   return (
@@ -163,12 +155,6 @@ function AboutDoor({
           {body}
         </AeSiteBody>
       </div>
-      <Link
-        to={href}
-        className="inline-flex min-h-touch w-fit items-center text-sm font-medium underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-      >
-        {cta}
-      </Link>
     </div>
   )
 }

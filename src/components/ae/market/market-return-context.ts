@@ -1,7 +1,6 @@
 import { x402DirectoryCatalogueInputSchema, type X402DirectoryCatalogueInput } from '@/modules/market/x402-directory-catalogue'
 import { directoryArraySearchKeys, directoryBooleanSearchKeys, directoryCatalogueSearchKeys } from '@/modules/market/x402-directory-navigation'
 import { isPublicToolRef } from '@/modules/capability-supply/public'
-import { marketWindowSchema, type MarketWindow } from '@/modules/market/contracts'
 import { isMarketCategoryId, type MarketCategoryId } from '@/modules/market/listing-evidence'
 
 declare const marketReturnContextBrand: unique symbol
@@ -11,13 +10,12 @@ export type MarketReturnContext = string & Readonly<{
 }>
 
 export type MarketReturnSearch = Readonly<X402DirectoryCatalogueInput & {
-  window: MarketWindow
   availability?: 'routeable' | 'setup_required' | 'unavailable'
   category?: MarketCategoryId
   cursor?: string
   capability?: string
   compare?: string
-  view?: "overview" | "discover" | "tools" | "providers" | "saved" | "leaderboard"
+  view?: "discover" | "tools" | "providers" | "saved"
   layout?: 'table' | 'grid'
   resource?: string
   providerCursor?: string
@@ -28,12 +26,11 @@ export type MarketReturnNavigation = Readonly<{
   hash?: 'tools'
 }>
 
-export const FALLBACK_MARKET_RETURN_CONTEXT = '/market?window=30d#tools' as MarketReturnContext
+export const FALLBACK_MARKET_RETURN_CONTEXT = '/market#tools' as MarketReturnContext
 
 const MAX_RETURN_CONTEXT_LENGTH = 3_000
 const MARKET_CONTEXT_ORIGIN = 'https://agentic-economy.invalid'
 const knownParameters = new Set([
-  'window',
   'query',
   'availability',
   'category',
@@ -49,7 +46,7 @@ export function buildMarketReturnContext(
   search: MarketReturnSearch,
   hash?: 'tools',
 ): MarketReturnContext {
-  const parameters = new URLSearchParams({ window: search.window })
+  const parameters = new URLSearchParams()
   if (search.query !== undefined) parameters.set('query', search.query)
   if (search.availability !== undefined) parameters.set('availability', search.availability)
   if (search.category !== undefined) parameters.set('category', search.category)
@@ -90,8 +87,6 @@ export function readMarketReturnContext(value: unknown): MarketReturnContext | u
     if (!knownParameters.has(key) || url.searchParams.getAll(key).length !== 1) return undefined
   }
 
-  const window = url.searchParams.get('window')
-  if (!marketWindowSchema.safeParse(window).success) return undefined
   const query = url.searchParams.get('query')
   if (query !== null && (query.length === 0 || query.length > 200 || query.trim() !== query)) return undefined
   const availability = url.searchParams.get('availability')
@@ -127,7 +122,7 @@ export function readMarketReturnContext(value: unknown): MarketReturnContext | u
   if (sort !== null && sort !== 'relevance' && sort !== 'popular' && sort !== 'updated' && sort !== 'adoption' && sort !== 'price_asc') return undefined
   if (query !== null && sort !== null && sort !== 'relevance') return undefined
   const view = url.searchParams.get('view')
-  if (view !== null && view !== 'overview' && view !== 'leaderboard' && view !== 'discover' && view !== 'tools' && view !== 'providers' && view !== 'saved') return undefined
+  if (view !== null && view !== 'discover' && view !== 'tools' && view !== 'providers' && view !== 'saved') return undefined
   const layout = url.searchParams.get('layout')
   if (layout !== null && layout !== 'table' && layout !== 'grid') return undefined
 
@@ -138,7 +133,6 @@ export function toMarketReturnNavigation(
   context: MarketReturnContext,
 ): MarketReturnNavigation {
   const url = new URL(context, MARKET_CONTEXT_ORIGIN)
-  const window = marketWindowSchema.parse(url.searchParams.get('window'))
   const query = url.searchParams.get('query')
   const availability = url.searchParams.get('availability')
   const category = url.searchParams.get('category')
@@ -153,13 +147,12 @@ export function toMarketReturnNavigation(
 
   return {
     search: {
-      window,
       ...readDirectoryFilters(url.searchParams),
       ...(directoryCategory === null ? {} : { directoryCategory }),
       ...(indexCursor === null ? {} : { indexCursor }),
       ...(providerCursor === null ? {} : { providerCursor }),
       ...(url.searchParams.has('sort') ? { sort: url.searchParams.get('sort') as MarketReturnSearch['sort'] } : {}),
-      ...(["overview", "discover", "tools", "providers", "saved", "leaderboard"].includes(url.searchParams.get("view") ?? "") ? { view: url.searchParams.get("view") as NonNullable<MarketReturnSearch['view']> } : {}),
+      ...(["discover", "tools", "providers", "saved"].includes(url.searchParams.get("view") ?? "") ? { view: url.searchParams.get("view") as NonNullable<MarketReturnSearch['view']> } : {}),
       ...(url.searchParams.has('layout') ? { layout: url.searchParams.get('layout') as 'table' | 'grid' } : {}),
       ...(query === null ? {} : { query }),
       ...(availability === 'routeable'

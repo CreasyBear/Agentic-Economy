@@ -46,7 +46,6 @@ describe("market comparison view", () => {
 
   it("renders the compact canonical comparison with Provider-qualified describe links", () => {
     const returnTo = buildMarketReturnContext({
-      window: "30d",
       query: "registry",
       compare: `${firstRef},${secondRef}`,
     });

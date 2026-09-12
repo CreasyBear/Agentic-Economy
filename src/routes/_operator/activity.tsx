@@ -1,6 +1,7 @@
 import { Link, createFileRoute, useRouter } from '@tanstack/react-router'
 import { useMemo, useState } from 'react'
 import type { ColumnDef } from '@tanstack/react-table'
+import { Activity } from 'lucide-react'
 
 import { AeEmptyState } from '@/components/ae/feedback/AeEmptyState'
 import { AeDegradedState } from '@/components/ae/feedback/AeDegradedState'
@@ -23,6 +24,23 @@ import { captureClientExceptionOnClient } from '@/lib/observability/capture-clie
 import { captureRouteException } from '@/lib/observability/capture-route-exception'
 
 export const Route = createFileRoute('/_operator/activity')({
+  staticData: {
+    nav: {
+      label: 'Calls',
+      header: { order: 3 },
+      footer: { column: 'Market', order: 3 },
+      operator: {
+        roles: ['owner'],
+        group: 'Buy',
+        groupOrder: 0,
+        order: 0,
+        icon: Activity,
+        tier: 'core',
+        mobilePrimary: true,
+        mobileOrder: 10,
+      },
+    },
+  },
   ...operatorRouteOptions,
   loader: async (): Promise<ActivityLoaderResult> => {
     try {
@@ -186,7 +204,7 @@ function ActivityAvailable({
           description="Find a capability and complete one call. Its task, outcome, amount, and receipt will appear here."
           action={
             <Button asChild className="min-h-touch">
-              <Link to="/market" search={{ window: '30d' }}>Discover capabilities</Link>
+              <Link to="/market">Discover capabilities</Link>
             </Button>
           }
         />

@@ -71,7 +71,7 @@ export function AeProviderWorkspace(props: WorkspaceProps) {
   return (
     <AeOperatorPage
       operatorRole="owner"
-      title="Tools"
+      title="Operations"
       description="Publish the exact tools agents can inspect and call."
       currentPath="/owner/offerings"
       {...(actions === undefined ? {} : { actions })}

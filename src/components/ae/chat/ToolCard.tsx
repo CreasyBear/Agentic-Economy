@@ -101,7 +101,7 @@ function ChoiceRemainder({ count, shown }: { count: number; shown: number }) {
         {remainder ? (
           <>
             {' '}
-            <a href="/market?window=30d">{chatBrowseMarket}</a>
+            <a href="/market">{chatBrowseMarket}</a>
           </>
         ) : null}
       </MarkerContent>

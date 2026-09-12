@@ -268,7 +268,7 @@ function ListingBackLink({ from, threadId }: { from?: 'thread'; threadId?: strin
 
   return (
     <Button asChild variant="ghost" size="sm" className="min-h-touch px-2">
-      <Link to="/market" search={{ window: '30d' }} hash="tools"><ArrowLeftIcon aria-hidden="true" /> Back to catalog</Link>
+      <Link to="/market" hash="tools"><ArrowLeftIcon aria-hidden="true" /> Back to catalog</Link>
     </Button>
   )
 }

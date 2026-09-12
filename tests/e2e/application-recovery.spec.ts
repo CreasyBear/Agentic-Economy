@@ -6,7 +6,6 @@ test.describe('application recovery', () => {
     const secondRef = `operation:v1:${'b'.repeat(64)}`
     const comparison = `${firstRef},${secondRef}`
     const returnContext = new URL('/market', 'http://ae.local')
-    returnContext.searchParams.set('window', '30d')
     returnContext.searchParams.set('query', 'weather alerts')
     returnContext.searchParams.set('availability', 'routeable')
     returnContext.searchParams.set('category', 'data-research')
@@ -23,7 +22,6 @@ test.describe('application recovery', () => {
       await back.click()
       await expect.poll(() => marketContext(page.url()), { timeout: 1_000 }).toEqual({
         pathname: '/market',
-        window: '30d',
         query: 'weather alerts',
         availability: 'routeable',
         category: 'data-research',
@@ -39,7 +37,6 @@ test.describe('application recovery', () => {
     await page.goForward()
     await expect.poll(() => marketContext(page.url())).toEqual({
       pathname: '/market',
-      window: '30d',
       query: 'weather alerts',
       availability: 'routeable',
       category: 'data-research',
@@ -50,7 +47,6 @@ test.describe('application recovery', () => {
     await page.reload()
     await expect.poll(() => marketContext(page.url())).toEqual({
       pathname: '/market',
-      window: '30d',
       query: 'weather alerts',
       availability: 'routeable',
       category: 'data-research',
@@ -64,7 +60,6 @@ function marketContext(value: string) {
   const url = new URL(value)
   return {
     pathname: url.pathname,
-    window: url.searchParams.get('window'),
     query: url.searchParams.get('query'),
     availability: url.searchParams.get('availability'),
     category: url.searchParams.get('category'),

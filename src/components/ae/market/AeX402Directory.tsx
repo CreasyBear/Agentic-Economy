@@ -1,6 +1,6 @@
 import { Link, useNavigate } from '@tanstack/react-router'
-import { ArrowLeftIcon, ArrowRightIcon, ChartNoAxesCombinedIcon, CompassIcon, HeartIcon, LayoutGridIcon, ListFilterIcon, SearchIcon, StoreIcon, TablePropertiesIcon, XIcon } from 'lucide-react'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { ArrowLeftIcon, ArrowRightIcon, CompassIcon, HeartIcon, ListFilterIcon, SearchIcon, StoreIcon, XIcon } from 'lucide-react'
+import { useMemo, useRef, useState } from 'react'
 
 import { AeEmptyState } from '@/components/ae/feedback/AeEmptyState'
 import { Badge } from '@/components/ui/badge'
@@ -8,18 +8,14 @@ import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/input-group'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
-import type { MarketReturnSearch } from './market-return-context'
-import { DirectoryMarketOverview } from './DirectoryMarketOverview'
+import { buildMarketReturnContext, type MarketReturnSearch } from './market-return-context'
 import { DirectoryExplorerFilters, type DirectoryExplorerFilterPatch } from './DirectoryExplorerFilters'
-import { DirectoryToolTable } from './DirectoryToolTable'
 import { DirectoryHero } from './DirectoryHero'
 import { DirectoryIndexDiscovery } from './DirectoryIndexDiscovery'
 import { DirectoryHomeDiscovery } from './DirectoryHomeDiscovery'
-import { DirectoryToolDetails } from './DirectoryToolDetails'
 import { DirectoryProvidersIndex } from './DirectoryProvidersIndex'
 import { DirectoryProviderHeader } from './DirectoryProviderHeader'
-import type { X402DirectoryAnalytics, X402DirectoryCatalogue, X402DirectoryCatalogueInput, X402DirectoryCatalogueOverview, X402DirectoryProvidersPage } from '@/modules/market/x402-directory-catalogue'
+import type { X402DirectoryCatalogue, X402DirectoryCatalogueInput, X402DirectoryCatalogueOverview, X402DirectoryProvidersPage } from '@/modules/market/x402-directory-catalogue'
 import { directoryCatalogueSearchValues } from '@/modules/market/x402-directory-navigation'
 import { directoryDate } from './directory-presentation'
 import type { X402MarketplaceHome } from '@/modules/market/x402-marketplace-home'
@@ -32,7 +28,7 @@ import type { X402DirectoryEntry, X402DirectoryFilters, X402DirectoryInput, X402
 
 type DirectorySearch = MarketReturnSearch
 
-type DirectoryProps = Readonly<{ page: X402DirectoryPage; search: DirectorySearch; home?: X402MarketplaceHome; catalogue?: X402DirectoryCatalogue; overview?: X402DirectoryCatalogueOverview; selectedEntry?: X402DirectoryEntry; providers?: X402DirectoryProvidersPage; analytics?: X402DirectoryAnalytics }>
+type DirectoryProps = Readonly<{ page: X402DirectoryPage; search: DirectorySearch; home?: X402MarketplaceHome; catalogue?: X402DirectoryCatalogue; overview?: X402DirectoryCatalogueOverview; providers?: X402DirectoryProvidersPage }>
 
 export function AeX402Directory(props: DirectoryProps) {
   return <DirectorySavedToolsProvider><DirectoryMarketplace {...props} /></DirectorySavedToolsProvider>
@@ -48,16 +44,14 @@ function directoryInput(search: X402DirectoryInput) {
   }
 }
 
-function DirectoryMarketplace({ page, search, home, catalogue, overview, selectedEntry, providers, analytics }: DirectoryProps) {
+function DirectoryMarketplace({ page, search, home, catalogue, overview, providers }: DirectoryProps) {
   const navigate = useNavigate()
-  const [selected, setSelected] = useState<SavedDirectoryTool>()
   const [comparison, setComparison] = useState<readonly SavedDirectoryTool[]>([])
   const [compareOpen, setCompareOpen] = useState(false)
-  const listingOpener = useRef<HTMLElement | null>(null)
   const searchInput = useRef<HTMLInputElement>(null)
   const compareTrigger = useRef<HTMLButtonElement>(null)
   const saved = useDirectorySavedTools()
-  const view = search.view === 'leaderboard' ? 'overview' : search.view ?? (analytics === undefined ? home === undefined ? 'tools' : 'discover' : 'overview')
+  const view = search.view ?? (home === undefined ? 'tools' : 'discover')
   const { query, offset, network, provider, maxUsdPrice } = search
   const sourceInput = useMemo(() => directoryInput({ query, offset, network, provider, maxUsdPrice }), [query, offset, network, provider, maxUsdPrice])
   const coverage = catalogue?.kind === 'ok' ? catalogue.coverage : overview?.kind === 'ok' ? overview.coverage : undefined
@@ -65,27 +59,13 @@ function DirectoryMarketplace({ page, search, home, catalogue, overview, selecte
   const count = coverage !== undefined ? `${coverage.indexedTotal.toLocaleString()} Tools in the catalogue` : page.kind === 'ok' && page.total !== undefined ? `${page.total.toLocaleString()} Tools` : undefined
   const filterValues = directoryCatalogueSearchValues(search)
   const browse = !Object.entries(filterValues).some(([key, value]) => !['sort', 'indexCursor', 'offset'].includes(key) && value !== undefined && value !== false)
-  const navigationKey = JSON.stringify({ ...filterValues, view: search.view, resource: search.resource, providerCursor: search.providerCursor })
-
-  function openListing(item: SavedDirectoryTool, fromComparison = false) {
-    listingOpener.current = fromComparison ? compareTrigger.current
-      : document.activeElement instanceof HTMLElement ? document.activeElement : searchInput.current
-    setSelected(item)
-  }
-
-  useEffect(() => {
-    setSelected(undefined)
-  }, [navigationKey])
-
-  useEffect(() => {
-    if (search.resource === undefined) return
-    const entry = search.resource === undefined ? undefined : selectedEntry?.resource === search.resource ? selectedEntry : page.kind === 'ok' ? page.items.find(item => item.resource === search.resource) : undefined
-    setSelected(current => current?.entry.resource === search.resource ? current : entry === undefined ? undefined : { entry, search: sourceInput })
-  }, [page, search.resource, sourceInput, selectedEntry])
+  // The one Tool detail surface is the `/tools/$toolRef` page; back-navigation
+  // from it returns here, to the current browse view (not to a single entry).
+  const { resource: _resource, ...returnSearch } = search
+  const returnTo = buildMarketReturnContext(returnSearch, 'tools')
 
   function applyFilters(filters: X402DirectoryFilters) {
     void navigate({ to: '/market', search: {
-      window: search.window,
       ...(search.query === undefined ? {} : { query: search.query }),
       view: view === 'providers' ? 'providers' : 'tools',
       ...(search.directoryCategory === undefined ? {} : { directoryCategory: search.directoryCategory }),
@@ -97,10 +77,10 @@ function DirectoryMarketplace({ page, search, home, catalogue, overview, selecte
   }
   function indexedSearch() {
     const { indexCursor: _cursor, offset: _offset, ...filters } = filterValues
-    return { window: search.window, ...filters, ...(search.layout === undefined ? {} : { layout: search.layout }) }
+    return { ...filters }
   }
   function explore(filters: X402DirectoryCatalogueInput) {
-    void navigate({ to: '/market', search: { window: search.window, ...filters, view: 'tools' } })
+    void navigate({ to: '/market', search: { ...filters, view: 'tools' } })
   }
   function applyExplorerFilters(patch: DirectoryExplorerFilterPatch) {
     const next = { ...indexedSearch(), ...patch, view: 'tools' as const }
@@ -115,7 +95,7 @@ function DirectoryMarketplace({ page, search, home, catalogue, overview, selecte
   function toolGrid(items: readonly SavedDirectoryTool[]) {
     return <ul className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
       {items.map(item => <li key={item.entry.resource} className="min-w-0">
-        <DirectoryToolCard entry={item.entry} onSelect={() => openListing(item)} onSave={() => saved.toggleSavedTool(item)} saved={saved.isSaved(item.entry.resource)}
+        <DirectoryToolCard entry={item.entry} returnTo={returnTo} onSave={() => saved.toggleSavedTool(item)} saved={saved.isSaved(item.entry.resource)}
           onCompare={() => toggleComparison(item)} comparing={comparison.some(other => other.entry.resource === item.entry.resource)} compareDisabled={comparison.length >= 4 && !comparison.some(other => other.entry.resource === item.entry.resource)} />
       </li>)}
     </ul>
@@ -123,7 +103,7 @@ function DirectoryMarketplace({ page, search, home, catalogue, overview, selecte
 
   return (
     <div className="ae-rail pb-page">
-      <DirectoryHero window={search.window} {...(home === undefined ? {} : { home })} compact={view !== 'discover'} {...(view === 'overview' ? { compactTitle: 'The agent economy, in focus.' } : view === 'tools' ? { compactTitle: 'Explore capabilities.' } : {})}>
+      <DirectoryHero {...(home === undefined ? {} : { home })} compact={view !== 'discover'} {...(view === 'tools' ? { compactTitle: 'Explore capabilities.' } : {})}>
         <form action="/market" method="get" role="search" className="mt-1 flex w-full max-w-2xl gap-2" onSubmit={event => {
           event.preventDefault()
           const query = new FormData(event.currentTarget).get('query')?.toString().trim() ?? ''
@@ -134,7 +114,6 @@ function DirectoryMarketplace({ page, search, home, catalogue, overview, selecte
             view: 'tools',
           } })
         }}>
-          <input type="hidden" name="window" value={search.window} />
           <input type="hidden" name="view" value="tools" />
           {search.directoryCategory === undefined ? null : <input type="hidden" name="directoryCategory" value={search.directoryCategory} />}
           {search.network === undefined ? null : <input type="hidden" name="network" value={search.network} />}
@@ -149,15 +128,14 @@ function DirectoryMarketplace({ page, search, home, catalogue, overview, selecte
         </form>
       </DirectoryHero>
       <Tabs value={view} onValueChange={value => {
-        if (value === 'overview' || value === 'discover' || value === 'tools' || value === 'providers' || value === 'saved') {
-          void navigate({ to: '/market', search: value === 'saved' || value === 'discover' || value === 'overview' || value === 'providers' ? { window: search.window, view: value } : {
+        if (value === 'discover' || value === 'tools' || value === 'providers' || value === 'saved') {
+          void navigate({ to: '/market', search: value === 'saved' || value === 'discover' || value === 'providers' ? { view: value } : {
             ...indexedSearch(), ...(search.indexCursor === undefined ? {} : { indexCursor: search.indexCursor }), view: value,
           } })
         }
       }}>
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-4">
           <TabsList variant="line" className="max-w-full justify-start overflow-x-auto overflow-y-hidden" aria-label="Browse the marketplace">
-            <TabsTrigger value="overview" className="px-3"><ChartNoAxesCombinedIcon aria-hidden="true" />Overview</TabsTrigger>
             <TabsTrigger value="tools" className="px-3"><ListFilterIcon aria-hidden="true" />Tools</TabsTrigger>
             <TabsTrigger value="discover" className="px-3"><CompassIcon aria-hidden="true" />Collections</TabsTrigger>
             <TabsTrigger value="providers" className="px-3"><StoreIcon aria-hidden="true" />Providers</TabsTrigger>
@@ -165,20 +143,15 @@ function DirectoryMarketplace({ page, search, home, catalogue, overview, selecte
           </TabsList>
           <div className="flex items-center gap-3">
             {count === undefined || view === 'saved' ? null : <span className="text-xs text-muted-foreground">{count}</span>}
-            {view === 'saved' || view === 'discover' || view === 'overview' || indexed ? null : <DirectoryFilters search={search} onApply={applyFilters} />}
+            {view === 'saved' || view === 'discover' || indexed ? null : <DirectoryFilters search={search} onApply={applyFilters} />}
           </div>
         </div>
         {saved.saveError === undefined ? null : <p role="alert" className="py-3 text-sm text-destructive">{saved.saveError}</p>}
         <TabsContent value="discover" className="pt-7">
-          {overview?.kind === 'ok' ? <DirectoryIndexDiscovery overview={overview} window={search.window} onSelect={openListing} onSave={saved.toggleSavedTool} isSaved={saved.isSaved} onCompare={toggleComparison}
+          {overview?.kind === 'ok' ? <DirectoryIndexDiscovery overview={overview} returnTo={returnTo} onSave={saved.toggleSavedTool} isSaved={saved.isSaved} onCompare={toggleComparison}
             isComparing={resource => comparison.some(item => item.entry.resource === resource)} compareDisabled={resource => comparison.length >= 4 && !comparison.some(item => item.entry.resource === resource)} /> : null}
-          {home === undefined ? <AeEmptyState title="Explore the Tool catalogue" description="Open All Tools to browse the current directory, or search for a service above." action={<Button asChild variant="outline"><Link to="/market" search={{ window: search.window, view: 'tools' }}>Browse all Tools</Link></Button>} /> : <DirectoryHomeDiscovery home={home} window={search.window} onSelect={openListing} onSave={saved.toggleSavedTool} isSaved={saved.isSaved} onCompare={toggleComparison}
+          {home === undefined ? <AeEmptyState title="Explore the Tool catalogue" description="Open All Tools to browse the current directory, or search for a service above." action={<Button asChild variant="outline"><Link to="/market" search={{ view: 'tools' }}>Browse all Tools</Link></Button>} /> : <DirectoryHomeDiscovery home={home} returnTo={returnTo} onSave={saved.toggleSavedTool} isSaved={saved.isSaved} onCompare={toggleComparison}
             isComparing={resource => comparison.some(item => item.entry.resource === resource)} compareDisabled={resource => comparison.length >= 4 && !comparison.some(item => item.entry.resource === resource)} />}
-        </TabsContent>
-        <TabsContent value="overview" className="pt-6">
-          <DirectoryMarketOverview {...(analytics === undefined ? {} : { analytics })} widelyUsed={page.kind === 'ok' ? page.items : []} onExplore={explore}
-            onPriceNetworkChange={network => { void navigate({ to: '/market', search: { window: search.window, view: 'overview', ...(network === undefined ? {} : { network }) } }) }}
-            onSelect={openListing} onSave={saved.toggleSavedTool} isSaved={saved.isSaved} onCompare={toggleComparison} isCompared={resource => comparison.some(item => item.entry.resource === resource)} compareDisabled={comparison.length >= 4} />
         </TabsContent>
         <TabsContent value="saved" className="pt-5">
           <div className="mb-5 flex flex-wrap items-baseline justify-between gap-2">
@@ -188,14 +161,13 @@ function DirectoryMarketplace({ page, search, home, catalogue, overview, selecte
           {!saved.hydrated ? <p role="status">Loading saved Tools…</p> : saved.savedTools.length === 0 ? <AeEmptyState icon={<HeartIcon />} title="Keep a few possibilities close" description="Save a Tool from its card, then come back when your agent needs it." /> : toolGrid(saved.savedTools)}
         </TabsContent>
         {(['tools', 'providers'] as const).map(tab => <TabsContent key={tab} value={tab} className="pt-5">
-          {tab === 'providers' && providers !== undefined ? <DirectoryProvidersIndex result={providers} window={search.window} /> : <div className={indexed && tab === 'tools' ? 'grid min-w-0 items-start gap-5 md:grid-cols-[13rem_minmax(0,1fr)] lg:gap-7' : 'min-w-0'}>
+          {tab === 'providers' && providers !== undefined ? <DirectoryProvidersIndex result={providers} /> : <div className={indexed && tab === 'tools' ? 'grid min-w-0 items-start gap-5 md:grid-cols-[13rem_minmax(0,1fr)] lg:gap-7' : 'min-w-0'}>
           {indexed && tab === 'tools' ? <DirectoryExplorerFilters search={search} {...(overview === undefined ? {} : { overview })} onChange={applyExplorerFilters} onReset={() => explore({})} /> : null}
           <section className="min-w-0" aria-label="Tool results">
           {indexed ? <div className="mb-5 flex flex-wrap items-center justify-between gap-3" aria-label="Catalogue ordering and display">
             <Select value={search.query === undefined ? search.sort ?? 'adoption' : 'relevance'} onValueChange={value => { if (value === 'popular' || value === 'updated' || value === 'relevance' || value === 'adoption' || value === 'price_asc') void navigate({ to: '/market', search: { ...indexedSearch(), view: tab, sort: value } }) }}>
               <SelectTrigger className="min-h-10 bg-card" aria-label="Sort Tools"><SelectValue /></SelectTrigger><SelectContent><SelectGroup>{search.query === undefined ? <><SelectItem value="adoption">Broader adoption · 30 days</SelectItem><SelectItem value="price_asc">Lowest listed price</SelectItem><SelectItem value="updated">Recently updated</SelectItem>{search.sort === 'popular' ? <SelectItem value="popular">Call volume · 30 days</SelectItem> : null}</> : <SelectItem value="relevance">Search relevance</SelectItem>}</SelectGroup></SelectContent>
             </Select>
-            {tab !== 'tools' ? null : <ToggleGroup type="single" value={search.layout ?? 'table'} onValueChange={layout => { if (layout === 'table' || layout === 'grid') void navigate({ to: '/market', search: { ...search, layout } }) }} variant="outline" size="sm" aria-label="Tool display"><ToggleGroupItem value="table" aria-label="Table view"><TablePropertiesIcon /></ToggleGroupItem><ToggleGroupItem value="grid" aria-label="Card view"><LayoutGridIcon /></ToggleGroupItem></ToggleGroup>}
           </div> : null}
           {search.provider !== undefined && page.kind === 'ok' ? <div className="mb-8"><DirectoryProviderHeader provider={search.provider} entries={page.items} /></div> : null}
           <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
@@ -204,7 +176,7 @@ function DirectoryMarketplace({ page, search, home, catalogue, overview, selecte
               {indexed && search.query !== undefined ? <p className="mt-1 text-xs text-muted-foreground">Keyword search across the catalogue</p> : null}
               {page.kind === 'ok' && page.items.length > 0 ? <p className="mt-1 text-xs text-muted-foreground">{indexed ? `${page.items.length} Tools on this page` : page.mode === 'search' || !browse ? `${page.items.length} matching Tools` : `Showing ${page.offset + 1}–${page.offset + page.items.length}${page.total === undefined ? '' : ` of ${page.total.toLocaleString()}`}`}</p> : null}
             </div>
-            {!browse ? <Button asChild variant="ghost" size="sm"><Link to="/market" search={{ window: search.window, view: tab }}><XIcon />Clear search & filters</Link></Button> : null}
+            {!browse ? <Button asChild variant="ghost" size="sm"><Link to="/market" search={{ view: tab }}><XIcon />Clear search & filters</Link></Button> : null}
           </div>
           {search.network !== undefined || search.maxUsdPrice !== undefined ? <div className="mb-4 flex flex-wrap gap-2">{search.network === undefined ? null : <Badge variant="outline">Network: {overview?.kind === 'ok' ? overview.networks.find(item => item.key === search.network)?.label ?? search.network : search.network}</Badge>}{search.maxUsdPrice === undefined ? null : <Badge variant="outline">Up to {search.maxUsdPrice} USDC</Badge>}</div> : null}
           {page.kind === 'unavailable' ? <AeEmptyState icon={<SearchIcon />} title={page.reason === 'query_invalid' ? 'Check your search' : 'Catalogue temporarily unavailable'}
@@ -212,16 +184,15 @@ function DirectoryMarketplace({ page, search, home, catalogue, overview, selecte
             action={<Button asChild variant="outline"><Link to="/market" reloadDocument search={search.indexCursor === undefined ? search : { ...indexedSearch(), view: tab }}>{search.indexCursor === undefined ? "Try again" : "Refresh results"}</Link></Button>} /> : <>
             {page.partialResults === true ? <p role="status" className="mb-4 text-sm text-muted-foreground">Coinbase returned its top matches. Refine your search to find more Tools.</p> : null}
             {page.items.length === 0 ? <AeEmptyState title={indexed && catalogue.kind === 'ok' && !catalogue.isDone ? 'More of the catalogue remains' : 'No matching Tools'} description={indexed && catalogue.kind === 'ok' && !catalogue.isDone ? 'No matches in this portion. Continue to the next page to check the remaining Tools.' : 'Try a different description or broaden your filters.'} /> : tab === 'providers'
-              ? <DirectoryProviderCards entries={page.items} onSelect={provider => { void navigate({ to: '/market', search: { window: search.window, ...sourceInput, provider, offset: 0 } }) }} />
-              : indexed && search.layout !== 'grid' ? <DirectoryToolTable entries={page.items} sourceInput={sourceInput} onSelect={openListing} onSave={saved.toggleSavedTool} isSaved={saved.isSaved} onCompare={toggleComparison} isCompared={resource => comparison.some(item => item.entry.resource === resource)} compareDisabled={comparison.length >= 4} />
+              ? <DirectoryProviderCards entries={page.items} onSelect={provider => { void navigate({ to: '/market', search: { ...sourceInput, provider, offset: 0 } }) }} />
               : toolGrid(page.items.map(entry => ({ entry, search: sourceInput })))}
             <nav aria-label="Catalogue pages" className="mt-8 flex justify-between gap-4 border-t border-border pt-5">
               {indexed ? <>
                 <span>{search.indexCursor === undefined ? null : <Button asChild variant="outline"><Link to="/market" search={{ ...indexedSearch(), view: tab }}><ArrowLeftIcon />First page</Link></Button>}</span>
                 {catalogue.indexCursor === undefined ? null : <Button asChild variant="outline"><Link to="/market" search={{ ...indexedSearch(), view: tab, indexCursor: catalogue.indexCursor }}>Next page<ArrowRightIcon /></Link></Button>}
               </> : <>
-              <span>{page.previousOffset === undefined ? null : <Button asChild variant="outline"><Link to="/market" search={{ window: search.window, ...sourceInput, view: tab, offset: page.previousOffset }}><ArrowLeftIcon />Previous page</Link></Button>}</span>
-              {page.nextOffset === undefined ? null : <Button asChild variant="outline"><Link to="/market" search={{ window: search.window, ...sourceInput, view: tab, offset: page.nextOffset }}>Next page<ArrowRightIcon /></Link></Button>}
+              <span>{page.previousOffset === undefined ? null : <Button asChild variant="outline"><Link to="/market" search={{ ...sourceInput, view: tab, offset: page.previousOffset }}><ArrowLeftIcon />Previous page</Link></Button>}</span>
+              {page.nextOffset === undefined ? null : <Button asChild variant="outline"><Link to="/market" search={{ ...sourceInput, view: tab, offset: page.nextOffset }}>Next page<ArrowRightIcon /></Link></Button>}
             </>}
             </nav>
             <p className="mt-4 text-xs text-muted-foreground">Directory: Coinbase Bazaar. Descriptions and payment requirements are published by providers.</p>
@@ -238,30 +209,12 @@ function DirectoryMarketplace({ page, search, home, catalogue, overview, selecte
       </div>}
       <DirectoryComparison entries={comparison.map(item => item.entry)} open={compareOpen} onOpenChange={setCompareOpen} onCloseAutoFocus={event => {
         event.preventDefault()
-        if (selected === undefined) compareTrigger.current?.focus()
-      }} onSelect={entry => {
-        const item = comparison.find(other => other.entry.resource === entry.resource)
-        if (item !== undefined) openListing(item, true)
-      }} />
-      <DirectoryToolDetails {...(selected === undefined ? {} : { selected })} window={search.window} saved={selected !== undefined && saved.isSaved(selected.entry.resource)}
-        onSave={() => { if (selected !== undefined) saved.toggleSavedTool(selected) }} onClose={() => {
-          setSelected(undefined)
-          if (search.resource !== undefined) {
-            const { resource: _resource, ...remaining } = search
-            void navigate({ to: '/market', search: remaining, replace: true })
-          }
-        }}
-        onProviderSelect={provider => { setSelected(undefined); void navigate({ to: '/market', search: { window: search.window, ...sourceInput, provider, offset: 0, view: 'tools' } }) }}
-        onCloseAutoFocus={event => {
-          event.preventDefault()
-          const opener = listingOpener.current
-          if (opener?.isConnected) opener.focus()
-          else searchInput.current?.focus()
-        }} />
+        compareTrigger.current?.focus()
+      }} returnTo={returnTo} />
     </div>
   )
 }
 
-export function X402DirectoryCards({ entries, onSelect }: Readonly<{ entries: readonly X402DirectoryEntry[]; onSelect?: (entry: X402DirectoryEntry) => void }>) {
-  return <ul className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">{entries.map((entry, index) => <li key={`${entry.resource}:${index}`} className="min-w-0"><DirectoryToolCard entry={entry} {...(onSelect === undefined ? {} : { onSelect })} /></li>)}</ul>
+export function X402DirectoryCards({ entries }: Readonly<{ entries: readonly X402DirectoryEntry[] }>) {
+  return <ul className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">{entries.map((entry, index) => <li key={`${entry.resource}:${index}`} className="min-w-0"><DirectoryToolCard entry={entry} /></li>)}</ul>
 }

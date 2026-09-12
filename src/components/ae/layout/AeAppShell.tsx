@@ -1,5 +1,5 @@
-import { Fragment, useEffect, useRef, useState, useSyncExternalStore, type CSSProperties, type ReactNode, type RefObject } from 'react'
-import { Link, useLocation } from '@tanstack/react-router'
+import { Fragment, useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type ReactNode, type RefObject } from 'react'
+import { Link, useMatchRoute, useRouter } from '@tanstack/react-router'
 import { MenuIcon, XIcon } from 'lucide-react'
 
 import { AeCommandPanel, CommandPanelProvider } from '@/components/ae/command-panel'
@@ -10,12 +10,14 @@ import { Button } from '@/components/ui/button'
 import { AeSiteDrawerNav, AeSiteIconButton } from '@/components/ae/website/AeSiteNav'
 import { AeVerticalHairline } from '@/components/ae/website/AeSiteMarks'
 import { AECON_MARK_SRC, AECON_MOBILE_LOCKUP_SRC, aeconMarkClassName } from '@/content/brand-assets'
-import {
-  isPublicPrimaryNavActive,
-  publicPrimaryNavItems,
-  type PublicFooterRouteLink,
-} from '@/lib/public/website-nav'
 import { cn } from '@/lib/utils'
+
+type HeaderNavItem = {
+  to: string
+  label: string
+  search?: Record<string, string>
+  order: number
+}
 
 function AeFunnelAttributionBoot() {
   useEffect(() => {
@@ -127,9 +129,6 @@ export function AeAppShell({ children }: { children: ReactNode }) {
                 <Button asChild variant="ghost" className="hidden lg:inline-flex">
                   <Link to="/sign-in/$" params={{ _splat: '' }}>Sign in</Link>
                 </Button>
-                <Button asChild variant="outline" className="hidden sm:inline-flex">
-                  <Link to="/for-providers">Publish</Link>
-                </Button>
                 <SheetTrigger asChild>
                   <AeSiteIconButton
                     ariaLabel={mobileNavOpen ? 'Close public menu' : 'Open public menu'}
@@ -154,9 +153,6 @@ export function AeAppShell({ children }: { children: ReactNode }) {
               <div className="grid gap-intra border-t border-border p-gutter">
                 <Button asChild variant="outline">
                   <Link to="/sign-in/$" params={{ _splat: '' }} onClick={() => setMobileNavOpen(false)}>Sign in</Link>
-                </Button>
-                <Button asChild>
-                  <Link to="/for-providers" onClick={() => setMobileNavOpen(false)}>Publish</Link>
                 </Button>
               </div>
             </SheetContent>
@@ -191,22 +187,34 @@ function BrandLink() {
 }
 
 function AppHeaderNav() {
-  const { pathname } = useLocation()
+  const { routesByPath } = useRouter()
+  const items = useMemo(
+    () =>
+      Object.values(routesByPath)
+        .flatMap((route) => {
+          const nav = route.options.staticData?.nav
+          if (nav?.header === undefined) return []
+          return [{ to: route.to, label: nav.label, search: nav.search, order: nav.header.order }]
+        })
+        .sort((a, b) => a.order - b.order),
+    [routesByPath],
+  )
 
   return (
     <nav aria-label="Primary" className="hidden items-center md:flex">
-      {publicPrimaryNavItems.map((item, index) => (
+      {items.map((item, index) => (
         <Fragment key={item.to}>
           {index > 0 ? <AeVerticalHairline /> : null}
-          <AppHeaderNavLink item={item} pathname={pathname} />
+          <AppHeaderNavLink item={item} />
         </Fragment>
       ))}
     </nav>
   )
 }
 
-function AppHeaderNavLink({ item, pathname }: { item: PublicFooterRouteLink; pathname: string }) {
-  const active = isPublicPrimaryNavActive(pathname, item)
+function AppHeaderNavLink({ item }: { item: HeaderNavItem }) {
+  const matchRoute = useMatchRoute()
+  const active = matchRoute({ to: item.to, fuzzy: true, includeSearch: false }) !== false
 
   return (
     <Link

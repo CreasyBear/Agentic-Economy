@@ -17,6 +17,12 @@ import { AePublicPage } from '@/components/ae/layout/AePublicPage'
 import { buildPublicPageHead } from '@/modules/seo/public'
 
 export const Route = createFileRoute('/privacy')({
+  staticData: {
+    nav: {
+      label: 'Privacy',
+      footer: { column: 'Legal', order: 0 },
+    },
+  },
   head: () => buildPublicPageHead({
     path: '/privacy',
     title: 'Privacy | Agentic Economy',

@@ -475,7 +475,7 @@ function SearchRecovery({
           Clear search
         </Button>
         <Button asChild variant="secondary" size="sm" className="min-h-touch">
-          <a href="/market?window=30d#tools">Browse current Tools</a>
+          <a href="/market#tools">Browse current Tools</a>
         </Button>
       </div>
     </div>

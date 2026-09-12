@@ -61,7 +61,7 @@ function SignInRoute() {
             body={body}
           >
             <AeSiteButton asChild>
-              <a href={isAgentAccessFlow ? '/agent-access' : '/market?window=30d#tools'}>
+              <a href={isAgentAccessFlow ? '/agent-access' : '/market#tools'}>
                 {isAgentAccessFlow ? 'Open agent access preview' : 'Browse the catalog'}
               </a>
             </AeSiteButton>

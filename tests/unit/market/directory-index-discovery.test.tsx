@@ -6,6 +6,7 @@ import '../../setup/jsdom-platform'
 import { DirectoryIndexDiscovery } from '@/components/ae/market/DirectoryIndexDiscovery'
 import type { X402DirectoryCatalogueOverview } from '@/modules/market/x402-directory-catalogue'
 import type { X402IndexedDirectoryEntry } from '@/modules/market/x402-directory-index'
+import { x402PendingToolRef } from '@/modules/market/x402-directory'
 
 function indexed(id: number, provider = 'repeat.example.com'): X402IndexedDirectoryEntry {
   return { entry: { resource: `https://${provider}/tool/${id}`, title: `Tool ${id}`, description: `Description ${id}`, provider, protocol: 'http', prices: [], metadataJson: '{}', activity: { calls30d: 1_000 - id }, provenance: { directory: 'Coinbase Bazaar', metadata: 'provider_declared', updatedAt: '2026-09-08T12:00:00Z' } }, category: 'unclassified', categorySource: 'unclassified', observedAt: 1, sourceDigest: `digest-${id}` }
@@ -24,10 +25,10 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.unstubAllGlobals() })
 function show(data = overview) {
   const root = createRootRoute()
-  const router = createRouter({ routeTree: root.addChildren([createRoute({ getParentRoute: () => root, path: '/market' })]), history: createMemoryHistory({ initialEntries: ['/market'] }) })
-  const select = vi.fn(), save = vi.fn(), compare = vi.fn()
-  render(<RouterContextProvider router={router}><DirectoryIndexDiscovery overview={data} window="7d" onSelect={select} onSave={save} onCompare={compare} isSaved={resource => resource === popular[1]!.entry.resource} isComparing={resource => resource === popular[1]!.entry.resource} compareDisabled={resource => resource === popular[2]!.entry.resource} /></RouterContextProvider>)
-  return { select, save, compare }
+  const router = createRouter({ routeTree: root.addChildren([createRoute({ getParentRoute: () => root, path: '/market' }), createRoute({ getParentRoute: () => root, path: '/tools/$toolRef' })]), history: createMemoryHistory({ initialEntries: ['/market'] }) })
+  const save = vi.fn(), compare = vi.fn()
+  render(<RouterContextProvider router={router}><DirectoryIndexDiscovery overview={data} onSave={save} onCompare={compare} isSaved={resource => resource === popular[1]!.entry.resource} isComparing={resource => resource === popular[1]!.entry.resource} compareDisabled={resource => resource === popular[2]!.entry.resource} /></RouterContextProvider>)
+  return { save, compare }
 }
 function linkSearch(name: string) { return new URL(screen.getByRole('link', { name }).getAttribute('href')!, 'https://aecon.ai').searchParams }
 
@@ -42,17 +43,17 @@ it('preserves all source-ranked entries including repeated Providers and uses tr
   expect(linkSearch('View all recently updated').get('sort')).toBe('updated')
   for (const name of ['View all popular tools', 'View all recently updated']) {
     expect(linkSearch(name).get('view')).toBe('tools')
-    expect(linkSearch(name).get('window')).toBe('7d')
     expect(linkSearch(name).has('query')).toBe(false)
   }
   expect(screen.queryByText(/new Tools|newly added/iu)).toBeNull()
 })
 it('passes exact resources with an empty source search and preserves saved and comparison control state', () => {
-  const { select, save, compare } = show()
-  fireEvent.click(screen.getByRole('button', { name: 'Tool 0' }))
+  const { save, compare } = show()
+  const toolUrl = new URL(screen.getByRole('link', { name: 'Tool 0' }).getAttribute('href')!, 'https://aecon.ai')
+  expect(decodeURIComponent(toolUrl.pathname.replace('/tools/', ''))).toBe(x402PendingToolRef(popular[0]!.entry.resource))
   fireEvent.click(screen.getByRole('button', { name: 'Save Tool 0' }))
   fireEvent.click(screen.getByRole('button', { name: 'Add Tool 0 to comparison' }))
-  for (const callback of [select, save, compare]) expect(callback).toHaveBeenCalledWith({ entry: popular[0]!.entry, search: {} })
+  for (const callback of [save, compare]) expect(callback).toHaveBeenCalledWith({ entry: popular[0]!.entry, search: {} })
   expect(screen.getByRole('button', { name: 'Unsave Tool 1' }).getAttribute('aria-pressed')).toBe('true')
   expect(screen.getByRole('button', { name: 'Remove Tool 1 from comparison' }).getAttribute('aria-pressed')).toBe('true')
   expect((screen.getByRole('button', { name: 'Add Tool 2 to comparison' }) as HTMLButtonElement).disabled).toBe(true)
@@ -70,7 +71,6 @@ it('shows the supplied twelve A–Z Provider samples with global counts and scop
     const search = linkSearch(`View Tools from ${provider.label}`)
     expect(search.get('provider')).toBe(provider.key)
     expect(search.get('view')).toBe('tools')
-    expect(search.get('window')).toBe('7d')
   }
 })
 it('keeps honest empty ranked shelves and navigation available without fake activity or dates', () => {

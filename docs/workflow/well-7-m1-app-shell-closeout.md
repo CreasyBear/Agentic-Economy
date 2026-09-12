@@ -50,6 +50,10 @@ Date: 2026-09-10. Branch `well-7/app-shell` (on `well-6/operator-truth` until #2
 
 Five read-only goblins (copy and positioning, design and taste, hostility in forms and errors, transitions and route states, machine surfaces) and four behaviour goblins (buyer over the CLI, hostile agent over HTTP and MCP, a human in a browser at 375/768/1440, a provider walking publish → listed → Calls and earnings) produced 80 findings, consolidated with root-cause groups in `docs/workflow/well-7-swarm-triage.md`. Fixed in this PR from the swarm: stacked brand marks on operator pages (the rail now names the mode only); `ae supply --help` missing `calls`; provider `earnings`/`tools`/`connections` reads returning `503 source_unavailable` because three Convex validators rejected the tracing field the server passes; `/owner/offerings/new` crashing SSR under the local Clerk bypass because it called a Clerk hook unconditionally. Two decisions are Joel's (accent colour authority; sandbox-vs-production visibility in describe). The rest is filed to M2–M8 by owner module.
 
+## Standing contract (2026-09-11)
+
+`docs/architecture/stable-application-definition.md` is now the standing four-axis contract (Source, Behaviour, Transitions, IA) for the app; new drift gets checked against it rather than a fresh audit. M2 (settings that act) is resolved by deletion of the redirect routes, with connections and earnings living on the Operations landing rather than as separate nested pages. Triage items closed by this work: W7-001, W7-002, W7-003, W7-004, W7-005, W7-006, W7-007, W7-008, W7-010, W7-011, W7-012, W7-062 (resolved as a DESIGN.md fix, not a colour change).
+
 ## Follow-ons
 
 - U9 `/plan-design-review` on the unified shell, then the polish tasks it names (the swarm's design groups G6 and G13 are its input).

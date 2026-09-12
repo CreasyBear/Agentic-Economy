@@ -121,7 +121,7 @@ function ProviderListingError() {
       action={
         <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
           <Button asChild variant="default" className="min-h-touch"><a href={pathname}>Try again</a></Button>
-          <Button asChild variant="secondary" className="min-h-touch"><Link to="/market" search={{ window: '30d' }} hash="tools">Back to catalog</Link></Button>
+          <Button asChild variant="secondary" className="min-h-touch"><Link to="/market" hash="tools">Back to catalog</Link></Button>
         </div>
       }
     />
@@ -139,7 +139,7 @@ export function PublicBusinessUnavailable() {
       action={
         <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
           <Button asChild variant="default" className="min-h-touch"><a href={pathname}>Try again</a></Button>
-          <Button asChild variant="secondary" className="min-h-touch"><Link to="/market" search={{ window: '30d' }} hash="tools">Back to catalog</Link></Button>
+          <Button asChild variant="secondary" className="min-h-touch"><Link to="/market" hash="tools">Back to catalog</Link></Button>
         </div>
       }
     />

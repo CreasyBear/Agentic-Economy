@@ -1,23 +1,41 @@
-import { Fragment, forwardRef, type ButtonHTMLAttributes } from 'react'
-import { Link, useLocation } from '@tanstack/react-router'
+import { Fragment, forwardRef, useMemo, type ButtonHTMLAttributes } from 'react'
+import { Link, useMatchRoute, useRouter } from '@tanstack/react-router'
 
 import { AeDottedRule, AeVerticalHairline } from '@/components/ae/website/AeSiteMarks'
 import { cn } from '@/lib/utils'
-import {
-  isPublicPrimaryNavActive,
-  publicPrimaryNavItems,
-  type PublicFooterRouteLink,
-} from '@/lib/public/website-nav'
+
+type HeaderNavItem = {
+  to: string
+  label: string
+  search?: Record<string, string>
+  order: number
+}
+
+function useHeaderNavItems(): HeaderNavItem[] {
+  const { routesByPath } = useRouter()
+
+  return useMemo(
+    () =>
+      Object.values(routesByPath)
+        .flatMap((route) => {
+          const nav = route.options.staticData?.nav
+          if (nav?.header === undefined) return []
+          return [{ to: route.to, label: nav.label, search: nav.search, order: nav.header.order }]
+        })
+        .sort((a, b) => a.order - b.order),
+    [routesByPath],
+  )
+}
 
 export function AeSitePrimaryNav() {
-  const { pathname } = useLocation()
+  const items = useHeaderNavItems()
 
   return (
     <nav aria-label="Primary" className="hidden items-center lg:flex">
-      {publicPrimaryNavItems.map((item, index) => (
+      {items.map((item, index) => (
         <Fragment key={item.to}>
           {index > 0 ? <AeVerticalHairline /> : null}
-          <PublicNavLink item={item} pathname={pathname} />
+          <PublicNavLink item={item} />
         </Fragment>
       ))}
     </nav>
@@ -25,14 +43,14 @@ export function AeSitePrimaryNav() {
 }
 
 export function AeSiteDrawerNav({ onNavigate }: { onNavigate: () => void }) {
-  const { pathname } = useLocation()
+  const items = useHeaderNavItems()
 
   return (
     <nav aria-label="Public navigation" className="grid content-center gap-section px-gutter py-page">
-      {publicPrimaryNavItems.map((item, index) => (
+      {items.map((item, index) => (
         <Fragment key={item.to}>
           {index > 0 ? <AeDottedRule /> : null}
-          <PublicNavLink item={item} pathname={pathname} onNavigate={onNavigate} drawer />
+          <PublicNavLink item={item} onNavigate={onNavigate} drawer />
         </Fragment>
       ))}
     </nav>
@@ -41,16 +59,15 @@ export function AeSiteDrawerNav({ onNavigate }: { onNavigate: () => void }) {
 
 function PublicNavLink({
   item,
-  pathname,
   onNavigate,
   drawer = false,
 }: {
-  item: PublicFooterRouteLink
-  pathname: string
+  item: HeaderNavItem
   onNavigate?: () => void
   drawer?: boolean
 }) {
-  const active = isPublicPrimaryNavActive(pathname, item)
+  const matchRoute = useMatchRoute()
+  const active = matchRoute({ to: item.to, fuzzy: true, includeSearch: false }) !== false
 
   return (
     <Link

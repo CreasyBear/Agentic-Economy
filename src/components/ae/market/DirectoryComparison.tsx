@@ -1,7 +1,9 @@
+import { Link } from '@tanstack/react-router'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import type { X402DirectoryEntry } from '@/modules/market/x402-directory'
+import { x402PendingToolRef, type X402DirectoryEntry } from '@/modules/market/x402-directory'
+import type { MarketReturnContext } from './market-return-context'
 
 const rows: readonly Readonly<{ label: string; value: (entry: X402DirectoryEntry) => string }>[] = [
   { label: 'Provider hostname', value: entry => entry.provider },
@@ -13,12 +15,12 @@ const rows: readonly Readonly<{ label: string; value: (entry: X402DirectoryEntry
   { label: 'Calls in 30 days', value: entry => entry.activity?.calls30d?.toLocaleString() ?? 'Not reported' },
 ]
 
-export function DirectoryComparison({ entries, open, onOpenChange, onCloseAutoFocus, onSelect }: Readonly<{
+export function DirectoryComparison({ entries, open, onOpenChange, onCloseAutoFocus, returnTo }: Readonly<{
   entries: readonly X402DirectoryEntry[]
   open: boolean
   onOpenChange: (open: boolean) => void
   onCloseAutoFocus: (event: Event) => void
-  onSelect: (entry: X402DirectoryEntry) => void
+  returnTo?: MarketReturnContext
 }>) {
   return <Dialog open={open} onOpenChange={onOpenChange}>
     <DialogContent className="max-h-[85dvh] overflow-y-auto sm:max-w-5xl" onCloseAutoFocus={onCloseAutoFocus}>
@@ -31,7 +33,7 @@ export function DirectoryComparison({ entries, open, onOpenChange, onCloseAutoFo
         <TableHeader><TableRow><TableHead className="min-w-36 font-sans normal-case tracking-normal">Tool</TableHead>{entries.map(entry => <TableHead key={entry.resource} className="min-w-56 max-w-72 whitespace-normal py-4 font-sans text-sm normal-case tracking-normal">{entry.title}</TableHead>)}</TableRow></TableHeader>
         <TableBody>
           {rows.map(row => <TableRow key={row.label}><TableCell className="align-top font-medium">{row.label}</TableCell>{entries.map(entry => <TableCell key={entry.resource} className="max-w-72 whitespace-normal break-words align-top text-muted-foreground">{row.value(entry)}</TableCell>)}</TableRow>)}
-          <TableRow><TableCell />{entries.map(entry => <TableCell key={entry.resource}><Button variant="outline" onClick={() => { onOpenChange(false); onSelect(entry) }}>Inspect Tool</Button></TableCell>)}</TableRow>
+          <TableRow><TableCell />{entries.map(entry => <TableCell key={entry.resource}><Button asChild variant="outline"><Link to="/tools/$toolRef" params={{ toolRef: x402PendingToolRef(entry.resource) }} {...(returnTo === undefined ? {} : { search: { from: returnTo } })}>Inspect Tool</Link></Button></TableCell>)}</TableRow>
         </TableBody>
       </Table>
     </DialogContent>

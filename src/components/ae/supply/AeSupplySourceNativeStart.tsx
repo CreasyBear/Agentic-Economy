@@ -12,6 +12,7 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
 import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
+import { REASON_COPY, REASON_COPY_FALLBACK } from '@/content/reason-copy'
 import { isRecord } from '@/modules/common/is-record'
 import type { ProviderConnectionOwnerProjection } from '@/modules/capability-supply/provider-connection'
 import type {
@@ -519,10 +520,7 @@ function pricingInput(
 }
 
 function publicationError(reason: string): string {
-  if (reason === 'source_changed' || reason === 'candidate_changed') return 'The source changed after preview. Find Tools again, then review the current facts.'
-  if (reason === 'connection_required' || reason === 'connection_unavailable') return 'The source connection is unavailable. Reconnect it, then submit again.'
-  if (reason === 'source_authority_review_required') return 'AE received the service. It remains Under review until source authority is confirmed.'
-  return `AE could not submit this Tool (${reason}). Review the source and try again.`
+  return REASON_COPY[reason] ?? REASON_COPY_FALLBACK
 }
 
 function CandidateRow({ candidate }: Readonly<{ candidate: SupplyToolCandidate }>) {
@@ -534,7 +532,7 @@ function CandidateRow({ candidate }: Readonly<{ candidate: SupplyToolCandidate }
         <p className="font-semibold text-foreground">{candidate.title}</p>
         <p className="text-sm text-muted-foreground">{candidate.description}</p>
         <p className="text-sm text-muted-foreground">{candidate.authentication.kind === 'public' ? 'Public' : 'Connection required'} · {candidate.validationExampleAvailable ? 'Validation input available' : 'Validation input required'}</p>
-        {supported ? null : <p className="text-sm text-destructive">Action required: update this Tool at its source ({candidate.disposition.reason}).</p>}
+        {supported ? null : <p className="text-sm text-destructive">Action required: update this Tool at its source. {REASON_COPY[candidate.disposition.reason] ?? REASON_COPY_FALLBACK}</p>}
       </div>
     </div>
   )

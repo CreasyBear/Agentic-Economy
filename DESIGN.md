@@ -2,7 +2,8 @@
 
 **Status:** active product design contract
 
-**Revised:** 2026-09-08
+**Revised:** 2026-09-11
+Aligned to aecon brand guidelines (PDF, 2026-09).
 
 ## Current app and market direction
 
@@ -29,10 +30,17 @@ state that an authorised agent can discover only by screen-scraping or support
 intervention.
 
 The visual grammar follows the Twenty public site and owner product: white data
-surfaces on a neutral field, near-black actions, one violet-blue accent,
+surfaces on a neutral field, near-black actions, one forest accent,
 near-square radii, hairline structure, aligned numeric values and stepped
 grotesk type. Restraint matters because commercial state and provenance need to
 remain visible.
+
+### Feel
+
+Agentic Economy feels like the Airbnb of the agentic economy, not a trading
+desk: Tools are listings, Providers are hosts, and trust comes from Qualified
+Use and provenance. Customer-facing surfaces must not use tickers, time-window
+selectors, movers or sparklines.
 
 ## What the interface must make legible
 
@@ -65,17 +73,19 @@ language may be shorter, but it must not invent a simpler commercial model.
 
 ## Type
 
-- `font-sans` (Host Grotesk) carries interface text, prose, headings, forms and
-  controls.
-- `font-mono` (Azeret Mono) carries prices, amounts, identifiers, timestamps,
-  code, keyboard hints and values whose alignment matters.
-- `font-display` (Aleo 300) carries one public display statement per page and
-  nothing else.
+- `font-sans` (Manrope, `--ae-font-sans`) carries interface text, prose,
+  headings, forms and controls, at ExtraLight 200, Regular 400 or Medium 500.
+  Hierarchy comes from weight and spacing, not from a separate display face.
+- `font-mono` (`--ae-font-mono`) carries prices, amounts, identifiers,
+  timestamps, code, keyboard hints and values whose alignment matters.
+- `font-display` (Manrope, `--ae-font-display`) carries one public display
+  statement per page and nothing else, set at ExtraLight 200 with -0.035em
+  tracking.
 
 Type is stepped, not viewport-fluid. Headings use a line-height near 1.1 and
 body text uses 1.55. Headings use `text-wrap: balance`. Do not switch typefaces
-inside one heading. Buttons use uppercase mono at 12px. Ordinary section labels
-remain ordinary-case sans.
+inside one heading. All interface copy is sentence case, including buttons,
+labels and headings; do not title-case.
 
 ## Shape and structure
 
@@ -94,15 +104,26 @@ hierarchy. The information model should create the hierarchy.
 
 ## Surfaces, colour and elevation
 
-Use three surface levels: canvas (`--ae-bg`, `#f4f4f4`), sunken work area and
-raised surface (`--ae-surface`, `#ffffff`). Structural borders use
-`--ae-border`, black at 10%.
+The brand palette (Brand guidelines, p.7):
 
-Near-black `#1c1c1c` is the action colour. Violet-blue `#4a38f5`
+| Colour   | Hex       | Role                                          | CSS token                        |
+| -------- | --------- | ---------------------------------------------- | --------------------------------- |
+| Forest   | `#24543D` | Primary, artwork and identity, links, focus    | `--ae-brand` (`--ae-brand-strong`, `--ae-ring`, `--ae-info`) |
+| Charcoal | `#141414` | Primary dark surface, action colour            | `--ae-fg`                         |
+| Chalk    | `#E8E4DA` | Light surface, body text on dark               | `--ae-bg` (`--ae-on-brand`, `--ae-primary-fg`) |
+| Stone    | `#AAA89E` | Supporting                                     | no token                          |
+| Gold     | `#E5AA35` | Logo endpoint only, restricted, never a UI accent | no token                       |
+
+Use three surface levels: canvas (`--ae-bg`), sunken work area
+(`--ae-surface-sunken`) and raised surface (`--ae-surface`). Structural
+borders use `--ae-border`.
+
+Charcoal `#141414` (`--ae-fg`) is the action colour. Forest `#24543D`
 (`--ae-brand`) marks links, selection, focus and information. It does not fill
 buttons or broad surfaces. Green, amber and red appear only for literal state
-and always with text or an icon. Muted text uses black at 60%; use black at 70%
-where the AA contrast floor requires it.
+and always with text or an icon. Muted text uses `--ae-muted-fg`; check the AA
+contrast floor before relying on it for body copy. Gold never appears as a UI
+accent; it is reserved for the logo endpoint.
 
 Use only the established shadow levels: header `0 1px 3px 0 rgba(0,0,0,.06)`,
 popup `0 12px 32px rgba(0,0,0,.08)`, dark popup

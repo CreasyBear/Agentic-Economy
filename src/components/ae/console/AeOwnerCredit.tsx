@@ -346,7 +346,7 @@ export function AeOwnerCredit({
             description="Browsing does not create a Call."
             action={
               <Button asChild className="min-h-touch">
-                <a href="/market?window=30d">Search Tools</a>
+                <a href="/market">Search Tools</a>
               </Button>
             }
           />

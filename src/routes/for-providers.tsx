@@ -5,11 +5,18 @@ import { loadSupplyLandingReadbackServer } from '@/lib/server/supply-landing.fun
 import { buildPublicPageHead } from '@/modules/seo/public'
 
 export const Route = createFileRoute('/for-providers')({
+  staticData: {
+    nav: {
+      label: 'For providers',
+      header: { order: 2 },
+      footer: { column: 'Market', order: 2 },
+    },
+  },
   loader: () => loadSupplyLandingReadbackServer(),
   head: () => buildPublicPageHead({
     path: '/for-providers',
     title: 'Publish a Tool | Agentic Economy',
-    description: 'Publish one bounded job, its price, access terms, readiness, and evidence.',
+    description: 'Publish one bounded Tool, its price, access terms, readiness, and evidence.',
   }),
   component: SupplyLandingRoute,
 })

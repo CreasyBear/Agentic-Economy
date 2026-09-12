@@ -219,7 +219,6 @@ afterEach(() => {
 describe('/tools/$toolRef', () => {
   it('accepts only bounded local market return contexts', () => {
     const returnTo = buildMarketReturnContext({
-      window: '7d',
       query: 'invoice',
       availability: 'routeable',
     }, 'tools')
@@ -378,7 +377,6 @@ describe('/tools/$toolRef', () => {
   it('preserves an exact comparison origin in the explicit return action', () => {
     const second = `operation:v1:${'d'.repeat(64)}` as typeof tool.toolRef
     const returnTo = buildMarketReturnContext({
-      window: '7d',
       query: 'invoice',
       compare: `${tool.toolRef},${second}`,
     })
@@ -578,7 +576,6 @@ const x402Tool = projectCapabilityTool({
 
   it('renders malformed references distinctly and preserves a known result origin', () => {
     const returnTo = buildMarketReturnContext({
-      window: '30d',
       query: 'invoice',
       capability: 'invoice.extract',
     }, 'tools')

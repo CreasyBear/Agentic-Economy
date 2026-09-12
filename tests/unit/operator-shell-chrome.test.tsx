@@ -12,6 +12,7 @@ import {
   useLocation,
 } from '@tanstack/react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { Boxes as NavIcon } from 'lucide-react'
 import '../setup/jsdom-platform'
 
 const shellMocks = vi.hoisted(() => ({
@@ -266,8 +267,8 @@ describe('operator shell nested chrome', () => {
     )
 
     expect(await screen.findByText('You don’t have access to this workspace')).toBeTruthy()
-    expect(screen.getByRole('link', { name: 'Return to market' }).getAttribute('href')).toBe('/market?window=30d')
-    expect(screen.getByRole('link', { name: 'Get help' }).getAttribute('href')).toBe('/support')
+    expect(screen.getByRole('link', { name: 'Return to market' }).getAttribute('href')).toBe('/market')
+    expect(screen.getByRole('link', { name: 'Help' }).getAttribute('href')).toBe('/support')
     expect(screen.getByRole('button', { name: 'Sign out' })).toBeTruthy()
     expect(screen.queryByRole('link', { name: 'Catalog health' })).toBeNull()
     expect(screen.queryByRole('link', { name: 'Audit' })).toBeNull()
@@ -316,14 +317,14 @@ describe('owner mobile navigation', () => {
     const mobileNav = await screen.findByRole('navigation', { name: 'Owner primary navigation' })
     const links = within(mobileNav).getAllByRole('link')
 
-    expect(links.map((link) => link.textContent)).toEqual(['Calls', 'Agents', 'Tools'])
+    expect(links.map((link) => link.textContent)).toEqual(['Calls', 'Agents', 'Operations'])
     expect(links.map((link) => link.getAttribute('href'))).toEqual([
       '/activity',
       '/agent-access',
       '/owner/offerings',
     ])
     expect(links.filter((link) => link.getAttribute('aria-current') === 'page').map((link) => link.textContent))
-      .toEqual(['Tools'])
+      .toEqual(['Operations'])
     expect(mobileNav.querySelectorAll('svg[aria-hidden="true"]')).toHaveLength(3)
   })
 
@@ -334,7 +335,7 @@ describe('owner mobile navigation', () => {
     expect(within(descendantNav).getAllByRole('link')
       .filter((link) => link.getAttribute('aria-current') === 'page')
       .map((link) => link.textContent))
-      .toEqual(['Tools'])
+      .toEqual(['Operations'])
 
     descendant.unmount()
     renderOperatorShell('owner', '/owner/settings')
@@ -349,8 +350,7 @@ describe('owner mobile navigation', () => {
     const owner = renderOperatorShell('owner', '/owner/offerings')
     const sidebarNav = await screen.findByRole('navigation', { name: 'Operator navigation' })
 
-    expect(within(sidebarNav).getByRole('link', { name: 'Tools' })).toBeTruthy()
-    expect(within(sidebarNav).getByRole('link', { name: 'Catalog' })).toBeTruthy()
+    expect(within(sidebarNav).getByRole('link', { name: 'Operations' })).toBeTruthy()
     expect(within(sidebarNav).getByRole('link', { name: 'Calls' })).toBeTruthy()
     expect(within(sidebarNav).getByRole('link', { name: 'Agents' })).toBeTruthy()
     expect(within(sidebarNav).getByRole('link', { name: 'Credit' })).toBeTruthy()
@@ -567,15 +567,40 @@ function renderAt(ui: ReactElement, pathname: string) {
   const rootRoute = createRootRoute()
   const routeTree = rootRoute.addChildren([
     createRoute({ getParentRoute: () => rootRoute, path: '/admin' }),
-    createRoute({ getParentRoute: () => rootRoute, path: '/admin/audit-events' }),
-    createRoute({ getParentRoute: () => rootRoute, path: '/agent-access' }),
+    createRoute({
+      getParentRoute: () => rootRoute,
+      path: '/admin/audit-events',
+      staticData: { nav: { label: 'Audit', operator: { roles: ['admin'], group: 'Records', groupOrder: 0, order: 1, icon: NavIcon, tier: 'core' } } },
+    }),
+    createRoute({
+      getParentRoute: () => rootRoute,
+      path: '/agent-access',
+      staticData: { nav: { label: 'Agents', operator: { roles: ['owner'], group: 'Buy', groupOrder: 0, order: 1, icon: NavIcon, tier: 'core', mobilePrimary: true, mobileOrder: 20 } } },
+    }),
     createRoute({ getParentRoute: () => rootRoute, path: '/agent-access/$' }),
     createRoute({ getParentRoute: () => rootRoute, path: '/owner/offerings/new' }),
-    createRoute({ getParentRoute: () => rootRoute, path: '/owner/offerings' }),
-    createRoute({ getParentRoute: () => rootRoute, path: '/owner/settings' }),
+    createRoute({
+      getParentRoute: () => rootRoute,
+      path: '/owner/offerings',
+      staticData: { nav: { label: 'Operations', operator: { roles: ['owner'], group: 'Supply', groupOrder: 1, order: 0, icon: NavIcon, tier: 'core', mobilePrimary: true, mobileOrder: 30 } } },
+    }),
+    createRoute({
+      getParentRoute: () => rootRoute,
+      path: '/owner/settings',
+      staticData: { nav: { label: 'Account & security', operator: { roles: ['owner'], group: 'Account', groupOrder: 2, order: 0, icon: NavIcon, tier: 'core' } } },
+    }),
     createRoute({ getParentRoute: () => rootRoute, path: '/owner/settings/connections' }),
     createRoute({ getParentRoute: () => rootRoute, path: '/owner/supply' }),
-    createRoute({ getParentRoute: () => rootRoute, path: '/activity' }),
+    createRoute({
+      getParentRoute: () => rootRoute,
+      path: '/owner/credit',
+      staticData: { nav: { label: 'Credit', operator: { roles: ['owner'], group: 'Buy', groupOrder: 0, order: 2, icon: NavIcon, tier: 'core' } } },
+    }),
+    createRoute({
+      getParentRoute: () => rootRoute,
+      path: '/activity',
+      staticData: { nav: { label: 'Calls', operator: { roles: ['owner'], group: 'Buy', groupOrder: 0, order: 0, icon: NavIcon, tier: 'core', mobilePrimary: true, mobileOrder: 10 } } },
+    }),
     createRoute({ getParentRoute: () => rootRoute, path: '/' }),
   ])
   const router = createRouter({

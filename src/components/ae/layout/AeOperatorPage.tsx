@@ -2,17 +2,44 @@
 
 import { createContext, use, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
+import { useMatches } from '@tanstack/react-router'
 
-import { AeOperatorBreadcrumbs } from '@/components/ae/layout/AeOperatorBreadcrumbs'
+import { AeOperatorBreadcrumbs, type OperatorBreadcrumbItem } from '@/components/ae/layout/AeOperatorBreadcrumbs'
 import { AeOwnerMobileNavigation } from '@/components/ae/layout/AeOwnerMobileNavigation'
 import { AeRecordHeader } from '@/components/ae/layout/AeRecordHeader'
 import {
-  resolveOperatorListCrumb,
-  type OperatorBreadcrumbItem,
+  ownerWorkspaceOwnerForPath,
   type OperatorNavBadges,
   type OperatorRole,
-} from '@/lib/operator/navigation'
+} from '@/lib/operator/roles'
 import type { OperatorContext } from '@/lib/operator/operator-context'
+
+/**
+ * The "List" half of a shell-derived breadcrumb trail: the nearest sidebar
+ * destination that is a strict ancestor of `currentPath`. Returns undefined
+ * on a list page itself (top of its section, no trail needed) or when no
+ * ancestor match carries a nav label. The terminal "Detail" crumb (the
+ * page's own title) is appended by RootOperatorPage, so no per-route
+ * breadcrumbs prop is needed.
+ *
+ * Owner routes under /owner/supply/* and /owner/settings/{connections,payouts}
+ * are not route-tree descendants of the /owner/offerings sidebar item that
+ * owns them, so that one owner-specific mapping is preserved on top of the
+ * useMatches() ancestor walk.
+ */
+function useOperatorListCrumb(operatorRole: OperatorRole, currentPath: string): OperatorBreadcrumbItem | undefined {
+  const matches = useMatches()
+
+  return useMemo(() => {
+    if (operatorRole === 'owner' && ownerWorkspaceOwnerForPath(currentPath) === 'operations' && currentPath !== '/owner/offerings') {
+      return { label: 'Operations', href: '/owner/offerings' }
+    }
+
+    const ancestor = matches.slice(0, -1).findLast((match) => match.staticData.nav?.label !== undefined)
+    const label = ancestor?.staticData.nav?.label
+    return ancestor === undefined || label === undefined ? undefined : { label, href: ancestor.pathname }
+  }, [matches, operatorRole, currentPath])
+}
 
 type OperatorPageChrome = Omit<AeOperatorPageProps, 'children' | 'operatorContext'>
 
@@ -146,10 +173,11 @@ function RootOperatorPage(props: AeOperatorPageProps) {
   const { children, operatorContext } = props
   const resolvedMainContentId = mainContentId ?? 'main-content'
 
-  const breadcrumbs = useMemo<readonly OperatorBreadcrumbItem[]>(() => {
-    const listCrumb = resolveOperatorListCrumb(operatorRole, currentPath)
-    return providedBreadcrumbs ?? (listCrumb === undefined ? [] : [listCrumb, { label: title }])
-  }, [currentPath, operatorRole, providedBreadcrumbs, title])
+  const listCrumb = useOperatorListCrumb(operatorRole, currentPath)
+  const breadcrumbs = useMemo<readonly OperatorBreadcrumbItem[]>(
+    () => providedBreadcrumbs ?? (listCrumb === undefined ? [] : [listCrumb, { label: title }]),
+    [listCrumb, providedBreadcrumbs, title],
+  )
 
   // Bubble the resolved chrome (in particular navBadges) up to the hoisted
   // sidebar bridge, when one is mounted above this route (see
