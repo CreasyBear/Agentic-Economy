@@ -106,6 +106,10 @@ module "alpha_environment" {
   alert_email              = "joel@agentic-economy.ai"
   flow_log_destination_arn = "arn:aws:s3:::agentic-economy-audit-197716152388-ap-southeast-2"
 
+  # Keep the initial 50 GiB fixed for the alpha budget. The existing <10 GiB
+  # free-space alarm prompts a reviewed capacity increase before storage fills.
+  database_max_allocated_storage = 0
+
   depends_on = [terraform_data.alpha_sandbox_gate]
 }
 
