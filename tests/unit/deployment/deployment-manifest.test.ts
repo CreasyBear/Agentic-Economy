@@ -159,6 +159,7 @@ describe('deployment manifest validator', () => {
       'AE_SOURCE_WRITE_KEY_BILLING',
       'AE_SOURCE_WRITE_KEY_SESSION',
       'STRIPE_SECRET_KEY',
+      'STRIPE_READBACK_KEY',
       'STRIPE_WEBHOOK_SECRET',
       'STRIPE_V2_WEBHOOK_SECRET',
       'STRIPE_AU_INCLUSIVE_GST_TAX_RATE_ID',
@@ -329,6 +330,16 @@ describe('deployment manifest validator', () => {
     expect(resolveServiceMode(environment)).toBe('hosted_alpha')
     expect(serviceModeAllowsEnvironment(resolveServiceMode(environment), 'sandbox')).toBe(true)
     expect(serviceModeAllowsEnvironment(resolveServiceMode(environment), 'production')).toBe(false)
+    for (const readbackKey of [undefined, '', ' ']) {
+      const result = validateDeploymentManifest({ ...environment, STRIPE_READBACK_KEY: readbackKey })
+      expect(result.ok).toBe(false)
+      expect(result.findings).toEqual([{
+        kind: 'missing',
+        code: 'stripe_configuration_required',
+        names: ['STRIPE_READBACK_KEY'],
+        scope: 'stripe-money',
+      }])
+    }
   })
 
   it.each([

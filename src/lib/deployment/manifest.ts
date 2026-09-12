@@ -62,7 +62,7 @@ const requiredProduction: readonly RequirementGroup[] = [
   { scope: 'chat-proxy', code: 'required_configuration_missing', names: ['AE_CHAT_PROXY_SECRET'], mode: 'all' },
   { scope: 'source-write', code: 'source_write_family_required', names: sourceWriteNames, mode: 'all' },
   { scope: 'x402-payment', code: 'x402_payment_custody_required', names: ['CDP_API_KEY_ID', 'CDP_API_KEY_SECRET', 'CDP_WALLET_SECRET', 'AE_X402_CDP_ACCOUNT_NAME', 'AE_X402_CDP_EXPECTED_EVM_ADDRESS', 'AE_X402_CDP_ACCOUNT_POLICY_ID', 'AE_X402_CDP_PROJECT_POLICY_ID', 'AE_X402_CDP_POLICY_RULES_DIGEST', 'AE_X402_CDP_CREDENTIAL_GENERATION', 'AE_X402_CUSTODY_ENABLED', 'AE_X402_CUSTODY_MAX_ATOMIC', 'AE_X402_CUSTODY_DAILY_MAX_ATOMIC', 'AE_X402_RPC_URLS_JSON'], mode: 'all' },
-  { scope: 'stripe-money', code: 'stripe_configuration_required', names: ['STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET', 'STRIPE_V2_WEBHOOK_SECRET', 'STRIPE_AU_INCLUSIVE_GST_TAX_RATE_ID'], mode: 'all' },
+  { scope: 'stripe-money', code: 'stripe_configuration_required', names: ['STRIPE_SECRET_KEY', 'STRIPE_READBACK_KEY', 'STRIPE_WEBHOOK_SECRET', 'STRIPE_V2_WEBHOOK_SECRET', 'STRIPE_AU_INCLUSIVE_GST_TAX_RATE_ID'], mode: 'all' },
   { scope: 'formance', code: 'formance_configuration_required', names: ['AE_FORMANCE_ENVIRONMENT', 'AE_FORMANCE_GATEWAY_URL', 'AE_FORMANCE_LEDGER', 'AE_FORMANCE_REQUEST_TIMEOUT_MS', 'AE_FORMANCE_ACCESS_CLIENT_ID', 'AE_FORMANCE_ACCESS_CLIENT_SECRET'], mode: 'all' },
 ]
 
