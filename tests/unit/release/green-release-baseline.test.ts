@@ -485,7 +485,7 @@ describe('green release baseline', () => {
       'AE_AUTHENTICATED_E2E_CLERK_PUBLISHABLE_KEY',
       'AE_AUTHENTICATED_E2E_CLERK_SECRET_KEY',
     ]))
-    expect(fresh?.environment).toBe('staging')
+    expect(fresh?.environment).toBeUndefined()
 
     const source = workflow.jobs?.['source-proof']
     // Same triggers as source-proof: neither job gates on an `if`, both run
