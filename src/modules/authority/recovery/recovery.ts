@@ -20,6 +20,7 @@ import {
   type DelegationGrantRef,
   type DelegationSnapshotRef,
 } from '../delegation/public'
+import { captureBackendException } from '@/lib/observability/degrade-backend'
 
 const RECOVERY_ADMISSION_REF_PATTERN = /^rcv_[0-9a-f]{32}$/u
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u
@@ -354,7 +355,8 @@ async function loadApprovals(
     let operatorPrincipalRef: PrincipalRef
     try {
       operatorPrincipalRef = principalRef(approval.operatorPrincipalRef)
-    } catch {
+    } catch (cause) {
+      captureBackendException(cause, { site: 'loadApprovals' }, 'warning')
       throw new RecoveryError('recovery_approval_mismatch')
     }
     if (approval.approvalRef !== approvalRef
@@ -468,7 +470,8 @@ export function parsePersistedRecoveryAdmission(value: RecoveryAdmission): Recov
       lifecycle: 'consumed',
       context: freezeContext(value.context),
     })
-  } catch {
+  } catch (cause) {
+    captureBackendException(cause, { site: 'parsePersistedRecoveryAdmission' }, 'warning')
     throw new RecoveryError('recovery_persisted_admission_invalid')
   }
 }

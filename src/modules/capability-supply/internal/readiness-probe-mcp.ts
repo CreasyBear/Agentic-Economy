@@ -39,6 +39,7 @@ import {
   type ProbeObservationBase,
   type ResponseMetadata,
 } from "./readiness-probe-shared";
+import { degradeBackend } from "@/lib/observability/degrade-backend";
 
 export const mcpProbeCommand: ProbeCommand = {
   parse(target) {
@@ -483,13 +484,15 @@ async function runMcpProbe(
     if (transport.sessionId !== undefined) {
       try {
         await transport.terminateSession();
-      } catch {
+      } catch (cause) {
+        degradeBackend(cause, undefined, { site: "runMcpProbe", reason: "source_unavailable" });
         // Cleanup failures must not replace the readiness outcome.
       }
     }
     try {
       await transport.close();
-    } catch {
+    } catch (cause) {
+      degradeBackend(cause, undefined, { site: "runMcpProbe", reason: "source_unavailable" });
       // Cleanup failures must not replace the readiness outcome.
     }
   }

@@ -1,3 +1,5 @@
+import { degradeBackend } from '@/lib/observability/degrade-backend'
+
 export const BASE_MAINNET_NETWORK = 'eip155:8453' as const
 export const BASE_SEPOLIA_NETWORK = 'eip155:84532' as const
 export const BASE_MAINNET_USDC_ADDRESS =
@@ -102,7 +104,7 @@ export function isX402PaymentRequirementForProfile(
   ) return false
   try {
     return maxAtomic === undefined || BigInt(normalized.amount) <= maxAtomic
-  } catch {
-    return false
+  } catch (cause) {
+    return degradeBackend(cause, false, { site: 'isX402PaymentRequirementForProfile', reason: 'invalid_response' })
   }
 }

@@ -11,10 +11,12 @@ import {
   sourceQuery,
   type ConvexServerFunctionAssertion,
 } from '@/lib/server/convex-source'
-import { isLocalE2EAuthBypassEnabled } from '@/lib/server/local-e2e-bypass'
 import { readTrimmedEnv } from '@/lib/server/read-trimmed-env'
 import { currentRequestCorrelationId } from '@/lib/server/request-correlation'
+import { degrade } from '@/lib/observability/degrade'
+import { captureRouteException } from '@/lib/observability/capture-route-exception'
 import { clerkUserProviderIdentifier } from '@/modules/principal-account/external-identity/public'
+import { idempotencyKeySchema } from '@/modules/common/action'
 
 import {
   issueAgentAccessKey,
@@ -55,7 +57,7 @@ import type { OwnerConnectionLifecycleResult } from './agent-connection'
 
 const issueInputSchema = z.strictObject({
   name: z.string().trim().min(1).max(80),
-  idempotencyKey: z.string().trim().min(8).max(128),
+  idempotencyKey: idempotencyKeySchema,
   scopes: z.array(z.string()).min(1).max(32).optional(),
   grantRef: z.string().trim().min(1).max(300).optional(),
   applicationRef: z.string().trim().min(1).max(200).optional(),
@@ -306,8 +308,8 @@ export async function registerAgentAccessPrincipal(
       seenAt: input.seenAt,
     })
     return result.kind === 'recorded' || result.kind === 'conflict' ? result : { kind: 'unavailable' }
-  } catch {
-    return { kind: 'unavailable' }
+  } catch (cause) {
+    return degrade(cause, { kind: 'unavailable' }, { site: 'registerAgentAccessPrincipal', reason: 'source_unavailable' })
   }
 }
 
@@ -326,8 +328,8 @@ export async function registerIssuedAgentBinding(
       command,
     })
     return await callSourceMutation(registerIssuedAgentBindingMutation, { ...command, serviceAuth })
-  } catch {
-    return { kind: 'unavailable' }
+  } catch (cause) {
+    return degrade(cause, { kind: 'unavailable' }, { site: 'registerIssuedAgentBinding', reason: 'source_unavailable' })
   }
 }
 
@@ -343,8 +345,8 @@ async function callReplacementMutation(
       command,
     })
     return await callSourceMutation(reference as never, { ...command, serviceAuth } as never) as AgentCredentialReplacementRegistrationResult | AgentCredentialReplacementTransitionResult
-  } catch {
-    return { kind: 'unavailable' }
+  } catch (cause) {
+    return degrade(cause, { kind: 'unavailable' }, { site: 'callReplacementMutation', reason: 'source_unavailable' })
   }
 }
 
@@ -391,14 +393,14 @@ export const issueAgentAccessKeyServer = createServerFn({ method: 'POST' })
     let policy: AgentAccessPolicy
     try {
       policy = buildOwnerAgentAccessPolicy(data)
-    } catch {
-      return { kind: 'error' as const, code: 'invalid_input' as const, retryable: false }
+    } catch (cause) {
+      return degrade(cause, { kind: 'error' as const, code: 'invalid_input' as const, retryable: false }, { site: 'issueAgentAccessKeyServer', reason: 'invalid_response' })
     }
     let principal: { userId: string } | undefined
     try {
       principal = await owner()
-    } catch {
-      return { kind: 'error' as const, code: 'missing_auth' as const, retryable: false }
+    } catch (cause) {
+      return degrade(cause, { kind: 'error' as const, code: 'missing_auth' as const, retryable: false }, { site: 'issueAgentAccessKeyServer', reason: 'forbidden' })
     }
     if (principal === undefined) {
       return { kind: 'error' as const, code: 'missing_auth' as const, retryable: false }
@@ -412,8 +414,8 @@ export const issueAgentAccessKeyServer = createServerFn({ method: 'POST' })
     }
     try {
       await requireCanonicalOwnerAuthorityServer()
-    } catch {
-      return { kind: 'error' as const, code: 'missing_auth' as const, retryable: false }
+    } catch (cause) {
+      return degrade(cause, { kind: 'error' as const, code: 'missing_auth' as const, retryable: false }, { site: 'issueAgentAccessKeyServer', reason: 'forbidden' })
     }
     const api = createClerkAgentAccessKeyApi(clerkClient().apiKeys)
     const grantRef = data.grantRef ?? issuedAgentGrantRef(principal.userId, data.idempotencyKey)
@@ -442,7 +444,6 @@ export const issueAgentAccessKeyServer = createServerFn({ method: 'POST' })
 
 export const listAgentAccessKeysServer = createServerFn({ method: 'GET' })
   .handler(async () => {
-    if (isLocalE2EAuthBypassEnabled()) return []
     await requireCanonicalOwnerAuthorityServer()
     const principal = await owner()
     const api = createClerkAgentAccessKeyApi(clerkClient().apiKeys)
@@ -489,7 +490,8 @@ async function completeAgentLifecycle(
         })
       }
       outcome = 'revoked'
-    } catch {
+    } catch (cause) {
+      captureRouteException(cause, { site: 'completeAgentLifecycle' }, 'warning')
       partial = true
     }
     try {
@@ -501,7 +503,8 @@ async function completeAgentLifecycle(
         outcome,
       })
       if (recorded.kind !== 'completed' && recorded.kind !== 'replayed') partial = true
-    } catch {
+    } catch (cause) {
+      captureRouteException(cause, { site: 'completeAgentLifecycle' }, 'warning')
       partial = true
     }
   }
@@ -528,8 +531,8 @@ export const revokeAgentCredentialServer = createServerFn({ method: 'POST' })
         revokeCredentialMutation,
         command,
       ))
-    } catch {
-      return { kind: 'refused', code: 'source_unavailable', correlationRef }
+    } catch (cause) {
+      return degrade(cause, { kind: 'refused', code: 'source_unavailable', correlationRef } as const, { site: 'revokeAgentCredentialServer', reason: 'source_unavailable' })
     }
   })
 
@@ -545,8 +548,8 @@ export const disconnectAgentServer = createServerFn({ method: 'POST' })
         disconnectAgentMutation,
         command,
       ))
-    } catch {
-      return { kind: 'refused', code: 'source_unavailable', correlationRef }
+    } catch (cause) {
+      return degrade(cause, { kind: 'refused', code: 'source_unavailable', correlationRef } as const, { site: 'disconnectAgentServer', reason: 'source_unavailable' })
     }
   })
 
@@ -564,8 +567,8 @@ export const revokeOwnerConnectionServer = createServerFn({ method: 'POST' })
         return { ...result, providerCleanupPending: true }
       }
       return result
-    } catch {
-      return { kind: 'refused', code: 'source_unavailable', correlationRef }
+    } catch (cause) {
+      return degrade(cause, { kind: 'refused', code: 'source_unavailable', correlationRef } as const, { site: 'revokeOwnerConnectionServer', reason: 'source_unavailable' })
     }
   })
 
@@ -580,7 +583,7 @@ export const renameAgentServer = createServerFn({ method: 'POST' })
     try {
       await requireCanonicalOwnerAuthorityServer()
       return await callSourceMutation(renameAgentMutation, { ...data, correlationRef })
-    } catch {
-      return { kind: 'refused', code: 'source_unavailable', correlationRef }
+    } catch (cause) {
+      return degrade(cause, { kind: 'refused', code: 'source_unavailable', correlationRef } as const, { site: 'renameAgentServer', reason: 'source_unavailable' })
     }
   })

@@ -26,6 +26,7 @@ import {
   type PublicToolDescriptor,
   type PublicToolNavigationRelation,
 } from "./tool-projection-types";
+import { degradeBackend } from "@/lib/observability/degrade-backend";
 
 const TOOL_SEARCH_INTENT_WORDS = new Set([
   "api",
@@ -707,8 +708,8 @@ function decodeCursor(
   try {
     cursorSnapshot = decodeURIComponent(encodedSnapshot);
     lastRef = decodeURIComponent(encodedRef);
-  } catch {
-    return undefined;
+  } catch (cause) {
+    return degradeBackend(cause, undefined, { site: "decodeCursor", reason: "invalid_response" });
   }
   if (cursorSnapshot !== snapshotKey || !isPublicToolRef(lastRef))
     return undefined;

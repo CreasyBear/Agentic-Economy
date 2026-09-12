@@ -1,5 +1,6 @@
 import { v } from 'convex/values'
 
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 import type { BusinessId, OwnerId, Slug, SourceHash } from '@/modules/common/ids'
 import type {
   AccountRef,
@@ -70,8 +71,8 @@ export function canonicalProviderWebsite(value: string): string | undefined {
     }
     const pathname = url.pathname.replace(/\/+$/, '') || '/'
     return `${url.origin.toLowerCase()}${pathname}`
-  } catch {
-    return undefined
+  } catch (cause) {
+    return degradeBackend(cause, undefined, { site: 'canonicalProviderWebsite', reason: 'invalid_response' })
   }
 }
 

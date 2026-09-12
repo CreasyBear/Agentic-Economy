@@ -17,6 +17,7 @@ import {
   isPaymentIdentifierExtension,
 } from '@x402/extensions/payment-identifier'
 
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { isBoundedJsonValue, type JsonValue } from '@/modules/common/bounded-json'
 import { containsForbiddenSignatureKey } from '@/modules/common/forbidden-signature-key'
@@ -31,8 +32,6 @@ import {
   type CdpX402CustodyConfiguration,
 } from './server-credential'
 import {
-  BASE_MAINNET_NETWORK,
-  BASE_MAINNET_USDC_ADDRESS,
   BASE_SEPOLIA_USDC_ADDRESS,
   isX402PaymentRequirementForProfile,
   normalizeX402PaymentRequirement,
@@ -42,10 +41,6 @@ import {
 } from './x402-payment-profile'
 import type { X402PaymentSignatureRequest } from './x402-challenge'
 
-/** @deprecated Use the explicit payment profile constants for new code. */
-export const BASE_NETWORK = BASE_MAINNET_NETWORK
-/** @deprecated Use the explicit payment profile constants for new code. */
-export const BASE_USDC_ADDRESS = BASE_MAINNET_USDC_ADDRESS
 export const PAYMENT_SIGNING_IDEMPOTENCY_KEY_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
 const MAX_CDP_POLICY_RULES = 10
 const MAX_CDP_POLICY_RULES_BYTES = 64 * 1024
@@ -255,8 +250,8 @@ export async function observeCdpX402Treasury(
       evidenceDigest,
       observedAt: material.observedAt,
     }
-  } catch {
-    return undefined
+  } catch (cause) {
+    return degradeBackend(cause, undefined, { site: 'observeCdpX402Treasury', reason: 'source_unavailable' })
   }
 }
 
@@ -480,8 +475,8 @@ export function readCdpX402PaymentAuthorization(
       paymentNonce: authorization.nonce.toLowerCase(),
       requestFingerprint,
     }
-  } catch {
-    return undefined
+  } catch (cause) {
+    return degradeBackend(cause, undefined, { site: 'readCdpX402PaymentAuthorization', reason: 'invalid_response' })
   }
 }
 
@@ -587,8 +582,8 @@ export async function createCdpEvmX402PaymentSignature(
       accepts: [{ ...offeredRequirement, extra: { ...offeredRequirement.extra } }] as PaymentRequired['accepts'],
       ...(extensions === undefined ? {} : { extensions }),
     }
-  } catch {
-    return undefined
+  } catch (cause) {
+    return degradeBackend(cause, undefined, { site: 'createCdpEvmX402PaymentSignature', reason: 'source_unavailable' })
   }
 
   let intent = dependencies.persistedIntent
@@ -678,8 +673,8 @@ export async function replayCdpX402PaymentSigningIntent(
         ?.paymentAuthorizationExpiresAt !== intent.paymentAuthorizationExpiresAt
     ) return undefined
     material = parsed
-  } catch {
-    return undefined
+  } catch (cause) {
+    return degradeBackend(cause, undefined, { site: 'replayCdpX402PaymentSigningIntent', reason: 'invalid_response' })
   }
   const configuration = cdpX402CustodyConfigurationFromEnvironment(dependencies.environment)
   if (configuration === undefined) return undefined
@@ -792,8 +787,8 @@ async function captureUnsignedMaterial(
     if (containsForbiddenSignatureKey(material)) return undefined
     canonicalDigest(material as StableHashValue)
     return JSON.parse(stableStringify(material as StableHashValue)) as CdpX402PaymentUnsignedMaterial
-  } catch {
-    return undefined
+  } catch (cause) {
+    return degradeBackend(cause, undefined, { site: 'captureUnsignedMaterial', reason: 'source_unavailable' })
   }
 }
 
@@ -819,8 +814,8 @@ function readPersistedUnsignedMaterial(
     if (!isRecord(parsed) || containsForbiddenSignatureKey(parsed)) return undefined
     if (stableStringify(parsed as StableHashValue) !== intent.paymentUnsignedMaterialJson) return undefined
     if (canonicalDigest(parsed) !== intent.paymentUnsignedMaterialDigest) return undefined
-  } catch {
-    return undefined
+  } catch (cause) {
+    return degradeBackend(cause, undefined, { site: 'readPersistedUnsignedMaterial', reason: 'invalid_response' })
   }
   if (!isUnsignedMaterial(parsed)) return undefined
   const expiry = paymentAuthorizationExpiryFromValidBefore(
@@ -882,8 +877,8 @@ function paymentAuthorizationExpiryFromValidBefore(
   let seconds: bigint
   try {
     seconds = BigInt(value)
-  } catch {
-    return undefined
+  } catch (cause) {
+    return degradeBackend(cause, undefined, { site: 'paymentAuthorizationExpiryFromValidBefore', reason: 'invalid_response' })
   }
   if (seconds <= 0n) return undefined
   const milliseconds = seconds * 1000n
@@ -897,8 +892,8 @@ function paymentAuthorizationExpiryFromValidBefore(
     return BigInt(expiresAt) === milliseconds
       ? { paymentAuthorizationValidBefore: value, paymentAuthorizationExpiresAt: expiresAt }
       : undefined
-  } catch {
-    return undefined
+  } catch (cause) {
+    return degradeBackend(cause, undefined, { site: 'paymentAuthorizationExpiryFromValidBefore', reason: 'invalid_response' })
   }
 }
 

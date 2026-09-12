@@ -1,6 +1,7 @@
 import { z } from 'zod'
 
 import { jsonValueSchema, validateJsonSchema } from '@/modules/capability-contract/public'
+import { idempotencyKeySchema } from '@/modules/common/action'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { isRecord } from '@/modules/common/is-record'
 import { stableStringify, type StableHashValue } from '@/modules/common/stable-hash'
@@ -77,7 +78,7 @@ export const publishSupplyToolV2InputSchema = z.strictObject({
   ]),
   validationInput: z.record(z.string(), jsonValueSchema).optional(),
   environment: z.enum(['sandbox', 'production']),
-  idempotencyKey: z.string().trim().min(8).max(200),
+  idempotencyKey: idempotencyKeySchema,
   attestation: z.strictObject({
     authorisedToPublish: z.literal(true),
     informationAccurate: z.literal(true),

@@ -50,3 +50,6 @@ export type {
   CapabilityPreparationProjection,
   CapabilityDecisionModel,
 } from './internal/decision-model'
+
+export { isDirectoryEntryEligible } from './internal/directory-eligibility'
+export type { DirectoryEligibilitySignals } from './internal/directory-eligibility'

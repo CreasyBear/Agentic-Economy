@@ -1,6 +1,9 @@
 {
   "x402Version": 2,
   "error": "Payment required",
+  "quality": {
+    "l30DaysUniquePayers": 4
+  },
   "resource": {
     "url": "https://api.example.test/lookup",
     "description": "Synthetic POST bazaar fixture for importer tests.",

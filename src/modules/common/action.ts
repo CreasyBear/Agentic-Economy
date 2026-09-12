@@ -22,6 +22,13 @@ import { z } from 'zod'
  * bundler tree-shakes bare side-effect imports.
  */
 
+/**
+ * Shared replay/conflict command identity used by every write action's
+ * `idempotencyKey` field. One rule for the whole platform: 8 chars rejects
+ * accidental single-character keys, 200 matches the existing ceiling.
+ */
+export const idempotencyKeySchema = z.string().trim().min(8).max(200)
+
 export type ActionSurface = 'ui' | 'http' | 'agentJson' | 'chat' | 'cli' | 'mcp'
 
 // Declaration merging is the extension seam for harness-owned action context.

@@ -97,6 +97,26 @@ export const marketTables = {
     network: v.string(),
     category: v.string(),
     provider: v.string(),
+    // Normalised host (lowercase, no port, no trailing dot). Optional until the
+    // backfill migration (convex/migrations.ts:backfillDirectoryEligibility)
+    // completes on every existing generation, then tightened to required.
+    providerKey: v.optional(v.string()),
+    // Directory quality bar (src/modules/market/x402-directory-index.ts:
+    // isDirectoryEntryEligible), computed once per resource at write time and
+    // copied onto every network-variant row. Optional for the same backfill
+    // reason as providerKey.
+    eligible: v.optional(v.boolean()),
+    // Stable route identity for the resource, computed the same way
+    // capability-supply computes `capabilityPublications.sourceRouteRef`
+    // (src/modules/capability-supply/internal/source-route-identity.ts). Lets
+    // the canonical Tool URL join to an admitted publication without storing
+    // a toolRef that would go stale across admission/withdrawal.
+    sourceRouteRef: v.optional(v.string()),
+    // Kebab slug for the canonical `/tools/<providerKey>/<slug>` URL, derived
+    // from the resource path at write time (method-qualified only when two
+    // resources on the same host collide). Optional for the same backfill
+    // reason as providerKey/eligible.
+    slug: v.optional(v.string()),
     searchText: v.string(),
     popularOrder: v.number(),
     updatedOrder: v.number(),
@@ -139,9 +159,35 @@ export const marketTables = {
     .index('by_generation_and_network_and_category_and_updatedOrder', ['generation', 'network', 'category', 'updatedOrder'])
     .index('by_generation_and_network_and_provider_and_popularOrder', ['generation', 'network', 'provider', 'popularOrder'])
     .index('by_generation_and_network_and_provider_and_updatedOrder', ['generation', 'network', 'provider', 'updatedOrder'])
+    // Eligible-narrowed variants for the default (no-provider) browse/search
+    // scope only. A provider filter intentionally reads the un-narrowed
+    // indexes above so the Provider page can show its ineligible long tail
+    // (docs/architecture/catalogue-distillation.md#9, Lane 1). No eligible
+    // variant for momentumOrder (out of Lane 1's scope) or for the
+    // provider-narrowed indexes (never queried eligible-only).
+    .index('by_generation_and_network_and_elig_and_payersOrder', ['generation', 'network', 'eligible', 'payersOrder'])
+    .index('by_generation_and_network_and_elig_and_category_and_payersOrder', ['generation', 'network', 'eligible', 'category', 'payersOrder'])
+    .index('by_generation_and_network_and_elig_and_priceOrder', ['generation', 'network', 'eligible', 'priceOrder'])
+    .index('by_generation_and_network_and_elig_and_category_and_priceOrder', ['generation', 'network', 'eligible', 'category', 'priceOrder'])
+    .index('by_generation_and_network_and_elig_and_popularOrder', ['generation', 'network', 'eligible', 'popularOrder'])
+    // Abbreviated (fields still present, just shortened): the unabbreviated
+    // name for this field set ran to exactly 64 characters, at the edge of
+    // Convex's index name length ceiling.
+    .index('by_gen_net_elig_cat_popular', ['generation', 'network', 'eligible', 'category', 'popularOrder'])
+    .index('by_generation_and_network_and_elig_and_updatedOrder', ['generation', 'network', 'eligible', 'updatedOrder'])
+    // Abbreviated for the same reason as by_gen_net_elig_cat_popular above.
+    .index('by_gen_net_elig_cat_updated', ['generation', 'network', 'eligible', 'category', 'updatedOrder'])
+    // Canonical Tool URL lookup: providerKey+slug within one generation, then
+    // filtered to the '*' network row in the query (minimal compound index -
+    // no network segment needed since slug is generation/resource-scoped,
+    // not network-scoped).
+    .index('by_generation_and_providerKey_and_slug', ['generation', 'providerKey', 'slug'])
+    // Reverse lookup for the `/tools/$toolRef` redirect: an admitted
+    // publication's sourceRouteRef back to its directory entry's slug.
+    .index('by_generation_and_sourceRouteRef', ['generation', 'sourceRouteRef'])
     .searchIndex('search_text_by_generation_network_category_provider', {
       searchField: 'searchText',
-      filterFields: ['generation', 'network', 'category', 'provider'],
+      filterFields: ['generation', 'network', 'category', 'provider', 'eligible'],
     }),
   marketDirectoryFacets: defineTable({
     generation: v.string(),

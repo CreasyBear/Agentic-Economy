@@ -157,6 +157,7 @@ export function projectCapabilityTool(
     transport: record.transport,
     provenance: record.provenance,
     listingTier: listingTier(record.provenance.publisher),
+    ...(record.canonical === undefined ? {} : { canonical: record.canonical }),
     availability,
     navigation:
       availability.posture === "unavailable"

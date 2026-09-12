@@ -8,6 +8,7 @@ import {
   sourceWriteRequestFromAdmission,
 } from '@/lib/server/source-write-admission'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 
 export const sourceAuthorityReviewInputSchema = z.strictObject({
   publicationRef: z.string().trim().min(1).max(300),
@@ -71,7 +72,7 @@ export const reviewSourceAuthorityServer = createServerFn({ method: 'POST' })
         sourceWrite,
         sourceWriteRequest: sourceWriteRequestFromAdmission(sourceWrite),
       })
-    } catch {
-      return { kind: 'error', code: 'source_unavailable' }
+    } catch (cause) {
+      return degradeBackend(cause, { kind: 'error' as const, code: 'source_unavailable' as const }, { site: 'reviewSourceAuthorityServer', reason: 'source_unavailable' })
     }
   })

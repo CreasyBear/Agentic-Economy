@@ -35,6 +35,7 @@ import {
   type ResponseMetadata,
 } from "./readiness-probe-shared";
 import { x402ResourceUrlBindsTarget } from "./route-transport-x402-payment";
+import { degradeBackend } from "@/lib/observability/degrade-backend";
 
 export const x402ProbeCommand: ProbeCommand = {
   parse(target) {
@@ -96,16 +97,16 @@ async function probeX402Challenge(
       response.headers.get("payment-required") ?? "",
     );
     decoded = validateX402PaymentRequired(decoded);
-  } catch {
+  } catch (cause) {
     await cancelResponseBody(response);
-    return unhealthy(
+    return degradeBackend(cause, unhealthy(
       now,
       base,
       "ready",
       "response_invalid",
       [...evidence, "probe:x402_payment_required_invalid"],
       metadata,
-    );
+    ), { site: "probeX402Challenge", reason: "invalid_response" });
   }
   if (
     !isRecord(decoded) ||

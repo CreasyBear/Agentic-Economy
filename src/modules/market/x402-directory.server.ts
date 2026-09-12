@@ -1,3 +1,4 @@
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { directorySourceLabels } from './x402-directory-metadata'
 import { listX402DiscoveryResources, searchX402Resources } from '@coinbase/cdp-sdk'
 import Decimal from 'decimal.js'
@@ -55,8 +56,8 @@ export async function readX402DirectoryRawPage(input: X402DirectoryInput): Promi
       ...(hasMore ? { nextOffset: next } : {}),
       ...(position > 0 ? { previousOffset: Math.max(0, position - limit) } : {}),
     }
-  } catch {
-    return { kind: 'unavailable', reason: 'source_unavailable' }
+  } catch (cause) {
+    return degradeBackend(cause, { kind: 'unavailable', reason: 'source_unavailable' } as const, { site: 'readX402DirectoryRawPage', reason: 'source_unavailable' })
   }
 }
 
@@ -109,7 +110,7 @@ function publicUrl(value: unknown): string | undefined {
   try {
     const url = new URL(value)
     return (url.protocol === 'https:' || url.protocol === 'http:') && !url.username && !url.password ? url.href : undefined
-  } catch { return undefined }
+  } catch (cause) { return degradeBackend(cause, undefined, { site: 'publicUrl', reason: 'invalid_response' }) }
 }
 
 // Complete JSON or an explicit omission. Never produce truncated executable examples.
@@ -118,7 +119,7 @@ function boundedJson(value: unknown, maximum = 32768): string | undefined {
   try {
     const json = JSON.stringify(value, null, 2)
     return json !== undefined && json.length <= maximum ? json : undefined
-  } catch { return undefined }
+  } catch (cause) { return degradeBackend(cause, undefined, { site: 'boundedJson', reason: 'invalid_response' }) }
 }
 
 function declaredType(value: unknown): string | undefined {
@@ -184,7 +185,7 @@ export function projectX402DirectoryEntry(resource: Resource | Readonly<Record<s
   const record: Readonly<Record<string, unknown>> = isRecord(resource) ? resource : {}
   const resourceUrl = typeof record.resource === 'string' ? record.resource : ''
   let provider = 'Unknown provider'
-  try { provider = new URL(resourceUrl).hostname || provider } catch { /* Opaque directory resources remain visible. */ }
+  try { provider = new URL(resourceUrl).hostname || provider } catch (cause) { degradeBackend(cause, undefined, { site: 'projectX402DirectoryEntry', reason: 'invalid_response' }) /* Opaque directory resources remain visible. */ }
   const bazaar = schemaNode(record, 'extensions', 'bazaar')
   const legacy = Array.isArray(record.accepts) ? record.accepts.filter(isRecord).find(price => isRecord(price.outputSchema)) : undefined
   const legacySchema = schemaNode(legacy, 'outputSchema')

@@ -1,4 +1,5 @@
 import { callSourceQuery, sourceQuery } from '@/lib/server/convex-source'
+import { degrade } from '@/lib/observability/degrade'
 import type {
   AdminReadbackSurface,
   AdminShellReadback,
@@ -14,16 +15,22 @@ const readAdminIndexHealthQuery = sourceQuery<Record<string, never>, AdminShellR
 export async function readAdminAuditEventsThroughSource(): Promise<AdminShellReadback> {
   try {
     return await callSourceQuery(readAdminAuditEventsQuery, {})
-  } catch {
-    return deniedAdminReadback('audit_events')
+  } catch (cause) {
+    return degrade(cause, deniedAdminReadback('audit_events'), {
+      site: 'readAdminAuditEventsThroughSource',
+      reason: 'source_unavailable',
+    })
   }
 }
 
 export async function readAdminIndexHealthThroughSource(): Promise<AdminShellReadback> {
   try {
     return await callSourceQuery(readAdminIndexHealthQuery, {})
-  } catch {
-    return deniedAdminReadback('index_health')
+  } catch (cause) {
+    return degrade(cause, deniedAdminReadback('index_health'), {
+      site: 'readAdminIndexHealthThroughSource',
+      reason: 'source_unavailable',
+    })
   }
 }
 

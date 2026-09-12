@@ -1,5 +1,6 @@
 import { z } from 'zod'
 
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { base64Codec, tryDecodeBase64Url } from '@/modules/common/base64-codec'
 
 /**
@@ -44,8 +45,8 @@ export function decodeOpaqueCursor(token: string, expected: OpaqueCursorScope): 
   let json: unknown
   try {
     json = JSON.parse(new TextDecoder().decode(bytes))
-  } catch {
-    return undefined
+  } catch (cause) {
+    return degradeBackend(cause, undefined, { site: 'decodeOpaqueCursor', reason: 'invalid_response' })
   }
   const parsed = opaqueCursorPayloadSchema.safeParse(json)
   if (!parsed.success) return undefined

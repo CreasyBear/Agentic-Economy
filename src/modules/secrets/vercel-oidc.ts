@@ -2,6 +2,7 @@ import { getVercelOidcToken } from '@vercel/oidc'
 
 import type { OidcIdentityTokenProvider } from './infisical-cloud'
 import { SecretPlaneError } from './secret-plane'
+import { captureBackendException } from '@/lib/observability/degrade-backend'
 
 const DEFAULT_MINIMUM_REMAINING_TTL_MS = 5_000
 const DEFAULT_MAXIMUM_TOKEN_TTL_MS = 60 * 60 * 1_000
@@ -74,7 +75,8 @@ export class VercelOidcIdentityTokenProvider implements OidcIdentityTokenProvide
       const jwt = await this.#acquireToken(signal)
       const expiresAt = this.#validateAndReadExpiry(jwt)
       return Object.freeze({ jwt, expiresAt })
-    } catch {
+    } catch (cause) {
+      captureBackendException(cause, { site: 'getIdentityToken' }, 'warning')
       throw authenticationFailure()
     }
   }
@@ -114,7 +116,8 @@ export class VercelOidcIdentityTokenProvider implements OidcIdentityTokenProvide
       const encodedClaims = segments.at(1)
       if (encodedClaims === undefined) throw authenticationFailure()
       claims = JSON.parse(Buffer.from(encodedClaims, 'base64url').toString('utf8')) as unknown
-    } catch {
+    } catch (cause) {
+      captureBackendException(cause, { site: 'validateAndReadExpiry' }, 'warning')
       throw authenticationFailure()
     }
     if (

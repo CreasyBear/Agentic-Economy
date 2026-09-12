@@ -8,10 +8,8 @@ import type { PublicToolRef } from "../public";
 import type { X402CatalogPayment } from "./transport-adapters";
 
 export const CURRENT_TOOL_CALL_VIA = "/api/v1/tools/call" as const;
-export const REGISTRY_TOOLS_SCHEMA_VERSION =
-  "registry-tools:v3" as const;
 export const PublicToolRegistrySchemaVersion =
-  REGISTRY_TOOLS_SCHEMA_VERSION;
+  "registry-tools:v3" as const;
 export type PublicToolRegistrySchemaVersion =
   typeof PublicToolRegistrySchemaVersion;
 export type PublicToolBusinessRef = Readonly<{
@@ -146,6 +144,19 @@ export type PublicToolReadiness = Readonly<{
   observedAt?: number;
   validUntil?: number;
 }>;
+/**
+ * The human-legible canonical page for a Tool
+ * (`/tools/<providerHost>/<slug>`), joined from the market directory's own
+ * `marketDirectorySearchEntries` row by `sourceRouteRef`. Absent when the
+ * publication never joined a directory row - today that includes every
+ * Provider-owned Tool, which has no directory row and so no slug source of
+ * its own yet.
+ */
+export type PublicToolCanonical = Readonly<{
+  providerHost: string;
+  slug: string;
+  path: string;
+}>;
 
 /**
  * The W1 origin seam: each catalog access path has its own exact admitted
@@ -268,6 +279,7 @@ export type PublicToolDescriptor = Readonly<{
    * gateway-mediated and merely observed 3P are `listed`.
    */
   listingTier: "reviewed" | "listed";
+  canonical?: PublicToolCanonical;
 }>;
 export type PublicToolParameterMapping = Readonly<{
   inputPointer: string;
@@ -313,6 +325,7 @@ export type CapabilityToolSourceRecord = Readonly<{
   readiness: Readonly<{ observedAt?: number; validUntil?: number; lastHealthyAt?: number }>;
   searchTerms: readonly string[];
   snapshotKey: string;
+  canonical?: PublicToolCanonical;
 }>;
 export type CapabilityToolSourcePort = Readonly<{
   navigation: ToolProjectionNavigationContract;

@@ -1,3 +1,4 @@
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { canonicalDigest, isCanonicalDigest } from '@/modules/common/canonical-digest'
 
 import { copyX402SellerIdentity, validX402SellerIdentity, x402SellerIdentityDigest } from './identity'
@@ -34,8 +35,10 @@ function commandDigest(command: CreateX402SellerOnboardingCommand | X402SellerOn
       })
     }
     return canonicalDigest({ format: 'ae-x402-seller-onboarding-command:v1', ...command })
-  } catch {
-    return undefined
+  } catch (cause) {
+    return degradeBackend(cause, undefined, {
+      site: 'commandDigest', reason: 'invalid_response',
+    })
   }
 }
 

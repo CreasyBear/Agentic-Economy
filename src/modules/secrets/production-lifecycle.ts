@@ -11,6 +11,7 @@ import {
   type SecretStore,
   type SecretTarget,
 } from './secret-plane'
+import { boundaryCauseKind, captureBackendException } from '@/lib/observability/degrade-backend'
 
 const OPAQUE_REF_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,199}$/u
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u
@@ -229,7 +230,8 @@ export class ProductionSecretLifecycleService {
       await this.#store.withSecret(target, async (lease) => {
         valid = await this.#validator.validate(target, lease)
       })
-    } catch {
+    } catch (cause) {
+      captureBackendException(boundaryCauseKind(cause), { site: 'writeAndValidate' }, 'warning')
       throw new SecretPlaneError('secret_store_unavailable')
     }
     if (!valid) {
@@ -258,7 +260,8 @@ export class ProductionSecretLifecycleService {
   async #readPointer(ref: SecretRef): Promise<SecretPointer | undefined> {
     try {
       return await this.#pointers.getActive(ref)
-    } catch {
+    } catch (cause) {
+      captureBackendException(boundaryCauseKind(cause), { site: 'readPointer' }, 'warning')
       throw new SecretLifecycleError('secret_lifecycle_ambiguous')
     }
   }
@@ -308,7 +311,8 @@ export class ProductionSecretLifecycleService {
       : 'pointer_conflict'
     try {
       await this.#transition(record, state)
-    } catch {
+    } catch (cause) {
+      captureBackendException(boundaryCauseKind(cause), { site: 'recordKnownFailure' }, 'warning')
       throw new SecretLifecycleError('secret_lifecycle_ambiguous')
     }
   }
@@ -316,7 +320,8 @@ export class ProductionSecretLifecycleService {
   async #throwAmbiguous(record: SecretLifecycleRecord): Promise<never> {
     try {
       await this.#transition(record, 'external_effect_unknown')
-    } catch {
+    } catch (cause) {
+      captureBackendException(boundaryCauseKind(cause), { site: 'throwAmbiguous' }, 'warning')
       // A journal receipt can itself be ambiguous. The durable prepared state
       // remains non-retryable and reconciliation, never a receipt, decides.
     }

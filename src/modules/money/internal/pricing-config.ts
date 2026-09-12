@@ -1,4 +1,5 @@
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 
 import {
   exactAmountSchema,
@@ -25,8 +26,8 @@ export function normalizePricingConfig(config: unknown): NormalizePricingConfigR
     const parsed = pricingConfigSchema.safeParse(config)
     if (!parsed.success) return { kind: 'invalid', code: 'pricing_config_invalid' }
     return { kind: 'valid', config: parsed.data }
-  } catch {
-    return { kind: 'invalid', code: 'pricing_config_invalid' }
+  } catch (cause) {
+    return degradeBackend(cause, { kind: 'invalid', code: 'pricing_config_invalid' }, { site: 'normalizePricingConfig', reason: 'invalid_response' })
   }
 }
 
@@ -127,7 +128,7 @@ export function computeRakeSplit(grossAmount: ExactAmount, config: RakeConfig | 
     const providerNet = rake === undefined ? undefined : subtractExactAmounts(parsedGross.data, rake)
     if (rake === undefined || providerNet === undefined) return { kind: 'refused', code: 'rake_not_configured' }
     return { grossAmount: parsedGross.data, rakeBps, rake, providerNet }
-  } catch {
-    return { kind: 'refused', code: 'rake_not_configured' }
+  } catch (cause) {
+    return degradeBackend(cause, { kind: 'refused', code: 'rake_not_configured' } as const, { site: 'computeRakeSplit', reason: 'invalid_response' })
   }
 }

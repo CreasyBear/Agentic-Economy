@@ -1,3 +1,4 @@
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 import {
@@ -51,8 +52,8 @@ export async function reconcilePreSubmissionRecovery(
   let money: PreSubmissionMoneyResult
   try {
     money = await reconcilePreSubmissionMoney(ctx, work, proof)
-  } catch {
-    return projectPersistedRecovery(work.recovered)
+  } catch (cause) {
+    return degradeBackend(cause, projectPersistedRecovery(work.recovered), { site: 'reconcilePreSubmissionRecovery', reason: 'source_unavailable' })
   }
   if (money.kind === 'not_reconciled') return projectPersistedRecovery(work.recovered)
 

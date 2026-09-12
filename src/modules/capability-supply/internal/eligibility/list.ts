@@ -1,3 +1,4 @@
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
   capabilityToolId,
@@ -208,8 +209,10 @@ function deriveAdmittedTool(
       commercialDigest: canonicalDigest(offering.presentation.commercialRelationship),
       effectDigest: canonicalDigest({ contractRef, contractDocumentJson }),
     })
-  } catch {
-    return undefined
+  } catch (cause) {
+    return degradeBackend(cause, undefined, {
+      site: 'deriveAdmittedTool', reason: 'invalid_response',
+    })
   }
 }
 

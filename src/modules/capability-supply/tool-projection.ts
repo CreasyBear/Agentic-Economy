@@ -46,6 +46,7 @@ export type {
   PublicRecoveryPolicy,
   PublicCapabilityUnavailableReason,
   PublicToolParameter,
+  PublicToolCanonical,
   PublicToolCatalogPrice,
   PublicToolAuthentication,
   PublicToolPayment,

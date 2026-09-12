@@ -32,6 +32,7 @@ import {
   type ResponseMetadata,
   type ValidProbeConfiguration,
 } from "./readiness-probe-shared";
+import { degradeBackend } from "@/lib/observability/degrade-backend";
 
 const quoteResponse = z.looseObject({
   kind: z.literal("quoted"),
@@ -47,8 +48,8 @@ export function parseJsonTransportConfig(
 ): unknown | undefined {
   try {
     return JSON.parse(target.transportConfigJson ?? "");
-  } catch {
-    return undefined;
+  } catch (cause) {
+    return degradeBackend(cause, undefined, { site: "parseJsonTransportConfig", reason: "invalid_response" });
   }
 }
 
@@ -93,8 +94,8 @@ export const aeQuoteProbeCommand: ProbeCommand = {
     let value: unknown;
     try {
       value = JSON.parse(target.transportConfigJson);
-    } catch {
-      return { kind: "invalid", evidence: "probe:request_unrepresentable" };
+    } catch (cause) {
+      return degradeBackend(cause, { kind: "invalid", evidence: "probe:request_unrepresentable" } as const, { site: "aeQuoteProbeCommandParse", reason: "invalid_response" });
     }
     const http = parseHttpJsonTransportConfiguration(value);
     return http === undefined
@@ -272,12 +273,12 @@ export async function executeHttpJsonProbe(
           : {}),
       }),
     );
-  } catch {
-    return unhealthy(now, base, "ready", "transport_unreachable", [
+  } catch (cause) {
+    return degradeBackend(cause, unhealthy(now, base, "ready", "transport_unreachable", [
       credentialEvidence,
       "probe:target_public",
       "probe:transport_unreachable",
-    ]);
+    ]), { site: "executeHttpJsonProbe", reason: "source_unavailable" });
   }
   const evidence = [credentialEvidence, "probe:target_public"];
   const responseMeta = responseMetadata(response);

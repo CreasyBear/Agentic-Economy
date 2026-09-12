@@ -4,7 +4,7 @@ import { callPublicSourceMutation, sourceMutation } from '@/lib/server/convex-so
 import { sourceWriteAdmissionFromRequest, sourceWriteRequestFromAdmission } from '@/lib/server/source-write-admission'
 import { MARKET_TOOLS_CALL_SCOPE } from '@/modules/agent-access/contract'
 import type { AgentAccessPrincipal } from '@/modules/agent-access/agent-access'
-import { defineAction } from '@/modules/common/action'
+import { defineAction, idempotencyKeySchema } from '@/modules/common/action'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { publicToolChoiceSchema } from '@/modules/registry/tool-choice-contracts'
 import { registryToolsSearchAction } from '@/modules/registry/tools.actions'
@@ -42,7 +42,7 @@ export const MARKET_REQUEST_ROUTE_CONTRACTS = Object.freeze({
 
 export const marketRequestCreateInputSchema = z.strictObject({
   query: z.string().trim().min(1).max(200),
-  idempotencyKey: z.string().trim().min(1).max(200),
+  idempotencyKey: idempotencyKeySchema,
 })
 
 export const marketRequestCreateResultSchema = z.discriminatedUnion('kind', [

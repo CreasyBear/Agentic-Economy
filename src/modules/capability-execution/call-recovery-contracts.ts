@@ -33,6 +33,7 @@ export const callStatusRefusalCodeValues = [
   'invocation_runtime_unavailable',
 ] as const
 export const callStatusRefusalCodeSchema = z.enum(callStatusRefusalCodeValues)
+export type CallStatusRefusalCode = (typeof callStatusRefusalCodeValues)[number]
 
 export type CallStatusState = z.infer<typeof callStatusStateSchema>
 

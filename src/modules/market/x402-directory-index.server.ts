@@ -1,3 +1,4 @@
+import { degrade } from '@/lib/observability/degrade'
 import { callPublicSourceQuery, sourceQuery } from '@/lib/server/convex-source'
 import { CATALOGUE_STALE_AFTER_MS, sourceFreshnessState, type SourceFreshnessState } from '@/modules/common/freshness'
 import { readX402Directory } from './x402-directory.server'
@@ -18,6 +19,8 @@ const browse = sourceQuery<X402DirectoryIndexInput & { paginationOpts: { numItem
 const overview = sourceQuery<Record<string, never>, X402DirectoryCatalogueOverview>('x402DirectoryIndex:overview')
 const resource = sourceQuery<{ resource: string }, X402DirectoryCatalogueResource>('x402DirectoryIndex:resource')
 const analytics = sourceQuery<{ network?: string }, X402DirectoryAnalytics>('x402DirectoryIndex:analytics')
+const bySlug = sourceQuery<{ providerKey: string; slug: string }, X402DirectoryCatalogueResource>('x402DirectoryIndex:bySlug')
+const canonicalUrlForTool = sourceQuery<{ toolRef: string }, { providerHost: string; slug: string } | null>('x402DirectoryIndex:canonicalUrlForTool')
 
 type DirectoryStatus = {
   kind: 'unavailable' | 'ready'
@@ -82,8 +85,12 @@ export async function readDirectoryFreshnessField(now: number = Date.now()): Pro
       ...(completedAt === undefined ? {} : { completedAt }),
       staleAfterMs: CATALOGUE_STALE_AFTER_MS,
     }
-  } catch {
-    return { source: 'x402_directory', state: 'absent', staleAfterMs: CATALOGUE_STALE_AFTER_MS }
+  } catch (cause) {
+    return degrade(
+      cause,
+      { source: 'x402_directory' as const, state: 'absent' as const, staleAfterMs: CATALOGUE_STALE_AFTER_MS },
+      { site: 'readDirectoryFreshnessField', reason: 'source_unavailable' },
+    )
   }
 }
 
@@ -127,17 +134,55 @@ export async function readX402DirectoryCatalogue(input: X402DirectoryCatalogueIn
 }
 export async function readX402DirectoryCatalogueOverview(): Promise<X402DirectoryCatalogueOverview> {
   try { return await callPublicSourceQuery(overview, {}) }
-  catch { return { kind: 'unavailable', reason: 'source_unavailable' } }
+  catch (cause) {
+    return degrade(cause, { kind: 'unavailable', reason: 'source_unavailable' } as const, {
+      site: 'readX402DirectoryCatalogueOverview',
+      reason: 'source_unavailable',
+    })
+  }
 }
 export async function readX402DirectoryAnalytics(input: { network?: string | undefined }): Promise<X402DirectoryAnalytics> {
   try { return await callPublicSourceQuery(analytics, input.network === undefined ? {} : { network: input.network }) }
-  catch { return { kind: 'unavailable', reason: 'source_unavailable' } }
+  catch (cause) {
+    return degrade(cause, { kind: 'unavailable', reason: 'source_unavailable' } as const, {
+      site: 'readX402DirectoryAnalytics',
+      reason: 'source_unavailable',
+    })
+  }
 }
 export async function readX402DirectoryCatalogueResource(input: { resource: string }): Promise<X402DirectoryCatalogueResource> {
   const parsed = x402DirectoryCatalogueResourceInputSchema.safeParse(input)
   if (!parsed.success) return { kind: 'unavailable', reason: 'query_invalid' }
   try { return await callPublicSourceQuery(resource, parsed.data) }
-  catch { return { kind: 'unavailable', reason: 'source_unavailable' } }
+  catch (cause) {
+    return degrade(cause, { kind: 'unavailable', reason: 'source_unavailable' } as const, {
+      site: 'readX402DirectoryCatalogueResource',
+      reason: 'source_unavailable',
+    })
+  }
+}
+
+/** Canonical `/tools/<providerHost>/<slug>` lookup - the route's synchronous directory metadata plus the admitted toolRef, when already joined. */
+export async function readX402DirectoryCatalogueBySlug(input: { providerKey: string; slug: string }): Promise<X402DirectoryCatalogueResource> {
+  if (input.providerKey.length === 0 || input.slug.length === 0) return { kind: 'unavailable', reason: 'query_invalid' }
+  try { return await callPublicSourceQuery(bySlug, input) }
+  catch (cause) {
+    return degrade(cause, { kind: 'unavailable', reason: 'source_unavailable' } as const, {
+      site: 'readX402DirectoryCatalogueBySlug',
+      reason: 'source_unavailable',
+    })
+  }
+}
+
+/** Reverse lookup for the `/tools/$toolRef` redirect; `null` keeps the caller on that route. */
+export async function readX402DirectoryCanonicalUrlForTool(input: { toolRef: string }): Promise<{ providerHost: string; slug: string } | null> {
+  try { return await callPublicSourceQuery(canonicalUrlForTool, input) }
+  catch (cause) {
+    return degrade(cause, null, {
+      site: 'readX402DirectoryCanonicalUrlForTool',
+      reason: 'source_unavailable',
+    })
+  }
 }
 
 const providers = sourceQuery<{ kind: 'provider'; paginationOpts: { numItems: number; cursor: string | null } }, X402DirectoryProvidersPage>('x402DirectoryIndex:facets')
@@ -145,5 +190,10 @@ export async function readX402DirectoryProviders(input: X402DirectoryProvidersIn
   const parsed = x402DirectoryProvidersInputSchema.safeParse(input)
   if (!parsed.success) return { kind: 'unavailable', reason: 'query_invalid' }
   try { return await callPublicSourceQuery(providers, { kind: 'provider', paginationOpts: { numItems: 24, cursor: parsed.data.providerCursor ?? null } }) }
-  catch { return { kind: 'unavailable', reason: 'source_unavailable' } }
+  catch (cause) {
+    return degrade(cause, { kind: 'unavailable', reason: 'source_unavailable' } as const, {
+      site: 'readX402DirectoryProviders',
+      reason: 'source_unavailable',
+    })
+  }
 }

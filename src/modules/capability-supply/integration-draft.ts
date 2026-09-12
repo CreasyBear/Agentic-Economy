@@ -1,6 +1,7 @@
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { isRecord } from '@/modules/common/is-record'
 import { stableStringify, type StableHashValue } from '@/modules/common/stable-hash'
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 
 import { inspectSource } from './internal/publication-importer-types'
 import { publicationMaterialContainsCredential } from './internal/publication/source'
@@ -74,8 +75,12 @@ export function normalizeSupplyIntegrationDraft(
     validationInput = input.validationInputJson === undefined
       ? undefined
       : JSON.parse(input.validationInputJson)
-  } catch {
-    return { kind: 'refused', reason: 'draft_invalid' }
+  } catch (cause) {
+    return degradeBackend(
+      cause,
+      { kind: 'refused', reason: 'draft_invalid' } as const,
+      { site: 'normalizeSupplyIntegrationDraft', reason: 'invalid_response' },
+    )
   }
   const source = normalizeSupplySourceDescriptor(sourceValue)
   if (source === undefined || source.kind !== input.sourceKind || !isRecord(selectorValue)) {
@@ -186,8 +191,8 @@ function validUrl(value: unknown): value is string {
   try {
     const parsed = new URL(value)
     return parsed.protocol === 'https:' && parsed.username === '' && parsed.password === ''
-  } catch {
-    return false
+  } catch (cause) {
+    return degradeBackend(cause, false, { site: 'validUrl', reason: 'invalid_response' })
   }
 }
 
@@ -233,8 +238,8 @@ function sourceTarget(
     url = source.kind === 'openapi' && typeof selector.path === 'string'
       ? new URL(selector.path.replace(/^\/+/, ''), parsed.href.endsWith('/') ? parsed.href : `${parsed.href}/`).toString()
       : parsed.toString()
-  } catch {
-    return undefined
+  } catch (cause) {
+    return degradeBackend(cause, undefined, { site: 'sourceTarget', reason: 'invalid_response' })
   }
   const method = typeof selector.method === 'string' ? selector.method.toUpperCase() : undefined
   return { url, ...(method === undefined ? {} : { method }) }

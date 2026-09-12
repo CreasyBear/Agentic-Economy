@@ -1,5 +1,6 @@
 import { canonicalDigest } from '@/modules/common/canonical-digest';
 import { isRecord } from "@/modules/common/is-record";
+import { isDirectoryEntryEligible } from "@/modules/capability-contract/public";
 import { formatCurrencyAmount, type ExactAmount } from "@/modules/money/public";
 
 import type { BazaarAdmission } from "./publication-importer-x402-bazaar";
@@ -12,6 +13,7 @@ import {
   validPublicHttpsEndpoint,
   type X402FetchTransportConfiguration,
 } from "./transport-adapters";
+import { degradeBackend } from "@/lib/observability/degrade-backend";
 
 export const FACILITATOR_DISCOVERY_URLS = [
   "https://api.cdp.coinbase.com/platform/v2/x402/discovery/resources",
@@ -164,6 +166,18 @@ export function decideFacilitatorDiscoveryItem(
     };
   }
 
+  // Directory eligibility gate (src/modules/market/x402-directory-index.ts:
+  // isDirectoryEntryEligible). Default-deny: an item with no `quality`
+  // telemetry at all is treated the same as one reporting zero payers
+  // (discoveryQualityPayersOrder's -1 sentinel) rather than skipping the
+  // check - unverifiable adoption is not eligible, so it fails the payer
+  // floor instead of being admitted on trust. Bazaar admission above already
+  // guarantees an output schema, so only the payer floor can fail here.
+  const payersOrder = discoveryQualityPayersOrder(item) ?? -1;
+  if (!isDirectoryEntryEligible({ hasOutputSchema: true, hasOutputExample: false, payersOrder })) {
+    return { kind: "skip", reason: "resource_invalid" };
+  }
+
   const accept = firstSupportedAccept(paymentRequired.accepts);
   if (accept.kind === "refused") return { kind: "skip", reason: accept.reason };
   const price = priceBreakdown(accept.amount, accept.assetExponent);
@@ -267,8 +281,8 @@ export function parseFacilitatorDiscoverySourceImport(
     return isRecord(parsed) && parsed.kind === "x402"
       ? parsed as Extract<CapabilityPublicationImport, { kind: "x402" }>
       : undefined;
-  } catch {
-    return undefined;
+  } catch (cause) {
+    return degradeBackend(cause, undefined, { site: "parseFacilitatorDiscoverySourceImport", reason: "invalid_response" });
   }
 }
 
@@ -380,8 +394,8 @@ function priceBreakdown(amount: string, exponent: number): FacilitatorDiscoveryP
     return provider === undefined || platformFee === undefined || total === undefined
       ? undefined
       : { provider, platformFee, total, feeBps: 0 };
-  } catch {
-    return undefined;
+  } catch (cause) {
+    return degradeBackend(cause, undefined, { site: "priceBreakdown", reason: "invalid_response" });
   }
 }
 
@@ -575,6 +589,13 @@ export function mapFacilitatorDiscoveryImporterRefusal(
     case "commercial_metadata_inconsistent": return "payment_terms_invalid";
     default: return "source_invalid";
   }
+}
+
+/** undefined = no discovery `quality` telemetry at all; the caller treats this the same as the -1 sentinel (unreported/invalid) so a missing signal fails the payer floor rather than skipping it. */
+function discoveryQualityPayersOrder(item: unknown): number | undefined {
+  if (!isRecord(item) || !isRecord(item.quality)) return undefined;
+  const payers = item.quality.l30DaysUniquePayers;
+  return typeof payers === "number" && Number.isSafeInteger(payers) && payers >= 0 ? payers : -1;
 }
 
 function readNonNegativeSafeInteger(value: unknown): number | undefined {

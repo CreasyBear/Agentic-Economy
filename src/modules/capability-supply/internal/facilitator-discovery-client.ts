@@ -16,6 +16,7 @@ import {
   FACILITATOR_DISCOVERY_URLS,
   parseFacilitatorDiscoveryPage,
 } from './facilitator-discovery-ingest'
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 
 export const FACILITATOR_DISCOVERY_MAX_PAGES = 4 as const
 export const FACILITATOR_DISCOVERY_MAX_BODY_BYTES = 2_097_152 as const
@@ -90,8 +91,8 @@ export function admitOfficialBazaarFromPaymentRequired(
       if (!consistency.valid) return { kind: 'refused', reason: 'bazaar_discovery_invalid' }
     }
     return admitBazaarDiscoveryInfo(extension, { input: info.input, output: info.output })
-  } catch {
-    return { kind: 'refused', reason: 'bazaar_discovery_invalid' }
+  } catch (cause) {
+    return degradeBackend(cause, { kind: 'refused', reason: 'bazaar_discovery_invalid' } as const, { site: 'admitOfficialBazaarFromPaymentRequired', reason: 'invalid_response' })
   }
 }
 
@@ -161,12 +162,12 @@ async function fetchPage(fetcher: Fetcher, requestUrl: string): Promise<Discover
     let document: unknown
     try {
       document = JSON.parse(body.text) as unknown
-    } catch {
-      return undefined
+    } catch (cause) {
+      return degradeBackend(cause, undefined, { site: 'fetchPage', reason: 'invalid_response' })
     }
     return parseFacilitatorDiscoveryPage(document)
-  } catch {
-    return undefined
+  } catch (cause) {
+    return degradeBackend(cause, undefined, { site: 'fetchPage', reason: 'source_unavailable' })
   } finally {
     clearTimeout(timer)
   }

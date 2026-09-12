@@ -1,3 +1,4 @@
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { capabilityOfferingRegistrationHash } from '@/modules/capability-supply/public'
 
 import { offeringRegistrationFromRow, type CapabilityOfferingRow } from './registration'
@@ -5,7 +6,9 @@ import { offeringRegistrationFromRow, type CapabilityOfferingRow } from './regis
 export function offeringIntegrityIsValid(row: CapabilityOfferingRow): boolean {
   try {
     return capabilityOfferingRegistrationHash(offeringRegistrationFromRow(row)) === row.registrationHash
-  } catch {
-    return false
+  } catch (cause) {
+    return degradeBackend(cause, false, {
+      site: 'offeringIntegrityIsValid', reason: 'invalid_response',
+    })
   }
 }

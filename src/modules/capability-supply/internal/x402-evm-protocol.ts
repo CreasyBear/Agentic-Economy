@@ -6,6 +6,8 @@ import {
   zeroAddress,
 } from 'viem'
 
+import { degradeBackend } from '@/lib/observability/degrade-backend'
+
 export type Hex = `0x${string}`
 export type EvmAddress = Hex
 
@@ -52,7 +54,7 @@ export async function verifyEip191Message(input: Readonly<{
       message: input.message,
       signature: input.signature,
     })
-  } catch {
-    return false
+  } catch (cause) {
+    return degradeBackend(cause, false, { site: 'verifyEip191Message', reason: 'invalid_response' })
   }
 }

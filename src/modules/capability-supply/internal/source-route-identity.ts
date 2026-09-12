@@ -1,6 +1,7 @@
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { isRecord } from '@/modules/common/is-record'
 import type { CapabilityPublicationSourceSelector } from './publication-importer-types'
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 
 export function sourceRouteRef(input: Readonly<{
   sourceKind: 'ae_envelope' | 'openapi_http' | 'mcp' | 'agent_plugin_mcp' | 'x402'
@@ -33,8 +34,8 @@ export function sourceRouteRef(input: Readonly<{
     let descriptor: unknown
     try {
       descriptor = JSON.parse(input.sourceDescriptorJson)
-    } catch {
-      return undefined
+    } catch (cause) {
+      return degradeBackend(cause, undefined, { site: 'sourceRouteRef', reason: 'invalid_response' })
     }
     const method = isRecord(descriptor) && typeof descriptor.method === 'string'
       ? descriptor.method.toUpperCase()
@@ -53,8 +54,8 @@ function canonicalEndpoint(value: string): string | undefined {
     if (url.protocol !== 'https:' || url.username !== '' || url.password !== '') return undefined
     url.hash = ''
     return url.toString()
-  } catch {
-    return undefined
+  } catch (cause) {
+    return degradeBackend(cause, undefined, { site: 'canonicalEndpoint', reason: 'invalid_response' })
   }
 }
 

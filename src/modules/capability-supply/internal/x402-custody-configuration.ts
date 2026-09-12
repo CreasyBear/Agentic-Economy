@@ -1,3 +1,4 @@
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { canonicalDigest, isCanonicalDigest } from '@/modules/common/canonical-digest'
 import { readTrimmedEnv, type StringEnvironment } from '@/lib/server/read-trimmed-env'
 import {
@@ -110,8 +111,8 @@ export function cdpX402CustodyConfigurationFromEnvironment(
       maxAtomic,
       dailyMaxAtomic,
     }
-  } catch {
-    return undefined
+  } catch (cause) {
+    return degradeBackend(cause, undefined, { site: 'cdpX402CustodyConfigurationFromEnvironment', reason: 'invalid_response' })
   }
 }
 

@@ -1,6 +1,8 @@
 import Decimal from 'decimal.js'
 import { z } from 'zod'
 
+import { degradeBackend } from '@/lib/observability/degrade-backend'
+
 export type ExactAmount = Readonly<{
   currency: string
   units: string
@@ -21,8 +23,8 @@ export function readExactAmount(value: unknown): ExactAmount | undefined {
   try {
     const parsed = exactAmountSchema.safeParse(value)
     return parsed.success ? parsed.data : undefined
-  } catch {
-    return undefined
+  } catch (cause) {
+    return degradeBackend(cause, undefined, { site: 'readExactAmount', reason: 'invalid_response' })
   }
 }
 
@@ -79,8 +81,8 @@ export function parseDecimalExactAmount(currency: unknown, decimalAmount: unknow
     const currencyResult = currencySchema.safeParse(currency)
     if (!currencyResult.success) return undefined
     parsedCurrency = currencyResult.data
-  } catch {
-    return undefined
+  } catch (cause) {
+    return degradeBackend(cause, undefined, { site: 'parseDecimalExactAmount', reason: 'invalid_response' })
   }
   const fractionalDigits = decimalAmount.split('.')[1] ?? ''
   if (/[1-9]/.test(fractionalDigits.slice(targetExponent))) return undefined
@@ -89,8 +91,8 @@ export function parseDecimalExactAmount(currency: unknown, decimalAmount: unknow
     if (!scaled.isInteger() || scaled.isNegative()) return undefined
     const units = scaled.toFixed(0)
     return exactAmountSchema.parse({ currency: parsedCurrency, units, exponent: targetExponent })
-  } catch {
-    return undefined
+  } catch (cause) {
+    return degradeBackend(cause, undefined, { site: 'parseDecimalExactAmount', reason: 'invalid_response' })
   }
 }
 

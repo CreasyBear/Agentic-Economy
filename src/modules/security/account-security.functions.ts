@@ -9,6 +9,7 @@ import {
   sourceQuery,
   type ConvexServerFunctionAssertion,
 } from '@/lib/server/convex-source'
+import { degrade } from '@/lib/observability/degrade'
 
 import {
   CLERK_SECURITY_OBSERVE_OPERATION,
@@ -74,8 +75,11 @@ export async function readAccountSecurityHistoryThroughSource(
         isDone: page.isDone,
       },
     }
-  } catch {
-    return { kind: 'unavailable', reason: 'source_unavailable' }
+  } catch (cause) {
+    return degrade(cause, { kind: 'unavailable', reason: 'source_unavailable' }, {
+      site: 'readAccountSecurityHistoryThroughSource',
+      reason: 'source_unavailable',
+    })
   }
 }
 
@@ -101,7 +105,10 @@ export const readAgentSecurityHistoryServer = createServerFn({ method: 'GET' })
           isDone: page.isDone,
         },
       }
-    } catch {
-      return { kind: 'unavailable', reason: 'source_unavailable' }
+    } catch (cause) {
+      return degrade(cause, { kind: 'unavailable', reason: 'source_unavailable' }, {
+        site: 'readAgentSecurityHistoryServer',
+        reason: 'source_unavailable',
+      })
     }
   })

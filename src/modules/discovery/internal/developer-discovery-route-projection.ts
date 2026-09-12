@@ -40,6 +40,7 @@ import {
   readDeveloperDiscoveryGatedExclusions,
   readDeveloperDiscoverySupportMatrix,
 } from './developer-discovery-support-matrix'
+import { captureBackendException } from '@/lib/observability/degrade-backend'
 
 const developerDiscoverySchemaFields = [
   'businessId',
@@ -704,7 +705,8 @@ function isDeveloperDiscoveryCriticalCatalogRoute(route: string): boolean {
   let pathname = route
   try {
     pathname = new URL(route, 'https://ae.example').pathname
-  } catch {
+  } catch (cause) {
+    captureBackendException(cause, { site: 'isDeveloperDiscoveryCriticalCatalogRoute' }, 'warning')
     pathname = route.split('?')[0] ?? route
   }
 

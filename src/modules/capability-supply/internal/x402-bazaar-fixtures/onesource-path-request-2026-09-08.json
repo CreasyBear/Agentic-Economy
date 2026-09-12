@@ -1,5 +1,8 @@
 {
   "x402Version": 2,
+  "quality": {
+    "l30DaysUniquePayers": 4
+  },
   "resource": {
     "url": "https://api.onesource.io/api/chain/tx/:hash",
     "description": "Full Ethereum transaction details by hash via eth_getTransactionByHash - from, to, value, calldata, block"

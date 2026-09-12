@@ -1,4 +1,5 @@
 import type { OfferingPrice } from '@/modules/catalog/public'
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { uniqueSorted } from '@/modules/common/unique-sorted'
 import {
   formatExactAmount,
@@ -509,15 +510,15 @@ function isValidEndpointUrl(value: string): boolean {
   if (trimmed.startsWith('/')) {
     try {
       return new URL(trimmed, 'https://agentic-economy.invalid').protocol === 'https:'
-    } catch {
-      return false
+    } catch (cause) {
+      return degradeBackend(cause, false, { site: 'isValidEndpointUrl', reason: 'invalid_response' })
     }
   }
   try {
     const parsed = new URL(trimmed)
     return (parsed.protocol === 'http:' || parsed.protocol === 'https:') && parsed.hostname.length > 0
-  } catch {
-    return false
+  } catch (cause) {
+    return degradeBackend(cause, false, { site: 'isValidEndpointUrl', reason: 'invalid_response' })
   }
 }
 
@@ -537,8 +538,8 @@ function domainFromPublicUrl(publicUrl: string): string | undefined {
     const parsed = new URL(publicUrl)
     if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return undefined
     return parsed.hostname.length === 0 ? undefined : parsed.hostname
-  } catch {
-    return undefined
+  } catch (cause) {
+    return degradeBackend(cause, undefined, { site: 'domainFromPublicUrl', reason: 'invalid_response' })
   }
 }
 

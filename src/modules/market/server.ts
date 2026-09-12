@@ -1,3 +1,5 @@
+import { captureRouteException } from "@/lib/observability/capture-route-exception";
+import { degrade } from "@/lib/observability/degrade";
 import { callPublicSourceQuery, sourceQuery } from "@/lib/server/convex-source";
 import { readCapabilityToolSearch } from "@/modules/capability-supply/tool-source";
 import type {
@@ -107,11 +109,15 @@ export async function readToolListingEvidence(
           tool.contract.capabilityId,
           catalogText,
         );
-  } catch {
-    return emptyMarketListingEvidence(
-      tool.toolRef,
-      tool.contract.capabilityId,
-      catalogText,
+  } catch (cause) {
+    return degrade(
+      cause,
+      emptyMarketListingEvidence(
+        tool.toolRef,
+        tool.contract.capabilityId,
+        catalogText,
+      ),
+      { site: "readToolListingEvidence", reason: "source_unavailable" },
     );
   }
 }
@@ -134,7 +140,8 @@ export async function readMarketRouteProjection(
         ? {}
         : { filters: { availability: [catalogQuery.availability] } }),
     });
-  } catch {
+  } catch (cause) {
+    captureRouteException(cause, { site: "readMarketRouteProjection" }, "warning");
     catalog = {
       kind: "unavailable",
       schemaVersion: "registry-tools:v3",
@@ -146,6 +153,52 @@ export async function readMarketRouteProjection(
   return { window, catalog: projectedCatalog };
 }
 
+export type ProviderListedCatalogProjection =
+  | Readonly<{ kind: "ok"; items: readonly ToolCardViewModel[] }>
+  | Readonly<{ kind: "unavailable" }>;
+
+/**
+ * Provider-owned Tools admitted to the live registry (`registry.tools.search`
+ * with `source: "current"`), narrowed to `provenance.publisher ===
+ * "provider_owned"`. `readMarketRouteProjection` above only reads the
+ * Coinbase-indexed catalog (`source: "coinbase"`), so a Provider's own
+ * publication never appears there even once admitted. This is the interim,
+ * honest fix: read the same admitted registry a second way rather than
+ * standing up a new read model, for the directory landing's
+ * "Listed by Providers" rail.
+ */
+export async function readProviderListedToolsProjection(
+  window: MarketWindow = "30d",
+): Promise<ProviderListedCatalogProjection> {
+  const generatedAt = Date.now();
+  let catalog: ToolSearchResult;
+  try {
+    catalog = await readCapabilityToolSearch({
+      source: "current",
+      query: "",
+      limit: 12,
+    });
+  } catch (cause) {
+    captureRouteException(
+      cause,
+      { site: "readProviderListedToolsProjection" },
+      "warning",
+    );
+    return { kind: "unavailable" };
+  }
+  if (catalog.kind !== "ok") return { kind: "unavailable" };
+  const providerOwned = {
+    ...catalog,
+    items: catalog.items.filter(
+      (tool) => tool.provenance.publisher === "provider_owned",
+    ),
+  };
+  const projected = await projectCatalog(providerOwned, window, generatedAt);
+  return projected.kind === "ok"
+    ? { kind: "ok", items: projected.items }
+    : { kind: "unavailable" };
+}
+
 export async function readMarketPageProjection(
   window: MarketWindow,
 ): Promise<MarketPageProjection> {
@@ -153,7 +206,8 @@ export async function readMarketPageProjection(
   let source: MarketSourceRead;
   try {
     source = await callPublicSourceQuery(readMarket, { window, now });
-  } catch {
+  } catch (cause) {
+    captureRouteException(cause, { site: "readMarketPageProjection" }, "warning");
     source = emptyMarketSource(now);
   }
   const generatedAt = new Date(source.generatedAt).toISOString();
@@ -299,7 +353,8 @@ async function projectCatalog(
       toolRefs,
       since: generatedAt - windowMilliseconds(window),
     });
-  } catch {
+  } catch (cause) {
+    captureRouteException(cause, { site: "projectCatalog" }, "warning");
     evidence = [];
   }
   const evidenceByToolRef = new Map(

@@ -26,6 +26,7 @@ import {
   sourceMutation,
   sourceQuery,
 } from '@/lib/server/convex-source'
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { readTrimmedEnv } from '@/lib/server/read-trimmed-env'
 import { package5RolloutDecision } from '@/lib/server/package5-rollout'
 import { sourceWriteAdmissionFromContext } from '@/lib/server/source-write-admission'
@@ -246,10 +247,10 @@ export async function cancelOwnerProviderConnectionAttempt({ data, context }: {
 }): Promise<CancelOwnerProviderConnectionAttemptResult> {
   const operationKey = canonicalDigest({ action: 'supply.connection.cancel', attemptRef: data.attemptRef, idempotencyKey: data.idempotencyKey })
   let proof: Awaited<ReturnType<typeof requireStrictClerkConsequenceProof>>
-  try { proof = await requireStrictClerkConsequenceProof(operationKey) } catch { return { kind: 'refused', code: 'reauthentication_required' } }
+  try { proof = await requireStrictClerkConsequenceProof(operationKey) } catch (cause) { return degradeBackend(cause, { kind: 'refused', code: 'reauthentication_required' }, { site: 'cancelOwnerProviderConnectionAttempt', reason: 'source_unavailable' }) }
   try {
     return await admittedMutation(cancelOwnerAttemptMutation, { attemptRef: data.attemptRef, commandId: operationKey, operationKey, correlationId: operationKey, proof }, context, operationKey)
-  } catch { return { kind: 'refused', code: 'source_unavailable' } }
+  } catch (cause) { return degradeBackend(cause, { kind: 'refused', code: 'source_unavailable' }, { site: 'cancelOwnerProviderConnectionAttempt', reason: 'source_unavailable' }) }
 }
 
 const prepareOwnerOAuthAttemptMutation = sourceMutation<
@@ -298,8 +299,8 @@ export async function completeOwnerHttpProviderConnection(
   let attempt: OwnerProviderConnectionAttemptReadback
   try {
     attempt = await readOwnerProviderConnectionAttempt({ data: { attemptRef: data.attemptRef } })
-  } catch {
-    return refusal('source_unavailable')
+  } catch (cause) {
+    return degradeBackend(cause, refusal('source_unavailable'), { site: 'completeOwnerHttpProviderConnection', reason: 'source_unavailable' })
   }
   if (attempt.kind !== 'available') return refusal('not_found')
   if (attempt.attempt.sourceKind !== 'http_credential') return refusal('not_supported')
@@ -317,8 +318,8 @@ export async function completeOwnerHttpProviderConnection(
   let proof: Awaited<ReturnType<typeof requireStrictClerkConsequenceProof>>
   try {
     proof = await requireStrictClerkConsequenceProof(operationKey)
-  } catch {
-    return refusal('reauthentication_required')
+  } catch (cause) {
+    return degradeBackend(cause, refusal('reauthentication_required'), { site: 'completeOwnerHttpProviderConnection', reason: 'source_unavailable' })
   }
 
   const prepareCommand = {
@@ -336,8 +337,8 @@ export async function completeOwnerHttpProviderConnection(
       context,
       operationKey,
     )
-  } catch {
-    return refusal('source_unavailable')
+  } catch (cause) {
+    return degradeBackend(cause, refusal('source_unavailable'), { site: 'completeOwnerHttpProviderConnection', reason: 'source_unavailable' })
   }
   if (prepared.kind === 'refused') return mapPrepareRefusal(prepared.code)
 
@@ -351,8 +352,8 @@ export async function completeOwnerHttpProviderConnection(
       idempotencyRef: operationKey,
       material,
     })
-  } catch {
-    return refusal('secret_unavailable')
+  } catch (cause) {
+    return degradeBackend(cause, refusal('secret_unavailable'), { site: 'completeOwnerHttpProviderConnection', reason: 'source_unavailable' })
   } finally {
     material.fill(0)
   }
@@ -374,8 +375,8 @@ export async function completeOwnerHttpProviderConnection(
       context,
       finalizeOperationKey,
     )
-  } catch {
-    return refusal('source_unavailable')
+  } catch (cause) {
+    return degradeBackend(cause, refusal('source_unavailable'), { site: 'completeOwnerHttpProviderConnection', reason: 'source_unavailable' })
   }
 }
 
@@ -392,7 +393,7 @@ export async function startOwnerMcpProviderConnection(
   if (!package5RolloutDecision('mcpOAuth').enabled) return startRefusal('not_supported')
   const now = runtime.now ?? Date.now
   let attempt: OwnerProviderConnectionAttemptReadback
-  try { attempt = await readOwnerProviderConnectionAttempt({ data: { attemptRef: data.attemptRef } }) } catch { return startRefusal('source_unavailable') }
+  try { attempt = await readOwnerProviderConnectionAttempt({ data: { attemptRef: data.attemptRef } }) } catch (cause) { return degradeBackend(cause, startRefusal('source_unavailable'), { site: 'startOwnerMcpProviderConnection', reason: 'source_unavailable' }) }
   if (attempt.kind !== 'available') return startRefusal('not_found')
   if (attempt.attempt.sourceKind !== 'mcp_oauth') return startRefusal('not_supported')
   if (attempt.attempt.state === 'expired' || attempt.attempt.expiresAt <= now()) {
@@ -410,8 +411,8 @@ export async function startOwnerMcpProviderConnection(
   let proof: Awaited<ReturnType<typeof requireStrictClerkConsequenceProof>>
   try {
     proof = await requireStrictClerkConsequenceProof(operationKey)
-  } catch {
-    return startRefusal('reauthentication_required')
+  } catch (cause) {
+    return degradeBackend(cause, startRefusal('reauthentication_required'), { site: 'startOwnerMcpProviderConnection', reason: 'source_unavailable' })
   }
   let prepared: PrepareOAuthResult
   try {
@@ -422,8 +423,8 @@ export async function startOwnerMcpProviderConnection(
       correlationId: operationKey,
       proof,
     }, context, operationKey)
-  } catch {
-    return startRefusal('source_unavailable')
+  } catch (cause) {
+    return degradeBackend(cause, startRefusal('source_unavailable'), { site: 'startOwnerMcpProviderConnection', reason: 'source_unavailable' })
   }
   if (prepared.kind === 'refused') return startRefusal(mapPrepareRefusal(prepared.code).code)
 
@@ -443,8 +444,8 @@ export async function startOwnerMcpProviderConnection(
       serverUrl: attempt.attempt.sourceUrl,
       authProvider: provider,
     })
-  } catch {
-    return startRefusal('source_unavailable')
+  } catch (cause) {
+    return degradeBackend(cause, startRefusal('source_unavailable'), { site: 'startOwnerMcpProviderConnection', reason: 'source_unavailable' })
   }
   const authorizationUrl = provider.authorizationUrl
   if (authorizationUrl === undefined || !provider.readyForRedirect()) {
@@ -460,8 +461,8 @@ export async function startOwnerMcpProviderConnection(
       material,
     })
     if (stored.kind !== 'active') return startRefusal('secret_unavailable')
-  } catch {
-    return startRefusal('secret_unavailable')
+  } catch (cause) {
+    return degradeBackend(cause, startRefusal('secret_unavailable'), { site: 'startOwnerMcpProviderConnection', reason: 'source_unavailable' })
   } finally {
     material.fill(0)
   }
@@ -477,8 +478,8 @@ export async function startOwnerMcpProviderConnection(
       correlationId: operationKey,
     }, context, bindOperationKey)
     if (bound.kind === 'refused') return startRefusal(mapPrepareRefusal(bound.code).code)
-  } catch {
-    return startRefusal('source_unavailable')
+  } catch (cause) {
+    return degradeBackend(cause, startRefusal('source_unavailable'), { site: 'startOwnerMcpProviderConnection', reason: 'source_unavailable' })
   }
   return { kind: 'redirect', authorizationUrl }
 }
@@ -513,8 +514,9 @@ export async function loadOwnerConnectedOpenApi(
   let material: Uint8Array
   try {
     material = await (runtime.readSecret ?? readActiveCustomerSecret)(pointer)
-  } catch {
-    throw new Error('provider_http_connection_unavailable')
+  } catch (cause) {
+    degradeBackend(cause, undefined, { site: 'loadOwnerConnectedOpenApi', reason: 'source_unavailable' })
+    throw new Error('provider_http_connection_unavailable', { cause })
   }
   try {
     return await (runtime.loadOpenApi ?? loadAuthenticatedOpenApi)({
@@ -587,8 +589,8 @@ export async function previewOwnerMcpProviderConnection(
       connectionRef: input.connectionRef,
       correlationRef,
     })
-  } catch {
-    return { kind: 'refused', reason: 'mcp_connection_unavailable' }
+  } catch (cause) {
+    return degradeBackend(cause, { kind: 'refused', reason: 'mcp_connection_unavailable' }, { site: 'previewOwnerMcpProviderConnection', reason: 'source_unavailable' })
   }
   if (prepared.kind !== 'available'
     || prepared.connection.businessRef !== input.businessRef
@@ -603,14 +605,14 @@ export async function previewOwnerMcpProviderConnection(
       activeGeneration: prepared.connection.activeGeneration,
       pointerRevision: prepared.connection.pointerRevision,
     })
-  } catch {
-    return { kind: 'refused', reason: 'mcp_connection_unavailable' }
+  } catch (cause) {
+    return degradeBackend(cause, { kind: 'refused', reason: 'mcp_connection_unavailable' }, { site: 'previewOwnerMcpProviderConnection', reason: 'source_unavailable' })
   }
   let provider: StoredMcpOAuthProvider
   try {
     provider = StoredMcpOAuthProvider.parse(new TextDecoder('utf-8', { fatal: true }).decode(material))
-  } catch {
-    return { kind: 'refused', reason: 'mcp_connection_unavailable' }
+  } catch (cause) {
+    return degradeBackend(cause, { kind: 'refused', reason: 'mcp_connection_unavailable' }, { site: 'previewOwnerMcpProviderConnection', reason: 'invalid_response' })
   } finally {
     material.fill(0)
   }
@@ -627,8 +629,8 @@ export async function previewOwnerMcpProviderConnection(
       environment: input.environment,
       authProvider: provider,
     })
-  } catch {
-    return { kind: 'refused', reason: 'mcp_connection_unavailable' }
+  } catch (cause) {
+    return degradeBackend(cause, { kind: 'refused', reason: 'mcp_connection_unavailable' }, { site: 'previewOwnerMcpProviderConnection', reason: 'source_unavailable' })
   }
   if (discovery.kind !== 'ready') return discovery
   const after = provider.serialize()
@@ -643,8 +645,8 @@ export async function previewOwnerMcpProviderConnection(
         material: rotated,
       })
       if (stored.kind !== 'active') return { kind: 'refused', reason: 'mcp_connection_unavailable' }
-    } catch {
-      return { kind: 'refused', reason: 'mcp_connection_unavailable' }
+    } catch (cause) {
+      return degradeBackend(cause, { kind: 'refused', reason: 'mcp_connection_unavailable' }, { site: 'previewOwnerMcpProviderConnection', reason: 'source_unavailable' })
     } finally {
       rotated.fill(0)
     }
@@ -689,8 +691,8 @@ export async function completeOwnerMcpProviderConnection(
       stateHash: oauthStateHash(state),
       observedAt: now(),
     })
-  } catch {
-    return refusal('source_unavailable')
+  } catch (cause) {
+    return degradeBackend(cause, refusal('source_unavailable'), { site: 'completeOwnerMcpProviderConnection', reason: 'source_unavailable' })
   }
   if (callback.kind !== 'available') return refusal('not_found')
 
@@ -702,14 +704,14 @@ export async function completeOwnerMcpProviderConnection(
   let material: Uint8Array
   try {
     material = await (runtime.readSecret ?? readActiveCustomerSecret)(pointer)
-  } catch {
-    return refusal('secret_unavailable')
+  } catch (cause) {
+    return degradeBackend(cause, refusal('secret_unavailable'), { site: 'completeOwnerMcpProviderConnection', reason: 'source_unavailable' })
   }
   let provider: StoredMcpOAuthProvider
   try {
     provider = StoredMcpOAuthProvider.parse(new TextDecoder('utf-8', { fatal: true }).decode(material))
-  } catch {
-    return refusal('secret_unavailable')
+  } catch (cause) {
+    return degradeBackend(cause, refusal('secret_unavailable'), { site: 'completeOwnerMcpProviderConnection', reason: 'invalid_response' })
   } finally {
     material.fill(0)
   }
@@ -724,8 +726,8 @@ export async function completeOwnerMcpProviderConnection(
       authProvider: provider,
       callbackParams,
     })
-  } catch {
-    return refusal('connection_conflict')
+  } catch (cause) {
+    return degradeBackend(cause, refusal('connection_conflict'), { site: 'completeOwnerMcpProviderConnection', reason: 'source_unavailable' })
   }
   if (provider.currentTokens === undefined) {
     return refusal('connection_conflict')
@@ -738,8 +740,8 @@ export async function completeOwnerMcpProviderConnection(
       environment: callback.attempt.environment,
       authProvider: provider,
     })
-  } catch {
-    return refusal('source_unavailable')
+  } catch (cause) {
+    return degradeBackend(cause, refusal('source_unavailable'), { site: 'completeOwnerMcpProviderConnection', reason: 'source_unavailable' })
   }
   if (verified.kind !== 'ready') return refusal('source_unavailable')
 
@@ -753,8 +755,8 @@ export async function completeOwnerMcpProviderConnection(
       material: rotated,
     })
     if (stored.kind !== 'active') return refusal('secret_unavailable')
-  } catch {
-    return refusal('secret_unavailable')
+  } catch (cause) {
+    return degradeBackend(cause, refusal('secret_unavailable'), { site: 'completeOwnerMcpProviderConnection', reason: 'source_unavailable' })
   } finally {
     rotated.fill(0)
   }
@@ -769,8 +771,8 @@ export async function completeOwnerMcpProviderConnection(
       operationKey: finalizeOperationKey,
       correlationId: provider.rotationIdempotencyRef,
     }, context, finalizeOperationKey)
-  } catch {
-    return refusal('source_unavailable')
+  } catch (cause) {
+    return degradeBackend(cause, refusal('source_unavailable'), { site: 'completeOwnerMcpProviderConnection', reason: 'source_unavailable' })
   }
 }
 
@@ -843,8 +845,8 @@ function canonicalOAuthCallback(value: string, attemptRef: string): string | und
       || url.searchParams.get('attempt') !== attemptRef
       || [...url.searchParams.keys()].some((key) => key !== 'attempt')) return undefined
     return url.toString()
-  } catch {
-    return undefined
+  } catch (cause) {
+    return degradeBackend(cause, undefined, { site: 'canonicalOAuthCallback', reason: 'invalid_response' })
   }
 }
 
@@ -1065,8 +1067,8 @@ function exactHttpsEndpoint(value: unknown): string | undefined {
       && endpoint.hash === ''
       ? value
       : undefined
-  } catch {
-    return undefined
+  } catch (cause) {
+    return degradeBackend(cause, undefined, { site: 'exactHttpsEndpoint', reason: 'invalid_response' })
   }
 }
 
@@ -1104,8 +1106,8 @@ export async function revokeStoredMcpProviderConnection(
   let provider: StoredMcpOAuthProvider
   try {
     provider = StoredMcpOAuthProvider.parse(new TextDecoder('utf-8', { fatal: true }).decode(material))
-  } catch {
-    return oauthCleanupResult('outcome_unknown', 'oauth_credential_unavailable')
+  } catch (cause) {
+    return degradeBackend(cause, oauthCleanupResult('outcome_unknown', 'oauth_credential_unavailable'), { site: 'revokeStoredMcpProviderConnection', reason: 'invalid_response' })
   } finally {
     material.fill(0)
   }

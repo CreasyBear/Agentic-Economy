@@ -1,4 +1,5 @@
 import { createAuthenticatedSourceTransport, sourceAction, sourceQuery } from '@/lib/server/convex-source'
+import { degrade } from '@/lib/observability/degrade'
 import { listAgentAccessKeysServer } from '@/modules/agent-access/agent-access.functions'
 import type { AgentAccessKeyInventoryItem } from '@/modules/agent-access/agent-access'
 import type { AgentAccessOwnerGrantReadback } from '@/modules/agent-access/policy'
@@ -165,8 +166,8 @@ export async function loadAgentDirectoryReadback(
           paginationOpts: { numItems: 50, cursor: null },
         })
         return { principalRef, readback: mapOwnerAgentReadback(principalRef, readback) }
-      } catch {
-        return {
+      } catch (cause) {
+        return degrade(cause, {
           principalRef,
           readback: {
             principalRef,
@@ -174,7 +175,7 @@ export async function loadAgentDirectoryReadback(
             activityIsDone: true,
             dataState: 'unavailable' as const,
           },
-        }
+        }, { site: 'loadAgentDirectoryReadback', reason: 'source_unavailable' })
       }
     })),
     principalRefs.length === 0
@@ -453,8 +454,8 @@ export async function enrichAgentDirectoryActivity(
   const comparisons = await Promise.all(batches.map(async (toolRefs) => {
     try {
       return await tools.compare({ toolRefs })
-    } catch {
-      return undefined
+    } catch (cause) {
+      return degrade(cause, undefined, { site: 'enrichAgentDirectoryActivity', reason: 'source_unavailable' })
     }
   }))
   const labels = new Map<string, Readonly<{ label: string; provider: string }>>(comparisons.flatMap((comparison) => (

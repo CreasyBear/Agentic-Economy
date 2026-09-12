@@ -3,6 +3,7 @@ import { canonicalDigest, isCanonicalDigest } from '@/modules/common/canonical-d
 import { deepFreeze } from '@/modules/common/deep-freeze'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 import { compareExactAmounts, displayPriceFromPricingConfig, exactAmountSchema, pricingConfigDigest } from '@/modules/money/public'
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 
 import type { PublicCapabilityUnavailableReason, PublicToolPrice } from './tool-projection'
 import type { PublishedTool } from './published-tool'
@@ -352,8 +353,8 @@ function transportConfigIsExact(tool: PublishedTool): boolean {
     const parsed: unknown = JSON.parse(tool.transport.configJson)
     return canonicalDigest(parsed) === tool.transport.configDigest
       && canonicalDigest(tool.binding.adapter.config) === tool.transport.configDigest
-  } catch {
-    return false
+  } catch (cause) {
+    return degradeBackend(cause, false, { site: 'transportConfigIsExact', reason: 'invalid_response' })
   }
 }
 
@@ -369,7 +370,7 @@ function readIdentityRuntimeEnvironment(
 function sameStableValue(left: unknown, right: unknown): boolean {
   try {
     return canonicalDigest(left) === canonicalDigest(right)
-  } catch {
-    return false
+  } catch (cause) {
+    return degradeBackend(cause, false, { site: 'sameStableValue', reason: 'source_unavailable' })
   }
 }

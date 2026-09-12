@@ -1,4 +1,5 @@
 import { callPublicSourceQuery, sourceQuery } from '@/lib/server/convex-source'
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { defineAction } from '@/modules/common/action'
 import { sourceFreshnessState } from '@/modules/common/freshness'
 import {
@@ -43,8 +44,8 @@ async function readSupplyProjectionFreshness(now: number = Date.now()): Promise<
       ...(completedAt === null ? {} : { completedAt }),
       staleAfterMs: SUPPLY_PROJECTION_STALE_AFTER_MS,
     }
-  } catch {
-    return { source: 'supply_projection', state: 'absent', staleAfterMs: SUPPLY_PROJECTION_STALE_AFTER_MS }
+  } catch (cause) {
+    return degradeBackend(cause, { source: 'supply_projection', state: 'absent', staleAfterMs: SUPPLY_PROJECTION_STALE_AFTER_MS } as const, { site: 'readSupplyProjectionFreshness', reason: 'source_unavailable' })
   }
 }
 

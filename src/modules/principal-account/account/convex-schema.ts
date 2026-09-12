@@ -146,16 +146,4 @@ export const accountTables = {
     .index('by_accountRef_and_lifecycle', ['accountRef', 'lifecycle'])
     .index('by_memberPrincipalRef_and_lifecycle', ['memberPrincipalRef', 'lifecycle'])
     .index('by_accountRef_and_memberPrincipalRef_and_lifecycle', ['accountRef', 'memberPrincipalRef', 'lifecycle']),
-  accountRecoveryParticipantApprovals: defineTable(verifiedRecoveryParticipantApprovalValue)
-    .index('by_approvalRef', ['approvalRef'])
-    .index('by_accountRef_and_lifecycle', ['accountRef', 'lifecycle'])
-    .index('by_participantPrincipalRef_and_lifecycle', ['participantPrincipalRef', 'lifecycle']),
-  accountSuccessionAuthorizations: defineTable(successionAuthorizationValue)
-    .index('by_authorizationRef', ['authorizationRef'])
-    .index('by_accountRef_and_lifecycle', ['accountRef', 'lifecycle'])
-    .index('by_accountRef_and_successorOwnerPrincipalRef_and_lifecycle', ['accountRef', 'successorOwnerPrincipalRef', 'lifecycle']),
-  accountSuccessionAuthorizationParticipants: defineTable(successionAuthorizationParticipantValue)
-    .index('by_authorizationRef', ['authorizationRef'])
-    .index('by_accountRef_and_createdAt', ['accountRef', 'createdAt'])
-    .index('by_participantPrincipalRef_and_createdAt', ['participantPrincipalRef', 'createdAt']),
 } as const

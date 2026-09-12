@@ -4,6 +4,7 @@ import { z } from "zod";
 import { marketWindowSchema } from "./contracts";
 import {
   readMarketRouteProjection,
+  readProviderListedToolsProjection,
 } from "./server";
 
 const inputSchema = z.object({
@@ -25,3 +26,6 @@ export const readMarketRouteServer = createServerFn({ method: "GET" })
         ...(data.cursor === undefined ? {} : { cursor: data.cursor }),
       }),
   );
+
+export const readProviderListedToolsServer = createServerFn({ method: "GET" })
+  .handler(async () => await readProviderListedToolsProjection());

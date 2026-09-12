@@ -3,13 +3,14 @@ import {
   type RouteTransportInvocation,
   type RouteTransportObservation,
 } from '@/modules/capability-supply/route-transport-runtime'
-import type { ActionCtx } from '../../../../convex/_generated/server'
+import { env, type ActionCtx } from '../../../../convex/_generated/server'
 import { internal } from '../../../../convex/_generated/api'
 import {
   providerConsequenceInvocationDigest,
   type CanonicalProviderConsequenceTicket,
 } from './jitProviderConsequence'
 import { sendGuardedHttpRequest } from '@/modules/network-guard/server'
+import { captureBackendException, degradeBackend } from '@/lib/observability/degrade-backend'
 
 const SECRET_REF = /^sec_[0-9a-f]{32}$/u
 const HTTPS_ORIGIN = /^https:\/\/[A-Za-z0-9.-]+(?::[0-9]{1,5})?$/u
@@ -91,18 +92,21 @@ async function sha256(value: string): Promise<string> {
 }
 
 function consequenceEndpoint(): string | undefined {
-  const raw = process.env.AE_PROVIDER_CONSEQUENCE_ORIGIN?.trim()
+  const raw = env.AE_PROVIDER_CONSEQUENCE_ORIGIN?.trim()
   if (raw === undefined || !HTTPS_ORIGIN.test(raw)) return undefined
   try {
     const url = new URL(raw)
     return url.origin === raw ? `${raw}/api/internal/provider-consequence` : undefined
-  } catch {
-    return undefined
+  } catch (cause) {
+    return degradeBackend(cause, undefined, {
+      site: 'consequenceEndpoint',
+      reason: 'invalid_response',
+    })
   }
 }
 
 export function providerConsequenceX402PaymentCustodyAvailable(): boolean {
-  const paymentSecretRef = process.env.AE_X402_PAYMENT_SECRET_REF?.trim()
+  const paymentSecretRef = env.AE_X402_PAYMENT_SECRET_REF?.trim()
   return paymentSecretRef !== undefined && SECRET_REF.test(paymentSecretRef)
 }
 
@@ -131,8 +135,8 @@ export async function invokeProviderConsequenceViaVercel(
     return refused(input.invocation, input.requestDigest, 'provider_consequence_authority_invalid')
   }
   const invocation = input.invocation
-  const signingSecretRef = process.env.AE_PROVIDER_TICKET_SIGNING_SECRET_REF?.trim()
-  const paymentSecretRef = process.env.AE_X402_PAYMENT_SECRET_REF?.trim()
+  const signingSecretRef = env.AE_PROVIDER_TICKET_SIGNING_SECRET_REF?.trim()
+  const paymentSecretRef = env.AE_X402_PAYMENT_SECRET_REF?.trim()
   const endpoint = consequenceEndpoint()
   if (signingSecretRef === undefined
     || !SECRET_REF.test(signingSecretRef)
@@ -180,7 +184,8 @@ export async function invokeProviderConsequenceViaVercel(
       requestedExpiresAt: invocation.authority.expiresAt,
       },
     )
-  } catch {
+  } catch (cause) {
+    captureBackendException(cause, { site: 'issueProviderConsequenceTicket' }, 'warning')
     return refused(invocation, input.requestDigest, 'provider_consequence_ticket_unavailable')
   }
   if (issue.kind === 'completed') {
@@ -219,7 +224,8 @@ export async function invokeProviderConsequenceViaVercel(
       return refused(invocation, input.requestDigest, 'provider_consequence_ticket_signing_unavailable')
     }
     signedTicket = (signingResult as { signedTicket: string }).signedTicket
-  } catch {
+  } catch (cause) {
+    captureBackendException(cause, { site: 'signProviderConsequenceTicket' }, 'warning')
     return refused(invocation, input.requestDigest, 'provider_consequence_ticket_signing_unavailable')
   }
   let response: Response
@@ -229,14 +235,16 @@ export async function invokeProviderConsequenceViaVercel(
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'execute', ...envelope, signedTicket, invocation }),
     }), MAXIMUM_BRIDGE_RESPONSE_BYTES)
-  } catch {
+  } catch (cause) {
+    captureBackendException(cause, { site: 'executeProviderConsequenceBridge' }, 'warning')
     return unknown(invocation, input.requestDigest, 'provider_consequence_bridge_unknown')
   }
   if (!response.ok) return unknown(invocation, input.requestDigest, 'provider_consequence_bridge_unknown')
   let observationJson: string
   try {
     observationJson = JSON.stringify(await response.json())
-  } catch {
+  } catch (cause) {
+    captureBackendException(cause, { site: 'parseProviderConsequenceBridgeResponse' }, 'warning')
     return unknown(invocation, input.requestDigest, 'provider_consequence_bridge_unknown')
   }
   return exactObservation(

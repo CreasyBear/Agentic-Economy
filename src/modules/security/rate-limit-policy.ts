@@ -22,6 +22,7 @@ export const RATE_LIMIT_NAMES = [
   'chat-anonymous',
   'chat-anonymous-edge',
   'dispute-open',
+  'mcp-anonymous',
 ] as const
 
 export type RateLimitName = (typeof RATE_LIMIT_NAMES)[number]
@@ -41,6 +42,7 @@ export const RATE_LIMIT_POLICY: Record<RateLimitName, RateLimitPolicyConfig> = {
   'chat-anonymous': { kind: 'token bucket', rate: 30, period: HOUR_MS, capacity: 30 },
   'chat-anonymous-edge': { kind: 'token bucket', rate: 30, period: HOUR_MS, capacity: 30 },
   'dispute-open': { kind: 'token bucket', rate: 3, period: MINUTE_MS, capacity: 3 },
+  'mcp-anonymous': { kind: 'token bucket', rate: 30, period: MINUTE_MS, capacity: 30 },
 }
 
 /**
@@ -54,6 +56,7 @@ export const HTTP_RATE_LIMIT_NAMES = [
   'oauth-issuance',
   'oauth-device-poll',
   'chat-anonymous-edge',
+  'mcp-anonymous',
 ] as const
 
 export type HttpRateLimitName = (typeof HTTP_RATE_LIMIT_NAMES)[number]

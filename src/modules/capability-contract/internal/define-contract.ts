@@ -193,8 +193,8 @@ export function parseCapabilityContractJson(input: string): CapabilityContract {
   let parsed: unknown
   try {
     parsed = JSON.parse(input)
-  } catch {
-    throw new Error('capability_contract_invalid')
+  } catch (cause) {
+    throw new Error('capability_contract_invalid', { cause })
   }
   return defineCapabilityContract(parsed)
 }

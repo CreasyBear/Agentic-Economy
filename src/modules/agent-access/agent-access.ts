@@ -16,6 +16,7 @@ import {
   type AgentAccessPolicy,
 } from './policy'
 import { compareExactAmounts, type ExactAmount } from '@/modules/money/public'
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { sanitizeTelemetryError } from '@/lib/observability/private-route-safety'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 
@@ -371,8 +372,8 @@ async function bindAgentPrincipal(
       createdAt: createdAt ?? Date.now(),
       expiresAt,
     }))
-  } catch {
-    return null
+  } catch (cause) {
+    return degradeBackend(cause, null, { site: 'bindAgentPrincipal', reason: 'source_unavailable' })
   }
 }
 
@@ -401,8 +402,8 @@ async function rollbackAgentKey(
   try {
     await api.revoke({ apiKeyId: keyId, revocationReason: 'Source principal binding failed.' })
     return 'provider_credential_revoked'
-  } catch {
-    return 'provider_revocation_required'
+  } catch (cause) {
+    return degradeBackend(cause, 'provider_revocation_required' as const, { site: 'rollbackAgentKey', reason: 'source_unavailable' })
   }
 }
 export function projectAgentAccessKey(record: AgentAccessKeyRecord): AgentAccessKeyInventoryItem | undefined {
@@ -452,8 +453,8 @@ export async function listAgentAccessKeys(input: Readonly<{
       const projected = projectAgentAccessKey(record)
       return projected === undefined ? [] : [projected]
     })
-  } catch {
-    return []
+  } catch (cause) {
+    return degradeBackend(cause, [], { site: 'listAgentAccessKeys', reason: 'source_unavailable' })
   }
 }
 

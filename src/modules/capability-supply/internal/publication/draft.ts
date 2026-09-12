@@ -3,6 +3,7 @@ import {
   type EncodedCapabilityContractDocument,
 } from '@/modules/capability-contract-registry/public'
 import { isCanonicalDigest } from '@/modules/common/canonical-digest'
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { stableStringify, type StableHashValue } from '@/modules/common/stable-hash'
 import {
   admitRegisteredTransport,
@@ -145,8 +146,8 @@ export async function preparePublicationDraft(input: Readonly<{
   let normalized
   try {
     normalized = await normalizeCapabilityPublication(input.source, input.derefSchema)
-  } catch {
-    return { kind: 'refused', reason: 'source_invalid' }
+  } catch (cause) {
+    return degradeBackend(cause, { kind: 'refused' as const, reason: 'source_invalid' as const }, { site: 'preparePublicationDraft', reason: 'invalid_response' })
   }
   if (normalized.kind === 'refused') return { kind: 'refused', reason: normalized.reason }
 
@@ -187,8 +188,8 @@ export async function preparePublicationDraft(input: Readonly<{
   let sourceDescriptorJson: string
   try {
     sourceDescriptorJson = publicationSourceDescriptorJson(input.source)
-  } catch {
-    return { kind: 'refused', reason: 'source_invalid' }
+  } catch (cause) {
+    return degradeBackend(cause, { kind: 'refused' as const, reason: 'source_invalid' as const }, { site: 'preparePublicationDraft', reason: 'invalid_response' })
   }
   if (encoder.encode(sourceDescriptorJson).byteLength > MAX_SOURCE_DESCRIPTOR_BYTES) {
     return { kind: 'refused', reason: 'source_too_large' }
@@ -203,8 +204,8 @@ export async function preparePublicationDraft(input: Readonly<{
   let sourceDescriptor: unknown
   try {
     sourceDescriptor = JSON.parse(sourceDescriptorJson)
-  } catch {
-    return { kind: 'refused', reason: 'source_invalid' }
+  } catch (cause) {
+    return degradeBackend(cause, { kind: 'refused' as const, reason: 'source_invalid' as const }, { site: 'preparePublicationDraft', reason: 'invalid_response' })
   }
   if (!publicationSourceDescriptorIsCanonical(draft.source.kind, sourceDescriptor)
     || publicationMaterialContainsCredential({
@@ -276,8 +277,8 @@ export async function admitPublicationDraft(input: Readonly<{
   try {
     descriptor = JSON.parse(prepared.sourceDescriptorJson)
     pricingInput = JSON.parse(prepared.pricingConfigJson)
-  } catch {
-    return { kind: 'refused', reason: 'source_invalid' }
+  } catch (cause) {
+    return degradeBackend(cause, { kind: 'refused' as const, reason: 'source_invalid' as const }, { site: 'admitPublicationDraft', reason: 'invalid_response' })
   }
   const expectedSourceDigest = publicationSourceDigest({
     sourceKind: prepared.sourceKind,
@@ -322,16 +323,16 @@ export async function admitPublicationDraft(input: Readonly<{
   let offering: CapabilityOfferingRegistration
   try {
     offering = defineCapabilityOfferingRegistration(offeringInput)
-  } catch {
-    return { kind: 'refused', reason: 'offering_invalid' }
+  } catch (cause) {
+    return degradeBackend(cause, { kind: 'refused' as const, reason: 'offering_invalid' as const }, { site: 'admitPublicationDraft', reason: 'invalid_response' })
   }
   let binding: CapabilityTransportBindingRegistration
   let admittedTransport: TransportAdmissionResult
   try {
     binding = defineCapabilityTransportBindingRegistration(bindingInput)
     admittedTransport = admitRegisteredTransport(transportAdmissionInput(binding))
-  } catch {
-    return { kind: 'refused', reason: 'binding_invalid' }
+  } catch (cause) {
+    return degradeBackend(cause, { kind: 'refused' as const, reason: 'binding_invalid' as const }, { site: 'admitPublicationDraft', reason: 'invalid_response' })
   }
   if (admittedTransport.kind === 'refused') return admittedTransport
   if (binding.adapter.adapterId !== sourceKindAdapterId[prepared.sourceKind]) {

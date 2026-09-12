@@ -39,7 +39,11 @@ import {
 } from '@/modules/capability-supply/supply-actions'
 import {
   registryDetailAction,
+  registryListAction,
   registrySearchAction,
+  registryServicesDetailAction,
+  registryServicesListAction,
+  registryServicesSearchAction,
 } from '@/modules/registry/registry.actions'
 import {
   registryToolsCompareAction,
@@ -79,6 +83,10 @@ const toolMarketReadActions: readonly AnyAction[] = [
 const registeredActions: readonly AnyAction[] = [
   registrySearchAction,
   registryDetailAction,
+  registryListAction,
+  registryServicesListAction,
+  registryServicesSearchAction,
+  registryServicesDetailAction,
   ...toolMarketReadActions,
   agentAccountSelfAction,
   agentAccountBalanceAction,

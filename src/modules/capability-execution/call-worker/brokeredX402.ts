@@ -1,4 +1,5 @@
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { captureBackendException } from '@/lib/observability/degrade-backend'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 import {
   invokePreparedRouteTransport,
@@ -149,7 +150,8 @@ export async function runCommittedManagedX402Transport(
       durableEffectGeneration: input.durableEffectGeneration,
       operationKeyDigest: input.operationKeyDigest,
     })
-  } catch {
+  } catch (cause) {
+    captureBackendException(cause, { site: 'runCommittedManagedX402Transport' }, 'warning')
     await retainManagedCallUnknown(ctx, input, observation)
     await projectManagedCall(ctx, input, observation, recordedAt, output, reservation, 'unknown')
     return observation

@@ -1,3 +1,5 @@
+import { degradeBackend } from '@/lib/observability/degrade-backend'
+
 export const base64Codec = {
   toBase64(bytes: Uint8Array): string {
     let binary = ''
@@ -27,7 +29,7 @@ export function tryDecodeBase64Url(value: string): Uint8Array<ArrayBuffer> | und
   if (!/^[A-Za-z0-9_-]+$/u.test(value)) return undefined
   try {
     return base64Codec.fromBase64Url(value)
-  } catch {
-    return undefined
+  } catch (cause) {
+    return degradeBackend(cause, undefined, { site: 'tryDecodeBase64Url', reason: 'invalid_response' })
   }
 }

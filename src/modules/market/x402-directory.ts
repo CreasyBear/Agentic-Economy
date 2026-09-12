@@ -1,5 +1,7 @@
 import { z } from 'zod'
 
+import { degradeBackend } from '@/lib/observability/degrade-backend'
+
 export type X402DirectoryField = Readonly<{
   name: string
   path: string
@@ -42,6 +44,8 @@ export type X402DirectoryEntry = Readonly<{
   tags?: readonly string[]
   curated?: true
   bundleSlugs?: readonly string[]
+  /** Kebab slug for the canonical `/tools/<providerHost>/<slug>` URL; `providerHost` is derived from `provider` via `directoryProviderKey`. */
+  slug?: string
   provenance?: Readonly<{ directory: 'Coinbase Bazaar'; metadata: 'provider_declared'; updatedAt?: string }>
   activity?: Readonly<{ calls30d?: number; payers30d?: number; lastCalledAt?: string }>
   provider: string
@@ -71,7 +75,7 @@ function canonicalProviderHost(value: string): string | undefined {
     if (url.username !== '' || url.password !== '' || url.port !== '' || url.pathname !== '/' || url.search !== '' || url.hash !== '') return undefined
     const host = url.hostname.toLowerCase()
     return host.includes('.') && host.split('.').every((label) => /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/u.test(label)) ? host : undefined
-  } catch { return undefined }
+  } catch (cause) { return degradeBackend(cause, undefined, { site: 'canonicalProviderHost', reason: 'invalid_response' }) }
 }
 
 export const x402DirectoryFilterSchema = z.strictObject({
@@ -100,23 +104,3 @@ export const x402DirectoryResolveInputSchema = x402DirectoryInputSchema.extend({
 export type X402DirectoryInput = z.infer<typeof x402DirectoryInputSchema>
 export type X402DirectoryResolveInput = z.infer<typeof x402DirectoryResolveInputSchema>
 export type X402DirectoryResolution = Readonly<{ kind: 'ready'; toolRef: string }> | Readonly<{ kind: 'unavailable'; reason: string }>
-
-const X402_PENDING_TOOL_REF_PREFIX = 'x402:'
-
-/**
- * The `/tools/$toolRef` route's one identifier for a catalogue entry that has
- * not yet been admitted into the capability supply as a Tool. The route
- * loader resolves it (the same server round trip the retired Tool detail
- * dialog performed) before reading the Tool descriptor.
- */
-export function x402PendingToolRef(resource: string): string {
-  return `${X402_PENDING_TOOL_REF_PREFIX}${encodeURIComponent(resource)}`
-}
-
-export function readX402PendingResource(toolRef: string): string | undefined {
-  if (!toolRef.startsWith(X402_PENDING_TOOL_REF_PREFIX)) return undefined
-  try {
-    const resource = decodeURIComponent(toolRef.slice(X402_PENDING_TOOL_REF_PREFIX.length))
-    return resource.length > 0 ? resource : undefined
-  } catch { return undefined }
-}

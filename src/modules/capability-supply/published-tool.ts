@@ -12,6 +12,7 @@ import { compareExactAmounts, displayPriceFromPricingConfig, pricingConfigDecisi
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 import { isRecord } from '@/modules/common/is-record'
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 
 import {
   admitRegisteredTransport,
@@ -134,8 +135,8 @@ export function parsePublishedToolSnapshot(toolJson: string): PublishedTool | un
     if (!isPublishedToolSnapshot(parsed)) return undefined
     materializeRuntimePublishedTool(parsed)
     return parsed
-  } catch {
-    return undefined
+  } catch (cause) {
+    return degradeBackend(cause, undefined, { site: 'parsePublishedToolSnapshot', reason: 'invalid_response' })
   }
 }
 
@@ -371,8 +372,9 @@ function parseAdmittedConfig(transport: AdmittedTransportMaterial): JsonValue {
   let parsed: unknown
   try {
     parsed = JSON.parse(transport.configJson)
-  } catch {
-    throw new Error('published_operation_transport_invalid')
+  } catch (cause) {
+    degradeBackend(cause, undefined, { site: 'parseAdmittedConfig', reason: 'invalid_response' })
+    throw new Error('published_operation_transport_invalid', { cause })
   }
   if (canonicalDigest(parsed as StableHashValue) !== transport.configDigest) {
     throw new Error('published_operation_transport_invalid')

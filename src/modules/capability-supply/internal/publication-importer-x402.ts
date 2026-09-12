@@ -1,5 +1,6 @@
 import type { JsonValue } from "@/modules/capability-contract/public";
 import { isRecord } from "@/modules/common/is-record";
+import { degradeBackend } from "@/lib/observability/degrade-backend";
 import { stableStringify, type StableHashValue } from "@/modules/common/stable-hash";
 import {
   compareExactAmounts,
@@ -40,8 +41,12 @@ export async function importX402Capability(
   let paymentRequired: X402ValidatedPaymentRequired;
   try {
     paymentRequired = validateX402PaymentRequired(resource.paymentRequired);
-  } catch {
-    return { kind: "refused", reason: "payment_required_invalid" };
+  } catch (cause) {
+    return degradeBackend(
+      cause,
+      { kind: "refused", reason: "payment_required_invalid" } as const,
+      { site: "importX402Capability", reason: "invalid_response" },
+    );
   }
   if (paymentRequired.x402Version !== 2) {
     return { kind: "refused", reason: "payment_required_invalid" };

@@ -1,5 +1,6 @@
 import { z } from 'zod'
 
+import { idempotencyKeySchema } from '@/modules/common/action'
 import type {
   ProviderConnectionCleanupOutcome,
   ProviderConnectionOwnerProjection,
@@ -35,18 +36,18 @@ export const ownerProviderConnectionAttemptInputSchema = z.strictObject({
 })
 export const cancelOwnerProviderConnectionAttemptInputSchema = z.strictObject({
   attemptRef: z.string().trim().min(1).max(300),
-  idempotencyKey: z.string().trim().min(8).max(200),
+  idempotencyKey: idempotencyKeySchema,
 })
 
 export const completeOwnerHttpProviderConnectionInputSchema = z.strictObject({
   attemptRef: z.string().trim().min(1).max(300),
   credential: z.string().min(1).max(32_768),
-  idempotencyKey: z.string().trim().min(8).max(200),
+  idempotencyKey: idempotencyKeySchema,
 })
 
 export const startOwnerMcpProviderConnectionInputSchema = z.strictObject({
   attemptRef: z.string().trim().min(1).max(300),
-  idempotencyKey: z.string().trim().min(8).max(200),
+  idempotencyKey: idempotencyKeySchema,
   callbackUrl: z.url().max(2_048),
 })
 

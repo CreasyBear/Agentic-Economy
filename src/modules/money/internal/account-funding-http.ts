@@ -21,6 +21,7 @@ import {
   type StripeMoneyMode,
   type StripeMoneyProviderConfig,
 } from '@/lib/server/stripe-money-provider'
+import { idempotencyKeySchema } from '@/modules/common/action'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
   sourceWriteRequestFromAdmission,
@@ -180,17 +181,17 @@ const beginInputSchema = z.strictObject({
     units: z.string().regex(/^[1-9]\d{0,29}$/u),
     exponent: z.literal(AUD_EXPONENT),
   }),
-  idempotencyKey: z.string().trim().min(8).max(200),
+  idempotencyKey: idempotencyKeySchema,
 })
 const readInputSchema = z.union([
   z.strictObject({
     externalRef: z.string().trim().min(1).max(500),
-    idempotencyKey: z.string().trim().min(8).max(200),
+    idempotencyKey: idempotencyKeySchema,
   }),
   z.strictObject({ externalRef: z.string().trim().min(1).max(500) }),
   z.strictObject({
     commandRef: z.string().trim().min(1).max(500),
-    idempotencyKey: z.string().trim().min(8).max(200),
+    idempotencyKey: idempotencyKeySchema,
   }),
 ])
 

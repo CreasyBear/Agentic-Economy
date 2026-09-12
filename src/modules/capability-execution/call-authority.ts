@@ -1,4 +1,5 @@
 import type { AgentAccessPrincipal } from '@/modules/agent-access/agent-access'
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { canonicalAuthorityBasisMaterial } from '@/modules/action-execution/runtime'
 import {
   publishedToolIdentityDigest,
@@ -178,8 +179,9 @@ async function callReservedTool(input: Readonly<{
       })
       if (abandoned.kind === 'abandoned') return refusal
       if (abandoned.kind === 'dispatch_started') return reconciliationRequiredAfterDispatch()
-    } catch {
+    } catch (cause) {
       // A failed cleanup must remain visible as runtime unavailability.
+      degradeBackend(cause, undefined, { site: 'refuseBeforeDispatch', reason: 'source_unavailable' })
     }
     return {
       kind: 'refused',
@@ -231,13 +233,13 @@ async function callReservedTool(input: Readonly<{
       idempotencyKey: command.idempotencyKey,
       correlationId: request.correlationId,
     })
-  } catch {
-    return await refuseBeforeDispatch({
+  } catch (cause) {
+    return degradeBackend(cause, await refuseBeforeDispatch({
       kind: 'refused',
       toolRef: command.toolRef,
       code: 'authority_reader_unavailable',
       retryable: true,
-    })
+    }), { site: 'callReservedTool', reason: 'source_unavailable' })
   }
   authority = normalizeCallAuthority({
     authority,
@@ -294,13 +296,13 @@ async function callReservedTool(input: Readonly<{
       input: command.input,
       correlationId: request.correlationId,
     })
-  } catch {
-    return await refuseBeforeDispatch({
+  } catch (cause) {
+    return degradeBackend(cause, await refuseBeforeDispatch({
       kind: 'refused',
       toolRef: command.toolRef,
       code: 'invocation_runtime_unavailable',
       retryable: true,
-    })
+    }), { site: 'callReservedTool', reason: 'source_unavailable' })
   }
   if (dispatched.kind === 'outcome_unknown') return reconciliationRequiredAfterDispatch()
   if (dispatched.kind === 'refused') {

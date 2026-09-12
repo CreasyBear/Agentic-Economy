@@ -1,3 +1,5 @@
+import { degradeBackend } from "@/lib/observability/degrade-backend";
+
 export type SupplyLandingTool = Readonly<{
   id: string;
   name: string;
@@ -55,7 +57,11 @@ export async function loadSupplyLandingReadback<Listings>(
       }));
     const listings = await ports.listListings();
     return { kind: "available", tools, listings, evidence: "source" };
-  } catch {
-    return { kind: "error", reason: "source_unavailable", retryable: true };
+  } catch (cause) {
+    return degradeBackend(
+      cause,
+      { kind: "error" as const, reason: "source_unavailable" as const, retryable: true as const },
+      { site: "loadSupplyLandingReadback", reason: "source_unavailable" },
+    );
   }
 }

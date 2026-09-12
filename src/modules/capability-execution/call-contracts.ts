@@ -2,6 +2,7 @@ import { z } from 'zod'
 
 import type { AgentAccessPrincipal } from '@/modules/agent-access/agent-access'
 import { jsonValueSchema, type JsonValue } from '@/modules/capability-contract/public'
+import { idempotencyKeySchema } from '@/modules/common/action'
 import {
   BASE_MAINNET_NETWORK,
   BASE_MAINNET_USDC_ADDRESS,
@@ -64,7 +65,7 @@ const callChargeStateSchema = z.enum([
 
 export const callInputSchema: z.ZodType<CallInput> = z.strictObject({
   quoteRef: z.string().regex(/^operation-commitment:v1:[0-9a-f]{64}$/u),
-  idempotencyKey: z.string().trim().min(1).max(200),
+  idempotencyKey: idempotencyKeySchema,
 })
 
 export const resolvedCallInputSchema: z.ZodType<ResolvedCallInput> = z.strictObject({
@@ -72,7 +73,7 @@ export const resolvedCallInputSchema: z.ZodType<ResolvedCallInput> = z.strictObj
   decisionPrice: exactAmountSchema.exactOptional(),
   toolRef: z.string().trim().min(1).max(300),
   input: z.record(z.string(), jsonValueSchema),
-  idempotencyKey: z.string().trim().min(1).max(200),
+  idempotencyKey: idempotencyKeySchema,
 })
 
 const authorityRequestSchema = z.strictObject({

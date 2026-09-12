@@ -33,6 +33,7 @@ import {
   readX402EvmReceipt,
 } from './x402Settlement'
 import { X402_MANAGED_CUSTODY_REF } from './x402ManagedCustodyRef'
+import { captureBackendException, degradeBackend } from '@/lib/observability/degrade-backend'
 
 type PreparedX402AuthorizationWithFingerprint = X402PreparedAuthorization & Readonly<{
   requestFingerprint?: string
@@ -157,8 +158,11 @@ export function x402MethodFromOperation(operation: PublishedTool): 'GET' | 'POST
     const parsed: unknown = JSON.parse(operation.transport.configJson)
     if (!isRecord(parsed) || (parsed.method !== 'GET' && parsed.method !== 'POST')) return undefined
     return parsed.method
-  } catch {
-    return undefined
+  } catch (cause) {
+    return degradeBackend(cause, undefined, {
+      site: 'x402MethodFromOperation',
+      reason: 'invalid_response',
+    })
   }
 }
 
@@ -208,8 +212,11 @@ export async function replayManagedX402SigningForRecovery(
     selectedRequirement = JSON.parse(
       material.selectedRequirementJson,
     ) as X402PaymentSignatureRequest['selectedRequirement']
-  } catch {
-    return { kind: 'unresolved' }
+  } catch (cause) {
+    return degradeBackend(cause, { kind: 'unresolved' } as const, {
+      site: 'replayManagedX402SigningForRecovery',
+      reason: 'invalid_response',
+    })
   }
   if (canonicalDigest(challenge as StableHashValue) !== material.challengeDigest) {
     return { kind: 'unresolved' }
@@ -453,8 +460,11 @@ async function signAndRecordSandboxAuthorization(
       paymentSignatureDigest: canonicalDigest(paymentSignature),
     })
     return paymentSignature
-  } catch {
-    return undefined
+  } catch (cause) {
+    return degradeBackend(cause, undefined, {
+      site: 'signAndRecordSandboxAuthorization',
+      reason: 'source_unavailable',
+    })
   }
 }
 
@@ -477,8 +487,11 @@ async function signAndCommitManagedAuthorization(
     selectedRequirement = JSON.parse(
       material.selectedRequirementJson,
     ) as X402PaymentSignatureRequest['selectedRequirement']
-  } catch {
-    return undefined
+  } catch (cause) {
+    return degradeBackend(cause, undefined, {
+      site: 'signAndCommitManagedAuthorization',
+      reason: 'invalid_response',
+    })
   }
   if (canonicalDigest(challenge as StableHashValue) !== material.challengeDigest) return undefined
   const request: X402PaymentSignatureRequest = {
@@ -844,7 +857,8 @@ export function createX402PaymentCallbacks(
               readinessDigest: input.operation.readiness.qualificationDigest,
             }),
       })
-    } catch {
+    } catch (cause) {
+      captureBackendException(cause, { site: 'validateProviderAuthorityForX402Payment' }, 'warning')
       await recordAuthorizationFailure('provider_authority_invalid', 'authority_read_failed')
       await releasePreparedReservation()
       return undefined
@@ -857,7 +871,8 @@ export function createX402PaymentCallbacks(
     let grantStillValid = false
     try {
       grantStillValid = await input.isGrantStillValid()
-    } catch {
+    } catch (cause) {
+      captureBackendException(cause, { site: 'isGrantStillValidForX402Payment' }, 'warning')
       grantStillValid = false
     }
     if (!grantStillValid) {

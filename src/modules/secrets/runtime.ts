@@ -6,6 +6,7 @@ import {
   type SecretPointerStore,
 } from './secret-plane'
 import { VercelOidcIdentityTokenProvider } from './vercel-oidc'
+import { captureBackendException } from '@/lib/observability/degrade-backend'
 import {
   createScopedSecretConsequenceRuntime,
   ProductionSecretGenerationValidator,
@@ -108,7 +109,8 @@ function requireBaseUrl(value: unknown): string {
   let url: URL
   try {
     url = new URL(value)
-  } catch {
+  } catch (cause) {
+    captureBackendException(cause, { site: 'requireBaseUrl' }, 'warning')
     throw configurationFailure()
   }
   if (

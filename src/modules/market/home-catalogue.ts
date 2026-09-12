@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { degrade } from "@/lib/observability/degrade";
 import type { ToolCardViewModel } from "@/modules/market/tool-view-model";
 import { readX402DirectoryServer } from "@/modules/market/x402-directory.functions";
 import type { X402DirectoryEntry } from './x402-directory';
@@ -42,7 +43,10 @@ export async function readHomeCapabilities(): Promise<HomeCapabilityRead> {
       ...(page.total === undefined ? {} : { total: page.total }),
       items: page.items.slice(0, HOME_CAPABILITY_LIMIT),
     };
-  } catch {
-    return { kind: "unavailable" };
+  } catch (cause) {
+    return degrade(cause, { kind: "unavailable" } as const, {
+      site: "readHomeCapabilities",
+      reason: "source_unavailable",
+    });
   }
 }

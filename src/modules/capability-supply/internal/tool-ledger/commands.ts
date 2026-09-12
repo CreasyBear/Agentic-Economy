@@ -9,6 +9,7 @@ import {
   type CapabilityOfferingRegistration,
   type CapabilityTransportBindingRegistration,
 } from '@/modules/capability-supply/public'
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { isCanonicalDigest } from '@/modules/common/canonical-digest'
 import { type StableHashValue } from '@/modules/common/stable-hash'
 
@@ -72,8 +73,10 @@ export async function registerCapabilityOfferingCommand(
   let registration: CapabilityOfferingRegistration
   try {
     registration = defineCapabilityOfferingRegistration(command.registration)
-  } catch {
-    return { kind: 'refused' as const, reason: 'offering_invalid' as const }
+  } catch (cause) {
+    return degradeBackend(cause, { kind: 'refused' as const, reason: 'offering_invalid' as const }, {
+      site: 'registerCapabilityOfferingCommand', reason: 'invalid_response',
+    })
   }
   const expectedResult = {
     kind: 'registered' as const,
@@ -124,8 +127,10 @@ export async function registerCapabilityBindingCommand(
   let registration: CapabilityTransportBindingRegistration
   try {
     registration = defineCapabilityTransportBindingRegistration(command.registration)
-  } catch {
-    return { kind: 'refused' as const, reason: 'binding_invalid' as const }
+  } catch (cause) {
+    return degradeBackend(cause, { kind: 'refused' as const, reason: 'binding_invalid' as const }, {
+      site: 'registerCapabilityBindingCommand', reason: 'invalid_response',
+    })
   }
   const operation = await beginOperation(
     ports, command.actor, 'registerCapabilityTransportBinding', command.context, {

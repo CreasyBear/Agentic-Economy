@@ -17,6 +17,7 @@ import {
   type DecodedOffer,
 } from '@x402/extensions/offer-receipt'
 
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { SourceHash } from '@/modules/common/ids'
 import { stableStringify, type StableHashValue } from '@/modules/common/stable-hash'
@@ -101,8 +102,8 @@ function originHost(resourceUrl: string): string | undefined {
   try {
     const parsed = new URL(resourceUrl)
     return parsed.host.toLowerCase()
-  } catch {
-    return undefined
+  } catch (cause) {
+    return degradeBackend(cause, undefined, { site: 'originHost', reason: 'invalid_response' })
   }
 }
 
@@ -114,8 +115,8 @@ function didWebHost(kid: string, resourceHost: string): boolean {
   if (firstSegment === undefined || firstSegment.length === 0) return false
   try {
     return decodeURIComponent(firstSegment).toLowerCase() === resourceHost
-  } catch {
-    return false
+  } catch (cause) {
+    return degradeBackend(cause, false, { site: 'didWebHost', reason: 'invalid_response' })
   }
 }
 
@@ -125,8 +126,8 @@ function canonicalMaterial(value: unknown): { serialized: string; digest: Source
     const serialized = stableStringify(stableValue)
     if (new TextEncoder().encode(serialized).byteLength > MAX_SERIALIZED_BYTES) return undefined
     return { serialized, digest: canonicalDigest(stableValue) }
-  } catch {
-    return undefined
+  } catch (cause) {
+    return degradeBackend(cause, undefined, { site: 'canonicalMaterial', reason: 'invalid_response' })
   }
 }
 
@@ -214,8 +215,8 @@ export async function verifyX402SignedOffer(
         maxTimeoutSeconds: input.selectedRequirement.maxTimeoutSeconds,
       },
     }
-  } catch {
-    return refused('offer_signature_invalid')
+  } catch (cause) {
+    return degradeBackend(cause, refused('offer_signature_invalid'), { site: 'verifyX402SignedOffer', reason: 'invalid_response' })
   }
 }
 
@@ -260,7 +261,7 @@ export async function verifyX402SignedReceipt(
     ) return refused('receipt_payload_mismatch')
 
     return { kind: 'verified', serializedReceipt: material.serialized, receiptDigest: material.digest }
-  } catch {
-    return refused('receipt_signature_invalid')
+  } catch (cause) {
+    return degradeBackend(cause, refused('receipt_signature_invalid'), { site: 'verifyX402SignedReceipt', reason: 'invalid_response' })
   }
 }

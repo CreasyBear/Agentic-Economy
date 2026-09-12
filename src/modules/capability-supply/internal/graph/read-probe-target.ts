@@ -1,3 +1,4 @@
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { validateJsonSchema, type CapabilityContractDocument } from '@/modules/capability-contract/public'
 import { encodeCapabilityContractDocumentJson } from '@/modules/capability-contract-registry/public'
 import {
@@ -141,8 +142,10 @@ export async function readCapabilityProbeTarget(
   let contractDocument: CapabilityContractDocument
   try {
     contractDocument = encodeCapabilityContractDocumentJson(contract.documentJson).document
-  } catch {
-    return unavailable('contract_missing')
+  } catch (cause) {
+    return degradeBackend(cause, unavailable('contract_missing'), {
+      site: 'readCapabilityProbeTarget', reason: 'invalid_response',
+    })
   }
   const { inputSchema, outputSchema } = contractDocument
 
@@ -288,7 +291,9 @@ function storedProbeKind(
 function parseJson(value: string): unknown {
   try {
     return JSON.parse(value)
-  } catch {
-    return undefined
+  } catch (cause) {
+    return degradeBackend(cause, undefined, {
+      site: 'parseJson', reason: 'invalid_response',
+    })
   }
 }

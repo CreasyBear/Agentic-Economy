@@ -1,3 +1,4 @@
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { readBoundedRequestText } from '@/lib/server/bounded-request-body'
 import { isRecord } from '@/modules/common/is-record'
 import { eip3009ABI } from '@x402/evm'
@@ -140,8 +141,8 @@ export async function readGuardedX402EvmReceipt(input: Readonly<{
         topics: log.topics,
       })),
     }
-  } catch {
-    return undefined
+  } catch (cause) {
+    return degradeBackend(cause, undefined, { site: 'readGuardedX402EvmReceipt', reason: 'source_unavailable' })
   }
 }
 

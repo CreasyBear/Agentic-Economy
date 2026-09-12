@@ -1,4 +1,6 @@
 import { callPublicSourceMutation, sourceMutation } from '@/lib/server/convex-source'
+import { degrade } from '@/lib/observability/degrade'
+import { readTrimmedEnv } from '@/lib/server/read-trimmed-env'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 import {
   createCustomerRequestServiceAssertion,
@@ -56,8 +58,8 @@ export async function registerAgentAccessGrant(input: AgentAccessGrantInput): Pr
     if (result.kind === 'conflict') return { kind: 'conflict' }
     if (result.kind === 'refused') return { kind: 'unavailable' }
     return result
-  } catch {
-    return { kind: 'unavailable' }
+  } catch (cause) {
+    return degrade(cause, { kind: 'unavailable' }, { site: 'registerAgentAccessGrant', reason: 'source_unavailable' })
   }
 }
 
@@ -66,7 +68,7 @@ async function createAgentAccessServerAssertion(
   command: StableHashValue,
   principal: Readonly<{ principalId: string; ownerId: string; credentialId: string }>,
 ): Promise<CustomerRequestServiceAssertion> {
-  const key = process.env.AE_CONVEX_SERVER_FUNCTION_TOKEN?.trim()
+  const key = readTrimmedEnv(process.env, 'AE_CONVEX_SERVER_FUNCTION_TOKEN')
   if (key === undefined || key.length < 32) throw new Error('agent_access_grant_server_auth_unavailable')
   return await createCustomerRequestServiceAssertion({
     key,

@@ -1,5 +1,6 @@
 import { z } from 'zod'
 
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 import {
   type CatalogOfferingToolMapEntry,
 } from '@/modules/capability-supply/public'
@@ -75,7 +76,7 @@ export const registryListAction = defineAction({
     spendExposure: 'none',
     approval: 'none',
   },
-  surfaces: ['http', 'agentJson'],
+  surfaces: ['http'],
   invocationContract: {
     version: 'registry.list:v2',
     consequenceClass: 'read_only',
@@ -86,9 +87,16 @@ export const registryListAction = defineAction({
     safeContinuations: ['inspect_result'],
     invalidationConditions: ['action_contract_version_changed', 'cursor_changed', 'limit_changed'],
   },
-  run: async ({ data }) => readPublicOfferingRegistryPage(
-    normalizeRegistryListInput(data),
-  ),
+  run: async ({ data }) => {
+    const page = await readPublicOfferingRegistryPage(normalizeRegistryListInput(data))
+    return {
+      kind: page.kind,
+      schemaVersion: page.schemaVersion,
+      page: page.page,
+      hasMore: !page.isDone,
+      ...(page.isDone ? {} : { nextCursor: page.continueCursor }),
+    }
+  },
 })
 
 export const registrySearchAction = defineAction({
@@ -167,7 +175,7 @@ export const registryServicesListAction = defineAction({
     spendExposure: 'none',
     approval: 'none',
   },
-  surfaces: ['http', 'agentJson', 'mcp'],
+  surfaces: ['http'],
   invocationContract: {
     version: 'registry.services_list:v1',
     consequenceClass: 'read_only',
@@ -182,7 +190,14 @@ export const registryServicesListAction = defineAction({
     const page = await readPublicOfferingRegistryPage(
       normalizeRegistryListInput(data),
     )
-    return projectPublicServicesPage(page, await offeringToolMapFor(page.page.map((item) => item.businessId)))
+    const projected = projectPublicServicesPage(page, await offeringToolMapFor(page.page.map((item) => item.businessId)))
+    return {
+      kind: projected.kind,
+      schemaVersion: projected.schemaVersion,
+      services: projected.services,
+      hasMore: !projected.isDone,
+      ...(projected.isDone ? {} : { nextCursor: projected.continueCursor }),
+    }
   },
 })
 
@@ -208,7 +223,7 @@ export const registryServicesSearchAction = defineAction({
     spendExposure: 'none',
     approval: 'none',
   },
-  surfaces: ['http', 'agentJson', 'mcp'],
+  surfaces: ['http'],
   invocationContract: {
     version: 'registry.services_search:v1',
     consequenceClass: 'read_only',
@@ -264,7 +279,7 @@ export const registryServicesDetailAction = defineAction({
     spendExposure: 'none',
     approval: 'none',
   },
-  surfaces: ['http', 'agentJson'],
+  surfaces: ['http'],
   invocationContract: {
     version: 'registry.services_detail:v1',
     consequenceClass: 'read_only',
@@ -373,8 +388,8 @@ async function offeringToolMapFor(
       else current.push(entry)
     }
     return map
-  } catch {
-    return {}
+  } catch (cause) {
+    return degradeBackend(cause, {}, { site: 'offeringToolMapFor', reason: 'source_unavailable' })
   }
 }
 

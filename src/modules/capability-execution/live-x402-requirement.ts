@@ -1,4 +1,5 @@
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { stableStringify } from '@/modules/common/stable-hash'
 import type { JsonValue } from '@/modules/common/bounded-json'
 import {
@@ -51,7 +52,7 @@ export async function inspectLiveX402Requirement(
     || operation.identity.payment.kind !== 'x402') return { kind: 'refused' }
 
   let config
-  try { config = parseX402FetchTransportConfiguration(JSON.parse(operation.transport.configJson)) } catch { return { kind: 'refused' } }
+  try { config = parseX402FetchTransportConfiguration(JSON.parse(operation.transport.configJson)) } catch (cause) { return degradeBackend(cause, { kind: 'refused' } as const, { site: 'inspectLiveX402Requirement', reason: 'invalid_response' }) }
   if (config === undefined) return { kind: 'refused' }
   const request = prepareX402Request(new URL(operation.identity.endpoint.url), config, JSON.stringify(input))
   if (request.kind !== 'prepared') return { kind: 'refused' }

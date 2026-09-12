@@ -2,6 +2,7 @@ import { hmac } from '@noble/hashes/hmac'
 import { sha256 } from '@noble/hashes/sha2'
 import { bytesToHex } from '@noble/hashes/utils'
 
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { constantTimeStringEqual } from '@/lib/server/constant-time'
 import { stableStringify } from '@/modules/common/stable-hash'
 
@@ -90,8 +91,8 @@ export function verifyChatThreadShare(input: Readonly<{
   let expectedToken: string
   try {
     expectedToken = mintChatThreadShareToken(grant, input.keyring)
-  } catch {
-    return false
+  } catch (cause) {
+    return degradeBackend(cause, false, { site: 'verifyChatThreadShare', reason: 'source_unavailable' })
   }
 
   return constantTimeStringEqual(shareToken, expectedToken)

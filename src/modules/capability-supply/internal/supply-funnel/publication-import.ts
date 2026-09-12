@@ -12,6 +12,7 @@ import type {
   CapabilityPublicationOfferingDraft,
 } from "../publication-importers";
 import { boundedTrimmed, validEvidenceRefs } from "../shared";
+import { degradeBackend } from "@/lib/observability/degrade-backend";
 
 function boundedSourceText(
   value: unknown,
@@ -227,8 +228,11 @@ export function ownerPublicationImport(source: Record<string, unknown>):
       let document: unknown;
       try {
         document = JSON.parse(documentJson);
-      } catch {
-        return undefined;
+      } catch (cause) {
+        return degradeBackend(cause, undefined, {
+          site: "ownerPublicationImport",
+          reason: "invalid_response",
+        });
       }
       if (publicationMaterialContainsCredential(document)) return undefined;
       return {

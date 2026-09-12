@@ -1,4 +1,5 @@
 import type { CapabilityTransportBindingRegistration } from "@/modules/capability-supply/public";
+import { degradeBackend } from "@/lib/observability/degrade-backend";
 import type {
   HttpJsonTransportConfiguration,
   McpJsonRpcTransportConfiguration,
@@ -133,8 +134,8 @@ export type ResponseMetadata = Readonly<{
 export function parseJson(value: string): unknown {
   try {
     return JSON.parse(value);
-  } catch {
-    return undefined;
+  } catch (cause) {
+    return degradeBackend(cause, undefined, { site: "parseJson", reason: "invalid_response" });
   }
 }
 

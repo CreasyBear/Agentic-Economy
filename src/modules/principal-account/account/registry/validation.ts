@@ -15,6 +15,7 @@ import {
   type SuccessionAuthorization,
   type AccountRegistryTransaction,
 } from './contracts'
+import { captureBackendException } from '@/lib/observability/degrade-backend'
 
 const ACCOUNT_REF_PATTERN = /^acc_[0-9a-f]{32}$/u
 const OWNERSHIP_REF_PATTERN = /^own_[0-9a-f]{32}$/u
@@ -263,8 +264,11 @@ export function requireTrustedRecoveryApproval(input: Readonly<{
   let createdBy: AccountActionContext
   try {
     createdBy = validActionContext(approval.createdBy)
-  } catch {
-    throw new AccountRegistryError('recovery_participant_approval_invalid')
+  } catch (cause) {
+    captureBackendException(cause, { site: 'requireTrustedRecoveryApproval' }, 'warning')
+    const error = new AccountRegistryError('recovery_participant_approval_invalid')
+    error.cause = cause
+    throw error
   }
   if (!all([
     approval.approvalRef === input.approvalRef,

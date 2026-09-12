@@ -11,7 +11,6 @@ import type { OpenDispatch } from '../../../../convex/capabilityCallProjection'
 import type { ConnectionAuthority } from './lease'
 import { createX402PaymentCallbacks } from './x402Authorization'
 import type { X402PaymentCallbacks } from './x402Authorization'
-import { X402_MANAGED_CUSTODY_REF } from './x402ManagedCustodyRef'
 
 export {
   configuredX402RpcUrl,
@@ -27,9 +26,6 @@ export {
 export type { X402TransportObservationRecord } from './x402Settlement'
 export type { X402PaymentCallbacks } from './x402Authorization'
 export { X402_MANAGED_CUSTODY_REF } from './x402ManagedCustodyRef'
-
-/** @deprecated Use the rail-neutral managed custody reference. */
-export const BROKERED_X402_MANAGED_CUSTODY_REF = X402_MANAGED_CUSTODY_REF
 
 type ProviderRouteBinding = Extract<
   RouteTransportInvocation['binding'],

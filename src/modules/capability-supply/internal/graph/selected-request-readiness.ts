@@ -1,3 +1,4 @@
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { normalizePricingConfig } from '@/modules/money/public'
 
 import { FACILITATOR_DISCOVERY_PUBLISHER_REF } from '../facilitator-discovery-ingest'
@@ -16,5 +17,9 @@ export function usesSelectedRequestReadiness(publication: Readonly<{
   try {
     const pricing = normalizePricingConfig(JSON.parse(publication.pricingConfigJson))
     return pricing.kind === 'valid' && pricing.config.kind === 'managed_x402'
-  } catch { return false }
+  } catch (cause) {
+    return degradeBackend(cause, false, {
+      site: 'usesSelectedRequestReadiness', reason: 'invalid_response',
+    })
+  }
 }

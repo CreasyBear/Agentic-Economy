@@ -1,5 +1,8 @@
 {
   "x402Version": 2,
+  "quality": {
+    "l30DaysUniquePayers": 4
+  },
   "resource": {
     "url": "https://api.onesource.io/api/chain/erc20-transfers",
     "description": "ERC20 Transfer logs via eth_getLogs - raw Transfer events for a token or wallet"

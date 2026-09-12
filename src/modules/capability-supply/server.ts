@@ -25,8 +25,6 @@ export {
 
 export { signRouteTransportCall } from './internal/route-call-signing'
 export {
-  BASE_NETWORK,
-  BASE_USDC_ADDRESS,
   createCdpEvmX402PaymentSignature,
   createCdpEvmX402PaymentSignature as createEvmX402PaymentSignature,
   cdpX402PolicyRulesDigest,

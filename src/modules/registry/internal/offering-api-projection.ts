@@ -1,3 +1,4 @@
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { validateOfferingAccessPath } from '@/modules/catalog/convex'
 import type {
   BusinessSupplyProjection,
@@ -272,7 +273,8 @@ function sanitizeAccessPaths(value: unknown): PublicAccessPath[] {
     let validation: OfferingAccessPathValidation
     try {
       validation = validateOfferingAccessPath(descriptorInput)
-    } catch {
+    } catch (cause) {
+      degradeBackend(cause, undefined, { site: 'sanitizeAccessPaths', reason: 'invalid_response' })
       continue
     }
     if (validation.kind !== 'valid') continue

@@ -1,3 +1,4 @@
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 import {
   createCurrentToolQuote,
 } from '@/modules/capability-supply/current-tool'
@@ -18,8 +19,8 @@ export function currentToolDigest(input: Readonly<{
 }>): string | undefined {
   try {
     return createCurrentToolQuote(input).currentDigest
-  } catch {
-    return undefined
+  } catch (cause) {
+    return degradeBackend(cause, undefined, { site: 'currentToolDigest', reason: 'invalid_response' })
   }
 }
 

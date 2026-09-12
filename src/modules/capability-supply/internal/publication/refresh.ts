@@ -1,4 +1,5 @@
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { normalizePricingConfig, pricingConfigDigest, type PricingConfig } from '@/modules/money/public'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 import {
@@ -303,7 +304,9 @@ function refreshedBinding(
 function verifiedPublicationPricing(publication: PublicationCommandRow): PricingConfig | undefined {
   if (publication.pricingConfigJson === undefined || publication.priceDigest === undefined) return undefined
   let value: unknown
-  try { value = JSON.parse(publication.pricingConfigJson) } catch { return undefined }
+  try { value = JSON.parse(publication.pricingConfigJson) } catch (cause) {
+    return degradeBackend(cause, undefined, { site: 'verifiedPublicationPricing', reason: 'invalid_response' })
+  }
   const pricing = normalizePricingConfig(value)
   return pricing.kind === 'valid' && pricingConfigDigest(pricing.config) === publication.priceDigest
     ? pricing.config : undefined

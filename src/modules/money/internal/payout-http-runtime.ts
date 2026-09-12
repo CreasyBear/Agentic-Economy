@@ -4,6 +4,7 @@ import {
 } from '@/lib/server/convex-source'
 import { isRecord } from '@/modules/common/is-record'
 import { sourceWriteAdmissionFromContext } from '@/lib/server/source-write-admission'
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 import {
   sourceWriteRequestFromAdmission,
   SourceWriteAdmissionError,
@@ -162,8 +163,8 @@ export async function ownerBusiness(
         })),
       },
     }
-  } catch {
-    return { kind: 'refused', code: 'payout_not_ready', retryable: true }
+  } catch (cause) {
+    return degradeBackend(cause, { kind: 'refused', code: 'payout_not_ready', retryable: true } as const, { site: 'ownerBusiness', reason: 'source_unavailable' })
   }
 }
 

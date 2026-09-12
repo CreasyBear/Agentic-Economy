@@ -1,3 +1,4 @@
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { isBoundedJsonValue } from '@/modules/capability-contract/public'
 import type { StableHashValue } from '@/modules/common/stable-hash'
@@ -363,8 +364,8 @@ function parseRecoveryMaterial(recovered: RecoveredCall): RecoveryMaterial | und
     const parsedInput: unknown = JSON.parse(recovered.inputJson)
     if (!isBoundedJsonValue(parsedInput)) return undefined
     return { operation, descriptor, parsedInput }
-  } catch {
-    return undefined
+  } catch (cause) {
+    return degradeBackend(cause, undefined, { site: 'parseRecoveryMaterial', reason: 'invalid_response' })
   }
 }
 

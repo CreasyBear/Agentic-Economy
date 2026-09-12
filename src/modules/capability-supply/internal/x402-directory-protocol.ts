@@ -3,6 +3,8 @@ import { extractDiscoveryInfoV1 } from '@x402/extensions/bazaar'
 import type { Network, PaymentRequirementsV1 } from '@x402/core/types'
 import { base, baseSepolia, mainnet, arbitrum, optimism, polygon, avalanche } from 'viem/chains'
 
+import { degradeBackend } from '@/lib/observability/degrade-backend'
+
 const namedChains = [base, baseSepolia, mainnet, arbitrum, optimism, polygon, avalanche]
 
 /** Names a declared x402 network for display; unknown networks read back verbatim. */
@@ -24,7 +26,7 @@ export function x402LegacyDiscoveryInfo(accepted: unknown): unknown {
   if (accepted === undefined || accepted === null) return undefined
   try {
     return extractDiscoveryInfoV1(accepted as PaymentRequirementsV1)
-  } catch {
-    return undefined
+  } catch (cause) {
+    return degradeBackend(cause, undefined, { site: 'x402LegacyDiscoveryInfo', reason: 'invalid_response' })
   }
 }

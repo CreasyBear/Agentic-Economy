@@ -83,8 +83,8 @@ export function assertSchemaIsSafeAndValid(schema: Readonly<Record<string, JsonV
   try {
     if (!schemaAndChildrenMatchMetaSchema(schema)) throw new Error('schema_meta_validation_failed')
     createInterpreter(schema).validate(null)
-  } catch {
-    throw new Error('capability_json_schema_invalid')
+  } catch (cause) {
+    throw new Error('capability_json_schema_invalid', { cause })
   }
 }
 

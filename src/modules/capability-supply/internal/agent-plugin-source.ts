@@ -2,6 +2,7 @@ import { Validator, type Schema } from '@cfworker/json-schema'
 
 import { isRecord } from '@/modules/common/is-record'
 import { validHttpsUrl } from './publication-importer-types'
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 import pluginSchema from './agent-plugins-1.0.0/plugin.schema.json'
 import mcpSchema from './agent-plugins-1.0.0/mcp.schema.json'
 
@@ -83,7 +84,7 @@ function validMcpEnvelope(value: unknown): value is Readonly<{
 function matchesSchema(schema: unknown, value: unknown): boolean {
   try {
     return new Validator(structuredClone(schema) as Schema, '2020-12', false).validate(value).valid
-  } catch {
-    return false
+  } catch (cause) {
+    return degradeBackend(cause, false, { site: 'matchesSchema', reason: 'invalid_response' })
   }
 }

@@ -2,6 +2,8 @@ import type { LookupAddress, LookupOptions } from 'node:dns'
 import { lookup as nodeDnsLookup } from 'node:dns/promises'
 import { BlockList, isIP, SocketAddress, type LookupFunction } from 'node:net'
 
+import { degradeBackend } from '@/lib/observability/degrade-backend'
+
 export type ResolvedAddress = {
   address: string
   family?: number
@@ -48,8 +50,8 @@ export async function isPublicHttpTarget(url: URL, resolver: DnsResolver): Promi
   let addresses: readonly ResolvedAddress[]
   try {
     addresses = await resolver.lookup(hostname)
-  } catch {
-    return false
+  } catch (cause) {
+    return degradeBackend(cause, false, { site: 'isPublicHttpTarget', reason: 'source_unavailable' })
   }
 
   return addresses.length > 0 && addresses.every(({ address }) => !isBlockedAddress(address))
@@ -153,8 +155,8 @@ function isPublicIpAddress(value: string): boolean {
       return !blockedAddressRanges.check(mappedIpv4, 'ipv4')
     }
     return !blockedAddressRanges.check(normalized, family === 6 ? 'ipv6' : 'ipv4')
-  } catch {
-    return false
+  } catch (cause) {
+    return degradeBackend(cause, false, { site: 'isPublicIpAddress', reason: 'source_unavailable' })
   }
 }
 
@@ -164,8 +166,8 @@ function extractMappedIpv4Address(value: string): string | undefined {
   let parsed: SocketAddress | undefined
   try {
     parsed = SocketAddress.parse(`[${withoutZone}]:0`)
-  } catch {
-    return undefined
+  } catch (cause) {
+    return degradeBackend(cause, undefined, { site: 'extractMappedIpv4Address', reason: 'invalid_response' })
   }
   if (parsed === undefined || parsed.family !== 'ipv6' || !parsed.address.startsWith('::ffff:')) {
     return undefined
