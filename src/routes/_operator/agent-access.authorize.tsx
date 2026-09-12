@@ -2,12 +2,12 @@ import { Link, createFileRoute } from '@tanstack/react-router'
 import { z } from 'zod'
 
 import { AeAgentAccessAuthorizeForm } from '@/components/ae/agent-access/AeAgentAccessAuthorizeForm'
-import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
+import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
 import {
   OperatorRouteError,
   OperatorRouteNotFound,
   OperatorRoutePending,
-} from '@/components/ae/layout/AeOperatorRouteStates'
+} from '@/components/ae/layout/AeRouteStates'
 import { AeSettingsStack } from '@/components/ae/layout/AeSection'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
@@ -98,7 +98,7 @@ function AgentAccessAuthorizeRoute() {
   }
   if (loaded.kind === 'outcome_unknown') {
     return (
-      <AeOperatorShell operatorRole="owner" title="Review agent access" description="Confirm the current result before taking another action." currentPath="/agent-access">
+      <AeOperatorPage operatorRole="owner" title="Review agent access" description="Confirm the current result before taking another action." currentPath="/agent-access">
         <AeSettingsStack>
           <Alert variant="destructive">
             <AlertTitle>Check the current access status</AlertTitle>
@@ -111,12 +111,12 @@ function AgentAccessAuthorizeRoute() {
             </AlertDescription>
           </Alert>
         </AeSettingsStack>
-      </AeOperatorShell>
+      </AeOperatorPage>
     )
   }
   if (loaded.kind === 'succeeded') {
     return (
-      <AeOperatorShell operatorRole="owner" title="Review agent access" description="This request has already completed." currentPath="/agent-access">
+      <AeOperatorPage operatorRole="owner" title="Review agent access" description="This request has already completed." currentPath="/agent-access">
         <AeSettingsStack>
           <Alert>
             <AlertTitle>Access approved</AlertTitle>
@@ -129,17 +129,17 @@ function AgentAccessAuthorizeRoute() {
             </AlertDescription>
           </Alert>
         </AeSettingsStack>
-      </AeOperatorShell>
+      </AeOperatorPage>
     )
   }
   return (
-    <AeOperatorShell operatorRole="owner" title="Review agent access" description="Choose what this agent may do, then approve or decline." currentPath="/agent-access">
+    <AeOperatorPage operatorRole="owner" title="Review agent access" description="Choose what this agent may do, then approve or decline." currentPath="/agent-access">
       <AeSettingsStack>
         <Alert variant="destructive">
           <AlertTitle>This access request is missing a code</AlertTitle>
           <AlertDescription>Start a new request from your agent.</AlertDescription>
         </Alert>
       </AeSettingsStack>
-    </AeOperatorShell>
+    </AeOperatorPage>
   )
 }

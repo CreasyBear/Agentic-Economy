@@ -9,6 +9,7 @@ import {
   emptyAccountSecurityHistory,
   type AccountSecurityHistoryResult,
 } from '@/modules/security/account-security'
+import { degrade } from '@/lib/observability/degrade'
 
 export function AeAgentSecurityHistory({ principalRef }: Readonly<{ principalRef: string }>) {
   const readHistory = useServerFn(readAgentSecurityHistoryServer)
@@ -25,8 +26,8 @@ export function AeAgentSecurityHistory({ principalRef }: Readonly<{ principalRef
       setResult((current) => next.kind === 'available' && current.kind === 'available' && append
         ? { kind: 'available', page: { ...next.page, items: [...current.page.items, ...next.page.items] } }
         : next)
-    } catch {
-      setResult({ kind: 'unavailable', reason: 'source_unavailable' })
+    } catch (cause) {
+      setResult(degrade(cause, { kind: 'unavailable', reason: 'source_unavailable' }, { site: 'loadAgentSecurityHistory', reason: 'source_unavailable' }))
     } finally {
       setLoading(false)
     }

@@ -1,8 +1,9 @@
 import { Outlet, createFileRoute, useLocation } from '@tanstack/react-router'
 
-import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
+import { OperatorChromeProvider } from '@/components/ae/layout/AeOperatorPage'
+import { AeOperatorSidebar } from '@/components/ae/layout/AeOperatorSidebar'
+import { SidebarTrigger } from '@/components/ui/sidebar'
 import { operatorLayoutRouteOptions } from '@/lib/operator/route-options'
-import { resolveOperatorNavItem } from '@/lib/operator/navigation'
 import { operatorSurfaceForPath } from '@/lib/operator/operator-context'
 
 export const Route = createFileRoute('/_operator')({
@@ -14,17 +15,20 @@ function OperatorLayoutRoute() {
   const { pathname } = useLocation()
   const operatorContext = Route.useRouteContext()
   const operatorRole = operatorSurfaceForPath(pathname)
-  const navItem = resolveOperatorNavItem(operatorRole, pathname)
 
   return (
-    <AeOperatorShell
-      operatorRole={operatorRole}
-      operatorContext={operatorContext}
-      title={navItem?.label ?? 'Workspace'}
-      description="Loading your latest marketplace activity."
-      currentPath={pathname}
+    <OperatorChromeProvider
+      mobileTrigger={<SidebarTrigger aria-label="Open operator navigation" className="md:hidden" />}
+      sidebar={
+        <AeOperatorSidebar
+          operatorRole={operatorRole}
+          operatorContext={operatorContext}
+          currentPath={pathname}
+          className="top-(--header-height) h-[calc(100svh-var(--header-height))]!"
+        />
+      }
     >
       <Outlet />
-    </AeOperatorShell>
+    </OperatorChromeProvider>
   )
 }

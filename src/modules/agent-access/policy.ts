@@ -1,6 +1,7 @@
 import { z } from 'zod'
 
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { isPublicToolRef } from '@/modules/common/tool-ref'
 import { compareExactAmounts, exactAmountSchema, type ExactAmount } from '@/modules/money/public'
 import {
@@ -537,8 +538,8 @@ export function normalizeStoredAgentAccessGrantForTool(
   try {
     const grant = normalizeStoredAgentAccessGrant(input)
     return agentAccessGrantAllowsTool(grant, toolRef) ? grant : undefined
-  } catch {
-    return undefined
+  } catch (cause) {
+    return degradeBackend(cause, undefined, { site: 'normalizeStoredAgentAccessGrantForTool', reason: 'invalid_response' })
   }
 }
 

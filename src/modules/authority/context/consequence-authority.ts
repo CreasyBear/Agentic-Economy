@@ -20,6 +20,7 @@ import {
   type DelegationSnapshotRef,
 } from '../delegation/public'
 import { canonicalDigest } from '../../common/canonical-digest'
+import { captureBackendException } from '@/lib/observability/degrade-backend'
 
 const ACTION_CONTEXT_REF_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/u
 const AUTHORITY_VALUE_PATTERN = /^[A-Za-z0-9*][A-Za-z0-9._:/*-]{0,199}$/u
@@ -426,7 +427,8 @@ function canonicalIntent(intent: AuthorityConsequenceIntent): CanonicalAuthority
     return consequence === undefined
       ? Object.freeze(canonical)
       : Object.freeze({ ...canonical, consequence })
-  } catch {
+  } catch (cause) {
+    captureBackendException(cause, { site: 'canonicalIntent' }, 'warning')
     throw new AuthorityBoundaryError('authority_admission_invalid')
   }
 }
@@ -549,7 +551,8 @@ function authorityBinding(value: AuthorityResolvedBinding | undefined): Authorit
       grantRef,
       grantGeneration: grantGenerationValue,
     })
-  } catch {
+  } catch (cause) {
+    captureBackendException(cause, { site: 'authorityBinding' }, 'warning')
     throw new AuthorityBoundaryError('authority_binding_invalid')
   }
 }
@@ -603,7 +606,8 @@ function canonicalAuthoritySnapshot(snapshot: DelegationAuthoritySnapshot): Cano
       correlationRef,
       idempotencyRef,
     })
-  } catch {
+  } catch (cause) {
+    captureBackendException(cause, { site: 'canonicalAuthoritySnapshot' }, 'warning')
     throw new AuthorityBoundaryError('authority_admission_invalid')
   }
 }

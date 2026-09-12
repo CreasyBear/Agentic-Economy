@@ -1,3 +1,5 @@
+import { degrade } from '@/lib/observability/degrade'
+
 export type FunnelAttribution = {
   source: string
   referrer?: string
@@ -54,8 +56,8 @@ function sanitizedReferrer(referrer: string): string | undefined {
   try {
     const url = new URL(referrer)
     return `${url.origin}${url.pathname}`.slice(0, 240)
-  } catch {
-    return undefined
+  } catch (cause) {
+    return degrade(cause, undefined, { site: 'sanitizedReferrer', reason: 'invalid_response' })
   }
 }
 

@@ -15,6 +15,12 @@ import { AePublicPage } from '@/components/ae/layout/AePublicPage'
 import { buildPublicPageHead } from '@/modules/seo/public'
 
 export const Route = createFileRoute('/terms')({
+  staticData: {
+    nav: {
+      label: 'Terms',
+      footer: { column: 'Legal', order: 1 },
+    },
+  },
   head: () => buildPublicPageHead({
     path: '/terms',
     title: 'Terms | Agentic Economy',
@@ -87,7 +93,7 @@ function TermsRoute() {
         </section>
 
         <section className="flex flex-wrap gap-related border-t border-border pt-section">
-          <Button asChild variant="default" className="min-h-touch"><Link to="/market" search={{ window: '30d' }} hash="tools">Browse catalog</Link></Button>
+          <Button asChild variant="default" className="min-h-touch"><Link to="/market">Browse catalog</Link></Button>
           <Button asChild variant="secondary" className="min-h-touch"><Link to="/for-providers">Publish a Tool <ArrowRightIcon aria-hidden="true" /></Link></Button>
         </section>
       </div>

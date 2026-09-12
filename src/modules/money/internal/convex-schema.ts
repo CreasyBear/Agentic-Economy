@@ -574,18 +574,6 @@ export const moneyTables = {
     .index('by_authorizationDigest', ['authorizationDigest'])
     .index('by_paymentIdentifier', ['paymentIdentifier'])
     .index('by_state_and_paymentAuthorizationExpiresAt', ['state', 'paymentAuthorizationExpiresAt']),
-  moneyCredentialUsageSummaries: defineTable({
-    principalId: identifier,
-    credentialId: identifier,
-    currency,
-    exponent,
-    callCount: v.number(),
-    paidCallCount: v.number(),
-    freeCallCount: v.number(),
-    grossSpendUnits: units,
-    states: v.array(v.union(v.literal('free_tier'), v.literal('paid'), v.literal('insufficient_credit'), v.literal('outcome_unknown'), v.literal('refunded'))),
-    updatedAt: v.number(),
-  }).index('by_principalId_and_credentialId_and_currency', ['principalId', 'credentialId', 'currency']),
   /**
    * ADR-034 delivery evidence. Insert-once and never updated: the money ledger
    * remains the economic authority and Action Invocation the lifecycle

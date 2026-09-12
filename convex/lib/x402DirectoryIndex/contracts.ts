@@ -19,6 +19,7 @@ export const directoryEntryValue = v.object({
   method: v.optional(v.string()), methodLabel: v.optional(v.string()), outputSummary: v.optional(v.string()), schemaSummary: v.optional(v.string()),
   tags: v.optional(v.array(v.string())),
   curated: v.optional(v.literal(true)), bundleSlugs: v.optional(v.array(v.string())),
+  slug: v.optional(v.string()),
   provenance: v.optional(v.object({ directory: v.literal('Coinbase Bazaar'), metadata: v.literal('provider_declared'), updatedAt: v.optional(v.string()) })),
   activity: v.optional(v.object({ calls30d: v.optional(v.number()), payers30d: v.optional(v.number()), lastCalledAt: v.optional(v.string()) })),
   prices: v.array(v.object({
@@ -31,6 +32,11 @@ export const indexedEntryValue = v.object({
   entry: directoryEntryValue, category: v.string(),
   categorySource: v.union(v.literal('provider_declared'), v.literal('unclassified')),
   observedAt: v.number(), sourceDigest: v.string(),
+  // Admitted Tool ref, joined live from capabilityPublications by
+  // sourceRouteRef (convex/x402DirectoryIndex.ts:admittedToolRef) - never
+  // stored on the directory row itself, so it always reflects the current
+  // disposition even after a publication is withdrawn or superseded.
+  toolRef: v.optional(v.string()),
   analytics: v.optional(v.object({
     payerDepth: v.optional(v.number()),
     depthBand: v.string(),
@@ -38,7 +44,9 @@ export const indexedEntryValue = v.object({
     lastCalledBand: v.string(),
     callDelta: v.optional(v.number()),
     payerDelta: v.optional(v.number()),
-    momentumBand: v.string(),
+    // Optional (Well 8 Lane B): no longer computed going forward (see
+    // x402DirectoryIndexBackfill.ts) - only legacy rows still carry a value.
+    momentumBand: v.optional(v.string()),
   })),
 })
 export type IndexedEntry = Infer<typeof indexedEntryValue>

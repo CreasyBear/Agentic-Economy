@@ -1,3 +1,4 @@
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { isRecord } from '@/modules/common/is-record'
 import { callReceiptPaymentProfile } from '@/modules/capability-execution/call-contracts'
@@ -29,8 +30,8 @@ function parseX402RpcUrl(value: unknown): URL | undefined {
   try {
     const url = new URL(value)
     return url.protocol === 'https:' ? url : undefined
-  } catch {
-    return undefined
+  } catch (cause) {
+    return degradeBackend(cause, undefined, { site: 'parseX402RpcUrl', reason: 'invalid_response' })
   }
 }
 
@@ -66,8 +67,8 @@ export function configuredX402RpcUrls(
     const parsedUrls = urls as URL[]
     const distinct = new Set(parsedUrls.map((url) => url.href))
     return distinct.size === parsedUrls.length ? parsedUrls : []
-  } catch {
-    return []
+  } catch (cause) {
+    return degradeBackend(cause, [], { site: 'configuredX402RpcUrls', reason: 'invalid_response' })
   }
 }
 
@@ -110,8 +111,8 @@ export async function readX402EvmReceipt(
               confirmationTimeoutMs: confirmation.timeoutMs,
             }),
       })
-    } catch {
-      return undefined
+    } catch (cause) {
+      return degradeBackend(cause, undefined, { site: 'readX402EvmReceipt', reason: 'source_unavailable' })
     }
   }))
   if (receipts.some((receipt) => receipt === undefined)) return undefined

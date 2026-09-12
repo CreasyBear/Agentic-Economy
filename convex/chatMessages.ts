@@ -4,8 +4,10 @@ import {
   saveMessage,
   syncStreams,
   updateThreadMetadata,
+  vPaginationResult,
   vStreamArgs,
 } from '@convex-dev/agent'
+import { vStreamDelta, vStreamMessage } from '@convex-dev/agent/validators'
 import { paginationOptsValidator } from 'convex/server'
 import { v } from 'convex/values'
 
@@ -188,12 +190,44 @@ export const authorizeScheduledGeneration = internalQuery({
   },
 })
 
+// The Vercel AI SDK's UIMessage `parts` union is deeply nested and vendor-owned,
+// and evolves with the SDK, so its element shape stays a runtime-validated
+// boundary here (the package's own validators take the same approach for
+// equally deep AI SDK content, e.g. `vStreamDelta`'s parts field); everything
+// else the client actually depends on is validated precisely below.
+const chatUIMessageValue = v.object({
+  id: v.string(),
+  key: v.string(),
+  role: v.union(v.literal('system'), v.literal('user'), v.literal('assistant')),
+  order: v.number(),
+  stepOrder: v.number(),
+  status: v.union(v.literal('streaming'), v.literal('pending'), v.literal('success'), v.literal('failed')),
+  text: v.string(),
+  _creationTime: v.number(),
+  agentName: v.optional(v.string()),
+  userId: v.optional(v.string()),
+  metadata: v.optional(v.any()), // runtime-validated AI SDK UIMessage boundary
+  parts: v.array(v.any()), // runtime-validated AI SDK UIMessage boundary
+})
+
+// `useUIMessages`'s `StreamQuery` type constraint requires a *required*
+// `streams` field typed exactly as `syncStreams`'s return value, so this
+// stays a required union (never `v.optional`) and the handler normalizes
+// `syncStreams`'s `undefined` ("no streamArgs supplied") to an empty list.
+const chatStreamsValue = v.union(
+  v.object({ kind: v.literal('list'), messages: v.array(vStreamMessage) }),
+  v.object({ kind: v.literal('deltas'), deltas: v.array(vStreamDelta) }),
+)
+
 export const listMessages = query({
   args: {
     threadId: v.string(),
     paginationOpts: paginationOptsValidator,
     streamArgs: vStreamArgs,
   },
+  returns: vPaginationResult(chatUIMessageValue).extend({
+    streams: chatStreamsValue,
+  }),
   handler: async (ctx, args) => {
     await requireOwnedChatThread(ctx, args.threadId)
     const paginationOpts = validatePaginationOpts(args.paginationOpts)
@@ -207,6 +241,6 @@ export const listMessages = query({
         streamArgs: args.streamArgs,
       }),
     ])
-    return { ...messages, streams }
+    return { ...messages, streams: streams ?? { kind: 'list' as const, messages: [] } }
   },
 })

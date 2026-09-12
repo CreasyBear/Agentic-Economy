@@ -15,8 +15,6 @@ import { CUSTOMER_REQUEST_READ_ONLY_SCOPE, CUSTOMER_REQUEST_SPENDING_POLICY_SCOP
 import { defaultSandboxAgentAccessPolicy } from '../../src/modules/agent-access/sandbox-policy'
 import { buildProductionAgentAccessPolicy } from '../../src/modules/agent-access/production-policy'
 import { issuedAgentCanonicalRefs } from '../../src/modules/agent-access/issued-agent-binding'
-import { createLocalE2EAgentAccessKeyApi } from '../../src/lib/server/local-e2e-agent-key'
-import { LOCAL_E2E_OPERATOR_PRINCIPAL } from '../../src/lib/server/local-e2e-bypass'
 
 const policy = defaultSandboxAgentAccessPolicy({ currency: 'USD', exponent: 2 })
 const scopes = [
@@ -215,62 +213,6 @@ describe('agent access', () => {
       spendingPolicy: policy,
     }))
     expect(getSecret).toHaveBeenCalledWith('key_123')
-  })
-
-  it('uses the local E2E key adapter through canonical binding and distinct issuances', async () => {
-    vi.useFakeTimers()
-    vi.setSystemTime(1_000)
-    vi.stubEnv('VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E', 'true')
-    const api = createLocalE2EAgentAccessKeyApi()
-    const registerBinding = vi.fn(async (binding: Parameters<Parameters<typeof issueAgentAccessKey>[0]['registerBinding']>[0]) => ({
-      ...recordedBinding(binding.grantRef),
-      expiresAt: binding.expiresAt,
-    }))
-    const issue = async (idempotencyKey: string, grantRef: string, name: string) => await issueAgentAccessKey({
-      ownerId: LOCAL_E2E_OPERATOR_PRINCIPAL,
-      principal: { userId: LOCAL_E2E_OPERATOR_PRINCIPAL },
-      input: {
-        name,
-        idempotencyKey,
-        grantRef,
-        scopes,
-        environment: 'sandbox',
-        expiresInSeconds: 60,
-      },
-      spendingPolicy: policy,
-      api,
-      registerBinding,
-      returnSecret: false,
-    })
-
-    try {
-      const first = await issue('local-canonical-first-12345678', 'grt_local_canonical_first', 'Local canonical first')
-      const replay = await issue('local-canonical-first-12345678', 'grt_local_canonical_first', 'Local canonical first')
-      const second = await issue('local-canonical-second-12345678', 'grt_local_canonical_second', 'Local canonical second')
-
-      expect(first).toMatchObject({ kind: 'created', grantRef: 'grt_local_canonical_first' })
-      expect(replay).toMatchObject({ kind: 'replayed', keyId: first.kind === 'error' ? '' : first.keyId })
-      expect(second).toMatchObject({ kind: 'created', grantRef: 'grt_local_canonical_second' })
-      if (first.kind === 'error' || second.kind === 'error') throw new Error('local issuance failed')
-      expect(second.keyId).not.toBe(first.keyId)
-      expect(registerBinding).toHaveBeenCalledTimes(3)
-      expect(registerBinding).toHaveBeenNthCalledWith(1, expect.objectContaining({
-        issuanceKey: 'local-canonical-first-12345678',
-        grantRef: 'grt_local_canonical_first',
-        credentialId: first.keyId,
-        displayName: 'Local canonical first',
-        applicationRef: AGENT_ACCESS_DEFAULT_APPLICATION_REF,
-        environment: 'sandbox',
-        scopes,
-        authorityMode: 'read_only',
-        toolAccess: 'all_admitted',
-        toolRefs: [],
-        spendingPolicy: policy,
-      }))
-    } finally {
-      vi.useRealTimers()
-      vi.unstubAllEnvs()
-    }
   })
 
   it('binds Clerk replay to one compact canonical Operation-selection digest', async () => {

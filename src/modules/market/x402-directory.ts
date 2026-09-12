@@ -1,5 +1,7 @@
 import { z } from 'zod'
 
+import { degradeBackend } from '@/lib/observability/degrade-backend'
+
 export type X402DirectoryField = Readonly<{
   name: string
   path: string
@@ -42,6 +44,8 @@ export type X402DirectoryEntry = Readonly<{
   tags?: readonly string[]
   curated?: true
   bundleSlugs?: readonly string[]
+  /** Kebab slug for the canonical `/tools/<providerHost>/<slug>` URL; `providerHost` is derived from `provider` via `directoryProviderKey`. */
+  slug?: string
   provenance?: Readonly<{ directory: 'Coinbase Bazaar'; metadata: 'provider_declared'; updatedAt?: string }>
   activity?: Readonly<{ calls30d?: number; payers30d?: number; lastCalledAt?: string }>
   provider: string
@@ -71,7 +75,7 @@ function canonicalProviderHost(value: string): string | undefined {
     if (url.username !== '' || url.password !== '' || url.port !== '' || url.pathname !== '/' || url.search !== '' || url.hash !== '') return undefined
     const host = url.hostname.toLowerCase()
     return host.includes('.') && host.split('.').every((label) => /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/u.test(label)) ? host : undefined
-  } catch { return undefined }
+  } catch (cause) { return degradeBackend(cause, undefined, { site: 'canonicalProviderHost', reason: 'invalid_response' }) }
 }
 
 export const x402DirectoryFilterSchema = z.strictObject({

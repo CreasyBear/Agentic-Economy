@@ -39,7 +39,11 @@ export function initSentryServer(): boolean {
   return true
 }
 
-export function captureServerException(error: unknown, context?: Record<string, string>): void {
+export function captureServerException(
+  error: unknown,
+  context?: Record<string, string>,
+  level?: 'warning' | 'error',
+): void {
   try {
     const safeError = sanitizeTelemetryError(error)
     if (!initSentryServer()) return
@@ -47,18 +51,20 @@ export function captureServerException(error: unknown, context?: Record<string, 
     const enrichedContext = correlationId === undefined
       ? context
       : { ...(context ?? {}), 'ae.request_id': correlationId }
-    if (enrichedContext !== undefined) {
-      const safeContext = sanitizeTelemetryValue(enrichedContext) as Record<string, unknown>
-      Sentry.withScope((scope) => {
+    const safeContext = enrichedContext === undefined
+      ? undefined
+      : (sanitizeTelemetryValue(enrichedContext) as Record<string, unknown>)
+    Sentry.withScope((scope) => {
+      if (safeContext !== undefined) {
         for (const [key, value] of Object.entries(safeContext)) {
           scope.setTag(key, String(value))
         }
-        Sentry.captureException(safeError)
-      })
-      return
-    }
-    Sentry.captureException(safeError)
+      }
+      if (level !== undefined) scope.setLevel(level)
+      Sentry.captureException(safeError)
+    })
   } catch {
+    // Intentional bare catch: the reporting path must never throw or recurse. See tests/imports/bare-catch-ratchet.test.ts.
     // Diagnostics are fail-open and cannot alter the domain response.
   }
 }
@@ -95,6 +101,7 @@ export function captureClientError(input: ClientErrorCapture): boolean {
     })
     return true
   } catch {
+    // Intentional bare catch: the reporting path must never throw or recurse. See tests/imports/bare-catch-ratchet.test.ts.
     return false
   }
 }

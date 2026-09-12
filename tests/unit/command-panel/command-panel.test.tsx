@@ -609,12 +609,11 @@ describe('operator command panel', () => {
     fireEvent.keyDown(await screen.findByRole('option', { name: /Weather forecast/ }), { key: 'Enter' })
 
     const action = await screen.findByRole('link', { name: 'Browse current Tools' })
-    expect(action.getAttribute('href')).toBe('/market?window=30d#tools')
+    expect(action.getAttribute('href')).toBe('/market')
     fireEvent.click(action)
     await waitFor(() => {
       expect(router.state.location.pathname).toBe('/market')
-      expect(router.state.location.search).toEqual({ window: '30d' })
-      expect(router.state.location.hash).toBe('tools')
+      expect(router.state.location.search).toEqual({})
       expect(screen.queryByRole('dialog')).toBeNull()
     })
   })
@@ -741,7 +740,7 @@ describe('operator command panel', () => {
     expect(await screen.findByText(/No Tools matched/)).toBeTruthy()
     expect(readDetail).not.toHaveBeenCalled()
     const browse = screen.getByRole('link', { name: 'Browse current Tools' })
-    expect(browse.getAttribute('href')).toBe('/market?window=30d#tools')
+    expect(browse.getAttribute('href')).toBe('/market')
     const clear = screen.getByRole('button', { name: 'Clear search' })
     expect(clear.getAttribute('data-slot')).toBe('button')
     fireEvent.click(clear)
@@ -840,8 +839,8 @@ export function detailFixture(toolRef: string = TEST_OPERATION_REF): PublicToolD
         }],
       },
       business: { businessId: 'b_acme', slug: 'acme-tools', name: 'Acme Tools' },
-      offering: {
-        offeringRef: 'offering:v1:x',
+      listing: {
+        listingRef: 'listing:v1:x',
         revision: 2,
         label: 'Currency conversion',
         summary: 'Convert between currencies.',

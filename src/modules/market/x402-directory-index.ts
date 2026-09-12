@@ -1,5 +1,6 @@
 import Decimal from 'decimal.js'
 import { z } from 'zod'
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { x402DirectoryFilterSchema, type X402DirectoryEntry, type X402DirectoryFilters } from './x402-directory'
 
 export const DIRECTORY_PRICE_BANDS = ['lt_0_01', '0_01_to_0_03', '0_03_to_0_10', '0_10_to_1', '1_to_10', '10_plus', 'unknown'] as const
@@ -51,6 +52,8 @@ export type X402IndexedDirectoryEntry = Readonly<{
   categorySource: 'provider_declared' | 'unclassified'
   observedAt: number
   sourceDigest: string
+  /** Joined live from capabilityPublications - see convex/x402DirectoryIndex.ts:admittedToolRef. */
+  toolRef?: string
   analytics?: Readonly<{
     payerDepth?: number
     depthBand: DirectoryDepthBand
@@ -82,7 +85,7 @@ export function minimumDirectoryUsdPrice(entry: X402DirectoryEntry, network?: st
       const amount = new Decimal(price.decimalAmount)
       if (!amount.isFinite() || amount.isNegative()) continue
       if (minimum === undefined || amount.lt(minimum)) minimum = amount
-    } catch { /* Unknown price facts never satisfy a price ceiling. */ }
+    } catch (cause) { degradeBackend(cause, undefined, { site: 'minimumDirectoryUsdPrice', reason: 'invalid_response' }) /* Unknown price facts never satisfy a price ceiling. */ }
   }
   return minimum?.toFixed()
 }
@@ -120,4 +123,43 @@ export function directoryAdoptionBand(payers: number | undefined): DirectoryAdop
 export function directoryIndexRangesValid(input: X402DirectoryIndexInput): boolean {
   return !(input.minUsdPrice !== undefined && input.maxUsdPrice !== undefined && input.minUsdPrice > input.maxUsdPrice)
     && !(input.minPayers30d !== undefined && input.maxPayers30d !== undefined && input.minPayers30d > input.maxPayers30d)
+}
+
+export { isDirectoryEntryEligible } from '@/modules/capability-contract/public'
+export type { DirectoryEligibilitySignals } from '@/modules/capability-contract/public'
+
+/** Normalised host: lowercase, no port, no trailing dot. */
+export function directoryProviderKey(provider: string): string {
+  return provider.trim().toLowerCase().replace(/:\d+$/u, '').replace(/\.+$/u, '')
+}
+
+/**
+ * Kebab slug for the canonical `/tools/<providerKey>/<slug>` URL
+ * (docs pattern: RapidAPI `/provider/api`, npm `/package/name`). Derived from
+ * the resource's URL path only - the query string and hash never contribute,
+ * so two resources differing only in query parameters collide and fall back
+ * to the method-qualified form below.
+ */
+export function directorySlugBase(resource: string): string {
+  let path: string
+  try {
+    path = new URL(resource).pathname
+  } catch (cause) {
+    path = degradeBackend(cause, resource, { site: 'directorySlugBase', reason: 'invalid_response' })
+  }
+  const decoded = path.split('/').map(segment => {
+    try {
+      return decodeURIComponent(segment)
+    } catch (cause) {
+      return degradeBackend(cause, segment, { site: 'directorySlugBase', reason: 'invalid_response' })
+    }
+  }).join(' ')
+  const slug = decoded.toLowerCase().replace(/[^a-z0-9]+/gu, '-').replace(/^-+|-+$/gu, '')
+  return slug.length > 0 ? slug.slice(0, 120) : 'tool'
+}
+
+/** Method-qualified slug, used only to disambiguate two resources on the same host whose path slugs collide. */
+export function directorySlugWithMethod(resource: string, method: string | undefined): string {
+  const base = directorySlugBase(resource)
+  return method === undefined || method.length === 0 ? base : `${base}-${method.toLowerCase()}`
 }

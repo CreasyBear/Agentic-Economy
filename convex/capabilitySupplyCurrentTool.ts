@@ -1,4 +1,5 @@
 import { v } from 'convex/values'
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 
 import {
@@ -9,6 +10,7 @@ import {
   x402PaymentProfileForEnvironment,
 } from '@/modules/capability-supply/public'
 
+import type { Doc } from './_generated/dataModel'
 import { internalQuery, internalMutation, type QueryCtx } from './_generated/server'
 import { getExactRegisteredCapabilityContract } from './capabilityContractDocuments'
 import { capabilitySupplyGraphPorts } from './capabilitySupplyGraphPorts'
@@ -42,6 +44,54 @@ export const readExactSellerCanaryOperationSnapshot = internalQuery({
   handler: readExactSellerCanaryOperationSnapshotHandler,
 })
 
+/**
+ * Tail of `readManagedX402InspectionTarget` that only needs the publication,
+ * its binding/contract docs and an already-computed qualification. Split out
+ * so `capabilitySupplyToolShared.ts:toolRecordProjection` - which already
+ * fetched all three plus qualified the same candidate a moment earlier while
+ * building the search/detail projection - can reuse them instead of paying
+ * for a second `qualifySuppliedCandidate` join (publication + business +
+ * contract + offering + binding reads) per row on every catalogue page.
+ */
+export async function readManagedX402InspectionTargetForQualifiedCandidate(
+  ctx: Pick<QueryCtx, 'db'>,
+  input: Readonly<{
+    publication: Doc<'capabilityPublications'>
+    binding: Doc<'capabilityTransportBindings'>
+    contract: Extract<Awaited<ReturnType<typeof getExactRegisteredCapabilityContract>>, { kind: 'found' }>
+    qualification: Awaited<ReturnType<typeof qualifySuppliedCandidate>>
+  }>,
+) {
+  const { publication, binding, contract, qualification } = input
+  const inspectableReasons = new Set(['credential_readiness_unobserved', 'readiness_unobserved', 'readiness_unhealthy', 'readiness_stale'])
+  if (qualification.reasons.some((reason) => !inspectableReasons.has(reason))) return undefined
+  if (binding.adapterId !== 'x402-fetch:v2') return undefined
+  const pricing = canonicalPublicationPricing(publication)
+  if (pricing?.config.kind !== 'managed_x402' || pricing.config.effectTiming !== 'payment_required_before_effect') return undefined
+  let config
+  try { config = parseX402FetchTransportConfiguration(JSON.parse(binding.configJson)) } catch (cause) { return degradeBackend(cause, undefined, { site: 'readManagedX402InspectionTarget', reason: 'invalid_response' }) }
+  const profile = x402PaymentProfileForEnvironment(publication.runtimeEnvironment)
+  if (config === undefined || profile === undefined || config.network !== profile.network
+    || config.asset.toLowerCase() !== profile.asset.toLowerCase() || config.scheme !== profile.scheme) return undefined
+  const contractRef = { capabilityId: publication.capabilityId, version: publication.version, contractDigest: publication.contractDigest }
+  const expectedToolRef = createPublicToolRef({ operationId: capabilityToolId(contractRef.capabilityId),
+    publicationRef: publication.publicationRef, publicationRevision: publication.revision, contractRef })
+  if (expectedToolRef !== publication.toolRef) return undefined
+  const target = {
+    publicationRef: publication.publicationRef, revision: publication.revision,
+    contract: contract.contract, runtimeEnvironment: publication.runtimeEnvironment,
+    pricingConfig: pricing.config,
+    identity: {
+      endpoint: { url: binding.endpointUrl, method: config.method },
+      payment: { kind: 'x402' as const, network: config.network, asset: config.asset, payTo: config.payTo,
+        currency: config.currency, routeAmountExponent: config.routeAmountExponent, assetAmountExponent: config.assetAmountExponent },
+    },
+    transport: { configJson: binding.configJson },
+    sourceAnchors: qualification.sources.filter((source) => source.kind !== 'readiness'),
+  }
+  return { ...target, targetDigest: canonicalDigest(target) }
+}
+
 /** An admitted request target, not proof of execution readiness or delivery. */
 export async function readManagedX402InspectionTarget(
   ctx: Pick<QueryCtx, 'db'>,
@@ -59,36 +109,12 @@ export async function readManagedX402InspectionTarget(
     contractRef: { capabilityId: publication.capabilityId, version: publication.version, contractDigest: publication.contractDigest },
   }
   const qualification = await qualifySuppliedCandidate(capabilitySupplyGraphPorts(ctx.db), { candidate, now })
-  const inspectableReasons = new Set(['credential_readiness_unobserved', 'readiness_unobserved', 'readiness_unhealthy', 'readiness_stale'])
-  if (qualification.reasons.some((reason) => !inspectableReasons.has(reason))) return undefined
   const [binding, contractResult] = await Promise.all([
     ctx.db.query('capabilityTransportBindings').withIndex('by_bindingId', (q) => q.eq('bindingId', publication.bindingId)).unique(),
     getExactRegisteredCapabilityContract(ctx.db, candidate.contractRef),
   ])
-  if (binding === null || binding.adapterId !== 'x402-fetch:v2' || contractResult.kind !== 'found') return undefined
-  const pricing = canonicalPublicationPricing(publication)
-  if (pricing?.config.kind !== 'managed_x402' || pricing.config.effectTiming !== 'payment_required_before_effect') return undefined
-  let config
-  try { config = parseX402FetchTransportConfiguration(JSON.parse(binding.configJson)) } catch { return undefined }
-  const profile = x402PaymentProfileForEnvironment(publication.runtimeEnvironment)
-  if (config === undefined || profile === undefined || config.network !== profile.network
-    || config.asset.toLowerCase() !== profile.asset.toLowerCase() || config.scheme !== profile.scheme) return undefined
-  const expectedToolRef = createPublicToolRef({ operationId: capabilityToolId(candidate.contractRef.capabilityId),
-    publicationRef: publication.publicationRef, publicationRevision: publication.revision, contractRef: candidate.contractRef })
-  if (expectedToolRef !== toolRef) return undefined
-  const target = {
-    publicationRef: publication.publicationRef, revision: publication.revision,
-    contract: contractResult.contract, runtimeEnvironment: publication.runtimeEnvironment,
-    pricingConfig: pricing.config,
-    identity: {
-      endpoint: { url: binding.endpointUrl, method: config.method },
-      payment: { kind: 'x402' as const, network: config.network, asset: config.asset, payTo: config.payTo,
-        currency: config.currency, routeAmountExponent: config.routeAmountExponent, assetAmountExponent: config.assetAmountExponent },
-    },
-    transport: { configJson: binding.configJson },
-    sourceAnchors: qualification.sources.filter((source) => source.kind !== 'readiness'),
-  }
-  return { ...target, targetDigest: canonicalDigest(target) }
+  if (binding === null || contractResult.kind !== 'found') return undefined
+  return readManagedX402InspectionTargetForQualifiedCandidate(ctx, { publication, binding, contract: contractResult, qualification })
 }
 
 export const readManagedX402InspectionSnapshot = internalQuery({

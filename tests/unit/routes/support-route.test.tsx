@@ -50,7 +50,7 @@ describe('/support', () => {
   it('returns people to authoritative records without inventing a retry', () => {
     renderRoute()
     expect(screen.getByRole('link', { name: 'Open Calls' }).getAttribute('href')).toBe('/activity')
-    expect(screen.getByRole('link', { name: 'Continue Provider setup' }).getAttribute('href')).toBe('/owner/offerings')
+    expect(screen.getByRole('link', { name: 'Continue Provider setup' }).getAttribute('href')).toBe('/owner/operations')
     expect(screen.getByRole('link', { name: 'Review account credit' }).getAttribute('href')).toBe('/owner/credit')
     expect(screen.getByText(/check that Call before trying again/)).toBeTruthy()
     expect(screen.queryByRole('button', { name: /retry/i })).toBeNull()

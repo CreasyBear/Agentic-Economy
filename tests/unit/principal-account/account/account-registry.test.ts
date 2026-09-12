@@ -291,9 +291,6 @@ describe('Account registry contract', () => {
       accountTables.accounts,
       accountTables.accountOwnerships,
       accountTables.memberships,
-      accountTables.accountRecoveryParticipantApprovals,
-      accountTables.accountSuccessionAuthorizations,
-      accountTables.accountSuccessionAuthorizationParticipants,
     ].every((value) => value !== undefined)).toBe(true)
   })
 

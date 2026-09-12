@@ -1,3 +1,4 @@
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 import {
   normalizeCapabilityPublication,
   type CanonicalCapabilityPublicationDraft,
@@ -52,12 +53,12 @@ export async function validateCapabilityPublication(
   let normalized
   try {
     normalized = await normalizeCapabilityPublication(importSource as CapabilityPublicationImport, derefSchema)
-  } catch {
-    return {
-      kind: 'refused',
-      reason: 'source_invalid',
+  } catch (cause) {
+    return degradeBackend(cause, {
+      kind: 'refused' as const,
+      reason: 'source_invalid' as const,
       fix: 'The publication source could not be parsed or normalized. Check that it is valid, self-contained input.',
-    }
+    }, { site: 'validateCapabilityPublication', reason: 'invalid_response' })
   }
   if (normalized.kind === 'refused') {
     return {
@@ -77,12 +78,12 @@ export async function validateCapabilityPublication(
         descriptorJson,
       }),
     }
-  } catch {
-    return {
-      kind: 'refused',
-      reason: 'source_invalid',
+  } catch (cause) {
+    return degradeBackend(cause, {
+      kind: 'refused' as const,
+      reason: 'source_invalid' as const,
       fix: publicationValidationFix('source_invalid'),
-    }
+    }, { site: 'validateCapabilityPublication', reason: 'invalid_response' })
   }
 }
 

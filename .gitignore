@@ -88,3 +88,5 @@ public/downloads/*.tgz
 !/docs/strategy/
 !/docs/strategy/*.md
 !/docs/glossary.md
+!/docs/architecture/
+!/docs/architecture/*.md

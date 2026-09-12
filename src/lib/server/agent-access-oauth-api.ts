@@ -6,9 +6,6 @@ import { problem } from '@/lib/server/problem'
 
 import { AGENT_ACCESS_OAUTH_AUTHORIZATION_SCOPES, bearerChallenge, oauthProtectedResourceMetadata } from '@/lib/http/oauth-challenge'
 import { resolveCanonicalBaseUrl } from '@/lib/server/canonical-url'
-import { isLocalE2EAuthBypassEnabled, LOCAL_E2E_OPERATOR_PRINCIPAL } from '@/lib/server/local-e2e-bypass'
-import { createLocalE2EAgentAccessKeyApi } from '@/lib/server/local-e2e-agent-key'
-import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { trimTrailingSlashes } from '@/modules/common/trim-trailing-slashes'
 import {
   AGENT_ACCESS_AUTHORITY_MODE_VALUES,
@@ -86,6 +83,8 @@ import {
   type AgentAccessConsentReservationResult,
 } from '@/lib/server/agent-access-oauth-store'
 import type { ConvexSourceAuth } from '@/lib/server/convex-source'
+import { degrade } from '@/lib/observability/degrade'
+import { captureRouteException } from '@/lib/observability/capture-route-exception'
 
 type OAuthConsentAuthObject = ConvexSourceAuth & Readonly<{
   userId: string | null
@@ -166,6 +165,16 @@ export {
   AGENT_ACCESS_OAUTH_RESPONSE_TYPES,
   AGENT_ACCESS_OAUTH_TOKEN_ENDPOINT_AUTH_METHODS,
   AGENT_ACCESS_OAUTH_CODE_CHALLENGE_METHODS,
+}
+
+/**
+ * `Response.redirect` returns a response whose Headers are immutable per the
+ * Fetch spec, which crashes `clerkMiddleware` when it appends its own headers
+ * to the authorize response. Build the redirect by hand so its headers stay
+ * mutable.
+ */
+function redirectTo(url: URL | string): Response {
+  return new Response(null, { status: 302, headers: { location: url.toString() } })
 }
 
 const OAUTH_AUTHORIZATION_UNAVAILABLE: ProblemInput = {
@@ -264,8 +273,8 @@ export async function handleOAuthRevokePost(request: Request, options: OAuthApiO
     if (refresh.kind !== 'unknown') return oauthRevokedResponse()
     await store.revokeRefreshFamilyByAccessToken({ tokenHash, clientId, now, reason: 'oauth_revocation' })
     return oauthRevokedResponse()
-  } catch {
-    return oauthError('server_error', 503)
+  } catch (cause) {
+    return degrade(cause, oauthError('server_error', 503), { site: 'handleOAuthRevokePost', reason: 'source_unavailable' })
   }
 }
 
@@ -342,8 +351,8 @@ export async function handleOAuthAuthorizeGet(request: Request, options: OAuthAp
   let client: AgentAccessOAuthClient | null
   try {
     client = await readClient(clientId, options)
-  } catch {
-    return oauthAuthorizationUnavailableResponse()
+  } catch (cause) {
+    return degrade(cause, oauthAuthorizationUnavailableResponse(), { site: 'handleOAuthAuthorizeGet', reason: 'source_unavailable' })
   }
   if (client === null || redirectUri === null || responseType !== AGENT_ACCESS_OAUTH_RESPONSE_TYPES[0] || state === null || challenge === null || challengeMethod === null) {
     return oauthError('invalid_request', 400)
@@ -361,7 +370,7 @@ export async function handleOAuthAuthorizeGet(request: Request, options: OAuthAp
   if (!owner.isAuthenticated || owner.userId === null) {
     const login = new URL('/sign-in', baseUrl(request, options))
     login.searchParams.set('redirect_url', url.toString())
-    return Response.redirect(login, 302)
+    return redirectTo(login)
   }
   const result = await beginAuthorizationCodeGrant(requireStore(options), {
     client,
@@ -379,7 +388,7 @@ export async function handleOAuthAuthorizeGet(request: Request, options: OAuthAp
   const gate = new URL(AGENT_ACCESS_OAUTH_PATHS.deviceVerification, baseUrl(request, options))
   gate.searchParams.set('grant_ref', result.value.grant.grantRef)
   gate.searchParams.set('state', state)
-  return Response.redirect(gate, 302)
+  return redirectTo(gate)
 }
 
 function defaultOAuthScopeText(includeOfflineAccess: boolean): string {
@@ -412,7 +421,7 @@ async function locatedConsentResponse(
   if (limited !== undefined) return limited
   const owner = await ownerIdentity(options)
   if (!owner.isAuthenticated || owner.userId === null) {
-    return Response.redirect(new URL('/sign-in', baseUrl(request, options)), 302)
+    return redirectTo(new URL('/sign-in', baseUrl(request, options)))
   }
   let result: Awaited<ReturnType<typeof readGrantForConsent>>
   try {
@@ -422,8 +431,8 @@ async function locatedConsentResponse(
       ownerId: owner.userId,
       now: currentNow(options),
     })
-  } catch {
-    return oauthAuthorizationUnavailableResponse()
+  } catch (cause) {
+    return degrade(cause, oauthAuthorizationUnavailableResponse(), { site: 'locatedConsentResponse', reason: 'source_unavailable' })
   }
   if (result.kind === 'outcome_unknown') {
     return new Response(consentRecoveryHtml(result.grant.grantRef), {
@@ -477,14 +486,9 @@ function consentAuthorityMode(form: URLSearchParams): AgentAccessAuthorityMode |
 }
 
 async function consentAuthObject(
-  form: URLSearchParams,
-  grantRef: string | null,
   options: OAuthApiOptions,
 ): Promise<OAuthConsentAuthObject> {
   if (options.authObject !== undefined) return options.authObject
-  if (isLocalE2EAuthBypassEnabled()) {
-    return localE2EConsentAuth(grantRef, positiveFormInteger(form.get('expected_grant_revision')))
-  }
   return await auth() as OAuthConsentAuthObject
 }
 
@@ -549,7 +553,7 @@ export async function handleOAuthConsentPost(request: Request, options: OAuthApi
   if (csrfDecision.kind === 'rejected') return oauthError('access_denied', 403)
   const grantRef = form.get('grant_ref')
   const decision = form.get('decision')
-  const authObject = await consentAuthObject(form, grantRef, options)
+  const authObject = await consentAuthObject(options)
   const [owner, limited] = await Promise.all([
     ownerIdentity(options, authObject),
     oauthAdmissionResponse(request, options, `consent:${grantRef ?? 'missing'}`),
@@ -713,16 +717,9 @@ async function confirmCompromisedPredecessorRevocation(
   try {
     const reason = 'Revoked before successor issuance because compromise was reported.'
     await revokeProviderCredentialIfCurrent(predecessor.credentialId, reason, options)
-    let provider: Readonly<{ revoked: boolean }>
-    if (options.getProviderCredential !== undefined) {
-      provider = await options.getProviderCredential(predecessor.credentialId)
-    } else if (isLocalE2EAuthBypassEnabled()) {
-      const local = createLocalE2EAgentAccessKeyApi()
-      if (local.get === undefined) return false
-      provider = await local.get(predecessor.credentialId)
-    } else {
-      provider = await clerkClient().apiKeys.get(predecessor.credentialId)
-    }
+    const provider: Readonly<{ revoked: boolean }> = options.getProviderCredential !== undefined
+      ? await options.getProviderCredential(predecessor.credentialId)
+      : await clerkClient().apiKeys.get(predecessor.credentialId)
     if (!provider.revoked) return false
     const recorded = await (options.recordProviderRevocation ?? recordAgentProviderRevocation)({
       principalRef: grant.connectionTarget.principalRef,
@@ -732,8 +729,8 @@ async function confirmCompromisedPredecessorRevocation(
       outcome: 'revoked',
     })
     return recorded.kind === 'completed' || recorded.kind === 'replayed'
-  } catch {
-    return false
+  } catch (cause) {
+    return degrade(cause, false, { site: 'confirmCompromisedPredecessorRevocation', reason: 'source_unavailable' })
   }
 }
 
@@ -836,8 +833,8 @@ async function exchangeRefreshToken(form: URLSearchParams, request: Request, opt
       now,
       claimExpiresAt: now + 30_000,
     })
-  } catch {
-    return oauthError('server_error', 503)
+  } catch (cause) {
+    return degrade(cause, oauthError('server_error', 503), { site: 'exchangeRefreshToken', reason: 'source_unavailable' })
   }
   if (!('family' in claimed)) {
     return claimed.kind === 'busy' ? oauthError('server_error', 503) : oauthError('invalid_grant', 400)
@@ -852,8 +849,8 @@ async function exchangeRefreshToken(form: URLSearchParams, request: Request, opt
     try {
       const secret = await (options.getSecret ?? defaultOAuthKeySecret)(family.currentProviderCredentialId)
       return refreshTokenResponse(secret.secret, rawSuccessorToken, family, now)
-    } catch {
-      return oauthError('server_error', 503)
+    } catch (cause) {
+      return degrade(cause, oauthError('server_error', 503), { site: 'exchangeRefreshToken', reason: 'source_unavailable' })
     }
   }
 
@@ -877,16 +874,16 @@ async function exchangeRefreshToken(form: URLSearchParams, request: Request, opt
       expiresInSeconds,
     })
     successorKeyId = successor.keyId
-  } catch {
-    return oauthError('server_error', 503)
+  } catch (cause) {
+    return degrade(cause, oauthError('server_error', 503), { site: 'exchangeRefreshToken', reason: 'source_unavailable' })
   }
 
   let successorSecret: string
   try {
     successorSecret = (await (options.getSecret ?? defaultOAuthKeySecret)(successorKeyId)).secret
-  } catch {
+  } catch (cause) {
     await revokeProviderCredentialIfCurrent(successorKeyId, 'Refresh credential could not be delivered.', options).catch(() => {})
-    return oauthError('server_error', 503)
+    return degrade(cause, oauthError('server_error', 503), { site: 'exchangeRefreshToken', reason: 'source_unavailable' })
   }
   const commitInput = {
       familyRef: family.familyRef,
@@ -908,10 +905,10 @@ async function exchangeRefreshToken(form: URLSearchParams, request: Request, opt
   } catch {
     try {
       committed = await refreshStore.commitRefreshFamilyRotation(commitInput)
-    } catch {
+    } catch (cause) {
       // The first response may have been lost after Convex committed. Keep the
       // successor intact so the same idempotent commit or recovery can converge.
-      return oauthError('server_error', 503)
+      return degrade(cause, oauthError('server_error', 503), { site: 'exchangeRefreshToken', reason: 'source_unavailable' })
     }
   }
   if (committed.kind === 'conflict') {
@@ -922,8 +919,8 @@ async function exchangeRefreshToken(form: URLSearchParams, request: Request, opt
   try {
     await completeRefreshProviderCleanup(committed, options)
     return refreshTokenResponse(successorSecret, rawSuccessorToken, committed.family, now)
-  } catch {
-    return oauthError('server_error', 503)
+  } catch (cause) {
+    return degrade(cause, oauthError('server_error', 503), { site: 'exchangeRefreshToken', reason: 'source_unavailable' })
   }
 }
 
@@ -942,9 +939,7 @@ async function defaultIssueRefreshKey(input: Readonly<{
   grantRef: string
   expiresInSeconds: number
 }>): Promise<Readonly<{ keyId: string }>> {
-  const api = isLocalE2EAuthBypassEnabled()
-    ? createLocalE2EAgentAccessKeyApi()
-    : createClerkAgentAccessKeyApi(clerkClient().apiKeys)
+  const api = createClerkAgentAccessKeyApi(clerkClient().apiKeys)
   const key = await api.create({
     name: input.family.displayName,
     subject: input.family.providerSubject,
@@ -1029,12 +1024,12 @@ async function cancelExpiredReplacement(grant: AgentAccessOAuthGrant, options: O
       throw new Error('expired_replacement_provider_revocation_record_failed')
     }
     return true
-  } catch {
+  } catch (cause) {
     // The canonical successor is already revoked. A repeated expired-token
     // request safely retries provider cleanup and outbox completion without
     // reviving it. The token endpoint returns a retryable server error until
     // both provider cleanup and outbox completion converge.
-    return false
+    return degrade(cause, false, { site: 'cancelExpiredReplacement', reason: 'source_unavailable' })
   }
 }
 
@@ -1114,14 +1109,15 @@ async function deliverClaimedGrant(
       expires_in: accessCredentialTtlSeconds(claimed.value.grant.approvedAccess),
       ...(refreshToken === undefined ? {} : { refresh_token: refreshToken }),
     }, { headers: { 'Cache-Control': 'no-store' } })
-  } catch {
+  } catch (cause) {
     try {
       await resetGrantDelivery(requireStore(options), { grantRef: claimed.value.grant.grantRef, claimToken: claimed.value.claimToken })
-    } catch {
+    } catch (resetCause) {
       // A retryable server response is still safer than converting a transient
       // store failure into a terminal OAuth grant error.
+      captureRouteException(resetCause, { site: 'deliverClaimedGrant' }, 'warning')
     }
-    return oauthError('server_error', 503)
+    return degrade(cause, oauthError('server_error', 503), { site: 'deliverClaimedGrant', reason: 'source_unavailable' })
   }
 }
 
@@ -1130,27 +1126,19 @@ async function revokeProviderCredentialIfCurrent(
   reason: string,
   options: OAuthApiOptions,
 ): Promise<void> {
-  const localApi = isLocalE2EAuthBypassEnabled() ? createLocalE2EAgentAccessKeyApi() : undefined
   const provider = options.getProviderCredential !== undefined
     ? await options.getProviderCredential(providerCredentialId)
-    : localApi?.get !== undefined
-      ? await localApi.get(providerCredentialId)
-      : await clerkClient().apiKeys.get(providerCredentialId)
+    : await clerkClient().apiKeys.get(providerCredentialId)
   if (provider.revoked) return
   if (options.revokeProviderCredential !== undefined) {
     await options.revokeProviderCredential(providerCredentialId, reason)
-    return
-  }
-  if (localApi?.revoke !== undefined) {
-    await localApi.revoke({ apiKeyId: providerCredentialId, revocationReason: reason })
     return
   }
   await clerkClient().apiKeys.revoke({ apiKeyId: providerCredentialId, revocationReason: reason })
 }
 
 async function defaultOAuthKeySecret(keyId: string): Promise<{ secret: string }> {
-  if (!isLocalE2EAuthBypassEnabled()) return await clerkClient().apiKeys.getSecret(keyId)
-  return await createLocalE2EAgentAccessKeyApi().getSecret(keyId)
+  return await clerkClient().apiKeys.getSecret(keyId)
 }
 
 async function issueReplacementGrantKey(input: Readonly<{
@@ -1162,9 +1150,7 @@ async function issueReplacementGrantKey(input: Readonly<{
   spendingPolicy: AgentAccessPolicy
   options: OAuthApiOptions
 }>): Promise<{ keyId: string; replacement: AgentCredentialReplacement }> {
-  const api = isLocalE2EAuthBypassEnabled()
-    ? createLocalE2EAgentAccessKeyApi()
-    : createClerkAgentAccessKeyApi(clerkClient().apiKeys)
+  const api = createClerkAgentAccessKeyApi(clerkClient().apiKeys)
   const successorGrantRef = issuedAgentGrantRef(input.ownerId, input.idempotencyKey)
   const toolSelectionDigest = agentAccessToolSelectionDigest(input.spendingPolicy)
   const accessTtlSeconds = accessCredentialTtlSeconds(input.grant.approvedAccess)
@@ -1255,8 +1241,8 @@ async function issueGrantKey(
     let spendingPolicy: AgentAccessPolicy
     try {
       spendingPolicy = deriveOAuthGrantPolicy(inputGrant.approvedAccess)
-    } catch {
-      throw new AgentAccessOAuthIssueRefusal('invalid_grant')
+    } catch (cause) {
+      throw new AgentAccessOAuthIssueRefusal('invalid_grant', { cause })
     }
     if (options.issueKey !== undefined) {
       return await options.issueKey({
@@ -1274,7 +1260,6 @@ async function issueGrantKey(
         target: inputTarget,
       })
     }
-    const localE2E = isLocalE2EAuthBypassEnabled()
     if (inputTarget.kind === 'replace_credential') {
       return await issueReplacementGrantKey({
         ownerId: inputOwnerId,
@@ -1307,9 +1292,7 @@ async function issueGrantKey(
       },
       spendingPolicy,
       returnSecret: false,
-      api: localE2E
-        ? createLocalE2EAgentAccessKeyApi()
-        : createClerkAgentAccessKeyApi(clerkClient().apiKeys),
+      api: createClerkAgentAccessKeyApi(clerkClient().apiKeys),
       registerBinding: options.registerBinding ?? registerIssuedAgentBinding,
     })
     if (issued.kind === 'error') {
@@ -1383,8 +1366,8 @@ async function consentAgentTargets(
           ? { reconnectAmbiguous: true as const }
           : {}),
     }
-  } catch {
-    return { items: [], unavailable: true }
+  } catch (cause) {
+    return degrade(cause, { items: [], unavailable: true }, { site: 'consentAgentTargets', reason: 'source_unavailable' })
   }
 }
 
@@ -1477,25 +1460,6 @@ function consentProofFromAuth(authObject: OAuthConsentAuthObject) {
   }
 }
 
-function localE2EConsentAuth(
-  grantRef: string | null,
-  expectedGrantRevision: number | undefined,
-): OAuthConsentAuthObject {
-  const reverificationId = `local-e2e:${canonicalDigest({
-    version: 'ae.local-e2e-agent-access-consent:v1',
-    grantRef: grantRef ?? 'missing',
-    expectedGrantRevision: expectedGrantRevision ?? 0,
-  })}`
-  return {
-    isAuthenticated: true,
-    userId: LOCAL_E2E_OPERATOR_PRINCIPAL,
-    has: () => true,
-    sessionClaims: { reverification_id: reverificationId },
-    factorVerificationAge: [0, -1],
-    getToken: async () => null,
-  }
-}
-
 function positiveFormInteger(value: string | null): number | undefined {
   if (value === null || !/^[1-9][0-9]*$/u.test(value)) return undefined
   const parsed = Number(value)
@@ -1537,9 +1501,6 @@ async function ownerIdentity(
   options: OAuthApiOptions,
   authObject?: Pick<OAuthConsentAuthObject, 'isAuthenticated' | 'userId'>,
 ): Promise<{ isAuthenticated: boolean; userId: string | null }> {
-  if (options.authenticateOwner === undefined && isLocalE2EAuthBypassEnabled()) {
-    return { isAuthenticated: true, userId: LOCAL_E2E_OPERATOR_PRINCIPAL }
-  }
   return options.authenticateOwner === undefined ? authObject ?? await auth() : await options.authenticateOwner()
 }
 

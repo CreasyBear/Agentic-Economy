@@ -1,6 +1,7 @@
 import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 
+import { degrade } from '@/lib/observability/degrade'
 import { callSourceMutation, sourceMutation } from '@/lib/server/convex-source'
 import {
   sourceWriteAdmissionFromContext,
@@ -58,7 +59,10 @@ export const renameProviderDisplayNameServer = createServerFn({ method: 'POST' }
         sourceWrite,
         sourceWriteRequest: sourceWriteRequestFromAdmission(sourceWrite),
       })
-    } catch {
-      return { kind: 'refused', code: 'source_unavailable' }
+    } catch (cause) {
+      return degrade(cause, { kind: 'refused', code: 'source_unavailable' } as const, {
+        site: 'renameProviderDisplayNameServer',
+        reason: 'source_unavailable',
+      })
     }
   })

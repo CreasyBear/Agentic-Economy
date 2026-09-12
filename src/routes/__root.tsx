@@ -7,6 +7,7 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { Toaster } from 'sonner'
 
 
+import { AeAppShell } from '@/components/ae/layout/AeAppShell'
 import { RouteProgressBar } from '@/components/ae/layout/AeRouteProgressBar'
 import { AePageState } from '@/components/ae/layout/AePageState'
 import { Button } from '@/components/ui/button'
@@ -16,7 +17,6 @@ import { AeObservabilityErrorBoundary } from '@/components/ae/feedback/AeObserva
 import { bootClientObservability } from '@/lib/observability/boot-client-observability'
 import appCss from '../styles/globals.css?url'
 import { clerkAppearance } from '@/components/ae/website/clerk-appearance'
-import { isLocalE2EAuthBypassEnabled } from '@/lib/client/local-e2e-auth'
 import { HOME } from '@/content/brand-copy'
 import { AECON_MARK_SRC } from '@/content/brand-assets'
 import { api } from '../../convex/_generated/api'
@@ -56,7 +56,9 @@ export const Route = createRootRoute({
 function RootComponent() {
   return (
     <RootDocument>
-      <Outlet />
+      <AeAppShell>
+        <Outlet />
+      </AeAppShell>
     </RootDocument>
   )
 }
@@ -64,13 +66,11 @@ function RootComponent() {
 function RootDocument({ children }: { children: ReactNode }) {
   const pathname = useRouterState({ select: (state) => state.location.pathname })
   const chatProvidersRequired = requiresChatProviders(pathname)
-  const content = isLocalE2EAuthBypassEnabled() && !chatProvidersRequired
-    ? children
-    : (
-        <ClerkProvider appearance={clerkAppearance}>
-          {chatProvidersRequired ? <ChatConvexProvider>{children}</ChatConvexProvider> : children}
-        </ClerkProvider>
-      )
+  const content = (
+    <ClerkProvider appearance={clerkAppearance}>
+      {chatProvidersRequired ? <ChatConvexProvider>{children}</ChatConvexProvider> : children}
+    </ClerkProvider>
+  )
 
   return (
     <html lang="en">
@@ -106,7 +106,7 @@ function ChatConvexProvider({ children }: { children: ReactNode }) {
         tone="warning"
         action={(
           <Button asChild className="min-h-touch">
-            <Link to="/market" search={{ window: '30d' }} hash="tools">
+            <Link to="/market">
               Browse Tools
             </Link>
           </Button>

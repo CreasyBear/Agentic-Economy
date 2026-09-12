@@ -18,8 +18,8 @@ vi.mock('@/lib/server/call-history.functions', () => ({
   readOwnerUsageServer: serverMocks.readUsage,
   readOwnerSpendServer: serverMocks.readSpend,
 }))
-vi.mock('@/components/ae/layout/AeOperatorShell', () => ({
-  AeOperatorShell: ({ children, title }: { children: ReactNode; title: string }) => <main><h1>{title}</h1>{children}</main>,
+vi.mock('@/components/ae/layout/AeOperatorPage', () => ({
+  AeOperatorPage: ({ children, title }: { children: ReactNode; title: string }) => <main><h1>{title}</h1>{children}</main>,
 }))
 
 import { Route as ActivityRoute } from '@/routes/_operator/activity'

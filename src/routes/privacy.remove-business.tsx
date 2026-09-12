@@ -33,6 +33,12 @@ const openRemovalServer = createServerFn({ method: 'POST' })
   .handler(async ({ data, context }) => openRemovalDisputeThroughSource(data, context))
 
 export const Route = createFileRoute('/privacy/remove-business')({
+  staticData: {
+    nav: {
+      label: 'Remove a listing',
+      footer: { column: 'Legal', order: 2 },
+    },
+  },
   head: () => ({
     meta: [
       { title: 'Provider correction or removal | Agentic Economy' },

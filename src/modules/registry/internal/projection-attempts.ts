@@ -1,3 +1,4 @@
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { isPubliclyDiscoverable } from '@/modules/business/public'
 import type { PublicCatalogReadState } from '@/modules/catalog/public'
 import { brandNonEmpty } from '@/modules/common/ids'
@@ -322,12 +323,12 @@ function readSourceCatalog(
 function safeWriteProjection(adapter: RegistryProjectionAdapter, catalog: PublicBusinessCatalogApiV2Dto) {
   try {
     return adapter.writeProjection(catalog)
-  } catch {
-    return {
+  } catch (cause) {
+    return degradeBackend(cause, {
       kind: 'error' as const,
       code: 'registry_projection_adapter_exception',
       redactedMessage: 'Projection adapter failed before write.',
-    }
+    }, { site: 'safeWriteProjection', reason: 'source_unavailable' })
   }
 }
 

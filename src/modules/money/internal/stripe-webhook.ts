@@ -2,6 +2,7 @@ import { response as jsonResponse } from '@/lib/server/no-store-response'
 import { kindForStatus } from '@/lib/errors'
 import { problem } from '@/lib/server/problem'
 import { readBoundedRequestText } from '@/lib/server/bounded-request-body'
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 
 import { isMoneyRefusal, type ExactAmount, type MoneyRefusal } from '../public'
 
@@ -104,19 +105,19 @@ export async function handleStripeWebhookRequest(input: Readonly<{
   let verified: StripeWebhookVerification
   try {
     verified = await input.verifier.verify({ rawBody, signature })
-  } catch {
-    return problem({ status: 503, kind: kindForStatus(503), code: 'stripe_setup_required', detail: 'stripe_setup_required' })
+  } catch (cause) {
+    return degradeBackend(cause, problem({ status: 503, kind: kindForStatus(503), code: 'stripe_setup_required', detail: 'stripe_setup_required' }), { site: 'handleStripeWebhookRequest', reason: 'source_unavailable' })
   }
   if (isMoneyRefusal(verified)) return refusalResponse(verified, 'verify')
 
   let admitted: StripeWebhookAdmission | MoneyRefusal
   try {
     admitted = await input.ingester.ingest({ event: verified, rawBody })
-  } catch {
-    return problem(
+  } catch (cause) {
+    return degradeBackend(cause, problem(
       { status: 503, kind: kindForStatus(503), code: 'credit_topup_pending', detail: 'credit_topup_pending' },
       { 'Retry-After': String(RETRY_AFTER_SECONDS) },
-    )
+    ), { site: 'handleStripeWebhookRequest', reason: 'source_unavailable' })
   }
   if (isMoneyRefusal(admitted)) return refusalResponse(admitted, 'ingest')
   return jsonResponse({

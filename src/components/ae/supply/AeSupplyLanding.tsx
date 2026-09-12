@@ -17,20 +17,20 @@ import type { ToolCardViewModel } from '@/modules/market/tool-view-model'
 
 import { AeSupplyAgentProof } from './AeSupplyAgentProof'
 
-export const SUPPLY_OFFER_SENTENCE = 'List one service agents can inspect and call. You describe the price, access, effects, and evidence; Agentic Economy records it as a Tool.'
+export const SUPPLY_OFFER_SENTENCE = 'List one Tool agents can inspect and call. You describe the price, access, effects, and evidence; Agentic Economy records it as a Tool.'
 
 const SUPPLY_STEPS = [
-  { number: '01', title: 'Choose one service', detail: 'Choose one bounded service with exact inputs and one usable outcome—not an entire app or account.' },
+  { number: '01', title: 'Choose one Tool', detail: 'Choose one bounded Tool with exact inputs and one usable outcome—not an entire app or account.' },
   { number: '02', title: 'Add its source', detail: 'Start with a supported OpenAPI document, remote MCP server, Agent Plugin bundle, or public x402 endpoint.' },
   { number: '03', title: 'Describe and check it', detail: 'Provide price, access, effects, data use, and evidence. The check can reach your configured source.' },
-  { number: '04', title: 'Submit, then check status', detail: 'A submitted service is not yet published. Read its current status before sharing it with agents.' },
+  { number: '04', title: 'Submit, then check status', detail: 'A submitted Tool is not yet published. Read its current status before sharing it with agents.' },
 ] as const
 
 const SUPPLY_REQUIREMENTS = [
-  'One supported source and one service you are authorised to list.',
+  'One supported source and one Tool you are authorised to list.',
   'A clear input, expected output, price, material terms, data use, external effects, and evidence of completion.',
   'A safe example for the check. It may call your configured source, consume its quota, or incur its normal cost.',
-  'An existing owner-controlled connection when the source needs credentials. Never paste a raw key or other provider secret into the service form.',
+  'An existing owner-controlled connection when the source needs credentials. Never paste a raw key or other provider secret into the Tool form.',
 ] as const
 
 const SUPPLY_SOURCE_FIT = [
@@ -67,7 +67,7 @@ export function AeSupplyLanding({
             <div className="mx-auto grid w-full max-w-xl justify-items-center gap-3">
               <AeSiteEyebrow>Providers</AeSiteEyebrow>
               <AeSiteHeading as="h1" size="md" id="supply-hero">
-                List a service.
+                List a Tool.
               </AeSiteHeading>
             </div>
             <div className="mx-auto w-full max-w-lg">
@@ -77,7 +77,7 @@ export function AeSupplyLanding({
             </div>
           </AeSiteHeadingPair>
           <AeSiteButton asChild>
-            <Link to="/owner/offerings">List a service</Link>
+            <Link to="/owner/operations">List a Tool</Link>
           </AeSiteButton>
         </AeSiteHeroIntro>
       </AeSiteSection>
@@ -100,16 +100,16 @@ export function AeSupplyLanding({
         <div className="grid max-w-3xl gap-page">
           <div className="grid gap-intra">
             <AeSiteEyebrow>Before you sign in</AeSiteEyebrow>
-            <AeSiteHeading as="h2" size="sm">Check whether your service is a fit.</AeSiteHeading>
+            <AeSiteHeading as="h2" size="sm">Check whether your Tool is a fit.</AeSiteHeading>
             <AeSiteBody muted size="sm">
-              List one service an agent can search, inspect, and call. Public sources need no provider secret. For a source that needs credentials, use an existing owner-controlled connection; this flow does not collect a raw provider key.
+              List one Tool an agent can search, inspect, and call. Public sources need no provider secret. For a source that needs credentials, use an existing owner-controlled connection; this flow does not collect a raw provider key.
             </AeSiteBody>
           </div>
           <ul className="m-0 grid gap-intra pl-5 text-sm text-muted-foreground">
             {SUPPLY_REQUIREMENTS.map((item) => <li key={item}>{item}</li>)}
           </ul>
           <p className="text-sm text-muted-foreground">
-            A check may reach the configured upstream. Use an example that is safe there and assume it may consume provider quota or cost. A successful check does not publish the service, create earnings, or guarantee delivery. Timing depends on the source and current requirements; check the current status rather than relying on an estimate.
+            A check may reach the configured upstream. Use an example that is safe there and assume it may consume provider quota or cost. A successful check does not publish the Tool, create earnings, or guarantee delivery. Timing depends on the source and current requirements; check the current status rather than relying on an estimate.
           </p>
           <p className="text-sm text-muted-foreground">
             Creating the Provider business is an owner step. After that, an owner can approve a separate agent credential for maintenance. The source preview confirms the exact current contract.
@@ -140,13 +140,13 @@ export function AeSupplyLanding({
       <AeSiteSection ariaLabel="Listing control" scheme="canvas">
         <div className="grid max-w-3xl gap-section">
           <AeSiteBody muted>
-            You control the listing and the source. Agents can inspect only the facts that are published. Publication means the current service passed Agentic Economy’s admission and readiness checks; it does not guarantee demand, payment, delivery, or payout. Setup and test calls do not create settled earnings or payouts.
+            You control the listing and the source. Agents can inspect only the facts that are published. Publication means the current Tool passed Agentic Economy’s admission and readiness checks; it does not guarantee demand, payment, delivery, or payout. Setup and test calls do not create settled earnings or payouts.
           </AeSiteBody>
           <Link
-            to="/owner/offerings"
+            to="/owner/operations"
             className="inline-flex min-h-touch items-center justify-self-start text-sm font-medium underline underline-offset-4"
           >
-            Manage listed services
+            Manage listed Tools
           </Link>
         </div>
       </AeSiteSection>

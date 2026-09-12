@@ -2,6 +2,7 @@ import { z } from 'zod'
 
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { isRecord } from '@/modules/common/is-record'
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { jsonValueSchema, type JsonValue } from '@/modules/capability-contract/public'
 
 import { dereferenceOpenApiSchema } from './internal/schema-deref'
@@ -347,8 +348,11 @@ export async function previewSupplySource(
   let loaded: unknown
   try {
     loaded = await (dependencies.loadOpenApi ?? loadPublicOpenApi)(definitionUrl)
-  } catch {
-    return openApiCorrection('OpenAPI source unavailable')
+  } catch (cause) {
+    return degradeBackend(cause, openApiCorrection('OpenAPI source unavailable'), {
+      site: 'previewSupplySource',
+      reason: 'source_unavailable',
+    })
   }
   const bounded = inspectSource(loaded)
   if (bounded.kind === 'refused') return openApiCorrection('OpenAPI source invalid')
@@ -424,10 +428,14 @@ async function previewAgentPluginSource(
   let discovery: McpSourceDiscovery
   try {
     discovery = await discover({ serverUrl: selectedRemote.serverUrl, environment: input.environment })
-  } catch {
-    return sourceCorrection(
-      'Agent Plugin server unavailable',
-      'Make the selected MCP server available at the same public HTTPS URL, then preview the bundle again.',
+  } catch (cause) {
+    return degradeBackend(
+      cause,
+      sourceCorrection(
+        'Agent Plugin server unavailable',
+        'Make the selected MCP server available at the same public HTTPS URL, then preview the bundle again.',
+      ),
+      { site: 'previewAgentPluginSource', reason: 'source_unavailable' },
     )
   }
   if (discovery.kind === 'authentication_required') {
@@ -505,10 +513,14 @@ async function previewMcpSource(
       ...(input.remoteRef === undefined ? {} : { remoteRef: input.remoteRef }),
       environment: input.environment,
     })
-  } catch {
-    return sourceCorrection(
-      'MCP server unavailable',
-      'Make the MCP server available at the same public HTTPS URL, then preview it again.',
+  } catch (cause) {
+    return degradeBackend(
+      cause,
+      sourceCorrection(
+        'MCP server unavailable',
+        'Make the MCP server available at the same public HTTPS URL, then preview it again.',
+      ),
+      { site: 'previewMcpSource', reason: 'source_unavailable' },
     )
   }
   if (discovery.kind === 'authentication_required') {
@@ -582,8 +594,12 @@ async function previewX402Source(
       method: input.method,
       aeEnvironment: input.environment,
     })
-  } catch {
-    return sourceCorrection('x402 source unavailable', 'Make the x402 resource available at the same public HTTPS URL, then preview it again.')
+  } catch (cause) {
+    return degradeBackend(
+      cause,
+      sourceCorrection('x402 source unavailable', 'Make the x402 resource available at the same public HTTPS URL, then preview it again.'),
+      { site: 'previewX402Source', reason: 'source_unavailable' },
+    )
   }
   if (inspection.kind === 'refused') {
     return sourceCorrection('x402 source needs attention', inspection.action)

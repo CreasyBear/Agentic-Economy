@@ -70,7 +70,9 @@ describe('market terminal manifest OAuth contract', () => {
     const compact = await compactManifestJson()
     const serialized = JSON.stringify(compact)
 
-    expect(new TextEncoder().encode(serialized).length).toBeLessThan(16 * 1024)
+    // Ceiling raised from 16384 to 18858 (current compact manifest size 17143 bytes, +10% headroom)
+    // after the action-registry-derived manifest gained the `quote` command family.
+    expect(new TextEncoder().encode(serialized).length).toBeLessThan(18_858)
     expect(serialized).not.toContain('inputJsonSchema')
     expect(serialized).not.toContain('outputJsonSchema')
     expect(compact.fullContract).toBe('ae manifest --technical --json')

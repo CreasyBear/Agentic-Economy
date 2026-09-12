@@ -1,5 +1,6 @@
 import { bearerChallenge } from '@/lib/http/oauth-challenge'
 import { gatewayFailureToProblem } from '@/lib/errors'
+import { degrade } from '@/lib/observability/degrade'
 import { authenticateAgentAccess, resolveAgentAccessPrincipal, type AgentAccessAuthenticationOptions, type AgentAccessPrincipalResolver } from '@/lib/server/agent-access-auth'
 import { readBoundedRequestText } from '@/lib/server/bounded-request-body'
 import { resolveCanonicalBaseUrl } from '@/lib/server/canonical-url'
@@ -241,7 +242,12 @@ export async function handleFundingHandoffAction(
           raw = { ...httpBody, idempotencyKey: request.headers.get('Idempotency-Key') ?? '' }
         }
       }
-      catch { return withRequestCorrelationHeader(problem({ status: 400, kind: 'INVALID_ARGUMENT', code: 'invalid_request', detail: 'Provide one exact AUD principalAmount and an Idempotency-Key header.' }), correlationId) }
+      catch (cause) {
+        return degrade(cause, withRequestCorrelationHeader(problem({ status: 400, kind: 'INVALID_ARGUMENT', code: 'invalid_request', detail: 'Provide one exact AUD principalAmount and an Idempotency-Key header.' }), correlationId), {
+          site: 'handleFundingHandoffAction',
+          reason: 'invalid_response',
+        })
+      }
     }
     const parsed = actionName === 'config'
       ? fundingHandoffConfigInputSchemaSafe(raw)
@@ -260,8 +266,8 @@ export async function handleFundingHandoffAction(
         : actionName === 'create'
           ? await fundingHandoffCreateAction.run({ data: createFundingHandoffInputSchema.parse(raw), context })
           : await fundingHandoffStatusAction.run({ data: fundingHandoffStatusInputSchema.parse(raw), context })
-    } catch {
-      return withRequestCorrelationHeader(problem({
+    } catch (cause) {
+      return degrade(cause, withRequestCorrelationHeader(problem({
         status: 503, kind: 'UNAVAILABLE', code: 'funding_source_unavailable', retryable: true,
         detail: 'Funding status is temporarily unavailable. Retry the same request or poll the same funding session.',
         extras: {
@@ -272,7 +278,7 @@ export async function handleFundingHandoffAction(
               ? { kind: 'retry_same_request' }
               : { kind: 'retry' },
         },
-      }), correlationId)
+      }), correlationId), { site: 'handleFundingHandoffAction', reason: 'source_unavailable' })
     }
     if (result.kind === 'refused' || result.kind === 'error') {
       const status = result.kind === 'refused' && result.code === 'funding_idempotency_conflict'

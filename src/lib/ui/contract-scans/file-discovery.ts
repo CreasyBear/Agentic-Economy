@@ -1,6 +1,8 @@
 import { readdirSync, statSync } from 'node:fs'
 import { join, relative } from 'node:path'
 
+import { captureRouteException } from '@/lib/observability/capture-route-exception'
+
 export type ScanTarget = {
   root: string
   includeExtensions?: readonly string[]
@@ -48,7 +50,8 @@ function collectFiles(root: string, target: ScanTarget, files: string[]): void {
   let stats
   try {
     stats = statSync(root)
-  } catch {
+  } catch (cause) {
+    captureRouteException(cause, { site: 'collectFiles' }, 'warning')
     return
   }
   if (isExcluded(root, target.exclude ?? [])) return

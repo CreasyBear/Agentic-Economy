@@ -20,6 +20,7 @@ import {
   sourceRouteRef,
 } from '@/modules/capability-supply/convex'
 import { isRecord } from '@/modules/common/is-record'
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 
 import type { Id } from './_generated/dataModel'
 import { internalMutation, type MutationCtx } from './_generated/server'
@@ -264,7 +265,7 @@ async function preservePublicationIdentity(ctx: MutationCtx, draft: FacilitatorD
     const binding = await ctx.db.query('capabilityTransportBindings').withIndex('by_bindingId', (q) => q.eq('bindingId', publication.bindingId)).unique()
     if (binding === null || binding.endpointUrl !== route.resourceUrl) continue
     let config: unknown
-    try { config = JSON.parse(binding.configJson) } catch { continue }
+    try { config = JSON.parse(binding.configJson) } catch (cause) { degradeBackend(cause, undefined, { site: 'preservePublicationIdentity', reason: 'invalid_response' }); continue }
     if (!isRecord(config) || config.method !== route.method || config.network !== source.resource.network
       || typeof config.asset !== 'string' || typeof source.resource.asset !== 'string'
       || config.asset.toLowerCase() !== source.resource.asset.toLowerCase()) continue
@@ -302,7 +303,7 @@ async function reconcileDraft(
   ) return 'skipped'
   const existingCurrent = await currentPublication(ctx, draft.offering.offeringId)
   let existingPricing: ReturnType<typeof normalizePricingConfig> | undefined
-  try { existingPricing = normalizePricingConfig(JSON.parse(existingCurrent?.pricingConfigJson ?? 'null')) } catch { /* Invalid historical material is not adopted. */ }
+  try { existingPricing = normalizePricingConfig(JSON.parse(existingCurrent?.pricingConfigJson ?? 'null')) } catch (cause) { degradeBackend(cause, undefined, { site: 'reconcileDraft', reason: 'invalid_response' }) /* Invalid historical material is not adopted. */ }
   const pricingConfig: PricingConfig = {
     version: 'pricing:v3',
     kind: 'managed_x402',
@@ -444,8 +445,8 @@ function routeIdentity(
     const parsed = new URL(rawUrl)
     if (parsed.protocol !== 'https:' || parsed.username !== '' || parsed.password !== '' || parsed.hash !== '') return undefined
     return { host: parsed.host.toLowerCase(), resourceUrl: parsed.toString(), method, payee }
-  } catch {
-    return undefined
+  } catch (cause) {
+    return degradeBackend(cause, undefined, { site: 'routeIdentity', reason: 'invalid_response' })
   }
 }
 

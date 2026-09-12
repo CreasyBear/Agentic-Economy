@@ -53,8 +53,8 @@ const servicesPageSchema = z.object({
   kind: z.literal("ok"),
   schemaVersion: z.literal(PublicServicesApiSchemaVersion),
   services: z.array(serviceIdentitySchema).max(SERVICES_PAGE_LIMIT),
-  isDone: z.boolean(),
-  continueCursor: z.string().max(512),
+  hasMore: z.boolean(),
+  nextCursor: z.string().min(1).max(512).optional(),
 });
 
 type GatewaySmokeDiscoveryConfig = Readonly<{
@@ -110,7 +110,7 @@ export async function discoverGatewayServices(
   let cursor: string | undefined;
 
   for (let pageNumber = 0; pageNumber < MAX_SERVICE_PAGES; pageNumber += 1) {
-    const url = new URL("/api/v1/services", config.baseUrl);
+    const url = new URL("/api/v1/businesses", config.baseUrl);
     url.searchParams.set("limit", String(SERVICES_PAGE_LIMIT));
     if (cursor !== undefined) url.searchParams.set("cursor", cursor);
     const response: GatewayHttpResponse = await requestJson(
@@ -148,8 +148,8 @@ export async function discoverGatewayServices(
       }
     }
 
-    if (parsed.data.isDone) return { tools, serviceCount, endpointCount };
-    const nextCursor = parsed.data.continueCursor.trim();
+    if (!parsed.data.hasMore) return { tools, serviceCount, endpointCount };
+    const nextCursor = parsed.data.nextCursor?.trim() ?? "";
     if (nextCursor.length === 0 || nextCursor === cursor)
       throw new GatewaySmokeError("gateway_smoke_services_cursor_invalid");
     cursor = nextCursor;

@@ -1,6 +1,7 @@
 import type { LanguageModelV4 } from '@ai-sdk/provider'
 import type { ModelMessage } from 'ai'
 
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { sanitizeTelemetryError } from '@/lib/observability/private-route-safety'
 import { constantTimeStringEqual } from '@/lib/server/constant-time'
 import {
@@ -145,8 +146,8 @@ export async function handleAnonymousChatRequest(
   let value: unknown
   try {
     value = await request.json() as unknown
-  } catch {
-    return jsonError(400, 'invalid_json')
+  } catch (cause) {
+    return degradeBackend(cause, jsonError(400, 'invalid_json'), { site: 'handleAnonymousChatRequest', reason: 'invalid_response' })
   }
   const parsed = validateAnonymousChatBody(value)
   if (!parsed.ok) return jsonError(400, parsed.code)

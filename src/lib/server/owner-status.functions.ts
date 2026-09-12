@@ -1,6 +1,7 @@
 import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 
+import { degrade } from '@/lib/observability/degrade'
 import {
   callPublicSourceQuery,
   callSourceQuery,
@@ -55,8 +56,8 @@ export async function readOwnerStatusThroughSource(
     const publicDetail = await readPublicOfferingRegistryBusinessDetail({ slug: result.catalog.slug })
     if (publicDetail.kind === 'not_found') return { kind: 'not_found', reason: 'not_public' }
     return { kind: 'available', readback: buildPublicOwnerStatusReadback(result.catalog) }
-  } catch {
-    return { kind: 'unavailable', reason: 'source_unavailable', retryable: true }
+  } catch (cause) {
+    return degrade(cause, { kind: 'unavailable', reason: 'source_unavailable', retryable: true } as const, { site: 'readOwnerStatusThroughSource', reason: 'source_unavailable' })
   }
 }
 
@@ -68,7 +69,7 @@ async function readPublicBusinessPageThroughSource(
     return result.kind === 'available'
       ? { kind: 'available', catalog: result.catalog }
       : { kind: 'not_found', reason: result.reason }
-  } catch {
-    return { kind: 'unavailable', reason: 'source_unavailable', retryable: true }
+  } catch (cause) {
+    return degrade(cause, { kind: 'unavailable', reason: 'source_unavailable', retryable: true } as const, { site: 'readPublicBusinessPageThroughSource', reason: 'source_unavailable' })
   }
 }

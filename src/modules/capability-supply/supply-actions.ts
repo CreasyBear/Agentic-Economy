@@ -2,6 +2,7 @@ import { z } from 'zod'
 import type { FunctionReference, FunctionReturnType } from 'convex/server'
 
 import { isRecord } from '@/modules/common/is-record'
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 import {
   callPublicSourceMutation,
   sourceMutation,
@@ -9,7 +10,7 @@ import {
 import { sourceWriteAdmissionFromRequest, sourceWriteRequestFromAdmission } from '@/lib/server/source-write-admission'
 import type { AgentAccessPrincipal } from '@/modules/agent-access/agent-access'
 import { MARKET_SUPPLY_MANAGE_SCOPE } from '@/modules/agent-access/contract'
-import { defineAction, type ActionParameter } from '@/modules/common/action'
+import { defineAction, idempotencyKeySchema, type ActionParameter } from '@/modules/common/action'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { currencySchema, exactAmountSchema, ProviderEarningsViewSchema } from '@/modules/money/public'
 import { base64Codec, tryDecodeBase64Url } from '@/modules/common/base64-codec'
@@ -152,7 +153,7 @@ export const supplyWithdrawInputSchema = z.strictObject({
   offeringSourceHash: z.string().trim().min(1),
   publicationRef: z.string().trim().min(1),
   publicationRevision: z.number().int().positive(),
-  idempotencyKey: z.string().trim().min(8).max(200),
+  idempotencyKey: idempotencyKeySchema,
 })
 export type SupplyWithdrawInput = z.infer<typeof supplyWithdrawInputSchema>
 export const supplyWithdrawResultSchema = z.union([
@@ -166,8 +167,7 @@ export const supplyWithdrawResultSchema = z.union([
 ])
 export type SupplyWithdrawResult = z.infer<typeof supplyWithdrawResultSchema>
 
-export const supplyRecheckInputSchema = supplyWithdrawInputSchema
-export type SupplyRecheckInput = z.infer<typeof supplyRecheckInputSchema>
+export type SupplyRecheckInput = SupplyWithdrawInput
 export const supplyRecheckResultSchema = z.union([
   z.strictObject({
     kind: z.literal('refreshed'),
@@ -180,8 +180,7 @@ export const supplyRecheckResultSchema = z.union([
 ])
 export type SupplyRecheckResult = z.infer<typeof supplyRecheckResultSchema>
 
-export const supplyRepublishInputSchema = supplyWithdrawInputSchema
-export type SupplyRepublishInput = z.infer<typeof supplyRepublishInputSchema>
+export type SupplyRepublishInput = SupplyWithdrawInput
 export const supplyRepublishResultSchema = z.union([
   z.strictObject({
     kind: z.literal('republished'),
@@ -254,8 +253,8 @@ function decodeSupplyCallsCursor(token: string, scope: string): string | undefin
   let json: unknown
   try {
     json = JSON.parse(new TextDecoder().decode(bytes))
-  } catch {
-    return undefined
+  } catch (cause) {
+    return degradeBackend(cause, undefined, { site: 'decodeSupplyCallsCursor', reason: 'invalid_response' })
   }
   const parsed = supplyCallsCursorEnvelopeSchema.safeParse(json)
   if (!parsed.success || parsed.data.scope !== scope) return undefined
@@ -349,7 +348,7 @@ export const supplyConnectionDetailResultSchema = z.union([
 export type SupplyConnectionDetailResult = z.infer<typeof supplyConnectionDetailResultSchema>
 
 const connectionEvidenceSchema = z.array(z.string().trim().min(1)).max(64)
-const connectionIdempotencySchema = z.string().trim().min(8).max(200)
+const connectionIdempotencySchema = idempotencyKeySchema
 export type SupplyConnectionConnectInput =
   | Readonly<{
       kind: 'http_credential'
@@ -966,7 +965,8 @@ export function createSupplyManagementService(request: Request, bodyText: string
         message: x402SellerClaimMessage(claim),
         signature: input.claimSignature,
       })
-    } catch {
+    } catch (cause) {
+      degradeBackend(cause, undefined, { site: 'connectionConnect', reason: 'source_unavailable' })
       claimVerified = false
     }
     if (!claimVerified) return connectionRefused('claim_invalid')
@@ -1030,8 +1030,8 @@ export function createSupplyManagementService(request: Request, bodyText: string
           return { kind: 'error', code: 'source_unavailable' }
         }
         cursor = { createdAt: parsed.createdAt, callRef: parsed.callRef }
-      } catch {
-        return { kind: 'error', code: 'source_unavailable' }
+      } catch (cause) {
+        return degradeBackend(cause, { kind: 'error', code: 'source_unavailable' } as const, { site: 'calls', reason: 'invalid_response' })
       }
     }
     const operationKey = canonicalDigest({
@@ -1283,7 +1283,7 @@ export const supplyRecheckAction = defineAction<SupplyRecheckInput, SupplyRechec
   name: 'Recheck Provider capability',
   summary: 'Schedule readiness revalidation for one exact current Provider publication.',
   boundaries: supplyBoundaries,
-  schema: supplyRecheckInputSchema,
+  schema: supplyWithdrawInputSchema,
   outputSchema: supplyRecheckResultSchema,
   parameters: maintenanceParameters,
   readOnly: false,
@@ -1304,7 +1304,7 @@ export const supplyRepublishAction = defineAction<SupplyRepublishInput, SupplyRe
   name: 'Republish Provider capability',
   summary: 'Republish one exact withdrawn Provider publication from admitted durable material.',
   boundaries: supplyBoundaries,
-  schema: supplyRepublishInputSchema,
+  schema: supplyWithdrawInputSchema,
   outputSchema: supplyRepublishResultSchema,
   parameters: maintenanceParameters,
   readOnly: false,

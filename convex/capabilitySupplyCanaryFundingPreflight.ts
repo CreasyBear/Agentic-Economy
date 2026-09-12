@@ -3,6 +3,7 @@
 import { CdpClient } from '@coinbase/cdp-sdk'
 import { v } from 'convex/values'
 
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { readTrimmedEnv, type StringEnvironment } from '@/lib/server/read-trimmed-env'
 import {
   cdpX402CustodyConfigurationFromEnvironment,
@@ -15,10 +16,8 @@ import {
   cdpX402SellerCanaryPolicyIsExact,
 } from '@/modules/capability-supply/server'
 
-import { api, internal } from './_generated/api'
-import type { Id } from './_generated/dataModel'
-import { action, internalAction, type ActionCtx } from './_generated/server'
-import { resolveBusinessActor } from './authz'
+import { internal } from './_generated/api'
+import { internalAction, type ActionCtx } from './_generated/server'
 import {
   SELLER_ONBOARDING_CANARY_MAXIMUM_PER_CALL_ATOMIC,
 } from './lib/capabilitySupply/canaryFundingConstants'
@@ -229,8 +228,8 @@ async function readConfiguredPolicy(
 ): Promise<CdpPolicyDocument | undefined> {
   try {
     return await client.policies.getPolicyById({ id })
-  } catch {
-    return undefined
+  } catch (cause) {
+    return degradeBackend(cause, undefined, { site: 'readConfiguredPolicy', reason: 'source_unavailable' })
   }
 }
 
@@ -262,8 +261,8 @@ export async function readCdpUsdcBalance(
         pageSize: BALANCE_PAGE_SIZE,
         ...(pageToken === undefined ? {} : { pageToken }),
       })
-    } catch {
-      return { kind: 'failed' }
+    } catch (cause) {
+      return degradeBackend(cause, { kind: 'failed' } as const, { site: 'readCdpUsdcBalance', reason: 'source_unavailable' })
     }
     pagesRead += 1
     for (const balance of page.balances) {
@@ -322,15 +321,15 @@ export async function inspectSellerOnboardingCanaryCdpReadiness(
   try {
     client = dependencies.createClient?.(configuration)
       ?? createOfficialCdpPreflightClient(configuration)
-  } catch {
-    return notReady(checkedAt, 'cdp_client_initialization_failed')
+  } catch (cause) {
+    return degradeBackend(cause, notReady(checkedAt, 'cdp_client_initialization_failed'), { site: 'inspectSellerOnboardingCanaryCdpReadiness', reason: 'source_unavailable' })
   }
 
   let account: Awaited<ReturnType<CdpPreflightClient['evm']['getAccount']>>
   try {
     account = await client.evm.getAccount({ name: configuration.accountName })
-  } catch {
-    return notReady(checkedAt, 'cdp_account_read_failed')
+  } catch (cause) {
+    return degradeBackend(cause, notReady(checkedAt, 'cdp_account_read_failed'), { site: 'inspectSellerOnboardingCanaryCdpReadiness', reason: 'source_unavailable' })
   }
   if (account.name !== configuration.accountName) {
     return notReady(checkedAt, 'cdp_account_name_mismatch')
@@ -433,30 +432,3 @@ export const readSellerOnboardingCanaryCdpReadiness = internalAction({
   handler: readSellerOnboardingCanaryCdpReadinessHandler,
 })
 
-async function currentOwnerCanReadCanaryFunding(
-  ctx: ActionCtx,
-  businessId: Id<'businesses'>,
-): Promise<boolean> {
-  const actor = await resolveBusinessActor(ctx)
-  if (actor.kind !== 'authenticated_owner') return false
-  return await ctx.runQuery(api.catalog.authorizeProviderBusiness, { businessId })
-}
-
-/**
- * Authenticated owner projection of the seller-canary funding preflight.
- *
- * This deliberately returns only the already-public readiness evidence. CDP
- * credentials, wallet secrets, and policy documents remain inside the Node
- * action and are never serialized to the caller.
- */
-export const readOwnerSellerOnboardingCanaryCdpReadiness = action({
-  args: { businessId: v.id('businesses') },
-  returns: resultValue,
-  handler: async (ctx, args): Promise<SellerOnboardingCanaryCdpPreflightResult> => {
-    const checkedAt = Date.now()
-    if (!await currentOwnerCanReadCanaryFunding(ctx, args.businessId)) {
-      return notReady(checkedAt, 'authorization_denied')
-    }
-    return await readSellerOnboardingCanaryCdpReadinessHandler(ctx, { now: checkedAt })
-  },
-})

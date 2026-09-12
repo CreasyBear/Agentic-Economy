@@ -1,3 +1,4 @@
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 import { canonicalAuthorityBasisMaterial } from '@/modules/action-execution/runtime'
@@ -141,7 +142,7 @@ export function validateCallAuthority(input: Readonly<{
       acceptedBasis: canonicalAuthorityBasisMaterial(authority.acceptedBasis),
     } as StableHashValue)
     return expectedDecisionDigest === authority.decisionDigest ? amount.data : undefined
-  } catch {
-    return undefined
+  } catch (cause) {
+    return degradeBackend(cause, undefined, { site: 'validateCallAuthority', reason: 'invalid_response' })
   }
 }

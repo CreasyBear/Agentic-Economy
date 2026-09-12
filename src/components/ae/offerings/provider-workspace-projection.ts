@@ -7,6 +7,8 @@ import type {
 import {
   providerToolReasonPresentation,
 } from '@/modules/capability-supply/provider-tool-status'
+import type { OwnerOfferingSummary } from './AeOwnerOfferings'
+import type { OfferingRef } from '@/modules/common/ids'
 
 export type OwnerToolAvailability = 'available' | 'unavailable' | 'unknown'
 
@@ -63,10 +65,14 @@ function projectRow(
   lifecycle: ProviderWorkspaceLifecycleRow | undefined,
   lifecycleKind: ProviderWorkspaceLifecycleResult['kind'],
 ): ProviderWorkspaceProjectionRow {
+  // Well 8 Lane C: a live reviewed-tier Tool resolves by its canonical slug;
+  // one with no current publication yet (draft/unready/incompatible) has
+  // none, so it falls back to its offeringRef - the route resolves both,
+  // each for a different lifecycle phase.
   const detail = {
     kind: 'navigate' as const,
     label: 'View status',
-    href: `/owner/supply/${encodeURIComponent(definition.offeringRef)}`,
+    href: `/owner/operations/${encodeURIComponent(definition.slug ?? definition.offeringRef)}`,
   }
   if (lifecycle === undefined) {
     return {
@@ -119,4 +125,60 @@ function hasDuplicate<T>(items: readonly T[], key: (item: T) => string): boolean
     seen.add(value)
   }
   return false
+}
+
+export function toOfferingSummary(row: ProviderWorkspaceProjectionRow): OwnerOfferingSummary {
+  return {
+    offering: {
+      offeringRef: row.offeringRef as OfferingRef,
+      revision: row.currentRevision,
+      name: row.name,
+      category: row.category,
+      summary: row.summary,
+    },
+    status: row.status,
+    accessPathCount: row.accessPathCount,
+    lifecycleLabel: row.lifecycleLabel,
+    availability: row.availability,
+    ...(row.blocker === undefined ? {} : { blocker: row.blocker }),
+    continuation: row.continuation,
+    ...(row.lifecyclePending === undefined ? {} : { lifecyclePending: row.lifecyclePending }),
+  }
+}
+
+export function offboardingBlocker(code: string): string {
+  if (code === 'calls_remain') return 'Outstanding Calls must finish or be reconciled.'
+  if (code === 'obligations_remain') return 'Provider obligations must be resolved.'
+  if (code === 'payout_resolution_required') return 'A payout requires attention before retirement can finish.'
+  if (code === 'connections_remain' || code === 'provider_cleanup_pending') return 'Provider connection cleanup must be confirmed.'
+  if (code === 'routeable_tools_remain') return 'One or more Tools are still accepting new work.'
+  if (code === 'retention_policy_unbound') return 'The retained-record policy must be confirmed.'
+  return 'AE could not prove the next retirement gate. Review current Tools and try again.'
+}
+
+export function offboardingError(reason: string): string {
+  if (reason === 'retention_policy_unavailable') return 'The retained-record policy is not configured. No Provider state changed.'
+  if (reason === 'offboarding_already_active') return 'Provider offboarding is already active. Reload its current status.'
+  if (reason === 'revision_conflict') return 'The offboarding case changed. Reload its current status before resuming.'
+  if (reason === 'routeability_freeze_accepted') return 'New work is already frozen. Offboarding can now be resumed or corrected, but not cancelled.'
+  if (reason === 'authorization_denied') return 'Sign in again and complete the required verification. No Provider state changed.'
+  return 'AE could not confirm Provider offboarding. Reload status before trying again.'
+}
+
+export function providerIdentityError(code: string): string {
+  if (code === 'slug_taken') return 'That provider name is already in use. Choose a more specific name.'
+  if (code === 'multiple_businesses') return 'This account has more than one provider identity. Resolve that conflict before continuing.'
+  if (code === 'unauthenticated') return 'Sign in again before creating a provider workspace.'
+  if (code === 'invalid_business') return 'Check the provider name and HTTPS website.'
+  return 'The provider workspace could not be created. Try again.'
+}
+
+/** Moves keyboard/scroll focus onto a section's heading, so async panels reveal themselves accessibly. */
+export function focusSection(id: string): void {
+  const section = document.getElementById(id)
+  const target = section?.querySelector<HTMLElement>('h2') ?? section
+  if (target === null || target === undefined) return
+  target.setAttribute('tabindex', '-1')
+  target.scrollIntoView({ block: 'start' })
+  target.focus()
 }

@@ -3,6 +3,7 @@ import { useId, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { degrade } from '@/lib/observability/degrade'
 
 /** Editor state while an inline edit session is open. `null` means display mode. */
 type InlineEditSession = Readonly<{ seed: string; draft: string; error: string | null }>
@@ -146,8 +147,8 @@ function InlineEditEditor({
     let accepted: boolean
     try {
       accepted = await onSave(next)
-    } catch {
-      accepted = false
+    } catch (cause) {
+      accepted = degrade(cause, false, { site: 'inlineEditFieldCommit', reason: 'source_unavailable' })
     }
     if (accepted) {
       onEnd()

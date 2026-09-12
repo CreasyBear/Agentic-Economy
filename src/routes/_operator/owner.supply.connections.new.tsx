@@ -1,17 +1,18 @@
 import { useRef, useState, type FormEvent } from 'react'
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, Link, useNavigate } from '@tanstack/react-router'
 import { useServerFn } from '@tanstack/react-start'
 import { useReverification } from '@clerk/tanstack-react-start'
 import { isReverificationCancelledError } from '@clerk/tanstack-react-start/errors'
 import { z } from 'zod'
 
-import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
+import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
 import { AeSettingsStack } from '@/components/ae/layout/AeSection'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
+import { degrade } from '@/lib/observability/degrade'
 import { operatorRouteOptions } from '@/lib/operator/route-options'
 import {
   cancelOwnerProviderConnectionAttemptServer,
@@ -31,13 +32,14 @@ export const Route = createFileRoute('/_operator/owner/supply/connections/new')(
     ? { kind: 'not_found' as const }
     : await readOwnerProviderConnectionAttemptServer({ data: { attemptRef: deps.attemptRef } }),
   head: () => ({ meta: [
-    { title: 'Connect service | Agentic Economy' },
+    { title: 'Connect Provider | Agentic Economy' },
     { name: 'robots', content: 'noindex' },
   ] }),
   component: OwnerProviderConnectionHandoffRoute,
 })
 
 function OwnerProviderConnectionHandoffRoute() {
+  const navigate = useNavigate()
   const loaded = Route.useLoaderData()
   const completeRequest = useServerFn(completeOwnerHttpProviderConnectionServer)
   const complete = useReverification(completeRequest)
@@ -60,9 +62,9 @@ function OwnerProviderConnectionHandoffRoute() {
         return
       }
       const draftRef = attempt.draftRef ?? attempt.candidateDraftRef
-      window.location.assign(result.state === 'consumed' && attempt.connectionRef !== undefined
-        ? connectionReturnUrl(attempt.connectionRef, attempt.environment, draftRef)
-        : `/owner/offerings/new${draftRef === undefined ? '' : `?draft=${encodeURIComponent(draftRef)}`}`)
+      void navigate({ to: '/owner/operations/new', search: result.state === 'consumed' && attempt.connectionRef !== undefined
+        ? { connection: attempt.connectionRef, environment: attempt.environment, ...(draftRef === undefined ? {} : { draft: draftRef }) }
+        : (draftRef === undefined ? {} : { draft: draftRef }) })
     } catch (cause) {
       if (!isReverificationCancelledError(cause)) {
         captureClientExceptionOnClient(cause)
@@ -77,8 +79,8 @@ function OwnerProviderConnectionHandoffRoute() {
         <Alert>
           <AlertTitle>This connection request is unavailable</AlertTitle>
           <AlertDescription>
-            <p>Return to Add service and start the connection again.</p>
-            <ReturnToAddService />
+            <p>Return to Add Tool and start the connection again.</p>
+            <ReturnToAddTool />
           </AlertDescription>
         </Alert>
       </Shell>
@@ -94,10 +96,10 @@ function OwnerProviderConnectionHandoffRoute() {
       <Shell>
         {loaded.attempt.state === 'consumed' ? (
           <Alert>
-            <AlertTitle>Service connected</AlertTitle>
+            <AlertTitle>Provider connected</AlertTitle>
           <AlertDescription>
-            <p>Return to Add service. AE will resume the saved Tool draft.</p>
-            <ReturnToAddService
+            <p>Return to Add Tool. AE will resume the saved Tool draft.</p>
+            <ReturnToAddTool
               connectionRef={loaded.attempt.connectionRef}
               environment={loaded.attempt.environment}
               draftRef={loaded.attempt.draftRef ?? loaded.attempt.candidateDraftRef}
@@ -108,8 +110,8 @@ function OwnerProviderConnectionHandoffRoute() {
           <Alert>
             <AlertTitle>This connection request has expired</AlertTitle>
             <AlertDescription>
-              <p>Return to Add service and start the connection again.</p>
-              <ReturnToAddService draftRef={loaded.attempt.draftRef ?? loaded.attempt.candidateDraftRef} />
+              <p>Return to Add Tool and start the connection again.</p>
+              <ReturnToAddTool draftRef={loaded.attempt.draftRef ?? loaded.attempt.candidateDraftRef} />
             </AlertDescription>
           </Alert>
         )}
@@ -136,11 +138,12 @@ function OwnerProviderConnectionHandoffRoute() {
       } })
       setCredential('')
       if (result.kind !== 'refused') {
-        window.location.assign(connectionReturnUrl(
-          result.connection.connectionRef,
-          result.connection.sourceEnvironment ?? attempt.environment,
-          attempt.draftRef ?? attempt.candidateDraftRef,
-        ))
+        const draftRef = attempt.draftRef ?? attempt.candidateDraftRef
+        void navigate({ to: '/owner/operations/new', search: {
+          connection: result.connection.connectionRef,
+          environment: result.connection.sourceEnvironment ?? attempt.environment,
+          ...(draftRef === undefined ? {} : { draft: draftRef }),
+        } })
         return
       }
       setError(refusalCopy(result.code))
@@ -151,14 +154,23 @@ function OwnerProviderConnectionHandoffRoute() {
         try {
           const readback = await readAttempt({ data: { attemptRef: attempt.attemptRef } })
           if (readback.kind === 'available' && readback.attempt.state === 'consumed' && readback.attempt.connectionRef !== undefined) {
-            window.location.assign(connectionReturnUrl(readback.attempt.connectionRef, readback.attempt.environment, readback.attempt.draftRef ?? readback.attempt.candidateDraftRef))
+            const readbackDraftRef = readback.attempt.draftRef ?? readback.attempt.candidateDraftRef
+            void navigate({ to: '/owner/operations/new', search: {
+              connection: readback.attempt.connectionRef,
+              environment: readback.attempt.environment,
+              ...(readbackDraftRef === undefined ? {} : { draft: readbackDraftRef }),
+            } })
             return
           }
           setError(readback.kind === 'available' && readback.attempt.state === 'pending'
             ? 'AE could not confirm whether the connection is still completing. Reload this request to check its status before submitting again.'
             : 'AE could not confirm the connection. Reload this request to check its current status.')
-        } catch {
-          setError('AE could not confirm the connection or read its current status. Reload this request before submitting again.')
+        } catch (readbackCause) {
+          setError(degrade(
+            readbackCause,
+            'AE could not confirm the connection or read its current status. Reload this request before submitting again.',
+            { site: 'ownerProviderConnectionReadbackRetry', reason: 'source_unavailable' },
+          ))
         }
       }
     } finally {
@@ -193,13 +205,13 @@ function OwnerProviderConnectionHandoffRoute() {
           </div>
           {error === undefined ? null : (
             <Alert id="provider-connection-error" variant="destructive" role="alert">
-              <AlertTitle>Service not connected</AlertTitle>
+              <AlertTitle>Provider not connected</AlertTitle>
               <AlertDescription>{error}</AlertDescription>
             </Alert>
           )}
           <div className="flex flex-wrap gap-3">
             <Button type="submit" disabled={busy || credential.length === 0}>
-              {busy ? 'Connecting…' : 'Connect service'}
+              {busy ? 'Connecting…' : 'Connect Provider'}
             </Button>
             <Button type="button" variant="secondary" disabled={busy} onClick={() => void cancelAttempt(attempt)}>Cancel</Button>
           </div>
@@ -224,12 +236,12 @@ function McpOAuthHandoff({ attempt, onCancel, cancelBusy, cancelError }: Readonl
     return (
       <Shell>
         <Alert>
-          <AlertTitle>{attempt.state === 'consumed' ? 'Service connected' : 'This connection request has expired'}</AlertTitle>
+          <AlertTitle>{attempt.state === 'consumed' ? 'Provider connected' : 'This connection request has expired'}</AlertTitle>
           <AlertDescription>
             <p>{attempt.state === 'consumed'
-              ? 'Return to Add service. AE will resume with the connected source.'
-              : 'Return to Add service and start the connection again.'}</p>
-            <ReturnToAddService connectionRef={attempt.connectionRef} environment={attempt.environment} draftRef={attempt.draftRef ?? attempt.candidateDraftRef} />
+              ? 'Return to Add Tool. AE will resume with the connected source.'
+              : 'Return to Add Tool and start the connection again.'}</p>
+            <ReturnToAddTool connectionRef={attempt.connectionRef} environment={attempt.environment} draftRef={attempt.draftRef ?? attempt.candidateDraftRef} />
           </AlertDescription>
         </Alert>
       </Shell>
@@ -264,7 +276,7 @@ function McpOAuthHandoff({ attempt, onCancel, cancelBusy, cancelError }: Readonl
     <Shell>
       <div className="grid max-w-xl gap-5">
         <p className="text-sm text-muted-foreground">
-          Sign in to {attempt.sourceOrigin}. The Provider controls its consent screen; AE stores the resulting connection securely and returns you to Add service.
+          Sign in to {attempt.sourceOrigin}. The Provider controls its consent screen; AE stores the resulting connection securely and returns you to Add Tool.
         </p>
         {(error ?? cancelError) === undefined ? null : (
           <Alert variant="destructive" role="alert">
@@ -285,35 +297,29 @@ function McpOAuthHandoff({ attempt, onCancel, cancelBusy, cancelError }: Readonl
 
 function Shell({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <AeOperatorShell
+    <AeOperatorPage
       operatorRole="owner"
-      title="Connect service"
+      title="Connect Provider"
       description="Connect the credential required by this Provider source."
-      currentPath="/owner/offerings/new"
-      breadcrumbs={[{ label: 'Tools', href: '/owner/offerings' }, { label: 'Add service', href: '/owner/offerings/new' }, { label: 'Connect service' }]}
+      currentPath="/owner/operations/new"
+      breadcrumbs={[{ label: 'Operations', href: '/owner/operations' }, { label: 'Add Tool', href: '/owner/operations/new' }, { label: 'Connect Provider' }]}
     >
       <AeSettingsStack>{children}</AeSettingsStack>
-    </AeOperatorShell>
+    </AeOperatorPage>
   )
 }
 
-function connectionReturnUrl(connectionRef: string, environment: 'sandbox' | 'production', draftRef?: string): string {
-  const search = new URLSearchParams({ connection: connectionRef, environment })
-  if (draftRef !== undefined) search.set('draft', draftRef)
-  return `/owner/offerings/new?${search.toString()}`
-}
-
-function ReturnToAddService({ connectionRef, environment, draftRef }: Readonly<{
+function ReturnToAddTool({ connectionRef, environment, draftRef }: Readonly<{
   connectionRef?: string | undefined
   environment?: 'sandbox' | 'production' | undefined
   draftRef?: string | undefined
 }> = {}) {
-  const draftQuery = draftRef === undefined ? '' : `?draft=${encodeURIComponent(draftRef)}`
+  const search = connectionRef === undefined || environment === undefined
+    ? (draftRef === undefined ? {} : { draft: draftRef })
+    : { connection: connectionRef, environment, ...(draftRef === undefined ? {} : { draft: draftRef }) }
   return (
     <Button asChild variant="secondary" className="mt-4 min-h-touch">
-      <a href={connectionRef === undefined || environment === undefined
-        ? `/owner/offerings/new${draftQuery}`
-        : connectionReturnUrl(connectionRef, environment, draftRef)}>Return to Add service</a>
+      <Link to="/owner/operations/new" search={search}>Return to Add Tool</Link>
     </Button>
   )
 }
@@ -322,13 +328,13 @@ function refusalCopy(code: string): string {
   switch (code) {
     case 'attempt_expired':
     case 'not_found':
-      return 'This connection request is no longer available. Return to Add service and start again.'
+      return 'This connection request is no longer available. Return to Add Tool and start again.'
     case 'reauthentication_required':
       return 'Your confirmation expired. Submit once more to confirm this connection.'
     case 'secret_unavailable':
       return 'The credential could not be stored. Try again; no Provider connection was created.'
     case 'connection_conflict':
-      return 'The Provider connection changed. Return to Add service and review the current connection.'
+      return 'The Provider connection changed. Return to Add Tool and review the current connection.'
     default:
       return 'AE could not confirm the connection. Try again.'
   }

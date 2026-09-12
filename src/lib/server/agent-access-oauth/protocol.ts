@@ -22,6 +22,7 @@ import { defaultSandboxAgentAccessPolicy } from '@/modules/agent-access/sandbox-
 import { buildProductionAgentAccessPolicy } from '@/modules/agent-access/production-policy'
 import { normalizeAgentAccessToolSelection } from '@/modules/agent-access/policy'
 import { exactAmountSchema, formatExactAmount, type ExactAmount } from '@/modules/money/public'
+import { degrade } from '@/lib/observability/degrade'
 
 const MAX_OAUTH_FORM_BODY_BYTES = 16 * 1024
 const MAX_OAUTH_JSON_BODY_BYTES = 16 * 1024
@@ -73,8 +74,8 @@ export async function readForm(request: Request): Promise<OAuthFormResult> {
     const bounded = await readBoundedRequestText(request, MAX_OAUTH_FORM_BODY_BYTES)
     if (!bounded.ok) return { kind: 'too_large' }
     return { kind: 'ok', value: new URLSearchParams(bounded.text) }
-  } catch {
-    return { kind: 'invalid' }
+  } catch (cause) {
+    return degrade(cause, { kind: 'invalid' }, { site: 'readForm', reason: 'invalid_response' })
   }
 }
 
@@ -85,8 +86,8 @@ export async function readJson(request: Request): Promise<OAuthJsonResult> {
     const bounded = await readBoundedRequestJson(request, MAX_OAUTH_JSON_BODY_BYTES)
     if (!bounded.ok) return { kind: bounded.code === 'payload_too_large' ? 'too_large' : 'invalid' }
     return { kind: 'ok', value: bounded.value }
-  } catch {
-    return { kind: 'invalid' }
+  } catch (cause) {
+    return degrade(cause, { kind: 'invalid' }, { site: 'readJson', reason: 'invalid_response' })
   }
 }
 
@@ -95,8 +96,8 @@ export function parseAuthorizationDetails(raw: string | null): AuthorizationDeta
   let parsed: unknown
   try {
     parsed = JSON.parse(raw) as unknown
-  } catch {
-    return { kind: 'invalid' }
+  } catch (cause) {
+    return degrade(cause, { kind: 'invalid' }, { site: 'parseAuthorizationDetails', reason: 'invalid_response' })
   }
   const detail = singleRecord(parsed)
   if (detail === undefined) return { kind: 'invalid' }
@@ -167,8 +168,8 @@ export function parseAuthorizationDetails(raw: string | null): AuthorizationDeta
         maximumDailySpend,
         maximumMonthlySpend,
       })
-    } catch {
-      return { kind: 'invalid' }
+    } catch (cause) {
+      return degrade(cause, { kind: 'invalid' }, { site: 'parseAuthorizationDetails', reason: 'invalid_response' })
     }
   }
 
@@ -222,8 +223,8 @@ export function validRedirectUri(value: string): boolean {
   try {
     const url = new URL(value)
     return url.protocol === 'https:' || (url.hostname === 'localhost' || url.hostname === '127.0.0.1' || url.hostname === '[::1]')
-  } catch {
-    return false
+  } catch (cause) {
+    return degrade(cause, false, { site: 'validRedirectUri', reason: 'invalid_response' })
   }
 }
 

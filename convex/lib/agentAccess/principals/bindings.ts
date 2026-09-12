@@ -1,4 +1,5 @@
 import { v, type ObjectType } from 'convex/values'
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { env, type MutationCtx } from '../../../_generated/server'
 import type { Doc } from '../../../_generated/dataModel'
 import { internal } from '../../../_generated/api'
@@ -217,8 +218,8 @@ export async function registerIssuedAgentBindingForServerHandler(
   let owner: Awaited<ReturnType<typeof resolveInteractiveAuthorityContext>>
   try {
     owner = await resolveInteractiveAuthorityContext(ctx, identity)
-  } catch {
-    return { kind: 'refused' as const, code: 'authentication_required' as const }
+  } catch (cause) {
+    return degradeBackend(cause, { kind: 'refused' as const, code: 'authentication_required' as const }, { site: 'registerIssuedAgentBindingForServerHandler', reason: 'forbidden' })
   }
   const now = Date.now()
   const scopes = uniqueSorted(input.scopes)
@@ -433,8 +434,8 @@ export async function registerIssuedAgentBindingForServerHandler(
 export async function renameAgentForServerHandler(ctx: MutationCtx, args: ObjectType<typeof renameAgentArgs>) {
   try {
     agentAuditOpaqueRef(args.correlationRef, 'correlationRef')
-  } catch {
-    return { kind: 'conflict' as const, code: 'correlation_ref_invalid' as const, correlationRef: 'invalid-correlation-reference' }
+  } catch (cause) {
+    return degradeBackend(cause, { kind: 'conflict' as const, code: 'correlation_ref_invalid' as const, correlationRef: 'invalid-correlation-reference' }, { site: 'renameAgentForServerHandler', reason: 'invalid_response' })
   }
   const identity = await ctx.auth.getUserIdentity()
   if (identity === null) {
@@ -443,8 +444,8 @@ export async function renameAgentForServerHandler(ctx: MutationCtx, args: Object
   let owner: Awaited<ReturnType<typeof resolveInteractiveAuthorityContext>>
   try {
     owner = await resolveInteractiveAuthorityContext(ctx, identity)
-  } catch {
-    return { kind: 'refused' as const, code: 'authentication_required' as const, correlationRef: args.correlationRef }
+  } catch (cause) {
+    return degradeBackend(cause, { kind: 'refused' as const, code: 'authentication_required' as const, correlationRef: args.correlationRef }, { site: 'renameAgentForServerHandler', reason: 'forbidden' })
   }
   if (owner.provenance.accessKind !== 'ownership') {
     return { kind: 'conflict' as const, code: 'account_ownership_required' as const, correlationRef: args.correlationRef }

@@ -17,7 +17,7 @@ const owner: OperatorContext = {
 
 describe('operator route admission', () => {
   it.each([
-    ['/owner/offerings', 'owner'],
+    ['/owner/operations', 'owner'],
     ['/agent-access', 'owner'],
     ['/agent-access/authorize', 'owner'],
     ['/activity', 'owner'],
@@ -28,7 +28,7 @@ describe('operator route admission', () => {
   })
 
   it('returns the context only when the requested surface is authorized', () => {
-    expect(admitOperatorContext(owner, '/owner/offerings')).toBe(owner)
+    expect(admitOperatorContext(owner, '/owner/operations')).toBe(owner)
     expect(admitOperatorContext(owner, '/developers/discovery')).toBe(owner)
   })
 
@@ -39,7 +39,7 @@ describe('operator route admission', () => {
   it('fails closed when canonical owner context is unavailable', () => {
     expect(() => admitOperatorContext(
       { kind: 'denied', reason: 'canonical_owner_required' },
-      '/owner/offerings',
+      '/owner/operations',
     )).toThrow(OperatorSurfaceForbiddenError)
   })
 })

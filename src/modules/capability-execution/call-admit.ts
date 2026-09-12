@@ -7,6 +7,7 @@ import {
   type RuntimePublishedToolDescriptor,
 } from '@/modules/capability-supply/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 import type { SpendingPolicyAuthorityBasis } from '@/modules/action-execution/runtime'
 import { currentToolDigest } from './current-tool-quote'
 import {
@@ -238,8 +239,8 @@ export async function admitCall(input: Readonly<{
       operationRef: command.toolRef,
       input: command.input,
     })
-  } catch {
-    return {
+  } catch (cause) {
+    return degradeBackend(cause, {
       kind: 'refused',
       result: {
         kind: 'refused',
@@ -247,7 +248,7 @@ export async function admitCall(input: Readonly<{
         code: 'input_invalid',
         retryable: false,
       },
-    }
+    }, { site: 'admitCall', reason: 'invalid_response' })
   }
 
   let grantDecision: CallGrantDecision
@@ -257,8 +258,8 @@ export async function admitCall(input: Readonly<{
       toolRef: command.toolRef,
       correlationId: input.request.correlationId,
     })
-  } catch {
-    return {
+  } catch (cause) {
+    return degradeBackend(cause, {
       kind: 'refused',
       result: {
         kind: 'refused',
@@ -267,7 +268,7 @@ export async function admitCall(input: Readonly<{
         retryable: true,
         nextAction: 'Refresh the agent grant and retry.',
       },
-    }
+    }, { site: 'admitCall', reason: 'source_unavailable' })
   }
   if (grantDecision.kind === 'refused') {
     return {
@@ -329,26 +330,26 @@ export async function admitCall(input: Readonly<{
           toolRef: command.toolRef,
           tool: current.operation,
         }) === undefined) throw new Error('operation_not_current')
-      } catch {
-        preflightRefusal = {
+      } catch (cause) {
+        preflightRefusal = degradeBackend(cause, {
           kind: 'refused',
           toolRef: command.toolRef,
           code: 'operation_unsupported',
           retryable: false,
-        }
+        }, { site: 'admitCall', reason: 'invalid_response' })
       }
     }
     if (preflightRefusal === undefined && current !== undefined && descriptor !== undefined) {
       let inputValid = false
       try {
         inputValid = descriptor.validateInput(command.input)
-      } catch {
-        preflightRefusal = {
+      } catch (cause) {
+        preflightRefusal = degradeBackend(cause, {
           kind: 'refused',
           toolRef: command.toolRef,
           code: 'operation_unsupported',
           retryable: false,
-        }
+        }, { site: 'admitCall', reason: 'invalid_response' })
       }
       if (preflightRefusal === undefined && (
         descriptor.target.publicationRef !== current.operation.identity.publicationRef
@@ -462,8 +463,8 @@ export async function reserveCall(input: Readonly<{
           principal: input.request.principal,
           correlationId: input.request.correlationId,
         })
-      } catch {
-        return {
+      } catch (cause) {
+        return degradeBackend(cause, {
           kind: 'terminal',
           result: {
             kind: 'refused',
@@ -472,13 +473,13 @@ export async function reserveCall(input: Readonly<{
             retryable: true,
             nextAction: 'Retry after the invocation store is available.',
           },
-        }
+        }, { site: 'reserveCall', reason: 'source_unavailable' })
       }
       if (replay !== undefined) return { kind: 'terminal', result: replay }
       reservationMayBeAbandoned = true
     }
-  } catch {
-    return {
+  } catch (cause) {
+    return degradeBackend(cause, {
       kind: 'terminal',
       result: {
         kind: 'refused',
@@ -487,7 +488,7 @@ export async function reserveCall(input: Readonly<{
         retryable: true,
         nextAction: 'Retry after the invocation store is available.',
       },
-    }
+    }, { site: 'reserveCall', reason: 'source_unavailable' })
   }
   return {
     kind: 'reserved',

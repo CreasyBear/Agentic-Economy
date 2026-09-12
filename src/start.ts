@@ -2,7 +2,6 @@ import { clerkMiddleware } from '@clerk/tanstack-react-start/server'
 import { createCsrfMiddleware, createMiddleware, createStart } from '@tanstack/react-start'
 
 import { applySecurityHeadersToResponse, resolveCspModeFromEnv } from '@/lib/http/security-headers'
-import { isLocalE2EAuthBypassEnabled } from '@/lib/server/local-e2e-bypass'
 import { createSourceWriteAdmissionMiddleware } from '@/lib/server/source-write-admission'
 import { apiRequestBoundaryResponse } from '@/lib/server/api-request-boundary'
 
@@ -10,6 +9,18 @@ import { negotiateAgentPage } from '@/lib/http/agent-content-negotiation'
 import { respondWithAgentPageMarkdown } from '@/lib/server/agent-page-markdown'
 import { resolveCanonicalBaseUrl, resolveCanonicalOrigin } from '@/lib/server/canonical-url'
 import { sanitizeTelemetryError, sanitizeTelemetryValue } from '@/lib/observability/private-route-safety'
+
+// TanStack Start's client/server shared entry means this module is evaluated
+// in the browser too, so the validation can't run at module load like a
+// classic server-only boot check. Instead it runs once, on the first
+// request, via an idempotent guard in ensureBootEnvironmentValidated: in
+// production the throw fails that first request (and the health check)
+// loudly rather than serving anything half-configured.
+const bootEnvironmentMiddleware = createMiddleware().server(async (ctx) => {
+  const { ensureBootEnvironmentValidated } = await import('@/lib/deployment/validate-boot-env.server')
+  ensureBootEnvironmentValidated()
+  return ctx.next()
+})
 
 const requestCorrelationMiddleware = createMiddleware().server(async (ctx) => {
   const { runWithRequestCorrelation, withRequestCorrelationHeader } = await import('@/lib/server/request-correlation')
@@ -87,11 +98,9 @@ const apiRequestBoundaryMiddleware = createMiddleware().server((ctx) =>
   apiRequestBoundaryResponse(ctx.request) ?? ctx.next(),
 )
 
-const clerkRequestMiddleware = isLocalE2EAuthBypassEnabled()
-  ? []
-  : [clerkMiddleware(() => ({ authorizedParties: [resolveCanonicalOrigin()] }))]
 export const startInstance = createStart(() => ({
   requestMiddleware: [
+    bootEnvironmentMiddleware,
     requestCorrelationMiddleware,
     apiRequestBoundaryMiddleware,
     observabilityRequestMiddleware,
@@ -99,6 +108,13 @@ export const startInstance = createStart(() => ({
     agentContentNegotiationMiddleware,
     csrfMiddleware,
     sourceWriteAdmissionMiddleware,
-    ...clerkRequestMiddleware,
+    clerkMiddleware(() => {
+      // Clerk recommends the authorized-party allowlist for public origins.
+      // Backend-API session tokens (local `connect:local`) carry no `azp`
+      // claim and @clerk/backend >= 3.17 rejects them whenever the list is
+      // set, so local http origins follow Clerk's default of no allowlist.
+      const origin = resolveCanonicalOrigin()
+      return origin.startsWith('https://') ? { authorizedParties: [origin] } : {}
+    }),
   ],
 }))

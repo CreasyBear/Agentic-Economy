@@ -1,4 +1,5 @@
 import { mutationGeneric, queryGeneric } from 'convex/server'
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { v, type Infer } from 'convex/values'
 
 import type { MutationCtx } from './_generated/server'
@@ -417,8 +418,8 @@ async function reserveAttempt(
       draftSource = draft === undefined
         ? undefined
         : normalizeSupplySourceDescriptor(JSON.parse(draft.sourceDescriptorJson) as unknown)
-    } catch {
-      draftSource = undefined
+    } catch (cause) {
+      draftSource = degradeBackend(cause, undefined, { site: 'reserveAttempt', reason: 'invalid_response' })
     }
     if (args.sourceKind !== 'http_credential'
       || args.candidateSourceDigest === undefined

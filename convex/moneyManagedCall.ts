@@ -1,5 +1,6 @@
 import { v } from 'convex/values'
 
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 import type { Doc } from './_generated/dataModel'
 import { internalMutation, internalQuery, type MutationCtx } from './_generated/server'
 import { canonicalDigest } from '../src/modules/common/canonical-digest'
@@ -57,7 +58,7 @@ function bookingFromRows(
       || rate.evidenceDigest !== quote.rateEvidenceDigest
       || rate.sourceAmount.units !== quote.decisionAudUnits
       || (rate.version === 'ae.managed-reference-price:v1' && rate.targetAmount.units !== quote.sourceUsdcUnits)) return null
-  } catch { return null }
+  } catch (cause) { return degradeBackend(cause, null, { site: 'bookingFromRows', reason: 'invalid_response' }) }
   return {
     callRef: call.callRef,
     quoteRef: quote.quoteRef,

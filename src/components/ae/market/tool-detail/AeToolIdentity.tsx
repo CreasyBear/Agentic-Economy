@@ -1,5 +1,6 @@
 import { Separator } from '@/components/ui/separator'
 import type { PublicToolDescriptor } from '@/modules/capability-supply/public'
+import { toolDisplayTitle } from '@/modules/market/tool-view-model'
 
 export function AeToolIdentity({
   tool,
@@ -16,15 +17,12 @@ export function AeToolIdentity({
     <header className="grid gap-intra px-gutter pb-related pt-intra">
       <div className="grid min-w-0 gap-0.5">
         <h2 className="text-base font-semibold text-foreground">
-          {tool.offering.label}
+          {toolDisplayTitle(tool)}
         </h2>
         <p className="text-xs text-muted-foreground">
           {tool.business.name} · {tool.contract.capabilityId}
         </p>
       </div>
-      <code dir="ltr" className="break-all font-mono text-xs text-muted-foreground">
-        {tool.toolRef}
-      </code>
       <Separator />
     </header>
   )

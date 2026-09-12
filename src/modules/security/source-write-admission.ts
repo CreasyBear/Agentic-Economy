@@ -8,6 +8,7 @@ import { base64Codec, tryDecodeBase64Url } from '@/modules/common/base64-codec'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { stableStringify, type StableHashValue } from '@/modules/common/stable-hash'
 import { isRecord } from '@/modules/common/is-record'
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { isBoundedJsonValue } from '@/modules/capability-contract/public'
 import { constantTimeStringEqual } from '@/lib/server/constant-time'
 import { readTrimmedEnv } from '@/lib/server/read-trimmed-env'
@@ -324,8 +325,8 @@ export async function verifySourceWriteAdmission(input: {
       },
     )
     if (!valid) return { kind: 'rejected', reason: 'invalid_source_write_signature' }
-  } catch {
-    return { kind: 'rejected', reason: 'invalid_source_write_signature' }
+  } catch (cause) {
+    return degradeBackend(cause, { kind: 'rejected', reason: 'invalid_source_write_signature' } as const, { site: 'verifySourceWriteAdmission', reason: 'source_unavailable' })
   }
 
   return { kind: 'accepted', admission }
@@ -464,7 +465,8 @@ function validateSourceWriteRequest(request: SourceWriteAdmissionRequest, allowN
   }
   try {
     new URL(`${request.targetOrigin}${request.targetPath}${request.targetQuery}`)
-  } catch {
+  } catch (cause) {
+    degradeBackend(cause, undefined, { site: 'validateSourceWriteRequest', reason: 'invalid_response' })
     throw new SourceWriteAdmissionError('invalid_source_write_request', 'Source write target URL is invalid.')
   }
   if (!isSourceWriteBodyDigest(request.bodyDigest, allowNoBody)) {
@@ -480,8 +482,8 @@ function isOrigin(value: string): boolean {
   try {
     const url = new URL(value)
     return url.origin === value && url.username === '' && url.password === '' && url.pathname === '/' && url.search === '' && url.hash === ''
-  } catch {
-    return false
+  } catch (cause) {
+    return degradeBackend(cause, false, { site: 'isOrigin', reason: 'invalid_response' })
   }
 }
 
@@ -577,8 +579,6 @@ function assertNotProviderSecret(secret: string, env: Env, envName: string): voi
     'STRIPE_READBACK_KEY',
     'STRIPE_WEBHOOK_SECRET',
     'STRIPE_V2_WEBHOOK_SECRET',
-    'AUTUMN_SECRET_KEY',
-    'AUTUMN_WEBHOOK_SECRET',
   ]
   for (const providerName of providerSecretNames) {
     const providerSecret = readTrimmedEnv(env, providerName)

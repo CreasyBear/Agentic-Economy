@@ -4,6 +4,7 @@ import { stepCountIs } from 'ai'
 import type { FunctionArgs } from 'convex/server'
 import { z } from 'zod'
 
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 import { MARKET_TOOLS_CALL_SCOPE } from '@/modules/agent-access/contract'
@@ -167,8 +168,8 @@ function modelFacingOutput<Output>(
           .replace(/[<>]/gu, (character) => character === '<' ? '‹' : '›')
         : value,
     )
-  } catch {
-    return failure(toolId, 'source_output_invalid')
+  } catch (cause) {
+    return degradeBackend(cause, failure(toolId, 'source_output_invalid'), { site: 'modelFacingOutput', reason: 'invalid_response' })
   }
 
   if (new TextEncoder().encode(serialized).byteLength > MAX_CHAT_TOOL_RESULT_BYTES) {
@@ -187,8 +188,8 @@ function projectedModelFacingOutput<Output>(
 ): Output | ChatToolFailure {
   try {
     return modelFacingOutput(toolId, schema, project())
-  } catch {
-    return failure(toolId, 'source_output_invalid')
+  } catch (cause) {
+    return degradeBackend(cause, failure(toolId, 'source_output_invalid'), { site: 'projectedModelFacingOutput', reason: 'invalid_response' })
   }
 }
 

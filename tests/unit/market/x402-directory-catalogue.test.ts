@@ -30,9 +30,13 @@ describe('indexed catalogue server boundary', () => {
     expect(await readX402DirectoryCatalogue({ offset: 20 })).toMatchObject({ kind: 'ok', source: 'upstream_limited', isDone: false })
     expect(upstream).toHaveBeenCalledWith({ offset: 20 })
     upstream.mockClear()
-    for (const input of [{ directoryCategory: 'creative' }, { sort: 'popular' as const }, { indexCursor: 'cursor' }]) {
+    for (const input of [{ directoryCategory: 'creative' }, { indexCursor: 'cursor' }]) {
       expect(await readX402DirectoryCatalogue(input)).toEqual({ kind: 'unavailable', reason: 'index_unavailable' })
     }
+    // Sort cannot block on unavailability - the upstream directory can't honour index-only
+    // orderings (e.g. adoption), so it falls back to relevance rather than staying unavailable.
+    expect(await readX402DirectoryCatalogue({ sort: 'popular' as const })).toMatchObject({ kind: 'ok', source: 'upstream_limited' })
+    upstream.mockClear()
     query.mockRejectedValue(new Error('offline'))
     expect(await readX402DirectoryCatalogue({})).toEqual({ kind: 'unavailable', reason: 'source_unavailable' })
     expect(upstream).not.toHaveBeenCalled()

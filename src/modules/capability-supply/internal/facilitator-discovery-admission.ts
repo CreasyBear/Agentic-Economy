@@ -15,6 +15,7 @@ import {
   type FacilitatorDiscoveryAdmissionResult,
   type FacilitatorDiscoverySkip,
 } from "./facilitator-discovery-ingest";
+import { degradeBackend } from "@/lib/observability/degrade-backend";
 
 export async function admitFacilitatorDiscoveryItems(
   items: readonly unknown[],
@@ -57,7 +58,8 @@ async function admitItems(
     let result;
     try {
       result = await importX402Capability(sourceImport, dereferenceOpenApiSchema);
-    } catch {
+    } catch (cause) {
+      degradeBackend(cause, undefined, { site: "admitItems", reason: "source_unavailable" })
       skipped.push({ kind: "skip", reason: "source_invalid" });
       continue;
     }

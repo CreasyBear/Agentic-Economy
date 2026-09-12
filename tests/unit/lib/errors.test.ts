@@ -48,8 +48,8 @@ describe('buildProblem', () => {
     expect(problem).not.toHaveProperty('detail')
   })
 
-  it('defaults no_data status to 200', () => {
-    expect(buildProblem({ kind: 'no_data', code: 'no_match' }).status).toBe(200)
+  it('defaults NO_DATA status to 200', () => {
+    expect(buildProblem({ kind: 'NO_DATA', code: 'no_match' }).status).toBe(200)
   })
 
   it('lets explicit status and extras set non-reserved fields', () => {
@@ -90,7 +90,7 @@ describe('buildProblem', () => {
     const kinds: ProblemKind[] = [
       'INVALID_ARGUMENT', 'FAILED_PRECONDITION', 'UNAUTHENTICATED', 'PERMISSION_DENIED',
       'NOT_FOUND', 'ALREADY_EXISTS', 'METHOD_NOT_ALLOWED', 'PAYLOAD_TOO_LARGE',
-      'UNSUPPORTED_MEDIA_TYPE', 'RESOURCE_EXHAUSTED', 'UNAVAILABLE', 'INTERNAL', 'UNKNOWN', 'no_data',
+      'UNSUPPORTED_MEDIA_TYPE', 'RESOURCE_EXHAUSTED', 'UNAVAILABLE', 'INTERNAL', 'UNKNOWN', 'NO_DATA',
     ]
     for (const kind of kinds) {
       expect(defaultTitle(kind).length).toBeGreaterThan(0)
@@ -146,7 +146,7 @@ describe('DEFAULT_STATUS', () => {
   it('is exhaustive over every kind', () => {
     const kinds = Object.keys(DEFAULT_STATUS)
     expect(kinds).toHaveLength(14)
-    expect(kinds).toContain('no_data')
-    expect(DEFAULT_STATUS.no_data).toBe(200)
+    expect(kinds).toContain('NO_DATA')
+    expect(DEFAULT_STATUS.NO_DATA).toBe(200)
   })
 })

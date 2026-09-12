@@ -1,6 +1,6 @@
-import type { PublicOfferingDto } from '@/modules/registry/public'
+import type { PublicListingDto } from '@/modules/registry/public'
 
-export function offeringPathLabel(path: PublicOfferingDto['accessPaths'][number]): string {
+export function offeringPathLabel(path: PublicListingDto['accessPaths'][number]): string {
   if (path.kind === 'external_operation') return path.name
   switch (path.channel) {
     case 'phone':

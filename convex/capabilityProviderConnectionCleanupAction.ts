@@ -1,11 +1,12 @@
 "use node"
 
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 import {
   isCanonicalCredentiallessX402ProviderConnection,
   providerConnectionCleanupRequestDigest,
 } from '../src/modules/capability-supply/provider-connection'
 import { sendGuardedHttpRequest } from '../src/modules/network-guard/server'
-import { internalAction } from './_generated/server'
+import { env, internalAction } from './_generated/server'
 import {
   cleanupArgs,
   convexCleanupResult,
@@ -18,7 +19,7 @@ import {
 } from './capabilityProviderConnectionCleanup'
 
 function cleanupEndpoint(): string | undefined {
-  const raw = process.env.AE_SITE_URL?.trim()
+  const raw = env.AE_SITE_URL?.trim()
   if (raw === undefined) return undefined
   try {
     const url = new URL(raw)
@@ -32,14 +33,14 @@ function cleanupEndpoint(): string | undefined {
       && url.origin === raw
       ? `${raw}/api/internal/provider-connection-cleanup`
       : undefined
-  } catch {
-    return undefined
+  } catch (cause) {
+    return degradeBackend(cause, undefined, { site: 'cleanupEndpoint', reason: 'invalid_response' })
   }
 }
 
 async function revokeMcpConnection(target: CleanupTarget, requestDigest: string): Promise<CleanupResult> {
   const endpoint = cleanupEndpoint()
-  const token = process.env.AE_CONVEX_SERVER_FUNCTION_TOKEN?.trim()
+  const token = env.AE_CONVEX_SERVER_FUNCTION_TOKEN?.trim()
   if (endpoint === undefined || token === undefined || token.length < 43 || target.secret === undefined) {
     return unknownResult('cleanup_action_failed')
   }
@@ -64,8 +65,8 @@ async function revokeMcpConnection(target: CleanupTarget, requestDigest: string)
     response = hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]'
       ? await fetch(request)
       : await sendGuardedHttpRequest(request, 16 * 1024)
-  } catch {
-    return unknownResult('cleanup_action_failed')
+  } catch (cause) {
+    return degradeBackend(cause, unknownResult('cleanup_action_failed'), { site: 'revokeMcpConnection', reason: 'source_unavailable' })
   }
   const declared = Number(response.headers.get('content-length'))
   if (!response.ok || (Number.isFinite(declared) && declared > 16 * 1024)) {
@@ -76,8 +77,8 @@ async function revokeMcpConnection(target: CleanupTarget, requestDigest: string)
     const text = await response.text()
     if (new TextEncoder().encode(text).byteLength > 16 * 1024) return unknownResult('cleanup_action_failed')
     body = JSON.parse(text)
-  } catch {
-    return unknownResult('cleanup_action_failed')
+  } catch (cause) {
+    return degradeBackend(cause, unknownResult('cleanup_action_failed'), { site: 'revokeMcpConnection', reason: 'invalid_response' })
   }
   return isCleanupResult(body) ? body : unknownResult('cleanup_action_failed')
 }
@@ -135,8 +136,8 @@ export const perform = internalAction({
           evidenceRefs: ['provider_cleanup:adapter_unsupported'],
         }),
       }
-    } catch {
-      return { kind: 'cleanup' as const, result: convexCleanupResult(unknownResult('cleanup_action_failed')) }
+    } catch (cause) {
+      return degradeBackend(cause, { kind: 'cleanup' as const, result: convexCleanupResult(unknownResult('cleanup_action_failed')) }, { site: 'perform', reason: 'source_unavailable' })
     }
   },
 })

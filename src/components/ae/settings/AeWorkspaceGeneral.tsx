@@ -62,7 +62,7 @@ export function AeWorkspaceGeneral({
         role="alert"
         action={
           <Button asChild variant="secondary" className="min-h-touch">
-            <Link to="/owner/offerings" hash="provider-identity">Try again</Link>
+            <Link to="/owner/operations" hash="provider-identity">Try again</Link>
           </Button>
         }
       />

@@ -1,4 +1,5 @@
 import { v, type Infer } from 'convex/values'
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { nativeSubmissionBusiness } from './capabilitySupplyNativeAdmission'
 
 import { canonicalDigest } from '@/modules/common/canonical-digest'
@@ -21,12 +22,14 @@ import {
   type PublicationCommandRow,
 } from '@/modules/capability-supply/public'
 import type { MutationCtx } from './_generated/server'
+import type { Id } from './_generated/dataModel'
 import {
   ownsPublishedBusiness,
   ownsPublishedBusinessForOwnerId,
   publicationPorts,
   rebuildCapabilityOriginSupplyProjection,
 } from './capabilitySupply'
+import { upsertProviderDirectoryRows } from './x402DirectoryIndexStore'
 import { agentAccessPrincipalValue, verifySupplyAgentPrincipal } from './agentAccessPrincipals'
 import { requireSourceWrite, sourceWriteArgs } from './sourceWriteAdmission'
 import { resolveBusinessActor } from './authz'
@@ -251,8 +254,8 @@ async function reconstructPreparedRepublishMaterial(
   let offeringRegistration: CapabilityOfferingRegistration
   try {
     offeringRegistration = offeringRegistrationFromRow(offering)
-  } catch {
-    return { kind: 'refused', reason: 'offering_integrity_failure' }
+  } catch (cause) {
+    return degradeBackend(cause, { kind: 'refused', reason: 'offering_integrity_failure' }, { site: 'reconstructPreparedRepublishMaterial', reason: 'invalid_response' })
   }
   if (
     offeringRegistration.businessId !== publication.businessId ||
@@ -269,8 +272,8 @@ async function reconstructPreparedRepublishMaterial(
   let adapterConfig: CapabilityPublicationBindingDraft['adapter']['config']
   try {
     adapterConfig = JSON.parse(binding.configJson)
-  } catch {
-    return { kind: 'refused', reason: 'binding_integrity_failure' }
+  } catch (cause) {
+    return degradeBackend(cause, { kind: 'refused', reason: 'binding_integrity_failure' }, { site: 'reconstructPreparedRepublishMaterial', reason: 'invalid_response' })
   }
   if (
     stableStringify(adapterConfig) !== binding.configJson ||
@@ -455,7 +458,7 @@ export async function withdrawOwnerCapabilityHandler(
         },
         resourceRefs: [`publication:${args.publicationRef}`],
         consequenceSummary: 'Withdraw this exact Tool revision from new market work.',
-        statusReadbackRef: `owner/supply/${args.offeringRef}`,
+        statusReadbackRef: `owner/operations/${args.offeringRef}`,
         correlationRef: args.correlationId,
         idempotencyRef: args.operationKey,
         command: consequenceCommand,
@@ -478,7 +481,7 @@ export async function withdrawOwnerCapabilityHandler(
         resourceRefs: [`publication:${args.publicationRef}`],
         budgetAmount: 0,
         consequenceSummary: 'Withdraw this exact Tool revision from new market work.',
-        statusReadbackRef: `owner/supply/${args.offeringRef}`,
+        statusReadbackRef: `owner/operations/${args.offeringRef}`,
         correlationRef: args.correlationId,
         idempotencyRef: args.operationKey,
         command: consequenceCommand,
@@ -535,6 +538,17 @@ export async function withdrawOwnerCapabilityHandler(
       return result
     }
     await rebuildCapabilityOriginSupplyProjection(ctx, args.businessId, now)
+    // Well 8 Lane C: remove this publication's provider directory row
+    // immediately, alongside the projection rebuild above (same
+    // transaction). loaded.publication was fetched before the withdraw
+    // command ran, so its disposition is stamped 'withdrawn' explicitly
+    // rather than read stale off that object.
+    await upsertProviderDirectoryRows(ctx, {
+      disposition: 'withdrawn', authorityMode: loaded.publication.authorityMode,
+      ...(loaded.publication.sourceRouteRef === undefined ? {} : { sourceRouteRef: loaded.publication.sourceRouteRef }),
+      businessId: loaded.publication.businessId as Id<'businesses'>,
+      offeringId: loaded.publication.offeringId, networkId: loaded.publication.networkId, sourceKind: loaded.publication.sourceKind,
+    })
     const stableResult: StableHashValue = {
       kind: result.kind,
       publicationRef: result.publicationRef,
@@ -609,7 +623,7 @@ export async function republishOwnerCapabilityHandler(
         },
         resourceRefs: [`publication:${args.publicationRef}`],
         consequenceSummary: 'Republish this exact withdrawn Tool revision to the market.',
-        statusReadbackRef: `owner/supply/${args.offeringRef}`,
+        statusReadbackRef: `owner/operations/${args.offeringRef}`,
         correlationRef: args.correlationId,
         idempotencyRef: args.operationKey,
         command: consequenceCommand,
@@ -632,7 +646,7 @@ export async function republishOwnerCapabilityHandler(
         resourceRefs: [`publication:${args.publicationRef}`],
         budgetAmount: 0,
         consequenceSummary: 'Republish this exact withdrawn Tool revision to the market.',
-        statusReadbackRef: `owner/supply/${args.offeringRef}`,
+        statusReadbackRef: `owner/operations/${args.offeringRef}`,
         correlationRef: args.correlationId,
         idempotencyRef: args.operationKey,
         command: consequenceCommand,
@@ -668,6 +682,10 @@ export async function republishOwnerCapabilityHandler(
     )
     if (result.kind === 'refused') return result
     await rebuildCapabilityOriginSupplyProjection(ctx, args.businessId, now)
+    const republished = await ctx.db.query('capabilityPublications')
+      .withIndex('by_publicationRef_and_revision', (query) => query.eq('publicationRef', result.publicationRef).eq('revision', result.publicationRevision))
+      .unique()
+    if (republished !== null) await upsertProviderDirectoryRows(ctx, republished)
     return {
       kind: 'republished',
       publicationRef: result.publicationRef,

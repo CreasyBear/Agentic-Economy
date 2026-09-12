@@ -2,6 +2,7 @@ import {
   jsonValueSchema,
   type JsonValue,
 } from "@/modules/capability-contract/public";
+import { degradeBackend } from "@/lib/observability/degrade-backend";
 import { isRecord } from "@/modules/common/is-record";
 
 const MAX_SCHEMA_BYTES = 131_072;
@@ -68,8 +69,11 @@ export function decodePublicSchema(
   let parsed: unknown;
   try {
     parsed = JSON.parse(serialized);
-  } catch {
-    throw new Error("tool_public_schema_wire_invalid");
+  } catch (cause) {
+    degradeBackend(cause, undefined, {
+      site: "decodePublicSchema", reason: "invalid_response",
+    });
+    throw new Error("tool_public_schema_wire_invalid", { cause });
   }
   const checked = jsonValueSchema.safeParse(parsed);
   if (!checked.success || !isRecord(checked.data)) {

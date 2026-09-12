@@ -28,7 +28,7 @@ function selectedTool() {
   return {
     toolRef,
     businessId: "business:provider",
-    offeringRef: tool.offering.offeringRef,
+    offeringRef: tool.listing.listingRef,
     search: publicToolSearchResponse().items[0]!,
     description: publicToolDescribeResponse().tool,
     quote: committedQuote(),
@@ -59,7 +59,7 @@ describe("hosted Tool gateway smoke discovery", () => {
     expect(discovered.endpointCount).toBe(2);
     expect(discovered.tools.get(toolRef)).toEqual({
       serviceId: "service:owner",
-      offeringRef: tool.offering.offeringRef,
+      offeringRef: tool.listing.listingRef,
       authentication: { kind: "ae_api_key" },
       authorityMode: "provider_owned",
     });
@@ -67,8 +67,8 @@ describe("hosted Tool gateway smoke discovery", () => {
       "service:control",
     );
     expect(urls).toEqual([
-      "https://gateway.example/api/v1/services?limit=50",
-      "https://gateway.example/api/v1/services?limit=50&cursor=cursor%3A1",
+      "https://gateway.example/api/v1/businesses?limit=50",
+      "https://gateway.example/api/v1/businesses?limit=50&cursor=cursor%3A1",
     ]);
   });
 
@@ -94,7 +94,7 @@ describe("hosted Tool gateway smoke discovery", () => {
           toolRef,
           {
             serviceId: "service:owner",
-            offeringRef: tool.offering.offeringRef,
+            offeringRef: tool.listing.listingRef,
             authentication: { kind: "ae_api_key" as const },
             authorityMode: "provider_owned" as const,
           },
@@ -118,7 +118,7 @@ describe("hosted Tool gateway smoke discovery", () => {
     expect(discovered).toMatchObject({
       toolRef,
       businessId: "business:provider",
-      offeringRef: tool.offering.offeringRef,
+      offeringRef: tool.listing.listingRef,
       quote: { quoteRef: committedQuote().quoteRef },
     });
     expect(requests).toEqual([
@@ -157,7 +157,7 @@ describe("hosted Tool gateway smoke discovery", () => {
           toolRef,
           {
             serviceId: "service:owner",
-            offeringRef: tool.offering.offeringRef,
+            offeringRef: tool.listing.listingRef,
             authentication: {
               kind: "platform_credential" as const,
               scheme: "bearer" as const,
@@ -192,7 +192,7 @@ describe("hosted Tool gateway smoke discovery", () => {
           toolRef,
           {
             serviceId: "service:owner",
-            offeringRef: tool.offering.offeringRef,
+            offeringRef: tool.listing.listingRef,
             authentication: ownerKeyed.description.authentication,
             authorityMode: "provider_owned" as const,
           },
@@ -210,7 +210,7 @@ describe("hosted Tool gateway smoke discovery", () => {
           toolRef,
           {
             serviceId: "service:control",
-            offeringRef: tool.offering.offeringRef,
+            offeringRef: tool.listing.listingRef,
             authentication: { kind: "ae_api_key" as const },
             authorityMode: "provider_owned" as const,
           },

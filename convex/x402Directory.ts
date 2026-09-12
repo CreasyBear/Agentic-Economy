@@ -1,14 +1,33 @@
 "use node"
 
 import { v } from 'convex/values'
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { admitFacilitatorDiscoveryItems } from '@/modules/capability-supply/server'
 import { projectX402DirectoryEntry, readX402DirectoryRawPage } from '@/modules/market/x402-directory.server'
 import { x402DirectoryResolveInputSchema, type X402DirectoryResolution } from '@/modules/market/x402-directory'
-import { directoryEntryMatchesFilters } from '@/modules/market/x402-directory-index'
+import type { X402DirectoryEntry } from '@/modules/market/x402-directory'
+import { directoryEntryMatchesFilters, isDirectoryEntryEligible } from '@/modules/market/x402-directory-index'
+import { directoryMetadataFlags } from '@/modules/market/x402-directory-metadata'
 import { api, internal } from './_generated/api'
 import { action } from './_generated/server'
 import { reconcileReadyItems } from './capabilitySupplyShared'
 import { bindWorkloadCronActionContext } from './workloadCron'
+
+/**
+ * Ineligible resources refuse the same way a filter mismatch would:
+ * eligibility is the directory's own quality bar
+ * (src/modules/market/x402-directory-index.ts:isDirectoryEntryEligible).
+ * The payer clause is only enforced when the source actually reported
+ * activity at all (`entry.activity !== undefined`) — a resource with no
+ * activity telemetry whatsoever (as opposed to reported-and-insufficient)
+ * isn't a genuine discovery-catalogue observation to hold to this bar.
+ */
+function directoryResolutionEligible(entry: X402DirectoryEntry): boolean {
+  if (entry.activity === undefined) return true
+  const flags = directoryMetadataFlags(entry)
+  const payersOrder = entry.activity.payers30d ?? -1
+  return isDirectoryEntryEligible({ hasOutputSchema: flags.hasOutputSchema, hasOutputExample: flags.hasOutputExample, payersOrder })
+}
 
 /** Resolve only a server-retrieved directory resource selected by the customer. */
 export const resolve = action({
@@ -24,7 +43,10 @@ export const resolve = action({
       ...(context.maxUsdPrice === undefined ? {} : { maxUsdPrice: context.maxUsdPrice }),
     })
     let selected: unknown
-    if (indexed.kind === 'found') selected = JSON.parse(indexed.sourceJson) as unknown
+    if (indexed.kind === 'found') {
+      if (!directoryResolutionEligible(indexed.entry)) return { kind: 'unavailable', reason: 'resource_filters_mismatch' }
+      selected = JSON.parse(indexed.sourceJson) as unknown
+    }
     else if (indexed.kind === 'not_found') return { kind: 'unavailable', reason: 'resource_not_found' }
     else if (indexed.reason !== 'index_unavailable') return indexed
     else {
@@ -32,7 +54,9 @@ export const resolve = action({
       if (page.kind === 'unavailable') return page
       const candidate = page.items.find(item => item.resource === resource)
       if (candidate === undefined) return { kind: 'unavailable', reason: 'resource_not_found' }
-      if (!directoryEntryMatchesFilters(projectX402DirectoryEntry(candidate), context)) return { kind: 'unavailable', reason: 'resource_filters_mismatch' }
+      const candidateEntry = projectX402DirectoryEntry(candidate)
+      if (!directoryEntryMatchesFilters(candidateEntry, context)) return { kind: 'unavailable', reason: 'resource_filters_mismatch' }
+      if (!directoryResolutionEligible(candidateEntry)) return { kind: 'unavailable', reason: 'resource_filters_mismatch' }
       selected = candidate
     }
     try {
@@ -45,8 +69,8 @@ export const resolve = action({
       if (toolRef === undefined) return { kind: 'unavailable', reason: 'admission_unavailable' }
       const detail = await ctx.runQuery(api.capabilitySupplyTools.detail, { toolRef })
       return detail.kind === 'found' ? { kind: 'ready', toolRef } : { kind: 'unavailable', reason: 'tool_unavailable' }
-    } catch {
-      return { kind: 'unavailable', reason: 'admission_unavailable' }
+    } catch (cause) {
+      return degradeBackend(cause, { kind: 'unavailable', reason: 'admission_unavailable' }, { site: 'resolve', reason: 'source_unavailable' })
     }
   },
 })

@@ -11,6 +11,7 @@ import {
 import type {
   AccountSecurityHistoryResult,
 } from '@/modules/security/account-security'
+import { degrade } from '@/lib/observability/degrade'
 
 export function AeAccountSecurityHistory({
   initialResult,
@@ -34,8 +35,11 @@ export function AeAccountSecurityHistory({
       } else {
         setResult(next)
       }
-    } catch {
-      setResult({ kind: 'unavailable', reason: 'source_unavailable' })
+    } catch (cause) {
+      setResult(degrade(cause, { kind: 'unavailable', reason: 'source_unavailable' } as const, {
+        site: 'loadAccountSecurityHistory',
+        reason: 'source_unavailable',
+      }))
     } finally {
       setLoading(false)
     }

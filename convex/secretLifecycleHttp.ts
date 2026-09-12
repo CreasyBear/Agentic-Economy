@@ -1,6 +1,8 @@
 import { httpActionGeneric } from 'convex/server'
 
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { internal } from './_generated/api'
+import { env } from './_generated/server'
 
 const MAX_BODY_BYTES = 128 * 1024
 const TOKEN_PATTERN = /^[A-Za-z0-9_-]{43,128}$/u
@@ -40,8 +42,8 @@ async function readBody(request: Request): Promise<JsonRecord | undefined> {
   try {
     const value: unknown = JSON.parse(text)
     return isRecord(value) ? value : undefined
-  } catch {
-    return undefined
+  } catch (cause) {
+    return degradeBackend(cause, undefined, { site: 'readBody', reason: 'invalid_response' })
   }
 }
 
@@ -58,7 +60,7 @@ async function digest(value: string): Promise<Uint8Array> {
 
 async function channelAuthenticated(request: Request): Promise<boolean> {
   const supplied = bearer(request)
-  const configured = process.env.AE_SECRET_LIFECYCLE_RPC_TOKEN?.trim()
+  const configured = env.AE_SECRET_LIFECYCLE_RPC_TOKEN?.trim()
   if (supplied === undefined || configured === undefined || !TOKEN_PATTERN.test(configured)) return false
   const [left, right] = await Promise.all([digest(supplied), digest(configured)])
   let mismatch = left.byteLength ^ right.byteLength

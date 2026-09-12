@@ -183,7 +183,7 @@ export function AeOwnerOfferingsList({
         <AeEmptyState
           title="No Tools yet"
           description="Connect a source and choose the exact Tool AE should validate."
-          action={<Button asChild className="min-h-touch"><Link to="/owner/offerings/new">Add Tool</Link></Button>}
+          action={<Button asChild className="min-h-touch"><Link to="/owner/operations/new">Add Tool</Link></Button>}
         />
       ) : (
         <AeRecordTable
@@ -209,7 +209,7 @@ export function AeOwnerOfferingsList({
                 {compactOfferings.map((item) => {
                   const action = item.continuation ?? {
                     label: 'Open Tool',
-                    href: `/owner/supply/${encodeURIComponent(item.offering.offeringRef)}`,
+                    href: `/owner/operations/${encodeURIComponent(item.offering.offeringRef)}`,
                   }
                   return (
                     <li key={item.offering.offeringRef} className="grid min-w-0 gap-related py-related">
@@ -239,7 +239,11 @@ export function AeOwnerOfferingsList({
           rowAction={{
             kind: 'link',
             label: 'Open',
-            getHref: (item) => `/owner/supply/${encodeURIComponent(item.offering.offeringRef)}`,
+            // Well 8 Lane C: prefer the slug-resolved continuation href when
+            // this row came through the provider workspace projection - it
+            // is more precise than reconstructing one from offeringRef alone
+            // (which the route still accepts for pre-publish Tools).
+            getHref: (item) => item.continuation?.href ?? `/owner/operations/${encodeURIComponent(item.offering.offeringRef)}`,
             getAccessibleLabel: (item) => `Open ${item.offering.name}`,
           }}
         />

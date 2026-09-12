@@ -74,8 +74,11 @@ describe('MCP host adapter supply', () => {
     expect(response.status).toBe(200)
     const result = await readMcpBody(response)
     expect(supplyService.publish).toHaveBeenCalledOnce()
+    // Tool-level refusal (`kind: 'refused'`): a normal CallToolResult with
+    // `isError: true`, per the MCP spec, not a bare success envelope.
     expect(result.result).toMatchObject({
-      structuredContent: { result: { kind: 'refused', reason: 'boundary_probe' } },
+      isError: true,
+      structuredContent: { code: 'boundary_probe' },
     })
   })
 

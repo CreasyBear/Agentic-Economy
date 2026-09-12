@@ -55,7 +55,7 @@ function operationDescriptor(toolRef: string, summary = 'Current reference looku
       customerAnnotations: [],
     },
     business: { businessId: 'business:reference', slug: 'reference', name: 'Reference Services' },
-    offering: { offeringRef: 'offering:reference', revision: 1, label: 'Reference lookup', summary },
+    listing: { listingRef: 'listing:reference', revision: 1, label: 'Reference lookup', summary },
     summary,
     commercial: {
       price: { kind: 'fixed', amount: { currency: 'USD', units: '0', exponent: 2 } },

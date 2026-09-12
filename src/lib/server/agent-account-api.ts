@@ -1,5 +1,6 @@
 import { bearerChallenge } from '@/lib/http/oauth-challenge'
 import { gatewayFailureToProblem } from '@/lib/errors'
+import { degrade } from '@/lib/observability/degrade'
 import {
   authenticateAgentAccess,
   resolveAgentAccessPrincipal,
@@ -132,13 +133,13 @@ export async function handleAgentAccountActionPost(
     let rawBody: unknown
     try {
       rawBody = JSON.parse(bounded.text) as unknown
-    } catch {
-      return withRequestCorrelationHeader(problem({
+    } catch (cause) {
+      return degrade(cause, withRequestCorrelationHeader(problem({
         status: 400,
         kind: 'INVALID_ARGUMENT',
         code: 'invalid_json',
         detail: 'The account action body must be valid JSON.',
-      }), correlationId)
+      }), correlationId), { site: 'handleAgentAccountActionPost', reason: 'invalid_response' })
     }
     const action = accountMoneyActions[actionName]
     const parsed = action.schema.safeParse(rawBody)
@@ -172,12 +173,12 @@ export async function handleAgentAccountActionPost(
       return withRequestCorrelationHeader(response(projected.data, 200, {
         'Content-Type': 'application/json; charset=utf-8',
       }), correlationId)
-    } catch {
+    } catch (cause) {
       const failure = gatewayFailureToProblem({ kind: 'error', code: 'source_unavailable', retryable: true })
-      return withRequestCorrelationHeader(problem({
+      return degrade(cause, withRequestCorrelationHeader(problem({
         ...failure,
         detail: 'The account money source is temporarily unavailable.',
-      }), correlationId)
+      }), correlationId), { site: 'handleAgentAccountActionPost', reason: 'source_unavailable' })
     }
   })
 }

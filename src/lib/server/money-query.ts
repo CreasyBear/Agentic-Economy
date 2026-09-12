@@ -1,4 +1,4 @@
-import { callSourceQuery, sourceQuery } from '@/lib/server/convex-source'
+import { callSourceAction, sourceAction } from '@/lib/server/convex-source'
 import type {
   CreditAccountQuery,
   CreditAccountView,
@@ -32,14 +32,14 @@ type KeyUsageSourceResult = Readonly<
   | { kind: 'refused'; code: string; items: readonly [] }
 >
 
-const readCreditAccountQuery = sourceQuery<CreditAccountQuery, CreditAccountSourceResult>('moneyLedger:readCreditAccount')
-const listCreditActivityQuery = sourceQuery<CreditActivityQuery, CreditActivitySourceResult>('moneyLedger:listCreditActivity')
-const readKeyUsageQuery = sourceQuery<KeyUsageQuery, KeyUsageSourceResult>('moneyLedger:readKeyUsage')
+const readCreditAccountAction = sourceAction<CreditAccountQuery, CreditAccountSourceResult>('moneyLedger:readCreditAccount')
+const listCreditActivityAction = sourceAction<CreditActivityQuery, CreditActivitySourceResult>('moneyLedger:listCreditActivity')
+const readKeyUsageAction = sourceAction<KeyUsageQuery, KeyUsageSourceResult>('moneyLedger:readKeyUsage')
 
 export function createConvexMoneyQueryPort(): MoneyQueryPort {
   return {
     readCreditAccount: async (query) => {
-      const result = await callSourceQuery(readCreditAccountQuery, query)
+      const result = await callSourceAction(readCreditAccountAction, query)
       if (result.kind !== 'ok') throw new MoneyQueryError(result.code)
       return {
         principalId: result.principalId,
@@ -55,7 +55,7 @@ export function createConvexMoneyQueryPort(): MoneyQueryPort {
       }
     },
     listCreditActivity: async (query) => {
-      const result = await callSourceQuery(listCreditActivityQuery, query)
+      const result = await callSourceAction(listCreditActivityAction, query)
       if (result.kind !== 'ok') throw new MoneyQueryError(result.code)
       return {
         page: result.page,
@@ -64,7 +64,7 @@ export function createConvexMoneyQueryPort(): MoneyQueryPort {
       }
     },
     readKeyUsage: async (query) => {
-      const result = await callSourceQuery(readKeyUsageQuery, query)
+      const result = await callSourceAction(readKeyUsageAction, query)
       if (result.kind !== 'ok') throw new MoneyQueryError(result.code)
       return {
         credentialId: result.credentialId,

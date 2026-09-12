@@ -1,6 +1,7 @@
 "use node";
 
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { isBoundedJsonValue } from '@/modules/capability-contract/public'
 import { isRecord } from '@/modules/common/is-record'
 import type { StableHashValue } from '@/modules/common/stable-hash'
@@ -217,8 +218,8 @@ export function exactSellerCanarySnapshotMatches(input: Readonly<{
       && envelope.readinessValidUntil === snapshot.readinessValidUntil
       && operation.readiness.observedAt === envelope.readinessObservedAt
       && operation.readiness.validUntil === envelope.readinessValidUntil
-  } catch {
-    return false
+  } catch (cause) {
+    return degradeBackend(cause, false, { site: 'exactSellerCanarySnapshotMatches', reason: 'invalid_response' })
   }
 }
 
@@ -428,8 +429,12 @@ export async function prepareCallRun(
     const parsedInput: unknown = JSON.parse(dispatch.inputJson)
     if (!isBoundedJsonValue(parsedInput) || !isRecord(parsedInput)) throw new Error('input_invalid')
     input = parsedInput
-  } catch {
-    return await refuseBeforeClaim(ctx, dispatch, 'operation_unsupported', false, 'The admitted operation snapshot is invalid.')
+  } catch (cause) {
+    return degradeBackend(
+      cause,
+      await refuseBeforeClaim(ctx, dispatch, 'operation_unsupported', false, 'The admitted operation snapshot is invalid.'),
+      { site: 'prepareCallRun', reason: 'invalid_response' },
+    )
   }
   if (!isPrincipalEnvironmentCompatibleWithTool(principal.environment, operation)) {
     return await refuseBeforeClaim(

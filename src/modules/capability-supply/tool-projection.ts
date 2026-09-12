@@ -35,7 +35,7 @@ export {
 export type {
   ToolProjectionNavigationContract,
   PublicToolBusinessRef,
-  PublicToolOfferingRef,
+  PublicToolListingRef,
   PublicToolPrice,
   PublicToolPriceEvidence,
   PublicCommercialTerms,
@@ -46,6 +46,7 @@ export type {
   PublicRecoveryPolicy,
   PublicCapabilityUnavailableReason,
   PublicToolParameter,
+  PublicToolCanonical,
   PublicToolCatalogPrice,
   PublicToolAuthentication,
   PublicToolPayment,

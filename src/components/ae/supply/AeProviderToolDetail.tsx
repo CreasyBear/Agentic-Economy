@@ -1,6 +1,7 @@
 import { useState } from 'react'
 
 import { AeFactList } from '@/components/ae/data/AeFactList'
+import { degrade } from '@/lib/observability/degrade'
 import { AeConfirmDialog } from '@/components/ae/feedback/AeConfirmDialog'
 import { AeSection } from '@/components/ae/layout/AeSection'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -51,11 +52,11 @@ export function AeProviderToolDetail({
       const result = await action()
       setFeedback(result)
       if (result.kind === 'applied') setConfirmation(undefined)
-    } catch {
-      setFeedback({
+    } catch (cause) {
+      setFeedback(degrade(cause, {
         kind: 'refused',
         message: 'AE could not confirm the result. Reload this Tool before trying another action.',
-      })
+      }, { site: 'runProviderToolAction', reason: 'source_unavailable' }))
     } finally {
       setPending(false)
     }
@@ -172,7 +173,7 @@ function PrimaryAction({
   }
   switch (status.continuation?.action) {
     case 'supply.source.preview':
-      return <Button asChild className="min-h-touch w-fit"><a href={resumeHref ?? '/owner/offerings/new'}>Continue setup</a></Button>
+      return <Button asChild className="min-h-touch w-fit"><a href={resumeHref ?? '/owner/operations/new'}>Continue setup</a></Button>
     case 'supply.status':
     case 'supply.offboarding.status':
       return onRefresh === undefined ? null : <Button type="button" className="min-h-touch w-fit" disabled={pending} onClick={onRefresh}>{pending ? 'Refreshing…' : 'Refresh status'}</Button>

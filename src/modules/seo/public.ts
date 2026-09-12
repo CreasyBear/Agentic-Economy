@@ -1,4 +1,4 @@
-import type { PublicBusinessCatalogApiV2Dto, PublicOfferingDto } from '@/modules/registry/public'
+import type { PublicBusinessCatalogApiV2Dto, PublicListingDto } from '@/modules/registry/public'
 import type { JsonLdObject } from './internal/json-ld'
 export { serializeJsonLd } from './internal/json-ld'
 
@@ -20,7 +20,7 @@ export type BuildPublicBusinessSeoOptions = {
 }
 
 export type PublicBusinessSeoOffering = Pick<
-  PublicOfferingDto,
+  PublicListingDto,
   'offeringRef' | 'name' | 'category' | 'summary' | 'serviceAreaSummary'
 >
 

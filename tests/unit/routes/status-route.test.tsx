@@ -187,7 +187,7 @@ describe('/status route', () => {
       ],
     })
     const region = screen.getByRole('region', { name: 'Retry after the affected system recovers' })
-    expect(within(region).getByRole('link', { name: 'Get help' }).getAttribute('href')).toBe('/support')
+    expect(within(region).getByRole('link', { name: 'Help' }).getAttribute('href')).toBe('/support')
   })
 
   it('copies a degraded probe request reference to the clipboard', async () => {

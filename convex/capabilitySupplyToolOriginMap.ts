@@ -180,8 +180,8 @@ async function buildOfferingToolMap(
       if (record === undefined || !record.integrated || bindingDoc === null) continue
       if (!isPublicToolRef(publication.toolRef)) continue
       if (
-        record.offering.offeringRef !== origin.offeringRef
-        || record.offering.revision !== origin.offeringRevision
+        record.listing.listingRef !== origin.offeringRef
+        || record.listing.revision !== origin.offeringRevision
       ) continue
       const transport = parseAdmittedTransportCatalogMetadata(bindingDoc.adapterId, bindingDoc.configJson)
       if (transport === undefined) continue

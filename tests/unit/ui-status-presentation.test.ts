@@ -8,7 +8,6 @@ import {
   getStatusPresentation,
   offeringAccessToAeStatus,
   offeringSupportToAeStatus,
-  statusPresentation,
 } from '@/lib/ui/status-presentation'
 
 
@@ -42,25 +41,25 @@ describe('getStatusPresentation', () => {
   })
 
   it('covers one reachable status presentation for each P2-P5 phase', () => {
-    expect(statusPresentation.notification_bounced).toMatchObject({
+    expect(aeStatusPresentation.notification_bounced).toMatchObject({
       label: 'Notification bounced',
       compactLabel: 'Bounced',
       audience: 'owner',
       publicness: 'private',
       nextAction: 'Review suppression and contact-readback before retrying.',
     })
-    expect(statusPresentation.discovery_parity_failed).toMatchObject({
+    expect(aeStatusPresentation.discovery_parity_failed).toMatchObject({
       label: 'Discovery parity failed',
       compactLabel: 'Parity failed',
       tone: 'danger',
       disabledReason: 'Parity failure blocks public discovery claims.',
     })
-    expect(statusPresentation.protected_action_proof_gap).toMatchObject({
+    expect(aeStatusPresentation.protected_action_proof_gap).toMatchObject({
       label: 'Protected action proof gap',
       compactLabel: 'Proof gap',
       audience: 'operator',
     })
-    expect(statusPresentation.billing_provider_event_held).toMatchObject({
+    expect(aeStatusPresentation.billing_provider_event_held).toMatchObject({
       label: 'Billing provider event held',
       compactLabel: 'Held',
       nextAction: 'Bind or reject the event through reconciliation without granting entitlement.',

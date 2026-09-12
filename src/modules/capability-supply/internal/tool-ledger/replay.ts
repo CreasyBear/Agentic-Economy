@@ -1,3 +1,4 @@
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { stableStringify } from '@/modules/common/stable-hash'
 import type {
@@ -86,8 +87,11 @@ export async function replayQuarantineBinding(
   let payload: unknown
   try {
     payload = JSON.parse(stored.redactedPayloadJson ?? '')
-  } catch {
-    throw new Error('capability_supply_operation_integrity_failure')
+  } catch (cause) {
+    degradeBackend(cause, undefined, {
+      site: 'replayQuarantineBinding', reason: 'invalid_response',
+    })
+    throw new Error('capability_supply_operation_integrity_failure', { cause })
   }
   if (!validQuarantineAuditPayload(payload, command)) {
     throw new Error('capability_supply_operation_integrity_failure')

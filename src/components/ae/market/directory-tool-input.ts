@@ -3,13 +3,14 @@ import { createErrorHandler, getSchemaType, toErrorSchema, unwrapErrorHandler, v
 
 import { isBoundedJsonValue } from '@/modules/common/bounded-json'
 import { isRecord } from '@/modules/common/is-record'
+import { degrade } from '@/lib/observability/degrade'
 
 export function parsePlaygroundJson(text: string | undefined): unknown {
   if (text === undefined || text.length > 131_072) return undefined
   try {
     const value: unknown = JSON.parse(text)
     return isBoundedJsonValue(value) ? value : undefined
-  } catch { return undefined }
+  } catch (cause) { return degrade(cause, undefined, { site: 'parsePlaygroundJson', reason: 'invalid_response' }) }
 }
 
 export function playgroundSchema(text: string | undefined): RJSFSchema | undefined {
@@ -68,8 +69,8 @@ function validate(schema: RJSFSchema, value: unknown): RJSFValidationError[] {
         .map(segment => `[${JSON.stringify(segment.replaceAll('~1', '/').replaceAll('~0', '~'))}]`).join('')
       return { name: error.keyword, property: path, message: error.error, params: {}, stack: `${path || 'Input'}: ${error.error}`, schemaPath: error.keywordLocation }
     })
-  } catch {
-    return [{ name: 'schema', property: '', message: 'This schema cannot be validated here.', params: {}, stack: 'This schema cannot be validated here.' }]
+  } catch (cause) {
+    return degrade(cause, [{ name: 'schema', property: '', message: 'This schema cannot be validated here.', params: {}, stack: 'This schema cannot be validated here.' }], { site: 'validatePlaygroundSchema', reason: 'invalid_response' })
   }
 }
 

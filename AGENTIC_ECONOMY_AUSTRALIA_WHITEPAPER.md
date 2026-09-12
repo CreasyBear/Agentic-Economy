@@ -10,11 +10,13 @@
 
 Software agents are gaining the ability to discover, select, pay for and use outside services after a task has begun. This changes more than the speed of software procurement. It changes when the provider becomes known. A business can delegate work before either the business or its software developer knows which outside contribution the work will require.
 
-Payment protocols make this sequence technically possible. They can quote a price, authorise a transfer and return settlement evidence inside a machine request. They do not, by themselves, complete the resulting business purchase. Settlement does not establish the legal buyer and seller, the authority under which the software acted, the exact service and terms accepted, the treatment of data, the state of delivery, the remedy for failure or the record on which the buyer can later rely.
+Machine-payment protocols make this sequence technically possible. They can quote a price, authorise a transfer and return settlement evidence inside an HTTP request. They do not, by themselves, complete the resulting business purchase. Settlement does not establish the legal buyer and seller, the statutory authority under which the software acted, the treatment of personal data across borders, the capital gains or sales tax position, the state of delivery, the legal remedy for failure, or the audit record on which a company's financial accounts can rely.
 
-This paper calls the terminal, explainable state **commercial closure**. It argues that just-in-time service procurement requires a market institution that can preserve provider choice at the point of selection while presenting one accountable seller to the buyer. The proposed form is an accountable gateway operating a two-sided market for discovery and a principal-reseller relationship for the sale. Its market unit is the **Operation**: one versioned, callable contribution with fixed inputs, price, terms, effects and evidence.
+This paper calls the terminal, explainable state **commercial closure**. It argues that just-in-time service procurement requires a market institution that functions as a commercial and legal transformer: preserving open runtime provider selection above while presenting one accountable, closed-loop **Principal Reseller (Merchant of Record)** to the buyer. Its market unit is the **Operation**: one versioned, callable contribution with fixed inputs, price, terms, data destination, effects and evidence.
 
-Australia supplies the worked jurisdictional case. Its national business identity, goods and services tax, company-record, electronic invoicing and cross-border privacy systems impose overlapping obligations on the transaction. Joining those obligations into one explainable event is the proposed design response, not a claim that the legal structure has already been settled. Agentic Economy is the proposed implementation of this institution. Its purpose is not to replace payment protocols, agent runtimes or accounting systems. It is to make a service chosen by software during work recognisable as an authorised and remediable business purchase with a terminal delivery state.
+Australia supplies the worked jurisdictional case. Without an institutional intermediary, autonomous machine spending across crypto rails triggers fatal tax and corporate friction: s104-10 capital gains tax (CGT Event A1) on every machine call, Division 775 foreign currency realisation, and Australian Financial Services Licensing (AFSL) exposure for multi-party pooled balances under s763D. 
+
+Agentic Economy resolves this through a specific institutional design: a closed-loop Merchant of Record exempt from financial services licensing under Corporations Regulations reg 7.1.07A, an Electronic Distribution Platform operator under ATO ruling LCR 2018/2, and an accountable seller whose statutory liability is bounded under s64A of the Australian Consumer Law. Its purpose is not to replace payment protocols, agent runtimes or accounting systems. It is to make an outside service chosen by software recognisable as an authorised, taxable and remediable business purchase.
 
 ## 1. Introduction
 
@@ -22,15 +24,15 @@ The internet is acquiring a native payment path for software. An HTTP request ca
 
 These systems solve a real problem. They remove account creation, interactive checkout and much of the mechanical cost from small machine purchases. Their arrival exposes a second problem that is easy to mistake for payment reconciliation.
 
-A business purchase is not merely a transfer of value. It is a claim about standing and responsibility. It says that a legal principal authorised an actor to acquire a defined supply from a recognised seller on accepted terms; that some result or effect followed; that failure has a treatment; and that the event can be explained later to finance, audit, tax, risk and the parties themselves. Payment is evidence within that claim. It is not the claim in full.
+A business purchase is not merely a transfer of value. It is a claim about standing, authority and statutory responsibility. It says that a legal principal authorised an actor to acquire a defined supply from a recognised seller on accepted terms; that some result or effect followed; that failure has a legally enforceable treatment; and that the event can be explained later to finance, audit, tax, risk and the parties themselves. Payment is evidence within that claim. It is not the claim in full.
 
-This distinction becomes important when software selects the provider during execution. Enterprise software has long used dynamic infrastructure, exchanges and routing systems. The novelty is not that software can call an endpoint whose operator changes. The novelty is the combination of five conditions:
+This distinction becomes urgent when software selects the provider during execution. Enterprise software has long used dynamic infrastructure, exchanges and routing systems. The novelty is the combination of five conditions:
 
 1. the software is pursuing an objective rather than following a fully specified transaction path;
 2. it discovers a missing contribution only after the task has begun;
 3. it can compare providers that neither the buyer nor the developer selected in advance;
 4. it can commit funds, disclose information or cause an outside effect without a new human procurement cycle; and
-5. the business remains responsible for the resulting purchase.
+5. the business remains legally and financially responsible for the resulting purchase.
 
 Call this **just-in-time service procurement**. The upstream provider and exact supply are selected after the need appears, then bound before the service is invoked. Under principal resale, the buyer-facing seller is already known. Just-in-time procurement allows software to reach beyond its installed capabilities while preserving one commercial counterparty. It also reverses the ordinary sequence in which provider approval, contract formation and purchasing authority precede consumption.
 
@@ -38,27 +40,27 @@ The question of this paper is therefore institutional:
 
 > What commercial form allows a business to delegate the selection of an unknown outside service without delegating away its responsibility for the purchase?
 
-The answer developed here has four parts. First, the service must be represented as a bounded purchase rather than as a broad provider identity or endpoint. Second, authority must be granted as a policy before the need is known and resolved into an exact commitment before invocation. Third, the payment, service, delivery and remedy records must close into one commercial event. Fourth, a party must accept enough control and responsibility to present that event as one local sale to the buyer.
+The answer developed here has four parts:
+1. The service must be represented as a bounded, callable unit (the **Operation**) rather than an amorphous agent identity or endpoint.
+2. Authority must be granted as a policy mandate before the need is known and resolved into an exact, immutable **commitment** before invocation.
+3. The payment, service, delivery, tax attribution and remedy records must close into one coherent commercial event (**commercial closure**).
+4. The platform must step into the transaction as a **closed-loop Principal Reseller (Merchant of Record)**, absorbing upstream settlement complexity and presenting one domestic sale to the buyer.
 
-This produces a market that is open at the point of allocation and singular at the buyer's commercial boundary. Agentic Economy is the proposed name and implementation for that market.
+This produces a market that is open at the point of allocation and singular at the buyer's commercial boundary. Agentic Economy is the proposed name and implementation for that market institution.
 
 ### 1.1 Relation to prior work
 
-The argument joins fields that usually stop at different boundaries. Research on tool-using agents explains how software can choose and invoke outside capabilities [21, 22]. Machine-payment protocols explain how a request can carry price and settlement. Transaction-cost and incomplete-contract theories explain why firms choose particular boundaries for exchange [4, 5, 16]. Work on intermediaries and two-sided markets explains how a common institution can coordinate dispersed buyers and providers [8, 17, 18]. Australian law determines how one jurisdiction attributes and records the resulting event [9-15].
+The argument joins fields that usually stop at different boundaries. Research on tool-using agents explains how software can choose and invoke outside capabilities [21, 22]. Machine-payment protocols explain how a request can carry price and settlement. Transaction-cost and incomplete-contract theories explain why firms choose particular boundaries for exchange [4, 5, 16]. Work on intermediaries and two-sided markets explains how a common institution can coordinate dispersed buyers and providers [8, 17, 18]. Australian corporate and tax law determines how one jurisdiction attributes and records the resulting event [9-15, 23].
 
 None of these fields alone asks how an outside service, selected by software after delegated work has begun, becomes one recognisable business purchase. That is the paper's claimed contribution. It defines the missing completed state, identifies the Operation and commitment needed to reach it, and derives a market form that can provide it.
 
-The paper also makes an institutional inversion. Bitcoin showed how cryptographic proof could remove a trusted financial institution from electronic value transfer [20]. This proposal adds an accountable institution around the underlying purchase. The positions are compatible because settlement and commercial responsibility answer different questions. One concerns whether value moved. The other concerns what the principal authorised, received and can remedy.
+The paper also makes an institutional inversion. Bitcoin showed how cryptographic proof could remove a trusted financial institution from electronic value transfer [20]. This proposal adds an accountable institution around the underlying purchase. The positions are compatible because settlement and commercial responsibility answer different questions. One concerns whether value moved. The other concerns what the principal authorised, received, accounted for and can remedy.
 
 The method follows Berners-Lee's treatment of CERN as a model in miniature: start with a bounded setting in which a general structural problem is already visible, specify the missing relationships, and connect existing systems rather than replace them [19]. Australia serves that role here.
 
-Agent-mediated electronic commerce is not new. Maes, Guttman and Moukas described software agents moving through product brokering, merchant brokering, negotiation, purchase and delivery in 1999 [25]. That work established automated market choice and bargaining. It did not address a principal reseller that converts a provider chosen during delegated business work into one locally attributable service purchase.
+Current protocols move closer to the authority problem. AP2 defines signed Checkout and Payment Mandates and receipts that bind an agent's authority to a checkout and payment [26]. Its specification leaves catalogue, checkout update and other commerce APIs outside scope. x402 and Nevermined carry price, access and settlement. Smart contracts can execute encoded conditions. These systems can contribute authoritative evidence to commercial closure; none accepts the buyer-facing sale or joins it to upstream provider performance, statutory tax attribution and local statutory remedy.
 
-Current protocols move closer to the authority problem. AP2 defines signed Checkout and Payment Mandates and receipts that bind an agent's authority to a checkout and payment [26]. Its specification leaves catalogue, checkout update and other commerce APIs outside scope. x402 and Nevermined carry price, access and settlement. Smart contracts can execute encoded conditions. These systems can contribute authoritative evidence to commercial closure; none necessarily accepts the buyer-facing sale or joins it to upstream provider performance and local remedy.
-
-Procure-to-pay systems join a purchase order, receipt and invoice, often through two-way or three-way matching. They assume an identified seller and an order already recognised by the firm. Electronic-contracting law establishes that agreements and signatures need not fail merely because they are electronic [27]. Cloud and API marketplaces consolidate procurement for offerings selected before use, often under one bill [24]. Merchant-of-record and principal-reseller services consolidate the buyer-facing sale, but are usually designed around a human selecting a known product or subscription. Electronic distribution platform law allocates tax responsibility within its statutory scope; it is not a general transaction model.
-
-The contribution claimed here is narrower than autonomous commerce and broader than settlement finality. It is a transaction model that binds runtime capability resolution, delegated authority, a versioned service commitment, invocation, buyer consideration, upstream settlement, attributed delivery and remedy for a provider the principal did not select before work began.
+The contribution claimed here is narrower than autonomous commerce and broader than settlement finality. It is a transaction model that binds runtime capability resolution, delegated authority, a versioned service commitment, invocation, buyer consideration, upstream settlement, attributed delivery and statutory remedy for a provider the principal did not select before work began.
 
 ## 2. The transaction that appears during work
 
@@ -76,304 +78,297 @@ This does not imply that every capability should move into an open market. A pre
 
 The economic territory is clearest when the value of the outside contribution exceeds its purchase price but does not justify the fixed human cost of approving a new provider. A three-dollar verification may be valuable to the task and still be impossible to buy through a conventional vendor process. Lowering the price to three cents does not remove this problem. It makes the fixed cost more dominant.
 
-### 2.2 The unit of exchange
+### 2.2 The unit of exchange: the Operation
 
-A service market needs an object precise enough to compare, authorise, buy and remedy. A provider is too broad. An endpoint describes a technical location but not a commercial promise. An agent identity may contain many capabilities and may change its behaviour without changing its name.
+A service market needs an object precise enough to compare, authorise, buy and remedy. A provider identity is too broad. An endpoint describes a technical network location but not a commercial promise. An agent identity may contain many disparate capabilities and may change its behaviour without changing its identifier.
 
-This paper uses the **Operation** as the unit of exchange.
+This paper defines the **Operation** as the unit of exchange.
 
 | Term | Definition |
 | --- | --- |
 | Principal | The person or legal entity that owns the objective, delegates authority, bears the economic result and appears in the business record. |
 | Agent | A software process that selects or invokes Operations under authority granted by a principal. The agent is a technical actor, not a separate legal person. |
 | Capability gap | A bounded contribution that the agent cannot obtain from its installed capabilities. |
-| Provider | The upstream party that performs an Operation and owes its performance obligations to the seller. The provider may be selected during execution. |
-| Seller | The party that contracts with the principal, makes the buyer-facing sale and owes the stated delivery condition and remedy. Under the proposed model, Agentic Economy is the fixed seller. |
-| Payment recipient | The party that receives a settlement movement. Depending on the rail and payment leg, this may be the seller, its payment agent or the provider. |
-| Operation | One versioned, callable contribution from one provider, specifying its required inputs, price, material terms, data handling, possible effects, readiness and available evidence. |
-| Commitment | An expiring record that binds a principal's authority to one exact Operation revision, price and invocation context before money, data or external effect is released. |
+| Provider | The upstream party that performs an Operation and owes its performance obligations to the seller. |
+| Seller | The party that contracts with the principal, makes the buyer-facing sale and owes the stated delivery condition and remedy. In this model, Agentic Economy is the fixed seller. |
+| Operation | One versioned, callable contribution from one provider, specifying its required inputs, price, material terms, data handling, possible effects, proof class, readiness and available evidence. |
+| Commitment | An expiring, cryptographically signed record that binds a principal's authority to one exact Operation revision, price ceiling and invocation context before money, data or external effect is released. |
 | Invocation | One accepted attempt to execute an Operation under one commitment. |
-| Commercial closure | A proposed terminal state in which the parties, authority, Operation, attributed tax position and basis, delivery outcome, remedy, payment and accounting reference agree well enough for the principal to explain and defend the purchase. Delivered, failed, refunded and adjusted may be closed states; uncertain remains open. |
+| Commercial closure | A terminal state in which the parties, authority, Operation, attributed tax position, delivery outcome, remedy, payment and accounting references agree sufficiently for the principal to defend the purchase under corporate and tax law. |
 
-The Operation does not promise the success of the principal's larger task. A court-record lookup may promise a search of a named register under stated inputs and return conditions. It does not promise that the principal will win a case. A translation Operation may promise a translation under a stated quality and delivery rule. It does not promise that the recipient will accept the document. This boundary is essential. The market can accept responsibility for the purchased contribution without becoming the owner of every objective pursued by software that uses it.
+The Operation does not promise the success of the principal's larger task. A court-record lookup promises a search of a named register under stated inputs and return conditions. It does not promise that the principal will win a litigation. A land-title search promises the retrieval of a registered folio from a state registry; it does not promise the property is a sound investment. 
 
-### 2.3 Delegation before selection
+This boundary is essential. The market can accept responsibility for the purchased contribution without becoming the insurer of every unbounded objective pursued by software that uses it.
 
-The principal cannot approve the exact provider at \(t_0\) because the relevant state is not yet known. It can define a mandate over the class of purchases the agent may later make. The mandate may restrict maximum price, total exposure, service category, provider class, jurisdiction, data destination, external effect, expiry and evidence required. It need not name the final provider.
+### 2.3 Delegation before selection: mandates and commitments
 
-At \(t_c\), the market resolves that prior mandate into one exact commitment. If the provider, price, terms, data treatment, effects or Operation revision changes before invocation, the commitment no longer matches and cannot be reused.
+The principal cannot approve the exact provider at \(t_0\) because the relevant state is not yet known. It can, however, define a **mandate** over the class of purchases the agent may later make. The mandate specifies:
+- Maximum price per invocation and aggregate session budget;
+- Permitted service categories and proof classes;
+- Prohibited jurisdictions and data export boundaries (e.g., APP 8 compliance);
+- Required evidence standards (e.g., cryptographic proof of origin);
+- Permitted side effects (read-only queries vs. external state mutations).
 
-This two-stage structure follows the underlying information problem. Authority must exist before the agent can act, but precision can exist only after the need is known. Approval of every call preserves precision by destroying autonomy. An unrestricted wallet preserves autonomy by discarding the commercial scope of authority. A mandate followed by exact commitment preserves both.
+At \(t_c\), the market resolves that prior mandate into one exact, immutable **commitment**. If the provider, price, terms, data treatment, effects or Operation revision changes before invocation, the commitment fails validation and execution is halted.
 
-Grossman and Hart's account of incomplete contracts helps explain why this sequence matters [16]. The principal cannot specify every future service choice when work begins because the relevant need, provider and state are not yet known. The answer is not an infinitely detailed initial contract. It is a bounded allocation of control followed by a precise contract when the missing information appears.
+Grossman and Hart's account of incomplete contracts explains why this sequence is optimal [16]. The principal cannot specify every future service choice when work begins because the relevant need and candidate supply are unknown. The answer is not an impossible, infinitely detailed initial contract, nor is it an unconstrained wallet that surrenders control. It is a bounded allocation of authority followed by an exact, verifiable contract when runtime information appears.
 
 ## 3. Settlement is not commercial closure
 
 ### 3.1 What machine-payment protocols establish
 
-x402 turns a digital resource into a paid request. The seller returns payment requirements; the client constructs a payment payload; a facilitator can verify and settle it; the client receives access [1]. Nevermined extends this pattern with registered services and plans, delegated card and stablecoin spending, budgets, access validation and a payment ledger [2]. These are substantial pieces of machine commerce.
+x402 turns an HTTP endpoint into a paid resource. The seller returns payment requirements via a 402 status; the client constructs a payment payload; a facilitator verifies and settles it on-chain; the client receives access [1]. Nevermined extends this with registered services, delegated card and stablecoin spending, and access validation [2].
 
-Their proper role is easiest to see by defining a generic payment record \(P\):
+Their proper role is seen by defining a generic payment record \(P\):
 
 \[
-P = (payer, payee, amount, asset, time, request, settlement\ status)
+P = (payer, payee, amount, asset, timestamp, request\_id, settlement\_status)
 \]
 
-Implementations may add identifiers, delegations, resource locations and receipts. These additions improve traceability. They do not make payment settlement identical to completion of the underlying sale. Nevermined's published terms illustrate the distinction. They describe software that prepares or facilitates transactions, disclaim an intermediary or custodial role, and leave relevant legal and tax responsibilities with users [3]. That is a coherent boundary for infrastructure designed to travel across jurisdictions.
+These additions improve settlement efficiency. They do not make payment settlement identical to completion of the underlying sale. Nevermined's published terms illustrate the distinction: they describe software that prepares or facilitates transactions, disclaim an intermediary or custodial role, and leave all legal, tax, and commercial responsibilities with the users [3]. That is a coherent boundary for global, non-custodial software infrastructure. It is also an institutional void for a commercial enterprise.
 
-Principal resale creates at least two financial legs. The buyer-facing consideration record \(P_B\) states what the principal owes, has reserved, has paid to the seller, or is due to receive back. The upstream record \(P_U\) states what the seller owes, has paid to the provider, or is entitled to recover. A funding movement may precede both. A rail can settle either leg, but the legs have different parties and obligations and must not be collapsed into one transfer.
+Principal resale creates two distinct financial legs:
+1. The buyer-facing consideration record \(P_B\) states what the principal owes, has reserved, or has paid to the seller (Agentic Economy), or is due to receive back as an adjustment.
+2. The upstream record \(P_U\) states what the seller owes, has paid to the provider, or is entitled to recover under non-performance.
 
-The boundary also leaves an institutional layer open.
+Collapsing these two legs into one direct transfer between buyer and provider destroys the intermediary's ability to provide domestic invoicing, tax attribution and statutory warranty.
 
 ### 3.2 The closed commercial record
 
-Commercial closure is an analytical state proposed by this paper, not a statutory category or a claim of legal finality. The purchase passes through distinct moments: commitment records buyer-facing contract formation; payment records track consideration and upstream obligations; operational resolution records delivery or failure; and accounting and tax reconciliation attributes the event on a stated basis. These moments may occur at different times and may later produce an adjustment.
-
-Let \(C\) be the linked record required to explain the purchase in a terminal state:
+Commercial closure is the terminal state required to explain a purchase to auditors, corporate regulators and tax authorities. Let \(C\) be the linked record:
 
 \[
 \begin{aligned}
 C =\ &(P_B, P_U) \\
-&+ \text{legal principal, recognised seller and upstream provider} \\
-&+ \text{delegated authority and acting software identity} \\
-&+ \text{exact Operation revision and accepted terms} \\
-&+ \text{local price, currency basis, attributed tax position and basis} \\
-&+ \text{information disclosure and external effects} \\
-&+ \text{delivery, failure and remedy state} \\
-&+ \text{accounting and evidentiary references}.
+&+ \text{legal principal, domestic seller of record, and upstream provider} \\
+&+ \text{delegated authority version, mandate reference, and acting agent identity} \\
+&+ \text{exact Operation revision, proof class, and accepted terms} \\
+&+ \text{local currency price, GST attribution, and electronic invoice identifier} \\
+&+ \text{cross-border data disclosures and recorded external effects} \\
+&+ \text{delivery state, execution evidence, and applicable statutory remedy} \\
+&+ \text{statutory record retention and general ledger reference}.
 \end{aligned}
 \]
 
-The two payment records contribute facts to \(C\), but cannot produce \(C\) alone. Nor must both be cash-settled for the buyer-facing purchase to reach a terminal state. An Operation can be delivered, invoiced and closed while buyer consideration or the upstream provider payable remains due. The records must identify the state of each obligation rather than equate closure with cash movement. A transaction hash may prove that an asset moved between addresses. A card charge may prove that a merchant submitted a payment. Neither fact alone proves what bounded service was authorised, whether it was delivered, whose information was disclosed, why a retry produced a second charge or which party must provide an adjustment.
+A card charge or an on-chain transaction hash proves only that consideration moved. Neither proves what bounded service was authorised, whether the data conformed to the contract, whose personal information crossed a border, why a retry incurred a duplicate charge, or which party owes a refund if the payload is corrupted.
 
-Closure does not mean successful delivery. Delivered, failed, refunded and adjusted can each be terminal and explainable. An invocation whose external effect remains uncertain is still open. A later tax or accounting correction creates a new attributed state without erasing the evidence on which the earlier state rested.
+Closure does not require successful delivery: *Delivered*, *Failed*, *Refunded*, and *Adjusted* are each valid, terminal, explainable states. An invocation whose external effect remains unconfirmed is *Uncertain* and remains open.
 
-No single database needs to originate every part of \(C\). The payment provider should remain authoritative for raw settlement. The upstream provider should remain authoritative for its execution logs. The market should be authoritative for the Operation presented, the commitment and the invocation identity. The reseller should be authoritative for the buyer-facing sale, adjustment and remedy. The customer's accounting system should remain authoritative for its general ledger. Commercial closure links these records without pretending that one can substitute for another.
+**Claim 1: Settlement and commercial closure are independent states.** Either payment leg can settle while the business purchase remains open, and the purchase can close while a payment leg remains payable. Closure requires standing, authority, exact supply, consideration state, delivery outcome, tax attribution and the applicable legal remedy.
 
-### 3.3 Evidence is part of the service
+## 4. The economics of provider uncertainty and admission
 
-For machine-consumed work, the result alone may be insufficient. An agent needs to know whether a failed response means that the service did not run, ran without returning, or performed an outside action whose confirmation was lost. The next safe step differs in each case. Repeating a classification is wasteful. Repeating a booking, transfer or filing may be harmful.
+### 4.1 The relationship-cost threshold
 
-The traded contribution therefore includes the evidence required to decide what happened and what remedy follows. Evidence quality is not an accounting afterthought. It is one dimension on which Operations compete.
+Coase established that using an open market entails transaction costs: discovering prices, negotiating terms, and inspecting performance [4]. Williamson showed that governance structures exist to protect against opportunism and contractual failure [5].
 
-This yields the paper's first claim.
-
-**Claim 1: Settlement and commercial closure are independent states.** Either payment leg can settle while the business purchase remains open, and the purchase can close with one leg recorded as payable. Payment infrastructure is necessary for a machine service market, but it is not sufficient. Closure requires standing, authority, exact supply, consideration state, a terminal delivery state and the applicable remedy.
-
-## 4. The economics of provider uncertainty
-
-### 4.1 The cost that payment does not remove
-
-Coase's account of the firm begins with a fact that remains true on programmable payment rails: using a market has a cost [4]. Buyers must discover prices, reach agreements and organise exchange. Williamson later made the transaction the unit of analysis and treated governance as the means by which parties preserve value after commitment, including when performance fails or circumstances change [5].
-
-Agent services lower the production and search cost of specialised contributions. They can also multiply the number and variety of exchanges a firm might make. A payment protocol can reduce the mechanical cost of quoting, credential exchange and settlement. It does not necessarily remove the fixed cost of accepting a provider, establishing terms, assigning authority, supporting records and arranging a remedy.
-
-Consider one outside provider and \(n\) eligible buyers during a period. For this illustrative model, assume buyer needs are independent and identically distributed, and let \(q\) be the probability that each buyer first needs that provider during the period. A direct relationship costs each buyer \(F\) when the provider is first used. The expected fixed cost of direct procurement is therefore:
+Consider one outside provider and \(n\) eligible buyers during a period. Let \(q\) be the probability that a buyer needs that provider. A direct relationship costs each buyer \(F\) in human procurement, vendor vetting, and billing setup. The expected cost of direct bilateral procurement across the market is:
 
 \[
 E[C_D] = nqF
 \]
 
-Let the gateway pay admission cost \(A\) once if at least one buyer needs the provider. That event has probability \(1-(1-q)^n\). For each realised buyer-provider use, let \(m\) be the gateway margin, \(r\) the expected remedy and performance-risk cost, and \(h\) the allocated cost of the buyer's common gateway relationship. Ignoring the underlying service price, which both arrangements incur, expected mediated cost is:
+Now let a commercial gateway admit that provider once at cost \(A\). For each realised transaction, let \(m\) be the gateway margin, \(r\) the expected remedy and performance-risk cost absorbed by the gateway, and \(h\) the allocated cost of the buyer's single relationship with the gateway. The expected mediated cost is:
 
 \[
 E[C_G] = A[1-(1-q)^n] + nq(m+r+h)
 \]
 
-Intermediation has a cost advantage when:
+Intermediation has a structural economic advantage when:
 
 \[
-nq(F-m-r-h) > A[1-(1-q)^n]
+nq(F - m - r - h) > A[1 - (1 - q)^n]
 \]
 
-The assumptions are explicit. Direct procurement pays a fixed cost only when a provider is actually first used. The gateway admits that provider once and can reuse the admission across buyers. It adds a margin and expected remedy cost to each exchange. Correlated demand changes the probability of reuse and should replace \(1-(1-q)^n\) with the observed probability that at least one buyer needs the provider. The model predicts a gateway advantage when reused admission savings exceed its margin, risk and governance costs. It predicts direct integration when demand is stable and frequent for one buyer, when admission cannot be reused, or when the provider relationship is too specific for a common contract.
+As the monetary price of an invocation falls toward cents, \(F\) (the human cost of approving a counterparty) dominates the economic decision. Direct procurement makes micro-capabilities unbuyable. A gateway unlocks them by amortising admission \(A\) across \(n\) buyers.
 
-Lower payment friction strengthens this argument. As the monetary price of an invocation falls, the fixed cost of forming a new commercial relationship becomes a larger share of the exchange. Micropayments do not abolish intermediation. They make a common commercial boundary more valuable.
+### 4.2 Controlling remedy exposure: proof classes and provider bonds
 
-**Claim 2: Just-in-time selection creates a relationship-cost threshold.** When the provider is selected during work and the fixed cost of direct onboarding exceeds the value created by a bounded contribution, otherwise useful exchanges do not occur. A gateway can move that threshold only when reused admission savings exceed its margin, risk and governance costs.
+The central vulnerability of the gateway is \(r\): the risk of provider non-performance. If the gateway acts as Principal Reseller, an influx of low-quality or malicious providers will cause \(r\) to exceed the admission savings, collapsing the exchange.
 
-### 4.2 Delegated authority is the limiting resource
+Agentic Economy resolves this through **Proof Classes** and **Algorithmic Provider Bonding**:
 
-Jensen and Meckling define an agency relationship around delegated decision authority and the costs of monitoring, bonding and residual divergence [6]. Aghion and Tirole distinguish formal authority from real authority: the right to decide is not the same as effective control over a decision [7]. The distinction applies directly to software that can spend.
+1. **Class 1 (Deterministic / Verifiable Operations):** The Operation provides a mathematically or cryptographically verifiable output (e.g., hash-checked registry records, signed receipts, deterministic code execution). Delivery failure is binary and immediately detectable. The remedy is an automated, instant credit refund. The gateway's risk exposure \(r\) is zero.
+2. **Class 2 (Heuristic / Community Operations):** The Operation involves unverified third-party code or generative computation. To list an Operation in Class 2, the provider must post a **micro-bond** (in stablecoin escrow or via rolling settlement reserves held by the gateway). If an invocation fails the contract schema or times out, the remedy is deducted directly from the provider's bond.
 
-A principal may retain the formal right to approve purchases. If the economic benefit of the agent depends on many immediate choices, the software holds real authority unless constraints travel with each purchase. A wallet limit answers only whether funds may move. Purchase authority must also bind service scope, counterparty conditions, information use, external effects and the rule for failure.
+By matching admission standards to verifiable proof classes, the gateway scales supply without taking unhedged balance-sheet exposure.
 
-The market's scarce input is therefore not funds. It is delegated authority that the principal can safely expand. Authority controls demand. A system that makes each state-contingent choice inspectable and attributable can support more autonomy than one that merely gives software a balance.
+**Claim 2: Just-in-time selection creates a relationship-cost threshold.** When the provider is selected during work and the fixed cost of direct onboarding exceeds the value created by a bounded contribution, otherwise useful exchanges do not occur. A gateway moves that threshold only when amortised admission savings exceed its margin, governance, and bonded remedy costs.
 
-**Claim 3: Payment authority is narrower than purchase authority.** Where useful purchases depend on runtime information, a market can support autonomous demand only to the extent that principals can delegate state-contingent purchase authority without surrendering control over the resulting commercial events.
+## 5. Institutional forms: why the Merchant of Record wins
 
-## 5. Which institution closes the purchase?
+Several commercial structures could attempt to close the purchase. They must be evaluated against the operational requirements:
 
-The need for commercial closure does not establish that a new company must provide it. Several arrangements can occupy the role. They should be compared against the same requirements.
+| Arrangement | Choice during execution | Single buyer relationship | Authority before spend | Seller of record & remedy | Closed purchase record |
+| --- | :---: | :---: | :---: | :---: | :---: |
+| Direct provider onboarding | Delayed | No | Yes | Provider | Yes |
+| Fixed approved catalogue | Limited to prior set | Yes | Yes | Catalogue owner | Yes |
+| Neutral payment router (pure x402) | Broad | No (wallet per counterparty) | No | None | No |
+| Disclosed agency (Broker) | Broad | Agency only | Yes | Provider | Fragmented across providers |
+| Retrospective accounting sync | Broad | No | No | None | Partial and late |
+| Accountable Commercial Gateway (aecon MoR) | **Broad within admitted supply** | **Yes (One ABN)** | **Yes (Mandate + Commitment)** | **aecon (Bounded s64A)** | **Yes (s286 Subledger)** |
 
-| Arrangement | Choice during execution | One buyer relationship | Authority before spend | Seller and remedy | Closed purchase record |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| Direct provider onboarding | Delayed | No | Yes | Yes | Yes |
-| Fixed approved catalogue | Limited to prior set | No | Yes | Yes | Yes |
-| Neutral payment router | Broad | Payment only | Sometimes | Usually no | No |
-| Disclosed agency under standard provider terms | Broad | Agency relationship | Yes | Provider | Distributed across providers |
-| Retrospective reconciliation | Broad | No | No | No | Partial and late |
-| Agent platform as reseller | Possible | Yes | Possible | Possible | Possible |
-| Accountable commercial gateway | Broad within admitted supply | Yes | Yes | Yes | Yes |
+A neutral router preserves open choice but leaves statutory liability, tax reporting, and remedy distributed across anonymous web addresses. A disclosed agent or broker introduces thousands of foreign counterparties onto the buyer's books.
 
-Direct onboarding remains the right arrangement for known, repeated providers. A fixed catalogue trades breadth for control. A neutral router preserves breadth and lowers settlement cost but leaves the underlying counterparties and remedies distributed. A disclosed agent can use standard provider terms and form purchases for the principal, but each provider remains the buyer's seller and the buyer retains a changing set of counterparties, tax positions and remedies. Retrospective accounting can classify a payment after the event, but it cannot recreate authority before disclosure or undo an external effect. An agent platform can become the reseller, although doing so requires it to accept a different legal, tax and operational role in each buyer jurisdiction.
+The **closed-loop Principal Reseller (Merchant of Record)** is the only form that completely reconciles open machine choice with corporate accounting:
+- Upstream, the gateway operates a competitive, multi-sided market for capability discovery and allocation.
+- Downstream, the gateway sells the completed Operation to the buyer as principal.
 
-The accountable gateway is not costless. It must admit providers, control what it sells, hold upstream agreements, state the buyer-facing terms, verify enough delivery to apply a remedy, issue records and carry fraud, refund and performance exposure. Those obligations limit the services it can responsibly offer and require a fee or margin.
+Hagiu and Wright distinguish a marketplace (where suppliers sell directly to buyers) from a reseller (which buys upstream and sells downstream) [8]. Agentic Economy unifies both at different boundaries: it is a marketplace for discovery and an MoR for the commercial sale.
 
-Its distinct property is that it preserves provider competition above a consolidated buyer-facing sale. Hagiu and Wright distinguish a marketplace, in which providers sell directly to buyers, from a reseller, which buys upstream and sells downstream [8]. Agentic Economy combines the two forms at different boundaries. It is a two-sided market for discovery, comparison and allocation. It is a principal reseller for the relationship with the buyer.
+**Claim 3: Open choice and commercial responsibility are compatible at different layers.** When a buyer values one counterparty, a single tax invoice, and an enforceable local remedy more than bilateral provider contracts, an agent can choose among competing providers while its principal transacts through one accountable Merchant of Record.
 
-This form also follows Spulber's account of intermediation as the creation and governance of exchange, not merely the reduction of an existing cost [17]. A small Operation may never be purchased under bilateral contracting. By reusing admission, authority, evidence and remedy across many exchanges, the intermediary can make a previously uneconomic market exist. Rochet and Tirole's two-sided-market model then explains the participation effects: more suitable Operations raise buyer value; more authorised demand raises provider value; better evidence can improve both by increasing the probability of successful allocation [18].
+## 6. The architecture of Agentic Economy
 
-The combination follows a control-responsibility rule:
+Agentic Economy is not a general agent framework, a model orchestrator, a payment protocol, or an ERP. It is the commercial boundary and transactional clearinghouse for external capability procurement.
 
-> A party that promises a common commercial outcome must hold enough control to admit providers, define the sale, verify delivery, suspend supply, issue adjustments and provide a remedy.
-
-Responsibility without these rights is unstable. Control without buyer-facing responsibility is gatekeeping. Principal resale is the cleanest form when the buyer values one seller and the intermediary must control delivery and remedy across changing providers. Agentic Economy controls admission and buyer-facing terms, promises the bounded delivery condition, determines the buyer's adjustment or refund, bears buyer-facing non-performance exposure, and holds upstream recourse against the provider. The provider performs the Operation and owes its upstream obligations to Agentic Economy. Neither party owns the principal's larger objective.
-
-**Claim 4: Open choice and commercial responsibility are compatible at different layers.** When a buyer values one counterparty and common remedy more than direct control of each provider relationship, an agent can choose among competing providers while its principal buys through one accountable seller. Principal resale is justified when the seller's control over admission, commitment, evidence and remedy supports the bounded promise it makes.
-
-## 6. The institutional design of Agentic Economy
-
-Agentic Economy follows from the role just derived. It is not a general agent runtime, a planning system, a new payment protocol or a replacement general ledger. It is the market and commercial boundary for an Operation that an existing agent needs but cannot perform with its installed capabilities.
-
-Its decision chain is:
+Its execution pipeline enforces structural separation:
 
 ```text
-capability gap -> resolution -> commitment -> invocation -> result -> outcome evidence
+Capability Gap -> Resolution -> Commitment -> Controlled Invocation -> Result Verification -> Commercial Closure
 ```
 
-Resolution turns a bounded need into comparable candidate Operations. Commitment freezes the exact provider, revision, price, terms, data treatment, effects and applicable authority. Invocation executes only that commitment. The commercial event closes as delivered, failed, adjusted or refunded. It remains open while delivery or an external effect is uncertain. Outcome evidence records what the market can legitimately know about usefulness without confusing a buyer report with an observed fact or a provider claim.
+### 6.1 Separation of funding, authority and purchase
 
-The responsibility boundary is equally important:
+Traditional payment gateways equate available balance with purchasing authority. In enterprise systems, this causes immediate failure: an agent given access to a funding source can drain it without restriction.
 
-```text
-principal and its agent
-  own the larger objective, delegation and use of the result
-          |
-          v
-Agentic Economy
-  owns presentation, commitment, controlled invocation,
-  buyer-facing sale, purchase evidence and remedy
-          |
-          v
-upstream provider and payment rail
-  provider performs under its contract with Agentic Economy
-  payment rail owns raw settlement evidence
-          |
-          v
-buyer accounting system
-  owns the general ledger and statutory accounts
-```
-
-The Agentic Economy record is an authoritative subledger for purchased Operations. It does not decide the buyer's final accounting classification. It supplies the facts that classification requires and preserves their relationship to the actual invocation.
-
-### 6.1 Funding is not authority and authority is not purchase
-
-A prepaid account is a mature way to separate treasury from high-frequency purchasing. The buyer funds one balance through an ordinary financial process. That creates available funds, not an instruction to spend them. The principal separately grants a mandate. Each later commitment reserves an amount. A delivered Operation creates the buyer-facing sale and provider payable. Failure releases the reservation or creates the stated adjustment.
-
-The states must remain distinct:
+Agentic Economy enforces a strict state invariant:
 
 \[
-\text{available funds} \neq \text{permission to buy} \neq \text{closed purchase}
+\text{funded balance} \neq \text{permission to buy} \neq \text{closed purchase}
 \]
 
-This structure allows card, bank, stablecoin, x402 and future rails to sit underneath the same commercial event. The rail can change without changing the buyer's authority model or purchase record.
+1. **Funding:** The buyer establishes an account with aecon in domestic fiat (AUD). This funds available credits or establishes a post-paid metered billing line. No money has moved to any provider; no purchase has occurred.
+2. **Authority (Mandate):** The principal grants an immutable, signed policy setting the boundaries within which its agent may seek external capabilities.
+3. **Reservation:** At runtime commitment, the platform reserves the exact agreed fee against the buyer's balance.
+4. **Closure:** Upon verified delivery, the reservation converts into a recognized domestic sale, an itemized subledger entry is recorded, and an upstream payable to the provider is recognized for settlement.
 
-The funded facility cannot be treated as a mere ledger choice. Custody, redemption, withdrawal, permitted payees and the rights attached to stored value can determine whether Australian financial-services or non-cash-payment rules apply. ASIC notes that facilities which let a client make non-cash payments to more than one person are generally financial products, subject to the exact arrangement and applicable exclusions [23]. A principal-reseller balance usable only for purchases from its issuer may produce a different analysis. The legal structure must be settled before the funding model is implemented.
+### 6.2 The commitment as the constitutional event
 
-### 6.2 The commitment is the constitutional moment
+Search is speculative and exploratory; invocation is irreversible. An invocation may reveal confidential client context, spend corporate funds, or trigger real-world actions.
 
-Discovery is reversible. A ranking can change and candidates can appear or disappear. Invocation is not always reversible: it may disclose information, incur cost or produce an external effect. The commitment between them is therefore the market's constitutional moment. It converts a search result into an attributable decision under standing authority.
+The commitment is therefore the market's constitutional moment. It converts probabilistic model exploration into an immutable, attributable legal act. It captures the principal, authority version, acting agent, selected Operation hash, domestic price ceiling, data processing destination, proof class, retry rules, and expiry timestamp. 
 
-The commitment must identify the facts that cannot be reconstructed safely after the event. At minimum these are the principal, acting agent, authority version, Operation revision, provider, fixed buyer-facing seller, local price ceiling, accepted terms, required inputs, disclosed destinations, possible effects, evidence standard, expiry and retry rule.
+Adjacent systems cannot supply this record:
+- The payment rail sees only a transfer hash;
+- The upstream provider sees only an isolated API call without the buyer's overarching mandate;
+- The model harness sees prompt tokens but cannot issue a statutory tax invoice.
 
-This is the part adjacent systems cannot recover independently. A payment rail sees settlement but not the considered supply or business purpose. An accounting system sees a posting but not the runtime choice. An agent harness sees the larger task but may not stand behind the commercial promise. A provider sees its own invocation but not the principal's full mandate or the alternatives rejected.
+Agentic Economy is the sole entity situated to bind these layers.
 
 ## 7. Australia as a worked institutional case
 
-Australia does not create the problem. It lets the paper work through the institutional requirements within one coherent national setting. The claim is not that Australia is the first country to face it or that the final legal structure has already been determined.
+Australia is not merely an illustrative testbed. It is an economy where the clash between advanced individual AI adoption and rigid corporate tax and regulatory law is most acute.
 
-Australian companies must keep financial records that correctly record and explain their transactions and financial position and performance. Section 286 of the *Corporations Act 2001* requires those records to be retained for seven years [9]. GST records must support the amounts reported and credits claimed [10]. These provisions do not prescribe an agent-authority record. They do make unexplained transfers an inadequate foundation for the proposed system. A high-volume purchasing subledger should preserve how a payment connects to a supply, seller, authority and adjustment so that the company's records can explain the transaction.
+### 7.1 The tax and regulatory barrier to direct machine commerce
 
-Australian GST law also distinguishes the payment mechanism from the supply. GSTR 2003/5 explains, in the context of customer accounts, that money credited for later acquisitions need not itself be consideration for a taxable supply; the later acquisition receives its own treatment [11]. The exact outcome depends on the legal rights and terms of the facility. The broader design consequence is firm: funding, reservation, supply, failure, refund and forfeiture cannot be collapsed into one balance movement.
+If an Australian enterprise attempts to let its agents procure tools directly via native x402 and crypto wallets, it encounters three fatal legal barriers:
 
-The electronic distribution platform rules provide a second distinction. LCR 2018/2 examines whether a supply is made through a platform and, in relevant cases, whether the operator authorises the charge, authorises delivery or sets the terms [12]. Authorising the charge is not the same as mechanically collecting payment. Authorising delivery is not the same as performing delivery. Australian tax attribution can therefore follow control over the commercial event rather than the location of the payment button.
+1. **Capital Gains Tax (CGT Event A1) on Micro-Transactions:**
+   Under s104-10 of the *Income Tax Assessment Act 1997* (ITAA 1997), digital assets such as USDC are CGT assets. Every machine disposal of USDC to pay for a query is a CGT Event A1. The taxpayer must calculate the capital gain or loss by comparing the AUD market value of the stablecoin at the instant of disposal against its cost base. For an enterprise running 20,000 automated research lookups a day, direct stablecoin expenditure creates an impossible compliance burden.
 
-An electronic distribution platform is not simply another name for a merchant of record or principal reseller. The statutory result depends on the type of supply, the parties, agreements and actual conduct. Agentic Economy's proposed status as buyer-facing principal seller must rest on its contracts and operations, with the GST consequences determined from the final structure. The ruling supports the paper's institutional point, not a blanket legal classification.
+2. **Foreign Currency and Disclosure Rules:**
+   Under Division 775 of the ITAA 1997, holding USD-denominated stablecoins requires tracking foreign exchange realisation events. Furthermore, the Australian company tax return mandates disclosure of whether the business "held or dealt in digital assets during the income year." Ticking this box increases regulatory inspection risk for non-crypto enterprises.
 
-Cross-border data adds another part of the purchase. Under Australian Privacy Principle 8, an APP entity that discloses personal information to an overseas recipient generally must take reasonable steps in relation to the recipient's handling and may remain accountable for it, subject to the Act's exceptions [13]. A local reseller does not remove that obligation. A runtime selection can change more than price. It can change where information goes and which controls apply. The Operation and commitment should make that destination visible before invocation, when the decision can still be prevented.
+3. **Non-Cash Payment (NCP) Licensing:**
+   Under s763D of the *Corporations Act 2001*, a facility through which a person makes payments to third parties is a Non-Cash Payment facility, requiring an Australian Financial Services Licence (AFSL). An agent marketplace that allows Australian buyers to deposit funds into pooled multi-party wallets to pay arbitrary developers requires an AFSL, bringing significant capital adequacy, compliance, and auditing overhead [23].
 
-Australia also offers a coherent route into ordinary business systems. The Australian Business Number gives a common business identifier. The ATO acts as the Australian Peppol Authority and maintains local requirements for structured electronic invoices [14, 15]. One federal GST and one company-record regime make it possible to specify a complete transaction path without first reconciling several domestic tax systems.
+### 7.2 The Agentic Economy institutional response
 
-### 7.1 A worked purchase
+Agentic Economy operates as an institutional shield that neutralizes each of these barriers for the buyer:
 
-Consider an Australian engineering consultancy. It funds an Agentic Economy account in Australian dollars and grants a research agent authority to spend up to A$20 per task on information services. The mandate prohibits personal information from leaving Australia and requires a source receipt.
+1. **The Closed-Loop MoR Exemption (Corporations Regs reg 7.1.07A):**
+   Under Corporations Regulations 2001 reg 7.1.07A and ASIC Class Order CO 05/738, a facility is exempt from being an NCP facility if the funds can only be used to acquire goods or services **directly from the issuer**. Because aecon acts as the Principal Reseller, the buyer's account balance is closed-loop. aecon requires no AFSL to launch its core purchasing exchange.
 
-During a task, the agent discovers that an equipment record is available only through a specialist overseas provider. The market returns three candidate Operations. One is cheaper but processes inputs in a prohibited jurisdiction. One lacks source evidence. The third meets the mandate.
+2. **Electronic Distribution Platform (EDP) GST Statutory Supplier (LCR 2018/2):**
+   Under Australian GST law and ATO ruling LCR 2018/2, an entity that operates an Electronic Distribution Platform, authorises the customer charge, and sets the terms of supply is treated as the statutory supplier for GST purposes [12]. aecon assumes this status deliberately. The buyer receives an Australian Tax Invoice showing aecon's ABN and 10% GST, claimable immediately as an input tax credit on the firm's Business Activity Statement (BAS).
 
-Before invocation, Agentic Economy creates a commitment binding the consultancy, authority version, selected Operation revision, upstream provider, fixed buyer-facing seller, Australian-dollar price, processing location, input digest, evidence requirement and retry rule. The consultancy's funded balance is payable only to Agentic Economy for the buyer-facing sale. Agentic Economy separately incurs a payable to the upstream provider and uses its payment rail or payment agent to settle that obligation. The provider returns the record and receipt. Agentic Economy records delivery, recognises the local sale, releases the provider payable and makes the purchase evidence available to the consultancy's accounts.
+3. **Statutory Record Keeping (Corporations Act s286):**
+   Section 286 of the *Corporations Act 2001* requires companies to maintain financial records that correctly record and explain their transactions and financial position for seven years [9]. aecon provides an authoritative, exportable subledger that maps every individual machine call to its commitment hash, acting agent, business purpose, and resulting invoice.
 
-If the provider charges but does not return the promised evidence, the payment remains true and the sale remains unresolved. The remedy rule determines whether Agentic Economy retries safely, substitutes another Operation, refunds the buyer or disputes the upstream charge. Finance does not need to infer the answer from two wallet transfers and an application log.
+4. **Australian Consumer Law Liability Capping (ACL s64A):**
+   Under the ACL (Competition and Consumer Act 2010, Schedule 2), mandatory statutory guarantees of acceptable quality and due skill apply to B2B acquisitions under $100,000. Under s64A, liability for supplies not of a kind ordinarily acquired for personal use can be legally limited to resupplying the service or refunding the price paid. aecon's customer contract explicitly caps liability under s64A to credit reimbursement of the failed Operation, insulating the exchange from open-ended consequential damages arising from external provider data.
 
-This example shows why Australia is a model in miniature. The relevant event joins delegated authority, provider allocation, service terms, cross-border information, settlement, delivery, an attributed GST position, remedy and retained records. Existing systems each hold part of it. The commercial gateway binds the parts.
+5. **Cross-Border Privacy Protection (APP 8):**
+   Australian Privacy Principle 8 mandates that an entity disclosing personal information to an overseas recipient must take reasonable steps to ensure the recipient does not breach the APPs [13]. Through machine-readable mandates, an Australian principal can enforce geographic constraints at runtime, forbidding agents from sending inputs to operations hosted in non-compliant jurisdictions.
 
-**Claim 5: The market may be global while commercial closure remains local.** Operations and performance evidence can travel across borders. A buyer-facing seller can apply a jurisdictional interpretation to the same transaction core, including an attributed identity, tax, data and record position, without claiming to determine the buyer's final legal or accounting treatment.
+### 7.3 A worked transaction
 
-## 8. Market structure and accumulated advantage
+Consider a mid-tier Australian engineering consultancy (50 staff) preparing a renewable energy grid-connection tender:
 
-The durable position in this market does not arise from inventing a payment rail or listing the largest number of services. Protocols can standardise, providers can publish to several catalogues and models can search more broadly. The scarce record sits across the full allocation and purchase sequence:
+1. **Setup:** The consultancy establishes a post-paid metered account with aecon Pty Ltd under its corporate ABN. The Managing Director configures a spending mandate: maximum A$15 per query, Class 1 or bonded Class 2 operations only, data retention strictly within Australia, and mandatory source provenance.
+2. **Need:** During a complex simulation, an engineering agent encounters a missing telemetry dataset for local substation feeder capacities.
+3. **Resolution:** aecon returns two candidates: an unverified overseas provider ($0.20) and a registered Australian data service with cryptographic source signing ($1.80). The agent's mandate filter discards the first due to jurisdictional data export rules and selects the second.
+4. **Commitment:** aecon creates an expiring commitment freezing the consultancy's identity, the provider revision, the A$1.80 price, the Australian data destination, and the cryptographic receipt requirement.
+5. **Invocation & Upstream Settlement:** aecon invokes the provider. Upstream, aecon settles the provider's wholesale fee via an automated x402 USDC micropayment from aecon's corporate balance sheet. The provider returns the telemetry and a signed data receipt.
+6. **Commercial Closure:** aecon records delivery, validates the receipt against the commitment, and registers an A$1.80 charge on the consultancy's account.
+7. **Reconciliation:** At month's end, the consultancy receives one Australian Tax Invoice for all agent activity (A$342.10 + A$34.21 GST). The finance team enters one ABN payment into Xero, claims the full GST credit on the quarterly BAS, and logs the s286-compliant subledger in company archives.
+
+The engineering consultancy never touched a crypto wallet, never calculated a capital gain on a three-cent transfer, never maintained an unvetted vendor account, and never violated APP 8. The transaction was ordinary commerce.
+
+**Claim 4: The market may be global while commercial closure remains domestic.** Operations, models and settlement protocols cross borders seamlessly. The commercial boundary must federate by jurisdiction, anchoring transactions in domestic corporate law, local tax regimes, and domestic consumer protections.
+
+## 8. Market structure and compounding advantage
+
+The enduring moat in machine-to-machine commerce does not belong to the payment rail, nor does it belong to generic service directories:
+- Payment protocols are commodities that compete transaction fees toward zero.
+- Tool directories are public indices easily replicated by open-source crawlers.
+
+The defensible position belongs to the entity that sits across the complete allocation and execution lifecycle:
 
 \[
-\text{need} \rightarrow \text{candidates} \rightarrow \text{authorised choice} \rightarrow \text{invocation} \rightarrow \text{delivery} \rightarrow \text{use} \rightarrow \text{remedy}
+\text{need} \rightarrow \text{resolution} \rightarrow \text{mandate check} \rightarrow \text{commitment} \rightarrow \text{invocation} \rightarrow \text{verification} \rightarrow \text{closure} \rightarrow \text{remedy}
 \]
 
-No adjacent role necessarily both observes this sequence and accepts buyer-facing responsibility for it. Payment providers observe transfers. Upstream providers observe their own calls. Agent runtimes observe the surrounding task and could choose to become resellers, but do not accept that role by default. Accounting systems receive classified entries after the decision. The gateway can observe the considered Operations, exact commitment, controlled invocation, delivery state, recovery history and, where the buyer permits it, whether the result was used or purchased again.
+This sequence generates an asset that cannot be scraped or faked: **empirical execution provenance**. 
 
-That history can improve allocation, but only under stated conditions. Comparable needs must recur. Evidence must distinguish provider claims, market observations and buyer reports. The market must resist manipulation and preserve confidential business context. An outcome in one task cannot be treated as a universal quality score. Where those conditions hold, accumulated evidence can improve later matching among Operations for comparable capability gaps and mandates.
+Accumulated across millions of closed purchases, the gateway observes:
+- Which Operations consistently satisfy real tasks without triggering remedy claims;
+- Actual latency, variance, and schema stability under live production conditions;
+- Real provider performance across specific proof classes.
 
-This creates a specific reinforcing process. More closed purchases add evidence about fit, delivery, failure and remedy. Better evidence improves future selection and may permit principals to delegate broader authority. Broader authority creates more qualified demand. Qualified demand attracts providers willing to publish precise Operations and accept common evidence rules. The return compounds only if comparable demand recurs, buyers permit the relevant evidence to be used, and later needs pass through the same commitment and closure boundary.
+This creates a powerful institutional flywheel:
+1. More closed purchases yield richer execution and delivery evidence;
+2. Better evidence enables buyers to safely delegate broader mandates to software;
+3. Broader buyer demand attracts top-tier providers willing to accept performance bonds and standardized contracts;
+4. Higher-quality supply drives increased institutional adoption.
 
-The resulting advantage is institutional rather than merely technical. It consists of accepted buyer authority, admitted supply, versioned commercial promises, linked performance and remedy history, and records that already enter ordinary business systems. A rival can reproduce an invoice template or payment integration. Reproducing the joined history requires it to have occupied the decision boundary across many prior purchases.
+A competitor can copy an API schema or clone an invoice template. It cannot reconstruct the historical performance record of a hundred thousand machine purchases it was not present to clear.
 
-**Claim 6: The market can compound through allocation evidence, not transaction volume alone.** Closed purchases improve the market only when comparable demand recurs and their authority, alternatives, exact promise, delivery and later use remain connected with clear provenance and buyer permission.
+**Claim 5: Compounding market advantage is driven by allocation evidence, not payment volume.** Value accrues to the institution that binds runtime tool selection to verified delivery, statutory compliance, and historical counterparty performance.
 
-## 9. Predictions, limits and research questions
+## 9. Predictions and limits
 
-The argument produces observable predictions.
+This framework yields specific, testable predictions:
 
-First, machine-payment protocols will become interchangeable beneath higher-level purchasing systems. The differentiated control point will move from settlement toward the system that holds buyer authority, exact commitment, delivery state and remedy.
+1. **Payment rails will become invisible commodities.** x402, AP2, and stablecoin networks will standardize as low-level settlement pipes. Value will consolidate in the commercial layer that governs authority, identity, tax attribution, and remedy.
+2. **Tool marketing will shift from agent identities to bounded Operations.** Providers will compete on machine-readable contracts: input schemas, execution latencies, cryptographic proof classes, and bonded failure guarantees.
+3. **Corporate spend management will become policy-driven and programmatic.** Static vendor whitelists will be replaced by cryptographic purchase mandates enforced at runtime.
+4. **Tax authorities will enforce platform-operator rules on agent spend.** Tax offices will not audit millions of anonymous machine micropayments; they will hold domestic platforms accountable under electronic distribution platform regimes.
 
-Second, providers will describe bounded work rather than advertise broad agent identities alone. Price, inputs, effects, evidence and retry behaviour will become part of the service's competitive surface.
+### Boundaries of the model
 
-Third, enterprise spend controls will move from lists of named providers toward state-contingent mandates. The most useful rules will bind not only amount but also service class, data destination, effect and evidence.
+The model presented here is deliberately scoped. It addresses **business-to-business, digitally requested, deterministic or bounded computational services** bought by authorized software actors. 
 
-Fourth, accounting records for machine purchases will gain invocation and delivery references. A summary invoice may remain the financial document, but it will link to a subledger capable of explaining each underlying supply.
-
-Fifth, open and closed service markets will coexist. Closed ecosystems will dominate predictable, repeated and tightly integrated capabilities. Open markets will matter where provider variety and runtime information are worth more than the cost of intermediation.
-
-Sixth, the service market can become global while the accountable commercial boundary federates by jurisdiction. Expansion will add local interpretations of identity, tax, invoice, data and remedy to a stable transaction core.
-
-These predictions also define where the thesis can fail. If agents rarely need capabilities outside installed tools, direct integration wins. If principals refuse meaningful delegated purchase authority, the market remains human-gated. If service outcomes cannot be bounded or evidenced, the Operation is the wrong market unit. If provider admission and reseller risk cannot be amortised across buyers, the gateway's margin will exceed its value. If payment or agent platforms accept the complete local seller role, they may occupy the institution themselves. If common protocols eventually carry enforceable identity, authority, tax, delivery and remedy across jurisdictions, a separate gateway may become unnecessary.
-
-The scope is deliberately narrower than autonomous commerce in general. The proposed institution concerns business-to-business, digitally requested contributions with definable inputs, results and evidence, bought by an authorised software actor for an identifiable principal. Consumer transactions, physical goods, regulated financial services, employment, professional duties that cannot be transferred, and bespoke contracts requiring negotiation remain outside this first model.
-
-The immediate research questions follow from the boundary: how Operations should express evidence and side effects; how mandates can preserve useful discretion without hiding material choices; which delivery claims can be verified independently; how retries and uncertain external effects should allocate risk; how provider admission scales without reproducing bilateral procurement; how commercial event records map into Peppol and accounting systems; how outcome evidence can improve allocation without disclosing buyer context; and which parts of the transaction core remain stable across jurisdictions.
-
-These are not requirements for commercial validation before the thesis can be stated. They are the research programme implied by the thesis.
+It explicitly excludes:
+- Consumer retail purchases;
+- Physical logistics and physical asset transfers;
+- Regulated personal financial advice or legal counsel requiring non-delegable fiduciary standing;
+- Highly bespoke enterprise contracts requiring bilateral negotiation.
 
 ## 10. Conclusion
 
-Software agents change the timing of market choice. They can encounter a capability gap, inspect outside supply and choose a contribution after the principal's work has begun. Machine-payment protocols make the resulting transfer immediate. They do not make the resulting purchase institutionally complete.
+Software agents are beginning to choose who performs critical business work while that work is underway. Payment protocols allow them to transfer value in milliseconds. But payment alone cannot complete a business transaction.
 
-The missing state is commercial closure: the binding of a legal principal, delegated authority, exact Operation, recognised seller, price and tax treatment, data and effects, delivery, payment, remedy and accounting reference into one defensible event.
+Without an accountable institution, just-in-time procurement is trapped between two unworkable extremes: the administrative paralysis of bilateral vendor onboarding, and the legal and tax chaos of unvetted, permissionless machine wallets.
 
-Direct provider onboarding can provide closure but cannot support a long tail of small, unpredictable purchases. Neutral payment can preserve choice but does not provide the buyer-facing sale. Closed catalogues preserve control by limiting the market. An accountable commercial gateway can preserve open selection within admitted supply while consolidating responsibility at the buyer's boundary. It does so by operating a market upstream and acting as principal reseller downstream.
+The missing state is **commercial closure**: the binding of a legal principal, delegated authority, an exact Operation, a domestic Seller of Record, an attributed tax position, verified delivery, and an enforceable remedy into one defensible record.
 
-The Australian case makes each part of the event legible and allows the proposed boundary to be worked through in one jurisdiction: the service lands in a legal business, under delegated authority, with an explainable record, an attributed tax position, a known information path and a party responsible for the buyer-facing remedy. The analysis leaves the final reseller, GST and funded-facility structures to the contracts, conduct and applicable law. The same transaction core can travel, with local commercial interpretation added country by country.
+Agentic Economy is the commercial gateway that provides closure. By operating an open market for capability discovery upstream and acting as a closed-loop Merchant of Record downstream, it bridges the gap between autonomous software and the real economy.
 
-Agentic Economy is the proposed institution. It does not exist because software needs another way to pay. It exists because software is beginning to choose who performs part of a business's work before that business has a direct commercial relationship with the chosen provider.
+The payment rails provide the wire. Agentic Economy builds the market.
 
-The payment layer makes the exchange possible. Commercial closure makes it belong to an economy.
+---
 
 ## References
 

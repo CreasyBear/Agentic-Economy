@@ -1,4 +1,5 @@
 import type { GenericDatabaseReader, GenericDatabaseWriter } from 'convex/server'
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 
 import type { MutationCtx, QueryCtx } from './_generated/server'
 import type { DataModel, Doc, Id } from './_generated/dataModel'
@@ -421,12 +422,12 @@ async function runSystemOfferingSourceCommand(
   let snapshot: DelegationAuthoritySnapshot
   try {
     snapshot = await admitDevSeedCatalogAuthority(ctx, command.operationKey, command.businessId)
-  } catch {
-    return {
-      kind: 'error',
-      code: 'authority_denied',
+  } catch (cause) {
+    return degradeBackend(cause, {
+      kind: 'error' as const,
+      code: 'authority_denied' as const,
       reason: 'Declared development seed workload authority is not current.',
-    }
+    }, { site: 'runSystemOfferingSourceCommand', reason: 'invalid_response' })
   }
   return runOfferingSourceCore(
     ctx.db,
@@ -776,8 +777,8 @@ function reconstructCanaryCommitment(
     ) === canonicalDigest(envelope as StableHashValue)
       ? commitment
       : undefined
-  } catch {
-    return undefined
+  } catch (cause) {
+    return degradeBackend(cause, undefined, { site: 'reconstructCanaryCommitment', reason: 'invalid_response' })
   }
 }
 
@@ -951,8 +952,8 @@ function promotionOutputEvidence(
   let contractValid = false
   try {
     contractValid = materializeRuntimePublishedTool(operation).validateOutput(result.output)
-  } catch {
-    contractValid = false
+  } catch (cause) {
+    contractValid = degradeBackend(cause, false, { site: 'promotionOutputEvidence', reason: 'invalid_response' })
   }
   const receipt = result.receipt
   const deterministic = row.evidenceHash !== undefined

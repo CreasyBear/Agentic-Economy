@@ -2,9 +2,9 @@ import { z } from 'zod'
 
 import { jsonValueSchema } from '@/modules/capability-contract/public'
 import { exactAmountSchema } from '@/modules/money/public'
-import { CURRENT_TOOL_CALL_VIA, REGISTRY_TOOLS_SCHEMA_VERSION } from './internal/tool-projection-types'
+import { CURRENT_TOOL_CALL_VIA, PublicToolRegistrySchemaVersion } from './internal/tool-projection-types'
 
-export { REGISTRY_TOOLS_SCHEMA_VERSION }
+export { PublicToolRegistrySchemaVersion }
 export { decodePublicSchema, projectPublicSchema } from './internal/tool-projection-wire-schema'
 
 import type {
@@ -89,6 +89,7 @@ export const publicToolAvailabilitySchema = z.strictObject({
   reason: z.enum(['setup_required', 'inspection_required', 'temporarily_unavailable', 'readiness_expired', 'publisher_withdrew', 'under_review', 'updated_terms_require_review', 'not_supported_by_ae']).optional(),
 })
 const provenance = z.strictObject({ publisher: z.enum(['provider_owned', 'ae_curated_external', 'third_party_gateway', 'observed_external']), sourceKind: z.enum(['ae_envelope', 'openapi_http', 'mcp', 'agent_plugin_mcp', 'x402']) })
+const canonical = z.strictObject({ providerHost: z.string(), slug: z.string(), path: z.string() })
 export const publicToolAuthenticationSchema = z.union([
   z.strictObject({ kind: z.literal('ae_api_key') }),
   z.strictObject({ kind: z.literal('platform_credential'), scheme: z.literal('api_key'), in: z.enum(['query', 'header']), name: z.string() }),
@@ -132,11 +133,11 @@ const descriptor = z.strictObject({
     inputExamples: z.array(inputExample).max(32).optional(),
   }),
   business: z.strictObject({ businessId: z.string(), slug: z.string(), name: z.string() }),
-  offering: z.strictObject({ offeringRef: z.string(), revision: z.number().int().positive(), label: z.string(), summary: z.string() }),
+  listing: z.strictObject({ listingRef: z.string(), revision: z.number().int().positive(), label: z.string(), summary: z.string() }),
   summary: z.string(),
   commercial: z.strictObject({ displayPrice: publicToolDisplayPriceSchema.optional(), price: publicToolPriceSchema, priceEvidence: priceEvidence.optional(), priceBreakdown: priceBreakdown.optional(), materialTerms: z.array(materialTerm), relationship }),
   dataUse: z.array(dataUse), effects: z.array(effect), evidence: z.array(evidence),
-  cancellation, recovery, authentication: publicToolAuthenticationSchema, payment: publicToolPaymentSchema.optional(), transport, provenance, listingTier: z.enum(['reviewed', 'listed']), availability: publicToolAvailabilitySchema, navigation: z.array(publicToolNavigationSchema),
+  cancellation, recovery, authentication: publicToolAuthenticationSchema, payment: publicToolPaymentSchema.optional(), transport, provenance, listingTier: z.enum(['reviewed', 'listed']), canonical: canonical.optional(), availability: publicToolAvailabilitySchema, navigation: z.array(publicToolNavigationSchema),
   parameters: z.array(publicToolParameterSchema).optional(), catalogPrice: catalogPrice.optional(),
 })
 export const toolSearchFiltersSchema = z.strictObject({
@@ -164,18 +165,18 @@ export const toolSearchInputSchema: z.ZodType<ToolSearchInput> = z.strictObject(
   filters: toolSearchFiltersSchema.optional(),
 }) as z.ZodType<ToolSearchInput>
 export const toolSearchOutputSchema: z.ZodType<ToolSearchResult> = z.union([
-  z.strictObject({ kind: z.literal('ok'), schemaVersion: z.literal(REGISTRY_TOOLS_SCHEMA_VERSION), query: z.string(), items: z.array(descriptor), matchedCount: z.number().int().nonnegative().optional(), partialResults: z.boolean().optional(), ranking: z.array(toolSearchRankingSchema), pagination: toolSearchPaginationSchema, navigation: z.array(publicToolNavigationSchema) }),
-  z.strictObject({ kind: z.literal('no_candidates'), schemaVersion: z.literal(REGISTRY_TOOLS_SCHEMA_VERSION), query: z.string(), appliedFilters: toolSearchFiltersSchema, matchedCount: z.number().int().nonnegative().optional(), partialResults: z.boolean().optional(), ranking: z.array(toolSearchRankingSchema), navigation: z.array(publicToolNavigationSchema) }),
-  z.strictObject({ kind: z.literal('unavailable'), schemaVersion: z.literal(REGISTRY_TOOLS_SCHEMA_VERSION), reason: z.enum(['query_invalid', 'source_unavailable', 'source_capacity_exceeded']), navigation: z.array(publicToolNavigationSchema) }),
+  z.strictObject({ kind: z.literal('ok'), schemaVersion: z.literal(PublicToolRegistrySchemaVersion), query: z.string(), items: z.array(descriptor), matchedCount: z.number().int().nonnegative().optional(), partialResults: z.boolean().optional(), ranking: z.array(toolSearchRankingSchema), pagination: toolSearchPaginationSchema, navigation: z.array(publicToolNavigationSchema) }),
+  z.strictObject({ kind: z.literal('no_candidates'), schemaVersion: z.literal(PublicToolRegistrySchemaVersion), query: z.string(), appliedFilters: toolSearchFiltersSchema, matchedCount: z.number().int().nonnegative().optional(), partialResults: z.boolean().optional(), ranking: z.array(toolSearchRankingSchema), navigation: z.array(publicToolNavigationSchema) }),
+  z.strictObject({ kind: z.literal('unavailable'), schemaVersion: z.literal(PublicToolRegistrySchemaVersion), reason: z.enum(['query_invalid', 'source_unavailable', 'source_capacity_exceeded']), navigation: z.array(publicToolNavigationSchema) }),
 ]) as z.ZodType<ToolSearchResult>
 export const toolDetailInputSchema: z.ZodType<ToolDetailInput> = z.strictObject({ toolRef }) as z.ZodType<ToolDetailInput>
 export const toolDetailOutputSchema: z.ZodType<ToolDetailResult> = z.union([
-  z.strictObject({ kind: z.literal('found'), schemaVersion: z.literal(REGISTRY_TOOLS_SCHEMA_VERSION), tool: descriptor }),
-  z.strictObject({ kind: z.literal('unavailable'), schemaVersion: z.literal(REGISTRY_TOOLS_SCHEMA_VERSION), toolRef: z.string(), reason: z.enum(['setup_required', 'inspection_required', 'temporarily_unavailable', 'readiness_expired', 'publisher_withdrew', 'under_review', 'updated_terms_require_review', 'not_supported_by_ae']), navigation: z.array(publicToolNavigationSchema) }),
-  z.strictObject({ kind: z.literal('not_found'), schemaVersion: z.literal(REGISTRY_TOOLS_SCHEMA_VERSION), toolRef: z.string(), navigation: z.array(publicToolNavigationSchema) }),
+  z.strictObject({ kind: z.literal('found'), schemaVersion: z.literal(PublicToolRegistrySchemaVersion), tool: descriptor }),
+  z.strictObject({ kind: z.literal('unavailable'), schemaVersion: z.literal(PublicToolRegistrySchemaVersion), toolRef: z.string(), reason: z.enum(['setup_required', 'inspection_required', 'temporarily_unavailable', 'readiness_expired', 'publisher_withdrew', 'under_review', 'updated_terms_require_review', 'not_supported_by_ae']), navigation: z.array(publicToolNavigationSchema) }),
+  z.strictObject({ kind: z.literal('not_found'), schemaVersion: z.literal(PublicToolRegistrySchemaVersion), toolRef: z.string(), navigation: z.array(publicToolNavigationSchema) }),
 ]) as z.ZodType<ToolDetailResult>
 export const toolCompareInputSchema: z.ZodType<ToolCompareInput> = z.strictObject({ toolRefs: z.array(toolRef).min(1).max(4) }) as z.ZodType<ToolCompareInput>
 export const toolCompareOutputSchema: z.ZodType<ToolCompareResult> = z.union([
-  z.strictObject({ kind: z.literal('ok'), schemaVersion: z.literal(REGISTRY_TOOLS_SCHEMA_VERSION), tools: z.array(descriptor), facts: z.array(toolComparisonFactSchema), navigation: z.array(publicToolNavigationSchema) }),
-  z.strictObject({ kind: z.literal('unavailable'), schemaVersion: z.literal(REGISTRY_TOOLS_SCHEMA_VERSION), reason: z.enum(['query_invalid', 'tool_not_found', 'tool_unavailable']), navigation: z.array(publicToolNavigationSchema) }),
+  z.strictObject({ kind: z.literal('ok'), schemaVersion: z.literal(PublicToolRegistrySchemaVersion), tools: z.array(descriptor), facts: z.array(toolComparisonFactSchema), navigation: z.array(publicToolNavigationSchema) }),
+  z.strictObject({ kind: z.literal('unavailable'), schemaVersion: z.literal(PublicToolRegistrySchemaVersion), reason: z.enum(['query_invalid', 'tool_not_found', 'tool_unavailable']), navigation: z.array(publicToolNavigationSchema) }),
 ]) as z.ZodType<ToolCompareResult>

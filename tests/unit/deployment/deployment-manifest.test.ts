@@ -91,7 +91,6 @@ describe('deployment manifest validator', () => {
       'workflow',
       'rate-limiter',
       'agent',
-      'aggregate:ownerActivationByStage',
       'aggregate:marketEvidence',
       'aggregate:marketOperationEvidence',
       'aggregate:marketOperationRatings',
@@ -218,15 +217,6 @@ describe('deployment manifest validator', () => {
     })
   })
 
-  it('rejects local auth bypass and fixture flags in production', () => {
-    const result = validateDeploymentManifest({
-      ...productionEnvironment(),
-      VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E: 'true',
-    }, { nodeMajor: 22 })
-
-    expect(result.findings.filter((finding) => finding.kind === 'forbidden').flatMap((finding) => finding.names))
-      .toEqual(expect.arrayContaining(['VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E']))
-  })
   it('rejects test Clerk credentials in production', () => {
     const result = validateDeploymentManifest({
       ...productionEnvironment(),

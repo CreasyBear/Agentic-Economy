@@ -19,6 +19,7 @@
     "resolveJsonModule": true,
     "isolatedModules": true,
     "noEmit": true,
+    "allowImportingTsExtensions": true,
     "jsx": "react-jsx",
     "paths": {
       "@/routes/owner.*": ["./src/routes/_operator/owner.*"],
@@ -39,7 +40,18 @@
     "tests/**/*.tsx",
     "vite.config.ts",
     "vitest.config.ts",
-    "playwright.config.ts"
+    "playwright.config.ts",
+    "scripts/audit-action-surfaces.ts",
+    "scripts/build-cli.ts",
+    "scripts/test-cli-package.ts",
+    "tools/dev/deps-ratchet.ts",
+    "tools/dev/guard-destructive-git.ts",
+    "tools/dev/local-connect.ts",
+    "tools/dev/local-dev.ts",
+    "tools/dev/local-source-write-secret.ts",
+    "tools/dev/require-supported-node.ts",
+    "tools/dev/run-listed-vitest.ts",
+    "tools/dev/run-with-cleanup.ts"
   ],
   "exclude": [
     "node_modules",

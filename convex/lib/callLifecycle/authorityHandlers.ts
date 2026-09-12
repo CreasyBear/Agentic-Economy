@@ -1,5 +1,6 @@
 import { makeFunctionReference } from 'convex/server'
 import type { Infer } from 'convex/values'
+import { degradeBackend } from '../../../src/lib/observability/degrade-backend'
 import type { Doc } from '../../_generated/dataModel'
 import { internal } from '../../_generated/api'
 import type { ActionCtx, MutationCtx, QueryCtx } from '../../_generated/server'
@@ -328,8 +329,8 @@ async function loadCurrentActiveGrant(
   let grant: NormalizedActiveGrant
   try {
     grant = normalizeStoredAgentAccessGrant(storedGrant)
-  } catch {
-    return null
+  } catch (cause) {
+    return degradeBackend(cause, null, { site: 'loadCurrentActiveGrant', reason: 'invalid_response' })
   }
   return activeGrantMatches(grant, stored, canonical, now) ? grant : null
 }

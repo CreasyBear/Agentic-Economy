@@ -1,4 +1,5 @@
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { isRecord } from '@/modules/common/is-record'
 import { stableStringify, type StableHashValue } from '@/modules/common/stable-hash'
 import type {
@@ -36,8 +37,8 @@ export function decodeConvexPublicationSource(value: unknown): unknown {
       const { resourceJson, ...source } = value
       return { ...source, resource: JSON.parse(resourceJson) }
     }
-  } catch {
-    return undefined
+  } catch (cause) {
+    return degradeBackend(cause, undefined, { site: 'decodeConvexPublicationSource', reason: 'invalid_response' })
   }
   return value
 }
@@ -88,8 +89,8 @@ function sourceUrlContainsSecret(value: string): boolean {
     return url.username !== ''
       || url.password !== ''
       || [...url.searchParams.keys()].some(sensitiveSourceKey)
-  } catch {
-    return false
+  } catch (cause) {
+    return degradeBackend(cause, false, { site: 'sourceUrlContainsSecret', reason: 'invalid_response' })
   }
 }
 

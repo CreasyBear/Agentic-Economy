@@ -1,4 +1,5 @@
 import { isRecord } from '@/modules/common/is-record'
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 import type { X402DirectoryEntry } from './x402-directory'
 
 /** Published structure, not a judgment of correctness, usefulness or runtime support. */
@@ -12,7 +13,7 @@ export function directoryMetadataFlags(entry: X402DirectoryEntry) {
       if (Array.isArray(value)) return value.length > 0
       if (isRecord(value)) return Object.keys(value).length > 0
       return typeof value === 'number' || typeof value === 'boolean'
-    } catch { return false }
+    } catch (cause) { return degradeBackend(cause, false, { site: 'directoryMetadataFlags', reason: 'invalid_response' }) }
   }
   return {
     hasInputFields: (entry.input?.fields.length ?? 0) > 0,

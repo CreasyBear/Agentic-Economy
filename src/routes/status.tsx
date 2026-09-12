@@ -23,6 +23,12 @@ const probeLabels: Readonly<Record<ProbeId, string>> = {
 const probeOrder: readonly ProbeId[] = ['site', 'market', 'discovery', 'release', 'catalogue']
 
 export const Route = createFileRoute('/status')({
+  staticData: {
+    nav: {
+      label: 'System status',
+      footer: { column: 'Help', order: 1 },
+    },
+  },
   head: () => buildPublicPageHead({
     path: '/status',
     title: 'System status | Agentic Economy',
@@ -126,7 +132,7 @@ function StatusRoute() {
             {statusAnnouncement}
           </p>
           <Link to="/support" className="min-h-touch content-center font-medium text-foreground underline underline-offset-4">
-            Get help
+            Help
           </Link>
         </div>
       </div>
@@ -152,6 +158,6 @@ function recoveryGuidance(checks: readonly StatusCheck[]): Readonly<{
         title: 'Retry after the affected system recovers',
         description: 'Refresh status first. If the problem continues, report it with any request reference shown above.',
         href: '/support',
-        label: 'Get help',
+        label: 'Help',
       }
 }

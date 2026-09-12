@@ -2,6 +2,7 @@ import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 
 import { callSourceMutation, sourceMutation } from '@/lib/server/convex-source'
+import { degrade } from '@/lib/observability/degrade'
 
 export type EnsureProviderBusinessResult =
   | Readonly<{ kind: 'created' | 'existing'; businessId: string; slug: string }>
@@ -30,7 +31,10 @@ export const ensureProviderBusinessServer = createServerFn({ method: 'POST' })
   .handler(async ({ data }): Promise<EnsureProviderBusinessResult> => {
     try {
       return await callSourceMutation(ensureProviderBusinessMutation, data)
-    } catch {
-      return { kind: 'refused', code: 'source_unavailable' }
+    } catch (cause) {
+      return degrade(cause, { kind: 'refused', code: 'source_unavailable' } as const, {
+        site: 'ensureProviderBusinessServer',
+        reason: 'source_unavailable',
+      })
     }
   })

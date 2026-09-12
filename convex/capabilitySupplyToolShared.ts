@@ -1,5 +1,6 @@
 import { v } from 'convex/values'
 
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 import {
   capabilityToolId,
   createPublicToolRef,
@@ -29,8 +30,10 @@ import type { Doc } from './_generated/dataModel'
 import type { QueryCtx } from './_generated/server'
 import { getExactRegisteredCapabilityContract } from './capabilityContractDocuments'
 import { capabilitySupplyGraphPorts } from './capabilitySupplyGraphPorts'
-import { readManagedX402InspectionTarget } from './capabilitySupplyCurrentTool'
+import { readManagedX402InspectionTargetForQualifiedCandidate } from './capabilitySupplyCurrentTool'
+import { toolProviderRouteabilityIsFrozen } from './lib/providerOffboardingFreeze'
 import { toCapabilityBindingRow, toCapabilityOfferingRow } from './capabilitySupplyRowMappers'
+import { directoryListingEntry } from './capabilitySupplyDirectoryEligibility'
 
 export const exactAmount = v.object({ currency: v.string(), units: v.string(), exponent: v.number() })
 export const publicPrice = v.union(
@@ -71,6 +74,7 @@ export const CURRENT_TOOL_PROJECTION_DROP_REASONS = [
   'malformed_offering',
   'malformed_binding',
   'malformed_price',
+  'directory_ineligible',
 ] as const
 
 export type CurrentToolProjectionDropReason = typeof CURRENT_TOOL_PROJECTION_DROP_REASONS[number]
@@ -126,12 +130,30 @@ export async function toolRecordProjection(
   if (bindingDoc === null) return { kind: 'dropped', reason: 'missing_binding' }
   if (business === null) return { kind: 'dropped', reason: 'missing_business' }
   if (contractResult.kind !== 'found') return { kind: 'dropped', reason: 'missing_contract' }
+  const directoryEntry = await directoryListingEntry(ctx, publication.authorityMode, publication.sourceRouteRef)
+  if (!directoryEntry.eligible) {
+    return { kind: 'dropped', reason: 'directory_ineligible' }
+  }
+  // Human-legible canonical page (`/tools/<providerHost>/<slug>`), same
+  // fields `x402DirectoryIndex.ts:canonicalUrlForTool` reverse-looks-up
+  // separately for the `/tools/$toolRef` redirect - reusing the eligibility
+  // join's row here instead of re-querying. Undefined when the publication
+  // never joined a directory row (Provider-owned Tools have no directory
+  // row today and so get no canonical URL yet; they need a slug source of
+  // their own as a follow-up) or the row predates the slug backfill.
+  const canonical = directoryEntry.row?.providerKey === undefined || directoryEntry.row.slug === undefined
+    ? undefined
+    : {
+        providerHost: directoryEntry.row.providerKey,
+        slug: directoryEntry.row.slug,
+        path: `/tools/${directoryEntry.row.providerKey}/${directoryEntry.row.slug}`,
+      }
   let offering
   let binding
   try {
     offering = offeringRegistrationFromRow(toCapabilityOfferingRow(offeringDoc))
-  } catch {
-    return { kind: 'dropped', reason: 'malformed_offering' }
+  } catch (cause) {
+    return degradeBackend(cause, { kind: 'dropped', reason: 'malformed_offering' } as const, { site: 'toolRecordProjection', reason: 'invalid_response' })
   }
   const bindingRow = toCapabilityBindingRow(bindingDoc)
   try {
@@ -151,8 +173,8 @@ export async function toolRecordProjection(
       adapter: { adapterId: bindingRow.adapterId, config: JSON.parse(bindingRow.configJson) as unknown },
       registrationEvidenceRefs: bindingRow.registrationEvidenceRefs,
     })
-  } catch {
-    return { kind: 'dropped', reason: 'malformed_binding' }
+  } catch (cause) {
+    return degradeBackend(cause, { kind: 'dropped', reason: 'malformed_binding' } as const, { site: 'toolRecordProjection', reason: 'invalid_response' })
   }
   const qualification = await qualifySuppliedCandidate(capabilitySupplyGraphPorts(ctx.db), {
     candidate: {
@@ -173,8 +195,17 @@ export async function toolRecordProjection(
     && bindingRow.admission === 'admitted'
     && bindingRow.conformance === 'conformant'
   const routeable = qualification.status === 'eligible'
+  // Reuse this row's already-fetched binding/contract docs and the
+  // qualification just computed above instead of calling the standalone
+  // `readManagedX402InspectionTarget(ctx, toolRef, now)` - it would re-fetch
+  // the same publication, re-run `qualifySuppliedCandidate` (publication +
+  // business + contract + offering + binding reads) and re-fetch the
+  // binding/contract a second time for every row of every catalogue page.
   const awaitingInspection = !routeable && binding.adapter.adapterId === 'x402-fetch:v2'
-    && await readManagedX402InspectionTarget(ctx, publication.toolRef, now) !== undefined
+    && !(await toolProviderRouteabilityIsFrozen(ctx, publication.toolRef))
+    && await readManagedX402InspectionTargetForQualifiedCandidate(ctx, {
+      publication, binding: bindingDoc, contract: contractResult, qualification,
+    }) !== undefined
   const unavailableReason = routeable ? undefined : awaitingInspection ? 'inspection_required' as const : publicUnavailableReason(publication, qualification)
   const authorityMode = publication.authorityMode
   // Display price is derived from the publication's pinned pricing config
@@ -186,8 +217,8 @@ export async function toolRecordProjection(
     normalizedPricingConfig = publication.pricingConfigJson === undefined
       ? undefined
       : normalizePricingConfig(JSON.parse(publication.pricingConfigJson) as unknown)
-  } catch {
-    return { kind: 'dropped', reason: 'malformed_price' }
+  } catch (cause) {
+    return degradeBackend(cause, { kind: 'dropped', reason: 'malformed_price' } as const, { site: 'toolRecordProjection', reason: 'invalid_response' })
   }
   if (
     normalizedPricingConfig === undefined
@@ -219,8 +250,8 @@ export async function toolRecordProjection(
     networkId: publication.networkId,
     contract: contractResult.contract,
     business: { businessId: String(business._id), slug: business.slug, name: business.name },
-    offering: {
-      offeringRef: offering.origin?.kind === 'catalog_offering' ? offering.origin.offeringRef : offering.offeringId,
+    listing: {
+      listingRef: offering.origin?.kind === 'catalog_offering' ? offering.origin.offeringRef : offering.offeringId,
       revision: offering.origin?.kind === 'catalog_offering' ? offering.origin.offeringRevision : 1,
       label: offering.presentation.label,
       summary: offering.presentation.summary,
@@ -257,6 +288,7 @@ export async function toolRecordProjection(
     },
     searchTerms: offering.searchTerms,
     snapshotKey: `publication:${publication.publicationRef}:${publication.revision}`,
+    ...(canonical === undefined ? {} : { canonical }),
   } }
 }
 
@@ -276,8 +308,8 @@ function priceBreakdownFor(
   let rawConfig: unknown
   try {
     rawConfig = JSON.parse(pricingConfigJson) as unknown
-  } catch {
-    return null
+  } catch (cause) {
+    return degradeBackend(cause, null, { site: 'priceBreakdownFor', reason: 'invalid_response' })
   }
   const normalized = normalizePricingConfig(rawConfig)
   if (normalized.kind === 'invalid' || pricingConfigDigest(normalized.config) !== publication.priceDigest) return null
@@ -348,16 +380,16 @@ function publicPathTemplate(endpointUrl: string): string | undefined {
     const pathname = new URL(endpointUrl).pathname
     if (pathname === '/') return undefined
     return pathname.replace(/%7B/gi, '{').replace(/%7D/gi, '}')
-  } catch {
-    return undefined
+  } catch (cause) {
+    return degradeBackend(cause, undefined, { site: 'publicPathTemplate', reason: 'invalid_response' })
   }
 }
 
 function parseTransportConfig(configJson: string): unknown {
   try {
     return JSON.parse(configJson) as unknown
-  } catch {
-    return undefined
+  } catch (cause) {
+    return degradeBackend(cause, undefined, { site: 'parseTransportConfig', reason: 'invalid_response' })
   }
 }
 

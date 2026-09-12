@@ -6,6 +6,8 @@ import {
   type ProviderMetadata,
 } from 'ai'
 
+import { env } from '../../../convex/_generated/server'
+
 /**
  * The single AE seam onto the OpenRouter language-model provider.
  *
@@ -39,17 +41,17 @@ export type OpenRouterGatewayEnvironment = Readonly<{
 
 /**
  * Resolve the gateway from explicit host values. Convex callers pass its typed
- * `env` object here; existing Node hosts may omit it and retain process-env
- * behavior without making the provider or Agent depend on a process reader.
+ * `env` object here; callers that omit it fall back to Convex's own typed
+ * `env` (declared in `convex/convex.config.ts`) so every read stays typed.
  */
 export function openRouterGatewayConfig(
   environment?: OpenRouterGatewayEnvironment,
 ): OpenRouterGatewayConfig {
   const source = environment ?? {
-    OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY,
-    AE_LLM_MODEL: process.env.AE_LLM_MODEL,
-    AE_OPENROUTER_API_BASE_URL: process.env.AE_OPENROUTER_API_BASE_URL,
-    SITE_URL: process.env.SITE_URL,
+    OPENROUTER_API_KEY: env.OPENROUTER_API_KEY,
+    AE_LLM_MODEL: env.AE_LLM_MODEL,
+    AE_OPENROUTER_API_BASE_URL: env.AE_OPENROUTER_API_BASE_URL,
+    SITE_URL: env.SITE_URL,
   }
   const apiKey = source.OPENROUTER_API_KEY?.trim()
   const baseUrl = source.AE_OPENROUTER_API_BASE_URL?.trim()

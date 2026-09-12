@@ -50,6 +50,7 @@ export async function runDescribeCommand(args: readonly string[], options: CliOp
   line(`  indicative price: ${tool.priceLabel}`)
   line(`  inputs: ${(tool.parameters ?? []).map((parameter) => `${parameter.name}${parameter.required ? '' : '?'}`).join(', ') || 'none'}`)
   line(`  Tool reference: ${tool.toolRef}`)
+  if (tool.canonicalUrl !== undefined) line(`  Page: ${options.baseUrl}${tool.canonicalUrl}`)
   line(`  Next: ${[toolCallCommand(tool.toolRef), ...continuationFlags(options)].join(' ')}`)
   line(`  From an MCP client: ${QUOTE_MCP_TOOL_NAME} with this Tool reference and input.`)
 }

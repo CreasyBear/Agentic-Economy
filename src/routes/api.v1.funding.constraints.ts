@@ -1,5 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 
+import { degrade } from '@/lib/observability/degrade'
 import { methodNotAllowed } from '@/lib/server/method-guard'
 import { problem } from '@/lib/server/problem'
 import { withHttpRateLimit } from '@/lib/server/rate-limit'
@@ -40,13 +41,13 @@ export async function handleFundingConstraintsRequest(request: Request, head = f
           headers: { 'Cache-Control': 'public, max-age=60, stale-while-revalidate=60' },
         })
       })
-    } catch {
-      response = problem({
+    } catch (cause) {
+      response = degrade(cause, problem({
         status: 503,
         kind: 'UNAVAILABLE',
         code: 'funding_constraints_unavailable',
         retryable: true,
-      })
+      }), { site: 'handleFundingConstraintsRequest', reason: 'source_unavailable' })
     }
     const projected = head
       ? new Response(null, { status: response.status, statusText: response.statusText, headers: response.headers })

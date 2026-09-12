@@ -17,7 +17,7 @@ describe('root route readback', () => {
     }
     expect(isRedirect(thrown)).toBe(true)
     if (!isRedirect(thrown)) return
-    expect(thrown.options).toMatchObject({ to: '/market', search: { window: '30d' }, replace: true })
+    expect(thrown.options).toMatchObject({ to: '/market', search: {}, replace: true })
   })
   it('redirects a query to the market even when a project param is present', () => {
     const beforeLoad = Route.options.beforeLoad
@@ -32,7 +32,7 @@ describe('root route readback', () => {
 
     expect(isRedirect(thrown)).toBe(true)
     if (!isRedirect(thrown)) return
-    expect(thrown.options).toMatchObject({ to: '/market', search: { window: '30d', query: BAS_ASK } })
+    expect(thrown.options).toMatchObject({ to: '/market', search: { query: BAS_ASK } })
   })
 
   it('redirects a query without a project to the market', () => {
@@ -48,7 +48,7 @@ describe('root route readback', () => {
 
     expect(isRedirect(thrown)).toBe(true)
     if (!isRedirect(thrown)) return
-    expect(thrown.options).toMatchObject({ to: '/market', search: { window: '30d', query: BAS_ASK } })
+    expect(thrown.options).toMatchObject({ to: '/market', search: { query: BAS_ASK } })
   })
 
   it('preserves a 173-character query through home and market navigation', () => {
@@ -70,7 +70,7 @@ describe('root route readback', () => {
 
     expect(isRedirect(thrown)).toBe(true)
     if (!isRedirect(thrown)) return
-    expect(thrown.options).toMatchObject({ to: '/market', search: { window: '30d', query } })
+    expect(thrown.options).toMatchObject({ to: '/market', search: { query } })
   })
 
 })

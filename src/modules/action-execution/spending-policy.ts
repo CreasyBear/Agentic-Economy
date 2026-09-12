@@ -1,4 +1,5 @@
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 import {
   addExactAmounts,
   compareExactAmounts,
@@ -122,8 +123,11 @@ export function restoreSpendingPolicyStore(
       kind: 'accepted',
       value: new SpendingPolicyStore(parsed.data as SpendingPolicySnapshot),
     }
-  } catch {
-    return { kind: 'refused', code: 'spending_policy_material_invalid' }
+  } catch (cause) {
+    return degradeBackend(cause, { kind: 'refused', code: 'spending_policy_material_invalid' } as const, {
+      site: 'restoreSpendingPolicyStore',
+      reason: 'invalid_response',
+    })
   }
 }
 

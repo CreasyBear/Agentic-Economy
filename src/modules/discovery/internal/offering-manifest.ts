@@ -5,7 +5,7 @@ import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { trimTrailingSlashes } from '@/modules/common/trim-trailing-slashes'
 import type {
   PublicBusinessCatalogApiV2Dto,
-  PublicOfferingAccessPathDto,
+  PublicListingAccessPathDto,
 } from '@/modules/registry/public'
 
 import { projectManifestCatalog, safePublicText } from './manifest-projection'
@@ -36,7 +36,7 @@ export type OfferingDiscoveryManifestContract = Readonly<{
     availabilitySummary?: string
     pricingSummary?: string
     price?: OfferingPrice
-    accessPaths: readonly PublicOfferingAccessPathDto[]
+    accessPaths: readonly PublicListingAccessPathDto[]
     support: Readonly<{
       integrated: boolean
       aeSupportedAction: boolean
@@ -95,9 +95,9 @@ const PUBLIC_PHONE_CHANNEL_DISCLOSURE = 'Call the published number on the listin
 const PUBLIC_WEBSITE_CHANNEL_DISCLOSURE = 'Use the published website on the listing.'
 
 function projectManifestAccessPaths(
-  paths: readonly PublicOfferingAccessPathDto[],
-): readonly PublicOfferingAccessPathDto[] {
-  return paths.flatMap((path): readonly PublicOfferingAccessPathDto[] => {
+  paths: readonly PublicListingAccessPathDto[],
+): readonly PublicListingAccessPathDto[] {
+  return paths.flatMap((path): readonly PublicListingAccessPathDto[] => {
     if (path.kind !== 'human_request') return [sanitizeAccessPath(path)]
     return [sanitizeAccessPath({
       ...path,
@@ -108,7 +108,7 @@ function projectManifestAccessPaths(
   })
 }
 
-function sanitizeAccessPath(path: PublicOfferingAccessPathDto): PublicOfferingAccessPathDto {
+function sanitizeAccessPath(path: PublicListingAccessPathDto): PublicListingAccessPathDto {
   return path.kind === 'human_request'
     ? {
         ...path,

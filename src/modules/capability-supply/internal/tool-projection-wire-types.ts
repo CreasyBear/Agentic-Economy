@@ -15,8 +15,8 @@ import type {
   PublicToolBusinessRef,
   PublicToolCatalogPrice,
   PublicToolDescriptor,
+  PublicToolListingRef,
   PublicToolNavigationRelation,
-  PublicToolOfferingRef,
   PublicToolParameter,
   PublicToolPayment,
   PublicToolPrice,
@@ -41,7 +41,7 @@ export type ToolSurfaceWireDescriptor = {
     inputExamples?: DeepWritable<CapabilityInputExample[]>;
   };
   business: DeepWritable<PublicToolBusinessRef>;
-  offering: DeepWritable<PublicToolOfferingRef>;
+  listing: DeepWritable<PublicToolListingRef>;
   summary: string;
   commercial: {
     price: DeepWritable<PublicToolPrice>;

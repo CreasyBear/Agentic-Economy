@@ -1,5 +1,6 @@
 import { bearerChallenge } from '@/lib/http/oauth-challenge'
 import { gatewayFailureToProblem } from '@/lib/errors'
+import { degrade } from '@/lib/observability/degrade'
 import {
   authenticateAgentAccess,
   resolveAgentAccessPrincipal,
@@ -10,6 +11,7 @@ import { readBoundedRequestText } from '@/lib/server/bounded-request-body'
 import { resolveCanonicalBaseUrl } from '@/lib/server/canonical-url'
 import { response } from '@/lib/server/no-store-response'
 import { problem } from '@/lib/server/problem'
+import { withHttpRateLimit } from '@/lib/server/rate-limit'
 import { runWithRequestCorrelation, withRequestCorrelationHeader } from '@/lib/server/request-correlation'
 import {
   MARKET_REQUEST_ROUTE_CONTRACTS,
@@ -29,6 +31,13 @@ const requestActions = Object.freeze({
 })
 
 export type MarketRequestActionName = keyof typeof requestActions
+
+/** Create mutates private market demand memory; list/status only read it. */
+const rateLimitScopeByAction = Object.freeze({
+  create: 'public-mutation',
+  list: 'public-read',
+  status: 'public-read',
+} as const satisfies Record<MarketRequestActionName, 'public-mutation' | 'public-read'>)
 
 export type MarketDemandHandlerOptions = Readonly<{
   authenticate?: AgentAccessAuthenticationOptions['authenticate']
@@ -77,52 +86,55 @@ export async function handleMarketRequestPost(
       }), correlationId)
     }
 
-    let rawBody: unknown
-    try {
-      rawBody = JSON.parse(bounded.text) as unknown
-    } catch {
-      return withRequestCorrelationHeader(problem({
-        status: 400,
-        kind: 'INVALID_ARGUMENT',
-        code: 'invalid_json',
-        detail: 'The market request body must be valid JSON.',
-      }), correlationId)
-    }
-    const action = requestActions[actionName]
-    const parsed = action.schema.safeParse(rawBody)
-    if (!parsed.success) {
-      return withRequestCorrelationHeader(problem({
-        status: 400,
-        kind: 'INVALID_ARGUMENT',
-        code: 'invalid_request',
-        detail: `The request did not match ${action.invocationContract.version}.`,
-      }), correlationId)
-    }
-
-    try {
-      const context = {
-        caller: 'http' as const,
-        correlationId,
-        agentAccessPrincipal: admitted.principal,
-        marketDemandService: options.marketDemandService
-          ?? createMarketDemandService(request, bounded.text),
+    const rateLimited = await withHttpRateLimit(request, rateLimitScopeByAction[actionName], async () => {
+      let rawBody: unknown
+      try {
+        rawBody = JSON.parse(bounded.text) as unknown
+      } catch (cause) {
+        return degrade(cause, problem({
+          status: 400,
+          kind: 'INVALID_ARGUMENT',
+          code: 'invalid_json',
+          detail: 'The market request body must be valid JSON.',
+        }), { site: 'handleMarketRequestPost', reason: 'invalid_response' })
       }
-      const result = actionName === 'create'
-        ? await marketRequestCreateAction.run({ data: marketRequestCreateAction.schema.parse(rawBody), context })
-        : actionName === 'list'
-          ? await marketRequestListAction.run({ data: marketRequestListAction.schema.parse(rawBody), context })
-          : await marketRequestStatusAction.run({ data: marketRequestStatusAction.schema.parse(rawBody), context })
-      const projected = action.outputSchema.safeParse(result)
-      if (!projected.success) throw new Error('market_request_action_result_invalid')
-      return withRequestCorrelationHeader(response(projected.data, 200, {
-        'Content-Type': 'application/json; charset=utf-8',
-      }), correlationId)
-    } catch {
-      const failure = gatewayFailureToProblem({ kind: 'error', code: 'source_unavailable', retryable: true })
-      return withRequestCorrelationHeader(problem({
-        ...failure,
-        detail: 'Private market request storage is temporarily unavailable.',
-      }), correlationId)
-    }
+      const action = requestActions[actionName]
+      const parsed = action.schema.safeParse(rawBody)
+      if (!parsed.success) {
+        return problem({
+          status: 400,
+          kind: 'INVALID_ARGUMENT',
+          code: 'invalid_request',
+          detail: `The request did not match ${action.invocationContract.version}.`,
+        })
+      }
+
+      try {
+        const context = {
+          caller: 'http' as const,
+          correlationId,
+          agentAccessPrincipal: admitted.principal,
+          marketDemandService: options.marketDemandService
+            ?? createMarketDemandService(request, bounded.text),
+        }
+        const result = actionName === 'create'
+          ? await marketRequestCreateAction.run({ data: marketRequestCreateAction.schema.parse(rawBody), context })
+          : actionName === 'list'
+            ? await marketRequestListAction.run({ data: marketRequestListAction.schema.parse(rawBody), context })
+            : await marketRequestStatusAction.run({ data: marketRequestStatusAction.schema.parse(rawBody), context })
+        const projected = action.outputSchema.safeParse(result)
+        if (!projected.success) throw new Error('market_request_action_result_invalid')
+        return response(projected.data, 200, {
+          'Content-Type': 'application/json; charset=utf-8',
+        })
+      } catch (cause) {
+        const failure = gatewayFailureToProblem({ kind: 'error', code: 'source_unavailable', retryable: true })
+        return degrade(cause, problem({
+          ...failure,
+          detail: 'Private market request storage is temporarily unavailable.',
+        }), { site: 'handleMarketRequestPost', reason: 'source_unavailable' })
+      }
+    })
+    return withRequestCorrelationHeader(rateLimited, correlationId)
   })
 }

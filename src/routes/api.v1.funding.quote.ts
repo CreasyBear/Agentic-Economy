@@ -1,6 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 
 import { readBoundedRequestJson } from '@/lib/server/bounded-request-body'
+import { degrade } from '@/lib/observability/degrade'
 import { methodNotAllowed } from '@/lib/server/method-guard'
 import { problem } from '@/lib/server/problem'
 import { withHttpRateLimit } from '@/lib/server/rate-limit'
@@ -64,13 +65,13 @@ export async function handleFundingQuoteRequest(
         }
         return Response.json(quote, { headers: { 'Cache-Control': 'no-store' } })
       })
-    } catch {
-      response = problem({
+    } catch (cause) {
+      response = degrade(cause, problem({
         status: 503,
         kind: 'UNAVAILABLE',
         code: 'funding_quote_unavailable',
         retryable: true,
-      })
+      }), { site: 'handleFundingQuoteRequest', reason: 'source_unavailable' })
     }
     return withRequestCorrelationHeader(response, correlationId)
   })

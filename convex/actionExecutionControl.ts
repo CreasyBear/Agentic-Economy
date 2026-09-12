@@ -199,22 +199,12 @@ const ownerReadArgs = {
   correlationId: v.string(),
   ...sourceWriteArgs,
 }
-const transactSourceArgs = {
-  ...actionExecutionTransactArgs,
-  operationKey: v.string(),
-  correlationId: v.string(),
-  ...sourceWriteArgs,
-}
 const lateObservationSourceArgs = {
   ...lateObservationArgs,
   operationKey: v.string(),
   correlationId: v.string(),
   ...sourceWriteArgs,
 }
-const readAttemptsSourceArgs = { ...ownerReadArgs, limit: v.number() }
-const readAttemptSourceArgs = { ...ownerReadArgs, attemptRef: v.string() }
-const readHistorySourceArgs = { ...ownerReadArgs, afterVersion: v.number(), limit: v.number() }
-const readHistoryCommandSourceArgs = { ...ownerReadArgs, commandId: v.string() }
 type OwnerReadArgs = ObjectType<typeof ownerReadArgs>
 
 function withoutSystemFields<Row extends { _id: string; _creationTime: number }>(
@@ -376,15 +366,6 @@ export const readHistoryCommand = internalQuery({
   handler: readHistoryCommandHandler,
 })
 
-export const transactSource = mutation({
-  args: transactSourceArgs,
-  returns: persistControlResult,
-  handler: async (ctx, args) => {
-    await requireActionExecutionSourceWrite(ctx, args)
-    return transactHandler(ctx, args)
-  },
-})
-
 export const recordLateObservationSource = mutation({
   args: lateObservationSourceArgs,
   returns: persistControlResult,
@@ -404,42 +385,3 @@ export const readControlSource = query({
   },
 })
 
-export const readAttemptsSource = query({
-  args: readAttemptsSourceArgs,
-  returns: v.array(attemptRow),
-  handler: async (ctx, args) => {
-    await requireActionExecutionSourceRead(args)
-    const control = await readOwnedControl(ctx, args)
-    return control === null ? [] : readAttemptsHandler(ctx, args)
-  },
-})
-
-export const readAttemptSource = query({
-  args: readAttemptSourceArgs,
-  returns: v.union(attemptRow, v.null()),
-  handler: async (ctx, args) => {
-    await requireActionExecutionSourceRead(args)
-    const control = await readOwnedControl(ctx, args)
-    return control === null ? null : readAttemptHandler(ctx, args)
-  },
-})
-
-export const readHistorySource = query({
-  args: readHistorySourceArgs,
-  returns: v.array(historyRow),
-  handler: async (ctx, args) => {
-    await requireActionExecutionSourceRead(args)
-    const control = await readOwnedControl(ctx, args)
-    return control === null ? [] : readHistoryHandler(ctx, args)
-  },
-})
-
-export const readHistoryCommandSource = query({
-  args: readHistoryCommandSourceArgs,
-  returns: v.union(historyRow, v.null()),
-  handler: async (ctx, args) => {
-    await requireActionExecutionSourceRead(args)
-    const control = await readOwnedControl(ctx, args)
-    return control === null ? null : readHistoryCommandHandler(ctx, args)
-  },
-})

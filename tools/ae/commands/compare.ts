@@ -81,6 +81,12 @@ export async function runCompareCommand(args: readonly string[], options: CliOpt
   for (const next of nextCommands) line(`    ${next.command}`)
 }
 
+function printMissingRefs(missing: readonly string[] | undefined): void {
+  if (missing === undefined || missing.length === 0) return
+  line('  not found or unavailable:')
+  for (const toolRef of missing) line(`    ${toolRef}`)
+}
+
 type AvailableComparison = Extract<ReturnType<typeof toolChoiceCompareOutputSchema.parse>, { kind: 'ok' }>
 
 function printHumanComparison(result: AvailableComparison, requestedCount: number, technical: boolean): void {
@@ -92,6 +98,7 @@ function printHumanComparison(result: AvailableComparison, requestedCount: numbe
     line(`       indicative price: ${tool.priceLabel}`)
     line(`       health: ${tool.healthStatus}`)
   }
+  printMissingRefs(result.missing)
   if (technical) printTechnicalComparison(result)
 }
 

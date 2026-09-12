@@ -6,6 +6,11 @@ export const marketTables = {
     key: v.literal('coinbase'),
     activeGeneration: v.optional(v.string()),
     refreshGeneration: v.optional(v.string()),
+    // Well 8 Lane B: the current run's start time, threaded through to every
+    // touched row's lastSeenRunAt and used as the removal sweep's staleness
+    // threshold (x402DirectoryIndexStore.cleanup). Set on every begin(), kept
+    // (not cleared) after completion as a "last refresh started at" record.
+    runStartedAt: v.optional(v.number()),
     lastAttemptAt: v.number(),
     lastAttemptStatus: v.union(
       v.literal('refreshing'),
@@ -46,7 +51,15 @@ export const marketTables = {
   marketExternalRegistryEntries: defineTable({
     generation: v.string(),
     documentId: v.string(),
-    source: v.literal('coinbase'),
+    // Well 8 Lane C: 'provider' rows are the reviewed-tier (provider_owned/
+    // ae_curated_external) publication projection written by
+    // x402DirectoryIndexStore.upsertProviderDirectoryRows - a synthetic
+    // Coinbase-shaped entry so storedDirectoryEntry/indexedDirectoryEntry and
+    // every browse/search/facets/bySlug/canonical reader need no
+    // provider-specific branch. Keyed by a documentId digest over
+    // sourceRouteRef (not resource), a wholly separate identity namespace
+    // from Coinbase's resource-keyed rows.
+    source: v.union(v.literal('coinbase'), v.literal('provider')),
     upstreamServiceId: v.string(),
     upstreamEndpointId: v.string(),
     sourceUrl: v.string(),
@@ -72,6 +85,19 @@ export const marketTables = {
     directoryCategory: v.optional(v.string()),
     directorySourceUpdatedAt: v.optional(v.number()),
     directoryCalls30d: v.optional(v.number()),
+    // Well 8 Lane B (one live generation updated in place): digest over
+    // listing-identity fields only (resource, method, description, accepts,
+    // metadata flags, category, tags, bundleSlugs, curated) - never
+    // calls30d/payers30d/lastCalledAt. Comparing this against the freshly
+    // computed value on each refresh is what lets an unchanged listing skip
+    // the expensive rewrite/facet-delta path (x402DirectoryIndexStore.ts).
+    listingDigest: v.optional(v.string()),
+    // Stamped to the run's start time (marketExternalRegistryState.
+    // runStartedAt) on every resource this run actually observed upstream.
+    // The removal sweep (x402DirectoryIndexStore.cleanup) deletes rows whose
+    // lastSeenRunAt is older than the current run's start - i.e. resources
+    // the upstream directory no longer reports.
+    lastSeenRunAt: v.optional(v.number()),
   })
     .index('by_generation_and_documentId', ['generation', 'documentId'])
     .index('by_generation_source_and_documentId', [
@@ -84,6 +110,7 @@ export const marketTables = {
       'access',
       'documentId',
     ])
+    .index('by_generation_and_lastSeenRunAt', ['generation', 'lastSeenRunAt'])
     .searchIndex('search_searchText_by_generation_source', {
       searchField: 'searchText',
       filterFields: ['generation', 'source', 'access'],
@@ -97,6 +124,33 @@ export const marketTables = {
     network: v.string(),
     category: v.string(),
     provider: v.string(),
+    // Normalised host (lowercase, no port, no trailing dot). Optional until the
+    // backfill migration (convex/migrations.ts:backfillDirectoryEligibility)
+    // completes on every existing generation, then tightened to required.
+    providerKey: v.optional(v.string()),
+    // Directory quality bar (src/modules/market/x402-directory-index.ts:
+    // isDirectoryEntryEligible), computed once per resource at write time and
+    // copied onto every network-variant row. Optional for the same backfill
+    // reason as providerKey.
+    eligible: v.optional(v.boolean()),
+    // Stable route identity for the resource, computed the same way
+    // capability-supply computes `capabilityPublications.sourceRouteRef`
+    // (src/modules/capability-supply/internal/source-route-identity.ts). Lets
+    // the canonical Tool URL join to an admitted publication without storing
+    // a toolRef that would go stale across admission/withdrawal.
+    sourceRouteRef: v.optional(v.string()),
+    // Kebab slug for the canonical `/tools/<providerKey>/<slug>` URL, derived
+    // from the resource path at write time (method-qualified only when two
+    // resources on the same host collide). Optional for the same backfill
+    // reason as providerKey/eligible.
+    slug: v.optional(v.string()),
+    // Well 8 Lane C: 'provider' rows are written from a current reviewed-tier
+    // publication (provider_owned/ae_curated_external) by
+    // x402DirectoryIndexStore.upsertProviderDirectoryRows; optional and
+    // absent on every pre-existing row, which means 'coinbase'. A provider
+    // row wins a shared sourceRouteRef over a Coinbase-sourced one (see
+    // upsertProviderDirectoryRows and the suppression check in writeSource).
+    source: v.optional(v.union(v.literal('coinbase'), v.literal('provider'))),
     searchText: v.string(),
     popularOrder: v.number(),
     updatedOrder: v.number(),
@@ -139,9 +193,35 @@ export const marketTables = {
     .index('by_generation_and_network_and_category_and_updatedOrder', ['generation', 'network', 'category', 'updatedOrder'])
     .index('by_generation_and_network_and_provider_and_popularOrder', ['generation', 'network', 'provider', 'popularOrder'])
     .index('by_generation_and_network_and_provider_and_updatedOrder', ['generation', 'network', 'provider', 'updatedOrder'])
+    // Eligible-narrowed variants for the default (no-provider) browse/search
+    // scope only. A provider filter intentionally reads the un-narrowed
+    // indexes above so the Provider page can show its ineligible long tail
+    // (docs/architecture/catalogue-distillation.md#9, Lane 1). No eligible
+    // variant for momentumOrder (out of Lane 1's scope) or for the
+    // provider-narrowed indexes (never queried eligible-only).
+    .index('by_generation_and_network_and_elig_and_payersOrder', ['generation', 'network', 'eligible', 'payersOrder'])
+    .index('by_generation_and_network_and_elig_and_category_and_payersOrder', ['generation', 'network', 'eligible', 'category', 'payersOrder'])
+    .index('by_generation_and_network_and_elig_and_priceOrder', ['generation', 'network', 'eligible', 'priceOrder'])
+    .index('by_generation_and_network_and_elig_and_category_and_priceOrder', ['generation', 'network', 'eligible', 'category', 'priceOrder'])
+    .index('by_generation_and_network_and_elig_and_popularOrder', ['generation', 'network', 'eligible', 'popularOrder'])
+    // Abbreviated (fields still present, just shortened): the unabbreviated
+    // name for this field set ran to exactly 64 characters, at the edge of
+    // Convex's index name length ceiling.
+    .index('by_gen_net_elig_cat_popular', ['generation', 'network', 'eligible', 'category', 'popularOrder'])
+    .index('by_generation_and_network_and_elig_and_updatedOrder', ['generation', 'network', 'eligible', 'updatedOrder'])
+    // Abbreviated for the same reason as by_gen_net_elig_cat_popular above.
+    .index('by_gen_net_elig_cat_updated', ['generation', 'network', 'eligible', 'category', 'updatedOrder'])
+    // Canonical Tool URL lookup: providerKey+slug within one generation, then
+    // filtered to the '*' network row in the query (minimal compound index -
+    // no network segment needed since slug is generation/resource-scoped,
+    // not network-scoped).
+    .index('by_generation_and_providerKey_and_slug', ['generation', 'providerKey', 'slug'])
+    // Reverse lookup for the `/tools/$toolRef` redirect: an admitted
+    // publication's sourceRouteRef back to its directory entry's slug.
+    .index('by_generation_and_sourceRouteRef', ['generation', 'sourceRouteRef'])
     .searchIndex('search_text_by_generation_network_category_provider', {
       searchField: 'searchText',
-      filterFields: ['generation', 'network', 'category', 'provider'],
+      filterFields: ['generation', 'network', 'category', 'provider', 'eligible'],
     }),
   marketDirectoryFacets: defineTable({
     generation: v.string(),

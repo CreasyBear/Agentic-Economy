@@ -13,6 +13,7 @@ import { ExactEvmScheme } from '@x402/evm/exact/client'
 import { appendPaymentIdentifierToExtensions, extractPaymentIdentifier, isPaymentIdentifierExtension } from '@x402/extensions/payment-identifier'
 import { privateKeyToAccount } from 'viem/accounts'
 
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { isRecord } from '@/modules/common/is-record'
 
 import type { X402PaymentSignatureRequest } from './x402-challenge'
@@ -122,8 +123,8 @@ export function readX402PaymentResponseHeader(
     return normalizeX402PaymentResponse(
       decodeX402PaymentResponseHeader(header),
     )
-  } catch {
-    return undefined
+  } catch (cause) {
+    return degradeBackend(cause, undefined, { site: 'readX402PaymentResponseHeader', reason: 'invalid_response' })
   }
 }
 
@@ -173,8 +174,8 @@ export async function createSandboxEvmX402PaymentSignature(
     return paymentIdentifierExtension === undefined
       ? encodedIdentifier === null ? header : undefined
       : encodedIdentifier === identifier ? header : undefined
-  } catch {
-    return undefined
+  } catch (cause) {
+    return degradeBackend(cause, undefined, { site: 'createSandboxEvmX402PaymentSignature', reason: 'source_unavailable' })
   }
 }
 
@@ -204,8 +205,8 @@ export function readX402PaymentPayer(
       && boundedString(permit2Authorization.from, 256)
     )
       return permit2Authorization.from
-  } catch {
-    return undefined
+  } catch (cause) {
+    return degradeBackend(cause, undefined, { site: 'readX402PaymentPayer', reason: 'invalid_response' })
   }
   return undefined
 }
@@ -247,8 +248,8 @@ export function readX402PaymentPayerAndNonce(
       payer: authorization.from.toLowerCase(),
       nonce: authorization.nonce.toLowerCase(),
     }
-  } catch {
-    return undefined
+  } catch (cause) {
+    return degradeBackend(cause, undefined, { site: 'readX402PaymentPayerAndNonce', reason: 'invalid_response' })
   }
 }
 

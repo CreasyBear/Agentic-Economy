@@ -1,4 +1,5 @@
 import { v } from 'convex/values'
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 
 import {
   decodeDurableCapabilityContract,
@@ -240,8 +241,8 @@ export async function getExactRegisteredCapabilityContract(
       return { kind: 'unavailable' as const, reason: 'integrity_failure' as const }
     }
     return { kind: 'found' as const, contract: encoded.contract, registeredAt: existing.registeredAt }
-  } catch {
-    return { kind: 'unavailable' as const, reason: 'integrity_failure' as const }
+  } catch (cause) {
+    return degradeBackend(cause, { kind: 'unavailable' as const, reason: 'integrity_failure' as const }, { site: 'getExactRegisteredCapabilityContract', reason: 'invalid_response' })
   }
 }
 

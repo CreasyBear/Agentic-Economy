@@ -29,6 +29,7 @@ import {
   unknown,
   type RouteTransportObservation,
 } from './route-transport-observation'
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 import {
   callHeaders,
   containsSensitiveValue,
@@ -176,8 +177,8 @@ export async function invokeX402(
       selectedRequirement: requirement,
       ...authorizationIdentity,
     })
-  } catch {
-    preparedAuthorization = undefined
+  } catch (cause) {
+    preparedAuthorization = degradeBackend(cause, undefined, { site: 'invokeX402', reason: 'source_unavailable' })
   }
   if (preparedAuthorization === undefined) {
     return {
@@ -193,8 +194,8 @@ export async function invokeX402(
     let fencePassed = false
     try {
       fencePassed = await runtime.beforeX402PaymentAuthorizationRead()
-    } catch {
-      fencePassed = false
+    } catch (cause) {
+      fencePassed = degradeBackend(cause, false, { site: 'invokeX402', reason: 'source_unavailable' })
     }
     if (!fencePassed) {
       return {
@@ -312,8 +313,8 @@ export async function invokeX402(
         ...offerEvidence,
       }
     }
-  } catch {
-    return {
+  } catch (cause) {
+    return degradeBackend(cause, {
       ...refused(
         'x402',
         requestDigest,
@@ -326,7 +327,7 @@ export async function invokeX402(
       queryReleaseStatus: 'released',
       settlementEvidence: { kind: 'not_submitted' },
       ...offerEvidence,
-    }
+    }, { site: 'invokeX402', reason: 'source_unavailable' })
   }
   try {
     const paid = await runtime.send(target, {
@@ -719,8 +720,8 @@ async function validateX402ProviderAuthority(
               : { readinessDigest: authority.readinessDigest }),
           }),
     })
-  } catch {
-    return 'connection_authority_validation_failed'
+  } catch (cause) {
+    return degradeBackend(cause, 'connection_authority_validation_failed', { site: 'validateX402ProviderAuthority', reason: 'source_unavailable' })
   }
   return validation.kind === 'valid'
     ? undefined
@@ -776,8 +777,8 @@ async function x402SettlementCheck(
           paymentSignature,
           ...authorizationIdentity,
         })
-  } catch {
-    verified = false
+  } catch (cause) {
+    verified = degradeBackend(cause, false, { site: 'x402SettlementCheck', reason: 'source_unavailable' })
   }
   if (!verified) {
     return {

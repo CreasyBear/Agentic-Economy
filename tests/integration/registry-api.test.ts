@@ -25,8 +25,8 @@ import {
   optionalHasPrice,
   optionalMaxPrice,
 } from '@/routes/api.businesses.search'
-import { handleDurableListServicesRequest } from '@/routes/api.v1.services'
-import { handleDurableSearchServicesRequest } from '@/routes/api.v1.services.search'
+import { handleDurableListServicesRequest } from '@/routes/api.v1.businesses'
+import { handleDurableSearchServicesRequest } from '@/routes/api.v1.businesses.search'
 
 const admittedLocalE2eBusiness = LOCAL_E2E_BUSINESS_FIXTURES.find(
   (fixture) => fixture.inquiryAdmission === 'admitted',
@@ -147,7 +147,7 @@ describe('registry public API routes', () => {
     try {
       const searchQuery = `${admittedLocalE2eOffering.name} ${admittedLocalE2eBusiness.suburb}`
       const registryResponse = await handleDurableSearchServicesRequest(
-        new Request(`https://ae.example/api/v1/services/search?q=${encodeURIComponent(searchQuery)}`),
+        new Request(`https://ae.example/api/v1/businesses/search?q=${encodeURIComponent(searchQuery)}`),
       )
       const registry = await registryResponse.json()
       const listing = await readPublicOfferingRegistryBusinessDetail({
@@ -196,7 +196,7 @@ describe('registry public API routes', () => {
       restoreLocalSource = undefined
 
       await expect(handleDurableSearchServicesRequest(
-        new Request(`https://ae.example/api/v1/services/search?q=${encodeURIComponent(searchQuery)}`),
+        new Request(`https://ae.example/api/v1/businesses/search?q=${encodeURIComponent(searchQuery)}`),
       )).rejects.toThrow('CONVEX_URL or VITE_CONVEX_URL is required for server Convex calls.')
       await expect(readPublicOfferingRegistryPage({
         paginationOpts: { cursor: null, numItems: 50 },
@@ -307,8 +307,8 @@ describe('registry public API routes', () => {
             ],
           },
         ],
-        isDone: false,
-        continueCursor: '1',
+        hasMore: true,
+        nextCursor: '1',
       })
       expect(typeof body.page[0].observedAt).toBe('number')
       // v2 publishes a business identifier by contract.
@@ -320,8 +320,8 @@ describe('registry public API routes', () => {
     it.each([
       ['businesses list', handleDurableListBusinessesRequest, 'https://ae.example/api/businesses?limit=-5'],
       ['businesses search', handleDurableSearchBusinessesRequest, 'https://ae.example/api/businesses/search?q=plumber&limit=-5'],
-      ['services list', handleDurableListServicesRequest, 'https://ae.example/api/v1/services?limit=-5'],
-      ['services search', handleDurableSearchServicesRequest, 'https://ae.example/api/v1/services/search?q=plumber&limit=-5'],
+      ['services list', handleDurableListServicesRequest, 'https://ae.example/api/v1/businesses?limit=-5'],
+      ['services search', handleDurableSearchServicesRequest, 'https://ae.example/api/v1/businesses/search?q=plumber&limit=-5'],
     ] as const)('rejects limit=-5 for %s with an RFC 9457 problem', async (_label, handler, url) => {
       const response = await handler(new Request(url))
       const body = await response.json()
@@ -358,8 +358,8 @@ describe('registry public API routes', () => {
     it.each([
       ['businesses list', handleDurableListBusinessesRequest, 'https://ae.example/api/businesses?cursor=not-a-valid-cursor'],
       ['businesses search', handleDurableSearchBusinessesRequest, 'https://ae.example/api/businesses/search?q=plumber&cursor=not-a-result'],
-      ['services list', handleDurableListServicesRequest, 'https://ae.example/api/v1/services?cursor=not-a-valid-cursor'],
-      ['services search', handleDurableSearchServicesRequest, 'https://ae.example/api/v1/services/search?q=plumber&cursor=not-a-result'],
+      ['services list', handleDurableListServicesRequest, 'https://ae.example/api/v1/businesses?cursor=not-a-valid-cursor'],
+      ['services search', handleDurableSearchServicesRequest, 'https://ae.example/api/v1/businesses/search?q=plumber&cursor=not-a-result'],
     ] as const)('rejects an invalid cursor for %s with an RFC 9457 problem', async (_label, handler, url) => {
       const response = await handler(new Request(url))
       const body = await response.json()

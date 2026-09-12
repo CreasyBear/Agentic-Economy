@@ -46,7 +46,7 @@ const operationRecord: CapabilityToolSourceRecord = {
     lifecycle: { idempotency: 'required', recovery: 'retry_safe' },
   },
   business: { businessId: 'business:reference', slug: 'reference', name: 'Reference' },
-  offering: { offeringRef: 'offering:reference', revision: 1, label: 'Reference lookup', summary: 'One reference lookup.' },
+  listing: { listingRef: 'listing:reference', revision: 1, label: 'Reference lookup', summary: 'One reference lookup.' },
   price: { kind: 'fixed', amount: { currency: 'USD', units: '125', exponent: 2 } },
   priceEvidence: { priceDigest: 'digest:publication-price', evidenceRefs: [] },
   materialTerms: [],
@@ -174,30 +174,30 @@ describe('public Tool read contract', () => {
       actionId: 'registry.tools.describe',
     })
   })
-  it('C17: sanitizes provider-authored contract description and offering label/summary', () => {
+  it('C17: sanitizes provider-authored contract description and listing label/summary', () => {
     const hostile = '<script>alert(1)</script>  **Bold**   markdown\n\nwith   extra   whitespace'
     const tool = projectCapabilityTool({
       ...operationRecord,
       contract: { ...operationRecord.contract, description: hostile },
-      offering: { ...operationRecord.offering, label: hostile, summary: hostile },
+      listing: { ...operationRecord.listing, label: hostile, summary: hostile },
     }, 2_000)
-    for (const text of [tool.summary, tool.offering.label, tool.offering.summary]) {
+    for (const text of [tool.summary, tool.listing.label, tool.listing.summary]) {
       expect(text).not.toContain('<')
       expect(text).not.toContain('>')
       expect(text).not.toMatch(/\s{2,}/)
       expect(text).toBe(text.trim())
     }
     expect(tool.summary).toBe('scriptalert(1)/script **Bold** markdown with extra whitespace')
-    expect(tool.offering.label.length).toBeLessThanOrEqual(160)
-    expect(tool.offering.summary.length).toBeLessThanOrEqual(1_000)
+    expect(tool.listing.label.length).toBeLessThanOrEqual(160)
+    expect(tool.listing.summary.length).toBeLessThanOrEqual(1_000)
 
     const overlong = projectCapabilityTool({
       ...operationRecord,
       contract: { ...operationRecord.contract, description: 'y'.repeat(2_000) },
-      offering: { ...operationRecord.offering, label: 'z'.repeat(2_000) },
+      listing: { ...operationRecord.listing, label: 'z'.repeat(2_000) },
     }, 2_000)
     expect(overlong.summary.length).toBe(1_000)
-    expect(overlong.offering.label.length).toBe(160)
+    expect(overlong.listing.label.length).toBe(160)
   })
   it('projects toolId through the wire roundtrip and rejects the retired public alias', () => {
     const projected = projectCapabilityTool(operationRecord, 2_000)

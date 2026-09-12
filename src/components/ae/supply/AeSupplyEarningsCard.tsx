@@ -4,6 +4,7 @@ import { isReverificationCancelledError } from "@clerk/tanstack-react-start/erro
 import { useServerFn } from "@tanstack/react-start";
 
 import { Button } from "@/components/ui/button";
+import { degrade } from "@/lib/observability/degrade";
 import { AeEmptyState } from "@/components/ae/feedback/AeEmptyState";
 import { AeFactList } from "@/components/ae/data/AeFactList";
 import { AeConfirmDialog } from "@/components/ae/feedback/AeConfirmDialog";
@@ -193,8 +194,8 @@ function EarningsCurrencyCard({
         : "Connect account created. Continue in Stripe; returning does not mark readiness.");
       if (result.onboardingUrl !== undefined) window.location.assign(result.onboardingUrl);
       else await onStatusRefreshed?.();
-    } catch {
-      setMessage("Payout setup was interrupted. Reload before trying again.");
+    } catch (cause) {
+      setMessage(degrade(cause, "Payout setup was interrupted. Reload before trying again.", { site: "createAccount", reason: "source_unavailable" }));
     } finally {
       setBusy(undefined);
     }
@@ -222,10 +223,12 @@ function EarningsCurrencyCard({
         return;
       }
       window.location.assign(result.url);
-    } catch {
-      setMessage(
+    } catch (cause) {
+      setMessage(degrade(
+        cause,
         "Hosted onboarding is temporarily unavailable. Your Connect account remains bound.",
-      );
+        { site: "openOnboarding", reason: "source_unavailable" },
+      ));
     } finally {
       setBusy(undefined);
     }
@@ -305,10 +308,12 @@ function EarningsCurrencyCard({
         return;
       }
       setMessage(actionMessage(result.code));
-    } catch {
-      setMessage(
+    } catch (cause) {
+      setMessage(degrade(
+        cause,
         "Recorded transfer status is temporarily unavailable. Reload and try again.",
-      );
+        { site: "refreshRecordedStatus", reason: "source_unavailable" },
+      ));
     } finally {
       setBusy(undefined);
     }

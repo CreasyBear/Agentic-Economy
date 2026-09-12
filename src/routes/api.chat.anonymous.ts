@@ -1,6 +1,8 @@
 import { createFileRoute } from '@tanstack/react-router'
 
 import { readBoundedRequestJson } from '@/lib/server/bounded-request-body'
+import { captureRouteException } from '@/lib/observability/capture-route-exception'
+import { degrade } from '@/lib/observability/degrade'
 import { methodNotAllowed } from '@/lib/server/method-guard'
 import { problem } from '@/lib/server/problem'
 import { readTrimmedEnv, type StringEnvironment } from '@/lib/server/read-trimmed-env'
@@ -52,7 +54,8 @@ function validOrigin(value: string, allowLocal: boolean): string | undefined {
   let url: URL
   try {
     url = new URL(value)
-  } catch {
+  } catch (cause) {
+    captureRouteException(cause, { site: 'parseAnonymousChatOrigin' }, 'warning')
     return undefined
   }
   if (
@@ -158,8 +161,11 @@ export async function handleAnonymousChatProxyRequest(
               )
               response = projectedUpstreamResponse(upstream)
             }
-          } catch {
-            response = proxyProblem(503, 'UNAVAILABLE', 'chat_proxy_unavailable')
+          } catch (cause) {
+            response = degrade(cause, proxyProblem(503, 'UNAVAILABLE', 'chat_proxy_unavailable'), {
+              site: 'proxyAnonymousChatRequest',
+              reason: 'source_unavailable',
+            })
           }
         }
       }

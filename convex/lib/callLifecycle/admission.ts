@@ -1,4 +1,5 @@
 import type { Infer } from 'convex/values'
+import { degradeBackend } from '../../../src/lib/observability/degrade-backend'
 import type { Doc } from '../../_generated/dataModel'
 import type { MutationCtx, QueryCtx } from '../../_generated/server'
 import {
@@ -45,8 +46,8 @@ function parseJsonObject(value: string): Record<string, unknown> | undefined {
   try {
     const parsed: unknown = JSON.parse(value)
     return isRecord(parsed) && isBoundedJsonValue(parsed) ? parsed : undefined
-  } catch {
-    return undefined
+  } catch (cause) {
+    return degradeBackend(cause, undefined, { site: 'parseJsonObject', reason: 'invalid_response' })
   }
 }
 
@@ -321,8 +322,8 @@ function grantAdmissionRefusal(grant: GrantRow | null, args: ReserveArgs): Grant
   let normalized: NormalizedStoredAgentAccessGrant
   try {
     normalized = normalizeStoredAgentAccessGrant(grant)
-  } catch {
-    return missingGrant()
+  } catch (cause) {
+    return degradeBackend(cause, missingGrant(), { site: 'grantAdmissionRefusal', reason: 'invalid_response' })
   }
   if (normalized.environment !== args.environment) {
     return { kind: 'refused', code: 'environment_mismatch', retryable: false, nextAction: 'Use a grant for the requested environment.' }
@@ -670,8 +671,8 @@ function loadApprovalMaterial(row: PendingApprovalRow): ApprovalMaterial | null 
       canonicalDigest({ toolRef: row.toolRef, input }) === row.requestDigest,
     ].every(Boolean)
     return digestsMatch ? { input, operation } : null
-  } catch {
-    return null
+  } catch (cause) {
+    return degradeBackend(cause, null, { site: 'loadApprovalMaterial', reason: 'invalid_response' })
   }
 }
 
@@ -692,8 +693,8 @@ function approvalRequestMatches(
   }
   try {
     return canonicalDigest(row.result.authorityRequest as never) === canonicalDigest(expected as never)
-  } catch {
-    return false
+  } catch (cause) {
+    return degradeBackend(cause, false, { site: 'approvalRequestMatches', reason: 'invalid_response' })
   }
 }
 
@@ -706,8 +707,8 @@ async function loadApprovalRuntime(
   let operation: PublishedTool | undefined
   try {
     operation = await readCurrentPublishedTool(ctx, row.toolRef, now)
-  } catch {
-    return null
+  } catch (cause) {
+    return degradeBackend(cause, null, { site: 'loadApprovalRuntime', reason: 'invalid_response' })
   }
   if (operation === undefined) return null
   const commitmentsMatch = [
@@ -722,8 +723,8 @@ async function loadApprovalRuntime(
   try {
     const descriptor = materializeRuntimePublishedTool(operation)
     return approvalRequestMatches(row, operation, descriptor) ? { operation, descriptor } : null
-  } catch {
-    return null
+  } catch (cause) {
+    return degradeBackend(cause, null, { site: 'loadApprovalRuntime', reason: 'invalid_response' })
   }
 }
 
@@ -736,8 +737,8 @@ function currentApprovalGrant(
   let normalized: NormalizedStoredAgentAccessGrant
   try {
     normalized = normalizeStoredAgentAccessGrant(grant)
-  } catch {
-    return null
+  } catch (cause) {
+    return degradeBackend(cause, null, { site: 'currentApprovalGrant', reason: 'invalid_response' })
   }
   const current = [
     normalized.lifecycle === 'active',

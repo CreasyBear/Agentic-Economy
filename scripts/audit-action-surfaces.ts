@@ -1,0 +1,194 @@
+#!/usr/bin/env node
+/**
+ * Declared-surface drift audit (advisory only, always exits 0).
+ *
+ * AE's rule is that registration alone does not create a reachable route. This
+ * script reports where a declared surface has no adapter evidence, which
+ * writes are still legacy-unclassified, and which registered actions nothing
+ * under src/routes or src/components references.
+ *
+ * Adapter evidence is a GREP-LEVEL HEURISTIC over source text, not a call
+ * graph. A finding is a prompt to look, not a proof of unreachability.
+ */
+
+import { readFileSync } from 'node:fs'
+import { glob } from 'node:fs/promises'
+import path from 'node:path'
+import { pathToFileURL } from 'node:url'
+
+const repoRoot = process.cwd()
+
+type RegisteredAction = {
+  id: string
+  surfaces: readonly string[]
+  readOnly: boolean
+  invocationContract?: unknown
+}
+
+type CallRouteDescriptor = {
+  actionId: string
+  routerPath: string
+}
+
+type ActionContract = {
+  consequenceClass: string
+}
+
+type ActionRegistryModule = {
+  listActions(): readonly RegisteredAction[]
+  listCallRouteDescriptors(): readonly CallRouteDescriptor[]
+  resolveActionContract(action: RegisteredAction): ActionContract
+}
+
+type MissingAdapterRow = { id: string, surface: string }
+type UnclassifiedWriteRow = { id: string, consequenceClass: string }
+type UnreferencedRow = { id: string }
+
+async function main(): Promise<void> {
+  const registry = await loadRegistry()
+  const callRouteDescriptors = registry.listCallRouteDescriptors()
+  const routeFiles = await collectSourceFiles(path.join(repoRoot, 'src/routes'))
+  const componentFiles = await collectSourceFiles(path.join(repoRoot, 'src/components'))
+  const moduleFiles = await collectSourceFiles(path.join(repoRoot, 'src/modules'))
+  const serverLibFiles = await collectSourceFiles(path.join(repoRoot, 'src/lib/server'))
+  const apiRouteFiles = [...routeFiles.filter((file) => path.basename(file).startsWith('api.')), ...serverLibFiles]
+
+  const sources = new Map<string, string>()
+  for (const file of [...routeFiles, ...componentFiles, ...moduleFiles, ...serverLibFiles]) {
+    sources.set(file, readFileSync(file, 'utf8'))
+  }
+
+  const missingAdapter: MissingAdapterRow[] = []
+  const unclassifiedWrites: UnclassifiedWriteRow[] = []
+  const unreferenced: UnreferencedRow[] = []
+
+  for (const action of registry.listActions()) {
+    const exportName = findExportName(moduleFiles, sources, action.id)
+    const callRouteDescriptor = callRouteDescriptors.find(({ actionId }) => actionId === action.id)
+    const nativeRouteEvidence = callRouteDescriptor === undefined
+      ? []
+      : routeFiles.filter((file) => sources.get(file)?.includes(callRouteDescriptor.routerPath) ?? false)
+    const mcpRouteEvidence = action.surfaces.includes('mcp')
+      ? routeFiles.filter((file) => sources.get(file)?.includes('handleMcpRequest') ?? false)
+      : []
+    const referencedIn = [...new Set([
+      ...[...routeFiles, ...componentFiles, ...serverLibFiles].filter((file) =>
+        mentionsAction(sources.get(file) ?? '', action.id, exportName),
+      ),
+      ...nativeRouteEvidence,
+      ...mcpRouteEvidence,
+    ])]
+
+    if (action.surfaces.includes('http')) {
+      const httpEvidence = [
+        ...apiRouteFiles.filter((file) => mentionsAction(sources.get(file) ?? '', action.id, exportName)),
+        ...nativeRouteEvidence,
+      ]
+      if (httpEvidence.length === 0) {
+        missingAdapter.push({ id: action.id, surface: 'http' })
+      }
+    }
+
+    if (action.surfaces.includes('ui')) {
+      const uiEvidence = referencedIn.filter((file) => !path.basename(file).startsWith('api.'))
+      const serverFnEvidence = moduleFiles.filter(
+        (file) => file.endsWith('.functions.ts') && mentionsAction(sources.get(file) ?? '', action.id, exportName),
+      )
+      if (uiEvidence.length === 0 && serverFnEvidence.length === 0) {
+        missingAdapter.push({ id: action.id, surface: 'ui' })
+      }
+    }
+
+    const contract = registry.resolveActionContract(action)
+    if (!action.readOnly && action.invocationContract === undefined) {
+      unclassifiedWrites.push({ id: action.id, consequenceClass: contract.consequenceClass })
+    }
+
+    if (referencedIn.length === 0) {
+      unreferenced.push({ id: action.id })
+    }
+  }
+
+  const total = registry.listActions().length
+  process.stdout.write(`AE action surface audit (advisory; grep-level heuristic, exits 0)\n`)
+  process.stdout.write(`Registered actions: ${total}\n\n`)
+
+  report('Declared surface without adapter evidence (heuristic: no source text under src/routes, src/components, or src/lib/server names the action)', missingAdapter, (row) => `${row.id} declares '${row.surface}'`)
+  report('Writes without an explicit invocation contract', unclassifiedWrites, (row) => `${row.id} (${row.consequenceClass})`)
+  report('Registered but referenced nowhere under src/routes, src/components, or src/lib/server', unreferenced, (row) => row.id)
+
+  process.stdout.write(
+    `Summary: ${missingAdapter.length} missing-adapter, ${unclassifiedWrites.length} unclassified-write, ${unreferenced.length} unreferenced of ${total} actions.\n`,
+  )
+  process.exit(0)
+}
+
+function report<T>(title: string, rows: readonly T[], format: (row: T) => string): void {
+  process.stdout.write(`${title}: ${rows.length}\n`)
+  for (const row of rows) {
+    process.stdout.write(`  - ${format(row)}\n`)
+  }
+  process.stdout.write('\n')
+}
+
+/** Actions are referenced by their exported const, not by their string id. */
+function findExportName(moduleFiles: readonly string[], sources: Map<string, string>, actionId: string): string | undefined {
+  const escapedActionId = escapeRegExp(actionId)
+  const pattern = new RegExp(`export const (\\w+) = defineAction(?:<[^;]{0,500}?>)?\\(\\{[\\s\\S]{0,500}?id:\\s*['"]${escapedActionId}['"]`, 'u')
+  for (const file of moduleFiles) {
+    const match = pattern.exec(sources.get(file) ?? '')
+    if (match?.[1] !== undefined) return match[1]
+  }
+  const idConstantPattern = new RegExp(`export const (\\w+)\\s*=\\s*['"]${escapedActionId}['"](?:\\s+as const)?`, 'u')
+  for (const file of moduleFiles) {
+    const source = sources.get(file) ?? ''
+    const idConstant = idConstantPattern.exec(source)?.[1]
+    if (idConstant === undefined) continue
+    const actionPattern = new RegExp(`export const (\\w+)\\s*=\\s*defineAction(?:<[^;]{0,500}?>)?\\(\\{[\\s\\S]{0,500}?id:\\s*${escapeRegExp(idConstant)}\\b`, 'u')
+    const action = actionPattern.exec(source)?.[1]
+    if (action !== undefined) return action
+  }
+  const candidate = actionId.split('.').reduce((name, segment, index) => (
+    `${name}${index === 0 ? segment : `${segment[0]?.toUpperCase() ?? ''}${segment.slice(1)}`}`
+  ), '') + 'Action'
+  const declaration = new RegExp(`export const ${candidate}\\s*=\\s*defineAction\\b`, 'u')
+  for (const file of moduleFiles) {
+    if (declaration.test(sources.get(file) ?? '')) return candidate
+  }
+  return undefined
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')
+}
+
+function mentionsAction(source: string, actionId: string, exportName: string | undefined): boolean {
+  if (source.includes(`'${actionId}'`) || source.includes(`"${actionId}"`)) return true
+  return exportName !== undefined && new RegExp(`\\b${exportName}\\b`, 'u').test(source)
+}
+
+async function collectSourceFiles(root: string): Promise<string[]> {
+  const found: string[] = []
+  try {
+    for await (const file of glob(['**/*.ts', '**/*.tsx'], { cwd: root })) {
+      const name = path.basename(file)
+      if (!name.endsWith('.test.ts') && !name.endsWith('.test.tsx')) found.push(path.join(root, file))
+    }
+  } catch {
+    return found
+  }
+
+  return found.toSorted()
+}
+
+async function loadRegistry(): Promise<ActionRegistryModule> {
+  const { register } = await import('tsx/esm/api') as { register: () => () => void }
+  const unregister = register()
+  try {
+    return await import(pathToFileURL(path.join(repoRoot, 'src/modules/actions/index.ts')).href) as unknown as ActionRegistryModule
+  } finally {
+    unregister()
+  }
+}
+
+await main()

@@ -1,5 +1,6 @@
 "use node";
 
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 import { Agent, fetch as guardedFetch } from 'undici'
@@ -226,8 +227,8 @@ export async function releaseCallRun(
       ) return false
       fenced = snapshot
       return true
-    } catch {
-      return false
+    } catch (cause) {
+      return degradeBackend(cause, false, { site: 'persistBrokeredReleaseFence', reason: 'source_unavailable' })
     }
   }
   const dispatcher = new Agent({ connect: { lookup: createGuardedLookup(defaultDnsResolver) } })
@@ -275,8 +276,8 @@ export async function releaseCallRun(
         generation: grantValidityExpectation.generation,
         now: Date.now(),
       })
-    } catch {
-      return false
+    } catch (cause) {
+      return degradeBackend(cause, false, { site: 'isGrantStillValid', reason: 'source_unavailable' })
     }
     return activeGrantMatches(currentGrant, grantValidityExpectation)
   }
@@ -332,16 +333,20 @@ export async function releaseCallRun(
       generation: dispatch.grantGeneration,
       now: Date.now(),
     })
-  } catch {
+  } catch (cause) {
     await settleProviderLease(ctx, dispatch, operation, leaseRef, leaseAuthority, false, durableAttemptRef, durableEffectGeneration)
     await closeDispatcher()
-    return await convergePreRelease(
-      ctx,
-      dispatch,
-      claimed,
-      'pre_release_failed',
-      true,
-      'Grant authority could not be revalidated before release.',
+    return degradeBackend(
+      cause,
+      await convergePreRelease(
+        ctx,
+        dispatch,
+        claimed,
+        'pre_release_failed',
+        true,
+        'Grant authority could not be revalidated before release.',
+      ),
+      { site: 'releaseCallRun', reason: 'source_unavailable' },
     )
   }
   if (!activeGrantMatches(finalGrant, grantValidityExpectation)) {
@@ -382,8 +387,8 @@ export async function releaseCallRun(
         operation: currentOperation,
       })
     ) currentOperation = undefined
-  } catch {
-    currentOperation = undefined
+  } catch (cause) {
+    currentOperation = degradeBackend(cause, undefined, { site: 'releaseCallRun', reason: 'source_unavailable' })
   }
   if (
     currentOperation === undefined
@@ -436,8 +441,8 @@ export async function releaseCallRun(
       return released.kind === 'accepted'
         ? { kind: 'settled', outcome: 'not_released' }
         : { kind: 'reconciliation_required' }
-    } catch {
-      return { kind: 'reconciliation_required' }
+    } catch (cause) {
+      return degradeBackend(cause, { kind: 'reconciliation_required' as const }, { site: 'releaseBrokeredBuyerBeforeSubmission', reason: 'source_unavailable' })
     }
   }
   const reconcileBeforeRelease = async (): Promise<ChargeSettlementResult> => {
@@ -484,10 +489,14 @@ export async function releaseCallRun(
         return await convergePreRelease(ctx, dispatch, claimed, 'pre_release_failed', false, 'release_fence_refused', settlement)
       }
       fenced = await readCanonicalSnapshot(port, dispatch.callRef, durableAttemptRef)
-    } catch {
+    } catch (cause) {
       const settlement = await reconcileBeforeRelease()
       await closeDispatcher()
-      return await convergePreRelease(ctx, dispatch, claimed, 'pre_release_failed', false, 'release_fence_failed', settlement)
+      return degradeBackend(
+        cause,
+        await convergePreRelease(ctx, dispatch, claimed, 'pre_release_failed', false, 'release_fence_failed', settlement),
+        { site: 'releaseCallRun', reason: 'source_unavailable' },
+      )
     }
     if (fenced === undefined) {
       const settlement = await reconcileBeforeRelease()

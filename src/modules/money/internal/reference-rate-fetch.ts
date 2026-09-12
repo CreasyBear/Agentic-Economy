@@ -1,4 +1,5 @@
 import { cancelResponseBody, readBoundedRequestJson } from '@/lib/server/bounded-request-body'
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { validReferenceRate, type ReferenceRate } from './executable-rate'
 
 /** Fixed public endpoint; neither credentials nor caller-controlled URLs enter this request. */
@@ -28,7 +29,7 @@ export async function fetchCoinbaseReferenceRate(input: Readonly<{
       fetchedAt: (input.now ?? Date.now)(),
     }
     return validReferenceRate(observation) ? Object.freeze(observation) : undefined
-  } catch {
-    return undefined
+  } catch (cause) {
+    return degradeBackend(cause, undefined, { site: 'fetchCoinbaseReferenceRate', reason: 'source_unavailable' })
   }
 }

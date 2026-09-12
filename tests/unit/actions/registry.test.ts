@@ -53,10 +53,14 @@ describe('action registry', () => {
     const ids = listActions().map((action) => action.id)
     expect(ids).toContain('registry.search')
     expect(ids).toContain('registry.detail')
-    expect(ids).not.toContain('registry.list')
-    expect(ids).not.toContain('registry.services_list')
-    expect(ids).not.toContain('registry.services_search')
-    expect(ids).not.toContain('registry.services_detail')
+    expect(ids).toContain('registry.list')
+    expect(ids).toContain('registry.services_list')
+    expect(ids).toContain('registry.services_search')
+    expect(ids).toContain('registry.services_detail')
+    // Business-portfolio projections consumed by the release smoke tool only; not MCP/CLI.
+    for (const id of ['registry.list', 'registry.services_list', 'registry.services_search', 'registry.services_detail']) {
+      expect(findAction(id)?.surfaces).toEqual(['http'])
+    }
   })
 
   it('accepts opaque Convex pagination cursors without making them unbounded', () => {
@@ -397,10 +401,10 @@ describe('action registry', () => {
     expect(detail?.surfaces).not.toContain('chat')
     expect(detail?.parameters.map((p) => p.name)).toContain('slug')
 
-    expect(findAction('registry.list')).toBeUndefined()
-    expect(findAction('registry.services_list')).toBeUndefined()
-    expect(findAction('registry.services_search')).toBeUndefined()
-    expect(findAction('registry.services_detail')).toBeUndefined()
+    expect(findAction('registry.list')?.surfaces).toEqual(['http'])
+    expect(findAction('registry.services_list')?.surfaces).toEqual(['http'])
+    expect(findAction('registry.services_search')?.surfaces).toEqual(['http'])
+    expect(findAction('registry.services_detail')?.surfaces).toEqual(['http'])
   })
 
 

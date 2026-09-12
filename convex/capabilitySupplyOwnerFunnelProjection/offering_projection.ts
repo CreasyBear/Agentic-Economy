@@ -1,4 +1,5 @@
 import { normalizePricingConfig } from '@/modules/money/public'
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 import {
   ownerSupplyAccessPathDescriptor,
   ownerSupplyLiteral,
@@ -34,8 +35,8 @@ export function ownerSupplyPricing(
       return undefined
     }
     return { config: parsed.config, priceDigest: publication.priceDigest }
-  } catch {
-    return undefined
+  } catch (cause) {
+    return degradeBackend(cause, undefined, { site: 'ownerSupplyPricing', reason: 'invalid_response' })
   }
 }
 

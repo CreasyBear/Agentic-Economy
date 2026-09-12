@@ -1,5 +1,6 @@
 import type { WorkId } from '@convex-dev/workpool'
 import { v, type Infer } from 'convex/values'
+import { degradeBackend } from '../../../src/lib/observability/degrade-backend'
 import {
   beginProviderConnectionRevocation,
   createConnectionHealthAuditEvent,
@@ -34,7 +35,7 @@ import {
   validPublicHttpsEndpoint,
 } from '../../../src/modules/capability-supply/convex'
 import { canonicalDigest, isCanonicalDigest } from '../../../src/modules/common/canonical-digest'
-import type { MutationCtx, QueryCtx } from '../../_generated/server'
+import { env, type MutationCtx, type QueryCtx } from '../../_generated/server'
 import type { Doc, Id } from '../../_generated/dataModel'
 import { marketDispatchWorkpool } from '../../marketDispatchWorkpool'
 import {
@@ -548,7 +549,7 @@ async function validOwnerRuntimeAssertion(
   input: Readonly<{ connectionRef: string; correlationRef: string }>,
   assertion: CustomerRequestServiceAssertion,
 ): Promise<boolean> {
-  const key = process.env.AE_CONVEX_SERVER_FUNCTION_TOKEN?.trim()
+  const key = env.AE_CONVEX_SERVER_FUNCTION_TOKEN?.trim()
   return key !== undefined
     && key.length >= 32
     && assertion.principalId === 'ae:server-function'
@@ -626,8 +627,8 @@ async function admitOwnerMcpRotation(
       resourceRefs: [`secret:${input.secret}`],
       budgetAmount: 0,
     })
-  } catch {
-    return null
+  } catch (cause) {
+    return degradeBackend(cause, null, { site: 'admitOwnerMcpRotation', reason: 'invalid_response' })
   }
 }
 
@@ -909,8 +910,8 @@ async function admitDelegatedProviderConnectionRevocation(
     return admission.consequenceAction === 'connection.revoke'
       && admission.descriptor !== undefined
       && admission.proofPolicy?.kind === 'none'
-  } catch {
-    return false
+  } catch (cause) {
+    return degradeBackend(cause, false, { site: 'admitDelegatedProviderConnectionRevocation', reason: 'invalid_response' })
   }
 }
 
@@ -1012,9 +1013,9 @@ async function cleanupWorkIsActive(ctx: MutationCtx, workId: string): Promise<bo
   try {
     const status = await marketDispatchWorkpool.status(ctx, workId as WorkId)
     return ['pending', 'running'].includes(status.state)
-  } catch {
+  } catch (cause) {
     // A missing work item is repairable after the persisted callback grace.
-    return false
+    return degradeBackend(cause, false, { site: 'cleanupWorkIsActive', reason: 'not_found' })
   }
 }
 

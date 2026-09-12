@@ -2,6 +2,7 @@ import type { BuildDiscoveryFileOptions, DiscoveryFileBuildResult } from '@/modu
 import { trimTrailingSlashes } from '@/modules/common/trim-trailing-slashes'
 import type { PublicBusinessCatalogApiV2Dto } from '@/modules/registry/public'
 import { CALL_ROUTE_CONTRACT } from '@/modules/capability-execution/call-entry'
+import { TOOL_QUOTE_PATH } from '@/modules/capability-execution/quote'
 import {
   TOOL_MARKET_COMPARE_PATH,
   TOOL_MARKET_DESCRIBE_PATH,
@@ -47,9 +48,9 @@ export function toolMarketLines(canonicalBaseUrl: string): readonly string[] {
   return [
     '## Tool market loop',
     '',
-    `1. Search by outcome: \`${cli} search "weather forecast" --base-url "${canonicalBaseUrl}" --json\` (\`POST ${canonicalBaseUrl}${TOOL_MARKET_SEARCH_PATH}\`).`,
+    `1. Search by outcome: \`${cli} search "wallet balance" --base-url "${canonicalBaseUrl}" --json\` (\`POST ${canonicalBaseUrl}${TOOL_MARKET_SEARCH_PATH}\`).`,
     `2. Describe one exact result: \`${cli} describe "$AE_TOOL_REF" --base-url "${canonicalBaseUrl}" --json\` (\`POST ${canonicalBaseUrl}${TOOL_MARKET_DESCRIBE_PATH}\`).`,
-    `3. Call \`tool.quote\` with the exact Tool and input. Complete its continuation or required action, then request again.`,
+    `3. Call \`tool.quote\` with the exact Tool and input (\`POST ${canonicalBaseUrl}${TOOL_QUOTE_PATH}\`). Complete its continuation or required action, then request again.`,
     `4. Call only with the returned Quote through \`${call.method} ${canonicalBaseUrl}${call.path}\`.`,
     `5. Keep the receipt: \`${cli} status "$AE_CALL_REF" --base-url "${canonicalBaseUrl}" --json\` (\`${status.method} ${canonicalBaseUrl}${status.path}\`). Use cancel or recover only when that receipt offers the action.`,
     '',

@@ -1,15 +1,25 @@
 import { createFileRoute, useRouter } from '@tanstack/react-router'
 import { AePublicPage } from '@/components/ae/layout/AePublicPage'
+import { RouteError, RoutePending } from '@/components/ae/layout/AeRouteStates'
 import { AeSupplyLanding } from '@/components/ae/supply/AeSupplyLanding'
 import { loadSupplyLandingReadbackServer } from '@/lib/server/supply-landing.functions'
 import { buildPublicPageHead } from '@/modules/seo/public'
 
 export const Route = createFileRoute('/for-providers')({
+  staticData: {
+    nav: {
+      label: 'For providers',
+      header: { order: 2 },
+      footer: { column: 'Market', order: 2 },
+    },
+  },
   loader: () => loadSupplyLandingReadbackServer(),
+  pendingComponent: RoutePending,
+  errorComponent: RouteError,
   head: () => buildPublicPageHead({
     path: '/for-providers',
     title: 'Publish a Tool | Agentic Economy',
-    description: 'Publish one bounded job, its price, access terms, readiness, and evidence.',
+    description: 'Publish one bounded Tool, its price, access terms, readiness, and evidence.',
   }),
   component: SupplyLandingRoute,
 })

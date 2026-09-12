@@ -9,7 +9,6 @@ import {
   ItemHeader,
   ItemTitle,
 } from "@/components/ui/item";
-import type { MarketWindow } from "@/modules/market/contracts";
 import {
   capabilityFromPrice,
   type CapabilityGroupViewModel,
@@ -17,10 +16,8 @@ import {
 
 export function AeCapabilityTile({
   group,
-  window,
 }: {
   group: CapabilityGroupViewModel;
-  window: MarketWindow;
 }) {
   const listingFact =
     group.providerCount > 1
@@ -36,7 +33,7 @@ export function AeCapabilityTile({
     >
       <Link
         to="/market"
-        search={{ window, capability: group.capabilityId }}
+        search={{ query: group.label }}
         aria-label={`${group.label}, ${listingFact}, ${price}`}
       >
         <ItemContent>

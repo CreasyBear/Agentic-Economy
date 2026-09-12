@@ -32,7 +32,7 @@ vi.mock('@/modules/capability-supply/supply-funnel.functions', () => ({
   startOwnerSupplySourceConnectionServer: vi.fn(),
 }))
 vi.mock('@/components/ae/offerings/provider-workspace.functions', () => ({ readProviderWorkspaceIdentityDetailServer: mocks.readIdentity }))
-vi.mock('@/components/ae/layout/AeOperatorShell', () => ({ AeOperatorShell: ({ children }: { children: unknown }) => children }))
+vi.mock('@/components/ae/layout/AeOperatorPage', () => ({ AeOperatorPage: ({ children }: { children: unknown }) => children }))
 vi.mock('@/components/ae/supply/AeSupplySourceNativeStart', async () => {
   const React = await import('react')
   return {
@@ -53,7 +53,7 @@ vi.mock('@clerk/tanstack-react-start', () => ({ useReverification: (fn: unknown)
 
 import { Route } from '@/routes/_operator/owner.supply.connections.new'
 import { Route as CallbackRoute } from '@/routes/_operator/owner.supply.connections.oauth.callback'
-import { Route as DestinationRoute } from '@/routes/_operator/owner.offerings.new'
+import { Route as DestinationRoute } from '@/routes/_operator/owner.operations.new'
 
 afterEach(() => {
   cleanup()
@@ -130,9 +130,13 @@ describe('Provider connection handoff route', () => {
     } as never)
     const Component = Route.options.component
     if (Component === undefined) throw new Error('handoff_component_missing')
-    render(createElement(Component))
-    const href = screen.getByRole('link', { name: 'Return to Add service' }).getAttribute('href')
-    expect(href).toBe('/owner/offerings/new?connection=connection%3Amcp&environment=production&draft=sds_exact_source')
+    const rootRoute = createRootRoute()
+    const routeTree = rootRoute.addChildren([createRoute({ getParentRoute: () => rootRoute, path: '/' })])
+    const router = createRouter({ routeTree, history: createMemoryHistory({ initialEntries: ['/'] }) })
+    const RouterProvider = RouterContextProvider as ComponentType<{ router: typeof router }>
+    render(createElement(RouterProvider, { router }, createElement(Component)))
+    const href = screen.getByRole('link', { name: 'Return to Add Tool' }).getAttribute('href')
+    expect(href).toBe('/owner/operations/new?connection=connection%3Amcp&environment=production&draft=sds_exact_source')
 
     mocks.readIdentity.mockResolvedValue({ kind: 'available', businessId: 'business:one' })
     mocks.readConnections.mockResolvedValue([{ connectionRef: 'connection:mcp', businessId: 'business:one', available: true }])
@@ -186,7 +190,7 @@ describe('Provider connection handoff route', () => {
     if (Component === undefined) throw new Error('handoff_component_missing')
     render(createElement(Component))
     fireEvent.change(screen.getByLabelText('Bearer token'), { target: { value: 'credential-never-rendered' } })
-    fireEvent.submit(screen.getByRole('button', { name: 'Connect service' }).closest('form')!)
+    fireEvent.submit(screen.getByRole('button', { name: 'Connect Provider' }).closest('form')!)
     expect(await screen.findByText(/still completing/u)).toBeTruthy()
     expect(mocks.complete).toHaveBeenCalledWith({ data: {
       attemptRef: 'pca_uncertain',
@@ -226,7 +230,7 @@ describe('Provider connection handoff route', () => {
       },
     })).rejects.toMatchObject({
       options: {
-        to: '/owner/offerings/new',
+        to: '/owner/operations/new',
         search: { connection: 'connection:mcp', environment: 'production', draft: 'sds_exact_source' },
         replace: true,
       },

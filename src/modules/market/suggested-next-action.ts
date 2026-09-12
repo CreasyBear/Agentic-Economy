@@ -80,7 +80,7 @@ export function suggestNextAction(state: NextActionState): SuggestedNextAction {
       : {
           label: 'Connect provider',
           kind: 'navigate',
-          href: '/owner/offerings#provider-connections',
+          href: '/owner/operations#provider-connections',
         }
   }
   return { label: 'Add credit', kind: 'navigate', command: 'ae account balance', href: '/owner/credit#fund' }
@@ -200,12 +200,12 @@ function providerNextAction(
       href: `/tools/${state.toolRef}`,
     }
   }
-  const href = `/owner/supply/${encodeURIComponent(state.offeringRef)}`
+  const href = `/owner/operations/${encodeURIComponent(state.offeringRef)}`
   if (state.state === 'draft') {
     return {
       label: 'Continue description',
       kind: 'navigate',
-      href: `/owner/supply/${encodeURIComponent(state.offeringRef)}`,
+      href: `/owner/operations/${encodeURIComponent(state.offeringRef)}`,
     }
   }
   if (state.state === 'unready' || state.state === 'current') {

@@ -7,6 +7,7 @@ import type {
 import type { BusinessContext, TrustTier } from '@/modules/business/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { sanitizeText } from '@/modules/common/sanitize-text'
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 import type { OfferingPrice } from './offering-price'
 
 export const BusinessOfferingStatusValues = ['draft', 'published', 'paused', 'retired'] as const
@@ -352,8 +353,8 @@ function isPublicHttpsUrl(value: string): boolean {
       && !bareHost.startsWith('::ffff:')
       && !bareHost.endsWith('.localhost')
       && !privateIpv4
-  } catch {
-    return false
+  } catch (cause) {
+    return degradeBackend(cause, false, { site: 'isPublicHttpsUrl', reason: 'invalid_response' })
   }
 }
 

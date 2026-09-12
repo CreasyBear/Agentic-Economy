@@ -1,5 +1,6 @@
 import Stripe from "stripe";
 
+import { degradeBackend } from "@/lib/observability/degrade-backend";
 import { canonicalDigest } from "@/modules/common/canonical-digest";
 import {
   compareExactAmounts,
@@ -62,8 +63,11 @@ export async function readStripeTransfersByIdentity(
       evidence.push(mapped);
     }
     return evidence;
-  } catch {
-    return refusal("payout_outcome_unknown", true);
+  } catch (cause) {
+    return degradeBackend(cause, refusal("payout_outcome_unknown", true), {
+      site: "readStripeTransfersByIdentity",
+      reason: "source_unavailable",
+    });
   }
 }
 
@@ -96,8 +100,11 @@ export async function readStripeTransfersByGroup(
       });
     }
     return transfers;
-  } catch {
-    return refusal("payout_outcome_unknown", true);
+  } catch (cause) {
+    return degradeBackend(cause, refusal("payout_outcome_unknown", true), {
+      site: "readStripeTransfersByGroup",
+      reason: "source_unavailable",
+    });
   }
 }
 
@@ -130,8 +137,11 @@ export async function createOrRecoverTransfer(
     created = responseData(
       await client.transfers.create(params, { idempotencyKey }),
     );
-  } catch {
-    return refusal("payout_outcome_unknown", true);
+  } catch (cause) {
+    return degradeBackend(cause, refusal("payout_outcome_unknown", true), {
+      site: "createOrRecoverTransfer",
+      reason: "source_unavailable",
+    });
   }
   if (!validTransferId(created.id))
     return refusal("payment_binding_invalid", false);
@@ -272,8 +282,11 @@ async function retrieveTransfer(
 ): Promise<Stripe.Transfer | MoneyRefusal> {
   try {
     return responseData(await client.transfers.retrieve(externalRef));
-  } catch {
-    return refusal("payout_outcome_unknown", true);
+  } catch (cause) {
+    return degradeBackend(cause, refusal("payout_outcome_unknown", true), {
+      site: "retrieveTransfer",
+      reason: "source_unavailable",
+    });
   }
 }
 

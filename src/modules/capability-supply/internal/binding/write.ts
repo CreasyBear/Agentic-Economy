@@ -1,3 +1,4 @@
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { sameCapabilityContractRef } from '@/modules/capability-contract/public'
 import {
   admitRegisteredTransport,
@@ -192,8 +193,10 @@ export async function registerCapabilityTransportBinding(
   let registration: CapabilityTransportBindingRegistration
   try {
     registration = defineCapabilityTransportBindingRegistration(input)
-  } catch {
-    return { kind: 'refused' as const, reason: 'binding_invalid' as const }
+  } catch (cause) {
+    return degradeBackend(cause, { kind: 'refused' as const, reason: 'binding_invalid' as const }, {
+      site: 'registerCapabilityTransportBinding', reason: 'invalid_response',
+    })
   }
   const offering = await ports.loadOfferingByOfferingId(registration.offeringId)
   if (offering === null) return { kind: 'refused' as const, reason: 'offering_not_found' as const }

@@ -2,7 +2,7 @@ import type { BusinessContext } from '@/modules/business/public'
 import type { OfferingPrice } from '@/modules/catalog/public'
 import type {
   PublicBusinessCatalogApiV2Dto,
-  PublicOfferingDto,
+  PublicListingDto,
 } from '@/modules/registry/public'
 
 export type ManifestOfferingProjection = Readonly<{
@@ -27,7 +27,7 @@ export type ManifestCatalogProjection<TOffering> = Readonly<{
 }>
 
 type ManifestOfferingProjector<TOffering> = (
-  offering: PublicOfferingDto,
+  offering: PublicListingDto,
   projection: ManifestOfferingProjection,
 ) => TOffering
 

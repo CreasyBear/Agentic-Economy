@@ -1,3 +1,5 @@
+import { degradeBackend } from '@/lib/observability/degrade-backend'
+
 const MAX_VALIDATED_VALUE_NODES = 10_000
 const MAX_VALIDATED_VALUE_DEPTH = 64
 
@@ -37,7 +39,7 @@ export function parseBoundedJson(value: string): JsonValue | undefined {
   try {
     const parsed: unknown = JSON.parse(value)
     return isBoundedJsonValue(parsed) ? parsed : undefined
-  } catch {
-    return undefined
+  } catch (cause) {
+    return degradeBackend(cause, undefined, { site: 'parseBoundedJson', reason: 'invalid_response' })
   }
 }

@@ -5,6 +5,7 @@ import {
   formatToolAuthentication,
   formatPaymentNetwork,
   formatToolReadiness,
+  toolDisplayTitle,
   toolPrice,
 } from '@/modules/market/tool-view-model'
 import {
@@ -14,6 +15,7 @@ import {
 
 export type ToolInspectorModel = Readonly<{
   toolRef: string
+  title: string
   summary: string
   nextAction: SuggestedNextAction
   availabilityPosture: PublicToolDescriptor['availability']['posture']
@@ -64,6 +66,7 @@ export function toToolInspectorModel(
 
   return {
     toolRef: tool.toolRef,
+    title: toolDisplayTitle(tool),
     summary: catalogSummary(tool),
     nextAction,
     availabilityPosture,
@@ -100,5 +103,5 @@ function nextActionDescription(nextAction: SuggestedNextAction): string {
 
 function catalogSummary(tool: PublicToolDescriptor): string {
   const summary = tool.summary.trim()
-  return summary === '' ? tool.offering.summary : summary
+  return summary === '' ? tool.listing.summary : summary
 }

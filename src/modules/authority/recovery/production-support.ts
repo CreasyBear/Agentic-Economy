@@ -20,6 +20,7 @@ import {
 } from './recovery'
 import { accountRef } from '../../principal-account/account/public'
 import { principalRef } from '../../principal-account/principal/public'
+import { captureBackendException } from '@/lib/observability/degrade-backend'
 
 const OPAQUE_REF_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/u
 const DEFAULT_RECOVERY_APPROVAL_TTL_MS = 5 * 60 * 1_000
@@ -163,7 +164,8 @@ export class ProductionRecoveryService {
         }
         try {
           await session.insertVerifiedApproval(approval)
-        } catch {
+        } catch (cause) {
+          captureBackendException(cause, { site: 'recordApproval' }, 'warning')
           throw new RecoveryError('recovery_approval_duplicate')
         }
         return approval
@@ -206,7 +208,8 @@ function trustedApprovalAttestation(
       operatorPrincipalRef: principalRef(attestation.operatorPrincipalRef),
       verificationRef: opaqueRef(attestation.verificationRef),
     })
-  } catch {
+  } catch (cause) {
+    captureBackendException(cause, { site: 'trustedApprovalAttestation' }, 'warning')
     throw new RecoveryError('recovery_approval_mismatch')
   }
 }

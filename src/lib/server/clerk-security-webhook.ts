@@ -1,6 +1,7 @@
 import { verifyWebhook } from '@clerk/tanstack-react-start/webhooks'
 
 import { kindForStatus } from '@/lib/errors'
+import { degrade } from '@/lib/observability/degrade'
 import { readBoundedRequestText } from '@/lib/server/bounded-request-body'
 import { response as jsonResponse } from '@/lib/server/no-store-response'
 import { problem } from '@/lib/server/problem'
@@ -48,8 +49,8 @@ export async function handleClerkSecurityWebhookRequest(
   let verified: unknown
   try {
     verified = await (dependencies.verify ?? verifyWebhook)(request)
-  } catch {
-    return problem({ status: 400, kind: kindForStatus(400), code: 'clerk_webhook_invalid', detail: 'clerk_webhook_invalid' })
+  } catch (cause) {
+    return degrade(cause, problem({ status: 400, kind: kindForStatus(400), code: 'clerk_webhook_invalid', detail: 'clerk_webhook_invalid' }), { site: 'handleClerkSecurityWebhookRequest', reason: 'forbidden' })
   }
 
   const event = redactedObservationFromVerifiedEvent({
@@ -67,11 +68,11 @@ export async function handleClerkSecurityWebhookRequest(
   let applied: ClerkSecurityObservationResult
   try {
     applied = await (dependencies.apply ?? recordClerkSecurityObservationThroughSource)(event.command)
-  } catch {
-    return problem(
+  } catch (cause) {
+    return degrade(cause, problem(
       { status: 503, kind: kindForStatus(503), code: 'security_history_unavailable', detail: 'security_history_unavailable' },
       { 'Retry-After': String(RETRY_AFTER_SECONDS) },
-    )
+    ), { site: 'handleClerkSecurityWebhookRequest', reason: 'source_unavailable' })
   }
   if (applied.kind === 'refused') {
     const retryable = applied.code === 'authentication_required'

@@ -2,6 +2,7 @@ import { z } from 'zod'
 
 import {
   defineAction,
+  idempotencyKeySchema,
   type ActionAgentAccessPrincipal,
 } from '@/modules/common/action'
 
@@ -39,7 +40,7 @@ export const createFundingHandoffInputSchema = z.strictObject({
     (value) => value.currency === 'AUD' && value.exponent === 6 && /^[1-9]\d*$/u.test(value.units),
     'principalAmount must be a positive exact AUD amount with exponent 6',
   ),
-  idempotencyKey: z.string().trim().min(1).max(255),
+  idempotencyKey: idempotencyKeySchema,
 })
 
 export const createFundingHandoffResultSchema = z.discriminatedUnion('kind', [

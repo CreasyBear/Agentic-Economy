@@ -72,6 +72,22 @@ const readinessFacts = {
   Unavailable: "Not currently available",
 } satisfies Record<ToolReadiness, string>;
 
+/**
+ * The one source of truth for a Tool's display title: the Provider-stated
+ * title when it reads as a real name, otherwise the capability's job name.
+ * Never a bare title-cased identifier. Consumed by the catalog card and by
+ * the Tool detail page so the same Tool never shows two different titles.
+ */
+export function toolDisplayTitle(tool: PublicToolDescriptor): string {
+  const summary = catalogJobSummary(tool.summary || tool.listing.summary);
+  const capability = catalogJobLabel(
+    tool.contract.capabilityId,
+    tool.listing.label,
+    summary,
+  );
+  return catalogOfferingTitle(tool.listing.label, capability);
+}
+
 export function toToolCardViewModel(
   tool: PublicToolDescriptor,
   evidence: MarketListingEvidenceProjection = emptyMarketListingEvidence(
@@ -87,18 +103,18 @@ export function toToolCardViewModel(
         : "Unavailable";
   const lastVerifiedAt = tool.availability.observedAt ?? tool.commercial.priceEvidence?.observedAt;
   const summary = catalogJobSummary(
-    tool.summary || tool.offering.summary,
+    tool.summary || tool.listing.summary,
   );
   const capability = catalogJobLabel(
     tool.contract.capabilityId,
-    tool.offering.label,
+    tool.listing.label,
     summary,
   );
   const priceAmount = toolPriceAmount(tool);
 
   return {
     toolRef: tool.toolRef,
-    title: catalogOfferingTitle(tool.offering.label, capability),
+    title: catalogOfferingTitle(tool.listing.label, capability),
     summary,
     providerName: tool.business.name,
     providerSlug: tool.business.slug,

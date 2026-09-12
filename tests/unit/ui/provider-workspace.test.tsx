@@ -8,7 +8,7 @@ const calls = vi.hoisted(() => ({
   connections: vi.fn(), earnings: vi.fn(), connect: vi.fn(), identity: vi.fn(), ensure: vi.fn(), rename: vi.fn(), invalidate: vi.fn(async () => undefined),
 }))
 const tokens = vi.hoisted(() => ({ connections: Symbol('connections'), earnings: Symbol('earnings'), connect: Symbol('connect'), identity: Symbol('identity'), ensure: Symbol('ensure'), rename: Symbol('rename') }))
-const routeState = vi.hoisted(() => ({ location: { pathname: '/owner/offerings', hash: '', search: {} as Record<string, unknown> } }))
+const routeState = vi.hoisted(() => ({ location: { pathname: '/owner/operations', hash: '', search: {} as Record<string, unknown> } }))
 const rendered = vi.hoisted(() => ({ status: vi.fn(), capabilities: vi.fn(), identity: vi.fn(), connections: vi.fn() }))
 
 vi.mock('@tanstack/react-start', async (importOriginal) => ({
@@ -41,7 +41,7 @@ vi.mock('@/components/ae/offerings/provider-identity.functions', () => ({ ensure
 vi.mock('@/lib/server/owner-workspace.functions', () => ({ renameProviderDisplayNameServer: tokens.rename }))
 vi.mock('@/modules/capability-supply/supply-funnel.functions', () => ({ readOwnerProviderEarningsServer: tokens.earnings }))
 vi.mock('@/modules/money/money.functions', () => ({ readOwnerConnectReadinessServer: tokens.connect }))
-vi.mock('@/components/ae/layout/AeOperatorShell', () => ({ AeOperatorShell: ({ children }: { children: ReactNode }) => <main>{children}</main> }))
+vi.mock('@/components/ae/layout/AeOperatorPage', () => ({ AeOperatorPage: ({ children }: { children: ReactNode }) => <main>{children}</main> }))
 vi.mock('@/components/ae/offerings/AeOwnerOfferings', () => ({ AeOwnerOfferingsList: () => <div data-testid="tools-list" /> }))
 vi.mock('@/components/ae/supply/AeOwnerProviderConnections', () => ({ AeOwnerProviderConnections: (props: unknown) => { rendered.connections(props); return <div data-testid="connection-controls" /> } }))
 vi.mock('@/components/ae/supply/AeSupplyEarningsCard', () => ({ AeSupplyEarningsCard: () => <div data-testid="earnings-controls" /> }))
@@ -59,7 +59,7 @@ afterEach(() => {
   for (const mock of Object.values(calls)) mock.mockReset()
   for (const mock of Object.values(rendered)) mock.mockReset()
   calls.invalidate.mockResolvedValue(undefined)
-  routeState.location = { pathname: '/owner/offerings', hash: '', search: {} }
+  routeState.location = { pathname: '/owner/operations', hash: '', search: {} }
 })
 
 describe('Tools management disclosure', () => {
@@ -164,7 +164,7 @@ describe('Tools management disclosure', () => {
   })
 
   it('opens authoritative earnings readback for a Connect return', async () => {
-    routeState.location = { pathname: '/owner/offerings', hash: 'earnings', search: { connect: 'return' } }
+    routeState.location = { pathname: '/owner/operations', hash: 'earnings', search: { connect: 'return' } }
     calls.earnings.mockResolvedValue({ kind: 'not_found' })
     calls.connect.mockResolvedValue({ kind: 'not_found' })
     render(<AeProviderWorkspace inventory={inventory} lifecycle={unavailable} connections={unavailable} payouts={unavailable} publicStatus={unavailable} />)
@@ -182,7 +182,7 @@ describe('Tools management disclosure', () => {
       method: 'GET',
       environment: 'sandbox',
     } as const
-    routeState.location = { pathname: '/owner/offerings', hash: '', search: handoff }
+    routeState.location = { pathname: '/owner/operations', hash: '', search: handoff }
     calls.connections.mockResolvedValue({ kind: 'available', businessId: 'biz:one', connections: [] })
     render(<AeProviderWorkspace inventory={inventory} lifecycle={unavailable} connections={unavailable} payouts={unavailable} publicStatus={unavailable} />)
 
@@ -208,7 +208,7 @@ describe('Tools management disclosure', () => {
   })
 
   it('owns a missing rebind target without changing a connection', async () => {
-    routeState.location = { pathname: '/owner/offerings', hash: 'provider-connection-connection:missing', search: { rebind: 'offering:one' } }
+    routeState.location = { pathname: '/owner/operations', hash: 'provider-connection-connection:missing', search: { rebind: 'offering:one' } }
     calls.connections.mockResolvedValue({ kind: 'available', businessId: 'biz:one', connections: [] })
     render(<AeProviderWorkspace inventory={inventory} lifecycle={unavailable} connections={unavailable} payouts={unavailable} publicStatus={unavailable} />)
 

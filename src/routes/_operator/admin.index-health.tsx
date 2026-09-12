@@ -2,14 +2,16 @@ import { useState, type FormEvent } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { createServerFn, useServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
+import { Activity } from 'lucide-react'
 
-import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
+import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
 import { AeSection } from '@/components/ae/layout/AeSection'
 import { AeAdminReadbackPanel } from '@/components/ae/readback/AeAdminReadbackPanel'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { degrade } from '@/lib/observability/degrade'
 import { operatorRouteOptions } from '@/lib/operator/route-options'
 import {
   reviewSourceAuthorityServer,
@@ -22,6 +24,19 @@ import {
 const readAdminIndexHealthServer = createServerFn().handler(() => readAdminIndexHealthThroughSource())
 
 export const Route = createFileRoute('/_operator/admin/index-health')({
+  staticData: {
+    nav: {
+      label: 'Catalog health',
+      operator: {
+        roles: ['admin'],
+        group: 'Records',
+        groupOrder: 0,
+        order: 0,
+        icon: Activity,
+        tier: 'core',
+      },
+    },
+  },
   ...operatorRouteOptions,
   validateSearch: z.object({
     publicationRef: z.string().trim().min(1).max(300).optional(),
@@ -67,7 +82,7 @@ function AdminIndexHealthRoute() {
     : undefined
 
   return (
-    <AeOperatorShell
+    <AeOperatorPage
       operatorRole="admin"
       title="Catalog health"
       description="Check catalog and projection readbacks before public discovery files are allowed to ship."
@@ -84,7 +99,7 @@ function AdminIndexHealthRoute() {
           readback={readback}
         />
       </div>
-    </AeOperatorShell>
+    </AeOperatorPage>
   )
 }
 
@@ -115,8 +130,11 @@ export function SourceAuthorityReviewPanel({ review }: { review: SourceAuthority
         expectedSourceDigest: review.expectedSourceDigest,
         evidenceRef: evidenceRef.trim(),
       } }))
-    } catch {
-      setOutcome({ kind: 'error', code: 'source_unavailable' })
+    } catch (cause) {
+      setOutcome(degrade(cause, { kind: 'error', code: 'source_unavailable' }, {
+        site: 'reviewSourceAuthorityConfirm',
+        reason: 'source_unavailable',
+      }))
     } finally {
       setBusy(false)
     }

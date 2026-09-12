@@ -1,3 +1,4 @@
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { canonicalDigest, isCanonicalDigest } from '@/modules/common/canonical-digest'
 import { uniqueSorted } from '@/modules/common/unique-sorted'
 
@@ -151,8 +152,10 @@ function validSourceOrigin(value: string): string | undefined {
     return url.protocol === 'https:' && url.username === '' && url.password === ''
       ? url.origin
       : undefined
-  } catch {
-    return undefined
+  } catch (cause) {
+    return degradeBackend(cause, undefined, {
+      site: 'validSourceOrigin', reason: 'invalid_response',
+    })
   }
 }
 

@@ -1,4 +1,5 @@
 import { v } from 'convex/values'
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 
 import { mutation, type MutationCtx } from './_generated/server'
 import type { Doc } from './_generated/dataModel'
@@ -212,8 +213,8 @@ export async function resolveCanonicalAgentBinding(
   let normalizedAccessGrant: ReturnType<typeof normalizeStoredAgentAccessGrant>
   try {
     normalizedAccessGrant = normalizeStoredAgentAccessGrant(accessGrant)
-  } catch {
-    return await denyKnownCredential('authentication_required')
+  } catch (cause) {
+    return await degradeBackend(cause, denyKnownCredential('authentication_required'), { site: 'resolveCanonicalAgentBinding', reason: 'invalid_response' })
   }
   if (accessGrant.principalId !== binding.principalRef
     || accessGrant.ownerId !== admission.ownerId

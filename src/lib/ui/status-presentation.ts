@@ -584,8 +584,6 @@ export const aeStatusPresentation = {
   },
 } satisfies Record<AeStatus, AeStatusPresentation>
 
-export const statusPresentation = aeStatusPresentation
-
 export function getStatusPresentation(status: AeStatus): AeStatusPresentation {
   return aeStatusPresentation[status]
 }

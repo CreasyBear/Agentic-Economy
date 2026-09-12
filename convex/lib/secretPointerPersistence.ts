@@ -1,5 +1,6 @@
 import type { MutationCtx } from '../_generated/server'
 import type { Doc } from '../_generated/dataModel'
+import { degradeBackend } from '../../src/lib/observability/degrade-backend'
 import { delegationSnapshotRef, type DelegationSnapshotRef } from '../../src/modules/authority/delegation/public'
 import { accountRef, principalRef, type AccountRef, type PrincipalRef } from '../../src/modules/principal-account/public'
 import {
@@ -247,8 +248,8 @@ function commandContinuesChain(
       && nextGeneration !== previousGeneration
       && nonnegativeInteger(command.action.occurredAt) >= previousOccurredAt
       && authorityEqual(command.action, command.action)
-  } catch {
-    return false
+  } catch (cause) {
+    return degradeBackend(cause, false, { site: 'commandContinuesChain', reason: 'invalid_response' })
   }
 }
 
@@ -283,8 +284,8 @@ function pointerMatchesCommand(
       && updatedAt === command.action.occurredAt
       && command.operation === command.action.operation
       && authorityEqual(pointer.lastAction, command.action)
-  } catch {
-    return false
+  } catch (cause) {
+    return degradeBackend(cause, false, { site: 'pointerMatchesCommand', reason: 'invalid_response' })
   }
 }
 
@@ -355,8 +356,8 @@ function authorityEqual(
       && canonicalLeft.correlationRef === canonicalRight.correlationRef
       && canonicalLeft.idempotencyRef === canonicalRight.idempotencyRef
       && canonicalLeft.occurredAt === canonicalRight.occurredAt
-  } catch {
-    return false
+  } catch (cause) {
+    return degradeBackend(cause, false, { site: 'authorityEqual', reason: 'invalid_response' })
   }
 }
 

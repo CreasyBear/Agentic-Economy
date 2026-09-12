@@ -1,5 +1,6 @@
 import { AGENT_ACCESS_AUTHORITY_MODE_VALUES, type AgentAccessAuthorityMode } from './contract'
 import { normalizeAgentAccessToolSelection, type AgentAccessToolAccess } from './policy'
+import { captureRouteException } from '@/lib/observability/capture-route-exception'
 
 export type AgentConsentTarget = Readonly<{
   principalRef: string
@@ -70,7 +71,8 @@ export function readAgentConsentDetails(html: string): AgentConsentDetails {
       && toolRefs.every((ref) => typeof ref === 'string')
       ? normalizeAgentAccessToolSelection({ toolAccess: toolAccessValue, toolRefs })
       : undefined
-  } catch {
+  } catch (cause) {
+    captureRouteException(cause, { site: 'readAgentConsentDetails' }, 'warning')
     toolSelection = undefined
   }
   const expiresInSecondsValue = Number(consent?.dataset.expiresInSeconds)
@@ -106,7 +108,8 @@ export function readAgentConsentDetails(html: string): AgentConsentDetails {
         agentTargetsNextCursor = decodedCursor
       }
     }
-  } catch {
+  } catch (cause) {
+    captureRouteException(cause, { site: 'readAgentConsentDetails' }, 'warning')
     agentTargetsNextCursor = undefined
     agentTargetsUnavailable = true
   }

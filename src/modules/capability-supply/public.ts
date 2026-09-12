@@ -265,9 +265,10 @@ export type {
   PublicToolAuthentication,
   PublicToolAvailability,
   PublicToolBusinessRef,
+  PublicToolCanonical,
   PublicToolCatalogPrice,
   PublicToolDescriptor,
-  PublicToolOfferingRef,
+  PublicToolListingRef,
   PublicToolParameter,
   PublicToolParameterMapping,
   PublicToolPayment,
@@ -314,6 +315,10 @@ export {
   preflightOpenApiHttpDocument,
 } from './internal/publication-importers'
 export { validateOpenApiDocument } from './internal/openapi-import/validation'
+// Route identity: the same stable digest capabilityPublications.sourceRouteRef
+// stores, so a cross-module consumer (e.g. the x402 directory index) can join
+// on it without duplicating the computation.
+export { sourceRouteRef } from './internal/source-route-identity'
 export { admitProviderSchema } from './internal/admit-provider-schema'
 export type {
   AdmitCredentialSpec,

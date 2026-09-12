@@ -60,12 +60,8 @@ vi.mock('@/components/ae/agent-access/AeAgentSecurityHistory', () => ({
   AeAgentSecurityHistory: ({ principalRef }: { principalRef: string }) => <div data-agent-history={principalRef} />,
 }))
 
-vi.mock('@/components/ae/layout/AeOperatorShell', () => ({
-  AeOperatorShell: ({ children }: { children?: ReactNode }) => children ?? null,
-}))
-
-vi.mock('@/lib/client/local-e2e-auth', () => ({
-  isLocalE2EAuthBypassEnabled: () => false,
+vi.mock('@/components/ae/layout/AeOperatorPage', () => ({
+  AeOperatorPage: ({ children }: { children?: ReactNode }) => children ?? null,
 }))
 
 vi.mock('@/lib/operator/route-options', () => ({ operatorRouteOptions: {} }))

@@ -186,7 +186,7 @@ export async function readOwnerSupplyFunnelProjection(
     const evidenceWindowStartAt = now - PROVIDER_EVIDENCE_WINDOW_MS
     // `businessOfferings.status` is draft|published|paused|retired — there is no
     // 'active'. Filtering on it returned nothing for every owner, so the funnel
-    // home always read "No services yet" while /owner/offerings listed the same
+    // home always read "No services yet" while /owner/operations listed the same
     // offerings. Same selection rule as `loadOfferingSourceState` in catalog.ts.
     const [
       offeringRows,

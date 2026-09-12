@@ -215,8 +215,8 @@ export type AgentAccessOAuthTransition<T> =
 export class AgentAccessOAuthIssueRefusal extends Error {
   readonly reason: 'invalid_grant' | 'invalid_scope'
 
-  constructor(reason: 'invalid_grant' | 'invalid_scope') {
-    super(reason)
+  constructor(reason: 'invalid_grant' | 'invalid_scope', options?: { cause?: unknown }) {
+    super(reason, options)
     this.name = 'AgentAccessOAuthIssueRefusal'
     this.reason = reason
   }

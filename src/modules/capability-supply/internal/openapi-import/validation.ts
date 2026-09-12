@@ -1,5 +1,6 @@
 import { validate } from '@scalar/openapi-parser'
 
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { isRecord } from '@/modules/common/is-record'
 
 export type ValidOpenApiDocument = Readonly<Record<string, unknown>> & Readonly<{
@@ -20,8 +21,10 @@ export async function validateOpenApiDocument(document: unknown): Promise<OpenAp
   let result: Awaited<ReturnType<typeof validate>>
   try {
     result = await validate(document)
-  } catch {
-    return { kind: 'refused', reason: 'source_invalid' }
+  } catch (cause) {
+    return degradeBackend(cause, { kind: 'refused', reason: 'source_invalid' } as const, {
+      site: 'validateOpenApiDocument', reason: 'invalid_response',
+    })
   }
   const parsed = parsedSpecification(result)
   if (!isRecord(parsed)) return { kind: 'refused', reason: 'source_invalid' }

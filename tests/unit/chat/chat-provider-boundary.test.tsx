@@ -68,6 +68,9 @@ vi.mock('@tanstack/react-router', () => ({
 
 vi.mock('sonner', () => ({ Toaster: () => null }))
 vi.mock('@/components/ae/layout/AeRouteProgressBar', () => ({ RouteProgressBar: () => null }))
+vi.mock('@/components/ae/layout/AeAppShell', () => ({
+  AeAppShell: ({ children }: { children: ReactNode }) => children,
+}))
 vi.mock('@/components/ae/feedback/AeObservabilityErrorBoundary', () => ({
   AeObservabilityErrorBoundary: ({ children }: { children: ReactNode }) => children,
 }))
@@ -92,9 +95,6 @@ vi.mock('@/components/ae/layout/AePageState', () => ({
 }))
 vi.mock('@/lib/observability/boot-client-observability', () => ({
   bootClientObservability: vi.fn(),
-}))
-vi.mock('@/lib/client/local-e2e-auth', () => ({
-  isLocalE2EAuthBypassEnabled: () => false,
 }))
 
 import { Route, requiresChatProviders } from '@/routes/__root'
@@ -175,7 +175,7 @@ describe('Tool chat provider boundary', () => {
     const browseLinks = screen.getAllByRole('link', { name: 'Browse Tools' })
     expect(browseLinks).toHaveLength(1)
     expect(browseLinks[0]?.tagName).toBe('A')
-    expect(browseLinks[0]?.getAttribute('href')).toBe('/market?window=30d#tools')
+    expect(browseLinks[0]?.getAttribute('href')).toBe('/market')
     expect(browseLinks[0]?.classList.contains('min-h-touch')).toBe(true)
 
     expect(screen.queryByRole('button', { name: /retry|try again/iu })).toBeNull()

@@ -758,11 +758,11 @@ async function seedDevCatalogAuthority(backend: SeedBackend): Promise<void> {
  * The dev seed's whole reason to exist is that a fresh local deployment can be
  * Quoted. Publishing the sandbox Tool proves the supply side only: this proves
  * the authority side end to end, through the exact seams `npm run dev:local`
- * and `ae connect` use in local Clerk-bypass mode.
+ * and `ae connect` use once the owner has signed in through Clerk.
  */
 const LOCAL_E2E_OPERATOR_SUBJECT = 'dev-seed-owner-session'
-// Mirrors the admin-auth identity src/lib/server/convex-source.ts installs when
-// VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E is on.
+// Mirrors the seeded Convex identity `devSeed.requireLocalE2EOwnerAuthority`
+// creates for the owner once Clerk authenticates them.
 const bypassOwnerIdentity: UserIdentity = {
   subject: LOCAL_E2E_OPERATOR_SUBJECT,
   issuer: 'https://convex.test',

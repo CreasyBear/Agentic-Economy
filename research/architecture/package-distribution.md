@@ -44,11 +44,11 @@ The external entry points are:
 
 ### Current build inputs and artifacts
 
-`npm run build:cli` invokes `scripts/build-cli.mjs` (`package.json:8-11`). The
+`npm run build:cli` invokes `scripts/build-cli.ts` (`package.json:8-11`). The
 script bundles `tools/ae/cli.ts` with the root `tsconfig.json`, targets Node 20,
 emits ESM with a Node shebang, suppresses source maps and legal comments, writes
 `packages/cli/dist/ae.js`, and makes it executable
-(`scripts/build-cli.mjs:1-18`). `dist/` is globally ignored
+(`scripts/build-cli.ts:1-18`). `dist/` is globally ignored
 (`.gitignore:1-3`), so the output is correctly generated rather than committed.
 
 On this checkout, the exact build produced an executable 3,121,462-byte
@@ -86,7 +86,7 @@ checkout because `test:imports` reads the generated CLI before
 The CLI package verifier itself is valuable: it packs into a temporary
 directory, rejects repository TypeScript, installs the tarball as a consumer,
 runs the installed `ae --help --json`, checks the canonical command set, and
-checks the installed `bin` mapping (`scripts/test-cli-package.mjs:7-42`). It
+checks the installed `bin` mapping (`scripts/test-cli-package.ts:7-42`). It
 passed with `CLI_PACKAGE_PASS` after a build. There is no checked-in `npm publish`
 command or CI publication job; the existing workflow proves source and deployed
 gateway behavior, but does not publish the CLI.

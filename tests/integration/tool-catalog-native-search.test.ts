@@ -84,7 +84,9 @@ describe('native admitted Tool catalogue', () => {
       } while (cursor !== undefined)
       expect(refs.size).toBe(257)
     }
-  })
+    // Fourteen hydrated page reads over 257 publications is real work; the
+    // five-second default is a CI-runner lottery, not a contract.
+  }, 30_000)
 
   it('preserves continuation through an empty filtered page', async () => {
     const backend = convexTest(schema, convexModules)

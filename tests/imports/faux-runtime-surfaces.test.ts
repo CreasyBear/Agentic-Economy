@@ -27,7 +27,6 @@ const forbiddenSelectors = [
   /seed-supply/u,
   /local-e2e-adapter/u,
   /\b(?:LOCAL_E2E_BUSINESS_FIXTURES|DEV_SEED_BUSINESS_FIXTURES|seedKeylessExecutableSource|defaultKeylessExecutableSource)\b/u,
-  /\bisLocalE2EAuthBypassEnabled\s*\(/u,
   /\b(?:readFixtureCatalogDiscoveryManifest|readFixtureLlmsTxt|readFixtureSitemapXml)\b/u,
   /\bcreateLocalE2eRegistrySourceState\b/u,
   /\b(?:createDefaultDiscoverySourceState|createFixtureDiscoverySourceState)\b/u,

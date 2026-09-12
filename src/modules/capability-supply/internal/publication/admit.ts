@@ -1,3 +1,4 @@
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 import {
   normalizeCapabilityPublication,
   type CapabilityPublicationImport,
@@ -107,8 +108,8 @@ export async function admitCapabilityPublicationCommand(
   let normalized: CapabilityPublicationImportResult
   try {
     normalized = await normalizeCapabilityPublication(input.source, dereferenceLocalSchema)
-  } catch {
-    return { kind: 'refused', reason: 'source_invalid' }
+  } catch (cause) {
+    return degradeBackend(cause, { kind: 'refused' as const, reason: 'source_invalid' as const }, { site: 'admitCapabilityPublicationCommand', reason: 'invalid_response' })
   }
   if (normalized.kind === 'refused') return { kind: 'refused', reason: normalized.reason }
 
@@ -150,8 +151,8 @@ export async function admitCapabilityPublicationCommand(
       sourceRevision: input.source.sourceRevision,
       sourceDigest: prepared.prepared.sourceDigest,
     })
-  } catch {
-    return { kind: 'refused', reason: 'provenance_invalid' }
+  } catch (cause) {
+    return degradeBackend(cause, { kind: 'refused' as const, reason: 'provenance_invalid' as const }, { site: 'admitCapabilityPublicationCommand', reason: 'invalid_response' })
   }
 
   const published = await publishPreparedCapabilityCommand({

@@ -1,4 +1,5 @@
 import type { OfferingPrice } from '@/modules/catalog/public'
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { uniqueSorted } from '@/modules/common/unique-sorted'
 import {
   formatExactAmount,
@@ -24,7 +25,7 @@ import type {
 import type {
   PublicBusinessCatalogApiV2Page,
   PublicBusinessCatalogApiV2SearchPage,
-  PublicOfferingAccessPathDto,
+  PublicListingAccessPathDto,
 } from './offering-api-projection'
 
 export const PublicServicesApiSchemaVersion = 'public-services-api:v3' as const
@@ -113,7 +114,7 @@ function projectServiceFromBusinessDto(
   }))
   const endpoints = business.offerings.flatMap((offering) => {
     const externalPaths = offering.accessPaths.filter(
-      (path): path is Extract<PublicOfferingAccessPathDto, { kind: 'external_operation' }> =>
+      (path): path is Extract<PublicListingAccessPathDto, { kind: 'external_operation' }> =>
         path.kind === 'external_operation' && isValidEndpointUrl(path.url),
     )
     return externalPaths.map((path) =>
@@ -182,7 +183,7 @@ function projectServiceFromBusinessDto(
 }
 
 function projectEndpoint(
-  path: Extract<PublicOfferingAccessPathDto, { kind: 'external_operation' }>,
+  path: Extract<PublicListingAccessPathDto, { kind: 'external_operation' }>,
   businessName: string,
   offeringRef: string,
   offeringRevision: number,
@@ -509,15 +510,15 @@ function isValidEndpointUrl(value: string): boolean {
   if (trimmed.startsWith('/')) {
     try {
       return new URL(trimmed, 'https://agentic-economy.invalid').protocol === 'https:'
-    } catch {
-      return false
+    } catch (cause) {
+      return degradeBackend(cause, false, { site: 'isValidEndpointUrl', reason: 'invalid_response' })
     }
   }
   try {
     const parsed = new URL(trimmed)
     return (parsed.protocol === 'http:' || parsed.protocol === 'https:') && parsed.hostname.length > 0
-  } catch {
-    return false
+  } catch (cause) {
+    return degradeBackend(cause, false, { site: 'isValidEndpointUrl', reason: 'invalid_response' })
   }
 }
 
@@ -537,8 +538,8 @@ function domainFromPublicUrl(publicUrl: string): string | undefined {
     const parsed = new URL(publicUrl)
     if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return undefined
     return parsed.hostname.length === 0 ? undefined : parsed.hostname
-  } catch {
-    return undefined
+  } catch (cause) {
+    return degradeBackend(cause, undefined, { site: 'domainFromPublicUrl', reason: 'invalid_response' })
   }
 }
 

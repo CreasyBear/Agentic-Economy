@@ -1,10 +1,8 @@
-import { Link } from '@tanstack/react-router'
+import { useMemo } from 'react'
+import type { LucideIcon } from 'lucide-react'
+import { Link, useRouter } from '@tanstack/react-router'
 
-import {
-  isOperatorNavItemCurrent,
-  mobileNavItemsForContext,
-  mobileNavItemsForRole,
-} from '@/lib/operator/navigation'
+import { ownerWorkspaceOwnerForPath } from '@/lib/operator/roles'
 import type { OperatorContext } from '@/lib/operator/operator-context'
 
 type AeOwnerMobileNavigationProps = {
@@ -12,10 +10,49 @@ type AeOwnerMobileNavigationProps = {
   currentPath: string
 }
 
+type MobileNavItem = { href: string; label: string; icon: LucideIcon; mobileOrder: number }
+
+/** Mirrors the pre-staticData resolveOperatorNavItem canonicalization for the
+ * owner surface: /owner/supply/* and /owner/settings/* routes are not
+ * route-tree descendants of the sidebar item that owns them. */
+function resolveCurrentHref(currentPath: string, hrefs: readonly string[]): string | undefined {
+  const owner = ownerWorkspaceOwnerForPath(currentPath)
+  const canonicalHref = owner === 'operations' ? '/owner/operations' : owner === 'account' ? '/owner/settings' : undefined
+  if (canonicalHref !== undefined) {
+    return hrefs.includes(canonicalHref) ? canonicalHref : undefined
+  }
+  if (currentPath.startsWith('/owner/settings/')) return undefined
+
+  let match: string | undefined
+  for (const href of hrefs) {
+    if (currentPath !== href && !currentPath.startsWith(`${href}/`)) continue
+    if (match === undefined || href.length > match.length) match = href
+  }
+  return match
+}
+
 export function AeOwnerMobileNavigation({ operatorContext, currentPath }: AeOwnerMobileNavigationProps) {
-  const items = operatorContext === undefined
-    ? mobileNavItemsForRole('owner')
-    : mobileNavItemsForContext(operatorContext, 'owner')
+  const router = useRouter()
+
+  const items = useMemo<MobileNavItem[]>(() => {
+    if (operatorContext !== undefined && !operatorContext.allowedSurfaces.includes('owner')) return []
+
+    const collected: MobileNavItem[] = []
+    for (const route of Object.values(router.routesByPath)) {
+      const nav = route.options.staticData?.nav
+      const operator = nav?.operator
+      if (operator === undefined || nav === undefined) continue
+      if (!operator.roles.includes('owner')) continue
+      if (operator.mobilePrimary !== true) continue
+      collected.push({ href: route.fullPath, label: nav.label, icon: operator.icon, mobileOrder: operator.mobileOrder ?? 0 })
+    }
+    return collected.sort((left, right) => left.mobileOrder - right.mobileOrder)
+  }, [router, operatorContext])
+
+  const currentHref = useMemo(
+    () => resolveCurrentHref(currentPath, items.map((item) => item.href)),
+    [currentPath, items],
+  )
 
   return (
     <nav
@@ -24,7 +61,7 @@ export function AeOwnerMobileNavigation({ operatorContext, currentPath }: AeOwne
     >
       <div className="grid min-h-touch grid-cols-3 px-gutter">
         {items.map((item) => {
-          const current = isOperatorNavItemCurrent('owner', currentPath, item.href)
+          const current = item.href === currentHref
           const Icon = item.icon
 
           return (

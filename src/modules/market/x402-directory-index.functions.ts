@@ -1,7 +1,14 @@
+import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
 import { x402DirectoryProvidersInputSchema, x402DirectoryCatalogueInputSchema, x402DirectoryCatalogueResourceInputSchema } from './x402-directory-catalogue'
-import { readX402DirectoryProviders, readX402DirectoryCatalogue, readX402DirectoryCatalogueOverview, readX402DirectoryCatalogueResource, readX402DirectoryAnalytics } from './x402-directory-index.server'
+import {
+  readX402DirectoryProviders, readX402DirectoryCatalogue, readX402DirectoryCatalogueOverview, readX402DirectoryCatalogueResource,
+  readX402DirectoryAnalytics, readX402DirectoryCatalogueBySlug, readX402DirectoryCanonicalUrlForTool,
+} from './x402-directory-index.server'
 import { x402DirectoryFilterSchema } from './x402-directory'
+
+const bySlugInputSchema = z.strictObject({ providerKey: z.string().min(1).max(253), slug: z.string().min(1).max(200) })
+const canonicalUrlForToolInputSchema = z.strictObject({ toolRef: z.string().min(1) })
 
 export const readX402DirectoryCatalogueServer = createServerFn({ method: 'GET' })
   .validator(data => x402DirectoryCatalogueInputSchema.parse(data))
@@ -19,3 +26,11 @@ export const readX402DirectoryAnalyticsServer = createServerFn({ method: 'GET' }
 export const readX402DirectoryProvidersServer = createServerFn({ method: 'GET' })
   .validator(data => x402DirectoryProvidersInputSchema.parse(data))
   .handler(async ({ data }) => await readX402DirectoryProviders(data))
+
+export const readX402DirectoryCatalogueBySlugServer = createServerFn({ method: 'GET' })
+  .validator(data => bySlugInputSchema.parse(data))
+  .handler(async ({ data }) => await readX402DirectoryCatalogueBySlug(data))
+
+export const readX402DirectoryCanonicalUrlForToolServer = createServerFn({ method: 'GET' })
+  .validator(data => canonicalUrlForToolInputSchema.parse(data))
+  .handler(async ({ data }) => await readX402DirectoryCanonicalUrlForTool(data))

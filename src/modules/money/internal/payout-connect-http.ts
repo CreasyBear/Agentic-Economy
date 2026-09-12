@@ -11,7 +11,9 @@ import {
   type ConvexServerFunctionAssertion,
 } from '@/lib/server/convex-source'
 import { resolveCanonicalBaseUrl } from '@/lib/server/canonical-url'
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { sourceWriteAdmissionFromRequest } from '@/lib/server/source-write-admission'
+import { idempotencyKeySchema } from '@/modules/common/action'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
   requireStrictClerkConsequenceProof,
@@ -206,7 +208,7 @@ export type OwnerPayoutAuthorityUpdateInput = OwnerOnboardingLinkInput & Readonl
 const ownerConnectAccountInputSchema = z.strictObject({
   businessId: z.string().trim().min(1).max(500),
   currency: z.string().regex(/^[A-Z][A-Z0-9]{2,19}$/u),
-  idempotencyKey: z.string().trim().min(8).max(200),
+  idempotencyKey: idempotencyKeySchema,
 })
 const ownerOnboardingLinkInputSchema = ownerConnectAccountInputSchema.extend({
   stripeAccountId: z.string().trim().min(1).max(500).optional(),
@@ -512,8 +514,8 @@ export async function createOwnerOnboardingLinkThroughSource(
     businessId: input.businessId,
     currency: currency.currency,
     stripeAccountId,
-    refreshRef: `${baseUrl}/owner/supply?connect=refresh`,
-    returnRef: `${baseUrl}/owner/supply?connect=return`,
+    refreshRef: `${baseUrl}/owner/operations?connect=refresh`,
+    returnRef: `${baseUrl}/owner/operations?connect=return`,
     idempotencyKey: input.idempotencyKey,
   })
   if (isMoneyRefusal(link)) return link
@@ -608,8 +610,8 @@ export async function readOwnerConnectReadinessThroughSource(): Promise<OwnerCon
       accounts,
       accountsTruncated: result.accounts.length >= 10,
     }
-  } catch {
-    return { kind: 'error', code: 'source_unavailable' }
+  } catch (cause) {
+    return degradeBackend(cause, { kind: 'error', code: 'source_unavailable' } as const, { site: 'readOwnerConnectReadinessThroughSource', reason: 'source_unavailable' })
   }
 }
 
@@ -639,8 +641,8 @@ export async function applyVerifiedConnectAccountEvent(
       command: { stripeAccountId: input.event.stripeAccountId },
       ...(input.env === undefined ? {} : { env: input.env }),
     })
-  } catch {
-    return { kind: 'refused', code: 'payout_not_ready', retryable: true }
+  } catch (cause) {
+    return degradeBackend(cause, { kind: 'refused', code: 'payout_not_ready', retryable: true } as const, { site: 'applyVerifiedConnectAccountEvent', reason: 'source_unavailable' })
   }
   const bindings = await callPublicSourceQuery(
     readPayoutAccountByStripeIdQuery,

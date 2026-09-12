@@ -1,6 +1,7 @@
 import { httpActionGeneric } from 'convex/server'
 import type { Infer } from 'convex/values'
 
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { internal } from './_generated/api'
 import type { ActionCtx } from './_generated/server'
 import { prepareX402PaymentAuthorizationReturns } from './moneyX402PaymentAuthorization'
@@ -39,8 +40,8 @@ async function boundedJson(request: Request): Promise<Record<string, unknown> | 
   try {
     const value: unknown = JSON.parse(body)
     return isRecord(value) ? value : undefined
-  } catch {
-    return undefined
+  } catch (cause) {
+    return degradeBackend(cause, undefined, { site: 'boundedJson', reason: 'invalid_response' })
   }
 }
 
@@ -87,8 +88,8 @@ export const beginProviderConsequenceJournal = httpActionGeneric(async (ctx, req
       expiresAt: Number(body.expiresAt),
     })
     return json(result)
-  } catch {
-    return json({ kind: 'unavailable' }, 503)
+  } catch (cause) {
+    return degradeBackend(cause, json({ kind: 'unavailable' }, 503), { site: 'beginProviderConsequenceJournal', reason: 'source_unavailable' })
   }
 })
 
@@ -122,8 +123,8 @@ export const attestProviderConsequenceTicket = httpActionGeneric(async (ctx, req
       },
     )
     return json(result, result.kind === 'attested' ? 200 : 409)
-  } catch {
-    return json({ kind: 'unavailable' }, 503)
+  } catch (cause) {
+    return degradeBackend(cause, json({ kind: 'unavailable' }, 503), { site: 'attestProviderConsequenceTicket', reason: 'source_unavailable' })
   }
 })
 
@@ -139,8 +140,8 @@ export const completeProviderConsequenceJournal = httpActionGeneric(async (ctx, 
   let observationJson: string
   try {
     observationJson = JSON.stringify(body.observation)
-  } catch {
-    return json({ kind: 'unavailable' }, 400)
+  } catch (cause) {
+    return degradeBackend(cause, json({ kind: 'unavailable' }, 400), { site: 'completeProviderConsequenceJournal', reason: 'invalid_response' })
   }
   try {
     const result = await ctx.runMutation(internal.capabilityProviderConsequenceJournal.completeProviderConsequence, {
@@ -150,8 +151,8 @@ export const completeProviderConsequenceJournal = httpActionGeneric(async (ctx, 
       observationJson,
     })
     return json(result, result.kind === 'completed' ? 200 : 409)
-  } catch {
-    return json({ kind: 'unavailable' }, 503)
+  } catch (cause) {
+    return degradeBackend(cause, json({ kind: 'unavailable' }, 503), { site: 'completeProviderConsequenceJournal', reason: 'source_unavailable' })
   }
 })
 
@@ -171,8 +172,8 @@ export const abortProviderConsequenceJournal = httpActionGeneric(async (ctx, req
       claimRef: body.claimRef,
     })
     return json(result, result.kind === 'aborted' ? 200 : 409)
-  } catch {
-    return json({ kind: 'unavailable' }, 503)
+  } catch (cause) {
+    return degradeBackend(cause, json({ kind: 'unavailable' }, 503), { site: 'abortProviderConsequenceJournal', reason: 'source_unavailable' })
   }
 })
 
@@ -304,7 +305,7 @@ export const providerConsequenceX402Rpc = httpActionGeneric(async (ctx, request)
     }
     const args = canonicalX402Args(operation, body.args, authorization, reservationRef)
     return json({ kind: 'result', value: await runX402Operation(ctx, operation, args) })
-  } catch {
-    return json({ kind: 'unavailable' }, 503)
+  } catch (cause) {
+    return degradeBackend(cause, json({ kind: 'unavailable' }, 503), { site: 'providerConsequenceX402Rpc', reason: 'source_unavailable' })
   }
 })

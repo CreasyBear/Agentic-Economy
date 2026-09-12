@@ -64,16 +64,16 @@ describe('site kit surfaces from Opensource UI', () => {
     render(
       <AeSiteAuthPanel
         eyebrow="Account"
-        title="Local preview sign-in is off"
+        title="Sign in"
         titleId="sign-in-context-heading"
-        body="This browser journey does not connect a Clerk account. Nothing is signed in or authorized."
+        body="After you sign in, you'll return to where you left off."
         footer={<a href="/sign-up">Create one</a>}
       >
         <AeSiteAuthSubmit>Sign in</AeSiteAuthSubmit>
       </AeSiteAuthPanel>,
     )
 
-    expect(screen.getByRole('heading', { level: 1, name: 'Local preview sign-in is off' })).toBeTruthy()
+    expect(screen.getByRole('heading', { level: 1, name: 'Sign in' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Sign in' }).classList.contains('min-h-touch')).toBe(true)
     expect(screen.getByRole('link', { name: 'Create one' }).getAttribute('href')).toBe('/sign-up')
   })

@@ -4,10 +4,8 @@ import type { Doc } from './_generated/dataModel'
 import {
   internalMutation,
   internalQuery,
-  query,
   type QueryCtx,
 } from './_generated/server'
-import { resolveBusinessActor } from './authz'
 import {
   buildQualifiedUseReceipt,
   decideQualifiedUseWrite,
@@ -247,46 +245,3 @@ export const readQualifiedUseByCall = internalQuery({
   },
 })
 
-/**
- * Owner-bounded readback. Business authority is derived from the authenticated
- * owner, never accepted from the caller.
- */
-export const readOwnerQualifiedUse = query({
-  args: { limit: v.optional(v.number()) },
-  returns: v.union(
-    v.object({
-      kind: v.literal('found'),
-      businessId: identifier,
-      receipts: v.array(qualifiedUseReceiptValue),
-    }),
-    v.object({ kind: v.literal('not_found') }),
-    v.object({ kind: v.literal('error'), code: v.literal('unauthenticated') }),
-  ),
-  handler: async (ctx, args) => {
-    const actor = await resolveBusinessActor(ctx)
-    if (actor.kind !== 'authenticated_owner')
-      return { kind: 'error' as const, code: 'unauthenticated' as const }
-    const business = await ctx.db
-      .query('businesses')
-      .withIndex('by_owningAccountRef_and_updatedAt', (q) =>
-        q.eq('owningAccountRef', actor.canonicalAccountRef),
-      )
-      .order('desc')
-      .first()
-    if (business === null) return { kind: 'not_found' as const }
-    const businessId = String(business._id)
-    const limit = Math.min(Math.max(args.limit ?? 25, 1), 100)
-    const rows = await ctx.db
-      .query('qualifiedUseReceipts')
-      .withIndex('by_businessId_and_qualifiedAt', (q) =>
-        q.eq('businessId', businessId),
-      )
-      .order('desc')
-      .take(limit)
-    return {
-      kind: 'found' as const,
-      businessId,
-      receipts: rows.map((row) => toWire(toReceipt(row))),
-    }
-  },
-})

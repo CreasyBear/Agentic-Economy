@@ -27,6 +27,7 @@ import {
   refused,
   type RouteTransportObservation,
 } from './route-transport-observation'
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 import type {
   X402Configuration,
   X402PaymentAuthorizationIdentity,
@@ -199,8 +200,8 @@ export async function prepareX402PaymentMaterial(
       ? undefined
       : await runtime.readX402PaymentCredentialRef()
     if (isProviderConnectionCredentialRef(configured)) paymentCredentialRef = configured
-  } catch {
-    paymentCredentialRef = undefined
+  } catch (cause) {
+    paymentCredentialRef = degradeBackend(cause, undefined, { site: 'prepareX402PaymentMaterial', reason: 'source_unavailable' })
   }
   if (paymentCredentialRef === undefined) {
     return {
@@ -273,8 +274,8 @@ function x402ResourcesEquivalent(
   try {
     committedUrl = new URL(committed.url).href
     freshUrl = new URL(fresh.url).href
-  } catch {
-    return false
+  } catch (cause) {
+    return degradeBackend(cause, false, { site: 'x402ResourcesEquivalent', reason: 'invalid_response' })
   }
   return committedUrl === freshUrl
     && committed.description === fresh.description
@@ -311,8 +312,8 @@ export function decodeX402Challenge(header: string | null): X402Challenge | unde
     return validateX402Challenge(
       validateX402PaymentRequired(decodeX402PaymentRequiredHeader(header)),
     )
-  } catch {
-    return undefined
+  } catch (cause) {
+    return degradeBackend(cause, undefined, { site: 'decodeX402Challenge', reason: 'invalid_response' })
   }
 }
 
@@ -325,8 +326,8 @@ function decodePinnedX402Challenge(configuration: X402Configuration, committedPa
     return validateX402Challenge(
       validateX402PaymentRequired(JSON.parse(committedPaymentRequiredJson ?? configuration.paymentRequiredJson)),
     )
-  } catch {
-    return undefined
+  } catch (cause) {
+    return degradeBackend(cause, undefined, { site: 'decodePinnedX402Challenge', reason: 'invalid_response' })
   }
 }
 
@@ -406,8 +407,8 @@ export function x402ResourceUrlBindsTarget(
   let resource: URL
   try {
     resource = new URL(resourceUrl)
-  } catch {
-    return false
+  } catch (cause) {
+    return degradeBackend(cause, false, { site: 'x402ResourceUrlBindsTarget', reason: 'invalid_response' })
   }
   if (
     resource.protocol !== 'https:'

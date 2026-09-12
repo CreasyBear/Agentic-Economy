@@ -1,13 +1,14 @@
 import Decimal from 'decimal.js'
 import { x402DirectoryFunctionalTitle } from '@/modules/market/x402-directory-title'
 import type { X402DirectoryEntry } from '@/modules/market/x402-directory'
+import { captureRouteException } from '@/lib/observability/capture-route-exception'
 
 /** Formatting a published token amount does not turn it into an AE Quote. */
 export function directoryPrice(entry: X402DirectoryEntry): string {
   const price = entry.prices[0]
   if (price === undefined) return 'Price on request'
   if (price.decimalAmount !== undefined && price.symbol !== undefined) {
-    try { return `${new Decimal(price.decimalAmount).toFixed()} ${price.symbol}` } catch { /* Retain the source label. */ }
+    try { return `${new Decimal(price.decimalAmount).toFixed()} ${price.symbol}` } catch (cause) { captureRouteException(cause, { site: 'directoryPrice' }, 'warning') /* Retain the source label. */ }
   }
   return price.symbol === undefined || price.decimalAmount === undefined ? 'See payment details' : price.amount
 }

@@ -2,7 +2,7 @@ import { createFileRoute } from '@tanstack/react-router'
 
 import { methodNotAllowed } from '@/lib/server/method-guard'
 import { toolReadUnavailableResponse } from '@/lib/server/tool-read-problem'
-import { readToolReadRequest } from '@/lib/server/tool-read-request'
+import { publicToolReadCacheControl, readToolReadRequest } from '@/lib/server/tool-read-request'
 import { problem } from '@/lib/server/problem'
 import { withHttpRateLimit } from '@/lib/server/rate-limit'
 import { runWithRequestCorrelation, withRequestCorrelationHeader } from '@/lib/server/request-correlation'
@@ -39,7 +39,7 @@ export async function handleMarketToolSearchRequest(request: Request): Promise<R
           context: { caller: 'http', request },
         }))
         if (!result.success) return problem({ status: 503, kind: 'INTERNAL', code: 'tool_read_result_invalid', detail: 'The tool catalogue result failed its own output contract.' })
-        return Response.json(result.data, { headers: { 'Cache-Control': 'no-store' } })
+        return Response.json(result.data, { headers: { 'Cache-Control': publicToolReadCacheControl(result.data) } })
       })
     } catch (error) {
       response = error instanceof InvalidOpaqueCursorError

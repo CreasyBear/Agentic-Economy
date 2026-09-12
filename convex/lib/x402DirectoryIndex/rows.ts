@@ -18,11 +18,20 @@ export async function directoryGeneration(ctx: Pick<QueryCtx, 'db'> | Pick<Mutat
   return row?.source === 'coinbase' ? row : null
 }
 
+/**
+ * The live generation is updated in place (Well 8 Lane B): a refresh patches
+ * this same row rather than swapping to a fresh one, so `status` legitimately
+ * reads 'refreshing' for the run's whole duration. Gating reads on
+ * `terminalObserved` alone (never re-checking `status`) keeps browse/search/
+ * facets available throughout a refresh - `terminalObserved` latches true the
+ * first time a scan ever completes (x402DirectoryIndexStore.applyPage) and
+ * never resets, unlike `status`, which does flip per run.
+ */
 export async function activeDirectoryGeneration(ctx: Pick<QueryCtx, 'db'>) {
   const state = await directoryState(ctx)
   if (state?.activeGeneration === undefined) return null
   const generation = await directoryGeneration(ctx, state.activeGeneration)
-  return generation?.status === 'complete' && generation.terminalObserved === true ? generation : null
+  return generation?.terminalObserved === true ? generation : null
 }
 
 export function directoryCoverage(row: Doc<'marketExternalRegistryGenerations'>): X402DirectoryIndexCoverage {
@@ -37,7 +46,11 @@ export function directoryCoverage(row: Doc<'marketExternalRegistryGenerations'>)
 }
 
 export function storedDirectoryEntry(row: Doc<'marketExternalRegistryEntries'>): DirectoryEntry {
-  if (row.source !== 'coinbase' || row.directoryEntryJson === undefined || row.directorySourceJson === undefined) throw new Error('directory_entry_invalid')
+  // Well 8 Lane C: 'provider' rows (upsertProviderDirectoryRows) are written
+  // through the exact same directoryEntryJson/directorySourceJson shape as
+  // Coinbase rows, so every reader below runs with no provider-specific
+  // branch - only the write path differs.
+  if ((row.source !== 'coinbase' && row.source !== 'provider') || row.directoryEntryJson === undefined || row.directorySourceJson === undefined) throw new Error('directory_entry_invalid')
   // The internal write validates this shape before persisting it. Source JSON
   // lives once in the row, rather than duplicating it inside the presentation.
   const entry = JSON.parse(row.directoryEntryJson) as DirectoryEntry
@@ -60,60 +73,23 @@ export function storedDirectoryEntry(row: Doc<'marketExternalRegistryEntries'>):
   return { ...entry, ...directorySourceLabels(raw), title, metadataJson: row.directorySourceJson }
 }
 
-export type MomentumObservation = { calls?: number; payers?: number }
-
-export type MomentumSignal = { momentumOrder: number; callDelta?: number; payerDelta?: number; momentumBand: DirectoryMomentumBand }
-
-function reportedCount(value: number | undefined): number | undefined {
-  return value !== undefined && Number.isSafeInteger(value) && value >= 0 ? value : undefined
-}
-
-/**
- * Momentum against the previous generation's reported activity. A missing
- * previous observation means nothing is comparable ('unknown'); a previous
- * observation without reported payers marks a resource that entered the
- * directory with payers as 'new'. Bands: rising >= 2 payer delta,
- * falling <= -2, otherwise flat.
- */
-export function directoryMomentum(
-  current: MomentumObservation,
-  previous: MomentumObservation | undefined,
-): MomentumSignal {
-  if (previous === undefined) return { momentumOrder: -1, momentumBand: 'unknown' }
-  const currentPayers = reportedCount(current.payers)
-  const previousPayers = reportedCount(previous.payers)
-  if (previousPayers === undefined) return { momentumOrder: -1, momentumBand: currentPayers !== undefined && currentPayers > 0 ? 'new' : 'unknown' }
-  if (currentPayers === undefined) return { momentumOrder: -1, momentumBand: 'unknown' }
-  const payerDelta = currentPayers - previousPayers
-  const currentCalls = reportedCount(current.calls)
-  const previousCalls = reportedCount(previous.calls)
-  return {
-    momentumOrder: payerDelta,
-    payerDelta,
-    ...(currentCalls !== undefined && previousCalls !== undefined ? { callDelta: currentCalls - previousCalls } : {}),
-    momentumBand: payerDelta >= 2 ? 'rising' : payerDelta <= -2 ? 'falling' : 'flat',
-  }
-}
-
-/** Stored projection patch: undefined deltas are omitted, never zero-filled. */
-export function momentumPatch(momentum: MomentumSignal) {
-  return {
-    momentumOrder: momentum.momentumOrder, momentumBand: momentum.momentumBand,
-    ...(momentum.callDelta === undefined ? {} : { callDelta: momentum.callDelta }),
-    ...(momentum.payerDelta === undefined ? {} : { payerDelta: momentum.payerDelta }),
-  }
-}
-
 export function indexedDirectoryEntry(row: Doc<'marketExternalRegistryEntries'>, search?: Doc<'marketDirectorySearchEntries'>): IndexedEntry {
-  const entry = storedDirectoryEntry(row)
-  const analytics = search === undefined || search.depthBand === undefined || search.lastCalledBand === undefined || search.momentumBand === undefined ? undefined : {
+  const stored = storedDirectoryEntry(row)
+  const entry = search?.slug === undefined ? stored : { ...stored, slug: search.slug }
+  // momentumBand/callDelta/payerDelta are no longer computed (Well 8 Lane B
+  // dropped the previous-generation comparison they depended on - see
+  // x402DirectoryIndexBackfill.ts). They stay optional here so legacy rows
+  // that still carry a value from before that change keep rendering it,
+  // without gating the whole analytics block on a field nothing writes
+  // anymore.
+  const analytics = search === undefined || search.depthBand === undefined || search.lastCalledBand === undefined ? undefined : {
     ...(search.payerDepth === undefined ? {} : { payerDepth: search.payerDepth }),
     depthBand: search.depthBand as DirectoryDepthBand,
     ...(search.lastActivatedAt === undefined ? {} : { lastActivatedAt: search.lastActivatedAt }),
     lastCalledBand: search.lastCalledBand as DirectoryRecencyBand,
     ...(search.callDelta === undefined ? {} : { callDelta: search.callDelta }),
     ...(search.payerDelta === undefined ? {} : { payerDelta: search.payerDelta }),
-    momentumBand: search.momentumBand as DirectoryMomentumBand,
+    ...(search.momentumBand === undefined ? {} : { momentumBand: search.momentumBand as DirectoryMomentumBand }),
   }
   return {
     entry, category: row.directoryCategory ?? 'uncategorized',
@@ -121,4 +97,26 @@ export function indexedDirectoryEntry(row: Doc<'marketExternalRegistryEntries'>,
     observedAt: row.updatedAt, sourceDigest: row.sourceDigest,
     ...(analytics === undefined ? {} : { analytics }),
   }
+}
+
+/**
+ * An admitted Tool's canonical `/tools/<providerKey>/<slug>` address, joined
+ * live off its current publication's sourceRouteRef - shared by the
+ * `/tools/$toolRef` redirect (x402DirectoryIndex.ts:canonicalUrlForTool) and
+ * the owner workspace (capabilityProviderTools.ts:readOwner/listOwner), which
+ * both need the same reverse lookup and neither should re-derive it.
+ */
+export async function canonicalSlugForToolRef(
+  ctx: Pick<QueryCtx, 'db'>, toolRef: string,
+): Promise<Readonly<{ providerHost: string; slug: string }> | null> {
+  const publication = await ctx.db.query('capabilityPublications')
+    .withIndex('by_toolRef_and_disposition', (query) => query.eq('toolRef', toolRef).eq('disposition', 'current')).unique()
+  if (publication === null || publication.sourceRouteRef === undefined) return null
+  const generation = await activeDirectoryGeneration(ctx)
+  if (generation === null) return null
+  const row = await ctx.db.query('marketDirectorySearchEntries')
+    .withIndex('by_generation_and_sourceRouteRef', (query) => query.eq('generation', generation.generation).eq('sourceRouteRef', publication.sourceRouteRef))
+    .filter((query) => query.eq(query.field('network'), '*'))
+    .first()
+  return row === null || row.providerKey === undefined || row.slug === undefined ? null : { providerHost: row.providerKey, slug: row.slug }
 }

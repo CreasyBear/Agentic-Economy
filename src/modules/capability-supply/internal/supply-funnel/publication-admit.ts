@@ -9,6 +9,7 @@ import {
   sourceMutation,
 } from "@/lib/server/convex-source";
 import { sourceWriteAdmissionFromContext } from "@/lib/server/source-write-admission";
+import { degradeBackend } from "@/lib/observability/degrade-backend";
 import { requireStrictClerkConsequenceProof } from "@/lib/server/clerk-consequence-proof";
 import {
   SourceWriteAdmissionError,
@@ -139,8 +140,11 @@ function ownerPublicationEndpoint(
           ).toString(),
           method: source.operation.method.toUpperCase() as "GET" | "POST",
         };
-      } catch {
-        return undefined;
+      } catch (cause) {
+        return degradeBackend(cause, undefined, {
+          site: "ownerPublicationEndpoint",
+          reason: "invalid_response",
+        });
       }
     }
     case "mcp":
@@ -175,8 +179,11 @@ function canonicalOwnerEndpoint(value: string): string | undefined {
   try {
     const endpoint = new URL(value);
     return endpoint.protocol === "https:" ? endpoint.toString() : undefined;
-  } catch {
-    return undefined;
+  } catch (cause) {
+    return degradeBackend(cause, undefined, {
+      site: "canonicalOwnerEndpoint",
+      reason: "invalid_response",
+    });
   }
 }
 
@@ -237,8 +244,11 @@ async function prepareOwnerPublicationSource(
     ) {
       return { kind: "refused", reason: "source_too_large" };
     }
-  } catch {
-    return { kind: "refused", reason: "source_invalid" };
+  } catch (cause) {
+    return degradeBackend(cause, { kind: "refused" as const, reason: "source_invalid" as const }, {
+      site: "prepareOwnerPublicationSource",
+      reason: "invalid_response",
+    });
   }
   const imported = ownerPublicationImport(data.source);
   if (
@@ -296,8 +306,11 @@ export async function preflightOwnerOpenApiDocument({
     readback = await callSourceQuery(readOwnerSupplyQuery, {
       businessId: data.businessId,
     });
-  } catch {
-    return { kind: "refused", reason: "source_unavailable" };
+  } catch (cause) {
+    return degradeBackend(cause, { kind: "refused" as const, reason: "source_unavailable" as const }, {
+      site: "preflightOwnerOpenApiDocument",
+      reason: "source_unavailable",
+    });
   }
   if (readback.kind === "error") {
     return {
@@ -325,8 +338,11 @@ export async function preflightOwnerOpenApiDocument({
       data.document,
       dereferenceOpenApiSchema,
     );
-  } catch {
-    return { kind: "refused", reason: "source_unavailable" };
+  } catch (cause) {
+    return degradeBackend(cause, { kind: "refused" as const, reason: "source_unavailable" as const }, {
+      site: "preflightOwnerOpenApiDocument",
+      reason: "source_unavailable",
+    });
   }
 }
 

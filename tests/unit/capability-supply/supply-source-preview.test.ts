@@ -384,7 +384,7 @@ describe('supply source preview', () => {
 
     expect(result).toEqual({
       kind: 'authentication_required',
-      authenticationUrl: '/owner/supply?source=mcp&serverUrl=https%3A%2F%2Ftools.example%2Fmcp',
+      authenticationUrl: '/owner/operations?source=mcp&serverUrl=https%3A%2F%2Ftools.example%2Fmcp',
       serverUrl: 'https://tools.example/mcp',
     })
   })

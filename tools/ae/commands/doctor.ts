@@ -246,7 +246,7 @@ export async function runDoctorCommand(args: readonly string[], options: CliOpti
         summary: 'No buyer credential is selected for this origin; anonymous search and describe remain available.',
         nextCommand: connectNextCommand(options),
       },
-      skippedQuoteCheck('no buyer credential for this origin', connectNextCommand(options)),
+      skippedQuoteCheck('no buyer credential for this origin', connectNextCommand(options), 'no_buyer_credential'),
       {
         id: 'balance', state: 'warn',
         summary: 'Balance is unavailable until a buyer credential is connected.',

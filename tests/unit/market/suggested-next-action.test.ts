@@ -73,19 +73,19 @@ describe('shared suggested next-action projection', () => {
     ],
     [
       { subject: 'provider', state: 'draft', offeringRef: 'offering:one' },
-      { label: 'Continue description', kind: 'navigate', href: '/owner/supply/offering%3Aone' },
+      { label: 'Continue description', kind: 'navigate', href: '/owner/operations/offering%3Aone' },
     ],
     [
       { subject: 'provider', state: 'unready', offeringRef: 'offering:one' },
-      { label: 'Recheck readiness', kind: 'navigate', href: '/owner/supply/offering%3Aone' },
+      { label: 'Recheck readiness', kind: 'navigate', href: '/owner/operations/offering%3Aone' },
     ],
     [
       { subject: 'provider', state: 'incompatible', offeringRef: 'offering:one' },
-      { label: 'Inspect incompatibility', kind: 'navigate', href: '/owner/supply/offering%3Aone' },
+      { label: 'Inspect incompatibility', kind: 'navigate', href: '/owner/operations/offering%3Aone' },
     ],
     [
       { subject: 'provider', state: 'withdrawn', offeringRef: 'offering:one' },
-      { label: 'Republish Tool', kind: 'navigate', href: '/owner/supply/offering%3Aone' },
+      { label: 'Republish Tool', kind: 'navigate', href: '/owner/operations/offering%3Aone' },
     ],
     [
       { subject: 'provider', state: 'current', offeringRef: 'offering:one', toolRef: TOOL_REF },
@@ -100,7 +100,7 @@ describe('shared suggested next-action projection', () => {
       {
         label: 'Connect provider',
         kind: 'navigate',
-        href: '/owner/offerings#provider-connections',
+        href: '/owner/operations#provider-connections',
       },
     ],
     [

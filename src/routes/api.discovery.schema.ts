@@ -1,5 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 
+import { degrade } from '@/lib/observability/degrade'
 import { methodNotAllowed } from '@/lib/server/method-guard'
 import { resolveCanonicalBaseUrl } from '@/lib/server/canonical-url'
 import { readDirectoryFreshnessField, type X402DirectoryFreshnessField } from '@/modules/market/x402-directory-index.server'
@@ -272,8 +273,11 @@ async function executeJsonRoute<Body>(input: {
       ...(errorCode === undefined ? {} : { errorCode }),
       ...(body === undefined ? {} : { body }),
     }
-  } catch {
-    return routeOutage(input.route, input.label, input.checkedAt)
+  } catch (cause) {
+    return degrade(cause, routeOutage(input.route, input.label, input.checkedAt), {
+      site: 'executeDiscoveryJsonRoute',
+      reason: 'source_unavailable',
+    })
   }
 }
 
@@ -296,8 +300,11 @@ async function executeTextRoute(input: {
       ...(cacheControl === undefined ? {} : { cacheControl }),
       ...(response.ok ? {} : { errorCode: response.status === 404 ? 'not_found' : 'route_outage' }),
     }
-  } catch {
-    return routeOutage(input.route, input.label, input.checkedAt)
+  } catch (cause) {
+    return degrade(cause, routeOutage(input.route, input.label, input.checkedAt), {
+      site: 'executeDiscoveryTextRoute',
+      reason: 'source_unavailable',
+    })
   }
 }
 

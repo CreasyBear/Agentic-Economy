@@ -1,5 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 
+import { degrade } from '@/lib/observability/degrade'
 import { methodNotAllowed } from '@/lib/server/method-guard'
 import { toolReadUnavailableResponse } from '@/lib/server/tool-read-problem'
 import { readToolReadRequest } from '@/lib/server/tool-read-request'
@@ -30,8 +31,11 @@ export async function handleMarketToolDescribeRequest(request: Request): Promise
           ? Response.json(result.data, { headers: { 'Cache-Control': 'no-store' } })
           : problem({ status: 503, kind: 'INTERNAL', code: 'tool_read_result_invalid' })
       })
-    } catch {
-      response = toolReadUnavailableResponse()
+    } catch (cause) {
+      response = degrade(cause, toolReadUnavailableResponse(), {
+        site: 'handleMarketToolDescribeRequest',
+        reason: 'source_unavailable',
+      })
     }
     return withRequestCorrelationHeader(response, correlationId)
   })

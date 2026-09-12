@@ -41,6 +41,7 @@ import {
   type RouteTransportFetch,
   type RouteTransportHeaderRecord,
 } from './route-transport-http-json'
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 
 export const MCP_TOOL_LIST_PAGE_LIMIT = 32
 export const MCP_TOOL_LIST_TOOL_LIMIT = 4_096
@@ -371,13 +372,15 @@ export async function invokeMcp(
     if (transport.sessionId !== undefined) {
       try {
         await transport.terminateSession()
-      } catch {
+      } catch (cause) {
+        degradeBackend(cause, undefined, { site: 'invokeMcp', reason: 'source_unavailable' })
         // Cleanup failures must not replace the invocation outcome.
       }
     }
     try {
       await transport.close()
-    } catch {
+    } catch (cause) {
+      degradeBackend(cause, undefined, { site: 'invokeMcp', reason: 'source_unavailable' })
       // Cleanup failures must not replace the invocation outcome.
     }
   }

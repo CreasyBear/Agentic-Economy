@@ -6,6 +6,7 @@ import {
   type CapabilityPublicationSourceSelector,
   type PreparedPublicationMaterial,
 } from '@/modules/capability-supply/public'
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { stableStringify, type StableHashValue } from '@/modules/common/stable-hash'
 
@@ -72,8 +73,8 @@ export async function reconstructOwnerSourceMaterial(
     offeringRegistration = offeringRegistrationFromRow(
       toCapabilityOfferingRow(offeringDoc),
     )
-  } catch {
-    return { kind: 'refused', reason: 'offering_integrity_failure' }
+  } catch (cause) {
+    return degradeBackend(cause, { kind: 'refused', reason: 'offering_integrity_failure' }, { site: 'reconstructOwnerSourceMaterial', reason: 'invalid_response' })
   }
   if (
     offeringRegistration.businessId !== String(publication.businessId)
@@ -88,8 +89,8 @@ export async function reconstructOwnerSourceMaterial(
   let adapterConfig: CapabilityPublicationBindingDraft['adapter']['config']
   try {
     adapterConfig = JSON.parse(binding.configJson)
-  } catch {
-    return { kind: 'refused', reason: 'binding_integrity_failure' }
+  } catch (cause) {
+    return degradeBackend(cause, { kind: 'refused', reason: 'binding_integrity_failure' }, { site: 'reconstructOwnerSourceMaterial', reason: 'invalid_response' })
   }
   if (
     stableStringify(adapterConfig) !== binding.configJson

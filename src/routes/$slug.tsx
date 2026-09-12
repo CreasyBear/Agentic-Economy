@@ -6,6 +6,7 @@ import { AeProviderListingPage } from '@/components/ae/listing/AeProviderListing
 import { PublicBusinessNotFound } from '@/components/ae/listing/PublicBusinessNotFound'
 import { AePageState } from '@/components/ae/layout/AePageState'
 import { AePublicPage } from '@/components/ae/layout/AePublicPage'
+import { degrade } from '@/lib/observability/degrade'
 import { readPublicBusinessRouteServer, type PublicBusinessRouteDataResult } from '@/lib/server/public-business-route.functions'
 import { serializeJsonLd } from '@/modules/seo/public'
 
@@ -27,8 +28,11 @@ export const Route = createFileRoute('/$slug')({
     let result: PublicBusinessRouteDataResult
     try {
       result = await readPublicBusinessRouteServer({ data: { slug: params.slug } })
-    } catch {
-      return { kind: 'unavailable' as const, reason: 'source_unavailable' as const, retryable: true }
+    } catch (cause) {
+      return degrade(cause, { kind: 'unavailable' as const, reason: 'source_unavailable' as const, retryable: true }, {
+        site: 'publicBusinessRouteLoader',
+        reason: 'source_unavailable',
+      })
     }
     if (result.kind === 'not_found') {
       throw notFound({ data: { reason: result.reason } })
@@ -121,7 +125,7 @@ function ProviderListingError() {
       action={
         <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
           <Button asChild variant="default" className="min-h-touch"><a href={pathname}>Try again</a></Button>
-          <Button asChild variant="secondary" className="min-h-touch"><Link to="/market" search={{ window: '30d' }} hash="tools">Back to catalog</Link></Button>
+          <Button asChild variant="secondary" className="min-h-touch"><Link to="/market">Back to catalog</Link></Button>
         </div>
       }
     />
@@ -139,7 +143,7 @@ export function PublicBusinessUnavailable() {
       action={
         <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
           <Button asChild variant="default" className="min-h-touch"><a href={pathname}>Try again</a></Button>
-          <Button asChild variant="secondary" className="min-h-touch"><Link to="/market" search={{ window: '30d' }} hash="tools">Back to catalog</Link></Button>
+          <Button asChild variant="secondary" className="min-h-touch"><Link to="/market">Back to catalog</Link></Button>
         </div>
       }
     />

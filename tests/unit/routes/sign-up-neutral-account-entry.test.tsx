@@ -22,6 +22,9 @@ vi.mock('@tanstack/react-router', () => ({
     }
   },
   Link: ({ children, to }: { children: ReactNode; to: string }) => <a href={to}>{children}</a>,
+  // AePublicPage renders AeSiteFooter, which reads the route table via
+  // useRouter(); an empty table is enough to render its (empty) columns.
+  useRouter: () => ({ routesByPath: {} }),
 }))
 
 vi.mock('@clerk/tanstack-react-start', () => ({
@@ -29,14 +32,6 @@ vi.mock('@clerk/tanstack-react-start', () => ({
     routeState.clerkProps = props
     return <div>Clerk sign-up</div>
   },
-}))
-
-vi.mock('@/lib/client/local-e2e-auth', () => ({
-  isLocalE2EAuthBypassEnabled: () => false,
-}))
-
-vi.mock('@/components/ae/layout/AePublicShell', () => ({
-  AePublicShell: ({ children }: { children: ReactNode }) => <main>{children}</main>,
 }))
 
 import '@/routes/sign-up.$'

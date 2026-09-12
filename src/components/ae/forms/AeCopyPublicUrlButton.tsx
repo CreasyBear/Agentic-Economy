@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input'
 
 import { emitFunnelEvent } from '@/lib/observability/funnel-client'
 import { copyTextToClipboard } from '@/lib/ui/copy-text-to-clipboard'
+import { captureRouteException } from '@/lib/observability/capture-route-exception'
 type AeCopyPublicUrlButtonVariant = 'default' | 'outline' | 'secondary' | 'ghost' | 'destructive' | 'link'
 type AeCopyPublicUrlButtonSize = 'default' | 'sm' | 'lg' | 'icon'
 
@@ -65,7 +66,8 @@ export function AeCopyPublicUrlButton({
         payload: { slug },
       })
       window.setTimeout(() => setCopied(false), 1600)
-    } catch {
+    } catch (cause) {
+      captureRouteException(cause, { site: 'copyPublicUrl' }, 'warning')
       setCopied(false)
       setCopyFailed(true)
       setCopyNotice('Could not copy the public URL. Select it and copy it manually.')

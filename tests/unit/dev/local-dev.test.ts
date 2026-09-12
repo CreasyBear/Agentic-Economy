@@ -5,7 +5,6 @@ import { afterEach, describe, expect, it } from 'vitest'
 
 import {
   anonymousDeploymentEnvSeed,
-  authModeLine,
   buildConvexDevArgs,
   buildConvexEnvSetArgs,
   buildConvexInitArgs,
@@ -13,6 +12,7 @@ import {
   buildStages,
   childExitStatus,
   convexChildEnv,
+  convexDevTimeoutMs,
   convexExitFix,
   convexPrintedUrl,
   createSupervisor,
@@ -24,17 +24,20 @@ import {
   isCatalogueComplete,
   isConvexReadyOutput,
   isViteReadyOutput,
+  missingClerkEnvNames,
   needsClerkPlaceholder,
   parseLauncherFlags,
   probeConvexUrl,
   releaseRevision,
   resolveConvexUrl,
+  resolveEffectiveConvexUrl,
   runStages,
+  stalePrintedUrlWarning,
   shouldSpawnConvex,
   signalProcessTree,
   terminateProcessTrees,
   viteLocalUrl,
-} from '../../../tools/dev/local-dev.mjs'
+} from '../../../tools/dev/local-dev.ts'
 
 type StageOutcome = {
   ok: boolean
@@ -237,7 +240,7 @@ describe('convex child env', () => {
       PATH: '/usr/bin',
       CLERK_JWT_ISSUER_DOMAIN: 'https://release-proof.invalid',
       CONVEX_AGENT_MODE: 'anonymous',
-      CONVEX_LOCAL_BACKEND_STARTUP_TIMEOUT_SECS: '180',
+      CONVEX_LOCAL_BACKEND_STARTUP_TIMEOUT_SECS: String(DEFAULT_LOCAL_BACKEND_STARTUP_TIMEOUT_SECS),
     })
     expect(lines).toEqual([
       'anonymous local deployment: using placeholder CLERK_JWT_ISSUER_DOMAIN (Clerk is not configured locally)',
@@ -259,7 +262,7 @@ describe('convex child env', () => {
     const env = { PATH: '/usr/bin' }
     const result = convexChildEnv(env, { anonymous: false, log })
     expect(result).not.toBe(env)
-    expect(result).toEqual({ PATH: '/usr/bin', CONVEX_LOCAL_BACKEND_STARTUP_TIMEOUT_SECS: '180' })
+    expect(result).toEqual({ PATH: '/usr/bin', CONVEX_LOCAL_BACKEND_STARTUP_TIMEOUT_SECS: String(DEFAULT_LOCAL_BACKEND_STARTUP_TIMEOUT_SECS) })
     expect(lines).toEqual([])
   })
 
@@ -296,7 +299,7 @@ describe('convex exit fix', () => {
   it('points at the startup timeout env var when the backend did not start in time', () => {
     const output = 'Local backend did not start on port 3212 within 30 seconds.'
     expect(convexExitFix(output, {})).toBe(
-      'the local backend took longer than CONVEX_LOCAL_BACKEND_STARTUP_TIMEOUT_SECS=180; rerun, or raise it for a large local database',
+      `the local backend took longer than CONVEX_LOCAL_BACKEND_STARTUP_TIMEOUT_SECS=${DEFAULT_LOCAL_BACKEND_STARTUP_TIMEOUT_SECS}; rerun, or raise it for a large local database`,
     )
     expect(convexExitFix(output, { CONVEX_LOCAL_BACKEND_STARTUP_TIMEOUT_SECS: '600' })).toBe(
       'the local backend took longer than CONVEX_LOCAL_BACKEND_STARTUP_TIMEOUT_SECS=600; rerun, or raise it for a large local database',
@@ -311,6 +314,19 @@ describe('convex exit fix', () => {
   it('falls back to a generic hint for anything else', () => {
     expect(convexExitFix('some unrelated failure trace', {})).toBe('read the Convex output above')
     expect(convexExitFix('', {})).toBe('read the Convex output above')
+  })
+})
+
+describe('convex dev timeout', () => {
+  it('derives the outer cap from the backend startup timeout plus a 30s margin', () => {
+    expect(convexDevTimeoutMs({ CONVEX_LOCAL_BACKEND_STARTUP_TIMEOUT_SECS: '300' })).toBe(330_000)
+    expect(convexDevTimeoutMs({ CONVEX_LOCAL_BACKEND_STARTUP_TIMEOUT_SECS: '45' })).toBe(75_000)
+  })
+
+  it('falls back to the generic launcher timeout when the env var is absent or unparseable', () => {
+    expect(convexDevTimeoutMs({})).toBe(120_000)
+    expect(convexDevTimeoutMs({ CONVEX_LOCAL_BACKEND_STARTUP_TIMEOUT_SECS: 'not-a-number' })).toBe(120_000)
+    expect(convexDevTimeoutMs({ CONVEX_LOCAL_BACKEND_STARTUP_TIMEOUT_SECS: '0' })).toBe(120_000)
   })
 })
 
@@ -387,6 +403,39 @@ describe('effective environment', () => {
     expect(resolveConvexUrl({ CONVEX_URL: '  ' }, {})).toBeUndefined()
   })
 
+  it('lets the URL printed by a running `convex dev` win over a stale dotenv value, and warns once', () => {
+    const dotenvUrl = { url: 'http://127.0.0.1:3212', name: 'CONVEX_URL', file: '.env.development.local' }
+    expect(resolveEffectiveConvexUrl(dotenvUrl, 'http://127.0.0.1:3210')).toEqual({
+      url: 'http://127.0.0.1:3210',
+      name: 'CONVEX_URL',
+      file: 'the running convex dev process',
+    })
+    expect(stalePrintedUrlWarning(dotenvUrl, 'http://127.0.0.1:3210')).toBe(
+      'convex dev is serving http://127.0.0.1:3210 but CONVEX_URL in .env.development.local is stale (http://127.0.0.1:3212); the running backend wins',
+    )
+
+    // Nothing was parsed from `convex dev`'s output: the dotenv value stands, unwarned.
+    expect(resolveEffectiveConvexUrl(dotenvUrl, undefined)).toBe(dotenvUrl)
+    expect(stalePrintedUrlWarning(dotenvUrl, undefined)).toBeUndefined()
+
+    // The two already agree: still authoritative, but nothing to warn about.
+    const agreeing = { url: 'http://127.0.0.1:3210', name: 'CONVEX_URL', file: '.env.local' }
+    expect(resolveEffectiveConvexUrl(agreeing, 'http://127.0.0.1:3210')).toEqual({
+      url: 'http://127.0.0.1:3210',
+      name: 'CONVEX_URL',
+      file: 'the running convex dev process',
+    })
+    expect(stalePrintedUrlWarning(agreeing, 'http://127.0.0.1:3210')).toBeUndefined()
+
+    // Nothing in dotenv at all, but `convex dev` printed one: printed wins.
+    expect(resolveEffectiveConvexUrl(undefined, 'http://127.0.0.1:3210')).toEqual({
+      url: 'http://127.0.0.1:3210',
+      name: 'CONVEX_URL',
+      file: 'the running convex dev process',
+    })
+    expect(stalePrintedUrlWarning(undefined, 'http://127.0.0.1:3210')).toBeUndefined()
+  })
+
   it('lets a process-owned value beat every file and records its source as process', () => {
     const baseEnv = { PATH: '/usr/bin', SHARED: 'process-value', CONVEX_URL: 'http://127.0.0.1:9' }
     const { env, sources } = effectiveEnv(baseEnv, files)
@@ -400,24 +449,24 @@ describe('effective environment', () => {
   })
 })
 
-describe('local Clerk bypass startup line', () => {
-  it('reports ON, with no source, when unset or explicitly true', () => {
-    expect(authModeLine({}, {})).toBe(
-      'auth: local Clerk bypass ON (VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E=true; connect:local can approve)',
-    )
-    expect(authModeLine({ VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E: 'true' }, {})).toBe(
-      'auth: local Clerk bypass ON (VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E=true; connect:local can approve)',
-    )
+describe('missingClerkEnvNames', () => {
+  it('lists all three required names when none are set', () => {
+    expect(missingClerkEnvNames({})).toEqual(['CLERK_PUBLISHABLE_KEY', 'CLERK_SECRET_KEY', 'AE_E2E_OWNER_EMAIL'])
   })
 
-  it('reports OFF with its source when the value is anything other than true', () => {
-    expect(authModeLine(
-      { VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E: 'false' },
-      { VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E: '.env.local' },
-    )).toBe('auth: local Clerk bypass OFF (source: .env.local); ae connect needs browser approval')
-    expect(authModeLine({ VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E: 'false' }, {})).toBe(
-      'auth: local Clerk bypass OFF (source: process); ae connect needs browser approval',
-    )
+  it('lists only the names still missing', () => {
+    expect(missingClerkEnvNames({ CLERK_PUBLISHABLE_KEY: 'pk_test_x', CLERK_SECRET_KEY: '' })).toEqual([
+      'CLERK_SECRET_KEY',
+      'AE_E2E_OWNER_EMAIL',
+    ])
+  })
+
+  it('reports none missing once all three are set', () => {
+    expect(missingClerkEnvNames({
+      CLERK_PUBLISHABLE_KEY: 'pk_test_x',
+      CLERK_SECRET_KEY: 'sk_test_x',
+      AE_E2E_OWNER_EMAIL: 'owner@example.com',
+    })).toEqual([])
   })
 })
 
@@ -550,7 +599,6 @@ describe('x402-era stage set', () => {
     expect((await runStages(buildStages({ run: empty.run }), { log: () => {} })).ok).toBe(true)
     expect(empty.calls).toEqual([
       'workloadCron:ensurePlatformWorkloadIdentities',
-      'devSeed:ensureLocalE2EOwnerIdentity',
       'devSeed:seedSandboxSpendingPolicy',
       'x402DirectoryIndex:status',
       'x402DirectoryIndexRefresh:start',
@@ -565,7 +613,6 @@ describe('x402-era stage set', () => {
       .toEqual({ ok: true, ran: ['identities'], skipped: ['authority', 'scan', 'sandbox-tool'] })
     expect(calls).toEqual([
       'workloadCron:ensurePlatformWorkloadIdentities',
-      'devSeed:ensureLocalE2EOwnerIdentity',
     ])
     expect(lines).toEqual([
       'stage authority skipped: --skip-seed',

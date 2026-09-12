@@ -6,6 +6,7 @@ import {
 } from "@/modules/capability-contract/public";
 import { isRecord } from "@/modules/common/is-record";
 import { canonicalDigest } from "@/modules/common/canonical-digest";
+import { degradeBackend } from "@/lib/observability/degrade-backend";
 import {
   stableStringify,
   type StableHashValue,
@@ -224,8 +225,12 @@ export function inspectSource(source: unknown): SourceInspection {
   let raw: string;
   try {
     raw = JSON.stringify(source);
-  } catch {
-    return { kind: "refused", reason: "source_invalid" };
+  } catch (cause) {
+    return degradeBackend(
+      cause,
+      { kind: "refused", reason: "source_invalid" } as const,
+      { site: "inspectSource", reason: "invalid_response" },
+    );
   }
   if (raw === undefined) return { kind: "refused", reason: "source_invalid" };
   if (encoder.encode(raw).byteLength > MAX_SOURCE_BYTES)
@@ -270,8 +275,12 @@ export function inspectSource(source: unknown): SourceInspection {
       kind: "accepted",
       digest: canonicalDigest(source as StableHashValue),
     };
-  } catch {
-    return { kind: "refused", reason: "source_invalid" };
+  } catch (cause) {
+    return degradeBackend(
+      cause,
+      { kind: "refused", reason: "source_invalid" } as const,
+      { site: "inspectSource", reason: "invalid_response" },
+    );
   }
 }
 
@@ -326,8 +335,12 @@ export function normalizeDirectEnvelope(
   let parsed: unknown;
   try {
     parsed = JSON.parse(input.documentJson);
-  } catch {
-    return { kind: "refused", reason: "source_invalid" };
+  } catch (cause) {
+    return degradeBackend(
+      cause,
+      { kind: "refused", reason: "source_invalid" } as const,
+      { site: "normalizeDirectEnvelope", reason: "invalid_response" },
+    );
   }
   const bounded = inspectSource(parsed);
   if (bounded.kind === "refused") return bounded;

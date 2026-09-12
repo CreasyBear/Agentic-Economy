@@ -3,6 +3,7 @@ import {
   type Principal,
   type PrincipalRef,
 } from '../principal/public'
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 
 const BINDING_REF_PATTERN = /^eib_[0-9a-f]{32}$/u
 const CREDENTIAL_REF_PATTERN = /^crd_[0-9a-f]{32}$/u
@@ -31,8 +32,8 @@ export function clerkUserProviderIdentifier(
     ) return undefined
     const canonicalIssuer = parsed.href.replace(/\/+$/u, '')
     return canonicalIssuer.length === 0 ? undefined : `${canonicalIssuer}|${userId}`
-  } catch {
-    return undefined
+  } catch (cause) {
+    return degradeBackend(cause, undefined, { site: 'clerkUserProviderIdentifier', reason: 'invalid_response' })
   }
 }
 

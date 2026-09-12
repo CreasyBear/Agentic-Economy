@@ -19,7 +19,7 @@ function scanTargets(): readonly string[] {
   return findFiles([
     { root: 'src', includeExtensions: ['.ts', '.tsx'] },
     { root: 'convex', includeExtensions: ['.ts'], exclude: ['convex/_generated'] },
-    { root: 'tools', includeExtensions: ['.ts', '.mjs'], exclude: ['tools/release/package5-reference-provider/node_modules'] },
+    { root: 'tools', includeExtensions: ['.ts'], exclude: ['tools/release/package5-reference-provider/node_modules'] },
   ])
 }
 

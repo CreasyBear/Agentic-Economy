@@ -17,6 +17,7 @@ import {
 } from '@/modules/capability-supply/route-transport-runtime'
 import { inspectSource, validHttpsUrl } from './publication-importer-types'
 import type { McpSourceDiscovery } from '../source-preview'
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 
 const REQUEST_TIMEOUT_MS = 10_000
 const MAXIMUM_RESPONSE_BYTES = 262_144
@@ -120,7 +121,7 @@ export async function discoverMcpSource(input: Readonly<{
       if (status === 401 || status === 403) {
         return {
           kind: 'authentication_required',
-          authenticationUrl: `/owner/supply?source=mcp&serverUrl=${encodeURIComponent(serverUrl)}`,
+          authenticationUrl: `/owner/operations?source=mcp&serverUrl=${encodeURIComponent(serverUrl)}`,
           serverUrl,
         }
       }
@@ -142,7 +143,7 @@ export async function discoverMcpSource(input: Readonly<{
         if (status === 401 || status === 403) {
           return {
             kind: 'authentication_required',
-            authenticationUrl: `/owner/supply?source=mcp&serverUrl=${encodeURIComponent(serverUrl)}`,
+            authenticationUrl: `/owner/operations?source=mcp&serverUrl=${encodeURIComponent(serverUrl)}`,
             serverUrl,
           }
         }
@@ -232,8 +233,8 @@ async function resolveMcpRegistryRemote(
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
       headers: { Accept: 'application/json' },
     }))
-  } catch {
-    return { kind: 'refused', reason: 'mcp_registry_unavailable' }
+  } catch (cause) {
+    return degradeBackend(cause, { kind: 'refused', reason: 'mcp_registry_unavailable' } as const, { site: 'resolveMcpRegistryRemote', reason: 'source_unavailable' })
   }
   if (!response.ok) return { kind: 'refused', reason: 'mcp_registry_entry_not_found' }
   const bounded = await readBoundedRequestText(response, MAXIMUM_RESPONSE_BYTES)
@@ -241,8 +242,8 @@ async function resolveMcpRegistryRemote(
   let body: unknown
   try {
     body = JSON.parse(bounded.text)
-  } catch {
-    return { kind: 'refused', reason: 'mcp_registry_response_invalid' }
+  } catch (cause) {
+    return degradeBackend(cause, { kind: 'refused', reason: 'mcp_registry_response_invalid' } as const, { site: 'resolveMcpRegistryRemote', reason: 'invalid_response' })
   }
   if (!isRecord(body) || !isRecord(body.server) || !isRecord(body._meta)) {
     return { kind: 'refused', reason: 'mcp_registry_response_invalid' }

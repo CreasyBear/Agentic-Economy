@@ -1,3 +1,4 @@
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { canonicalDigest, isCanonicalDigest } from '@/modules/common/canonical-digest'
 
 import type { X402SellerIdentity } from './types'
@@ -15,8 +16,10 @@ export function validX402SellerIdentity(identity: X402SellerIdentity): boolean {
   let resource: URL
   try {
     resource = new URL(identity.resourceUrl)
-  } catch {
-    return false
+  } catch (cause) {
+    return degradeBackend(cause, false, {
+      site: 'validX402SellerIdentity', reason: 'invalid_response',
+    })
   }
   return [
     identity.accountRef,

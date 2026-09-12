@@ -1,9 +1,11 @@
 import { createServerFn } from '@tanstack/react-start'
 import { getRequest } from '@tanstack/react-start/server'
 
+import { degrade } from '@/lib/observability/degrade'
 import { resolveCanonicalBaseUrl } from '@/lib/server/canonical-url'
 import { readServerReadiness } from '@/lib/server/readiness'
 import { readRequestCorrelationId } from '@/lib/server/request-correlation'
+import { formatUtcTimestamp } from '@/lib/ui/format-time'
 import { buildSiteDiscoveryManifest, SiteDiscoveryManifestSchemaVersion } from '@/modules/discovery/public'
 import { readCatalogueFreshness } from '@/modules/market/x402-directory-index.server'
 
@@ -33,7 +35,7 @@ export const readStatusProbesServer = createServerFn().handler(async (): Promise
     runProbe('release', requestRef, probeRelease),
     runProbe('catalogue', requestRef, () => probeCatalogue(now)),
   ])
-  return { checks, checkedAt: new Date(now).toLocaleTimeString() }
+  return { checks, checkedAt: `${formatUtcTimestamp(now)} UTC` }
 })
 
 type ProbeAssessment = Readonly<{ state: ProbeState; detail: string }>
@@ -114,7 +116,7 @@ function isHttpOrigin(value: string): boolean {
     const url = new URL(value)
     return (url.protocol === 'https:' || url.protocol === 'http:')
       && url.origin === value.replace(/\/$/u, '')
-  } catch {
-    return false
+  } catch (cause) {
+    return degrade(cause, false, { site: 'isHttpOrigin', reason: 'invalid_response' })
   }
 }

@@ -20,7 +20,12 @@ function source(index: number, overrides: Partial<IndexedSource['entry']> = {}):
   const raw = { resource, type: 'http', description: `Research tool ${index}`, ...(overrides.title === undefined ? {} : { title: overrides.title }) }
   return { resource, sourceJson: JSON.stringify(raw), sourceDigest: canonicalDigest(raw), entry: {
     resource, title: `Research tool ${index}`, description: 'Search public research', protocol: 'http', provider: 'provider.test', metadataJson: '',
-    category: 'Research', tags: ['search'], activity: { calls30d: index }, provenance: { directory: 'Coinbase Bazaar', metadata: 'provider_declared', updatedAt: new Date(1700000000000 + index).toISOString() },
+    category: 'Research', tags: ['search'],
+    // Directory-eligible by default (payersOrder>=2 + a declared output shape):
+    // this suite exercises pagination/route mechanics, not eligibility, and
+    // browse() now defaults to eligible-only.
+    activity: { calls30d: index, payers30d: 2 }, output: { fields: [], schemaJson: '{}' },
+    provenance: { directory: 'Coinbase Bazaar', metadata: 'provider_declared', updatedAt: new Date(1700000000000 + index).toISOString() },
     prices: [{ network: 'base', scheme: 'exact', amount: '1000000', decimalAmount: '1', symbol: 'USDC' }], ...overrides,
   } }
 }
@@ -81,7 +86,7 @@ describe('GET /api/v1/registry backed by the x402 directory browse index', () =>
   it('is unavailable (503 registry_unavailable) while the Coinbase generation is still refreshing', async () => {
     const { backend, workload } = await setup()
     await seedRefresh(backend, 'coinbase-search-refreshing')
-    await backend.mutation(internal.x402DirectoryIndexStore.applyPage, { generation: 'coinbase-search-refreshing', offset: 0, reportedTotal: 2, observedAt: 2, workload, items: [source(1), source(2)] })
+    await backend.mutation(internal.x402DirectoryIndexStore.applyPage, { generation: 'coinbase-search-refreshing', offset: 0, reportedTotal: 2, observedAt: 2, runStartedAt: 1, workload, items: [source(1), source(2)] })
 
     const response = await getRegistry()
     expect(response.status).toBe(503)
@@ -92,8 +97,8 @@ describe('GET /api/v1/registry backed by the x402 directory browse index', () =>
     const { backend, workload } = await setup()
     const generation = 'coinbase-search-complete'
     await seedRefresh(backend, generation)
-    await backend.mutation(internal.x402DirectoryIndexStore.applyPage, { generation, offset: 0, reportedTotal: 2, observedAt: 2, workload, items: [source(1), source(2)] })
-    await backend.mutation(internal.x402DirectoryIndexStore.applyPage, { generation, offset: 100, reportedTotal: 2, observedAt: 3, workload, items: [] })
+    await backend.mutation(internal.x402DirectoryIndexStore.applyPage, { generation, offset: 0, reportedTotal: 2, observedAt: 2, runStartedAt: 1, workload, items: [source(1), source(2)] })
+    await backend.mutation(internal.x402DirectoryIndexStore.applyPage, { generation, offset: 100, reportedTotal: 2, observedAt: 3, runStartedAt: 1, workload, items: [] })
 
     const browseResponse = await getRegistry()
     expect(browseResponse.status).toBe(200)
@@ -155,8 +160,8 @@ describe('GET /api/v1/registry backed by the x402 directory browse index', () =>
     const generation = 'coinbase-search-paged'
     await seedRefresh(backend, generation)
     const items = Array.from({ length: 13 }, (_, index) => source(index + 1))
-    await backend.mutation(internal.x402DirectoryIndexStore.applyPage, { generation, offset: 0, reportedTotal: 13, observedAt: 2, workload, items })
-    await backend.mutation(internal.x402DirectoryIndexStore.applyPage, { generation, offset: 100, reportedTotal: 13, observedAt: 3, workload, items: [] })
+    await backend.mutation(internal.x402DirectoryIndexStore.applyPage, { generation, offset: 0, reportedTotal: 13, observedAt: 2, runStartedAt: 1, workload, items })
+    await backend.mutation(internal.x402DirectoryIndexStore.applyPage, { generation, offset: 100, reportedTotal: 13, observedAt: 3, runStartedAt: 1, workload, items: [] })
 
     const first = await getRegistry({ limit: 24 })
     expect(first.status).toBe(200)

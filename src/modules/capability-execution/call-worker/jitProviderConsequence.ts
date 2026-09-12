@@ -10,6 +10,7 @@ import {
 } from '@/modules/capability-supply/route-transport-runtime'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { isRecord } from '@/modules/common/is-record'
+import { captureBackendException, degradeBackend } from '@/lib/observability/degrade-backend'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 import { accountRef, principalRef } from '@/modules/principal-account/public'
 import {
@@ -174,7 +175,8 @@ export function createJitProviderConsequenceBoundary(
       let ticket: CanonicalProviderConsequenceTicket | undefined
       try {
         ticket = await options.verifyTicket(input.ticket)
-      } catch {
+      } catch (cause) {
+        captureBackendException(cause, { site: 'verifyProviderConsequenceTicket' }, 'warning')
         ticket = undefined
       }
       const canonical = canonicalTicket(ticket, providerInvocation, prepared.requestDigest, now())
@@ -198,7 +200,8 @@ export function createJitProviderConsequenceBoundary(
           return refused(transport, prepared.requestDigest, 'provider_consequence_journal_invalid')
         }
         journalResult = parsedResult
-      } catch {
+      } catch (cause) {
+        captureBackendException(cause, { site: 'beginProviderConsequenceJournal' }, 'warning')
         return refused(transport, prepared.requestDigest, 'provider_consequence_journal_unavailable')
       }
       if (journalResult.kind === 'unavailable') {
@@ -325,7 +328,8 @@ export function createJitProviderConsequenceBoundary(
           )
           try {
             await options.journal.abortBeforeRelease({ claimRef })
-          } catch {
+          } catch (cause) {
+            captureBackendException(cause, { site: 'abortProviderConsequenceJournal' }, 'warning')
             // The trusted transport proved no external request began.
           }
           return observation
@@ -340,18 +344,21 @@ export function createJitProviderConsequenceBoundary(
           }
           try {
             await options.journal.abortBeforeRelease({ claimRef })
-          } catch {
+          } catch (cause) {
+            captureBackendException(cause, { site: 'abortProviderConsequenceJournal' }, 'warning')
             // No provider I/O began. Expiry remains a fail-closed refusal.
           }
           return refused(transport, prepared.requestDigest, 'provider_consequence_expired')
         }
         try {
           await options.journal.complete({ claimRef, observation })
-        } catch {
+        } catch (cause) {
+          captureBackendException(cause, { site: 'completeProviderConsequenceJournal' }, 'warning')
           return unknown(transport, prepared.requestDigest, 'provider_consequence_completion_unknown')
         }
         return observation
-      } catch {
+      } catch (cause) {
+        captureBackendException(cause, { site: 'invokeProviderRouteTransport' }, 'warning')
         if (releaseAttempted) {
           return unknown(
             transport,
@@ -361,7 +368,8 @@ export function createJitProviderConsequenceBoundary(
         }
         try {
           await options.journal.abortBeforeRelease({ claimRef })
-        } catch {
+        } catch (abortCause) {
+          captureBackendException(abortCause, { site: 'abortProviderConsequenceJournal' }, 'warning')
           // No provider I/O began. A failed abort remains a fail-closed refusal.
         }
         return refused(transport, prepared.requestDigest, 'provider_consequence_secret_unavailable')
@@ -387,7 +395,8 @@ async function observationContainsLeasedSecret(
       ]
       try {
         representations.push(new TextDecoder('utf-8', { fatal: true }).decode(material))
-      } catch {
+      } catch (cause) {
+        captureBackendException(cause, { site: 'observationContainsLeasedSecret' }, 'warning')
         // Binary credentials are still covered by their lossless encodings.
       }
       contaminated = representations.some((value) => value.length > 0 && serialized.includes(value))
@@ -419,8 +428,11 @@ async function createCallbackScopedX402Runtime(
   let candidate: unknown
   try {
     candidate = await factory({ ticket, invocation })
-  } catch {
-    return undefined
+  } catch (cause) {
+    return degradeBackend(cause, undefined, {
+      site: 'createCallbackScopedX402Runtime',
+      reason: 'source_unavailable',
+    })
   }
   if (!isRecord(candidate)
     || Object.keys(candidate).some((key) => (
@@ -453,7 +465,8 @@ function parseProviderConsequenceJournalBeginResult(
   let serialized: string | undefined
   try {
     serialized = JSON.stringify(value.observation)
-  } catch {
+  } catch (cause) {
+    captureBackendException(cause, { site: 'parseProviderConsequenceJournalBeginResult' }, 'warning')
     serialized = undefined
   }
   if (serialized === undefined) return undefined
@@ -551,8 +564,11 @@ function canonicalTicket(
       return undefined
     }
     return candidate
-  } catch {
-    return undefined
+  } catch (cause) {
+    return degradeBackend(cause, undefined, {
+      site: 'canonicalTicket',
+      reason: 'invalid_response',
+    })
   }
 }
 

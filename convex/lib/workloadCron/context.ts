@@ -67,8 +67,8 @@ export type WorkloadCronBoundaryErrorCode =
 export class WorkloadCronBoundaryError extends Error {
   readonly code: WorkloadCronBoundaryErrorCode
 
-  constructor(code: WorkloadCronBoundaryErrorCode) {
-    super(code)
+  constructor(code: WorkloadCronBoundaryErrorCode, options?: { cause?: unknown }) {
+    super(code, options)
     this.name = 'WorkloadCronBoundaryError'
     this.code = code
   }
@@ -158,8 +158,8 @@ export function parseWorkloadCronSnapshot(input: unknown): WorkloadCronSnapshot 
       accessVia: record.accessVia,
       admittedAt: record.admittedAt as number,
     })
-  } catch {
-    throw new WorkloadCronBoundaryError('workload_snapshot_invalid')
+  } catch (cause) {
+    throw new WorkloadCronBoundaryError('workload_snapshot_invalid', { cause })
   }
 }
 

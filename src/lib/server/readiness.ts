@@ -1,3 +1,4 @@
+import { degrade } from '@/lib/observability/degrade'
 import { readTrimmedEnv, type StringEnvironment } from '@/lib/server/read-trimmed-env'
 import { readStripeMoneyProviderConfig } from '@/lib/server/stripe-money-provider-config'
 import {
@@ -59,8 +60,11 @@ export function readNamesOnlyReadinessDiagnostics(
       environment: mode,
       ...(nodeMajor === undefined ? {} : { nodeMajor }),
     }).findings
-  } catch {
-    findings = []
+  } catch (cause) {
+    findings = degrade(cause, [], {
+      site: 'readNamesOnlyReadinessDiagnostics',
+      reason: 'invalid_response',
+    })
   }
   const configuration = DEPLOYMENT_MANIFEST.configuration
   const family = (
@@ -258,8 +262,11 @@ function fundingState(env: StringEnvironment): 'configured' | 'missing' {
     const stripe = readStripeMoneyProviderConfig(env)
     if (!isMoneyRefusal(stripe)) return 'configured'
     return cdpX402CustodyConfigurationFromEnvironment(env) === undefined ? 'missing' : 'configured'
-  } catch {
-    return 'missing'
+  } catch (cause) {
+    return degrade(cause, 'missing', {
+      site: 'fundingState',
+      reason: 'source_unavailable',
+    })
   }
 }
 
@@ -306,8 +313,11 @@ function readDeploymentConfig(env: StringEnvironment, nodeMajor?: number): Deplo
         environment: mode,
         nodeMajor: nodeMajor ?? Number.parseInt(process.versions.node.split('.')[0] ?? '', 10),
       })
-    } catch {
-      return { kind: 'failed', code: 'deployment_manifest_invalid' }
+    } catch (cause) {
+      return degrade(cause, { kind: 'failed', code: 'deployment_manifest_invalid' } as const, {
+        site: 'readDeploymentConfig',
+        reason: 'invalid_response',
+      })
     }
     if (!deployment.ok) return { kind: 'failed', code: 'deployment_manifest_invalid' }
   }
@@ -360,7 +370,10 @@ function readHttpUrl(value: string): URL | undefined {
       && parsed.hash.length === 0
       ? parsed
       : undefined
-  } catch {
-    return undefined
+  } catch (cause) {
+    return degrade(cause, undefined, {
+      site: 'readHttpUrl',
+      reason: 'invalid_response',
+    })
   }
 }

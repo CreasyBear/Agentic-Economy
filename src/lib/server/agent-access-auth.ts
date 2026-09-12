@@ -1,9 +1,6 @@
 import { auth, clerkClient } from '@clerk/tanstack-react-start/server'
-import { getRequest } from '@tanstack/react-start/server'
 
 import { callPublicSourceMutation, sourceMutation } from '@/lib/server/convex-source'
-import { authenticateLocalE2EAgentKey } from '@/lib/server/local-e2e-agent-key'
-import { isLocalE2EAuthBypassEnabled, LOCAL_E2E_OPERATOR_PRINCIPAL } from '@/lib/server/local-e2e-bypass'
 import {
   sourceWriteAdmissionFromRequest,
   sourceWriteRequestFromAdmission,
@@ -20,6 +17,7 @@ import {
 import type { AgentAccessAuthorityMode } from '@/modules/agent-access/contract'
 import { accountRef, principalRef } from '@/modules/principal-account/public'
 import type { SourceWriteAdmission, SourceWriteAdmissionRequest } from '@/modules/security/source-write-admission'
+import { degrade } from '@/lib/observability/degrade'
 export type { AgentAccessPrincipal }
 
 export type AgentAccessApiKeyAuth = Readonly<{
@@ -108,8 +106,8 @@ export function resolveAgentAccessPrincipal(
         sourceWriteRequest: sourceWriteRequestFromAdmission(sourceWrite),
         sourceWrite,
       })
-    } catch {
-      return null
+    } catch (cause) {
+      return degrade(cause, null, { site: 'resolveAgentAccessPrincipal', reason: 'source_unavailable' })
     }
   }
 }
@@ -138,26 +136,17 @@ export async function authenticateAgentAccess(
   )].sort())
   const requiredAnyScopes = Object.freeze([...new Set(options.requiredAnyScopes ?? [])].sort())
   let candidate: AgentAccessApiKeyAuth
-  let localCurrent: AgentAccessCurrentApiKey | undefined
   try {
-    if (options.authenticate !== undefined) {
-      candidate = await options.authenticate()
-    } else if (isLocalE2EAuthBypassEnabled()) {
-      const local = authenticateLocalE2EAgentKey(getRequest())
-      if (local === undefined) return { kind: 'refused', status: 401, reason: 'authentication_required' }
-      candidate = local.candidate
-      localCurrent = local.current
-    } else {
-      candidate = await auth({ acceptsToken: 'api_key' }) as AgentAccessApiKeyAuth
-    }
-  } catch {
-    return { kind: 'refused', status: 401, reason: 'authentication_required' }
+    candidate = options.authenticate !== undefined
+      ? await options.authenticate()
+      : await auth({ acceptsToken: 'api_key' }) as AgentAccessApiKeyAuth
+  } catch (cause) {
+    return degrade(cause, { kind: 'refused', status: 401, reason: 'authentication_required' } as const, { site: 'authenticateAgentAccess', reason: 'source_unavailable' })
   }
   if (!candidate.isAuthenticated || candidate.tokenType !== 'api_key' || candidate.id === null || candidate.subject === null || candidate.scopes === null) {
     return { kind: 'refused', status: 401, reason: 'authentication_required' }
   }
-  if (!candidate.subject.startsWith('user_')
-    && !(localCurrent !== undefined && candidate.subject === LOCAL_E2E_OPERATOR_PRINCIPAL)) {
+  if (!candidate.subject.startsWith('user_')) {
     return { kind: 'refused', status: 403, reason: 'scope_required' }
   }
   const candidateScopes = candidate.scopes
@@ -169,7 +158,7 @@ export async function authenticateAgentAccess(
   let claims = candidate.claims
   if (options.verifyKeyState !== undefined || options.authenticate === undefined) {
     try {
-      const current = localCurrent ?? await (options.verifyKeyState ?? (async (keyId: string) => {
+      const current = await (options.verifyKeyState ?? (async (keyId: string) => {
         const key = await clerkClient().apiKeys.get(keyId)
         return {
           id: key.id,
@@ -189,8 +178,8 @@ export async function authenticateAgentAccess(
       }
       admittedScopes = current.scopes
       claims = current.claims
-    } catch {
-      return { kind: 'refused', status: 401, reason: 'authentication_required' }
+    } catch (cause) {
+      return degrade(cause, { kind: 'refused', status: 401, reason: 'authentication_required' } as const, { site: 'authenticateAgentAccess', reason: 'source_unavailable' })
     }
   }
   const authorityMode = agentAuthorityModeForScopes(admittedScopes, { allowCustomerDefault: true })
@@ -224,8 +213,8 @@ export async function authenticateAgentAccess(
         return { kind: 'refused', status: 403, reason: 'scope_required' }
       }
       return { kind: 'authenticated', principal: stored }
-    } catch {
-      return { kind: 'refused', status: 401, reason: 'authentication_required' }
+    } catch (cause) {
+      return degrade(cause, { kind: 'refused', status: 401, reason: 'authentication_required' } as const, { site: 'authenticateAgentAccess', reason: 'source_unavailable' })
     }
   }
   return { kind: 'refused', status: 401, reason: 'authentication_required' }
@@ -270,8 +259,8 @@ function canonicalResolvedPrincipal(
       scopes,
       authorityMode,
     })
-  } catch {
-    return undefined
+  } catch (cause) {
+    return degrade(cause, undefined, { site: 'canonicalResolvedPrincipal', reason: 'invalid_response' })
   }
 }
 

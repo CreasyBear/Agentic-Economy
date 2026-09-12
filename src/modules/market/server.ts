@@ -1,3 +1,5 @@
+import { captureRouteException } from "@/lib/observability/capture-route-exception";
+import { degrade } from "@/lib/observability/degrade";
 import { callPublicSourceQuery, sourceQuery } from "@/lib/server/convex-source";
 import { readCapabilityToolSearch } from "@/modules/capability-supply/tool-source";
 import type {
@@ -84,11 +86,11 @@ export async function readToolListingEvidence(
   window: MarketWindow = "30d",
 ): Promise<MarketListingEvidenceProjection> {
   const summary = catalogJobSummary(
-    tool.summary || tool.offering.summary,
+    tool.summary || tool.listing.summary,
   );
   const catalogText = `${catalogJobLabel(
     tool.contract.capabilityId,
-    tool.offering.label,
+    tool.listing.label,
     summary,
   )} ${summary}`;
   try {
@@ -107,11 +109,15 @@ export async function readToolListingEvidence(
           tool.contract.capabilityId,
           catalogText,
         );
-  } catch {
-    return emptyMarketListingEvidence(
-      tool.toolRef,
-      tool.contract.capabilityId,
-      catalogText,
+  } catch (cause) {
+    return degrade(
+      cause,
+      emptyMarketListingEvidence(
+        tool.toolRef,
+        tool.contract.capabilityId,
+        catalogText,
+      ),
+      { site: "readToolListingEvidence", reason: "source_unavailable" },
     );
   }
 }
@@ -134,7 +140,8 @@ export async function readMarketRouteProjection(
         ? {}
         : { filters: { availability: [catalogQuery.availability] } }),
     });
-  } catch {
+  } catch (cause) {
+    captureRouteException(cause, { site: "readMarketRouteProjection" }, "warning");
     catalog = {
       kind: "unavailable",
       schemaVersion: "registry-tools:v3",
@@ -153,7 +160,8 @@ export async function readMarketPageProjection(
   let source: MarketSourceRead;
   try {
     source = await callPublicSourceQuery(readMarket, { window, now });
-  } catch {
+  } catch (cause) {
+    captureRouteException(cause, { site: "readMarketPageProjection" }, "warning");
     source = emptyMarketSource(now);
   }
   const generatedAt = new Date(source.generatedAt).toISOString();
@@ -299,7 +307,8 @@ async function projectCatalog(
       toolRefs,
       since: generatedAt - windowMilliseconds(window),
     });
-  } catch {
+  } catch (cause) {
+    captureRouteException(cause, { site: "projectCatalog" }, "warning");
     evidence = [];
   }
   const evidenceByToolRef = new Map(
@@ -309,11 +318,11 @@ async function projectCatalog(
     kind: "ok",
     items: catalog.items.map((tool) => {
       const summary = catalogJobSummary(
-        tool.summary || tool.offering.summary,
+        tool.summary || tool.listing.summary,
       );
       const catalogText = `${catalogJobLabel(
         tool.contract.capabilityId,
-        tool.offering.label,
+        tool.listing.label,
         summary,
       )} ${summary}`;
       const source = evidenceByToolRef.get(tool.toolRef);

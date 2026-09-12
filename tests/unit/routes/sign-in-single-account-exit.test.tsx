@@ -2,7 +2,7 @@
  * @vitest-environment jsdom
  */
 import { cleanup, render, screen } from '@testing-library/react'
-import type { ComponentType, ReactNode } from 'react'
+import type { ComponentType } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import '../../setup/jsdom-platform'
 
@@ -21,6 +21,9 @@ vi.mock('@tanstack/react-router', () => ({
       useSearch: () => routeState.search,
     }
   },
+  // AePublicPage renders AeSiteFooter, which reads the route table via
+  // useRouter(); an empty table is enough to render its (empty) columns.
+  useRouter: () => ({ routesByPath: {} }),
 }))
 
 vi.mock('@clerk/tanstack-react-start', () => ({
@@ -34,14 +37,6 @@ vi.mock('@clerk/tanstack-react-start', () => ({
   },
 }))
 
-vi.mock('@/lib/client/local-e2e-auth', () => ({
-  isLocalE2EAuthBypassEnabled: () => false,
-}))
-
-vi.mock('@/components/ae/layout/AePublicShell', () => ({
-  AePublicShell: ({ children }: { children: ReactNode }) => <main>{children}</main>,
-}))
-
 import '@/routes/sign-in.$'
 
 afterEach(() => {
@@ -51,14 +46,14 @@ afterEach(() => {
 })
 
 describe('sign-in account exit', () => {
-  it('returns an unqualified sign-in to neutral account settings', () => {
+  it('returns an unqualified sign-in to wherever the visitor left off', () => {
     const Component = routeState.SignIn
     if (Component === null) throw new Error('Sign-in route was not captured.')
 
     render(<Component />)
 
     expect(screen.getByRole('heading', { name: 'Sign in' })).toBeTruthy()
-    expect(screen.getByText('After you sign in, you’ll return to your account settings.')).toBeTruthy()
+    expect(screen.getByText('After you sign in, you’ll return to where you left off.')).toBeTruthy()
     expect(document.body.textContent?.toLowerCase()).not.toContain('supplier')
     expect(document.body.textContent).not.toContain('manage Operations')
     expect(routeState.clerkProps).toMatchObject({

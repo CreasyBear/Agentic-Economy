@@ -72,10 +72,8 @@ describe('anonymous chat TanStack proxy', () => {
 
   it('signs the dedicated edge admission command before calling Convex', async () => {
     const previousServerToken = process.env.AE_CONVEX_SERVER_FUNCTION_TOKEN
-    const previousLocalBypass = process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
     process.env.AE_CONVEX_SERVER_FUNCTION_TOKEN =
       'anonymous-chat-server-function-token-at-least-32-characters'
-    delete process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
     setHttpRateLimitAdmissionForTests(undefined)
     let payload: unknown
     const restoreTransport = setPublicSourceTransportForTests(createPublicSourceTransport({
@@ -96,8 +94,6 @@ describe('anonymous chat TanStack proxy', () => {
       restoreTransport()
       if (previousServerToken === undefined) delete process.env.AE_CONVEX_SERVER_FUNCTION_TOKEN
       else process.env.AE_CONVEX_SERVER_FUNCTION_TOKEN = previousServerToken
-      if (previousLocalBypass === undefined) delete process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
-      else process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = previousLocalBypass
       setHttpRateLimitAdmissionForTests(async () => ({ ok: true }))
     }
 

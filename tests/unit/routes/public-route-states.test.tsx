@@ -12,10 +12,10 @@ import {
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import {
-  PublicRouteError,
-  PublicRoutePending,
-  publicErrorCorrelationRef,
-} from '@/components/ae/layout/AePublicRouteStates'
+  RouteError,
+  RoutePending,
+  errorCorrelationRef,
+} from '@/components/ae/layout/AeRouteStates'
 import { getRouter } from '@/router'
 
 afterEach(cleanup)
@@ -23,14 +23,14 @@ afterEach(cleanup)
 describe('public route containment', () => {
   it('installs shared pending, error, and not-found defaults', () => {
     const router = getRouter()
-    expect(router.options.defaultPendingComponent).toBe(PublicRoutePending)
-    expect(router.options.defaultErrorComponent).toBe(PublicRouteError)
+    expect(router.options.defaultPendingComponent).toBe(RoutePending)
+    expect(router.options.defaultErrorComponent).toBe(RouteError)
     expect(router.options.defaultNotFoundComponent).toBeTypeOf('function')
   })
 
   it('keeps private exception detail hidden while retaining bounded evidence', () => {
     renderAt(
-      <PublicRouteError
+      <RouteError
         error={{ message: 'private provider credential failure', correlationRef: '  ref-public-123  ' }}
       />,
     )
@@ -43,7 +43,7 @@ describe('public route containment', () => {
 
   it('allows only one authoritative read invalidation while retry is pending', () => {
     const deferred = Promise.withResolvers<void>()
-    const { router } = renderAt(<PublicRouteError error={new Error('hidden')} />)
+    const { router } = renderAt(<RouteError error={new Error('hidden')} />)
     const invalidate = vi.spyOn(router, 'invalidate').mockImplementation(() => deferred.promise as never)
     const retry = screen.getByRole('button', { name: 'Try again' })
 
@@ -56,8 +56,8 @@ describe('public route containment', () => {
   })
 
   it('drops oversized or empty correlation values', () => {
-    expect(publicErrorCorrelationRef({ correlationId: ' '.repeat(10) })).toBeUndefined()
-    expect(publicErrorCorrelationRef({ correlationRef: 'x'.repeat(201) })).toBeUndefined()
+    expect(errorCorrelationRef({ correlationId: ' '.repeat(10) })).toBeUndefined()
+    expect(errorCorrelationRef({ correlationRef: 'x'.repeat(201) })).toBeUndefined()
   })
 })
 

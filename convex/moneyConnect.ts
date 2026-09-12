@@ -36,14 +36,6 @@ const PAYOUT_BINDING_LOOKUP_OPERATION =
   'moneyLedger:readPayoutAccountByStripeId'
 const PAYOUT_BINDING_LOOKUP_SCOPE = 'money:payout_binding_read'
 
-export type BindConnectAccountArgs = BillingSourceWriteArgs & {
-  businessId: string
-  currency: string
-  exponent: number
-  stripeAccountId: string
-  observedAt: number
-}
-
 export type ReserveConnectAccountArgs = BillingSourceWriteArgs & {
   businessId: string
   currency: string
@@ -233,14 +225,6 @@ export const authorizeConnectOnboardingArgs = {
   proof: v.optional(clerkConsequenceProofValue),
   ...billingSourceArgs,
 }
-export const bindConnectAccountArgs = {
-  businessId: identifier,
-  currency: identifier,
-  exponent: v.number(),
-  stripeAccountId: identifier,
-  observedAt: v.number(),
-  ...billingSourceArgs,
-}
 export const readPayoutAccountByStripeIdArgs = {
   stripeAccountId: identifier,
   serviceAuth: v.optional(serverFunctionAuth),
@@ -412,7 +396,7 @@ export async function reserveConnectAccountHandler(
     resourceRefs: [`business:${args.businessId}`, `currency:${args.currency}`],
     budgetAmount: 0,
     consequenceSummary: 'Create this Stripe-hosted payout authority for the owner Account.',
-    statusReadbackRef: '/owner/offerings#earnings',
+    statusReadbackRef: '/owner/operations#earnings',
     command: {
       version: 'ae.payout-authority-consequence:v1',
       action: 'payout_authority.create',
@@ -577,7 +561,7 @@ export async function authorizeConnectOnboardingHandler(
     ],
     budgetAmount: 0,
     consequenceSummary: 'Reopen Stripe-hosted onboarding for this payout authority.',
-    statusReadbackRef: '/owner/offerings#earnings',
+    statusReadbackRef: '/owner/operations#earnings',
     command: {
       version: 'ae.payout-authority-replace-consequence:v1',
       businessId: args.businessId,
@@ -727,65 +711,6 @@ export async function finalizeConnectAccountHandler(
   return updated === null
     ? refusedConnect('payout_reconciliation_required', false)
     : { kind: 'accepted' as const, command: connectAccountCommandView(updated), execute: false }
-}
-
-export async function bindConnectAccountHandler(
-  ctx: MutationCtx,
-  args: BindConnectAccountArgs,
-) {
-  await requireBillingSourceWrite(ctx, args)
-  const [current, stripeBindings] = await Promise.all([
-    ctx.db
-      .query('moneyPayoutAccounts')
-      .withIndex('by_businessId_and_currency', (q) =>
-        q.eq('businessId', args.businessId).eq('currency', args.currency),
-      )
-      .unique(),
-    ctx.db
-      .query('moneyPayoutAccounts')
-      .withIndex('by_stripeAccountId', (q) =>
-        q.eq('stripeAccountId', args.stripeAccountId),
-      )
-      .take(2),
-  ])
-  if (
-    stripeBindings.some(
-      (binding) =>
-        binding.businessId !== args.businessId ||
-        binding.currency !== args.currency,
-    ) ||
-    stripeBindings.length > 1
-  )
-    return refusedConnect('payment_binding_invalid', false)
-  if (current !== null && current.stripeAccountId !== args.stripeAccountId)
-    return refusedConnect('payment_binding_invalid', false)
-  const transition = transitionPayoutAccount({
-    ...(current === null ? {} : { current: payoutAccountView(current) }),
-    businessId: args.businessId,
-    currency: args.currency,
-    exponent: args.exponent,
-    stripeAccountId: args.stripeAccountId,
-    event: { kind: 'onboarding_started', observedAt: args.observedAt },
-  })
-  if (transition.kind === 'refused') return transition
-  const value = transition.value
-  if (current === null) {
-    await ctx.db.insert('moneyPayoutAccounts', value)
-  } else {
-    await ctx.db.patch('moneyPayoutAccounts', current._id, value)
-  }
-  const updated =
-    current === null
-      ? await ctx.db
-          .query('moneyPayoutAccounts')
-          .withIndex('by_businessId_and_currency', (q) =>
-            q.eq('businessId', args.businessId).eq('currency', args.currency),
-          )
-          .unique()
-      : await ctx.db.get(current._id)
-  return updated === null
-    ? refusedConnect('payout_reconciliation_required', false)
-    : { kind: 'accepted' as const, account: payoutAccountView(updated) }
 }
 
 export async function readPayoutAccountByStripeIdHandler(

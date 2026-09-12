@@ -311,6 +311,16 @@
   }
 }
 
+/* Route view transitions: the persistent frame does not animate; only the content region cross-fades on the 220ms ladder. */
+@media (prefers-reduced-motion: no-preference) {
+  [data-shell="app-header"] { view-transition-name: ae-app-header; }
+  ::view-transition-group(ae-app-header) { animation: none; }
+  ::view-transition-old(root), ::view-transition-new(root) { animation-duration: var(--motion-duration-base); animation-timing-function: var(--motion-ease-standard); }
+}
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*), ::view-transition-old(*), ::view-transition-new(*) { animation: none !important; }
+}
+
 @layer base {
   :where(h1, h2, h3, h4) {
     font-family: var(--ae-font-sans);

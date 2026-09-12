@@ -49,7 +49,7 @@ describe('ListingFirstScreen', () => {
 
     expect(markup).toContain('href="tel:0861112222"')
     expect(markup).toContain('Call provider')
-    expect(markup).toContain('#tools')
+    expect(markup).toContain('href="/market"')
   })
 
   it('lets Offering v2 own visible supply without resurrecting inquiry cards', () => {

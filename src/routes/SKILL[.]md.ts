@@ -6,6 +6,12 @@ import { methodNotAllowed } from '@/lib/server/method-guard'
 import { buildPublicAgentSkillMarkdown } from '@/modules/discovery/public'
 
 export const Route = createFileRoute('/SKILL.md')({
+  staticData: {
+    nav: {
+      label: 'SKILL.md',
+      footer: { column: 'Machines', order: 1 },
+    },
+  },
   server: {
     handlers: {
       GET: ({ request }) => handlePublicAgentSkillRequest(request),

@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"$CLAUDE_PROJECT_DIR/tools/dev/guard-destructive-git.mjs\""
+            "command": "node \"$CLAUDE_PROJECT_DIR/tools/dev/guard-destructive-git.ts\""
           }
         ]
       }

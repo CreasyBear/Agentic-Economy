@@ -9,7 +9,10 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from '@/components/ui/breadcrumb'
-import type { OperatorBreadcrumbItem } from '@/lib/operator/navigation'
+export type OperatorBreadcrumbItem = {
+  label: string
+  href?: string
+}
 
 type AeOperatorBreadcrumbsProps = {
   items: readonly OperatorBreadcrumbItem[]

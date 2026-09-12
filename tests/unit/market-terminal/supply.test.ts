@@ -293,7 +293,7 @@ describe('AE CLI provider Tool lifecycle', () => {
 
     await runSupplyCommand(['connections', 'business:one'], { ...baseOptions, json: false })
 
-    expect(write.mock.calls.flat().join('')).toContain('next  /owner/offerings#provider-connections')
+    expect(write.mock.calls.flat().join('')).toContain('next  /owner/operations#provider-connections')
   })
 
   it('adds one explicit idempotency key to maintenance material', async () => {

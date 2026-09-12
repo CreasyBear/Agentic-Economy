@@ -11,10 +11,8 @@ import {
   PublicBusinessCatalogApiSchemaVersion,
   PublicServicesApiSchemaVersion,
   type PublicBusinessCatalogApiV2Dto,
-  type PublicBusinessCatalogApiV2Page,
   type PublicBusinessCatalogApiV2SearchPage,
   type PublicBusinessCatalogV2DetailResult,
-  type PublicServicesApiPage,
   type PublicServicesSearchPage,
   type ServiceDto,
 } from '@/modules/registry/public'
@@ -171,13 +169,28 @@ export const publicBusinessCatalogApiV2DtoOutputSchema = z.strictObject({
   }),
 }) as z.ZodType<PublicBusinessCatalogApiV2Dto>
 
+/**
+ * Action-boundary envelope for `registry.list`. The source projection
+ * (`PublicBusinessCatalogApiV2Page`) carries raw Convex `isDone`/
+ * `continueCursor`; every other list action on the public registry returns
+ * `{ hasMore, nextCursor }`, so this action projects to that same shape
+ * rather than leaking the Convex pagination vocabulary onto the wire.
+ */
+export type RegistryListActionResult = Readonly<{
+  kind: 'ok'
+  schemaVersion: typeof PublicBusinessCatalogApiSchemaVersion
+  page: readonly PublicBusinessCatalogApiV2Dto[]
+  hasMore: boolean
+  nextCursor?: string
+}>
+
 export const registryPageOutputSchema = z.strictObject({
   kind: z.literal('ok'),
   schemaVersion: z.literal(PublicBusinessCatalogApiSchemaVersion),
   page: z.array(publicBusinessCatalogApiV2DtoOutputSchema),
-  isDone: z.boolean(),
-  continueCursor: z.string(),
-}) as z.ZodType<PublicBusinessCatalogApiV2Page>
+  hasMore: z.boolean(),
+  nextCursor: z.string().min(1).max(512).optional(),
+}) as z.ZodType<RegistryListActionResult>
 export const registrySearchPageOutputSchema = z.strictObject({
   kind: z.literal('ok'),
   schemaVersion: z.literal(PublicBusinessCatalogApiSchemaVersion),
@@ -324,13 +337,22 @@ export const serviceOutputSchema = z.strictObject({
     .describe('Agentic Economy supplier portfolio and Publication source metadata'),
 }) as z.ZodType<ServiceDto>
 
+/** Action-boundary envelope for `registry.services_list`; see {@link RegistryListActionResult}. */
+export type ServicesListActionResult = Readonly<{
+  kind: 'ok'
+  schemaVersion: typeof PublicServicesApiSchemaVersion
+  services: readonly ServiceDto[]
+  hasMore: boolean
+  nextCursor?: string
+}>
+
 export const servicesPageOutputSchema = z.strictObject({
   kind: z.literal('ok').describe('Successful published business portfolio response'),
   schemaVersion: z.literal(PublicServicesApiSchemaVersion).describe('Published business portfolio response schema version'),
   services: z.array(serviceOutputSchema).describe('One published business portfolio per business'),
-  isDone: z.boolean(),
-  continueCursor: z.string(),
-}) as z.ZodType<PublicServicesApiPage>
+  hasMore: z.boolean(),
+  nextCursor: z.string().min(1).max(512).optional(),
+}) as z.ZodType<ServicesListActionResult>
 export const servicesSearchPageOutputSchema = z.strictObject({
   kind: z.literal('ok').describe('Successful published business portfolio response'),
   schemaVersion: z.literal(PublicServicesApiSchemaVersion).describe('Published business portfolio response schema version'),

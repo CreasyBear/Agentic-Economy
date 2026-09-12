@@ -1,3 +1,4 @@
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 import {
   capabilityOfferingEligibilityHash,
   capabilityOfferingRegistrationHash,
@@ -68,8 +69,10 @@ export async function registerCapabilityOffering(
   let registration: CapabilityOfferingRegistration
   try {
     registration = defineCapabilityOfferingRegistration(input)
-  } catch {
-    return { kind: 'refused' as const, reason: 'offering_invalid' as const }
+  } catch (cause) {
+    return degradeBackend(cause, { kind: 'refused' as const, reason: 'offering_invalid' as const }, {
+      site: 'registerCapabilityOffering', reason: 'invalid_response',
+    })
   }
   const business = await ports.loadPublishedBusiness(registration.businessId)
   if (business === null) return { kind: 'refused' as const, reason: 'business_not_registered' as const }

@@ -1,3 +1,4 @@
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 import {
   isRegisteredToolMappingRef,
   resolveRegisteredToolMappingRef,
@@ -16,8 +17,8 @@ export function toRegisteredToolMapping(
   }
   try {
     return resolveRegisteredToolMappingRef(mapping) === mapping.mappingRef ? mapping : null
-  } catch {
-    return null
+  } catch (cause) {
+    return degradeBackend(cause, null, { site: 'toRegisteredToolMapping', reason: 'invalid_response' })
   }
 }
 

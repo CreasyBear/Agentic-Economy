@@ -254,7 +254,7 @@ function rowFromDescriptorFields(value: unknown): ToolChoiceRow | null {
   const refs: string[] = []
   addRef(refs, value.toolRef)
   const toolRef = refs[0]
-  const title = isRecord(value.offering) ? stringField(value.offering.label) : undefined
+  const title = isRecord(value.listing) ? stringField(value.listing.label) : undefined
   if (toolRef === undefined || title === undefined) return null
   const provider = isRecord(value.provider)
     ? stringField(value.provider.name)

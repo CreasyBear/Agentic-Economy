@@ -1,3 +1,4 @@
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { isBoundedJsonValue } from '@/modules/capability-contract/public'
 import type { StableHashValue } from '@/modules/common/stable-hash'
@@ -470,8 +471,8 @@ export function parseContractOutput(
     return isBoundedJsonValue(output) && descriptor.validateOutput(output)
       ? { valid: true, output }
       : { valid: false }
-  } catch {
-    return { valid: false }
+  } catch (cause) {
+    return degradeBackend(cause, { valid: false }, { site: 'parseContractOutput', reason: 'invalid_response' })
   }
 }
 

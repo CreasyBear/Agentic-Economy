@@ -1,9 +1,11 @@
 import { z } from 'zod'
 
 import { requireStrictClerkConsequenceProof } from '@/lib/server/clerk-consequence-proof'
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { callSourceMutation, callSourceQuery, sourceMutation, sourceQuery } from '@/lib/server/convex-source'
 import { sourceWriteAdmissionFromContext } from '@/lib/server/source-write-admission'
 import { package5RolloutDecision } from '@/lib/server/package5-rollout'
+import { idempotencyKeySchema } from '@/modules/common/action'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { sourceWriteRequestFromAdmission } from '@/modules/security/source-write-admission'
 import { stableStringify } from '@/modules/common/stable-hash'
@@ -32,7 +34,7 @@ const ownerSourcePreviewInputSchema = z.strictObject({
   businessId: z.string().min(1),
   source: supplySourceInputSchema,
   connectionRef: z.string().trim().min(1).max(300).optional(),
-  idempotencyKey: z.string().trim().min(8).max(200),
+  idempotencyKey: idempotencyKeySchema,
 })
 
 const ownerSourceConnectionInputSchema = z.strictObject({
@@ -40,7 +42,7 @@ const ownerSourceConnectionInputSchema = z.strictObject({
   source: supplySourceInputSchema,
   expectedSourceDigest: z.string().regex(/^sha256:[0-9a-f]{64}$/u),
   candidateRef: z.string().regex(/^sha256:[0-9a-f]{64}$/u),
-  idempotencyKey: z.string().trim().min(8).max(200),
+  idempotencyKey: idempotencyKeySchema,
 })
 
 type OwnerDraftResult =
@@ -375,8 +377,11 @@ async function reserveOwnerSourceConnection(input: Readonly<{
         title: input.title,
       },
     }
-  } catch {
-    return unavailablePreview()
+  } catch (cause) {
+    return degradeBackend(cause, unavailablePreview(), {
+      site: 'reserveOwnerSourceConnection',
+      reason: 'source_unavailable',
+    })
   }
 }
 
@@ -411,8 +416,11 @@ export async function resumeOwnerSupplySourceDraft({
     let rawSource: unknown
     try {
       rawSource = JSON.parse(selectedSource.draft.sourceDescriptorJson) as unknown
-    } catch {
-      return { kind: 'source_changed' }
+    } catch (cause) {
+      return degradeBackend(cause, { kind: 'source_changed' } as const, {
+        site: 'resumeOwnerSupplySourceDraft',
+        reason: 'invalid_response',
+      })
     }
     const parsed = supplySourceInputSchema.safeParse(rawSource)
     if (!parsed.success || (parsed.data.kind !== 'mcp' && parsed.data.kind !== 'agent_plugin')) {
@@ -448,8 +456,11 @@ export async function resumeOwnerSupplySourceDraft({
   let rawSource: unknown
   try {
     rawSource = JSON.parse(saved.draft.sourceDescriptorJson) as unknown
-  } catch {
-    return { kind: 'source_changed' }
+  } catch (cause) {
+    return degradeBackend(cause, { kind: 'source_changed' } as const, {
+      site: 'resumeOwnerSupplySourceDraft',
+      reason: 'invalid_response',
+    })
   }
   const parsed = supplySourceInputSchema.safeParse(rawSource)
   if (!parsed.success) return { kind: 'source_changed' }
@@ -668,8 +679,11 @@ async function readOwnerProviderConnectionsForPublication(): Promise<readonly Pr
       ),
       {},
     )
-  } catch {
-    return []
+  } catch (cause) {
+    return degradeBackend(cause, [], {
+      site: 'readOwnerProviderConnectionsForPublication',
+      reason: 'source_unavailable',
+    })
   }
 }
 
@@ -697,7 +711,7 @@ function unavailablePreview(): SupplySourcePreview {
     requiredAction: {
       action: 'supply.source.preview',
       blockedCapabilities: ['supply.publish'],
-      cta: '/owner/offerings',
+      cta: '/owner/operations',
       ctaLabel: 'Return to Tools',
       description: 'The current Business could not be confirmed. Return to Tools and try again.',
       iconUrl: null,
@@ -746,13 +760,16 @@ function x402ConnectionCta(input: Readonly<{
     method: input.method,
     environment: input.environment,
   })
-  return `/owner/offerings?${search.toString()}`
+  return `/owner/operations?${search.toString()}`
 }
 
 function canonicalResourceUrl(resourceUrl: string): string {
   try {
     return new URL(resourceUrl).toString()
-  } catch {
-    return resourceUrl
+  } catch (cause) {
+    return degradeBackend(cause, resourceUrl, {
+      site: 'canonicalResourceUrl',
+      reason: 'invalid_response',
+    })
   }
 }

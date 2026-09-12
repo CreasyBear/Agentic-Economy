@@ -33,9 +33,9 @@ test.describe('Package 3 Account security recovery', () => {
     await expect(page.getByRole('link', { name: /Rotate or disconnect Agents/u }))
       .toHaveAttribute('href', '/agent-access')
     await expect(page.getByRole('link', { name: /supplier connections/u }))
-      .toHaveAttribute('href', '/owner/offerings#supplier-connections')
+      .toHaveAttribute('href', '/owner/operations#supplier-connections')
     await expect(page.getByRole('link', { name: /Review payout authority/u }))
-      .toHaveAttribute('href', '/owner/offerings#earnings')
+      .toHaveAttribute('href', '/owner/operations#earnings')
     await expect(page.getByRole('link', { name: /Retain evidence and contact support/u }))
       .toHaveAttribute('href', '/support')
 
@@ -43,13 +43,13 @@ test.describe('Package 3 Account security recovery', () => {
     await expect(page).toHaveURL(/\/agent-access(?:[/?#]|$)/u)
     await expect(page.getByRole('heading', { name: 'Agents', level: 1 })).toBeVisible()
 
-    await page.goto('/owner/offerings#supplier-connections')
+    await page.goto('/owner/operations#supplier-connections')
     await expect(page).toHaveURL(/\/owner\/offerings#supplier-connections$/u)
     await expect(page.locator('#supplier-connections').or(
       page.getByRole('button', { name: 'Create supplier workspace' }),
     )).toBeVisible()
 
-    await page.goto('/owner/offerings#earnings')
+    await page.goto('/owner/operations#earnings')
     await expect(page).toHaveURL(/\/owner\/offerings#earnings$/u)
     await expect(page.getByRole('heading', { name: 'Earnings and payouts' }).or(
       page.getByRole('button', { name: 'Create supplier workspace' }),

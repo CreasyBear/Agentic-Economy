@@ -7,10 +7,10 @@ import { ProvenanceBadge } from '@/components/ae/status/ProvenanceBadge'
 import { ProviderFacts } from '@/components/ae/provider-facts'
 import { offeringPathLabel } from '@/components/ae/provider-facts.exports'
 import { cn } from '@/lib/utils'
-import type { PublicOfferingDto } from '@/modules/registry/public'
+import type { PublicListingDto } from '@/modules/registry/public'
 
 export type AeOfferingCardProps = {
-  offering: PublicOfferingDto
+  offering: PublicListingDto
   /** Action/status slot rendered below the access paths (e.g. a "Send a message" CTA). */
   actions?: ReactNode
   /** Extra layout classes for the card shell. */
@@ -22,7 +22,7 @@ export type AeOfferingCardProps = {
 }
 
 /**
- * The single canonical card for a published `PublicOfferingDto`. Converges the
+ * The single canonical card for a published `PublicListingDto`. Converges the
  * former AeProviderCard `offering` variant and the listing page's inline
  * OfferingCardsSection card. Image/name/summary plus optional facts (service
  * area, availability, pricing — each omitted when unpublished) and access-path

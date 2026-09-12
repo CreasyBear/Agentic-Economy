@@ -1,5 +1,6 @@
 import Decimal from 'decimal.js'
 
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 import type { CommercialPolicyControls } from './commercial-policy'
 
 export const AUD_EXPONENT = 6 as const
@@ -41,8 +42,8 @@ export function canonicalAudUnits(value: string): bigint | undefined {
     if (!scaled.isInteger() || scaled.lte(0)) return undefined
     const units = scaled.toFixed(0)
     return units.length <= MAX_UNITS_DIGITS ? BigInt(units) : undefined
-  } catch {
-    return undefined
+  } catch (cause) {
+    return degradeBackend(cause, undefined, { site: 'canonicalAudUnits', reason: 'invalid_response' })
   }
 }
 

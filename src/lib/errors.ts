@@ -26,12 +26,12 @@ export const PROBLEM_KINDS = [
   'INTERNAL',
   'UNKNOWN',
   // Repo-native: ok-outcome but matched nothing; NOT an error.
-  'no_data',
+  'NO_DATA',
 ] as const
 
 export type ProblemKind = (typeof PROBLEM_KINDS)[number]
 
-/** Default HTTP status per kind (overridable per problem). `no_data` is 200 by design. */
+/** Default HTTP status per kind (overridable per problem). `NO_DATA` is 200 by design. */
 export const DEFAULT_STATUS: Record<ProblemKind, number> = {
   INVALID_ARGUMENT: 400,
   FAILED_PRECONDITION: 400,
@@ -46,7 +46,7 @@ export const DEFAULT_STATUS: Record<ProblemKind, number> = {
   UNAVAILABLE: 503,
   INTERNAL: 500,
   UNKNOWN: 500,
-  no_data: 200,
+  NO_DATA: 200,
 }
 
 const KIND_BY_STATUS: Record<number, ProblemKind> = {
@@ -69,6 +69,20 @@ export function kindForStatus(status: number): ProblemKind {
   return KIND_BY_STATUS[status] ?? 'UNKNOWN'
 }
 
+/** Canonical reasons a degraded (fallback-served) result can occur. */
+export type DegradedReason = 'source_unavailable' | 'timeout' | 'not_found' | 'forbidden' | 'invalid_response'
+
+/**
+ * Canonical degraded-result marker. Modules that fall back to a stale/default
+ * value instead of erroring should report this shape rather than hand-rolling
+ * their own `{ kind: 'unavailable' }`.
+ */
+export type Degraded = {
+  kind: 'unavailable'
+  reason: DegradedReason
+  correlationRef?: string
+}
+
 const TITLE_BY_KIND: Record<ProblemKind, string> = {
   INVALID_ARGUMENT: 'Invalid argument',
   FAILED_PRECONDITION: 'Failed precondition',
@@ -83,7 +97,7 @@ const TITLE_BY_KIND: Record<ProblemKind, string> = {
   UNAVAILABLE: 'Unavailable',
   INTERNAL: 'Internal error',
   UNKNOWN: 'Unknown error',
-  no_data: 'No data',
+  NO_DATA: 'No data',
 }
 
 /** Short human title for a kind (overridable per problem). */
@@ -103,6 +117,8 @@ export type ProblemInput = {
   retryable?: boolean
   /** Overrides DEFAULT_STATUS when projecting to HTTP. */
   status?: number
+  /** RFC 9457 `invalid-params` member: per-field validation failures. */
+  invalidParams?: ReadonlyArray<{ name: string; reason: string }>
   /** Route-specific extension fields (e.g. `fields`, `unsupported`, `supported`). */
   extras?: Readonly<Record<string, unknown>>
 }
@@ -118,6 +134,7 @@ export type ProblemDetails = {
   code: string
   reason?: string
   retryable?: boolean
+  'invalid-params'?: ReadonlyArray<{ name: string; reason: string }>
 } & { [key: string]: unknown }
 
 /**
@@ -142,6 +159,7 @@ export function buildProblem(input: ProblemInput): ProblemDetails {
     code: input.code,
     ...(input.reason === undefined ? {} : { reason: input.reason }),
     ...(input.retryable === undefined ? {} : { retryable: input.retryable }),
+    ...(input.invalidParams === undefined ? {} : { 'invalid-params': input.invalidParams }),
   }
 }
 
@@ -266,7 +284,7 @@ function publicGatewayCode(code: string | undefined, fallback: GatewayProblemCod
  * canonical `kind`, and retryability cross the boundary: remote `title` and
  * `detail` are arbitrary backend prose and are never copied, for the same
  * reason {@link gatewayFailureToProblem} does not copy provider text. Human
- * text is rebuilt locally from the kind. `no_data` is an ok-outcome kind and
+ * text is rebuilt locally from the kind. `NO_DATA` is an ok-outcome kind and
  * is never accepted from a failure body.
  */
 export function remoteProblemToProblem(input: {
@@ -274,7 +292,7 @@ export function remoteProblemToProblem(input: {
   body: Readonly<Record<string, unknown>>
 }): ProblemDetails {
   const declaredKind = PROBLEM_KINDS.find(
-    (candidate) => candidate !== 'no_data' && candidate === input.body.kind,
+    (candidate) => candidate !== 'NO_DATA' && candidate === input.body.kind,
   )
   const retryable = input.body.retryable
   return buildProblem({

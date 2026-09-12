@@ -33,14 +33,13 @@ vi.mock('@tanstack/react-router', () => ({
   redirect: vi.fn(),
   useLocation: () => routeState.location,
   useNavigate: () => vi.fn(),
+  // AePublicPage renders AeSiteFooter, which reads the route table via
+  // useRouter(); an empty table is enough to render its (empty) columns.
+  useRouter: () => ({ routesByPath: {} }),
 }))
 
 vi.mock('@tanstack/react-start', () => ({
   createServerFn: () => ({ handler: (fn: unknown) => fn, validator: () => ({ handler: (fn: unknown) => fn }) }),
-}))
-
-vi.mock('@/components/ae/layout/AePublicShell', () => ({
-  AePublicShell: ({ children }: { children: ReactNode }) => <main>{children}</main>,
 }))
 
 import { ABOUT } from '@/content/brand-copy'
@@ -54,7 +53,7 @@ describe('public semantic comfort', () => {
   it('keeps the Terms outline sequential and its standalone actions comfortable', () => {
     renderRoute('/terms')
 
-    const headings = screen.getAllByRole('heading')
+    const headings = within(screen.getByRole('main')).getAllByRole('heading')
     expect(headings.map((heading) => heading.tagName)).toEqual(['H1', 'H2', 'H3', 'H3', 'H3'])
     expect(screen.getByRole('heading', { level: 2, name: 'What these terms mean in practice' })).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Browse catalog' }).classList.contains('min-h-touch')).toBe(true)

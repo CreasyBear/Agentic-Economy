@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 
-import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
+import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
 import { AeSettingsStack } from '@/components/ae/layout/AeSection'
 import { ownerSettingsChrome } from '@/lib/operator/settings-navigation'
 
@@ -12,13 +12,13 @@ export function OwnerSettingsShell({
   children: ReactNode
 }>) {
   return (
-    <AeOperatorShell
+    <AeOperatorPage
       operatorRole="owner"
       title={ownerSettingsChrome.title}
       description={ownerSettingsChrome.description}
       currentPath={currentPath ?? '/owner/settings'}
     >
       <AeSettingsStack>{children}</AeSettingsStack>
-    </AeOperatorShell>
+    </AeOperatorPage>
   )
 }

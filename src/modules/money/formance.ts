@@ -3,6 +3,7 @@
 import { HTTPClient, SDK } from '@formance/formance-sdk'
 
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { PACKAGE4_FORMANCE_REQUIREMENTS } from './internal/commercial-policy'
 
 type FormanceSchemaData = Parameters<SDK['ledger']['v2']['insertSchema']>[0]['v2SchemaData']
@@ -528,8 +529,8 @@ export function readFormanceConfiguration(
   let parsed: URL
   try {
     parsed = new URL(gateway)
-  } catch {
-    return Object.freeze({ kind: 'setup_required', code: 'formance_gateway_invalid' })
+  } catch (cause) {
+    return degradeBackend(cause, Object.freeze({ kind: 'setup_required', code: 'formance_gateway_invalid' }), { site: 'readFormanceConfiguration', reason: 'invalid_response' })
   }
   const loopback = parsed.hostname === '127.0.0.1' || parsed.hostname === 'localhost'
   if (parsed.username !== ''
@@ -648,8 +649,8 @@ export function formanceSafeUnitsFromSdk(value: bigint | number | string): strin
   let units: bigint
   try {
     units = typeof value === 'bigint' ? value : BigInt(value)
-  } catch {
-    return undefined
+  } catch (cause) {
+    return degradeBackend(cause, undefined, { site: 'formanceSafeUnitsFromSdk', reason: 'invalid_response' })
   }
   if (units < 0n) return undefined
   const number = Number(units)
@@ -694,7 +695,8 @@ export async function installPackage4FormanceSchema(
         version: PACKAGE4_FORMANCE_REQUIREMENTS.schemaVersion,
         v2SchemaData: PACKAGE4_FORMANCE_SCHEMA,
       }, NO_RETRY)
-    } catch {
+    } catch (cause) {
+      degradeBackend(cause, undefined, { site: 'installPackage4FormanceSchema', reason: 'source_unavailable' })
       const reconciled = await readSchema(context)
       if (reconciled.kind !== 'ready') return reconciled
     }
@@ -708,9 +710,9 @@ export async function installPackage4FormanceSchema(
       schemaDigest: installed.schemaDigest,
       replayed: false,
     })
-  } catch {
+  } catch (cause) {
     recordMetric('install_schema', 'unavailable', startedAt)
-    return Object.freeze({ kind: 'unavailable', code: 'formance_install_unavailable' })
+    return degradeBackend(cause, Object.freeze({ kind: 'unavailable', code: 'formance_install_unavailable' }), { site: 'installPackage4FormanceSchema', reason: 'source_unavailable' })
   }
 }
 
@@ -828,9 +830,9 @@ export async function readFormanceTransactionByReference(
       metadata: safeMetadata(row.metadata),
       postings,
     })
-  } catch {
+  } catch (cause) {
     recordMetric('read_reference', 'unavailable', startedAt)
-    return Object.freeze({ kind: 'unavailable', code: 'formance_read_unavailable' })
+    return degradeBackend(cause, Object.freeze({ kind: 'unavailable', code: 'formance_read_unavailable' }), { site: 'readFormanceTransactionByReference', reason: 'source_unavailable' })
   }
 }
 
@@ -915,9 +917,9 @@ export async function readFormancePeriodSpend(
         return Object.freeze({ kind: 'unavailable', code: 'formance_spend_cursor_invalid' })
       }
     } while (cursor !== undefined)
-  } catch {
+  } catch (cause) {
     recordMetric('read_period_spend', 'unavailable', startedAt)
-    return Object.freeze({ kind: 'unavailable', code: 'formance_read_unavailable' })
+    return degradeBackend(cause, Object.freeze({ kind: 'unavailable', code: 'formance_read_unavailable' }), { site: 'readFormancePeriodSpend', reason: 'source_unavailable' })
   }
   if (settledCount === 0n) {
     recordMetric('read_period_spend', 'empty', startedAt)
@@ -1022,9 +1024,9 @@ export async function readFormanceStatementPage(
       continueCursor: page.hasMore ? page.next! : '',
       isDone: !page.hasMore,
     })
-  } catch {
+  } catch (cause) {
     recordMetric('read_statement_page', 'unavailable', startedAt)
-    return Object.freeze({ kind: 'unavailable', code: 'formance_read_unavailable' })
+    return degradeBackend(cause, Object.freeze({ kind: 'unavailable', code: 'formance_read_unavailable' }), { site: 'readFormanceStatementPage', reason: 'source_unavailable' })
   }
 }
 

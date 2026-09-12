@@ -10,6 +10,7 @@
 //
 // This file holds plain logic only - no Convex function registrations.
 import { v } from 'convex/values'
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 
 import {
@@ -79,8 +80,8 @@ export async function readCurrentPublishedToolSnapshotHandler(
   try {
     const operation = await readCurrentPublishedTool(ctx, input.toolRef, Date.now())
     return operation === undefined ? null : { toolJson: JSON.stringify(operation) }
-  } catch {
-    return null
+  } catch (cause) {
+    return degradeBackend(cause, null, { site: 'readCurrentPublishedToolSnapshotHandler', reason: 'invalid_response' })
   }
 }
 
@@ -91,8 +92,8 @@ export async function readCurrentPublishedTool(
 ): Promise<PublishedTool | undefined> {
   try {
     return await readCurrentPublishedToolUnchecked(ctx, toolRef, now)
-  } catch {
-    return undefined
+  } catch (cause) {
+    return degradeBackend(cause, undefined, { site: 'readCurrentPublishedTool', reason: 'invalid_response' })
   }
 }
 
@@ -168,8 +169,8 @@ export async function readExactSellerCanaryOperationSnapshotHandler(
       adapter: { adapterId: bindingDoc.adapterId, config },
       registrationEvidenceRefs: bindingDoc.registrationEvidenceRefs,
     })
-  } catch {
-    return null
+  } catch (cause) {
+    return degradeBackend(cause, null, { site: 'readExactSellerCanaryOperationSnapshotHandler', reason: 'invalid_response' })
   }
   if (binding.adapter.adapterId !== 'x402-fetch:v2' || binding.authority.kind !== 'provider_connection') return null
   const connectionRef = binding.authority.connectionRef
@@ -305,8 +306,8 @@ export async function readExactSellerCanaryOperationSnapshotHandler(
       readinessObservedAt: publication.readinessObservedAt,
       readinessValidUntil: publication.readinessValidUntil,
     }
-  } catch {
-    return null
+  } catch (cause) {
+    return degradeBackend(cause, null, { site: 'readExactSellerCanaryOperationSnapshotHandler', reason: 'invalid_response' })
   }
 }
 
@@ -356,8 +357,8 @@ async function readCurrentPublishedToolUnchecked(
       adapter: { adapterId: bindingDoc.adapterId, config },
       registrationEvidenceRefs: bindingDoc.registrationEvidenceRefs,
     })
-  } catch {
-    return undefined
+  } catch (cause) {
+    return degradeBackend(cause, undefined, { site: 'readCurrentPublishedToolUnchecked', reason: 'invalid_response' })
   }
   const admittedTransport = admitRegisteredTransport({
     adapterId: binding.adapter.adapterId,
@@ -430,8 +431,8 @@ async function readCurrentPublishedToolUnchecked(
       contractRef: contractResult.contract.ref,
     })
     if (expectedToolRef === toolRef) return materialized
-  } catch {
-    return undefined
+  } catch (cause) {
+    return degradeBackend(cause, undefined, { site: 'readCurrentPublishedToolUnchecked', reason: 'invalid_response' })
   }
   return undefined
 }
@@ -444,7 +445,7 @@ export function canonicalPublicationPricing(
     const parsed = normalizePricingConfig(JSON.parse(publication.pricingConfigJson))
     if (parsed.kind !== 'valid' || pricingConfigDigest(parsed.config) !== publication.priceDigest) return undefined
     return { config: parsed.config, priceDigest: publication.priceDigest }
-  } catch {
-    return undefined
+  } catch (cause) {
+    return degradeBackend(cause, undefined, { site: 'canonicalPublicationPricing', reason: 'invalid_response' })
   }
 }

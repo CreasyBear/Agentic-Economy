@@ -1,6 +1,7 @@
 import { v, type Infer } from 'convex/values'
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 
-import { internalMutation, internalQuery, query } from './_generated/server'
+import { internalMutation, internalQuery } from './_generated/server'
 import type { Doc, Id } from './_generated/dataModel'
 import type { MutationCtx } from './_generated/server'
 import { resolveBusinessActor } from './authz'
@@ -12,9 +13,6 @@ import {
   enqueueKnownUnpaidSellerCanaryRearm,
   enqueueRecoveredSellerCanaryReplay,
   enqueueSafeBeforeReleaseSellerCanaryResume,
-  knownUnpaidSellerCanaryRefusal,
-  safeBeforeReleaseSellerCanaryRefusal,
-  SELLER_CANARY_ROUTE_SIGNING_UNAVAILABLE_NEXT_ACTION,
 } from './lib/callLifecycle/dispatch'
 import {
   jsonObject,
@@ -94,78 +92,6 @@ const sellerOnboardingCanaryEvidenceValue = v.union(v.object({
   attemptRef: v.optional(v.string()),
   updatedAt: v.number(),
 }), v.null())
-
-const ownerSellerCanaryReceiptValue = v.object({
-  receiptRef: v.string(),
-  state: v.union(
-    v.literal('settled'),
-    v.literal('refunded'),
-    v.literal('reconciliation_required'),
-  ),
-  network: v.string(),
-  asset: v.string(),
-  paymentIdentifier: v.optional(v.string()),
-  settlementTransactionHash: v.optional(v.string()),
-  externalSettlementRef: v.optional(v.string()),
-  evidenceHash: v.string(),
-  issuedAt: v.string(),
-  refundState: v.optional(v.union(v.literal('not_applicable'), v.literal('released'), v.literal('unknown'))),
-  lossState: v.optional(v.union(v.literal('none'), v.literal('provider_output_invalid'), v.literal('unknown'))),
-})
-
-const ownerSellerCanaryStatusValue = v.union(
-  v.object({ kind: v.literal('error'), code: v.union(v.literal('unauthenticated'), v.literal('wrong_owner')) }),
-  v.object({ kind: v.literal('not_found') }),
-  v.object({ kind: v.literal('conflict') }),
-  v.object({
-    kind: v.literal('available'),
-    canaryRef: v.string(),
-    callRef: v.string(),
-    toolRef: v.string(),
-    offeringRef: v.string(),
-    offeringRevision: v.number(),
-    publicationRef: v.string(),
-    publicationRevision: v.number(),
-    state: v.union(
-      v.literal('pending'),
-      v.literal('completed'),
-      v.literal('refused'),
-      v.literal('reconciliation_required'),
-      v.literal('cancelled'),
-    ),
-    resultKind: v.optional(v.union(
-      v.literal('completed'),
-      v.literal('pending'),
-      v.literal('needs_authority'),
-      v.literal('reconciliation_required'),
-      v.literal('refused'),
-    )),
-    evidenceHash: v.optional(v.string()),
-    attemptRef: v.optional(v.string()),
-    receipt: v.optional(ownerSellerCanaryReceiptValue),
-    reconciliation: v.optional(v.object({
-      attemptRef: v.string(),
-      effectGeneration: v.number(),
-      requiredAt: v.string(),
-      retry: v.literal('reconcile_before_retry'),
-      evidenceSource: v.string(),
-    })),
-    refusal: v.optional(v.object({
-      code: v.string(),
-      retryable: v.boolean(),
-      retryKind: v.optional(v.union(
-        v.literal('pre_claim_rearm'),
-        v.literal('safe_before_release_resume'),
-      )),
-      nextAction: v.optional(v.string()),
-    })),
-    promotion: v.union(
-      v.object({ state: v.literal('not_promoted') }),
-      v.object({ state: v.literal('promoted'), evidenceDigest: v.string() }),
-    ),
-    updatedAt: v.number(),
-  }),
-)
 
 type RequestArgs = {
   businessId: Id<'businesses'>
@@ -263,8 +189,8 @@ function persistedCanaryCommitmentIsValid(envelope: CanaryEnvelope): boolean {
       && reconstructed.commitmentDigest === envelope.canaryCommitmentDigest
       && canonicalDigest(sellerOnboardingCanaryExecutionEnvelope(reconstructed) as never)
         === canonicalDigest(envelope as never)
-  } catch {
-    return false
+  } catch (cause) {
+    return degradeBackend(cause, false, { site: 'persistedCanaryCommitmentIsValid', reason: 'invalid_response' })
   }
 }
 
@@ -606,129 +532,3 @@ export const readSellerOnboardingCanaryEvidence = internalQuery({
   },
 })
 
-/** Authenticated, bounded owner read of the exact current seller canary target. */
-export const readOwnerSellerOnboardingCanaryStatus = query({
-  args: {
-    businessId: v.id('businesses'),
-    offeringRef: v.string(),
-    offeringRevision: v.number(),
-    offeringSourceHash: v.string(),
-    publicationRef: v.string(),
-    publicationRevision: v.number(),
-  },
-  returns: ownerSellerCanaryStatusValue,
-  handler: async (ctx, args) => {
-    const actor = await resolveBusinessActor(ctx)
-    if (actor.kind !== 'authenticated_owner') return { kind: 'error' as const, code: 'unauthenticated' as const }
-    const business = await ctx.db.get(args.businessId)
-    if (business === null || business.owningAccountRef !== actor.canonicalAccountRef) {
-      return { kind: 'error' as const, code: 'wrong_owner' as const }
-    }
-
-    const rows = await ctx.db.query('capabilityCalls')
-      .withIndex('by_sellerOnboardingCanary_target', (index) => index
-        .eq('sellerOnboardingCanary.businessId', String(args.businessId))
-        .eq('sellerOnboardingCanary.offeringRef', args.offeringRef)
-        .eq('sellerOnboardingCanary.offeringRevision', args.offeringRevision)
-        .eq('sellerOnboardingCanary.offeringSourceHash', args.offeringSourceHash)
-        .eq('sellerOnboardingCanary.publicationRef', args.publicationRef)
-        .eq('sellerOnboardingCanary.publicationRevision', args.publicationRevision))
-      .order('desc')
-      .take(2)
-    if (rows.length === 0) return { kind: 'not_found' as const }
-    if (rows.length !== 1) return { kind: 'conflict' as const }
-    const row = rows[0]
-    if (row === undefined) return { kind: 'conflict' as const }
-    const canary = row.sellerOnboardingCanary
-    if (canary === undefined
-      || canary.ownerId !== actor.canonicalAccountRef
-      || canary.businessId !== String(args.businessId)
-      || canary.offeringRef !== args.offeringRef
-      || canary.offeringRevision !== args.offeringRevision
-      || canary.offeringSourceHash !== args.offeringSourceHash
-      || canary.publicationRef !== args.publicationRef
-      || canary.publicationRevision !== args.publicationRevision
-      || canary.callRef !== row.callRef
-      || canary.toolRef !== row.toolRef
-      || canary.inputDigest !== row.inputDigest
-      || canary.idempotencyKey !== row.idempotencyKey) {
-      return { kind: 'conflict' as const }
-    }
-
-    const promotionMarker = await ctx.db.query('operationKeys')
-      .withIndex('by_actor_operation_key', (index) => index
-        .eq('actorRef', actor.canonicalAccountRef)
-        .eq('operationName', 'promoteX402SellerCanary')
-        .eq('key', canary.canaryRef))
-      .unique()
-    const promotion = promotionMarker === null
-      ? { state: 'not_promoted' as const }
-      : promotionMarker.scope === 'catalog_offering'
-        && promotionMarker.status === 'succeeded'
-        && promotionMarker.resultHash !== undefined
-        ? { state: 'promoted' as const, evidenceDigest: promotionMarker.resultHash }
-        : undefined
-    if (promotion === undefined) return { kind: 'conflict' as const }
-
-    const result = row.result
-    const receipt = result !== undefined && 'receipt' in result ? result.receipt : undefined
-    const knownUnpaidRefusal = result?.kind === 'refused'
-      ? await knownUnpaidSellerCanaryRefusal(ctx, row)
-      : undefined
-    const safeBeforeReleaseRefusal = result?.kind === 'refused'
-      ? await safeBeforeReleaseSellerCanaryRefusal(ctx, row)
-      : undefined
-    return {
-      kind: 'available' as const,
-      canaryRef: canary.canaryRef,
-      callRef: canary.callRef,
-      toolRef: canary.toolRef,
-      offeringRef: canary.offeringRef,
-      offeringRevision: canary.offeringRevision,
-      publicationRef: canary.publicationRef,
-      publicationRevision: canary.publicationRevision,
-      state: row.state,
-      ...(result === undefined ? {} : { resultKind: result.kind }),
-      ...(row.evidenceHash === undefined ? {} : { evidenceHash: row.evidenceHash }),
-      ...(row.attemptRef === undefined ? {} : { attemptRef: row.attemptRef }),
-      ...(receipt === undefined || receipt.commercialModel !== 'seller_canary_x402'
-        ? {}
-        : {
-            receipt: {
-              receiptRef: receipt.receiptRef,
-              state: receipt.state,
-              network: receipt.network,
-              asset: receipt.asset,
-              ...(receipt.paymentIdentifier === undefined ? {} : { paymentIdentifier: receipt.paymentIdentifier }),
-              ...(receipt.settlementTransactionHash === undefined ? {} : { settlementTransactionHash: receipt.settlementTransactionHash }),
-              ...(receipt.externalSettlementRef === undefined ? {} : { externalSettlementRef: receipt.externalSettlementRef }),
-              evidenceHash: receipt.evidenceHash,
-              issuedAt: receipt.issuedAt,
-              ...(receipt.refundState === undefined ? {} : { refundState: receipt.refundState }),
-              ...(receipt.lossState === undefined ? {} : { lossState: receipt.lossState }),
-            },
-          }),
-      ...(result?.kind === 'reconciliation_required'
-        ? { reconciliation: structuredClone(result.evidence) }
-        : {}),
-      ...(result?.kind === 'refused'
-        ? {
-            refusal: {
-              code: result.code,
-              retryable: knownUnpaidRefusal !== undefined || safeBeforeReleaseRefusal !== undefined,
-              ...(knownUnpaidRefusal !== undefined
-                ? { retryKind: 'pre_claim_rearm' as const }
-                : safeBeforeReleaseRefusal !== undefined
-                  ? { retryKind: 'safe_before_release_resume' as const }
-                  : {}),
-              ...(safeBeforeReleaseRefusal !== undefined
-                ? { nextAction: SELLER_CANARY_ROUTE_SIGNING_UNAVAILABLE_NEXT_ACTION }
-                : result.nextAction === undefined ? {} : { nextAction: result.nextAction }),
-            },
-          }
-        : {}),
-      promotion,
-      updatedAt: row.updatedAt,
-    }
-  },
-})

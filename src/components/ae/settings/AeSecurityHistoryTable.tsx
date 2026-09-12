@@ -1,9 +1,11 @@
 import { useMemo } from 'react'
 import type { ColumnDef } from '@tanstack/react-table'
 
+import { AeCopyReference } from '@/components/ae/data/AeCopyReference'
 import { AeRecordTable } from '@/components/ae/operator/AeOperatorDataTable'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { formatUtcTimestamp } from '@/lib/ui/format-time'
 import type { AccountSecurityHistoryItem } from '@/modules/security/account-security'
 
 export function AeSecurityHistoryTable({
@@ -59,8 +61,8 @@ function historyColumns(showActorAndTarget: boolean): ColumnDef<AccountSecurityH
       accessorFn: (row) => row.observedAt ?? row.recordedAt,
       cell: ({ row }) => (
         <span className="grid gap-1 whitespace-nowrap">
-          <span>{row.original.observedAt === undefined ? 'Observed time unavailable' : formatTime(row.original.observedAt)}</span>
-          <span className="text-xs text-muted-foreground">Recorded {formatTime(row.original.recordedAt)}</span>
+          <span>{row.original.observedAt === undefined ? 'Observed time unavailable' : `${formatUtcTimestamp(row.original.observedAt)} UTC`}</span>
+          <span className="text-xs text-muted-foreground">Recorded {formatUtcTimestamp(row.original.recordedAt)} UTC</span>
         </span>
       ),
     },
@@ -74,9 +76,9 @@ function historyColumns(showActorAndTarget: boolean): ColumnDef<AccountSecurityH
       header: 'Actor',
       accessorFn: (row: AccountSecurityHistoryItem) => `${row.actorKind} ${row.actorRef}`,
       cell: ({ row }: { row: { original: AccountSecurityHistoryItem } }) => (
-        <span className="grid gap-1">
-          <span className="capitalize">{row.original.actorKind}</span>
-          <code className="text-xs text-muted-foreground">{row.original.actorRef}</code>
+        <span className="grid min-w-0 gap-1">
+          <span>{actorLabel(row.original.actorKind)}</span>
+          <AeCopyReference label="Actor reference" value={row.original.actorRef} />
         </span>
       ),
     }, {
@@ -84,9 +86,9 @@ function historyColumns(showActorAndTarget: boolean): ColumnDef<AccountSecurityH
       header: 'Target',
       accessorFn: (row: AccountSecurityHistoryItem) => `${row.targetType} ${row.targetRef}`,
       cell: ({ row }: { row: { original: AccountSecurityHistoryItem } }) => (
-        <span className="grid gap-1">
+        <span className="grid min-w-0 gap-1">
           <span>{targetLabel(row.original.targetType)}</span>
-          <code className="text-xs text-muted-foreground">{row.original.targetRef}</code>
+          <AeCopyReference label="Target reference" value={row.original.targetRef} />
         </span>
       ),
     }] satisfies ColumnDef<AccountSecurityHistoryItem, unknown>[] : []),
@@ -103,16 +105,13 @@ function historyColumns(showActorAndTarget: boolean): ColumnDef<AccountSecurityH
     {
       accessorKey: 'correlationRef',
       header: 'Reference',
-      cell: ({ row }) => <code className="text-xs">{row.original.correlationRef}</code>,
+      cell: ({ row }) => <AeCopyReference label="Reference" value={row.original.correlationRef} />,
     },
   ]
 }
 
-function formatTime(value: number): string {
-  return new Intl.DateTimeFormat('en-AU', {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  }).format(new Date(value))
+function actorLabel(value: string): string {
+  return humanize(value)
 }
 
 function eventLabel(value: string): string {

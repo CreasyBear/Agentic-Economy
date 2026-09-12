@@ -2,6 +2,7 @@ import { createServerFn } from '@tanstack/react-start'
 import { setResponseHeader } from '@tanstack/react-start/server'
 import { z } from 'zod'
 
+import { idempotencyKeySchema } from '@/modules/common/action'
 import {
   exactAmountSchema,
   type ExactAmount,
@@ -59,14 +60,14 @@ const ownerPayoutTransferInputSchema = z.strictObject({
   amount: exactAmountSchema,
   expectedPayoutRevision: z.number().int().positive(),
   expectedAccountVersion: z.number().int().nonnegative(),
-  idempotencyKey: z.string().trim().min(8).max(200),
+  idempotencyKey: idempotencyKeySchema,
 })
 
 const ownerPayoutTransferReadInputSchema = z.strictObject({
   businessId: z.string().trim().min(1).max(500),
   currency: z.string().regex(/^[A-Z][A-Z0-9]{2,19}$/u),
   payoutRef: z.string().trim().min(1).max(500),
-  idempotencyKey: z.string().trim().min(8).max(200),
+  idempotencyKey: idempotencyKeySchema,
 })
 
 const unavailable: MoneyRefusal = Object.freeze({

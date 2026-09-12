@@ -8,6 +8,8 @@ import { agentAccessPrincipalValue, verifySupplyAgentPrincipal } from './agentAc
 import { resolveBusinessActor } from './authz'
 import { capabilitySupplyGraphPorts } from './capabilitySupplyGraphPorts'
 import { upsertProviderToolIdentity } from './capabilityProviderToolProjection'
+import { canonicalSlugForToolRef, activeDirectoryGeneration } from './lib/x402DirectoryIndex/rows'
+import { providerKeyForBusiness } from './x402DirectoryIndexStore'
 import type { Doc } from './_generated/dataModel'
 import { internalMutation, mutation, query, type MutationCtx, type QueryCtx } from './_generated/server'
 import { requireSourceWrite, sourceWriteArgs } from './sourceWriteAdmission'
@@ -32,6 +34,9 @@ const ownerReadResultValue = v.union(
       summary: v.string(),
       status: v.union(v.literal('draft'), v.literal('published'), v.literal('paused'), v.literal('retired')),
       accessPathCount: v.number(),
+      // Well 8 Lane C: the canonical `/tools/<providerKey>/<slug>` slug, when
+      // this Tool's current publication has one - see canonicalSlugForToolRef.
+      slug: v.optional(v.string()),
     }),
     maintenance: v.optional(v.object({
       offeringRef: v.string(),
@@ -66,6 +71,7 @@ const ownerListResultValue = v.union(
       summary: v.string(),
       status: v.union(v.literal('draft'), v.literal('published'), v.literal('paused'), v.literal('retired')),
       accessPathCount: v.number(),
+      slug: v.optional(v.string()),
       statusJson: v.string(),
     })),
     isDone: v.boolean(),
@@ -220,7 +226,7 @@ export const readOwner = query({
       .withIndex('by_businessId_and_offeringRef', (index) => index.eq('businessId', args.businessId).eq('offeringRef', args.offeringRef))
       .unique()
     if (identity === null) return { kind: 'not_found' as const }
-    const [status, offering, revision, paths] = await Promise.all([
+    const [status, offering, revision, paths, canonical] = await Promise.all([
       projectIdentity(ctx, identity, args.now, true),
       ctx.db.query('businessOfferings')
         .withIndex('by_offeringRef', (index) => index.eq('offeringRef', identity.offeringRef))
@@ -233,6 +239,7 @@ export const readOwner = query({
       ctx.db.query('offeringAccessPaths')
         .withIndex('by_offeringRef_and_offeringRevision', (index) => index.eq('offeringRef', identity.offeringRef).eq('offeringRevision', identity.offeringRevision))
         .take(21),
+      canonicalSlugForToolRef(ctx, identity.toolRef),
     ])
     if (
       status === null
@@ -254,6 +261,7 @@ export const readOwner = query({
         summary: revision.summary,
         status: offering.status,
         accessPathCount: paths.filter((path) => path.status !== 'withdrawn').length,
+        ...(canonical === null ? {} : { slug: canonical.slug }),
       },
       ...(identity.publicationRef === undefined || identity.publicationRevision === undefined
         ? {}
@@ -290,11 +298,12 @@ export const listOwner = query({
       .order('desc')
       .paginate(args.paginationOpts)
     const page = await Promise.all(rows.page.map(async (identity) => {
-      const [projected, offering, revision, paths] = await Promise.all([
+      const [projected, offering, revision, paths, canonical] = await Promise.all([
         projectIdentity(ctx, identity, args.now, false),
         ctx.db.query('businessOfferings').withIndex('by_offeringRef', (index) => index.eq('offeringRef', identity.offeringRef)).unique(),
         ctx.db.query('businessOfferingRevisions').withIndex('by_offeringRef_and_revision', (index) => index.eq('offeringRef', identity.offeringRef).eq('revision', identity.offeringRevision)).unique(),
         ctx.db.query('offeringAccessPaths').withIndex('by_offeringRef_and_offeringRevision', (index) => index.eq('offeringRef', identity.offeringRef).eq('offeringRevision', identity.offeringRevision)).take(MAX_ACCESS_PATHS_PER_OFFERING + 1),
+        canonicalSlugForToolRef(ctx, identity.toolRef),
       ])
       if (projected === null || offering === null || revision === null || offering.businessId !== args.businessId || revision.businessId !== args.businessId) return null
       return {
@@ -305,6 +314,7 @@ export const listOwner = query({
         summary: revision.summary,
         status: offering.status,
         accessPathCount: paths.filter((path) => path.status !== 'withdrawn').length,
+        ...(canonical === null ? {} : { slug: canonical.slug }),
         statusJson: JSON.stringify(projected),
       }
     }))
@@ -314,6 +324,38 @@ export const listOwner = query({
       isDone: rows.isDone,
       continueCursor: rows.continueCursor,
     }
+  },
+})
+
+/**
+ * Well 8 Lane C: resolves `/owner/operations/<slug>` server-side - the slug
+ * is scoped to the owner's own providerKey (never client-supplied), so this
+ * can only ever resolve a Tool the caller's own business owns.
+ */
+export const resolveOwnerToolSlug = query({
+  args: { businessId: v.id('businesses'), slug: v.string() },
+  returns: v.union(v.null(), v.object({ offeringRef: v.string() })),
+  handler: async (ctx, args) => {
+    const actor = await resolveBusinessActor(ctx)
+    if (actor.kind !== 'authenticated_owner') return null
+    const business = await ctx.db.get(args.businessId)
+    if (business === null || business.owningAccountRef !== actor.canonicalAccountRef) return null
+    const generation = await activeDirectoryGeneration(ctx)
+    if (generation === null) return null
+    const providerKey = providerKeyForBusiness(business)
+    const row = await ctx.db.query('marketDirectorySearchEntries')
+      .withIndex('by_generation_and_providerKey_and_slug', (index) => index.eq('generation', generation.generation).eq('providerKey', providerKey).eq('slug', args.slug))
+      .filter((query) => query.and(query.eq(query.field('network'), '*'), query.eq(query.field('source'), 'provider')))
+      .unique()
+    if (row === null || row.sourceRouteRef === undefined) return null
+    const publication = await ctx.db.query('capabilityPublications')
+      .withIndex('by_sourceRouteRef_and_disposition', (index) => index.eq('sourceRouteRef', row.sourceRouteRef).eq('disposition', 'current'))
+      .unique()
+    if (publication === null || publication.businessId !== args.businessId) return null
+    const offering = await ctx.db.query('capabilityOfferings')
+      .withIndex('by_offeringId', (index) => index.eq('offeringId', publication.offeringId))
+      .unique()
+    return offering === null || offering.origin?.kind !== 'catalog_offering' ? null : { offeringRef: offering.origin.offeringRef }
   },
 })
 

@@ -6,8 +6,6 @@ import {
   type AgentAccessAuthenticationOptions,
   type AgentAccessPrincipalResolver,
 } from '@/lib/server/agent-access-auth'
-import { createLocalE2EAgentAccessKeyApi } from '@/lib/server/local-e2e-agent-key'
-import { LOCAL_E2E_OPERATOR_PRINCIPAL } from '@/lib/server/local-e2e-bypass'
 import {
   CUSTOMER_REQUEST_AGENT_SCOPE,
   CUSTOMER_REQUEST_APPROVAL_REQUIRED_SCOPE,
@@ -38,16 +36,11 @@ const adapterMocks = vi.hoisted(() => ({
   callPublicSourceMutation: vi.fn(),
   sourceWriteAdmissionFromRequest: vi.fn(),
   sourceWriteRequestFromAdmission: vi.fn(),
-  getRequest: vi.fn(),
 }))
 
 vi.mock('@clerk/tanstack-react-start/server', () => ({
   auth: adapterMocks.auth,
   clerkClient: adapterMocks.clerkClient,
-}))
-
-vi.mock('@tanstack/react-start/server', () => ({
-  getRequest: adapterMocks.getRequest,
 }))
 
 vi.mock('@/lib/server/convex-source', async (importOriginal) => ({
@@ -193,7 +186,6 @@ describe('agent access authentication', () => {
   })
 
   it('uses the hosted auth and current-key providers while still requiring canonical resolution', async () => {
-    vi.stubEnv('VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E', '')
     adapterMocks.auth.mockResolvedValue({
       isAuthenticated: true,
       tokenType: 'api_key',
@@ -235,86 +227,6 @@ describe('agent access authentication', () => {
     })
   })
 
-  it('authenticates only the current nonexpired local OAuth bearer through canonical resolution', async () => {
-    vi.useFakeTimers()
-    vi.setSystemTime(1_000)
-    vi.stubEnv('VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E', 'true')
-    const localApi = createLocalE2EAgentAccessKeyApi()
-    const createInput = {
-      name: 'AE Agent local-authentication',
-      subject: LOCAL_E2E_OPERATOR_PRINCIPAL,
-      createdBy: LOCAL_E2E_OPERATOR_PRINCIPAL,
-      scopes: liveScopes,
-      claims: {
-        aePurpose: 'agent_access',
-        aeGrantRef: 'grt_local_authentication',
-        aeDisplayName: 'Local authentication',
-        aeAuthorityMode: 'read_only',
-        aeIssuanceKey: 'local-authentication-12345678',
-        aeApplicationRef: 'agentic-economy',
-        aeEnvironment: 'sandbox',
-        aeScopes: JSON.stringify(liveScopes),
-      },
-      secondsUntilExpiration: 1,
-      description: 'Use Agentic Economy Tools with this assistant.',
-    } as const
-    const created = await localApi.create(createInput)
-    const replay = await localApi.create(createInput)
-    const second = await localApi.create({
-      ...createInput,
-      name: 'AE Agent second-authentication',
-      claims: {
-        ...createInput.claims,
-        aeGrantRef: 'grt_second_authentication',
-        aeIssuanceKey: 'second-authentication-12345678',
-      },
-    })
-    const secret = (await localApi.getSecret(created.id)).secret
-    expect(replay.id).toBe(created.id)
-    expect(second.id).not.toBe(created.id)
-    const resolvePrincipal = vi.fn<AgentAccessPrincipalResolver>(async (projection) => ({
-      ...projection,
-      principalId: 'prn_00000000000040008000000000000048',
-      ownerId: 'acc_00000000000040008000000000000048',
-    }))
-
-    try {
-      adapterMocks.getRequest.mockReturnValue(new Request('http://localhost/api/v1/account', {
-        headers: { Authorization: `Bearer ${secret}` },
-      }))
-      await expect(authenticateCanonically({ resolvePrincipal })).resolves.toMatchObject({
-        kind: 'authenticated',
-        principal: {
-          credentialId: created.id,
-          applicationRef: 'agentic-economy',
-          environment: 'sandbox',
-        },
-      })
-      expect(resolvePrincipal).toHaveBeenCalledTimes(1)
-      expect(adapterMocks.auth).not.toHaveBeenCalled()
-      expect(adapterMocks.clerkClient).not.toHaveBeenCalled()
-
-      adapterMocks.getRequest.mockReturnValue(new Request('http://localhost/api/v1/account', {
-        headers: { Authorization: 'Bearer wrong-local-secret' },
-      }))
-      await expect(authenticateCanonically({ resolvePrincipal })).resolves.toEqual({
-        kind: 'refused', status: 401, reason: 'authentication_required',
-      })
-
-      vi.setSystemTime(2_001)
-      adapterMocks.getRequest.mockReturnValue(new Request('http://localhost/api/v1/account', {
-        headers: { Authorization: `Bearer ${secret}` },
-      }))
-      await expect(authenticateCanonically({ resolvePrincipal })).resolves.toEqual({
-        kind: 'refused', status: 401, reason: 'authentication_required',
-      })
-      expect(resolvePrincipal).toHaveBeenCalledTimes(1)
-      expect(adapterMocks.auth).not.toHaveBeenCalled()
-      expect(adapterMocks.clerkClient).not.toHaveBeenCalled()
-    } finally {
-      vi.useRealTimers()
-    }
-  })
 
   it('fails closed without canonical resolution and has no test-only ownership projection', async () => {
     const authenticate = async () => ({

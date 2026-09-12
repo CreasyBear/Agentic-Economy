@@ -52,7 +52,7 @@ export function deserializeToolDescriptor(
           }),
     },
     business: tool.business,
-    offering: tool.offering,
+    listing: tool.listing,
     summary: tool.summary,
     commercial: {
       ...(tool.commercial.displayPrice === undefined ? {} : { displayPrice: structuredClone(tool.commercial.displayPrice) }),      price: tool.commercial.price,

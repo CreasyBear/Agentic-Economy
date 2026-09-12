@@ -186,7 +186,10 @@ function isDocumentedJsonBoundary(violation: ScanViolation): boolean {
     (violation.file ===
       "src/modules/capability-execution/internal/convex-schema.ts" &&
       violation.excerpt.includes("v.any()") &&
-      violation.excerpt.includes("runtime-validated JsonValue boundary"))
+      violation.excerpt.includes("runtime-validated JsonValue boundary")) ||
+    (violation.file === "convex/chatMessages.ts" &&
+      violation.excerpt.includes("v.any()") &&
+      violation.excerpt.includes("runtime-validated AI SDK UIMessage boundary"))
   );
 }
 

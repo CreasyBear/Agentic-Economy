@@ -1,4 +1,5 @@
 import type { GenericDatabaseReader } from 'convex/server'
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { v } from 'convex/values'
 
 import type { QueryCtx } from './_generated/server'
@@ -292,8 +293,8 @@ export async function getCurrentOwnerOfferingSupplyHandler(ctx: QueryCtx) {
             observedAt: decoded.observedAt,
             disposition: decoded.disposition,
           }
-        } catch {
-          return { status: 'projection_pending' as const }
+        } catch (cause) {
+          return degradeBackend(cause, { status: 'projection_pending' as const }, { site: 'getCurrentOwnerOfferingSupplyHandler', reason: 'invalid_response' })
         }
       })()
   const offerings = state.offerings.map((offering) => {

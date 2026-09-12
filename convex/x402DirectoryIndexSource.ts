@@ -42,7 +42,7 @@ export function prepareIndexedDirectorySource(resource: Readonly<Record<string, 
 
 /** Read-only SDK discovery plus one transactional metadata commit; no Provider endpoint is called. */
 export const page = internalAction({
-  args: { generation: v.string(), offset: v.number(), workload: workloadCronSnapshotValue },
+  args: { generation: v.string(), offset: v.number(), runStartedAt: v.number(), workload: workloadCronSnapshotValue },
   returns: progressValue,
   handler: async (ctx, args): Promise<IndexProgress> => {
     await ctx.runQuery(internal.workloadCron.reconcile, { name: 'refresh Agentic Economy API registry', snapshot: parseWorkloadCronSnapshot(args.workload) })
@@ -67,7 +67,7 @@ export const page = internalAction({
       progress = await ctx.runMutation(internal.x402DirectoryIndexStore.applyPage, {
         generation: args.generation, offset: args.offset, reportedTotal,
         items: items.slice(startItem, startItem + 5), startItem, totalItems: items.length,
-        observedAt: Date.now(), workload: args.workload,
+        observedAt: Date.now(), runStartedAt: args.runStartedAt, workload: args.workload,
       })
       if (progress.kind !== 'advanced') break
     }

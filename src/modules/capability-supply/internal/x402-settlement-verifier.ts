@@ -7,6 +7,8 @@ import {
   type Hex,
 } from 'viem'
 
+import { degradeBackend } from '@/lib/observability/degrade-backend'
+
 import {
   x402PaymentProfileForEnvironment,
   type X402AeEnvironment,
@@ -141,8 +143,10 @@ export function verifyExactEvmX402Settlement(input: Readonly<{
         && decoded.args.value === BigInt(requirement.amount)
       if (!matches) return false
       hasTransfer = true
-    } catch {
+    } catch (cause) {
       // A malformed or unrelated log is not settlement evidence.
+      degradeBackend(cause, undefined, { site: 'verifyExactEvmX402Settlement', reason: 'invalid_response' })
+      continue
     }
   }
 
@@ -255,8 +259,8 @@ function authorizationCancellationLogMatches(
     })
     return decoded.args.authorizer.toLowerCase() === payer.toLowerCase()
       && decoded.args.nonce.toLowerCase() === paymentNonce.toLowerCase()
-  } catch {
-    return false
+  } catch (cause) {
+    return degradeBackend(cause, false, { site: 'authorizationCancellationLogMatches', reason: 'invalid_response' })
   }
 }
 
@@ -294,8 +298,8 @@ function decodeTransferWithAuthorization(
       validBefore: decoded.args[4],
       nonce: decoded.args[5],
     }
-  } catch {
-    return undefined
+  } catch (cause) {
+    return degradeBackend(cause, undefined, { site: 'decodeTransferWithAuthorization', reason: 'invalid_response' })
   }
 }
 

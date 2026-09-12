@@ -1,4 +1,5 @@
 import type { MutationCtx } from '../_generated/server'
+import { degradeBackend } from '../../src/lib/observability/degrade-backend'
 
 import {
   AuthorityBoundaryError,
@@ -65,8 +66,8 @@ export async function admitAgentPublicationConsequence(
     actor = principalRef(input.agent.principalId)
     account = accountRef(input.agent.ownerId)
     canonicalGrantRef = delegationGrantRef(grant.grantRef)
-  } catch {
-    return null
+  } catch (cause) {
+    return degradeBackend(cause, null, { site: 'admitAgentPublicationConsequence', reason: 'invalid_response' })
   }
 
   const boundary = new ConsequenceAuthorityBoundary(new DelegationService(

@@ -1,4 +1,5 @@
 import { v, type ObjectType } from 'convex/values'
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 import type { MutationCtx } from '../../../_generated/server'
 import type { Doc } from '../../../_generated/dataModel'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
@@ -64,8 +65,8 @@ async function requireLifecycleOwner(
   if (identity === null || !await validReplacementAssertion(operation, command, assertion)) return null
   try {
     return await resolveInteractiveAuthorityContext(ctx, identity)
-  } catch {
-    return null
+  } catch (cause) {
+    return degradeBackend(cause, null, { site: 'requireLifecycleOwner', reason: 'forbidden' })
   }
 }
 
@@ -122,8 +123,8 @@ async function admitAgentLifecycleReduction(
       && admitted.admission.consequenceAction === input.action
       && admitted.admission.descriptor !== undefined
       && admitted.admission.proofPolicy?.kind === 'none'
-  } catch {
-    return false
+  } catch (cause) {
+    return degradeBackend(cause, false, { site: 'admitAgentLifecycleReduction', reason: 'invalid_response' })
   }
 }
 
@@ -270,7 +271,8 @@ async function promoteRemainingCredential(
     let normalizedGrant: ReturnType<typeof normalizeStoredAgentAccessGrant>
     try {
       normalizedGrant = normalizeStoredAgentAccessGrant(grant)
-    } catch {
+    } catch (cause) {
+      degradeBackend(cause, undefined, { site: 'promoteRemainingCredential', reason: 'invalid_response' })
       continue
     }
     const scopes = hasSupplyAuthority

@@ -1,4 +1,5 @@
 import type { Doc } from '../../_generated/dataModel'
+import { degradeBackend } from '../../../src/lib/observability/degrade-backend'
 import { canonicalDigest } from '../../../src/modules/common/canonical-digest'
 import type { StableHashValue } from '../../../src/modules/common/stable-hash'
 import type { QualifiedUseReceipt } from '../../../src/modules/money/public'
@@ -48,8 +49,8 @@ export function dailyPayoutIdentityFromRow(
   let period: DailyPayoutIdentity
   try {
     period = dailyPayoutIdentity(row.businessId, row.currency, periodStartAt)
-  } catch {
-    return undefined
+  } catch (cause) {
+    return degradeBackend(cause, undefined, { site: 'dailyPayoutIdentityFromRow', reason: 'invalid_response' })
   }
   return row.payoutRef === period.payoutRef &&
     row.periodStart === period.periodStart &&

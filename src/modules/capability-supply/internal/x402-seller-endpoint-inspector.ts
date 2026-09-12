@@ -1,3 +1,4 @@
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { readBoundedRequestText } from '@/lib/server/bounded-request-body'
 import { stableStringify, type StableHashValue } from '@/modules/common/stable-hash'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
@@ -165,7 +166,8 @@ export async function inspectX402SellerEndpoint(
       )
       targetIsPublic = await isPublicHttpTarget(endpoint, defaultDnsResolver)
     }
-  } catch {
+  } catch (cause) {
+    degradeBackend(cause, undefined, { site: 'inspectX402SellerEndpointValidateTarget', reason: 'source_unavailable' })
     targetIsPublic = false
   }
   if (!targetIsPublic) {
@@ -183,9 +185,10 @@ export async function inspectX402SellerEndpoint(
   let request: Request
   try {
     request = inspectionRequest(endpoint, input.method, input.postBody)
-  } catch {
-    return refused('request_invalid', observedAt, undefined,
-      'Choose GET or POST and provide only a bounded JSON example body.')
+  } catch (cause) {
+    return degradeBackend(cause, refused('request_invalid', observedAt, undefined,
+      'Choose GET or POST and provide only a bounded JSON example body.'),
+      { site: 'inspectX402SellerEndpointBuildRequest', reason: 'invalid_response' })
   }
   let response: Response
   try {
@@ -199,9 +202,10 @@ export async function inspectX402SellerEndpoint(
       const { sendGuardedHttpRequest } = await import('@/modules/network-guard/server')
       response = await sendGuardedHttpRequest(request, MAX_CHALLENGE_BODY_BYTES)
     }
-  } catch {
-    return refused('request_failed', observedAt, undefined,
-      'The endpoint could not be reached without payment. Check its availability and TLS configuration.')
+  } catch (cause) {
+    return degradeBackend(cause, refused('request_failed', observedAt, undefined,
+      'The endpoint could not be reached without payment. Check its availability and TLS configuration.'),
+      { site: 'inspectX402SellerEndpointSendRequest', reason: 'source_unavailable' })
   }
 
   if (response.status >= 300 && response.status < 400) {
@@ -291,8 +295,8 @@ function publicHttpsUrl(value: string): URL | undefined {
       || url.hash.length > 0
     ) return undefined
     return url
-  } catch {
-    return undefined
+  } catch (cause) {
+    return degradeBackend(cause, undefined, { site: 'publicHttpsUrl', reason: 'invalid_response' })
   }
 }
 
@@ -343,12 +347,12 @@ async function readChallenge(response: Response): Promise<ChallengeReadResult> {
       fromHeader = validV2Challenge(
         validateX402PaymentRequired(decodeX402PaymentRequiredHeader(header)),
       )
-    } catch {
-      return {
+    } catch (cause) {
+      return degradeBackend(cause, {
         kind: 'refused',
         reason: 'challenge_malformed',
         action: 'Return a valid official x402 v2 PAYMENT-REQUIRED header.',
-      }
+      }, { site: 'readChallenge', reason: 'invalid_response' })
     }
     if (fromHeader === undefined) {
       return {
@@ -409,8 +413,8 @@ function paymentRequiredFromBody(
   let parsed: unknown
   try {
     parsed = JSON.parse(text) as unknown
-  } catch {
-    return { kind: 'absent' }
+  } catch (cause) {
+    return degradeBackend(cause, { kind: 'absent' } as const, { site: 'paymentRequiredFromBody', reason: 'invalid_response' })
   }
   if (!isRecord(parsed)) return { kind: 'absent' }
   const wrapped = 'paymentRequired' in parsed
@@ -422,8 +426,8 @@ function paymentRequiredFromBody(
     return validated === undefined
       ? { kind: 'malformed' }
       : { kind: 'challenge', value: validated }
-  } catch {
-    return { kind: 'malformed' }
+  } catch (cause) {
+    return degradeBackend(cause, { kind: 'malformed' } as const, { site: 'paymentRequiredFromBody', reason: 'invalid_response' })
   }
 }
 

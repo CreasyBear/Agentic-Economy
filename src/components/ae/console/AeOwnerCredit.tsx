@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import type { ColumnDef } from '@tanstack/react-table'
 
 import { AeFactList } from '@/components/ae/data/AeFactList'
@@ -14,7 +14,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { stagedListPhase, useFirstLoadPending } from '@/components/ui/data-state'
 import { Skeleton } from '@/components/ui/skeleton'
-import { formatCurrencyAmount, type ExactAmount } from '@/modules/money/public'
+import { formatCurrencyAmount, formatDisplayAmount, type ExactAmount } from '@/modules/money/public'
 import type { AccountFundingBalance } from '@/modules/money/server'
 import type { AgentActivityView, AgentDetail, AgentDirectoryProjection } from '@/modules/agent-access/agent-operator-view-model'
 import { formatTimestamp } from '@/lib/ui/format-time'
@@ -40,6 +40,26 @@ type CreditChargeRow = Readonly<{
   item: AgentDetail
   entry: AgentActivityView
 }>
+
+/**
+ * A section with nothing to show reads as one line, not a full card body.
+ * `AeEmptyState`'s reserved min-height and page-scale padding are meant for
+ * a page's single primary empty state; this Credit page can show several
+ * of these at once for a brand-new account, so each stays compact here.
+ */
+function CreditSectionEmptyState({
+  title,
+  description,
+  action,
+}: Readonly<{ title: string; description: string; action?: ReactNode }>) {
+  return (
+    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
+      <span className="font-medium text-foreground">{title}</span>
+      <span className="text-muted-foreground">{description}</span>
+      {action === undefined ? null : action}
+    </div>
+  )
+}
 
 export function AeOwnerCredit({
   directory,
@@ -123,7 +143,7 @@ export function AeOwnerCredit({
                 ? 'Checking…'
                 : balanceUnavailable
                   ? 'Balance unavailable'
-                  : formatCreditAmount(balance),
+                  : formatDisplayAmount(balance),
               mono: true,
             },
             {
@@ -193,7 +213,7 @@ export function AeOwnerCredit({
                   : 'Documents are generated from immutable Account postings.'}
         </p>
         {documents.length === 0 ? (
-          <AeEmptyState
+          <CreditSectionEmptyState
             title="No documents yet"
             description="Funding receipts appear after confirmed settlement. Statements include settled Calls in the selected period."
           />
@@ -251,7 +271,7 @@ export function AeOwnerCredit({
         description="Processor, treasury, settlement, or document differences remain scope-limited cases until an owner closes them with evidence."
       >
         {reconciliationCases.length === 0 ? (
-          <AeEmptyState
+          <CreditSectionEmptyState
             title="No reconciliation differences"
             description="New paid Calls remain blocked only when their affected Account is locked for a proven mismatch."
           />
@@ -276,7 +296,7 @@ export function AeOwnerCredit({
         description="Managed x402 obligations retain distinct buyer AUD and Provider USDC evidence. They are never eligible for a second payout."
       >
         {providerObligations.length === 0 ? (
-          <AeEmptyState title="No Provider obligations" description="A managed x402 Call creates one attributable upstream obligation." />
+          <CreditSectionEmptyState title="No Provider obligations" description="A managed x402 Call creates one attributable upstream obligation." />
         ) : (
           <div className="grid gap-intra">
             {providerObligations.map((obligation) => (
@@ -341,12 +361,12 @@ export function AeOwnerCredit({
             )}
           />
         ) : activity.length === 0 ? (
-          <AeEmptyState
+          <CreditSectionEmptyState
             title="No activity yet"
             description="Browsing does not create a Call."
             action={
-              <Button asChild className="min-h-touch">
-                <a href="/market?window=30d">Search Tools</a>
+              <Button asChild size="sm" className="min-h-touch">
+                <a href="/market">Search Tools</a>
               </Button>
             }
           />
@@ -444,7 +464,7 @@ function formatActivityAmount(entry: AgentActivityView): string {
   if (entry.audAmountUnits === undefined || !/^(?:0|[1-9]\d*)$/u.test(entry.audAmountUnits)) {
     return 'Amount unknown'
   }
-  return formatCreditAmount({ currency: 'AUD', exponent: 6, units: entry.audAmountUnits })
+  return formatDisplayAmount({ currency: 'AUD', exponent: 6, units: entry.audAmountUnits })
 }
 
 const unavailableAccountBalance: AccountFundingBalance = Object.freeze({

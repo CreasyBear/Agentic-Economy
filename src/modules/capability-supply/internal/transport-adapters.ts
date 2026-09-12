@@ -11,6 +11,7 @@ import type {
 } from './transport-terms-schema'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { stableStringify, type StableHashValue } from '@/modules/common/stable-hash'
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 
 export type X402CatalogPayment = Readonly<{
   network: string
@@ -271,8 +272,8 @@ export function parseAdmittedTransportCatalogMetadata(
   let value: unknown
   try {
     value = JSON.parse(configJson)
-  } catch {
-    return undefined
+  } catch (cause) {
+    return degradeBackend(cause, undefined, { site: 'parseAdmittedTransportCatalogMetadata', reason: 'invalid_response' })
   }
   if (adapterId === 'http-json:v1') {
     const parsed = httpJsonConfiguration.safeParse(value)
@@ -393,7 +394,8 @@ export function readHttpJsonProbeConfiguration(
             fixedQuery: [],
         }
     }
-  } catch {
+  } catch (cause) {
+    degradeBackend(cause, undefined, { site: 'readHttpJsonProbeConfiguration', reason: 'invalid_response' })
     // Fall through to the safe non-target default.
   }
   return { method: 'GET', query: [], path: [], headers: [], fixedQuery: [] }
@@ -459,8 +461,8 @@ export function parseAdmittedX402CatalogPayment(
     if (configuration === undefined) return undefined
     const { network, asset, currency, routeAmountExponent, assetAmountExponent } = configuration
     return { network, asset, currency, routeAmountExponent, assetAmountExponent }
-  } catch {
-    return undefined
+  } catch (cause) {
+    return degradeBackend(cause, undefined, { site: 'parseAdmittedX402CatalogPayment', reason: 'invalid_response' })
   }
 }
 
@@ -560,8 +562,8 @@ export function parsePinnedX402PaymentRequiredJson(
   try {
     const paymentRequired = validatePaymentRequired(JSON.parse(value))
     return paymentRequired.x402Version === 2 ? paymentRequired : undefined
-  } catch {
-    return undefined
+  } catch (cause) {
+    return degradeBackend(cause, undefined, { site: 'parsePinnedX402PaymentRequiredJson', reason: 'invalid_response' })
   }
 }
 
@@ -574,8 +576,8 @@ export function validPublicHttpsEndpoint(value: string): URL | undefined {
       && !staticallyPrivateHostname(url.hostname)
       ? url
       : undefined
-  } catch {
-    return undefined
+  } catch (cause) {
+    return degradeBackend(cause, undefined, { site: 'validPublicHttpsEndpoint', reason: 'invalid_response' })
   }
 }
 
@@ -619,7 +621,7 @@ function parseIpv4(hostname: string): readonly [number, number, number, number] 
 function stringifyForSize(value: unknown): string | undefined {
   try {
     return JSON.stringify(value)
-  } catch {
-    return undefined
+  } catch (cause) {
+    return degradeBackend(cause, undefined, { site: 'stringifyForSize', reason: 'invalid_response' })
   }
 }

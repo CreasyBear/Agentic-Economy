@@ -1,3 +1,5 @@
+import { captureBackendException, degradeBackend } from '@/lib/observability/degrade-backend'
+
 const SECRET_REF_PATTERN = /^sec_[0-9a-f]{32}$/u
 const SECRET_GENERATION_PATTERN = /^sgn_[0-9a-f]{32}$/u
 
@@ -222,12 +224,14 @@ export class SecretPlane {
       await this.#store.withSecret(target, async (lease) => {
         try {
           valid = (await this.#validator.validate(target, lease)) === true
-        } catch {
+        } catch (cause) {
+          captureBackendException(cause, { site: 'rotate' }, 'warning')
           validationFailed = true
           throw new SecretPlaneError('secret_generation_validation_failed')
         }
       })
-    } catch {
+    } catch (cause) {
+      captureBackendException(cause, { site: 'rotate' }, 'warning')
       await this.#discard(creation)
       throw new SecretPlaneError(validationFailed
         ? 'secret_generation_validation_failed'
@@ -245,7 +249,8 @@ export class SecretPlane {
         expectedRevision: current.revision,
         newGeneration: generation,
       })
-    } catch {
+    } catch (cause) {
+      captureBackendException(cause, { site: 'rotate' }, 'warning')
       // A failed call can be an ambiguous transport result after a committed
       // atomic advance. Canonical post-state below, never the receipt, decides.
     }
@@ -253,7 +258,8 @@ export class SecretPlane {
     let reconciled: SecretPointer | undefined
     try {
       reconciled = await this.#pointerStore.getActive(current.secretRef)
-    } catch {
+    } catch (cause) {
+      captureBackendException(cause, { site: 'rotate' }, 'warning')
       throw new SecretPlaneError('secret_pointer_reconciliation_failed')
     }
     if (!this.#isValidPointer(reconciled, current.secretRef) ||
@@ -305,7 +311,8 @@ export class SecretPlane {
     let pointer: SecretPointer | undefined
     try {
       pointer = await this.#pointerStore.getActive(ref)
-    } catch {
+    } catch (cause) {
+      captureBackendException(cause, { site: 'getActivePointer' }, 'warning')
       throw new SecretPlaneError('secret_store_unavailable')
     }
     if (!this.#isValidPointer(pointer, ref)) {
@@ -321,15 +328,16 @@ export class SecretPlane {
     try {
       secretGeneration(pointer.activeGeneration)
       return true
-    } catch {
-      return false
+    } catch (cause) {
+      return degradeBackend(cause, false, { site: 'isValidPointer', reason: 'invalid_response' })
     }
   }
 
   async #discard(creation: Extract<SecretGenerationCreation, { kind: 'created' }>): Promise<void> {
     try {
       await creation.discard()
-    } catch {
+    } catch (cause) {
+      captureBackendException(cause, { site: 'discard' }, 'warning')
       // The active pointer still references the previous generation. Cleanup is
       // intentionally best-effort and must never turn an unvalidated write active.
     }

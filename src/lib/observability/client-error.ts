@@ -1,5 +1,6 @@
 import { z } from 'zod'
 
+import { degrade } from '@/lib/observability/degrade'
 import { sanitizeTelemetryValue, safeTelemetryPath } from '@/lib/observability/private-route-safety'
 
 const clientErrorMetadata = z.strictObject({
@@ -59,7 +60,7 @@ export function normalizeClientError(input: ClientErrorPayload): NormalizedClien
 function normalizeClientErrorUrl(value: string): string {
   try {
     return safeTelemetryPath({ pathname: new URL(value, 'https://ae.invalid').pathname })
-  } catch {
-    return '/[Filtered]'
+  } catch (cause) {
+    return degrade(cause, '/[Filtered]', { site: 'normalizeClientErrorUrl', reason: 'invalid_response' })
   }
 }

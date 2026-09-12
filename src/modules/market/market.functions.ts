@@ -2,9 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
 import { marketWindowSchema } from "./contracts";
-import {
-  readMarketRouteProjection,
-} from "./server";
+import { readMarketRouteProjection } from "./server";
 
 const inputSchema = z.object({
   window: marketWindowSchema,

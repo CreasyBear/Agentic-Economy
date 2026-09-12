@@ -350,7 +350,7 @@ function sourceRecord(
       lifecycle: { idempotency: 'required', recovery: 'retry_safe' },
     },
     business: { businessId: 'business:reference', slug: 'reference', name: 'Reference Services' },
-    offering: { offeringRef: `offering:${capabilityId}`, revision: 1, label: summary, summary },
+    listing: { listingRef: `listing:${capabilityId}`, revision: 1, label: summary, summary },
     price: { kind: 'fixed', amount: { currency: 'USD', units: '0', exponent: 2 } },
     priceEvidence: { priceDigest: `digest:price:${capabilityId}`, evidenceRefs: [] },
     materialTerms: [],

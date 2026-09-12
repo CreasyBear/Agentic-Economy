@@ -1,6 +1,6 @@
 {
   "name": "@agentic-economy/cli",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Compiled Agentic Economy Tool discovery, Call, and receipt client.",
   "type": "module",
   "exports": {},
@@ -15,9 +15,9 @@
     "node": ">=20"
   },
   "scripts": {
-    "build": "node ../../scripts/build-cli.mjs",
+    "build": "node ../../scripts/build-cli.ts",
     "prepack": "npm run build",
-    "test": "node ../../scripts/test-cli-package.mjs"
+    "test": "node ../../scripts/test-cli-package.ts"
   },
   "publishConfig": {
     "access": "public"

@@ -1,6 +1,7 @@
 import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 
+import { degrade } from '@/lib/observability/degrade'
 import type { ToolDetailResult } from '@/modules/capability-supply/public'
 import { readCapabilityToolDetail } from '@/modules/capability-supply/tool-source'
 
@@ -15,7 +16,10 @@ export const readPublicToolDetailRouteServer = createServerFn()
   .handler(async ({ data }): Promise<PublicToolDetailRouteResult> => {
     try {
       return await readCapabilityToolDetail(data)
-    } catch {
-      return { kind: 'source_unavailable', toolRef: data.toolRef }
+    } catch (cause) {
+      return degrade(cause, { kind: 'source_unavailable', toolRef: data.toolRef } as const, {
+        site: 'readPublicToolDetailRouteServer',
+        reason: 'source_unavailable',
+      })
     }
   })

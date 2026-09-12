@@ -13,6 +13,8 @@ const app = defineApp({
   env: {
     OPENROUTER_API_KEY: v.optional(v.string()),
     AE_LLM_MODEL: v.optional(v.string()),
+    AE_OPENROUTER_API_BASE_URL: v.optional(v.string()),
+    SITE_URL: v.optional(v.string()),
     AE_CHAT_SHARE_SECRET: v.optional(v.string()),
     AE_CHAT_SHARE_KEY_ID: v.optional(v.string()),
     AE_CHAT_PROXY_SECRET: v.optional(v.string()),
@@ -20,11 +22,15 @@ const app = defineApp({
     AE_RELEASE_SOURCE_REVISION: v.optional(v.string()),
     CLERK_JWT_ISSUER_DOMAIN: v.optional(v.string()),
     AE_CONVEX_SERVER_FUNCTION_TOKEN: v.optional(v.string()),
+    AE_SECRET_LIFECYCLE_RPC_TOKEN: v.optional(v.string()),
     AE_ROUTE_CALL_SIGNING_SECRET: v.optional(v.string()),
     AE_ROUTE_CALL_SIGNING_KEY_ID: v.optional(v.string()),
+    AE_PROVIDER_CONSEQUENCE_ORIGIN: v.optional(v.string()),
     AE_X402_RPC_URLS_JSON: v.optional(v.string()),
     AE_X402_PAYMENT_CREDENTIAL_REF: v.optional(v.string()),
     AE_X402_PAYMENT_PRIVATE_KEY: v.optional(v.string()),
+    AE_X402_PAYMENT_SECRET_REF: v.optional(v.string()),
+    AE_PROVIDER_TICKET_SIGNING_SECRET_REF: v.optional(v.string()),
     CDP_API_KEY_ID: v.optional(v.string()),
     CDP_API_KEY_SECRET: v.optional(v.string()),
     CDP_WALLET_SECRET: v.optional(v.string()),
@@ -56,7 +62,6 @@ app.use(workflow)
 app.use(rateLimiter)
 app.use(agent)
 app.use(migrations)
-app.use(aggregate, { name: 'ownerActivationByStage' })
 app.use(aggregate, { name: 'marketEvidence' })
 app.use(aggregate, { name: 'marketOperationEvidence' })
 app.use(aggregate, { name: 'marketToolRatings' })

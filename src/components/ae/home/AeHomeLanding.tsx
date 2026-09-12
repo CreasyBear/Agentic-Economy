@@ -70,7 +70,7 @@ function HomeHero({
         </AeSiteHeadingPair>
         <div className="flex flex-wrap items-center justify-center gap-related">
           <AeSiteButton asChild>
-            <Link to="/market" search={{ window: "30d" }}>Browse Tools</Link>
+            <Link to="/market">Browse Tools</Link>
           </AeSiteButton>
         </div>
       </AeSiteHeroIntro>
@@ -131,7 +131,7 @@ export function HomeCapabilityResults({
               description={HOME.catalogEmptyBody}
               action={
                 <AeSiteButton asChild variant="outlined">
-                  <Link to="/market" search={{ window: "30d" }}>
+                  <Link to="/market">
                     Browse Tools
                   </Link>
                 </AeSiteButton>
@@ -143,7 +143,7 @@ export function HomeCapabilityResults({
               <ItemGroup className="grid gap-related sm:grid-cols-2">
                 {groups.map((group) => (
                   <li key={group.capabilityId}>
-                    <AeCapabilityTile group={group} window="30d" />
+                    <AeCapabilityTile group={group} />
                   </li>
                 ))}
               </ItemGroup>

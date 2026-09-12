@@ -1,4 +1,5 @@
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { stableStringify, type StableHashValue } from '@/modules/common/stable-hash'
 
 import {
@@ -27,8 +28,8 @@ export function normalizeSupplySourceSelectionDraft(input: Readonly<{
   let rawSource: unknown
   try {
     rawSource = JSON.parse(input.sourceDescriptorJson)
-  } catch {
-    return { kind: 'refused', reason: 'draft_invalid' }
+  } catch (cause) {
+    return degradeBackend(cause, { kind: 'refused', reason: 'draft_invalid' } as const, { site: 'normalizeSupplySourceSelectionDraft', reason: 'invalid_response' })
   }
   const source = normalizeSupplySourceDescriptor(rawSource)
   if (source === undefined || (source.kind !== 'mcp' && source.kind !== 'agent_plugin')) {
@@ -49,8 +50,8 @@ export function normalizeSupplySourceSelectionDraft(input: Readonly<{
       return { kind: 'refused', reason: 'draft_invalid' }
     }
     sourceUrl = parsed.href
-  } catch {
-    return { kind: 'refused', reason: 'draft_invalid' }
+  } catch (cause) {
+    return degradeBackend(cause, { kind: 'refused', reason: 'draft_invalid' } as const, { site: 'normalizeSupplySourceSelectionDraft', reason: 'invalid_response' })
   }
   if (source.kind === 'mcp' && source.serverUrl !== undefined && source.serverUrl !== sourceUrl) {
     return { kind: 'refused', reason: 'candidate_changed' }

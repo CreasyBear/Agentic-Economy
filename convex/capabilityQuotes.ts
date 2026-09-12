@@ -1,4 +1,5 @@
 import { v, type Infer } from 'convex/values'
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 
 import { internal } from './_generated/api'
 import type { Doc } from './_generated/dataModel'
@@ -252,8 +253,8 @@ function treasurySpendableUnits(
   try {
     const spendableUnits = BigInt(observation.totalUnits) - BigInt(observation.bufferUnits)
     return spendableUnits > 0n ? spendableUnits.toString() : undefined
-  } catch {
-    return undefined
+  } catch (cause) {
+    return degradeBackend(cause, undefined, { site: 'treasurySpendableUnits', reason: 'invalid_response' })
   }
 }
 
@@ -309,7 +310,7 @@ function toolPricing(tool: PublishedTool, now: number, live?: LiveX402Requiremen
     }
   }
   let sourceUnits: string
-  try { sourceUnits = live === undefined ? normalized.config.sourceRequirement.atomicUnits : JSON.parse(live.requirementJson).requirement.amountUnits } catch { return undefined }
+  try { sourceUnits = live === undefined ? normalized.config.sourceRequirement.atomicUnits : JSON.parse(live.requirementJson).requirement.amountUnits } catch (cause) { return degradeBackend(cause, undefined, { site: 'toolPricing', reason: 'invalid_response' }) }
   if (typeof sourceUnits !== 'string' || !/^[1-9][0-9]{0,77}$/.test(sourceUnits)) return undefined
   const sourceRequirement = {
     currency: 'USDC' as const,
@@ -358,7 +359,7 @@ async function prepareFinancialSubjectsHandler(
     reason: `This Tool uses the ${operation.runtimeEnvironment} environment; your agent uses ${authority.principal.environment}. Connect an agent for ${operation.runtimeEnvironment} before calling it.`,
   }
   let descriptor
-  try { descriptor = openCapabilityDecisionModel(operation.contract) } catch { return { kind: 'refused', code: 'tool_unsupported' } }
+  try { descriptor = openCapabilityDecisionModel(operation.contract) } catch (cause) { return degradeBackend(cause, { kind: 'refused', code: 'tool_unsupported' } as const, { site: 'prepareFinancialSubjectsHandler', reason: 'invalid_response' }) }
   if (!isBoundedJsonValue(args.input) || descriptor.validateInput(args.input).kind !== 'valid') return { kind: 'refused', code: 'input_invalid' }
   const pricing = normalizePricingConfig(operation.pricingConfig)
   if (pricing.kind !== 'valid') return { kind: 'refused', code: 'tool_unsupported' }
@@ -479,8 +480,8 @@ async function issueQuoteHandler(
   let descriptor
   try {
     descriptor = materializeRuntimePublishedTool(operation)
-  } catch {
-    return refuse(args, 'tool_unsupported', false)
+  } catch (cause) {
+    return degradeBackend(cause, refuse(args, 'tool_unsupported', false), { site: 'issueQuoteHandler', reason: 'invalid_response' })
   }
   if (!isBoundedJsonValue(args.input) || !descriptor.validateInput(args.input)) {
     return refuse(args, 'input_invalid', false)
@@ -543,8 +544,8 @@ async function issueQuoteHandler(
           !== args.liveX402Requirement.requirementDigest) {
         return refuse(args, 'tool_not_ready', true)
       }
-    } catch {
-      return refuse(args, 'tool_not_ready', true)
+    } catch (cause) {
+      return degradeBackend(cause, refuse(args, 'tool_not_ready', true), { site: 'issueQuoteHandler', reason: 'invalid_response' })
     }
   }
   const maximum = grantReadback.budget.maximumSpendPerCall
@@ -987,8 +988,8 @@ export const readForCall = internalQuery({
               : { x402RequirementDigest: row.x402RequirementDigest }),
           }
         : null
-    } catch {
-      return null
+    } catch (cause) {
+      return degradeBackend(cause, null, { site: 'readForCall', reason: 'invalid_response' })
     }
   },
 })

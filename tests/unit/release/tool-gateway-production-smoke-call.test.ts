@@ -51,7 +51,7 @@ describe('hosted Tool gateway smoke call', () => {
       })
     }
 
-    await expect(callGatewayTool(config(fetchMock), tool, quote, 'run:key')).resolves.toEqual({
+    await expect(callGatewayTool(config(fetchMock), tool, quote, 'run:key1')).resolves.toEqual({
       kind: 'pending',
       callRef,
       toolRef,
@@ -64,7 +64,7 @@ describe('hosted Tool gateway smoke call', () => {
     const body = JSON.parse(String(requests[0]?.init?.body))
     expect(body).toEqual({
       quoteRef: quote.quoteRef,
-      idempotencyKey: 'run:key',
+      idempotencyKey: 'run:key1',
     })
     expect(callInputSchema.safeParse(body).success).toBe(true)
   })

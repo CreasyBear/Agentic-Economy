@@ -18,8 +18,6 @@ vi.mock('@/components/ae/website', () => ({
   clerkAuthSurfaceAppearance: {},
   clerkSignInSurfaceAppearance: {},
 }))
-vi.mock('@/lib/client/local-e2e-auth', () => ({ isLocalE2EAuthBypassEnabled: () => false }))
-
 import { sanitizeAuthRedirectTarget } from '@/lib/client/auth-redirect'
 import { Route as SignInRoute } from '@/routes/sign-in.$'
 import { Route as SignUpRoute } from '@/routes/sign-up.$'

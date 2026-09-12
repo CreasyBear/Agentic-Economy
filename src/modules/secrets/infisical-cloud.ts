@@ -6,6 +6,7 @@ import {
   type SecretStore,
   type SecretTarget,
 } from './secret-plane'
+import { boundaryCauseKind, captureBackendException, degradeBackend } from '@/lib/observability/degrade-backend'
 
 const DEFAULT_TOKEN_REFRESH_SKEW_MS = 5_000
 const DEFAULT_MAXIMUM_ACCESS_TOKEN_TTL_MS = 2 * 60 * 60 * 1_000
@@ -245,7 +246,8 @@ export class InfisicalCloudSecretStore implements SecretStore {
         signal: AbortSignal.timeout(this.#requestTimeoutMs),
         redirect: 'error',
       })
-    } catch {
+    } catch (cause) {
+      captureBackendException(boundaryCauseKind(cause), { site: 'authorizedRequest' }, 'warning')
       throw new SecretPlaneError('secret_store_unavailable')
     }
     if (response.status === 401 || response.status === 403) {
@@ -269,8 +271,8 @@ export class InfisicalCloudSecretStore implements SecretStore {
     let payload: unknown
     try {
       payload = await response.json()
-    } catch {
-      return false
+    } catch (cause) {
+      return degradeBackend(cause, false, { site: 'isExactDuplicateBadRequest', reason: 'invalid_response' })
     }
     return isRecord(payload) &&
       payload.statusCode === 400 &&
@@ -308,7 +310,8 @@ export class InfisicalCloudSecretStore implements SecretStore {
           }, { once: true })
         }),
       ])
-    } catch {
+    } catch (cause) {
+      captureBackendException(boundaryCauseKind(cause), { site: 'acquireAccessToken' }, 'warning')
       throw new SecretPlaneError('secret_store_authentication_failed')
     }
     if (
@@ -337,7 +340,8 @@ export class InfisicalCloudSecretStore implements SecretStore {
         signal: AbortSignal.timeout(this.#requestTimeoutMs),
         redirect: 'error',
       })
-    } catch {
+    } catch (cause) {
+      captureBackendException(boundaryCauseKind(cause), { site: 'acquireAccessToken' }, 'warning')
       throw new SecretPlaneError('secret_store_authentication_failed')
     }
     if (!response.ok) {
@@ -382,7 +386,8 @@ export class InfisicalCloudSecretStore implements SecretStore {
       const value: unknown = await response.json()
       if (!isJsonValue(value)) throw new SecretPlaneError(errorCode)
       return value
-    } catch {
+    } catch (cause) {
+      captureBackendException(boundaryCauseKind(cause), { site: 'readJson' }, 'warning')
       throw new SecretPlaneError(errorCode)
     }
   }
@@ -390,7 +395,8 @@ export class InfisicalCloudSecretStore implements SecretStore {
   async #discardBody(response: Response): Promise<void> {
     try {
       await response.body?.cancel()
-    } catch {
+    } catch (cause) {
+      captureBackendException(boundaryCauseKind(cause), { site: 'discardBody' }, 'warning')
       // Provider bodies can contain secret material. Never read or surface them,
       // and never let a failed stream cancellation change the fixed outcome.
     }

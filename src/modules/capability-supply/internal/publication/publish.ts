@@ -6,6 +6,7 @@ import {
   type CapabilityOfferingOrigin,
 } from '@/modules/capability-supply/public'
 import { canonicalDigest, isCanonicalDigest } from '@/modules/common/canonical-digest'
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { stableStringify, type StableHashValue } from '@/modules/common/stable-hash'
 import { normalizePricingConfig, pricingConfigDigest, type PricingConfig } from '@/modules/money/public'
 
@@ -808,8 +809,8 @@ function validatePreparedPublication(prepared: PreparedPublicationMaterial): Pre
   >
   try {
     parsedPricing = normalizePricingConfig(JSON.parse(prepared.pricingConfigJson))
-  } catch {
-    return { kind: 'refused', reason: 'pricing_config_invalid' }
+  } catch (cause) {
+    return degradeBackend(cause, { kind: 'refused' as const, reason: 'pricing_config_invalid' as const }, { site: 'validatePreparedPublication', reason: 'invalid_response' })
   }
   if (parsedPricing.kind === 'invalid' || pricingConfigDigest(parsedPricing.config) !== prepared.priceDigest) {
     return { kind: 'refused', reason: 'pricing_config_invalid' }

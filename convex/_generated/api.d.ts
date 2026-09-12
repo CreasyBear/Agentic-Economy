@@ -42,6 +42,7 @@ import type * as capabilitySupplyCanaryFunding from "../capabilitySupplyCanaryFu
 import type * as capabilitySupplyCanaryFundingPreflight from "../capabilitySupplyCanaryFundingPreflight.js";
 import type * as capabilitySupplyCommands from "../capabilitySupplyCommands.js";
 import type * as capabilitySupplyCurrentTool from "../capabilitySupplyCurrentTool.js";
+import type * as capabilitySupplyDirectoryEligibility from "../capabilitySupplyDirectoryEligibility.js";
 import type * as capabilitySupplyEligiblePorts from "../capabilitySupplyEligiblePorts.js";
 import type * as capabilitySupplyGraph from "../capabilitySupplyGraph.js";
 import type * as capabilitySupplyGraphPorts from "../capabilitySupplyGraphPorts.js";
@@ -144,6 +145,7 @@ import type * as lib_x402DirectoryIndex_analytics from "../lib/x402DirectoryInde
 import type * as lib_x402DirectoryIndex_categoryStats from "../lib/x402DirectoryIndex/categoryStats.js";
 import type * as lib_x402DirectoryIndex_contracts from "../lib/x402DirectoryIndex/contracts.js";
 import type * as lib_x402DirectoryIndex_facets from "../lib/x402DirectoryIndex/facets.js";
+import type * as lib_x402DirectoryIndex_listingDigest from "../lib/x402DirectoryIndex/listingDigest.js";
 import type * as lib_x402DirectoryIndex_rows from "../lib/x402DirectoryIndex/rows.js";
 import type * as marketDemandSignals from "../marketDemandSignals.js";
 import type * as marketDispatchWorkpool from "../marketDispatchWorkpool.js";
@@ -246,6 +248,7 @@ declare const fullApi: ApiFromModules<{
   capabilitySupplyCanaryFundingPreflight: typeof capabilitySupplyCanaryFundingPreflight;
   capabilitySupplyCommands: typeof capabilitySupplyCommands;
   capabilitySupplyCurrentTool: typeof capabilitySupplyCurrentTool;
+  capabilitySupplyDirectoryEligibility: typeof capabilitySupplyDirectoryEligibility;
   capabilitySupplyEligiblePorts: typeof capabilitySupplyEligiblePorts;
   capabilitySupplyGraph: typeof capabilitySupplyGraph;
   capabilitySupplyGraphPorts: typeof capabilitySupplyGraphPorts;
@@ -348,6 +351,7 @@ declare const fullApi: ApiFromModules<{
   "lib/x402DirectoryIndex/categoryStats": typeof lib_x402DirectoryIndex_categoryStats;
   "lib/x402DirectoryIndex/contracts": typeof lib_x402DirectoryIndex_contracts;
   "lib/x402DirectoryIndex/facets": typeof lib_x402DirectoryIndex_facets;
+  "lib/x402DirectoryIndex/listingDigest": typeof lib_x402DirectoryIndex_listingDigest;
   "lib/x402DirectoryIndex/rows": typeof lib_x402DirectoryIndex_rows;
   marketDemandSignals: typeof marketDemandSignals;
   marketDispatchWorkpool: typeof marketDispatchWorkpool;
@@ -443,7 +447,6 @@ export declare const components: {
   rateLimiter: import("@convex-dev/rate-limiter/_generated/component.js").ComponentApi<"rateLimiter">;
   agent: import("@convex-dev/agent/_generated/component.js").ComponentApi<"agent">;
   migrations: import("@convex-dev/migrations/_generated/component.js").ComponentApi<"migrations">;
-  ownerActivationByStage: import("@convex-dev/aggregate/_generated/component.js").ComponentApi<"ownerActivationByStage">;
   marketEvidence: import("@convex-dev/aggregate/_generated/component.js").ComponentApi<"marketEvidence">;
   marketOperationEvidence: import("@convex-dev/aggregate/_generated/component.js").ComponentApi<"marketOperationEvidence">;
   marketToolRatings: import("@convex-dev/aggregate/_generated/component.js").ComponentApi<"marketToolRatings">;

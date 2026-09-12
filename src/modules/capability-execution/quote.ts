@@ -15,6 +15,7 @@ import {
   TOOL_MARKET_LIST_PATH,
   TOOL_MARKET_SEARCH_PATH,
 } from '@/modules/common/market-tool-paths'
+import { idempotencyKeySchema } from '@/modules/common/action'
 
 export const TOOL_QUOTE_ACTION_ID = 'tool.quote' as const
 export const TOOL_QUOTE_PATH = '/api/v1/tools/quote' as const
@@ -37,7 +38,7 @@ const callContinuationSchema = z.strictObject({
   path: z.literal('/api/v1/tools/call'),
   input: z.strictObject({
     quoteRef: z.string(),
-    idempotencyKey: z.string(),
+    idempotencyKey: idempotencyKeySchema,
   }),
 })
 
@@ -89,7 +90,7 @@ const quoteContinuationSchema = z.discriminatedUnion('action', [
     path: z.literal(FUNDING_HANDOFF_CREATE_PATH),
     input: z.strictObject({
       principalAmount: exactAmountSchema,
-      idempotencyKey: z.string().min(1).max(255),
+      idempotencyKey: idempotencyKeySchema,
     }),
   }),
   z.strictObject({

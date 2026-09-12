@@ -16,6 +16,7 @@ import {
   type CapabilityProbeTarget,
   type ProbeCommand,
 } from "./readiness-probe-shared";
+import { degradeBackend } from "@/lib/observability/degrade-backend";
 
 export type {
   CapabilityProbeDependencies,
@@ -53,8 +54,8 @@ export async function runCapabilityReadinessProbe(
   let targetIsPublic: boolean;
   try {
     targetIsPublic = await dependencies.validateTarget(endpoint);
-  } catch {
-    targetIsPublic = false;
+  } catch (cause) {
+    targetIsPublic = degradeBackend(cause, false, { site: "runCapabilityReadinessProbe", reason: "source_unavailable" });
   }
   if (!targetIsPublic) {
     return unhealthy(now, base, "ready", "target_not_public", [
@@ -74,10 +75,10 @@ export async function runCapabilityReadinessProbe(
     try {
       reference =
         await dependencies.resolveProviderConnectionCredential(authority);
-    } catch {
-      return unhealthy(now, base, "unavailable", "credential_unavailable", [
+    } catch (cause) {
+      return degradeBackend(cause, unhealthy(now, base, "unavailable", "credential_unavailable", [
         "probe:credential_unavailable",
-      ]);
+      ]), { site: "runCapabilityReadinessProbe", reason: "source_unavailable" });
     }
     if (reference === undefined || reference.trim().length === 0) {
       return unhealthy(now, base, "unavailable", "credential_unavailable", [

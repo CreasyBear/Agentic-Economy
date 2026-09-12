@@ -10,7 +10,7 @@ import {
  * Lower these as work lands; never raise them.
  */
 const RATCHET = {
-  numModules: 27,
+  numModules: 26,
   totalEntrySurfaces: 190,
   numTestOnlyWhiteBoxExceptions: 0,
   numToCapabilitySupply: 0,

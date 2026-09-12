@@ -1,6 +1,7 @@
 "use node"
 
 import { listX402DiscoveryResources, searchX402Resources } from '@coinbase/cdp-sdk'
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { readBoundedRequestJson } from '@/lib/server/bounded-request-body'
 import { CURRENT_TOOL_PROJECTION_NAVIGATION } from '@/modules/actions/contract'
 import { isRecord } from '@/modules/common/is-record'
@@ -101,7 +102,7 @@ export const search = action({
     if ((input.source === 'payai' && input.query.trim().length > 0) || (input.query.trim().length > 0 && input.cursor !== undefined)) return serializeToolSearchResult(unavailable('query_invalid'))
     if (input.cursor !== undefined && (!/^(0|[1-9]\d*)$/u.test(input.cursor) || !Number.isSafeInteger(Number(input.cursor)))) return serializeToolSearchResult(unavailable('query_invalid'))
     let page: Awaited<ReturnType<typeof fetchCatalogPage>>
-    try { page = await fetchCatalogPage(input) } catch { return serializeToolSearchResult(unavailable('source_unavailable')) }
+    try { page = await fetchCatalogPage(input) } catch (cause) { return degradeBackend(cause, serializeToolSearchResult(unavailable('source_unavailable')), { site: 'search', reason: 'source_unavailable' }) }
     const workload = await ctx.runQuery(internal.workloadCron.admit, { name: 'refresh facilitator discovery' })
     const authorized = bindWorkloadCronActionContext(ctx, { name: 'refresh facilitator discovery', snapshot: workload })
     const refs = new Set<string>()
@@ -112,8 +113,9 @@ export const search = action({
         if (admission.admitted.length === 0) continue
         const result = await authorized.runMutation(internal.facilitatorDiscovery.reconcile, { items: [...structuredClone(reconcileReadyItems(admission.admitted))], complete: false, deadlineAt: Date.now() + TIMEOUT_MS, workload })
         for (const ref of result.toolRefs) refs.add(ref)
-      } catch {
+      } catch (cause) {
         // Candidate failure may be isolated; revoked workload authority may not.
+        degradeBackend(cause, undefined, { site: 'search', reason: 'source_unavailable' })
         await ctx.runQuery(internal.workloadCron.reconcile, { name: 'refresh facilitator discovery', snapshot: workload })
       }
     }

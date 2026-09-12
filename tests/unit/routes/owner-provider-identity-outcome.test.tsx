@@ -15,7 +15,7 @@ vi.mock('@tanstack/react-router', async () => {
       return value === undefined ? null : children(value)
     },
     Link: ({ children, to }: { children: ReactNode; to: string }) => <a href={to}>{children}</a>,
-    useLocation: () => ({ pathname: '/owner/offerings', hash: '', search: {} }),
+    useLocation: () => ({ pathname: '/owner/operations', hash: '', search: {} }),
     useRouter: () => ({ invalidate: mocks.invalidate }),
   }
 })

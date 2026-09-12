@@ -13,10 +13,10 @@ vi.mock('@/components/ae/offerings/provider-workspace.functions', () => ({
   readProviderWorkspaceIdentityDetailServer: vi.fn(),
   readProviderToolStatusServer: vi.fn(),
 }))
-vi.mock('@/components/ae/layout/AeOperatorShell', async () => {
+vi.mock('@/components/ae/layout/AeOperatorPage', async () => {
   const React = await import('react')
   return {
-    AeOperatorShell: ({ children }: { children: ReactNode }) => React.createElement('main', null, children),
+    AeOperatorPage: ({ children }: { children: ReactNode }) => React.createElement('main', null, children),
   }
 })
 vi.mock('@/components/ae/supply/AeProviderToolDetail', async () => {
@@ -39,8 +39,7 @@ vi.mock('@tanstack/react-router', async (importOriginal) => {
   }
 })
 
-import { Route as OwnerSupplyRoute } from '@/routes/_operator/owner.supply'
-import { Route as OwnerSupplyDetailRoute } from '@/routes/_operator/owner.supply.$offeringRef'
+import { Route as OwnerSupplyDetailRoute } from '@/routes/_operator/owner.operations.$toolRef'
 
 afterEach(() => {
   cleanup()
@@ -60,8 +59,7 @@ function createTestRouter() {
 }
 
 describe('owner supply routes', () => {
-  it('exports both authenticated publisher hosts', () => {
-    expect(OwnerSupplyRoute).toBeDefined()
+  it('exports the authenticated publisher host', () => {
     expect(OwnerSupplyDetailRoute).toBeDefined()
   })
 
@@ -70,7 +68,7 @@ describe('owner supply routes', () => {
     if (Component === undefined) throw new Error('owner_supply_detail_component_missing')
     const router = createTestRouter()
     const renderDetail = (businessRef: string) => {
-      vi.spyOn(OwnerSupplyDetailRoute, 'useParams').mockReturnValue({ offeringRef: 'offering:one' } as never)
+      vi.spyOn(OwnerSupplyDetailRoute, 'useParams').mockReturnValue({ toolRef: 'offering:one' } as never)
       vi.spyOn(OwnerSupplyDetailRoute, 'useLoaderData').mockReturnValue({
         identity: { kind: 'available', businessId: 'business:one' },
         status: {
@@ -100,7 +98,7 @@ describe('owner supply routes', () => {
   ])('keeps %s readback refusal at the render boundary', (status, title) => {
     const Component = OwnerSupplyDetailRoute.options.component
     if (Component === undefined) throw new Error('owner_supply_detail_component_missing')
-    vi.spyOn(OwnerSupplyDetailRoute, 'useParams').mockReturnValue({ offeringRef: 'offering:one' } as never)
+    vi.spyOn(OwnerSupplyDetailRoute, 'useParams').mockReturnValue({ toolRef: 'offering:one' } as never)
     vi.spyOn(OwnerSupplyDetailRoute, 'useLoaderData').mockReturnValue({
       identity: { kind: 'available', businessId: 'business:one' },
       status,

@@ -9,7 +9,7 @@ export const Route = createFileRoute('/')({
   beforeLoad: ({ search }) => {
     throw redirect({
       to: '/market',
-      search: { window: '30d', ...(search.q === undefined ? {} : { query: search.q }) },
+      search: search.q === undefined ? {} : { query: search.q },
       replace: true,
     })
   },

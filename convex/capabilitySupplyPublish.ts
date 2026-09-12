@@ -1,4 +1,5 @@
 import { v, type Infer } from 'convex/values'
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { dereferenceLocalSchema } from '@/modules/capability-supply/convex'
 import { jsonValueSchema } from '@/modules/capability-contract/public'
 import { isRecord } from '@/modules/common/is-record'
@@ -48,6 +49,7 @@ import { admitInteractiveOwnerConsequence } from './lib/ownerConsequence'
 import { providerRouteabilityIsFrozen } from './lib/providerOffboardingFreeze'
 import { isNativeSupplySource, nativeSubmissionBusiness, nativeSubmissionPorts } from './capabilitySupplyNativeAdmission'
 import { upsertProviderToolIdentity } from './capabilityProviderToolProjection'
+import { upsertProviderDirectoryRows } from './x402DirectoryIndexStore'
 import {
   authorityValue,
   cancellationValue,
@@ -64,6 +66,23 @@ import {
   publicationLifecycleValue,
   rebuildCapabilityOriginSupplyProjection,
 } from './capabilitySupplyShared'
+
+/**
+ * Well 8 Lane C: keeps a publication's market directory rows in step with a
+ * publish/withdraw immediately, alongside rebuildCapabilityOriginSupplyProjection
+ * above (same transaction, no ctx.runMutation hop - upsertProviderDirectoryRows
+ * is a plain helper, not a Convex function reference). The hourly
+ * reconcileProviderDirectoryRows sweep (workloadCron.ts) is the safety net for
+ * any disposition change that bypasses these call sites.
+ */
+async function syncProviderDirectoryRowsAfterPublish(
+  ctx: MutationCtx, publicationRef: string, publicationRevision: number,
+): Promise<void> {
+  const publication = await ctx.db.query('capabilityPublications')
+    .withIndex('by_publicationRef_and_revision', (query) => query.eq('publicationRef', publicationRef).eq('revision', publicationRevision))
+    .unique()
+  if (publication !== null) await upsertProviderDirectoryRows(ctx, publication)
+}
 
 export const verifyCapabilitySourceAuthorityArgs = {
   publicationRef: v.string(),
@@ -655,7 +674,7 @@ export async function publishPreparedCapabilityHandler(
         `publication:${args.prepared.offering.offeringId}`,
       ],
       consequenceSummary: 'Publish this exact Tool revision to the market.',
-      statusReadbackRef: `owner/supply/${args.offeringRef}`,
+      statusReadbackRef: `owner/operations/${args.offeringRef}`,
       correlationRef: args.correlationId,
       idempotencyRef: args.operationKey,
       command: consequenceCommand,
@@ -681,7 +700,7 @@ export async function publishPreparedCapabilityHandler(
       ],
       budgetAmount: 0,
       consequenceSummary: 'Publish this exact Tool revision to the market.',
-      statusReadbackRef: `owner/supply/${args.offeringRef}`,
+      statusReadbackRef: `owner/operations/${args.offeringRef}`,
       correlationRef: args.correlationId,
       idempotencyRef: args.operationKey,
       command: consequenceCommand,
@@ -722,6 +741,7 @@ export async function publishPreparedCapabilityHandler(
     args.businessId,
     Date.now(),
   )
+  await syncProviderDirectoryRowsAfterPublish(ctx, result.publicationRef, result.publicationRevision)
   return convexPreparedPublicationResult(result)
 }
 
@@ -901,8 +921,8 @@ function decodeBootstrapPublicationSource(
   let decoded: unknown
   try {
     decoded = decodeConvexPublicationSource(source)
-  } catch {
-    return undefined
+  } catch (cause) {
+    return degradeBackend(cause, undefined, { site: 'decodeBootstrapPublicationSource', reason: 'invalid_response' })
   }
   if (!isRecord(decoded) || typeof decoded.kind !== 'string') return undefined
   if (decoded.kind === 'ae_envelope') {
@@ -973,6 +993,7 @@ export async function publishBootstrapCapability(
       input.businessId as Id<'businesses'>,
       input.now,
     )
+    await syncProviderDirectoryRowsAfterPublish(ctx, result.publicationRef, result.publicationRevision)
   }
   return result
 }
@@ -1103,6 +1124,12 @@ export async function withdrawCuratedCapability(
       publication.businessId as Id<'businesses'>,
       input.now,
     )
+    await upsertProviderDirectoryRows(ctx, {
+      disposition: 'withdrawn', authorityMode: publication.authorityMode,
+      ...(publication.sourceRouteRef === undefined ? {} : { sourceRouteRef: publication.sourceRouteRef }),
+      businessId: publication.businessId as Id<'businesses'>,
+      offeringId: publication.offeringId, networkId: publication.networkId, sourceKind: publication.sourceKind,
+    })
   }
   return result
 }

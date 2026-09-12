@@ -5,6 +5,9 @@
   "paymentRequired": {
     "x402Version": 2,
     "error": "Payment required",
+    "quality": {
+      "l30DaysUniquePayers": 4
+    },
     "resource": {
       "url": "https://402timezones.vercel.app/api/convert-timezone?from=UTC&to=America%2FNew_York&time=12%3A00",
       "description": "Convert a time between any two IANA time zones (DST-aware). Pay-per-call in USDC on Base.",

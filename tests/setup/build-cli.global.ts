@@ -11,7 +11,7 @@ import { fileURLToPath } from 'node:url'
  */
 export default async function setup(): Promise<void> {
   const repositoryRoot = fileURLToPath(new URL('../..', import.meta.url))
-  execFileSync(process.execPath, ['scripts/build-cli.mjs'], {
+  execFileSync(process.execPath, ['scripts/build-cli.ts'], {
     cwd: repositoryRoot,
     stdio: 'inherit',
   })

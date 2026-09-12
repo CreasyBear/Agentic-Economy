@@ -1,3 +1,4 @@
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 import type { ActionCtx } from '../../../../../convex/_generated/server'
 import { internal } from '../../../../../convex/_generated/api'
 import {
@@ -82,8 +83,12 @@ async function observeExpiryTransition(
     return observation.kind === 'accepted'
       ? { nativeTransition: 'applied', controlExecutionVersion: observation.view.executionVersion }
       : { nativeTransition: 'manual_review', controlExecutionVersion: control.control.executionVersion }
-  } catch {
-    return { nativeTransition: 'manual_review', controlExecutionVersion: control.control.executionVersion }
+  } catch (cause) {
+    return degradeBackend(
+      cause,
+      { nativeTransition: 'manual_review' as const, controlExecutionVersion: control.control.executionVersion },
+      { site: 'observeExpiryTransition', reason: 'source_unavailable' },
+    )
   }
 }
 
@@ -125,7 +130,7 @@ async function queueExpiredAuthorization(
       observedControlState: input.observedControlState,
       now: Date.now(),
     })
-  } catch {
-    return undefined
+  } catch (cause) {
+    return degradeBackend(cause, undefined, { site: 'queueExpiredAuthorization', reason: 'source_unavailable' })
   }
 }

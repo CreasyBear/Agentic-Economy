@@ -17,10 +17,16 @@ import { AePublicPage } from '@/components/ae/layout/AePublicPage'
 import { buildPublicPageHead } from '@/modules/seo/public'
 
 export const Route = createFileRoute('/privacy')({
+  staticData: {
+    nav: {
+      label: 'Privacy',
+      footer: { column: 'Legal', order: 0 },
+    },
+  },
   head: () => buildPublicPageHead({
     path: '/privacy',
     title: 'Privacy | Agentic Economy',
-    description: 'What Agentic Economy handles when you browse, call, pay for, or publish Tools and service offerings.',
+    description: 'What Agentic Economy handles when you browse, call, pay for, or publish Tools and listings.',
   }),
   component: PrivacyRoute,
 })
@@ -73,7 +79,7 @@ const moments = [
     label: 'Publish',
     icon: StoreIcon,
     title: 'When a Provider publishes',
-    points: ['Provider identity, published service offerings, Tool contracts, prices, readiness, and access facts become catalogue data.', 'Credentials and internal adapter configuration are not part of the public projection.', 'Providers can request a correction or removal through the process below.'],
+    points: ['Provider identity, published listings, Tool contracts, prices, readiness, and access facts become catalogue data.', 'Credentials and internal adapter configuration are not part of the public projection.', 'Providers can request a correction or removal through the process below.'],
   },
 ] as const
 
@@ -89,7 +95,7 @@ function PrivacyRoute() {
       kind="document"
       eyebrow="Legal"
       title="Privacy"
-      description="What the market handles when you browse, call, pay for, or publish Tools and service offerings."
+      description="What the market handles when you browse, call, pay for, or publish Tools and listings."
     >
       <div className="ae-rail grid max-w-prose gap-page pb-page">
         <section className="grid gap-related">

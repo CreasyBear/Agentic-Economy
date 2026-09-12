@@ -74,7 +74,7 @@ describe('owner Agent projection', () => {
   })
 
   it('enriches current toolRef without replacing Call or payment evidence', async () => {
-    const compare = vi.fn(async () => ({ kind: 'ok' as const, tools: [{ toolRef: call.toolRef, offering: { label: 'Weather now' }, business: { name: 'Weather Co' } }] }))
+    const compare = vi.fn(async () => ({ kind: 'ok' as const, tools: [{ toolRef: call.toolRef, listing: { label: 'Weather now' }, business: { name: 'Weather Co' } }] }))
     const directory = await enrichAgentDirectoryActivity(projectAgentDirectory([], [canonical], [], [owner]), {
       compare, isToolRef: (value) => value === call.toolRef,
     })

@@ -77,7 +77,7 @@ describe('catalogue-first home', () => {
       within(row).getByRole('link', {
         name: 'Invoice extract, Ledger Labs, USD 1.25',
       }).getAttribute('href'),
-    ).toContain('capability=invoice.extract')
+    ).toContain('query=Invoice')
   })
 
   it('states unavailable and empty catalogue conditions without presenting stale capability facts', () => {

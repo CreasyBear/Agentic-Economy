@@ -1,9 +1,11 @@
+import { degrade } from '@/lib/observability/degrade'
+
 export async function isJsonContentType(contentType: string | null): Promise<boolean> {
   if (contentType === null) return false
   try {
     const { MIMEType } = await import('node:util')
     return new MIMEType(contentType).essence === 'application/json'
-  } catch {
-    return false
+  } catch (cause) {
+    return degrade(cause, false, { site: 'isJsonContentType', reason: 'invalid_response' })
   }
 }

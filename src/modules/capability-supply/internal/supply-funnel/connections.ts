@@ -23,6 +23,7 @@ import {
   verifyEip191Message,
 } from "../x402-evm-protocol";
 import { OWNER_SUPPLY_UNAVAILABLE_MESSAGE } from "./types";
+import { degradeBackend } from "@/lib/observability/degrade-backend";
 import { canonicalDigest } from "@/modules/common/canonical-digest";
 import { requireStrictClerkConsequenceProof } from "@/lib/server/clerk-consequence-proof";
 import type { OwnerProviderEarningsReadback } from './earnings-readback'
@@ -167,8 +168,12 @@ export async function readOwnerProviderConnections(): Promise<
 > {
   try {
     return await callSourceQuery(readOwnerProviderConnectionsQuery, {});
-  } catch {
-    throw new Error(OWNER_SUPPLY_UNAVAILABLE_MESSAGE);
+  } catch (cause) {
+    degradeBackend(cause, undefined, {
+      site: "readOwnerProviderConnections",
+      reason: "source_unavailable",
+    });
+    throw new Error(OWNER_SUPPLY_UNAVAILABLE_MESSAGE, { cause });
   }
 }
 
@@ -250,8 +255,11 @@ export async function connectOwnerX402({
       sourceWrite,
       sourceWriteRequest: sourceWriteRequestFromAdmission(sourceWrite),
     });
-  } catch {
-    return { kind: "refused", code: "source_unavailable" };
+  } catch (cause) {
+    return degradeBackend(cause, { kind: "refused", code: "source_unavailable" }, {
+      site: "connectOwnerX402",
+      reason: "source_unavailable",
+    });
   }
 }
 
@@ -387,8 +395,11 @@ export async function checkOwnerX402({
       sourceWrite,
       sourceWriteRequest: sourceWriteRequestFromAdmission(sourceWrite),
     });
-  } catch {
-    return { kind: "refused", code: "source_unavailable" };
+  } catch (cause) {
+    return degradeBackend(cause, { kind: "refused", code: "source_unavailable" }, {
+      site: "checkOwnerX402",
+      reason: "source_unavailable",
+    });
   }
 }
 
@@ -402,8 +413,11 @@ export async function reconnectOwnerProviderConnection({
       ...data,
       evidenceRefs: [],
     });
-  } catch {
-    return { kind: "refused", code: "source_unavailable" };
+  } catch (cause) {
+    return degradeBackend(cause, { kind: "refused", code: "source_unavailable" }, {
+      site: "reconnectOwnerProviderConnection",
+      reason: "source_unavailable",
+    });
   }
 }
 
@@ -417,8 +431,11 @@ export async function revokeOwnerProviderConnection({
       ...data,
       evidenceRefs: [],
     });
-  } catch {
-    return { kind: "refused", code: "source_unavailable" };
+  } catch (cause) {
+    return degradeBackend(cause, { kind: "refused", code: "source_unavailable" }, {
+      site: "revokeOwnerProviderConnection",
+      reason: "source_unavailable",
+    });
   }
 }
 
@@ -432,15 +449,21 @@ export async function retryOwnerProviderConnectionCleanup({
       retryOwnerProviderConnectionCleanupMutation,
       data,
     );
-  } catch {
-    return { kind: "refused", code: "source_unavailable" };
+  } catch (cause) {
+    return degradeBackend(cause, { kind: "refused", code: "source_unavailable" }, {
+      site: "retryOwnerProviderConnectionCleanup",
+      reason: "source_unavailable",
+    });
   }
 }
 
 export async function readOwnerProviderEarnings(): Promise<OwnerProviderEarningsReadback> {
   try {
     return await callSourceQuery(readOwnerProviderEarningsQuery, {});
-  } catch {
-    return { kind: "error", code: "source_unavailable" };
+  } catch (cause) {
+    return degradeBackend(cause, { kind: "error", code: "source_unavailable" }, {
+      site: "readOwnerProviderEarnings",
+      reason: "source_unavailable",
+    });
   }
 }

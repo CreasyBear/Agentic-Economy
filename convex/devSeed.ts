@@ -1,3 +1,4 @@
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { env, internalMutation, type MutationCtx } from './_generated/server'
 import type { Doc, Id } from './_generated/dataModel'
 import { internal } from './_generated/api'
@@ -189,9 +190,9 @@ export const provisionDevSeedCatalogIdentity = internalMutation({
  * So the seed must not mint an agent identity of its own:
  *   - that mutation is public and gated on a verified Clerk identity plus an
  *     HMAC service assertion, so an internal seed mutation cannot call it, and
- *   - the bypass credential id is minted per consent
- *     (`localKeyId`, src/lib/server/local-e2e-agent-key.ts), so there is no
- *     fixed local credential to pre-bind.
+ *   - the credential id is minted per consent by `issueAgentAccessKey`
+ *     (src/modules/agent-access/agent-access.ts, called via issueGrantKey
+ *     above), so there is no fixed local credential to pre-bind.
  * The previous fabricated `clerk_api_key:ak_local_e2e_owner` principal could
  * never be admitted anyway: `candidateMatchesCanonical`
  * (convex/lib/callLifecycle/authorityHandlers.ts) requires
@@ -224,7 +225,7 @@ type LocalE2EOwnerAuthority = Readonly<{ principalRef: string; accountRef: strin
  * write only sandbox-scoped facts, so a deployment whose owner account already
  * carries a production agent refuses instead of seeding into it.
  */
-async function requireLocalE2EOwnerAuthority(ctx: MutationCtx): Promise<LocalE2EOwnerAuthority> {
+export async function requireLocalE2EOwnerAuthority(ctx: MutationCtx): Promise<LocalE2EOwnerAuthority> {
   const refs = await ensureOwnerIdentityForAuthenticatedIdentity(ctx, LOCAL_E2E_OWNER_IDENTITY)
   if (refs === null) throw new Error('dev_seed_local_e2e_owner_identity_unavailable')
   const accountRef = refs.accountRef ?? (await ctx.db.query('accountOwnerships')
@@ -246,19 +247,6 @@ async function requireLocalE2EOwnerAuthority(ctx: MutationCtx): Promise<LocalE2E
   }
   return { principalRef: refs.principalRef, accountRef }
 }
-
-export const ensureLocalE2EOwnerIdentity = internalMutation({
-  args: {},
-  returns: v.object({
-    kind: v.literal('ensured'),
-    principalRef: v.string(),
-    accountRef: v.string(),
-  }),
-  handler: async (ctx) => {
-    const owner = await requireLocalE2EOwnerAuthority(ctx)
-    return { kind: 'ensured' as const, ...owner }
-  },
-})
 
 type SeedDevCatalogResult = Readonly<{
   kind: 'seeded'
@@ -617,8 +605,8 @@ function sandboxReferenceEndpointUrl(): string | undefined {
     const validOrigin = (url.protocol === 'https:' || (url.protocol === 'http:' && loopback))
       && url.username === '' && url.password === ''
     return validOrigin ? new URL(SANDBOX_REFERENCE_ROUTE_PATH, origin).toString() : undefined
-  } catch {
-    return undefined
+  } catch (cause) {
+    return degradeBackend(cause, undefined, { site: 'sandboxReferenceEndpointUrl', reason: 'invalid_response' })
   }
 }
 
@@ -748,8 +736,8 @@ function sandboxTestnetEndpointUrl(): string | undefined {
     return url.protocol === 'https:' && url.username === '' && url.password === ''
       ? url.toString()
       : undefined
-  } catch {
-    return undefined
+  } catch (cause) {
+    return degradeBackend(cause, undefined, { site: 'sandboxTestnetEndpointUrl', reason: 'invalid_response' })
   }
 }
 

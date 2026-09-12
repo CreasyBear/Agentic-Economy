@@ -12,6 +12,7 @@ import {
 import { CheckIcon, CodeIcon } from 'lucide-react'
 import { copyTextToClipboard } from '@/lib/ui/copy-text-to-clipboard'
 import { isRecord } from '@/modules/common/is-record'
+import { degrade } from '@/lib/observability/degrade'
 
 export type AeAgentJsonAffordanceProps = {
   agentJsonUrl: string
@@ -43,8 +44,11 @@ export function AeAgentJsonAffordance({ agentJsonUrl, query }: AeAgentJsonAfford
         text: JSON.stringify(disclosedPayload, null, 2),
         fields: topLevelFields(disclosedPayload),
       })
-    } catch {
-      setPreview({ status: 'error' })
+    } catch (cause) {
+      setPreview(degrade(cause, { status: 'error' } as const, {
+        site: 'openAgentJsonPreview',
+        reason: 'source_unavailable',
+      }))
     }
   }
 
@@ -53,8 +57,8 @@ export function AeAgentJsonAffordance({ agentJsonUrl, query }: AeAgentJsonAfford
     try {
       await copyTextToClipboard(preview.text)
       setCopied(true)
-    } catch {
-      setCopied(false)
+    } catch (cause) {
+      setCopied(degrade(cause, false, { site: 'confirmAgentJsonCopy', reason: 'source_unavailable' }))
     }
   }
 

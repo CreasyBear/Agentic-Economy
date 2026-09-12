@@ -6,6 +6,7 @@ import {
   type SecretMaterialLease,
   type SecretTarget,
 } from './secret-plane'
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 
 export interface SecretGenerationProbe {
   /**
@@ -70,16 +71,16 @@ export class ProductionSecretGenerationValidator implements SecretGenerationVali
         secretRef: secretRef(targetInput.secretRef),
         generation: secretGeneration(targetInput.generation),
       })
-    } catch {
-      return false
+    } catch (cause) {
+      return degradeBackend(cause, false, { site: 'validate', reason: 'invalid_response' })
     }
 
     const singleUseLease = new SingleUseSecretMaterialLease(lease)
     try {
       await this.#probe.validate(target, singleUseLease)
       return singleUseLease.used
-    } catch {
-      return false
+    } catch (cause) {
+      return degradeBackend(cause, false, { site: 'validate', reason: 'source_unavailable' })
     }
   }
 }

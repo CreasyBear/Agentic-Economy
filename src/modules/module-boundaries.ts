@@ -36,7 +36,6 @@ export type ModuleName =
   | 'security'
   | 'secrets'
   | 'seo'
-  | 'storefront'
 
 export type RuntimeImporter = ModuleName | 'adapter' | 'convex'
 
@@ -81,7 +80,7 @@ export const MODULE_BOUNDARY_MANIFEST: ModuleBoundaryManifest = {
     { name: 'network-guard', entrySurfaces: ['public.ts', 'server.ts'], allowedDependencies: ['common'] },
     { name: 'capability-contract', entrySurfaces: ['public.ts'], allowedDependencies: ['common'] },
     { name: 'business', entrySurfaces: ['public.ts', 'schema.ts'], allowedDependencies: ['common', 'principal-account'] },
-    { name: 'security', entrySurfaces: ['public.ts', 'schema.ts', 'source-write-admission.ts', 'admin-readback.functions.ts', 'removal-dispute.functions.ts', 'account-security.ts', 'account-security.functions.ts'], allowedDependencies: ['common', 'business', 'capability-contract'] },
+    { name: 'security', entrySurfaces: ['public.ts', 'schema.ts', 'source-write-admission.ts', 'admin-readback.functions.ts', 'removal-dispute.functions.ts', 'account-security.ts', 'account-security.functions.ts', 'rate-limit-policy.ts'], allowedDependencies: ['common', 'business', 'capability-contract'] },
     { name: 'capability-contract-registry', entrySurfaces: ['public.ts', 'schema.ts'], allowedDependencies: ['common', 'capability-contract'] },
     { name: 'agent-access', entrySurfaces: ['public.ts', 'schema.ts', 'contract.ts', 'account.actions.ts', 'issued-agent-binding.ts', 'agent-access.ts', 'agent-access.functions.ts', 'policy.ts', 'policy.functions.ts', 'production-policy.ts', 'sandbox-policy.ts', 'service-auth-envelope.ts', 'agent-access-console.ts', 'agent-operator-view-model.ts', 'consent-read-model.ts', 'oauth-state.ts', 'agent-connection.ts'], allowedDependencies: ['common', 'capability-contract', 'security', 'money', 'principal-account'] },
     { name: 'money', entrySurfaces: ['public.ts', 'schema.ts', 'server.ts', 'money.functions.ts', 'formance.ts', 'formance-workflows.ts', 'funding-handoff.actions.ts', 'reference-rate.ts'], allowedDependencies: ['common', 'security'] },
@@ -96,7 +95,6 @@ export const MODULE_BOUNDARY_MANIFEST: ModuleBoundaryManifest = {
     { name: 'actions', entrySurfaces: ['index.ts', 'contract.ts', 'strict-schema.ts', 'tool-contract.ts'], allowedDependencies: ['common', 'registry', 'capability-execution', 'capability-supply', 'agent-access', 'market-demand', 'money', 'security'] },
     { name: 'discovery', entrySurfaces: ['public.ts', 'convex.ts', 'discovery.functions.ts', 'developer-discovery.ts', 'developer-discovery-route.ts'], allowedDependencies: ['common', 'business', 'capability-contract', 'catalog', 'registry', 'capability-supply', 'capability-execution', 'agent-access', 'money', 'actions', 'market', 'observability', 'seo'] },
     { name: 'seo', entrySurfaces: ['public.ts', 'public-route.ts'], allowedDependencies: ['common', 'business', 'catalog', 'registry'] },
-    { name: 'storefront', entrySurfaces: ['public.ts'], allowedDependencies: ['common', 'network-guard', 'business', 'catalog', 'registry', 'model-gateway'] },
     { name: 'chat', entrySurfaces: ['schema.ts', 'tool-card.ts'], allowedDependencies: ['common', 'actions', 'registry', 'capability-execution', 'capability-supply', 'market', 'money'] },
     { name: 'chat-sharing', entrySurfaces: ['share-token.ts', 'schema.ts', 'convex.ts'], allowedDependencies: ['common'] },
     { name: 'model-gateway', entrySurfaces: ['public.ts'], allowedDependencies: ['common', 'actions'] },
