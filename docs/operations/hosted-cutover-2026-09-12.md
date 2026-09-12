@@ -73,6 +73,9 @@ two platforms. None are in the repository.
 
 ## Remaining for /api/ready 200 (owner actions)
 
+The app is usable and the catalogue is live; readiness alone remains
+gated by the four external items below.
+
 1. **Stripe, test mode.** Create a restricted key with Checkout Session,
    Transfer, Accounts v2 and Account Link permissions. This replaces the
    placeholder `STRIPE_SECRET_KEY` (the manifest expects `rk_test_...`).
@@ -134,3 +137,48 @@ two platforms. None are in the repository.
 - The marketing site at aecon.ai serves the same readiness route and
   reports 503 with no environment configured at all, which can be
   mistaken for an app outage by probes that do not distinguish surfaces.
+
+## Later on 2026-09-12: catalogue live
+
+### Symptom
+
+Production `/market` showed "The market snapshot is being prepared" and
+`POST /api/v1/market-tools/list` returned 503 `tool_read_unavailable`.
+
+### Root cause 1: stale Vercel production environment
+
+Vercel production still carried the previous Convex deployment URLs and
+server-function token. Fixed by setting `CONVEX_URL`, `VITE_CONVEX_URL`,
+`CONVEX_SITE_URL`, `VITE_CONVEX_SITE_URL` to `effervescent-bee-577`;
+`AE_CONVEX_SERVER_FUNCTION_TOKEN` and `AE_SOURCE_WRITE_SECRET` aligned with
+Convex prod; the Clerk trio (test instance) and `OPENROUTER_API_KEY`
+aligned with the local env; `AE_CANONICAL_BASE_URL`/`AE_SITE_URL`/
+`SITE_URL`/`VITE_SITE_URL` = `https://app.aecon.ai`; and
+`AE_CANONICAL_HOST_ALLOWLIST` =
+`app.aecon.ai,agentic-economy-phi.vercel.app`. Result: list endpoint 200
+with count 0, freshness source `supply_projection` state absent.
+
+### Root cause 2: supply projection crons had not run yet
+
+The registry reads the supply projection that the workload crons build;
+the crons had only just been scheduled. Ran by hand on Convex prod:
+`workloadCron:refreshFacilitatorDiscovery`,
+`refreshAgenticEconomyApiRegistry`, `refreshCurrentMarketPresence`,
+`refreshCapabilitySupplyReadiness`,
+`reconcileBusinessSupplyProjections`. Result: count 20 Tools.
+
+### Deploy
+
+Deployed the finished branch commit `f9f657779` (`well-7/app-shell`) to
+production, replacing `5b8a423cf`; `AE_RELEASE_SOURCE_REVISION` updated on
+both sides. Human routes 200; the analytics snapshot screen no longer
+exists in this build.
+
+### Smells
+
+- `vercel link` rewrites `.gitignore` in the checkout it links, which
+  blocks `git switch` in a worktree.
+- `npx convex logs --prod` streams indefinitely.
+- The `/api/v1/release` `sourceRevision` reads
+  `AE_RELEASE_SOURCE_REVISION` rather than the build, so it must be
+  updated on every deploy.
