@@ -188,9 +188,10 @@ describe('CLI Call recovery projections', () => {
         }
       }
     }
-    expect(manifest.commands.recover.summary).toContain('not a replay')
+    expect(manifest.commands.recover.summary).toContain('uncertain')
     expect(manifest.commands.recover.guidance.join(' ')).toContain('genuinely uncertain')
     expect(manifest.commands.recover.guidance.join(' ')).toContain('canonical evidence')
+    expect(manifest.commands.recover.guidance.join(' ')).toContain('does not replay a known result')
     expect(manifest.coldLoop).toEqual(['search', 'describe', 'connect', 'call', 'history', 'status', 'wait'])
     expect(manifest.payment).toMatchObject({
       providerQuotedAmount: { field: 'commercial.priceBreakdown.providerQuotedAmount', exact: true },

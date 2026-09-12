@@ -6,7 +6,7 @@ import { AeEmptyState } from '@/components/ae/feedback/AeEmptyState'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/input-group'
+import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from '@/components/ui/input-group'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { buildMarketReturnContext, type MarketReturnSearch } from './market-return-context'
 import { DirectoryExplorerFilters, type DirectoryExplorerFilterPatch } from './DirectoryExplorerFilters'
@@ -56,16 +56,33 @@ function DirectoryMarketplace({ page, search, home, catalogue, overview, provide
   const sourceInput = useMemo(() => directoryInput({ query, offset, network, provider, maxUsdPrice }), [query, offset, network, provider, maxUsdPrice])
   const coverage = catalogue?.kind === 'ok' ? catalogue.coverage : overview?.kind === 'ok' ? overview.coverage : undefined
   const indexed = catalogue?.kind === 'ok' && catalogue.source === 'index'
-  const count = coverage !== undefined ? `${coverage.indexedTotal.toLocaleString()} Tools in the catalogue` : page.kind === 'ok' && page.total !== undefined ? `${page.total.toLocaleString()} Tools` : undefined
   const filterValues = directoryCatalogueSearchValues(search)
   const browse = !Object.entries(filterValues).some(([key, value]) => !['sort', 'indexCursor', 'offset'].includes(key) && value !== undefined && value !== false)
+  // A query or filter changes what "the count" means: the catalogue total no
+  // longer describes what's on screen, so switch to how many Tools matched.
+  // The indexed catalogue already separates the two (coverage total here,
+  // "N Tools on this page" in the results header below), so it keeps the
+  // catalogue total here rather than a second, differently-scoped count.
+  const count = !indexed && !browse
+    ? page.kind === 'ok'
+      ? page.total !== undefined
+        ? `Showing ${page.total.toLocaleString()} matching Tools`
+        : `${page.items.length.toLocaleString()} matching Tools on this page`
+      : undefined
+    : coverage !== undefined ? `${coverage.indexedTotal.toLocaleString()} Tools in the catalogue` : page.kind === 'ok' && page.total !== undefined ? `${page.total.toLocaleString()} Tools` : undefined
   // The one Tool detail surface is the `/tools/$toolRef` page; back-navigation
   // from it returns here, to the current browse view (not to a single entry).
   const { resource: _resource, ...returnSearch } = search
-  const returnTo = buildMarketReturnContext(returnSearch, 'tools')
+  // No `'tools'` hash: nothing on this page has `id="tools"`, so the hash
+  // only ever suppressed TanStack Router's window scroll restoration (see
+  // AeMarketPage.tsx for the same fix) without landing anywhere itself.
+  const returnTo = buildMarketReturnContext(returnSearch)
 
+  // Filter changes stay on `/market` and only narrow the same list the user
+  // is already looking at, so they keep the current scroll position instead
+  // of resetting to the top the way a real page navigation would.
   function applyFilters(filters: X402DirectoryFilters) {
-    void navigate({ to: '/market', search: {
+    void navigate({ to: '/market', resetScroll: false, search: {
       ...(search.query === undefined ? {} : { query: search.query }),
       view: view === 'providers' ? 'providers' : 'tools',
       ...(search.directoryCategory === undefined ? {} : { directoryCategory: search.directoryCategory }),
@@ -80,12 +97,12 @@ function DirectoryMarketplace({ page, search, home, catalogue, overview, provide
     return { ...filters }
   }
   function explore(filters: X402DirectoryCatalogueInput) {
-    void navigate({ to: '/market', search: { ...filters, view: 'tools' } })
+    void navigate({ to: '/market', resetScroll: false, search: { ...filters, view: 'tools' } })
   }
   function applyExplorerFilters(patch: DirectoryExplorerFilterPatch) {
     const next = { ...indexedSearch(), ...patch, view: 'tools' as const }
     for (const key of Object.keys(next)) if (next[key as keyof typeof next] === undefined) delete next[key as keyof typeof next]
-    void navigate({ to: '/market', search: next })
+    void navigate({ to: '/market', resetScroll: false, search: next })
   }
   function toggleComparison(item: SavedDirectoryTool) {
     setComparison(current => current.some(other => other.entry.resource === item.entry.resource)
@@ -123,7 +140,14 @@ function DirectoryMarketplace({ page, search, home, catalogue, overview, provide
             <InputGroupAddon><SearchIcon aria-hidden="true" /></InputGroupAddon>
             <label htmlFor="x402-directory-search" className="sr-only">Search Tools</label>
             <InputGroupInput ref={searchInput} id="x402-directory-search" key={search.query ?? ''} type="search" name="query" placeholder="Describe what you need done…" defaultValue={search.query ?? ''} />
-            <InputGroupAddon align="inline-end"><Button type="submit" className="mr-1 rounded-full" aria-label="Search Tools"><SearchIcon aria-hidden="true" /><span className="hidden sm:inline">Search</span></Button></InputGroupAddon>
+            <InputGroupAddon align="inline-end">
+              {search.query === undefined ? null : <InputGroupButton type="button" size="icon-sm" variant="ghost" aria-label="Clear search" onClick={() => {
+                if (searchInput.current) searchInput.current.value = ''
+                const { query: _query, sort: _sort, ...filters } = indexedSearch()
+                void navigate({ to: '/market', resetScroll: false, search: { ...filters, view: 'tools' } })
+              }}><XIcon aria-hidden="true" /></InputGroupButton>}
+              <Button type="submit" className="mr-1 rounded-full" aria-label="Search Tools"><SearchIcon aria-hidden="true" /><span className="hidden sm:inline">Search</span></Button>
+            </InputGroupAddon>
           </InputGroup>
         </form>
       </DirectoryHero>
@@ -135,7 +159,7 @@ function DirectoryMarketplace({ page, search, home, catalogue, overview, provide
         }
       }}>
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-4">
-          <TabsList variant="line" className="max-w-full justify-start overflow-x-auto overflow-y-hidden" aria-label="Browse the marketplace">
+          <TabsList variant="line" className="max-w-full shrink-0 justify-start overflow-x-auto overflow-y-hidden" aria-label="Browse the marketplace">
             <TabsTrigger value="tools" className="px-3"><ListFilterIcon aria-hidden="true" />Tools</TabsTrigger>
             <TabsTrigger value="discover" className="px-3"><CompassIcon aria-hidden="true" />Collections</TabsTrigger>
             <TabsTrigger value="providers" className="px-3"><StoreIcon aria-hidden="true" />Providers</TabsTrigger>

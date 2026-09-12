@@ -640,4 +640,4 @@ export type {
   QualifiedUseWriteDecision,
 } from "./internal/delivery";
 
-export { formatDisplayPrice } from './internal/display-price'
+export { formatDisplayPrice, formatDisplayAmount } from './internal/display-price'

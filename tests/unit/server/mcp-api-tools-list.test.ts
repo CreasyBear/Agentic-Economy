@@ -345,7 +345,7 @@ describe('MCP host adapter tools/list', () => {
     const body = await readMcpBody(response)
     expect(body.error).toMatchObject({
       code: -32602,
-      message: 'Invalid MCP request parameters.',
+      message: 'Invalid MCP request parameters. cursor: does not decode to a valid tools/list page offset.',
     })
   })
 })

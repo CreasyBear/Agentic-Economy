@@ -2,7 +2,6 @@ import { z } from 'zod'
 
 import { jsonValueSchema } from '@/modules/capability-contract/public'
 import type {
-  ToolCompareResult,
   ToolDetailResult,
   ToolSearchResult,
   PublicToolDescriptor,
@@ -192,6 +191,9 @@ export const toolChoiceCompareOutputSchema = z.union([
     kind: z.literal('ok'),
     schemaVersion: z.literal(REGISTRY_TOOLS_SCHEMA_VERSION),
     tools: z.array(compactToolCandidateSchema).min(1).max(4),
+    // Present only when at least one requested ref did not resolve to a
+    // current, available Tool; the call still succeeds for the refs that did.
+    missing: z.array(z.string()).min(1).max(4).optional(),
   }),
   z.strictObject({
     kind: z.literal('unavailable'),
@@ -332,12 +334,23 @@ export function projectToolDescription(result: ToolDetailResult) {
   })
 }
 
-export function projectToolCompareChoices(result: ToolCompareResult) {
+/**
+ * Per-ref compare resolution (review issue: `ae compare` / `registry.tools.compare`
+ * aborted the whole call when one ref was unknown). Resolved refs project as
+ * `tools`; unresolved refs (not found, or unavailable) are named in `missing`.
+ * The call only refuses outright when zero refs resolve.
+ */
+export type ToolCompareResolution =
+  | Readonly<{ kind: 'ok'; tools: readonly PublicToolDescriptor[]; missing?: readonly string[] }>
+  | Readonly<{ kind: 'unavailable'; reason: 'query_invalid' | 'tool_not_found' | 'tool_unavailable' }>
+
+export function projectToolCompareChoices(result: ToolCompareResolution) {
   return toolChoiceCompareOutputSchema.parse(result.kind === 'ok'
     ? {
         kind: 'ok',
         schemaVersion: REGISTRY_TOOLS_SCHEMA_VERSION,
         tools: result.tools.map(projectCompactTool),
+        ...(result.missing === undefined ? {} : { missing: result.missing }),
       }
     : { kind: 'unavailable', schemaVersion: REGISTRY_TOOLS_SCHEMA_VERSION, reason: result.reason })
 }

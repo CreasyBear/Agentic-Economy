@@ -2,7 +2,7 @@ import type { ZodType } from 'zod'
 
 import { readBoundedRequestJson } from '@/lib/server/bounded-request-body'
 import { isJsonContentType } from '@/lib/server/json-content-type'
-import { problem } from '@/lib/server/problem'
+import { problem, zodIssueDetail } from '@/lib/server/problem'
 
 export type ToolReadRequestResult<T> =
   | Readonly<{ ok: true; data: T }>
@@ -42,17 +42,33 @@ export async function readToolReadRequest<T>(
 
   const parsed = schema.safeParse(bounded.value)
   if (!parsed.success) {
-    const detail = parsed.error.issues[0]?.message
     return {
       ok: false,
       response: problem({
         status: 400,
         kind: 'INVALID_ARGUMENT',
         code: 'invalid_body',
-        ...(detail === undefined ? {} : { detail }),
+        detail: zodIssueDetail(parsed.error),
       }),
     }
   }
 
   return { ok: true, data: parsed.data }
+}
+
+/**
+ * `Cache-Control` for an anonymous public Tool-read response. When the
+ * response carries a `freshness.staleAfterMs` reading (`list`/`search`, read
+ * from the periodically reconciled supply projection), the response is
+ * cacheable for that same window; a response with no freshness reading (the
+ * `unavailable` branch, or a route whose source has no staleness window) is
+ * never cached.
+ */
+export function publicToolReadCacheControl(
+  data: Readonly<{ kind: string; freshness?: Readonly<{ staleAfterMs: number }> | undefined }>,
+): string {
+  const staleAfterMs = data.freshness?.staleAfterMs
+  return staleAfterMs === undefined
+    ? 'no-store'
+    : `public, max-age=${Math.floor(staleAfterMs / 1000)}, stale-while-revalidate=60`
 }

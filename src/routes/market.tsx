@@ -164,6 +164,14 @@ export const Route = createFileRoute("/market")({
   },
   staleTime: 30_000,
   preloadStaleTime: 30_000,
+  // The router default (150ms) is tuned for slow, rare navigations; a filter
+  // click on this page re-runs the same route's loader and, past that
+  // default, would unmount the whole directory for MarketPending's full-page
+  // skeleton even though the previous results are still valid to look at.
+  // Raising the threshold lets a typical catalogue round trip finish without
+  // ever swapping the visible list out from under the user.
+  pendingMs: 1_000,
+  pendingMinMs: 500,
   pendingComponent: MarketPending,
   errorComponent: MarketError,
   head: ({ loaderData }) =>

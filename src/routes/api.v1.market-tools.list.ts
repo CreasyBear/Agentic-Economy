@@ -2,7 +2,7 @@ import { createFileRoute } from '@tanstack/react-router'
 
 import { methodNotAllowed } from '@/lib/server/method-guard'
 import { toolReadUnavailableResponse } from '@/lib/server/tool-read-problem'
-import { readToolReadRequest } from '@/lib/server/tool-read-request'
+import { publicToolReadCacheControl, readToolReadRequest } from '@/lib/server/tool-read-request'
 import { problem } from '@/lib/server/problem'
 import { withHttpRateLimit } from '@/lib/server/rate-limit'
 import { runWithRequestCorrelation, withRequestCorrelationHeader } from '@/lib/server/request-correlation'
@@ -28,7 +28,7 @@ export async function handleMarketToolListRequest(request: Request): Promise<Res
           context: { caller: 'http', request },
         }))
         return result.success
-          ? Response.json(result.data, { headers: { 'Cache-Control': 'no-store' } })
+          ? Response.json(result.data, { headers: { 'Cache-Control': publicToolReadCacheControl(result.data) } })
           : problem({ status: 503, kind: 'INTERNAL', code: 'tool_read_result_invalid', detail: 'The tool catalogue result failed its own output contract.' })
       })
     } catch (error) {

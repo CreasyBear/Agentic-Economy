@@ -12,7 +12,7 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
 import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
-import { REASON_COPY, REASON_COPY_FALLBACK } from '@/content/reason-copy'
+import { REASON_COPY, REASON_COPY_FALLBACK, SUPPLY_SOURCE_TYPE_COPY } from '@/content/reason-copy'
 import { isRecord } from '@/modules/common/is-record'
 import type { ProviderConnectionOwnerProjection } from '@/modules/capability-supply/provider-connection'
 import type {
@@ -203,7 +203,7 @@ export function AeSupplySourceNativeStart({
         },
       })
       if (saved.kind === 'refused') {
-        setError('AE could not save this selection. Find Tools again, then select the current source candidate.')
+        setError('AE could not save this selection. Discover endpoints again, then select the current source candidate.')
         return
       }
       setSelectedRef(candidate.candidateRef)
@@ -219,7 +219,7 @@ export function AeSupplySourceNativeStart({
       await onDraftSaved?.(candidate.candidateRef, connectionRef === '' ? undefined : connectionRef)
     } catch (cause) {
       captureClientExceptionOnClient(cause)
-      setError('AE could not save this selection. Find Tools again, then try again.')
+      setError('AE could not save this selection. Discover endpoints again, then try again.')
     } finally {
       setPending(undefined)
     }
@@ -317,13 +317,13 @@ export function AeSupplySourceNativeStart({
         idempotencyKey: connectionIdempotencyKey.current,
       })
       if (result.kind !== 'action_required') {
-        setError('This source no longer requires a connection. Find Tools again to continue with its current contract.')
+        setError('This source no longer requires a connection. Discover endpoints again to continue with its current contract.')
         return
       }
       setRequiredAction(result.requiredAction)
     } catch (cause) {
       captureClientExceptionOnClient(cause)
-      setError('AE could not start this connection. Find Tools again, then retry the current source.')
+      setError('AE could not start this connection. Discover endpoints again, then retry the current source.')
     } finally {
       setPending(undefined)
     }
@@ -358,7 +358,7 @@ export function AeSupplySourceNativeStart({
                 <TabsTrigger value="x402">x402</TabsTrigger>
               </TabsList>
             </Tabs>
-            <FieldDescription>AE reads the source. You do not need to recreate its schemas or payment metadata.</FieldDescription>
+            <FieldDescription>{SUPPLY_SOURCE_TYPE_COPY[sourceKind]}</FieldDescription>
           </Field>
           <EnvironmentField value={environment} disabled={pending !== undefined} onChange={(next) => {
             setEnvironment(next)
@@ -390,7 +390,7 @@ export function AeSupplySourceNativeStart({
           }} onError={setError} /> : null}
           {sourceKind === 'x402' ? <X402SourceFields resourceUrl={resourceUrl} method={x402Method} onResourceUrlChange={setResourceUrl} onMethodChange={setX402Method} /> : null}
           <Button type="button" className="min-h-touch justify-self-start" disabled={pending !== undefined} aria-busy={pending === 'preview' || undefined} onClick={() => void findTools()}>
-            {pending === 'preview' ? 'Finding Tools…' : 'Find Tools'}
+            {pending === 'preview' ? 'Discovering endpoints…' : 'Discover endpoints'}
           </Button>
         </FieldGroup>
       </AeSection>

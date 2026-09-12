@@ -18,6 +18,7 @@ import {
 } from '@/modules/capability-supply/public'
 import type { MarketListingEvidenceProjection } from '@/modules/market/listing-evidence'
 import { readToolListingEvidence } from '@/modules/market/server'
+import { toolDisplayTitle } from '@/modules/market/tool-view-model'
 import { readX402PendingResource, type X402DirectoryResolution } from '@/modules/market/x402-directory'
 import { prepareX402DirectoryResourceServer } from '@/modules/market/x402-directory.functions'
 import {
@@ -80,7 +81,7 @@ export const Route = createFileRoute('/tools/$toolRef')({
       ] }
     }
     return { meta: [
-      { title: `${loaderData.result.tool.offering.label} | Agentic Economy` },
+      { title: `${toolDisplayTitle(loaderData.result.tool)} | Agentic Economy` },
       { name: 'description', content: loaderData.result.tool.summary },
     ] }
   },
@@ -133,7 +134,7 @@ function CurrentToolDetail({
   return (
     <AePublicPage
       kind="workspace"
-      title={tool.offering.label}
+      title={toolDisplayTitle(tool)}
       description={`${tool.business.name} · ${tool.contract.capabilityId}`}
       actions={
         <Button asChild variant="ghost" className="min-h-touch">

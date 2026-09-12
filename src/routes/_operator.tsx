@@ -18,19 +18,14 @@ function OperatorLayoutRoute() {
 
   return (
     <OperatorChromeProvider
+      mobileTrigger={<SidebarTrigger aria-label="Open operator navigation" className="md:hidden" />}
       sidebar={
-        <>
-          <SidebarTrigger
-            aria-label="Open operator navigation"
-            className="fixed start-gutter top-[calc(var(--header-height)+var(--spacing-intra))] z-20 border border-border bg-background shadow-soft md:hidden"
-          />
-          <AeOperatorSidebar
-            operatorRole={operatorRole}
-            operatorContext={operatorContext}
-            currentPath={pathname}
-            className="top-(--header-height) h-[calc(100svh-var(--header-height))]!"
-          />
-        </>
+        <AeOperatorSidebar
+          operatorRole={operatorRole}
+          operatorContext={operatorContext}
+          currentPath={pathname}
+          className="top-(--header-height) h-[calc(100svh-var(--header-height))]!"
+        />
       }
     >
       <Outlet />

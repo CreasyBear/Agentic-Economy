@@ -8,11 +8,10 @@ import {
   registryToolsSearchContract,
 } from './tool-action-contracts'
 import {
-  readCapabilityToolCompare,
   readCapabilityToolDetail,
   readCapabilityToolSearch,
 } from '@/modules/capability-supply/tool-source'
-import type { ToolSearchFilters } from '@/modules/capability-supply/public'
+import type { PublicToolDescriptor, ToolSearchFilters } from '@/modules/capability-supply/public'
 import { decodeOpaqueCursor, encodeOpaqueCursor, InvalidOpaqueCursorError } from './opaque-cursor'
 import {
   projectToolCompareChoices,
@@ -20,6 +19,7 @@ import {
   projectToolListChoices,
   projectToolSearchChoices,
   type SupplyProjectionFreshness,
+  type ToolCompareResolution,
 } from './tool-choice-contracts'
 
 // `market-tools/list` and `market-tools/search` read `registrySearchDocuments`,
@@ -142,5 +142,31 @@ export const registryToolsDescribeAction = defineAction({
 
 export const registryToolsCompareAction = defineAction({
   ...registryToolsCompareContract,
-  run: async ({ data }) => projectToolCompareChoices(await readCapabilityToolCompare(data)),
+  run: async ({ data }) => projectToolCompareChoices(await resolveToolCompare(data.toolRefs)),
 })
+
+/**
+ * Resolves each requested ref independently (one `registry.tools.describe`
+ * read per ref) instead of aborting the whole comparison when one ref is
+ * unknown. Only refuses the whole call when zero refs resolve to a current,
+ * available Tool.
+ */
+async function resolveToolCompare(toolRefs: readonly string[]): Promise<ToolCompareResolution> {
+  if (new Set(toolRefs).size !== toolRefs.length) {
+    return { kind: 'unavailable', reason: 'query_invalid' }
+  }
+  const details = await Promise.all(toolRefs.map((toolRef) => readCapabilityToolDetail({ toolRef })))
+  const tools: PublicToolDescriptor[] = []
+  const missing: string[] = []
+  for (const detail of details) {
+    if (detail.kind === 'found') tools.push(detail.tool)
+    else missing.push(detail.toolRef)
+  }
+  if (tools.length === 0) {
+    return {
+      kind: 'unavailable',
+      reason: details.every((detail) => detail.kind === 'unavailable') ? 'tool_unavailable' : 'tool_not_found',
+    }
+  }
+  return missing.length === 0 ? { kind: 'ok', tools } : { kind: 'ok', tools, missing }
+}

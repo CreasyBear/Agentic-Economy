@@ -39,6 +39,7 @@ import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from '@/c
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
+import { isLocalE2EAuthBypassEnabled } from '@/lib/client/local-e2e-auth'
 import type { OfferingRef } from '@/modules/common/ids'
 import { renameProviderDisplayNameServer } from '@/lib/server/owner-workspace.functions'
 import { readOwnerProviderEarningsServer } from '@/modules/capability-supply/supply-funnel.functions'
@@ -367,11 +368,33 @@ function AvailableWorkspace({
       </AeSection>
       <AeSection id="offboarding" title="Provider offboarding" description="Stop new work, settle outstanding obligations, and retire this Provider safely.">
         <DeferredSection promise={offboarding} loadingLabel="Loading Provider offboarding" unavailableTitle="Provider offboarding unavailable">
-          {(result) => <ProviderOffboardingCard initial={result} refreshWorkspace={refresh} />}
+          {(result) => <ProviderOffboardingSection initial={result} refreshWorkspace={refresh} />}
         </DeferredSection>
       </AeSection>
     </div>
   )
+}
+
+/**
+ * `ProviderOffboardingCard` calls `useReverification` unconditionally, which
+ * requires a mounted ClerkProvider. The local Clerk bypass never mounts one,
+ * so this wrapper keeps the card out of the tree entirely under the bypass
+ * (matching `AccountSettingsSection`'s guard in `OwnerSettingsSections.tsx`)
+ * instead of letting the hook throw.
+ */
+function ProviderOffboardingSection({ initial, refreshWorkspace }: Readonly<{
+  initial: OwnerProviderOffboardingResult
+  refreshWorkspace: () => void
+}>) {
+  if (isLocalE2EAuthBypassEnabled()) {
+    return (
+      <Alert>
+        <AlertTitle>Provider offboarding is unavailable in local preview</AlertTitle>
+        <AlertDescription>This browser journey does not connect a Clerk account. Sign in outside local preview to retire this Provider.</AlertDescription>
+      </Alert>
+    )
+  }
+  return <ProviderOffboardingCard initial={initial} refreshWorkspace={refreshWorkspace} />
 }
 
 function ProviderOffboardingCard({ initial, refreshWorkspace }: Readonly<{

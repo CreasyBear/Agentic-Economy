@@ -30,6 +30,7 @@ describe('market-terminal CLI error contracts', () => {
       'account',
       'supply',
       'fund',
+      'quote',
       'call',
       'history',
       'status',
@@ -66,7 +67,7 @@ describe('market-terminal CLI error contracts', () => {
       {
         id: 'call_recover',
         title: 'Call and recover',
-        commands: ['call', 'history', 'status', 'wait', 'cancel', 'recover'],
+        commands: ['quote', 'call', 'history', 'status', 'wait', 'cancel', 'recover'],
       },
       { id: 'supply', title: 'Supply', commands: ['supply'] },
       { id: 'reference', title: 'Reference', commands: ['manifest', 'config', 'doctor'] },
@@ -244,7 +245,7 @@ describe('market-terminal CLI error contracts', () => {
     expect(help.stderr).toBe('')
     expect(JSON.parse(help.stdout)).toMatchObject({
       command: 'search',
-      usage: 'ae search "<job>" [--limit <1-20>] [--cursor <cursor>] [--filters \'<json>\']',
+      usage: 'ae search "<what you need>" [--limit <1-20>] [--cursor <cursor>] [--filters \'<json>\']',
       guidance: [
         expect.any(String),
         expect.any(String),
@@ -319,7 +320,7 @@ describe('market-terminal CLI error contracts', () => {
       kind: 'HELP',
       command: 'account status',
       usage: 'ae account status [market|provider]',
-      summary: expect.stringContaining('principal'),
+      summary: expect.stringContaining('credential identity'),
     })
     const balanceHelp = await runCliInProcess(['help', 'account', 'balance', '--json'])
     expect(balanceHelp.status).toBe(0)
@@ -452,7 +453,7 @@ describe('market-terminal CLI error contracts', () => {
       },
       flags: {
         '--input': {
-          description: expect.stringContaining('call alone accepts -'),
+          description: expect.stringContaining('call and quote alone accept -'),
         },
       },
     })
@@ -546,9 +547,9 @@ describe('market-terminal CLI error contracts', () => {
       expect(text.stdout).toContain(envelope.summary)
       if (command === 'recover') {
         expect(envelope.summary).toContain('uncertain')
-        expect(envelope.summary).toContain('not a replay')
         expect(envelope.guidance?.join(' ')).toContain('canonical evidence')
-        expect(text.stdout).toContain('not a replay')
+        expect(envelope.guidance?.join(' ')).toContain('does not replay a known result')
+        expect(text.stdout).toContain('does not replay a known result')
       }
     }
 

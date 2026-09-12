@@ -10,21 +10,21 @@ describe("supply landing", () => {
   it("leads with a plain-language Provider fit decision and published Tool rows", () => {
     renderWithRouter(<AeSupplyLanding tools={[tool]} publishedTools={[publishedTool]} />);
     expect(
-      screen.getByRole("heading", { name: "List a service." }),
+      screen.getByRole("heading", { name: "List a Tool." }),
     ).toBeDefined();
     expect(screen.getByText("Providers")).toBeDefined();
     expect(
       screen
-        .getByRole("link", { name: "List a service" })
+        .getByRole("link", { name: "List a Tool" })
         .getAttribute("href"),
     ).toBe("/owner/offerings");
-    expect(screen.getByRole("heading", { name: "Check whether your service is a fit." })).toBeDefined();
-    expect(screen.getByText(/List one service an agent can search/i)).toBeDefined();
+    expect(screen.getByRole("heading", { name: "Check whether your Tool is a fit." })).toBeDefined();
+    expect(screen.getByText(/List one Tool an agent can search/i)).toBeDefined();
     expect(screen.getByText(/supported OpenAPI document, remote MCP server/i)).toBeDefined();
     expect(screen.getByText(/Never paste a raw key/i)).toBeDefined();
     expect(screen.getByText(/may consume provider quota or cost/i)).toBeDefined();
-    expect(screen.getByText(/does not publish the service, create earnings, or guarantee delivery/i)).toBeDefined();
-    expect(screen.getByText(/Publication means the current service passed/i)).toBeDefined();
+    expect(screen.getByText(/does not publish the Tool, create earnings, or guarantee delivery/i)).toBeDefined();
+    expect(screen.getByText(/Publication means the current Tool passed/i)).toBeDefined();
     expect(screen.getByRole("heading", { name: "Public x402 endpoint" })).toBeDefined();
     expect(screen.getByText(/Prove control of the payout address; never paste a wallet private key/i)).toBeDefined();
     expect(screen.queryByRole("link", { name: "x402 Provider requirements" })).toBeNull();

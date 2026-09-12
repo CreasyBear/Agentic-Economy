@@ -29,7 +29,7 @@ describe('AeAppShell', () => {
     expect(screen.getByTestId('skip-to-content').getAttribute('href')).toBe('#main-content')
 
     const nav = screen.getByRole('navigation', { name: 'Primary' })
-    expect(['Discover', 'For agents', 'For Providers', 'Calls']).toEqual(
+    expect(['Market', 'For agents', 'For providers', 'Calls']).toEqual(
       Array.from(nav.querySelectorAll('a')).map((link) => link.textContent),
     )
   })
@@ -39,10 +39,26 @@ function renderAppShell(): void {
   const rootRoute = createRootRoute()
   const routeTree = rootRoute.addChildren([
     createRoute({ getParentRoute: () => rootRoute, path: '/' }),
-    createRoute({ getParentRoute: () => rootRoute, path: '/market' }),
-    createRoute({ getParentRoute: () => rootRoute, path: '/for-agents' }),
-    createRoute({ getParentRoute: () => rootRoute, path: '/for-providers' }),
-    createRoute({ getParentRoute: () => rootRoute, path: '/activity' }),
+    createRoute({
+      getParentRoute: () => rootRoute,
+      path: '/market',
+      staticData: { nav: { label: 'Market', header: { order: 0 } } },
+    }),
+    createRoute({
+      getParentRoute: () => rootRoute,
+      path: '/for-agents',
+      staticData: { nav: { label: 'For agents', header: { order: 1 } } },
+    }),
+    createRoute({
+      getParentRoute: () => rootRoute,
+      path: '/for-providers',
+      staticData: { nav: { label: 'For providers', header: { order: 2 } } },
+    }),
+    createRoute({
+      getParentRoute: () => rootRoute,
+      path: '/activity',
+      staticData: { nav: { label: 'Calls', header: { order: 3 } } },
+    }),
     createRoute({ getParentRoute: () => rootRoute, path: '/sign-in/$' }),
   ])
   const router = createRouter({

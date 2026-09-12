@@ -1,43 +1,17 @@
-import { HOUR, MINUTE, RateLimiter, type RateLimitConfig, type RateLimitReturns, type RunMutationCtx } from '@convex-dev/rate-limiter'
+import { HOUR, MINUTE, RateLimiter, type RateLimitReturns, type RunMutationCtx } from '@convex-dev/rate-limiter'
 import { components } from '../_generated/api'
 import type { MutationCtx } from '../_generated/server'
+import { RATE_LIMIT_NAMES, RATE_LIMIT_POLICY, type RateLimitName } from '@/modules/security/rate-limit-policy'
 
-export const RATE_LIMIT_NAMES = [
-  'public-read',
-  'public-mutation',
-  'oauth-issuance',
-  'oauth-device-poll',
-  'authority-credential-change',
-  'payout-transfer',
-  'chat-submit',
-  'chat-anonymous',
-  'chat-anonymous-edge',
-  'dispute-open',
-] as const
-
-export type RateLimitName = (typeof RATE_LIMIT_NAMES)[number]
+export { RATE_LIMIT_NAMES }
+export type { RateLimitName }
 
 export type ConsequentialRateAdmission =
   | Readonly<{ kind: 'admitted' }>
   | Readonly<{ kind: 'rate_limited'; retryAfter: number }>
   | Readonly<{ kind: 'unavailable' }>
 
-type RateLimitDefinitions = Record<RateLimitName, RateLimitConfig>
-
-const limits: RateLimitDefinitions = {
-  'public-read': { kind: 'token bucket', rate: 120, period: MINUTE, capacity: 120 },
-  'public-mutation': { kind: 'token bucket', rate: 5, period: MINUTE, capacity: 5 },
-  'oauth-issuance': { kind: 'token bucket', rate: 5, period: MINUTE, capacity: 5 },
-  'oauth-device-poll': { kind: 'token bucket', rate: 24, period: MINUTE, capacity: 24 },
-  'authority-credential-change': { kind: 'fixed window', rate: 5, period: 10 * MINUTE },
-  'payout-transfer': { kind: 'fixed window', rate: 3, period: HOUR },
-  'chat-submit': { kind: 'token bucket', rate: 30, period: HOUR, capacity: 30 },
-  'chat-anonymous': { kind: 'token bucket', rate: 30, period: HOUR, capacity: 30 },
-  'chat-anonymous-edge': { kind: 'token bucket', rate: 30, period: HOUR, capacity: 30 },
-  'dispute-open': { kind: 'token bucket', rate: 3, period: MINUTE, capacity: 3 },
-}
-
-const rateLimiter = new RateLimiter(components.rateLimiter, limits)
+const rateLimiter = new RateLimiter(components.rateLimiter, RATE_LIMIT_POLICY)
 
 export async function assertAdmission(
   ctx: RunMutationCtx,

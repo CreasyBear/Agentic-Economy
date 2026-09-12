@@ -56,7 +56,10 @@ describe('native x402 catalogue', () => {
     show(search)
     const href = toolHref(toolOpener('Tool 0'))
     expect(decodeURIComponent(href.pathname.replace('/tools/', ''))).toBe(x402PendingToolRef(entries[0]!.resource))
-    expect(href.searchParams.get('from')).toBe(buildMarketReturnContext(search, 'tools'))
+    // No `'tools'` hash: nothing on this page has `id="tools"`, and a hash on
+    // the return trip would make TanStack Router skip restoring the market
+    // list's scroll position in favour of a (nonexistent) hash-anchor scroll.
+    expect(href.searchParams.get('from')).toBe(buildMarketReturnContext(search))
   })
 })
 

@@ -78,7 +78,13 @@ export function AeMarketPage({
     search.cursor,
   ].join("\u0000");
   const categoryId = search.category ?? "all";
-  const marketTableReturnTo = buildMarketReturnContext(search, "tools");
+  // No `'tools'` hash: nothing on this page has `id="tools"`, so the hash
+  // only ever suppressed TanStack Router's window scroll restoration (a
+  // hash present on the destination location makes commitLocation skip
+  // restoring the window's scroll in favour of a hash-anchor scroll) without
+  // ever landing anywhere itself. Dropping it lets Back-to-results restore
+  // the scroll position the user had before opening the Tool page.
+  const marketTableReturnTo = buildMarketReturnContext(search);
   const marketComparisonReturnTo = buildMarketReturnContext(search);
   const tools = useMemo(
     () => catalog.kind === "ok" ? catalog.items : [],

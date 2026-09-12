@@ -542,12 +542,8 @@ function renderOperatorShell(operatorRole: 'owner' | 'admin', currentPath: strin
   return renderAt(
     <SidebarProvider>
       <OperatorChromeProvider
-        sidebar={(
-          <>
-            <SidebarTrigger aria-label="Open operator navigation" className="md:hidden" />
-            <AeOperatorSidebar operatorRole={operatorRole} currentPath={currentPath} />
-          </>
-        )}
+        mobileTrigger={<SidebarTrigger aria-label="Open operator navigation" className="md:hidden" />}
+        sidebar={<AeOperatorSidebar operatorRole={operatorRole} currentPath={currentPath} />}
       >
         <AeOperatorPage
           operatorRole={operatorRole}

@@ -21,6 +21,7 @@ import type {
   PublicToolDescriptor,
   PublicToolParameter,
 } from '@/modules/capability-supply/public'
+import { formatPaymentNetwork } from '@/modules/market/tool-view-model'
 
 import type { ToolInspectorModel } from './tool-inspector-model'
 import { toolLabel } from './tool-inspector-model'
@@ -181,7 +182,7 @@ export function AeToolTechnicalContract({
     <div className="grid gap-6">
       <dl className="grid gap-3 sm:grid-cols-2">
         <Fact label="Tool reference">
-          <AeCopyReference label="reference" value={tool.toolRef} />
+          <AeCopyReference label="Tool reference" value={tool.toolRef} />
         </Fact>
         <Fact label="Tool ID" value={tool.toolId} />
         <Fact
@@ -196,7 +197,7 @@ export function AeToolTechnicalContract({
         />
         <Fact label="Request timeout" value={`${tool.transport.requestTimeoutMs} ms`} />
         {tool.payment === undefined ? null : (
-          <Fact label="Payment network" value={`${tool.payment.network} · ${tool.payment.asset}`} />
+          <Fact label="Payment network" value={`${formatPaymentNetwork(tool.payment.network)} · ${tool.payment.asset}`} />
         )}
         <Fact
           label="Price digest"

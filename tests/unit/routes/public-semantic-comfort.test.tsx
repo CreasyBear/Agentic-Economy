@@ -33,6 +33,9 @@ vi.mock('@tanstack/react-router', () => ({
   redirect: vi.fn(),
   useLocation: () => routeState.location,
   useNavigate: () => vi.fn(),
+  // AePublicPage renders AeSiteFooter, which reads the route table via
+  // useRouter(); an empty table is enough to render its (empty) columns.
+  useRouter: () => ({ routesByPath: {} }),
 }))
 
 vi.mock('@tanstack/react-start', () => ({

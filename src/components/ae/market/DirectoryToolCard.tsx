@@ -12,7 +12,7 @@ import { cn } from '@/lib/utils'
 import { x402PendingToolRef, type X402DirectoryEntry } from '@/modules/market/x402-directory'
 import type { MarketReturnContext } from './market-return-context'
 import { DirectoryToolIdentity } from './DirectoryToolIdentity'
-import { directoryNetworkLabel, directoryOutputLabel, directoryPrice, directoryTitle } from './directory-presentation'
+import { directoryDate, directoryNetworkLabel, directoryOutputLabel, directoryPrice, directoryTitle } from './directory-presentation'
 
 type DirectoryToolCardProps = Readonly<{
   entry: X402DirectoryEntry
@@ -51,7 +51,11 @@ export const DirectoryToolCard = memo(function DirectoryToolCard({ entry, return
         {description ? <p className="line-clamp-3 text-sm leading-relaxed text-muted-foreground">{description}</p> : null}
         {entry.tags?.length || entry.category ? <div className="flex flex-wrap gap-1.5">{[...new Set([...(entry.category === undefined ? [] : [entry.category]), ...(entry.tags ?? [])])].slice(0, 2).map(tag => <Badge key={tag} variant="secondary" className="max-w-full truncate">{tag}</Badge>)}</div> : null}
         {output === undefined ? null : <p className="truncate text-xs text-muted-foreground" title={output}>Returns {output}</p>}
-        {entry.activity?.calls30d === undefined || entry.activity.calls30d <= 0 ? null : <p className="text-xs text-muted-foreground" title="Reported by Coinbase Bazaar in the past 30 days">Used recently by other agents</p>}
+        {entry.activity?.calls30d !== undefined && entry.activity.calls30d > 0
+          ? <p className="text-xs text-muted-foreground" title="Reported by Coinbase Bazaar in the past 30 days">Used recently by other agents</p>
+          : entry.provenance?.updatedAt !== undefined
+            ? <p className="text-xs text-muted-foreground">Verified {directoryDate(entry.provenance.updatedAt)}</p>
+            : null}
       </CardContent>
       <CardFooter className="flex-wrap justify-between gap-2 border-t border-border px-5 py-3">
         <div className="min-w-0">

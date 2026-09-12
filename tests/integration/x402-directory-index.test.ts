@@ -11,7 +11,13 @@ function source(index: number, overrides: Partial<IndexedSource['entry']> = {}):
   const raw = { resource, type: 'http', description: `Research tool ${index}`, ...(overrides.title === undefined ? {} : { title: overrides.title }) }
   return { resource, sourceJson: JSON.stringify(raw), sourceDigest: canonicalDigest(raw), entry: {
     resource, title: `Research tool ${index}`, description: 'Search public research', protocol: 'http', provider: 'provider.test', metadataJson: '',
-    category: 'Research', tags: ['search'], activity: { calls30d: index }, provenance: { directory: 'Coinbase Bazaar', metadata: 'provider_declared', updatedAt: new Date(1700000000000 + index).toISOString() },
+    category: 'Research', tags: ['search'],
+    // Directory-eligible by default (payersOrder>=2 + a declared output shape):
+    // most tests below exercise pagination/cursor/title-projection mechanics,
+    // not eligibility, and browse() now defaults to eligible-only. Tests that
+    // specifically exercise adoption/price bands override activity/output.
+    activity: { calls30d: index, payers30d: 2 }, output: { fields: [], schemaJson: '{}' },
+    provenance: { directory: 'Coinbase Bazaar', metadata: 'provider_declared', updatedAt: new Date(1700000000000 + index).toISOString() },
     prices: [{ network: 'base', scheme: 'exact', amount: '1000000', decimalAmount: '1', symbol: 'USDC' }], ...overrides,
   } }
 }
@@ -156,13 +162,13 @@ describe('complete external directory index', () => {
     expect(analytics.price.bands.find(item => item.key === '0_01_to_0_03')?.count).toBe(1)
     expect(await backend.query(api.x402DirectoryIndex.analytics, { network: 'base' })).toMatchObject({ kind: 'ok', totalTools: 4, price: { scope: 'network', totalTools: 3, unknownPriceTools: 0 } })
     const browse = (filters: Record<string, unknown>) => backend.query(api.x402DirectoryIndex.browse, { ...filters, paginationOpts: { cursor: null, numItems: 12 } })
-    const adoption = await browse({ sort: 'adoption' })
+    const adoption = await browse({ sort: 'adoption', provider: 'provider.test' })
     expect(adoption.kind === 'ok' && adoption.page.map(item => item.entry.resource)).toEqual([source(2).resource, source(1).resource, source(3).resource, source(4).resource])
-    const price = await browse({ sort: 'price_asc' })
+    const price = await browse({ sort: 'price_asc', provider: 'provider.test' })
     expect(price.kind === 'ok' && price.page.map(item => item.entry.resource)).toEqual([source(2).resource, source(4).resource, source(1).resource, source(3).resource])
     expect(await browse({ priceBand: '0_01_to_0_03' })).toMatchObject({ kind: 'ok', page: [{ entry: { resource: source(2).resource } }] })
-    expect(await browse({ adoptionBand: 'missing' })).toMatchObject({ kind: 'ok', page: [{ entry: { resource: source(4).resource } }] })
-    expect(await browse({ minPayers30d: 1, maxPayers30d: 1, curatedOnly: true, bundleSlugs: ['research-workflow'], tags: ['search'] })).toMatchObject({ kind: 'ok', page: [{ entry: { resource: source(1).resource } }] })
+    expect(await browse({ adoptionBand: 'missing', provider: 'provider.test' })).toMatchObject({ kind: 'ok', page: [{ entry: { resource: source(4).resource } }] })
+    expect(await browse({ minPayers30d: 1, maxPayers30d: 1, curatedOnly: true, bundleSlugs: ['research-workflow'], tags: ['search'], provider: 'provider.test' })).toMatchObject({ kind: 'ok', page: [{ entry: { resource: source(1).resource } }] })
     expect(await browse({ minUsdPrice: 2, maxUsdPrice: 1 })).toEqual({ kind: 'unavailable', reason: 'query_invalid' })
     expect(await browse({ minPayers30d: 2, maxPayers30d: 1 })).toEqual({ kind: 'unavailable', reason: 'query_invalid' })
     expect(await browse({ hasOutputExample: true })).toMatchObject({ kind: 'ok', page: [{ entry: { resource: source(2).resource } }] })

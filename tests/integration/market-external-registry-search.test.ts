@@ -20,7 +20,12 @@ function source(index: number, overrides: Partial<IndexedSource['entry']> = {}):
   const raw = { resource, type: 'http', description: `Research tool ${index}`, ...(overrides.title === undefined ? {} : { title: overrides.title }) }
   return { resource, sourceJson: JSON.stringify(raw), sourceDigest: canonicalDigest(raw), entry: {
     resource, title: `Research tool ${index}`, description: 'Search public research', protocol: 'http', provider: 'provider.test', metadataJson: '',
-    category: 'Research', tags: ['search'], activity: { calls30d: index }, provenance: { directory: 'Coinbase Bazaar', metadata: 'provider_declared', updatedAt: new Date(1700000000000 + index).toISOString() },
+    category: 'Research', tags: ['search'],
+    // Directory-eligible by default (payersOrder>=2 + a declared output shape):
+    // this suite exercises pagination/route mechanics, not eligibility, and
+    // browse() now defaults to eligible-only.
+    activity: { calls30d: index, payers30d: 2 }, output: { fields: [], schemaJson: '{}' },
+    provenance: { directory: 'Coinbase Bazaar', metadata: 'provider_declared', updatedAt: new Date(1700000000000 + index).toISOString() },
     prices: [{ network: 'base', scheme: 'exact', amount: '1000000', decimalAmount: '1', symbol: 'USDC' }], ...overrides,
   } }
 }

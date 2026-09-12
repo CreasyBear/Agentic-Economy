@@ -51,7 +51,10 @@ describe('GET /api/v1/registry hostile inputs', () => {
       entry: {
         resource, title: `Research tool ${index}`, description: 'Search public research', protocol: 'http',
         provider: 'provider.test', metadataJson: '', category: 'Research', tags: ['search'],
-        activity: { calls30d: index },
+        // Directory-eligible by default (payersOrder>=2 + a declared output
+        // shape): this suite exercises hostile-input handling, not
+        // eligibility, and browse() now defaults to eligible-only.
+        activity: { calls30d: index, payers30d: 2 }, output: { fields: [], schemaJson: '{}' },
         provenance: { directory: 'Coinbase Bazaar', metadata: 'provider_declared', updatedAt: new Date(1700000000000 + index).toISOString() },
         prices: [{ network: 'base', scheme: 'exact', amount: '1000000', decimalAmount: '1', symbol: 'USDC' }],
       },

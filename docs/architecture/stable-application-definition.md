@@ -106,7 +106,7 @@ Each lane leaves a working app. Every subagent brief carries: reference followed
 
 ### Lane 5: Market front door (2026-09-12)
 
-- **Reference:** `docs/architecture/market-design-direction.md`, `docs/architecture/market-concepts.md`, `docs/architecture/pain-path.md`.
+- **Reference:** the decisions below, the decisions below, the decisions below.
 - **Decisions taken 2026-09-12:** retire analytics outright, not soften them; anonymity floor k=5, demand signal stays private, never surfaced per-Tool; owner leaning to concept E (agent's-eye view) first, but the pain-path doc argues fix the catalogue first.
 - **Proof:** real browser on `/market` and a Tool page; `ae search`/`ae describe` against production once `/api/ready` is 200.
 

@@ -81,7 +81,7 @@ export const registryToolsListContract = {
 
 export const registryToolsSearchContract = {
   id: 'registry.tools.search', schema: toolCatalogSearchInputSchema, surfaces: toolMarketActionSurfaces(),
-  name: 'Search Tools', summary: 'Search compact current Tool supply with a capability phrase.',
+  name: 'Search Tools', summary: 'Search compact current Tool supply with what you need.',
   boundaries, outputSchema: toolChoiceSearchOutputSchema, parameters: searchParameters, readOnly: true, effect: readOnlyEffect,
   invocationContract: {
     version: 'registry.tools.search:v3', consequenceClass: 'read_only', materialInputPaths: ['source', 'query', 'limit', 'cursor', 'filters'],

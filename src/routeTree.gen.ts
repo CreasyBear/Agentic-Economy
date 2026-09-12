@@ -18,6 +18,7 @@ import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as McpRouteImport } from './routes/mcp'
 import { Route as MarketRouteImport } from './routes/market'
 import { Route as LlmsDottxtRouteImport } from './routes/llms[.]txt'
+import { Route as GlossaryDotmdRouteImport } from './routes/glossary[.]md'
 import { Route as ForProvidersRouteImport } from './routes/for-providers'
 import { Route as ForAgentsRouteImport } from './routes/for-agents'
 import { Route as AboutRouteImport } from './routes/about'
@@ -168,6 +169,11 @@ const LlmsDottxtRoute = LlmsDottxtRouteImport.update({
   path: '/llms.txt',
   getParentRoute: () => rootRouteImport,
 } as any)
+const GlossaryDotmdRoute = GlossaryDotmdRouteImport.update({
+  id: '/glossary.md',
+  path: '/glossary.md',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ForProvidersRoute = ForProvidersRouteImport.update({
   id: '/for-providers',
   path: '/for-providers',
@@ -203,9 +209,9 @@ const IndexRoute = IndexRouteImport.update({
   getParentRoute: () => rootRouteImport,
 } as any)
 const ToolsToolRefRoute = ToolsToolRefRouteImport.update({
-  id: '/$toolRef',
-  path: '/$toolRef',
-  getParentRoute: () => ToolsRoute,
+  id: '/tools/$toolRef',
+  path: '/tools/$toolRef',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const TNewRoute = TNewRouteImport.update({
   id: '/t/new',
@@ -727,6 +733,7 @@ export interface FileRoutesByFullPath {
   '/about': typeof AboutRoute
   '/for-agents': typeof ForAgentsRoute
   '/for-providers': typeof ForProvidersRoute
+  '/glossary.md': typeof GlossaryDotmdRoute
   '/llms.txt': typeof LlmsDottxtRoute
   '/market': typeof MarketRoute
   '/mcp': typeof McpRoute
@@ -841,6 +848,7 @@ export interface FileRoutesByTo {
   '/about': typeof AboutRoute
   '/for-agents': typeof ForAgentsRoute
   '/for-providers': typeof ForProvidersRoute
+  '/glossary.md': typeof GlossaryDotmdRoute
   '/llms.txt': typeof LlmsDottxtRoute
   '/market': typeof MarketRoute
   '/mcp': typeof McpRoute
@@ -957,6 +965,7 @@ export interface FileRoutesById {
   '/about': typeof AboutRoute
   '/for-agents': typeof ForAgentsRoute
   '/for-providers': typeof ForProvidersRoute
+  '/glossary.md': typeof GlossaryDotmdRoute
   '/llms.txt': typeof LlmsDottxtRoute
   '/market': typeof MarketRoute
   '/mcp': typeof McpRoute
@@ -1073,6 +1082,7 @@ export interface FileRouteTypes {
     | '/about'
     | '/for-agents'
     | '/for-providers'
+    | '/glossary.md'
     | '/llms.txt'
     | '/market'
     | '/mcp'
@@ -1187,6 +1197,7 @@ export interface FileRouteTypes {
     | '/about'
     | '/for-agents'
     | '/for-providers'
+    | '/glossary.md'
     | '/llms.txt'
     | '/market'
     | '/mcp'
@@ -1302,6 +1313,7 @@ export interface FileRouteTypes {
     | '/about'
     | '/for-agents'
     | '/for-providers'
+    | '/glossary.md'
     | '/llms.txt'
     | '/market'
     | '/mcp'
@@ -1418,6 +1430,7 @@ export interface RootRouteChildren {
   AboutRoute: typeof AboutRoute
   ForAgentsRoute: typeof ForAgentsRoute
   ForProvidersRoute: typeof ForProvidersRoute
+  GlossaryDotmdRoute: typeof GlossaryDotmdRoute
   LlmsDottxtRoute: typeof LlmsDottxtRoute
   MarketRoute: typeof MarketRoute
   McpRoute: typeof McpRoute
@@ -1449,6 +1462,7 @@ export interface RootRouteChildren {
   SignUpSplatRoute: typeof SignUpSplatRoute
   TThreadIdRoute: typeof TThreadIdRoute
   TNewRoute: typeof TNewRoute
+  ToolsToolRefRoute: typeof ToolsToolRefRoute
   ApiChatAnonymousRoute: typeof ApiChatAnonymousRoute
   ApiClerkWebhookRoute: typeof ApiClerkWebhookRoute
   ApiDiscoveryExamplesRoute: typeof ApiDiscoveryExamplesRoute
@@ -1557,6 +1571,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LlmsDottxtRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/glossary.md': {
+      id: '/glossary.md'
+      path: '/glossary.md'
+      fullPath: '/glossary.md'
+      preLoaderRoute: typeof GlossaryDotmdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/for-providers': {
       id: '/for-providers'
       path: '/for-providers'
@@ -1608,10 +1629,10 @@ declare module '@tanstack/react-router' {
     }
     '/tools/$toolRef': {
       id: '/tools/$toolRef'
-      path: '/$toolRef'
+      path: '/tools/$toolRef'
       fullPath: '/tools/$toolRef'
       preLoaderRoute: typeof ToolsToolRefRouteImport
-      parentRoute: typeof ToolsRoute
+      parentRoute: typeof rootRouteImport
     }
     '/t/new': {
       id: '/t/new'
@@ -2504,6 +2525,7 @@ const rootRouteChildren: RootRouteChildren = {
   AboutRoute: AboutRoute,
   ForAgentsRoute: ForAgentsRoute,
   ForProvidersRoute: ForProvidersRoute,
+  GlossaryDotmdRoute: GlossaryDotmdRoute,
   LlmsDottxtRoute: LlmsDottxtRoute,
   MarketRoute: MarketRoute,
   McpRoute: McpRoute,
@@ -2538,6 +2560,7 @@ const rootRouteChildren: RootRouteChildren = {
   SignUpSplatRoute: SignUpSplatRoute,
   TThreadIdRoute: TThreadIdRoute,
   TNewRoute: TNewRoute,
+  ToolsToolRefRoute: ToolsToolRefRoute,
   ApiChatAnonymousRoute: ApiChatAnonymousRoute,
   ApiClerkWebhookRoute: ApiClerkWebhookRoute,
   ApiDiscoveryExamplesRoute: ApiDiscoveryExamplesRoute,

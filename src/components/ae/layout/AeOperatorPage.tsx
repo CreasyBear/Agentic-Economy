@@ -72,6 +72,14 @@ export function useOperatorSidebarChrome(): OperatorPageChrome | null {
   return use(OperatorSidebarChromeContext)?.chrome ?? null
 }
 
+// Carries the `/_operator` layout's mobile `SidebarTrigger` down into the
+// root AeOperatorPage's own header row (beside the breadcrumb), the same
+// way shadcn's `SidebarInset` header hosts the trigger next to its
+// breadcrumb. Defaults to null so tests that render AeOperatorPage without
+// a SidebarProvider ancestor (error/pending/not-found states) render no
+// trigger instead of throwing from `useSidebar`.
+const OperatorMobileTriggerContext = createContext<ReactNode | null>(null)
+
 export type AeOperatorPageProps = {
   operatorRole: OperatorRole
   operatorContext?: OperatorContext
@@ -178,6 +186,7 @@ function RootOperatorPage(props: AeOperatorPageProps) {
     () => providedBreadcrumbs ?? (listCrumb === undefined ? [] : [listCrumb, { label: title }]),
     [listCrumb, providedBreadcrumbs, title],
   )
+  const mobileTrigger = use(OperatorMobileTriggerContext)
 
   // Bubble the resolved chrome (in particular navBadges) up to the hoisted
   // sidebar bridge, when one is mounted above this route (see
@@ -198,7 +207,12 @@ function RootOperatorPage(props: AeOperatorPageProps) {
         data-testid="operator-content"
         className="flex min-h-0 flex-1 flex-col px-gutter pb-[calc(var(--spacing-touch)+env(safe-area-inset-bottom,0px))] focus:outline-none md:px-related md:pb-related"
       >
-        {breadcrumbs.length === 0 ? null : <AeOperatorBreadcrumbs items={breadcrumbs} />}
+        {mobileTrigger === null && breadcrumbs.length === 0 ? null : (
+          <div className="flex items-center gap-related">
+            {mobileTrigger}
+            {breadcrumbs.length === 0 ? null : <AeOperatorBreadcrumbs items={breadcrumbs} />}
+          </div>
+        )}
         <AeRecordHeader
           title={title}
           description={description}
@@ -222,6 +236,8 @@ function RootOperatorPage(props: AeOperatorPageProps) {
 
 export type OperatorChromeProviderProps = {
   sidebar?: ReactNode
+  /** The mobile `SidebarTrigger`, rendered in flow in the root AeOperatorPage's header row. */
+  mobileTrigger?: ReactNode
   children: ReactNode
 }
 
@@ -232,7 +248,7 @@ export type OperatorChromeProviderProps = {
  * any AeOperatorPage) can read the navBadges the current route's root
  * AeOperatorPage resolves.
  */
-export function OperatorChromeProvider({ sidebar, children }: OperatorChromeProviderProps) {
+export function OperatorChromeProvider({ sidebar, mobileTrigger, children }: OperatorChromeProviderProps) {
   const [chrome, setRegisteredChrome] = useState<OperatorPageChrome | null>(null)
   const setChrome = useCallback((nextChrome: OperatorPageChrome) => {
     setRegisteredChrome(nextChrome)
@@ -278,8 +294,10 @@ export function OperatorChromeProvider({ sidebar, children }: OperatorChromeProv
 
   return (
     <OperatorSidebarChromeContext.Provider value={registration}>
-      {sidebar}
-      <div className="relative flex w-full flex-1 flex-col bg-background">{children}</div>
+      <OperatorMobileTriggerContext.Provider value={mobileTrigger ?? null}>
+        {sidebar}
+        <div className="relative flex w-full flex-1 flex-col bg-background">{children}</div>
+      </OperatorMobileTriggerContext.Provider>
     </OperatorSidebarChromeContext.Provider>
   )
 }

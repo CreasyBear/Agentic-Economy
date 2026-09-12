@@ -1,7 +1,8 @@
-import { createFileRoute } from '@tanstack/react-router'
+import { Link, createFileRoute } from '@tanstack/react-router'
 import { useServerFn } from '@tanstack/react-start'
 import { useReverification } from '@clerk/tanstack-react-start'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Button } from '@/components/ui/button'
 
 import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
 import { AeSupplySourceNativeStart } from '@/components/ae/supply/AeSupplySourceNativeStart'
@@ -93,7 +94,15 @@ function NewOwnerOfferingRouteView({ publish }: Readonly<{
 
   return (
     <AeOperatorPage operatorRole="owner" title="Add Tool" description="Connect the interface you already operate. AE discovers the Tools and validates the one you submit." currentPath="/owner/offerings/new" breadcrumbs={[{ label: 'Operations', href: '/owner/offerings' }, { label: 'Add Tool' }]}>
-      {identity.kind !== 'available' ? <Alert variant="destructive"><AlertTitle>Provider workspace unavailable</AlertTitle><AlertDescription>AE could not confirm the current Business. Return to Operations and try again.</AlertDescription></Alert> : sourceUnavailable ? (
+      {identity.kind !== 'available' ? (
+        <Alert variant="destructive">
+          <AlertTitle>Provider workspace unavailable</AlertTitle>
+          <AlertDescription className="grid gap-related">
+            <p>AE could not confirm the current Business. Return to Operations and try again.</p>
+            <Button asChild variant="outline" className="justify-self-start min-h-touch"><Link to="/owner/offerings">Return to Operations</Link></Button>
+          </AlertDescription>
+        </Alert>
+      ) : sourceUnavailable ? (
         <Alert variant="destructive"><AlertTitle>Saved source unavailable</AlertTitle><AlertDescription>AE could not read the saved source or current connections. Reload before starting or submitting another connection.</AlertDescription></Alert>
       ) : (<>
         {resumeRequested && resume.kind !== 'available' ? (

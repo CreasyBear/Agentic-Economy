@@ -22,6 +22,9 @@ vi.mock('@tanstack/react-router', () => ({
     }
   },
   Link: ({ children, to }: { children: ReactNode; to: string }) => <a href={to}>{children}</a>,
+  // AePublicPage renders AeSiteFooter, which reads the route table via
+  // useRouter(); an empty table is enough to render its (empty) columns.
+  useRouter: () => ({ routesByPath: {} }),
 }))
 
 vi.mock('@clerk/tanstack-react-start', () => ({

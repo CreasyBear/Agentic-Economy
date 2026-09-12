@@ -36,7 +36,7 @@ describe('MCP host adapter protocol', () => {
     const instructions = body.result?.instructions
     expect(instructions).toBe(
       'Use Agentic Economy to acquire one bounded outside contribution when your current harness lacks a capability. '
-      + 'Search with `ae_registry_tools_search` and a capability phrase. '
+      + 'Search with `ae_registry_tools_search` and what you need. '
       + 'Use `ae_registry_tools_list` to browse, `ae_registry_tools_describe` for one exact input contract, and `ae_registry_tools_compare` for up to four exact references. '
       + '`ae_tool_quote` and `ae_tool_call` are protected Tools: they appear in `tools/list` only after the agent connects. Connect through the OAuth device flow via `ae connect` (CLI), or, for MCP clients that support authorization, through the `/.well-known/oauth-protected-resource` metadata. '
       + 'Call `ae_tool_quote` with the exact Tool and input. Complete its one continuation or required action, then request a fresh Quote if the input or authority changes. '
@@ -44,7 +44,7 @@ describe('MCP host adapter protocol', () => {
       + 'If Account credit is insufficient, use `ae_funding_handoff_create`, give only its Stripe checkoutUrl to the payer, persist fundingSessionId, poll `ae_funding_handoff_status`, then explicitly retry the original Tool only after ready. '
       + 'If effects are uncertain, use `ae_call_status` or `ae_call_reconcile` before retrying. '
       + 'Agentic Economy returns the contribution or receipt; your existing harness keeps project planning and execution. '
-      + 'See `docs/glossary.md` for the vocabulary used above, such as Tool, Quote and Call.',
+      + 'See `/glossary.md` for the vocabulary used above, such as Tool, Quote and Call.',
     )
     expect(typeof instructions).toBe('string')
     expect([...String(instructions).matchAll(/`(ae_[^`]+)`/g)].map((match) => match[1])).toEqual([
@@ -87,12 +87,17 @@ describe('MCP host adapter protocol', () => {
       },
     })
 
-    for (const response of [malformedInitialize, malformedCall]) {
+    const expectedMessages = [
+      'Invalid MCP request parameters. params.protocolVersion: Invalid input: expected string, received undefined.',
+      'Invalid MCP request parameters. params.name: Invalid input: expected string, received number.',
+    ]
+
+    for (const [index, response] of [malformedInitialize, malformedCall].entries()) {
       expect(response.status).toBe(200)
       const body = await readMcpBody(response)
       expect(body.error).toMatchObject({
         code: -32602,
-        message: 'Invalid MCP request parameters.',
+        message: expectedMessages[index],
       })
       expect(body.error?.message).not.toContain('\n')
     }

@@ -2,9 +2,17 @@
  * @vitest-environment jsdom
  */
 import { cleanup, render, screen, within } from '@testing-library/react'
-import { afterEach, describe, expect, it } from 'vitest'
+import type { ReactNode } from 'react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { AePublicPage } from '@/components/ae/layout/AePublicPage'
+
+vi.mock('@tanstack/react-router', () => ({
+  Link: ({ children, to }: { children: ReactNode; to: string }) => <a href={to}>{children}</a>,
+  // AeSiteFooter reads the route table via useRouter(); an empty table is
+  // enough to render its (empty) columns.
+  useRouter: () => ({ routesByPath: {} }),
+}))
 
 afterEach(cleanup)
 

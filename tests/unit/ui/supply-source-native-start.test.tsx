@@ -224,7 +224,7 @@ describe('source-native Provider start', () => {
     fireEvent.change(screen.getByLabelText('OpenAPI URL'), {
       target: { value: 'https://provider.example/openapi.yaml' },
     })
-    fireEvent.click(screen.getByRole('button', { name: 'Find Tools' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Discover endpoints' }))
     await screen.findByText('Reference lookup')
     expect(onPreview).toHaveBeenCalledWith(
       {
@@ -316,7 +316,7 @@ describe('source-native Provider start', () => {
       />,
     )
 
-    fireEvent.click(screen.getByRole('button', { name: 'Find Tools' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Discover endpoints' }))
 
     const action = await screen.findByRole('link', { name: 'Connect server' })
     expect(action.getAttribute('href')).toBe('/owner/supply/connections/new?attempt=pca_one')
@@ -373,7 +373,7 @@ describe('source-native Provider start', () => {
       />,
     )
 
-    fireEvent.click(screen.getByRole('button', { name: 'Find Tools' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Discover endpoints' }))
 
     expect(await screen.findByText('Select MCP server')).toBeTruthy()
     expect(onPreview).toHaveBeenNthCalledWith(1, {

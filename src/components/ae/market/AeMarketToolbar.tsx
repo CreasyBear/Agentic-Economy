@@ -58,6 +58,9 @@ export function AeMarketToolbar({
   const handleAvailabilityChange = (value: AvailabilityChoice) => {
     void navigate({
       to: "/market",
+      // Same-page filter change: keep the list's current scroll position
+      // instead of resetting to the top like a real navigation would.
+      resetScroll: false,
       search: {
         ...(search.query === undefined ? {} : { query: search.query }),
         ...(value === "all" ? {} : { availability: value }),
@@ -65,6 +68,18 @@ export function AeMarketToolbar({
         ...(search.capability === undefined
           ? {}
           : { capability: search.capability }),
+      },
+    });
+  };
+
+  const handleClearQuery = () => {
+    void navigate({
+      to: "/market",
+      resetScroll: false,
+      search: {
+        ...(search.availability === undefined ? {} : { availability: search.availability }),
+        ...(search.category === undefined ? {} : { category: search.category }),
+        ...(search.capability === undefined ? {} : { capability: search.capability }),
       },
     });
   };
@@ -105,6 +120,17 @@ export function AeMarketToolbar({
                 <SearchIcon aria-hidden="true" />
               </InputGroupAddon>
               <InputGroupAddon align="inline-end">
+                {search.query === undefined ? null : (
+                  <InputGroupButton
+                    type="button"
+                    size="icon-sm"
+                    variant="ghost"
+                    aria-label="Clear search"
+                    onClick={handleClearQuery}
+                  >
+                    <XIcon />
+                  </InputGroupButton>
+                )}
                 <InputGroupButton
                   type="submit"
                   size="sm"

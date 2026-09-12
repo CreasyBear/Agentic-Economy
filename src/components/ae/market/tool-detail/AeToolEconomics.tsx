@@ -1,7 +1,8 @@
 import { AeFactList, type AeFact } from '@/components/ae/data/AeFactList'
 import { formatUtcTimestamp, timestampIso } from '@/lib/ui/format-time'
 import type { PublicToolDescriptor } from '@/modules/capability-supply/public'
-import { formatCurrencyAmount } from '@/modules/money/public'
+import { formatPaymentNetwork } from '@/modules/market/tool-view-model'
+import { formatCurrencyAmount, formatDisplayPrice } from '@/modules/money/public'
 
 export function AeToolEconomics({
   tool,
@@ -9,12 +10,19 @@ export function AeToolEconomics({
   const breakdown = tool.commercial.priceBreakdown
   const priceEvidence = tool.commercial.priceEvidence
   const managed = tool.authentication.kind === 'x402'
-  const pricing = tool.commercial.displayPrice?.kind === 'indicative' ? 'AUD estimate; confirmed in Quote' : tool.commercial.price.kind === 'fixed'
-    ? 'Fixed price'
-    : tool.commercial.price.kind === 'range'
-      ? 'Price range'
-      : 'Price on request'
+  const displayPrice = tool.commercial.displayPrice
+  const audEstimate = displayPrice?.kind === 'indicative' ? formatDisplayPrice(displayPrice) : undefined
+  const pricing = audEstimate === undefined
+    ? tool.commercial.price.kind === 'fixed'
+      ? 'Fixed price'
+      : tool.commercial.price.kind === 'range'
+        ? 'Price range'
+        : 'Price on request'
+    : breakdown === undefined
+      ? `${audEstimate} per Call`
+      : `${formatCurrencyAmount(breakdown.providerQuotedAmount)} · ${audEstimate} per Call`
   const evidenceFields = tool.evidence.length
+  const settlementNetwork = breakdown?.network ?? tool.payment?.network
   const facts: AeFact[] = [
     { label: 'Pricing model', value: pricing },
     {
@@ -34,8 +42,8 @@ export function AeToolEconomics({
     },
     {
       label: 'Settlement',
-      value: breakdown?.network ?? tool.payment?.network ?? 'Not published',
-      mono: breakdown?.network !== undefined || tool.payment?.network !== undefined,
+      value: settlementNetwork === undefined ? 'Not published' : formatPaymentNetwork(settlementNetwork),
+      mono: settlementNetwork !== undefined,
     },
     ...(priceEvidence?.observedAt === undefined
       ? []

@@ -19,9 +19,10 @@ import {
   readOwnerSpendServer,
   readOwnerUsageServer,
 } from '@/lib/server/call-history.functions'
-import { formatExactAmount } from '@/modules/money/public'
+import { formatDisplayAmount } from '@/modules/money/public'
 import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
 import { captureRouteException } from '@/lib/observability/capture-route-exception'
+import { formatUtcTimestamp } from '@/lib/ui/format-time'
 
 export const Route = createFileRoute('/_operator/activity')({
   staticData: {
@@ -144,7 +145,7 @@ function ActivityAvailable({
           <span className="font-mono text-sm tabular-nums">
             {row.original.audAmountUnits === undefined
               ? '—'
-              : `AUD ${formatExactAmount({ currency: 'AUD', exponent: 6, units: row.original.audAmountUnits }) ?? row.original.audAmountUnits}`}
+              : formatDisplayAmount({ currency: 'AUD', exponent: 6, units: row.original.audAmountUnits })}
           </span>
         ),
       },
@@ -160,7 +161,7 @@ function ActivityAvailable({
         header: ({ column }) => <AeOperatorSortableHeader label="When" column={column} />,
         cell: ({ row }) => (
           <time className="font-mono text-xs tabular-nums text-muted-foreground">
-            {new Date(row.original.createdAt).toLocaleString()}
+            {formatUtcTimestamp(row.original.createdAt)} UTC
           </time>
         ),
       },
@@ -180,11 +181,15 @@ function ActivityAvailable({
           title="Usage"
           description={`Exact Call counts for ${periodStart}. Counts belong to this Account, across credentials.`}
         >
-          <div className="grid gap-related sm:grid-cols-3">
-            <ActivityMetric label="Calls" value={usage.kind === 'available' ? usage.callCountUnits : '—'} />
-            <ActivityMetric label="Completed" value={usage.kind === 'available' ? usage.completedCountUnits : '—'} />
-            <ActivityMetric label="Needs reconciliation" value={usage.kind === 'available' ? usage.outcomeUnknownCountUnits : '—'} />
-          </div>
+          {usage.kind === 'available' ? (
+            <div className="grid gap-related sm:grid-cols-3">
+              <ActivityMetric label="Calls" value={usage.callCountUnits} />
+              <ActivityMetric label="Completed" value={usage.completedCountUnits} />
+              <ActivityMetric label="Needs reconciliation" value={usage.outcomeUnknownCountUnits} />
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">Usage unavailable</p>
+          )}
         </AeSection>
         <AeSection
           title="Spend"
@@ -193,20 +198,25 @@ function ActivityAvailable({
           <ActivityMetric
             label="Account spend"
             value={spend.kind === 'available'
-              ? `AUD ${formatExactAmount({ currency: 'AUD', exponent: 6, units: spend.spendUnits }) ?? spend.spendUnits}`
+              ? formatDisplayAmount({ currency: 'AUD', exponent: 6, units: spend.spendUnits })
               : '—'}
           />
         </AeSection>
       </div>
-      {activity.length === 0 ? (
+      {activity.length === 0 && usage.kind === 'available' ? (
         <AeEmptyState
           title="No calls yet"
           description="Find a capability and complete one call. Its task, outcome, amount, and receipt will appear here."
           action={
             <Button asChild className="min-h-touch">
-              <Link to="/market">Discover capabilities</Link>
+              <Link to="/market">Find Tools</Link>
             </Button>
           }
+        />
+      ) : activity.length === 0 ? (
+        <AeEmptyState
+          title="Usage unavailable"
+          description="Call counts could not be confirmed. Refresh to check for calls."
         />
       ) : (
         <>
@@ -290,7 +300,7 @@ type CallRow = Extract<ActivityLoaderResult, { kind: 'available' }>['calls']['pa
 
 function activityFacts(item: CallRow) {
   return [
-    { label: 'Amount', value: item.audAmountUnits === undefined ? 'Not applicable' : `AUD ${formatExactAmount({ currency: 'AUD', exponent: 6, units: item.audAmountUnits }) ?? item.audAmountUnits}`, mono: true },
+    { label: 'Amount', value: item.audAmountUnits === undefined ? 'Not applicable' : formatDisplayAmount({ currency: 'AUD', exponent: 6, units: item.audAmountUnits }), mono: true },
     { label: 'Outcome', value: callStateLabel(item.state) },
     { label: 'Delivery', value: item.deliveryState.replaceAll('_', ' ') },
     { label: 'Payment', value: item.paymentState.replaceAll('_', ' ') },
@@ -299,9 +309,9 @@ function activityFacts(item: CallRow) {
       : [{ label: 'Provider obligation', value: item.providerObligationState.replaceAll('_', ' ') }]),
     ...(item.providerAmountUnits === undefined
       ? []
-      : [{ label: 'Provider amount', value: `USDC ${formatExactAmount({ currency: 'USDC', exponent: 6, units: item.providerAmountUnits }) ?? item.providerAmountUnits}`, mono: true }]),
+      : [{ label: 'Provider amount', value: formatDisplayAmount({ currency: 'USDC', exponent: 6, units: item.providerAmountUnits }), mono: true }]),
     { label: 'Latency', value: `${item.latencyMs} ms`, mono: true },
-    { label: 'When', value: new Date(item.createdAt).toLocaleString() },
+    { label: 'When', value: `${formatUtcTimestamp(item.createdAt)} UTC` },
     { label: 'Call reference', value: shortReference(item.callRef), mono: true },
     { label: 'Provider', value: item.providerRef, mono: true },
     ...(item.receiptRef === undefined ? [] : [{ label: 'Receipt', value: shortReference(item.receiptRef), mono: true }]),

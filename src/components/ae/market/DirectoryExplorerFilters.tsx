@@ -9,6 +9,7 @@ import { Sheet, SheetClose, SheetContent, SheetDescription, SheetFooter, SheetHe
 import { cn } from '@/lib/utils'
 import { x402DirectoryFilterSchema } from '@/modules/market/x402-directory'
 import type { X402DirectoryCatalogueInput, X402DirectoryCatalogueOverview, X402DirectoryFacet } from '@/modules/market/x402-directory-catalogue'
+import { formatPaymentNetwork } from '@/modules/market/tool-view-model'
 
 export type DirectoryExplorerFilterValues = Readonly<Pick<X402DirectoryCatalogueInput,
   'directoryCategory' | 'network' | 'provider' | 'minUsdPrice' | 'maxUsdPrice' |
@@ -81,7 +82,7 @@ function FilterBody({ search, overview, onChange, onReset }: Props) {
       <FieldError id={`${id}-price-error`} className="text-xs">{priceError}</FieldError>
       <p className="text-xs leading-relaxed text-muted-foreground">Per Call. Includes only published USDC prices on the selected network.</p><Button type="submit" variant="outline" size="sm" className="w-full">Apply price range</Button>
     </form>
-    {facets === undefined ? null : <div className="border-t pt-5"><Facets label="Network" values={facets.networks} selected={search.network} onChange={network => onChange({ network })} /></div>}
+    {facets === undefined ? null : <div className="border-t pt-5"><Facets label="Network" values={facets.networks.map(item => ({ ...item, label: formatPaymentNetwork(item.label) }))} selected={search.network} onChange={network => onChange({ network })} /></div>}
     <form className="flex flex-col gap-3 border-t pt-5" onSubmit={event => {
       event.preventDefault()
       const parsed = x402DirectoryFilterSchema.safeParse(provider.trim() === '' ? {} : { provider })

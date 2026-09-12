@@ -15,6 +15,7 @@ import type { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/proto
 import { z } from 'zod'
 
 import { base64Codec, tryDecodeBase64Url } from '@/modules/common/base64-codec'
+import { REASON_COPY, REASON_COPY_FALLBACK } from '@/content/reason-copy'
 import { bearerChallenge, bearerModeChallenge } from '@/lib/http/oauth-challenge'
 import { buildProblem, gatewayFailureToProblem, type ProblemDetails, type ProblemKind } from '@/lib/errors'
 import { problem } from '@/lib/server/problem'
@@ -53,7 +54,7 @@ import type { FundingHandoffService } from '@/modules/money/funding-handoff.acti
 const MAX_MCP_REQUEST_BODY_BYTES = 320 * 1024
 const AE_MCP_INSTRUCTIONS = [
   'Use Agentic Economy to acquire one bounded outside contribution when your current harness lacks a capability.',
-  'Search with `ae_registry_tools_search` and a capability phrase.',
+  'Search with `ae_registry_tools_search` and what you need.',
   'Use `ae_registry_tools_list` to browse, `ae_registry_tools_describe` for one exact input contract, and `ae_registry_tools_compare` for up to four exact references.',
   '`ae_tool_quote` and `ae_tool_call` are protected Tools: they appear in `tools/list` only after the agent connects. Connect through the OAuth device flow via `ae connect` (CLI), or, for MCP clients that support authorization, through the `/.well-known/oauth-protected-resource` metadata.',
   'Call `ae_tool_quote` with the exact Tool and input. Complete its one continuation or required action, then request a fresh Quote if the input or authority changes.',
@@ -61,7 +62,7 @@ const AE_MCP_INSTRUCTIONS = [
   'If Account credit is insufficient, use `ae_funding_handoff_create`, give only its Stripe checkoutUrl to the payer, persist fundingSessionId, poll `ae_funding_handoff_status`, then explicitly retry the original Tool only after ready.',
   'If effects are uncertain, use `ae_call_status` or `ae_call_reconcile` before retrying.',
   'Agentic Economy returns the contribution or receipt; your existing harness keeps project planning and execution.',
-  'See `docs/glossary.md` for the vocabulary used above, such as Tool, Quote and Call.',
+  'See `/glossary.md` for the vocabulary used above, such as Tool, Quote and Call.',
 ].join(' ')
 export type McpAccessTier = Readonly<{
   tier: 'anonymous' | 'authenticated'
@@ -90,15 +91,39 @@ type AeServerHandler<T extends AnyObjectSchema> = (
  * schema-parse throw into the JSON-RPC Invalid params error the SDK already
  * defines. McpError prefixes its message for local diagnostics, so this
  * adapter restores the concise wire-level message without changing the
- * SDK-owned error code or protocol handling.
+ * SDK-owned error code or protocol handling. The offending field (and, for a
+ * `toolRef`, the expected reference pattern) is appended when the schema
+ * failure names one, so a caller can self-correct without guessing.
  */
 const INVALID_MCP_REQUEST_PARAMETERS_MESSAGE = 'Invalid MCP request parameters.'
+/** Same Tool reference shape enforced by every `toolRef` schema (e.g. `@/modules/capability-execution/quote.ts`). */
+const TOOL_REF_PATTERN = '^operation:v1:[0-9a-f]{64}$'
 
 class ConciseMcpRequestError extends McpError {
-  constructor() {
-    super(ErrorCode.InvalidParams, INVALID_MCP_REQUEST_PARAMETERS_MESSAGE)
-    this.message = INVALID_MCP_REQUEST_PARAMETERS_MESSAGE
+  constructor(message: string = INVALID_MCP_REQUEST_PARAMETERS_MESSAGE) {
+    super(ErrorCode.InvalidParams, message)
+    this.message = message
   }
+}
+
+/** First zod-shaped issue on an unknown schema-parse failure, duck-typed since the SDK's `safeParse` types its error as `unknown`. */
+function mcpValidationIssue(error: unknown): { path: string; message: string } | undefined {
+  const issues = isRecord(error) && Array.isArray(error.issues) ? error.issues : undefined
+  const issue = issues?.[0]
+  if (!isRecord(issue) || typeof issue.message !== 'string') return undefined
+  const path = Array.isArray(issue.path) ? issue.path.map(String).join('.') : ''
+  return { path, message: issue.message }
+}
+
+/** Names the offending field for a request-schema failure; a `toolRef` field also gets the expected pattern. */
+function mcpRequestValidationMessage(error: unknown): string {
+  const issue = mcpValidationIssue(error)
+  if (issue === undefined) return INVALID_MCP_REQUEST_PARAMETERS_MESSAGE
+  const named = issue.path.length > 0 ? `${issue.path}: ${issue.message}` : issue.message
+  const isToolRef = issue.path === 'toolRef' || issue.path.endsWith('.toolRef')
+  return isToolRef
+    ? `${INVALID_MCP_REQUEST_PARAMETERS_MESSAGE} ${named}. Expected pattern: ${TOOL_REF_PATTERN}.`
+    : `${INVALID_MCP_REQUEST_PARAMETERS_MESSAGE} ${named}.`
 }
 class SafeMcpSdkServer extends Server {
   constructor() {
@@ -120,7 +145,7 @@ class SafeMcpSdkServer extends Server {
     ): Promise<ServerResult | Result> => {
       const parsed = safeParse(requestSchema, request)
       if (!parsed.success) {
-        throw new ConciseMcpRequestError()
+        throw new ConciseMcpRequestError(mcpRequestValidationMessage(parsed.error))
       }
       return await handler(parsed.data, extra)
     }
@@ -204,6 +229,61 @@ function mcpToolError(failure: McpToolFailure): {
       type: 'text',
       text: JSON.stringify(failure),
     }],
+  }
+}
+
+type McpToolRefusal = Readonly<{ code: string; reason?: string; nextAction?: unknown; retryable?: boolean }>
+
+/** Every result `kind` the Tool-catalogue reads (`registry.tools.*`) use to mean "did not resolve". */
+const TOOL_MARKET_READ_NEGATIVE_KINDS = new Set(['not_found', 'unavailable'])
+
+/**
+ * MCP spec: a tool-level refusal is a normal `CallToolResult` with
+ * `isError: true`, not a JSON-RPC error (those stay reserved for
+ * protocol-level failures, e.g. bad params — see `ConciseMcpRequestError`
+ * above). Every action that deliberately declines to proceed uses
+ * `kind: 'refused'` (see `quote.ts`, `call-authority.ts`, `supply-actions.ts`,
+ * `market-demand.actions.ts`, `funding-handoff.actions.ts`). The Tool-catalogue
+ * reads have no separate `refused` variant; they use `not_found` /
+ * `unavailable` for the same purpose. Every other kind (`no_candidates`,
+ * `reconciliation_required`, `pending`, …) is a legitimate non-error outcome
+ * and is returned as a normal result, unchanged.
+ */
+function mcpToolRefusal(action: AnyAction, result: unknown): McpToolRefusal | undefined {
+  if (!isRecord(result) || typeof result.kind !== 'string') return undefined
+  const isRefusal = result.kind === 'refused'
+    || (isToolMarketReadAction(action) && TOOL_MARKET_READ_NEGATIVE_KINDS.has(result.kind))
+  if (!isRefusal) return undefined
+  const explicitCode = typeof result.code === 'string' ? result.code : undefined
+  const reasonText = typeof result.reason === 'string' ? result.reason : undefined
+  const code = explicitCode ?? reasonText ?? result.kind
+  const nextAction = result.nextAction ?? result.continuation
+  const retryable = typeof result.retryable === 'boolean' ? result.retryable : undefined
+  return {
+    code,
+    // Only surface `reason` when it is distinct from `code` (some actions
+    // carry both a stable code and free-text detail; others only have one
+    // field, already promoted to `code` above).
+    ...(explicitCode !== undefined && reasonText !== undefined ? { reason: reasonText } : {}),
+    ...(nextAction === undefined ? {} : { nextAction }),
+    ...(retryable === undefined ? {} : { retryable }),
+  }
+}
+
+/** Reuses the reason-copy catalogue for the human sentence where the code maps; falls back to the action's own free-text reason, then the generic sentence. */
+function mcpRefusalSentence(refusal: McpToolRefusal): string {
+  return REASON_COPY[refusal.code] ?? refusal.reason ?? REASON_COPY_FALLBACK
+}
+
+function mcpToolRefusalResult(refusal: McpToolRefusal): {
+  isError: true
+  content: [{ type: 'text'; text: string }]
+  structuredContent: McpToolRefusal
+} {
+  return {
+    isError: true,
+    content: [{ type: 'text', text: mcpRefusalSentence(refusal) }],
+    structuredContent: refusal,
   }
 }
 
@@ -358,6 +438,28 @@ function mcpToolListEntry(action: AnyAction): Record<string, unknown> {
   }
 }
 
+/**
+ * `structuredContent`'s actual on-the-wire shape is `{ result: <action
+ * output>, nextAction? }` (built in the tool handler below), not the
+ * action's raw `outputSchema` directly — declaring the raw schema would fail
+ * the SDK's own output validation (`validateToolOutput`) on every successful
+ * call. Wrap it in that same envelope and only declare it when the SDK's
+ * supported conversion path (`toJsonSchemaCompat`, the same one `tools/list`
+ * already uses for input schemas; backed by `z.toJSONSchema` on zod 4) can
+ * actually render it, so an unconvertible action output schema never breaks
+ * tool registration — it just leaves that one tool without a declared
+ * `outputSchema`, exactly as today.
+ */
+function mcpToolOutputSchema(action: AnyAction): AnyObjectSchema | undefined {
+  const wrapped = z.object({ result: action.outputSchema, nextAction: z.unknown().optional() })
+  try {
+    toJsonSchemaCompat(wrapped, { strictUnions: true, pipeStrategy: 'output' })
+    return wrapped
+  } catch {
+    return undefined
+  }
+}
+
 function registerPaginatedToolsList(
   sdkServer: Server,
   admittedActions: readonly AnyAction[],
@@ -366,7 +468,9 @@ function registerPaginatedToolsList(
   sdkServer.setRequestHandler(ListToolsRequestSchema, (toolsListRequest) => {
     const cursor = toolsListRequest.params?.cursor
     const offset = cursor === undefined ? 0 : decodeMcpToolsListCursor(cursor, admittedActions.length)
-    if (offset === undefined) throw new ConciseMcpRequestError()
+    if (offset === undefined) {
+      throw new ConciseMcpRequestError(`${INVALID_MCP_REQUEST_PARAMETERS_MESSAGE} cursor: does not decode to a valid tools/list page offset.`)
+    }
     const page = admittedActions.slice(offset, offset + pageSize)
     const nextOffset = offset + page.length
     return {
@@ -401,12 +505,14 @@ export function createAeMcpServer(
   serverWithSdk.server = sdkServer
   for (const action of admittedActions) {
     const metadata = describeActionMcpMetadata(action)
+    const outputSchema = mcpToolOutputSchema(action)
     server.registerTool(
       mcpToolName(action),
       {
         title: action.name,
         description: mcpToolDescription(action),
         inputSchema: action.schema,
+        ...(outputSchema === undefined ? {} : { outputSchema }),
         annotations: {
           readOnlyHint: action.readOnly,
           destructiveHint: action.readOnly ? false : metadata.destructive,
@@ -453,6 +559,8 @@ export function createAeMcpServer(
             }))
           }
           recordMcpGatewayTelemetry(action.id, data, result, access, startedAt)
+          const refusal = mcpToolRefusal(action, outputValidation.data)
+          if (refusal !== undefined) return mcpToolRefusalResult(refusal)
           return {
             content: [{ type: 'text' as const, text: JSON.stringify(outputValidation.data) }],
             structuredContent: {

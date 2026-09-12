@@ -130,8 +130,12 @@ describe('Provider connection handoff route', () => {
     } as never)
     const Component = Route.options.component
     if (Component === undefined) throw new Error('handoff_component_missing')
-    render(createElement(Component))
-    const href = screen.getByRole('link', { name: 'Return to Add service' }).getAttribute('href')
+    const rootRoute = createRootRoute()
+    const routeTree = rootRoute.addChildren([createRoute({ getParentRoute: () => rootRoute, path: '/' })])
+    const router = createRouter({ routeTree, history: createMemoryHistory({ initialEntries: ['/'] }) })
+    const RouterProvider = RouterContextProvider as ComponentType<{ router: typeof router }>
+    render(createElement(RouterProvider, { router }, createElement(Component)))
+    const href = screen.getByRole('link', { name: 'Return to Add Tool' }).getAttribute('href')
     expect(href).toBe('/owner/offerings/new?connection=connection%3Amcp&environment=production&draft=sds_exact_source')
 
     mocks.readIdentity.mockResolvedValue({ kind: 'available', businessId: 'business:one' })
@@ -186,7 +190,7 @@ describe('Provider connection handoff route', () => {
     if (Component === undefined) throw new Error('handoff_component_missing')
     render(createElement(Component))
     fireEvent.change(screen.getByLabelText('Bearer token'), { target: { value: 'credential-never-rendered' } })
-    fireEvent.submit(screen.getByRole('button', { name: 'Connect service' }).closest('form')!)
+    fireEvent.submit(screen.getByRole('button', { name: 'Connect Provider' }).closest('form')!)
     expect(await screen.findByText(/still completing/u)).toBeTruthy()
     expect(mocks.complete).toHaveBeenCalledWith({ data: {
       attemptRef: 'pca_uncertain',
