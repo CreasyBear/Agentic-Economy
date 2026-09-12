@@ -6,6 +6,7 @@ import {
   isTelemetryAllowedForCurrentRoute,
   sanitizeTelemetryError,
   sanitizeTelemetryEvent,
+  sanitizeTelemetryValue,
   securePrivateRecordLocation,
 } from '@/lib/observability/private-route-safety'
 
@@ -44,13 +45,29 @@ export function initSentryClient(router?: AnyRouter): boolean {
   initialized = true
   return true
 }
-export function captureClientException(error: unknown): void {
+export function captureClientException(
+  error: unknown,
+  context?: Record<string, string>,
+  level?: 'warning' | 'error',
+): void {
   if (!isTelemetryAllowedForCurrentRoute()) return
   if (!initialized) {
     initSentryClient()
   }
 
-  Sentry.captureException(sanitizeTelemetryError(error))
+  const safeError = sanitizeTelemetryError(error)
+  const safeContext = context === undefined
+    ? undefined
+    : (sanitizeTelemetryValue(context) as Record<string, unknown>)
+  Sentry.withScope((scope) => {
+    if (safeContext !== undefined) {
+      for (const [key, value] of Object.entries(safeContext)) {
+        scope.setTag(key, String(value))
+      }
+    }
+    if (level !== undefined) scope.setLevel(level)
+    Sentry.captureException(safeError)
+  })
 }
 
 export { Sentry }

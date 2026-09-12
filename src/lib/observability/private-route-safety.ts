@@ -1,3 +1,5 @@
+import { degradeBackend } from '@/lib/observability/degrade-backend'
+
 const shareTokenPathPattern = /^\/s\/[0-9a-f]{64}\/?$/i
 
 const privateAccessParameterNames = new Set([
@@ -97,8 +99,8 @@ export function readPrivateRecordAccessKey(
     if (stored === undefined || stored.length === 0) return undefined
     accessKeysByThreadId.set(threadId, stored)
     return stored
-  } catch {
-    return undefined
+  } catch (cause) {
+    return degradeBackend(cause, undefined, { site: 'readPrivateRecordAccessKey', reason: 'source_unavailable' })
   }
 }
 
@@ -148,8 +150,8 @@ function sanitizeTelemetryString(value: string): string {
 
   try {
     return safeTelemetryPath({ pathname: new URL(redacted).pathname })
-  } catch {
-    return '[Filtered URL]'
+  } catch (cause) {
+    return degradeBackend(cause, '[Filtered URL]', { site: 'sanitizeTelemetryString', reason: 'invalid_response' })
   }
 }
 
@@ -199,13 +201,13 @@ function sanitizeTelemetryValueRecursively(
           seen,
           depth + 1,
         )
-      } catch {
-        result[entryKey] = filteredTelemetryValue
+      } catch (cause) {
+        result[entryKey] = degradeBackend(cause, filteredTelemetryValue, { site: 'sanitizeTelemetryValueRecursively', reason: 'source_unavailable' })
       }
     }
     return result
-  } catch {
-    return filteredTelemetryValue
+  } catch (cause) {
+    return degradeBackend(cause, filteredTelemetryValue, { site: 'sanitizeTelemetryValueRecursively', reason: 'source_unavailable' })
   } finally {
     seen.delete(value)
   }
@@ -286,8 +288,8 @@ function readTelemetryProperty(value: unknown, key: string): unknown {
   if (value === null || (typeof value !== 'object' && typeof value !== 'function')) return undefined
   try {
     return (value as Record<string, unknown>)[key]
-  } catch {
-    return undefined
+  } catch (cause) {
+    return degradeBackend(cause, undefined, { site: 'readTelemetryProperty', reason: 'source_unavailable' })
   }
 }
 
@@ -317,8 +319,9 @@ function cachePrivateRecordAccessKey(
   if (sessionStorage === undefined) return
   try {
     sessionStorage.setItem(privateRecordAccessStorageKey(threadId), accessKey)
-  } catch {
+  } catch (cause) {
     // The in-memory copy still supports this page when session storage is unavailable.
+    degradeBackend(cause, undefined, { site: 'cachePrivateRecordAccessKey', reason: 'source_unavailable' })
   }
 }
 
@@ -332,8 +335,8 @@ function browserSessionStorage(): BrowserSessionStorageLike | undefined {
   const host = globalThis as { sessionStorage?: BrowserSessionStorageLike }
   try {
     return host.sessionStorage
-  } catch {
-    return undefined
+  } catch (cause) {
+    return degradeBackend(cause, undefined, { site: 'browserSessionStorage', reason: 'source_unavailable' })
   }
 }
 
@@ -344,7 +347,7 @@ function privateRecordThreadId(pathname: string): string | undefined {
   if (encodedThreadId === undefined) return undefined
   try {
     return decodeURIComponent(encodedThreadId)
-  } catch {
-    return encodedThreadId
+  } catch (cause) {
+    return degradeBackend(cause, encodedThreadId, { site: 'privateRecordThreadId', reason: 'invalid_response' })
   }
 }

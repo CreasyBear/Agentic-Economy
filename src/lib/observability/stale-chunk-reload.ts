@@ -1,5 +1,8 @@
 import { createClientOnlyFn } from '@tanstack/react-start'
 
+import { captureRouteException } from '@/lib/observability/capture-route-exception'
+import { degrade } from '@/lib/observability/degrade'
+
 const VITE_STALE_CHUNK_ERROR_MESSAGES = [
   'Failed to fetch dynamically imported module',
   'error loading dynamically imported module',
@@ -64,8 +67,8 @@ export function attemptViteStaleChunkReload(
     }
 
     storage.setItem(STALE_CHUNK_RELOAD_TIMESTAMP_KEY, String(now))
-  } catch {
-    return false
+  } catch (cause) {
+    return degrade(cause, false, { site: 'attemptViteStaleChunkReload', reason: 'source_unavailable' })
   }
 
   const reload = options.reload ?? (() => window.location.reload())
@@ -76,7 +79,8 @@ export function attemptViteStaleChunkReload(
 
     try {
       sentryImportPromise = loadSentry()
-    } catch {
+    } catch (cause) {
+      captureRouteException(cause, { site: 'reloadAfterBoundedSentryFlush' }, 'warning')
       reload()
       return
     }
@@ -105,7 +109,8 @@ export function attemptViteStaleChunkReload(
           }),
         ])
         clearTimeout(flushTimeoutId)
-      } catch {
+      } catch (cause) {
+        captureRouteException(cause, { site: 'reloadAfterBoundedSentryFlush' }, 'warning')
         // A synchronous flush failure must not prevent recovery.
       }
     }

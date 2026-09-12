@@ -1,5 +1,6 @@
 import { PostHog } from 'posthog-node'
 
+import { captureRouteException } from '@/lib/observability/capture-route-exception'
 import { readObservabilityServerConfig } from '@/lib/observability/config'
 import { buildFunnelEventProperties, type FunnelCaptureInput } from '@/lib/observability/funnel-event-props'
 import { sanitizeTelemetryValue } from '@/lib/observability/private-route-safety'
@@ -51,8 +52,9 @@ export function captureServerEvent(
         properties: sanitizeTelemetryValue(properties) as Record<string, string | number | boolean | null>,
       }),
     })
-  } catch {
+  } catch (cause) {
     // Diagnostics must never alter application behavior.
+    captureRouteException(cause, { site: 'captureServerEvent' }, 'warning')
   }
 }
 
