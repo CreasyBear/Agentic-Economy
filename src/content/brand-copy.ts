@@ -99,6 +99,6 @@ export const FOOTER = {
    * footer pattern: market, help, legal, and machine-readable artifacts.
    * Column contents are read from route `staticData.nav.footer`.
    */
-  columns: ['Market', 'Help', 'Legal', 'Machines'] as const,
+  columns: ['Market', 'Resources', 'Help', 'Legal', 'Machines'] as const,
   copyright: (year: number) => `© ${year} Agentic Economy`,
 } as const

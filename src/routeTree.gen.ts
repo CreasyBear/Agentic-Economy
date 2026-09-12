@@ -15,6 +15,7 @@ import { Route as StatusRouteImport } from './routes/status'
 import { Route as SitemapDotxmlRouteImport } from './routes/sitemap[.]xml'
 import { Route as RobotsDottxtRouteImport } from './routes/robots[.]txt'
 import { Route as PrivacyRouteImport } from './routes/privacy'
+import { Route as OpenapiDotjsonRouteImport } from './routes/openapi[.]json'
 import { Route as McpRouteImport } from './routes/mcp'
 import { Route as MarketRouteImport } from './routes/market'
 import { Route as LlmsDottxtRouteImport } from './routes/llms[.]txt'
@@ -40,6 +41,7 @@ import { Route as OauthDevice_authorizationRouteImport } from './routes/oauth.de
 import { Route as OauthAuthorizeRouteImport } from './routes/oauth.authorize'
 import { Route as FundCancelledRouteImport } from './routes/fund.cancelled'
 import { Route as FundFundingSessionIdRouteImport } from './routes/fund.$fundingSessionId'
+import { Route as DevelopersApiRouteImport } from './routes/developers.api'
 import { Route as CallsCallRefRouteImport } from './routes/calls.$callRef'
 import { Route as ApiReadyRouteImport } from './routes/api.ready'
 import { Route as ApiHealthRouteImport } from './routes/api.health'
@@ -151,6 +153,11 @@ const RobotsDottxtRoute = RobotsDottxtRouteImport.update({
 const PrivacyRoute = PrivacyRouteImport.update({
   id: '/privacy',
   path: '/privacy',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const OpenapiDotjsonRoute = OpenapiDotjsonRouteImport.update({
+  id: '/openapi.json',
+  path: '/openapi.json',
   getParentRoute: () => rootRouteImport,
 } as any)
 const McpRoute = McpRouteImport.update({
@@ -276,6 +283,11 @@ const FundCancelledRoute = FundCancelledRouteImport.update({
 const FundFundingSessionIdRoute = FundFundingSessionIdRouteImport.update({
   id: '/fund/$fundingSessionId',
   path: '/fund/$fundingSessionId',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DevelopersApiRoute = DevelopersApiRouteImport.update({
+  id: '/developers/api',
+  path: '/developers/api',
   getParentRoute: () => rootRouteImport,
 } as any)
 const CallsCallRefRoute = CallsCallRefRouteImport.update({
@@ -731,6 +743,7 @@ export interface FileRoutesByFullPath {
   '/llms.txt': typeof LlmsDottxtRoute
   '/market': typeof MarketRoute
   '/mcp': typeof McpRoute
+  '/openapi.json': typeof OpenapiDotjsonRoute
   '/privacy': typeof PrivacyRouteWithChildren
   '/robots.txt': typeof RobotsDottxtRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
@@ -750,6 +763,7 @@ export interface FileRoutesByFullPath {
   '/api/health': typeof ApiHealthRoute
   '/api/ready': typeof ApiReadyRoute
   '/calls/$callRef': typeof CallsCallRefRoute
+  '/developers/api': typeof DevelopersApiRoute
   '/fund/$fundingSessionId': typeof FundFundingSessionIdRoute
   '/fund/cancelled': typeof FundCancelledRoute
   '/oauth/authorize': typeof OauthAuthorizeRoute
@@ -845,6 +859,7 @@ export interface FileRoutesByTo {
   '/llms.txt': typeof LlmsDottxtRoute
   '/market': typeof MarketRoute
   '/mcp': typeof McpRoute
+  '/openapi.json': typeof OpenapiDotjsonRoute
   '/privacy': typeof PrivacyRouteWithChildren
   '/robots.txt': typeof RobotsDottxtRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
@@ -864,6 +879,7 @@ export interface FileRoutesByTo {
   '/api/health': typeof ApiHealthRoute
   '/api/ready': typeof ApiReadyRoute
   '/calls/$callRef': typeof CallsCallRefRoute
+  '/developers/api': typeof DevelopersApiRoute
   '/fund/$fundingSessionId': typeof FundFundingSessionIdRoute
   '/fund/cancelled': typeof FundCancelledRoute
   '/oauth/authorize': typeof OauthAuthorizeRoute
@@ -961,6 +977,7 @@ export interface FileRoutesById {
   '/llms.txt': typeof LlmsDottxtRoute
   '/market': typeof MarketRoute
   '/mcp': typeof McpRoute
+  '/openapi.json': typeof OpenapiDotjsonRoute
   '/privacy': typeof PrivacyRouteWithChildren
   '/robots.txt': typeof RobotsDottxtRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
@@ -980,6 +997,7 @@ export interface FileRoutesById {
   '/api/health': typeof ApiHealthRoute
   '/api/ready': typeof ApiReadyRoute
   '/calls/$callRef': typeof CallsCallRefRoute
+  '/developers/api': typeof DevelopersApiRoute
   '/fund/$fundingSessionId': typeof FundFundingSessionIdRoute
   '/fund/cancelled': typeof FundCancelledRoute
   '/oauth/authorize': typeof OauthAuthorizeRoute
@@ -1077,6 +1095,7 @@ export interface FileRouteTypes {
     | '/llms.txt'
     | '/market'
     | '/mcp'
+    | '/openapi.json'
     | '/privacy'
     | '/robots.txt'
     | '/sitemap.xml'
@@ -1096,6 +1115,7 @@ export interface FileRouteTypes {
     | '/api/health'
     | '/api/ready'
     | '/calls/$callRef'
+    | '/developers/api'
     | '/fund/$fundingSessionId'
     | '/fund/cancelled'
     | '/oauth/authorize'
@@ -1191,6 +1211,7 @@ export interface FileRouteTypes {
     | '/llms.txt'
     | '/market'
     | '/mcp'
+    | '/openapi.json'
     | '/privacy'
     | '/robots.txt'
     | '/sitemap.xml'
@@ -1210,6 +1231,7 @@ export interface FileRouteTypes {
     | '/api/health'
     | '/api/ready'
     | '/calls/$callRef'
+    | '/developers/api'
     | '/fund/$fundingSessionId'
     | '/fund/cancelled'
     | '/oauth/authorize'
@@ -1306,6 +1328,7 @@ export interface FileRouteTypes {
     | '/llms.txt'
     | '/market'
     | '/mcp'
+    | '/openapi.json'
     | '/privacy'
     | '/robots.txt'
     | '/sitemap.xml'
@@ -1325,6 +1348,7 @@ export interface FileRouteTypes {
     | '/api/health'
     | '/api/ready'
     | '/calls/$callRef'
+    | '/developers/api'
     | '/fund/$fundingSessionId'
     | '/fund/cancelled'
     | '/oauth/authorize'
@@ -1422,6 +1446,7 @@ export interface RootRouteChildren {
   LlmsDottxtRoute: typeof LlmsDottxtRoute
   MarketRoute: typeof MarketRoute
   McpRoute: typeof McpRoute
+  OpenapiDotjsonRoute: typeof OpenapiDotjsonRoute
   PrivacyRoute: typeof PrivacyRouteWithChildren
   RobotsDottxtRoute: typeof RobotsDottxtRoute
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
@@ -1438,6 +1463,7 @@ export interface RootRouteChildren {
   ApiHealthRoute: typeof ApiHealthRoute
   ApiReadyRoute: typeof ApiReadyRoute
   CallsCallRefRoute: typeof CallsCallRefRoute
+  DevelopersApiRoute: typeof DevelopersApiRoute
   FundFundingSessionIdRoute: typeof FundFundingSessionIdRoute
   FundCancelledRoute: typeof FundCancelledRoute
   OauthAuthorizeRoute: typeof OauthAuthorizeRoute
@@ -1537,6 +1563,13 @@ declare module '@tanstack/react-router' {
       path: '/privacy'
       fullPath: '/privacy'
       preLoaderRoute: typeof PrivacyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/openapi.json': {
+      id: '/openapi.json'
+      path: '/openapi.json'
+      fullPath: '/openapi.json'
+      preLoaderRoute: typeof OpenapiDotjsonRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/mcp': {
@@ -1712,6 +1745,13 @@ declare module '@tanstack/react-router' {
       path: '/fund/$fundingSessionId'
       fullPath: '/fund/$fundingSessionId'
       preLoaderRoute: typeof FundFundingSessionIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/developers/api': {
+      id: '/developers/api'
+      path: '/developers/api'
+      fullPath: '/developers/api'
+      preLoaderRoute: typeof DevelopersApiRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/calls/$callRef': {
@@ -2497,6 +2537,7 @@ const rootRouteChildren: RootRouteChildren = {
   LlmsDottxtRoute: LlmsDottxtRoute,
   MarketRoute: MarketRoute,
   McpRoute: McpRoute,
+  OpenapiDotjsonRoute: OpenapiDotjsonRoute,
   PrivacyRoute: PrivacyRouteWithChildren,
   RobotsDottxtRoute: RobotsDottxtRoute,
   SitemapDotxmlRoute: SitemapDotxmlRoute,
@@ -2516,6 +2557,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiHealthRoute: ApiHealthRoute,
   ApiReadyRoute: ApiReadyRoute,
   CallsCallRefRoute: CallsCallRefRoute,
+  DevelopersApiRoute: DevelopersApiRoute,
   FundFundingSessionIdRoute: FundFundingSessionIdRoute,
   FundCancelledRoute: FundCancelledRoute,
   OauthAuthorizeRoute: OauthAuthorizeRoute,

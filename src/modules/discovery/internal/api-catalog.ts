@@ -25,6 +25,7 @@ type ApiCatalogLinksetEntry = Readonly<{
   anchor: string
   describedby?: readonly ApiCatalogLink[]
   'service-doc'?: readonly ApiCatalogLink[]
+  'service-desc'?: readonly ApiCatalogLink[]
 }>
 
 /** Media-type mapping mirrors site-manifest's endpoint media conventions. */
@@ -56,10 +57,18 @@ export function buildApiCatalogDocument(
     href: `${origin}${SiteDiscoveryManifestPath}`,
     type: discoveryMediaTypeFor(SiteDiscoveryManifestPath),
   }]
+  // RFC 9727 service-desc target: the machine-readable OpenAPI 3.1 description
+  // of this same REST surface, built by `openapi-document.ts` from the
+  // identical contract lists this linkset already anchors.
+  const serviceDesc: readonly ApiCatalogLink[] = [{
+    href: `${origin}/openapi.json`,
+    type: 'application/vnd.oai.openapi+json;version=3.1',
+  }]
   const anchorEntry = (anchorPath: string): ApiCatalogLinksetEntry => ({
     anchor: `${origin}${anchorPath}`,
     describedby,
     'service-doc': serviceDoc,
+    'service-desc': serviceDesc,
   })
 
   return {

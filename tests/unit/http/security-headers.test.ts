@@ -36,6 +36,7 @@ const requiredCspAllowances = [
   'https://*.stripe.com',
   'https://link.com',
   'https://*.link.com',
+  'https://cdn.jsdelivr.net',
 ] as const
 
 describe('security header middleware', () => {

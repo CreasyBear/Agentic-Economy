@@ -56,13 +56,13 @@ describe('api-catalog document projection', () => {
     expect(JSON.stringify(document).replaceAll(`${origin}`, '')).not.toContain('://')
   })
 
-  it('invents no OpenAPI or spec document that this app does not serve', () => {
-    const serialized = JSON.stringify(document)
-    expect(serialized.toLowerCase()).not.toContain('openapi')
-    expect(serialized).not.toContain('swagger')
+  it('points the machine API description relation at the served OpenAPI document', () => {
     for (const entry of document.linkset) {
-      expect('service-desc' in entry).toBe(false)
+      expect(entry['service-desc']).toEqual([
+        { href: `${origin}/openapi.json`, type: 'application/vnd.oai.openapi+json;version=3.1' },
+      ])
     }
+    expect(JSON.stringify(document)).not.toContain('swagger')
   })
 
   it('documents each anchor through llms.txt, SKILL.md, and the agent guide', () => {

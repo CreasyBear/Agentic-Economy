@@ -28,6 +28,12 @@ export {
   buildApiCatalogDocument,
 } from './internal/api-catalog'
 export {
+  buildOpenApiDocument,
+  buildOpenApiDocumentWithMetrics,
+  listOpenApiOperationIds,
+} from './internal/openapi-document'
+export type { OpenApiBuildResult, OpenApiDocument } from './internal/openapi-document'
+export {
   PUBLIC_CALL_REF_EXAMPLE,
   PUBLIC_IDEMPOTENCY_KEY_EXAMPLE,
   PUBLIC_TOOL_REF_EXAMPLE,

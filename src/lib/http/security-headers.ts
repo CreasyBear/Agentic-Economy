@@ -51,8 +51,10 @@ const cspDirectives = {
     'https://checkout.stripe.com',
     'https://js.stripe.com',
     'https://*.js.stripe.com',
+    // Scalar's official CDN embed for the public OpenAPI reference (/developers/api).
+    'https://cdn.jsdelivr.net',
   ],
-  'style-src': ["'self'", "'unsafe-inline'"],
+  'style-src': ["'self'", "'unsafe-inline'", 'https://cdn.jsdelivr.net'],
   'img-src': [
     "'self'",
     'data:',
