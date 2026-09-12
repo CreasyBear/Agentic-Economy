@@ -1,4 +1,5 @@
 import { v, type ObjectType } from 'convex/values'
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { type MutationCtx } from '../../../_generated/server'
 import type { Doc } from '../../../_generated/dataModel'
 import { internal } from '../../../_generated/api'
@@ -83,8 +84,8 @@ export async function prepareCredentialReplacementForServerHandler(
   let owner: Awaited<ReturnType<typeof resolveInteractiveAuthorityContext>>
   try {
     owner = await resolveInteractiveAuthorityContext(ctx, identity)
-  } catch {
-    return { kind: 'refused' as const, code: 'authentication_required' as const }
+  } catch (cause) {
+    return degradeBackend(cause, { kind: 'refused' as const, code: 'authentication_required' as const }, { site: 'prepareCredentialReplacementForServerHandler', reason: 'forbidden' })
   }
   if (input.grantRef !== issuedAgentGrantRef(identity.subject, input.issuanceKey)) {
     return { kind: 'refused' as const, code: 'authentication_required' as const }
@@ -280,8 +281,8 @@ async function replacementOwner(
   if (!await validReplacementAssertion(operation, input as StableHashValue, assertion)) return null
   try {
     return await resolveInteractiveAuthorityContext(ctx, identity)
-  } catch {
-    return null
+  } catch (cause) {
+    return degradeBackend(cause, null, { site: 'replacementOwner', reason: 'forbidden' })
   }
 }
 
@@ -306,8 +307,8 @@ export async function transitionCredentialReplacementCore(
   let normalizedSuccessorGrant: ReturnType<typeof normalizeStoredAgentAccessGrant>
   try {
     normalizedSuccessorGrant = normalizeStoredAgentAccessGrant(successorGrant)
-  } catch {
-    return { kind: 'conflict' as const }
+  } catch (cause) {
+    return degradeBackend(cause, { kind: 'conflict' as const }, { site: 'transitionCredentialReplacementCore', reason: 'invalid_response' })
   }
   const successorBinding = await ctx.db.query('externalIdentityBindings')
     .withIndex('by_bindingRef', (query) => query.eq('bindingRef', successor.bindingRef)).unique()

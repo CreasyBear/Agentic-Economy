@@ -1,5 +1,6 @@
 import type { Infer } from 'convex/values'
 import type { PaginationOptions } from 'convex/server'
+import { degradeBackend } from '../../../src/lib/observability/degrade-backend'
 import type { ActionCtx, MutationCtx, QueryCtx } from '../../_generated/server'
 import type { Doc } from '../../_generated/dataModel'
 import { internal } from '../../_generated/api'
@@ -447,8 +448,8 @@ export async function callHandler(
       snapshot = await ctx.runQuery(internal.capabilitySupplyTools.readCurrentPublishedToolSnapshot, {
         toolRef: args.toolRef,
       })
-    } catch {
-      currentOperationState = { kind: 'unavailable' }
+    } catch (cause) {
+      currentOperationState = degradeBackend(cause, { kind: 'unavailable' as const }, { site: 'callHandler', reason: 'source_unavailable' })
       return currentOperationState
     }
     if (snapshot === null) {
@@ -460,8 +461,8 @@ export async function callHandler(
       if (operation === undefined) throw new Error('operation_unsupported')
       materializeRuntimePublishedTool(operation)
       currentOperationState = { kind: 'valid', operation, toolJson: snapshot.toolJson }
-    } catch {
-      currentOperationState = { kind: 'unsupported' }
+    } catch (cause) {
+      currentOperationState = degradeBackend(cause, { kind: 'unsupported' as const }, { site: 'callHandler', reason: 'invalid_response' })
     }
     return currentOperationState
   }
@@ -785,8 +786,8 @@ function parseOwnerPreviousInput(inputJson: string): Record<string, JsonValue> |
     return isRecord(value) && isBoundedJsonValue(value)
       ? value as Record<string, JsonValue>
       : undefined
-  } catch {
-    return undefined
+  } catch (cause) {
+    return degradeBackend(cause, undefined, { site: 'parseOwnerPreviousInput', reason: 'invalid_response' })
   }
 }
 

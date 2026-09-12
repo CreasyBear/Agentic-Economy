@@ -2,15 +2,16 @@ import { start } from '@convex-dev/workflow'
 import { v } from 'convex/values'
 
 import { canonicalDigest } from '@/modules/common/canonical-digest'
-import { directoryNetwork } from '@/modules/market/x402-directory-index'
+import { directoryNetwork, directoryProviderKey, directorySlugBase, directorySlugWithMethod, isDirectoryEntryEligible } from '@/modules/market/x402-directory-index'
+import { sourceRouteRef } from '@/modules/capability-supply/public'
 import { internal } from './_generated/api'
 import type { Doc, Id } from './_generated/dataModel'
 import { internalMutation, internalQuery, type MutationCtx } from './_generated/server'
 import { parseWorkloadCronSnapshot, reconcileWorkloadCronSnapshot, workloadCronSnapshotValue } from './workloadCron'
 import { indexedSourceValue, progressValue, type IndexedSource, type IndexProgress } from './lib/x402DirectoryIndex/contracts'
 import { directoryFacets } from './lib/x402DirectoryIndex/facets'
-import { ANALYTICS_VERSION, analyticsNamespace, searchAnalytics, writeAnalytics } from './lib/x402DirectoryIndex/analytics'
-import { directoryGeneration, directoryState, storedDirectoryEntry } from './lib/x402DirectoryIndex/rows'
+import { ANALYTICS_VERSION, analyticsNamespace, eligibleFacetsNamespace, searchAnalytics, writeAnalytics } from './lib/x402DirectoryIndex/analytics'
+import { activeDirectoryGeneration, directoryGeneration, directoryState, storedDirectoryEntry } from './lib/x402DirectoryIndex/rows'
 
 export const DIRECTORY_INDEX_PAGE_SIZE = 100
 const MAX_ENTRY_BYTES = 768 * 1024
@@ -64,17 +65,65 @@ export const checkpoint = internalQuery({
   },
 })
 
+/** The active generation's already-recorded coverage, for the change-signal guard in x402DirectoryIndexRefresh.start. */
+export const activeCoverage = internalQuery({
+  args: {},
+  returns: v.union(v.null(), v.object({ generation: v.string(), sourceReportedLatest: v.optional(v.number()) })),
+  handler: async ctx => {
+    const generation = await activeDirectoryGeneration(ctx)
+    if (generation === null) return null
+    return { generation: generation.generation, ...(generation.sourceReportedLatest === undefined ? {} : { sourceReportedLatest: generation.sourceReportedLatest }) }
+  },
+})
+
+/**
+ * Advances the audit trail when the change-signal guard finds nothing new
+ * upstream: marketExternalRegistryState.lastAttemptAt moves to now so an
+ * operator can see the check happened, without minting a new generation row.
+ * No new schema field is needed - the compared totals (equal by definition
+ * of "unchanged") are already on the active generation's sourceReportedLatest,
+ * and the exact comparison is logged by the caller.
+ */
+export const recordUnchangedCheck = internalMutation({
+  args: { workload: workloadCronSnapshotValue },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await authorize(ctx, args.workload)
+    const state = await directoryState(ctx)
+    if (state === null) return null
+    await ctx.db.replace(state._id, {
+      key: 'coinbase',
+      ...(state.activeGeneration === undefined ? {} : { activeGeneration: state.activeGeneration }),
+      ...(state.refreshGeneration === undefined ? {} : { refreshGeneration: state.refreshGeneration }),
+      lastAttemptAt: Date.now(), lastAttemptStatus: state.lastAttemptStatus,
+      ...(state.lastError === undefined ? {} : { lastError: state.lastError }),
+    })
+    return null
+  },
+})
+
 type FacetKind = 'category' | 'provider' | 'network'
 function facetKeys(row: Pick<Doc<'marketExternalRegistryEntries'>, 'directoryCategory' | 'provider' | 'networks'>): [FacetKind, string][] {
   return [['category', row.directoryCategory ?? 'uncategorized'], ['provider', row.provider], ...row.networks.map(network => ['network', network] as [FacetKind, string])]
 }
 
-async function writeFacetMembership(ctx: MutationCtx, generation: string, resource: string, next: IndexedSource, category: string, networks: string[], previous: Doc<'marketExternalRegistryEntries'> | null) {
+/**
+ * Category/provider/network facets are mirrored into a second, eligible-only
+ * namespace alongside the generation-wide one (the same pattern already used
+ * for analyticsNamespace) so the facet panel can default to eligible-only
+ * counts without a provider-scoped long-tail view (Lane 1: facets never
+ * expose a provider filter, unlike browse/search).
+ */
+async function writeFacetMembership(ctx: MutationCtx, generation: string, resource: string, next: IndexedSource, category: string, networks: string[], eligible: boolean, previous: Doc<'marketExternalRegistryEntries'> | null, previousEligible: boolean) {
   if (previous !== null) {
-    for (const key of facetKeys(previous)) await directoryFacets.delete(ctx, { namespace: generation, key, id: resource })
+    for (const key of facetKeys(previous)) {
+      await directoryFacets.delete(ctx, { namespace: generation, key, id: resource })
+      if (previousEligible) await directoryFacets.deleteIfExists(ctx, { namespace: eligibleFacetsNamespace(generation), key, id: resource })
+    }
   }
   for (const key of facetKeys({ directoryCategory: category, provider: next.entry.provider, networks })) {
     await directoryFacets.insert(ctx, { namespace: generation, key, id: resource })
+    if (eligible) await directoryFacets.insert(ctx, { namespace: eligibleFacetsNamespace(generation), key, id: resource })
     const exists = await ctx.db.query('marketDirectoryFacets')
       .withIndex('by_generation_and_kind_and_key', q => q.eq('generation', generation).eq('kind', key[0]).eq('key', key[1])).unique()
     if (exists === null) await ctx.db.insert('marketDirectoryFacets', {
@@ -82,6 +131,26 @@ async function writeFacetMembership(ctx: MutationCtx, generation: string, resour
       ...(key[0] === 'provider' && next.entry.iconUrl !== undefined ? { iconUrl: next.entry.iconUrl } : {}),
     })
   }
+}
+
+/**
+ * Kebab slug for the canonical `/tools/<providerKey>/<slug>` URL, unique
+ * within (generation, providerKey). The base slug is the resource path only;
+ * a collision with a *different* resource already holding that slug (e.g.
+ * two methods on the same path) is resolved by qualifying the new entry's
+ * slug with its method, leaving the earlier resource's slug untouched - both
+ * remain unique. Checked and assigned once per resource (not per network
+ * variant), same as providerKey/eligible above.
+ */
+async function resolveDirectorySlug(
+  ctx: MutationCtx, generation: string, providerKey: string, resource: string, method: string | undefined,
+): Promise<string> {
+  const base = directorySlugBase(resource)
+  const collision = await ctx.db.query('marketDirectorySearchEntries')
+    .withIndex('by_generation_and_providerKey_and_slug', q => q.eq('generation', generation).eq('providerKey', providerKey).eq('slug', base))
+    .filter(q => q.eq(q.field('network'), '*'))
+    .first()
+  return collision !== null && collision.resource !== resource ? directorySlugWithMethod(resource, method) : base
 }
 
 async function writeSource(ctx: MutationCtx, generation: string, item: IndexedSource, observedAt: number): Promise<boolean> {
@@ -102,6 +171,20 @@ async function writeSource(ctx: MutationCtx, generation: string, item: IndexedSo
   const calls = entry.activity?.calls30d
   const popularOrder = calls !== undefined && Number.isSafeInteger(calls) && calls >= 0 ? calls : -1
   const searchText = [entry.title, entry.serviceName, entry.description, entry.provider, category, ...(entry.tags ?? [])].filter(Boolean).join(' ').slice(0, 8000)
+  // Eligibility and provider identity are resource-level (not per-network), so
+  // compute once and copy onto every network-variant search row below.
+  const universalAnalytics = searchAnalytics(entry, '*')
+  const eligible = isDirectoryEntryEligible(universalAnalytics)
+  const providerKey = directoryProviderKey(entry.provider)
+  const slug = await resolveDirectorySlug(ctx, generation, providerKey, item.resource, entry.method)
+  // Computed from the same raw resource JSON that flows into
+  // admitFacilitatorDiscoveryItems at resolve time (item.sourceJson ==
+  // stableStringify(source.resource) there), so the digest this produces is
+  // bit-for-bit identical to capabilityPublications.sourceRouteRef once the
+  // resource is admitted - the join in x402DirectoryIndex.ts relies on that.
+  const routeRef = sourceRouteRef({
+    sourceKind: 'x402', sourceSelector: {}, sourceDescriptorJson: item.sourceJson, endpointUrl: item.resource,
+  })
   const row = {
     generation, documentId: id, source: 'coinbase' as const,
     upstreamServiceId: entry.serviceName ?? entry.provider, upstreamEndpointId: item.resource,
@@ -119,15 +202,17 @@ async function writeSource(ctx: MutationCtx, generation: string, item: IndexedSo
   else { await ctx.db.replace(previous._id, row); entryId = previous._id }
   const oldSearch = await ctx.db.query('marketDirectorySearchEntries')
     .withIndex('by_generation_and_resource', q => q.eq('generation', generation).eq('resource', item.resource)).take(130)
+  const previousEligible = oldSearch[0]?.eligible === true
   for (const old of oldSearch) await ctx.db.delete(old._id)
   for (const network of ['*', ...networks]) {
     await ctx.db.insert('marketDirectorySearchEntries', {
-      generation, resource: item.resource, entryId, network, category, provider: entry.provider.toLowerCase(), searchText,
+      generation, resource: item.resource, entryId, network, category, provider: entry.provider.toLowerCase(), providerKey, eligible, searchText,
+      slug, ...(routeRef === undefined ? {} : { sourceRouteRef: routeRef }),
       popularOrder, updatedOrder, ...searchAnalytics(entry, network),
 
     })
   }
-  await writeFacetMembership(ctx, generation, item.resource, item, category, networks, previous)
+  await writeFacetMembership(ctx, generation, item.resource, item, category, networks, eligible, previous, previousEligible)
   await writeAnalytics(ctx, generation, item.resource, entry, previous === null ? undefined : storedDirectoryEntry(previous))
   return previous === null
 }
@@ -215,14 +300,27 @@ export const cleanup = internalMutation({
       await ctx.scheduler.runAfter(0, internal.x402DirectoryIndexStore.cleanup, args)
       return null
     }
-    const rows = await ctx.db.query('marketExternalRegistryEntries').withIndex('by_generation_and_documentId', q => q.eq('generation', args.generation)).take(5)
+    // Batch 200 (was 5): the same read/write budget services 40x more rows per
+    // reschedule tick, which is what turned cleanup into thousands of extra
+    // internalMutation calls per generation (see cost comment in scheduled-workloads.ts).
+    // Bounded by work, not row count: each row's facetKeys() fans out to
+    // category + provider + up to 128 network aggregate deletes, so 200 rows
+    // can mean up to 26,000 aggregate deletes in one mutation. Stop once the
+    // accumulated key count would cross the budget (always processing at
+    // least one row, so a single wide row can't stall the reschedule loop).
+    const CLEANUP_FACET_KEY_BUDGET = 2000
+    const rows = await ctx.db.query('marketExternalRegistryEntries').withIndex('by_generation_and_documentId', q => q.eq('generation', args.generation)).take(200)
     if (rows.length > 0) {
-      for (const row of rows) {
+      let keyBudget = 0
+      for (const [processed, row] of rows.entries()) {
+        const keys = facetKeys(row)
+        if (processed > 0 && keyBudget + keys.length > CLEANUP_FACET_KEY_BUDGET) break
         if (row.source !== 'coinbase') throw new Error('directory_cleanup_source_conflict')
         const endpointUrl = row.endpointUrl
         if (endpointUrl === undefined) throw new Error('directory_cleanup_endpoint_missing')
-        for (const key of facetKeys(row)) await directoryFacets.delete(ctx, { namespace: args.generation, key, id: endpointUrl })
+        for (const key of keys) await directoryFacets.delete(ctx, { namespace: args.generation, key, id: endpointUrl })
         await ctx.db.delete(row._id)
+        keyBudget += keys.length
       }
       await ctx.scheduler.runAfter(0, internal.x402DirectoryIndexStore.cleanup, args)
       return null
@@ -232,6 +330,7 @@ export const cleanup = internalMutation({
     if (facets.length === 100) { await ctx.scheduler.runAfter(0, internal.x402DirectoryIndexStore.cleanup, args); return null }
     await directoryFacets.clear(ctx, { namespace: args.generation })
     await directoryFacets.clear(ctx, { namespace: analyticsNamespace(args.generation) })
+    await directoryFacets.clear(ctx, { namespace: eligibleFacetsNamespace(args.generation) })
     await ctx.db.delete(generation._id)
     return null
   },

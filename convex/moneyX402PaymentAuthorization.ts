@@ -1,5 +1,6 @@
 import { v, type Infer } from 'convex/values'
 
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { containsForbiddenSignatureKey } from '@/modules/common/forbidden-signature-key'
 import { isRecord } from '@/modules/common/is-record'
@@ -41,8 +42,11 @@ function paymentAuthorizationExpiryFromValidBefore(
   let seconds: bigint
   try {
     seconds = BigInt(validBefore)
-  } catch {
-    return undefined
+  } catch (cause) {
+    return degradeBackend(cause, undefined, {
+      site: 'paymentAuthorizationExpiryFromValidBefore',
+      reason: 'invalid_response',
+    })
   }
   if (seconds <= 0n) return undefined
   const milliseconds = seconds * 1000n
@@ -56,8 +60,11 @@ function paymentAuthorizationExpiryFromValidBefore(
     return BigInt(expiresAt) === milliseconds
       ? { paymentAuthorizationValidBefore: validBefore, paymentAuthorizationExpiresAt: expiresAt }
       : undefined
-  } catch {
-    return undefined
+  } catch (cause) {
+    return degradeBackend(cause, undefined, {
+      site: 'paymentAuthorizationExpiryFromValidBefore',
+      reason: 'invalid_response',
+    })
   }
 }
 
@@ -91,8 +98,11 @@ function canonicalUnsignedMaterialJson(value: unknown): string | undefined {
   try {
     const json = stableStringify(value as StableHashValue)
     return canonicalDigest(value) === canonicalDigest(JSON.parse(json)) ? json : undefined
-  } catch {
-    return undefined
+  } catch (cause) {
+    return degradeBackend(cause, undefined, {
+      site: 'canonicalUnsignedMaterialJson',
+      reason: 'invalid_response',
+    })
   }
 }
 
@@ -538,8 +548,12 @@ export async function recordX402PaymentSigningIntentHandler(
   let parsed: unknown
   try {
     parsed = JSON.parse(args.paymentUnsignedMaterialJson)
-  } catch {
-    throw new Error('x402_payment_unsigned_material_invalid')
+  } catch (cause) {
+    degradeBackend(cause, undefined, {
+      site: 'recordX402PaymentSigningIntentHandler',
+      reason: 'invalid_response',
+    })
+    throw new Error('x402_payment_unsigned_material_invalid', { cause })
   }
   const parsedExpiry = paymentAuthorizationExpiryFromMaterial(parsed)
   if (

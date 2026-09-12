@@ -1,4 +1,5 @@
 import { v, type Infer } from 'convex/values'
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { nativeSubmissionBusiness } from './capabilitySupplyNativeAdmission'
 
 import { canonicalDigest } from '@/modules/common/canonical-digest'
@@ -251,8 +252,8 @@ async function reconstructPreparedRepublishMaterial(
   let offeringRegistration: CapabilityOfferingRegistration
   try {
     offeringRegistration = offeringRegistrationFromRow(offering)
-  } catch {
-    return { kind: 'refused', reason: 'offering_integrity_failure' }
+  } catch (cause) {
+    return degradeBackend(cause, { kind: 'refused', reason: 'offering_integrity_failure' }, { site: 'reconstructPreparedRepublishMaterial', reason: 'invalid_response' })
   }
   if (
     offeringRegistration.businessId !== publication.businessId ||
@@ -269,8 +270,8 @@ async function reconstructPreparedRepublishMaterial(
   let adapterConfig: CapabilityPublicationBindingDraft['adapter']['config']
   try {
     adapterConfig = JSON.parse(binding.configJson)
-  } catch {
-    return { kind: 'refused', reason: 'binding_integrity_failure' }
+  } catch (cause) {
+    return degradeBackend(cause, { kind: 'refused', reason: 'binding_integrity_failure' }, { site: 'reconstructPreparedRepublishMaterial', reason: 'invalid_response' })
   }
   if (
     stableStringify(adapterConfig) !== binding.configJson ||

@@ -40,6 +40,23 @@ export function prepareIndexedDirectorySource(resource: Readonly<Record<string, 
   }
 }
 
+/**
+ * Cheapest available upstream change signal: one discovery call with limit 1
+ * (no metadata parsing, no writes) returning the source's reported total.
+ * Used by x402DirectoryIndexRefresh.start to skip a full re-index when
+ * nothing changed (see cost comment there).
+ */
+export const probeTotal = internalAction({
+  args: {},
+  returns: v.number(),
+  handler: async () => {
+    const response = await listX402DiscoveryResources({ limit: 1, offset: 0 })
+    const total = response.pagination.total
+    if (total === undefined || !Number.isSafeInteger(total) || total < 0) throw new Error('directory_probe_invalid')
+    return total
+  },
+})
+
 /** Read-only SDK discovery plus one transactional metadata commit; no Provider endpoint is called. */
 export const page = internalAction({
   args: { generation: v.string(), offset: v.number(), workload: workloadCronSnapshotValue },

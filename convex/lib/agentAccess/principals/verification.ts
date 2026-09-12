@@ -1,4 +1,5 @@
 import { v, type Infer } from 'convex/values'
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 import type { MutationCtx, QueryCtx } from '../../../_generated/server'
 import { normalizeStoredAgentAccessGrant } from '@/modules/agent-access/policy'
 import {
@@ -60,8 +61,8 @@ async function verifyAgentPrincipalForScope(
   const grant = grants.flatMap((candidate) => {
     try {
       return [normalizeStoredAgentAccessGrant(candidate)]
-    } catch {
-      return []
+    } catch (cause) {
+      return degradeBackend(cause, [], { site: 'verifyAgentPrincipalForScope', reason: 'invalid_response' })
     }
   }).find((candidate) => candidate.principalId === stored.principalId
     && candidate.ownerId === stored.ownerId

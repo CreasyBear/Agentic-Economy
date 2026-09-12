@@ -1,4 +1,5 @@
 import type { MutationCtx } from '../_generated/server'
+import { degradeBackend } from '../../src/lib/observability/degrade-backend'
 import { canonicalDigest } from '../../src/modules/common/canonical-digest'
 import type { StableHashValue } from '../../src/modules/common/stable-hash'
 import {
@@ -190,7 +191,7 @@ export async function validateCanonicalAgentDelegation(
       budgetAmount: 0,
     })
     return snapshot
-  } catch {
-    return null
+  } catch (cause) {
+    return degradeBackend(cause, null, { site: 'validateCanonicalAgentDelegation', reason: 'invalid_response' })
   }
 }

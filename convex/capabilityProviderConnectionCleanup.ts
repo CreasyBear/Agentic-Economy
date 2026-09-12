@@ -1,4 +1,5 @@
 import { vOnCompleteArgs } from '@convex-dev/workpool'
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { v } from 'convex/values'
 
 import {
@@ -247,8 +248,8 @@ export const completeWork = internalMutation({
         now: Date.now(),
         resourceAuthority: context.resourceAuthority,
       })
-    } catch {
-      return null
+    } catch (cause) {
+      return degradeBackend(cause, null, { site: 'completeWork', reason: 'source_unavailable' })
     }
     return null
   },

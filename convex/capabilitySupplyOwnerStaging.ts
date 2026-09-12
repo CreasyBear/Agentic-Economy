@@ -1,5 +1,6 @@
 import { v, type Infer } from 'convex/values'
 
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 import {
   isCanonicalCredentiallessX402ProviderConnection,
   type ProviderConnection,
@@ -184,8 +185,8 @@ function exactSandboxX402Material(
   let pricing: ReturnType<typeof normalizePricingConfig>
   try {
     pricing = normalizePricingConfig(JSON.parse(prepared.pricingConfigJson))
-  } catch {
-    return false
+  } catch (cause) {
+    return degradeBackend(cause, false, { site: 'exactSandboxX402Material', reason: 'invalid_response' })
   }
   if (
     pricing.kind !== 'valid'

@@ -1,5 +1,6 @@
 import { v } from 'convex/values'
 
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { MARKET_TOOLS_CALL_SCOPE } from '@/modules/agent-access/contract'
 import {
   createAgentAccessGrant,
@@ -233,8 +234,8 @@ function grantReadinessCodes(
   let grant: NormalizedStoredAgentAccessGrant
   try {
     grant = normalizeStoredAgentAccessGrant(storedGrant)
-  } catch {
-    return ['canary_grant_material_invalid']
+  } catch (cause) {
+    return degradeBackend(cause, ['canary_grant_material_invalid'], { site: 'grantReadinessCodes', reason: 'invalid_response' })
   }
   const codes: ReadinessCode[] = []
   if (
@@ -319,8 +320,8 @@ export async function readExactSellerOnboardingCanaryPlatformGrantHandler(
   let normalized: NormalizedStoredAgentAccessGrant
   try {
     normalized = normalizeStoredAgentAccessGrant(grant)
-  } catch {
-    return null
+  } catch (cause) {
+    return degradeBackend(cause, null, { site: 'readExactSellerOnboardingCanaryPlatformGrantHandler', reason: 'invalid_response' })
   }
   if (
     normalized.format !== 'ae.agent-access-grant:v2'
@@ -416,14 +417,14 @@ function sandboxRpcEndpointCount(): number {
       try {
         const url = new URL(value)
         return url.protocol === 'https:' ? url.href : undefined
-      } catch {
-        return undefined
+      } catch (cause) {
+        return degradeBackend(cause, undefined, { site: 'sandboxRpcEndpointCount', reason: 'invalid_response' })
       }
     })
     if (urls.some((url) => url === undefined)) return 0
     return new Set(urls).size === urls.length ? urls.length : 0
-  } catch {
-    return 0
+  } catch (cause) {
+    return degradeBackend(cause, 0, { site: 'sandboxRpcEndpointCount', reason: 'invalid_response' })
   }
 }
 

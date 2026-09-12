@@ -4,6 +4,7 @@ import type {
   GraphPublicationRow,
   GraphPublishedBusiness,
 } from '@/modules/capability-supply/public'
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 import type { OfferingAccessPathDescriptor } from '@/modules/catalog/public'
 import type { ProviderConnection } from '@/modules/capability-supply/provider-connection'
 import { normalizePricingConfig, type PricingConfig } from '@/modules/money/public'
@@ -231,7 +232,7 @@ function parsePricingConfig(value: string): PricingConfig | undefined {
     const parsed: unknown = JSON.parse(value)
     const normalized = normalizePricingConfig(parsed)
     return normalized.kind === 'valid' ? normalized.config : undefined
-  } catch {
-    return undefined
+  } catch (cause) {
+    return degradeBackend(cause, undefined, { site: 'parsePricingConfig', reason: 'invalid_response' })
   }
 }

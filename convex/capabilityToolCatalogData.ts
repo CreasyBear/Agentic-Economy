@@ -1,4 +1,5 @@
 import { v } from 'convex/values'
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { normalizePricingConfig } from '@/modules/money/public'
 import { internalQuery } from './_generated/server'
 
@@ -13,7 +14,7 @@ export const priceSources = internalQuery({
       const row = await ctx.db.query('capabilityPublications').withIndex('by_toolRef_and_disposition', (q) => q.eq('toolRef', toolRef).eq('disposition', 'current')).unique()
       if (row?.pricingConfigJson === undefined) continue
       let parsed: unknown
-      try { parsed = JSON.parse(row.pricingConfigJson) } catch { continue }
+      try { parsed = JSON.parse(row.pricingConfigJson) } catch (cause) { degradeBackend(cause, undefined, { site: 'priceSources', reason: 'invalid_response' }); continue }
       const price = normalizePricingConfig(parsed)
       if (price.kind !== 'valid' || price.config.kind !== 'managed_x402') continue
       result.push({ toolRef, environment: row.runtimeEnvironment, atomicUnits: price.config.sourceRequirement.atomicUnits })

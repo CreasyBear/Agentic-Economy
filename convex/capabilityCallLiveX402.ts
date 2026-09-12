@@ -1,6 +1,7 @@
 "use node"
 
 import { v, type Infer } from 'convex/values'
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 
 import { internal } from './_generated/api'
 import { internalAction } from './_generated/server'
@@ -49,7 +50,7 @@ export const inspect = internalAction({
     const operation = JSON.parse(snapshot.targetJson) as LiveX402InspectionTarget & { targetDigest: string; contract: CapabilityContract }
     try {
       if (openCapabilityDecisionModel(operation.contract).validateInput(args.input).kind !== 'valid') return { kind: 'refused' as const }
-    } catch { return { kind: 'refused' as const } }
+    } catch (cause) { return degradeBackend(cause, { kind: 'refused' as const }, { site: 'inspect', reason: 'invalid_response' }) }
     const result = await inspectLiveX402Requirement(operation, args.input, {
       beforeSend: async () => {
         const current = await ctx.runQuery(internal.capabilitySupplyCurrentTool.readManagedX402InspectionSnapshot, { toolRef: args.toolRef })

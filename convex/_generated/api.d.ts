@@ -42,6 +42,7 @@ import type * as capabilitySupplyCanaryFunding from "../capabilitySupplyCanaryFu
 import type * as capabilitySupplyCanaryFundingPreflight from "../capabilitySupplyCanaryFundingPreflight.js";
 import type * as capabilitySupplyCommands from "../capabilitySupplyCommands.js";
 import type * as capabilitySupplyCurrentTool from "../capabilitySupplyCurrentTool.js";
+import type * as capabilitySupplyDirectoryEligibility from "../capabilitySupplyDirectoryEligibility.js";
 import type * as capabilitySupplyEligiblePorts from "../capabilitySupplyEligiblePorts.js";
 import type * as capabilitySupplyGraph from "../capabilitySupplyGraph.js";
 import type * as capabilitySupplyGraphPorts from "../capabilitySupplyGraphPorts.js";
@@ -246,6 +247,7 @@ declare const fullApi: ApiFromModules<{
   capabilitySupplyCanaryFundingPreflight: typeof capabilitySupplyCanaryFundingPreflight;
   capabilitySupplyCommands: typeof capabilitySupplyCommands;
   capabilitySupplyCurrentTool: typeof capabilitySupplyCurrentTool;
+  capabilitySupplyDirectoryEligibility: typeof capabilitySupplyDirectoryEligibility;
   capabilitySupplyEligiblePorts: typeof capabilitySupplyEligiblePorts;
   capabilitySupplyGraph: typeof capabilitySupplyGraph;
   capabilitySupplyGraphPorts: typeof capabilitySupplyGraphPorts;
@@ -443,7 +445,6 @@ export declare const components: {
   rateLimiter: import("@convex-dev/rate-limiter/_generated/component.js").ComponentApi<"rateLimiter">;
   agent: import("@convex-dev/agent/_generated/component.js").ComponentApi<"agent">;
   migrations: import("@convex-dev/migrations/_generated/component.js").ComponentApi<"migrations">;
-  ownerActivationByStage: import("@convex-dev/aggregate/_generated/component.js").ComponentApi<"ownerActivationByStage">;
   marketEvidence: import("@convex-dev/aggregate/_generated/component.js").ComponentApi<"marketEvidence">;
   marketOperationEvidence: import("@convex-dev/aggregate/_generated/component.js").ComponentApi<"marketOperationEvidence">;
   marketToolRatings: import("@convex-dev/aggregate/_generated/component.js").ComponentApi<"marketToolRatings">;

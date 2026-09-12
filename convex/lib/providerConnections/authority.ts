@@ -1,5 +1,6 @@
 import type { MutationCtx, QueryCtx } from '../../_generated/server'
 import type { Id } from '../../_generated/dataModel'
+import { degradeBackend } from '../../../src/lib/observability/degrade-backend'
 import { canonicalDigest } from '../../../src/modules/common/canonical-digest'
 import {
   providerConnectionAuthorityProvenanceIsValid,
@@ -74,8 +75,8 @@ export async function resolveCanonicalBusinessOwner(
 function canonicalActor(principal: string, account: string): CanonicalActor | null {
   try {
     return Object.freeze({ principalRef: principalRef(principal), accountRef: accountRef(account) })
-  } catch {
-    return null
+  } catch (cause) {
+    return degradeBackend(cause, null, { site: 'canonicalActor', reason: 'invalid_response' })
   }
 }
 
@@ -92,8 +93,8 @@ function parseGrantRow(
     void _id
     void _creationTime
     return parsePersistedDelegationGrant(stored as never)
-  } catch {
-    return null
+  } catch (cause) {
+    return degradeBackend(cause, null, { site: 'parseGrantRow', reason: 'invalid_response' })
   }
 }
 
@@ -335,8 +336,8 @@ export async function resolveExpectedProviderConnectionGrant(
   let canonicalGrantRef: DelegationGrantRef
   try {
     canonicalGrantRef = delegationGrantRef(expectedGrantRef)
-  } catch {
-    return null
+  } catch (cause) {
+    return degradeBackend(cause, null, { site: 'resolveExpectedProviderConnectionGrant', reason: 'invalid_response' })
   }
   const candidate = await ctx.db.query('authorityDelegationGrants')
     .withIndex('by_grantRef', (query) => query.eq('grantRef', canonicalGrantRef))

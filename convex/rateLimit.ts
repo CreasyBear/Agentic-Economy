@@ -20,6 +20,7 @@ const publicHttpRateLimitName = v.union(
   v.literal('oauth-issuance'),
   v.literal('oauth-device-poll'),
   v.literal('dispute-open'),
+  v.literal('mcp-anonymous'),
 )
 
 export const admit = internalMutation({

@@ -1,3 +1,4 @@
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { Infer } from 'convex/values'
 import {
@@ -87,8 +88,8 @@ async function registerMappingCommand(
     if (resolveRegisteredToolMappingRef(mapping) !== mapping.mappingRef) {
       return { kind: 'refused' as const, reason: 'mapping_invalid' as const }
     }
-  } catch {
-    return { kind: 'refused' as const, reason: 'mapping_invalid' as const }
+  } catch (cause) {
+    return degradeBackend(cause, { kind: 'refused' as const, reason: 'mapping_invalid' as const }, { site: 'registerMappingCommand', reason: 'invalid_response' })
   }
   const mappingRef = mapping.mappingRef
   const contracts = await validateMappingContracts(db, mapping)

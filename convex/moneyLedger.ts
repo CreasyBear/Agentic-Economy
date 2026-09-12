@@ -7,8 +7,6 @@ import { sourceWriteArgs } from './sourceWriteAdmission'
 import {
   authorizeConnectOnboardingArgs,
   authorizeConnectOnboardingHandler,
-  bindConnectAccountArgs,
-  bindConnectAccountHandler,
   connectAccountResultValue,
   connectAccountReservationResultValue,
   connectAccountViewValue,
@@ -51,12 +49,6 @@ export const finalizeConnectAccount = mutation({
   handler: finalizeConnectAccountHandler,
 })
 
-export const bindConnectAccount = mutation({
-  args: bindConnectAccountArgs,
-  returns: connectAccountResultValue,
-  handler: bindConnectAccountHandler,
-})
-
 export const readPayoutAccountByStripeId = query({
   args: readPayoutAccountByStripeIdArgs,
   returns: v.array(payoutBindingViewValue),
@@ -88,9 +80,16 @@ export const recordConnectAccountEventFromInbox = internalMutation({
 })
 
 const retiredCreditRefusal = { kind: 'refused' as const, code: 'account_aud_required' as const }
+const retiredCreditRefusalValue = v.object({ kind: v.literal('refused'), code: v.literal('account_aud_required') })
+const retiredCreditRefusalWithItemsValue = v.object({
+  kind: v.literal('refused'),
+  code: v.literal('account_aud_required'),
+  items: v.array(v.string()),
+})
 
 export const readCreditAccount = query({
   args: { principalId: identifier, currency: identifier },
+  returns: retiredCreditRefusalValue,
   handler: async () => retiredCreditRefusal,
 })
 
@@ -101,16 +100,22 @@ export const listCreditActivity = query({
     currency: identifier,
     paginationOpts: paginationOptsValidator,
   },
-  handler: async () => ({ ...retiredCreditRefusal, items: [] as const }),
+  returns: retiredCreditRefusalWithItemsValue,
+  handler: async () => ({ ...retiredCreditRefusal, items: [] }),
 })
 
 export const readKeyUsage = query({
   args: { principalId: identifier, credentialId: identifier, currency: identifier },
-  handler: async () => ({ ...retiredCreditRefusal, items: [] as const }),
+  returns: retiredCreditRefusalWithItemsValue,
+  handler: async () => ({ ...retiredCreditRefusal, items: [] }),
 })
 
 export const readOwnerProviderEarnings = query({
   args: {},
+  returns: v.union(
+    v.object({ kind: v.literal('not_found') }),
+    v.object({ kind: v.literal('error'), code: v.literal('unauthenticated') }),
+  ),
   handler: async (ctx) => {
     const actor = await resolveBusinessActor(ctx)
     return actor.kind === 'authenticated_owner'
@@ -127,5 +132,6 @@ export const readAgentProviderEarnings = mutation({
     correlationId: v.string(),
     ...sourceWriteArgs,
   },
+  returns: v.object({ kind: v.literal('error'), code: v.literal('source_unavailable') }),
   handler: async () => ({ kind: 'error' as const, code: 'source_unavailable' as const }),
 })

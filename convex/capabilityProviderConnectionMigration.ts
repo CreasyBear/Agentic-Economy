@@ -1,6 +1,7 @@
 import { paginationOptsValidator } from 'convex/server'
 import { v } from 'convex/values'
 
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { canonicalDigest, isCanonicalDigest } from '@/modules/common/canonical-digest'
 import {
   FACILITATOR_DISCOVERY_PUBLISHER_REF,
@@ -55,8 +56,8 @@ function canonicalLegacyResource(row: CompatibilityRow): string | undefined {
       || row.providerRef !== `provider:x402:${parsed.host.toLowerCase()}`
     ) return undefined
     return resourceUrl
-  } catch {
-    return undefined
+  } catch (cause) {
+    return degradeBackend(cause, undefined, { site: 'canonicalLegacyResource', reason: 'invalid_response' })
   }
 }
 

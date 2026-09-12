@@ -1,4 +1,5 @@
 import { v, type Infer } from 'convex/values'
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { dereferenceLocalSchema } from '@/modules/capability-supply/convex'
 import { jsonValueSchema } from '@/modules/capability-contract/public'
 import { isRecord } from '@/modules/common/is-record'
@@ -901,8 +902,8 @@ function decodeBootstrapPublicationSource(
   let decoded: unknown
   try {
     decoded = decodeConvexPublicationSource(source)
-  } catch {
-    return undefined
+  } catch (cause) {
+    return degradeBackend(cause, undefined, { site: 'decodeBootstrapPublicationSource', reason: 'invalid_response' })
   }
   if (!isRecord(decoded) || typeof decoded.kind !== 'string') return undefined
   if (decoded.kind === 'ae_envelope') {

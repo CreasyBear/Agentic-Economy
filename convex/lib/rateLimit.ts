@@ -1,4 +1,5 @@
 import { HOUR, MINUTE, RateLimiter, type RateLimitReturns, type RunMutationCtx } from '@convex-dev/rate-limiter'
+import { degradeBackend } from '../../src/lib/observability/degrade-backend'
 import { components } from '../_generated/api'
 import type { MutationCtx } from '../_generated/server'
 import { RATE_LIMIT_NAMES, RATE_LIMIT_POLICY, type RateLimitName } from '@/modules/security/rate-limit-policy'
@@ -95,8 +96,8 @@ async function consequentialRateAdmission(
     return result.ok
       ? { kind: 'admitted' }
       : { kind: 'rate_limited', retryAfter: result.retryAfter }
-  } catch {
-    return { kind: 'unavailable' }
+  } catch (cause) {
+    return degradeBackend(cause, { kind: 'unavailable' as const }, { site: 'consequentialRateAdmission', reason: 'source_unavailable' })
   }
 }
 

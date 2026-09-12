@@ -1,4 +1,5 @@
 import { v } from 'convex/values'
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 
 import {
@@ -69,7 +70,7 @@ export async function readManagedX402InspectionTarget(
   const pricing = canonicalPublicationPricing(publication)
   if (pricing?.config.kind !== 'managed_x402' || pricing.config.effectTiming !== 'payment_required_before_effect') return undefined
   let config
-  try { config = parseX402FetchTransportConfiguration(JSON.parse(binding.configJson)) } catch { return undefined }
+  try { config = parseX402FetchTransportConfiguration(JSON.parse(binding.configJson)) } catch (cause) { return degradeBackend(cause, undefined, { site: 'readManagedX402InspectionTarget', reason: 'invalid_response' }) }
   const profile = x402PaymentProfileForEnvironment(publication.runtimeEnvironment)
   if (config === undefined || profile === undefined || config.network !== profile.network
     || config.asset.toLowerCase() !== profile.asset.toLowerCase() || config.scheme !== profile.scheme) return undefined

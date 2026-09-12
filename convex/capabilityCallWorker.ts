@@ -3,6 +3,7 @@
 import * as crypto from 'node:crypto'
 import { makeFunctionReference } from 'convex/server'
 import { v, type Infer } from 'convex/values'
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { recoveryResultValue } from '@/modules/capability-execution/convex'
 import {
   expireAuthorizationRecovery,
@@ -188,8 +189,8 @@ export const reconcileScheduled = internalAction({
         internal.moneyX402PaymentAttempts.listExpiredPreparedX402PaymentAttempts,
         { now: startedAt, limit: RECONCILIATION_SWEEP_LIMIT },
       )
-    } catch {
-      expiredCandidates = []
+    } catch (cause) {
+      expiredCandidates = degradeBackend(cause, [], { site: 'reconcileScheduled', reason: 'source_unavailable' })
     }
     const expiredSelected = Math.min(expiredCandidates.length, RECONCILIATION_SWEEP_LIMIT)
     let expiredQueued = 0
@@ -202,7 +203,8 @@ export const reconcileScheduled = internalAction({
           internal.capabilityCalls.readOwnerRecovery,
           { callRef: candidate.dispatchRef },
         )
-      } catch {
+      } catch (cause) {
+        degradeBackend(cause, undefined, { site: 'readOwnerRecovery', reason: 'source_unavailable' })
         continue
       }
       if (ownerRecovery === null) continue
@@ -221,8 +223,9 @@ export const reconcileScheduled = internalAction({
         if (result.kind !== 'reconciliation_required' || !('expiryDisposition' in result)) continue
         if (result.expiryDisposition === 'manual_review') expiredManualReview += 1
         else expiredQueued += 1
-      } catch {
+      } catch (cause) {
         // A failed expiry candidate must not prevent the remaining candidates from running.
+        degradeBackend(cause, undefined, { site: 'expireAuthorizationRecovery', reason: 'source_unavailable' })
       }
     }
     const remainingCapacity = Math.max(0, RECONCILIATION_SWEEP_LIMIT - expiredSelected)
@@ -250,7 +253,8 @@ export const reconcileScheduled = internalAction({
           internal.capabilityCalls.claimAutomaticReconciliationCandidate,
           { callRef: candidate.callRef, leaseOwner, now: Date.now() },
         )
-      } catch {
+      } catch (cause) {
+        degradeBackend(cause, undefined, { site: 'claimAutomaticReconciliationCandidate', reason: 'source_unavailable' })
         continue
       }
       if (claim.kind !== 'claimed' || claim.principalId === undefined || claim.credentialId === undefined) continue
@@ -268,7 +272,8 @@ export const reconcileScheduled = internalAction({
             credentialId: claim.credentialId,
           })
           outcome = isTerminalRecoveryResult(result) ? 'terminal' : 'reconciliation_required'
-        } catch {
+        } catch (cause) {
+          degradeBackend(cause, undefined, { site: 'readRecoveryStatus', reason: 'source_unavailable' })
           outcome = 'error'
           reason = 'recovery_failed'
         }
@@ -287,8 +292,9 @@ export const reconcileScheduled = internalAction({
         if (finished.kind === 'completed') completed += 1
         else if (finished.kind === 'retried') retried += 1
         else if (finished.kind === 'manual_review') manualReview += 1
-      } catch {
+      } catch (cause) {
         // A failed finish must not prevent the remaining candidates from running.
+        degradeBackend(cause, undefined, { site: 'finishAutomaticReconciliation', reason: 'source_unavailable' })
       }
     }
     return {

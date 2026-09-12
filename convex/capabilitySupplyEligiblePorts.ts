@@ -1,3 +1,4 @@
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 import {
   capabilityToolId,
   createPublicToolRef,
@@ -106,8 +107,8 @@ function toPublicationRow(doc: Doc<'capabilityPublications'>): EligiblePublicati
     const parsed = normalizePricingConfig(JSON.parse(doc.pricingConfigJson))
     if (parsed.kind !== 'valid' || pricingConfigDigest(parsed.config) !== doc.priceDigest) return null
     pricingConfig = parsed.config
-  } catch {
-    return null
+  } catch (cause) {
+    return degradeBackend(cause, null, { site: 'toPublicationRow', reason: 'invalid_response' })
   }
   return {
     publicationRef: doc.publicationRef,

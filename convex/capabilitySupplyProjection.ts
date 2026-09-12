@@ -36,6 +36,7 @@ import {
 } from '../src/modules/registry/public'
 import { qualifySuppliedCandidate } from '../src/modules/capability-supply/public'
 import { capabilitySupplyGraphPorts } from './capabilitySupplyGraphPorts'
+import { directoryListingEligible } from './capabilitySupplyDirectoryEligibility'
 
 const MAX_BUSINESS_CATALOG_OFFERINGS_PER_REBUILD = 100
 const BUSINESS_PROJECTION_REBUILD_PAGE_SIZE = 25
@@ -380,7 +381,17 @@ export async function deriveBusinessOfferingSupportFromCapabilitySupply(
     })
     const readinessObservedAt = publication.readinessObservedAt
     const expiry = publication.readinessValidUntil
+    // Same directory quality bar applied to the admitted registry's Tool
+    // reads (capabilitySupplyToolShared.ts:directoryListingEligible):
+    // reviewed-tier (provider_owned/ae_curated_external) is exempt; a
+    // listed-tier publication (third_party_gateway/observed_external) must
+    // still clear the directory's eligibility bar to count as routeable
+    // here. No catalog_offering-origin publication is listed-tier today
+    // (facilitator discovery only ever publishes standalone-origin
+    // offerings), so this is currently a no-op guard against that changing
+    // silently rather than an active filter.
     const routeable = qualification.status === 'eligible'
+      && await directoryListingEligible({ db }, publication.authorityMode, publication.sourceRouteRef)
     const next: OfferingSupportProjection = routeable
       ? {
           integrated: true,
@@ -549,6 +560,8 @@ type CapabilityPublicationSource = {
   readinessObservedAt?: number
   readinessValidUntil?: number
   readinessLastHealthyAt?: number
+  authorityMode: 'provider_owned' | 'ae_curated_external' | 'third_party_gateway' | 'observed_external'
+  sourceRouteRef?: string
 }
 
 type CapabilityBindingSource = {
@@ -570,6 +583,7 @@ function readCapabilityPublication(row: Doc<'capabilityPublications'>): Capabili
   const readinessObservedAt = optionalNumber(row, 'readinessObservedAt')
   const readinessValidUntil = optionalNumber(row, 'readinessValidUntil')
   const readinessLastHealthyAt = optionalNumber(row, 'readinessLastHealthyAt')
+  const sourceRouteRef = optionalString(row, 'sourceRouteRef')
   return {
     publicationRef: requiredString(row, 'publicationRef'),
     revision: requiredNumber(row, 'revision'),
@@ -582,9 +596,11 @@ function readCapabilityPublication(row: Doc<'capabilityPublications'>): Capabili
     bindingId: requiredString(row, 'bindingId'),
     credentialState: requiredString(row, 'credentialState'),
     healthState: requiredString(row, 'healthState'),
+    authorityMode: readLiteral(row.authorityMode, ['provider_owned', 'ae_curated_external', 'third_party_gateway', 'observed_external'], 'authorityMode'),
     ...(readinessObservedAt === undefined ? {} : { readinessObservedAt }),
     ...(readinessValidUntil === undefined ? {} : { readinessValidUntil }),
     ...(readinessLastHealthyAt === undefined ? {} : { readinessLastHealthyAt }),
+    ...(sourceRouteRef === undefined ? {} : { sourceRouteRef }),
   }
 }
 

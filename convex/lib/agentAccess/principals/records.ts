@@ -1,4 +1,5 @@
 import { v, type ObjectType } from 'convex/values'
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { env, type MutationCtx, type QueryCtx } from '../../../_generated/server'
 import { uniqueSorted } from '@/modules/common/unique-sorted'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
@@ -242,8 +243,8 @@ export async function registerAgentPrincipalHandler(ctx: MutationCtx, args: Obje
   let normalizedGrant: ReturnType<typeof normalizeStoredAgentAccessGrant>
   try {
     normalizedGrant = normalizeStoredAgentAccessGrant(grant)
-  } catch {
-    return { kind: 'conflict' as const }
+  } catch (cause) {
+    return degradeBackend(cause, { kind: 'conflict' as const }, { site: 'registerAgentPrincipalHandler', reason: 'invalid_response' })
   }
   const delegation = await ctx.db.query('authorityDelegationGrants')
     .withIndex('by_grantRef', (query) => query.eq('grantRef', grant.grantRef))

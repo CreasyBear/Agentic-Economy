@@ -1,5 +1,6 @@
 import { v, type Infer } from 'convex/values'
 import type { RegisteredMutation } from 'convex/server'
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 
 import { agentAccessGrantV2Value, normalizedAgentAccessGrantValue } from '@/modules/agent-access/public'
 import {
@@ -207,8 +208,8 @@ export const upsertGrant = internalMutation({
         return { kind: 'conflict' as const, code: 'grant_material_invalid' as const }
       }
       grant = normalized
-    } catch {
-      return { kind: 'conflict' as const, code: 'grant_material_invalid' as const }
+    } catch (cause) {
+      return degradeBackend(cause, { kind: 'conflict' as const, code: 'grant_material_invalid' as const }, { site: 'upsertGrant', reason: 'invalid_response' })
     }
     const selection = normalizeAgentAccessToolSelection(grant)
     if (selection === undefined

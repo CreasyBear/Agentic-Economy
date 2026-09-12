@@ -1,4 +1,5 @@
 import { v, type ObjectType } from 'convex/values'
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { brandNonEmpty } from '@/modules/common/ids'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
@@ -123,8 +124,8 @@ export async function reserveAgentAccessConsentHandler(
   let owner: Awaited<ReturnType<typeof resolveInteractiveAuthorityContext>>
   try {
     owner = await resolveInteractiveAuthorityContext(ctx, identity)
-  } catch {
-    return { kind: 'refused' as const, code: 'authentication_required' as const }
+  } catch (cause) {
+    return degradeBackend(cause, { kind: 'refused' as const, code: 'authentication_required' as const }, { site: 'reserveAgentAccessConsentHandler', reason: 'forbidden' })
   }
   const ownership = await currentOwnerAuthority(ctx, owner)
   if (ownership === null) {
@@ -413,8 +414,8 @@ async function deriveConsentCommand(
   let canonicalPrincipalRef: string
   try {
     canonicalPrincipalRef = principalRef(args.connectionTarget.principalRef)
-  } catch {
-    return null
+  } catch (cause) {
+    return degradeBackend(cause, null, { site: 'deriveConsentCommand', reason: 'invalid_response' })
   }
   if (oauthGrant.status !== 'pending') {
     const reservation = oauthGrant.consequenceReservation
@@ -579,8 +580,8 @@ async function resolveReplacementPredecessor(
     let normalizedCandidate: ReturnType<typeof normalizeStoredAgentAccessGrant>
     try {
       normalizedCandidate = normalizeStoredAgentAccessGrant(candidate)
-    } catch {
-      return []
+    } catch (cause) {
+      return degradeBackend(cause, [], { site: 'resolveReplacementPredecessor', reason: 'invalid_response' })
     }
     return candidate.principalId === canonicalPrincipalRef
       && candidate.ownerId === activeAccountRef
@@ -633,8 +634,8 @@ async function revokeCompromisedPredecessor(
   if (grant !== null) {
     try {
       normalizedGrant = normalizeStoredAgentAccessGrant(grant)
-    } catch {
-      normalizedGrant = undefined
+    } catch (cause) {
+      normalizedGrant = degradeBackend(cause, undefined, { site: 'revokeCompromisedPredecessor', reason: 'invalid_response' })
     }
   }
   if (credential === null || binding === null || grant === null

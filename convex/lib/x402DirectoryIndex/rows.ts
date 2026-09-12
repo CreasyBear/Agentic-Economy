@@ -105,7 +105,8 @@ export function momentumPatch(momentum: MomentumSignal) {
 }
 
 export function indexedDirectoryEntry(row: Doc<'marketExternalRegistryEntries'>, search?: Doc<'marketDirectorySearchEntries'>): IndexedEntry {
-  const entry = storedDirectoryEntry(row)
+  const stored = storedDirectoryEntry(row)
+  const entry = search?.slug === undefined ? stored : { ...stored, slug: search.slug }
   const analytics = search === undefined || search.depthBand === undefined || search.lastCalledBand === undefined || search.momentumBand === undefined ? undefined : {
     ...(search.payerDepth === undefined ? {} : { payerDepth: search.payerDepth }),
     depthBand: search.depthBand as DirectoryDepthBand,

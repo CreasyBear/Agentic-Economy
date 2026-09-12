@@ -25,6 +25,7 @@ import type {
   InteractiveBusinessAuthorityContext,
 } from '../src/modules/business/public'
 import { canonicalDigest } from '../src/modules/common/canonical-digest'
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 import type { DataModel, Doc } from './_generated/dataModel'
 import { internalAction, internalQuery, mutation, type MutationCtx } from './_generated/server'
 import {
@@ -147,10 +148,10 @@ export const readCurrentInteractiveAuthorityFacts = internalQuery({
     if (identity === null) return null
     try {
       return await resolveInteractiveAuthorityFacts(ctx.db, identity)
-    } catch {
+    } catch (cause) {
       // This is an authority read: malformed facts and storage failures both
       // deny rather than exposing a partially resolved identity.
-      return null
+      return degradeBackend(cause, null, { site: 'readCurrentInteractiveAuthorityFacts', reason: 'source_unavailable' })
     }
   },
 })
@@ -785,8 +786,8 @@ export async function resolveScheduledInteractiveAuthorityContext(
     const current = currentContextAtTrustedServerTime(facts, Date.now())
     if (current === null || !sameScheduledAuthority(current, expected)) return null
     return current
-  } catch {
-    return null
+  } catch (cause) {
+    return degradeBackend(cause, null, { site: 'resolveScheduledInteractiveAuthorityContext', reason: 'source_unavailable' })
   }
 }
 
@@ -842,7 +843,8 @@ function requireCanonicalRef<Value>(
 ): Value {
   try {
     return parse(value)
-  } catch {
+  } catch (cause) {
+    degradeBackend(cause, undefined, { site: 'requireCanonicalRef', reason: 'invalid_response' })
     throw new InteractiveAuthorityError('authority_fact_invalid')
   }
 }

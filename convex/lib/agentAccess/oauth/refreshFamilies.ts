@@ -1,4 +1,5 @@
 import { v, type ObjectType } from 'convex/values'
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { brandNonEmpty } from '@/modules/common/ids'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { accountRef, principalRef } from '@/modules/principal-account/public'
@@ -386,8 +387,8 @@ async function resolveRefreshCanonicalMaterial(ctx: MutationCtx, keyId: string) 
   let normalizedGrant: ReturnType<typeof normalizeStoredAgentAccessGrant>
   try {
     normalizedGrant = normalizeStoredAgentAccessGrant(grant)
-  } catch {
-    return null
+  } catch (cause) {
+    return degradeBackend(cause, null, { site: 'resolveRefreshCanonicalMaterial', reason: 'invalid_response' })
   }
   if (normalizedGrant.format !== AGENT_ACCESS_GRANT_FORMAT
     || normalizedGrant.spendingPolicy.format !== AGENT_ACCESS_POLICY_FORMAT
