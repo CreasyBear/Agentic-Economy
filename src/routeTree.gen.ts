@@ -41,6 +41,7 @@ import { Route as OauthDevice_authorizationRouteImport } from './routes/oauth.de
 import { Route as OauthAuthorizeRouteImport } from './routes/oauth.authorize'
 import { Route as FundCancelledRouteImport } from './routes/fund.cancelled'
 import { Route as FundFundingSessionIdRouteImport } from './routes/fund.$fundingSessionId'
+import { Route as DevelopersDiscoveryRouteImport } from './routes/developers.discovery'
 import { Route as DevelopersApiRouteImport } from './routes/developers.api'
 import { Route as CallsCallRefRouteImport } from './routes/calls.$callRef'
 import { Route as ApiReadyRouteImport } from './routes/api.ready'
@@ -79,7 +80,6 @@ import { Route as ApiBusinessesSlugRouteImport } from './routes/api.businesses.$
 import { Route as OperatorOwnerSettingsRouteImport } from './routes/_operator/owner.settings'
 import { Route as OperatorOwnerOperationsRouteImport } from './routes/_operator/owner.operations'
 import { Route as OperatorOwnerCreditRouteImport } from './routes/_operator/owner.credit'
-import { Route as OperatorDevelopersDiscoveryRouteImport } from './routes/_operator/developers.discovery'
 import { Route as OperatorAgentAccessAuthorizeRouteImport } from './routes/_operator/agent-access.authorize'
 import { Route as OperatorAdminIndexHealthRouteImport } from './routes/_operator/admin.index-health'
 import { Route as OperatorAdminAuditEventsRouteImport } from './routes/_operator/admin.audit-events'
@@ -285,6 +285,11 @@ const FundFundingSessionIdRoute = FundFundingSessionIdRouteImport.update({
   path: '/fund/$fundingSessionId',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DevelopersDiscoveryRoute = DevelopersDiscoveryRouteImport.update({
+  id: '/developers/discovery',
+  path: '/developers/discovery',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const DevelopersApiRoute = DevelopersApiRouteImport.update({
   id: '/developers/api',
   path: '/developers/api',
@@ -482,12 +487,6 @@ const OperatorOwnerCreditRoute = OperatorOwnerCreditRouteImport.update({
   path: '/owner/credit',
   getParentRoute: () => OperatorRoute,
 } as any)
-const OperatorDevelopersDiscoveryRoute =
-  OperatorDevelopersDiscoveryRouteImport.update({
-    id: '/developers/discovery',
-    path: '/developers/discovery',
-    getParentRoute: () => OperatorRoute,
-  } as any)
 const OperatorAgentAccessAuthorizeRoute =
   OperatorAgentAccessAuthorizeRouteImport.update({
     id: '/authorize',
@@ -764,6 +763,7 @@ export interface FileRoutesByFullPath {
   '/api/ready': typeof ApiReadyRoute
   '/calls/$callRef': typeof CallsCallRefRoute
   '/developers/api': typeof DevelopersApiRoute
+  '/developers/discovery': typeof DevelopersDiscoveryRoute
   '/fund/$fundingSessionId': typeof FundFundingSessionIdRoute
   '/fund/cancelled': typeof FundCancelledRoute
   '/oauth/authorize': typeof OauthAuthorizeRoute
@@ -781,7 +781,6 @@ export interface FileRoutesByFullPath {
   '/admin/audit-events': typeof OperatorAdminAuditEventsRoute
   '/admin/index-health': typeof OperatorAdminIndexHealthRoute
   '/agent-access/authorize': typeof OperatorAgentAccessAuthorizeRoute
-  '/developers/discovery': typeof OperatorDevelopersDiscoveryRoute
   '/owner/credit': typeof OperatorOwnerCreditRoute
   '/owner/operations': typeof OperatorOwnerOperationsRouteWithChildren
   '/owner/settings': typeof OperatorOwnerSettingsRoute
@@ -880,6 +879,7 @@ export interface FileRoutesByTo {
   '/api/ready': typeof ApiReadyRoute
   '/calls/$callRef': typeof CallsCallRefRoute
   '/developers/api': typeof DevelopersApiRoute
+  '/developers/discovery': typeof DevelopersDiscoveryRoute
   '/fund/$fundingSessionId': typeof FundFundingSessionIdRoute
   '/fund/cancelled': typeof FundCancelledRoute
   '/oauth/authorize': typeof OauthAuthorizeRoute
@@ -897,7 +897,6 @@ export interface FileRoutesByTo {
   '/admin/audit-events': typeof OperatorAdminAuditEventsRoute
   '/admin/index-health': typeof OperatorAdminIndexHealthRoute
   '/agent-access/authorize': typeof OperatorAgentAccessAuthorizeRoute
-  '/developers/discovery': typeof OperatorDevelopersDiscoveryRoute
   '/owner/credit': typeof OperatorOwnerCreditRoute
   '/owner/operations': typeof OperatorOwnerOperationsRouteWithChildren
   '/owner/settings': typeof OperatorOwnerSettingsRoute
@@ -998,6 +997,7 @@ export interface FileRoutesById {
   '/api/ready': typeof ApiReadyRoute
   '/calls/$callRef': typeof CallsCallRefRoute
   '/developers/api': typeof DevelopersApiRoute
+  '/developers/discovery': typeof DevelopersDiscoveryRoute
   '/fund/$fundingSessionId': typeof FundFundingSessionIdRoute
   '/fund/cancelled': typeof FundCancelledRoute
   '/oauth/authorize': typeof OauthAuthorizeRoute
@@ -1015,7 +1015,6 @@ export interface FileRoutesById {
   '/_operator/admin/audit-events': typeof OperatorAdminAuditEventsRoute
   '/_operator/admin/index-health': typeof OperatorAdminIndexHealthRoute
   '/_operator/agent-access/authorize': typeof OperatorAgentAccessAuthorizeRoute
-  '/_operator/developers/discovery': typeof OperatorDevelopersDiscoveryRoute
   '/_operator/owner/credit': typeof OperatorOwnerCreditRoute
   '/_operator/owner/operations': typeof OperatorOwnerOperationsRouteWithChildren
   '/_operator/owner/settings': typeof OperatorOwnerSettingsRoute
@@ -1116,6 +1115,7 @@ export interface FileRouteTypes {
     | '/api/ready'
     | '/calls/$callRef'
     | '/developers/api'
+    | '/developers/discovery'
     | '/fund/$fundingSessionId'
     | '/fund/cancelled'
     | '/oauth/authorize'
@@ -1133,7 +1133,6 @@ export interface FileRouteTypes {
     | '/admin/audit-events'
     | '/admin/index-health'
     | '/agent-access/authorize'
-    | '/developers/discovery'
     | '/owner/credit'
     | '/owner/operations'
     | '/owner/settings'
@@ -1232,6 +1231,7 @@ export interface FileRouteTypes {
     | '/api/ready'
     | '/calls/$callRef'
     | '/developers/api'
+    | '/developers/discovery'
     | '/fund/$fundingSessionId'
     | '/fund/cancelled'
     | '/oauth/authorize'
@@ -1249,7 +1249,6 @@ export interface FileRouteTypes {
     | '/admin/audit-events'
     | '/admin/index-health'
     | '/agent-access/authorize'
-    | '/developers/discovery'
     | '/owner/credit'
     | '/owner/operations'
     | '/owner/settings'
@@ -1349,6 +1348,7 @@ export interface FileRouteTypes {
     | '/api/ready'
     | '/calls/$callRef'
     | '/developers/api'
+    | '/developers/discovery'
     | '/fund/$fundingSessionId'
     | '/fund/cancelled'
     | '/oauth/authorize'
@@ -1366,7 +1366,6 @@ export interface FileRouteTypes {
     | '/_operator/admin/audit-events'
     | '/_operator/admin/index-health'
     | '/_operator/agent-access/authorize'
-    | '/_operator/developers/discovery'
     | '/_operator/owner/credit'
     | '/_operator/owner/operations'
     | '/_operator/owner/settings'
@@ -1464,6 +1463,7 @@ export interface RootRouteChildren {
   ApiReadyRoute: typeof ApiReadyRoute
   CallsCallRefRoute: typeof CallsCallRefRoute
   DevelopersApiRoute: typeof DevelopersApiRoute
+  DevelopersDiscoveryRoute: typeof DevelopersDiscoveryRoute
   FundFundingSessionIdRoute: typeof FundFundingSessionIdRoute
   FundCancelledRoute: typeof FundCancelledRoute
   OauthAuthorizeRoute: typeof OauthAuthorizeRoute
@@ -1747,6 +1747,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof FundFundingSessionIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/developers/discovery': {
+      id: '/developers/discovery'
+      path: '/developers/discovery'
+      fullPath: '/developers/discovery'
+      preLoaderRoute: typeof DevelopersDiscoveryRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/developers/api': {
       id: '/developers/api'
       path: '/developers/api'
@@ -2011,13 +2018,6 @@ declare module '@tanstack/react-router' {
       path: '/owner/credit'
       fullPath: '/owner/credit'
       preLoaderRoute: typeof OperatorOwnerCreditRouteImport
-      parentRoute: typeof OperatorRoute
-    }
-    '/_operator/developers/discovery': {
-      id: '/_operator/developers/discovery'
-      path: '/developers/discovery'
-      fullPath: '/developers/discovery'
-      preLoaderRoute: typeof OperatorDevelopersDiscoveryRouteImport
       parentRoute: typeof OperatorRoute
     }
     '/_operator/agent-access/authorize': {
@@ -2373,7 +2373,6 @@ interface OperatorRouteChildren {
   OperatorAgentAccessRoute: typeof OperatorAgentAccessRouteWithChildren
   OperatorAdminAuditEventsRoute: typeof OperatorAdminAuditEventsRoute
   OperatorAdminIndexHealthRoute: typeof OperatorAdminIndexHealthRoute
-  OperatorDevelopersDiscoveryRoute: typeof OperatorDevelopersDiscoveryRoute
   OperatorOwnerCreditRoute: typeof OperatorOwnerCreditRoute
   OperatorOwnerOperationsRoute: typeof OperatorOwnerOperationsRouteWithChildren
   OperatorOwnerSettingsRoute: typeof OperatorOwnerSettingsRoute
@@ -2386,7 +2385,6 @@ const OperatorRouteChildren: OperatorRouteChildren = {
   OperatorAgentAccessRoute: OperatorAgentAccessRouteWithChildren,
   OperatorAdminAuditEventsRoute: OperatorAdminAuditEventsRoute,
   OperatorAdminIndexHealthRoute: OperatorAdminIndexHealthRoute,
-  OperatorDevelopersDiscoveryRoute: OperatorDevelopersDiscoveryRoute,
   OperatorOwnerCreditRoute: OperatorOwnerCreditRoute,
   OperatorOwnerOperationsRoute: OperatorOwnerOperationsRouteWithChildren,
   OperatorOwnerSettingsRoute: OperatorOwnerSettingsRoute,
@@ -2558,6 +2556,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiReadyRoute: ApiReadyRoute,
   CallsCallRefRoute: CallsCallRefRoute,
   DevelopersApiRoute: DevelopersApiRoute,
+  DevelopersDiscoveryRoute: DevelopersDiscoveryRoute,
   FundFundingSessionIdRoute: FundFundingSessionIdRoute,
   FundCancelledRoute: FundCancelledRoute,
   OauthAuthorizeRoute: OauthAuthorizeRoute,

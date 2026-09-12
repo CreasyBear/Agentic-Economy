@@ -17,7 +17,7 @@ export const operatorRouteOptions = {
 
 /**
  * Applied once at the pathless operator layout. This is the shared
- * /owner/*, /admin/*, and /developers/* auth boundary.
+ * /owner/* and /admin/* auth boundary.
  */
 export const operatorLayoutRouteOptions = {
   beforeLoad: requireOperatorBeforeLoad,

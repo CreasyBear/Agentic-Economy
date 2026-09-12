@@ -8,10 +8,9 @@ import { AeFactList } from '@/components/ae/data/AeFactList'
 import { AeEmptyState } from '@/components/ae/feedback/AeEmptyState'
 import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
 import { AeSection } from '@/components/ae/layout/AeSection'
-import { operatorRouteOptions } from '@/lib/operator/route-options'
 import { loadDeveloperDiscoveryRouteServer } from '@/modules/discovery/developer-discovery-route'
 
-export const Route = createFileRoute('/_operator/developers/discovery')({
+export const Route = createFileRoute('/developers/discovery')({
   staticData: {
     nav: {
       label: 'Discovery',
@@ -25,7 +24,6 @@ export const Route = createFileRoute('/_operator/developers/discovery')({
       },
     },
   },
-  ...operatorRouteOptions,
   loader: () => loadDeveloperDiscoveryRouteServer(),
   head: () => ({
     meta: [

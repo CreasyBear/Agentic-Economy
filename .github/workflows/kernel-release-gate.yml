@@ -200,7 +200,10 @@ jobs:
             const quoteOk = quote !== undefined && (
               quoteState === "pass" ||
               quoteState === "warn" ||
-              (quoteState === "skipped" && quote.code === "loopback_readiness_unprovable")
+              (quoteState === "skipped" && (
+                quote.code === "loopback_readiness_unprovable" ||
+                quote.code === "no_buyer_credential"
+              ))
             );
             if (discoveryFailed || !quoteOk) {
               console.error(JSON.stringify(result, null, 2));
