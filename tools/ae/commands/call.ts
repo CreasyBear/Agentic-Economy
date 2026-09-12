@@ -172,7 +172,7 @@ async function waitForCallResult(
     if (status.callRef !== callRef) throw new CliFailure('The gateway changed the Call status identity.', { kind: 'UNAVAILABLE', code: 'call-recovery-identity-conflict' })
     const terminal = terminalResult(status)
     if (terminal !== undefined) {
-      observeResult(record, status)
+      await observeResult(record, status)
       if (status.kind === 'found' && status.result !== undefined) return projectCallMachineResult(status.result)
       return isRecord(terminal) && terminal.kind === 'found'
         ? terminal as CallStatusResult
@@ -203,7 +203,7 @@ function attachRecovery(error: unknown, record: CallRecoveryRecord, options: Cli
   })
 }
 
-function observeResult(record: CallRecoveryRecord, result: CallMachineResult | CallStatusResult): CallRecoveryRecord {
+async function observeResult(record: CallRecoveryRecord, result: CallMachineResult | CallStatusResult): Promise<CallRecoveryRecord> {
   if ('toolRef' in result && result.toolRef !== undefined && result.toolRef !== record.toolRef) {
     throw new CliFailure('The gateway returned a result for a different Tool.', { kind: 'UNAVAILABLE', code: 'call-recovery-identity-conflict' })
   }
@@ -222,7 +222,7 @@ async function submitOrReadCall(record: CallRecoveryRecord, options: CliOptions)
     if (record.callRef !== undefined) {
       const status = await readCallStatus(options, record.callRef)
       if (status.callRef !== record.callRef) throw new CliFailure('The gateway changed the Call status identity.', { kind: 'UNAVAILABLE', code: 'call-recovery-identity-conflict' })
-      record = observeResult(record, status)
+      record = await observeResult(record, status)
       const terminal = terminalResult(status)
       result = terminal !== undefined && status.kind === 'found' && status.result !== undefined
         ? projectCallMachineResult(status.result)
@@ -238,10 +238,10 @@ async function submitOrReadCall(record: CallRecoveryRecord, options: CliOptions)
         method: callCommandDescriptor.method, headers: { Authorization: `Bearer ${apiKey}` }, body: JSON.stringify(record.command),
       })
       result = parseCallResult(requireOk(outcome, callCommandDescriptor.path))
-      record = observeResult(record, result)
+      record = await observeResult(record, result)
       if (result.kind === 'pending' && options.wait === true) result = await waitForCallResult(options, record, result)
     }
-    record = observeResult(record, result)
+    record = await observeResult(record, result)
     const rendered: Record<string, unknown> = { ...callOutput(result, options), recoveryRef: record.recoveryRef }
     if (options.json) { printJson(rendered); return }
     heading(`Tool ${record.toolRef}`)
@@ -447,7 +447,7 @@ export async function runCallCommand(
     idempotencyKey,
   })
   if (!parsedCall.success) throw new Error('tool_quote_projection_invalid')
-  const retained = retainCallRecovery(recoveryRequest, {
+  const retained = await retainCallRecovery(recoveryRequest, {
     quoteRef: parsedCall.data.quoteRef, accountRef: quote.account.accountRef, principalRef: quote.budget.principalRef,
   }, parsedCall.data.idempotencyKey)
   if (!retained.created) throw pendingRecoveryFailure(retained.record, options)

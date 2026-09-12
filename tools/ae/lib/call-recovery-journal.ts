@@ -76,7 +76,7 @@ function lockFailure(lockPath: string): CliFailure {
 }
 
 /**
- * Only synchronous journal mutations hold this lock; network requests never do.
+ * Only journal mutations hold this lock; network requests never do.
  *
  * The calls directory holds every record, request-index, and identity-index
  * file for the journal, so the lock guards that whole directory rather than
@@ -84,20 +84,23 @@ function lockFailure(lockPath: string): CliFailure {
  * and reclaims it itself once it is older than `stale`, so a crashed owner's
  * lock is never left stuck.
  */
-function writeLocked<T>(write: () => T): T {
+async function writeLocked<T>(write: () => T): Promise<T> {
   const root = directory()
   mkdirSync(root, { recursive: true, mode: 0o700 })
   chmodSync(root, 0o700)
-  let release: () => void
+  let release: () => Promise<void>
   try {
-    // proper-lockfile's sync API cannot retry (it throws ESYNC if asked to);
-    // its own mkdir-based acquisition plus stale reclaim is the only retry
-    // semantics available here, matching the fail-closed contract below.
-    release = lockfile.lockSync(root, { stale: 30_000, realpath: false })
+    // The async API retries the mkdir-based acquisition with backoff, so a
+    // concurrent `ae call` process waits out the lock instead of racing it.
+    // The lock-failure error is still thrown once retries are exhausted.
+    release = await lockfile.lock(root, {
+      stale: 30_000, realpath: false,
+      retries: { retries: 20, minTimeout: 25, maxTimeout: 250, factor: 1.5 },
+    })
   } catch {
     throw lockFailure(`${root}.lock`)
   }
-  try { return write() } finally { release() }
+  try { return write() } finally { await release() }
 }
 
 function readRecord(ref: string): CallRecoveryRecord {
@@ -146,13 +149,13 @@ export function findCallRecovery(request: CallRecoveryRequest): CallRecoveryReco
   }
 }
 
-export function retainCallRecovery(
+export async function retainCallRecovery(
   request: CallRecoveryRequest,
   quote: Readonly<{ quoteRef: string; accountRef: string; principalRef: string }>,
   idempotencyKey: string,
-): Readonly<{ record: CallRecoveryRecord; created: boolean }> {
+): Promise<Readonly<{ record: CallRecoveryRecord; created: boolean }>> {
   try {
-    return writeLocked(() => {
+    return await writeLocked(() => {
       // Recheck after quoting: another CLI process may have won this request.
       const previous = findCallRecovery(request)
       if (previous !== undefined) return { record: previous, created: false }
@@ -174,9 +177,9 @@ export function retainCallRecovery(
   }
 }
 
-export function acknowledgeCallRecovery(record: CallRecoveryRecord, observation: Readonly<{ callRef?: string; terminal: boolean }>): CallRecoveryRecord {
+export async function acknowledgeCallRecovery(record: CallRecoveryRecord, observation: Readonly<{ callRef?: string; terminal: boolean }>): Promise<CallRecoveryRecord> {
   try {
-    return writeLocked(() => {
+    return await writeLocked(() => {
       const current = readRecord(record.recoveryRef)
       if (current.callRef !== undefined && observation.callRef !== undefined && current.callRef !== observation.callRef) {
         throw new CliFailure('The gateway changed the identity of this purchase. Preserve the recovery reference and contact support.', {

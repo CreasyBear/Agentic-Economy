@@ -47,6 +47,7 @@ jobs:
     name: Clean source, contract, browser, and build proof
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    environment: staging
     steps:
       - uses: actions/checkout@v6
 
@@ -92,7 +93,15 @@ jobs:
       - name: Verify generated source and pinned release inputs
         run: npm run verify:release-integrity
 
+      # The browser proof boots the real app, which mounts ClerkProvider and
+      # clerkMiddleware unconditionally; the Clerk development instance is the
+      # only credential this job receives.
       - name: Run source release contract without deployment credentials
+        env:
+          CLERK_JWT_ISSUER_DOMAIN: https://relative-phoenix-8958.clerk.accounts.dev
+          CLERK_PUBLISHABLE_KEY: ${{ secrets.AE_AUTHENTICATED_E2E_CLERK_PUBLISHABLE_KEY }}
+          VITE_CLERK_PUBLISHABLE_KEY: ${{ secrets.AE_AUTHENTICATED_E2E_CLERK_PUBLISHABLE_KEY }}
+          CLERK_SECRET_KEY: ${{ secrets.AE_AUTHENTICATED_E2E_CLERK_SECRET_KEY }}
         run: npm run test:release:source:after-codegen
 
       - name: Upload sanitized source release evidence
@@ -113,6 +122,7 @@ jobs:
     needs: []
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    environment: staging
     steps:
       - name: 'Announce deploy-guard target: local-anonymous'
         run: "echo 'target: local-anonymous'"
@@ -142,10 +152,13 @@ jobs:
           path: ~/.cache/convex/binaries
           key: convex-local-backend-${{ runner.os }}-${{ steps.convex-backend-version.outputs.version }}
 
-      - name: Start local stack (anonymous)
+      - name: Start local stack (anonymous Convex, authenticated Clerk)
         env:
           CONVEX_AGENT_MODE: anonymous
-          CLERK_JWT_ISSUER_DOMAIN: https://release-proof.invalid
+          CLERK_JWT_ISSUER_DOMAIN: https://relative-phoenix-8958.clerk.accounts.dev
+          AE_E2E_OWNER_EMAIL: ${{ secrets.AE_AUTHENTICATED_E2E_OWNER_EMAIL }}
+          CLERK_PUBLISHABLE_KEY: ${{ secrets.AE_AUTHENTICATED_E2E_CLERK_PUBLISHABLE_KEY }}
+          CLERK_SECRET_KEY: ${{ secrets.AE_AUTHENTICATED_E2E_CLERK_SECRET_KEY }}
           CI: 'true'
         run: |
           mkdir -p output/fresh-checkout
@@ -165,9 +178,9 @@ jobs:
             exit 1
           fi
 
-      - name: Bind explicit test authority
-        run: npm run --silent connect:local -- --base-url http://127.0.0.1:3024 --json
-
+      # Agent access consent requires the owner's strict reverification in a
+      # browser, so this job proves the anonymous sandbox only; doctor reports
+      # the credentialed checks as warn/skipped by design.
       - name: Doctor
         run: |
           npm run --silent ae -- doctor --json --base-url http://127.0.0.1:3024 > output/fresh-checkout/doctor.json

@@ -149,19 +149,19 @@ Open `http://127.0.0.1:3024/market` for the catalogue or
 `http://127.0.0.1:3024/t/new` for chat.
 
 `npm run dev:local` is a staged launcher: toolchain → local Convex deployment
-→ URL probe → identities → owner authority (the bypass owner's canonical identity
+→ URL probe → identities → owner authority (the E2E owner's canonical identity
 and legal-customer binding) → directory scan kickoff (skipped when a complete catalogue
 generation exists) → one seeded sandbox Tool → Vite → `ae doctor`. Each stage stops
 with the exact fix on failure. Flags: `--skip-scan`, `--skip-seed`, `--no-doctor`.
+It mounts the real `ClerkProvider`, so `CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`
+and `AE_E2E_OWNER_EMAIL` must be present. A large local database slows the backend's
+start; `CONVEX_LOCAL_BACKEND_STARTUP_TIMEOUT_SECS` (default 300) bounds the wait.
 
-To enable explicit test authority, after startup run `npm run connect:local --
---base-url http://127.0.0.1:3024` to bind the local buyer credential; it wraps
-`ae connect` and approves the device code through the local Clerk bypass, so
-no browser is needed. Use `--provider` to bind a provider credential the same way.
-On a hosted origin use `ae connect` and approve in the browser instead.
-If your `.env.development.local` sets `VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E=false`
-(real Clerk locally), start with `VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E=true npm run dev:local`
-for the bypass, because the process environment now wins over dotenv files.
+To bind a buyer credential, after startup run `npm run connect:local --
+--base-url http://127.0.0.1:3024`. It runs `ae connect` and prints the approval
+URL and user code; approve in the browser as the owner. Consent approval requires
+Clerk's strict reverification, so there is no headless approval path anywhere.
+Use `--provider` to bind a provider credential the same way.
 Then `npm run ae -- doctor --json --base-url http://127.0.0.1:3024` shows three groups:
 discovery, quoting, purchase. On a loopback origin the doctor reports quoting `skipped`: the seeded sandbox Tool is only listed where the readiness probe can reach it, which is a public HTTPS origin (a preview or hosted deployment). Locally you can prove Discover, connect and the funding diagnostics; Quote and Call are proven on a hosted origin with credentials (tier 1).
 

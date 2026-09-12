@@ -226,7 +226,13 @@ describe('green release baseline', () => {
     expect(source).toBeDefined()
     const sourceConfig = JSON.stringify(source ?? {})
     expect(sourceConfig).not.toContain('CONVEX_DEPLOY_KEY')
-    expect(sourceConfig).not.toContain('secrets.')
+    // The browser proof boots the real app with ClerkProvider mounted, so the
+    // Clerk development instance is the only credential this job may hold.
+    const sourceSecretRefs = [...sourceConfig.matchAll(/secrets\.([A-Z0-9_]+)/g)].map((match) => match[1])
+    expect(new Set(sourceSecretRefs)).toEqual(new Set([
+      'AE_AUTHENTICATED_E2E_CLERK_PUBLISHABLE_KEY',
+      'AE_AUTHENTICATED_E2E_CLERK_SECRET_KEY',
+    ]))
     const anonymousIndex = source?.steps?.findIndex((step) => step.name === 'Prove committed Convex source with an isolated anonymous local backend') ?? -1
     const driftIndex = source?.steps?.findIndex((step) => step.name === 'Prove anonymous generation did not mutate the source checkout') ?? -1
     const integrityIndex = source?.steps?.findIndex((step) => step.name === 'Verify generated source and pinned release inputs') ?? -1
@@ -240,7 +246,12 @@ describe('green release baseline', () => {
     expect(integrityIndex).toBeLessThan(sourceGateIndex)
     const sourceGate = source?.steps?.find((step) => step.name === 'Run source release contract without deployment credentials')
     expect(sourceGate?.run).toBe('npm run test:release:source:after-codegen')
-    expect(sourceGate?.env).toBeUndefined()
+    expect(Object.keys(sourceGate?.env ?? {}).sort()).toEqual([
+      'CLERK_JWT_ISSUER_DOMAIN',
+      'CLERK_PUBLISHABLE_KEY',
+      'CLERK_SECRET_KEY',
+      'VITE_CLERK_PUBLISHABLE_KEY',
+    ])
     const chatGate = source?.steps?.find((step) => step.name === 'Run deterministic Tool chat conformance')
     expect(chatGate?.run).toBe('npm run test:chat:conformance')
 
@@ -456,7 +467,7 @@ describe('green release baseline', () => {
     expect(live?.env?.AE_X402_RPC_URLS_JSON).toBe('${{ secrets.AE_X402_RPC_URLS_JSON }}')
   })
 
-  it('proves a fresh checkout reaches a sellable local sandbox without secrets', () => {
+  it('proves a fresh checkout reaches a sellable local sandbox with only the Clerk development instance', () => {
     const workflow = readWorkflow('.github/workflows/kernel-release-gate.yml')
     const events = workflow.on ?? {}
     const fresh = workflow.jobs?.['fresh-checkout-proof']
@@ -465,8 +476,16 @@ describe('green release baseline', () => {
     expect(fresh?.needs).toEqual([])
     expect(fresh?.['timeout-minutes']).toBe(30)
 
+    // The app mounts ClerkProvider unconditionally, so the only credentials
+    // this job may receive are the Clerk development instance's.
     const freshConfig = JSON.stringify(fresh ?? {})
-    expect(freshConfig).not.toContain('secrets.')
+    const secretRefs = [...freshConfig.matchAll(/secrets\.([A-Z0-9_]+)/g)].map((match) => match[1])
+    expect(new Set(secretRefs)).toEqual(new Set([
+      'AE_AUTHENTICATED_E2E_OWNER_EMAIL',
+      'AE_AUTHENTICATED_E2E_CLERK_PUBLISHABLE_KEY',
+      'AE_AUTHENTICATED_E2E_CLERK_SECRET_KEY',
+    ]))
+    expect(fresh?.environment).toBe('staging')
 
     const source = workflow.jobs?.['source-proof']
     // Same triggers as source-proof: neither job gates on an `if`, both run
@@ -476,10 +495,13 @@ describe('green release baseline', () => {
     expect(events).toHaveProperty('merge_group')
     expect(events.push).toEqual({ branches: ['main'] })
 
-    const start = fresh?.steps?.find((step) => step.name === 'Start local stack (anonymous)')
+    const start = fresh?.steps?.find((step) => step.name === 'Start local stack (anonymous Convex, authenticated Clerk)')
     expect(start?.env).toMatchObject({
       CONVEX_AGENT_MODE: 'anonymous',
-      CLERK_JWT_ISSUER_DOMAIN: 'https://release-proof.invalid',
+      CLERK_JWT_ISSUER_DOMAIN: 'https://relative-phoenix-8958.clerk.accounts.dev',
+      CLERK_PUBLISHABLE_KEY: '${{ secrets.AE_AUTHENTICATED_E2E_CLERK_PUBLISHABLE_KEY }}',
+      CLERK_SECRET_KEY: '${{ secrets.AE_AUTHENTICATED_E2E_CLERK_SECRET_KEY }}',
+      AE_E2E_OWNER_EMAIL: '${{ secrets.AE_AUTHENTICATED_E2E_OWNER_EMAIL }}',
       CI: 'true',
     })
     expect(start?.run).toContain('npm run dev:local -- --skip-scan --no-doctor')
@@ -488,13 +510,9 @@ describe('green release baseline', () => {
     expect(start?.run).toContain('DEV_LOCAL_PID=$!')
     expect(start?.run).toContain('GITHUB_ENV')
 
-    const connect = fresh?.steps?.find((step) => step.name === 'Bind explicit test authority')
-    expect(connect?.run).toBe('npm run --silent connect:local -- --base-url http://127.0.0.1:3024 --json')
-    // The step must fail the job when the connect driver does not reach
-    // `kind: 'connected'` — no best-effort fallback that lets quoting run
-    // unauthenticated.
-    expect(connect?.run).not.toContain('|| true')
-    expect((connect as { 'continue-on-error'?: boolean } | undefined)?.['continue-on-error']).toBeUndefined()
+    // Consent approval requires the owner's strict reverification in a
+    // browser, so no CI job may bind agent authority headlessly.
+    expect(fresh?.steps?.some((step) => step.run?.includes('connect:local'))).toBe(false)
 
     const doctor = fresh?.steps?.find((step) => step.name === 'Doctor')
     expect(doctor?.run).toContain('npm run --silent ae -- doctor --json --base-url http://127.0.0.1:3024 > output/fresh-checkout/doctor.json')
