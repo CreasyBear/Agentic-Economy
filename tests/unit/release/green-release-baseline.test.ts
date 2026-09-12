@@ -521,7 +521,8 @@ describe('green release baseline', () => {
     expect(doctor?.run).toContain('!quote')
     expect(doctor?.run).toContain('loopback_readiness_unprovable')
     expect(doctor?.run).toContain('catalogue_absent')
-    expect(doctor?.run).toContain('market_requests')
+    expect(doctor?.run).toContain('no_buyer_credential')
+    expect(doctor?.run).not.toContain('market_requests')
 
     const upload = fresh?.steps?.find((step) => step.name === 'Upload the fresh-checkout evidence')
     expect(upload?.if).toBe('always()')
