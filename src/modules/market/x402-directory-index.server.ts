@@ -98,8 +98,11 @@ export async function readX402DirectoryCatalogue(input: X402DirectoryCatalogueIn
     })
     if (result.kind === 'unavailable') {
       if (result.reason !== 'index_unavailable') return result
-      // Do not silently reinterpret index category, sort or cursor as SDK search.
-      if (directoryCategory !== undefined || indexCursor !== undefined || Object.keys(filters).some(key => !['query', 'network', 'provider', 'maxUsdPrice', 'sort'].includes(key)) || (filters.sort !== undefined && filters.sort !== 'relevance')) return result
+      // Do not silently reinterpret index category or cursor as SDK search. Sort always falls
+      // back to upstream relevance ordering here since the SDK cannot honour index-only sorts
+      // (e.g. adoption) - the /market default view must still render during index refreshes.
+      if (directoryCategory !== undefined || indexCursor !== undefined || Object.keys(filters).some(key => !['query', 'network', 'provider', 'maxUsdPrice', 'sort'].includes(key))) return result
+      console.error('[market] x402 directory index unavailable, using upstream fallback', { reason: result.reason })
       const { sort: _sort, ...sourceFilters } = filters
       const page = await readX402Directory({ ...sourceFilters, ...(offset === undefined ? {} : { offset }) })
       if (page.kind === 'unavailable') return page
@@ -117,7 +120,10 @@ export async function readX402DirectoryCatalogue(input: X402DirectoryCatalogueIn
       ...(result.pageStatus === undefined ? {} : { pageStatus: result.pageStatus }),
       ...(result.splitCursor === undefined ? {} : { splitCursor: result.splitCursor }),
     }
-  } catch { return { kind: 'unavailable', reason: 'source_unavailable' } }
+  } catch (reason) {
+    console.error('[market] x402 directory catalogue read failed, returning source_unavailable', { reason })
+    return { kind: 'unavailable', reason: 'source_unavailable' }
+  }
 }
 export async function readX402DirectoryCatalogueOverview(): Promise<X402DirectoryCatalogueOverview> {
   try { return await callPublicSourceQuery(overview, {}) }
