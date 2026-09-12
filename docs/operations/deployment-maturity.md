@@ -1,5 +1,8 @@
 # Deployment maturity and gaps
 
+Current hosted evidence is the [12 September alpha assessment](#hosted-alpha-assessment--12-september-2026). Earlier assessments below remain
+historical and do not establish current alpha availability.
+
 ## Current operating override — 6 September 2026
 
 At Joel's request the synthetic AWS financial stack is paused for the
@@ -203,3 +206,32 @@ reconciliation of the 20 pending funding commands (18 externally referenced),
 and callback/job isolation evidence. The five skips in the 09:10 snapshot remain
 explicit and unchanged: AWS, local restricted command key, local restricted
 readback key, Stripe destinations and Cloudflare alerts.
+
+
+## Hosted alpha assessment — 12 September 2026
+
+**Alpha is deployed but not ready.** Authority is `hosted_alpha`, sandbox only;
+custody, writes and recurring workloads remain disabled. Provider labels
+`production` and `prod` do not confer production authority. This assessment
+supersedes earlier hosted topology, identity, configuration and usability
+claims, while retaining synthetic-release and backup evidence as history.
+Exact identities and revisions are in the
+[registry](deployment-registry.yaml) and
+[cutover receipt](hosted-cutover-2026-09-12.md#current-hosted-alpha-evidence--12-september-2026).
+
+| Boundary | Current evidence | Remaining gap |
+| --- | --- | --- |
+| Web and backend | New Vercel deployment and Convex project deployed; `/api/health` 200. | `/api/ready` 503 `deployment_manifest_invalid`; consecutive sign-in requests return 500 and consistently fail closed. Removal of forbidden `AE_SOURCE_WRITE_SECRET` from Vercel configuration awaits a new deployment. |
+| Clerk | Production instance and four-event webhook created; user-saved signing secret deployed in Vercel. | Signed delivery and authenticated sign-in unverified. |
+| Stripe | Existing sandbox snapshot and Accounts v2 thin destinations enabled at their exact app paths. | `STRIPE_READBACK_KEY` missing; delivery, replay and purchase success unverified. |
+| Infisical | Existing separate platform and customer projects verified. | Existing platform staging identity trusts Vercel preview; `ae-alpha-platform` exists with No Access; its OIDC trust is prepared but unsaved pending browser confirmation. Alpha authentication and secret access remain inactive; bindings are incomplete. Earlier “Example Project only” and “nothing exists” claims are superseded. |
+| Financial authority | All six required Formance variables missing; fresh isolated infrastructure not deployed. | Existing synthetic EC2/RDS remain stopped and cannot be promoted; historical RPO 308 seconds still exceeds the 300-second target. |
+| AWS cost | Fresh forecast readback returned `DataUnavailable` with insufficient history. | No current forecast proof; earlier spend evidence is dated. |
+| Source checks | Node 22.22.0/npm 11.5.1; Rolldown 1.2.7 fixed the build. Focused tests 161/161 across four files and diagnostic tests 30/30 passed; lint, typecheck, dependency check, server build and `env:example:check` passed. | Full gate and live purchases remain unproven. Source checks do not establish runtime readiness. |
+
+Ten old Convex projects were deleted with the user's approval. Historical
+resource references are evidence, not current deployment targets. Next proof
+requires deploying the pending configuration change, resolving the remaining
+bindings and isolated ledger boundary, then verifying readiness, signed events
+and authenticated journeys. Alpha must remain below ready until those checks
+succeed.

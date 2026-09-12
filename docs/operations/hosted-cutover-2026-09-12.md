@@ -1,8 +1,10 @@
 # Hosted cutover, 2026-09-12
 
-Status of the first production cutover to the hosted stack. Work below was
-done by the orchestrator under the owner's authorisation on 2026-09-12.
-No secret values appear in this file.
+Historical hosted cutover notes and current alpha evidence. Earlier sections
+are preserved as history; the [current alpha receipt](#current-hosted-alpha-evidence--12-september-2026)
+supersedes their topology, identity, configuration and usability claims. The
+current environment is sandbox-only `hosted_alpha` and is not alpha-ready or
+production-ready. No secret values appear in this file.
 
 ## Topology
 
@@ -228,3 +230,65 @@ exists in this build.
 - The `/api/v1/release` `sourceRevision` reads
   `AE_RELEASE_SOURCE_REVISION` rather than the build, so it must be
   updated on every deploy.
+
+
+## Current hosted alpha evidence — 12 September 2026
+
+The orchestrator verified the following provider state and local checks. This
+receipt supersedes the earlier same-day claims that the app is usable, that
+Clerk/Infisical resources still need creating, that the previous Convex target
+is current, and that the synthetic Formance stack can supply the new boundary.
+Earlier commands and receipts remain historical, not an active runbook.
+
+- **Authority:** `hosted_alpha`, sandbox only. Custody, writes and recurring
+  workloads are disabled; provider production labels do not change that scope.
+- **Vercel:** project `agentic-economy`,
+  `prj_dK5mDpjBYuAXMwvLr0pWO0h8DoH9`, scope `creasybears-projects`;
+  `https://app.aecon.ai` points to `dpl_4v9d2G9cmbnHFbsDmubdkkbrfV5t`,
+  source `a269f9b4ad863798d2ff79b91eed0014a3886f01`.
+- **Convex:** team `joel-chan`, new project `agentic-economy`, development
+  `cool-crab-306`, provider production `cautious-zebra-473`; source
+  `fbd22a563f204312f26aa9b8a53c55ca5969e02f` deployed. Ten old projects were
+  deleted with the user's approval. Previous targets are historical only.
+- **Observed HTTP:** `/api/health` 200; `/api/ready` 503 with
+  `deployment_manifest_invalid`; consecutive sign-in requests consistently
+  return 500 and fail closed. The forbidden legacy `AE_SOURCE_WRITE_SECRET`
+  was removed from Vercel production configuration through the official CLI.
+  That removal requires a new deployment before it affects live requests; no
+  secret read or external revocation occurred.
+- **Clerk:** production instance `ins_3JEJtsKq3rdCZG94s6tAkkut9Y7`, issuer
+  `clerk.aecon.ai`; endpoint `ep_3JET0Um63P5BmiF8x6Guz5ToyUZ` created at
+  `https://app.aecon.ai/api/clerk/webhook` for `session.created`,
+  `session.ended`, `session.revoked`, `user.updated`. The user saved the signing
+  secret in Vercel and it is deployed. Signed delivery remains unverified.
+- **Stripe:** sandbox account `acct_1Tlni770N4UjLqHt`; existing snapshot
+  `we_1UEgKx70N4UjLqHtxiYhgLAD` and thin destination
+  `ed_test_61VO4O26zMNAz9Nn616UvBfU9V8SqsP28ZeVu4UQaSGu` are enabled at
+  `https://app.aecon.ai/api/stripe/webhook` and
+  `https://app.aecon.ai/api/stripe/webhook/accounts-v2`, respectively. Exact
+  paths were verified. `STRIPE_READBACK_KEY` remains missing; destination
+  existence is not delivery, replay or purchase proof.
+- **Infisical:** organization `8d09981b-9b5e-4a59-aa6d-5561c4f4642a` already
+  contains platform project `7a7f4820-5412-4a0f-92b6-c4106051333f` and customer
+  project `cae7a337-b1f1-4634-8302-cf36b60edf74`. Existing platform staging
+  identity `3e45be0b-6907-4fe3-90bf-a4c2701e7e1b` trusts Vercel preview;
+  new project-managed identity `ae-alpha-platform`
+  (`18030256-9085-4e51-8758-5a0e60599def`) exists with No Access. Its exact
+  Vercel production OIDC subject and 3,600-second TTL are prepared but not
+  saved, pending mandatory browser confirmation. Alpha authentication and
+  secret access are inactive; bindings remain incomplete.
+- **Ledger and AWS:** all six required Formance variables remain missing and
+  fresh isolated financial infrastructure is not deployed. Existing synthetic
+  EC2/RDS remain stopped and must never be promoted in place. Fresh AWS
+  forecast readback returned `DataUnavailable` with insufficient history.
+  Historical restore RPO remains 308 seconds against a 300-second target.
+- **Local verification:** Node 22.22.0/npm 11.5.1; build fixed with Rolldown
+  1.2.7. Four focused test files passed 161/161 tests; diagnostics passed
+  30/30. Lint, typecheck, dependency check, server build and
+  `env:example:check` passed. Four temporary credential files were deleted
+  after consumers were bound. The full
+  gate, successful authenticated sign-in and live purchases are not proven.
+
+Alpha remains blocked on current manifest/binding requirements, the fresh
+isolated ledger boundary and end-to-end verification. Health 200 and passing
+source checks do not establish alpha readiness.

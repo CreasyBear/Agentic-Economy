@@ -1,5 +1,6 @@
 schemaVersion: ae.deployment-registry/v1
-# Current operating override: see operatingPause; the baseline below is dated.
+# Current hosted evidence: hostedAlphaReadback. Synthetic pause: operatingPause.
+# The original baseline below remains dated historical evidence.
 capturedAt: "2026-09-04T08:48:02Z"
 capturedFromRevision: "8621ef3f3017a0e2ebe19c6277da98f7d5488909"
 captureWorkingTree: dirty_preserved_user_and_infrastructure_changes
@@ -351,3 +352,102 @@ operatingPause:
   observedMonthToDateCostUsd: "18.5614214555"
   costForecast: insufficient_history
   evidenceAndResume: docs/operations/aws-foundation.md
+
+
+hostedAlphaReadback:
+  capturedOn: "2026-09-12"
+  evidenceSource: orchestrator_verified_provider_readback_and_local_checks
+  evidence: docs/operations/hosted-cutover-2026-09-12.md
+  supersedes: earlier_hosted_cutover_topology_identity_configuration_and_usability_claims
+  environment:
+    id: hosted_alpha
+    moneyMode: sandbox_only
+    custodyEnabled: false
+    writesEnabled: false
+    recurringWorkloadsEnabled: false
+    alphaReady: false
+    productionReady: false
+  web:
+    provider: vercel
+    projectName: agentic-economy
+    projectId: prj_dK5mDpjBYuAXMwvLr0pWO0h8DoH9
+    scope: creasybears-projects
+    canonicalUrl: https://app.aecon.ai
+    observedDeploymentId: dpl_4v9d2G9cmbnHFbsDmubdkkbrfV5t
+    observedSourceRevision: a269f9b4ad863798d2ff79b91eed0014a3886f01
+    healthHttp: 200
+    readyHttp: 503
+    readyReason: deployment_manifest_invalid
+    consecutiveSignInHttp: 500
+    signInState: consistently_fail_closed
+    pendingConfigurationChange:
+      removedVariable: AE_SOURCE_WRITE_SECRET
+      providerConfigurationRemoval: verified
+      liveDeploymentRemoval: pending_redeployment
+  backend:
+    provider: convex
+    team: joel-chan
+    projectName: agentic-economy
+    developmentDeployment: cool-crab-306
+    providerProductionDeployment: cautious-zebra-473
+    deployedSourceRevision: fbd22a563f204312f26aa9b8a53c55ca5969e02f
+    aeAuthority: hosted_alpha_sandbox_only
+    oldProjectsDeletedWithUserApproval: 10
+  identity:
+    provider: clerk
+    providerClass: production
+    instanceId: ins_3JEJtsKq3rdCZG94s6tAkkut9Y7
+    issuerHost: clerk.aecon.ai
+    webhookEndpointId: ep_3JET0Um63P5BmiF8x6Guz5ToyUZ
+    webhookUrl: https://app.aecon.ai/api/clerk/webhook
+    events: [session.created, session.ended, session.revoked, user.updated]
+    signingSecretBinding: user_saved_in_vercel_and_deployed
+    signedDelivery: not_verified
+  processor:
+    provider: stripe
+    mode: sandbox
+    accountId: acct_1Tlni770N4UjLqHt
+    snapshotDestination:
+      id: we_1UEgKx70N4UjLqHtxiYhgLAD
+      route: https://app.aecon.ai/api/stripe/webhook
+      state: enabled_exact_path_verified
+    accountsV2Destination:
+      id: ed_test_61VO4O26zMNAz9Nn616UvBfU9V8SqsP28ZeVu4UQaSGu
+      route: https://app.aecon.ai/api/stripe/webhook/accounts-v2
+      state: enabled_exact_path_verified
+    readbackKey: missing
+    livePurchaseProof: not_verified
+  secretCustody:
+    provider: infisical
+    organizationId: 8d09981b-9b5e-4a59-aa6d-5561c4f4642a
+    platformProjectId: 7a7f4820-5412-4a0f-92b6-c4106051333f
+    customerProjectId: cae7a337-b1f1-4634-8302-cf36b60edf74
+    existingPlatformStagingIdentityId: 3e45be0b-6907-4fe3-90bf-a4c2701e7e1b
+    existingIdentityTrust: vercel_preview_not_alpha
+    alphaPlatformIdentityId: 18030256-9085-4e51-8758-5a0e60599def
+    alphaPlatformIdentityName: ae-alpha-platform
+    alphaPlatformIdentityAccess: no_access
+    alphaPlatformOidcTrust: prepared_not_saved_pending_browser_confirmation
+    alphaAuthenticationAndSecretAccess: inactive
+    alphaIdentitiesAndBindings: incomplete
+  financialAuthority:
+    freshIsolatedInfrastructure: not_deployed
+    requiredFormanceVariables: all_six_missing
+    existingSyntheticEc2AndRds: stopped_never_promote_in_place
+    awsForecast: DataUnavailable_insufficient_history
+    historicalRecoveryRpoSeconds: 308
+    requiredRecoveryRpoSeconds: 300
+  sourceVerification:
+    nodeVersion: 22.22.0
+    npmVersion: 11.5.1
+    buildFix: rolldown_1.2.7
+    focusedTests: 161_of_161_passed_across_four_files
+    diagnosticTests: 30_of_30_passed
+    lint: passed
+    typecheck: passed
+    dependencyCheck: passed
+    serverBuild: passed
+    environmentExampleCheck: passed
+    fullGate: not_proven
+    authenticatedSignIn: not_proven
+    livePurchases: not_proven
