@@ -11,7 +11,7 @@ const pendingSchema = z.strictObject({
   clientId: z.string().min(1),
   deviceCode: z.string().min(1),
   userCode: z.string().min(1),
-  verificationUri: z.string().url(),
+  verificationUri: z.url(),
   expiresAt: z.number().finite().positive(),
   intervalMs: z.number().finite().positive(),
   nextPollAt: z.number().finite().nonnegative(),
