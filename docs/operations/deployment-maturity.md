@@ -226,21 +226,27 @@ Exact identities and revisions are in the
 
 | Boundary | Current evidence | Remaining gap |
 | --- | --- | --- |
-| Web and backend | Deployment `dpl_9RXpxCHwGwmPmziXxxTD1WmRER5z`, source `df0e62862731c9d9f6c8f7b8eaeda77581540b51`; `/api/health` and `/api/v1/release` 200. All six Formance settings active. | `/api/ready` remains 503 `deployment_manifest_invalid`; exact diagnostic pending. Branch remains unmerged to main. No sellable Tool or purchase proof. |
+| Web and backend | Deployment `dpl_EoeWXuiKTRmesU5yiQ6CCdYbfkwS`, source `1760881d8f7a6daab058fd15a6a909db3586a8a7`; health/release 200, six Formance settings active. | Readiness 503. Private logs identify four findings: Clerk Base64 validation, wrong Stripe command-key type, malformed inactive x402 RPC JSON and an undeclared lifecycle RPC token. Validator fixes and Vercel custody-disabled/RPC-removal changes await a credential batch and redeployment. |
 | Clerk | CSP fix deployed; Clerk form loads. Production instance and signed-webhook configuration remain recorded. | User signup, password and email steps pending; signed delivery and authenticated journey unverified. |
-| Stripe | Fresh restricted test readback key installed in Vercel production and Convex; tax, Checkout, PaymentIntent, Price and Refund SDK reads passed. GST tax rate bound in Convex; existing destinations remain enabled. | Saved Core Read permission and matching installed key suffix verified, but Accounts v2 list returns 403 `v2_account_storer_read`; platform account retrieval also returns 403. No successful connected-account canary, delivery/replay or purchase proof. |
+| Stripe | Fresh restricted test readback key installed in Vercel production and Convex; tax, Checkout, PaymentIntent, Price and Refund SDK reads passed. GST tax rate bound in Convex; existing destinations remain enabled. | Saved Core Read permission and matching installed key suffix verified, but Accounts v2 list returns 403 `v2_account_storer_read`; platform account retrieval also returns 403. Restricted command key still has its old label ending `-command`; rename did not persist and permissions were unchanged. Transfer to the empty mode-0600 credential file is pending. No successful connected-account canary, delivery/replay or purchase proof. |
 | Infisical | Two new dedicated alpha projects have separate, deletion-protected member identities and saved Vercel production OIDC trust. All nine variables bound in Vercel production. Unused No Access identity deleted and verified; old staging projects untouched. | Hosted OIDC authentication and secret CRUD unverified. Local CLI token had a development subject, so its canary aborted before creating a secret. Project isolation uses member roles because custom roles require a paid plan. |
 | Financial authority | Reviewed bootstrap repair replaced the host; cloud-init complete, k3s/reconcile/timer active, required replicas ready; tunnel healthy with eight connections. Formance health ready; schema v1.3.0 installed and repeat replayed. Final pinned OpenTofu plan: no changes, exit 0. | End-to-end purchase unproven. SNS email subscription awaits confirmation. Historical RPO 308 seconds exceeds the 300-second target. |
 | AWS cost and retention | User-approved old AWS retirement completed: 24 resources removed; EC2 terminated, root disk absent, both RDS instances absent, NAT deleted and EIP absent. Three encrypted RDS snapshots and completed EBS snapshot retained under the enabled KMS key. | Budget decision resolved. Fresh alpha estimate is USD 311.29/month before tax, plus retained storage/account costs; the former combined paused-runtime estimate is superseded. Old root/drill ordinary apply would recreate retired resources. |
-| Source checks | Full `npm run gate` passed with exit 0 at `df0e62862731c9d9f6c8f7b8eaeda77581540b51`; log `alpha-final-integration-gate.log`. | Source checks do not establish authenticated or purchase journeys. |
+| Source checks | Full gate at `df0e628` passed: 4,643 unit, 1,251 integration, 24 E2E and ten accessibility. Later fixes `14fd68b` and `5dce3419b`: 125 focused tests and environment-example check passed. | Later fixes are not deployed; no full-gate claim for latest HEAD. Source checks do not establish authenticated or purchase journeys. |
 
 Ten old Convex projects were deleted with the user's approval. Historical
 resource references are evidence, not current deployment targets. The seeded
 sandbox publication `capability-offering:sandbox-aecon-reference:v1` exists
-but is unlisted; its probe returned `authority_stale`. The supported human
-owner publication path is identified but has not been executed. Next proof
-requires the exact readiness diagnostic, completed user signup and publication,
-hosted OIDC/secret CRUD, signed events and a supported purchase journey.
-The temporary Cloudflare deployment credential file and six superseded preview
-artifacts were deleted; reviewed applied plans and snapshots remain retained.
-Alpha remains below ready.
+but is unlisted; its probe returned `authority_stale`, and public current-source
+search for `sandbox` returned 200 `no_candidates`. An ordinary fixed AUD $1
+HTTP Tool can publish and quote, but Call reservation requires x402 financial
+booking and returns `commercial_policy_unavailable` without it. Only zero-price
+Calls are allowed without booking; a free HTTP demonstration is not paid
+purchase proof. The existing testnet x402 reference path is needed for paid
+alpha and has not been provisioned. No cleanup wrapper or ownership bypass
+was written; seeded history is retained.
+
+Convex named reads confirm `STRIPE_SECRET_KEY` and `AE_X402_RPC_URLS_JSON`
+absent; absence alone does not establish a required Convex command consumer.
+User signup, SNS email confirmation, hosted OIDC/secret CRUD, signed events and
+a supported paid purchase remain pending. Alpha remains below ready.

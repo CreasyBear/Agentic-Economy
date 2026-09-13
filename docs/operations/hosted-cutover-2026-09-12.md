@@ -244,19 +244,28 @@ Earlier commands and receipts remain historical, not an active runbook.
   workloads are disabled; provider production labels do not change that scope.
 - **Vercel:** project `agentic-economy`,
   `prj_dK5mDpjBYuAXMwvLr0pWO0h8DoH9`, scope `creasybears-projects`;
-  `https://app.aecon.ai` points to `dpl_9RXpxCHwGwmPmziXxxTD1WmRER5z`, source
-  `df0e62862731c9d9f6c8f7b8eaeda77581540b51`. All six Formance settings are
+  `https://app.aecon.ai` points to `dpl_EoeWXuiKTRmesU5yiQ6CCdYbfkwS`, also at
+  `https://agentic-economy-1oe1xneon-creasybears-projects.vercel.app`, source
+  `1760881d8f7a6daab058fd15a6a909db3586a8a7`. All six Formance settings are
   active in this deployment.
 - **Convex:** team `joel-chan`, new project `agentic-economy`, development
   `cool-crab-306`, provider production `cautious-zebra-473`; source
   `fbd22a563f204312f26aa9b8a53c55ca5969e02f` deployed. Ten old projects were
   deleted with the user's approval. Previous targets are historical only.
-- **Observed HTTP:** `/api/health` and `/api/v1/release` return 200.
-  `/api/ready` remains 503 `deployment_manifest_invalid`; the exact readiness
-  diagnostic is pending. The former missing-six Formance boot failure is
-  superseded by active bindings and the successful release response. The
-  branch remains unmerged to main. This does not establish a sellable Tool or
-  an end-to-end purchase.
+- **Observed HTTP and pending fixes:** health/release return 200; readiness
+  remains 503 `deployment_manifest_invalid`. Private logs now identify exactly
+  four findings: `CLERK_WEBHOOK_SIGNING_SECRET` standard-Base64 format rejected,
+  `STRIPE_SECRET_KEY` wrong key type, `AE_X402_RPC_URLS_JSON` malformed and
+  `AE_SECRET_LIFECYCLE_RPC_TOKEN` unknown to the manifest. Source `14fd68b`
+  accepts the actual standard-Base64 Clerk format and registers the lifecycle
+  RPC token; `5dce3419b` updates the generated environment example and valid
+  synthetic Clerk fixture. These fixes are not deployed. Vercel production
+  custody was explicitly set false and the malformed inactive RPC variable
+  removed (official CLIs exit 0); changes are staged pending the credential
+  batch and redeployment. The branch remains unmerged to main.
+- **Exact Convex environment reads:** `STRIPE_SECRET_KEY` and
+  `AE_X402_RPC_URLS_JSON` are missing. This observation does not establish
+  whether Convex has a required command-key consumer.
 - **Clerk:** production instance `ins_3JEJtsKq3rdCZG94s6tAkkut9Y7`, issuer
   `clerk.aecon.ai`; endpoint `ep_3JET0Um63P5BmiF8x6Guz5ToyUZ` created at
   `https://app.aecon.ai/api/clerk/webhook` for `session.created`,
@@ -278,7 +287,11 @@ Earlier commands and receipts remain historical, not an active runbook.
   the edited key's suffix. Nevertheless, `v2.core.accounts.list` returns 403
   missing `v2_account_storer_read`; platform account retrieval also returns
   403. Core Read has not established Accounts v2 access. There is no successful
-  connected-account canary, delivery/replay or purchase proof.
+  connected-account canary, delivery/replay or purchase proof. The existing
+  restricted command key retains its old label ending `-command`; the rename
+  attempt did not persist and no permissions changed. The user was asked to
+  transfer it to `/private/tmp/ae-alpha-credentials/stripe-command.key`; that
+  file is empty with mode `0600`, and transfer remains pending.
 - **Infisical:** organization `8d09981b-9b5e-4a59-aa6d-5561c4f4642a` has two
   new dedicated alpha projects. Both machine identities have verified deletion
   protection. Platform project
@@ -376,15 +389,24 @@ Earlier commands and receipts remain historical, not an active runbook.
   was deleted, together with six superseded old preview artifacts. Reviewed
   applied plans and snapshots remain retained.
 - **Source verification:** full `npm run gate` passed with exit 0 on
-  `df0e62862731c9d9f6c8f7b8eaeda77581540b51`; log
-  `alpha-final-integration-gate.log`. Runtime remains Node 22.22.0/npm 11.5.1.
-  Hosted authenticated sign-in and end-to-end purchases remain unproven.
-- **Sandbox publication:** `capability-offering:sandbox-aecon-reference:v1`
-  was created, but its probe returned `authority_stale`; it remains unlisted.
-  The supported human owner publication path was identified but not executed.
-  This seed is not sellable purchase proof.
+  `df0e62862731c9d9f6c8f7b8eaeda77581540b51`: 4,643 unit, 1,251 integration,
+  24 E2E and ten accessibility; log `alpha-final-integration-gate.log`.
+  Later fixes `14fd68b` and `5dce3419b` passed 125 focused tests and the
+  environment-example check. The full gate is not claimed for latest HEAD.
+  Runtime remains Node 22.22.0/npm 11.5.1.
+- **Sandbox publication and paid-path correction:**
+  `capability-offering:sandbox-aecon-reference:v1` was created, but its probe
+  returned `authority_stale`; it remains unlisted. Public
+  `POST market-tools/search`, source `current`, query `sandbox`, returned
+  200 `no_candidates`. An ordinary fixed AUD $1 HTTP Tool can publish and
+  quote, but Call reservation requires x402 financial booking and returns
+  `commercial_policy_unavailable` without it. Only zero-price Calls are
+  allowed without booking; a free HTTP demo cannot prove a paid purchase.
+  Paid alpha needs the existing testnet x402 reference path, which has not
+  been provisioned. No cleanup wrapper or ownership bypass was written;
+  seeded history is retained.
 
-The hosted app has health and release 200, readiness 503 pending its exact
-configuration diagnostic. Bootstrap and Formance schema are verified; user
-signup, publication, hosted Infisical, Stripe connected-account and purchase
-proof remain pending. Alpha is not ready.
+Bootstrap and Formance schema are verified, but four exact readiness findings
+still require staged fixes, the command-key transfer and redeployment. User
+signup and SNS email confirmation remain pending, as do hosted Infisical,
+Stripe connected-account and supported paid-purchase proof. Alpha is not ready.

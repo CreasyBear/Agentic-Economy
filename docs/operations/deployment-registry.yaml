@@ -373,13 +373,25 @@ hostedAlphaReadback:
     projectId: prj_dK5mDpjBYuAXMwvLr0pWO0h8DoH9
     scope: creasybears-projects
     canonicalUrl: https://app.aecon.ai
-    observedDeploymentId: dpl_9RXpxCHwGwmPmziXxxTD1WmRER5z
-    observedSourceRevision: df0e62862731c9d9f6c8f7b8eaeda77581540b51
+    observedDeploymentId: dpl_EoeWXuiKTRmesU5yiQ6CCdYbfkwS
+    deploymentUrl: https://agentic-economy-1oe1xneon-creasybears-projects.vercel.app
+    observedSourceRevision: 1760881d8f7a6daab058fd15a6a909db3586a8a7
     healthHttp: 200
     serverRenderingBoot: fixed
     readyHttp: 503
     readyReason: deployment_manifest_invalid
-    exactReadinessDiagnostic: pending
+    exactReadinessDiagnostic:
+      source: private_runtime_logs
+      findings:
+        CLERK_WEBHOOK_SIGNING_SECRET: standard_base64_format_rejected
+        STRIPE_SECRET_KEY: wrong_key_type
+        AE_X402_RPC_URLS_JSON: malformed
+        AE_SECRET_LIFECYCLE_RPC_TOKEN: unknown_manifest_variable
+    stagedConfiguration:
+      vercelProductionCustodyEnabled: false_explicitly_set
+      removedInactiveVariable: AE_X402_RPC_URLS_JSON
+      officialCliExit: 0
+      redeployment: pending_credential_batch
     sellable: false
     releaseHttp: 200
     formanceBindings: all_six_active
@@ -401,6 +413,10 @@ hostedAlphaReadback:
     deployedSourceRevision: fbd22a563f204312f26aa9b8a53c55ca5969e02f
     aeAuthority: hosted_alpha_sandbox_only
     oldProjectsDeletedWithUserApproval: 10
+    exactNamedEnvironmentReadback:
+      STRIPE_SECRET_KEY: missing
+      AE_X402_RPC_URLS_JSON: missing
+      commandConsumerRequirement: not_inferred_from_environment_absence
   identity:
     provider: clerk
     providerClass: production
@@ -441,6 +457,14 @@ hostedAlphaReadback:
     inclusiveGstTaxRate:
       id: txr_1UBZhn70N4UjLqHtDjJ74oie
       convexBinding: installed
+    commandKey:
+      existingRestrictedKeyLabel: unchanged_ending_command
+      renameAttempt: did_not_persist
+      permissionsChanged: false
+      requestedTransferFile: /private/tmp/ae-alpha-credentials/stripe-command.key
+      transferFileState: empty
+      transferFileMode: "0600"
+      transfer: pending_user
     livePurchaseProof: not_verified
   secretCustody:
     provider: infisical
@@ -597,7 +621,17 @@ hostedAlphaReadback:
     state: created_unlisted
     probe: authority_stale
     sellable: false
-    supportedHumanOwnerPublicationPath: identified_not_executed
+    publicSearch: {method: POST, route: market-tools/search, source: current, query: sandbox, http: 200, result: no_candidates}
+    supportedHumanOwnerPublicationPath: publication_and_quote_only_paid_call_blocked
+    paidHttpCall:
+      examplePrice: AUD_1_fixed
+      reservationRequires: x402_financial_booking
+      failure: commercial_policy_unavailable
+      withoutBooking: zero_price_only
+    paidAlphaTestnetX402Reference: required_not_provisioned
+    freeHttpDemo: not_paid_purchase_proof
+    cleanupWrapperOrOwnershipBypass: not_written
+    seededHistory: retained
   sourceVerification:
     sourceRevision: df0e62862731c9d9f6c8f7b8eaeda77581540b51
     nodeVersion: 22.22.0
@@ -606,6 +640,18 @@ hostedAlphaReadback:
     gateCommand: npm_run_gate
     gateExit: 0
     gateLog: alpha-final-integration-gate.log
+    unitPassed: 4643
+    integrationPassed: 1251
+    e2ePassed: 24
+    accessibilityPassed: 10
+    pendingFixes:
+      validatorCommit: 14fd68b0fe8f2fca7e2c187fe91ac187f9f08d71
+      validatorChanges: standard_base64_clerk_format_and_registered_lifecycle_rpc_token
+      fixtureAndExampleCommit: 5dce3419b1a3433988e4ada06eefe8884bf09367
+      focusedTestsPassed: 125
+      environmentExampleCheck: passed
+      deployment: pending_credential_batch
+      latestHeadFullGate: not_claimed
     previousGate:
       sourceRevision: fa33461cef107e75f15b1b6749c58cf6d99138c4
       unitPassed: 4594
