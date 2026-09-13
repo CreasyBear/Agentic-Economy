@@ -180,7 +180,7 @@ export const fieldRules: readonly FieldRule[] = [
 
 export const knownNames = Object.freeze([
   'OPENROUTER_API_KEY', 'AE_CONVEX_SERVER_FUNCTION_TOKEN', 'VITE_CLERK_PUBLISHABLE_KEY', 'CLERK_SECRET_KEY', 'CLERK_WEBHOOK_SIGNING_SECRET',
-  'AE_CHAT_PROXY_SECRET', 'AE_CHAT_SHARE_SECRET', 'AE_CHAT_SHARE_KEY_ID',
+  'AE_CHAT_PROXY_SECRET', 'AE_CHAT_SHARE_SECRET', 'AE_CHAT_SHARE_KEY_ID', 'AE_SECRET_LIFECYCLE_RPC_TOKEN',
   'AE_SOURCE_WRITE_SECRET',
   'AE_ROUTE_CALL_SIGNING_KEY_ID', 'AE_X402_PAYMENT_CREDENTIAL_REF', 'AE_X402_PAYMENT_PRIVATE_KEY',
   'CDP_API_KEY_ID', 'CDP_API_KEY_SECRET', 'CDP_WALLET_SECRET', 'AE_X402_CDP_ACCOUNT_NAME', 'AE_X402_CDP_EXPECTED_EVM_ADDRESS',
@@ -446,7 +446,9 @@ function validateProductionClerkCredentials(
     add('malformed', 'clerk_secret_key_invalid', ['CLERK_SECRET_KEY'], 'clerk')
   }
   const webhookSecret = present(environment, 'CLERK_WEBHOOK_SIGNING_SECRET')
-  if (webhookSecret !== undefined && !/^whsec_[A-Za-z0-9_-]+$/u.test(webhookSecret)) {
+  // Clerk's standardwebhooks verifier decodes the whsec_ suffix as standard Base64.
+  const webhookPattern = /^whsec_(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{4}|[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)$/u
+  if (webhookSecret !== undefined && !webhookPattern.test(webhookSecret)) {
     add('malformed', 'clerk_webhook_signing_secret_invalid', ['CLERK_WEBHOOK_SIGNING_SECRET'], 'clerk')
   }
 }

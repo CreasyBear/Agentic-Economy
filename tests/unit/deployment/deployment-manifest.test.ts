@@ -18,7 +18,7 @@ function productionEnvironment(): Record<string, string> {
     AE_CONVEX_SERVER_FUNCTION_TOKEN: 'convex-server-function-token-long-enough',
     VITE_CLERK_PUBLISHABLE_KEY: 'pk_live_example',
     CLERK_SECRET_KEY: 'sk_live_example',
-    CLERK_WEBHOOK_SIGNING_SECRET: 'whsec_live_example',
+    CLERK_WEBHOOK_SIGNING_SECRET: 'whsec_c3ludGhldGljLWNsZXJrLXdlYmhvb2sta2V5',
     CLERK_JWT_ISSUER_DOMAIN: 'https://clerk.example.com',
     OPENROUTER_API_KEY: 'openrouter-secret-value',
     AE_CHAT_PROXY_SECRET: 'chat-proxy-secret-value-long-enough',
@@ -288,6 +288,37 @@ describe('deployment manifest validator', () => {
       expect.objectContaining({ kind: 'missing', code: 'canonical_origin_required', names: ['AE_CANONICAL_BASE_URL'] }),
       expect.objectContaining({ kind: 'malformed', code: 'clerk_webhook_signing_secret_invalid', names: ['CLERK_WEBHOOK_SIGNING_SECRET'] }),
     ]))
+  })
+
+  it.each(['whsec_+/9/', 'whsec_+/8=', 'whsec_+w==', 'whsec_c2VjcmV0'])('accepts standard Base64 Clerk webhook secret shape %s', (secret) => {
+    expect(validateDeploymentManifest({
+      ...productionEnvironment(), CLERK_WEBHOOK_SIGNING_SECRET: secret,
+    }).ok).toBe(true)
+  })
+
+  it.each([
+    'whsec_', 'whsec_abc=def', 'whsec_abc===', 'whsec_abc def', 'whsec_abc!',
+    'whsec_live_example', 'whsec_-w==', 'whsec_abcde', 'whsec_abc==',
+  ])('rejects malformed Clerk webhook secret shape %s', (secret) => {
+    const result = validateDeploymentManifest({
+      ...productionEnvironment(), CLERK_WEBHOOK_SIGNING_SECRET: secret,
+    })
+    expect(result.ok).toBe(false)
+    expect(result.findings).toContainEqual(expect.objectContaining({
+      code: 'clerk_webhook_signing_secret_invalid', names: ['CLERK_WEBHOOK_SIGNING_SECRET'],
+    }))
+  })
+
+  it('recognizes the lifecycle RPC token without exposing or fingerprinting its secret value', () => {
+    const token = 'lifecycle-rpc-secret-sentinel-that-is-long-enough'
+    const result = validateDeploymentManifest({
+      ...productionEnvironment(), AE_SECRET_LIFECYCLE_RPC_TOKEN: token,
+    })
+    expect(result).toMatchObject({ ok: true, findings: [] })
+    expect(JSON.stringify(result)).not.toContain(token)
+    expect(validateDeploymentManifest({
+      ...productionEnvironment(), AE_SECRET_LIFECYCLE_RPC_TOKEN: 'rotated-lifecycle-rpc-secret-that-is-long-enough',
+    }).fingerprint).toBe(result.fingerprint)
   })
 
   it('rejects test or malformed Stripe credentials in production', () => {
