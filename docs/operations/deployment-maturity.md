@@ -232,6 +232,13 @@ The latest release-gate attempt passed 4,658 unit and 1,251 integration tests
 but failed the compact Support keyboard check. A finite agent is investigating
 the exact failure; later gate stages are not claimed for this attempt.
 
+The testnet seed also cannot pass its actual readiness authority check: its
+workload owner fails the ordinary human-owner requirement. Existing seed tests
+simulate an observation and do not establish real probing. The supported
+human-owner alternative is under review; no authority bypass is approved by
+this evidence. Custody policy generation exists in source, but provider-side
+rules alone do not enforce an aggregate daily cap or explicit chain ID.
+
 **Updated 13 September: alpha is deployed but not ready.** Authority is
 `hosted_alpha`, sandbox only;
 custody, writes and recurring workloads remain disabled. Provider labels

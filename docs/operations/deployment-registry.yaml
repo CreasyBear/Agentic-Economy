@@ -660,6 +660,18 @@ hostedAlphaReadback:
       facilitatorSupportedHttp: 200
       exactV2BaseSepolia: verified
     treasuryObserver: existing_official_cdp_sdk_workload
+    testnetSeedReadiness: blocked_authority_stale_workload_owner
+    testnetSeedTestLimitation: simulated_observation_bypasses_real_probe_authority
+    ownerAdmissionAlternative: under_source_review
+    custodyPolicyProvisioning:
+      rules: existing_cdpX402SellerCanaryPolicyRules_generator
+      digest: existing_cdpX402PolicyRulesDigest_from_provider_readback
+      perPaymentAtomic: "10000"
+      dailyConfigurationAtomic: "50000"
+      cdpDailyAggregateEnforcement: not_provided_by_policy
+      networkFence: ae_sandbox_profile_plus_sepolia_usdc_contract_rules
+      policyOnlyChainIdFence: false
+      liveProvisioning: pending
     fullPaidJourney: not_verified
     auditProtocol: docs/operations/alpha-validation-plan.md
     fullColdUserJourneyAudits: pending_integration_baseline

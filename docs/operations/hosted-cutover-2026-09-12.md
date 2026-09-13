@@ -273,6 +273,23 @@ Log: `/private/tmp/ae-alpha-plan-t6sl85yp/alpha-current-source-gate.log`.
 The failing diagnostics accordion assertion is under bounded investigation;
 this attempt is not a full-gate pass.
 
+The follow-up authority review corrected the initial testnet-seed assessment:
+`publishSeededSandboxTestnetTool` uses the common seed publisher, which creates
+workload-owned curated supply. `capabilitySupplyProbes` requires an active
+human owner outside the narrowly defined facilitator-discovery path. Therefore
+the testnet seed also fails real probing with `authority_stale`. Its integration
+test directly simulates a readiness observation and does not prove that path.
+The genuine owner-admission alternative is being checked; no authority
+exception, ownership mutation or forged readiness was introduced.
+
+The custody review found existing rule and digest generators:
+`cdpX402SellerCanaryPolicyRules` and `cdpX402PolicyRulesDigest`. Provisioning
+should use these with official CDP SDK readback. The canary's per-payment cap
+is 10,000 atomic USDC; daily configuration is 50,000. The CDP rules enforce
+the per-payment cap, not an aggregate daily total or explicit chain ID.
+AE's sandbox profile/domain and budget controls remain necessary. No policy
+or wallet has been provisioned. The review's 67 focused checks passed.
+
 **Updated 13 September 2026.** The orchestrator verified the following provider
 state and local checks. This receipt supersedes the earlier 12 September claims that the app is usable, that
 Clerk/Infisical resources still need creating, that the previous Convex target
