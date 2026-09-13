@@ -186,3 +186,14 @@ update the registry, maturity record, and release evidence in the same commit.
 
 Live readback outranks this document. A discrepancy is drift to investigate,
 not permission to force the live system to match stale prose.
+
+
+## CLI connection recovery
+
+The hosted archive defaults to `https://app.aecon.ai` and carries the immutable
+source revision. Explicit origin overrides retain precedence. Pending OAuth
+device requests are private local records, isolated by origin, role and requested
+environment; existing file locking prevents concurrent polling. A completed CLI
+wait can resume the same unexpired request. Expired, declined and consumed device
+codes are removed. This state carries no spending authority until the normal
+owner approval and credential validation complete.

@@ -373,9 +373,11 @@ hostedAlphaReadback:
     projectId: prj_dK5mDpjBYuAXMwvLr0pWO0h8DoH9
     scope: creasybears-projects
     canonicalUrl: https://app.aecon.ai
-    observedDeploymentId: dpl_CUppxcpy5G9c2vedJdf3Cp37wbbS
-    deploymentUrl: https://agentic-economy-qhckdppxr-creasybears-projects.vercel.app
-    observedSourceRevision: 18f070720614cda20b5ad27176638f1893ca4487
+    observedDeploymentId: dpl_5FnYpA6uDBdY4htjXm7h1HT1sEbn
+    deploymentUrl: https://agentic-economy-mqfgd6w36-creasybears-projects.vercel.app
+    observedSourceRevision: 584cba57facc3977640930167a1c34620e1464e3
+    cliDownload: verified_revision_and_canonical_origin
+    cliArchiveSha256: 26454fc687bd48beebe7d85c5e64af645b303acc7799b4c2f38e26370681ebe6
     healthHttp: 200
     serverRenderingBoot: fixed
     readyHttp: 503

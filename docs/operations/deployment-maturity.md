@@ -214,6 +214,17 @@ readback key, Stripe destinations and Cloudflare alerts.
 
 ## Hosted alpha assessment — 12 September 2026
 
+**13 September CLI deployment:** revision `584cba57f` is live as
+`dpl_5FnYpA6uDBdY4htjXm7h1HT1sEbn`. Health and exact release identity return
+200. The downloaded CLI reports that revision and defaults to `app.aecon.ai`;
+its device approval resumes across runs. The release gate completed with 4,663
+unit, 1,251 integration, 24 E2E and ten accessibility passes. Eight authenticated
+E2E, five integration skips and three TODOs remain explicit; late CLI corrections
+also passed 73 focused tests and final type checking. Draft PR #226 carries the
+source changes; the protected source gate is still running. Readiness remains
+503 with the sole manifest finding `stripe_secret_key_invalid`. This does not
+establish Provider credential issuance or the paid purchase path.
+
 **13 September authenticated integration:** the controlled sandbox Provider
 workspace exists under the genuine business-account session. Its x402 source
 was discovered through the UI. Saving the Tool initially returned

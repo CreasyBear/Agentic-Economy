@@ -568,3 +568,29 @@ request. The owner has not approved Provider access, and no credential was
 issued or stored by these attempts. The private pending request remains locally
 for the authorised continuation and expires according to the server deadline.
 This CLI source correction still awaits the next hosted deployment.
+
+
+### Verified CLI deployment — 13 September
+
+The release gate finished successfully: 4,663 unit, 1,251 integration, 24 E2E
+and ten accessibility passes; eight authenticated E2E, five integration skips
+and three TODOs remain. The final source corrections additionally passed 73
+focused tests, type checking and lint. Draft PR #226 targets main at source
+`584cba57facc3977640930167a1c34620e1464e3`; its fresh-checkout sandbox and React
+checks passed, with the clean source release job still running.
+
+The first deployment attempt used an incorrect release-variable name. It was
+cancelled while BUILDING (`dpl_6f8QRBghTvu2m4A328FjcHLRhruK`) before promotion.
+After the official CLI successfully updated `AE_RELEASE_SOURCE_REVISION`, the
+replacement deployment `dpl_5FnYpA6uDBdY4htjXm7h1HT1sEbn` reached READY and
+was aliased to app.aecon.ai. Its build also receives `AE_SOURCE_REVISION` for
+the CLI archive label. Health is 200 and release readback exactly matches
+`584cba57facc3977640930167a1c34620e1464e3`.
+
+The downloaded archive reports `ae 0.2.0` at that source revision and defaults
+to `https://app.aecon.ai`. Its SHA-256 is
+`26454fc687bd48beebe7d85c5e64af645b303acc7799b4c2f38e26370681ebe6`.
+The temporary verification download was removed. Readiness remains 503; scoped
+runtime logs confirm the sole manifest finding is `stripe_secret_key_invalid`
+for `STRIPE_SECRET_KEY`. The prior deployment
+`dpl_CUppxcpy5G9c2vedJdf3Cp37wbbS` remains the deliberate rollback reference.
