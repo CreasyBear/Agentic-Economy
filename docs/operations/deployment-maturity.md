@@ -1,6 +1,13 @@
 # Deployment maturity and gaps
 
-## Current operating override — 6 September 2026
+Current hosted evidence is the [12 September alpha assessment](#hosted-alpha-assessment--12-september-2026). Earlier assessments below remain
+historical and do not establish current alpha availability.
+
+## Historical operating pause — 6 September 2026
+
+The 13 September retirement below supersedes this pause and its resume path.
+The old root and drill must not receive an ordinary apply; it would recreate
+retired resources.
 
 At Joel's request the synthetic AWS financial stack is paused for the
 vocabulary refactor. EC2 `i-063c00d935d85d74f` is confirmed stopped; RDS
@@ -203,3 +210,160 @@ reconciliation of the 20 pending funding commands (18 externally referenced),
 and callback/job isolation evidence. The five skips in the 09:10 snapshot remain
 explicit and unchanged: AWS, local restricted command key, local restricted
 readback key, Stripe destinations and Cloudflare alerts.
+
+
+## Hosted alpha assessment — 12 September 2026
+
+**13 September CLI deployment:** revision `584cba57f` is live as
+`dpl_5FnYpA6uDBdY4htjXm7h1HT1sEbn`. Health and exact release identity return
+200. The downloaded CLI reports that revision and defaults to `app.aecon.ai`;
+its device approval resumes across runs. The release gate completed with 4,663
+unit, 1,251 integration, 24 E2E and ten accessibility passes. Eight authenticated
+E2E, five integration skips and three TODOs remain explicit; late CLI corrections
+also passed 73 focused tests and final type checking. Draft PR #226 carries the
+source changes; the protected source gate is still running. Readiness remains
+503 with the sole manifest finding `stripe_secret_key_invalid`. This does not
+establish Provider credential issuance or the paid purchase path.
+
+**13 September authenticated integration:** the controlled sandbox Provider
+workspace exists under the genuine business-account session. Its x402 source
+was discovered through the UI. Saving the Tool initially returned
+`authorization_denied`; all six shared source-write signing-key families were
+missing from the fresh Convex deployment. Matching replacement keys are now
+bound through official CLIs to Vercel and Convex, with exact Convex readback,
+a new verified web deployment and a successful hosted Tool draft save. The
+temporary key file was removed. Live inspection confirms Base Sepolia, 1,000
+atomic USDC units and the controlled Provider payee; wallet-control proof and
+publication remain pending. The generic draft error incorrectly advised
+rediscovery for this deployment configuration failure; retain that papercut
+for the bounded UX correction wave.
+
+The real Clerk session webhook returned 200/ignored before its Account binding
+existed. Replaying that same signed event after binding persisted a security
+event and made it visible in Account & security. A second replay returned
+200/`replayed` with the same event reference; readback retained one event with
+its original recording timestamp. After Joel's approval, live Google readback
+confirmed the business project is In production with an External audience.
+Clerk's feature was already configured with User API keys enabled; user
+self-service was disabled to match the approved backend-only scope, with
+Organisation keys also disabled. The authenticated Agent directory loads and
+no new key-list Forbidden error was observed in the scoped runtime logs;
+credential issuance and verification remain unproven. Hosted Infisical
+proof must use the real HTTP-credential or MCP connection flow; the existing
+secret lifecycle does not expose user-facing deletion. No custom diagnostic
+endpoint or counterfeit ownership was added.
+
+**13 September authentication defect:** Joel's Google signup reached an OAuth
+400 with `client_id` missing. Production Clerk confirmed Google and GitHub
+were enabled with empty custom credentials and marked “Setup required”. Both
+connections were disabled through Clerk; the live sign-in form now shows email
+without those broken social buttons. No custom authentication code was added.
+The replacement Google project, `aecon-authentication`, is created under the
+`agentic-economy.ai` organisation with `joel@agentic-economy.ai` as its contact.
+The user approved Google's policy for that business account. Its consent
+configuration and web OAuth client are created, restricted to the app origin
+and Clerk callback. Joel saved the credentials in Clerk; Google was enabled and
+real sign-in completed with the business account. The authenticated account page
+then failed with `NoAuthProvider`: the hosted Convex deployment correctly trusts
+`https://clerk.aecon.ai` with application ID `convex`, but the official Convex
+integration was disabled in production Clerk. It is now activated with explicit
+approval. Signing out and back in obtains fresh claims; Account & security,
+Credit and the Provider workspace now load successfully against the hosted
+backend. Google's branding links point to the existing public home, privacy and
+terms pages, each checked with HTTP 200. The earlier personal-account
+project, `agentic-economy-authentication`, remains unused and unconnected, pending
+retirement. This verifies authentication and these initial page loads, not funding
+or a paid Call. Initial copy papercut: the Provider workspace says “after an Tool”.
+
+**13 September testnet integration:** the dedicated Coinbase alpha key and
+Wallet Secret are provisioned. Official SDK reads verify the buyer and Provider
+wallets, exact account/project policies, and 1 test USDC from the Base Sepolia
+faucet. Policy-management permission was removed after setup. All 13 custody
+settings match exact Convex readback and are installed in Vercel production;
+web activation is verified with no new custody configuration findings. The existing one-shot treasury workload
+recorded the genuine sandbox balance after standard workload-identity bootstrap,
+with recurring jobs still disabled.
+
+The reused sandbox Tool project is deployed at
+`https://agentic-economy-sandbox-tools.vercel.app`: health and discovery return
+200, unpaid x402 returns 402. Public descriptions now use sandbox Tool language;
+protected protocol identifiers remain stable. The official x402 decoder verifies exact v2 Base Sepolia, controlled payee,
+1,000 atomic USDC and Bazaar schemas. Five focused provider tests and lint
+passed. All four temporary Coinbase credential files were deleted. Human-owner admission and a paid Call remain unproven. Full cold
+user-journey audits await that integration baseline under
+[alpha-validation-plan.md](alpha-validation-plan.md).
+
+The initial release-gate attempt found a compact Support test hydration race.
+The test now waits for the existing hydration marker and activates its toggle
+once. Full gate at `d47a0e872` subsequently passed: 4,658 unit, 1,251 integration,
+24 browser and ten accessibility tests; eight authenticated cases are skipped.
+
+The testnet seed also cannot pass its actual readiness authority check: its
+workload owner fails the ordinary human-owner requirement. Existing seed tests
+simulate an observation and do not establish real probing. The supported
+human-owner alternative is source-supported through x402 preview, signed
+payee claim, connection and publication without Stripe Accounts v2. It remains
+runtime-unverified; no authority bypass was added. Custody policy generation exists in source, but provider-side
+rules alone do not enforce an aggregate daily cap or explicit chain ID.
+
+**Updated 13 September: alpha is deployed but not ready.** Authority is
+`hosted_alpha`, sandbox only;
+custody is enabled in the backend and web; writes and
+recurring workloads remain disabled. Provider labels
+`production` and `prod` do not confer production authority. This assessment
+supersedes earlier hosted topology, identity, configuration and usability
+claims, while retaining synthetic-release and backup evidence as history.
+Exact identities and revisions are in the
+[registry](deployment-registry.yaml) and
+[cutover receipt](hosted-cutover-2026-09-12.md#current-hosted-alpha-evidence--12-september-2026).
+
+| Boundary | Current evidence | Remaining gap |
+| --- | --- | --- |
+| Web and backend | Deployment `dpl_CuuoGmGstgb3VxCnwsdJarVYD7ZU`, source `5c0081f1578576dba2e894cfe5784978ac49534c`; health/release 200, six Formance settings active. | Readiness 503. Private logs identify only the wrong Stripe command-key type. The Clerk, inactive RPC and lifecycle-token findings are cleared by the verified deployment. |
+| Clerk | CSP fix deployed; Clerk form loads. Production instance and signed-webhook configuration remain recorded. | User signup, password and email steps pending; signed delivery and authenticated journey unverified. |
+| Stripe | Fresh restricted test readback key installed in Vercel production and Convex; tax, Checkout, PaymentIntent, Price and Refund SDK reads passed. GST tax rate bound in Convex; existing destinations remain enabled. | Saved Core Read permission and matching installed key suffix verified, but Accounts v2 list returns 403 `v2_account_storer_read`; platform account retrieval also returns 403. Restricted command key still has its old label ending `-command`; rename did not persist and permissions were unchanged. Transfer to the empty mode-0600 credential file is pending. No successful connected-account canary, delivery/replay or purchase proof. |
+| Infisical | Two new dedicated alpha projects have separate, deletion-protected member identities and saved Vercel production OIDC trust. All nine variables bound in Vercel production. Unused No Access identity deleted and verified; old staging projects untouched. | Hosted OIDC authentication and secret CRUD unverified. Local CLI token had a development subject, so its canary aborted before creating a secret. Project isolation uses member roles because custom roles require a paid plan. |
+| Financial authority | Reviewed bootstrap repair replaced the host; cloud-init complete, k3s/reconcile/timer active, required replicas ready; tunnel healthy with eight connections. Formance health ready; schema v1.3.0 installed and repeat replayed. Final pinned OpenTofu plan: no changes, exit 0. | End-to-end purchase unproven. SNS email subscription awaits confirmation. Historical RPO 308 seconds exceeds the 300-second target. |
+| AWS cost and retention | User-approved old AWS retirement completed: 24 resources removed; EC2 terminated, root disk absent, both RDS instances absent, NAT deleted and EIP absent. Three encrypted RDS snapshots and completed EBS snapshot retained under the enabled KMS key. | Budget decision resolved. Fresh alpha estimate is USD 311.29/month before tax, plus retained storage/account costs; the former combined paused-runtime estimate is superseded. Old root/drill ordinary apply would recreate retired resources. |
+| Source checks | Full gate at application baseline `d47a0e872` passed: 4,658 unit, 1,251 integration, 24 E2E and ten accessibility. The Support keyboard test now waits for hydration and activates once. | Eight authenticated E2E cases remain skipped. Source checks do not establish authenticated or purchase journeys. |
+
+Ten old Convex projects were deleted with the user's approval. Historical
+resource references are evidence, not current deployment targets. The seeded
+sandbox publication `capability-offering:sandbox-aecon-reference:v1` exists
+but is unlisted; its probe returned `authority_stale`, and public current-source
+search for `sandbox` returned 200 `no_candidates`. An ordinary fixed AUD $1
+HTTP Tool can publish and quote, but Call reservation requires x402 financial
+booking and returns `commercial_policy_unavailable` without it. Only zero-price
+Calls are allowed without booking; a free HTTP demonstration is not paid
+purchase proof. The existing testnet x402 reference path is needed for paid
+alpha and has not been provisioned. No cleanup wrapper or ownership bypass
+was written; seeded history is retained.
+
+Convex named reads confirm `STRIPE_SECRET_KEY` and `AE_X402_RPC_URLS_JSON`
+absent; absence alone does not establish a required Convex command consumer.
+User signup, SNS email confirmation, hosted OIDC/secret CRUD, signed events and
+a supported paid purchase remain pending. Alpha remains below ready.
+
+
+### Stripe sandbox funding verified — 13 September, after command-key handoff
+
+This readback supersedes the earlier Stripe command-key and readiness blockers.
+The restricted sandbox command key is installed in the alpha web app; the
+temporary credential file was removed. Deployment
+`dpl_4D25Fo8R3XGzup57z4dvxRsg4QmJ` serves source
+`584cba57facc3977640930167a1c34620e1464e3` at app.aecon.ai. Health, release and
+readiness return 200; configuration and Convex report ready.
+
+Sandbox funding is **VERIFIED** through the signed-in app, Stripe Checkout,
+the separate SDK readback key, the durable webhook worker and Account balance.
+A synthetic card paid A$10.55; the Account received A$10.00 and has a funding
+receipt and A$0.55 fee document. The matching webhook was applied in 5.4 seconds.
+Refreshing the payment return retained A$10.00 and the same two documents.
+Exact payment and event references are in the deployment registry and cutover
+evidence. No real payment was made.
+
+CI run `34748670853` passed both required Kernel jobs. Optional authenticated
+lifecycle, paid gateway and chat jobs were skipped. Alpha is still not ready:
+commercial readiness reports no admitted catalogue, quoting unavailable and
+`sellable: false`. Tool publication and a paid sandbox Call remain unverified,
+as do forced webhook replay, refunds and document rendering.

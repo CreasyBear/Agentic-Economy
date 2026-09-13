@@ -19,15 +19,26 @@ const HANDLERS: Record<ScheduledWorkloadName, FunctionReference<'mutation' | 'ac
 }
 
 const crons = cronJobs()
+const scheduledWorkloadsEnabled = process.env.AE_SCHEDULED_WORKLOADS_ENABLED
+if (scheduledWorkloadsEnabled !== undefined
+  && scheduledWorkloadsEnabled !== 'true'
+  && scheduledWorkloadsEnabled !== 'false') {
+  throw new Error('invalid_scheduled_workloads_configuration: AE_SCHEDULED_WORKLOADS_ENABLED must be true or false')
+}
 
 // Pre-launch cadence: keep recovery and freshness without burning included
 // Convex usage. Tighten these only when the market is actually live.
 // Bazaar pages are admitted on demand through capabilityToolCatalog, so
 // 'refresh facilitator discovery' declares no interval.
-for (const workload of SCHEDULED_WORKLOADS) {
-  if (!('interval' in workload) || workload.interval === undefined) continue
-  const interval = workload.interval
-  crons.interval(workload.name, interval, HANDLERS[workload.name], {})
+// Environment changes affect these registrations on the next deploy. This
+// gates recurring crons only; manual calls and durable Call recovery remain available.
+// https://docs.convex.dev/production/environment-variables
+if (scheduledWorkloadsEnabled !== 'false') {
+  for (const workload of SCHEDULED_WORKLOADS) {
+    if (!('interval' in workload) || workload.interval === undefined) continue
+    const interval = workload.interval
+    crons.interval(workload.name, interval, HANDLERS[workload.name], {})
+  }
 }
 
 export default crons

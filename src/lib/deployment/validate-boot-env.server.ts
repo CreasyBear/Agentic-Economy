@@ -12,12 +12,14 @@ let validated = false
 
 export function ensureBootEnvironmentValidated(): void {
   if (validated) return
-  validated = true
 
   const nodeEnv = readTrimmedEnv(process.env, 'NODE_ENV')
   const environment = nodeEnv === 'development' ? 'development' : 'production'
   const result = validateEnvironment(process.env, environment)
-  if (result.ok) return
+  if (result.ok) {
+    validated = true
+    return
+  }
 
   const message = result.problems.map((problem) => `${problem.name}: ${problem.reason}`).join('\n')
   if (environment === 'production') {

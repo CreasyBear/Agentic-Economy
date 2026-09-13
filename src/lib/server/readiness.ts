@@ -1,4 +1,5 @@
 import { degrade } from '@/lib/observability/degrade'
+import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { readTrimmedEnv, type StringEnvironment } from '@/lib/server/read-trimmed-env'
 import { readStripeMoneyProviderConfig } from '@/lib/server/stripe-money-provider-config'
 import {
@@ -14,6 +15,7 @@ import { isMoneyRefusal } from '@/modules/money/public'
 
 const DEFAULT_PROBE_TIMEOUT_MS = 2_000
 const MAX_PROBE_TIMEOUT_MS = 5_000
+let lastReportedDeploymentManifestFailure: string | undefined
 
 type ReadinessCheck = Readonly<{
   status: 'ready' | 'failed'
@@ -319,7 +321,15 @@ function readDeploymentConfig(env: StringEnvironment, nodeMajor?: number): Deplo
         reason: 'invalid_response',
       })
     }
-    if (!deployment.ok) return { kind: 'failed', code: 'deployment_manifest_invalid' }
+    if (!deployment.ok) {
+      const findings = deployment.findings.map(({ kind, code, names, scope }) => ({ kind, code, names, scope }))
+      const failureKey = JSON.stringify([deployment.fingerprint, findings])
+      if (lastReportedDeploymentManifestFailure !== failureKey) {
+        lastReportedDeploymentManifestFailure = failureKey
+        degradeBackend({ findings }, undefined, { site: 'readDeploymentConfig', reason: 'invalid_response' })
+      }
+      return { kind: 'failed', code: 'deployment_manifest_invalid' }
+    }
   }
   return { kind: 'ready', convexUrl: convexUrl.href }
 }

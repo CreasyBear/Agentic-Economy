@@ -1,9 +1,10 @@
 import { makeFunctionReference } from 'convex/server'
 import type { Infer } from 'convex/values'
 import { degradeBackend } from '../../../src/lib/observability/degrade-backend'
+import { resolveServiceMode, serviceModeAllowsEnvironment } from '@/lib/deployment/service-mode'
 import type { Doc } from '../../_generated/dataModel'
 import { internal } from '../../_generated/api'
-import type { ActionCtx, MutationCtx, QueryCtx } from '../../_generated/server'
+import { env, type ActionCtx, type MutationCtx, type QueryCtx } from '../../_generated/server'
 import { resolveBusinessActor } from '../../authz'
 import { MARKET_TOOLS_CALL_SCOPE } from '@/modules/agent-access/contract'
 import {
@@ -573,6 +574,9 @@ export async function canonicalAgentCallHandler(
     if (replay === null) return { kind: 'refused', code: 'operation_not_current', retryable: false }
     if (replay.result !== undefined) return projectCallResult(callResultSchema.parse(replay.result))
     return { kind: 'pending', callRef: material.consumedCallRef, toolRef: material.toolRef, retryAfterMs: 1_000 }
+  }
+  if (!serviceModeAllowsEnvironment(resolveServiceMode(env), principal.environment)) {
+    return { kind: 'refused', toolRef: material.toolRef, code: 'environment_mismatch', retryable: false }
   }
   if (material.x402RequirementDigest !== undefined) {
     const live = await ctx.runAction(inspectLiveX402RequirementRef, {

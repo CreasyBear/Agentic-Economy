@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import convexCrons from '../../../convex/crons'
 import {
@@ -7,6 +7,7 @@ import {
   validateDeploymentManifest,
   type DeploymentEnvironmentInput,
 } from '../../../src/lib/deployment/manifest'
+import { resolveServiceMode, serviceModeAllowsEnvironment } from '../../../src/lib/deployment/service-mode'
 
 function productionEnvironment(): Record<string, string> {
   return {
@@ -17,7 +18,8 @@ function productionEnvironment(): Record<string, string> {
     AE_CONVEX_SERVER_FUNCTION_TOKEN: 'convex-server-function-token-long-enough',
     VITE_CLERK_PUBLISHABLE_KEY: 'pk_live_example',
     CLERK_SECRET_KEY: 'sk_live_example',
-    CLERK_WEBHOOK_SIGNING_SECRET: 'whsec_live_example',
+    // Explicit synthetic Base64 fixture; never copied from a provider.
+    CLERK_WEBHOOK_SIGNING_SECRET: `whsec_${Buffer.from('synthetic-clerk-webhook-key-for-unit-tests').toString('base64')}`,
     CLERK_JWT_ISSUER_DOMAIN: 'https://clerk.example.com',
     OPENROUTER_API_KEY: 'openrouter-secret-value',
     AE_CHAT_PROXY_SECRET: 'chat-proxy-secret-value-long-enough',
@@ -63,6 +65,26 @@ function productionEnvironment(): Record<string, string> {
       `AE_SOURCE_WRITE_KEY_${family.toUpperCase()}`,
       `${family}-key:source-write-secret-${family}-long-enough`,
     ])),
+  }
+}
+
+function disabledHostedAlphaEnvironment(): Record<string, string> {
+  const environment = productionEnvironment()
+  for (const name of Object.keys(environment)) {
+    if (name.startsWith('CDP_') || name.startsWith('AE_X402_')) delete environment[name]
+  }
+  return {
+    ...environment,
+    AE_SERVICE_MODE: 'hosted_alpha',
+    STRIPE_SECRET_KEY: 'rk_test_alpha',
+    STRIPE_READBACK_KEY: 'rk_test_alpha_readback',
+    AE_FORMANCE_ENVIRONMENT: 'sandbox',
+    AE_X402_CUSTODY_ENABLED: 'false',
+    AE_PACKAGE5_WRITES_ENABLED: 'false',
+    AE_SUPPLY_HTTP_CREDENTIALS_ENABLED: 'false',
+    AE_SUPPLY_MCP_OAUTH_ENABLED: 'false',
+    AE_PROVIDER_OFFBOARDING_ENABLED: 'false',
+    AE_SCHEDULED_WORKLOADS_ENABLED: 'false',
   }
 }
 
@@ -114,6 +136,30 @@ describe('deployment manifest validator', () => {
     expect(manifestJobNames).toEqual(registeredJobNames)
   })
 
+  it.each([undefined, 'true', 'false'])('registers recurring jobs according to the deployment switch %s', async (value) => {
+    vi.stubEnv('AE_SCHEDULED_WORKLOADS_ENABLED', value)
+    vi.resetModules()
+    try {
+      const { default: crons } = await import('../../../convex/crons')
+      const registered = Object.keys(crons.crons).sort()
+      expect(registered).toEqual(value === 'false' ? [] : Object.keys(convexCrons.crons).sort())
+    } finally {
+      vi.unstubAllEnvs()
+      vi.resetModules()
+    }
+  })
+
+  it('refuses to register recurring jobs with an invalid explicit switch', async () => {
+    vi.stubEnv('AE_SCHEDULED_WORKLOADS_ENABLED', 'invalid')
+    vi.resetModules()
+    try {
+      await expect(import('../../../convex/crons')).rejects.toThrow('invalid_scheduled_workloads_configuration')
+    } finally {
+      vi.unstubAllEnvs()
+      vi.resetModules()
+    }
+  })
+
   it('fails closed for missing core source, auth, canonical, model, and source-write configuration', () => {
     const result = validateDeploymentManifest({ NODE_ENV: 'production' }, { nodeMajor: 22 })
     const names = result.findings.flatMap((finding) => finding.names)
@@ -134,6 +180,7 @@ describe('deployment manifest validator', () => {
       'AE_SOURCE_WRITE_KEY_BILLING',
       'AE_SOURCE_WRITE_KEY_SESSION',
       'STRIPE_SECRET_KEY',
+      'STRIPE_READBACK_KEY',
       'STRIPE_WEBHOOK_SECRET',
       'STRIPE_V2_WEBHOOK_SECRET',
       'STRIPE_AU_INCLUSIVE_GST_TAX_RATE_ID',
@@ -244,6 +291,37 @@ describe('deployment manifest validator', () => {
     ]))
   })
 
+  it.each(['whsec_+/9/', 'whsec_+/8=', 'whsec_+w==', 'whsec_c2VjcmV0'])('accepts standard Base64 Clerk webhook secret shape %s', (secret) => {
+    expect(validateDeploymentManifest({
+      ...productionEnvironment(), CLERK_WEBHOOK_SIGNING_SECRET: secret,
+    }).ok).toBe(true)
+  })
+
+  it.each([
+    'whsec_', 'whsec_abc=def', 'whsec_abc===', 'whsec_abc def', 'whsec_abc!',
+    'whsec_live_example', 'whsec_-w==', 'whsec_abcde', 'whsec_abc==',
+  ])('rejects malformed Clerk webhook secret shape %s', (secret) => {
+    const result = validateDeploymentManifest({
+      ...productionEnvironment(), CLERK_WEBHOOK_SIGNING_SECRET: secret,
+    })
+    expect(result.ok).toBe(false)
+    expect(result.findings).toContainEqual(expect.objectContaining({
+      code: 'clerk_webhook_signing_secret_invalid', names: ['CLERK_WEBHOOK_SIGNING_SECRET'],
+    }))
+  })
+
+  it('recognizes the lifecycle RPC token without exposing or fingerprinting its secret value', () => {
+    const token = 'lifecycle-rpc-secret-sentinel-that-is-long-enough'
+    const result = validateDeploymentManifest({
+      ...productionEnvironment(), AE_SECRET_LIFECYCLE_RPC_TOKEN: token,
+    })
+    expect(result).toMatchObject({ ok: true, findings: [] })
+    expect(JSON.stringify(result)).not.toContain(token)
+    expect(validateDeploymentManifest({
+      ...productionEnvironment(), AE_SECRET_LIFECYCLE_RPC_TOKEN: 'rotated-lifecycle-rpc-secret-that-is-long-enough',
+    }).fingerprint).toBe(result.fingerprint)
+  })
+
   it('rejects test or malformed Stripe credentials in production', () => {
     const result = validateDeploymentManifest({
       ...productionEnvironment(),
@@ -289,6 +367,185 @@ describe('deployment manifest validator', () => {
       'stripe_secret_key_invalid',
       'formance_environment_mismatch',
     ]))
+  })
+
+  it('admits hosted alpha with production identity and sandbox money', () => {
+    const environment = {
+      ...productionEnvironment(),
+      AE_SERVICE_MODE: 'hosted_alpha',
+      STRIPE_SECRET_KEY: 'rk_test_alpha',
+      STRIPE_READBACK_KEY: 'rk_test_alpha_readback',
+      AE_FORMANCE_ENVIRONMENT: 'sandbox',
+      AE_SCHEDULED_WORKLOADS_ENABLED: 'false',
+    }
+    expect(validateDeploymentManifest(environment)).toMatchObject({ ok: true, findings: [] })
+    expect(resolveServiceMode(environment)).toBe('hosted_alpha')
+    expect(serviceModeAllowsEnvironment(resolveServiceMode(environment), 'sandbox')).toBe(true)
+    expect(serviceModeAllowsEnvironment(resolveServiceMode(environment), 'production')).toBe(false)
+    for (const readbackKey of [undefined, '', ' ']) {
+      const result = validateDeploymentManifest({ ...environment, STRIPE_READBACK_KEY: readbackKey })
+      expect(result.ok).toBe(false)
+      expect(result.findings).toEqual([{
+        kind: 'missing',
+        code: 'stripe_configuration_required',
+        names: ['STRIPE_READBACK_KEY'],
+        scope: 'stripe-money',
+      }])
+    }
+  })
+
+  it('admits hosted alpha with explicitly disabled custody, Provider features, and recurring work', () => {
+    expect(validateDeploymentManifest(disabledHostedAlphaEnvironment(), { nodeMajor: 22 }))
+      .toMatchObject({ ok: true, findings: [] })
+  })
+
+  it.each([
+    'AE_X402_CUSTODY_ENABLED',
+    'AE_PACKAGE5_WRITES_ENABLED',
+    'AE_SUPPLY_HTTP_CREDENTIALS_ENABLED',
+    'AE_SUPPLY_MCP_OAUTH_ENABLED',
+    'AE_PROVIDER_OFFBOARDING_ENABLED',
+  ])('requires an explicit valid hosted alpha switch for %s', (name) => {
+    for (const value of [undefined, '', ' ', 'FALSE', '0', 'invalid']) {
+      const result = validateDeploymentManifest({ ...disabledHostedAlphaEnvironment(), [name]: value })
+      expect(result.ok).toBe(false)
+      expect(result.findings).toContainEqual(expect.objectContaining({ names: [name] }))
+    }
+  })
+
+  it('requires the exact false custody switch to omit hosted alpha custody credentials', () => {
+    const result = validateDeploymentManifest({
+      ...disabledHostedAlphaEnvironment(), AE_X402_CUSTODY_ENABLED: 'false ',
+    })
+    expect(result.ok).toBe(false)
+    expect(result.findings).toContainEqual(expect.objectContaining({
+      code: 'x402_custody_not_enabled', names: ['AE_X402_CUSTODY_ENABLED'],
+    }))
+  })
+
+  it('requires full custody configuration when hosted alpha enables custody', () => {
+    const result = validateDeploymentManifest({
+      ...disabledHostedAlphaEnvironment(), AE_X402_CUSTODY_ENABLED: 'true',
+    })
+    expect(result.ok).toBe(false)
+    expect(result.findings.filter(({ code }) => code === 'x402_payment_custody_required')
+      .flatMap(({ names }) => names)).toEqual(expect.arrayContaining([
+      'CDP_API_KEY_ID', 'CDP_API_KEY_SECRET', 'CDP_WALLET_SECRET',
+      'AE_X402_CDP_ACCOUNT_NAME', 'AE_X402_CDP_EXPECTED_EVM_ADDRESS',
+      'AE_X402_CDP_ACCOUNT_POLICY_ID', 'AE_X402_CDP_PROJECT_POLICY_ID',
+      'AE_X402_CDP_POLICY_RULES_DIGEST', 'AE_X402_CDP_CREDENTIAL_GENERATION',
+      'AE_X402_CUSTODY_MAX_ATOMIC', 'AE_X402_CUSTODY_DAILY_MAX_ATOMIC', 'AE_X402_RPC_URLS_JSON',
+    ]))
+  })
+
+  it.each([
+    'AE_INFISICAL_CUSTOMER_PROJECT_ID',
+    'AE_INFISICAL_PLATFORM_MACHINE_IDENTITY_ID',
+    ...SOURCE_WRITE_FAMILIES.map((family) => `AE_SOURCE_WRITE_KEY_${family.toUpperCase()}`),
+  ])('retains disabled hosted alpha authority requirements for %s', (name) => {
+    const result = validateDeploymentManifest({ ...disabledHostedAlphaEnvironment(), [name]: undefined })
+    expect(result.ok).toBe(false)
+    expect(result.findings).toContainEqual(expect.objectContaining({ kind: 'missing', names: [name] }))
+  })
+
+  it.each([false, true])('keeps custody and Provider features required outside hosted alpha (synthetic fixture: %s)', (synthetic) => {
+    const result = validateDeploymentManifest({
+      ...disabledHostedAlphaEnvironment(),
+      AE_SERVICE_MODE: undefined,
+      ...(synthetic ? {
+        AE_PACKAGE4_SANDBOX_DEPLOYMENT_PROFILE: 'synthetic_vps_fixture',
+        VITE_CLERK_PUBLISHABLE_KEY: 'pk_test_release',
+        CLERK_SECRET_KEY: 'sk_test_release',
+      } : {
+        STRIPE_SECRET_KEY: 'rk_live_example',
+        STRIPE_READBACK_KEY: 'rk_live_readback',
+        AE_FORMANCE_ENVIRONMENT: 'production',
+      }),
+    })
+    expect(result.ok).toBe(false)
+    expect(result.findings).toContainEqual(expect.objectContaining({ code: 'x402_custody_not_enabled' }))
+    expect(result.findings.filter(({ code }) => code === 'package5_rollout_not_enabled')
+      .flatMap(({ names }) => names)).toEqual(expect.arrayContaining([
+      'AE_PACKAGE5_WRITES_ENABLED', 'AE_SUPPLY_HTTP_CREDENTIALS_ENABLED',
+      'AE_SUPPLY_MCP_OAUTH_ENABLED', 'AE_PROVIDER_OFFBOARDING_ENABLED',
+    ]))
+  })
+
+  it.each([
+    ['VITE_CLERK_PUBLISHABLE_KEY', 'pk_test_alpha', 'clerk_publishable_key_invalid'],
+    ['CLERK_SECRET_KEY', 'sk_test_alpha', 'clerk_secret_key_invalid'],
+    ['STRIPE_SECRET_KEY', 'rk_live_alpha', 'stripe_secret_key_invalid'],
+    ['STRIPE_SECRET_KEY', 'sk_test_alpha', 'stripe_secret_key_invalid'],
+    ['STRIPE_READBACK_KEY', 'rk_live_alpha', 'stripe_readback_key_invalid'],
+    ['AE_FORMANCE_ENVIRONMENT', 'production', 'formance_environment_mismatch'],
+  ])('refuses hosted alpha with incompatible %s', (name, value, code) => {
+    const result = validateDeploymentManifest({
+      ...productionEnvironment(),
+      AE_SERVICE_MODE: 'hosted_alpha',
+      STRIPE_SECRET_KEY: 'rk_test_alpha',
+      STRIPE_READBACK_KEY: 'rk_test_alpha_readback',
+      AE_FORMANCE_ENVIRONMENT: 'sandbox',
+      [name]: value,
+    })
+    expect(result.ok).toBe(false)
+    expect(result.findings).toContainEqual(expect.objectContaining({ code, names: [name] }))
+  })
+
+  it('keeps hosted alpha identity requirements on non-production deployment classes', () => {
+    const result = validateDeploymentManifest({
+      ...productionEnvironment(),
+      NODE_ENV: 'development',
+      AE_SERVICE_MODE: 'hosted_alpha',
+      STRIPE_SECRET_KEY: 'rk_test_alpha',
+      STRIPE_READBACK_KEY: 'rk_test_alpha_readback',
+      AE_FORMANCE_ENVIRONMENT: 'sandbox',
+      CLERK_SECRET_KEY: undefined,
+    })
+    expect(result.ok).toBe(false)
+    expect(result.findings).toContainEqual(expect.objectContaining({
+      kind: 'missing', scope: 'clerk', names: ['CLERK_SECRET_KEY'],
+    }))
+  })
+
+  it.each([
+    { AE_SERVICE_MODE: '' },
+    { AE_SERVICE_MODE: ' ' },
+    { AE_SERVICE_MODE: 'standard' },
+    { AE_SERVICE_MODE: 'hosted_alpha ' },
+    { AE_SERVICE_MODE: 'unknown' },
+    { AE_SERVICE_MODE: 'hosted_alpha', AE_PACKAGE4_SANDBOX_DEPLOYMENT_PROFILE: 'synthetic_vps_fixture' },
+    { AE_SERVICE_MODE: 'hosted_alpha', AE_PACKAGE4_SANDBOX_DEPLOYMENT_PROFILE: '' },
+  ])('fails closed for invalid or conflicting explicit service configuration %j', (configuration) => {
+    const environment = { ...productionEnvironment(), ...configuration }
+    expect(resolveServiceMode(environment)).toBe('invalid')
+    expect(serviceModeAllowsEnvironment(resolveServiceMode(environment), 'sandbox')).toBe(false)
+    expect(serviceModeAllowsEnvironment(resolveServiceMode(environment), 'production')).toBe(false)
+    const result = validateDeploymentManifest(environment)
+    expect(result.ok).toBe(false)
+    expect(result.findings).toContainEqual(expect.objectContaining({ code: 'service_mode_invalid' }))
+  })
+
+  it('preserves existing environment checks when service mode is unset', () => {
+    const mode = resolveServiceMode(productionEnvironment())
+    expect(mode).toBe('standard')
+    expect(serviceModeAllowsEnvironment(mode, 'sandbox')).toBe(true)
+    expect(serviceModeAllowsEnvironment(mode, 'production')).toBe(true)
+  })
+
+  it.each([undefined, 'true', 'false'])('accepts optional scheduled-workload setting %s', (value) => {
+    expect(validateDeploymentManifest({
+      ...productionEnvironment(), AE_SCHEDULED_WORKLOADS_ENABLED: value,
+    }).ok).toBe(true)
+  })
+
+  it.each(['', ' ', 'TRUE', '0', '1', 'false ', 'unknown'])('rejects malformed scheduled-workload setting %j', (value) => {
+    const result = validateDeploymentManifest({
+      ...productionEnvironment(), AE_SCHEDULED_WORKLOADS_ENABLED: value,
+    })
+    expect(result.ok).toBe(false)
+    expect(result.findings).toContainEqual(expect.objectContaining({
+      code: 'ae_scheduled_workloads_enabled_invalid', names: ['AE_SCHEDULED_WORKLOADS_ENABLED'],
+    }))
   })
 
   it('does not allow production CSP enforcement to be downgraded', () => {

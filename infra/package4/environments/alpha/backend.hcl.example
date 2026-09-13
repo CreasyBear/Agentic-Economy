@@ -1,0 +1,9 @@
+# Select an existing authorized encrypted state bucket and KMS key before init.
+# Never substitute the release or production state key. No backend is created by
+# this root; validate locally with init -backend=false before live planning.
+bucket       = "replace-with-authorized-encrypted-state-bucket"
+key          = "agentic-economy/alpha/opentofu.tfstate"
+region       = "ap-southeast-2"
+encrypt      = true
+use_lockfile = true
+kms_key_id   = "replace-with-authorized-state-kms-key-arn"

@@ -86,9 +86,9 @@ export async function createPackage5ReferenceProvider(
         },
         maxTimeoutSeconds: 60,
       },
-      description: 'Deterministic x402 Operation for Package 5 release proof.',
+      description: 'Returns your text for sandbox integration testing.',
       mimeType: 'application/json',
-      serviceName: 'package5-reference-provider',
+      serviceName: 'Agentic Economy sandbox Tool',
       extensions: declareDiscoveryExtension({
         bodyType: 'json',
         input: { value: 'x402-validation' },
@@ -138,8 +138,8 @@ function createMcpServer(): McpServer {
   const server = new McpServer({ name: 'package5-reference-provider', version: '1.0.0' })
   const register = (name: 'package5_mcp_execute' | 'package5_agent_plugin_execute', sourceKind: 'mcp' | 'agent_plugin') => {
     server.registerTool(name, {
-      title: sourceKind === 'mcp' ? 'Package 5 MCP Operation' : 'Package 5 Agent Plugin Operation',
-      description: `Deterministic ${sourceKind.replace('_', ' ')} Operation for Package 5 release proof.`,
+      title: sourceKind === 'mcp' ? 'Agentic Economy sandbox Tool (MCP)' : 'Agentic Economy sandbox Tool (Agent Plugin)',
+      description: `Agentic Economy sandbox Tool for ${sourceKind === 'mcp' ? 'MCP' : 'Agent Plugin'} integration checks.`,
       inputSchema: { value: z.string().trim().min(1).max(200) },
       outputSchema: toolOutput.shape,
     }, async ({ value }) => {
@@ -208,21 +208,21 @@ function providerOutput(sourceKind: SourceKind, value: string) {
 function openApiDocument(origin: string) {
   return {
     openapi: '3.1.0',
-    info: { title: 'Package 5 reference Provider', version: '1.0.0' },
+    info: { title: 'Agentic Economy sandbox Tool', version: '1.0.0' },
     servers: [{ url: origin }],
     paths: {
       '/openapi/execute': {
         post: {
           operationId: 'package5OpenApiExecute',
-          summary: 'Package 5 OpenAPI Operation',
-          description: 'Deterministic OpenAPI Operation for Package 5 release proof.',
+          summary: 'Agentic Economy sandbox Tool (OpenAPI)',
+          description: 'Agentic Economy sandbox Tool for OpenAPI integration checks.',
           requestBody: {
             required: true,
             content: { 'application/json': { schema: inputSchema, example: { value: 'openapi-validation' } } },
           },
           responses: {
             '200': {
-              description: 'Operation result',
+              description: 'Agentic Economy sandbox Tool result',
               content: {
                 'application/json': {
                   schema: outputSchema,
@@ -242,7 +242,7 @@ function pluginDocument() {
     $schema: 'https://agent-plugins.org/schemas/1.0.0/plugin.schema.json',
     name: 'package5-reference-provider',
     version: '1.0.0',
-    description: 'Agent Plugins 1.0 fixture for Package 5 release proof.',
+    description: 'Agentic Economy sandbox Tool for Agent Plugins 1.0 integration checks.',
   } as const
 }
 

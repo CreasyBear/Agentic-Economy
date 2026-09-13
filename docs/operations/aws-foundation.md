@@ -6,7 +6,37 @@ observable, recoverable and bounded in cost. Live resource identifiers remain
 in `deployment-registry.yaml`; capability evidence remains in
 `deployment-maturity.md`.
 
-## Refactor pause — 6 September 2026
+## Synthetic runtime retired — 13 September 2026
+
+Joel approved preserving recovery snapshots and retiring the old synthetic AWS
+runtime. The reviewed saved OpenTofu plans completed: five recovery-drill
+resources and 19 main-runtime resources were deleted. The exact checked-in
+drill cleanup first passed source verification before and after removal.
+
+Live readback confirms both old RDS instances absent, EC2
+`i-063c00d935d85d74f` terminated, its root volume absent, NAT
+`nat-0aabc2385d7704d2d` deleted and its public IP released. The previous
+seven-day database restart risk is resolved. Retained encrypted recovery points
+are available:
+
+- `package4-release-formance-retirement-20260913`
+- `package4-release-restore-20260904-retirement`
+- `package4-release-formance-final`
+- EBS `snap-04e41acaa13daaf60`
+
+Keep encryption key `5979d934-bd8d-4809-bd2e-5cf22092922e` enabled. State,
+audit controls, logs, vaults, VPC/subnets and recovery evidence remain retained;
+retention continues to incur storage and account-service costs. Snapshot
+availability does not establish a new restore drill pass.
+
+**Do not apply the old `environments/package4-release` or dated recovery-drill
+root: an ordinary apply would recreate retired resources.** The fresh hosted
+alpha uses `infra/package4/environments/alpha` and its separate state key.
+Provisioning status is recorded in `deployment-registry.yaml`; alpha readiness
+still requires runtime verification. The pause and resume commands below are
+historical and must not be used against the retired runtime.
+
+## Historical refactor pause — 6 September 2026
 
 Joel requested a reversible AWS pause during the vocabulary refactor. This
 operating state supersedes the running-state observations dated below; it does

@@ -1,5 +1,6 @@
 schemaVersion: ae.deployment-registry/v1
-# Current operating override: see operatingPause; the baseline below is dated.
+# Current hosted evidence and retirement: hostedAlphaReadback. Historical pause: operatingPause.
+# The original baseline below remains dated historical evidence.
 capturedAt: "2026-09-04T08:48:02Z"
 capturedFromRevision: "8621ef3f3017a0e2ebe19c6277da98f7d5488909"
 captureWorkingTree: dirty_preserved_user_and_infrastructure_changes
@@ -351,3 +352,535 @@ operatingPause:
   observedMonthToDateCostUsd: "18.5614214555"
   costForecast: insufficient_history
   evidenceAndResume: docs/operations/aws-foundation.md
+
+
+hostedAlphaReadback:
+  capturedOn: "2026-09-13"
+  evidenceSource: orchestrator_verified_provider_readback_and_local_checks
+  evidence: docs/operations/hosted-cutover-2026-09-12.md
+  supersedes: earlier_hosted_cutover_topology_identity_configuration_and_usability_claims
+  environment:
+    id: hosted_alpha
+    moneyMode: sandbox_only
+    custodyEnabled: true
+    writesEnabled: false
+    recurringWorkloadsEnabled: false
+    alphaReady: false
+    productionReady: false
+  web:
+    provider: vercel
+    projectName: agentic-economy
+    projectId: prj_dK5mDpjBYuAXMwvLr0pWO0h8DoH9
+    scope: creasybears-projects
+    canonicalUrl: https://app.aecon.ai
+    observedDeploymentId: dpl_4D25Fo8R3XGzup57z4dvxRsg4QmJ
+    deploymentUrl: https://agentic-economy-9c8k210jb-creasybears-projects.vercel.app
+    observedSourceRevision: 584cba57facc3977640930167a1c34620e1464e3
+    cliDownload: verified_revision_and_canonical_origin
+    cliArchiveSha256: 26454fc687bd48beebe7d85c5e64af645b303acc7799b4c2f38e26370681ebe6
+    healthHttp: 200
+    serverRenderingBoot: fixed
+    readyHttp: 200
+    readyReason: config_and_convex_ready
+    exactReadinessDiagnostic:
+      source: public_api_ready_after_redeployment
+      findings: []
+      clearedFindings: [CLERK_WEBHOOK_SIGNING_SECRET, AE_X402_RPC_URLS_JSON, AE_SECRET_LIFECYCLE_RPC_TOKEN, STRIPE_SECRET_KEY]
+    readinessChecks:
+      deploymentConfig: ready
+      convex: ready
+      sourceMatches: true
+    appliedConfiguration:
+      vercelProductionCustodyEnabled: true_verified_after_redeployment
+      rpcConfiguration: valid_base_sepolia_only_map_installed
+      officialCliExit: 0
+      redeployment: verified_health_and_release_200
+    sellable: false
+    releaseHttp: 200
+    commercial:
+      catalogue: absent
+      quoting: unavailable
+      funding: configured
+      sellable: false
+    formanceBindings: all_six_active
+    signInState: google_business_signup_signin_and_authenticated_pages_verified
+    configurationChange:
+      removedVariable: AE_SOURCE_WRITE_SECRET
+      providerConfigurationRemoval: verified
+      redeployedAfterBindingChanges: true
+      sourceWriteKeyFamilies: [BILLING, PROTECTED, CATALOG, OPERATOR, REPAIR, SESSION]
+      sourceWriteKeyRepair: six_missing_convex_bindings_replaced_with_matching_vercel_and_convex_keys
+      sourceWriteKeyGeneration: alpha_family_v2
+      sourceWriteKeyReadback: six_exact_convex_matches_and_vercel_cli_updates
+      sourceWriteRuntimeProof: genuine_catalog_draft_saved_after_redeployment
+      sourceWriteTemporaryFile: removed
+    mainAutodeployBundlerRegression:
+      recovery: reviewed_branch_deployed
+      fixMergedToMain: false
+      recurrenceRisk: persists_until_merge
+  backend:
+    provider: convex
+    team: joel-chan
+    projectName: agentic-economy
+    developmentDeployment: cool-crab-306
+    providerProductionDeployment: cautious-zebra-473
+    deployedSourceRevision: fbd22a563f204312f26aa9b8a53c55ca5969e02f
+    aeAuthority: hosted_alpha_sandbox_only
+    oldProjectsDeletedWithUserApproval: 10
+    exactNamedEnvironmentReadback:
+      STRIPE_SECRET_KEY: missing
+      AE_X402_RPC_URLS_JSON: missing
+      commandConsumerRequirement: not_inferred_from_environment_absence
+  identity:
+    provider: clerk
+    providerClass: production
+    instanceId: ins_3JEJtsKq3rdCZG94s6tAkkut9Y7
+    issuerHost: clerk.aecon.ai
+    webhookEndpointId: ep_3JET0Um63P5BmiF8x6Guz5ToyUZ
+    webhookUrl: https://app.aecon.ai/api/clerk/webhook
+    events: [session.created, session.ended, session.revoked, user.updated]
+    signingSecretBinding: user_saved_in_vercel_and_deployed
+    signedDelivery: verified_real_session_event_200
+    securityEventPersistence: applied_after_account_binding_and_visible_in_account_security
+    securityEventRef: audit:clerk:1f0b1f8774643c66dedb9f68361d2a0963dac1a3886fe9a55cb6cc513ce11b3a
+    duplicateSecurityDelivery: verified_200_replayed_same_event_reference_one_durable_record
+    initialSessionDelivery: ignored_before_account_binding
+    clerkAgentApiKeys: configured_user_and_organization_self_service_disabled
+    clerkAgentApiKeyRuntime: authenticated_directory_loaded_no_new_forbidden_log_issuance_unverified
+    cspFix: deployed
+    formLoads: verified
+    userSignupPasswordAndEmail: pending
+    socialSignIn:
+      reportedFailure: google_400_invalid_request_missing_client_id
+      rootCause: google_and_github_enabled_without_production_oauth_credentials
+      mitigation: github_disabled_google_reconfigured_with_business_credentials
+      liveSignIn: google_oauth_completed_authenticated_owner_settings_reached
+      googleCloudProjectName: Agentic Economy Authentication
+      googleCloudProjectId: aecon-authentication
+      googleCloudOrganization: agentic-economy.ai
+      googleCloudOrganizationId: '366790865037'
+      googleCloudOwnerContact: joel@agentic-economy.ai
+      googleCloudProjectCreation: verified
+      googleConsentConfiguration: created_with_user_approved_policy
+      googleOAuthClient: user_saved_in_clerk_enabled_signin_verified
+      googleOAuthClientId: 986306197538-fgpen9v8r3h4c06cpp1r6npgh0lbks73.apps.googleusercontent.com
+      googleOAuthClientName: Agentic Economy web sign-in
+      googleOAuthJavascriptOrigin: https://app.aecon.ai
+      supersededPersonalGoogleProject: agentic-economy-authentication
+      supersededPersonalGoogleProjectStatus: unused_unconnected_pending_retirement
+      intendedRedirectUri: https://clerk.aecon.ai/v1/oauth_callback
+      intendedScopes: [openid, email, profile]
+      convexIntegration: enabled_in_production_clerk
+      convexAuthProviderReadback: issuer_clerk.aecon.ai_application_id_convex
+      authenticatedPageFailure: resolved_by_official_convex_integration_and_fresh_signin
+      authenticatedPagesVerified: [/owner/settings, /owner/credit, /owner/operations]
+      googleBrandingLinks: saved_public_home_privacy_terms
+      googlePublishingStatus: in_production_external_verified
+      codeChangeRequired: false
+  processor:
+    provider: stripe
+    mode: sandbox
+    accountId: acct_1Tlni770N4UjLqHt
+    snapshotDestination:
+      id: we_1UEgKx70N4UjLqHtxiYhgLAD
+      route: https://app.aecon.ai/api/stripe/webhook
+      state: enabled_exact_path_verified
+    accountsV2Destination:
+      id: ed_test_61VO4O26zMNAz9Nn616UvBfU9V8SqsP28ZeVu4UQaSGu
+      route: https://app.aecon.ai/api/stripe/webhook/accounts-v2
+      state: enabled_exact_path_verified
+    readbackKey:
+      name: agentic-economy-alpha-readback
+      type: rk_test
+      bindings: [vercel_production, convex_cautious_zebra_473]
+      bindingCommandsExit: 0
+      temporaryCredentialFile: deleted
+      sdkReadChecks: {tax: passed, checkout: passed, paymentIntent: passed, price: passed, refund: passed}
+      coreReadDashboardPermission: user_applied_saved_ui_verified
+      installedKeyMatchesEditedKeySuffix: verified
+      accountsV2List: http_403_missing_v2_account_storer_read
+      platformAccountRetrieve: http_403
+      connectedAccountCanary: not_successful
+    inclusiveGstTaxRate:
+      id: txr_1UBZhn70N4UjLqHtDjJ74oie
+      convexBinding: installed
+    commandKey:
+      existingRestrictedKeyLabel: unchanged_ending_command
+      type: rk_test
+      targetVariable: STRIPE_SECRET_KEY
+      targetProjectId: prj_dK5mDpjBYuAXMwvLr0pWO0h8DoH9
+      targetEnvironment: production
+      officialCliExit: 0
+      temporaryCredentialFile: /private/tmp/ae-alpha-credentials/stripe-command.key
+      temporaryCredentialFileState: deleted
+      renameAttempt: did_not_persist
+      permissionsChanged: false
+      transfer: verified_official_cli
+      sdkCheckoutRead: passed_livemode_false
+      sdkTaxRateRead: http_403_expected_separate_readback_key
+    sandboxFunding:
+      checkoutSessionId: cs_test_b1xQOxgNfXYna083i4BTa5PIvbTNhRciseDl95brtGrkZcPfSyxT3IXQ5i
+      state: complete
+      paymentStatus: paid
+      livemode: false
+      amountMinor: 1055
+      currency: AUD
+      paymentIntentId: pi_3UF9SY70N4UjLqHt0Pfx80wX
+      readback: official_sdk_via_separate_convex_readback_key
+      commandSha256: 5d27a4e104c9d657107ff81b14b618508e3ac61f1e78f4ba4758e0c2401f2963
+      fundingCommand:
+        state: succeeded
+        providerStatus: succeeded
+        providerPaymentStatus: paid
+        principalUnits: "10000000"
+        totalUnits: "10550000"
+        paymentId: pi_3UF9SY70N4UjLqHt0Pfx80wX
+      webhook:
+        eventId: evt_1UF9SZ70N4UjLqHtsVtI98CB
+        eventType: checkout.session.completed
+        inboxState: applied
+        receivedAt: 1789290748371
+        completedAt: 1789290753783
+        processingMs: 5412
+        deliveryAndWorker: verified
+        forcedReplay: not_run
+      browser:
+        signedInBusinessAccount: true
+        paymentMethod: stripe_synthetic_4242
+        realMoney: false
+        priorBalance: AUD_0.00
+        availableBalance: AUD_10.00
+        paymentVerified: true
+        fundingReceipt: AUD_10.00
+        serviceFeeDocument: AUD_0.55
+        serviceFeeDocumentStatus: Ready
+        documentReferences: unchanged_two_refs
+        reconciliationDifferences: none
+        documentRendering: not_tested
+    paidToolCall: not_verified
+    livePurchaseProof: sandbox_funding_verified_paid_tool_call_unverified
+  secretCustody:
+    provider: infisical
+    organizationId: 8d09981b-9b5e-4a59-aa6d-5561c4f4642a
+    platform:
+      projectId: 8b470821-5cfc-4f9a-a37a-c0e80f6779c7
+      environment: dev
+      secretPath: /platform
+      machineIdentityId: 13040b65-e776-4e5c-9ad0-fccad1ccb79d
+      machineIdentityName: ae-alpha-platform
+    customer:
+      projectId: 5c61916a-4cdd-4fdd-9067-a145291de7d9
+      environment: dev
+      secretPath: /customer
+      machineIdentityId: bd5a7a70-01ba-43a4-a7ea-6a7482f87a2a
+      machineIdentityName: ae-alpha-customer
+    isolation: each_identity_member_only_in_its_dedicated_project
+    machineIdentityDeletionProtection: enabled
+    roleChoice: isolated_project_member_custom_roles_require_paid_plan
+    oidc:
+      issuer: https://oidc.vercel.com/creasybears-projects
+      audience: https://vercel.com/creasybears-projects
+      subject: owner:creasybears-projects:project:agentic-economy:environment:production
+      ttlSeconds: 3600
+      trustConfiguration: saved
+    vercelProductionBindings: all_nine_AE_INFISICAL_variables_bound_exit_0
+    hostedAuthenticationAndSecretCrud: not_verified
+    localCanary: aborted_on_vercel_cli_development_subject_before_secret_creation
+    supersededUnusedNoAccessIdentity:
+      id: 18030256-9085-4e51-8758-5a0e60599def
+      deletion: verified
+    existingStagingProjects: untouched
+  financialAuthority:
+    freshIsolatedInfrastructure: bootstrap_and_formance_health_verified_sandbox_funding_proven
+    requiredFormanceVariables: all_six_active_in_web_and_bound_in_convex
+    formanceBindings:
+      targets: [vercel_production, convex_cautious_zebra_473]
+      officialCliExit: 0
+      environment: sandbox
+      gatewayUrl: https://formance-alpha.aecon.ai
+      ledger: agentic-economy-alpha
+      requestTimeoutMs: 10000
+      accessCredentialsSource: arn:aws:secretsmanager:ap-southeast-2:197716152388:secret:ae-alpha/package4/cloudflare-access-application-718qYi
+      owningKmsKeyId: b5701c00-bda9-4e47-9061-dbfdfec48244
+      credentialsPrinted: false
+      temporaryDotenvFile: deleted
+      vercelLiveBindingState: active
+      convexServiceMode: hosted_alpha
+      convexEnvironmentBinding: sandbox_verified
+      convexRuntimeProof: sandbox_funding_verified_paid_tool_call_pending
+    existingSyntheticEc2AndRds: retired_never_reapply_old_roots
+    historicalRecoveryRpoSeconds: 308
+    requiredRecoveryRpoSeconds: 300
+    alphaPlan:
+      file: /private/tmp/ae-alpha-plan-t6sl85yp/alpha-fixed-storage.tfplan
+      sourceRevision: 535598cb5a32b7e3c1bc976f0eeb18ef6fa995f1
+      creates: 80
+      reads: 6
+      existingUpdates: 0
+      deletes: 0
+      databaseStorageGiB: 50
+      databaseStorageAutoscaling: disabled
+      sha256: 1813729a1f92934c7fb1334361f4a3dc326485c48674b218a265ba03064abd38
+      applyState: completed
+      applyExit: 0
+      applyResult: {added: 80, changed: 0, destroyed: 0}
+      applyLog: /private/tmp/ae-alpha-plan-t6sl85yp/alpha-apply.log
+    alphaResources:
+      k3sHostId: i-073197e0346d83010
+      replacedInitialHostId: i-03783779db01d90fc
+      rdsInstanceId: ae-alpha-formance
+      rdsArn: arn:aws:rds:ap-southeast-2:197716152388:db:ae-alpha-formance
+      rdsResourceId: db-HXOLD5NCUPK4Y4EA67D62PPTDI
+      vpcId: vpc-0580eee94c9ef6255
+      vpcCidr: 10.44.0.0/16
+      cloudflareTunnelId: c4f07700-e347-4f34-9d64-1f0992e7a863
+      cloudflareAccessApplicationId: 55ab1c32-4663-44be-ae70-d239c8a3c7e9
+      alertTopicArn: arn:aws:sns:ap-southeast-2:197716152388:ae-alpha-package4-alerts
+      alertEmailSubscription: PendingConfirmation
+      bootstrap:
+        sourceRevision: b949f94dd1ee495e1e36286742de2a0343e1df69
+        appliedPlan: alpha-bootstrap-fix.tfplan
+        planSha256: 087b01c953879ddf8a0c6853798c83436363df176249e7360426c5a3ff8cbfc9
+        applyResult: {added: 1, changed: 46, destroyed: 1}
+        ssmCommandId: df918365-90b6-441e-8510-ea879d0bc9af
+        ssmStatus: success
+        cloudInit: done
+        k3s: active
+        reconcile: success
+        reconcileTimer: active
+        readyReplicas: {gateway: 1, ledger: 1, worker: 1, cloudflared: 2, operator: 1}
+        finalPinnedOpenTofuPlan: no_changes_exit_0
+      tunnel: {state: healthy, connections: 8}
+      formance:
+        health: ready
+        gatewayVersion: v2.3.1
+        ledgerVersion: v2.4.12
+        schemaVersion: v1.3.0
+        schemaDigest: sha256:881851b2348fc64af08df3245030ebdb3fdb5bcfd5de9e7f0ffe14f169082953
+        installSchema: completed
+        repeatedInstallReplayed: true
+        endToEndPurchase: not_verified
+    monthlyCostEstimateUsd:
+      assumption: low_traffic_before_tax
+      freshAlpha: "311.29"
+      additionalCosts: retained_storage_and_account_services_not_yet_totalled
+      previousCombinedPausedRuntimeEstimate: superseded_by_completed_retirement
+      retirementBudgetDecision: approved_and_resolved
+    deployerAccess:
+      cloudFormationStack: ae-alpha-deployer-access
+      state: CREATE_COMPLETE
+      executedChangeSet: alpha-runtime-access-20260913
+      authorization: user_authorized_root_browser_once
+      grantScope: two_alpha_runtime_roles_and_one_instance_profile
+      subsequentRoutineCliIdentity: verified_assumed_role_Package4ReleaseOpenTofu
+      rootCliUsed: false
+    oldResourceRetirement:
+      authorization: user_approved_snapshots_and_retirement
+      state: completed
+      openTofuVersion: 1.12.6
+      reviewedPlanDirectory: /private/tmp/ae-old-retirement-9ia9rysy
+      destroyedResources: {drill: 5, main: 19, total: 24}
+      sourceDeletionProtectionUpdate: one_update_before_retirement
+      exactDrillCleanup:
+        ssmCommandId: b8167267-2bbb-45d6-b47b-f67f66b8296d
+        commandStatus: SUCCESS
+        sourceVerification: PASS
+        cleanup: PASS
+        digest: 616c676cf13d38237c8716813a9141a32185ec307eb186f46bb2c8f628ade01d
+      ec2: {id: i-063c00d935d85d74f, state: terminated}
+      rootVolume: {id: vol-0a36f198a069d1d45, state: absent}
+      rds:
+        - {id: package4-release-formance, readback: DBInstanceNotFound}
+        - {id: package4-release-restore-20260904, readback: DBInstanceNotFound}
+      natGateway: {id: nat-0aabc2385d7704d2d, state: deleted}
+      elasticIp: {id: eipalloc-06be89467efa6ced9, state: absent}
+      retainedRdsSnapshots:
+        - {id: package4-release-formance-retirement-20260913, state: available, encrypted: true}
+        - {id: package4-release-restore-20260904-retirement, state: available, encrypted: true}
+        - {id: package4-release-formance-final, state: available, encrypted: true}
+      retainedEbsSnapshot: {id: snap-04e41acaa13daaf60, state: completed, progressPercent: 100}
+      snapshotKmsKey: {id: 5979d934-bd8d-4809-bd2e-5cf22092922e, state: enabled, scope: all_retained_snapshots}
+      retained: [vpc, subnets, logs, vaults, state, audit, keys, roles, cloudflare]
+      removedDependencies: [runtime_grants, alarms, associations, routes]
+      oldRootAndDrillApply: prohibited_ordinary_apply_would_recreate_retired_resources
+    cloudflareDeploymentCredential:
+      state: active
+      expiry: "2026-09-20T23:59:59Z"
+      temporaryFile: deleted
+      deletedSupersededPreviewArtifacts: 6
+      reviewedAppliedPlansAndSnapshots: retained
+  sandboxPublication:
+    id: capability-offering:sandbox-aecon-reference:v1
+    state: created_unlisted
+    probe: authority_stale
+    sellable: false
+    catalogue: absent
+    quoting: unavailable
+    funding: configured
+    publicSearch: {method: POST, route: market-tools/search, source: current, query: sandbox, http: 200, result: no_candidates}
+    supportedHumanOwnerPublicationPath: publication_and_quote_only_paid_call_blocked
+    paidHttpCall:
+      examplePrice: AUD_1_fixed
+      reservationRequires: x402_financial_booking
+      failure: commercial_policy_unavailable
+      withoutBooking: zero_price_only
+    paidAlphaTestnetX402Reference: provider_deployed_human_owner_admission_pending
+    freeHttpDemo: not_paid_purchase_proof
+    cleanupWrapperOrOwnershipBypass: not_written
+    seededHistory: retained
+  testnetIntegration:
+    capturedOn: "2026-09-13"
+    coinbase:
+      entityId: entity_13b783ca-e69b-51e7-bf52-e7794333a818
+      projectName: Agentic Economy Alpha
+      projectCreation: verified_in_portal
+      projectId: 929175ec-e74d-48ff-a03e-7396cf40dcc0
+      apiKey: bound_and_official_sdk_authenticated
+      apiKeyId: 4df9f508-2454-4b4a-9a2d-020b0bb6407d
+      apiKeyName: agentic-economy-alpha
+      keyTransfer: provider_download_moved_to_private_0600_file
+      temporaryCredentialFiles: all_four_removed_after_verified_bindings
+      initialAccountAndPolicyInventory: both_empty_no_further_pages
+      walletSecret: created_with_user_approval_and_bound
+      walletAndPolicies: provisioned_and_exact_readback_verified
+      policyManagementPermission: removed_after_provisioning
+      buyerAccountName: ae-alpha-buyer
+      buyerAddress: "0x2595AB56Be60CA38606d0c106583b7B7a33707ef"
+      providerAccountName: ae-alpha-provider
+      providerAddress: "0x9ec2cD9E2E2a7D93c426d98b48a745990972EE71"
+      accountPolicyId: d0797b09-f2a6-4815-bc17-c1259e9f6978
+      projectPolicyId: 32297a1f-ba27-4769-97b3-7563481966e4
+      policyRulesDigest: sha256:83dd997fb78d8a51ef5825cd93b3e915d164bd4950ccc71235784570ea00c724
+      custodyPreflight: ready_identity_policies_and_balance_verified
+      providerWalletControl: official_sdk_signMessage_and_viem_verifyMessage_passed
+      faucetTransaction: "0x2b8cfdfe8c51a7e5d38a62326bba9ef0a5a829f568bf50fbd1a27fe1fe3e4686"
+      testUsdcBalanceAtomic: "1000000"
+      convexBindingReadback: all_13_values_match
+      vercelBindingMetadata: all_13_production_variables_present
+      vercelActivation: deployed_no_new_custody_configuration_findings
+      existingBroadLiveKey: not_reused
+      platformMode: live_api_with_ae_sandbox_profile_and_base_sepolia_rpc_only
+      custodialSandbox: simulated_balances_not_testnet_settlement
+    referenceProvider:
+      projectId: prj_gyaX8fy0abiwTFfvfqnqrn71Al8p
+      projectName: agentic-economy-sandbox-tools
+      rename: official_cli_and_exact_id_readback_verified
+      publicOriginMigration: verified_project_domain_and_deployment_alias
+      existingProjectReused: true
+      publicOrigin: https://agentic-economy-sandbox-tools.vercel.app
+      deploymentId: dpl_723RkHxkAupfvuDkktksEtdnw49b
+      deploymentUrl: https://agentic-economy-sandbox-tools-bpbi0eioq-creasybears-projects.vercel.app
+      sourceRevision: 61f6388e1a5ac3d2919f0f51be49fcaf620081d2
+      healthHttp: 200
+      discoveryHttp: 200
+      unpaidCallHttp: 402
+      preBindingHealthHttp: 500
+      exactFailure: AE_PACKAGE5_FIXTURE_PUBLIC_ORIGIN_is_required
+      stagedProductionVariables:
+        - AE_PACKAGE5_FIXTURE_PUBLIC_ORIGIN
+        - AE_PACKAGE5_FIXTURE_X402_FACILITATOR_URL
+        - AE_PACKAGE5_FIXTURE_X402_PAY_TO
+      officialCliWriteAndMetadataReadback: passed
+      payeeAddress: "0x9ec2cD9E2E2a7D93c426d98b48a745990972EE71"
+      redeployment: verified_ready
+      facilitator: https://x402.org/facilitator
+      facilitatorSupportedHttp: 200
+      exactV2BaseSepolia: verified
+    treasuryObserver: existing_official_cdp_sdk_workload
+    treasuryObservation:
+      invocation: workloadCron_observeX402Treasury_manual
+      standardPlatformWorkloadIdentity: initialized
+      recurringJobsEnabled: false
+      evidenceRef: cdp-balance:0x2595ab56be60ca38606d0c106583b7b7a33707ef:base-sepolia:1789281442248
+      network: "eip155:84532"
+      totalUnits: "1000000"
+      bufferUnits: "10000"
+      custodyGeneration: 1
+      observedAt: 1789281442248
+      recordedAt: 1789281442686
+      durableReadback: verified
+    testnetSeedReadiness: blocked_authority_stale_workload_owner
+    testnetSeedTestLimitation: simulated_observation_bypasses_real_probe_authority
+    ownerAdmissionAlternative:
+      path: human_owned_provider_business_x402_preview_connect_publish
+      verification: workspace_created_draft_saved_live_challenge_verified_payee_claim_pending
+      businessId: mn78qyrzapg0qrpc8brg7ahprs8eanz3
+      accountRef: acc_84e45622d36248de9452c03509f84d11
+      providerName: Agentic Economy Sandbox Tools
+      draftRef: sha256:ab9cd9eaeaabaf5aa2dc6a4b8635d1935e165534537ac003a988395b2a3363bd
+      stripeAccountsV2Required: false
+      sourceWritesFlag: AE_PACKAGE5_WRITES_ENABLED
+      requirements: [human_signup, controlled_payee_claim_signature, valid_bazaar_402_declaration]
+    custodyPolicyProvisioning:
+      rules: existing_cdpX402SellerCanaryPolicyRules_generator
+      digest: existing_cdpX402PolicyRulesDigest_from_provider_readback
+      perPaymentAtomic: "10000"
+      dailyConfigurationAtomic: "50000"
+      cdpDailyAggregateEnforcement: not_provided_by_policy
+      networkFence: ae_sandbox_profile_plus_sepolia_usdc_contract_rules
+      policyOnlyChainIdFence: false
+      liveProvisioning: verified
+    sandboxProviderVerification:
+      focusedTests: 5_passed
+      lint: passed
+      paymentDeclaration: official_decoder_verified_exact_v2_base_sepolia_payee_price_and_bazaar_schemas
+    fullPaidJourney: not_verified
+    auditProtocol: docs/operations/alpha-validation-plan.md
+    fullColdUserJourneyAudits: pending_integration_baseline
+  sourceVerification:
+    previousFailedGateAttempt:
+      sourceRevision: 024f14067
+      log: alpha-current-source-gate.log
+      gateExit: 1
+      unitPassed: 4658
+      integrationPassed: 1251
+      e2ePassed: 23
+      e2eFailed: 1
+      failure: compact_support_keyboard_diagnostics
+      diagnosis: hydration_race_and_repeated_toggle_in_test
+      fixedBy: d47a0e872ae18e18bda581deacff145a3b554d06
+    sourceRevision: d47a0e872ae18e18bda581deacff145a3b554d06
+    nodeVersion: 22.22.0
+    npmVersion: 11.5.1
+    fullGate: passed
+    gateCommand: npm_run_gate
+    gateExit: 0
+    gateLog: alpha-verified-source-gate.log
+    unitPassed: 4658
+    integrationPassed: 1251
+    e2ePassed: 24
+    authenticatedE2eSkipped: 8
+    accessibilityPassed: 10
+    validatedFixes:
+      validatorCommit: 14fd68b0fe8f2fca7e2c187fe91ac187f9f08d71
+      validatorChanges: standard_base64_clerk_format_and_registered_lifecycle_rpc_token
+      fixtureAndExampleCommit: 5dce3419b1a3433988e4ada06eefe8884bf09367
+      focusedTestsPassed: 125
+      environmentExampleCheck: passed
+      deployment: verified
+      applicationSourceFullGate: passed
+    previousGate:
+      sourceRevision: fa33461cef107e75f15b1b6749c58cf6d99138c4
+      unitPassed: 4594
+      integrationPassed: 1251
+      integrationSkipped: 5
+      integrationTodo: 3
+      e2ePassed: 24
+      authenticatedE2eSkipped: 8
+      accessibilityPassed: 10
+      cli: passed
+      build: passed
+    authenticatedSignIn: not_proven
+    livePurchases: not_proven
+    latestDeploymentSourceRevision: 584cba57facc3977640930167a1c34620e1464e3
+    currentHead: a796682575cbb8d0c14d94c3a109ada04c909800
+    currentHeadSubsequentChanges: docs_and_test_only
+    ci:
+      runId: 34748670853
+      state: success
+      requiredKernelJobs: passed
+      optionalJobs: authenticated_lifecycle_paid_gateway_chat_skipped
+    sandboxFundingCheckout: verified
+    webhookDeliveryAndWorker: verified
+    forcedWebhookReplay: not_run
+    paidToolCall: not_verified

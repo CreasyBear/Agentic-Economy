@@ -9,6 +9,7 @@ import {
 } from '@/modules/security/source-write-admission'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 import { SCHEDULED_WORKLOAD_JOB_NAMES } from './scheduled-workloads'
+import { resolveServiceMode } from './service-mode'
 
 export type DeploymentEnvironment = 'production' | 'preview' | 'development' | 'test'
 export type DeploymentEnvironmentInput = Readonly<Record<string, string | undefined>>
@@ -61,7 +62,7 @@ const requiredProduction: readonly RequirementGroup[] = [
   { scope: 'chat-proxy', code: 'required_configuration_missing', names: ['AE_CHAT_PROXY_SECRET'], mode: 'all' },
   { scope: 'source-write', code: 'source_write_family_required', names: sourceWriteNames, mode: 'all' },
   { scope: 'x402-payment', code: 'x402_payment_custody_required', names: ['CDP_API_KEY_ID', 'CDP_API_KEY_SECRET', 'CDP_WALLET_SECRET', 'AE_X402_CDP_ACCOUNT_NAME', 'AE_X402_CDP_EXPECTED_EVM_ADDRESS', 'AE_X402_CDP_ACCOUNT_POLICY_ID', 'AE_X402_CDP_PROJECT_POLICY_ID', 'AE_X402_CDP_POLICY_RULES_DIGEST', 'AE_X402_CDP_CREDENTIAL_GENERATION', 'AE_X402_CUSTODY_ENABLED', 'AE_X402_CUSTODY_MAX_ATOMIC', 'AE_X402_CUSTODY_DAILY_MAX_ATOMIC', 'AE_X402_RPC_URLS_JSON'], mode: 'all' },
-  { scope: 'stripe-money', code: 'stripe_configuration_required', names: ['STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET', 'STRIPE_V2_WEBHOOK_SECRET', 'STRIPE_AU_INCLUSIVE_GST_TAX_RATE_ID'], mode: 'all' },
+  { scope: 'stripe-money', code: 'stripe_configuration_required', names: ['STRIPE_SECRET_KEY', 'STRIPE_READBACK_KEY', 'STRIPE_WEBHOOK_SECRET', 'STRIPE_V2_WEBHOOK_SECRET', 'STRIPE_AU_INCLUSIVE_GST_TAX_RATE_ID'], mode: 'all' },
   { scope: 'formance', code: 'formance_configuration_required', names: ['AE_FORMANCE_ENVIRONMENT', 'AE_FORMANCE_GATEWAY_URL', 'AE_FORMANCE_LEDGER', 'AE_FORMANCE_REQUEST_TIMEOUT_MS', 'AE_FORMANCE_ACCESS_CLIENT_ID', 'AE_FORMANCE_ACCESS_CLIENT_SECRET'], mode: 'all' },
 ]
 
@@ -149,11 +150,13 @@ const optionalNames = Object.freeze([
   'VITE_POSTHOG_APP_URL', 'POSTHOG_APP_URL',   'AE_WBA_SIGNATURE_AGENT_ALLOWLIST', 'AE_WBA_DIRECTORY_PUBLIC_JWK_JSON',
   'AE_CLI_BASE_URL',
   'AE_PACKAGE4_SANDBOX_DEPLOYMENT_PROFILE',
+  'AE_SERVICE_MODE',
   'AE_INFISICAL_CUSTOMER_ORGANIZATION_SLUG',
   'AE_INFISICAL_PLATFORM_ORGANIZATION_SLUG',
 ])
 
 export const fieldRules: readonly FieldRule[] = [
+  { name: 'AE_SCHEDULED_WORKLOADS_ENABLED', kind: 'boolean' },
   { name: 'AE_CANONICAL_BASE_URL', kind: 'url' }, { name: 'AE_CANONICAL_HOST_ALLOWLIST', kind: 'host-list' },
   { name: 'CONVEX_URL', kind: 'url' }, { name: 'VITE_CONVEX_URL', kind: 'url' }, { name: 'CLERK_JWT_ISSUER_DOMAIN', kind: 'url' },
   { name: 'AE_GATEWAY_SMOKE_BASE_URL', kind: 'url' }, { name: 'AE_RELEASE_CONVEX_URL', kind: 'url' },
@@ -177,7 +180,7 @@ export const fieldRules: readonly FieldRule[] = [
 
 export const knownNames = Object.freeze([
   'OPENROUTER_API_KEY', 'AE_CONVEX_SERVER_FUNCTION_TOKEN', 'VITE_CLERK_PUBLISHABLE_KEY', 'CLERK_SECRET_KEY', 'CLERK_WEBHOOK_SIGNING_SECRET',
-  'AE_CHAT_PROXY_SECRET', 'AE_CHAT_SHARE_SECRET', 'AE_CHAT_SHARE_KEY_ID',
+  'AE_CHAT_PROXY_SECRET', 'AE_CHAT_SHARE_SECRET', 'AE_CHAT_SHARE_KEY_ID', 'AE_SECRET_LIFECYCLE_RPC_TOKEN',
   'AE_SOURCE_WRITE_SECRET',
   'AE_ROUTE_CALL_SIGNING_KEY_ID', 'AE_X402_PAYMENT_CREDENTIAL_REF', 'AE_X402_PAYMENT_PRIVATE_KEY',
   'CDP_API_KEY_ID', 'CDP_API_KEY_SECRET', 'CDP_WALLET_SECRET', 'AE_X402_CDP_ACCOUNT_NAME', 'AE_X402_CDP_EXPECTED_EVM_ADDRESS',
@@ -255,6 +258,22 @@ export const DEPLOYMENT_MANIFEST = Object.freeze({
   ]),
 })
 
+export function selectDeploymentRequirementGroups(
+  environment: DeploymentEnvironmentInput,
+  envClass: DeploymentEnvironment,
+): readonly RequirementGroup[] {
+  const hostedAlpha = resolveServiceMode(environment) === 'hosted_alpha'
+  const production = envClass === 'production' || hostedAlpha
+  const package4Release = present(environment, 'AE_PACKAGE4_SANDBOX_DEPLOYMENT_PROFILE') === 'synthetic_vps_fixture'
+  const custodyDisabled = hostedAlpha && environment.AE_X402_CUSTODY_ENABLED === 'false'
+  return [
+    ...(production ? requiredProduction.map((group) => custodyDisabled && group.scope === 'x402-payment'
+      ? { ...group, names: ['AE_X402_CUSTODY_ENABLED'] }
+      : group) : []),
+    ...(production || package4Release ? package5ControlledRequirements : []),
+  ]
+}
+
 export function validateDeploymentManifest(environment: DeploymentEnvironmentInput = {}, options: ValidateDeploymentOptions = {}): DeploymentValidationResult {
   const findings: DeploymentFinding[] = []
   const seen = new Set<string>()
@@ -266,8 +285,13 @@ export function validateDeploymentManifest(environment: DeploymentEnvironmentInp
     findings.push(Object.freeze({ kind, code, names: Object.freeze(sortedNames), scope }))
   }
   const envClass = resolveEnvironment(environment, options.environment, add)
-  const production = envClass === 'production'
+  const serviceMode = resolveServiceMode(environment)
+  const hostedAlpha = serviceMode === 'hosted_alpha'
+  const custodyDisabled = hostedAlpha && environment.AE_X402_CUSTODY_ENABLED === 'false'
+  const production = envClass === 'production' || serviceMode === 'hosted_alpha'
   const package4Release = present(environment, 'AE_PACKAGE4_SANDBOX_DEPLOYMENT_PROFILE') === 'synthetic_vps_fixture'
+  const sandboxMoney = package4Release || serviceMode === 'hosted_alpha'
+  if (serviceMode === 'invalid') add('malformed', 'service_mode_invalid', ['AE_SERVICE_MODE'], 'environment')
   const package5Controlled = production || package4Release
   const compatible = options.nodeMajor === undefined || options.nodeMajor === 22
   if (!compatible) add('runtime', 'node_runtime_incompatible', ['NODE_RUNTIME'], 'runtime')
@@ -280,17 +304,16 @@ export function validateDeploymentManifest(environment: DeploymentEnvironmentInp
   if (production) for (const name of forbiddenProductionNames) {
     if (present(environment, name) !== undefined) add('forbidden', 'production_local_or_fixture_configuration', [name], 'environment')
   }
-  for (const group of requiredProduction) if (production) requireGroup(environment, group, add)
-  for (const group of package5ControlledRequirements) if (package5Controlled) requireGroup(environment, group, add)
+  for (const group of selectDeploymentRequirementGroups(environment, envClass)) requireGroup(environment, group, add)
   for (const group of conditional) if (group.trigger?.some((name) => present(environment, name)) === true) requireGroup(environment, group, add)
   if (production) validateProductionClerkCredentials(environment, add, package4Release)
-  if (production) validateProductionStripeCredentials(environment, add, package4Release)
-  if (production) validateProductionFormanceConfiguration(environment, add, package4Release)
+  if (production) validateProductionStripeCredentials(environment, add, sandboxMoney)
+  if (production) validateProductionFormanceConfiguration(environment, add, sandboxMoney)
   if (production) validateProductionBrowserSecurity(environment, add)
   if (production) validateSourceWriteAuthority(environment, add)
-  if (package5Controlled) validatePackage5Rollout(environment, add)
+  if (package5Controlled) validatePackage5Rollout(environment, add, hostedAlpha)
   for (const rule of fieldRules) validateField(environment, rule, production, add)
-  validateX402Custody(environment, add)
+  validateX402Custody(environment, add, custodyDisabled)
   validateX402RpcUrls(environment, add)
 
   const convex = present(environment, 'CONVEX_URL')
@@ -376,10 +399,11 @@ function requireGroup(environment: DeploymentEnvironmentInput, group: Requiremen
 function validatePackage5Rollout(
   environment: DeploymentEnvironmentInput,
   add: (kind: DeploymentFindingKind, code: string, names: readonly string[], scope: string) => void,
+  allowDisabled: boolean,
 ): void {
   for (const name of package5ControlledRequirements[0]!.names) {
     const value = present(environment, name)
-    if (value !== undefined && value !== 'true') {
+    if (value !== undefined && value !== 'true' && !(allowDisabled && value === 'false')) {
       add('malformed', 'package5_rollout_not_enabled', [name], 'package5-rollout')
     }
   }
@@ -422,7 +446,9 @@ function validateProductionClerkCredentials(
     add('malformed', 'clerk_secret_key_invalid', ['CLERK_SECRET_KEY'], 'clerk')
   }
   const webhookSecret = present(environment, 'CLERK_WEBHOOK_SIGNING_SECRET')
-  if (webhookSecret !== undefined && !/^whsec_[A-Za-z0-9_-]+$/u.test(webhookSecret)) {
+  // Clerk's standardwebhooks verifier decodes the whsec_ suffix as standard Base64.
+  const webhookPattern = /^whsec_(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{4}|[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)$/u
+  if (webhookSecret !== undefined && !webhookPattern.test(webhookSecret)) {
     add('malformed', 'clerk_webhook_signing_secret_invalid', ['CLERK_WEBHOOK_SIGNING_SECRET'], 'clerk')
   }
 }
@@ -517,9 +543,10 @@ function validateX402RpcUrls(
 function validateX402Custody(
   environment: DeploymentEnvironmentInput,
   add: (kind: DeploymentFindingKind, code: string, names: readonly string[], scope: string) => void,
+  custodyDisabled: boolean,
 ): void {
   const enabled = present(environment, 'AE_X402_CUSTODY_ENABLED')
-  if (enabled !== undefined && enabled !== 'true') {
+  if (enabled !== undefined && enabled !== 'true' && !custodyDisabled) {
     add('malformed', 'x402_custody_not_enabled', ['AE_X402_CUSTODY_ENABLED'], 'x402-payment')
   }
   const maxAtomic = present(environment, 'AE_X402_CUSTODY_MAX_ATOMIC')
@@ -528,7 +555,7 @@ function validateX402Custody(
   }
 }
 function validateField(environment: DeploymentEnvironmentInput, rule: FieldRule, production: boolean, add: (kind: DeploymentFindingKind, code: string, names: readonly string[], scope: string) => void): void {
-  const value = present(environment, rule.name)
+  const value = rule.name === 'AE_SCHEDULED_WORKLOADS_ENABLED' ? environment[rule.name] : present(environment, rule.name)
   if (value === undefined || !isMalformed(rule, value, production)) return
   const code = rule.name === 'AE_CANONICAL_BASE_URL' ? 'url_configuration_invalid' : rule.name === 'AE_CANONICAL_HOST_ALLOWLIST' ? 'canonical_host_allowlist_invalid' : `${rule.name.toLowerCase()}_invalid`
   add('malformed', code, [rule.name], rule.name.startsWith('AE_') ? 'ae-config' : 'configuration')

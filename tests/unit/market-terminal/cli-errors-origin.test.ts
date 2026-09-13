@@ -9,7 +9,25 @@ import { CliFailure, callJson, maskCredential, requireOk, type HttpOutcome } fro
 import { runCliInProcess, spawnCliSync } from './cli-errors-harness'
 
 describe('market-terminal CLI error contracts', () => {
-  afterEach(() => vi.unstubAllGlobals())
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    vi.unstubAllEnvs()
+  })
+
+  it('defaults to the canonical hosted app while preserving explicit origin precedence', () => {
+    for (const name of ['CONVEX_URL', 'VITE_CONVEX_URL', 'AE_CLI_BASE_URL', 'AE_CANONICAL_BASE_URL']) {
+      vi.stubEnv(name, undefined)
+    }
+    expect(parseArgs(['search', 'rates']).options).toMatchObject({
+      baseUrl: 'https://app.aecon.ai', baseUrlSource: 'hosted_default',
+    })
+    vi.stubEnv('AE_CANONICAL_BASE_URL', 'https://canonical.example')
+    expect(parseArgs(['search', 'rates']).options.baseUrl).toBe('https://canonical.example')
+    vi.stubEnv('AE_CLI_BASE_URL', 'https://cli.example')
+    expect(parseArgs(['search', 'rates']).options.baseUrl).toBe('https://cli.example')
+    expect(parseArgs(['search', 'rates', '--base-url', 'https://explicit.example']).options.baseUrl)
+      .toBe('https://explicit.example')
+  })
 
   it.each([
     ['http://localhost:3024', true],
@@ -17,7 +35,7 @@ describe('market-terminal CLI error contracts', () => {
     ['http://127.255.1.2:3024', true],
     ['http://[::1]:3024', true],
     ['https://127.example.invalid', false],
-    ['https://agentic-economy-phi.vercel.app', false],
+    ['https://app.aecon.ai', false],
   ] as const)('classifies CLI origin %s as loopback=%s', (origin, expected) => {
     expect(isLoopbackCliBaseUrl(origin)).toBe(expected)
   })
@@ -115,7 +133,7 @@ describe('market-terminal CLI error contracts', () => {
   }, 30_000)
 
   it('keeps loopback connection-refused diagnostics local and redacted', async () => {
-    const hostedDoctor = 'ae doctor --base-url https://agentic-economy-phi.vercel.app'
+    const hostedDoctor = 'ae doctor --base-url https://app.aecon.ai'
     for (const json of [false, true]) {
       const result = await runCliInProcess([
         '--base-url',

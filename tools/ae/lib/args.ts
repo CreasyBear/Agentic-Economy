@@ -46,7 +46,7 @@ export type ParsedArgs = {
   providedOptions: readonly string[]
 }
 
-export const HOSTED_DEFAULT_BASE_URL = 'https://agentic-economy-phi.vercel.app'
+export const HOSTED_DEFAULT_BASE_URL = 'https://app.aecon.ai'
 const LOCAL_DEV_BASE_URL = 'http://127.0.0.1:3024'
 export const INVALID_BASE_URL_PLACEHOLDER = '<invalid-origin>'
 

@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { readTrimmedEnv } from '@/lib/server/read-trimmed-env'
-import { DEPLOYMENT_MANIFEST, fieldRules, type FieldRule } from './manifest'
+import { DEPLOYMENT_MANIFEST, fieldRules, selectDeploymentRequirementGroups, type FieldRule } from './manifest'
 
 export type EnvValidationProblem = Readonly<{ name: string; reason: string }>
 export type EnvValidationResult =
@@ -55,11 +55,11 @@ export function validateEnvironment(
     if (!result.success) addProblem(name, firstIssueMessage(result.error))
   }
 
-  const { requiredProduction, controlledPackage5, conditional, optional, forbiddenProduction } =
+  const { conditional, optional, forbiddenProduction } =
     DEPLOYMENT_MANIFEST.configuration
 
   if (environment === 'production') {
-    for (const group of [...requiredProduction, ...controlledPackage5]) {
+    for (const group of selectDeploymentRequirementGroups(env, environment)) {
       if (group.mode === 'one-of') {
         const anyPresent = group.names.some((name) => readTrimmedEnv(env, name) !== undefined)
         if (!anyPresent) {

@@ -132,6 +132,28 @@ The reusable environment module declares:
 The deployment intentionally excludes Formance Payments, Auth, Console,
 Wallets, Flows, Webhooks, and Reconciliation.
 
+## Hosted alpha Google sign-in boundary
+
+The Google web OAuth client belongs to `aecon-authentication` in the
+`agentic-economy.ai` organisation. Its support and owner contact is
+`joel@agentic-economy.ai`; its browser origin is `https://app.aecon.ai` and its
+only callback is `https://clerk.aecon.ai/v1/oauth_callback`. Clerk retains the
+sign-in flow and requests only OpenID, email and profile identity scopes.
+Client creation, Clerk credential binding and actual Google sign-in are verified.
+The Convex deployment trusts that issuer with application ID `convex`; Clerk's
+production Convex integration is enabled and adds the required audience claim.
+A fresh sign-in verified authenticated Account & security, Credit and Provider
+workspace page loads. No application authentication implementation was replaced.
+The unused personal-account project is not an application dependency.
+
+The app-to-Convex write boundary requires the same six independently scoped
+source-write keys in both services: billing, protected, catalogue, operator,
+repair and session. All six backend bindings were missing during fresh-backend
+setup; replacement `alpha-<family>-v2` keys now match, and a genuine hosted
+catalogue draft save verifies that boundary. Clerk session authentication and
+these write signatures are separate checks; successful sign-in alone cannot
+prove that a protected mutation is enabled.
+
 ## Stripe event boundary
 
 The snapshot endpoint accepts only Checkout completion/async outcome and refund
@@ -164,3 +186,14 @@ update the registry, maturity record, and release evidence in the same commit.
 
 Live readback outranks this document. A discrepancy is drift to investigate,
 not permission to force the live system to match stale prose.
+
+
+## CLI connection recovery
+
+The hosted archive defaults to `https://app.aecon.ai` and carries the immutable
+source revision. Explicit origin overrides retain precedence. Pending OAuth
+device requests are private local records, isolated by origin, role and requested
+environment; existing file locking prevents concurrent polling. A completed CLI
+wait can resume the same unexpired request. Expired, declined and consumed device
+codes are removed. This state carries no spending authority until the normal
+owner approval and credential validation complete.

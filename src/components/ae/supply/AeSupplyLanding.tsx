@@ -51,11 +51,13 @@ const SUPPLY_SOURCE_FIT = [
 export function AeSupplyLanding({
   tools,
   publishedTools,
+  sourcePending = false,
   sourceError,
   onRetry,
 }: Readonly<{
   tools: readonly SupplyLandingTool[]
   publishedTools: readonly ToolCardViewModel[]
+  sourcePending?: boolean
   sourceError?: string
   onRetry?: () => void
 }>) {
@@ -152,7 +154,11 @@ export function AeSupplyLanding({
       </AeSiteSection>
       {sourceError === undefined ? (
         <AeSiteSection ariaLabel="What agents can inspect" scheme="surface">
-          <AeSupplyAgentProof tools={tools} publishedTools={publishedTools} />
+          {sourcePending ? (
+            <p role="status" className="text-sm text-muted-foreground">Loading current Tool information…</p>
+          ) : (
+            <AeSupplyAgentProof tools={tools} publishedTools={publishedTools} />
+          )}
         </AeSiteSection>
       ) : null}
     </>

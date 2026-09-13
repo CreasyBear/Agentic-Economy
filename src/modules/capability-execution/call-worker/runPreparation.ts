@@ -2,6 +2,7 @@
 
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { degradeBackend } from '@/lib/observability/degrade-backend'
+import { resolveServiceMode, serviceModeAllowsEnvironment } from '@/lib/deployment/service-mode'
 import { isBoundedJsonValue } from '@/modules/capability-contract/public'
 import { isRecord } from '@/modules/common/is-record'
 import type { StableHashValue } from '@/modules/common/stable-hash'
@@ -41,7 +42,7 @@ import {
   type SellerOnboardingCanaryExecutionEnvelope,
 } from '@/modules/capability-supply/public'
 import type { AgentAccessPrincipal } from '@/modules/agent-access/agent-access'
-import type { ActionCtx } from '../../../../convex/_generated/server'
+import { env, type ActionCtx } from '../../../../convex/_generated/server'
 import { internal } from '../../../../convex/_generated/api'
 import {
   canonicalPort,
@@ -265,6 +266,11 @@ export async function prepareCallRun(
     return await convergeReleaseFenceBeforeGates(ctx, dispatch, initialSnapshot)
   }
 
+  const serviceMode = resolveServiceMode(env)
+  if (!serviceModeAllowsEnvironment(serviceMode, dispatch.environment)) {
+    return await refuseBeforeClaim(ctx, dispatch, 'environment_mismatch', false, 'This deployment does not admit purchases in this environment.')
+  }
+
   const principalRow = await ctx.runQuery(internal.agentAccessPrincipals.getAgentPrincipal, {
     principalId: dispatch.principalId,
   })
@@ -387,6 +393,10 @@ export async function prepareCallRun(
   const currentOperation = parsePublishedToolSnapshot(currentSnapshot.toolJson)
   if (reservedOperation === undefined || currentOperation === undefined) {
     return await refuseBeforeClaim(ctx, dispatch, 'operation_unsupported', false, 'The admitted operation snapshot is invalid.')
+  }
+  if (!serviceModeAllowsEnvironment(serviceMode, reservedOperation.runtimeEnvironment)
+    || !serviceModeAllowsEnvironment(serviceMode, currentOperation.runtimeEnvironment)) {
+    return await refuseBeforeClaim(ctx, dispatch, 'environment_mismatch', false, 'This deployment does not admit purchases in this environment.')
   }
   if (sellerCanary !== undefined) {
     const payment = currentOperation.identity.payment

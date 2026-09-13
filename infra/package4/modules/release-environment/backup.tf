@@ -82,9 +82,66 @@ resource "aws_cloudwatch_event_rule" "backup_failure" {
 
 data "aws_caller_identity" "current" {}
 
+data "aws_iam_policy_document" "alerts_key" {
+  # In a KMS key policy, Resource "*" refers only to the attached key.
+  statement {
+    sid       = "EnableAccountAdministration"
+    effect    = "Allow"
+    actions   = ["kms:*"]
+    resources = ["*"]
+    principals {
+      type        = "AWS"
+      identifiers = ["arn:aws:iam::${data.aws_caller_identity.current.account_id}:root"]
+    }
+  }
+
+  statement {
+    sid       = "AllowCloudWatchAlerts"
+    effect    = "Allow"
+    actions   = ["kms:GenerateDataKey*", "kms:Decrypt"]
+    resources = ["*"]
+    principals {
+      type        = "Service"
+      identifiers = ["cloudwatch.amazonaws.com"]
+    }
+    condition {
+      test     = "StringEquals"
+      variable = "aws:SourceAccount"
+      values   = [data.aws_caller_identity.current.account_id]
+    }
+    condition {
+      test     = "ArnLike"
+      variable = "aws:SourceArn"
+      values   = ["arn:aws:cloudwatch:ap-southeast-2:${data.aws_caller_identity.current.account_id}:alarm:${var.name}-*"]
+    }
+  }
+
+  # EventBridge-to-SNS does not support SourceAccount/SourceArn/SourceOrgID
+  # KMS conditions. Confine this service grant to a dedicated alerts key.
+  # https://docs.aws.amazon.com/sns/latest/dg/sns-key-management.html
+  statement {
+    sid       = "AllowEventBridgeAlerts"
+    effect    = "Allow"
+    actions   = ["kms:GenerateDataKey*", "kms:Decrypt"]
+    resources = ["*"]
+    principals {
+      type        = "Service"
+      identifiers = ["events.amazonaws.com"]
+    }
+  }
+}
+
+resource "aws_kms_key" "alerts" {
+  description             = "${var.name} infrastructure alert encryption"
+  deletion_window_in_days = 30
+  enable_key_rotation     = true
+  policy                  = data.aws_iam_policy_document.alerts_key.json
+  tags                    = local.tags
+}
+
 resource "aws_sns_topic" "alerts" {
   name              = "${var.name}-package4-alerts"
-  kms_master_key_id = "alias/aws/sns"
+  kms_master_key_id = aws_kms_key.alerts.arn
   tags              = local.tags
 }
 
@@ -105,11 +162,9 @@ data "aws_iam_policy_document" "alerts" {
       type        = "Service"
       identifiers = ["events.amazonaws.com"]
     }
-    condition {
-      test     = "ArnEquals"
-      variable = "aws:SourceArn"
-      values   = [aws_cloudwatch_event_rule.backup_failure.arn]
-    }
+    # Follow EventBridge's supported SNS resource-policy statement: the exact
+    # topic and service principal bound this grant; omit Condition blocks.
+    # https://docs.aws.amazon.com/eventbridge/latest/userguide/eb-use-resource-based.html
   }
 
   statement {
@@ -143,4 +198,6 @@ resource "aws_cloudwatch_event_target" "backup_failure" {
   rule      = aws_cloudwatch_event_rule.backup_failure.name
   target_id = "notify"
   arn       = aws_sns_topic.alerts.arn
+
+  depends_on = [aws_sns_topic_policy.alerts]
 }

@@ -4,18 +4,25 @@ Tier 1 = a funded sandbox Account that can complete a paid Call, on a local mach
 
 ## 1. Stripe test mode
 
-Env read by `readStripeMoneyProviderConfig` (`src/lib/server/stripe-money-provider-config.ts:41-52`): `STRIPE_SECRET_KEY` (`sk_test_...`, required), `STRIPE_WEBHOOK_SECRET` (`whsec_...`, required), `STRIPE_V2_WEBHOOK_SECRET` (`whsec_...`, optional, accounts-v2 only), `STRIPE_AU_INCLUSIVE_GST_TAX_RATE_ID` (required for checkout), `STRIPE_CHECKOUT_HOST` (optional), `STRIPE_READBACK_KEY` (`rk_test_...`, optional, readback only).
+The local web/server consumer reads `STRIPE_SECRET_KEY` (required), `STRIPE_WEBHOOK_SECRET` (required), `STRIPE_V2_WEBHOOK_SECRET` (optional, accounts-v2 only), `STRIPE_AU_INCLUSIVE_GST_TAX_RATE_ID` (required for checkout), and `STRIPE_CHECKOUT_HOST` (optional) through `readStripeMoneyProviderConfig` (`src/lib/server/stripe-money-provider-config.ts:50-79`). `STRIPE_READBACK_KEY` is a separate Convex webhook-worker credential; it is read by `readStripeMoneyReadbackProviderConfig` (`src/lib/server/stripe-money-provider-config.ts:97-119`).
 
-`mode` derives from the secret key's prefix (`modeFromSecretKey`, same file:249-253); a `sk_test_` key yields `mode: "test"`. Webhook events are only mapped when `event.livemode` matches that mode (`sessionMatchesMode`, same file:179-184, used in `src/lib/server/stripe-money-webhook.ts:48,222`), so test events process only when a test key is configured.
+`mode` derives from either an `sk_` or `rk_` test/live prefix (`modeFromSecretKey`, same file:239-243); a `sk_test_` or `rk_test_` key yields `mode: "test"`. Webhook events are only mapped when `event.livemode` matches that mode (`sessionMatchesMode`, same file:169-174, used in `src/lib/server/stripe-money-webhook.ts:49,226`), so test events process only when a test-mode key is configured.
 
-Checkout refuses outright without a valid `inclusiveGstTaxRateId` (`src/lib/server/stripe-checkout-evidence.ts:306-312`): that tax rate must exist in Stripe **test mode** — 10%, inclusive, country AU (Products → Tax rates, test mode on) — with its `txr_...` id in `STRIPE_AU_INCLUSIVE_GST_TAX_RATE_ID`.
+Checkout refuses outright without a valid `inclusiveGstTaxRateId` (`src/lib/server/stripe-checkout-evidence.ts:313-320`): that tax rate must exist in Stripe **test mode** — 10%, inclusive, country AU (Products → Tax rates, test mode on) — with its `txr_...` id in `STRIPE_AU_INCLUSIVE_GST_TAX_RATE_ID`.
 
-`STRIPE_READBACK_KEY`, `STRIPE_AU_INCLUSIVE_GST_TAX_RATE_ID`, `STRIPE_CHECKOUT_HOST` are optional Convex env (`convex/convex.config.ts:44-46`); `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_V2_WEBHOOK_SECRET` are required Convex env in production (`stripe-money` group, `src/lib/deployment/manifest.ts`, `requiredProduction`). Set all via Convex env, not the web server process:
+These credentials have different consumers and locations. For local development, put the web/server values in the ignored `.env.development.local` file (the launcher loads it; `tools/dev/local-dev.ts:34-35`), and put the Convex worker values in the local Convex deployment environment. `convex/convex.config.ts:53-55` declares `STRIPE_READBACK_KEY`, `STRIPE_AU_INCLUSIVE_GST_TAX_RATE_ID`, and `STRIPE_CHECKOUT_HOST`; the worker specifically requires `STRIPE_READBACK_KEY` with an `rk_test_...` value for this run. Do not put the web/server values only in Convex: the loopback checkout and webhook routes read the server process environment (`src/lib/server/funding-handoff-api.ts:63-68`, `src/modules/money/server.ts:162-191`).
+
+For a deployed `hosted_alpha`/sandbox release, the manifest validates both `STRIPE_SECRET_KEY` (the Vercel command consumer) and `STRIPE_READBACK_KEY` (the Convex worker) as restricted `rk_test_...` keys; a live production deployment requires `rk_live_...` (`src/lib/deployment/manifest.ts:289-310,455-480`). The deployment credential map records the same split (`docs/operations/credentials-and-access.md:35-37`).
 
 ```sh
-npx convex env set STRIPE_SECRET_KEY sk_test_...
-npx convex env set STRIPE_WEBHOOK_SECRET whsec_...
-npx convex env set STRIPE_V2_WEBHOOK_SECRET whsec_...
+# .env.development.local (mode 0600; values supplied from protected custody)
+STRIPE_SECRET_KEY=sk_test_...
+STRIPE_WEBHOOK_SECRET=whsec_...
+STRIPE_V2_WEBHOOK_SECRET=whsec_...  # optional
+STRIPE_AU_INCLUSIVE_GST_TAX_RATE_ID=txr_...
+
+# Local Convex worker: send the restricted key over stdin from its 0600 file.
+npx convex env set STRIPE_READBACK_KEY < /path/to/stripe-readback.key
 npx convex env set STRIPE_AU_INCLUSIVE_GST_TAX_RATE_ID txr_...
 ```
 
@@ -51,7 +58,7 @@ npm run --silent ae -- doctor --base-url http://127.0.0.1:3024 --json
 
 CDP custody env, read in `convex/capabilityQuotes.ts:204-215` and declared in `src/modules/capability-supply/internal/x402-custody-configuration.ts:9-19`: `CDP_API_KEY_ID`, `CDP_API_KEY_SECRET`, `CDP_WALLET_SECRET`, `AE_X402_CDP_ACCOUNT_NAME`, `AE_X402_CDP_EXPECTED_EVM_ADDRESS`, `AE_X402_CDP_ACCOUNT_POLICY_ID`, `AE_X402_CDP_PROJECT_POLICY_ID`, `AE_X402_CDP_POLICY_RULES_DIGEST`, `AE_X402_CDP_CREDENTIAL_GENERATION`, `AE_X402_CUSTODY_ENABLED`, `AE_X402_CUSTODY_MAX_ATOMIC`, `AE_X402_CUSTODY_DAILY_MAX_ATOMIC`, plus `AE_X402_RPC_URLS_JSON` — all optional Convex env (`convex/convex.config.ts:24-38`), required together in production (`x402-payment` manifest group). Sandbox network is Base Sepolia / USDC (`base-sepolia-usdc-exact`, `eip155:84532`, `0x036CbD53842c5426634e7929541eC2318f3dCF7e`, `src/modules/capability-supply/internal/x402-payment-profile.ts:2-16,34-40`).
 
-Provider spend is gated on a `moneyTreasuryObservations` row (`convex/moneyTreasury.ts:9-68`, read back by `treasurySpendableUnits`, `convex/capabilityQuotes.ts:219`). **Unverified/gap**: no command in this repo calls `recordObservation` outside unit tests (`tests/unit/convex/money-treasury.test.ts` via `convexTest`); there is no documented operator path to populate this table locally — it would need a manual `npx convex run moneyTreasury:recordObservation` with hand-assembled CDP balance evidence.
+Provider spend is gated on a `moneyTreasuryObservations` row (`convex/moneyTreasury.ts:9-68`, read back by `treasurySpendableUnits`, `convex/capabilityQuotes.ts:219`). The official observer in `convex/moneyTreasuryObservation.ts:77-160` uses the CDP SDK token-balance API and records canonical evidence through that mutation. The `observe x402 treasury` workload is wired through `convex/workloadCron.ts:517-523`, registered by `convex/crons.ts:9-40`, and scheduled every 15 minutes (`src/lib/deployment/scheduled-workloads.ts:16-32`) unless recurring workloads are explicitly disabled. Configure the CDP custody bundle and let this workload populate observations; do not call `moneyTreasury:recordObservation` directly or hand-assemble its evidence. A local runtime observation still requires a running Convex deployment, valid CDP credentials, and recurring workloads enabled; this document does not claim that runtime proof.
 
 The reference provider (`tools/release/package5-reference-provider/core.ts`, no README) needs `AE_PACKAGE5_FIXTURE_PUBLIC_ORIGIN` (credential-free HTTPS, `core.ts:281`), `AE_PACKAGE5_FIXTURE_X402_PAY_TO` (EVM address, `core.ts:68`), and `AE_PACKAGE5_FIXTURE_X402_FACILITATOR_URL` (`api/fixture.ts:37,42-43`). It's a Vercel fixture, not a plain `localhost` server, so local use needs an HTTPS tunnel in front of it (manual, outside this repo).
 
@@ -68,7 +75,7 @@ The sandbox counterparty is the app's own `POST /api/v1/sandbox-reference`; the 
 
 ## 5. Known state
 
-Hosted Stripe webhook destinations are disabled/unpinned per the September 2026 preflight (`docs/operations/vocabulary-cutover-preflight.md:64-72`). This doc is local-only and does not change that hosted state.
+The September 4 webhook snapshot in the preflight (`docs/operations/vocabulary-cutover-preflight.md:64-72`) is historical and does not establish the current hosted state. Before operating on a hosted destination, consult the [current hosted alpha assessment](deployment-maturity.md#hosted-alpha-assessment--12-september-2026) and the [deployment registry](deployment-registry.yaml) (`hostedAlphaReadback`). This runbook is local-only.
 
 ## 6. Managing the hosted webhook destinations
 
@@ -80,10 +87,10 @@ npm run stripe:webhooks -- --mode test --url https://<host>/api/stripe/webhook -
 npm run stripe:webhooks -- --mode live --url https://<host>/api/stripe/webhook --apply --confirm-live
 ```
 
-Desired state is exactly one enabled endpoint for the URL, `api_version` pinned to the SDK constant (`Stripe.API_VERSION`, the same pin `createStripeMoneyClient` uses at `src/lib/server/stripe-money-provider-config.ts:127-131`), and `enabled_events` equal to the six events the worker consumes (the `switch (event.type)` in `mapStripeMoneyWebhookEvent`, `src/lib/server/stripe-money-webhook.ts:52-63`): `checkout.session.completed`, `checkout.session.async_payment_succeeded`, `checkout.session.async_payment_failed`, `refund.created`, `refund.updated`, `refund.failed`. `tests/unit/release/stripe-webhook-destinations.test.ts` fails if that worker switch drifts from the tool's list.
+Desired state is exactly one enabled endpoint for the URL, `api_version` pinned to the SDK constant (`Stripe.API_VERSION`, the same pin `createStripeMoneyClient` uses at `src/lib/server/stripe-money-client.ts:26-30`), and `enabled_events` equal to the six events the worker consumes (the `switch (event.type)` in `mapStripeMoneyWebhookEvent`, `src/lib/server/stripe-money-webhook.ts:53-63`): `checkout.session.completed`, `checkout.session.async_payment_succeeded`, `checkout.session.async_payment_failed`, `refund.created`, `refund.updated`, `refund.failed`. `tests/unit/release/stripe-webhook-destinations.test.ts` fails if that worker switch drifts from the tool's list.
 
 - Default is a dry run: it lists and prints an action table and performs no writes. `--apply` is required to write; live `--apply` additionally requires `--confirm-live`.
-- `STRIPE_SECRET_KEY` must match the mode (`sk_test_` / `sk_live_`); a mismatch exits `2` before any API call.
+- The hosted-destination manager is an operator-side consumer and accepts only `sk_test_` / `sk_live_` in `STRIPE_SECRET_KEY` (`modeOfSecretKey`, `tools/release/stripe-webhook-destinations.ts:291-295`); a mismatch exits `2` before any API call. This is separate from the deployed Vercel/Convex consumers, whose manifest key contract is the restricted `rk_*` contract described in Section 1.
 - `api_version` is immutable on an existing endpoint, so a version mismatch creates a replacement and **disables** (never deletes) the old one. Superseded duplicates and the enabled legacy unpinned destination on the same host are disabled the same way, preserving delivery history.
 - On create the signing secret is printed exactly once — store it as `STRIPE_WEBHOOK_SECRET`. It is never logged again and `--json` redacts it to `<printed once above>`.
 - Only v1 `webhookEndpoints` are managed. The Accounts v2 destination (`/api/stripe/webhook/accounts-v2`, id prefix `ed_`) is a v2 core event destination on a separate API resource; the tool never touches it and its secret stays in `STRIPE_V2_WEBHOOK_SECRET`.

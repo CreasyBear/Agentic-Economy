@@ -138,9 +138,33 @@ export function resolveCspModeFromEnv(env: SecurityHeaderEnv = process.env): Csp
   return raw === 'false' || raw === '0' ? 'enforce' : 'report-only'
 }
 
-export function buildContentSecurityPolicy(): string {
+// Only a configured HTTPS origin may extend Clerk's existing resource allowances.
+// Invalid or absent issuers leave the base policy intact; never interpret paths,
+// credentials, wildcards, or CSP source expressions as trusted deployment origins.
+function configuredClerkOrigin(env: SecurityHeaderEnv): string | undefined {
+  const issuer = env.CLERK_JWT_ISSUER_DOMAIN?.trim()
+  if (!issuer || !/^https:\/\/[a-z0-9.-]+(?::443)?\/?$/iu.test(issuer)) return undefined
+
+  try {
+    const url = new URL(issuer)
+    const labels = url.hostname.split('.')
+    if (labels.length < 2 || labels.some((label) => !/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/iu.test(label))) {
+      return undefined
+    }
+    return url.origin
+  } catch {
+    return undefined
+  }
+}
+
+export function buildContentSecurityPolicy(env: SecurityHeaderEnv = process.env): string {
+  const clerkOrigin = configuredClerkOrigin(env)
   return cspDirectiveNames
-    .map((directive) => `${directive} ${cspDirectives[directive].join(' ')}`)
+    .map((directive) => {
+      const sources: readonly string[] = cspDirectives[directive]
+      const includeClerkOrigin = clerkOrigin !== undefined && sources.includes('https://*.clerk.com')
+      return `${directive} ${[...sources, ...(includeClerkOrigin ? [clerkOrigin] : [])].join(' ')}`
+    })
     .join('; ')
 }
 

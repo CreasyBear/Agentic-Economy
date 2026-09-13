@@ -23,7 +23,7 @@ resource "aws_db_instance" "formance" {
   engine_version                = "16"
   instance_class                = var.database_instance_class
   allocated_storage             = 50
-  max_allocated_storage         = 200
+  max_allocated_storage         = var.database_max_allocated_storage
   storage_type                  = "gp3"
   storage_encrypted             = true
   kms_key_id                    = aws_kms_key.primary.arn
