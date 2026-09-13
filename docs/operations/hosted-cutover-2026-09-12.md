@@ -234,6 +234,45 @@ exists in this build.
 
 ## Current hosted alpha evidence — 12 September 2026
 
+### Testnet setup readback — 13 September
+
+The existing Vercel reference-provider project
+`prj_gyaX8fy0abiwTFfvfqnqrn71Al8p` has Node 22 and public origin
+`https://package5-reference-provider.vercel.app`. Before this change, its
+production environment inventory was empty. `/health`, `/release-fixtures`
+and unpaid `POST /x402/execute` returned 500. Exact private runtime logs named
+`AE_PACKAGE5_FIXTURE_PUBLIC_ORIGIN is required`.
+
+Official Vercel CLI writes and subsequent metadata readback confirm two staged
+production settings: that public origin and
+`AE_PACKAGE5_FIXTURE_X402_FACILITATOR_URL=https://x402.org/facilitator`.
+The facilitator's `/supported` read returned 200 with exact v2 support for
+`eip155:84532`. No signed payment was sent. The controlled payee address remains
+pending; the provider has not been redeployed with partial configuration.
+
+The Coinbase portal confirms creation of `Agentic Economy Alpha` under entity
+`entity_13b783ca-e69b-51e7-bf52-e7794333a818`. The full project ID has not yet
+been read. A dedicated API key is prepared but awaits browser access
+confirmation. No existing broad key was reused and no wallet was created.
+The API-key wallet path uses the live API with testnet policy restrictions;
+Coinbase's custodial Sandbox is simulated and cannot settle testnet payments.
+Sources: [API-key wallet quickstart](https://docs.cdp.coinbase.com/wallets/quickstart/api-key-auth),
+[Sandbox overview](https://docs.cdp.coinbase.com/get-started/sandbox/overview),
+and [x402 facilitator FAQ](https://docs.cdp.coinbase.com/x402/support/faq).
+
+Source inspection found the existing `moneyTreasuryObservation` CDP SDK
+workload. Its existence corrects the stale local-runbook gap; it does not
+establish a runtime observation while custody and recurring workloads are
+disabled. Full cold user-journey audits remain pending the integration baseline
+in [alpha-validation-plan.md](alpha-validation-plan.md).
+
+The subsequent `npm run gate` attempt on application source `024f14067`
+passed 4,658 unit and 1,251 integration tests, then stopped at one compact
+Support keyboard E2E failure (23 browser tests passed, eight skipped).
+Log: `/private/tmp/ae-alpha-plan-t6sl85yp/alpha-current-source-gate.log`.
+The failing diagnostics accordion assertion is under bounded investigation;
+this attempt is not a full-gate pass.
+
 **Updated 13 September 2026.** The orchestrator verified the following provider
 state and local checks. This receipt supersedes the earlier 12 September claims that the app is usable, that
 Clerk/Infisical resources still need creating, that the previous Convex target

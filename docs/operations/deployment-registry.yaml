@@ -632,7 +632,48 @@ hostedAlphaReadback:
     freeHttpDemo: not_paid_purchase_proof
     cleanupWrapperOrOwnershipBypass: not_written
     seededHistory: retained
+  testnetIntegration:
+    capturedOn: "2026-09-13"
+    coinbase:
+      entityId: entity_13b783ca-e69b-51e7-bf52-e7794333a818
+      projectName: Agentic Economy Alpha
+      projectCreation: verified_in_portal
+      projectId: not_yet_read_in_full
+      apiKey: prepared_not_created_pending_browser_access_confirmation
+      walletAndPolicies: not_provisioned
+      existingBroadLiveKey: not_reused
+      platformMode: live_api_with_base_sepolia_only_wallet_policy_required
+      custodialSandbox: simulated_balances_not_testnet_settlement
+    referenceProvider:
+      projectId: prj_gyaX8fy0abiwTFfvfqnqrn71Al8p
+      existingProjectReused: true
+      publicOrigin: https://package5-reference-provider.vercel.app
+      preBindingHealthHttp: 500
+      exactFailure: AE_PACKAGE5_FIXTURE_PUBLIC_ORIGIN_is_required
+      stagedProductionVariables:
+        - AE_PACKAGE5_FIXTURE_PUBLIC_ORIGIN
+        - AE_PACKAGE5_FIXTURE_X402_FACILITATOR_URL
+      officialCliWriteAndMetadataReadback: passed
+      payeeAddress: pending_controlled_testnet_wallet
+      redeployment: pending_complete_configuration
+      facilitator: https://x402.org/facilitator
+      facilitatorSupportedHttp: 200
+      exactV2BaseSepolia: verified
+    treasuryObserver: existing_official_cdp_sdk_workload
+    fullPaidJourney: not_verified
+    auditProtocol: docs/operations/alpha-validation-plan.md
+    fullColdUserJourneyAudits: pending_integration_baseline
   sourceVerification:
+    latestGateAttempt:
+      sourceRevision: 024f14067
+      log: alpha-current-source-gate.log
+      gateExit: 1
+      unitPassed: 4658
+      integrationPassed: 1251
+      e2ePassed: 23
+      e2eFailed: 1
+      failure: compact_support_keyboard_diagnostics
+      diagnosis: assigned_finite_cold_agent
     sourceRevision: df0e62862731c9d9f6c8f7b8eaeda77581540b51
     nodeVersion: 22.22.0
     npmVersion: 11.5.1

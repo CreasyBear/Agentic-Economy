@@ -214,6 +214,24 @@ readback key, Stripe destinations and Cloudflare alerts.
 
 ## Hosted alpha assessment — 12 September 2026
 
+**13 September testnet preparation:** the existing reference-provider project
+was found with no production environment settings. Its health, fixture and
+unpaid payment endpoints returned 500; private logs identified the missing
+public-origin setting. The public origin and official testnet facilitator are
+now staged and verified by Vercel metadata readback. A controlled payee wallet
+and redeployment remain pending. The facilitator's supported endpoint returned
+200 and advertised exact x402 v2 on Base Sepolia. Coinbase's dedicated
+`Agentic Economy Alpha` project is created; its API key awaits the browser's
+access confirmation, and no wallet or policies are provisioned. The existing
+CDP SDK treasury observer supersedes the local runbook's previous observer-gap
+claim. No paid Call is proven. The finite cold-agent audit protocol is recorded
+in [alpha-validation-plan.md](alpha-validation-plan.md); full user-journey
+audits await the integration baseline.
+
+The latest release-gate attempt passed 4,658 unit and 1,251 integration tests
+but failed the compact Support keyboard check. A finite agent is investigating
+the exact failure; later gate stages are not claimed for this attempt.
+
 **Updated 13 September: alpha is deployed but not ready.** Authority is
 `hosted_alpha`, sandbox only;
 custody, writes and recurring workloads remain disabled. Provider labels
