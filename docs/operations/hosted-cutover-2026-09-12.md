@@ -263,7 +263,9 @@ Faucet transaction `0x2b8cfdfe8c51a7e5d38a62326bba9ef0a5a829f568bf50fbd1a27fe1fe
 supplied 1 test USDC. Only Base Sepolia RPC is configured; its chain ID is 84532.
 
 All 13 custody settings match exact Convex alpha readback and are installed
-as Vercel production variables; web activation awaits redeployment. The standard
+as Vercel production variables; deployment `dpl_CuuoGmGstgb3VxCnwsdJarVYD7ZU` activates
+them with no new custody configuration findings. All four temporary credential
+files were deleted after binding and backend verification. The standard
 `workloadCron:ensurePlatformWorkloadIdentities` initialized four missing system
 records. Manual `workloadCron:observeX402Treasury {}` then ran successfully,
 without enabling recurring jobs. Read-only query verified its sandbox record:
@@ -318,12 +320,12 @@ is current, and that the synthetic Formance stack can supply the new boundary.
 Earlier commands and receipts remain historical, not an active runbook.
 
 - **Authority:** `hosted_alpha`, sandbox only. Backend custody is enabled; web
-  activation awaits redeployment. Writes and recurring workloads remain disabled.
+  activation is verified. Writes and recurring workloads remain disabled.
 - **Vercel:** project `agentic-economy`,
   `prj_dK5mDpjBYuAXMwvLr0pWO0h8DoH9`, scope `creasybears-projects`;
-  `https://app.aecon.ai` points to `dpl_GB2eVJ8aCiWVMNKNQG7MA31FNmwe`, also at
-  `https://agentic-economy-74m5cuhiu-creasybears-projects.vercel.app`, source
-  `d47a0e872ae18e18bda581deacff145a3b554d06`. All six Formance settings are
+  `https://app.aecon.ai` points to `dpl_CuuoGmGstgb3VxCnwsdJarVYD7ZU`, also at
+  `https://agentic-economy-aspmf70b8-creasybears-projects.vercel.app`, source
+  `5c0081f1578576dba2e894cfe5784978ac49534c`. All six Formance settings are
   active in this deployment.
 - **Convex:** team `joel-chan`, new project `agentic-economy`, development
   `cool-crab-306`, provider production `cautious-zebra-473`; source
@@ -335,10 +337,9 @@ Earlier commands and receipts remain historical, not an active runbook.
   accepts the actual standard-Base64 Clerk format and registers the lifecycle
   RPC token; `5dce3419b` updates the generated environment example and valid
   synthetic Clerk fixture. These fixes are deployed. Vercel production
-  custody was explicitly set false and the malformed inactive RPC variable
-  removed (official CLIs exit 0); these changes are active and the other three
-  readiness findings cleared. Deployment log:
-  `/private/tmp/ae-alpha-plan-t6sl85yp/alpha-validated-web-deploy.log`.
+  custody is now enabled with the verified Base Sepolia RPC map. The other
+  three readiness findings remain cleared. Deployment log:
+  `/private/tmp/ae-alpha-plan-t6sl85yp/alpha-custody-web-deploy.log`.
   The restricted Stripe command-key handoff remains pending. The branch
   remains unmerged to main.
 - **Exact Convex environment reads:** all 13 new custody values, including the

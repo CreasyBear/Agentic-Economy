@@ -373,9 +373,9 @@ hostedAlphaReadback:
     projectId: prj_dK5mDpjBYuAXMwvLr0pWO0h8DoH9
     scope: creasybears-projects
     canonicalUrl: https://app.aecon.ai
-    observedDeploymentId: dpl_GB2eVJ8aCiWVMNKNQG7MA31FNmwe
-    deploymentUrl: https://agentic-economy-74m5cuhiu-creasybears-projects.vercel.app
-    observedSourceRevision: d47a0e872ae18e18bda581deacff145a3b554d06
+    observedDeploymentId: dpl_CuuoGmGstgb3VxCnwsdJarVYD7ZU
+    deploymentUrl: https://agentic-economy-aspmf70b8-creasybears-projects.vercel.app
+    observedSourceRevision: 5c0081f1578576dba2e894cfe5784978ac49534c
     healthHttp: 200
     serverRenderingBoot: fixed
     readyHttp: 503
@@ -386,8 +386,8 @@ hostedAlphaReadback:
         STRIPE_SECRET_KEY: wrong_key_type
       clearedFindings: [CLERK_WEBHOOK_SIGNING_SECRET, AE_X402_RPC_URLS_JSON, AE_SECRET_LIFECYCLE_RPC_TOKEN]
     appliedConfiguration:
-      vercelProductionCustodyEnabled: false_explicitly_set
-      removedInactiveVariable: AE_X402_RPC_URLS_JSON
+      vercelProductionCustodyEnabled: true_verified_after_redeployment
+      rpcConfiguration: valid_base_sepolia_only_map_installed
       officialCliExit: 0
       redeployment: verified_health_and_release_200
     sellable: false
@@ -641,7 +641,7 @@ hostedAlphaReadback:
       apiKeyId: 4df9f508-2454-4b4a-9a2d-020b0bb6407d
       apiKeyName: agentic-economy-alpha
       keyTransfer: provider_download_moved_to_private_0600_file
-      temporaryKeyFile: /private/tmp/ae-alpha-credentials/cdp-api-key.json
+      temporaryCredentialFiles: all_four_removed_after_verified_bindings
       initialAccountAndPolicyInventory: both_empty_no_further_pages
       walletSecret: created_with_user_approval_and_bound
       walletAndPolicies: provisioned_and_exact_readback_verified
@@ -659,8 +659,9 @@ hostedAlphaReadback:
       testUsdcBalanceAtomic: "1000000"
       convexBindingReadback: all_13_values_match
       vercelBindingMetadata: all_13_production_variables_present
+      vercelActivation: deployed_no_new_custody_configuration_findings
       existingBroadLiveKey: not_reused
-      platformMode: live_api_with_base_sepolia_only_wallet_policy_required
+      platformMode: live_api_with_ae_sandbox_profile_and_base_sepolia_rpc_only
       custodialSandbox: simulated_balances_not_testnet_settlement
     referenceProvider:
       projectId: prj_gyaX8fy0abiwTFfvfqnqrn71Al8p
@@ -717,6 +718,10 @@ hostedAlphaReadback:
       networkFence: ae_sandbox_profile_plus_sepolia_usdc_contract_rules
       policyOnlyChainIdFence: false
       liveProvisioning: verified
+    sandboxProviderVerification:
+      focusedTests: 5_passed
+      lint: passed
+      paymentDeclaration: official_decoder_verified_exact_v2_base_sepolia_payee_price_and_bazaar_schemas
     fullPaidJourney: not_verified
     auditProtocol: docs/operations/alpha-validation-plan.md
     fullColdUserJourneyAudits: pending_integration_baseline

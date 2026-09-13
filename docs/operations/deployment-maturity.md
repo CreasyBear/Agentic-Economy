@@ -219,15 +219,16 @@ Wallet Secret are provisioned. Official SDK reads verify the buyer and Provider
 wallets, exact account/project policies, and 1 test USDC from the Base Sepolia
 faucet. Policy-management permission was removed after setup. All 13 custody
 settings match exact Convex readback and are installed in Vercel production;
-web activation awaits redeployment. The existing one-shot treasury workload
+web activation is verified with no new custody configuration findings. The existing one-shot treasury workload
 recorded the genuine sandbox balance after standard workload-identity bootstrap,
 with recurring jobs still disabled.
 
 The reused sandbox Tool project is deployed at
 `https://agentic-economy-sandbox-tools.vercel.app`: health and discovery return
 200, unpaid x402 returns 402. Public descriptions now use sandbox Tool language;
-protected protocol identifiers remain stable. Five focused provider tests and
-lint passed. Human-owner admission and a paid Call remain unproven. Full cold
+protected protocol identifiers remain stable. The official x402 decoder verifies exact v2 Base Sepolia, controlled payee,
+1,000 atomic USDC and Bazaar schemas. Five focused provider tests and lint
+passed. All four temporary Coinbase credential files were deleted. Human-owner admission and a paid Call remain unproven. Full cold
 user-journey audits await that integration baseline under
 [alpha-validation-plan.md](alpha-validation-plan.md).
 
@@ -246,7 +247,7 @@ rules alone do not enforce an aggregate daily cap or explicit chain ID.
 
 **Updated 13 September: alpha is deployed but not ready.** Authority is
 `hosted_alpha`, sandbox only;
-custody is enabled in the backend and staged for web activation; writes and
+custody is enabled in the backend and web; writes and
 recurring workloads remain disabled. Provider labels
 `production` and `prod` do not confer production authority. This assessment
 supersedes earlier hosted topology, identity, configuration and usability
@@ -257,13 +258,13 @@ Exact identities and revisions are in the
 
 | Boundary | Current evidence | Remaining gap |
 | --- | --- | --- |
-| Web and backend | Deployment `dpl_GB2eVJ8aCiWVMNKNQG7MA31FNmwe`, source `d47a0e872ae18e18bda581deacff145a3b554d06`; health/release 200, six Formance settings active. | Readiness 503. Private logs identify only the wrong Stripe command-key type. The Clerk, inactive RPC and lifecycle-token findings are cleared by the verified deployment. |
+| Web and backend | Deployment `dpl_CuuoGmGstgb3VxCnwsdJarVYD7ZU`, source `5c0081f1578576dba2e894cfe5784978ac49534c`; health/release 200, six Formance settings active. | Readiness 503. Private logs identify only the wrong Stripe command-key type. The Clerk, inactive RPC and lifecycle-token findings are cleared by the verified deployment. |
 | Clerk | CSP fix deployed; Clerk form loads. Production instance and signed-webhook configuration remain recorded. | User signup, password and email steps pending; signed delivery and authenticated journey unverified. |
 | Stripe | Fresh restricted test readback key installed in Vercel production and Convex; tax, Checkout, PaymentIntent, Price and Refund SDK reads passed. GST tax rate bound in Convex; existing destinations remain enabled. | Saved Core Read permission and matching installed key suffix verified, but Accounts v2 list returns 403 `v2_account_storer_read`; platform account retrieval also returns 403. Restricted command key still has its old label ending `-command`; rename did not persist and permissions were unchanged. Transfer to the empty mode-0600 credential file is pending. No successful connected-account canary, delivery/replay or purchase proof. |
 | Infisical | Two new dedicated alpha projects have separate, deletion-protected member identities and saved Vercel production OIDC trust. All nine variables bound in Vercel production. Unused No Access identity deleted and verified; old staging projects untouched. | Hosted OIDC authentication and secret CRUD unverified. Local CLI token had a development subject, so its canary aborted before creating a secret. Project isolation uses member roles because custom roles require a paid plan. |
 | Financial authority | Reviewed bootstrap repair replaced the host; cloud-init complete, k3s/reconcile/timer active, required replicas ready; tunnel healthy with eight connections. Formance health ready; schema v1.3.0 installed and repeat replayed. Final pinned OpenTofu plan: no changes, exit 0. | End-to-end purchase unproven. SNS email subscription awaits confirmation. Historical RPO 308 seconds exceeds the 300-second target. |
 | AWS cost and retention | User-approved old AWS retirement completed: 24 resources removed; EC2 terminated, root disk absent, both RDS instances absent, NAT deleted and EIP absent. Three encrypted RDS snapshots and completed EBS snapshot retained under the enabled KMS key. | Budget decision resolved. Fresh alpha estimate is USD 311.29/month before tax, plus retained storage/account costs; the former combined paused-runtime estimate is superseded. Old root/drill ordinary apply would recreate retired resources. |
-| Source checks | Full gate at deployed `d47a0e872` passed: 4,658 unit, 1,251 integration, 24 E2E and ten accessibility. The Support keyboard test now waits for hydration and activates once. | Eight authenticated E2E cases remain skipped. Source checks do not establish authenticated or purchase journeys. |
+| Source checks | Full gate at application baseline `d47a0e872` passed: 4,658 unit, 1,251 integration, 24 E2E and ten accessibility. The Support keyboard test now waits for hydration and activates once. | Eight authenticated E2E cases remain skipped. Source checks do not establish authenticated or purchase journeys. |
 
 Ten old Convex projects were deleted with the user's approval. Historical
 resource references are evidence, not current deployment targets. The seeded
