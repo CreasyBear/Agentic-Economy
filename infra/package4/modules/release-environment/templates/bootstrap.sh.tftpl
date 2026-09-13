@@ -3,7 +3,8 @@ set -euo pipefail
 
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
-apt-get install -y --no-install-recommends ca-certificates curl jq python3 unzip
+# SSM may install CloudWatch concurrently during first boot.
+apt-get -o DPkg::Lock::Timeout=600 install -y --no-install-recommends ca-certificates curl jq python3 unzip
 
 curl --fail --silent --show-error --location \
   '${aws_cli_install_url}' \
