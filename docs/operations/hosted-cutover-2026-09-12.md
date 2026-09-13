@@ -513,7 +513,10 @@ x402 inspection verifies its controlled testnet payee. A replayed real Clerk
 session event is recorded and visible in security history.
 
 Stripe's restricted command-key transfer still blocks web readiness (503).
-Clerk backend-issued Agent keys and Google external publishing await prepared
-confirmations; payee-control connection/publication, hosted Infisical, SNS
+Google external publishing is verified as In production in the business project.
+Clerk key configuration has user and organisation self-service disabled, matching
+the approved backend-only scope. The authenticated Agent directory loads without
+a newly observed key-list Forbidden log; actual credential issuance remains
+unverified. Payee-control connection/publication, hosted Infisical, SNS
 confirmation and supported paid-purchase proof remain incomplete. Alpha is not
 ready. Full UX audits remain gated on that integration baseline.

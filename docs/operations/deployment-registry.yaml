@@ -435,7 +435,8 @@ hostedAlphaReadback:
     securityEventRef: audit:clerk:1f0b1f8774643c66dedb9f68361d2a0963dac1a3886fe9a55cb6cc513ce11b3a
     duplicateSecurityDelivery: verified_200_replayed_same_event_reference_one_durable_record
     initialSessionDelivery: ignored_before_account_binding
-    clerkAgentApiKeys: disabled_backend_only_activation_prepared_pending_confirmation
+    clerkAgentApiKeys: configured_user_and_organization_self_service_disabled
+    clerkAgentApiKeyRuntime: authenticated_directory_loaded_no_new_forbidden_log_issuance_unverified
     cspFix: deployed
     formLoads: verified
     userSignupPasswordAndEmail: pending
@@ -464,7 +465,7 @@ hostedAlphaReadback:
       authenticatedPageFailure: resolved_by_official_convex_integration_and_fresh_signin
       authenticatedPagesVerified: [/owner/settings, /owner/credit, /owner/operations]
       googleBrandingLinks: saved_public_home_privacy_terms
-      googlePublishingStatus: testing_publish_confirmation_prepared
+      googlePublishingStatus: in_production_external_verified
       codeChangeRequired: false
   processor:
     provider: stripe

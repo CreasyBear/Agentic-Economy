@@ -231,10 +231,13 @@ The real Clerk session webhook returned 200/ignored before its Account binding
 existed. Replaying that same signed event after binding persisted a security
 event and made it visible in Account & security. A second replay returned
 200/`replayed` with the same event reference; readback retained one event with
-its original recording timestamp. Production Clerk API-key
-functionality is disabled (the app's key-list read returned Forbidden);
-backend-only activation is prepared, pending browser-required confirmation.
-Google's external publishing confirmation is also prepared. Hosted Infisical
+its original recording timestamp. After Joel's approval, live Google readback
+confirmed the business project is In production with an External audience.
+Clerk's feature was already configured with User API keys enabled; user
+self-service was disabled to match the approved backend-only scope, with
+Organisation keys also disabled. The authenticated Agent directory loads and
+no new key-list Forbidden error was observed in the scoped runtime logs;
+credential issuance and verification remain unproven. Hosted Infisical
 proof must use the real HTTP-credential or MCP connection flow; the existing
 secret lifecycle does not expose user-facing deletion. No custom diagnostic
 endpoint or counterfeit ownership was added.
