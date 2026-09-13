@@ -1,5 +1,5 @@
 import * as childProcess from 'node:child_process'
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:http'
 import { tmpdir } from 'node:os'
 import { delimiter, join } from 'node:path'
@@ -1658,7 +1658,7 @@ describe('external-agent Market Tool cold loop', () => {
     expect(result.nextAction).toBe('Run ' + expectedCommand + '.')
   })
 
-  it('emits an origin-preserving JSON continuation when OAuth approval times out', async () => {
+  it('clears an expired approval and returns an origin-preserving restart command', async () => {
     const selectedOrigin = 'http://[::1]:3210'
     const output = captureStdout()
     const diagnostics = captureStderr()
@@ -1690,9 +1690,13 @@ describe('external-agent Market Tool cold loop', () => {
         baseUrlSource: 'flag',
         provider: true,
       })
+      const expired = expect(connect).rejects.toMatchObject({
+        code: 'expired_token',
+        nextCommand: "ae connect --provider --base-url 'http://[::1]:3210' --json",
+      })
       await tokenFetch
       await vi.advanceTimersByTimeAsync(1_000)
-      await connect
+      await expired
     } finally {
       vi.useRealTimers()
       output.restore()
@@ -1700,10 +1704,8 @@ describe('external-agent Market Tool cold loop', () => {
       vi.unstubAllGlobals()
     }
 
-    expect(JSON.parse(output.read())).toMatchObject({
-      kind: 'pending',
-      nextCommand: "ae connect --provider --base-url 'http://[::1]:3210' --json",
-    })
+    expect(output.read()).toBe('')
+    expect(readdirSync(join(testConfigDirectory, 'pending-connections'))).toHaveLength(0)
   })
 
   it('connects, searches, selects one returned Tool, and obtains its first Quote in fresh processes', async () => {

@@ -14,6 +14,7 @@ import { retry } from 'es-toolkit'
 
 import type { CliOptions } from '../lib/args'
 import { resolveAgentAccessCredential, storeConnection } from '../lib/config'
+import { withPendingConnect, type PendingConnect, type PendingConnectStore } from '../lib/pending-connect'
 import { continuationCommand } from '../lib/continuation-command'
 import { CliFailure, callJson, heading, line, printJson, requireOk, table } from '../lib/output'
 import { usageFailure } from '../lib/help'
@@ -32,15 +33,7 @@ const ISSUED_KEY_VALIDATION_DELAY_MS = 250
 
 type JsonRecord = Record<string, unknown>
 
-type ConnectDetails = Readonly<{
-  clientId: string
-  deviceCode: string
-  userCode: string
-  verificationUri: string
-  expiresIn: number
-  intervalMs: number
-  provider: boolean
-}>
+type ConnectDetails = PendingConnect
 
 function continuationFlags(options: Pick<CliOptions, 'baseUrl' | 'baseUrlSource' | 'json'>): readonly string[] {
   return [
@@ -218,6 +211,10 @@ async function validateIssuedAccessToken(options: CliOptions, key: string, provi
 }
 /** Register a public device client, obtain owner consent, and deliver one AE key. */
 export async function runConnectCommand(args: readonly string[], options: CliOptions): Promise<void> {
+  await withPendingConnect(options, async (pending) => runConnect(args, options, pending))
+}
+
+async function runConnect(args: readonly string[], options: CliOptions, pending: PendingConnectStore): Promise<void> {
   if (args.length > 0) {
     throw usageFailure('connect', 'connect-usage')
   }
@@ -266,34 +263,39 @@ export async function runConnectCommand(args: readonly string[], options: CliOpt
     }
   }
 
-  const registrationOutcome = await callJson(options.baseUrl, OAUTH_REGISTER_PATH, {
-    method: 'POST',
-    body: JSON.stringify(registrationRequest),
-  })
-  const registration = requireOk(registrationOutcome, OAUTH_REGISTER_PATH)
-  const clientId = textField(isRecord(registration) ? registration.client_id : undefined, 'registration.client_id')
+  let details = pending.read()
+  if (details === undefined) {
+    const registrationOutcome = await callJson(options.baseUrl, OAUTH_REGISTER_PATH, {
+      method: 'POST',
+      body: JSON.stringify(registrationRequest),
+    })
+    const registration = requireOk(registrationOutcome, OAUTH_REGISTER_PATH)
+    const clientId = textField(isRecord(registration) ? registration.client_id : undefined, 'registration.client_id')
 
-  const deviceRequest = oauthForm({ client_id: clientId, scope: requestedScope,
-    ...(options.environment === undefined ? {} : { authorization_details: JSON.stringify([{
-      type: 'agentic_economy_market_tools', environment: options.environment,
-      tool_access: 'all_admitted', tool_refs: [], expires_in_seconds: 7 * 24 * 60 * 60,
-    }]) }),
-  })
-  const deviceOutcome = await callJson(options.baseUrl, OAUTH_DEVICE_AUTHORIZATION_PATH, {
-    method: 'POST',
-    headers: deviceRequest.headers,
-    body: deviceRequest.body,
-  })
-  const device = requireOk(deviceOutcome, OAUTH_DEVICE_AUTHORIZATION_PATH)
-  const deviceRecord = isRecord(device) ? device : undefined
-  const details: ConnectDetails = {
-    clientId,
-    deviceCode: textField(deviceRecord?.device_code, 'device_code'),
-    userCode: textField(deviceRecord?.user_code, 'user_code'),
-    verificationUri: verificationUri(deviceRecord?.verification_uri),
-    expiresIn: positiveSeconds(deviceRecord?.expires_in, 'expires_in', 600),
-    intervalMs: Math.min(MAX_POLL_DELAY_MS, Math.max(MIN_POLL_DELAY_MS, positiveSeconds(deviceRecord?.interval, 'interval', DEFAULT_POLL_DELAY_MS / 1000) * 1_000)),
-    provider,
+    const deviceRequest = oauthForm({ client_id: clientId, scope: requestedScope,
+      ...(options.environment === undefined ? {} : { authorization_details: JSON.stringify([{
+        type: 'agentic_economy_market_tools', environment: options.environment,
+        tool_access: 'all_admitted', tool_refs: [], expires_in_seconds: 7 * 24 * 60 * 60,
+      }]) }),
+    })
+    const deviceOutcome = await callJson(options.baseUrl, OAUTH_DEVICE_AUTHORIZATION_PATH, {
+      method: 'POST',
+      headers: deviceRequest.headers,
+      body: deviceRequest.body,
+    })
+    const device = requireOk(deviceOutcome, OAUTH_DEVICE_AUTHORIZATION_PATH)
+    const deviceRecord = isRecord(device) ? device : undefined
+    details = {
+      clientId,
+      deviceCode: textField(deviceRecord?.device_code, 'device_code'),
+      userCode: textField(deviceRecord?.user_code, 'user_code'),
+      verificationUri: verificationUri(deviceRecord?.verification_uri),
+      expiresAt: Date.now() + positiveSeconds(deviceRecord?.expires_in, 'expires_in', 600) * 1_000,
+      nextPollAt: 0,
+      intervalMs: Math.min(MAX_POLL_DELAY_MS, Math.max(MIN_POLL_DELAY_MS, positiveSeconds(deviceRecord?.interval, 'interval', DEFAULT_POLL_DELAY_MS / 1000) * 1_000)),
+      provider,
+    }
+    pending.write(details)
   }
 
   if (options.json) {
@@ -303,19 +305,34 @@ export async function runConnectCommand(args: readonly string[], options: CliOpt
     table([
       ['verification', details.verificationUri],
       ['user code', details.userCode],
-      ['expires', `${details.expiresIn}s`],
+      ['expires', `${Math.max(0, Math.ceil((details.expiresAt - Date.now()) / 1_000))}s`],
     ])
     line('Approve the request, then this command will poll for the one-time credential.')
   }
   openVerificationUri(details.verificationUri, options)
 
-  const deadline = Math.min(Date.now() + MAX_CONNECT_WAIT_MS, Date.now() + details.expiresIn * 1_000)
+  const deadline = Math.min(Date.now() + MAX_CONNECT_WAIT_MS, details.expiresAt)
   let delayMs = details.intervalMs
   for (;;) {
     const remainingMs = deadline - Date.now()
     if (remainingMs <= 0) {
+      if (details.expiresAt <= Date.now()) {
+        pending.clear()
+        throw new CliFailure('This approval expired. Run connect again to start a new request.', {
+          kind: 'FAILED_PRECONDITION', code: 'expired_token',
+          nextCommand: connectContinuation(options, ['ae', 'connect',
+            ...(provider ? ['--provider'] : []),
+            ...(options.environment === undefined ? [] : ['--environment', options.environment])]),
+        })
+      }
       printConnectResult(connectPending(details, options), options)
       return
+    }
+
+    const pollDelay = Math.min(details.nextPollAt - Date.now(), remainingMs)
+    if (pollDelay > 0) {
+      await new Promise<void>((resolve) => setTimeout(resolve, pollDelay))
+      continue
     }
 
     const tokenRequest = oauthForm({
@@ -329,6 +346,8 @@ export async function runConnectCommand(args: readonly string[], options: CliOpt
       body: tokenRequest.body,
     })
     if (tokenOutcome.ok) {
+      // The server has consumed this device code, even if local validation fails.
+      pending.clear()
       const token = tokenOutcome.body
       if (!isRecord(token)) {
         throw new CliFailure('OAuth token response was not a JSON object.', { kind: 'UNAVAILABLE', code: 'connect-response-invalid' })
@@ -369,6 +388,7 @@ export async function runConnectCommand(args: readonly string[], options: CliOpt
     const errorBody = isRecord(tokenOutcome.body) ? tokenOutcome.body : undefined
     const oauthError = typeof errorBody?.error === 'string' ? errorBody.error : undefined
     if (oauthError !== 'authorization_pending' && oauthError !== 'slow_down') {
+      if (['access_denied', 'expired_token', 'invalid_grant', 'invalid_client'].includes(oauthError ?? '')) pending.clear()
       throw new CliFailure(`OAuth token request failed${oauthError === undefined ? '' : `: ${oauthError}`}.`, {
         kind: tokenOutcome.status === 401 ? 'UNAUTHENTICATED' : tokenOutcome.status === 429 ? 'RESOURCE_EXHAUSTED' : 'UNAVAILABLE',
         code: oauthError ?? 'connect-token-failed',
@@ -382,8 +402,7 @@ export async function runConnectCommand(args: readonly string[], options: CliOpt
     } else if (Number.isFinite(retryAfter) && retryAfter > 0) {
       delayMs = Math.min(MAX_POLL_DELAY_MS, Math.max(MIN_POLL_DELAY_MS, retryAfter * 1_000))
     }
-    await new Promise<void>((resolve) => {
-      setTimeout(resolve, Math.min(delayMs, deadline - Date.now()))
-    })
+    details = { ...details, intervalMs: delayMs, nextPollAt: Date.now() + delayMs }
+    pending.write(details)
   }
 }
