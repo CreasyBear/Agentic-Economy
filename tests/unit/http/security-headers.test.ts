@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import {
   applySecurityHeadersToResponse,
@@ -40,6 +40,62 @@ const requiredCspAllowances = [
 ] as const
 
 describe('security header middleware', () => {
+  afterEach(() => vi.unstubAllEnvs())
+
+  it.each(['https://clerk.aecon.ai', ' https://CLERK.AECON.AI:443/ '])(
+    'allows the configured Clerk origin in existing Clerk resource directives: %s',
+    (issuer) => {
+      const baseDirectives = buildContentSecurityPolicy({}).split('; ')
+      const configuredDirectives = buildContentSecurityPolicy({ CLERK_JWT_ISSUER_DOMAIN: issuer }).split('; ')
+
+      for (const [index, directive] of baseDirectives.entries()) {
+        const name = directive.split(' ')[0]
+        const permitsClerk = ['script-src', 'connect-src', 'img-src', 'frame-src'].includes(name!)
+        expect(configuredDirectives[index]).toBe(`${directive}${permitsClerk ? ' https://clerk.aecon.ai' : ''}`)
+      }
+    },
+  )
+
+  it.each([
+    undefined,
+    '',
+    'http://clerk.aecon.ai',
+    '//clerk.aecon.ai',
+    'https://*.aecon.ai',
+    'https://clerk.aecon.ai:8443',
+    'https://user:password@clerk.aecon.ai',
+    'https://clerk.aecon.ai/path',
+    'https://clerk.aecon.ai/../',
+    'https://clerk.aecon.ai?source=other',
+    'https://clerk.aecon.ai#fragment',
+    "https://clerk.aecon.ai; script-src 'unsafe-eval'",
+    'https://clerk.aecon.ai https://other.example',
+    'https://clerk.\naecon.ai',
+    'https://clerk.aecon.ai\\other',
+    'https://-clerk.aecon.ai',
+    'https://999.999.999.999',
+  ])('keeps the base policy for an absent or invalid Clerk issuer: %s', (issuer) => {
+    expect(buildContentSecurityPolicy({ CLERK_JWT_ISSUER_DOMAIN: issuer })).toBe(buildContentSecurityPolicy({}))
+  })
+
+  it('includes the runtime Clerk issuer in the enforcing HTML response policy', () => {
+    vi.stubEnv('CLERK_JWT_ISSUER_DOMAIN', 'https://clerk.aecon.ai')
+    const response = new Response('<!doctype html><h1>Sign in</h1>', {
+      headers: { 'Content-Type': 'text/html' },
+    })
+
+    const secured = applySecurityHeadersToResponse(response, { cspMode: 'enforce' })
+    const csp = secured.headers.get('Content-Security-Policy')!
+
+    for (const name of ['script-src', 'connect-src', 'img-src', 'frame-src']) {
+      expect(csp.split('; ').find((directive) => directive.startsWith(`${name} `))?.split(' '))
+        .toContain('https://clerk.aecon.ai')
+    }
+    expect(csp).not.toContain("'unsafe-eval'")
+    expectStaticSecurityHeaders(secured.headers)
+    expect(secured.headers.has('Content-Security-Policy-Report-Only')).toBe(false)
+  })
+
   it('emits report-only CSP unless rollout configuration opts into enforcement', () => {
     const headers = buildSecurityHeaders()
 
