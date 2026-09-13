@@ -308,26 +308,62 @@ Earlier commands and receipts remain historical, not an active runbook.
   old staging projects were untouched. Hosted OIDC authentication and secret
   CRUD remain unverified: the local Vercel CLI token had a development subject,
   so the canary aborted before any secret creation.
-- **Ledger plan:** Formance is unprovisioned and all six required variables
-  remain missing. Saved plan
+- **Formance bindings:** all six `AE_FORMANCE_*` values were installed in
+  Vercel production and Convex `cautious-zebra-473` through official CLIs,
+  both exit 0. Values are sandbox environment, gateway
+  `https://formance-alpha.aecon.ai`, ledger `agentic-economy-alpha` and
+  10,000 ms timeout. The two Access credentials came from exact AWS secret
+  ARN `arn:aws:secretsmanager:ap-southeast-2:197716152388:secret:ae-alpha/package4/cloudflare-access-application-718qYi`,
+  owned by new KMS key `b5701c00-bda9-4e47-9061-dbfdfec48244`. Credentials
+  were never printed; the temporary dotenv file was deleted in cleanup.
+  Vercel bindings are staged pending redeployment; Convex is configured but
+  runtime proof is pending. Convex `AE_SERVICE_MODE=hosted_alpha` and
+  `AE_FORMANCE_ENVIRONMENT=sandbox` bindings were verified. The previous live
+  boot still reports the six
+  settings missing until the next deployment.
+- **Ledger infrastructure:** apply completed with exit 0: 80 added, zero
+  changed, zero destroyed. Saved plan
   `/private/tmp/ae-alpha-plan-t6sl85yp/alpha-fixed-storage.tfplan`, source
   `535598cb5a32b7e3c1bc976f0eeb18ef6fa995f1`, proposes 80 creates and six reads,
   with no existing-resource updates or deletes. Database storage is fixed at
-  50 GiB with no autoscaling. The plan has not been applied.
-- **Budget and old resources:** low-traffic fresh alpha estimate is USD
-  311.29/month; paused old baseline is USD 79.17; combined estimate is USD
-  390.45 before tax. Old RDS auto-restarts 13 September at 09:44–09:49 Perth,
-  so budget blocks apply pending approved retirement of old resources. Scoped
-  live census found EC2 `i-063c00d935d85d74f` and both old RDS instances stopped,
-  each RDS at 50 GiB; NAT `nat-0aabc2385d7704d2d` remains active. Primary and DR
-  vaults currently have zero recovery points. Source RDS has five automated
-  snapshots, latest 5 September; the drill has none. Retirement is proposed,
-  not authorized: approval is pending to snapshot both old RDS instances and
-  the host disk before retiring the old host, RDS, NAT and EIP. It requires
-  retention of KMS key
-  `5979d934-bd8d-4809-bd2e-5cf22092922e`, audit, state and evidence. These
-  resources must never be promoted in place. Historical restore RPO remains
-  308 seconds against the 300-second target.
+  50 GiB with no autoscaling. Saved-plan SHA-256 is
+  `1813729a1f92934c7fb1334361f4a3dc326485c48674b218a265ba03064abd38`.
+  Apply log: `/private/tmp/ae-alpha-plan-t6sl85yp/alpha-apply.log`. New k3s
+  host is `i-03783779db01d90fc`; RDS is `ae-alpha-formance`, ARN
+  `arn:aws:rds:ap-southeast-2:197716152388:db:ae-alpha-formance`, internal
+  resource ID `db-HXOLD5NCUPK4Y4EA67D62PPTDI`. VPC
+  `vpc-0580eee94c9ef6255` uses `10.44.0.0/16`. Cloudflare tunnel is
+  `c4f07700-e347-4f34-9d64-1f0992e7a863`; Access application is
+  `55ab1c32-4663-44be-ae70-d239c8a3c7e9`. Alert topic is
+  `arn:aws:sns:ap-southeast-2:197716152388:ae-alpha-package4-alerts`.
+  Bootstrap and ledger remain unverified; infrastructure creation does not
+  establish runtime readiness or canary proof.
+- **Old AWS retirement:** the user approved snapshots and retirement. Pinned
+  OpenTofu 1.12.6 applied saved, reviewed plans in
+  `/private/tmp/ae-old-retirement-9ia9rysy`: all 24 resources were removed
+  (five drill, 19 main), following one source deletion-protection update.
+  Exact drill cleanup SSM command `b8167267-2bbb-45d6-b47b-f67f66b8296d`
+  returned `SUCCESS`, source verification `PASS` and cleanup `PASS`; digest
+  `616c676cf13d38237c8716813a9141a32185ec307eb186f46bb2c8f628ade01d`.
+  EC2 `i-063c00d935d85d74f` is terminated, root volume
+  `vol-0a36f198a069d1d45` absent; both `package4-release-formance` and
+  `package4-release-restore-20260904` return `DBInstanceNotFound`. NAT
+  `nat-0aabc2385d7704d2d` is deleted and EIP `eipalloc-06be89467efa6ced9`
+  absent. Available encrypted RDS snapshots are
+  `package4-release-formance-retirement-20260913`,
+  `package4-release-restore-20260904-retirement` and the additional final
+  `package4-release-formance-final`. EBS snapshot `snap-04e41acaa13daaf60`
+  completed at 100%. All use retained, enabled KMS key
+  `5979d934-bd8d-4809-bd2e-5cf22092922e`. VPC, subnets, logs, vaults, state,
+  audit, keys, roles and Cloudflare remain; dependent runtime grants, alarms,
+  associations and routes were removed. The old root and drill are retired:
+  an ordinary apply would recreate resources and must not be run.
+- **Budget:** the retirement decision is resolved. Fresh low-traffic alpha
+  remains estimated at USD 311.29/month before tax, plus retained storage and
+  account costs. The former USD 390.45 combined paused-runtime assumption is
+  superseded by completed retirement. Historical restore RPO remains 308
+  seconds against the 300-second target; retained snapshots alone do not
+  establish a new restore result.
 - **Deployer access:** standalone CloudFormation stack
   `ae-alpha-deployer-access` is `CREATE_COMPLETE`. Exact prepared change set
   `alpha-runtime-access-20260913` was executed once through the user-authorized
@@ -336,17 +372,18 @@ Earlier commands and receipts remain historical, not an active runbook.
   `Package4ReleaseOpenTofu`; no root CLI was used. The Cloudflare deployment
   credential remains active until `2026-09-20T23:59:59Z`; its temporary file
   remains present with mode `0600`.
-- **Source verification:** committed app
-  `ae60dfa3d67818b24ed1fd9a392ece998d1005f8` includes merged main and the
-  bundler fix (Rolldown 1.2.7), using Node 22.22.0/npm 11.5.1. Initial gate
-  stages passed 4,593 unit and 1,251 integration tests (five integration
-  skipped, three todo), then found two provider-page E2E failures. After their
-  fix, 24 E2E, ten accessibility and five focused unit checks passed;
-  typecheck, build and CLI checks passed. Eight authenticated E2E checks were
-  skipped. Full `npm run gate` has not been rerun green; authenticated sign-in
-  and live purchases remain unproven.
+- **Source verification:** full `npm run gate` passed with exit 0 at
+  `fa33461cef107e75f15b1b6749c58cf6d99138c4`, with no app changes since deployed
+  source `ae60dfa3d67818b24ed1fd9a392ece998d1005f8`. Results: 4,594 unit,
+  1,251 integration, 24 E2E and ten accessibility passed; CLI/build passed.
+  Five integration checks were skipped, three todo; eight authenticated E2E
+  checks were skipped. Runtime remains Node 22.22.0/npm 11.5.1, with the
+  Rolldown 1.2.7 bundler fix. Hosted authenticated sign-in and live purchases
+  remain unproven.
 
-The new deployment restores server boot; alpha remains blocked on six missing
-Formance bindings, Stripe account access, the unapplied isolated ledger
-boundary and end-to-end verification. Health 200 and passing source checks do not establish
-alpha readiness.
+The hosted deployment is unchanged: health 200, readiness 503. Six Formance
+settings are now bound but await Vercel redeployment and runtime verification.
+Old retirement is complete; all 80 fresh alpha resources are provisioned.
+Formance runtime, hosted Infisical, Stripe connected-account and purchase
+canaries remain pending. Passing the source gate does not establish alpha
+readiness.

@@ -1,5 +1,5 @@
 schemaVersion: ae.deployment-registry/v1
-# Current hosted evidence: hostedAlphaReadback. Synthetic pause: operatingPause.
+# Current hosted evidence and retirement: hostedAlphaReadback. Historical pause: operatingPause.
 # The original baseline below remains dated historical evidence.
 capturedAt: "2026-09-04T08:48:02Z"
 capturedFromRevision: "8621ef3f3017a0e2ebe19c6277da98f7d5488909"
@@ -480,9 +480,24 @@ hostedAlphaReadback:
       deletion: verified
     existingStagingProjects: untouched
   financialAuthority:
-    freshIsolatedInfrastructure: planned_not_applied
-    requiredFormanceVariables: all_six_missing
-    existingSyntheticEc2AndRds: stopped_never_promote_in_place
+    freshIsolatedInfrastructure: provisioned_runtime_unverified
+    requiredFormanceVariables: all_six_bound_vercel_staged_convex_configured_runtime_unverified
+    formanceBindings:
+      targets: [vercel_production, convex_cautious_zebra_473]
+      officialCliExit: 0
+      environment: sandbox
+      gatewayUrl: https://formance-alpha.aecon.ai
+      ledger: agentic-economy-alpha
+      requestTimeoutMs: 10000
+      accessCredentialsSource: arn:aws:secretsmanager:ap-southeast-2:197716152388:secret:ae-alpha/package4/cloudflare-access-application-718qYi
+      owningKmsKeyId: b5701c00-bda9-4e47-9061-dbfdfec48244
+      credentialsPrinted: false
+      temporaryDotenvFile: deleted
+      vercelLiveBindingState: pending_redeployment
+      convexServiceMode: hosted_alpha
+      convexEnvironmentBinding: sandbox_verified
+      convexRuntimeProof: pending
+    existingSyntheticEc2AndRds: retired_never_reapply_old_roots
     historicalRecoveryRpoSeconds: 308
     requiredRecoveryRpoSeconds: 300
     alphaPlan:
@@ -494,13 +509,29 @@ hostedAlphaReadback:
       deletes: 0
       databaseStorageGiB: 50
       databaseStorageAutoscaling: disabled
-      applyState: blocked_pending_budget_resolution_and_old_resource_retirement_approval
+      sha256: 1813729a1f92934c7fb1334361f4a3dc326485c48674b218a265ba03064abd38
+      applyState: completed
+      applyExit: 0
+      applyResult: {added: 80, changed: 0, destroyed: 0}
+      applyLog: /private/tmp/ae-alpha-plan-t6sl85yp/alpha-apply.log
+    alphaResources:
+      k3sHostId: i-03783779db01d90fc
+      rdsInstanceId: ae-alpha-formance
+      rdsArn: arn:aws:rds:ap-southeast-2:197716152388:db:ae-alpha-formance
+      rdsResourceId: db-HXOLD5NCUPK4Y4EA67D62PPTDI
+      vpcId: vpc-0580eee94c9ef6255
+      vpcCidr: 10.44.0.0/16
+      cloudflareTunnelId: c4f07700-e347-4f34-9d64-1f0992e7a863
+      cloudflareAccessApplicationId: 55ab1c32-4663-44be-ae70-d239c8a3c7e9
+      alertTopicArn: arn:aws:sns:ap-southeast-2:197716152388:ae-alpha-package4-alerts
+      runtimeBootstrap: not_verified
+      ledger: not_verified
     monthlyCostEstimateUsd:
       assumption: low_traffic_before_tax
       freshAlpha: "311.29"
-      oldPausedBaseline: "79.17"
-      combined: "390.45"
-      oldRdsAutomaticRestartPerth: "2026-09-13 09:44–09:49"
+      additionalCosts: retained_storage_and_account_services_not_yet_totalled
+      previousCombinedPausedRuntimeEstimate: superseded_by_completed_retirement
+      retirementBudgetDecision: approved_and_resolved
     deployerAccess:
       cloudFormationStack: ae-alpha-deployer-access
       state: CREATE_COMPLETE
@@ -509,43 +540,59 @@ hostedAlphaReadback:
       grantScope: two_alpha_runtime_roles_and_one_instance_profile
       subsequentRoutineCliIdentity: verified_assumed_role_Package4ReleaseOpenTofu
       rootCliUsed: false
-    oldResourceCensus:
-      ec2: {id: i-063c00d935d85d74f, state: stopped}
+    oldResourceRetirement:
+      authorization: user_approved_snapshots_and_retirement
+      state: completed
+      openTofuVersion: 1.12.6
+      reviewedPlanDirectory: /private/tmp/ae-old-retirement-9ia9rysy
+      destroyedResources: {drill: 5, main: 19, total: 24}
+      sourceDeletionProtectionUpdate: one_update_before_retirement
+      exactDrillCleanup:
+        ssmCommandId: b8167267-2bbb-45d6-b47b-f67f66b8296d
+        commandStatus: SUCCESS
+        sourceVerification: PASS
+        cleanup: PASS
+        digest: 616c676cf13d38237c8716813a9141a32185ec307eb186f46bb2c8f628ade01d
+      ec2: {id: i-063c00d935d85d74f, state: terminated}
+      rootVolume: {id: vol-0a36f198a069d1d45, state: absent}
       rds:
-        - {id: package4-release-formance, state: stopped, storageGiB: 50, automatedSnapshots: 5, latestAutomatedSnapshotDate: "2026-09-05"}
-        - {id: package4-release-restore-20260904, state: stopped, storageGiB: 50, automatedSnapshots: 0}
-      natGateway: {id: nat-0aabc2385d7704d2d, state: active}
-      primaryVaultRecoveryPoints: 0
-      disasterRecoveryVaultRecoveryPoints: 0
-      retirement: proposed_not_authorized
-      pendingUserApproval: snapshot_both_old_rds_and_host_disk_then_retire_old_host_rds_nat_and_eip
-      retirementRequires: [fresh_snapshots, retain_kms_key, retain_audit, retain_state, retain_evidence]
-      retainedKmsKeyId: 5979d934-bd8d-4809-bd2e-5cf22092922e
+        - {id: package4-release-formance, readback: DBInstanceNotFound}
+        - {id: package4-release-restore-20260904, readback: DBInstanceNotFound}
+      natGateway: {id: nat-0aabc2385d7704d2d, state: deleted}
+      elasticIp: {id: eipalloc-06be89467efa6ced9, state: absent}
+      retainedRdsSnapshots:
+        - {id: package4-release-formance-retirement-20260913, state: available, encrypted: true}
+        - {id: package4-release-restore-20260904-retirement, state: available, encrypted: true}
+        - {id: package4-release-formance-final, state: available, encrypted: true}
+      retainedEbsSnapshot: {id: snap-04e41acaa13daaf60, state: completed, progressPercent: 100}
+      snapshotKmsKey: {id: 5979d934-bd8d-4809-bd2e-5cf22092922e, state: enabled, scope: all_retained_snapshots}
+      retained: [vpc, subnets, logs, vaults, state, audit, keys, roles, cloudflare]
+      removedDependencies: [runtime_grants, alarms, associations, routes]
+      oldRootAndDrillApply: prohibited_ordinary_apply_would_recreate_retired_resources
     cloudflareDeploymentCredential:
       state: active
       expiry: "2026-09-20T23:59:59Z"
       temporaryFile: present
       temporaryFileMode: "0600"
   sourceVerification:
-    sourceRevision: ae60dfa3d67818b24ed1fd9a392ece998d1005f8
+    sourceRevision: fa33461cef107e75f15b1b6749c58cf6d99138c4
+    appSourceRevision: ae60dfa3d67818b24ed1fd9a392ece998d1005f8
+    appChangesSinceHostedDeploy: false
     includes: merged_main_and_bundler_fix
     nodeVersion: 22.22.0
     npmVersion: 11.5.1
     buildFix: rolldown_1.2.7
-    initialGate:
-      unitPassed: 4593
-      integrationPassed: 1251
-      integrationSkipped: 5
-      integrationTodo: 3
-      e2e: two_provider_page_failures_subsequently_fixed
-    subsequentChecks:
-      e2ePassed: 24
-      authenticatedE2eSkipped: 8
-      accessibilityPassed: 10
-      focusedUnitPassed: 5
-      typecheck: passed
-      build: passed
-      cli: passed
-    fullGate: not_rerun_green
+    fullGate: passed
+    gateCommand: npm_run_gate
+    gateExit: 0
+    unitPassed: 4594
+    integrationPassed: 1251
+    integrationSkipped: 5
+    integrationTodo: 3
+    e2ePassed: 24
+    authenticatedE2eSkipped: 8
+    accessibilityPassed: 10
+    cli: passed
+    build: passed
     authenticatedSignIn: not_proven
     livePurchases: not_proven

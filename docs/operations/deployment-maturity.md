@@ -3,7 +3,11 @@
 Current hosted evidence is the [12 September alpha assessment](#hosted-alpha-assessment--12-september-2026). Earlier assessments below remain
 historical and do not establish current alpha availability.
 
-## Current operating override — 6 September 2026
+## Historical operating pause — 6 September 2026
+
+The 13 September retirement below supersedes this pause and its resume path.
+The old root and drill must not receive an ordinary apply; it would recreate
+retired resources.
 
 At Joel's request the synthetic AWS financial stack is paused for the
 vocabulary refactor. EC2 `i-063c00d935d85d74f` is confirmed stopped; RDS
@@ -222,19 +226,18 @@ Exact identities and revisions are in the
 
 | Boundary | Current evidence | Remaining gap |
 | --- | --- | --- |
-| Web and backend | Reviewed branch deployed as `dpl_4pS5h6962eGWnXXNScgPQTrcmRcE` at app source `ae60dfa3d67818b24ed1fd9a392ece998d1005f8`; `/api/health` 200 proves server rendering boot recovered. | `/api/ready` 503 `deployment_manifest_invalid`: Convex probe skipped, catalogue absent, quoting unavailable, funding configured, sellable false. `/api/v1/release` 500 at the boot guard; source identity comes from deployment metadata and configured revision. Runtime logs identify only the six missing Formance settings. Branch remains unmerged to main, so automatic deployment can repeat the bundler regression. |
+| Web and backend | Reviewed branch deployed as `dpl_4pS5h6962eGWnXXNScgPQTrcmRcE` at app source `ae60dfa3d67818b24ed1fd9a392ece998d1005f8`; `/api/health` 200 proves server rendering boot recovered. | `/api/ready` 503 `deployment_manifest_invalid`: Convex probe skipped, catalogue absent, quoting unavailable, funding configured, sellable false. `/api/v1/release` 500 at the boot guard; source identity comes from deployment metadata and configured revision. Prior live runtime logs identify six missing Formance settings; all six are now staged in Vercel and configured in Convex, awaiting redeployment and runtime proof. Branch remains unmerged to main, so automatic deployment can repeat the bundler regression. |
 | Clerk | Production instance and four-event webhook created; user-saved signing secret deployed in Vercel. | Signed delivery and authenticated sign-in unverified. |
 | Stripe | Fresh restricted test readback key installed in Vercel production and Convex; tax, Checkout, PaymentIntent, Price and Refund SDK reads passed. GST tax rate bound in Convex; existing destinations remain enabled. | Saved Core Read permission and matching installed key suffix verified, but Accounts v2 list returns 403 `v2_account_storer_read`; platform account retrieval also returns 403. No successful connected-account canary, delivery/replay or purchase proof. |
 | Infisical | Two new dedicated alpha projects have separate, deletion-protected member identities and saved Vercel production OIDC trust. All nine variables bound in Vercel production. Unused No Access identity deleted and verified; old staging projects untouched. | Hosted OIDC authentication and secret CRUD unverified. Local CLI token had a development subject, so its canary aborted before creating a secret. Project isolation uses member roles because custom roles require a paid plan. |
-| Financial authority | Fresh alpha plan: 80 creates, six reads, no existing updates/deletes; fixed 50 GiB database without autoscaling. Bounded deployer-access stack is `CREATE_COMPLETE`; routine assumed-role CLI verified. | Plan not applied and Formance unprovisioned. Existing synthetic resources cannot be promoted; historical RPO 308 seconds exceeds the 300-second target. |
-| AWS cost and retention | Low-traffic alpha estimate USD 311.29/month; paused old baseline USD 79.17; combined estimate USD 390.45 before tax. Both old 50 GiB RDS instances and EC2 stopped; NAT active. Vaults have zero recovery points; source has five automated snapshots, latest 5 September; drill has none. | Old RDS auto-restarts 13 September 09:44–09:49 Perth. Budget blocks alpha apply pending approval to retire old resources with fresh snapshots and retained KMS, audit, state and evidence. Retirement is not authorized. |
-| Source checks | Committed app `ae60dfa3d67818b24ed1fd9a392ece998d1005f8` includes merged main and the bundler fix. Initial gate: 4,593 unit and 1,251 integration passed (five skipped, three todo); two provider-page E2E failures fixed. Subsequent checks: 24 E2E, ten accessibility and five focused unit passed; typecheck, build and CLI passed. | Full `npm run gate` has not been rerun green. Eight authenticated E2E checks skipped; authenticated sign-in and live purchases remain unproven. |
+| Financial authority | Fresh alpha apply completed (exit 0): 80 added, zero changed/destroyed; fixed 50 GiB database without autoscaling. Bounded deployer-access stack is `CREATE_COMPLETE`; routine assumed-role CLI verified. | Infrastructure is provisioned; bootstrap, ledger and all hosted canaries remain unverified. Historical RPO 308 seconds exceeds the 300-second target. |
+| AWS cost and retention | User-approved old AWS retirement completed: 24 resources removed; EC2 terminated, root disk absent, both RDS instances absent, NAT deleted and EIP absent. Three encrypted RDS snapshots and completed EBS snapshot retained under the enabled KMS key. | Budget decision resolved. Fresh alpha estimate is USD 311.29/month before tax, plus retained storage/account costs; the former combined paused-runtime estimate is superseded. Old root/drill ordinary apply would recreate retired resources. |
+| Source checks | Full `npm run gate` passed (exit 0) at `fa33461ce`: 4,594 unit, 1,251 integration, 24 E2E and ten accessibility passed; CLI/build passed. No app changes since deployed `ae60dfa3d`. | Five integration skipped, three todo and eight authenticated E2E skipped. Hosted authenticated sign-in and live purchases remain unproven. |
 
 Ten old Convex projects were deleted with the user's approval. Historical
 resource references are evidence, not current deployment targets. Next proof
-requires resolving the six missing Formance bindings, Stripe account access
-and the isolated ledger boundary, then verifying hosted OIDC/secret CRUD, readiness, signed
-events and authenticated journeys. Approval is pending to snapshot both old
-RDS instances and the host disk before retiring the old host, RDS, NAT and EIP;
-no deletion is authorized. The new web deployment restores server boot but
-readiness remains 503. Alpha must remain below ready until those checks succeed.
+requires deploying the six staged Formance bindings, resolving Stripe account
+access and completing the isolated ledger boundary, then verifying hosted OIDC/secret CRUD,
+readiness, signed events and authenticated journeys. Old AWS retirement is
+complete and all 80 alpha resources are provisioned. The hosted deployment still has
+readiness 503. Alpha must remain below ready until runtime checks succeed.
