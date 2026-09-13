@@ -270,6 +270,8 @@ export function validateDeploymentManifest(environment: DeploymentEnvironmentInp
   }
   const envClass = resolveEnvironment(environment, options.environment, add)
   const serviceMode = resolveServiceMode(environment)
+  const hostedAlpha = serviceMode === 'hosted_alpha'
+  const custodyDisabled = hostedAlpha && environment.AE_X402_CUSTODY_ENABLED === 'false'
   const production = envClass === 'production' || serviceMode === 'hosted_alpha'
   const package4Release = present(environment, 'AE_PACKAGE4_SANDBOX_DEPLOYMENT_PROFILE') === 'synthetic_vps_fixture'
   const sandboxMoney = package4Release || serviceMode === 'hosted_alpha'
@@ -286,7 +288,10 @@ export function validateDeploymentManifest(environment: DeploymentEnvironmentInp
   if (production) for (const name of forbiddenProductionNames) {
     if (present(environment, name) !== undefined) add('forbidden', 'production_local_or_fixture_configuration', [name], 'environment')
   }
-  for (const group of requiredProduction) if (production) requireGroup(environment, group, add)
+  for (const group of requiredProduction) if (production) {
+    if (custodyDisabled && group.scope === 'x402-payment') continue
+    requireGroup(environment, group, add)
+  }
   for (const group of package5ControlledRequirements) if (package5Controlled) requireGroup(environment, group, add)
   for (const group of conditional) if (group.trigger?.some((name) => present(environment, name)) === true) requireGroup(environment, group, add)
   if (production) validateProductionClerkCredentials(environment, add, package4Release)
@@ -294,9 +299,9 @@ export function validateDeploymentManifest(environment: DeploymentEnvironmentInp
   if (production) validateProductionFormanceConfiguration(environment, add, sandboxMoney)
   if (production) validateProductionBrowserSecurity(environment, add)
   if (production) validateSourceWriteAuthority(environment, add)
-  if (package5Controlled) validatePackage5Rollout(environment, add)
+  if (package5Controlled) validatePackage5Rollout(environment, add, hostedAlpha)
   for (const rule of fieldRules) validateField(environment, rule, production, add)
-  validateX402Custody(environment, add)
+  validateX402Custody(environment, add, custodyDisabled)
   validateX402RpcUrls(environment, add)
 
   const convex = present(environment, 'CONVEX_URL')
@@ -382,10 +387,11 @@ function requireGroup(environment: DeploymentEnvironmentInput, group: Requiremen
 function validatePackage5Rollout(
   environment: DeploymentEnvironmentInput,
   add: (kind: DeploymentFindingKind, code: string, names: readonly string[], scope: string) => void,
+  allowDisabled: boolean,
 ): void {
   for (const name of package5ControlledRequirements[0]!.names) {
     const value = present(environment, name)
-    if (value !== undefined && value !== 'true') {
+    if (value !== undefined && value !== 'true' && !(allowDisabled && value === 'false')) {
       add('malformed', 'package5_rollout_not_enabled', [name], 'package5-rollout')
     }
   }
@@ -523,9 +529,10 @@ function validateX402RpcUrls(
 function validateX402Custody(
   environment: DeploymentEnvironmentInput,
   add: (kind: DeploymentFindingKind, code: string, names: readonly string[], scope: string) => void,
+  custodyDisabled: boolean,
 ): void {
   const enabled = present(environment, 'AE_X402_CUSTODY_ENABLED')
-  if (enabled !== undefined && enabled !== 'true') {
+  if (enabled !== undefined && enabled !== 'true' && !custodyDisabled) {
     add('malformed', 'x402_custody_not_enabled', ['AE_X402_CUSTODY_ENABLED'], 'x402-payment')
   }
   const maxAtomic = present(environment, 'AE_X402_CUSTODY_MAX_ATOMIC')

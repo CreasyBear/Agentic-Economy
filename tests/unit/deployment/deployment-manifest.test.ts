@@ -67,6 +67,26 @@ function productionEnvironment(): Record<string, string> {
   }
 }
 
+function disabledHostedAlphaEnvironment(): Record<string, string> {
+  const environment = productionEnvironment()
+  for (const name of Object.keys(environment)) {
+    if (name.startsWith('CDP_') || name.startsWith('AE_X402_')) delete environment[name]
+  }
+  return {
+    ...environment,
+    AE_SERVICE_MODE: 'hosted_alpha',
+    STRIPE_SECRET_KEY: 'rk_test_alpha',
+    STRIPE_READBACK_KEY: 'rk_test_alpha_readback',
+    AE_FORMANCE_ENVIRONMENT: 'sandbox',
+    AE_X402_CUSTODY_ENABLED: 'false',
+    AE_PACKAGE5_WRITES_ENABLED: 'false',
+    AE_SUPPLY_HTTP_CREDENTIALS_ENABLED: 'false',
+    AE_SUPPLY_MCP_OAUTH_ENABLED: 'false',
+    AE_PROVIDER_OFFBOARDING_ENABLED: 'false',
+    AE_SCHEDULED_WORKLOADS_ENABLED: 'false',
+  }
+}
+
 describe('deployment manifest validator', () => {
   it('admits a complete production configuration and declares only real resources/probes', () => {
     const result = validateDeploymentManifest(productionEnvironment(), { nodeMajor: 22 })
@@ -340,6 +360,83 @@ describe('deployment manifest validator', () => {
         scope: 'stripe-money',
       }])
     }
+  })
+
+  it('admits hosted alpha with explicitly disabled custody, Provider features, and recurring work', () => {
+    expect(validateDeploymentManifest(disabledHostedAlphaEnvironment(), { nodeMajor: 22 }))
+      .toMatchObject({ ok: true, findings: [] })
+  })
+
+  it.each([
+    'AE_X402_CUSTODY_ENABLED',
+    'AE_PACKAGE5_WRITES_ENABLED',
+    'AE_SUPPLY_HTTP_CREDENTIALS_ENABLED',
+    'AE_SUPPLY_MCP_OAUTH_ENABLED',
+    'AE_PROVIDER_OFFBOARDING_ENABLED',
+  ])('requires an explicit valid hosted alpha switch for %s', (name) => {
+    for (const value of [undefined, '', ' ', 'FALSE', '0', 'invalid']) {
+      const result = validateDeploymentManifest({ ...disabledHostedAlphaEnvironment(), [name]: value })
+      expect(result.ok).toBe(false)
+      expect(result.findings).toContainEqual(expect.objectContaining({ names: [name] }))
+    }
+  })
+
+  it('requires the exact false custody switch to omit hosted alpha custody credentials', () => {
+    const result = validateDeploymentManifest({
+      ...disabledHostedAlphaEnvironment(), AE_X402_CUSTODY_ENABLED: 'false ',
+    })
+    expect(result.ok).toBe(false)
+    expect(result.findings).toContainEqual(expect.objectContaining({
+      code: 'x402_custody_not_enabled', names: ['AE_X402_CUSTODY_ENABLED'],
+    }))
+  })
+
+  it('requires full custody configuration when hosted alpha enables custody', () => {
+    const result = validateDeploymentManifest({
+      ...disabledHostedAlphaEnvironment(), AE_X402_CUSTODY_ENABLED: 'true',
+    })
+    expect(result.ok).toBe(false)
+    expect(result.findings.filter(({ code }) => code === 'x402_payment_custody_required')
+      .flatMap(({ names }) => names)).toEqual(expect.arrayContaining([
+      'CDP_API_KEY_ID', 'CDP_API_KEY_SECRET', 'CDP_WALLET_SECRET',
+      'AE_X402_CDP_ACCOUNT_NAME', 'AE_X402_CDP_EXPECTED_EVM_ADDRESS',
+      'AE_X402_CDP_ACCOUNT_POLICY_ID', 'AE_X402_CDP_PROJECT_POLICY_ID',
+      'AE_X402_CDP_POLICY_RULES_DIGEST', 'AE_X402_CDP_CREDENTIAL_GENERATION',
+      'AE_X402_CUSTODY_MAX_ATOMIC', 'AE_X402_CUSTODY_DAILY_MAX_ATOMIC', 'AE_X402_RPC_URLS_JSON',
+    ]))
+  })
+
+  it.each([
+    'AE_INFISICAL_CUSTOMER_PROJECT_ID',
+    'AE_INFISICAL_PLATFORM_MACHINE_IDENTITY_ID',
+    ...SOURCE_WRITE_FAMILIES.map((family) => `AE_SOURCE_WRITE_KEY_${family.toUpperCase()}`),
+  ])('retains disabled hosted alpha authority requirements for %s', (name) => {
+    const result = validateDeploymentManifest({ ...disabledHostedAlphaEnvironment(), [name]: undefined })
+    expect(result.ok).toBe(false)
+    expect(result.findings).toContainEqual(expect.objectContaining({ kind: 'missing', names: [name] }))
+  })
+
+  it.each([false, true])('keeps custody and Provider features required outside hosted alpha (synthetic fixture: %s)', (synthetic) => {
+    const result = validateDeploymentManifest({
+      ...disabledHostedAlphaEnvironment(),
+      AE_SERVICE_MODE: undefined,
+      ...(synthetic ? {
+        AE_PACKAGE4_SANDBOX_DEPLOYMENT_PROFILE: 'synthetic_vps_fixture',
+        VITE_CLERK_PUBLISHABLE_KEY: 'pk_test_release',
+        CLERK_SECRET_KEY: 'sk_test_release',
+      } : {
+        STRIPE_SECRET_KEY: 'rk_live_example',
+        STRIPE_READBACK_KEY: 'rk_live_readback',
+        AE_FORMANCE_ENVIRONMENT: 'production',
+      }),
+    })
+    expect(result.ok).toBe(false)
+    expect(result.findings).toContainEqual(expect.objectContaining({ code: 'x402_custody_not_enabled' }))
+    expect(result.findings.filter(({ code }) => code === 'package5_rollout_not_enabled')
+      .flatMap(({ names }) => names)).toEqual(expect.arrayContaining([
+      'AE_PACKAGE5_WRITES_ENABLED', 'AE_SUPPLY_HTTP_CREDENTIALS_ENABLED',
+      'AE_SUPPLY_MCP_OAUTH_ENABLED', 'AE_PROVIDER_OFFBOARDING_ENABLED',
+    ]))
   })
 
   it.each([
