@@ -258,6 +258,22 @@ export const DEPLOYMENT_MANIFEST = Object.freeze({
   ]),
 })
 
+export function selectDeploymentRequirementGroups(
+  environment: DeploymentEnvironmentInput,
+  envClass: DeploymentEnvironment,
+): readonly RequirementGroup[] {
+  const hostedAlpha = resolveServiceMode(environment) === 'hosted_alpha'
+  const production = envClass === 'production' || hostedAlpha
+  const package4Release = present(environment, 'AE_PACKAGE4_SANDBOX_DEPLOYMENT_PROFILE') === 'synthetic_vps_fixture'
+  const custodyDisabled = hostedAlpha && environment.AE_X402_CUSTODY_ENABLED === 'false'
+  return [
+    ...(production ? requiredProduction.map((group) => custodyDisabled && group.scope === 'x402-payment'
+      ? { ...group, names: ['AE_X402_CUSTODY_ENABLED'] }
+      : group) : []),
+    ...(production || package4Release ? package5ControlledRequirements : []),
+  ]
+}
+
 export function validateDeploymentManifest(environment: DeploymentEnvironmentInput = {}, options: ValidateDeploymentOptions = {}): DeploymentValidationResult {
   const findings: DeploymentFinding[] = []
   const seen = new Set<string>()
@@ -288,11 +304,7 @@ export function validateDeploymentManifest(environment: DeploymentEnvironmentInp
   if (production) for (const name of forbiddenProductionNames) {
     if (present(environment, name) !== undefined) add('forbidden', 'production_local_or_fixture_configuration', [name], 'environment')
   }
-  for (const group of requiredProduction) if (production) {
-    if (custodyDisabled && group.scope === 'x402-payment') continue
-    requireGroup(environment, group, add)
-  }
-  for (const group of package5ControlledRequirements) if (package5Controlled) requireGroup(environment, group, add)
+  for (const group of selectDeploymentRequirementGroups(environment, envClass)) requireGroup(environment, group, add)
   for (const group of conditional) if (group.trigger?.some((name) => present(environment, name)) === true) requireGroup(environment, group, add)
   if (production) validateProductionClerkCredentials(environment, add, package4Release)
   if (production) validateProductionStripeCredentials(environment, add, sandboxMoney)
