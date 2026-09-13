@@ -219,9 +219,22 @@ readback key, Stripe destinations and Cloudflare alerts.
 were enabled with empty custom credentials and marked “Setup required”. Both
 connections were disabled through Clerk; the live sign-in form now shows email
 without those broken social buttons. No custom authentication code was added.
-A dedicated Google project, `agentic-economy-authentication`, is created; its
-consent form is prepared but awaits the browser-required policy confirmation.
-Google OAuth client creation, credential binding and actual sign-in are pending.
+The replacement Google project, `aecon-authentication`, is created under the
+`agentic-economy.ai` organisation with `joel@agentic-economy.ai` as its contact.
+The user approved Google's policy for that business account. Its consent
+configuration and web OAuth client are created, restricted to the app origin
+and Clerk callback. Joel saved the credentials in Clerk; Google was enabled and
+real sign-in completed with the business account. The authenticated account page
+then failed with `NoAuthProvider`: the hosted Convex deployment correctly trusts
+`https://clerk.aecon.ai` with application ID `convex`, but the official Convex
+integration was disabled in production Clerk. It is now activated with explicit
+approval. Signing out and back in obtains fresh claims; Account & security,
+Credit and the Provider workspace now load successfully against the hosted
+backend. Google's branding links point to the existing public home, privacy and
+terms pages, each checked with HTTP 200. The earlier personal-account
+project, `agentic-economy-authentication`, remains unused and unconnected, pending
+retirement. This verifies authentication and these initial page loads, not funding
+or a paid Call. Initial copy papercut: the Provider workspace says “after an Tool”.
 
 **13 September testnet integration:** the dedicated Coinbase alpha key and
 Wallet Secret are provisioned. Official SDK reads verify the buyer and Provider

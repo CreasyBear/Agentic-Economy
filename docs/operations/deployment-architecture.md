@@ -132,6 +132,20 @@ The reusable environment module declares:
 The deployment intentionally excludes Formance Payments, Auth, Console,
 Wallets, Flows, Webhooks, and Reconciliation.
 
+## Hosted alpha Google sign-in boundary
+
+The Google web OAuth client belongs to `aecon-authentication` in the
+`agentic-economy.ai` organisation. Its support and owner contact is
+`joel@agentic-economy.ai`; its browser origin is `https://app.aecon.ai` and its
+only callback is `https://clerk.aecon.ai/v1/oauth_callback`. Clerk retains the
+sign-in flow and requests only OpenID, email and profile identity scopes.
+Client creation, Clerk credential binding and actual Google sign-in are verified.
+The Convex deployment trusts that issuer with application ID `convex`; Clerk's
+production Convex integration is enabled and adds the required audience claim.
+A fresh sign-in verified authenticated Account & security, Credit and Provider
+workspace page loads. No application authentication implementation was replaced.
+The unused personal-account project is not an application dependency.
+
 ## Stripe event boundary
 
 The snapshot endpoint accepts only Checkout completion/async outcome and refund

@@ -431,15 +431,28 @@ hostedAlphaReadback:
     socialSignIn:
       reportedFailure: google_400_invalid_request_missing_client_id
       rootCause: google_and_github_enabled_without_production_oauth_credentials
-      mitigation: both_unconfigured_connections_disabled_in_clerk
-      liveSignIn: email_form_loaded_social_buttons_absent
+      mitigation: github_disabled_google_reconfigured_with_business_credentials
+      liveSignIn: google_oauth_completed_authenticated_owner_settings_reached
       googleCloudProjectName: Agentic Economy Authentication
-      googleCloudProjectId: agentic-economy-authentication
+      googleCloudProjectId: aecon-authentication
+      googleCloudOrganization: agentic-economy.ai
+      googleCloudOrganizationId: '366790865037'
+      googleCloudOwnerContact: joel@agentic-economy.ai
       googleCloudProjectCreation: verified
-      googleConsentConfiguration: prepared_pending_user_policy_confirmation
-      googleOAuthClient: not_created
+      googleConsentConfiguration: created_with_user_approved_policy
+      googleOAuthClient: user_saved_in_clerk_enabled_signin_verified
+      googleOAuthClientId: 986306197538-fgpen9v8r3h4c06cpp1r6npgh0lbks73.apps.googleusercontent.com
+      googleOAuthClientName: Agentic Economy web sign-in
+      googleOAuthJavascriptOrigin: https://app.aecon.ai
+      supersededPersonalGoogleProject: agentic-economy-authentication
+      supersededPersonalGoogleProjectStatus: unused_unconnected_pending_retirement
       intendedRedirectUri: https://clerk.aecon.ai/v1/oauth_callback
       intendedScopes: [openid, email, profile]
+      convexIntegration: enabled_in_production_clerk
+      convexAuthProviderReadback: issuer_clerk.aecon.ai_application_id_convex
+      authenticatedPageFailure: resolved_by_official_convex_integration_and_fresh_signin
+      authenticatedPagesVerified: [/owner/settings, /owner/credit, /owner/operations]
+      googleBrandingLinks: saved_public_home_privacy_terms
       codeChangeRequired: false
   processor:
     provider: stripe
