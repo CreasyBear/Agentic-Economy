@@ -373,9 +373,9 @@ hostedAlphaReadback:
     projectId: prj_dK5mDpjBYuAXMwvLr0pWO0h8DoH9
     scope: creasybears-projects
     canonicalUrl: https://app.aecon.ai
-    observedDeploymentId: dpl_EoeWXuiKTRmesU5yiQ6CCdYbfkwS
-    deploymentUrl: https://agentic-economy-1oe1xneon-creasybears-projects.vercel.app
-    observedSourceRevision: 1760881d8f7a6daab058fd15a6a909db3586a8a7
+    observedDeploymentId: dpl_GB2eVJ8aCiWVMNKNQG7MA31FNmwe
+    deploymentUrl: https://agentic-economy-74m5cuhiu-creasybears-projects.vercel.app
+    observedSourceRevision: d47a0e872ae18e18bda581deacff145a3b554d06
     healthHttp: 200
     serverRenderingBoot: fixed
     readyHttp: 503
@@ -383,15 +383,13 @@ hostedAlphaReadback:
     exactReadinessDiagnostic:
       source: private_runtime_logs
       findings:
-        CLERK_WEBHOOK_SIGNING_SECRET: standard_base64_format_rejected
         STRIPE_SECRET_KEY: wrong_key_type
-        AE_X402_RPC_URLS_JSON: malformed
-        AE_SECRET_LIFECYCLE_RPC_TOKEN: unknown_manifest_variable
-    stagedConfiguration:
+      clearedFindings: [CLERK_WEBHOOK_SIGNING_SECRET, AE_X402_RPC_URLS_JSON, AE_SECRET_LIFECYCLE_RPC_TOKEN]
+    appliedConfiguration:
       vercelProductionCustodyEnabled: false_explicitly_set
       removedInactiveVariable: AE_X402_RPC_URLS_JSON
       officialCliExit: 0
-      redeployment: pending_credential_batch
+      redeployment: verified_health_and_release_200
     sellable: false
     releaseHttp: 200
     formanceBindings: all_six_active
@@ -646,6 +644,9 @@ hostedAlphaReadback:
       custodialSandbox: simulated_balances_not_testnet_settlement
     referenceProvider:
       projectId: prj_gyaX8fy0abiwTFfvfqnqrn71Al8p
+      projectName: agentic-economy-sandbox-tools
+      rename: official_cli_and_exact_id_readback_verified
+      publicOriginMigration: pending_complete_configuration_and_redeployment
       existingProjectReused: true
       publicOrigin: https://package5-reference-provider.vercel.app
       preBindingHealthHttp: 500
@@ -662,7 +663,12 @@ hostedAlphaReadback:
     treasuryObserver: existing_official_cdp_sdk_workload
     testnetSeedReadiness: blocked_authority_stale_workload_owner
     testnetSeedTestLimitation: simulated_observation_bypasses_real_probe_authority
-    ownerAdmissionAlternative: under_source_review
+    ownerAdmissionAlternative:
+      path: human_owned_provider_business_x402_preview_connect_publish
+      verification: source_supported_not_runtime_proven
+      stripeAccountsV2Required: false
+      sourceWritesFlag: AE_PACKAGE5_WRITES_ENABLED
+      requirements: [human_signup, controlled_payee_claim_signature, valid_bazaar_402_declaration]
     custodyPolicyProvisioning:
       rules: existing_cdpX402SellerCanaryPolicyRules_generator
       digest: existing_cdpX402PolicyRulesDigest_from_provider_readback
@@ -676,7 +682,7 @@ hostedAlphaReadback:
     auditProtocol: docs/operations/alpha-validation-plan.md
     fullColdUserJourneyAudits: pending_integration_baseline
   sourceVerification:
-    latestGateAttempt:
+    previousFailedGateAttempt:
       sourceRevision: 024f14067
       log: alpha-current-source-gate.log
       gateExit: 1
@@ -685,26 +691,28 @@ hostedAlphaReadback:
       e2ePassed: 23
       e2eFailed: 1
       failure: compact_support_keyboard_diagnostics
-      diagnosis: assigned_finite_cold_agent
-    sourceRevision: df0e62862731c9d9f6c8f7b8eaeda77581540b51
+      diagnosis: hydration_race_and_repeated_toggle_in_test
+      fixedBy: d47a0e872ae18e18bda581deacff145a3b554d06
+    sourceRevision: d47a0e872ae18e18bda581deacff145a3b554d06
     nodeVersion: 22.22.0
     npmVersion: 11.5.1
     fullGate: passed
     gateCommand: npm_run_gate
     gateExit: 0
-    gateLog: alpha-final-integration-gate.log
-    unitPassed: 4643
+    gateLog: alpha-verified-source-gate.log
+    unitPassed: 4658
     integrationPassed: 1251
     e2ePassed: 24
+    authenticatedE2eSkipped: 8
     accessibilityPassed: 10
-    pendingFixes:
+    validatedFixes:
       validatorCommit: 14fd68b0fe8f2fca7e2c187fe91ac187f9f08d71
       validatorChanges: standard_base64_clerk_format_and_registered_lifecycle_rpc_token
       fixtureAndExampleCommit: 5dce3419b1a3433988e4ada06eefe8884bf09367
       focusedTestsPassed: 125
       environmentExampleCheck: passed
-      deployment: pending_credential_batch
-      latestHeadFullGate: not_claimed
+      deployment: verified
+      applicationSourceFullGate: passed
     previousGate:
       sourceRevision: fa33461cef107e75f15b1b6749c58cf6d99138c4
       unitPassed: 4594

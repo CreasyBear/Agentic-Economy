@@ -228,15 +228,17 @@ claim. No paid Call is proven. The finite cold-agent audit protocol is recorded
 in [alpha-validation-plan.md](alpha-validation-plan.md); full user-journey
 audits await the integration baseline.
 
-The latest release-gate attempt passed 4,658 unit and 1,251 integration tests
-but failed the compact Support keyboard check. A finite agent is investigating
-the exact failure; later gate stages are not claimed for this attempt.
+The initial release-gate attempt found a compact Support test hydration race.
+The test now waits for the existing hydration marker and activates its toggle
+once. Full gate at `d47a0e872` subsequently passed: 4,658 unit, 1,251 integration,
+24 browser and ten accessibility tests; eight authenticated cases are skipped.
 
 The testnet seed also cannot pass its actual readiness authority check: its
 workload owner fails the ordinary human-owner requirement. Existing seed tests
 simulate an observation and do not establish real probing. The supported
-human-owner alternative is under review; no authority bypass is approved by
-this evidence. Custody policy generation exists in source, but provider-side
+human-owner alternative is source-supported through x402 preview, signed
+payee claim, connection and publication without Stripe Accounts v2. It remains
+runtime-unverified; no authority bypass was added. Custody policy generation exists in source, but provider-side
 rules alone do not enforce an aggregate daily cap or explicit chain ID.
 
 **Updated 13 September: alpha is deployed but not ready.** Authority is
@@ -251,13 +253,13 @@ Exact identities and revisions are in the
 
 | Boundary | Current evidence | Remaining gap |
 | --- | --- | --- |
-| Web and backend | Deployment `dpl_EoeWXuiKTRmesU5yiQ6CCdYbfkwS`, source `1760881d8f7a6daab058fd15a6a909db3586a8a7`; health/release 200, six Formance settings active. | Readiness 503. Private logs identify four findings: Clerk Base64 validation, wrong Stripe command-key type, malformed inactive x402 RPC JSON and an undeclared lifecycle RPC token. Validator fixes and Vercel custody-disabled/RPC-removal changes await a credential batch and redeployment. |
+| Web and backend | Deployment `dpl_GB2eVJ8aCiWVMNKNQG7MA31FNmwe`, source `d47a0e872ae18e18bda581deacff145a3b554d06`; health/release 200, six Formance settings active. | Readiness 503. Private logs identify only the wrong Stripe command-key type. The Clerk, inactive RPC and lifecycle-token findings are cleared by the verified deployment. |
 | Clerk | CSP fix deployed; Clerk form loads. Production instance and signed-webhook configuration remain recorded. | User signup, password and email steps pending; signed delivery and authenticated journey unverified. |
 | Stripe | Fresh restricted test readback key installed in Vercel production and Convex; tax, Checkout, PaymentIntent, Price and Refund SDK reads passed. GST tax rate bound in Convex; existing destinations remain enabled. | Saved Core Read permission and matching installed key suffix verified, but Accounts v2 list returns 403 `v2_account_storer_read`; platform account retrieval also returns 403. Restricted command key still has its old label ending `-command`; rename did not persist and permissions were unchanged. Transfer to the empty mode-0600 credential file is pending. No successful connected-account canary, delivery/replay or purchase proof. |
 | Infisical | Two new dedicated alpha projects have separate, deletion-protected member identities and saved Vercel production OIDC trust. All nine variables bound in Vercel production. Unused No Access identity deleted and verified; old staging projects untouched. | Hosted OIDC authentication and secret CRUD unverified. Local CLI token had a development subject, so its canary aborted before creating a secret. Project isolation uses member roles because custom roles require a paid plan. |
 | Financial authority | Reviewed bootstrap repair replaced the host; cloud-init complete, k3s/reconcile/timer active, required replicas ready; tunnel healthy with eight connections. Formance health ready; schema v1.3.0 installed and repeat replayed. Final pinned OpenTofu plan: no changes, exit 0. | End-to-end purchase unproven. SNS email subscription awaits confirmation. Historical RPO 308 seconds exceeds the 300-second target. |
 | AWS cost and retention | User-approved old AWS retirement completed: 24 resources removed; EC2 terminated, root disk absent, both RDS instances absent, NAT deleted and EIP absent. Three encrypted RDS snapshots and completed EBS snapshot retained under the enabled KMS key. | Budget decision resolved. Fresh alpha estimate is USD 311.29/month before tax, plus retained storage/account costs; the former combined paused-runtime estimate is superseded. Old root/drill ordinary apply would recreate retired resources. |
-| Source checks | Full gate at `df0e628` passed: 4,643 unit, 1,251 integration, 24 E2E and ten accessibility. Later fixes `14fd68b` and `5dce3419b`: 125 focused tests and environment-example check passed. | Later fixes are not deployed; no full-gate claim for latest HEAD. Source checks do not establish authenticated or purchase journeys. |
+| Source checks | Full gate at deployed `d47a0e872` passed: 4,658 unit, 1,251 integration, 24 E2E and ten accessibility. The Support keyboard test now waits for hydration and activates once. | Eight authenticated E2E cases remain skipped. Source checks do not establish authenticated or purchase journeys. |
 
 Ten old Convex projects were deleted with the user's approval. Historical
 resource references are evidence, not current deployment targets. The seeded

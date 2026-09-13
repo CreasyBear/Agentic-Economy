@@ -270,8 +270,14 @@ The subsequent `npm run gate` attempt on application source `024f14067`
 passed 4,658 unit and 1,251 integration tests, then stopped at one compact
 Support keyboard E2E failure (23 browser tests passed, eight skipped).
 Log: `/private/tmp/ae-alpha-plan-t6sl85yp/alpha-current-source-gate.log`.
-The failing diagnostics accordion assertion is under bounded investigation;
-this attempt is not a full-gate pass.
+The diagnostics accordion failure was a test hydration race compounded by
+repeated Enter toggles. Commit `d47a0e872ae18e18bda581deacff145a3b554d06`
+waits for the existing hydration marker and activates once. Ten repeated
+compact checks, four full-file viewport checks and three Support unit tests
+passed. The subsequent full `npm run gate` passed with 4,658 unit, 1,251
+integration, 24 E2E and ten accessibility tests; eight authenticated E2E
+cases remained skipped. Log:
+`/private/tmp/ae-alpha-plan-t6sl85yp/alpha-verified-source-gate.log`.
 
 The follow-up authority review corrected the initial testnet-seed assessment:
 `publishSeededSandboxTestnetTool` uses the common seed publisher, which creates
@@ -279,8 +285,17 @@ workload-owned curated supply. `capabilitySupplyProbes` requires an active
 human owner outside the narrowly defined facilitator-discovery path. Therefore
 the testnet seed also fails real probing with `authority_stale`. Its integration
 test directly simulates a readiness observation and does not prove that path.
-The genuine owner-admission alternative is being checked; no authority
-exception, ownership mutation or forged readiness was introduced.
+The existing human-owner alternative supports a new Provider workspace, x402
+preview, connection with an EIP-191 claim signed by the controlled payee,
+and publication with source x402 pricing. It requires the source-writes flag
+and a valid public Bazaar 402 declaration, but not Stripe Accounts v2. This is
+source evidence, not a completed runtime journey. No authority exception,
+ownership mutation or forged readiness was introduced.
+
+The existing reference-provider project was renamed through the official CLI
+to `agentic-economy-sandbox-tools`. Readback preserved exact project ID
+`prj_gyaX8fy0abiwTFfvfqnqrn71Al8p`, root directory and Node 22. Public-origin
+migration remains pending complete wallet configuration and redeployment.
 
 The custody review found existing rule and digest generators:
 `cdpX402SellerCanaryPolicyRules` and `cdpX402PolicyRulesDigest`. Provisioning
@@ -300,25 +315,26 @@ Earlier commands and receipts remain historical, not an active runbook.
   workloads are disabled; provider production labels do not change that scope.
 - **Vercel:** project `agentic-economy`,
   `prj_dK5mDpjBYuAXMwvLr0pWO0h8DoH9`, scope `creasybears-projects`;
-  `https://app.aecon.ai` points to `dpl_EoeWXuiKTRmesU5yiQ6CCdYbfkwS`, also at
-  `https://agentic-economy-1oe1xneon-creasybears-projects.vercel.app`, source
-  `1760881d8f7a6daab058fd15a6a909db3586a8a7`. All six Formance settings are
+  `https://app.aecon.ai` points to `dpl_GB2eVJ8aCiWVMNKNQG7MA31FNmwe`, also at
+  `https://agentic-economy-74m5cuhiu-creasybears-projects.vercel.app`, source
+  `d47a0e872ae18e18bda581deacff145a3b554d06`. All six Formance settings are
   active in this deployment.
 - **Convex:** team `joel-chan`, new project `agentic-economy`, development
   `cool-crab-306`, provider production `cautious-zebra-473`; source
   `fbd22a563f204312f26aa9b8a53c55ca5969e02f` deployed. Ten old projects were
   deleted with the user's approval. Previous targets are historical only.
 - **Observed HTTP and pending fixes:** health/release return 200; readiness
-  remains 503 `deployment_manifest_invalid`. Private logs now identify exactly
-  four findings: `CLERK_WEBHOOK_SIGNING_SECRET` standard-Base64 format rejected,
-  `STRIPE_SECRET_KEY` wrong key type, `AE_X402_RPC_URLS_JSON` malformed and
-  `AE_SECRET_LIFECYCLE_RPC_TOKEN` unknown to the manifest. Source `14fd68b`
+  remains 503 `deployment_manifest_invalid`. Private logs now identify only
+  `STRIPE_SECRET_KEY` with the wrong key type. Source `14fd68b`
   accepts the actual standard-Base64 Clerk format and registers the lifecycle
   RPC token; `5dce3419b` updates the generated environment example and valid
-  synthetic Clerk fixture. These fixes are not deployed. Vercel production
+  synthetic Clerk fixture. These fixes are deployed. Vercel production
   custody was explicitly set false and the malformed inactive RPC variable
-  removed (official CLIs exit 0); changes are staged pending the credential
-  batch and redeployment. The branch remains unmerged to main.
+  removed (official CLIs exit 0); these changes are active and the other three
+  readiness findings cleared. Deployment log:
+  `/private/tmp/ae-alpha-plan-t6sl85yp/alpha-validated-web-deploy.log`.
+  The restricted Stripe command-key handoff remains pending. The branch
+  remains unmerged to main.
 - **Exact Convex environment reads:** `STRIPE_SECRET_KEY` and
   `AE_X402_RPC_URLS_JSON` are missing. This observation does not establish
   whether Convex has a required command-key consumer.
