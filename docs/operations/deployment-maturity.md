@@ -343,3 +343,27 @@ Convex named reads confirm `STRIPE_SECRET_KEY` and `AE_X402_RPC_URLS_JSON`
 absent; absence alone does not establish a required Convex command consumer.
 User signup, SNS email confirmation, hosted OIDC/secret CRUD, signed events and
 a supported paid purchase remain pending. Alpha remains below ready.
+
+
+### Stripe sandbox funding verified — 13 September, after command-key handoff
+
+This readback supersedes the earlier Stripe command-key and readiness blockers.
+The restricted sandbox command key is installed in the alpha web app; the
+temporary credential file was removed. Deployment
+`dpl_4D25Fo8R3XGzup57z4dvxRsg4QmJ` serves source
+`584cba57facc3977640930167a1c34620e1464e3` at app.aecon.ai. Health, release and
+readiness return 200; configuration and Convex report ready.
+
+Sandbox funding is **VERIFIED** through the signed-in app, Stripe Checkout,
+the separate SDK readback key, the durable webhook worker and Account balance.
+A synthetic card paid A$10.55; the Account received A$10.00 and has a funding
+receipt and A$0.55 fee document. The matching webhook was applied in 5.4 seconds.
+Refreshing the payment return retained A$10.00 and the same two documents.
+Exact payment and event references are in the deployment registry and cutover
+evidence. No real payment was made.
+
+CI run `34748670853` passed both required Kernel jobs. Optional authenticated
+lifecycle, paid gateway and chat jobs were skipped. Alpha is still not ready:
+commercial readiness reports no admitted catalogue, quoting unavailable and
+`sellable: false`. Tool publication and a paid sandbox Call remain unverified,
+as do forced webhook replay, refunds and document rendering.

@@ -594,3 +594,45 @@ The temporary verification download was removed. Readiness remains 503; scoped
 runtime logs confirm the sole manifest finding is `stripe_secret_key_invalid`
 for `STRIPE_SECRET_KEY`. The prior deployment
 `dpl_CUppxcpy5G9c2vedJdf3Cp37wbbS` remains the deliberate rollback reference.
+
+
+### Stripe sandbox funding verified — 13 September
+
+The user-supplied restricted sandbox command key authenticated through the
+official Stripe SDK and was installed as Vercel production `STRIPE_SECRET_KEY`
+in project `prj_dK5mDpjBYuAXMwvLr0pWO0h8DoH9`; the official CLI returned zero.
+The temporary key file was deleted. Permissions were unchanged; tax-rate reads
+remain the responsibility of the separate readback key.
+
+An official redeploy of existing deployment
+`dpl_5FnYpA6uDBdY4htjXm7h1HT1sEbn` produced
+`dpl_4D25Fo8R3XGzup57z4dvxRsg4QmJ`, READY at
+`https://agentic-economy-9c8k210jb-creasybears-projects.vercel.app`. The project
+production target and app.aecon.ai probes agree. Health, release and readiness
+return 200; source remains `584cba57facc3977640930167a1c34620e1464e3`. The previous
+deployment is retained as the rollback reference. No application code changed.
+
+The signed-in business Account began an A$10 funding request. Stripe's sandbox
+Checkout displayed A$10 principal plus A$0.55 fee including A$0.05 GST. Payment
+used Stripe's synthetic test card and synthetic contact data, with payment-detail
+saving disabled. Official SDK readback through the Convex readback key confirms:
+
+- Session: `cs_test_b1xQOxgNfXYna083i4BTa5PIvbTNhRciseDl95brtGrkZcPfSyxT3IXQ5i`.
+- Payment: `pi_3UF9SY70N4UjLqHt0Pfx80wX`; complete, paid, `livemode: false`, AUD 1055 minor units.
+- Funding command: `sha256:5d27a4e104c9d657107ff81b14b618508e3ac61f1e78f4ba4758e0c2401f2963`.
+- Webhook: `evt_1UF9SZ70N4UjLqHtsVtI98CB`, `checkout.session.completed`, inbox state `applied`.
+
+Exact-session Convex reads confirm the command succeeded with principal
+10000000 and total 10550000 at exponent six. The webhook was received at
+1789290748371 and completed at 1789290753783 (5.412 seconds). The browser return
+showed Payment verified, A$10.00 available, funding receipt and service-fee
+document Ready, and no reconciliation differences. Reloading retained the same
+balance and two document references. Forced event replay, refund and document
+rendering were not exercised.
+
+CI run `34748670853` succeeded for source
+`a796682575cbb8d0c14d94c3a109ada04c909800`; both required Kernel jobs passed.
+Optional authenticated lifecycle, paid gateway and chat jobs were skipped.
+Commercial readiness still reports catalogue absent, quoting unavailable,
+funding configured and sellable false. Sandbox funding is verified; Tool
+publication and a paid sandbox Call remain outstanding.
