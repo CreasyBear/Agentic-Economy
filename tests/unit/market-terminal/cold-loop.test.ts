@@ -1,5 +1,5 @@
 import * as childProcess from 'node:child_process'
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:http'
 import { tmpdir } from 'node:os'
 import { delimiter, join } from 'node:path'
@@ -23,6 +23,7 @@ import { runStatusCommand } from '../../../tools/ae/commands/status'
 import { runCallCommand } from '../../../tools/ae/commands/call'
 import { parseArgs, type CliOptions } from '../../../tools/ae/lib/args'
 import { CliFailure } from '../../../tools/ae/lib/output'
+import { withPendingConnect } from '../../../tools/ae/lib/pending-connect'
 import { storeConnection } from '../../../tools/ae/lib/config'
 import { CALL_ROUTE_CONTRACT } from '@/modules/capability-execution/call-entry'
 import { TOOL_QUOTE_PATH } from '@/modules/capability-execution/quote'
@@ -1083,6 +1084,85 @@ describe('external-agent Market Tool cold loop', () => {
     })
   })
 
+  it.each([false, true])('resumes an approval after the CLI wait; expired=%s creates a fresh request', async (expired) => {
+    let now = Date.now()
+    vi.spyOn(Date, 'now').mockImplementation(() => now)
+    const output = captureStdout()
+    const diagnostics = captureStderr()
+    let registrations = 0
+    let polls = 0
+    const polledCodes: string[] = []
+    const fetchMock = vi.fn<typeof fetch>().mockImplementation(async (url, init) => {
+      if (String(url).endsWith('/oauth/register')) {
+        registrations += 1
+        return responseJson({ client_id: `client-${registrations}` })
+      }
+      if (String(url).endsWith('/oauth/device_authorization')) return responseJson({
+        device_code: `private-device-${registrations}`, user_code: `CODE-${registrations}`,
+        verification_uri: 'https://market.example/agent-access/authorize', expires_in: 600, interval: 5,
+      })
+      if (String(url).endsWith('/oauth/token')) {
+        polledCodes.push(new URLSearchParams(String(init?.body)).get('device_code')!)
+        polls += 1
+        if (polls === 1) {
+          now += 61_000
+          return Response.json({ error: 'authorization_pending' }, { status: 400 })
+        }
+        return responseJson({ access_token: 'private-issued-key', scope: 'market_tools:call customer_requests:spending_policy' })
+      }
+      return responseJson(connectedAccount())
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    try {
+      await runConnectCommand([], options)
+      expect(JSON.parse(output.read()).kind).toBe('pending')
+      const pendingDirectory = join(testConfigDirectory, 'pending-connections')
+      const files = readdirSync(pendingDirectory)
+      expect(files).toHaveLength(1)
+      expect(statSync(join(pendingDirectory, files[0]!)).mode & 0o777).toBe(0o600)
+      expect(statSync(pendingDirectory).mode & 0o777).toBe(0o700)
+      now += expired ? 600_000 : 5_000
+      await runConnectCommand([], options)
+      expect(registrations).toBe(expired ? 2 : 1)
+      expect(polledCodes).toEqual(['private-device-1', expired ? 'private-device-2' : 'private-device-1'])
+      expect(output.read()).toContain('"kind": "connected"')
+      expect(readdirSync(pendingDirectory)).toHaveLength(0)
+      expect(output.read() + diagnostics.read()).not.toMatch(/private-device|private-issued-key/)
+    } finally { output.restore(); diagnostics.restore() }
+  })
+
+  it('does not resume a consumed device code when issued-key validation fails', async () => {
+    const output = captureStdout()
+    const diagnostics = captureStderr()
+    const fetchMock = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(responseJson({ client_id: 'client' }))
+      .mockResolvedValueOnce(responseJson({ device_code: 'private-device', user_code: 'CODE',
+        verification_uri: 'https://market.example/agent-access/authorize', expires_in: 600, interval: 5 }))
+      .mockResolvedValueOnce(responseJson({ access_token: 'private-issued-key' }))
+      .mockResolvedValueOnce(Response.json({ error: 'temporarily_unavailable' }, { status: 503 }))
+    vi.stubGlobal('fetch', fetchMock)
+    try {
+      await expect(runConnectCommand([], options)).rejects.toMatchObject({ code: 'connect_validation_unavailable' })
+      expect(readdirSync(join(testConfigDirectory, 'pending-connections'))).toHaveLength(0)
+      expect(output.read() + diagnostics.read()).not.toMatch(/private-device|private-issued-key/)
+    } finally { output.restore(); diagnostics.restore() }
+  })
+
+  it('isolates pending approvals by origin, role and environment and excludes concurrent pollers', async () => {
+    const sandbox = { ...options, environment: 'sandbox' }
+    await withPendingConnect(sandbox, async (store) => {
+      store.write({ clientId: 'client', deviceCode: 'private-device', userCode: 'CODE',
+        verificationUri: 'https://market.example/agent-access/authorize', expiresAt: Date.now() + 600_000,
+        intervalMs: 5_000, nextPollAt: 0, provider: false })
+      await expect(withPendingConnect(sandbox, async () => undefined)).rejects.toMatchObject({ code: 'connect_in_progress' })
+    })
+    for (const other of [{ ...sandbox, baseUrl: 'https://other.example' }, { ...sandbox, provider: true },
+      { ...sandbox, environment: 'production' }, options]) {
+      await withPendingConnect(other, async (store) => expect(store.read()).toBeUndefined())
+    }
+    await withPendingConnect(sandbox, async (store) => expect(store.read()?.userCode).toBe('CODE'))
+  })
+
   it('uses the existing OAuth device flow and returns the one-time AE credential', async () => {
     const output = captureStdout()
     const fetchMock = vi.fn<typeof fetch>()
@@ -1512,7 +1592,7 @@ describe('external-agent Market Tool cold loop', () => {
     expect(result.nextAction).toBe('Run ' + expectedCommand + '.')
   })
 
-  it('emits an origin-preserving JSON continuation when OAuth approval times out', async () => {
+  it('clears an expired approval and returns an origin-preserving restart command', async () => {
     const selectedOrigin = 'http://[::1]:3210'
     const output = captureStdout()
     const diagnostics = captureStderr()
@@ -1544,9 +1624,13 @@ describe('external-agent Market Tool cold loop', () => {
         baseUrlSource: 'flag',
         provider: true,
       })
+      const expired = expect(connect).rejects.toMatchObject({
+        code: 'expired_token',
+        nextCommand: "ae connect --provider --base-url 'http://[::1]:3210' --json",
+      })
       await tokenFetch
       await vi.advanceTimersByTimeAsync(1_000)
-      await connect
+      await expired
     } finally {
       vi.useRealTimers()
       output.restore()
@@ -1554,10 +1638,8 @@ describe('external-agent Market Tool cold loop', () => {
       vi.unstubAllGlobals()
     }
 
-    expect(JSON.parse(output.read())).toMatchObject({
-      kind: 'pending',
-      nextCommand: "ae connect --provider --base-url 'http://[::1]:3210' --json",
-    })
+    expect(output.read()).toBe('')
+    expect(readdirSync(join(testConfigDirectory, 'pending-connections'))).toHaveLength(0)
   })
 
   it('follows a connected continuation to the selected IPv6 loopback origin in a fresh process', async () => {
