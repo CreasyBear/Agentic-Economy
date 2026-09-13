@@ -226,18 +226,21 @@ Exact identities and revisions are in the
 
 | Boundary | Current evidence | Remaining gap |
 | --- | --- | --- |
-| Web and backend | Reviewed branch deployed as `dpl_4pS5h6962eGWnXXNScgPQTrcmRcE` at app source `ae60dfa3d67818b24ed1fd9a392ece998d1005f8`; `/api/health` 200 proves server rendering boot recovered. | `/api/ready` 503 `deployment_manifest_invalid`: Convex probe skipped, catalogue absent, quoting unavailable, funding configured, sellable false. `/api/v1/release` 500 at the boot guard; source identity comes from deployment metadata and configured revision. Prior live runtime logs identify six missing Formance settings; all six are now staged in Vercel and configured in Convex, awaiting redeployment and runtime proof. Branch remains unmerged to main, so automatic deployment can repeat the bundler regression. |
-| Clerk | Production instance and four-event webhook created; user-saved signing secret deployed in Vercel. | Signed delivery and authenticated sign-in unverified. |
+| Web and backend | Deployment `dpl_9RXpxCHwGwmPmziXxxTD1WmRER5z`, source `df0e62862731c9d9f6c8f7b8eaeda77581540b51`; `/api/health` and `/api/v1/release` 200. All six Formance settings active. | `/api/ready` remains 503 `deployment_manifest_invalid`; exact diagnostic pending. Branch remains unmerged to main. No sellable Tool or purchase proof. |
+| Clerk | CSP fix deployed; Clerk form loads. Production instance and signed-webhook configuration remain recorded. | User signup, password and email steps pending; signed delivery and authenticated journey unverified. |
 | Stripe | Fresh restricted test readback key installed in Vercel production and Convex; tax, Checkout, PaymentIntent, Price and Refund SDK reads passed. GST tax rate bound in Convex; existing destinations remain enabled. | Saved Core Read permission and matching installed key suffix verified, but Accounts v2 list returns 403 `v2_account_storer_read`; platform account retrieval also returns 403. No successful connected-account canary, delivery/replay or purchase proof. |
 | Infisical | Two new dedicated alpha projects have separate, deletion-protected member identities and saved Vercel production OIDC trust. All nine variables bound in Vercel production. Unused No Access identity deleted and verified; old staging projects untouched. | Hosted OIDC authentication and secret CRUD unverified. Local CLI token had a development subject, so its canary aborted before creating a secret. Project isolation uses member roles because custom roles require a paid plan. |
-| Financial authority | Fresh alpha apply completed (exit 0): 80 added, zero changed/destroyed; fixed 50 GiB database without autoscaling. Bounded deployer-access stack is `CREATE_COMPLETE`; routine assumed-role CLI verified. | Infrastructure is provisioned; bootstrap, ledger and all hosted canaries remain unverified. Historical RPO 308 seconds exceeds the 300-second target. |
+| Financial authority | Reviewed bootstrap repair replaced the host; cloud-init complete, k3s/reconcile/timer active, required replicas ready; tunnel healthy with eight connections. Formance health ready; schema v1.3.0 installed and repeat replayed. Final pinned OpenTofu plan: no changes, exit 0. | End-to-end purchase unproven. SNS email subscription awaits confirmation. Historical RPO 308 seconds exceeds the 300-second target. |
 | AWS cost and retention | User-approved old AWS retirement completed: 24 resources removed; EC2 terminated, root disk absent, both RDS instances absent, NAT deleted and EIP absent. Three encrypted RDS snapshots and completed EBS snapshot retained under the enabled KMS key. | Budget decision resolved. Fresh alpha estimate is USD 311.29/month before tax, plus retained storage/account costs; the former combined paused-runtime estimate is superseded. Old root/drill ordinary apply would recreate retired resources. |
-| Source checks | Full `npm run gate` passed (exit 0) at `fa33461ce`: 4,594 unit, 1,251 integration, 24 E2E and ten accessibility passed; CLI/build passed. No app changes since deployed `ae60dfa3d`. | Five integration skipped, three todo and eight authenticated E2E skipped. Hosted authenticated sign-in and live purchases remain unproven. |
+| Source checks | Full `npm run gate` passed with exit 0 at `df0e62862731c9d9f6c8f7b8eaeda77581540b51`; log `alpha-final-integration-gate.log`. | Source checks do not establish authenticated or purchase journeys. |
 
 Ten old Convex projects were deleted with the user's approval. Historical
-resource references are evidence, not current deployment targets. Next proof
-requires deploying the six staged Formance bindings, resolving Stripe account
-access and completing the isolated ledger boundary, then verifying hosted OIDC/secret CRUD,
-readiness, signed events and authenticated journeys. Old AWS retirement is
-complete and all 80 alpha resources are provisioned. The hosted deployment still has
-readiness 503. Alpha must remain below ready until runtime checks succeed.
+resource references are evidence, not current deployment targets. The seeded
+sandbox publication `capability-offering:sandbox-aecon-reference:v1` exists
+but is unlisted; its probe returned `authority_stale`. The supported human
+owner publication path is identified but has not been executed. Next proof
+requires the exact readiness diagnostic, completed user signup and publication,
+hosted OIDC/secret CRUD, signed events and a supported purchase journey.
+The temporary Cloudflare deployment credential file and six superseded preview
+artifacts were deleted; reviewed applied plans and snapshots remain retained.
+Alpha remains below ready.

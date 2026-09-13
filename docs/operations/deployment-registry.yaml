@@ -373,26 +373,17 @@ hostedAlphaReadback:
     projectId: prj_dK5mDpjBYuAXMwvLr0pWO0h8DoH9
     scope: creasybears-projects
     canonicalUrl: https://app.aecon.ai
-    observedDeploymentId: dpl_4pS5h6962eGWnXXNScgPQTrcmRcE
-    deploymentUrl: https://agentic-economy-isy77u3ki-creasybears-projects.vercel.app
-    observedSourceRevision: ae60dfa3d67818b24ed1fd9a392ece998d1005f8
-    configuredReleaseSourceRevision: ae60dfa3d67818b24ed1fd9a392ece998d1005f8
-    sourceIdentityEvidence: deployment_metadata_and_configured_revision_not_release_endpoint
+    observedDeploymentId: dpl_9RXpxCHwGwmPmziXxxTD1WmRER5z
+    observedSourceRevision: df0e62862731c9d9f6c8f7b8eaeda77581540b51
     healthHttp: 200
     serverRenderingBoot: fixed
     readyHttp: 503
     readyReason: deployment_manifest_invalid
-    convexProbe: convex_probe_skipped
-    catalogue: absent
-    quoting: unavailable
-    funding: configured
+    exactReadinessDiagnostic: pending
     sellable: false
-    releaseHttp: 500
-    releaseFailure: boot_guard_pending_six_formance_bindings
-    runtimeLog:
-      bundlerSyntaxError: absent
-      missingBootVariables: [AE_FORMANCE_ENVIRONMENT, AE_FORMANCE_GATEWAY_URL, AE_FORMANCE_LEDGER, AE_FORMANCE_REQUEST_TIMEOUT_MS, AE_FORMANCE_ACCESS_CLIENT_ID, AE_FORMANCE_ACCESS_CLIENT_SECRET]
-    signInState: not_reverified_after_new_deployment
+    releaseHttp: 200
+    formanceBindings: all_six_active
+    signInState: clerk_form_loads_signup_password_and_email_steps_pending
     configurationChange:
       removedVariable: AE_SOURCE_WRITE_SECRET
       providerConfigurationRemoval: verified
@@ -420,6 +411,9 @@ hostedAlphaReadback:
     events: [session.created, session.ended, session.revoked, user.updated]
     signingSecretBinding: user_saved_in_vercel_and_deployed
     signedDelivery: not_verified
+    cspFix: deployed
+    formLoads: verified
+    userSignupPasswordAndEmail: pending
   processor:
     provider: stripe
     mode: sandbox
@@ -480,8 +474,8 @@ hostedAlphaReadback:
       deletion: verified
     existingStagingProjects: untouched
   financialAuthority:
-    freshIsolatedInfrastructure: provisioned_runtime_unverified
-    requiredFormanceVariables: all_six_bound_vercel_staged_convex_configured_runtime_unverified
+    freshIsolatedInfrastructure: bootstrap_and_formance_health_verified_purchase_unproven
+    requiredFormanceVariables: all_six_active_in_web_and_bound_in_convex
     formanceBindings:
       targets: [vercel_production, convex_cautious_zebra_473]
       officialCliExit: 0
@@ -493,7 +487,7 @@ hostedAlphaReadback:
       owningKmsKeyId: b5701c00-bda9-4e47-9061-dbfdfec48244
       credentialsPrinted: false
       temporaryDotenvFile: deleted
-      vercelLiveBindingState: pending_redeployment
+      vercelLiveBindingState: active
       convexServiceMode: hosted_alpha
       convexEnvironmentBinding: sandbox_verified
       convexRuntimeProof: pending
@@ -515,7 +509,8 @@ hostedAlphaReadback:
       applyResult: {added: 80, changed: 0, destroyed: 0}
       applyLog: /private/tmp/ae-alpha-plan-t6sl85yp/alpha-apply.log
     alphaResources:
-      k3sHostId: i-03783779db01d90fc
+      k3sHostId: i-073197e0346d83010
+      replacedInitialHostId: i-03783779db01d90fc
       rdsInstanceId: ae-alpha-formance
       rdsArn: arn:aws:rds:ap-southeast-2:197716152388:db:ae-alpha-formance
       rdsResourceId: db-HXOLD5NCUPK4Y4EA67D62PPTDI
@@ -524,8 +519,30 @@ hostedAlphaReadback:
       cloudflareTunnelId: c4f07700-e347-4f34-9d64-1f0992e7a863
       cloudflareAccessApplicationId: 55ab1c32-4663-44be-ae70-d239c8a3c7e9
       alertTopicArn: arn:aws:sns:ap-southeast-2:197716152388:ae-alpha-package4-alerts
-      runtimeBootstrap: not_verified
-      ledger: not_verified
+      alertEmailSubscription: PendingConfirmation
+      bootstrap:
+        sourceRevision: b949f94dd1ee495e1e36286742de2a0343e1df69
+        appliedPlan: alpha-bootstrap-fix.tfplan
+        planSha256: 087b01c953879ddf8a0c6853798c83436363df176249e7360426c5a3ff8cbfc9
+        applyResult: {added: 1, changed: 46, destroyed: 1}
+        ssmCommandId: df918365-90b6-441e-8510-ea879d0bc9af
+        ssmStatus: success
+        cloudInit: done
+        k3s: active
+        reconcile: success
+        reconcileTimer: active
+        readyReplicas: {gateway: 1, ledger: 1, worker: 1, cloudflared: 2, operator: 1}
+        finalPinnedOpenTofuPlan: no_changes_exit_0
+      tunnel: {state: healthy, connections: 8}
+      formance:
+        health: ready
+        gatewayVersion: v2.3.1
+        ledgerVersion: v2.4.12
+        schemaVersion: v1.3.0
+        schemaDigest: sha256:881851b2348fc64af08df3245030ebdb3fdb5bcfd5de9e7f0ffe14f169082953
+        installSchema: completed
+        repeatedInstallReplayed: true
+        endToEndPurchase: not_verified
     monthlyCostEstimateUsd:
       assumption: low_traffic_before_tax
       freshAlpha: "311.29"
@@ -572,27 +589,33 @@ hostedAlphaReadback:
     cloudflareDeploymentCredential:
       state: active
       expiry: "2026-09-20T23:59:59Z"
-      temporaryFile: present
-      temporaryFileMode: "0600"
+      temporaryFile: deleted
+      deletedSupersededPreviewArtifacts: 6
+      reviewedAppliedPlansAndSnapshots: retained
+  sandboxPublication:
+    id: capability-offering:sandbox-aecon-reference:v1
+    state: created_unlisted
+    probe: authority_stale
+    sellable: false
+    supportedHumanOwnerPublicationPath: identified_not_executed
   sourceVerification:
-    sourceRevision: fa33461cef107e75f15b1b6749c58cf6d99138c4
-    appSourceRevision: ae60dfa3d67818b24ed1fd9a392ece998d1005f8
-    appChangesSinceHostedDeploy: false
-    includes: merged_main_and_bundler_fix
+    sourceRevision: df0e62862731c9d9f6c8f7b8eaeda77581540b51
     nodeVersion: 22.22.0
     npmVersion: 11.5.1
-    buildFix: rolldown_1.2.7
     fullGate: passed
     gateCommand: npm_run_gate
     gateExit: 0
-    unitPassed: 4594
-    integrationPassed: 1251
-    integrationSkipped: 5
-    integrationTodo: 3
-    e2ePassed: 24
-    authenticatedE2eSkipped: 8
-    accessibilityPassed: 10
-    cli: passed
-    build: passed
+    gateLog: alpha-final-integration-gate.log
+    previousGate:
+      sourceRevision: fa33461cef107e75f15b1b6749c58cf6d99138c4
+      unitPassed: 4594
+      integrationPassed: 1251
+      integrationSkipped: 5
+      integrationTodo: 3
+      e2ePassed: 24
+      authenticatedE2eSkipped: 8
+      accessibilityPassed: 10
+      cli: passed
+      build: passed
     authenticatedSignIn: not_proven
     livePurchases: not_proven

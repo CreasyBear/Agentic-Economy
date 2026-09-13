@@ -244,35 +244,26 @@ Earlier commands and receipts remain historical, not an active runbook.
   workloads are disabled; provider production labels do not change that scope.
 - **Vercel:** project `agentic-economy`,
   `prj_dK5mDpjBYuAXMwvLr0pWO0h8DoH9`, scope `creasybears-projects`;
-  `https://app.aecon.ai` points to `dpl_4pS5h6962eGWnXXNScgPQTrcmRcE`, also at
-  `https://agentic-economy-isy77u3ki-creasybears-projects.vercel.app`, source
-  `ae60dfa3d67818b24ed1fd9a392ece998d1005f8`. Vercel production
-  `AE_RELEASE_SOURCE_REVISION` was updated to that exact revision. Source
-  identity is supported by deployment metadata and the configured revision,
-  not by the failing release endpoint.
+  `https://app.aecon.ai` points to `dpl_9RXpxCHwGwmPmziXxxTD1WmRER5z`, source
+  `df0e62862731c9d9f6c8f7b8eaeda77581540b51`. All six Formance settings are
+  active in this deployment.
 - **Convex:** team `joel-chan`, new project `agentic-economy`, development
   `cool-crab-306`, provider production `cautious-zebra-473`; source
   `fbd22a563f204312f26aa9b8a53c55ca5969e02f` deployed. Ten old projects were
   deleted with the user's approval. Previous targets are historical only.
-- **Observed HTTP:** `/api/health` 200 proves server rendering boot recovered.
-  `/api/ready` remains 503 `deployment_manifest_invalid`, with
-  `convex_probe_skipped`, catalogue absent, quoting unavailable, funding
-  configured and sellable false. `/api/v1/release` returns 500 from the boot
-  guard. Runtime logs confirm the bundler syntax error is gone and identify
-  exactly six missing boot settings: `AE_FORMANCE_ENVIRONMENT`,
-  `AE_FORMANCE_GATEWAY_URL`, `AE_FORMANCE_LEDGER`,
-  `AE_FORMANCE_REQUEST_TIMEOUT_MS`, `AE_FORMANCE_ACCESS_CLIENT_ID` and
-  `AE_FORMANCE_ACCESS_CLIENT_SECRET`. Authenticated sign-in has not
-  been verified after deployment. The forbidden legacy `AE_SOURCE_WRITE_SECRET`
-  was removed from Vercel configuration before this deployment. The reviewed
-  branch deployment recovers server boot after the main automatic deployment
-  introduced a bundler regression. The branch remains unmerged to main, so
-  recurrence risk persists.
+- **Observed HTTP:** `/api/health` and `/api/v1/release` return 200.
+  `/api/ready` remains 503 `deployment_manifest_invalid`; the exact readiness
+  diagnostic is pending. The former missing-six Formance boot failure is
+  superseded by active bindings and the successful release response. The
+  branch remains unmerged to main. This does not establish a sellable Tool or
+  an end-to-end purchase.
 - **Clerk:** production instance `ins_3JEJtsKq3rdCZG94s6tAkkut9Y7`, issuer
   `clerk.aecon.ai`; endpoint `ep_3JET0Um63P5BmiF8x6Guz5ToyUZ` created at
   `https://app.aecon.ai/api/clerk/webhook` for `session.created`,
   `session.ended`, `session.revoked`, `user.updated`. The user saved the signing
-  secret in Vercel and it is deployed. Signed delivery remains unverified.
+  secret in Vercel and it is deployed. The CSP fix is deployed and the Clerk
+  form loads. User signup, password and email steps remain pending; signed
+  delivery and the authenticated journey are unverified.
 - **Stripe:** sandbox account `acct_1Tlni770N4UjLqHt`; existing snapshot
   `we_1UEgKx70N4UjLqHtxiYhgLAD` and thin destination
   `ed_test_61VO4O26zMNAz9Nn616UvBfU9V8SqsP28ZeVu4UQaSGu` are enabled at
@@ -316,11 +307,9 @@ Earlier commands and receipts remain historical, not an active runbook.
   ARN `arn:aws:secretsmanager:ap-southeast-2:197716152388:secret:ae-alpha/package4/cloudflare-access-application-718qYi`,
   owned by new KMS key `b5701c00-bda9-4e47-9061-dbfdfec48244`. Credentials
   were never printed; the temporary dotenv file was deleted in cleanup.
-  Vercel bindings are staged pending redeployment; Convex is configured but
-  runtime proof is pending. Convex `AE_SERVICE_MODE=hosted_alpha` and
-  `AE_FORMANCE_ENVIRONMENT=sandbox` bindings were verified. The previous live
-  boot still reports the six
-  settings missing until the next deployment.
+  Vercel bindings are now active. Convex `AE_SERVICE_MODE=hosted_alpha` and
+  `AE_FORMANCE_ENVIRONMENT=sandbox` bindings were verified; purchase runtime
+  proof remains pending.
 - **Ledger infrastructure:** apply completed with exit 0: 80 added, zero
   changed, zero destroyed. Saved plan
   `/private/tmp/ae-alpha-plan-t6sl85yp/alpha-fixed-storage.tfplan`, source
@@ -328,16 +317,29 @@ Earlier commands and receipts remain historical, not an active runbook.
   with no existing-resource updates or deletes. Database storage is fixed at
   50 GiB with no autoscaling. Saved-plan SHA-256 is
   `1813729a1f92934c7fb1334361f4a3dc326485c48674b218a265ba03064abd38`.
-  Apply log: `/private/tmp/ae-alpha-plan-t6sl85yp/alpha-apply.log`. New k3s
-  host is `i-03783779db01d90fc`; RDS is `ae-alpha-formance`, ARN
+  Initial apply log: `/private/tmp/ae-alpha-plan-t6sl85yp/alpha-apply.log`. The
+  initial host `i-03783779db01d90fc` was replaced by the bootstrap repair below;
+  current host is `i-073197e0346d83010`. RDS is `ae-alpha-formance`, ARN
   `arn:aws:rds:ap-southeast-2:197716152388:db:ae-alpha-formance`, internal
   resource ID `db-HXOLD5NCUPK4Y4EA67D62PPTDI`. VPC
   `vpc-0580eee94c9ef6255` uses `10.44.0.0/16`. Cloudflare tunnel is
   `c4f07700-e347-4f34-9d64-1f0992e7a863`; Access application is
   `55ab1c32-4663-44be-ae70-d239c8a3c7e9`. Alert topic is
   `arn:aws:sns:ap-southeast-2:197716152388:ae-alpha-package4-alerts`.
-  Bootstrap and ledger remain unverified; infrastructure creation does not
-  establish runtime readiness or canary proof.
+  Its email subscription is `PendingConfirmation`.
+- **Bootstrap and Formance:** repair source
+  `b949f94dd1ee495e1e36286742de2a0343e1df69` was applied through reviewed
+  `alpha-bootstrap-fix.tfplan`, SHA-256
+  `087b01c953879ddf8a0c6853798c83436363df176249e7360426c5a3ff8cbfc9`:
+  one added, 46 changed, one destroyed. SSM command
+  `df918365-90b6-441e-8510-ea879d0bc9af` succeeded: cloud-init done, k3s active,
+  reconcile successful and timer active. Ready replicas: gateway one, ledger
+  one, worker one, cloudflared two and operator one. Final pinned OpenTofu plan
+  exited 0 with no changes; tunnel healthy with eight connections. Formance
+  health is ready (gateway v2.3.1, ledger v2.4.12). `installSchema` completed
+  and its repeat returned `replayed: true`; schema v1.3.0 digest is
+  `sha256:881851b2348fc64af08df3245030ebdb3fdb5bcfd5de9e7f0ffe14f169082953`.
+  This verifies bootstrap and schema installation, not an alpha purchase.
 - **Old AWS retirement:** the user approved snapshots and retirement. Pinned
   OpenTofu 1.12.6 applied saved, reviewed plans in
   `/private/tmp/ae-old-retirement-9ia9rysy`: all 24 resources were removed
@@ -370,20 +372,19 @@ Earlier commands and receipts remain historical, not an active runbook.
   root browser. Its grant covers only two alpha runtime roles and one instance
   profile. Subsequent routine CLI identity was verified as assumed role
   `Package4ReleaseOpenTofu`; no root CLI was used. The Cloudflare deployment
-  credential remains active until `2026-09-20T23:59:59Z`; its temporary file
-  remains present with mode `0600`.
-- **Source verification:** full `npm run gate` passed with exit 0 at
-  `fa33461cef107e75f15b1b6749c58cf6d99138c4`, with no app changes since deployed
-  source `ae60dfa3d67818b24ed1fd9a392ece998d1005f8`. Results: 4,594 unit,
-  1,251 integration, 24 E2E and ten accessibility passed; CLI/build passed.
-  Five integration checks were skipped, three todo; eight authenticated E2E
-  checks were skipped. Runtime remains Node 22.22.0/npm 11.5.1, with the
-  Rolldown 1.2.7 bundler fix. Hosted authenticated sign-in and live purchases
-  remain unproven.
+  credential has recorded expiry `2026-09-20T23:59:59Z`; its temporary file
+  was deleted, together with six superseded old preview artifacts. Reviewed
+  applied plans and snapshots remain retained.
+- **Source verification:** full `npm run gate` passed with exit 0 on
+  `df0e62862731c9d9f6c8f7b8eaeda77581540b51`; log
+  `alpha-final-integration-gate.log`. Runtime remains Node 22.22.0/npm 11.5.1.
+  Hosted authenticated sign-in and end-to-end purchases remain unproven.
+- **Sandbox publication:** `capability-offering:sandbox-aecon-reference:v1`
+  was created, but its probe returned `authority_stale`; it remains unlisted.
+  The supported human owner publication path was identified but not executed.
+  This seed is not sellable purchase proof.
 
-The hosted deployment is unchanged: health 200, readiness 503. Six Formance
-settings are now bound but await Vercel redeployment and runtime verification.
-Old retirement is complete; all 80 fresh alpha resources are provisioned.
-Formance runtime, hosted Infisical, Stripe connected-account and purchase
-canaries remain pending. Passing the source gate does not establish alpha
-readiness.
+The hosted app has health and release 200, readiness 503 pending its exact
+configuration diagnostic. Bootstrap and Formance schema are verified; user
+signup, publication, hosted Infisical, Stripe connected-account and purchase
+proof remain pending. Alpha is not ready.
