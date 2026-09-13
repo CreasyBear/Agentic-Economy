@@ -308,6 +308,85 @@ describe('operational diagnostics routes', () => {
   })
 
 
+  it('logs manifest failure names once per configuration without exposing secrets or changing public readiness', async () => {
+    const sentinel = 'readiness-secret-sentinel-do-not-log'
+    const env = {
+      ...productionReadinessEnvironment(),
+      AE_CANONICAL_BASE_URL: 'https://manifest-diagnostic.example',
+      AE_PACKAGE5_WRITES_ENABLED: 'false',
+      OPENROUTER_API_KEY: sentinel,
+      AE_FORMANCE_ACCESS_CLIENT_SECRET: sentinel,
+    }
+    const fetch = vi.fn()
+    const errorLog = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    const manifestLogs = () => errorLog.mock.calls.filter(([marker, detail]) =>
+      marker === '[ae.degraded]' && typeof detail === 'string' && detail.includes('"operation":"readDeploymentConfig"'))
+    try {
+      for (let probe = 0; probe < 2; probe += 1) {
+        const response = await handleReadyRequest(new Request('https://ae.example/api/ready'), {
+          env, fetch, nodeMajor: 22,
+        })
+        expect(response.status).toBe(503)
+        const body = await response.json()
+        expect(body).toEqual({
+          type: 'about:blank',
+          title: 'Unavailable',
+          status: 503,
+          detail: 'Required server readiness checks did not pass.',
+          kind: 'UNAVAILABLE',
+          code: 'server_not_ready',
+          retryable: true,
+          checks: {
+            config: { status: 'failed', code: 'deployment_manifest_invalid' },
+            convex: { status: 'failed', code: 'convex_probe_skipped' },
+          },
+          commercial: { catalogue: 'absent', quoting: 'unavailable', funding: 'configured', sellable: false },
+        })
+        expect(JSON.stringify(body)).not.toContain(sentinel)
+      }
+      expect(fetch).not.toHaveBeenCalled()
+      expect(manifestLogs()).toHaveLength(1)
+      expect(manifestLogs()[0]).toEqual(['[ae.degraded]', JSON.stringify({
+        operation: 'readDeploymentConfig',
+        reason: 'invalid_response',
+        cause: {
+          findings: [{
+            kind: 'malformed',
+            code: 'package5_rollout_not_enabled',
+            names: ['AE_PACKAGE5_WRITES_ENABLED'],
+            scope: 'package5-rollout',
+          }],
+        },
+      })])
+      expect(JSON.stringify(errorLog.mock.calls)).not.toContain(sentinel)
+      expect(JSON.stringify(errorLog.mock.calls)).not.toContain('manifest-diagnostic.example')
+
+      for (const value of ['sk_test_invalid', 'another-invalid-secret-sentinel']) {
+        await readServerReadiness({ env: { ...env, STRIPE_READBACK_KEY: value }, fetch, nodeMajor: 22 })
+      }
+      expect(manifestLogs()).toHaveLength(2)
+      expect(manifestLogs()[1]).toEqual(['[ae.degraded]', JSON.stringify({
+        operation: 'readDeploymentConfig',
+        reason: 'invalid_response',
+        cause: {
+          findings: [
+            { kind: 'malformed', code: 'package5_rollout_not_enabled', names: ['AE_PACKAGE5_WRITES_ENABLED'], scope: 'package5-rollout' },
+            { kind: 'malformed', code: 'stripe_readback_key_invalid', names: ['STRIPE_READBACK_KEY'], scope: 'stripe-money' },
+          ],
+        },
+      })])
+      expect(JSON.stringify(errorLog.mock.calls)).not.toContain('sk_test_invalid')
+      expect(JSON.stringify(errorLog.mock.calls)).not.toContain('another-invalid-secret-sentinel')
+
+      await readServerReadiness({
+        env: { ...env, AE_FORMANCE_REQUEST_TIMEOUT_MS: '500' }, fetch, nodeMajor: 22,
+      })
+      expect(manifestLogs()).toHaveLength(3)
+    } finally {
+      errorLog.mockRestore()
+    }
+  })
+
   it('fails readiness closed for missing config and Convex probe failure', async () => {
     const skippedFetch = vi.fn()
     await expect(readServerReadiness({ env: {}, fetch: skippedFetch })).resolves.toMatchObject({
