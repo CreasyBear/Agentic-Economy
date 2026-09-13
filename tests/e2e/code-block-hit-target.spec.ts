@@ -45,6 +45,7 @@ test('native setup copy and alternatives work by pointer and keyboard', async ({
 
 test('support keeps private contact and current records keyboard reachable', async ({ page }) => {
   await page.goto('/support')
+  await page.locator('[data-shell="app-header"][data-hydrated="true"]').waitFor()
   const support = page.getByRole('link', { name: 'Email support', exact: true })
   await expect(support).toHaveAttribute('href', 'mailto:support@aecon.ai')
   await support.focus()
@@ -52,10 +53,9 @@ test('support keeps private contact and current records keyboard reachable', asy
   await expect(page.getByRole('link', { name: 'Open Calls', exact: true })).toHaveAttribute('href', '/activity')
   const diagnostics = page.getByRole('button', { name: 'Advanced connection diagnostics' })
   await diagnostics.focus()
-  await expect(async () => {
-    await page.keyboard.press('Enter')
-    await expect(diagnostics).toHaveAttribute('aria-expanded', 'true', { timeout: 1_000 })
-  }).toPass()
+  await expect(diagnostics).toBeFocused()
+  await page.keyboard.press('Enter')
+  await expect(diagnostics).toHaveAttribute('aria-expanded', 'true')
   await expect(page.getByRole('button', { name: 'Copy diagnostic command' })).toBeVisible()
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true)
 })
