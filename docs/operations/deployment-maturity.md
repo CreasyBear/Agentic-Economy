@@ -214,21 +214,22 @@ readback key, Stripe destinations and Cloudflare alerts.
 
 ## Hosted alpha assessment — 12 September 2026
 
-**13 September testnet preparation:** the existing reference-provider project
-was found with no production environment settings. Its health, fixture and
-unpaid payment endpoints returned 500; private logs identified the missing
-public-origin setting. The public origin and official testnet facilitator are
-now staged and verified by Vercel metadata readback. A controlled payee wallet
-and redeployment remain pending. The facilitator's supported endpoint returned
-200 and advertised exact x402 v2 on Base Sepolia. Coinbase's dedicated
-`Agentic Economy Alpha` project and approved API key are created. Official SDK
-reads authenticate and confirm empty account/policy inventories. The separate
-Wallet Secret awaits browser access confirmation; no wallet or policies are
-provisioned. The existing
-CDP SDK treasury observer supersedes the local runbook's previous observer-gap
-claim. No paid Call is proven. The finite cold-agent audit protocol is recorded
-in [alpha-validation-plan.md](alpha-validation-plan.md); full user-journey
-audits await the integration baseline.
+**13 September testnet integration:** the dedicated Coinbase alpha key and
+Wallet Secret are provisioned. Official SDK reads verify the buyer and Provider
+wallets, exact account/project policies, and 1 test USDC from the Base Sepolia
+faucet. Policy-management permission was removed after setup. All 13 custody
+settings match exact Convex readback and are installed in Vercel production;
+web activation awaits redeployment. The existing one-shot treasury workload
+recorded the genuine sandbox balance after standard workload-identity bootstrap,
+with recurring jobs still disabled.
+
+The reused sandbox Tool project is deployed at
+`https://agentic-economy-sandbox-tools.vercel.app`: health and discovery return
+200, unpaid x402 returns 402. Public descriptions now use sandbox Tool language;
+protected protocol identifiers remain stable. Five focused provider tests and
+lint passed. Human-owner admission and a paid Call remain unproven. Full cold
+user-journey audits await that integration baseline under
+[alpha-validation-plan.md](alpha-validation-plan.md).
 
 The initial release-gate attempt found a compact Support test hydration race.
 The test now waits for the existing hydration marker and activates its toggle
@@ -245,7 +246,8 @@ rules alone do not enforce an aggregate daily cap or explicit chain ID.
 
 **Updated 13 September: alpha is deployed but not ready.** Authority is
 `hosted_alpha`, sandbox only;
-custody, writes and recurring workloads remain disabled. Provider labels
+custody is enabled in the backend and staged for web activation; writes and
+recurring workloads remain disabled. Provider labels
 `production` and `prod` do not confer production authority. This assessment
 supersedes earlier hosted topology, identity, configuration and usability
 claims, while retaining synthetic-release and backup evidence as history.

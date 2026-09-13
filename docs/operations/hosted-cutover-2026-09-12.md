@@ -236,43 +236,42 @@ exists in this build.
 
 ### Testnet setup readback — 13 September
 
-The existing Vercel reference-provider project
-`prj_gyaX8fy0abiwTFfvfqnqrn71Al8p` has Node 22 and public origin
-`https://package5-reference-provider.vercel.app`. Before this change, its
-production environment inventory was empty. `/health`, `/release-fixtures`
-and unpaid `POST /x402/execute` returned 500. Exact private runtime logs named
-`AE_PACKAGE5_FIXTURE_PUBLIC_ORIGIN is required`.
+The existing Vercel project `prj_gyaX8fy0abiwTFfvfqnqrn71Al8p` is now
+`agentic-economy-sandbox-tools`. Deployment `dpl_723RkHxkAupfvuDkktksEtdnw49b`
+serves `https://agentic-economy-sandbox-tools.vercel.app`, attached as both a
+project domain and deployment alias. Health, discovery and OpenAPI return 200;
+unpaid x402 returns 402. Its previous empty configuration produced 500. The
+public origin, controlled payee and official `https://x402.org/facilitator` are
+bound. No signed payment was submitted. Source `61f6388e1` changes only public
+descriptions; five provider tests and lint passed.
 
-Official Vercel CLI writes and subsequent metadata readback confirm two staged
-production settings: that public origin and
-`AE_PACKAGE5_FIXTURE_X402_FACILITATOR_URL=https://x402.org/facilitator`.
-The facilitator's `/supported` read returned 200 with exact v2 support for
-`eip155:84532`. No signed payment was sent. The controlled payee address remains
-pending; the provider has not been redeployed with partial configuration.
+Coinbase project `929175ec-e74d-48ff-a03e-7396cf40dcc0` belongs to entity
+`entity_13b783ca-e69b-51e7-bf52-e7794333a818`. User-approved key
+`agentic-economy-alpha` (`4df9f508-2454-4b4a-9a2d-020b0bb6407d`) and Wallet
+Secret were obtained through official provider downloads. The existing broad
+key was not reused. Official SDK provisioning created buyer `ae-alpha-buyer`
+(`0x2595AB56Be60CA38606d0c106583b7B7a33707ef`) and Provider `ae-alpha-provider`
+(`0x9ec2cD9E2E2a7D93c426d98b48a745990972EE71`). A harmless wallet-control
+message passed SDK signing and viem verification; it is not a Provider claim.
 
-The Coinbase portal confirms creation of `Agentic Economy Alpha` under entity
-`entity_13b783ca-e69b-51e7-bf52-e7794333a818`. The project ID is
-`929175ec-e74d-48ff-a03e-7396cf40dcc0`. After explicit user approval and
-Coinbase two-factor verification, key `agentic-economy-alpha`
-(`4df9f508-2454-4b4a-9a2d-020b0bb6407d`) was created. Portal readback confirms
-the alpha project, mandatory Primary portfolio read-only access, policy Manage,
-and no export/trade/transfer/receive permissions. The provider JSON download
-was moved into a mode-0600 temporary file; its values were not printed.
-Official CDP SDK account and policy reads authenticated successfully and
-returned empty inventories with no further pages. The separate Wallet Secret
-awaits the browser's access confirmation. No existing broad key was reused
-and no wallet was created.
-The API-key wallet path uses the live API with testnet policy restrictions;
-Coinbase's custodial Sandbox is simulated and cannot settle testnet payments.
-Sources: [API-key wallet quickstart](https://docs.cdp.coinbase.com/wallets/quickstart/api-key-auth),
-[Sandbox overview](https://docs.cdp.coinbase.com/get-started/sandbox/overview),
-and [x402 facilitator FAQ](https://docs.cdp.coinbase.com/x402/support/faq).
+Existing AE generators produced project policy `32297a1f-ba27-4769-97b3-7563481966e4`
+and account policy `d0797b09-f2a6-4815-bc17-c1259e9f6978`. Provider readback
+matches digest `sha256:83dd997fb78d8a51ef5825cd93b3e915d164bd4950ccc71235784570ea00c724`.
+Temporary policy-management permission was removed and SDK reads still pass.
+The existing custody preflight is ready for identity, policies and balance.
+Faucet transaction `0x2b8cfdfe8c51a7e5d38a62326bba9ef0a5a829f568bf50fbd1a27fe1fe3e4686`
+supplied 1 test USDC. Only Base Sepolia RPC is configured; its chain ID is 84532.
 
-Source inspection found the existing `moneyTreasuryObservation` CDP SDK
-workload. Its existence corrects the stale local-runbook gap; it does not
-establish a runtime observation while custody and recurring workloads are
-disabled. Full cold user-journey audits remain pending the integration baseline
-in [alpha-validation-plan.md](alpha-validation-plan.md).
+All 13 custody settings match exact Convex alpha readback and are installed
+as Vercel production variables; web activation awaits redeployment. The standard
+`workloadCron:ensurePlatformWorkloadIdentities` initialized four missing system
+records. Manual `workloadCron:observeX402Treasury {}` then ran successfully,
+without enabling recurring jobs. Read-only query verified its sandbox record:
+`cdp-balance:0x2595ab56be60ca38606d0c106583b7b7a33707ef:base-sepolia:1789281442248`,
+network `eip155:84532`, 1,000,000 atomic USDC, 10,000 buffer, generation 1,
+recorded at `1789281442686`. This is external balance evidence, not customer
+funding or purchase proof. Full cold user-journey audits await the integration
+baseline in [alpha-validation-plan.md](alpha-validation-plan.md).
 
 The subsequent `npm run gate` attempt on application source `024f14067`
 passed 4,658 unit and 1,251 integration tests, then stopped at one compact
@@ -303,15 +302,14 @@ ownership mutation or forged readiness was introduced.
 The existing reference-provider project was renamed through the official CLI
 to `agentic-economy-sandbox-tools`. Readback preserved exact project ID
 `prj_gyaX8fy0abiwTFfvfqnqrn71Al8p`, root directory and Node 22. Public-origin
-migration remains pending complete wallet configuration and redeployment.
+migration is verified with the new project domain and deployment alias.
 
 The custody review found existing rule and digest generators:
 `cdpX402SellerCanaryPolicyRules` and `cdpX402PolicyRulesDigest`. Provisioning
-should use these with official CDP SDK readback. The canary's per-payment cap
+used these with official CDP SDK readback. The canary's per-payment cap
 is 10,000 atomic USDC; daily configuration is 50,000. The CDP rules enforce
 the per-payment cap, not an aggregate daily total or explicit chain ID.
-AE's sandbox profile/domain and budget controls remain necessary. No policy
-or wallet has been provisioned. The review's 67 focused checks passed.
+AE's sandbox profile/domain and budget controls remain necessary. Wallets and both policies are now provisioned and verified. The review's 67 focused checks passed.
 
 **Updated 13 September 2026.** The orchestrator verified the following provider
 state and local checks. This receipt supersedes the earlier 12 September claims that the app is usable, that
@@ -319,8 +317,8 @@ Clerk/Infisical resources still need creating, that the previous Convex target
 is current, and that the synthetic Formance stack can supply the new boundary.
 Earlier commands and receipts remain historical, not an active runbook.
 
-- **Authority:** `hosted_alpha`, sandbox only. Custody, writes and recurring
-  workloads are disabled; provider production labels do not change that scope.
+- **Authority:** `hosted_alpha`, sandbox only. Backend custody is enabled; web
+  activation awaits redeployment. Writes and recurring workloads remain disabled.
 - **Vercel:** project `agentic-economy`,
   `prj_dK5mDpjBYuAXMwvLr0pWO0h8DoH9`, scope `creasybears-projects`;
   `https://app.aecon.ai` points to `dpl_GB2eVJ8aCiWVMNKNQG7MA31FNmwe`, also at
@@ -343,9 +341,9 @@ Earlier commands and receipts remain historical, not an active runbook.
   `/private/tmp/ae-alpha-plan-t6sl85yp/alpha-validated-web-deploy.log`.
   The restricted Stripe command-key handoff remains pending. The branch
   remains unmerged to main.
-- **Exact Convex environment reads:** `STRIPE_SECRET_KEY` and
-  `AE_X402_RPC_URLS_JSON` are missing. This observation does not establish
-  whether Convex has a required command-key consumer.
+- **Exact Convex environment reads:** all 13 new custody values, including the
+  Base Sepolia RPC map, match. Stripe command execution belongs to Vercel;
+  Convex retains its separate readback credential.
 - **Clerk:** production instance `ins_3JEJtsKq3rdCZG94s6tAkkut9Y7`, issuer
   `clerk.aecon.ai`; endpoint `ep_3JET0Um63P5BmiF8x6Guz5ToyUZ` created at
   `https://app.aecon.ai/api/clerk/webhook` for `session.created`,
@@ -482,11 +480,10 @@ Earlier commands and receipts remain historical, not an active runbook.
   quote, but Call reservation requires x402 financial booking and returns
   `commercial_policy_unavailable` without it. Only zero-price Calls are
   allowed without booking; a free HTTP demo cannot prove a paid purchase.
-  Paid alpha needs the existing testnet x402 reference path, which has not
-  been provisioned. No cleanup wrapper or ownership bypass was written;
+  Paid alpha needs the existing testnet x402 reference path, whose endpoint is deployed but human-owner admission remains pending. No cleanup wrapper or ownership bypass was written;
   seeded history is retained.
 
-Bootstrap and Formance schema are verified, but four exact readiness findings
-still require staged fixes, the command-key transfer and redeployment. User
+Bootstrap, Formance schema and testnet treasury are verified. The Stripe
+command-key transfer remains the last observed web configuration blocker. User
 signup and SNS email confirmation remain pending, as do hosted Infisical,
 Stripe connected-account and supported paid-purchase proof. Alpha is not ready.

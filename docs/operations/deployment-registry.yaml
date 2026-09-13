@@ -362,7 +362,7 @@ hostedAlphaReadback:
   environment:
     id: hosted_alpha
     moneyMode: sandbox_only
-    custodyEnabled: false
+    custodyEnabled: true
     writesEnabled: false
     recurringWorkloadsEnabled: false
     alphaReady: false
@@ -626,7 +626,7 @@ hostedAlphaReadback:
       reservationRequires: x402_financial_booking
       failure: commercial_policy_unavailable
       withoutBooking: zero_price_only
-    paidAlphaTestnetX402Reference: required_not_provisioned
+    paidAlphaTestnetX402Reference: provider_deployed_human_owner_admission_pending
     freeHttpDemo: not_paid_purchase_proof
     cleanupWrapperOrOwnershipBypass: not_written
     seededHistory: retained
@@ -637,14 +637,28 @@ hostedAlphaReadback:
       projectName: Agentic Economy Alpha
       projectCreation: verified_in_portal
       projectId: 929175ec-e74d-48ff-a03e-7396cf40dcc0
-      apiKey: created_and_official_sdk_authenticated
+      apiKey: bound_and_official_sdk_authenticated
       apiKeyId: 4df9f508-2454-4b4a-9a2d-020b0bb6407d
       apiKeyName: agentic-economy-alpha
       keyTransfer: provider_download_moved_to_private_0600_file
       temporaryKeyFile: /private/tmp/ae-alpha-credentials/cdp-api-key.json
       initialAccountAndPolicyInventory: both_empty_no_further_pages
-      walletSecret: awaiting_browser_access_confirmation
-      walletAndPolicies: not_provisioned
+      walletSecret: created_with_user_approval_and_bound
+      walletAndPolicies: provisioned_and_exact_readback_verified
+      policyManagementPermission: removed_after_provisioning
+      buyerAccountName: ae-alpha-buyer
+      buyerAddress: "0x2595AB56Be60CA38606d0c106583b7B7a33707ef"
+      providerAccountName: ae-alpha-provider
+      providerAddress: "0x9ec2cD9E2E2a7D93c426d98b48a745990972EE71"
+      accountPolicyId: d0797b09-f2a6-4815-bc17-c1259e9f6978
+      projectPolicyId: 32297a1f-ba27-4769-97b3-7563481966e4
+      policyRulesDigest: sha256:83dd997fb78d8a51ef5825cd93b3e915d164bd4950ccc71235784570ea00c724
+      custodyPreflight: ready_identity_policies_and_balance_verified
+      providerWalletControl: official_sdk_signMessage_and_viem_verifyMessage_passed
+      faucetTransaction: "0x2b8cfdfe8c51a7e5d38a62326bba9ef0a5a829f568bf50fbd1a27fe1fe3e4686"
+      testUsdcBalanceAtomic: "1000000"
+      convexBindingReadback: all_13_values_match
+      vercelBindingMetadata: all_13_production_variables_present
       existingBroadLiveKey: not_reused
       platformMode: live_api_with_base_sepolia_only_wallet_policy_required
       custodialSandbox: simulated_balances_not_testnet_settlement
@@ -652,21 +666,40 @@ hostedAlphaReadback:
       projectId: prj_gyaX8fy0abiwTFfvfqnqrn71Al8p
       projectName: agentic-economy-sandbox-tools
       rename: official_cli_and_exact_id_readback_verified
-      publicOriginMigration: pending_complete_configuration_and_redeployment
+      publicOriginMigration: verified_project_domain_and_deployment_alias
       existingProjectReused: true
-      publicOrigin: https://package5-reference-provider.vercel.app
+      publicOrigin: https://agentic-economy-sandbox-tools.vercel.app
+      deploymentId: dpl_723RkHxkAupfvuDkktksEtdnw49b
+      deploymentUrl: https://agentic-economy-sandbox-tools-bpbi0eioq-creasybears-projects.vercel.app
+      sourceRevision: 61f6388e1a5ac3d2919f0f51be49fcaf620081d2
+      healthHttp: 200
+      discoveryHttp: 200
+      unpaidCallHttp: 402
       preBindingHealthHttp: 500
       exactFailure: AE_PACKAGE5_FIXTURE_PUBLIC_ORIGIN_is_required
       stagedProductionVariables:
         - AE_PACKAGE5_FIXTURE_PUBLIC_ORIGIN
         - AE_PACKAGE5_FIXTURE_X402_FACILITATOR_URL
+        - AE_PACKAGE5_FIXTURE_X402_PAY_TO
       officialCliWriteAndMetadataReadback: passed
-      payeeAddress: pending_controlled_testnet_wallet
-      redeployment: pending_complete_configuration
+      payeeAddress: "0x9ec2cD9E2E2a7D93c426d98b48a745990972EE71"
+      redeployment: verified_ready
       facilitator: https://x402.org/facilitator
       facilitatorSupportedHttp: 200
       exactV2BaseSepolia: verified
     treasuryObserver: existing_official_cdp_sdk_workload
+    treasuryObservation:
+      invocation: workloadCron_observeX402Treasury_manual
+      standardPlatformWorkloadIdentity: initialized
+      recurringJobsEnabled: false
+      evidenceRef: cdp-balance:0x2595ab56be60ca38606d0c106583b7b7a33707ef:base-sepolia:1789281442248
+      network: "eip155:84532"
+      totalUnits: "1000000"
+      bufferUnits: "10000"
+      custodyGeneration: 1
+      observedAt: 1789281442248
+      recordedAt: 1789281442686
+      durableReadback: verified
     testnetSeedReadiness: blocked_authority_stale_workload_owner
     testnetSeedTestLimitation: simulated_observation_bypasses_real_probe_authority
     ownerAdmissionAlternative:
@@ -683,7 +716,7 @@ hostedAlphaReadback:
       cdpDailyAggregateEnforcement: not_provided_by_policy
       networkFence: ae_sandbox_profile_plus_sepolia_usdc_contract_rules
       policyOnlyChainIdFence: false
-      liveProvisioning: pending
+      liveProvisioning: verified
     fullPaidJourney: not_verified
     auditProtocol: docs/operations/alpha-validation-plan.md
     fullColdUserJourneyAudits: pending_integration_baseline
