@@ -545,3 +545,26 @@ branch re-inspects the endpoint, checks the observation and expiry, then calls
 `verifyEip191Message` against the declared payee before admitting a connection.
 The official Coinbase SDK can sign that existing claim message. No custom
 signer adapter, fabricated ownership or browser-state injection is required.
+
+
+### CLI approval recovery correction — 13 September
+
+Pending device requests now persist privately across CLI runs, keyed by exact
+origin, Provider/market profile and requested environment. The existing
+`proper-lockfile` library excludes simultaneous polling. Expired, denied and
+consumed requests are removed; token validation failure cannot leave a consumed
+device code available for reuse. No new dependency or authentication protocol
+was introduced. A cold Luna/max review found consumed-code and in-process expiry
+edge cases; both were corrected with observable regression tests.
+
+The focused CLI suites pass 73 tests and lint passes. Type checking and the
+reproducible packaged-CLI check passed before the final two review corrections;
+the full release gate is still running and is not yet claimed for the final
+source. Its log is `alpha-cli-resume-gate.log`.
+
+Two real hosted CLI runs returned pending with the same client reference
+`ae_XfpUp4jxWyBNLDjXbdaEUfT2`, establishing that rerun resumes the existing device
+request. The owner has not approved Provider access, and no credential was
+issued or stored by these attempts. The private pending request remains locally
+for the authorised continuation and expires according to the server deadline.
+This CLI source correction still awaits the next hosted deployment.
