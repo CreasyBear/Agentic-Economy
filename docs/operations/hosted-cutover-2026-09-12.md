@@ -520,3 +520,28 @@ a newly observed key-list Forbidden log; actual credential issuance remains
 unverified. Payee-control connection/publication, hosted Infisical, SNS
 confirmation and supported paid-purchase proof remain incomplete. Alpha is not
 ready. Full UX audits remain gated on that integration baseline.
+
+
+### CLI activation follow-up — 13 September
+
+The compiled CLI's no-flag default still targeted the superseded Vercel alias.
+The source default now targets `https://app.aecon.ai`; CLI environment and flag
+overrides retain their precedence. The origin/error and credential-store suites
+passed 38 tests, focused lint passed, and the rebuilt CLI reports the canonical
+origin. This source correction is not yet in the hosted downloadable archive;
+the next verified web build must include it.
+
+A real sandbox Provider CLI device request reached the signed-in business
+owner's consent page, with `market_supply:manage`, seven-day expiry and no buyer
+spending authority. Browser-required consent remains pending. The CLI stopped
+polling after its hard-coded 60-second window. Its instruction to rerun does
+not resume the outstanding device request: current `runConnectCommand` creates
+a new registration and device request and does not persist the pending device
+code. Record this as an activation recovery defect, not a completed connection.
+No Provider credential was received or stored by this attempt.
+
+The existing supply connection API supports an external EVM signer: its x402
+branch re-inspects the endpoint, checks the observation and expiry, then calls
+`verifyEip191Message` against the declared payee before admitting a connection.
+The official Coinbase SDK can sign that existing claim message. No custom
+signer adapter, fabricated ownership or browser-state injection is required.
