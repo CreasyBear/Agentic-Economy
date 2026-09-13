@@ -54,7 +54,7 @@ function productionReadinessEnvironment(): Record<string, string> {
     AE_CANONICAL_BASE_URL: 'https://ae.example',
     VITE_CLERK_PUBLISHABLE_KEY: 'pk_live_example',
     CLERK_SECRET_KEY: 'sk_live_example',
-    CLERK_WEBHOOK_SIGNING_SECRET: 'whsec_live_example',
+    CLERK_WEBHOOK_SIGNING_SECRET: 'whsec_ZGVwbG95bWVudC10ZXN0LXNpZ25pbmctc2VjcmV0',
     CLERK_JWT_ISSUER_DOMAIN: 'https://clerk.example',
     OPENROUTER_API_KEY: 'openrouter-example',
     AE_LLM_MODEL: 'test/provider-model',
