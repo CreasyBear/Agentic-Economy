@@ -636,8 +636,14 @@ hostedAlphaReadback:
       entityId: entity_13b783ca-e69b-51e7-bf52-e7794333a818
       projectName: Agentic Economy Alpha
       projectCreation: verified_in_portal
-      projectId: not_yet_read_in_full
-      apiKey: prepared_not_created_pending_browser_access_confirmation
+      projectId: 929175ec-e74d-48ff-a03e-7396cf40dcc0
+      apiKey: created_and_official_sdk_authenticated
+      apiKeyId: 4df9f508-2454-4b4a-9a2d-020b0bb6407d
+      apiKeyName: agentic-economy-alpha
+      keyTransfer: provider_download_moved_to_private_0600_file
+      temporaryKeyFile: /private/tmp/ae-alpha-credentials/cdp-api-key.json
+      initialAccountAndPolicyInventory: both_empty_no_further_pages
+      walletSecret: awaiting_browser_access_confirmation
       walletAndPolicies: not_provisioned
       existingBroadLiveKey: not_reused
       platformMode: live_api_with_base_sepolia_only_wallet_policy_required

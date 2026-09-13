@@ -251,9 +251,17 @@ The facilitator's `/supported` read returned 200 with exact v2 support for
 pending; the provider has not been redeployed with partial configuration.
 
 The Coinbase portal confirms creation of `Agentic Economy Alpha` under entity
-`entity_13b783ca-e69b-51e7-bf52-e7794333a818`. The full project ID has not yet
-been read. A dedicated API key is prepared but awaits browser access
-confirmation. No existing broad key was reused and no wallet was created.
+`entity_13b783ca-e69b-51e7-bf52-e7794333a818`. The project ID is
+`929175ec-e74d-48ff-a03e-7396cf40dcc0`. After explicit user approval and
+Coinbase two-factor verification, key `agentic-economy-alpha`
+(`4df9f508-2454-4b4a-9a2d-020b0bb6407d`) was created. Portal readback confirms
+the alpha project, mandatory Primary portfolio read-only access, policy Manage,
+and no export/trade/transfer/receive permissions. The provider JSON download
+was moved into a mode-0600 temporary file; its values were not printed.
+Official CDP SDK account and policy reads authenticated successfully and
+returned empty inventories with no further pages. The separate Wallet Secret
+awaits the browser's access confirmation. No existing broad key was reused
+and no wallet was created.
 The API-key wallet path uses the live API with testnet policy restrictions;
 Coinbase's custodial Sandbox is simulated and cannot settle testnet payments.
 Sources: [API-key wallet quickstart](https://docs.cdp.coinbase.com/wallets/quickstart/api-key-auth),

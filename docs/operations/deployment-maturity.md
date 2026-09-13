@@ -221,8 +221,10 @@ public-origin setting. The public origin and official testnet facilitator are
 now staged and verified by Vercel metadata readback. A controlled payee wallet
 and redeployment remain pending. The facilitator's supported endpoint returned
 200 and advertised exact x402 v2 on Base Sepolia. Coinbase's dedicated
-`Agentic Economy Alpha` project is created; its API key awaits the browser's
-access confirmation, and no wallet or policies are provisioned. The existing
+`Agentic Economy Alpha` project and approved API key are created. Official SDK
+reads authenticate and confirm empty account/policy inventories. The separate
+Wallet Secret awaits browser access confirmation; no wallet or policies are
+provisioned. The existing
 CDP SDK treasury observer supersedes the local runbook's previous observer-gap
 claim. No paid Call is proven. The finite cold-agent audit protocol is recorded
 in [alpha-validation-plan.md](alpha-validation-plan.md); full user-journey
