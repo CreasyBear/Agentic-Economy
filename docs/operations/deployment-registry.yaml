@@ -373,9 +373,9 @@ hostedAlphaReadback:
     projectId: prj_dK5mDpjBYuAXMwvLr0pWO0h8DoH9
     scope: creasybears-projects
     canonicalUrl: https://app.aecon.ai
-    observedDeploymentId: dpl_CuuoGmGstgb3VxCnwsdJarVYD7ZU
-    deploymentUrl: https://agentic-economy-aspmf70b8-creasybears-projects.vercel.app
-    observedSourceRevision: 5c0081f1578576dba2e894cfe5784978ac49534c
+    observedDeploymentId: dpl_CUppxcpy5G9c2vedJdf3Cp37wbbS
+    deploymentUrl: https://agentic-economy-qhckdppxr-creasybears-projects.vercel.app
+    observedSourceRevision: 18f070720614cda20b5ad27176638f1893ca4487
     healthHttp: 200
     serverRenderingBoot: fixed
     readyHttp: 503
@@ -393,11 +393,17 @@ hostedAlphaReadback:
     sellable: false
     releaseHttp: 200
     formanceBindings: all_six_active
-    signInState: clerk_form_loads_signup_password_and_email_steps_pending
+    signInState: google_business_signup_signin_and_authenticated_pages_verified
     configurationChange:
       removedVariable: AE_SOURCE_WRITE_SECRET
       providerConfigurationRemoval: verified
       redeployedAfterBindingChanges: true
+      sourceWriteKeyFamilies: [BILLING, PROTECTED, CATALOG, OPERATOR, REPAIR, SESSION]
+      sourceWriteKeyRepair: six_missing_convex_bindings_replaced_with_matching_vercel_and_convex_keys
+      sourceWriteKeyGeneration: alpha_family_v2
+      sourceWriteKeyReadback: six_exact_convex_matches_and_vercel_cli_updates
+      sourceWriteRuntimeProof: genuine_catalog_draft_saved_after_redeployment
+      sourceWriteTemporaryFile: removed
     mainAutodeployBundlerRegression:
       recovery: reviewed_branch_deployed
       fixMergedToMain: false
@@ -424,7 +430,12 @@ hostedAlphaReadback:
     webhookUrl: https://app.aecon.ai/api/clerk/webhook
     events: [session.created, session.ended, session.revoked, user.updated]
     signingSecretBinding: user_saved_in_vercel_and_deployed
-    signedDelivery: not_verified
+    signedDelivery: verified_real_session_event_200
+    securityEventPersistence: applied_after_account_binding_and_visible_in_account_security
+    securityEventRef: audit:clerk:1f0b1f8774643c66dedb9f68361d2a0963dac1a3886fe9a55cb6cc513ce11b3a
+    duplicateSecurityDelivery: verified_200_replayed_same_event_reference_one_durable_record
+    initialSessionDelivery: ignored_before_account_binding
+    clerkAgentApiKeys: disabled_backend_only_activation_prepared_pending_confirmation
     cspFix: deployed
     formLoads: verified
     userSignupPasswordAndEmail: pending
@@ -453,6 +464,7 @@ hostedAlphaReadback:
       authenticatedPageFailure: resolved_by_official_convex_integration_and_fresh_signin
       authenticatedPagesVerified: [/owner/settings, /owner/credit, /owner/operations]
       googleBrandingLinks: saved_public_home_privacy_terms
+      googlePublishingStatus: testing_publish_confirmation_prepared
       codeChangeRequired: false
   processor:
     provider: stripe
@@ -731,7 +743,11 @@ hostedAlphaReadback:
     testnetSeedTestLimitation: simulated_observation_bypasses_real_probe_authority
     ownerAdmissionAlternative:
       path: human_owned_provider_business_x402_preview_connect_publish
-      verification: source_supported_not_runtime_proven
+      verification: workspace_created_draft_saved_live_challenge_verified_payee_claim_pending
+      businessId: mn78qyrzapg0qrpc8brg7ahprs8eanz3
+      accountRef: acc_84e45622d36248de9452c03509f84d11
+      providerName: Agentic Economy Sandbox Tools
+      draftRef: sha256:ab9cd9eaeaabaf5aa2dc6a4b8635d1935e165534537ac003a988395b2a3363bd
       stripeAccountsV2Required: false
       sourceWritesFlag: AE_PACKAGE5_WRITES_ENABLED
       requirements: [human_signup, controlled_payee_claim_signature, valid_bazaar_402_declaration]

@@ -502,7 +502,18 @@ Earlier commands and receipts remain historical, not an active runbook.
   Paid alpha needs the existing testnet x402 reference path, whose endpoint is deployed but human-owner admission remains pending. No cleanup wrapper or ownership bypass was written;
   seeded history is retained.
 
-Bootstrap, Formance schema and testnet treasury are verified. The Stripe
-command-key transfer remains the last observed web configuration blocker. User
-signup and SNS email confirmation remain pending, as do hosted Infisical,
-Stripe connected-account and supported paid-purchase proof. Alpha is not ready.
+Bootstrap, Formance schema, testnet treasury and business Google signup are
+verified. The official Clerk–Convex integration is enabled; authenticated
+Account & security, Credit and Provider operations load. Six missing backend
+source-write keys were repaired together and the app redeployed as
+`dpl_CUppxcpy5G9c2vedJdf3Cp37wbbS`, source
+`18f070720614cda20b5ad27176638f1893ca4487`; health and release return 200.
+The genuine sandbox Provider workspace and source draft now exist, and live
+x402 inspection verifies its controlled testnet payee. A replayed real Clerk
+session event is recorded and visible in security history.
+
+Stripe's restricted command-key transfer still blocks web readiness (503).
+Clerk backend-issued Agent keys and Google external publishing await prepared
+confirmations; payee-control connection/publication, hosted Infisical, SNS
+confirmation and supported paid-purchase proof remain incomplete. Alpha is not
+ready. Full UX audits remain gated on that integration baseline.

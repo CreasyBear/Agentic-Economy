@@ -146,6 +146,14 @@ A fresh sign-in verified authenticated Account & security, Credit and Provider
 workspace page loads. No application authentication implementation was replaced.
 The unused personal-account project is not an application dependency.
 
+The app-to-Convex write boundary requires the same six independently scoped
+source-write keys in both services: billing, protected, catalogue, operator,
+repair and session. All six backend bindings were missing during fresh-backend
+setup; replacement `alpha-<family>-v2` keys now match, and a genuine hosted
+catalogue draft save verifies that boundary. Clerk session authentication and
+these write signatures are separate checks; successful sign-in alone cannot
+prove that a protected mutation is enabled.
+
 ## Stripe event boundary
 
 The snapshot endpoint accepts only Checkout completion/async outcome and refund
