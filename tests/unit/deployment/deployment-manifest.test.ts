@@ -18,7 +18,8 @@ function productionEnvironment(): Record<string, string> {
     AE_CONVEX_SERVER_FUNCTION_TOKEN: 'convex-server-function-token-long-enough',
     VITE_CLERK_PUBLISHABLE_KEY: 'pk_live_example',
     CLERK_SECRET_KEY: 'sk_live_example',
-    CLERK_WEBHOOK_SIGNING_SECRET: 'whsec_c3ludGhldGljLWNsZXJrLXdlYmhvb2sta2V5',
+    // Explicit synthetic Base64 fixture; never copied from a provider.
+    CLERK_WEBHOOK_SIGNING_SECRET: `whsec_${Buffer.from('synthetic-clerk-webhook-key-for-unit-tests').toString('base64')}`,
     CLERK_JWT_ISSUER_DOMAIN: 'https://clerk.example.com',
     OPENROUTER_API_KEY: 'openrouter-secret-value',
     AE_CHAT_PROXY_SECRET: 'chat-proxy-secret-value-long-enough',
