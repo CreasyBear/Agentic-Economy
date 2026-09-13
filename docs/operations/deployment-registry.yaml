@@ -428,6 +428,19 @@ hostedAlphaReadback:
     cspFix: deployed
     formLoads: verified
     userSignupPasswordAndEmail: pending
+    socialSignIn:
+      reportedFailure: google_400_invalid_request_missing_client_id
+      rootCause: google_and_github_enabled_without_production_oauth_credentials
+      mitigation: both_unconfigured_connections_disabled_in_clerk
+      liveSignIn: email_form_loaded_social_buttons_absent
+      googleCloudProjectName: Agentic Economy Authentication
+      googleCloudProjectId: agentic-economy-authentication
+      googleCloudProjectCreation: verified
+      googleConsentConfiguration: prepared_pending_user_policy_confirmation
+      googleOAuthClient: not_created
+      intendedRedirectUri: https://clerk.aecon.ai/v1/oauth_callback
+      intendedScopes: [openid, email, profile]
+      codeChangeRequired: false
   processor:
     provider: stripe
     mode: sandbox

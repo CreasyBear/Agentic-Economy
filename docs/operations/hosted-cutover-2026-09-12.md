@@ -234,6 +234,24 @@ exists in this build.
 
 ## Current hosted alpha evidence — 12 September 2026
 
+### Authentication defect readback — 13 September
+
+Joel reported Google signup returning HTTP 400 `invalid_request`, missing
+`client_id`. The app uses Clerk's maintained `SignIn` and `SignUp` components.
+Exact production instance `ins_3JEJtsKq3rdCZG94s6tAkkut9Y7` showed both Google
+and GitHub enabled with “Setup required” and empty client fields. Both were
+reversibly disabled; Clerk readback shows Disabled. The live sign-in page loads
+email/Continue without the broken social options. No source workaround was added.
+
+Google Cloud project `agentic-economy-authentication` (Agentic Economy
+Authentication) was created and selected. Consent branding is prepared for
+Agentic Economy, external users, and the existing business notification address.
+The required Google API Services User Data Policy checkbox remains unchecked
+pending action-time user confirmation. No OAuth client or new Google secret
+exists yet. The intended callback was read directly from Clerk:
+`https://clerk.aecon.ai/v1/oauth_callback`; only OpenID, email and profile scopes
+are planned. The Google and Clerk tabs are preserved for continuation.
+
 ### Testnet setup readback — 13 September
 
 The existing Vercel project `prj_gyaX8fy0abiwTFfvfqnqrn71Al8p` is now

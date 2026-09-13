@@ -214,6 +214,15 @@ readback key, Stripe destinations and Cloudflare alerts.
 
 ## Hosted alpha assessment — 12 September 2026
 
+**13 September authentication defect:** Joel's Google signup reached an OAuth
+400 with `client_id` missing. Production Clerk confirmed Google and GitHub
+were enabled with empty custom credentials and marked “Setup required”. Both
+connections were disabled through Clerk; the live sign-in form now shows email
+without those broken social buttons. No custom authentication code was added.
+A dedicated Google project, `agentic-economy-authentication`, is created; its
+consent form is prepared but awaits the browser-required policy confirmation.
+Google OAuth client creation, credential binding and actual sign-in are pending.
+
 **13 September testnet integration:** the dedicated Coinbase alpha key and
 Wallet Secret are provisioned. Official SDK reads verify the buyer and Provider
 wallets, exact account/project policies, and 1 test USDC from the Base Sepolia
