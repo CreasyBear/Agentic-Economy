@@ -360,12 +360,7 @@ engines, duplicate business state, broad navigation redesign and open-ended
 patch loops. Sandbox scope, the existing stack and finite workers constrain the
 solution without weakening correctness.
 
-Next work is acceptance for the fixed Provider contract in order 1. Use the
-existing staging integration suite and workflow suite as entry tests; keep
-test ownership separate from coordination and status-projection implementation.
-Source ownership starts at `capabilitySupplyValidation.ts`,
-`capabilitySupplyProbes.ts` and `provider-tool-status.ts`, respectively. Each
-worker receives its exact source/test subset, rather than permission to repair
-the whole chain. Root integrates the existing staging hooks and verifies the
-complete milestone. Any necessary change outside these boundaries returns to
-this design for an explicit blast-radius assessment before assignment.
+Current execution assignments and order are governed exclusively by the
+[alpha maturity register](alpha-maturity-register.md#record-by-record-execution).
+The earlier milestone ordering above describes design dependencies and history;
+it does not authorize switching away from the manager's active release record.

@@ -41,12 +41,12 @@ For each assigned record:
    audit or cleanup loop between records. Missing paperwork does not invalidate
    correct work; establish the missing substantive evidence without restarting it.
 
-**Current controlled assignments:** AM-20 is SOURCE VERIFIED after manager
-acceptance of the complete spending/refusal contract. AM-02 is also SOURCE
-VERIFIED; backend next owns AM-04, then the explicit order below. UX completed its authorized workspace source
-closeout and is archived; do not wake it for backend dependencies or deferred
-browser proof. AM-27's outstanding source dependencies remain with their owning
-records. Workers remain isolated; the manager resolves cross-record dependencies.
+**Current controlled assignments:** AM-20, AM-02 and AM-04 are SOURCE VERIFIED
+after manager acceptance. Backend next owns AM-05, then the explicit order below.
+UX completed its authorized workspace source closeout and is archived; do not
+wake it for backend dependencies or deferred browser proof. AM-27's outstanding
+source dependencies remain with their owning records. Workers remain isolated;
+the manager resolves cross-record dependencies.
 
 **UX phase boundary:** address every existing finding at source first. During
 this phase use the selected skills/contracts and narrow relevant source checks;
@@ -59,7 +59,7 @@ consolidated review of the integrated result. Repair defects found in that revie
 and recheck the affected behavior, without restarting open-ended audit cycles.
 This final review does not authorize deployment or hosted configuration repair.
 
-**Next source closeout order:** AM-04, AM-05, AM-06, AM-07, AM-09, AM-10,
+**Next source closeout order:** AM-05, AM-06, AM-07, AM-09, AM-10,
 AM-11, AM-12, AM-14, AM-15, AM-16, AM-17, AM-18, AM-21, AM-22, AM-23, AM-24,
 AM-26, AM-29. AM-27 retains its explicit source dependencies. Already
 source-verified rows are not reopened without relevant contrary evidence;
@@ -148,7 +148,7 @@ at Quote/Call admission and before paid effects.
 | AM-01 | Given the named alpha candidate, a Customer uses the app and connected Agent against the same Account, balance and Tool state; web, backend and integrations resolve to the recorded targets | Health/readiness and release identities match the recorded candidate; sandbox fences refuse live funding/mainnet execution even through direct requests. An unavailable dependency cannot produce false success | PARTIAL | HOSTED ONLY — Release owner: target/revision alignment and effective sandbox-fence proof deferred; no additional source change indicated. | Targets and health recorded in [registry](deployment-registry.yaml#hostedalphareadback); current web and backend have different source revisions. Coherent candidate and effective restrictions need verification |
 | AM-02 | Given a fresh invited business user, signing up or signing in reaches the intended app page; signing out removes access and signing back in restores the correct Account context | Invalid or expired authentication and an interrupted return offer a working sign-in/recovery path; no redirect loop, lost destination or accidental second Account | PARTIAL | SOURCE VERIFIED — Shared URL-parser validation rejects external/control-character and normalized authentication self-returns; documented Clerk reciprocal fallback settings preserve the intended destination through flow switching. Current-session guard and canonical first provisioning/restoration enforce one stable Account without rewriting durable identity on sign-out. | `eaa0d7256` integrated as `4997f7072`; [AM02 contract and source evidence](alpha-release-design.md#am02-interactive-authentication-and-account-recovery). Nine-file source matrix 125/125 on candidate and main; candidate combined typecheck and integrated changed-file lint pass. Real invitation/Google challenge, cookie/session termination and hosted concurrency remain unverified. AM-04 owns broader Account isolation. |
 | AM-03 | Given a bound Account, a genuine signed Clerk security event appears in that Account’s security history with its original event identity | Replaying the same event preserves one history record. Session enforcement and cross-Account isolation are separately required by AM-02/04; an event record alone does not prove them | VERIFIED | SOURCE VERIFIED — Signed/redacted webhook tests and retained event/replay evidence; preserve AM-02/04 separation. | Recorded event and duplicate-delivery readback `audit:clerk:1f0b1f8774643c66dedb9f68361d2a0963dac1a3886fe9a55cb6cc513ce11b3a`; signed delivery and persistence in registry |
-| AM-04 | Given two isolated Accounts with owner, Agent and administrator test roles, each actor can access only the Tools, Calls, money, credentials and documents its role permits | Changing identifiers or calling a route directly cannot read or mutate another Account’s private resources or bypass role restrictions; publicly discoverable Tool information remains public | NOT VERIFIED | SOURCE GAP (verification) — Access owner: complete two-Account/role negative-case coverage across the named resources. | Requires hosted negative checks with isolated test roles; do not infer from authenticated page load |
+| AM-04 | Given two isolated Accounts with owner, Agent and administrator test roles, each actor can access only the Tools, Calls, money, credentials and documents its role permits | Changing identifiers or calling a route directly cannot read or mutate another Account’s private resources or bypass role restrictions; publicly discoverable Tool information remains public | NOT VERIFIED | SOURCE VERIFIED — Existing canonical owner, delegated Agent, administrator and source-admission boundaries pass named-resource positive/negative checks. Private reads/mutations refuse foreign locators or role substitution; legitimate owners/Agents retain access and public discovery stays public. No new permission layer required. | `2e6929721` integrated as `349f69d0f`; missing existing private-Provider preparation prerequisite `40e5a9859` integrated as `f7499e12d`. [Full source contract and evidence](alpha-release-design.md#am04-account-and-role-isolation). All 22 changed-file cases pass on candidate and main; existing selected source-boundary16 and public-discovery1 cases pass on candidate; both combined typechecks pass. Hosted role/direct-route/storage proof remains unverified. |
 | AM-05 | Given an owner with a spending policy, connecting and approving a buyer Agent lets it resume in the actual installed CLI or harness and request a Quote for the correct Account | An unapproved or expired connection offers the supported approval/reconnection path; no copied Account identifier, wallet setup or mandatory diagnostic sequence is needed to purchase | PARTIAL | SOURCE GAP — Access + UX: preserve buyer approval/return context and prove installed-client reconnection without operator diagnostics. | Provider CLI approval was proved; the complete buyer activation journey is outstanding |
 | AM-06 | Given an existing Agent and history, the owner rotates its credential; the replacement acts for the same Agent with the same current limits and history. Revocation blocks new Calls through the old credential | Old and new credentials used concurrently cannot multiply capacity. Revocation preserves accepted Call history; any further effect or recovery still checks current authority | NOT VERIFIED | SOURCE GAP (verification) — Access owner: bind rotation, revocation and concurrent credentials to one Agent capacity in source tests. | Hosted rotation/revocation and concurrent-credential checks outstanding |
 
@@ -215,8 +215,8 @@ close its parent until the parent's acceptance is met.
 ## Execution order and boundaries
 
 The **Record-by-record execution** assignment and numeric queue above supersede
-the earlier Provider/buyer milestone ordering. AM-20 and AM-02 are now source-accepted;
-AM-04 is next. Historical contributor notes below remain evidence, not an active
+the earlier Provider/buyer milestone ordering. AM-20, AM-02 and AM-04 are now source-accepted;
+AM-05 is next. Historical contributor notes below remain evidence, not an active
 alternative queue. Run affected source checks at coherent integration boundaries;
 full browser/release review follows source completion. No deployment is authorized.
 
@@ -676,3 +676,31 @@ transaction scheduling remain explicitly unverified. SOURCE VERIFIED does not
 change hosted status from PARTIAL. The source totals are now **6 verified,
 20 unclosed, 6 hosted-only** out of 32. Backend next owns AM-04; AM-05 follows only
 after manager acceptance of the whole AM-04 source contract.
+
+
+### AM-04 manager source acceptance — 14 September 2026
+
+Source accepted at `2e6929721`, integrated to main as `349f69d0f`. The existing
+release design maps the whole named-resource isolation contract to enforcing
+source and positive/negative evidence. The bounded design/contract review found
+no need for a new IAM layer. No new production implementation was required in
+the candidate; the five test files close finite proof gaps.
+
+Main integration reproduced two legitimate private-Provider preparation failures
+because its earlier `40e5a9859` source prerequisite had not been integrated.
+Applied that existing two-file correction as `f7499e12d`, retaining all newer
+isolation tests and unrelated main edits. The four other files' 15 tests passed
+before that correction; the affected private-provider file then passed 7/7.
+Thus all **22/22** changed-file cases pass in main as well as candidate. Existing
+selected role/secret/funding/source checks passed **16/16**, and the selected
+public discovery scenario passed **1/1**, with unrelated cases deliberately
+excluded. Combined `npm run typecheck` passes in both checkouts; relevant explicit
+`oxlint` and `git diff --check` pass.
+
+Evidence limits remain explicit: Call snapshots cover protected Call rows, not
+all audit/ledger state; ledger scoping is tested at the SDK boundary; document
+checks establish URL issuance isolation, not revocation of an issued bearer URL.
+Actual hosted Clerk/Agent/admin sessions, direct-route and storage probes remain
+unverified. AM-04 hosted status stays NOT VERIFIED. Source totals are now
+**7 verified, 19 unclosed, 6 hosted-only** out of 32. Backend next owns AM-05;
+AM-06 follows only after manager acceptance of the whole AM-05 source outcome.
