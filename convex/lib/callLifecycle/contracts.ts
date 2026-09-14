@@ -8,9 +8,24 @@ import {
   callResultValue,
   sellerOnboardingCanaryExecutionEnvelopeValue,
   usageValue,
+  statusResultValue,
 } from '@/modules/capability-execution/convex'
 
 export const environment = v.union(v.literal('sandbox'), v.literal('production'))
+export const ownerCallContextValue = v.object({
+  purpose: v.null(),
+  agent: v.object({ principalRef: v.string(), applicationRef: v.string(), currentDisplayName: v.union(v.string(), v.null()) }),
+  recordedTool: v.union(
+    v.object({ kind: v.literal('available'), basis: v.literal('call_snapshot'), name: v.string(), providerRef: v.string(), providerName: v.null() }),
+    v.object({ kind: v.literal('unavailable') }),
+  ),
+  reconciliation: v.object({ canSubmitEvidence: v.literal(true), permissionBasis: v.literal('account_owner'), requiresVerifiedEvidence: v.literal(true) }),
+})
+export const ownerCallStatusResultValue = v.union(
+  statusResultValue.members[0].extend({ ownerContext: v.optional(v.union(ownerCallContextValue, v.null())) }),
+  statusResultValue.members[1],
+  statusResultValue.members[2],
+)
 export const authorityMode = v.union(
   v.literal('read_only'),
   v.literal('approval_required'),

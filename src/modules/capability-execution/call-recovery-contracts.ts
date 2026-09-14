@@ -37,6 +37,27 @@ export type CallStatusRefusalCode = (typeof callStatusRefusalCodeValues)[number]
 
 export type CallStatusState = z.infer<typeof callStatusStateSchema>
 
+/** Owner UI metadata only; never part of the public Call status protocol. */
+export const ownerCallContextSchema = z.strictObject({
+  purpose: z.null(),
+  agent: z.strictObject({
+    principalRef: z.string(), applicationRef: z.string(), currentDisplayName: z.string().nullable(),
+  }),
+  recordedTool: z.discriminatedUnion('kind', [
+    z.strictObject({
+      kind: z.literal('available'), basis: z.literal('call_snapshot'),
+      name: z.string(), providerRef: z.string(), providerName: z.null(),
+    }),
+    z.strictObject({ kind: z.literal('unavailable') }),
+  ]),
+  /** Permission to submit only. The worker independently verifies evidence. */
+  reconciliation: z.strictObject({
+    canSubmitEvidence: z.literal(true), permissionBasis: z.literal('account_owner'),
+    requiresVerifiedEvidence: z.literal(true),
+  }),
+})
+export type OwnerCallContext = z.infer<typeof ownerCallContextSchema>
+
 export type CallStatusResult =
   | Readonly<{
       kind: 'found'
@@ -75,3 +96,7 @@ export type CallRecoveryResult =
       evidence: PublicReconciliationState
       receipt?: CallReceipt
     }>
+
+export type OwnerCallStatusResult =
+  | (Extract<CallStatusResult, { kind: 'found' }> & Readonly<{ ownerContext?: OwnerCallContext | null }>)
+  | Exclude<CallStatusResult, { kind: 'found' }>

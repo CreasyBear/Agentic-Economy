@@ -161,6 +161,12 @@ function ownerRecoveryContext(
   const runAction = vi.fn(async (_reference: unknown, _args: unknown) => workerResult)
   const runQuery = vi.fn(async (reference: unknown) => {
     if (functionPath(reference) === 'capabilityCalls:readOwnerRecovery') return recoveryRow
+    if (functionPath(reference) === 'capabilityCalls:readOwnerReceiptContext') return {
+      purpose: null,
+      agent: { principalRef: principal.principalId, applicationRef: principal.applicationRef, currentDisplayName: null },
+      recordedTool: { kind: 'unavailable' },
+      reconciliation: { canSubmitEvidence: true, permissionBasis: 'account_owner', requiresVerifiedEvidence: true },
+    }
     throw new Error(`unexpected_owner_query:${functionPath(reference)}`)
   })
   const identity = identityOrOwnerId === null
@@ -461,6 +467,7 @@ describe('capability operation recovery Convex adapters', () => {
       kind: 'found',
       state: 'reconciliation_required',
       previousInput: { city: 'Perth', units: 'metric' },
+      ownerContext: { reconciliation: { canSubmitEvidence: true, permissionBasis: 'account_owner', requiresVerifiedEvidence: true } },
     })
     expect(statusContext.runAction).toHaveBeenCalledWith(expect.anything(), {
       callRef,
@@ -507,6 +514,16 @@ describe('capability operation recovery Convex adapters', () => {
       recoverAsOwner: true,
       mode: 'reconcile',
       evidence,
+    })
+  })
+
+  it('retains readable status when optional owner context cannot be read', async () => {
+    const ctx = ownerRecoveryContext(ownerIdentity, {
+      kind: 'found', callRef, toolRef: row.toolRef, state: 'reconciliation_required',
+    })
+    ctx.runQuery.mockResolvedValueOnce(row).mockRejectedValueOnce(new Error('source unavailable'))
+    await expect(readOwnerCallStatusHandler(ctx, { callRef })).resolves.toMatchObject({
+      kind: 'found', callRef, state: 'reconciliation_required', ownerContext: null,
     })
   })
 

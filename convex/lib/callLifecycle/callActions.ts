@@ -9,6 +9,9 @@ import { MARKET_TOOLS_CALL_SCOPE } from '@/modules/agent-access/contract'
 import { isBoundedJsonValue, type JsonValue } from '@/modules/capability-contract/public'
 import { isRecord } from '@/modules/common/is-record'
 import { pricingConfigDecisionAmount } from '@/modules/money/public'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
+import type { OwnerCallContext } from '@/modules/capability-execution/call-recovery-contracts'
+import type { ownerCallStatusResultValue } from './contracts'
 import {
   createCallApplication,
   type CallIdempotencyReservation,
@@ -35,6 +38,7 @@ import {
 } from '@/modules/capability-supply/provider-connection'
 import {
   materializeRuntimePublishedTool,
+  createPublicToolRef,
   parsePublishedToolSnapshot,
   type PublishedTool,
   validPublicHttpsEndpoint,
@@ -761,7 +765,7 @@ export async function reconcileCallHandler(
 export async function readOwnerCallStatusHandler(
   ctx: ActionCtx,
   args: { callRef: string },
-): Promise<Infer<typeof statusResultValue>> {
+): Promise<Infer<typeof ownerCallStatusResultValue>> {
   const row = await authorizeOwnerRecovery(ctx, args.callRef)
   if (row === null) return recoveryNotFound(args.callRef) as Infer<typeof statusResultValue>
   const result = await ctx.runAction(internal.capabilityCallWorker.recover, {
@@ -774,9 +778,65 @@ export async function readOwnerCallStatusHandler(
   const projected = projectStatusRecoveryResult(result)
   if (projected.kind !== 'found') return projected
   const previousInput = parseOwnerPreviousInput(row.inputJson)
+  let ownerContext: OwnerCallContext | null
+  try {
+    ownerContext = await ctx.runQuery(internal.capabilityCalls.readOwnerReceiptContext, {
+      callRef: row.callRef, ownerId: row.ownerId, toolRef: projected.toolRef,
+    })
+  } catch (cause) {
+    // Optional identity/capability metadata must not erase a readable receipt.
+    ownerContext = degradeBackend(cause, null, { site: 'readOwnerCallStatusHandler', reason: 'source_unavailable' })
+  }
   return {
     ...projected,
     ...(previousInput === undefined ? {} : { previousInput }),
+    ownerContext,
+  }
+}
+
+export async function readOwnerReceiptContextHandler(
+  ctx: QueryCtx,
+  args: { callRef: string; ownerId: string; toolRef: string },
+): Promise<OwnerCallContext | null> {
+  // Internal owner read only, called after the same authorization used by
+  // reconcileOwnerCall. Re-check linkage before reading any identity metadata.
+  const row = await ctx.db.query('capabilityCalls')
+    .withIndex('by_callRef', (q) => q.eq('callRef', args.callRef)).unique()
+  if (row === null || row.ownerId !== args.ownerId || row.toolRef !== args.toolRef) return null
+  const [principal, admission, membership] = await Promise.all([
+    ctx.db.query('principals').withIndex('by_principalRef', (q) => q.eq('principalRef', row.principalId)).unique(),
+    ctx.db.query('agentAccessPrincipals').withIndex('by_principalId', (q) => q.eq('principalId', row.principalId)).unique(),
+    ctx.db.query('memberships').withIndex('by_accountRef_and_memberPrincipalRef_and_lifecycle', (q) => q
+      .eq('accountRef', row.ownerId).eq('memberPrincipalRef', row.principalId).eq('lifecycle', 'active')).first(),
+  ])
+  const currentDisplayName = principal?.kind === 'agent' && principal.lifecycle === 'active'
+    && membership !== null && admission !== null
+    && admission.ownerId === row.ownerId && admission.applicationRef === row.applicationRef
+    && admission.environment === row.environment ? principal.displayName : null
+  return {
+    purpose: null,
+    agent: { principalRef: row.principalId, applicationRef: row.applicationRef, currentDisplayName },
+    recordedTool: recordedReceiptTool(row),
+    reconciliation: { canSubmitEvidence: true, permissionBasis: 'account_owner', requiresVerifiedEvidence: true },
+  }
+}
+
+function recordedReceiptTool(row: CallRow): OwnerCallContext['recordedTool'] {
+  const unavailable = { kind: 'unavailable' } as const
+  if (row.toolJson === undefined || row.inputJson === undefined) return unavailable
+  const tool = parsePublishedToolSnapshot(row.toolJson)
+  const input = parseOwnerPreviousInput(row.inputJson)
+  if (tool === undefined || input === undefined) return unavailable
+  const toolRef = createPublicToolRef({
+    operationId: tool.operationId, publicationRef: tool.identity.publicationRef,
+    publicationRevision: tool.identity.publicationRevision, contractRef: tool.contract.ref,
+  })
+  if (toolRef !== row.toolRef || tool.runtimeEnvironment !== row.environment
+    || canonicalDigest(input) !== row.inputDigest
+    || canonicalDigest({ toolRef: row.toolRef, input }) !== row.requestDigest) return unavailable
+  return {
+    kind: 'available', basis: 'call_snapshot', name: tool.contract.name,
+    providerRef: tool.identity.businessId, providerName: null,
   }
 }
 

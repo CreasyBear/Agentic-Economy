@@ -15,6 +15,8 @@ import {
   callDispatchMutationArgs,
   callDispatchMutationResult,
   pendingApprovalView,
+  ownerCallContextValue,
+  ownerCallStatusResultValue,
   callState,
   callSummaryPageValue,
   principalAndSourceArgs,
@@ -71,6 +73,7 @@ import {
 } from './lib/callLifecycle/dispatch'
 import {
   readOwnerRecoveryHandler,
+  readOwnerReceiptContextHandler,
   listAgentCallSummariesHandler,
   readCurrentProviderConnectionAuthorityHandler,
   readProviderLeaseAuthorityHandler,
@@ -191,6 +194,12 @@ export const readOwnerRecovery = internalQuery({
   handler: readOwnerRecoveryHandler,
 })
 
+export const readOwnerReceiptContext = internalQuery({
+  args: { callRef: v.string(), ownerId: v.string(), toolRef: v.string() },
+  returns: v.union(ownerCallContextValue, v.null()),
+  handler: readOwnerReceiptContextHandler,
+})
+
 export const record = internalMutation({
   args: recordArgs,
   returns: v.object({ kind: v.literal('recorded') }),
@@ -303,7 +312,7 @@ export const reconcileCall = action({
 
 export const readOwnerCallStatus = action({
   args: { callRef: v.string() },
-  returns: statusResultValue,
+  returns: ownerCallStatusResultValue,
   handler: canonicalOwnerStatusHandler,
 })
 
