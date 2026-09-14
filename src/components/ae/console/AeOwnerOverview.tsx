@@ -57,6 +57,19 @@ function OverviewCard({ title, description, value, action, icon: Icon, dominant 
   </Card>
 }
 
+function ProviderSetupEntry({ provider }: Readonly<{ provider: OwnerOverviewSnapshot['provider'] }>) {
+  if (provider !== undefined) return null
+  return (
+    <aside aria-label="Provider setup" className="flex flex-col gap-related border-t border-border pt-related sm:flex-row sm:items-center sm:justify-between">
+      <div className="grid gap-intra">
+        <p className="text-sm font-medium text-foreground">Want to offer a service?</p>
+        <p className="text-sm text-muted-foreground">Start a separate Provider setup when you are ready to publish a Tool.</p>
+      </div>
+      <Button asChild variant="outline" className="w-fit min-h-touch"><Link to="/owner/operations">Offer a Tool</Link></Button>
+    </aside>
+  )
+}
+
 export function AeOwnerOverview({ snapshot }: Readonly<{ snapshot: OwnerOverviewSnapshot }>) {
   const next = nextActionFor(snapshot)
   const balanceValue = snapshot.balance.kind === 'available' ? formatDisplayAmount(snapshot.balance.amount) : 'Balance unavailable'
@@ -80,6 +93,7 @@ export function AeOwnerOverview({ snapshot }: Readonly<{ snapshot: OwnerOverview
       <AeSection title="Next step" description={next.description}>
         <Button asChild className="w-fit min-h-touch"><Link to={next.href}>{next.label}</Link></Button>
       </AeSection>
+      <ProviderSetupEntry provider={snapshot.provider} />
     </div>
   </AeOperatorPage>
 }

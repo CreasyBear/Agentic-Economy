@@ -58,6 +58,7 @@ describe('owner Overview', () => {
     expect(screen.getByText('2 connected Agents')).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Review Call' }).getAttribute('href')).toBe('/activity')
     expect(screen.queryByText('Provider workspace')).toBeNull()
+    expect(screen.getByRole('link', { name: 'Offer a Tool' }).getAttribute('href')).toBe('/owner/operations')
   })
 
   it('preserves known Calls and Agents when the Balance read fails', async () => {
@@ -108,5 +109,6 @@ describe('owner Overview', () => {
     expect(screen.getByText('Provider workspace')).toBeTruthy()
     expect(screen.getByText('Example Provider · 1 Tool')).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Open My Tools' }).getAttribute('href')).toBe('/owner/operations')
+    expect(screen.queryByRole('link', { name: 'Offer a Tool' })).toBeNull()
   })
 })
