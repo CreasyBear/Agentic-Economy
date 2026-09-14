@@ -84,6 +84,21 @@ describe('owner Overview', () => {
 
     expect(screen.getByText('No attention in recent Calls')).toBeTruthy()
     expect(screen.queryByText('No Calls need attention')).toBeNull()
+    expect(screen.getByRole('link', { name: 'Check Calls' }).getAttribute('href')).toBe('/activity')
+    expect(screen.queryByRole('link', { name: 'Explore Market' })).toBeNull()
+  })
+
+  it('does not advance past unavailable Calls or an incomplete empty Agent directory', async () => {
+    reads.calls.mockRejectedValueOnce(new Error('calls unavailable'))
+    renderOverview(await loadOverview())
+    expect(screen.getByRole('link', { name: 'Check Calls' }).getAttribute('href')).toBe('/activity')
+    cleanup()
+
+    reads.calls.mockResolvedValueOnce({ page: [], continueCursor: '', isDone: true })
+    reads.agents.mockResolvedValueOnce({ items: [], details: [], nextCursor: 'more' })
+    renderOverview(await loadOverview())
+    expect(screen.getByRole('link', { name: 'Check Agents' }).getAttribute('href')).toBe('/agent-access')
+    expect(screen.queryByRole('link', { name: 'Connect an Agent' })).toBeNull()
   })
 
   it('moves a new Customer through Agent connection, funding and Market without guessing', async () => {
@@ -115,6 +130,16 @@ describe('owner Overview', () => {
 
     expect(screen.getByText('Provider workspace')).toBeTruthy()
     expect(screen.getByText('Example Provider · 1 Tool')).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Open My Tools' }).getAttribute('href')).toBe('/owner/operations')
+    expect(screen.queryByRole('link', { name: 'Offer a Tool' })).toBeNull()
+  })
+
+  it('does not turn an unavailable Provider read into a second setup invitation', async () => {
+    reads.provider.mockRejectedValueOnce(new Error('provider status unavailable'))
+    renderOverview(await loadOverview())
+
+    expect(screen.getByText('Provider workspace')).toBeTruthy()
+    expect(screen.getByText('Status unavailable')).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Open My Tools' }).getAttribute('href')).toBe('/owner/operations')
     expect(screen.queryByRole('link', { name: 'Offer a Tool' })).toBeNull()
   })

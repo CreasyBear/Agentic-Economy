@@ -42,11 +42,13 @@ export const Route = createFileRoute('/_operator/owner/')({
     const agentsSnapshot: OwnerOverviewSnapshot['agents'] = agents.status === 'fulfilled'
       ? { kind: 'available', connected: agents.value.items.filter(agent => agent.status === 'connected' || agent.status === 'attention').length, complete: agents.value.nextCursor === undefined }
       : { kind: 'unavailable' }
-    const providerSnapshot: OwnerOverviewSnapshot['provider'] = provider.status !== 'fulfilled' || provider.value.kind === 'unavailable' || provider.value.kind === 'not_applicable'
-      ? undefined
-      : provider.value.kind === 'available'
-        ? { kind: 'available', name: provider.value.value.catalog.name, tools: provider.value.value.catalog.offerings.length }
-        : { kind: 'attention' }
+    const providerSnapshot: OwnerOverviewSnapshot['provider'] = provider.status !== 'fulfilled' || provider.value.kind === 'unavailable'
+      ? { kind: 'unavailable' }
+      : provider.value.kind === 'not_applicable'
+        ? undefined
+        : provider.value.kind === 'available'
+          ? { kind: 'available', name: provider.value.value.catalog.name, tools: provider.value.value.catalog.offerings.length }
+          : { kind: 'attention' }
     return { balance: balanceSnapshot, calls: callsSnapshot, agents: agentsSnapshot, ...(providerSnapshot === undefined ? {} : { provider: providerSnapshot }) }
   },
   head: () => ({ meta: [{ title: 'Overview | Agentic Economy' }, { name: 'robots', content: 'noindex' }] }),
