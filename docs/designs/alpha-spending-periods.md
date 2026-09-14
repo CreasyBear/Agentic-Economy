@@ -1,10 +1,9 @@
 # Daily and monthly spending limits
 
-Status: source outcome ready for final manager acceptance. Final consequence
-integration now proves actual worker execution after monetary-limit changes and
-scheduled pre-submission fund return after revocation/expiry. All 16 local
-registered-buyer/native scenarios pass. Combined release checks and hosted cutover
-remain manager-owned.
+Status: SOURCE VERIFIED by manager acceptance `f4d2b53eb`. The final worker and
+refund contracts pass the enabled 16-case registered-buyer/native-ledger suite
+on both candidate and integrated main. Combined typecheck/lint pass. Hosted
+acceptance and the final browser/release review remain deferred.
 
 ## Buyer contract and reproduced defect
 

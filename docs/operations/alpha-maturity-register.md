@@ -641,3 +641,13 @@ contains browser and full build checks and was not run in this source phase.
 `npm run deps:check` also passed with all existing ceilings unchanged.
 Hosted/runtime acceptance stays PARTIAL. This source closure leaves **5 SOURCE
 VERIFIED, 21 source-unclosed and 6 HOSTED ONLY** release records out of 32.
+
+
+Main integration completed through `7b1f892b0`. Exact AM-20 source and required
+existing environment/payment prerequisites were integrated without changing
+hosted configuration or disturbing unrelated main edits. Main's enabled native
+buyer file passed **16/16** in 29.95s; affected Quote/worker/refund checks passed
+**59/59**, and payment/authorization checks **122/122**. Final main typecheck and
+lint passed. Older Provider candidate/main differences remain for their owning
+source records; this is not a claim of complete repository parity or alpha
+readiness. Backend is assigned AM-02, with AM-04 next after manager acceptance.
