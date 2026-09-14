@@ -79,6 +79,11 @@ describe('Tools management disclosure', () => {
 
     expect(calls.connections).not.toHaveBeenCalled()
     expect(calls.earnings).not.toHaveBeenCalled()
+    const earningsHeading = screen.getByRole('heading', { name: 'Earnings' })
+    expect(earningsHeading.closest('details')).toBeNull()
+    const administration = screen.getByText('Provider settings and administration').closest('details')
+    expect(administration?.textContent).toContain('Provider identity')
+    expect(administration?.textContent).not.toContain('Earnings')
     fireEvent.click(await screen.findByRole('button', { name: 'Manage connections' }))
     await waitFor(() => expect(calls.connections).toHaveBeenCalledTimes(1))
     expect(await screen.findByTestId('connection-controls')).toBeTruthy()

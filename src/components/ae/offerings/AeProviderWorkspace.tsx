@@ -63,7 +63,7 @@ export function AeProviderWorkspace(props: WorkspaceProps) {
   return (
     <AeOperatorPage
       operatorRole="owner"
-      title="Operations"
+      title="Tools"
       description="Publish the exact tools agents can inspect and call."
       currentPath="/owner/operations"
       {...(actions === undefined ? {} : { actions })}
@@ -242,20 +242,6 @@ function AvailableWorkspace({
         onOpenConnections={openConnections}
         onRetryConnections={loadConnections}
       />
-      <ProviderWorkspaceIdentitySection
-        providerName={inventory.provider.name}
-        identityOpen={identityOpen}
-        identityPending={identityPending}
-        {...(identityDetail === undefined ? {} : { identityDetail })}
-        {...(publicStatus === undefined ? {} : { publicStatus })}
-        onOpenIdentity={openIdentity}
-        onRetryIdentity={loadIdentity}
-        onRename={async (input) => {
-          const renamed = await renameProvider({ data: input })
-          if (renamed.kind === 'updated' || renamed.kind === 'unchanged') await router.invalidate()
-          return renamed
-        }}
-      />
       <ProviderWorkspaceEarningsSection
         {...(payouts === undefined ? {} : { payouts })}
         earningsOpen={earningsOpen}
@@ -265,7 +251,26 @@ function AvailableWorkspace({
         onRetryEarnings={loadEarnings}
         onStatusRefreshed={() => void router.invalidate()}
       />
-      <ProviderWorkspaceOffboardingSection {...(offboarding === undefined ? {} : { offboarding })} refreshWorkspace={refresh} />
+      <details className="rounded-lg border border-border p-4" open={location.hash === 'provider-identity' || undefined}>
+        <summary className="cursor-pointer font-medium">Provider settings and administration</summary>
+        <div className="mt-6 grid gap-section">
+          <ProviderWorkspaceIdentitySection
+            providerName={inventory.provider.name}
+            identityOpen={identityOpen}
+            identityPending={identityPending}
+            {...(identityDetail === undefined ? {} : { identityDetail })}
+            {...(publicStatus === undefined ? {} : { publicStatus })}
+            onOpenIdentity={openIdentity}
+            onRetryIdentity={loadIdentity}
+            onRename={async (input) => {
+              const renamed = await renameProvider({ data: input })
+              if (renamed.kind === 'updated' || renamed.kind === 'unchanged') await router.invalidate()
+              return renamed
+            }}
+          />
+          <ProviderWorkspaceOffboardingSection {...(offboarding === undefined ? {} : { offboarding })} refreshWorkspace={refresh} />
+        </div>
+      </details>
     </div>
   )
 }

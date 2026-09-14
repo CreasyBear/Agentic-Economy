@@ -24,7 +24,7 @@ export function ProviderWorkspaceEarningsSection({
   onStatusRefreshed: () => void
 }>) {
   return (
-    <AeSection id="earnings" title="Earnings and operational evidence" description="Source-recorded provider earnings and payout readiness.">
+    <AeSection id="earnings" title="Earnings" description="Provider earnings and payout readiness.">
       <DeferredSection promise={payouts} loadingLabel="Loading earnings" unavailableTitle="Earnings unavailable">
         {(result) => result.kind === 'available' ? (
           <SummaryCard title="Payout readiness" detail={`${result.value.readyAccounts} ready · ${result.value.needsAttention} need attention`} action="Manage earnings" onAction={onOpenEarnings} />
