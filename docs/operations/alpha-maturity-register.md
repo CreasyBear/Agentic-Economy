@@ -41,13 +41,12 @@ For each assigned record:
    audit or cleanup loop between records. Missing paperwork does not invalidate
    correct work; establish the missing substantive evidence without restarting it.
 
-**Current controlled assignments:** AM-20, AM-02, AM-04 and AM-05 are SOURCE
-VERIFIED after manager acceptance. Backend next owns AM-06, then the explicit
-order below.
-UX completed its authorized workspace source closeout and is archived; do not
-wake it for backend dependencies or deferred browser proof. AM-27's outstanding
-source dependencies remain with their owning records. Workers remain isolated;
-the manager resolves cross-record dependencies.
+**Current controlled assignments:** backend next owns AM-07, following source
+acceptance of AM-06 and the earlier AM-20/02/04/05 outcomes. Follow the explicit
+order below. UX completed its authorized workspace source closeout and is
+archived; do not wake it for backend dependencies or deferred browser proof.
+AM-27's outstanding source dependencies remain with their owning records.
+Workers remain isolated; the manager resolves cross-record dependencies.
 
 **UX phase boundary:** address every existing finding at source first. During
 this phase use the selected skills/contracts and narrow relevant source checks;
@@ -60,7 +59,7 @@ consolidated review of the integrated result. Repair defects found in that revie
 and recheck the affected behavior, without restarting open-ended audit cycles.
 This final review does not authorize deployment or hosted configuration repair.
 
-**Next source closeout order:** AM-06, AM-07, AM-09, AM-10,
+**Next source closeout order:** AM-07, AM-09, AM-10,
 AM-11, AM-12, AM-14, AM-15, AM-16, AM-17, AM-18, AM-21, AM-22, AM-23, AM-24,
 AM-26, AM-29. AM-27 retains its explicit source dependencies. Already
 source-verified rows are not reopened without relevant contrary evidence;
@@ -151,7 +150,7 @@ at Quote/Call admission and before paid effects.
 | AM-03 | Given a bound Account, a genuine signed Clerk security event appears in that Account’s security history with its original event identity | Replaying the same event preserves one history record. Session enforcement and cross-Account isolation are separately required by AM-02/04; an event record alone does not prove them | VERIFIED | SOURCE VERIFIED — Signed/redacted webhook tests and retained event/replay evidence; preserve AM-02/04 separation. | Recorded event and duplicate-delivery readback `audit:clerk:1f0b1f8774643c66dedb9f68361d2a0963dac1a3886fe9a55cb6cc513ce11b3a`; signed delivery and persistence in registry |
 | AM-04 | Given two isolated Accounts with owner, Agent and administrator test roles, each actor can access only the Tools, Calls, money, credentials and documents its role permits | Changing identifiers or calling a route directly cannot read or mutate another Account’s private resources or bypass role restrictions; publicly discoverable Tool information remains public | NOT VERIFIED | SOURCE VERIFIED — Existing canonical owner, delegated Agent, administrator and source-admission boundaries pass named-resource positive/negative checks. Private reads/mutations refuse foreign locators or role substitution; legitimate owners/Agents retain access and public discovery stays public. No new permission layer required. | `2e6929721` integrated as `349f69d0f`; missing existing private-Provider preparation prerequisite `40e5a9859` integrated as `f7499e12d`. [Full source contract and evidence](alpha-release-design.md#am04-account-and-role-isolation). All 22 changed-file cases pass on candidate and main; existing selected source-boundary16 and public-discovery1 cases pass on candidate; both combined typechecks pass. Hosted role/direct-route/storage proof remains unverified. |
 | AM-05 | Given an owner with a spending policy, connecting and approving a buyer Agent lets it resume in the actual installed CLI or harness and request a Quote for the correct Account | An unapproved or expired connection offers the supported approval/reconnection path; no copied Account identifier, wallet setup or mandatory diagnostic sequence is needed to purchase | PARTIAL | SOURCE VERIFIED — Supported CLI device polling preserves its pending approval and validates the canonical Account before credential storage; installed connection → discovery → first Quote passes. Registered OAuth callbacks preserve client state on approval/denial. Malformed decisions refuse before mutation; lost responses remain unknown with same-request status recovery; confirmed expired requests offer reconnection. | `af97fd565` integrated as `29a7ddc53`, with existing pending-approval prerequisites `5820d9c45`/`584cba57f` integrated as `56ac71a76`/`f9d1c4074`. [AM05 contract and source evidence](alpha-release-design.md#am05-buyer-connection-approval-and-return). Integrated three-file 132/132 including installed CLI; candidate/main typechecks and scoped lint pass. Hosted approval/credential propagation/harness proof remains deferred. Funding/task return remains AM-09/24; arbitrary external conversation URLs require an actual supported client contract. |
-| AM-06 | Given an existing Agent and history, the owner rotates its credential; the replacement acts for the same Agent with the same current limits and history. Revocation blocks new Calls through the old credential | Old and new credentials used concurrently cannot multiply capacity. Revocation preserves accepted Call history; any further effect or recovery still checks current authority | NOT VERIFIED | SOURCE GAP (verification) — Access owner: bind rotation, revocation and concurrent credentials to one Agent capacity in source tests. | Hosted rotation/revocation and concurrent-credential checks outstanding |
+| AM-06 | Given an existing Agent and history, the owner rotates its credential; the replacement acts for the same Agent with the same current limits and history. Revocation blocks new Calls through the old credential | Old and new credentials used concurrently cannot multiply capacity. Revocation preserves accepted Call history; any further effect or recovery still checks current authority | NOT VERIFIED | SOURCE VERIFIED — Existing canonical replacement/revocation, provider cleanup and stable-Principal capacity contracts hold. Active successor selection excludes cancelled history before bounding results; stale binding replay refuses; grant validation precedes inserts and new promotion checks live successor material before predecessor revocation. Completed outcome replay does not reactivate expired authority. | `349d1bbb0` integrated as `a859a1f65`; [AM06 contract and evidence](alpha-release-design.md#am06-credential-replacement-revocation-and-retained-capacity). Integrated replacement/rotation-dispatch 15/15, candidate combined typecheck and scoped lint pass. Existing canonical lifecycle/cleanup/authority checks and AM-20 native registered rotation/capacity evidence reused. Hosted simultaneous clients, Clerk cleanup and production transaction scheduling remain unverified. |
 
 ## Funding and customer records
 
@@ -216,8 +215,8 @@ close its parent until the parent's acceptance is met.
 ## Execution order and boundaries
 
 The **Record-by-record execution** assignment and numeric queue above supersede
-the earlier Provider/buyer milestone ordering. AM-20, AM-02, AM-04 and AM-05 are now source-accepted;
-AM-06 is next. Historical contributor notes below remain evidence, not an active
+the earlier Provider/buyer milestone ordering. AM-20, AM-02, AM-04, AM-05 and AM-06 are now source-accepted;
+AM-07 is next. Historical contributor notes below remain evidence, not an active
 alternative queue. Run affected source checks at coherent integration boundaries;
 full browser/release review follows source completion. No deployment is authorized.
 
@@ -738,3 +737,28 @@ Clerk challenges, invitation/approval, actual credential propagation and real
 harness/browser execution remain unverified. AM-05 stays PARTIAL for hosted
 acceptance. Source totals: **8 verified, 18 unclosed, 6 hosted-only** out of 32.
 Backend next owns AM-06; AM-07 follows only after whole-record manager acceptance.
+
+
+### AM-06 manager source acceptance — 14 September 2026
+
+Accepted source `349d1bbb0`, integrated as `a859a1f65` with no conflict or missing
+prerequisite. Replacement implementation and both changed test files match
+candidate/main. Four reproduced transition defects are corrected in the existing
+module: cancelled-history successor selection, revoked-binding replay, grant
+validation after partial writes, and predecessor revocation before validating a
+live successor. Existing transaction, indexes, canonical validators and provider
+adapter remain the owners; no new lifecycle store or permission framework.
+
+Main's replacement and rotation-dispatch files passed **15/15**. Candidate
+`npm run typecheck`, integrated scoped `oxlint` and `git diff --check` pass.
+Existing selected canonical lifecycle, provider cleanup, current authority,
+refresh and stable-Principal admission/rate evidence is recorded in the design;
+AM-20's native registered-buyer rotation/capacity proof is reused without another
+full money run. The changed dispatch fixture explicitly refuses AM-20's accepted
+Call authority fallback for revoked credential authority; it does not substitute
+for the existing production reconciliation tests.
+
+Hosted provider cleanup, simultaneous clients and production transaction
+scheduling remain unverified; hosted status remains NOT VERIFIED. Source totals
+are **9 verified, 17 unclosed, 6 hosted-only** out of 32. Backend next owns AM-07,
+then AM-09 after whole-record manager acceptance.
