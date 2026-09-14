@@ -32,7 +32,7 @@ function useOperatorListCrumb(operatorRole: OperatorRole, currentPath: string): 
 
   return useMemo(() => {
     if (operatorRole === 'owner' && ownerWorkspaceOwnerForPath(currentPath) === 'operations' && currentPath !== '/owner/operations') {
-      return { label: 'Operations', href: '/owner/operations' }
+      return { label: 'Tools', href: '/owner/operations' }
     }
 
     const ancestor = matches.slice(0, -1).findLast((match) => match.staticData.nav?.label !== undefined)
@@ -205,7 +205,7 @@ function RootOperatorPage(props: AeOperatorPageProps) {
         id={resolvedMainContentId}
         tabIndex={-1}
         data-testid="operator-content"
-        className="flex min-h-0 flex-1 flex-col px-gutter pb-[calc(var(--spacing-touch)+env(safe-area-inset-bottom,0px))] focus:outline-none md:px-related md:pb-related"
+        className="ae-rail flex min-h-0 flex-1 flex-col pb-[calc(var(--spacing-touch)+env(safe-area-inset-bottom,0px))] focus:outline-none md:pb-related"
       >
         {mobileTrigger === null && breadcrumbs.length === 0 ? null : (
           <div className="flex items-center gap-related">
@@ -220,7 +220,12 @@ function RootOperatorPage(props: AeOperatorPageProps) {
           {...(actions === undefined ? {} : { actions })}
         />
         {secondaryBar === undefined ? null : secondaryBar}
-        <div className="min-h-0 flex-1 pt-related">{children}</div>
+        <div
+          data-testid="operator-page-stack"
+          className="grid min-h-0 flex-1 content-start gap-section pt-related"
+        >
+          {children}
+        </div>
       </main>
       {operatorRole === 'owner' && suppressSurfaceNavigation !== true
         ? (
