@@ -844,3 +844,58 @@ for these observable results. Then extend the same attempt's recovery before
 enabling automatic admission/promotion. The generic persisted billing-authority
 reader and x402 recovery currently assume a buyer credential/reservation; they
 remain explicit work, not permission to invent one for platform validation.
+
+#### Platform validation execution and settlement recovery — 2026-09-14
+
+Source commits: `daab0bf3d` (settlement recovery) and `3a1f48be6` (execution).
+
+The release worker now selects the existing managed custody callbacks for the
+sandbox validation rail and rereads the exact platform grant before release and
+signing. Exact private publication and connection checks and the durable release
+fence remain in place. It saves transport/payment observations with the existing
+recorder before projecting a validation result; verified settlement references
+and payment identity reach the canary receipt. Missing evidence or a failed
+observation write leaves reconciliation required. Replaying the Call does not
+sign or send again. No customer reservation, Charge or Provider earnings are
+created by this path.
+
+Settlement recovery uses a dedicated internal mutation,
+`moneyX402PaymentAttempts.reconcileSellerOnboardingCanaryPaymentAttempt`, sharing
+the existing exact evidence writer. It checks the retained platform Call,
+current attempt/generation, payment identity, recipient, sandbox asset, amount,
+spending limit and disabled customer accounting. Internal recovery evidence can
+omit a reservation; public buyer evidence still requires one. The recovery
+action verifies the actual EVM receipt using the existing verifier before that
+mutation and never invokes buyer lifecycle actions. Reconciliation is observation
+of past spend, so this mutation permits exact evidence after grant revocation or
+validation expiry; it cannot authorize new signing. The outer workload recovery
+entry still requires its current platform grant, so end-to-end recovery after
+revocation is not established by this mutation test.
+
+Verification: 208 tests across ten focused worker, payment, recovery and platform
+funding suites pass. Typecheck, targeted lint, dependency ratchet and whitespace
+checks pass. The recovery review found no concrete bug; direct mutation tests
+separately cover persistence, exact replay and refusal of conflicting evidence.
+The worker fixture now uses the validation Call's actual attempt identity, USD
+exponent 6 and the real 50,000 atomic daily cap. The first claim is exercised
+without pretending it was already leased. Transport is mocked in worker tests;
+the separate recovery suite verifies ABI-encoded transfer/authorization evidence
+with the real settlement verifier and a mocked RPC response. No hosted payment,
+publication or deployment was performed for this source slice.
+
+Remaining work before enabling automatic publication:
+
+1. Complete platform signing-interruption and pre-submission recovery in the
+   existing `managedSigning.ts` and `preSubmission.ts` paths, which still require
+   buyer reservations. Preserve the same signing key/nonce and distinguish
+   confirmed absence from uncertainty. New spend must recheck current authority.
+2. Connect the existing authorized admission to owned readiness, paid validation,
+   recovery and promotion using the installed workflow component. Recovery of
+   settlement alone does not establish delivery: retain and validate quarantined
+   output before any successful validation/promotion. Status polling currently
+   reports retained state; it does not automatically obtain missing RPC evidence.
+   Cover owner and Agent submission and replay after promotion.
+3. Deploy the coherent path, refresh treasury through its real workload authority,
+   resume the retained sandbox draft and prove one paid validation/publication.
+   Only then begin the planned cold alpha maturity audit. Hosted source remains
+   the previously recorded release until that deployment is verified.
