@@ -52,6 +52,16 @@ const promoteReplacement = makeFunctionReference<
   }>,
   RegisterResult
 >('agentAccessPrincipals:promoteCredentialReplacementForServer')
+const cancelReplacement = makeFunctionReference<
+  'mutation',
+  Readonly<{
+    principalRef: string
+    successorCredentialRef: string
+    successorGrantRef: string
+    serviceAuth: CustomerRequestServiceAssertion
+  }>,
+  RegisterResult
+>('agentAccessPrincipals:cancelCredentialReplacementForServer')
 
 type IssuedBuyer = Readonly<{
   input: IssuedAgentBindingRegistration
@@ -61,6 +71,7 @@ type IssuedBuyer = Readonly<{
 async function serviceAssertion(
   operation: string,
   command: Record<string, unknown>,
+  issuedAt = NOW,
 ): Promise<CustomerRequestServiceAssertion> {
   return await createCustomerRequestServiceAssertion({
     key: SERVICE_KEY,
@@ -72,7 +83,7 @@ async function serviceAssertion(
       credentialId: 'ae:server-function',
       scopes: [MARKET_TOOLS_CALL_SCOPE],
     },
-    issuedAt: NOW,
+    issuedAt,
   })
 }
 
@@ -204,6 +215,27 @@ async function readReplacementArtifacts(
   }))
 }
 
+async function readCurrentArtifacts(
+  backend: ConvexFixtureBackend,
+  first: IssuedBuyer,
+) {
+  return await backend.run(async (ctx) => {
+    const principal = await ctx.db.query('agentAccessPrincipals')
+      .withIndex('by_principalId', (query) => query.eq('principalId', first.principal.principalId)).unique()
+    const binding = principal === null ? null : await ctx.db.query('externalIdentityBindings')
+      .withIndex('by_providerNamespace_and_providerIdentifier', (query) => query
+        .eq('providerNamespace', 'clerk/api-key').eq('providerIdentifier', principal.credentialId))
+      .unique()
+    const credential = binding === null ? null : await ctx.db.query('credentials')
+      .withIndex('by_bindingRef_and_generation_and_lifecycle', (query) => query
+        .eq('bindingRef', binding.bindingRef).eq('generation', binding.credentialGeneration).eq('lifecycle', 'active'))
+      .unique()
+    const grant = await ctx.db.query('agentAccessGrants')
+      .withIndex('by_grantRef', (query) => query.eq('grantRef', first.input.grantRef)).unique()
+    return { principal, binding, credential, grant }
+  })
+}
+
 describe('buyer Agent credential replacement', () => {
   const previousServiceKey = process.env.AE_CONVEX_SERVER_FUNCTION_TOKEN
 
@@ -283,6 +315,16 @@ describe('buyer Agent credential replacement', () => {
         transition,
       ),
     })).resolves.toMatchObject({ kind: 'replayed', providerCredentialId: first.input.credentialId })
+    vi.setSystemTime(NOW + 700_000)
+    await expect(fixture.owner.mutation(promoteReplacement, {
+      ...transition,
+      serviceAuth: await serviceAssertion(
+        'agentAccessPrincipals.promoteCredentialReplacementForServer',
+        transition,
+        NOW + 700_000,
+      ),
+    })).resolves.toMatchObject({ kind: 'replayed', providerCredentialId: first.input.credentialId })
+    vi.setSystemTime(NOW)
 
     await expect(resolve(backend, {
       credentialId: replacement.credentialId,
@@ -309,6 +351,62 @@ describe('buyer Agent credential replacement', () => {
       .toBe(predecessorGrant.spendingPolicy.rate.generation)
     expect(successorGrant.spendingPolicy.budget).toEqual(predecessorGrant.spendingPolicy.budget)
     expect(successorGrant.spendingPolicy.rate).toEqual(predecessorGrant.spendingPolicy.rate)
+  })
+
+  it('does not let cancelled successors hide a later active successor', async () => {
+    const backend = convexTestWithWorkers({ pauseWorkpool: true })
+    const fixture = await publishedBusinessOwner(backend, 'agent-credential-replacement-successor-limit')
+    const subject = 'user_agent-credential-replacement-successor-limit'
+    const first = await issueBuyerAgent(backend, fixture.owner, subject)
+    const prepare = async (replacement: AgentCredentialReplacementRegistration, expectSuccess = true) => {
+      const prepared = await fixture.owner.mutation(prepareReplacement, {
+        ...replacement,
+        serviceAuth: await serviceAssertion(
+          'agentAccessPrincipals.prepareCredentialReplacementForServer',
+          { ...replacement, scopes: [...replacement.scopes], toolRefs: [...replacement.toolRefs] },
+        ),
+      })
+      if (!expectSuccess) return prepared
+      expect(prepared).toMatchObject({ kind: expect.stringMatching(/recorded|replayed/), generation: 2 })
+      if (prepared.kind !== 'recorded' && prepared.kind !== 'replayed') {
+        throw new Error(`successor_prepare_failed:${String(prepared.kind)}`)
+      }
+      return prepared
+    }
+    const cancel = async (replacement: AgentCredentialReplacementRegistration) => {
+      const prepared = await prepare(replacement)
+      const transition = {
+        principalRef: first.principal.principalId,
+        successorCredentialRef: String(prepared.successorCredentialRef),
+        successorGrantRef: replacement.grantRef,
+      }
+      await expect(fixture.owner.mutation(cancelReplacement, {
+        ...transition,
+        serviceAuth: await serviceAssertion(
+          'agentAccessPrincipals.cancelCredentialReplacementForServer',
+          transition,
+        ),
+      })).resolves.toMatchObject({ kind: 'completed' })
+    }
+
+    await cancel(replacementInput(first, subject, 'buyer-cancelled-1-123456', 'credential:cancelled-1'))
+    await cancel(replacementInput(first, subject, 'buyer-cancelled-2-123456', 'credential:cancelled-2'))
+    const activeReplacement = replacementInput(first, subject, 'buyer-active-3-123456', 'credential:active-3')
+    await expect(prepare(activeReplacement)).resolves.toMatchObject({ kind: 'recorded' })
+    const current = await readCurrentArtifacts(backend, first)
+    if (current.credential === null) throw new Error('successor_limit_predecessor_missing')
+
+    const rejectedReplacement = replacementInput(first, subject, 'buyer-active-4-123456', 'credential:active-4')
+    await expect(prepare(rejectedReplacement, false)).resolves.toEqual({ kind: 'conflict' })
+    await expect(readReplacementArtifacts(backend, first, rejectedReplacement)).resolves.toEqual({
+      binding: null,
+      credential: null,
+      grant: null,
+    })
+    await expect(backend.run(async (ctx) => await ctx.db.query('credentials')
+      .withIndex('by_predecessorCredentialRef', (query) => query.eq('predecessorCredentialRef', current.credential!.credentialRef))
+      .filter((query) => query.eq(query.field('lifecycle'), 'active'))
+      .collect())).resolves.toHaveLength(1)
   })
 
   it('rejects authority mode and scope drift without creating successor records', async () => {
@@ -358,6 +456,143 @@ describe('buyer Agent credential replacement', () => {
       ),
     })).resolves.toEqual({ kind: 'conflict' })
     await expect(readReplacementArtifacts(backend, first, scopeDrift)).resolves.toEqual({
+      binding: null,
+      credential: null,
+      grant: null,
+    })
+  })
+
+  it('rejects replay when the existing successor binding is revoked', async () => {
+    const backend = convexTestWithWorkers({ pauseWorkpool: true })
+    const fixture = await publishedBusinessOwner(backend, 'agent-credential-replacement-revoked-binding')
+    const subject = 'user_agent-credential-replacement-revoked-binding'
+    const first = await issueBuyerAgent(backend, fixture.owner, subject)
+    const replacement = replacementInput(
+      first,
+      subject,
+      'buyer-revoked-binding-12345678',
+      'credential:revoked-binding',
+    )
+    const prepared = await fixture.owner.mutation(prepareReplacement, {
+      ...replacement,
+      serviceAuth: await serviceAssertion(
+        'agentAccessPrincipals.prepareCredentialReplacementForServer',
+        { ...replacement, scopes: [...replacement.scopes], toolRefs: [...replacement.toolRefs] },
+      ),
+    })
+    if (prepared.kind !== 'recorded' && prepared.kind !== 'replayed') {
+      throw new Error(`revoked_binding_prepare_failed:${String(prepared.kind)}`)
+    }
+    const before = await readReplacementArtifacts(backend, first, replacement)
+    if (before.binding === null) throw new Error('revoked_binding_missing')
+    await backend.run(async (ctx) => {
+      await ctx.db.patch(before.binding!._id, {
+        lifecycle: 'revoked',
+        providerState: { kind: 'unknown', value: 'test_revoked' },
+        revokedAt: NOW,
+        updatedAt: NOW,
+        revision: before.binding!.revision + 1,
+      })
+    })
+    const revoked = await readReplacementArtifacts(backend, first, replacement)
+    await expect(fixture.owner.mutation(prepareReplacement, {
+      ...replacement,
+      serviceAuth: await serviceAssertion(
+        'agentAccessPrincipals.prepareCredentialReplacementForServer',
+        { ...replacement, scopes: [...replacement.scopes], toolRefs: [...replacement.toolRefs] },
+      ),
+    })).resolves.toEqual({ kind: 'conflict' })
+    await expect(readReplacementArtifacts(backend, first, replacement)).resolves.toEqual(revoked)
+  })
+
+  it.each(['cancelled', 'inactive', 'expired'] as const)(
+    'refuses promotion of a %s successor before predecessor revocation',
+    async (successorState) => {
+      const backend = convexTestWithWorkers({ pauseWorkpool: true })
+      const fixture = await publishedBusinessOwner(backend, `agent-credential-replacement-${successorState}`)
+      const subject = `user_agent-credential-replacement-${successorState}`
+      const first = await issueBuyerAgent(backend, fixture.owner, subject)
+      const replacement = replacementInput(
+        first,
+        subject,
+        `buyer-${successorState}-12345678`,
+        `credential:${successorState}`,
+      )
+      const prepared = await fixture.owner.mutation(prepareReplacement, {
+        ...replacement,
+        serviceAuth: await serviceAssertion(
+          'agentAccessPrincipals.prepareCredentialReplacementForServer',
+          { ...replacement, scopes: [...replacement.scopes], toolRefs: [...replacement.toolRefs] },
+        ),
+      })
+      if (prepared.kind !== 'recorded' && prepared.kind !== 'replayed') {
+        throw new Error(`inactive_successor_prepare_failed:${String(prepared.kind)}`)
+      }
+      const transition = {
+        principalRef: first.principal.principalId,
+        successorCredentialRef: String(prepared.successorCredentialRef),
+        successorGrantRef: replacement.grantRef,
+      }
+      const artifacts = await readReplacementArtifacts(backend, first, replacement)
+      if (artifacts.binding === null || artifacts.credential === null || artifacts.grant === null) {
+        throw new Error(`inactive_successor_artifacts_missing:${successorState}`)
+      }
+      if (successorState === 'cancelled') {
+        await expect(fixture.owner.mutation(cancelReplacement, {
+          ...transition,
+          serviceAuth: await serviceAssertion(
+            'agentAccessPrincipals.cancelCredentialReplacementForServer',
+            transition,
+          ),
+        })).resolves.toMatchObject({ kind: 'completed' })
+      } else if (successorState === 'inactive') {
+        await backend.run(async (ctx) => {
+          await ctx.db.patch(artifacts.grant!._id, { lifecycle: 'revoked', updatedAt: NOW })
+        })
+      } else {
+        await backend.run(async (ctx) => {
+          await Promise.all([
+            ctx.db.patch(artifacts.credential!._id, { expiresAt: NOW - 1, updatedAt: NOW }),
+            ctx.db.patch(artifacts.grant!._id, { expiresAt: NOW - 1, updatedAt: NOW }),
+          ])
+        })
+      }
+      const currentBefore = await readCurrentArtifacts(backend, first)
+      await expect(fixture.owner.mutation(promoteReplacement, {
+        ...transition,
+        serviceAuth: await serviceAssertion(
+          'agentAccessPrincipals.promoteCredentialReplacementForServer',
+          transition,
+        ),
+      })).resolves.toEqual({ kind: 'conflict' })
+      await expect(readCurrentArtifacts(backend, first)).resolves.toEqual(currentBefore)
+    },
+  )
+
+  it('creates no successor artifacts when grant validation rejects the requested expiry', async () => {
+    const backend = convexTestWithWorkers({ pauseWorkpool: true })
+    const fixture = await publishedBusinessOwner(backend, 'agent-credential-replacement-invalid-grant')
+    const subject = 'user_agent-credential-replacement-invalid-grant'
+    const first = await issueBuyerAgent(backend, fixture.owner, subject)
+    const replacement = {
+      ...replacementInput(
+        first,
+        subject,
+        'buyer-invalid-grant-12345678',
+        'credential:invalid-grant',
+      ),
+      createdAt: NOW + 60_000,
+      expiresAt: NOW + 1,
+    }
+
+    await expect(fixture.owner.mutation(prepareReplacement, {
+      ...replacement,
+      serviceAuth: await serviceAssertion(
+        'agentAccessPrincipals.prepareCredentialReplacementForServer',
+        { ...replacement, scopes: [...replacement.scopes], toolRefs: [...replacement.toolRefs] },
+      ),
+    })).resolves.toEqual({ kind: 'conflict' })
+    await expect(readReplacementArtifacts(backend, first, replacement)).resolves.toEqual({
       binding: null,
       credential: null,
       grant: null,

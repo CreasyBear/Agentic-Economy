@@ -247,6 +247,81 @@ against controlled provider boundaries proves source compatibility only. Whole
 AM05 source acceptance belongs to the manager after the focused checks and
 integrated typecheck pass.
 
+## AM06 Credential replacement, revocation and retained capacity
+
+**Contract:** an owner replaces access to an existing Agent without replacing
+that Agent, its Account, its current spending limits or its accepted purchase
+history. Revoking access prevents new Calls. Replacement credentials do not
+create another allowance or authorize an otherwise forbidden recovery effect.
+
+  Requires: current canonical owner authority, an existing Agent in that Account,
+  a valid replacement target and exact current policy/predecessor evidence.
+  Only an active credential with current authority may admit a new purchase.
+  Ensures: the replacement belongs to the same Agent and Account; activation
+  makes the intended credential usable and disables the predecessor according
+  to the supported transition. Accepted Call and money references remain stable.
+  Invariant: daily/monthly allowance, rate limits, active Call capacity and
+  purchase idempotency are keyed to stable Agent identity. Credential generation
+  is access/effect evidence, never a fresh spending account. A recorded purchase
+  remains history after revocation; history alone grants no new authority.
+  On violation: reject stale, foreign or conflicting transitions without partial
+  activation; report uncertain provider cleanup truthfully and preserve its
+  retry identity. Reconcile current authority before further effects. Exact
+  already-accepted bookkeeping recovery uses its existing bounded proof, not
+  a general bypass of revoked authority.
+
+| Condition | Source and attributable evidence |
+| --- | --- |
+| Same Agent, Account, limits and accepted history | `principals/replacement.ts` resolves current owner/Account, predecessor identity, mode, scopes, Tool selection and exact policy before replacement. Existing `agentAccessPrincipals.test.ts` cases exercise prior Call recovery after promotion, immutable original evidence, Account isolation, planned stage/promote/replay/cancel with audit retention, compromise mode, one pending successor and the authenticated two-Agent lifecycle through retained history. These are canonical Convex mutation/query tests, not a comparison of duplicated policy constants alone. |
+| Canonical revoke and scoped cleanup | `principals/revocation.ts` revokes exact credential/grant/delegation/binding material, invalidates scoped refresh families and retains audit/provider-revocation records. It validates the exact principal, credential, provider identifier and revoked lifecycle before recording provider outcomes; a stale result cannot target the successor. Existing canonical lifecycle cases prove scoped revoke/disconnect/replay, failure before mutation for missing binding, and bounded cleanup continuation. |
+| Official provider and interrupted cleanup | `agent-access.functions.ts` uses the installed Clerk `apiKeys` adapter. Canonical revoke precedes provider calls. Two selected wrapper tests pass for retryable partial cleanup followed by canonical replay, and completed cleanup replay with no repeated Clerk call. These mock the source/provider boundaries separately; live Convex-to-Clerk integration is not implied. |
+| One capacity across credentials | `convex/lib/callLifecycle/admission.ts` indexes active pending/uncertain Calls and reservation replay by stable Principal. `convex/lib/rateLimit.ts` keys the maintained rate-limiter component to that Principal. Five selected `capability-call-reservation.test.ts` cases pass for rotated replay, the exact rate key, pending/uncertain counts, expired pending grants and an actual maintained token bucket across two credential identifiers. |
+| New Call admission after revocation | The canonical current-authority resolver rejects revoked bindings and expired credentials. Three selected `capability-call-authority-boundary.test.ts` cases pass for those refusals and the public action contract that requires exact canonical authority before the Call handler. AM20's registered rotation journey separately observes refusal through the revoked key. |
+| Further effects after revocation | `call-worker/runPreparation.ts` validates the current dispatcher and accepted authority before claiming dispatch. All six `call-credential-rotation-dispatch.test.ts` cases pass, retaining original effect identity and refusing revoked original authority, wrong owner, revoked successor and stale generation. Three selected `capability-call-worker-authority-boundary.test.ts` cases pass for refusal before claim/effects, revocation between preparation and release, and exact persisted recovery provenance. The rotation fixture explicitly refuses the existing AM20 recovery reader; it is not a proof of that reader itself, whose exact policy-update/recovery contract remains covered by accepted AM20 evidence. |
+| Retained monetary allowance and history | AM20's accepted registered-buyer/native-Ledger evidence is reused: `capability-call-workpool.test.ts`, `retains one Agent $capacity through registered credential replacement` (spending and concurrency variants), prepares/promotes the same Agent, concurrently refuses the old credential and evaluates the successor against retained capacity. It retains the original Call, permits bounded cancellation by the successor and preserves budget generation/calendar periods and final balance. This existing evidence is not replaced by a second money implementation or broad rerun. |
+
+`sluice` bounds this record to credential lifecycle and its existing authority,
+capacity and history consequences. `contract-enforcer` supplies the semantic
+contract above. `idempotency-guardian` separates identity-preserving replacement
+and provider cleanup from purchase reservation replay. Ordering analysis checks
+prepare → activate → cleanup and admission → dispatch → consequence against
+persisted transition evidence; atomic database operations are not treated as
+an excuse to add a parallel state machine.
+
+The correction filters active successors before bounding the result, rejects
+stale binding replay, validates a live successor before new promotion can revoke
+its predecessor, and validates the requested grant before creating replacement
+artifacts. The existing completed-promotion replay remains valid after expiry;
+replaying a recorded outcome does not reactivate access. The rotation fixture
+now accounts for the existing, tightly scoped AM20 accepted-Call policy-update
+reader without making revoked credential authority permissive.
+
+Focused verification: all nine credential-replacement tests pass, including
+red-first regressions for the four conditions. Nine selected canonical lifecycle
+cases and two provider-cleanup wrapper cases pass. Five reservation/rate cases,
+six rotation-dispatch cases and three worker authority cases pass. After the
+source correction, six selected canonical rotation/history and OAuth refresh
+cases pass; the refresh family still promotes atomically and revokes on token
+reuse. Source invariants and existing accepted AM20 native-Ledger evidence cover
+capacity; this record does not rerun the full money suite. Hosted simultaneous
+clients, Clerk cleanup and production transaction scheduling remain unverified.
+Scoped Oxlint and whitespace checks pass. Independent review of the two-file
+replacement correction found no concrete defect; the three additional current
+authority/public-action checks also pass.
+
+Technical design review used the non-interactive fallback because the accepted
+product contract and autonomous assignment already resolve its design questions.
+Thesis: replace access while preserving the Agent and its purchase obligations.
+Integrity is strong at the design level: canonical identity owns continuity,
+existing Convex transactions own activation, the official provider owns its key,
+and existing ledger controls own capacity. The risks are stale successor
+selection, destructive ordering before validation, and mistaking provider
+cleanup failure for still-valid AE access. Cuts: no second rotation state store,
+new usage counter, cleanup scheduler or credential history rewrite. Existing
+indexes, lifecycle results and provider readback constrain the correction.
+The manager owns integrated source acceptance and combined typechecking. Hosted
+provider behavior remains an explicit operational question.
+
 ## Provider lifecycle contract
 
 The user submits one reviewed Tool version and sees its progress on the same
