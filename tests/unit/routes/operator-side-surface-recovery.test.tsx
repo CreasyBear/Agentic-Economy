@@ -65,8 +65,28 @@ function callRow(callRef: string, state: 'completed' | 'refused' | 'outcome_unkn
   }
 }
 
-const usage = { kind: 'available' as const, callCountUnits: '2', completedCountUnits: '1', outcomeUnknownCountUnits: '1' }
-const spend = { kind: 'available' as const, spendUnits: '1000000' }
+const usage = {
+  kind: 'available' as const,
+  dimensionKind: 'account' as const,
+  dimensionRef: 'account:owner',
+  periodStartAt: Date.UTC(2026, 8, 1),
+  periodEndAt: Date.UTC(2026, 9, 1),
+  callCountUnits: '2', completedCountUnits: '1', outcomeUnknownCountUnits: '1',
+  updatedAt: Date.UTC(2026, 8, 14),
+  source: 'convex_call_evidence' as const,
+}
+const spend = {
+  kind: 'available' as const,
+  currency: 'AUD' as const,
+  exponent: 6 as const,
+  spendUnits: '1000000',
+  transactionCountUnits: '1',
+  periodStartAt: Date.UTC(2026, 8, 1),
+  periodEndAt: Date.UTC(2026, 9, 1),
+  observedAt: Date.UTC(2026, 8, 14),
+  source: 'formance_transaction_cursor' as const,
+  authoritativeForConsequences: false as const,
+}
 const periodStart = '2026-09'
 
 function available(calls: Extract<ActivityLoaderResult, { kind: 'available' }>['calls']): ActivityLoaderResult {
