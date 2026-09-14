@@ -759,3 +759,53 @@ controls preserved. Removing the refusal alone is insufficient. Promotion also
 exists only as an unregistered handler. Complete automatic validation and
 promotion through the existing admission lifecycle before claiming a public
 sandbox Tool or alpha readiness. No paid testnet Call has been proven.
+
+Execution contract follow-up: `createManagedX402PaymentCallbacks` currently
+excludes seller onboarding from its signing path and requires a managed buyer
+reservation. Canary admission deliberately creates no such reservation: its
+funding is platform `external_spend_only`, with buyer accounting disabled.
+Do not attach a synthetic buyer reservation to make that path pass. The release
+worker also rereads the generic agent grant instead of the exact platform grant.
+Recovery currently excludes seller onboarding in
+`src/modules/capability-execution/call-worker/recovery/x402.ts` and
+`recovery/managedSigning.ts`.
+
+Implement the execution work as reviewed, dependent slices:
+
+1. Separate platform validation funding from buyer reservation assumptions in
+   the existing payment-attempt/custody boundary, preserving exact grant limits,
+   one payment identity and durable signing replay. Reuse the official signer
+   and existing attempt storage; do not build another payment driver.
+2. Wire release to that boundary and the exact platform-grant reread; retain
+   publication/connection revalidation and the release fence. Feed verified
+   settlement facts into the existing canary projector. Correct the worker test
+   harness, which currently supplies a buyer reservation even for canaries.
+3. Support settlement uncertainty and recovery for the same attempt before
+   enabling automatic validation and promotion. Prove that a retry cannot sign
+   or spend again, and that customer balances and usage remain untouched.
+
+These are implementation slices within the authorised alpha scope, not new
+services. Keep the runtime refusal until the complete execution and recovery
+contract passes; no partial slice establishes a working paid validation Call.
+
+Connected staging is now implemented at the existing registered publish entry
+point for an unpublished programmable Provider's sandbox x402 Tool. It checks
+the current saved connection and exact source-first draft, uses existing owner
+or agent consequence admission, activates the catalog draft with the domain
+commands, retains the paid-validation fence, and records one admission case.
+The business and public Tool snapshot remain private. Promotion is not wired.
+
+Cold review identified caller-injectable admission markers. Staging now strips
+the entire reserved admission-marker namespace from caller and connection
+evidence before adding its required-validation marker. The regression test
+injects forged admitted markers from both sources. A replay-test failure used a
+synthetic access-path hash; the fixture now uses its canonical hash, and runtime
+activation asserts that the accepted hash remains unchanged. Catalog persistence
+uses patch semantics and retains the integration draft; it did not delete it.
+
+Three focused integration suites pass (16 tests), including owner and agent
+registered submission, revoked-connection refusal, forged-marker filtering,
+private visibility and duplicate replay. Targeted lint, typecheck and the
+dependency ratchet passed. Source commit `fdffc62e5` has not been deployed;
+full validation, promotion and replay after promotion remain
+unverified and must be covered by the lifecycle integration slice.
