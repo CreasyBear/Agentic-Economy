@@ -15,6 +15,7 @@ import {
 import {
   createAgentAccessGrant,
   normalizeStoredAgentAccessGrant,
+  projectAgentAccessGrant,
   normalizeStoredAgentAccessPolicy,
   normalizeAgentAccessToolSelection,
 } from '@/modules/agent-access/policy'
@@ -263,7 +264,7 @@ function sameReplayMaterial(
   }>,
   owner: OwnerAuthority,
 ): boolean {
-  const budget = grant.spendingPolicy.budget
+  const budget = projectAgentAccessGrant(grant).budget
   return grant.principalId === input.principalRef
     && grant.ownerId === owner.accountRef
     && grant.generation === input.expectedGeneration + 1
@@ -520,15 +521,16 @@ export const readCurrent = query({
     const loaded = await loadOwnedAgent(ctx, owner, requestedPrincipalRef, Date.now())
     if (loaded.kind !== 'ok') return mapLoadFailure(loaded) as AgentSpendingLimitsReadResult
     const { admission, grant } = loaded.material
+    const budget = projectAgentAccessGrant(grant).budget
     return {
       kind: 'current',
       principalRef: admission.principalId,
       grantRef: grant.grantRef,
       generation: grant.generation,
       spendingPolicyDigest: grant.spendingPolicyDigest,
-      maximumSpendPerCall: grant.spendingPolicy.budget.maximumSpendPerCall,
-      maximumDailySpend: grant.spendingPolicy.budget.maximumDailySpend,
-      maximumMonthlySpend: grant.spendingPolicy.budget.maximumMonthlySpend,
+      maximumSpendPerCall: budget.maximumSpendPerCall,
+      maximumDailySpend: budget.maximumDailySpend,
+      maximumMonthlySpend: budget.maximumMonthlySpend,
     }
   },
 })

@@ -125,7 +125,7 @@ async function provisionAgent(backend: Backend): Promise<Readonly<{
   return { owner, input, principalRef: admission.principalId }
 }
 
-function command(principalRef: string, overrides: Partial<AgentSpendingLimitsUpdate> = {}) {
+function command(principalRef: string, overrides: Partial<AgentSpendingLimitsUpdate & { correlationRef: string }> = {}) {
   return {
     principalRef,
     expectedGeneration: 1,

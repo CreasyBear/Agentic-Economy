@@ -537,7 +537,10 @@ export async function readFormanceSpendingPeriod(
     periodStartAt: number
     periodEndAt: number
   }>,
-): Promise<FormanceDisplayBalanceResult> {
+): Promise<
+  | Exclude<FormanceDisplayBalanceResult, { kind: 'available' }>
+  | (Extract<FormanceDisplayBalanceResult, { kind: 'available' }> & { currency: 'AUD'; balanceKind: 'agent_budget' })
+> {
   if (spendingPeriodIdentity(input) === undefined) {
     return Object.freeze({ kind: 'setup_required', code: 'formance_spending_period_input_invalid' })
   }
@@ -731,7 +734,9 @@ function validSpendingPeriod(
     || typeof period !== 'object'
     || period === null) return false
   const candidate = period as Partial<FormanceManagedCallSpendingPeriod>
-  if (!Number.isSafeInteger(candidate.periodStartAt)
+  if (typeof candidate.periodStartAt !== 'number'
+    || typeof candidate.periodEndAt !== 'number'
+    || !Number.isSafeInteger(candidate.periodStartAt)
     || !Number.isSafeInteger(candidate.periodEndAt)
     || !positiveGeneration(candidate.revision)
     || canonicalFormanceUnits(candidate.limitUnits ?? '', false) === undefined) return false

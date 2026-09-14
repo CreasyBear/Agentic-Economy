@@ -1,4 +1,4 @@
-import type { MutationCtx } from '../_generated/server'
+import type { MutationCtx, QueryCtx } from '../_generated/server'
 import { degradeBackend } from '../../src/lib/observability/degrade-backend'
 import { canonicalDigest } from '../../src/modules/common/canonical-digest'
 import type { StableHashValue } from '../../src/modules/common/stable-hash'
@@ -41,7 +41,7 @@ type CanonicalAgentDelegationInput = Readonly<{
  * the sole current Principal + Account context.
  */
 export async function resolveCanonicalAgentContext(
-  ctx: Pick<MutationCtx, 'db'>,
+  ctx: Pick<QueryCtx, 'db'>,
   credentialLocator: string,
   now: number,
 ): Promise<CanonicalAgentContext | null> {
