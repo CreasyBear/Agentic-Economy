@@ -166,6 +166,26 @@ describe('Calls side-surface recovery', () => {
     expect(screen.queryByRole('button', { name: 'Load more' })).toBeNull()
   })
 
+  it('continues pagination after a refresh returns identical Calls in a new object', async () => {
+    const calls = {
+      page: [callRow('newer', 'completed', 2)],
+      isDone: false,
+      continueCursor: 'cursor:older',
+    }
+    const view = renderActivity(available(calls))
+    view.updateResult(available({ ...calls, page: [...calls.page] }))
+    serverMocks.readCalls.mockResolvedValueOnce({
+      page: [callRow('older', 'completed', 1)], isDone: true, continueCursor: '',
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Load more' }))
+
+    expect(await screen.findByText('Tool older')).toBeTruthy()
+    expect(screen.getByText('Tool newer')).toBeTruthy()
+    expect(serverMocks.readCalls).toHaveBeenCalledWith({ data: { cursor: 'cursor:older' } })
+    expect(screen.queryByRole('button', { name: 'Load more' })).toBeNull()
+  })
+
   it('rejects a stale pagination response after refreshed loader Calls replace the page', async () => {
     let resolveContinuation: (value: unknown) => void = () => undefined
     serverMocks.readCalls.mockImplementation(() => new Promise((resolve) => { resolveContinuation = resolve }))

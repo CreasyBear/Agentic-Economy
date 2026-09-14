@@ -144,7 +144,7 @@ function useCallPagination(initial: CallPage) {
 
   async function loadNextPage() {
     if (state.cursor === undefined || state.status === 'loading') return
-    const source = initial
+    const source = state.source
     const cursor = state.cursor
     setState((current) => current.source === source && current.cursor === cursor
       ? { ...current, status: 'loading' }
