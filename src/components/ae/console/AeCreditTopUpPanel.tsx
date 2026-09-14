@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useReducer, useRef } from 'react'
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
@@ -44,6 +44,83 @@ type RecoveryLocator =
 
 type CreditPaymentStatus = CreditPaymentSession['evidence']['status']
 
+type FundingUiState = Readonly<{
+  operation: 'idle' | 'starting' | 'checking'
+  amountText: string
+  amountInvalid: boolean
+  session: CreditPaymentSession | undefined
+  paymentStatus: CreditPaymentStatus | undefined
+  errorMessage: string | undefined
+  recovery: RecoveryLocator | undefined
+}>
+
+type FundingUiAction =
+  | Readonly<{ type: 'amount_changed'; amountText: string; valid: boolean }>
+  | Readonly<{ type: 'amount_rejected' }>
+  | Readonly<{ type: 'operation_started'; operation: 'starting' | 'checking' }>
+  | Readonly<{ type: 'operation_finished' }>
+  | Readonly<{ type: 'recovery_found'; recovery: RecoveryLocator }>
+  | Readonly<{ type: 'payment_read'; session: CreditPaymentSession; recovery: RecoveryLocator }>
+  | Readonly<{ type: 'payment_refused'; paymentStatus: CreditPaymentStatus | undefined; errorMessage: string | undefined }>
+  | Readonly<{ type: 'payment_outcome_unknown'; recovery?: RecoveryLocator }>
+  | Readonly<{ type: 'payment_started'; session: CreditPaymentSession; recovery: RecoveryLocator }>
+  | Readonly<{ type: 'error_changed'; errorMessage: string }>
+  | Readonly<{ type: 'reset' }>
+
+const initialFundingUiState: FundingUiState = Object.freeze({
+  operation: 'idle',
+  amountText: '',
+  amountInvalid: false,
+  session: undefined,
+  paymentStatus: undefined,
+  errorMessage: undefined,
+  recovery: undefined,
+})
+
+function fundingUiReducer(state: FundingUiState, action: FundingUiAction): FundingUiState {
+  switch (action.type) {
+    case 'amount_changed':
+      return { ...state, amountText: action.amountText, amountInvalid: action.valid ? false : state.amountInvalid }
+    case 'amount_rejected':
+      return { ...state, amountInvalid: true }
+    case 'operation_started':
+      return { ...state, operation: action.operation, errorMessage: undefined }
+    case 'operation_finished':
+      return { ...state, operation: 'idle' }
+    case 'recovery_found':
+      return { ...state, recovery: action.recovery }
+    case 'payment_read': {
+      const status = action.session.evidence.status
+      return {
+        ...state,
+        session: action.session,
+        paymentStatus: status,
+        recovery: action.recovery,
+        errorMessage: status === 'failed'
+          ? 'The provider did not complete this payment. No Account funds were added.'
+          : status === 'outcome_unknown'
+            ? 'Payment status is still being verified. No Account funds were added by this browser return.'
+            : undefined,
+      }
+    }
+    case 'payment_refused':
+      return { ...state, paymentStatus: action.paymentStatus, errorMessage: action.errorMessage }
+    case 'payment_outcome_unknown':
+      return {
+        ...state,
+        paymentStatus: 'outcome_unknown',
+        errorMessage: undefined,
+        ...(action.recovery === undefined ? {} : { recovery: action.recovery }),
+      }
+    case 'payment_started':
+      return { ...state, session: action.session, recovery: action.recovery }
+    case 'error_changed':
+      return { ...state, errorMessage: action.errorMessage }
+    case 'reset':
+      return initialFundingUiState
+  }
+}
+
 const recoveryStorageKey = 'ae.account-funding.recovery.v1'
 
 export function AeAccountFundingPanel({
@@ -53,14 +130,10 @@ export function AeAccountFundingPanel({
   onRefresh,
   redirectToCheckout = defaultCheckoutRedirect,
 }: AeAccountFundingPanelProps) {
-  const [pending, setPending] = useState(false)
-  const [checking, setChecking] = useState(false)
-  const [amountText, setAmountText] = useState('')
-  const [amountInvalid, setAmountInvalid] = useState(false)
-  const [session, setSession] = useState<CreditPaymentSession>()
-  const [paymentStatus, setPaymentStatus] = useState<CreditPaymentStatus>()
-  const [errorMessage, setErrorMessage] = useState<string>()
-  const [recovery, setRecovery] = useState<RecoveryLocator>()
+  const [state, dispatch] = useReducer(fundingUiReducer, initialFundingUiState)
+  const { amountInvalid, amountText, errorMessage, paymentStatus, recovery, session } = state
+  const pending = state.operation === 'starting'
+  const checking = state.operation === 'checking'
   const idempotencyKey = useRef<string | undefined>(undefined)
   const recoveryAttempted = useRef(false)
   const policy = useMemo(() => constraints?.kind === 'available'
@@ -82,34 +155,32 @@ export function AeAccountFundingPanel({
 
   const readCanonicalPayment = useCallback(async (locator: RecoveryLocator) => {
     if (port === undefined) return
-    setChecking(true)
-    setErrorMessage(undefined)
+    dispatch({ type: 'operation_started', operation: 'checking' })
     try {
       const result = await port.read(locator)
       if (isMoneyRefusal(result)) {
-        setPaymentStatus(result.code === 'funding_pending' ? 'pending' : result.code === 'funding_outcome_unknown' ? 'outcome_unknown' : undefined)
-        setErrorMessage(result.code === 'funding_pending' || result.code === 'funding_outcome_unknown'
-          ? undefined
-          : topUpErrorCopy(result))
+        dispatch({
+          type: 'payment_refused',
+          paymentStatus: result.code === 'funding_pending' ? 'pending' : result.code === 'funding_outcome_unknown' ? 'outcome_unknown' : undefined,
+          errorMessage: result.code === 'funding_pending' || result.code === 'funding_outcome_unknown'
+            ? undefined
+            : topUpErrorCopy(result),
+        })
         return
       }
-      setSession(result)
-      setPaymentStatus(result.evidence.status)
-      if (result.evidence.status === 'failed') setErrorMessage('The provider did not complete this payment. No Account funds were added.')
-      if (result.evidence.status === 'outcome_unknown') setErrorMessage('Payment status is still being verified. No Account funds were added by this browser return.')
-      setRecovery(locator)
+      dispatch({ type: 'payment_read', session: result, recovery: locator })
       persistRecovery(locator)
       try {
         await onRefresh?.()
       } catch (cause) {
-        setErrorMessage(degrade(cause, 'Payment was read back, but the canonical Account balance is temporarily unavailable.', { site: 'readCanonicalPayment.onRefresh', reason: 'source_unavailable' }))
+        dispatch({ type: 'error_changed', errorMessage: degrade(cause, 'Payment was read back, but the canonical Account balance is temporarily unavailable.', { site: 'readCanonicalPayment.onRefresh', reason: 'source_unavailable' }) })
       }
     } catch (cause) {
       captureClientExceptionOnClient(cause)
-      setPaymentStatus('outcome_unknown')
-      setErrorMessage('Payment status is still being checked. Your Account balance has not been updated by this browser return.')
+      dispatch({ type: 'payment_outcome_unknown' })
+      dispatch({ type: 'error_changed', errorMessage: 'Payment status is still being checked. Your Account balance has not been updated by this browser return.' })
     } finally {
-      setChecking(false)
+      dispatch({ type: 'operation_finished' })
     }
   }, [onRefresh, port])
 
@@ -123,7 +194,7 @@ export function AeAccountFundingPanel({
     if (locator === undefined) return
     recoveryAttempted.current = true
     idempotencyKey.current = locator.idempotencyKey
-    setRecovery(locator)
+    dispatch({ type: 'recovery_found', recovery: locator })
     void readCanonicalPayment(locator)
   }, [port, readCanonicalPayment])
 
@@ -131,13 +202,12 @@ export function AeAccountFundingPanel({
     if (pending || port === undefined) return
     const units = canonicalAudUnits(amountText)
     if (units === undefined || policy === undefined || constraints?.kind !== 'available' || quoteAudAccountFunding(units, policy) === undefined) {
-      setAmountInvalid(true)
+      dispatch({ type: 'amount_rejected' })
       return
     }
     const nextIdempotencyKey = idempotencyKey.current ?? `account-funding:${randomId()}`
     idempotencyKey.current = nextIdempotencyKey
-    setPending(true)
-    setErrorMessage(undefined)
+    dispatch({ type: 'operation_started', operation: 'starting' })
     try {
       const result = await port.begin({
         amount: { currency: 'AUD', units: units.toString(), exponent: AUD_EXPONENT },
@@ -146,14 +216,12 @@ export function AeAccountFundingPanel({
       })
       if (result.kind === 'outcome_unknown') {
         const locator = { commandRef: result.commandRef, idempotencyKey: nextIdempotencyKey }
-        setPaymentStatus('outcome_unknown')
-        setRecovery(locator)
+        dispatch({ type: 'payment_outcome_unknown', recovery: locator })
         persistRecovery(locator)
-        setErrorMessage(undefined)
         return
       }
       if (result.kind === 'refused') {
-        setErrorMessage(topUpErrorCopy(result))
+        dispatch({ type: 'error_changed', errorMessage: topUpErrorCopy(result) })
         if (result.code === 'price_changed') {
           try {
             await onRefresh?.()
@@ -164,29 +232,23 @@ export function AeAccountFundingPanel({
         return
       }
       const locator = { externalRef: result.session.evidence.externalRef, idempotencyKey: nextIdempotencyKey }
-      setSession(result.session)
-      setRecovery(locator)
+      dispatch({ type: 'payment_started', session: result.session, recovery: locator })
       persistRecovery(locator)
       if (result.session.kind === 'hosted_redirect' && result.session.checkoutUrl !== undefined) {
         redirectToCheckout(result.session.checkoutUrl)
       }
     } catch (cause) {
       captureClientExceptionOnClient(cause)
-      setErrorMessage('Account funding could not be started. No payment was confirmed; try again.')
+      dispatch({ type: 'error_changed', errorMessage: 'Account funding could not be started. No payment was confirmed; try again.' })
     } finally {
-      setPending(false)
+      dispatch({ type: 'operation_finished' })
     }
   }
 
   function startAnotherPayment() {
     if (pending || checking || (paymentStatus !== 'succeeded' && paymentStatus !== 'failed')) return
     idempotencyKey.current = undefined
-    setSession(undefined)
-    setRecovery(undefined)
-    setPaymentStatus(undefined)
-    setErrorMessage(undefined)
-    setAmountText('')
-    setAmountInvalid(false)
+    dispatch({ type: 'reset' })
     try {
       window.sessionStorage.removeItem(recoveryStorageKey)
       const url = new URL(window.location.href)
@@ -240,8 +302,11 @@ export function AeAccountFundingPanel({
               autoComplete="off"
               value={amountText}
               onChange={(event) => {
-                setAmountText(event.target.value)
-                if (canonicalAudUnits(event.target.value) !== undefined) setAmountInvalid(false)
+                dispatch({
+                  type: 'amount_changed',
+                  amountText: event.target.value,
+                  valid: canonicalAudUnits(event.target.value) !== undefined,
+                })
               }}
               disabled={pending || checking}
               placeholder="10.00"
