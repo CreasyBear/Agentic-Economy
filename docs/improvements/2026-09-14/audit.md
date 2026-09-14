@@ -145,6 +145,22 @@ Source -> Tool -> Terms -> Review -> publish -> monitor Calls/earnings
 
 ## Release plan
 
+### Current source repair status
+
+This audit remains the authoritative scope and acceptance register. Detailed
+implementation notes are recorded in the linked
+[repair register](./repair-register.md); source completion does not replace the
+hosted and task-level alpha gates below.
+
+| Finding | Status | Evidence / remaining boundary |
+| ---: | --- | --- |
+| 1. Neutral owner Overview and owner home | **Fixed in source** | `c520db917` makes `/owner` the workspace home and independently projects known Balance, Calls, Agents and applicable Provider state with one next action. Provider navigation disclosure remains finding 2. |
+| 3. Mobile buyer navigation continuity | **Fixed in source** | `c520db917` constrains compact primary navigation to Overview → Market → Calls → Balance; Agent and Provider administration cannot displace Balance. |
+| 10–12. Funding continuation and failure states | **Fixed in source** | `61b7b0866` preserves the exact payment attempt and gives each visible nonterminal/failure state an honest executable continuation. |
+| 13. Market default | **Fixed in source** | `c7a9546e0`, integrated as `bf9a71be7`, makes guided discovery the deterministic default. |
+| 14, 16. Market refinement and pagination | **Fixed in source** | `8d885b887` progressively discloses advanced source facts and preserves loaded rows/cursor across failure, retry and stale responses. |
+| 2, 4–9, 15, 18–25 and all unlisted P0/P1 boundaries | **Open or dependency-blocked** | Continue source-first repair against the work and acceptance tables below; do not infer completion from adjacent component changes. |
+
 ### P0 — alpha blockers
 
 | Work | Evidence and blast radius | Acceptance |

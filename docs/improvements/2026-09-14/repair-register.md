@@ -21,9 +21,9 @@ compact-layout and keyboard review under AM-27/31/32.
 
 | Finding | Parent | Status | Source evidence / next boundary |
 | ---: | --- | --- | --- |
-| 1. Owner home is Provider Tools rather than a neutral Overview | AM-27 | OPEN | Correct role home and introduce a buyer-neutral first view without duplicating navigation. |
+| 1. Owner home is Provider Tools rather than a neutral Overview | AM-27 | FIXED IN SOURCE | `c520db917`: `/owner` is the workspace home and independently projects Balance, Calls, Agents and applicable Provider state with one evident next action. Provider navigation disclosure remains finding 2. |
 | 2. Buy and Supply appear as one role before Provider intent exists | AM-27 | OPEN | Disclose Supply only after relevant Provider state; preserve direct authenticated deep links. |
-| 3. Mobile buyer navigation omits Balance and promotes Provider Tools | AM-27 | OPEN | Align compact navigation with Overview, Market, Calls and Balance; keep Agents one tap away. |
+| 3. Mobile buyer navigation omits Balance and promotes Provider Tools | AM-27 | FIXED IN SOURCE | `c520db917`: compact primary navigation is Overview, Market, Calls and Balance; Agent and Provider administration cannot displace purchase continuity. |
 | 4. Global and workspace navigation duplicate Market and Calls | AM-27 | OPEN | Establish one hierarchy per region and canonical labels. |
 | 5. Balance availability depends on Agent-directory state | AM-11, AM-23 | OPEN | Shared Balance work is release-owner controlled; use an independent authoritative Account balance read. |
 | 6. Unrelated Balance resources share one load lifecycle and can race | AM-07–11, AM-23, AM-27 | OPEN | Model each read independently; preserve known Balance and document facts when a secondary read fails. |
@@ -74,3 +74,4 @@ compact-layout and keyboard review under AM-27/31/32.
 | 2026-09-14 | 10–12 | `61b7b0866` preserves exact-session funding continuation and distinct failure states | Funding-return and handoff API: 11 tests; lint; typecheck; staged React Doctor | Release integration, hosted cancel/fail/expire, forced replay/reordering, executable Agent return |
 | 2026-09-14 | 13 | `c7a9546e0` makes guided discovery the deterministic default; release integration `bf9a71be7` | Market route/page: 33 tests; lint; typecheck; staged React Doctor | Frozen-candidate compact/keyboard/cold-task proof |
 | 2026-09-14 | 14, 16 | `8d885b887` progressively discloses advanced catalogue facts and makes continuation recoverable and stale-safe | Market route/page/filter: 44 tests; lint; typecheck; commit-hook React Doctor passed | Release integration, compact/keyboard/cold-task proof |
+| 2026-09-14 | 1, 3 | `c520db917` adds the neutral owner Overview, corrects owner home, and constrains compact navigation to the buyer journey | Overview/navigation: 8 focused tests; focused lint; staged React Doctor 0 errors (2 bounded-role lookup advisories) | Release integration, Provider-nav disclosure, compact/keyboard/cold-task and hosted proof |
