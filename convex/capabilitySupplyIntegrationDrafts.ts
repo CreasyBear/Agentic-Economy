@@ -17,7 +17,8 @@ import {
 import type { MutationCtx, QueryCtx } from './_generated/server'
 import { agentAccessPrincipalValue, verifySupplyAgentPrincipal } from './agentAccessPrincipals'
 import { resolveBusinessActor } from './authz'
-import { ownsPublishedBusinessForOwnerId, publicationPorts } from './capabilitySupply'
+import { publicationPorts } from './capabilitySupply'
+import { nativeSubmissionBusiness } from './capabilitySupplyNativeAdmission'
 import {
   loadExactOfferingSourceState,
   persistOfferingSourceState,
@@ -121,7 +122,7 @@ export async function saveAgentSupplyIntegrationDraftHandler(
   const admission = await verifySupplyAgentPrincipal(ctx, args.agentPrincipal, true)
   if (
     admission.kind !== 'allowed'
-    || !(await ownsPublishedBusinessForOwnerId(ctx, args.businessId, admission.ownerId))
+    || (await nativeSubmissionBusiness(ctx, args.businessId))?.owningAccountRef !== admission.ownerId
   ) {
     return { kind: 'refused', reason: 'authorization_denied' }
   }
