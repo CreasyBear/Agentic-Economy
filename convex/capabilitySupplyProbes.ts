@@ -727,9 +727,12 @@ export async function recordCapabilityProbeResultHandler(
           .eq('revision', result.revision)
       ))
       .unique()
+    const paidValidationRequired = publication?.registrationEvidenceRefs.includes(X402_SELLER_CANARY_ADMISSION_REQUIRED_REF) ?? false
+    const readinessActive = result.lifecycle.state === 'active'
+    const publiclyReady = readinessActive && !paidValidationRequired
     if (publication !== null) {
-      if (result.lifecycle.state === 'active') await publishValidatedNativeDraft(ctx, publication, Date.now())
-      if (result.lifecycle.state === 'active'
+      if (publiclyReady) await publishValidatedNativeDraft(ctx, publication, Date.now())
+      if (publiclyReady
         && publication.authorityMode === 'provider_owned'
         && publication.sourceRouteRef !== undefined) {
         const priorObservations = await ctx.db.query('capabilityPublications')
@@ -752,7 +755,7 @@ export async function recordCapabilityProbeResultHandler(
       await syncMarketToolPresence(ctx, {
         toolRef: publication.toolRef,
         businessId: publication.businessId,
-        active: result.lifecycle.state === 'active',
+        active: publiclyReady,
         now: Date.now(),
       })
     }
@@ -763,13 +766,13 @@ export async function recordCapabilityProbeResultHandler(
       ))
       .unique()
     if (admissionCase !== null) {
-      const published = result.lifecycle.state === 'active'
+      const awaitingPaidValidation = readinessActive && paidValidationRequired
       await ctx.db.patch(admissionCase._id, {
-        state: 'completed',
-        terminalDecision: published ? 'published' : 'action_required',
-        blockerRefs: published ? [] : [...result.lifecycle.reasons],
+        state: awaitingPaidValidation ? 'under_review' : 'completed',
+        terminalDecision: awaitingPaidValidation ? 'pending' : publiclyReady ? 'published' : 'action_required',
+        blockerRefs: readinessActive ? [] : [...result.lifecycle.reasons],
         reviewStartedAt: admissionCase.reviewStartedAt ?? args.observedAt,
-        completedAt: args.observedAt,
+        completedAt: awaitingPaidValidation ? undefined : args.observedAt,
         updatedAt: Date.now(),
       })
     }

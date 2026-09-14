@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { api, internal } from '../../convex/_generated/api'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
-import { probeRequestDigest } from '@/modules/capability-supply/public'
+import { probeRequestDigest, X402_SELLER_CANARY_ADMISSION_REQUIRED_REF } from '@/modules/capability-supply/public'
 import { convexTestWithMarketComponents } from '../helpers/convex-fixtures'
 import {
   createPublishedBusinessOwner,
@@ -16,7 +16,7 @@ describe('owner supply test', () => {
   beforeEach(() => vi.useFakeTimers())
   afterEach(() => vi.useRealTimers())
 
-  it('does not turn an exact fresh no-payment challenge into a paid canary or publication authority', async () => {
+  it.each([false, true])('keeps an unpaid challenge separate from paid validation (admission fence: %s)', async (paidValidationRequired) => {
     const backend = convexTestWithMarketComponents()
     const { businessId, owner } = await createPublishedBusinessOwner(
       backend,
@@ -72,6 +72,18 @@ describe('owner supply test', () => {
     if (published.kind !== 'published')
       throw new Error(`owner_x402_publish_failed:${published.kind}`)
     await backend.finishAllScheduledFunctions(vi.runAllTimers)
+    if (paidValidationRequired) {
+      await backend.run(async (ctx) => {
+        const publication = await ctx.db.query('capabilityPublications')
+          .withIndex('by_publicationRef_and_revision', q => q
+            .eq('publicationRef', published.publicationRef)
+            .eq('revision', published.publicationRevision)).unique()
+        if (publication === null) throw new Error('publication_missing')
+        await ctx.db.patch(publication._id, {
+          registrationEvidenceRefs: [...publication.registrationEvidenceRefs, X402_SELLER_CANARY_ADMISSION_REQUIRED_REF],
+        })
+      })
+    }
     const targetResult = await backend.query(
       internal.capabilitySupply.readCapabilityProbeTarget,
       {
@@ -127,12 +139,17 @@ describe('owner supply test', () => {
     ))
     expect(admissionCases).toHaveLength(1)
     expect(admissionCases[0]).toMatchObject({
-      state: 'completed',
-      terminalDecision: 'published',
+      state: paidValidationRequired ? 'under_review' : 'completed',
+      terminalDecision: paidValidationRequired ? 'pending' : 'published',
       blockerRefs: [],
       reviewStartedAt: expect.any(Number),
-      completedAt: expect.any(Number),
     })
+    if (paidValidationRequired) expect(admissionCases[0]?.completedAt).toBeUndefined()
+    else expect(admissionCases[0]?.completedAt).toEqual(expect.any(Number))
+    const marketPresence = await backend.run(async (ctx) => ctx.db.query('marketActiveTools')
+      .withIndex('by_toolRef', q => q.eq('toolRef', published.toolRef)).unique())
+    if (paidValidationRequired) expect(marketPresence).toBeNull()
+    else expect(marketPresence?.toolRef).toBe(published.toolRef)
 
     const readTestState = async () => {
       const readback = await owner.query(
