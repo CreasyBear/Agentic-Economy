@@ -156,13 +156,14 @@ hosted and task-level alpha gates below.
 | ---: | --- | --- |
 | 1. Neutral owner Overview and owner home | **Fixed in source** | `c520db917` makes `/owner` the workspace home and independently projects known Balance, Calls, Agents and applicable Provider state with one next action. Provider navigation disclosure remains finding 2. |
 | 3. Mobile buyer navigation continuity | **Fixed in source** | `c520db917` constrains compact primary navigation to Overview → Market → Calls → Balance; Agent and Provider administration cannot displace Balance. |
+| 4. One Market navigation hierarchy | **Fixed in source** | `5116d283c` adds `/owner/market` inside the authenticated Buy journey, reuses the public Market loader/view contract, keeps all Market transitions in the entered shell, and suppresses public primary navigation while the operator shell owns the route. Calls remains in the same operator hierarchy. |
 | 10–12. Funding continuation and failure states | **Fixed in source** | `61b7b0866` preserves the exact payment attempt and gives each visible nonterminal/failure state an honest executable continuation. |
 | 13. Market default | **Fixed in source** | `c7a9546e0`, integrated as `bf9a71be7`, makes guided discovery the deterministic default. |
 | 14, 16. Market refinement and pagination | **Fixed in source** | `8d885b887` progressively discloses advanced source facts and preserves loaded rows/cursor across failure, retry and stale responses. |
 | 18. Agent connection progression | **Active** | `575540d92` gives setup an ordered connect → approve → confirm path and an exact directory refresh that cannot be repeated while pending. Originating Tool/Agent continuation is still unavailable, so the complete handoff contract remains open. |
 | 22, 25. Call context and route-keyed state | **Fixed in source** | `5b80b32b9` moves the unchanged `/calls/:callRef` URL under the authenticated owner shell and scopes the stateful controller to `callRef`; a late result cannot replace a newly navigated Call. |
 | 23, 24. Call hierarchy and recovery burden | **Active** | `5b80b32b9` leads with outcome/buyer money/time, one state-supported remedy and Provider output; raw lifecycle, identifiers, settlement detail, evidence reconciliation and reuse recipes are disclosed second. Recognizable Tool/Provider/Agent facts and privilege-gated reconciliation still need owning projections. |
-| 2, 4–9, 15, 17, 19–21 and all unlisted P0/P1 boundaries | **Open or dependency-blocked** | Continue source-first repair against the work and acceptance tables below; do not infer completion from adjacent component changes. |
+| 2, 5–9, 15, 17, 19–21 and all unlisted P0/P1 boundaries | **Open or dependency-blocked** | Continue source-first repair against the work and acceptance tables below; do not infer completion from adjacent component changes. |
 
 ### P0 — alpha blockers
 
