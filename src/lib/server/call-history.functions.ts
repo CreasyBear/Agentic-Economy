@@ -1,5 +1,6 @@
 import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
+import { accountHistoryResultSchema, type AccountHistoryResult } from '@/modules/money/public'
 
 import {
   callSourceAction,
@@ -99,6 +100,15 @@ const callsInput = z.strictObject({
   cursor: z.string().max(2_000).nullable().optional(),
   principalRef: z.string().min(1).max(200).optional(),
 })
+
+const accountHistoryInput = z.strictObject({ cursor: z.string().min(1).max(4096).optional() })
+const readOwnerHistoryAction = sourceAction<{ cursor?: string }, AccountHistoryResult>('moneyOwnerSpend:readOwnerHistory')
+
+export const readOwnerAccountHistoryServer = createServerFn({ method: 'GET' })
+  .validator((data) => accountHistoryInput.parse(data ?? {}))
+  .handler(async ({ data }) => accountHistoryResultSchema.parse(await callSourceAction(
+    readOwnerHistoryAction, data.cursor === undefined ? {} : { cursor: data.cursor },
+  )))
 
 export const readOwnerCallsServer = createServerFn({ method: 'GET' })
   .validator((data) => callsInput.parse(data ?? {}))

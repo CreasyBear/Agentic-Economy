@@ -1,6 +1,8 @@
 "use node"
 
 import { HTTPClient, SDK } from '@formance/formance-sdk'
+import { createHmac, timingSafeEqual } from 'node:crypto'
+import { accountHistoryCursorSchema, type AccountHistoryEntry, type AccountHistoryResult } from './internal/account-history'
 
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { degradeBackend } from '@/lib/observability/degrade-backend'
@@ -1027,6 +1029,151 @@ export async function readFormanceStatementPage(
   } catch (cause) {
     recordMetric('read_statement_page', 'unavailable', startedAt)
     return degradeBackend(cause, Object.freeze({ kind: 'unavailable', code: 'formance_read_unavailable' }), { site: 'readFormanceStatementPage', reason: 'source_unavailable' })
+  }
+}
+
+type LedgerHistoryTransaction = NonNullable<Awaited<ReturnType<SDK['ledger']['v2']['listTransactions']>>['v2TransactionsCursorResponse']>['cursor']['data'][number]
+type HistoryCursor = ReturnType<typeof accountHistoryCursorSchema.parse>
+
+function historyCursorSignature(payload: string, key: string): Buffer {
+  return createHmac('sha256', key).update(`ae.account-history-cursor:v1.${payload}`).digest()
+}
+
+function encodeHistoryCursor(payload: HistoryCursor, key: string): string {
+  const encoded = Buffer.from(JSON.stringify(payload)).toString('base64url')
+  return `${encoded}.${historyCursorSignature(encoded, key).toString('base64url')}`
+}
+
+function decodeHistoryCursor(token: string, key: string): HistoryCursor | undefined {
+  if (token.length > 4096) return undefined
+  const match = /^([A-Za-z0-9_-]+)\.([A-Za-z0-9_-]{43})$/u.exec(token)
+  if (match?.[1] === undefined || match[2] === undefined) return undefined
+  const signature = Buffer.from(match[2], 'base64url')
+  if (signature.length !== 32 || !timingSafeEqual(signature, historyCursorSignature(match[1], key))) return undefined
+  try {
+    const parsed = accountHistoryCursorSchema.safeParse(JSON.parse(Buffer.from(match[1], 'base64url').toString('utf8')))
+    return parsed.success ? parsed.data : undefined
+  } catch {
+    return undefined
+  }
+}
+
+function historyTransactionEffect(transaction: LedgerHistoryTransaction, accountDigest: string): AccountHistoryEntry | null | undefined {
+  if (transaction.metadata.account_digest !== accountDigest) return undefined
+  const occurredAt = transaction.timestamp.getTime()
+  const recordedAt = transaction.insertedAt?.getTime() ?? null
+  const revertedAt = transaction.revertedAt?.getTime() ?? null
+  // This SDK decodes IDs through JSON numbers before bigint; reject lost precision.
+  if (!Number.isSafeInteger(occurredAt) || occurredAt < 0 || formanceSafeUnitsFromSdk(transaction.id) === undefined
+    || (recordedAt !== null && (!Number.isSafeInteger(recordedAt) || recordedAt < 0))
+    || (revertedAt !== null && (!Number.isSafeInteger(revertedAt) || revertedAt < 0))) return undefined
+  const available = `accounts:${accountDigest}:available`
+  const callDigest = transaction.metadata.call_digest
+  const reserved = callDigest !== undefined && DIGEST_PATTERN.test(callDigest) ? `calls:${callDigest}:buyer_reserved` : undefined
+  let credit = 0n
+  let document = 0n
+  for (const posting of transaction.postings) {
+    if (posting.asset !== AUD_ASSET) continue
+    const units = formanceSafeUnitsFromSdk(posting.amount)
+    if (units === undefined) return undefined
+    // Account and Call attribution must agree with the booked addresses.
+    if ([posting.source, posting.destination].some((address) =>
+      (/^calls:[a-f0-9]{64}:buyer_reserved$/u.test(address) && address !== reserved)
+      || (/^accounts:[a-f0-9]{64}:available$/u.test(address) && address !== available))) return undefined
+    const amount = BigInt(units)
+    if (posting.destination === available || posting.destination === reserved) credit += amount
+    if (posting.source === available || posting.source === reserved) credit -= amount
+    if (/^adjustments:[a-f0-9]{64}:buyer$/u.test(posting.destination)) document += amount
+    if (/^adjustments:[a-f0-9]{64}:buyer$/u.test(posting.source)) document -= amount
+  }
+  const kinds: Partial<Record<FormanceMoneyTemplate, AccountHistoryEntry['kind']>> = {
+    FUNDING_SETTLED: 'funding', FUNDING_REVERSED: 'funding_reversal',
+    BUYER_SALE_SETTLED: 'call_spend', BUYER_ADJUSTED: 'document_adjustment',
+  }
+  const template = transaction.template
+  const known = PACKAGE4_FORMANCE_TEMPLATE_NAMES.find((value) => value === template)
+  let kind = known === undefined ? 'unmapped' : kinds[known]
+  if ((kind === 'funding' && (credit <= 0n || document !== 0n))
+    || ((kind === 'funding_reversal' || kind === 'call_spend') && (credit >= 0n || document !== 0n))
+    || (kind === 'document_adjustment' && (credit !== 0n || document === 0n))) kind = 'unmapped'
+  // Only known zero-effect internal legs can be omitted. Unknown bookings stay
+  // visible and mark coverage partial, even if their credit effect is zero.
+  if (kind === undefined && credit === 0n && document === 0n) return null
+  return {
+    transactionId: transaction.id.toString(), transactionRef: transaction.reference ?? null,
+    occurredAt, recordedAt, kind: kind ?? 'unmapped',
+    accountEffect: { currency: 'AUD', units: credit.toString(), exponent: 6 },
+    documentEffectUnits: document.toString(), reverted: transaction.reverted, revertedAt,
+    sourceRef: null,
+    sourceDigest: [transaction.metadata.call_digest, transaction.metadata.command_digest]
+      .find((value) => value !== undefined && DIGEST_PATTERN.test(value)) ?? null,
+  }
+}
+
+/**
+ * Requires a canonical Account digest and server-held cursor key. Returns each
+ * booked transaction once in native ID order, not effective-date order. Exact
+ * Account effects exclude internal allocation; document adjustments stay separate.
+ * Invalid source attribution/order/snapshot fails unavailable without a partial page.
+ * Does not change statement-document rules or write money.
+ */
+export async function readFormanceAccountHistory(
+  context: FormanceContext,
+  input: Readonly<{ accountDigest: string; cursorKey: string; cursor?: string; now?: number }>,
+): Promise<AccountHistoryResult> {
+  if (!DIGEST_PATTERN.test(input.accountDigest) || input.cursorKey.length < 32) {
+    return { kind: 'setup_required', code: 'formance_history_configuration_invalid' }
+  }
+  const cursor = input.cursor === undefined ? undefined : decodeHistoryCursor(input.cursor, input.cursorKey)
+  if (input.cursor !== undefined && (cursor === undefined || cursor.accountDigest !== input.accountDigest
+    || cursor.ledger !== context.configuration.ledger)) return { kind: 'refused', code: 'account_history_cursor_invalid' }
+  const snapshotAt = cursor?.snapshotAt ?? input.now ?? Date.now()
+  if (!Number.isSafeInteger(snapshotAt) || snapshotAt < 0) return { kind: 'refused', code: 'account_history_cursor_invalid' }
+  try {
+    const response = await context.sdk.ledger.v2.listTransactions(cursor === undefined ? {
+      ledger: context.configuration.ledger, pageSize: 15, pit: new Date(snapshotAt), sort: 'id:desc',
+      // Formance v2.4.12 PIT bounds effective time only. Its native cursor
+      // retains these filters; we also enforce the snapshot on every returned row.
+      query: { $and: [
+        { $match: { 'metadata[account_digest]': input.accountDigest } },
+        { $lte: { inserted_at: new Date(snapshotAt).toISOString() } },
+      ] },
+    } : { ledger: context.configuration.ledger, cursor: cursor.cursor }, NO_RETRY)
+    const page = response.v2TransactionsCursorResponse?.cursor
+    if (page === undefined || page.data.length > 15 || (page.hasMore && (page.data.length === 0
+      || page.next === undefined || page.next.length === 0 || page.next.length > 2000 || page.next === cursor?.cursor))) {
+      return { kind: 'unavailable', code: 'formance_history_response_invalid' }
+    }
+    const entries: AccountHistoryEntry[] = []
+    let lastId = cursor?.lastId
+    let coverage: 'complete' | 'partial' = cursor?.coverage ?? 'complete'
+    for (const transaction of page.data) {
+      const timestamp = transaction.timestamp.getTime()
+      if (timestamp > snapshotAt || (transaction.insertedAt?.getTime() ?? snapshotAt) > snapshotAt
+        || (transaction.revertedAt?.getTime() ?? snapshotAt) > snapshotAt) {
+        return { kind: 'unavailable', code: 'formance_history_snapshot_invalid' }
+      }
+      if (lastId !== undefined && transaction.id >= BigInt(lastId)) {
+        return { kind: 'unavailable', code: 'formance_history_order_invalid' }
+      }
+      const entry = historyTransactionEffect(transaction, input.accountDigest)
+      if (entry === undefined) return { kind: 'unavailable', code: 'formance_history_attribution_invalid' }
+      lastId = transaction.id.toString()
+      if (entry !== null) {
+        entries.push(entry)
+        // Native reverts lack a guaranteed reverse-reference projection in the
+        // installed SDK. Preserve the original and never claim complete netting.
+        if (entry.kind === 'unmapped' || entry.recordedAt === null || entry.reverted) coverage = 'partial'
+      }
+    }
+    const continueCursor = page.hasMore && page.next !== undefined && lastId !== undefined
+      ? encodeHistoryCursor({ accountDigest: input.accountDigest, ledger: context.configuration.ledger,
+          snapshotAt, cursor: page.next, lastId, coverage }, input.cursorKey)
+      : ''
+    return { kind: 'available', entries, snapshotAt, continueCursor, isDone: !page.hasMore, coverage,
+      sourceLinkCoverage: 'unavailable', source: 'formance_transaction_cursor', ordering: 'recorded_transaction_sequence_desc' }
+  } catch (cause) {
+    return degradeBackend(cause, { kind: 'unavailable' as const, code: 'formance_read_unavailable' }, { site: 'readFormanceAccountHistory', reason: 'source_unavailable' })
   }
 }
 

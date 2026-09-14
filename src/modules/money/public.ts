@@ -641,3 +641,5 @@ export type {
 } from "./internal/delivery";
 
 export { formatDisplayPrice, formatDisplayAmount } from './internal/display-price'
+export { accountHistoryResultSchema } from './internal/account-history'
+export type { AccountHistoryEntry, AccountHistoryResult } from './internal/account-history'

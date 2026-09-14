@@ -6,6 +6,7 @@ import {
   createFormanceContext,
   installPackage4FormanceSchema,
   readFormanceAccount,
+  readFormanceAccountHistory,
   readFormanceConfiguration,
   readFormanceHealth,
   readFormancePeriodSpend,
@@ -27,6 +28,7 @@ import {
   syncFormanceCapacity,
 } from '../src/modules/money/formance-workflows'
 import { internalAction } from './_generated/server'
+import { accountHistoryResultValue } from './moneyLedgerValues'
 
 export type MoneyFormanceResult = FormanceMoneyResult
 export type MoneyFormanceManagedCallBooking = import('../src/modules/money/formance-workflows').FormanceManagedCallBooking
@@ -251,6 +253,22 @@ export const readPeriodSpend = internalAction({
           periodStartAt: args.periodStartAt,
           periodEndAt: args.periodEndAt,
         })
+  },
+})
+
+export const readAccountHistory = internalAction({
+  args: { accountRef: v.string(), cursor: v.optional(v.string()) },
+  returns: accountHistoryResultValue,
+  handler: async (_ctx, args) => {
+    const accountDigest = formanceAccountMetadataDigest(args.accountRef)
+    const cursorKey = process.env.AE_CONVEX_SERVER_FUNCTION_TOKEN?.trim()
+    if (accountDigest === undefined || cursorKey === undefined || cursorKey.length < 32) {
+      return { kind: 'setup_required' as const, code: 'formance_history_configuration_invalid' }
+    }
+    const context = configuredContext()
+    return context.kind === 'setup_required' ? context : await readFormanceAccountHistory(context.context, {
+      accountDigest, cursorKey, ...(args.cursor === undefined ? {} : { cursor: args.cursor }),
+    })
   },
 })
 

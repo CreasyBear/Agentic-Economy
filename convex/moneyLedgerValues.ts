@@ -3,6 +3,27 @@ import { v } from 'convex/values'
 import { sourceWriteArgs } from './sourceWriteAdmission'
 
 export const identifier = v.string()
+export const accountHistoryResultValue = v.union(
+  v.object({
+    kind: v.literal('available'),
+    entries: v.array(v.object({
+      transactionId: v.string(), transactionRef: v.union(v.string(), v.null()),
+      occurredAt: v.number(), recordedAt: v.union(v.number(), v.null()),
+      kind: v.union(v.literal('funding'), v.literal('funding_reversal'), v.literal('call_spend'),
+        v.literal('document_adjustment'), v.literal('unmapped')),
+      accountEffect: v.object({ currency: v.literal('AUD'), units: v.string(), exponent: v.literal(6) }),
+      documentEffectUnits: v.string(), reverted: v.boolean(), revertedAt: v.union(v.number(), v.null()),
+      sourceRef: v.null(), sourceDigest: v.union(v.string(), v.null()),
+    })),
+    snapshotAt: v.number(), continueCursor: v.string(), isDone: v.boolean(),
+    coverage: v.union(v.literal('complete'), v.literal('partial')),
+    sourceLinkCoverage: v.literal('unavailable'), source: v.literal('formance_transaction_cursor'),
+    ordering: v.literal('recorded_transaction_sequence_desc'),
+  }),
+  v.object({ kind: v.literal('setup_required'), code: v.string() }),
+  v.object({ kind: v.literal('unavailable'), code: v.string() }),
+  v.object({ kind: v.literal('refused'), code: v.string() }),
+)
 export const serverFunctionAuth = v.object({
   principalId: v.string(),
   ownerId: v.string(),
