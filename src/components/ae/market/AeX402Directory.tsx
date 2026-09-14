@@ -30,6 +30,46 @@ import type { X402DirectoryEntry, X402DirectoryFilters, X402DirectoryInput, X402
 type DirectorySearch = MarketReturnSearch
 
 type DirectoryProps = Readonly<{ page: X402DirectoryPage; search: DirectorySearch; activeView?: NonNullable<DirectorySearch['view']>; home?: X402MarketplaceHome; catalogue?: X402DirectoryCatalogue; overview?: X402DirectoryCatalogueOverview; providers?: X402DirectoryProvidersPage }>
+type IndexedPaginationState = Readonly<{
+  source: X402DirectoryCatalogue | undefined
+  items: readonly X402DirectoryEntry[]
+  cursor: string | undefined
+  isDone: boolean
+  status: 'idle' | 'loading' | 'failed'
+}>
+
+function indexedPaginationState(indexed: boolean, catalogue: X402DirectoryCatalogue | undefined): IndexedPaginationState {
+  return indexed && catalogue?.kind === 'ok'
+    ? { source: catalogue, items: catalogue.page.items, cursor: catalogue.indexCursor, isDone: catalogue.isDone, status: 'idle' }
+    : { source: catalogue, items: [], cursor: undefined, isDone: true, status: 'idle' }
+}
+
+function useIndexedPagination(indexed: boolean, catalogue: X402DirectoryCatalogue | undefined, filters: X402DirectoryCatalogueInput) {
+  const [state, setState] = useState(() => indexedPaginationState(indexed, catalogue))
+  useEffect(() => {
+    setState(indexedPaginationState(indexed, catalogue))
+  }, [catalogue, indexed])
+  async function loadNextPage() {
+    if (state.cursor === undefined || state.status === 'loading') return
+    const cursor = state.cursor
+    const source = catalogue
+    setState(current => current.source === source && current.cursor === cursor ? { ...current, status: 'loading' } : current)
+    try {
+      const { indexCursor: _cursor, offset: _offset, ...query } = filters
+      const result = await readX402DirectoryCatalogueServer({ data: { ...query, indexCursor: cursor } })
+      if (result.kind !== 'ok' || result.source !== 'index') {
+        setState(current => current.source === source && current.cursor === cursor ? { ...current, status: 'failed' } : current)
+        return
+      }
+      setState(current => current.source === source && current.cursor === cursor
+        ? { source, items: [...current.items, ...result.page.items], cursor: result.indexCursor, isDone: result.isDone, status: 'idle' }
+        : current)
+    } catch {
+      setState(current => current.source === source && current.cursor === cursor ? { ...current, status: 'failed' } : current)
+    }
+  }
+  return { state, loadNextPage }
+}
 
 export function AeX402Directory(props: DirectoryProps) {
   return <DirectorySavedToolsProvider><DirectoryMarketplace {...props} /></DirectorySavedToolsProvider>
@@ -65,28 +105,7 @@ function DirectoryMarketplace({ page, search, activeView, home, catalogue, overv
   // model). Reset whenever the server loader hands back a new first page
   // (a real filter/sort/query navigation), never by this component's own
   // appends.
-  const [loadMore, setLoadMore] = useState(() => indexed && catalogue?.kind === 'ok'
-    ? { items: catalogue.page.items, cursor: catalogue.indexCursor, isDone: catalogue.isDone }
-    : { items: [] as X402DirectoryEntry[], cursor: undefined as string | undefined, isDone: true })
-  const [loadingMore, setLoadingMore] = useState(false)
-  useEffect(() => {
-    setLoadMore(indexed && catalogue?.kind === 'ok'
-      ? { items: catalogue.page.items, cursor: catalogue.indexCursor, isDone: catalogue.isDone }
-      : { items: [], cursor: undefined, isDone: true })
-  }, [catalogue, indexed])
-  async function loadMoreResults() {
-    if (loadMore.cursor === undefined || loadingMore) return
-    setLoadingMore(true)
-    try {
-      const { indexCursor: _cursor, offset: _offset, ...filters } = filterValues
-      const result = await readX402DirectoryCatalogueServer({ data: { ...filters, indexCursor: loadMore.cursor } })
-      setLoadMore(current => result.kind === 'ok' && result.source === 'index'
-        ? { items: [...current.items, ...result.page.items], cursor: result.indexCursor, isDone: result.isDone }
-        : { ...current, isDone: true })
-    } finally {
-      setLoadingMore(false)
-    }
-  }
+  const { state: loadMore, loadNextPage } = useIndexedPagination(indexed, catalogue, filterValues)
   // Legacy `?compare=` links (from the retired capability-catalog tree, or
   // shared before it was removed) carry resource identifiers rather than a
   // selection made in this component's own state. Resolve them against
@@ -270,9 +289,11 @@ function DirectoryMarketplace({ page, search, activeView, home, catalogue, overv
             <nav aria-label="Catalogue pages" className="mt-8 flex justify-between gap-4 border-t border-border pt-5">
               {tab === 'tools' && indexed ? <>
                 <span />
-                {loadMore.isDone ? null : <Button type="button" variant="outline" onClick={() => void loadMoreResults()} disabled={loadingMore} aria-busy={loadingMore}>
-                  {loadingMore ? <Loader2Icon className="animate-spin" /> : null}Load more<ArrowRightIcon />
-                </Button>}
+                {loadMore.isDone ? null : <div className="flex flex-col items-end gap-2">
+                {loadMore.status === 'failed' ? <p role="alert" className="max-w-md text-right text-sm text-destructive">More Tools could not be loaded. Your current results and filters are unchanged.</p> : null}
+                <Button type="button" variant="outline" onClick={() => void loadNextPage()} disabled={loadMore.status === 'loading'} aria-busy={loadMore.status === 'loading'} aria-label={loadMore.status === 'failed' ? 'Try loading more again' : 'Load more'}>
+                  {loadMore.status === 'loading' ? <Loader2Icon className="animate-spin" /> : null}Load more<ArrowRightIcon />
+                </Button></div>}
               </> : <>
               <span>{page.previousOffset === undefined ? null : <Button asChild variant="outline"><Link to="/market" search={{ ...sourceInput, view: tab, offset: page.previousOffset }}><ArrowLeftIcon />Previous page</Link></Button>}</span>
               {page.nextOffset === undefined ? null : <Button asChild variant="outline"><Link to="/market" search={{ ...sourceInput, view: tab, offset: page.nextOffset }}>Next page<ArrowRightIcon /></Link></Button>}

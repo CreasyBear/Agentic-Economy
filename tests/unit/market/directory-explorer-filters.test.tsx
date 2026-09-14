@@ -45,6 +45,7 @@ it('validates Provider hostnames and permits explicitly clearing a constraint', 
 })
 it('sends metadata, curation and payer filters with source meaning intact', () => {
   const { filters, change, reset } = show()
+  fireEvent.click(filters.getByRole('button', { name: 'Advanced filters' }))
   fireEvent.click(filters.getByRole('checkbox', { name: 'Request fields' }))
   expect(change).toHaveBeenLastCalledWith({ hasInputFields: true })
   fireEvent.click(filters.getByRole('checkbox', { name: 'Output example' }))
