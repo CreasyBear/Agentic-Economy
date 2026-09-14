@@ -155,6 +155,7 @@ hosted and task-level alpha gates below.
 | Finding | Status | Evidence / remaining boundary |
 | ---: | --- | --- |
 | 1. Neutral owner Overview and owner home | **Fixed in source** | `c520db917` makes `/owner` the workspace home and independently projects known Balance, Calls, Agents and applicable Provider state with one next action. Provider navigation disclosure remains finding 2. |
+| 2. Role-appropriate Supply disclosure | **Fixed in source** | `0a5b24644` removes Supply from the default buyer shell. Provider state remains discoverable through the conditional Overview card, while a direct authenticated Provider journey discloses its Supply group for orientation without changing route access. |
 | 3. Mobile buyer navigation continuity | **Fixed in source** | `c520db917` constrains compact primary navigation to Overview → Market → Calls → Balance; Agent and Provider administration cannot displace Balance. |
 | 4. One Market navigation hierarchy | **Fixed in source** | `5116d283c` adds `/owner/market` inside the authenticated Buy journey, reuses the public Market loader/view contract, keeps all Market transitions in the entered shell, and suppresses public primary navigation while the operator shell owns the route. Calls remains in the same operator hierarchy. |
 | 10–12. Funding continuation and failure states | **Fixed in source** | `61b7b0866` preserves the exact payment attempt and gives each visible nonterminal/failure state an honest executable continuation. |
@@ -165,7 +166,7 @@ hosted and task-level alpha gates below.
 | 19. Self-contained Call approval | **Fixed in source** | `219ed5b82` replaces the opaque Tool reference with accepted Quote identity, current Agent label, explicit unrecorded purpose/Provider-name facts, accepted AUD ceiling, action class, declared effects and declared data release in one decision region. Missing or unavailable Quote context disables approval while leaving decline and scoped refresh available. |
 | 22, 25. Call context and route-keyed state | **Fixed in source** | `5b80b32b9` moves the unchanged `/calls/:callRef` URL under the authenticated owner shell and scopes the stateful controller to `callRef`; a late result cannot replace a newly navigated Call. |
 | 23, 24. Call hierarchy and recovery burden | **Fixed in source** | `5b80b32b9` leads with outcome/buyer money/time, one state-supported remedy and Provider output; `bb190d492` adds the retained Tool snapshot name, recorded Provider reference, current Agent label and explicit missing-history facts, then fails closed unless the owner receipt grants evidence-submission permission. Raw lifecycle, identifiers, settlement detail, reconciliation and reuse recipes remain disclosed second. |
-| 2, 5–9, 17, 20–21 and all unlisted P0/P1 boundaries | **Open or dependency-blocked** | Continue source-first repair against the work and acceptance tables below; do not infer completion from adjacent component changes. |
+| 5–9, 17, 20–21 and all unlisted P0/P1 boundaries | **Open or dependency-blocked** | Continue source-first repair against the work and acceptance tables below; do not infer completion from adjacent component changes. |
 
 ### P0 — alpha blockers
 
