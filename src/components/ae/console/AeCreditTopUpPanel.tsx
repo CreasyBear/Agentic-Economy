@@ -482,8 +482,11 @@ function fundingSuggestionUnits(policy: AudFundingPolicy): readonly bigint[] {
   const preferred = [minimum, alignUp(minimum * 2n), alignUp(minimum * 5n)]
   const fallbacks = [maximum, alignDown(minimum + ((maximum - minimum) / 2n))]
   const valid: bigint[] = []
+  const seen = new Set<bigint>()
   for (const units of [...preferred, ...fallbacks]) {
-    if (valid.includes(units) || quoteAudAccountFunding(units, policy) === undefined) continue
+    if (seen.has(units)) continue
+    seen.add(units)
+    if (quoteAudAccountFunding(units, policy) === undefined) continue
     valid.push(units)
     if (valid.length === 3) break
   }
