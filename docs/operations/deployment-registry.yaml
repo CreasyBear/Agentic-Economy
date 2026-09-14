@@ -355,7 +355,7 @@ operatingPause:
 
 
 hostedAlphaReadback:
-  capturedOn: "2026-09-13"
+  capturedOn: "2026-09-14"
   evidenceSource: orchestrator_verified_provider_readback_and_local_checks
   evidence: docs/operations/hosted-cutover-2026-09-12.md
   supersedes: earlier_hosted_cutover_topology_identity_configuration_and_usability_claims
@@ -363,7 +363,7 @@ hostedAlphaReadback:
     id: hosted_alpha
     moneyMode: sandbox_only
     custodyEnabled: true
-    writesEnabled: false
+    writesEnabled: true
     recurringWorkloadsEnabled: false
     alphaReady: false
     productionReady: false
@@ -373,11 +373,13 @@ hostedAlphaReadback:
     projectId: prj_dK5mDpjBYuAXMwvLr0pWO0h8DoH9
     scope: creasybears-projects
     canonicalUrl: https://app.aecon.ai
-    observedDeploymentId: dpl_4D25Fo8R3XGzup57z4dvxRsg4QmJ
-    deploymentUrl: https://agentic-economy-9c8k210jb-creasybears-projects.vercel.app
-    observedSourceRevision: 584cba57facc3977640930167a1c34620e1464e3
-    cliDownload: verified_revision_and_canonical_origin
-    cliArchiveSha256: 26454fc687bd48beebe7d85c5e64af645b303acc7799b4c2f38e26370681ebe6
+    observedDeploymentId: dpl_BPj6SC6355j27N3q9Yv5BgfLGuYA
+    deploymentUrl: https://agentic-economy-a9zg448t7-creasybears-projects.vercel.app
+    observedSourceRevision: ce68a15f5c006f068c9493135f3cfb0e52b86e02
+    cliDownload: previous_revision_verified_current_archive_not_rechecked
+    previousCliVerification:
+      sourceRevision: 584cba57facc3977640930167a1c34620e1464e3
+      archiveSha256: 26454fc687bd48beebe7d85c5e64af645b303acc7799b4c2f38e26370681ebe6
     healthHttp: 200
     serverRenderingBoot: fixed
     readyHttp: 200
@@ -424,10 +426,10 @@ hostedAlphaReadback:
     projectName: agentic-economy
     developmentDeployment: cool-crab-306
     providerProductionDeployment: cautious-zebra-473
-    deployedSourceRevision: fbd22a563f204312f26aa9b8a53c55ca5969e02f
+    deployedSourceRevision: 3fad0c66f7c7ca9babba6c2e10bc639e141c1a0d
     aeAuthority: hosted_alpha_sandbox_only
     oldProjectsDeletedWithUserApproval: 10
-    exactNamedEnvironmentReadback:
+    earlierNamedEnvironmentReadback:
       STRIPE_SECRET_KEY: missing
       AE_X402_RPC_URLS_JSON: missing
       commandConsumerRequirement: not_inferred_from_environment_absence
@@ -803,13 +805,21 @@ hostedAlphaReadback:
     testnetSeedTestLimitation: simulated_observation_bypasses_real_probe_authority
     ownerAdmissionAlternative:
       path: human_owned_provider_business_x402_preview_connect_publish
-      verification: workspace_created_draft_saved_live_challenge_verified_payee_claim_pending
+      verification: payee_claim_verified_active_connection_saved_cli_and_owner_readback_verified
       businessId: mn78qyrzapg0qrpc8brg7ahprs8eanz3
       accountRef: acc_84e45622d36248de9452c03509f84d11
       providerName: Agentic Economy Sandbox Tools
       draftRef: sha256:ab9cd9eaeaabaf5aa2dc6a4b8635d1935e165534537ac003a988395b2a3363bd
       stripeAccountsV2Required: false
+      connectionRef: connection:x402:sha256:cf75704924ada4267e496073866f1ac80cf50c532d328d7f873c02b5ffa3395a
+      connectionState: active
+      providerCredential: seven_day_sandbox_market_supply_manage
+      publicationRequestId: alpha-sandbox-tool-publish-20260914-v1
+      publicationResult: refused_authorization_denied_no_submission
+      businessVisibility: unpublished
+      blocker: first_x402_owner_and_agent_publish_paths_not_wired_to_staging_canary_promotion
       sourceWritesFlag: AE_PACKAGE5_WRITES_ENABLED
+      sourceWritesEnabled: true
       requirements: [human_signup, controlled_payee_claim_signature, valid_bazaar_402_declaration]
     custodyPolicyProvisioning:
       rules: existing_cdpX402SellerCanaryPolicyRules_generator
@@ -870,12 +880,16 @@ hostedAlphaReadback:
       accessibilityPassed: 10
       cli: passed
       build: passed
-    authenticatedSignIn: not_proven
+    authenticatedSignIn: verified_business_google_session
     livePurchases: not_proven
-    latestDeploymentSourceRevision: 584cba57facc3977640930167a1c34620e1464e3
-    currentHead: a796682575cbb8d0c14d94c3a109ada04c909800
-    currentHeadSubsequentChanges: docs_and_test_only
-    ci:
+    latestDeploymentSourceRevision: ce68a15f5c006f068c9493135f3cfb0e52b86e02
+    lastVerifiedCodeRevision: ce68a15f5c006f068c9493135f3cfb0e52b86e02
+    focusedPublicationTests: 57_passed_before_final_projection_alignment
+    finalProjectionTests: 19_passed
+    finalTypecheck: passed
+    finalTargetedLint: passed
+    latestCi: {runId: 34796948624, state: in_progress, reactDoctor: passed}
+    previousSuccessfulCi:
       runId: 34748670853
       state: success
       requiredKernelJobs: passed

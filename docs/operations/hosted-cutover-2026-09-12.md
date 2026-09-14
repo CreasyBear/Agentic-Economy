@@ -636,3 +636,100 @@ Optional authenticated lifecycle, paid gateway and chat jobs were skipped.
 Commercial readiness still reports catalogue absent, quoting unavailable,
 funding configured and sellable false. Sandbox funding is verified; Tool
 publication and a paid sandbox Call remain outstanding.
+
+
+### First sandbox Tool admission — 14 September
+
+The Provider CLI approval completed under the genuine business-account session.
+Its separately stored credential has `market_supply:manage`, sandbox environment
+and a seven-day lifetime. The official CDP SDK signed and locally verified the
+controlled payee claim. One active connection was saved for business
+`mn78qyrzapg0qrpc8brg7ahprs8eanz3`:
+`connection:x402:sha256:cf75704924ada4267e496073866f1ac80cf50c532d328d7f873c02b5ffa3395a`.
+The owner UI independently shows one available connection. No buyer spending
+credential was issued in this step.
+
+Provider writes (`AE_PACKAGE5_WRITES_ENABLED`) are enabled in both intended
+alpha targets. Scheduled workloads remain disabled. Backend source
+`3fad0c66f7c7ca9babba6c2e10bc639e141c1a0d` deployed to `cautious-zebra-473`;
+the official dry run and deployment reported no index deletions.
+
+Two source defects were identified. The managed x402 importer required an
+optional display price even though the current builder derives price from the
+payment challenge. It now accepts the omitted display field while rejecting
+mismatched payment terms. The Provider HTTP response also rejected safe source,
+payment and health metadata emitted by the backend's owner projection. The
+final strict schema now includes those fields and still rejects credentials;
+its tests construct actual domain projections. The earlier `reasonCode`
+omission diagnosis was incorrect: the backend already supplies null.
+
+Verification: 57 focused publication/import/action tests passed before the final
+projection correction; its 19 action tests passed afterward. Final type checking,
+targeted lint and whitespace checks passed. Remote Kernel CI run `34796948624` is
+still in progress for the final revision; React Doctor passed.
+
+The unchanged publication request `alpha-sandbox-tool-publish-20260914-v1`
+now reaches `authorization_denied`. There is no submitted publication from this
+request. The existing draft remains
+`offering:supply-draft:b3c152bf2d9e52e19f55f8529d67d64b94888590e6fd6dd9a231b466313f1ec8`.
+The business is private (`publicStatus: unpublished`). Agent draft saving
+requires a published business; later read/reserve/publish paths make the same
+assumption. The dedicated sandbox x402 staging mutation is implemented and
+tested but has no web or CLI caller. Generic owner publishing also misses it.
+This is an application workflow gap, not another provider credential failure.
+
+#### Implementation boundary for first-Tool publication
+
+Preserve one lifecycle: private draft → authenticated submission → staged Tool
+→ paid testnet validation → evidence-based promotion → public Tool. Reuse
+`capabilitySupplyOwnerStaging`, `capabilitySupplyOwnerCanary` and
+`catalogOfferingMutations.promoteX402SellerCanaryHandler`. The staged Tool's
+canary admission fence must remain enforced. Do not publish the business by
+editing data, relax the generic published-business guard globally, or classify
+x402 as an ordinary native source to avoid paid validation.
+
+Execute as finite assignments, each with explicit file ownership:
+
+1. **Admission contract and evidence.** Establish the shared owner/agent staging
+   entry point and exact ownership/delegation checks. Reconcile active saved
+   connection authority with the current short-lived seller-claim requirement;
+   a claim digest cannot be treated as a newly signed claim. Trace catalog
+   draft activation too: the existing staging helper currently requires
+   published catalog offering/access-path rows even while the business is
+   private. Keep public visibility fenced throughout.
+2. **Publish orchestration.** Route first sandbox x402 submissions through that
+   shared staging entry point from owner and agent publishing. Apply any private
+   draft/read/reservation allowance only within the authenticated admission
+   boundary. Preserve ordinary publication behavior and durable request IDs.
+3. **Validation and promotion.** Connect the existing testnet funding readiness,
+   exact paid validation Call, status/recovery and promotion operations. Refresh
+   real treasury evidence through its existing workload authority; never seed
+   synthetic evidence. Expose pending or failed validation as an actionable
+   state, not a generic authorization failure.
+4. **Cold verification.** Start from an unpublished Provider; publish through
+   each supported entry point. Require proof that no public Tool appears before
+   validation, stale/mismatched/revoked authority fails closed, duplicate
+   submission reuses its durable operation, and successful promotion creates
+   one discoverable Tool with matching Call and payment evidence.
+
+The code boundary includes `supply-actions.ts`, `source-first-owner.ts`,
+`capabilitySupplyIntegrationDrafts.ts`, `capabilitySupplyOwnerFunnelCommands.ts`,
+`capabilitySupplyPublish.ts` and the existing staging/validation modules.
+Partition these into 1–3-file changes after the shared contract is fixed; do not
+have parallel workers invent separate owner and agent lifecycles.
+
+Observed UI papercuts for the later maturity wave: the saved Tool says
+“Continue setup” without a continuation control; its status says Connection
+“Not required” despite the required x402 connection; Provider status has two
+identical empty panels. The first two impair recovery from this publication
+blocker. No full application audit has started and alpha is not ready.
+
+Final web deployment `dpl_BPj6SC6355j27N3q9Yv5BgfLGuYA` is READY and aliases
+app.aecon.ai, serving `ce68a15f5c006f068c9493135f3cfb0e52b86e02`. Health, release
+and readiness return 200; release identity matches exactly. The ordinary CLI
+connection-list command now returns `available` with the saved active connection,
+POST method, controlled payee and `reasonCode: null`. Commercial readiness still
+reports catalogue absent, quoting unavailable, funding configured, sellable false.
+The preceding deployment `dpl_Ga3QwZy4kWCZg1cn1yxd2icHFs8V` is retained as a
+rollback reference; it contains the importer fix but the incomplete projection
+fix. No credentials or authority scope changed during these code corrections.

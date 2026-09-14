@@ -367,3 +367,24 @@ lifecycle, paid gateway and chat jobs were skipped. Alpha is still not ready:
 commercial readiness reports no admitted catalogue, quoting unavailable and
 `sellable: false`. Tool publication and a paid sandbox Call remain unverified,
 as do forced webhook replay, refunds and document rendering.
+
+
+### First sandbox Tool publication — 14 September
+
+Provider approval and payee-control proof are verified; one active sandbox
+connection is persisted and visible in the owner UI. Provider writes are enabled
+in web and backend, with recurring workloads still disabled. The source importer
+and HTTP connection projection defects have focused regression coverage.
+
+**Release blocker:** first-time x402 publishing is not wired to its implemented
+staging, paid testnet validation and promotion lifecycle. The approved Provider
+is still private; the CLI's published-business guard returns
+`authorization_denied` before draft update. Generic owner publishing also misses
+the dedicated staging path. There is no submitted or public Tool from this
+attempt, and no paid Call proof. This cannot be resolved by another credential
+or an unchecked business-visibility change.
+
+The cutover evidence now records the exact connection/draft, verified changes,
+UI recovery papercuts and the bounded implementation sequence. Complete this
+lifecycle and hosted secret-lifecycle proof before beginning the full cold-agent
+maturity audit. Sandbox funding remains verified; alpha remains not ready.
