@@ -330,11 +330,12 @@ describe('/tools/$toolRef', () => {
     )
   })
 
-  it('keeps one safe continuation beside switchable research views and focuses each full record', () => {
+  it('keeps one CSS-responsive continuation beside switchable research views and focuses each full record', () => {
     const rendered = renderInspectorWithRouter('full')
     const inspector = screen.getByRole('article', {
       name: 'Invoice line-item extraction Tool details',
     })
+    expect(inspector.querySelectorAll('[data-tool-layout="responsive"]')).toHaveLength(1)
     expect(within(inspector).getAllByRole('complementary', {
       name: 'What you can do next',
     })).toHaveLength(1)
