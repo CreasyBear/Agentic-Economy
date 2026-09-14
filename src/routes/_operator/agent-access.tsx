@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
-import { Outlet, createFileRoute, useLocation, useNavigate } from '@tanstack/react-router'
+import { Link, Outlet, createFileRoute, useLocation, useNavigate } from '@tanstack/react-router'
 import { useServerFn } from '@tanstack/react-start'
 import { KeyRound } from 'lucide-react'
 
@@ -30,7 +30,7 @@ import {
   type PendingCallApproval,
 } from '@/modules/capability-execution/call-approval.functions'
 
-export type AgentAccessSearch = Readonly<{ caller?: string }>
+export type AgentAccessSearch = Readonly<{ caller?: string; resumeTool?: string }>
 
 type LifecycleCommand =
   | Readonly<{ kind: 'credential' | 'agent'; ref: string }>
@@ -44,11 +44,15 @@ type LifecycleIssue = Readonly<{
 }>
 
 const canonicalPrincipalIdPattern = /^prn_[0-9a-f]{32}$/u
+const canonicalToolRefPattern = /^operation:v1:[0-9a-f]{64}$/u
 
 export function validateAgentAccessSearch(search: Record<string, unknown>): AgentAccessSearch {
-  if (typeof search.caller !== 'string') return {}
-  const caller = search.caller.trim()
-  return canonicalPrincipalIdPattern.test(caller) ? { caller } : {}
+  const caller = typeof search.caller === 'string' ? search.caller.trim() : undefined
+  const resumeTool = typeof search.resumeTool === 'string' ? search.resumeTool.trim() : undefined
+  return {
+    ...(caller !== undefined && canonicalPrincipalIdPattern.test(caller) ? { caller } : {}),
+    ...(resumeTool !== undefined && canonicalToolRefPattern.test(resumeTool) ? { resumeTool } : {}),
+  }
 }
 
 export const Route = createFileRoute('/_operator/agent-access')({
@@ -113,6 +117,7 @@ function AgentAccessHome() {
   const [approvalDecision, setApprovalDecision] = useState<Readonly<{ callRef: string; decision: 'approve' | 'deny' }>>()
   const [approvalStatus, setApprovalStatus] = useState<string>()
   const [showSetup, setShowSetup] = useState(false)
+  const hasConnectedAgent = directory.items.some(({ status }) => status === 'connected')
 
   const load = useCallback(async () => {
       setLoading(true)
@@ -334,9 +339,27 @@ function AgentAccessHome() {
           canonicalBaseUrl={canonicalBaseUrl}
           checkingConnection={loading}
           onCheckConnection={() => void load()}
+          {...(search.resumeTool === undefined ? {} : { resumeToolRef: search.resumeTool })}
         />
       ) : (
         <AeSection title="Connections" description="Your agents stay connected until expiry or until you disconnect them.">
+          {search.resumeTool === undefined ? null : (
+            <div className="grid gap-3 rounded-lg border border-border bg-muted/30 p-4">
+              <div>
+                <h3 className="font-medium">{hasConnectedAgent ? 'An Agent connection is available' : 'The selected Tool is waiting for a connection'}</h3>
+                <p className="text-sm text-muted-foreground">
+                  {hasConnectedAgent
+                    ? 'Return to the selected Tool, copy its reference, and continue in your agent client. Browser access does not create a Call.'
+                    : 'No connected Agent is confirmed yet. Add an agent below, approve access, then check the connection before returning.'}
+                </p>
+              </div>
+              {hasConnectedAgent ? (
+                <Button asChild className="w-fit min-h-touch">
+                  <Link to="/tools/$toolRef" params={{ toolRef: search.resumeTool }}>Return to selected Tool</Link>
+                </Button>
+              ) : null}
+            </div>
+          )}
           <Button type="button" variant="secondary" className="w-fit min-h-touch" onClick={() => setShowSetup((value) => !value)}>
             {showSetup ? 'Hide setup' : 'Add another agent'}
           </Button>
@@ -345,6 +368,7 @@ function AgentAccessHome() {
               canonicalBaseUrl={canonicalBaseUrl}
               checkingConnection={loading}
               onCheckConnection={() => void load()}
+              {...(search.resumeTool === undefined ? {} : { resumeToolRef: search.resumeTool })}
             />
           ) : null}
         </AeSection>
@@ -353,9 +377,13 @@ function AgentAccessHome() {
         directory={directory}
         loading={loading}
         {...(search.caller === undefined ? {} : { selectedPrincipalId: search.caller })}
-        getAgentHref={(principalId) => `/agent-access?caller=${encodeURIComponent(principalId)}`}
+        getAgentHref={(principalId) => `/agent-access?caller=${encodeURIComponent(principalId)}${search.resumeTool === undefined ? '' : `&resumeTool=${encodeURIComponent(search.resumeTool)}`}`}
         onClearSelectedPrincipal={() => {
-          void navigate({ to: '/agent-access', search: {}, replace: true })
+          void navigate({
+            to: '/agent-access',
+            search: search.resumeTool === undefined ? {} : { resumeTool: search.resumeTool },
+            replace: true,
+          })
         }}
         onRevokeCredential={(credentialRef) => revoke(credentialRef)}
         onDisconnectAgent={(principalRef) => disconnect(principalRef)}

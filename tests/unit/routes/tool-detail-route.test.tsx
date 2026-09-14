@@ -451,6 +451,8 @@ const x402Tool = projectCapabilityTool({
 
     const continuation = screen.getByRole('complementary', { name: 'What you can do next' })
     expect(within(continuation).getByRole('button', { name: 'Copy Tool reference' })).toBeTruthy()
+    expect(within(continuation).getByRole('link', { name: 'Connect an Agent first' }).getAttribute('href'))
+      .toBe(`/agent-access?resumeTool=${encodeURIComponent(tool.toolRef)}`)
     expect(screen.getByRole('region', { name: 'Operational' })).toBeTruthy()
     expect(screen.queryByText(/connected/i)).toBeNull()
   })

@@ -42,4 +42,17 @@ describe('Agent connection progression', () => {
     const action = screen.getByRole('button', { name: 'Checking connection…' })
     expect(action.hasAttribute('disabled')).toBe(true)
   })
+
+  it('keeps selected Tool context visible without claiming setup creates a Call', () => {
+    render(
+      <AeAssistantInstallFunnel
+        canonicalBaseUrl="https://ae.example/"
+        resumeToolRef={`operation:v1:${'a'.repeat(64)}`}
+      />,
+    )
+
+    expect(screen.getByText('Selected Tool saved for this setup')).toBeTruthy()
+    expect(screen.getByText(/one return action to that Tool/u)).toBeTruthy()
+    expect(screen.getByText(/No Call is created during setup/u)).toBeTruthy()
+  })
 })

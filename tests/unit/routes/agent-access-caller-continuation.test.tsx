@@ -9,10 +9,11 @@ import { projectAgentDirectory } from '@/modules/agent-access/agent-access-conso
 import { canonicalAgentRecord } from '../../helpers/agent-directory-fixture'
 
 const routeHarness = vi.hoisted(() => ({
-  search: {} as Readonly<{ caller?: string }>,
+  search: {} as Readonly<{ caller?: string; resumeTool?: string }>,
   location: { pathname: '/agent-access', hash: '' },
   navigate: vi.fn(),
   consoleProps: undefined as Record<string, unknown> | undefined,
+  installProps: undefined as Record<string, unknown> | undefined,
   loaderData: undefined as unknown as Readonly<{ canonicalBaseUrl: string; directory: AgentDirectoryProjection }>,
   serverFns: new Map<unknown, (...args: never[]) => Promise<unknown>>(),
   readDirectory: vi.fn(),
@@ -26,7 +27,9 @@ const routeHarness = vi.hoisted(() => ({
 }))
 
 vi.mock('@tanstack/react-router', () => ({
-  Link: ({ children }: { children?: ReactNode }) => children ?? null,
+  Link: ({ to, params, children }: { to: string; params?: Record<string, string>; children?: ReactNode }) => (
+    <a href={params?.toolRef === undefined ? to : to.replace('$toolRef', encodeURIComponent(params.toolRef))}>{children}</a>
+  ),
   Outlet: () => null,
   createFileRoute: () => (options: Record<string, unknown>) => {
     const route = {
@@ -53,7 +56,10 @@ vi.mock('@/components/ae/console/AeAgentOperatorConsole', () => ({
 }))
 
 vi.mock('@/components/ae/console/AeAssistantInstallFunnel', () => ({
-  AeAssistantInstallFunnel: () => null,
+  AeAssistantInstallFunnel: (props: Record<string, unknown>) => {
+    routeHarness.installProps = props
+    return null
+  },
 }))
 
 vi.mock('@/components/ae/agent-access/AeAgentSecurityHistory', () => ({
@@ -94,6 +100,7 @@ import {
 
 const PRINCIPAL_ID = `prn_${'1'.repeat(32)}`
 const FOREIGN_PRINCIPAL_ID = `prn_${'2'.repeat(32)}`
+const TOOL_REF = `operation:v1:${'a'.repeat(64)}`
 const KEY_ID = 'key_private_route_canary'
 
 const caller: AgentCredentialSource = {
@@ -166,6 +173,7 @@ afterEach(() => {
   routeHarness.location = { pathname: '/agent-access', hash: '' }
   routeHarness.navigate.mockReset()
   routeHarness.consoleProps = undefined
+  routeHarness.installProps = undefined
   routeHarness.serverFns.clear()
   routeHarness.loaderData = { canonicalBaseUrl: 'https://market.example', directory }
   routeHarness.readDirectory.mockReset()
@@ -193,6 +201,16 @@ describe('agent-access caller locator validation', () => {
     ]
     for (const caller of hostileValues) {
       expect(validateAgentAccessSearch({ caller })).toEqual({})
+    }
+  })
+
+  it('accepts only a canonical Tool continuation and does not discard a valid caller', () => {
+    expect(validateAgentAccessSearch({ caller: PRINCIPAL_ID, resumeTool: ` ${TOOL_REF} ` })).toEqual({
+      caller: PRINCIPAL_ID,
+      resumeTool: TOOL_REF,
+    })
+    for (const resumeTool of ['', 'tool:opaque', `${TOOL_REF}0`, TOOL_REF.toUpperCase(), [TOOL_REF], { value: TOOL_REF }]) {
+      expect(validateAgentAccessSearch({ caller: PRINCIPAL_ID, resumeTool })).toEqual({ caller: PRINCIPAL_ID })
     }
   })
 })
@@ -247,6 +265,41 @@ describe('agent-access caller route continuation', () => {
     expect(readDirectory).toHaveBeenCalledOnce()
     expect(routeHarness.consoleProps?.selectedPrincipalId).toBe(PRINCIPAL_ID)
     expect(routeHarness.navigate).not.toHaveBeenCalled()
+  })
+
+  it('retains the selected Tool through Agent selection and offers one browser return', async () => {
+    routeHarness.search = { caller: PRINCIPAL_ID, resumeTool: TOOL_REF }
+    installServerFns()
+
+    renderRoute()
+
+    const returnAction = await screen.findByRole('link', { name: 'Return to selected Tool' })
+    expect(returnAction.getAttribute('href')).toBe(`/tools/${encodeURIComponent(TOOL_REF)}`)
+    expect(screen.getByText(/Browser access does not create a Call/u)).toBeTruthy()
+    const getAgentHref = routeHarness.consoleProps?.getAgentHref as ((principalRef: string) => string) | undefined
+    expect(getAgentHref?.(FOREIGN_PRINCIPAL_ID)).toBe(`/agent-access?caller=${encodeURIComponent(FOREIGN_PRINCIPAL_ID)}&resumeTool=${encodeURIComponent(TOOL_REF)}`)
+    const clear = routeHarness.consoleProps?.onClearSelectedPrincipal as (() => void) | undefined
+    clear?.()
+    expect(routeHarness.navigate).toHaveBeenCalledWith({
+      to: '/agent-access', search: { resumeTool: TOOL_REF }, replace: true,
+    })
+  })
+
+  it('reveals the Tool return only after an empty directory confirms a connection', async () => {
+    const emptyDirectory: AgentDirectoryProjection = { items: [], details: [] }
+    routeHarness.loaderData = { canonicalBaseUrl: 'https://market.example', directory: emptyDirectory }
+    routeHarness.search = { resumeTool: TOOL_REF }
+    installServerFns(async () => directory)
+
+    renderRoute()
+
+    expect(routeHarness.installProps?.resumeToolRef).toBe(TOOL_REF)
+    expect(screen.queryByRole('link', { name: 'Return to selected Tool' })).toBeNull()
+    const checkConnection = routeHarness.installProps?.onCheckConnection as (() => void) | undefined
+    act(() => checkConnection?.())
+
+    expect(await screen.findByRole('link', { name: 'Return to selected Tool' })).toBeTruthy()
+    expect(screen.getByText(/Browser access does not create a Call/u)).toBeTruthy()
   })
 
   it('preserves an unmatched loader-backed locator for the in-shell not-found state', async () => {

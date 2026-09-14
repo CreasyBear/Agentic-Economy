@@ -67,9 +67,14 @@ export function AeToolNextAction({
         ) : null}
 
         {nextAction.label === 'Tool reference' ? (
-          <p className="text-xs leading-5 text-background/55">
-            Your agent confirms the exact buyer amount in AUD, authority, balance, and availability through tool.quote before it can Call.
-          </p>
+          <div className="grid gap-3">
+            <p className="text-xs leading-5 text-background/55">
+              Your agent confirms the exact buyer amount in AUD, authority, balance, and availability through tool.quote before it can Call.
+            </p>
+            <Button asChild variant="outline" className="min-h-touch w-full border-background/30 bg-transparent text-background hover:bg-background/10 hover:text-background">
+              <a href={agentSetupHref(model.toolRef)}>Connect an Agent first</a>
+            </Button>
+          </div>
         ) : null}
       </aside>
     )
@@ -86,7 +91,7 @@ export function AeToolNextAction({
         </CardTitle>
         <CardDescription>{model.nextActionDescription}</CardDescription>
       </CardHeader>
-      <CardContent>
+      <CardContent className="grid gap-3">
         {nextAction.kind === 'navigate' && nextAction.href !== undefined ? (
           <Button
             asChild
@@ -102,9 +107,18 @@ export function AeToolNextAction({
             code={code}
           />
         ) : null}
+        {nextAction.label === 'Tool reference' ? (
+          <Button asChild variant="outline" size="sm" className="min-h-touch">
+            <a href={agentSetupHref(model.toolRef)}>Connect an Agent first</a>
+          </Button>
+        ) : null}
       </CardContent>
     </Card>
   )
+}
+
+function agentSetupHref(toolRef: string): string {
+  return `/agent-access?resumeTool=${encodeURIComponent(toolRef)}`
 }
 
 function TicketFact({

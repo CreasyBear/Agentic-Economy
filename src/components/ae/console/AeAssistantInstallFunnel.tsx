@@ -12,12 +12,14 @@ export type AeAssistantInstallFunnelProps = Readonly<{
   canonicalBaseUrl: string
   checkingConnection?: boolean
   onCheckConnection?: () => void
+  resumeToolRef?: string
 }>
 
 export function AeAssistantInstallFunnel({
   canonicalBaseUrl,
   checkingConnection = false,
   onCheckConnection,
+  resumeToolRef,
 }: AeAssistantInstallFunnelProps) {
   const baseUrl = trimTrailingSlashes(canonicalBaseUrl)
   const recommended = nativeMcpClient('codex')
@@ -27,6 +29,12 @@ export function AeAssistantInstallFunnel({
       title="Connect with Codex"
       description="Follow these steps in order. You can browse Tools before connecting."
     >
+      {resumeToolRef === undefined ? null : (
+        <div className="grid max-w-3xl gap-1 rounded-lg border border-border bg-muted/30 p-4">
+          <h3 className="font-medium">Selected Tool saved for this setup</h3>
+          <p className="text-sm text-muted-foreground">After Agents confirms a connection, this page will offer one return action to that Tool. No Call is created during setup.</p>
+        </div>
+      )}
       <ol aria-label="Agent connection steps" className="grid max-w-3xl list-none gap-0 border-y border-border p-0">
         <li className="grid grid-cols-[2rem_minmax(0,1fr)] gap-related border-b border-border py-related">
           <span aria-hidden="true" className="flex size-8 items-center justify-center rounded-full bg-muted font-mono text-sm font-semibold">1</span>
