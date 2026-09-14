@@ -23,6 +23,26 @@ import { CallStatusPage, Route } from '@/routes/_operator/calls.$callRef'
 
 const callRef = 'invocation:exact-owner-status'
 const toolRef = `operation:v1:${'a'.repeat(64)}`
+const ownerContext = {
+  purpose: null,
+  agent: {
+    principalRef: 'principal:agent:weather',
+    applicationRef: 'application:weather',
+    currentDisplayName: 'Weather assistant',
+  },
+  recordedTool: {
+    kind: 'available',
+    basis: 'call_snapshot',
+    name: 'Observe Perth weather',
+    providerRef: 'provider:weather:one',
+    providerName: null,
+  },
+  reconciliation: {
+    canSubmitEvidence: true,
+    permissionBasis: 'account_owner',
+    requiresVerifiedEvidence: true,
+  },
+} as const
 
 function renderWithRouter(result: CallStatusPageResult, actions?: CallStatusPageActions) {
   const rootRoute = createRootRoute()
@@ -84,6 +104,7 @@ describe('/calls/$callRef', () => {
       callRef,
       toolRef,
       state: 'terminal',
+      ownerContext,
       evidenceHash: 'sha256:top-level-evidence',
       attemptRef: 'attempt:exact',
       effectGeneration: 3,
@@ -114,8 +135,11 @@ describe('/calls/$callRef', () => {
 
     expect(screen.getByRole('heading', { level: 1, name: 'Call receipt' })).toBeTruthy()
     expect(screen.getAllByText(callRef).length).toBeGreaterThan(0)
-    const toolLink = screen.getByRole('link', { name: 'Open Tool details' })
+    const toolLink = screen.getByRole('link', { name: 'Observe Perth weather' })
     expect(toolLink.getAttribute('href')).toBe(`/tools/${encodeURIComponent(toolRef)}`)
+    expect(screen.getByText('provider:weather:one (name not recorded)')).toBeTruthy()
+    expect(screen.getByText('Weather assistant')).toBeTruthy()
+    expect(screen.getByText('Not recorded for this Call')).toBeTruthy()
     expect(screen.getAllByText('Terminal').length).toBeGreaterThan(0)
     expect(screen.getAllByText('AUD 1.25').length).toBeGreaterThan(0)
     expect(screen.getByText('attempt:exact')).toBeTruthy()
@@ -270,6 +294,7 @@ describe('/calls/$callRef', () => {
       state: 'reconciliation_required',
       attemptRef: 'attempt:uncertain',
       effectGeneration: 2,
+      ownerContext,
     }, { onReconcile })
 
     fireEvent.click(screen.getByRole('combobox', { name: 'Observed provider outcome' }))
@@ -283,6 +308,23 @@ describe('/calls/$callRef', () => {
       source: 'Provider control plane',
       evidenceRef: 'evt_123',
     })
+  })
+
+  it('does not expose evidence submission when the owner receipt context is absent', () => {
+    renderWithRouter({
+      kind: 'found',
+      version: 1,
+      callRef,
+      toolRef,
+      state: 'reconciliation_required',
+      attemptRef: 'attempt:uncertain',
+      effectGeneration: 2,
+      ownerContext: null,
+    }, { onReconcile: vi.fn() })
+
+    expect(screen.getByText('Evidence submission is unavailable')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Submit reconciliation' })).toBeNull()
+    expect(screen.queryByLabelText('Evidence source')).toBeNull()
   })
 
   it('requires explicit confirmation before requesting cancellation', async () => {
@@ -390,11 +432,11 @@ describe('/calls/$callRef', () => {
       <RouterContextProvider router={router}>{createElement(Component)}</RouterContextProvider>,
     )
 
-    expect(screen.getByRole('link', { name: 'Open Tool details' }).getAttribute('href')).toContain(encodeURIComponent(toolRef))
+    expect(screen.getByRole('link', { name: 'Recorded Tool name unavailable' }).getAttribute('href')).toContain(encodeURIComponent(toolRef))
     loader.mockReturnValue(next)
     view.rerender(<RouterContextProvider router={router}>{createElement(Component)}</RouterContextProvider>)
 
-    expect(screen.getByRole('link', { name: 'Open Tool details' }).getAttribute('href')).toContain(encodeURIComponent(nextToolRef))
+    expect(screen.getByRole('link', { name: 'Recorded Tool name unavailable' }).getAttribute('href')).toContain(encodeURIComponent(nextToolRef))
     expect(screen.queryByText(callRef)).toBeNull()
   })
 
@@ -439,6 +481,7 @@ describe('/calls/$callRef', () => {
       state: 'reconciliation_required',
       attemptRef: 'attempt:uncertain',
       effectGeneration: 2,
+      ownerContext,
     })
 
     fireEvent.change(screen.getByLabelText('Evidence source'), { target: { value: 'Provider control plane' } })
@@ -469,6 +512,7 @@ describe('/calls/$callRef', () => {
       state: 'reconciliation_required',
       attemptRef: 'attempt:uncertain',
       effectGeneration: 2,
+      ownerContext,
     })
 
     fireEvent.change(screen.getByLabelText('Evidence source'), { target: { value: 'Provider control plane' } })

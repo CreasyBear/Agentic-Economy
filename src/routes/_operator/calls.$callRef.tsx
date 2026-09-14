@@ -45,13 +45,14 @@ import {
 import type {
   CallRecoveryResult,
   CallStatusResult,
+  OwnerCallStatusResult,
 } from '@/modules/capability-execution/call-recovery-contracts'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { nextActionForCallStatus } from '@/modules/market/suggested-next-action'
 import { formatCurrencyAmount } from '@/modules/money/public'
 import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
 
-export type CallStatusPageResult = CallStatusResult | Readonly<{
+export type CallStatusPageResult = OwnerCallStatusResult | Readonly<{
   kind: 'source_unavailable'
   callRef: string
 }>
@@ -72,7 +73,7 @@ export type CallStatusPageActions = Readonly<{
   feedback?: Readonly<{ kind: 'success' | 'error'; message: string }>
 }>
 
-type FoundCallStatus = Extract<CallStatusResult, { kind: 'found' }>
+type FoundCallStatus = Extract<OwnerCallStatusResult, { kind: 'found' }>
 
 export const Route = createFileRoute('/_operator/calls/$callRef')({
   loader: ({ params }) => readOwnerCallStatusServer({ data: { callRef: params.callRef } })
@@ -170,6 +171,7 @@ function CallStatusController({ loadedResult }: Readonly<{ loadedResult: CallSta
       || reconcilePending
       || result.kind !== 'found'
       || result.state !== 'reconciliation_required'
+      || result.ownerContext?.reconciliation.canSubmitEvidence !== true
       || result.attemptRef === undefined
       || result.effectGeneration === undefined
     ) return
@@ -338,18 +340,7 @@ function StatusFound({
           </div>
           <AeFactList
             facts={[
-              {
-                label: "Tool",
-                value: (
-                  <Link
-                    to="/tools/$toolRef"
-                    params={{ toolRef: result.toolRef }}
-                    className="font-medium text-brand underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  >
-                    Open Tool details
-                  </Link>
-                ),
-              },
+              ...ownerCallIdentityFacts(result),
               { label: "Buyer amount", value: buyerAmountLabel(receiptView) },
               { label: "Recorded", value: recordedAtLabel(receiptView) },
               { label: "Purchase status", value: purchaseStatusLabel(result) },
@@ -384,6 +375,45 @@ function buyerAmountLabel(view: CallReceiptView): string {
   return 'Not recorded yet'
 }
 
+function ownerCallIdentityFacts(result: FoundCallStatus) {
+  const context = result.ownerContext
+  const recordedTool = context?.recordedTool.kind === 'available' ? context.recordedTool : undefined
+  return [
+    {
+      label: 'Tool at Call',
+      value: (
+        <Link
+          to="/tools/$toolRef"
+          params={{ toolRef: result.toolRef }}
+          className="font-medium text-brand underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          {recordedTool?.name ?? 'Recorded Tool name unavailable'}
+        </Link>
+      ),
+      definition: recordedTool === undefined ? undefined : 'Name retained with the Call snapshot, not read from the current catalogue.',
+    },
+    {
+      label: 'Provider at Call',
+      value: recordedTool === undefined
+        ? 'Recorded Provider details unavailable'
+        : `${recordedTool.providerRef} (name not recorded)`,
+    },
+    {
+      label: 'Agent (current label)',
+      value: context === undefined || context === null
+        ? 'Agent details unavailable'
+        : context.agent.currentDisplayName ?? 'Current Agent name not available',
+      definition: context === undefined || context === null ? undefined : 'Current account-owned label; it may differ from the label at Call time.',
+    },
+    {
+      label: 'Purpose',
+      value: context === undefined || context === null
+        ? 'Purpose unavailable from this receipt source'
+        : 'Not recorded for this Call',
+    },
+  ] as const
+}
+
 function recordedAtLabel(view: CallReceiptView): ReactNode {
   if (view.usage !== undefined) {
     return <time dateTime={timestampIso(view.usage.observedAt)}>{formatUtcTimestamp(view.usage.observedAt)} UTC</time>
@@ -406,6 +436,7 @@ function CallOutput({ result }: Readonly<{ result: CallResult }>) {
 }
 
 function TechnicalCallRecord({ result, view }: Readonly<{ result: FoundCallStatus; view: CallReceiptView }>) {
+  const ownerContext = result.ownerContext
   return (
     <details className="border-t border-border pt-related">
       <summary className="flex min-h-touch cursor-pointer items-center text-sm font-medium text-foreground">Technical record</summary>
@@ -417,6 +448,10 @@ function TechnicalCallRecord({ result, view }: Readonly<{ result: FoundCallStatu
           ...(result.attemptRef === undefined ? [] : [{ label: "Attempt reference", value: <Ref value={result.attemptRef} />, mono: true }]),
           ...(result.effectGeneration === undefined ? [] : [{ label: "Effect generation", value: String(result.effectGeneration) }]),
           ...(result.evidenceHash === undefined ? [] : [{ label: "Evidence hash", value: <Ref value={result.evidenceHash} />, mono: true }]),
+          ...(ownerContext === undefined || ownerContext === null ? [] : [
+            { label: 'Agent principal reference', value: <Ref value={ownerContext.agent.principalRef} />, mono: true },
+            { label: 'Agent application reference', value: <Ref value={ownerContext.agent.applicationRef} />, mono: true },
+          ]),
         ]} />
         <ReceiptTimeline stages={view.stages} />
         {result.result === undefined ? null : <ResultDetails result={result.result} />}
@@ -630,30 +665,59 @@ function MachineReadableReceipt({ view }: Readonly<{ view: CallReceiptView }>) {
   )
 }
 
-function CallRecoveryActions({
-  result,
-  actions,
-}: Readonly<{ result: FoundCallStatus; actions?: CallStatusPageActions }>) {
-  const [cancelDialogOpen, setCancelDialogOpen] = useState(false)
-  const [resolution, setResolution] = useState<CallReconciliationForm['resolution']>('not_released')
-  const [source, setSource] = useState('')
-  const [evidenceRef, setEvidenceRef] = useState('')
-  function submitReconciliation(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    actions?.onReconcile?.({ resolution, source, evidenceRef })
-  }
+type CallRecoveryAvailability = Readonly<{
+  canCancelNow: boolean
+  canReconcileNow: boolean
+  hasReconciliationRecordBlocker: boolean
+  hasReconciliationPermissionBlocker: boolean
+  canRefreshNow: boolean
+  recoveryPending: boolean
+  visible: boolean
+}>
+
+function callRecoveryAvailability(
+  result: FoundCallStatus,
+  actions?: CallStatusPageActions,
+): CallRecoveryAvailability {
   const canCancelNow = result.state === 'authorized' || result.state === 'retryable' || result.state === 'leased'
-  const canReconcileNow = result.state === 'reconciliation_required'
-    && result.attemptRef !== undefined
-    && result.effectGeneration !== undefined
-    && actions?.onReconcile !== undefined
-  const hasReconciliationBlocker = result.state === 'reconciliation_required'
+  const canSubmitReconciliationEvidence = result.ownerContext?.reconciliation.canSubmitEvidence === true
+  const hasReconciliationRecordBlocker = result.state === 'reconciliation_required'
     && (result.attemptRef === undefined || result.effectGeneration === undefined)
+  const hasReconciliationPermissionBlocker = result.state === 'reconciliation_required'
+    && !hasReconciliationRecordBlocker
+    && !canSubmitReconciliationEvidence
+  const canReconcileNow = result.state === 'reconciliation_required'
+    && !hasReconciliationRecordBlocker
+    && !hasReconciliationPermissionBlocker
+    && actions?.onReconcile !== undefined
   const canRefreshNow = canRefreshStatus(result) && actions?.onRefresh !== undefined
   const recoveryPending = actions?.refreshPending === true
     || actions?.cancelPending === true
     || actions?.reconcilePending === true
-  if (!canRefreshNow && !canCancelNow && !canReconcileNow && !hasReconciliationBlocker && actions?.feedback === undefined) return null
+  const visible = canRefreshNow
+    || canCancelNow
+    || canReconcileNow
+    || hasReconciliationRecordBlocker
+    || hasReconciliationPermissionBlocker
+    || actions?.feedback !== undefined
+
+  return {
+    canCancelNow,
+    canReconcileNow,
+    hasReconciliationRecordBlocker,
+    hasReconciliationPermissionBlocker,
+    canRefreshNow,
+    recoveryPending,
+    visible,
+  }
+}
+
+function CallRecoveryActions({
+  result,
+  actions,
+}: Readonly<{ result: FoundCallStatus; actions?: CallStatusPageActions }>) {
+  const availability = callRecoveryAvailability(result, actions)
+  if (!availability.visible) return null
 
   return (
     <section className="grid gap-related border-t border-border pt-section" aria-labelledby="recovery-actions-title">
@@ -662,7 +726,19 @@ function CallRecoveryActions({
         <p className="text-sm text-muted-foreground">Use only the action supported by the recorded state. Each action refreshes this exact Call.</p>
       </div>
       <StatusFeedback feedback={actions?.feedback} callRef={result.callRef} />
-      {hasReconciliationBlocker ? (
+      <ReconciliationBlockers availability={availability} />
+      <RecoveryPrimaryActions availability={availability} actions={actions} />
+      {availability.canReconcileNow ? (
+        <AdvancedReconciliation actions={actions} recoveryPending={availability.recoveryPending} />
+      ) : null}
+    </section>
+  )
+}
+
+function ReconciliationBlockers({ availability }: Readonly<{ availability: CallRecoveryAvailability }>) {
+  return (
+    <>
+      {availability.hasReconciliationRecordBlocker ? (
         <Alert>
           <AlertTitle>Reconciliation cannot be submitted</AlertTitle>
           <AlertDescription>
@@ -670,90 +746,51 @@ function CallRecoveryActions({
           </AlertDescription>
         </Alert>
       ) : null}
-      {canRefreshNow || (canCancelNow && actions?.onCancel !== undefined) ? (
-        <div className="flex flex-wrap gap-intra">
-          {canRefreshNow ? (
-            <Button
-              type="button"
-              className="min-h-touch"
-              disabled={actions?.refreshPending === true || actions?.cancelPending === true || actions?.reconcilePending === true}
-              onClick={() => { void actions?.onRefresh?.() }}
-            >
-              {actions?.refreshPending === true ? 'Refreshing current status…' : 'Refresh current status'}
-            </Button>
-          ) : null}
-          {canCancelNow && actions?.onCancel !== undefined ? (
-            <Button
-              type="button"
-              variant="secondary"
-              className="min-h-touch"
-              disabled={actions?.cancelPending === true || actions?.refreshPending === true || actions?.reconcilePending === true}
-              onClick={() => setCancelDialogOpen(true)}
-            >
-              Cancel Call
-            </Button>
-          ) : null}
-        </div>
+      {availability.hasReconciliationPermissionBlocker ? (
+        <Alert>
+          <AlertTitle>Evidence submission is unavailable</AlertTitle>
+          <AlertDescription>
+            This receipt source does not grant the signed-in account permission to submit Provider evidence. Refresh the current Call before relying on a newer permission state; no evidence can be submitted here now.
+          </AlertDescription>
+        </Alert>
       ) : null}
-      {canReconcileNow ? (
-        <details className="border-t border-border pt-related">
-          <summary className="flex min-h-touch cursor-pointer items-center text-sm font-medium text-foreground">Advanced evidence reconciliation</summary>
-          <form className="pt-related" onSubmit={submitReconciliation}>
-            <FieldGroup className="max-w-xl">
-              <Field data-disabled={actions?.reconcilePending || undefined}>
-                <FieldLabel htmlFor="reconciliation-resolution">Observed provider outcome</FieldLabel>
-                <Select
-                  value={resolution}
-                  onValueChange={(value) => setResolution(value as CallReconciliationForm['resolution'])}
-                  disabled={recoveryPending}
-                  required
-                >
-                  <SelectTrigger id="reconciliation-resolution" className="min-h-touch w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectGroup>
-                      <SelectItem value="not_released">Effect not released</SelectItem>
-                      <SelectItem value="released">Effect released</SelectItem>
-                    </SelectGroup>
-                  </SelectContent>
-                </Select>
-              </Field>
-              <Field data-disabled={actions?.reconcilePending || undefined}>
-                <FieldLabel htmlFor="reconciliation-source">Evidence source</FieldLabel>
-                <Input
-                  id="reconciliation-source"
-                  maxLength={300}
-                  value={source}
-                  onChange={(event) => setSource(event.target.value)}
-                  placeholder="Provider control plane"
-                  disabled={recoveryPending}
-                  required
-                  className="min-h-touch"
-                />
-              </Field>
-              <Field data-disabled={actions?.reconcilePending || undefined}>
-                <FieldLabel htmlFor="reconciliation-reference">Evidence reference</FieldLabel>
-                <Input
-                  id="reconciliation-reference"
-                  maxLength={300}
-                  value={evidenceRef}
-                  onChange={(event) => setEvidenceRef(event.target.value)}
-                  placeholder="Provider event or incident reference"
-                  disabled={recoveryPending}
-                  required
-                  className="min-h-touch"
-                />
-              </Field>
-              <Field orientation="horizontal">
-                <Button type="submit" className="min-h-touch" disabled={recoveryPending}>
-                  {actions?.reconcilePending === true ? 'Reconciling Call…' : 'Submit reconciliation'}
-                </Button>
-              </Field>
-            </FieldGroup>
-          </form>
-        </details>
-      ) : null}
+    </>
+  )
+}
+
+function RecoveryPrimaryActions({
+  availability,
+  actions,
+}: Readonly<{ availability: CallRecoveryAvailability; actions?: CallStatusPageActions }>) {
+  const [cancelDialogOpen, setCancelDialogOpen] = useState(false)
+  const canCancel = availability.canCancelNow && actions?.onCancel !== undefined
+  if (!availability.canRefreshNow && !canCancel) return null
+
+  return (
+    <>
+      <div className="flex flex-wrap gap-intra">
+        {availability.canRefreshNow ? (
+          <Button
+            type="button"
+            className="min-h-touch"
+            disabled={availability.recoveryPending}
+            onClick={() => { void actions?.onRefresh?.() }}
+          >
+            {actions?.refreshPending === true ? 'Refreshing current status…' : 'Refresh current status'}
+          </Button>
+        ) : null}
+        {canCancel ? (
+          <Button
+            type="button"
+            variant="secondary"
+            className="min-h-touch"
+            disabled={availability.recoveryPending}
+            onClick={() => setCancelDialogOpen(true)}
+          >
+            Cancel Call
+          </Button>
+        ) : null}
+      </div>
       <AeConfirmDialog
         open={cancelDialogOpen}
         onOpenChange={setCancelDialogOpen}
@@ -768,7 +805,80 @@ function CallRecoveryActions({
           setCancelDialogOpen(false)
         }}
       />
-    </section>
+    </>
+  )
+}
+
+function AdvancedReconciliation({
+  actions,
+  recoveryPending,
+}: Readonly<{ actions?: CallStatusPageActions; recoveryPending: boolean }>) {
+  const [resolution, setResolution] = useState<CallReconciliationForm['resolution']>('not_released')
+  const [source, setSource] = useState('')
+  const [evidenceRef, setEvidenceRef] = useState('')
+  function submitReconciliation(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    actions?.onReconcile?.({ resolution, source, evidenceRef })
+  }
+
+  return (
+    <details className="border-t border-border pt-related">
+      <summary className="flex min-h-touch cursor-pointer items-center text-sm font-medium text-foreground">Advanced evidence reconciliation</summary>
+      <form className="pt-related" onSubmit={submitReconciliation}>
+        <FieldGroup className="max-w-xl">
+          <Field data-disabled={actions?.reconcilePending || undefined}>
+            <FieldLabel htmlFor="reconciliation-resolution">Observed provider outcome</FieldLabel>
+            <Select
+              value={resolution}
+              onValueChange={(value) => setResolution(value as CallReconciliationForm['resolution'])}
+              disabled={recoveryPending}
+              required
+            >
+              <SelectTrigger id="reconciliation-resolution" className="min-h-touch w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  <SelectItem value="not_released">Effect not released</SelectItem>
+                  <SelectItem value="released">Effect released</SelectItem>
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+          </Field>
+          <Field data-disabled={actions?.reconcilePending || undefined}>
+            <FieldLabel htmlFor="reconciliation-source">Evidence source</FieldLabel>
+            <Input
+              id="reconciliation-source"
+              maxLength={300}
+              value={source}
+              onChange={(event) => setSource(event.target.value)}
+              placeholder="Provider control plane"
+              disabled={recoveryPending}
+              required
+              className="min-h-touch"
+            />
+          </Field>
+          <Field data-disabled={actions?.reconcilePending || undefined}>
+            <FieldLabel htmlFor="reconciliation-reference">Evidence reference</FieldLabel>
+            <Input
+              id="reconciliation-reference"
+              maxLength={300}
+              value={evidenceRef}
+              onChange={(event) => setEvidenceRef(event.target.value)}
+              placeholder="Provider event or incident reference"
+              disabled={recoveryPending}
+              required
+              className="min-h-touch"
+            />
+          </Field>
+          <Field orientation="horizontal">
+            <Button type="submit" className="min-h-touch" disabled={recoveryPending}>
+              {actions?.reconcilePending === true ? 'Reconciling Call…' : 'Submit reconciliation'}
+            </Button>
+          </Field>
+        </FieldGroup>
+      </form>
+    </details>
   )
 }
 
