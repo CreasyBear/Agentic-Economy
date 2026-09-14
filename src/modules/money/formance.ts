@@ -1098,15 +1098,17 @@ function historyTransactionEffect(transaction: LedgerHistoryTransaction, account
     || (kind === 'document_adjustment' && (credit !== 0n || document === 0n))) kind = 'unmapped'
   // Only known zero-effect internal legs can be omitted. Unknown bookings stay
   // visible and mark coverage partial, even if their credit effect is zero.
-  if (kind === undefined && credit === 0n && document === 0n) return null
+  if (kind === undefined && credit === 0n && document === 0n && !transaction.reverted) return null
+  const sourceDigest = template === 'BUYER_SALE_SETTLED'
+    ? transaction.metadata.call_digest
+    : transaction.metadata.command_digest
   return {
     transactionId: transaction.id.toString(), transactionRef: transaction.reference ?? null,
     occurredAt, recordedAt, kind: kind ?? 'unmapped',
     accountEffect: { currency: 'AUD', units: credit.toString(), exponent: 6 },
     documentEffectUnits: document.toString(), reverted: transaction.reverted, revertedAt,
     sourceRef: null,
-    sourceDigest: [transaction.metadata.call_digest, transaction.metadata.command_digest]
-      .find((value) => value !== undefined && DIGEST_PATTERN.test(value)) ?? null,
+    sourceDigest: sourceDigest !== undefined && DIGEST_PATTERN.test(sourceDigest) ? sourceDigest : null,
   }
 }
 
@@ -1163,7 +1165,8 @@ export async function readFormanceAccountHistory(
         entries.push(entry)
         // Native reverts lack a guaranteed reverse-reference projection in the
         // installed SDK. Preserve the original and never claim complete netting.
-        if (entry.kind === 'unmapped' || entry.recordedAt === null || entry.reverted) coverage = 'partial'
+        if (entry.kind === 'unmapped' || entry.recordedAt === null || entry.reverted
+          || (!entry.transactionRef && entry.sourceDigest === null)) coverage = 'partial'
       }
     }
     const continueCursor = page.hasMore && page.next !== undefined && lastId !== undefined

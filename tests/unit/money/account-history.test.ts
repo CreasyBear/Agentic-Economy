@@ -104,6 +104,27 @@ describe('booked Account history', () => {
       .resolves.toMatchObject({ kind: 'available', coverage: 'partial', isDone: true })
   })
 
+  it('retains reverted internal reservations even though their total Account effect is zero', async () => {
+    const { context } = boundary(page([
+      { ...transaction(1n, 'CALL_RESERVED_AUD', [posting(available, reserved, 50n)]),
+        reverted: true, revertedAt: new Date(9000) },
+    ]))
+    await expect(readFormanceAccountHistory(context, input)).resolves.toMatchObject({ kind: 'available', coverage: 'partial',
+      entries: [{ transactionId: '1', kind: 'unmapped', reverted: true, accountEffect: { units: '0' } }] })
+  })
+
+  it('selects source identity by transaction type and marks absent references as partial', async () => {
+    const commandDigest = 'e'.repeat(64)
+    const funding = { ...transaction(3n), metadata: { account_digest: accountDigest, call_digest: callDigest, command_digest: commandDigest } }
+    const call = { ...transaction(2n, 'BUYER_SALE_SETTLED', [posting(reserved, 'platform:revenue:sales', 10n)]), metadata: funding.metadata }
+    const row = transaction(1n)
+    const { reference: _reference, ...withoutReference } = row
+    const { context } = boundary(page([funding, call, withoutReference]))
+    await expect(readFormanceAccountHistory(context, input)).resolves.toMatchObject({ kind: 'available', coverage: 'partial', entries: [
+      { sourceDigest: commandDigest }, { sourceDigest: callDigest }, { transactionRef: null, sourceDigest: null },
+    ] })
+  })
+
   it.each([
     ['wrong Account metadata', { ...transaction(1n), metadata: { account_digest: 'd'.repeat(64) } }],
     ['foreign Account postings', transaction(1n, 'FUNDING_SETTLED', [posting('processor:one', `accounts:${'d'.repeat(64)}:available`, 1n)])],
