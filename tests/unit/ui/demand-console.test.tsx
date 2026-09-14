@@ -238,7 +238,7 @@ describe('owner credit target', () => {
     expect(screen.getByText('Opening Statement…')).toBeTruthy()
 
     fireEvent.click(screen.getByRole('button', { name: 'Create current statement' }))
-    expect(await screen.findByText('The statement could not be created. Existing records were not changed.')).toBeTruthy()
+    expect(await screen.findByText('Statement creation could not be confirmed. Refresh documents before trying again.')).toBeTruthy()
 
     fireEvent.click(screen.getByRole('button', { name: 'Open document' }))
     expect(screen.getByText('Opening Tax invoice…')).toBeTruthy()
@@ -250,7 +250,7 @@ describe('owner credit target', () => {
       await Promise.resolve()
     })
 
-    expect(screen.getByText('Statement opened in a new tab.')).toBeTruthy()
+    expect(screen.getByText('Statement link prepared. If no tab opened, try opening it again.')).toBeTruthy()
     expect(screen.getByText('Tax invoice could not be opened. This record remains available.')).toBeTruthy()
   })
 

@@ -264,13 +264,13 @@ export function AeOwnerCredit({
               status={createStatementStatus}
               pending="Creating the current statement…"
               succeeded="Statement generation started. Its status remains visible below."
-              failed="The statement could not be created. Existing records were not changed."
+              failed="Statement creation could not be confirmed. Refresh documents before trying again."
             />
             <DocumentActionNotice
               status={createDailyCloseStatus}
               pending="Creating yesterday’s daily close…"
               succeeded="Daily close generation started. Its status remains visible below."
-              failed="The daily close could not be created. Existing records were not changed."
+              failed="Daily close creation could not be confirmed. Refresh documents before trying again."
             />
           </div>
         )}
@@ -329,12 +329,12 @@ export function AeOwnerCredit({
                     status={signStatus}
                     pending={`Signing ${label}…`}
                     succeeded={`${label} signed. Its updated status remains visible in this row.`}
-                    failed={`${label} could not be signed. This record remains unchanged.`}
+                    failed={`Signing ${label} could not be confirmed. Refresh this record before trying again.`}
                   />
                   <DocumentActionNotice
                     status={openStatus}
                     pending={`Opening ${label}…`}
-                    succeeded={`${label} opened in a new tab.`}
+                    succeeded={`${label} link prepared. If no tab opened, try opening it again.`}
                     failed={`${label} could not be opened. This record remains available.`}
                   />
                 </div>
