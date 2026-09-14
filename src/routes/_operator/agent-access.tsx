@@ -301,7 +301,7 @@ function AgentAccessHome() {
       currentPath="/agent-access"
     >
       {directoryError === undefined ? null : (
-        <Alert variant="destructive">
+        <Alert>
           <AlertTitle>Agent access unavailable</AlertTitle>
           <AlertDescription>
             <p>{directoryError}</p>

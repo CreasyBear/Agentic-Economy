@@ -215,7 +215,10 @@ describe('indexed x402 catalogue controls', () => {
     show({ view: 'tools' }, undefined, { page: indexedPage, catalogue: indexedCatalogue, overview })
 
     fireEvent.click(screen.getByRole('button', { name: 'Load more' }))
-    expect((await screen.findByRole('alert')).textContent).toContain('More Tools could not be loaded')
+    const failure = await screen.findByRole('alert')
+    expect(failure.textContent).toContain('More Tools could not be loaded')
+    expect(failure.className).toContain('text-muted-foreground')
+    expect(failure.className).not.toContain('text-destructive')
     expect(screen.getByText('2 Tools loaded')).toBeTruthy()
 
     fireEvent.click(screen.getByRole('button', { name: 'Try loading more again' }))

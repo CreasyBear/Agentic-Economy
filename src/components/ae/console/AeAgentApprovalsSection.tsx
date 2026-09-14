@@ -34,7 +34,7 @@ export function AeAgentApprovalsSection({
         </div>
       ) : null}
       {error === undefined ? null : (
-        <Alert variant="destructive">
+        <Alert>
           <AlertTitle>Waiting approvals unavailable</AlertTitle>
           <AlertDescription>
             <p>{error}</p>

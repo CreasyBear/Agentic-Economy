@@ -341,7 +341,7 @@ function CallPaginationControl({
   return (
     <div className="flex flex-col items-center gap-intra border-t border-border pt-related">
       {pagination.status === 'failed' ? (
-        <p role="alert" className="text-sm text-destructive">More Calls could not be loaded. Current Calls and the continuation are unchanged.</p>
+        <p role="alert" className="text-sm text-muted-foreground">More Calls could not be loaded. Current Calls and the continuation are unchanged.</p>
       ) : null}
       <Button
         type="button"

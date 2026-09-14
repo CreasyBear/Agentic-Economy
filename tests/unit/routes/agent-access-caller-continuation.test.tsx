@@ -302,6 +302,21 @@ describe('agent-access caller route continuation', () => {
     expect(screen.getByText(/Browser access does not create a Call/u)).toBeTruthy()
   })
 
+  it('treats a directory read outage as scoped recovery rather than a destructive state', async () => {
+    const emptyDirectory: AgentDirectoryProjection = { items: [], details: [] }
+    routeHarness.loaderData = { canonicalBaseUrl: 'https://market.example', directory: emptyDirectory }
+    installServerFns(async () => { throw new Error('directory offline') })
+
+    renderRoute()
+    const checkConnection = routeHarness.installProps?.onCheckConnection as (() => void) | undefined
+    act(() => checkConnection?.())
+
+    const alert = await screen.findByRole('alert')
+    expect(alert.textContent).toContain('Known Balance information is unaffected')
+    expect(alert.className).not.toContain('text-destructive')
+    expect(routeHarness.installProps).toBeTruthy()
+  })
+
   it('preserves an unmatched loader-backed locator for the in-shell not-found state', async () => {
     routeHarness.search = { caller: FOREIGN_PRINCIPAL_ID }
     installServerFns()

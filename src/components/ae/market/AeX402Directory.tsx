@@ -293,7 +293,7 @@ function DirectoryMarketplace({ page, search, workspace = false, activeView, hom
               {tab === 'tools' && indexed ? <>
                 <span />
                 {loadMore.isDone ? null : <div className="flex flex-col items-end gap-2">
-                {loadMore.status === 'failed' ? <p role="alert" className="max-w-md text-right text-sm text-destructive">More Tools could not be loaded. Your current results and filters are unchanged.</p> : null}
+                {loadMore.status === 'failed' ? <p role="alert" className="max-w-md text-right text-sm text-muted-foreground">More Tools could not be loaded. Your current results and filters are unchanged.</p> : null}
                 <Button type="button" variant="outline" onClick={() => void loadNextPage()} disabled={loadMore.status === 'loading'} aria-busy={loadMore.status === 'loading'} aria-label={loadMore.status === 'failed' ? 'Try loading more again' : 'Load more'}>
                   {loadMore.status === 'loading' ? <Loader2Icon className="animate-spin" /> : null}Load more<ArrowRightIcon />
                 </Button></div>}

@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import '../../setup/jsdom-platform'
 
 import { AeAssistantInstallFunnel } from '@/components/ae/console/AeAssistantInstallFunnel'
+import { AeAgentApprovalsSection } from '@/components/ae/console/AeAgentApprovalsSection'
 
 afterEach(cleanup)
 
@@ -54,5 +55,23 @@ describe('Agent connection progression', () => {
     expect(screen.getByText('Selected Tool saved for this setup')).toBeTruthy()
     expect(screen.getByText(/one return action to that Tool/u)).toBeTruthy()
     expect(screen.getByText(/No Call is created during setup/u)).toBeTruthy()
+  })
+})
+
+describe('scoped Agent read failures', () => {
+  it('keeps an unavailable approvals read neutral and exactly retryable', () => {
+    const onRetry = vi.fn()
+    render(<AeAgentApprovalsSection
+      approvals={[]}
+      loading={false}
+      error="Waiting approvals are temporarily unavailable."
+      onRetry={onRetry}
+      onDecide={() => undefined}
+    />)
+
+    const alert = screen.getByRole('alert')
+    expect(alert.className).not.toContain('text-destructive')
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh approvals' }))
+    expect(onRetry).toHaveBeenCalledOnce()
   })
 })

@@ -146,7 +146,8 @@ describe('Tools management disclosure', () => {
     render(<AeProviderWorkspace inventory={inventory} lifecycle={unavailable} connections={unavailable} payouts={unavailable} publicStatus={unavailable} />)
 
     fireEvent.click(screen.getByRole('button', { name: 'Manage provider identity' }))
-    expect(await screen.findByText('Provider identity controls unavailable')).toBeTruthy()
+    const unavailableTitle = await screen.findByText('Provider identity controls unavailable')
+    expect(unavailableTitle.closest('[data-slot="alert"]')?.className).not.toContain('text-destructive')
     fireEvent.click(screen.getByRole('button', { name: 'Try provider identity again' }))
 
     expect(await screen.findByTestId('provider-identity-controls')).toBeTruthy()
