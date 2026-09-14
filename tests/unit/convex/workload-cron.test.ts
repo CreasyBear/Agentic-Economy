@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { DelegationService } from '@/modules/authority/delegation/public'
 
 import convexCrons from '../../../convex/crons'
+import { readPreClaimRefundHandler } from '../../../convex/lib/callLifecycle/dispatch'
 import { probeFromCron } from '../../../convex/capabilitySupplyReadiness'
 import {
   SYSTEM_WORKLOAD_ACCOUNT_REF,
@@ -476,7 +477,7 @@ describe('System workload cron boundary', () => {
     const cases = [
       { includeGrant: false },
       { leafLifecycle: 'revoked' as const },
-      { grantGeneration: 8 },
+      { accessGrantGeneration: 8 },
       { grantExpiresAt: Date.now() },
       { rootLifecycle: 'revoked' as const },
       { malformedChain: true },
@@ -498,6 +499,53 @@ describe('System workload cron boundary', () => {
         payload: {},
       })).rejects.toMatchObject({ code: 'workload_resource_authority_invalid' })
       expect(context.dispatches).toEqual([])
+    }
+  })
+
+  it('keeps canonical and access generations distinct and admits canonical wildcard resources', async () => {
+    const db = canonicalDb()
+    seedInvocationAuthority(db, { grantGeneration: 3, wildcard: true })
+    const snapshot = await admitWorkloadCron(queryContext(db), 'reconcile due facilitator invocations')
+    const context = new FakeRuntimeContext(db)
+    await expect(dispatchWorkloadCronConsequenceHandler(context.mutation() as never, {
+      name: snapshot.name, snapshot, resourceInvocationRef: 'inv_cron',
+      operation: 'facilitatorDiscovery:reconcile', payload: {},
+    })).resolves.toBeNull()
+    expect(context.dispatches).toEqual(['facilitatorDiscovery:reconcile'])
+  })
+
+  it('allows only proven same-Call refund bookkeeping after expiry or revocation', async () => {
+    for (const boundary of [
+      { grantExpiresAt: Date.now() - 1 },
+      { leafLifecycle: 'revoked' as const },
+      { rootLifecycle: 'revoked' as const },
+    ]) {
+      const db = canonicalDb()
+      seedInvocationAuthority(db, { ...boundary, wildcard: true, preClaimRefund: true })
+      const snapshot = await admitWorkloadCron(queryContext(db), 'reconcile due facilitator invocations')
+      const context = new FakeRuntimeContext(db)
+      for (const operation of ['capabilityCalls:claimAutomaticReconciliationCandidate', 'capabilityCalls:finishAutomaticReconciliation'] as const) {
+        await expect(dispatchWorkloadCronConsequenceHandler(context.mutation() as never, {
+          name: snapshot.name, snapshot, resourceInvocationRef: 'inv_cron', operation,
+          payload: { callRef: 'inv_cron' },
+        })).resolves.toBeNull()
+      }
+      await expect(dispatchWorkloadCronConsequenceHandler(context.mutation() as never, {
+        name: snapshot.name, snapshot, resourceInvocationRef: 'inv_cron',
+        operation: 'facilitatorDiscovery:reconcile', payload: {},
+      })).rejects.toMatchObject({ code: 'workload_resource_authority_invalid' })
+      await expect(dispatchWorkloadCronConsequenceHandler(context.mutation() as never, {
+        name: snapshot.name, snapshot, resourceInvocationRef: 'inv_cron',
+        operation: 'capabilityCalls:claimAutomaticReconciliationCandidate', payload: { callRef: 'inv_other' },
+      })).rejects.toMatchObject({ code: 'workload_resource_authority_invalid' })
+      db.seed('actionExecutionAttempts', { executionRef: 'inv_cron', attemptNumber: 1 })
+      await expect(dispatchWorkloadCronConsequenceHandler(context.mutation() as never, {
+        name: snapshot.name, snapshot, resourceInvocationRef: 'inv_cron',
+        operation: 'capabilityCalls:claimAutomaticReconciliationCandidate', payload: { callRef: 'inv_cron' },
+      })).rejects.toMatchObject({ code: 'workload_resource_authority_invalid' })
+      expect(context.dispatches).toEqual([
+        'capabilityCalls:claimAutomaticReconciliationCandidate', 'capabilityCalls:finishAutomaticReconciliation',
+      ])
     }
   })
 
@@ -623,6 +671,10 @@ class FakeQuery {
     const matches = this.matches()
     if (matches.length > 1) throw new Error('unique query returned more than one row')
     return matches.at(0) ?? null
+  }
+
+  async take(limit: number): Promise<Row[]> {
+    return this.matches().slice(0, limit)
   }
 
   async collect(): Promise<Row[]> {
@@ -782,6 +834,9 @@ function seedInvocationAuthority(
     grantAccountRef?: string
     grantExpiresAt?: number
     grantGeneration?: number
+    accessGrantGeneration?: number
+    wildcard?: boolean
+    preClaimRefund?: boolean
     invocationAccountRef?: string
     invocationGrantExpiresAt?: number
     invocationOperationRef?: string
@@ -804,7 +859,22 @@ function seedInvocationAuthority(
     toolRef: input.invocationOperationRef ?? 'invocation:inv_cron',
     grantRef: leafGrantRef,
     grantGeneration: 7,
+    credentialId: 'credential:cron',
+    applicationRef: 'application:cron',
+    environment: 'sandbox',
+    policyDigest: 'sha256:cron-policy',
+    ...(input.preClaimRefund ? {
+      state: 'refused', result: { kind: 'refused', code: 'budget_exceeded' },
+      dispatchState: 'failed', reconciliation: { reason: 'refund_pending' },
+      formanceFinancialState: 'reserved', formanceReservationRefs: ['buyer', 'treasury', 'provider'],
+    } : {}),
     grantExpiresAt: input.invocationGrantExpiresAt ?? (input.grantExpiresAt ?? Date.now() + 60_000),
+  })
+  db.seed('agentAccessGrants', {
+    grantRef: leafGrantRef, principalId: leafSubject, ownerId: resourceAccountRef,
+    credentialId: 'credential:cron', applicationRef: 'application:cron', environment: 'sandbox',
+    generation: input.accessGrantGeneration ?? 7, spendingPolicyDigest: 'sha256:cron-policy',
+    expiresAt: input.grantExpiresAt ?? Date.now() + 60_000,
   })
   if (input.includeGrant !== false) {
     db.seed('authorityDelegationGrants', {
@@ -813,7 +883,7 @@ function seedInvocationAuthority(
       actorPrincipalRef: rootActor,
       subjectPrincipalRef: intermediate,
       scopes: ['operation:reconcile'],
-      resourceRefs: ['invocation:inv_cron'],
+      resourceRefs: input.wildcard ? ['*'] : ['invocation:inv_cron'],
       budgetLimit: 10,
       budgetUsed: 0,
       expiresAt: Date.now() + 120_000,
@@ -834,7 +904,7 @@ function seedInvocationAuthority(
       parentGrantRef: rootGrantRef,
       parentGeneration: input.rootLifecycle === 'revoked' ? 1 : 1,
       scopes: ['operation:reconcile'],
-      resourceRefs: ['invocation:inv_cron'],
+      resourceRefs: input.wildcard ? ['*'] : ['invocation:inv_cron'],
       budgetLimit: 5,
       budgetUsed: 0,
       expiresAt: input.grantExpiresAt ?? Date.now() + 60_000,
@@ -923,6 +993,10 @@ class FakeRuntimeContext {
   mutation(): WorkloadCronMutationContext {
     return {
       db: this.db,
+      runQuery: async (reference: RuntimeReference, args: { callRef: string }) => {
+        if (getFunctionName(reference) !== 'capabilityCalls:readPreClaimRefund') throw new Error('unexpected_refund_query')
+        return await readPreClaimRefundHandler({ db: this.db } as never, args)
+      },
       runMutation: async (reference: FunctionReference<'mutation', 'public' | 'internal'>) => this.recordDispatch(reference),
     } as unknown as WorkloadCronMutationContext
   }

@@ -18,6 +18,7 @@ import {
 } from '@/modules/authority/delegation/public'
 
 import { internal } from './_generated/api'
+import type { Doc } from './_generated/dataModel'
 import {
   internalAction,
   internalMutation,
@@ -243,10 +244,38 @@ export const reconcile = internalQuery({
   handler: reconcileWorkloadCronSnapshotHandler,
 })
 
+function matchesCapturedAccessGrant(
+  grant: Doc<'agentAccessGrants'> | null,
+  call: Doc<'capabilityCalls'>,
+): boolean {
+  return grant !== null
+    && grant.principalId === call.principalId
+    && grant.ownerId === call.ownerId
+    && grant.credentialId === call.credentialId
+    && grant.applicationRef === call.applicationRef
+    && grant.environment === call.environment
+    && grant.generation === call.grantGeneration
+    && grant.spendingPolicyDigest === call.policyDigest
+    && grant.expiresAt === call.grantExpiresAt
+}
+
+/**
+ * CONTRACT: attributeInvocationResourceAccount
+ * Requires current system workload authority and matching immutable Call,
+ * access-grant and canonical delegation identities. Refund bookkeeping is
+ * limited to its exact Call and an existing pre-claim refund proof.
+ * Ensures Account attribution survives expired/revoked buyer authority only
+ * for claiming/finishing that proven refund; other consequences require live
+ * canonical delegation. Access and delegation generations remain distinct.
+ * Invariant: this never grants Provider effect authority or changes a booking.
+ * On violation: workload_resource_authority_invalid, before consequence writes.
+ */
 async function attributeInvocationResourceAccount(
   ctx: MutationCtx,
   current: WorkloadCronSnapshot,
   callRef: string,
+  operation: ConsequenceOperation,
+  payload: Readonly<Record<string, JsonValue>>,
 ): Promise<void> {
   const invocation = await ctx.db
     .query('capabilityCalls')
@@ -260,30 +289,50 @@ async function attributeInvocationResourceAccount(
   if (grant === null) {
     throw new WorkloadCronBoundaryError('workload_resource_authority_invalid')
   }
+  const accessGrant = await ctx.db.query('agentAccessGrants')
+    .withIndex('by_grantRef', (query) => query.eq('grantRef', invocation.grantRef))
+    .unique()
+  if (!matchesCapturedAccessGrant(accessGrant, invocation)) {
+    throw new WorkloadCronBoundaryError('workload_resource_authority_invalid')
+  }
+  const refundBookkeeping = operation === 'capabilityCalls:claimAutomaticReconciliationCandidate'
+    || operation === 'capabilityCalls:finishAutomaticReconciliation'
+  if (refundBookkeeping && payload.callRef !== callRef) {
+    throw new WorkloadCronBoundaryError('workload_resource_authority_invalid')
+  }
   // The grant chain remains the only Account source. Legacy invocation fields
   // are checked solely as fail-closed immutable-integrity evidence and never
   // seed the admission context below.
   if (invocation.principalId !== grant.subjectPrincipalRef
     || invocation.ownerId !== grant.accountRef
     || invocation.grantExpiresAt !== grant.expiresAt
-    || !grant.resourceRefs.includes(invocation.toolRef)) {
+    || (!grant.resourceRefs.includes('*') && !grant.resourceRefs.includes(invocation.toolRef))) {
     throw new WorkloadCronBoundaryError('workload_resource_authority_invalid')
   }
   try {
     const canonicalGrantRef = delegationGrantRef(invocation.grantRef)
     const canonicalSubjectPrincipalRef = principalRef(grant.subjectPrincipalRef)
     const canonicalAccountRef = accountRef(grant.accountRef)
+    if (refundBookkeeping && await ctx.runQuery(internal.capabilityCalls.readPreClaimRefund, { callRef })) {
+      if (canonicalAccountRef !== current.activeAccountRef) {
+        await new WorkloadContextAdmission(new ConvexWorkloadContextStore(ctx)).attributeCrossAccount({
+          context: workloadContextFromSnapshot(current),
+          counterpartyAccountRef: canonicalAccountRef,
+        })
+      }
+      return
+    }
     const snapshot = await new DelegationService(
       createConvexDelegationStore(ctx),
       createConvexDelegationContextPort(ctx, canonicalSubjectPrincipalRef),
     ).admitConsequence({
       grantRef: canonicalGrantRef,
-      expectedGeneration: invocation.grantGeneration,
+      expectedGeneration: grant.generation,
       context: {
         actorPrincipalRef: canonicalSubjectPrincipalRef,
         activeAccountRef: canonicalAccountRef,
         correlationRef: current.correlationRef,
-        idempotencyRef: `cron-admit:${current.admittedAt}:${canonicalGrantRef}:${invocation.grantGeneration}`,
+        idempotencyRef: `cron-admit:${current.admittedAt}:${canonicalGrantRef}:${grant.generation}`,
       },
       requiredScopes: grant.scopes,
       resourceRefs: [invocation.toolRef],
@@ -291,7 +340,7 @@ async function attributeInvocationResourceAccount(
     })
     const consequenceNow = Date.now()
     if (snapshot.grantRef !== canonicalGrantRef
-      || snapshot.generation !== invocation.grantGeneration
+      || snapshot.generation !== grant.generation
       || snapshot.accountRef !== canonicalAccountRef
       || snapshot.actorPrincipalRef !== canonicalSubjectPrincipalRef
       || snapshot.expiresAt <= consequenceNow) {
@@ -394,7 +443,7 @@ export async function dispatchWorkloadCronConsequenceHandler(
 ): Promise<JsonValue> {
   const current = await reconcileWorkloadCronSnapshot(ctx as Pick<QueryCtx, 'db'>, args.name, args.snapshot)
   if (args.resourceInvocationRef !== undefined) {
-    await attributeInvocationResourceAccount(ctx, current, args.resourceInvocationRef)
+    await attributeInvocationResourceAccount(ctx, current, args.resourceInvocationRef, args.operation, args.payload)
   }
   return await CONSEQUENCE_HANDLERS[args.operation](ctx, args.payload, current)
 }
