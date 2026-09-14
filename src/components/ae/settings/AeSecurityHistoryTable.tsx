@@ -63,6 +63,17 @@ export function AeSecurityHistoryTable({
 function historyColumns(showActorAndTarget: boolean): ColumnDef<AccountSecurityHistoryItem, unknown>[] {
   return [
     {
+      id: 'activity',
+      header: 'Activity',
+      accessorFn: (row) => `${row.eventType} ${row.outcome}`,
+      cell: ({ row }) => (
+        <span className="grid gap-1">
+          <span className="font-medium text-foreground">{eventLabel(row.original.eventType)}</span>
+          <Badge variant="secondary" className="w-fit">{humanize(row.original.outcome)}</Badge>
+        </span>
+      ),
+    },
+    {
       id: 'time',
       header: 'Time',
       accessorFn: (row) => row.observedAt ?? row.recordedAt,
@@ -74,45 +85,37 @@ function historyColumns(showActorAndTarget: boolean): ColumnDef<AccountSecurityH
       ),
     },
     {
-      accessorKey: 'eventType',
-      header: 'Event',
-      cell: ({ row }) => eventLabel(row.original.eventType),
-    },
-    ...(showActorAndTarget ? [{
-      id: 'actor',
-      header: 'Actor',
-      accessorFn: (row: AccountSecurityHistoryItem) => `${row.actorKind} ${row.actorRef}`,
-      cell: ({ row }: { row: { original: AccountSecurityHistoryItem } }) => (
-        <span className="grid min-w-0 gap-1">
-          <span>{actorLabel(row.original.actorKind)}</span>
-          <AeCopyReference label="Actor reference" value={row.original.actorRef} />
-        </span>
-      ),
-    }, {
-      id: 'target',
-      header: 'Target',
-      accessorFn: (row: AccountSecurityHistoryItem) => `${row.targetType} ${row.targetRef}`,
-      cell: ({ row }: { row: { original: AccountSecurityHistoryItem } }) => (
-        <span className="grid min-w-0 gap-1">
-          <span>{targetLabel(row.original.targetType)}</span>
-          <AeCopyReference label="Target reference" value={row.original.targetRef} />
-        </span>
-      ),
-    }] satisfies ColumnDef<AccountSecurityHistoryItem, unknown>[] : []),
-    {
-      accessorKey: 'outcome',
-      header: 'Outcome',
-      cell: ({ row }) => <Badge variant="secondary">{humanize(row.original.outcome)}</Badge>,
-    },
-    {
       accessorKey: 'sourceSystem',
       header: 'Source',
       cell: ({ row }) => sourceLabel(row.original.sourceSystem),
     },
     {
-      accessorKey: 'correlationRef',
-      header: 'Reference',
-      cell: ({ row }) => <AeCopyReference label="Reference" value={row.original.correlationRef} />,
+      id: 'evidence',
+      header: 'Evidence',
+      enableSorting: false,
+      cell: ({ row }) => (
+        <details className="min-w-48 text-xs text-muted-foreground">
+          <summary className="cursor-pointer font-medium text-foreground">Evidence details</summary>
+          <dl className="mt-2 grid gap-2">
+            {showActorAndTarget ? (
+              <>
+                <div className="grid gap-1">
+                  <dt>Actor · {actorLabel(row.original.actorKind)}</dt>
+                  <dd><AeCopyReference label="Actor reference" value={row.original.actorRef} /></dd>
+                </div>
+                <div className="grid gap-1">
+                  <dt>Target · {targetLabel(row.original.targetType)}</dt>
+                  <dd><AeCopyReference label="Target reference" value={row.original.targetRef} /></dd>
+                </div>
+              </>
+            ) : null}
+            <div className="grid gap-1">
+              <dt>Correlation reference</dt>
+              <dd><AeCopyReference label="Reference" value={row.original.correlationRef} /></dd>
+            </div>
+          </dl>
+        </details>
+      ),
     },
   ]
 }

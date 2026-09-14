@@ -1,5 +1,5 @@
 /** @vitest-environment jsdom */
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import '../../setup/jsdom-platform'
@@ -57,10 +57,19 @@ describe('account security history', () => {
   it('shows source time separately from recorded time and exposes only durable references', () => {
     render(<AeAccountSecurityHistory initialResult={available()} />)
 
+    const table = screen.getByRole('table', { name: 'Account security history' })
     expect(screen.getByRole('heading', { name: 'Security history' })).toBeTruthy()
+    expect(within(table).getAllByRole('columnheader').map((header) => header.textContent)).toEqual([
+      'Activity',
+      'Time',
+      'Source',
+      'Evidence',
+    ])
     expect(screen.getByText('Session revoked')).toBeTruthy()
+    expect(screen.getByText('Revoked')).toBeTruthy()
     expect(screen.getByText('Clerk observed')).toBeTruthy()
     expect(screen.getByText(/Recorded/u)).toBeTruthy()
+    expect(screen.getByText('Evidence details')).toBeTruthy()
     expect(screen.getByText('clerk:delivery-hash')).toBeTruthy()
     expect(document.body.textContent).not.toContain('owner@example.test')
     expect(document.body.textContent).not.toContain('192.0.2.1')
