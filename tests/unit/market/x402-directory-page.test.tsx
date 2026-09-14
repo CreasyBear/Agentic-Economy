@@ -82,9 +82,13 @@ it('compares published facts and links straight to the one canonical Tool detail
   fireEvent.click(screen.getByRole('button', { name: 'Add Tool 1 to comparison' }))
   fireEvent.click(screen.getByRole('button', { name: 'Compare Tools' }))
   const comparison = screen.getByRole('dialog', { name: 'Compare Tools' })
+  expect(within(comparison).getByText('Preliminary comparison.')).toBeTruthy()
   expect(within(comparison).getByText('1 USDC')).toBeTruthy()
   expect(within(comparison).getByText('2 USDC')).toBeTruthy()
   expect(within(comparison).getByText('Output 0')).toBeTruthy()
+  expect(within(comparison).getByText('Category')).toBeTruthy()
+  expect(within(comparison).getByText('Provider-listed price')).toBeTruthy()
+  expect(within(comparison).queryByText('Base')).toBeNull()
   const inspect = within(comparison).getAllByRole('link', { name: 'Inspect Tool' })[0]!
   expect(toolHref(inspect).pathname).toBe(`/tools/${priced[0]!.provider}/${priced[0]!.slug}`)
   expect(inspect.closest('th')).not.toBeNull()
