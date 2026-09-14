@@ -167,6 +167,86 @@ before the handler; the TypeScript function-reference annotation grants no API
 authority. Formance filtering is asserted at the external SDK boundary, while
 ledger-internal filtering correctness remains the provider contract.
 
+## AM05 Buyer connection, approval and return
+
+**Contract:** an owner approves bounded access for a buyer Agent; its supported
+client resumes with the approved Account and can request its first Quote.
+AE owns authorization and the purchased Tool boundary. The client retains its
+task and conversation; AE does not manufacture external task links.
+
+  Requires: a registered OAuth client, the appropriate device-code or
+  authorization-code proof, current canonical owner authority, a current approval
+  request, an explicit approve/deny decision and access within the requested
+  ceiling. Credential replacement also requires the exact existing Agent and
+  predecessor authority.
+  Ensures: approval reserves one exact command and registers the issued
+  credential against the canonical Account before claiming usable connection.
+  The CLI validates account-self, stores the origin-bound credential and resumes
+  through existing discovery/Quote commands. Authorization-code clients receive
+  only their registered callback with the opaque client state; denial returns
+  `access_denied` there without issuing a credential.
+  Invariant: funding is not authority; no Account identifier or wallet setup is
+  supplied to connect. Client origin, role and environment partition pending
+  connection state. Replay does not mint a second credential or reissue a
+  consumed authorization secret. Lost responses cannot prove that approval was
+  refused, expired or unapplied.
+  On violation: reject malformed decisions without changing the grant; retain a
+  pending device approval across a bounded CLI wait; restart an expired request
+  through the original client; refuse mismatched scope/environment before
+  storing a credential. Unknown browser outcomes offer a read of the same
+  approval request, retaining its OAuth state, rather than another approval.
+  Clerk reverification cancellation preserves the existing choice and focus.
+
+| Condition | Existing source and evidence |
+| --- | --- |
+| Canonical owner, Account and approved policy | `convex/lib/agentAccess/oauth/consent.ts` records current authority revisions, target, proof and exact command under CAS. `agentAccessOAuth.test.ts` covers exact replay, owner narrowing, cross-Account proof refusal, replacement membership and predecessor binding/credential/grant/policy drift. |
+| Issue and activate before connected | `issueGrantKey` uses the installed Clerk API adapter and `issueAgentAccessKey` with `registerIssuedAgentBinding`; the CLI then validates `/api/v1/account`. `agent-access.test.ts` covers atomic owner-authorized registration, rollback of a newly created key after binding failure, and preservation of a pre-existing credential on unavailable replay. |
+| Durable CLI approval and reconnection | `connect.ts` and `pending-connect.ts` preserve the same device request, validate existing credentials, bound the wait, partition by origin/role/environment and protect local credential files. Existing `cold-loop.test.ts` cases cover restart, expiry, concurrent polling refusal, edge propagation, rejected-key replacement and origin-preserving continuation. These cases are reused rather than replaced by another connection framework. |
+| Explicit decision and registered callback | `agent-access-oauth-api.ts` validates the decision before mutation and returns a registered authorization-code denial callback. Its focused tests assert unchanged grant/no issuance on malformed input, client-state return, no caller-selected callback and unchanged device denial behavior. Existing authorization/token tests protect exact redirect matching and PKCE. |
+| Browser interruption and continuation | `agent-access.authorize.tsx` carries the original query state to the form separately from the consent read model. The form posts that state for approval and denial, follows the server callback and offers the same grant's status link after a lost response. `agent-access-authorize.test.tsx` covers both callbacks, both lost-response paths, replacement selection, strict reauthentication cancellation and one approval dispatch. |
+| Expired approval request | The authorize route recognizes confirmed 4xx `expired_token`/`invalid_grant` responses and uses existing reconnect guidance. Route tests prove no approval or futile retry control remains, while a 503 with an OAuth-looking body stays retryable. |
+| Expired/revoked existing connection | `ownerConnections.ts` derives expiry and returns reconnect candidates only for the requesting OAuth client and the same owner Account. `agentAccessOAuth.test.ts` and the authorize-route tests cover exact-client candidates, no automatic choice when history is ambiguous, stable revision revocation and planned/compromise replacement. |
+| First Quote in the installed CLI | The bounded `cold-loop.test.ts` connection/discovery/Quote scenario uses the existing child-process/local-server test pattern and the installed-CLI override. The installed client completed connect → its emitted search command → Quote for the returned Tool. Assertions verify the exact Quote reference, server Account/environment, stored credential reuse and preserved IPv6 origin, ending before any paid Call. Its provider responses are controlled test boundaries; hosted provider integration remains separate. |
+
+The protocol references are the existing
+[OAuth device flow](https://www.rfc-editor.org/rfc/rfc8628#section-3.3), in which
+the requesting client polls while the owner approves elsewhere, and
+[authorization-code error return](https://www.rfc-editor.org/rfc/rfc6749#section-4.1.2.1),
+which uses the client's validated redirect URI and state. A device client has
+no requirement for a browser callback. A URL back to an arbitrary third-party
+conversation is not defined by these protocols or current AE source. Such a
+destination must come from an actual supported client contract; it cannot be
+invented or inferred from the client's display name. The separate missing
+funding/task return context remains explicitly owned by AM09/24 and is not
+silently claimed as repaired here.
+
+Applied `sluice`, `contract-enforcer`, `error-strategist` and
+`temporal-coupling-detector` procedures to the sequence approval reservation →
+issuance/binding → account-self validation → local storage → first Quote.
+Existing persisted states, CAS and caller preconditions enforce the ordering.
+The UI boundary can promise honest uncertainty after a transport failure, not
+rollback of an already accepted server command. Design review retains the
+existing OAuth/client responsibilities and rejects a parallel callback registry,
+custom URI scheme, task store or orchestration service. Changed React source is
+checked with the installed React Doctor; no new dependency is required.
+
+Source verification for this change: OAuth API 48/48; authorize route/form
+26/26; selected installed CLI and refusal cases 7 passed (51 unselected);
+existing issuance/binding cases 3 passed (13 unselected); existing canonical
+approval/replacement/reconnection cases 7 passed (42 unselected). The installed
+CLI was `/private/tmp/ae-am21-cli-3s8cnv16/consumer/node_modules/.bin/ae`;
+its source-bundle fallback was not used. Scoped Oxlint, whitespace checks and
+changed-source React Doctor passed; Doctor scoring and unrelated audits were
+disabled. Independent bounded reviews found no concrete defect in the browser
+uncertainty/callback changes or terminal-expiry recovery. No deployment or
+combined typecheck was run in this lane.
+
+Hosted Clerk challenges, actual invited-user approval, live credential propagation
+and real harness/browser return remain unverified. Installed client behavior
+against controlled provider boundaries proves source compatibility only. Whole
+AM05 source acceptance belongs to the manager after the focused checks and
+integrated typecheck pass.
+
 ## Provider lifecycle contract
 
 The user submits one reviewed Tool version and sees its progress on the same

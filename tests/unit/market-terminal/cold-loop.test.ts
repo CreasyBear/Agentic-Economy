@@ -23,7 +23,8 @@ import { runStatusCommand } from '../../../tools/ae/commands/status'
 import { runCallCommand } from '../../../tools/ae/commands/call'
 import { parseArgs, type CliOptions } from '../../../tools/ae/lib/args'
 import { CliFailure } from '../../../tools/ae/lib/output'
-import { storeConnection } from '../../../tools/ae/lib/config'
+import { withPendingConnect } from '../../../tools/ae/lib/pending-connect'
+import { readStoredConnection, storeConnection } from '../../../tools/ae/lib/config'
 import { CALL_ROUTE_CONTRACT } from '@/modules/capability-execution/call-entry'
 import { TOOL_QUOTE_PATH } from '@/modules/capability-execution/quote'
 import { projectToolDescription, projectToolListChoices, projectToolSearchChoices } from '@/modules/registry/tool-choice-contracts'
@@ -1083,6 +1084,151 @@ describe('external-agent Market Tool cold loop', () => {
     })
   })
 
+  it.each([false, true])('resumes an approval after the CLI wait; expired=%s creates a fresh request', async (expired) => {
+    let now = Date.now()
+    vi.spyOn(Date, 'now').mockImplementation(() => now)
+    const output = captureStdout()
+    const diagnostics = captureStderr()
+    let registrations = 0
+    let polls = 0
+    const polledCodes: string[] = []
+    const fetchMock = vi.fn<typeof fetch>().mockImplementation(async (url, init) => {
+      if (String(url).endsWith('/oauth/register')) {
+        registrations += 1
+        return responseJson({ client_id: `client-${registrations}` })
+      }
+      if (String(url).endsWith('/oauth/device_authorization')) return responseJson({
+        device_code: `private-device-${registrations}`, user_code: `CODE-${registrations}`,
+        verification_uri: 'https://market.example/agent-access/authorize', expires_in: 600, interval: 5,
+      })
+      if (String(url).endsWith('/oauth/token')) {
+        polledCodes.push(new URLSearchParams(String(init?.body)).get('device_code')!)
+        polls += 1
+        if (polls === 1) {
+          now += 61_000
+          return Response.json({ error: 'authorization_pending' }, { status: 400 })
+        }
+        return responseJson({ access_token: 'private-issued-key', scope: 'market_tools:call customer_requests:spending_policy' })
+      }
+      return responseJson(connectedAccount())
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    try {
+      await runConnectCommand([], options)
+      expect(JSON.parse(output.read()).kind).toBe('pending')
+      const pendingDirectory = join(testConfigDirectory, 'pending-connections')
+      const files = readdirSync(pendingDirectory)
+      expect(files).toHaveLength(1)
+      expect(statSync(join(pendingDirectory, files[0]!)).mode & 0o777).toBe(0o600)
+      expect(statSync(pendingDirectory).mode & 0o777).toBe(0o700)
+      now += expired ? 600_000 : 5_000
+      await runConnectCommand([], options)
+      expect(registrations).toBe(expired ? 2 : 1)
+      expect(polledCodes).toEqual(['private-device-1', expired ? 'private-device-2' : 'private-device-1'])
+      expect(output.read()).toContain('"kind": "connected"')
+      expect(readdirSync(pendingDirectory)).toHaveLength(0)
+      expect(output.read() + diagnostics.read()).not.toMatch(/private-device|private-issued-key/)
+    } finally { output.restore(); diagnostics.restore() }
+  })
+
+  it.each(['access_denied', 'expired_token', 'invalid_grant', 'invalid_client'] as const)(
+    'clears pending approval on terminal OAuth token error: %s',
+    async (oauthError) => {
+      const diagnostics = captureStderr()
+      const fetchMock = vi.fn<typeof fetch>()
+        .mockResolvedValueOnce(Response.json({ client_id: 'client' }, { status: 201 }))
+        .mockResolvedValueOnce(Response.json({
+          device_code: 'private-device-code',
+          user_code: 'ABCD-EFGH',
+          verification_uri: 'https://market.example/agent-access/authorize?user_code=ABCD-EFGH',
+          expires_in: 600,
+          interval: 1,
+        }))
+        .mockResolvedValueOnce(Response.json({ error: oauthError }, { status: 400 }))
+      vi.stubGlobal('fetch', fetchMock)
+
+      try {
+        await expect(runConnectCommand([], options)).rejects.toMatchObject({
+          kind: 'UNAVAILABLE',
+          code: oauthError,
+        } satisfies Partial<CliFailure>)
+        expect(fetchMock).toHaveBeenCalledTimes(3)
+        expect(readdirSync(join(testConfigDirectory, 'pending-connections'))).toHaveLength(0)
+        expect(readStoredConnection(options.baseUrl)).toBeUndefined()
+      } finally {
+        diagnostics.restore()
+      }
+    },
+  )
+
+  it.each([
+    ['missing buyer scope', { ...connectedAccount(), scopes: ['customer_requests:spending_policy'] }, {}],
+    ['requested environment mismatch', { ...connectedAccount(), environment: 'production' }, { environment: 'sandbox' }],
+  ] as const)('rejects a newly issued credential before storage when account validation fails: %s', async (_label, account, overrides) => {
+    const diagnostics = captureStderr()
+    const fetchMock = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(Response.json({ client_id: 'client' }, { status: 201 }))
+      .mockResolvedValueOnce(Response.json({
+        device_code: 'private-device-code',
+        user_code: 'ABCD-EFGH',
+        verification_uri: 'https://market.example/agent-access/authorize?user_code=ABCD-EFGH',
+        expires_in: 600,
+        interval: 1,
+      }))
+      .mockResolvedValueOnce(Response.json({
+        access_token: 'private-issued-key',
+        token_type: 'Bearer',
+        scope: 'market_tools:call customer_requests:spending_policy',
+      }))
+      .mockImplementation(async () => responseJson(account))
+    vi.stubGlobal('fetch', fetchMock)
+
+    try {
+      const connect = runConnectCommand([], { ...options, ...overrides })
+      await expect(connect).rejects.toMatchObject({
+        kind: 'UNAUTHENTICATED',
+        code: 'api_key_invalid',
+      } satisfies Partial<CliFailure>)
+      expect(fetchMock.mock.calls.filter(([url]) => String(url).endsWith('/api/v1/account'))).toHaveLength(21)
+      expect(readdirSync(join(testConfigDirectory, 'pending-connections'))).toHaveLength(0)
+      expect(readStoredConnection(options.baseUrl)).toBeUndefined()
+    } finally {
+      diagnostics.restore()
+    }
+  }, 15_000)
+
+  it('does not resume a consumed device code when issued-key validation fails', async () => {
+    const output = captureStdout()
+    const diagnostics = captureStderr()
+    const fetchMock = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(responseJson({ client_id: 'client' }))
+      .mockResolvedValueOnce(responseJson({ device_code: 'private-device', user_code: 'CODE',
+        verification_uri: 'https://market.example/agent-access/authorize', expires_in: 600, interval: 5 }))
+      .mockResolvedValueOnce(responseJson({ access_token: 'private-issued-key' }))
+      .mockResolvedValueOnce(Response.json({ error: 'temporarily_unavailable' }, { status: 503 }))
+    vi.stubGlobal('fetch', fetchMock)
+    try {
+      await expect(runConnectCommand([], options)).rejects.toMatchObject({ code: 'connect_validation_unavailable' })
+      expect(readdirSync(join(testConfigDirectory, 'pending-connections'))).toHaveLength(0)
+      expect(output.read() + diagnostics.read()).not.toMatch(/private-device|private-issued-key/)
+    } finally { output.restore(); diagnostics.restore() }
+  })
+
+  it('isolates pending approvals by origin, role and environment and excludes concurrent pollers', async () => {
+    const sandbox = { ...options, environment: 'sandbox' }
+    await withPendingConnect(sandbox, async (store) => {
+      store.write({ clientId: 'client', deviceCode: 'private-device', userCode: 'CODE',
+        verificationUri: 'https://market.example/agent-access/authorize', expiresAt: Date.now() + 600_000,
+        intervalMs: 5_000, nextPollAt: 0, provider: false })
+      await expect(withPendingConnect(sandbox, async () => undefined)).rejects.toMatchObject({ code: 'connect_in_progress' })
+    })
+    for (const other of [{ ...sandbox, baseUrl: 'https://other.example' }, { ...sandbox, provider: true },
+      { ...sandbox, environment: 'production' }, options]) {
+      await withPendingConnect(other, async (store) => expect(store.read()).toBeUndefined())
+    }
+    await withPendingConnect(sandbox, async (store) => expect(store.read()?.userCode).toBe('CODE'))
+  })
+
   it('uses the existing OAuth device flow and returns the one-time AE credential', async () => {
     const output = captureStdout()
     const fetchMock = vi.fn<typeof fetch>()
@@ -1560,81 +1706,192 @@ describe('external-agent Market Tool cold loop', () => {
     })
   })
 
-  it('follows a connected continuation to the selected IPv6 loopback origin in a fresh process', async () => {
-    const requests: Array<{ method: string; url: string; body: string }> = []
+  it('connects, searches, selects one returned Tool, and obtains its first Quote in fresh processes', async () => {
+    const toolRef = `operation:v1:${'7'.repeat(64)}`
+    const input = { query: 'what you need' }
+    const serverAccount = {
+      ...connectedAccount(),
+      principalRef: 'principal:server-derived',
+      accountRef: 'account:server-derived',
+    }
+    const searchResult = operationSearchResult('what you need', [
+      operationDescriptor(toolRef, 'Server-derived lookup'),
+    ])
+    const quoteRef = `operation-commitment:v1:${'8'.repeat(64)}`
+    const quoteResult = operationInspection(toolRef, input, quoteRef)
+    quoteResult.account.accountRef = serverAccount.accountRef
+    quoteResult.budget.principalRef = serverAccount.principalRef
+    const requests: Array<{
+      method: string
+      url: string
+      authorization: string | null
+      body: string
+    }> = []
     const server = createServer((request, response) => {
       const chunks: Buffer[] = []
       request.on('data', (chunk: Buffer | string) => chunks.push(Buffer.from(chunk)))
       request.on('end', () => {
+        const body = Buffer.concat(chunks).toString('utf8')
         requests.push({
           method: request.method ?? '',
           url: request.url ?? '',
-          body: Buffer.concat(chunks).toString('utf8'),
+          authorization: request.headers.authorization ?? null,
+          body,
         })
-        if (request.url === '/api/v1/account') {
-          response.writeHead(200, { 'content-type': 'application/json' })
-          response.end(JSON.stringify(connectedAccount()))
+        const route = request.url ?? ''
+        const sendJson = (value: unknown, status = 200) => {
+          response.writeHead(status, { 'content-type': 'application/json' })
+          response.end(JSON.stringify(value))
+        }
+        if (route === '/oauth/register') {
+          sendJson({ client_id: 'server-client' }, 201)
           return
         }
-        if (request.url === '/api/v1/market-tools/search') {
-          response.writeHead(200, { 'content-type': 'application/json' })
-          response.end(JSON.stringify(operationSearchResult('what you need', [])))
+        if (route === '/oauth/device_authorization') {
+          sendJson({
+            device_code: 'server-device-code',
+            user_code: 'ABCD-EFGH',
+            verification_uri: 'https://auth.example/authorize?flow=server',
+            expires_in: 600,
+            interval: 1,
+          })
           return
         }
-        response.writeHead(404, { 'content-type': 'application/json' })
-        response.end(JSON.stringify({ kind: 'not_found' }))
+        if (route === '/oauth/token') {
+          sendJson({
+            access_token: 'server-issued-key',
+            token_type: 'Bearer',
+            scope: serverAccount.scopes.join(' '),
+          })
+          return
+        }
+        if (route === '/api/v1/account') {
+          sendJson(serverAccount)
+          return
+        }
+        if (route === '/api/v1/market-tools/search') {
+          sendJson(searchResult)
+          return
+        }
+        if (route === TOOL_QUOTE_PATH) {
+          if (request.headers.authorization !== 'Bearer server-issued-key') {
+            sendJson({ kind: 'unauthenticated' }, 401)
+            return
+          }
+          sendJson(quoteResult)
+          return
+        }
+        sendJson({ kind: 'not_found' }, 404)
       })
     })
     let listening = false
 
     await new Promise<void>((resolveListen, reject) => {
       server.once('error', reject)
-      server.listen(0, '::1', resolveListen)
+      server.listen(0, '::1', () => {
+        server.off('error', reject)
+        resolveListen()
+      })
     })
     listening = true
 
     try {
       const address = server.address()
-      if (typeof address !== 'object' || address === null) throw new Error('fresh continuation server did not expose an address')
-      const selectedOrigin = 'http://[::1]:' + address.port
-      setApiKey('fresh-process-key', selectedOrigin)
+      if (typeof address !== 'object' || address === null) throw new Error('fresh connect server did not expose an address')
+      const selectedOrigin = `http://[::1]:${address.port}`
       writeFileSync(
         join(testConfigDirectory, 'ae'),
         '#!/bin/sh\nexec "$AE_TEST_NODE" "$AE_TEST_CLI" "$@"\n',
         { mode: 0o755 },
       )
-
-      const output = captureStdout()
-      vi.stubGlobal('fetch', vi.fn<typeof fetch>().mockResolvedValueOnce(responseJson(connectedAccount())))
-      try {
-        await runConnectCommand([], {
-          ...options,
-          baseUrl: selectedOrigin,
-          baseUrlSource: 'flag',
-        })
-      } finally {
-        output.restore()
-      }
-
-      const connected = JSON.parse(output.read()) as { nextCommand: string }
-      expect(connected.nextCommand).toBe("ae search 'what you need' --base-url '" + selectedOrigin + "' --json")
-
-      const child = await runFreshShell(connected.nextCommand, {
+      const childEnvironment: NodeJS.ProcessEnv = {
         ...process.env,
-        AE_TEST_CLI: CLI_BUNDLE_PATH,
+        AE_API_KEY: '',
+        AE_API_KEY_ORIGIN: '',
+        AE_CONFIG_DIR: testConfigDirectory,
+        AE_DISABLE_BROWSER_OPEN: '1',
+        AE_TEST_CLI: process.env.AE_TEST_INSTALLED_CLI ?? CLI_BUNDLE_PATH,
         AE_TEST_NODE: process.execPath,
         PATH: testConfigDirectory + delimiter + (process.env.PATH ?? ''),
+      }
+      const connectCommand = `ae connect --base-url '${selectedOrigin}' --environment sandbox --json`
+      const connect = await runFreshShell(connectCommand, childEnvironment)
+      expect(connect).toMatchObject({ exitCode: 0, signal: null })
+      expect(connect.stderr).toContain('Approve: https://auth.example/authorize?flow=server')
+      expect(connect.stdout).not.toContain('server-issued-key')
+      const connected = JSON.parse(connect.stdout) as Record<string, unknown> & { nextCommand: string }
+      expect(connected).toMatchObject({
+        kind: 'connected',
+        credentialStored: true,
+        connectionState: 'ready_to_buy',
+        principalRef: serverAccount.principalRef,
+        accountRef: serverAccount.accountRef,
+        scope: serverAccount.scopes.join(' '),
+        apiKeyOrigin: selectedOrigin,
       })
-      expect(child).toMatchObject({ exitCode: 0, signal: null, stderr: '' })
-      expect(JSON.parse(child.stdout)).toMatchObject({
-        kind: 'no_candidates',
-        query: 'what you need',
+      expect(connected.ownerConnectionHref).toBe(`${selectedOrigin}/agent-access?caller=${encodeURIComponent(serverAccount.principalRef)}`)
+      expect(connected.nextCommand).toBe(`ae search 'what you need' --base-url '${selectedOrigin}' --json`)
+
+      expect(readStoredConnection(selectedOrigin)).toMatchObject({
+        accessToken: 'server-issued-key',
+        tokenType: 'Bearer',
+        profile: 'market',
+        scope: serverAccount.scopes.join(' '),
       })
-      expect(requests).toContainEqual({
+
+      const deviceRequest = requests.find(({ url }) => url === '/oauth/device_authorization')
+      expect(deviceRequest).toBeDefined()
+      const deviceParams = new URLSearchParams(deviceRequest?.body)
+      expect(JSON.parse(deviceParams.get('authorization_details') ?? 'null')).toEqual([{
+        type: 'agentic_economy_market_tools',
+        environment: serverAccount.environment,
+        tool_access: 'all_admitted',
+        tool_refs: [],
+        expires_in_seconds: 604800,
+      }])
+
+      const searchCommand = connected.nextCommand
+      const search = await runFreshShell(searchCommand, childEnvironment)
+      expect(search).toMatchObject({ exitCode: 0, signal: null, stderr: '' })
+      const searched = JSON.parse(search.stdout) as { kind: string; query: string; items: Array<{ toolRef: string }> }
+      expect(searched).toMatchObject({ kind: 'ok', query: 'what you need' })
+      expect(searched.items).toHaveLength(1)
+      const selectedToolRef = searched.items[0]?.toolRef
+      expect(selectedToolRef).toBe(toolRef)
+
+      const quoteCommand = `ae quote ${selectedToolRef} --input '${JSON.stringify(input)}' --base-url '${selectedOrigin}' --json`
+      const quote = await runFreshShell(quoteCommand, childEnvironment)
+      expect(quote).toMatchObject({ exitCode: 0, signal: null, stderr: '' })
+      const quoted = JSON.parse(quote.stdout) as Record<string, unknown>
+      expect(quoted).toMatchObject({
+        kind: 'committed',
+        quoteRef,
+        toolRef,
+        account: { accountRef: serverAccount.accountRef },
+        budget: { principalRef: serverAccount.principalRef },
+      })
+
+      const searchRequest = requests.find(({ url }) => url === '/api/v1/market-tools/search')
+      expect(JSON.parse(searchRequest?.body ?? 'null')).toEqual({ query: 'what you need', limit: 10 })
+      const quoteRequest = requests.find(({ url }) => url === TOOL_QUOTE_PATH)
+      expect(quoteRequest).toMatchObject({
         method: 'POST',
-        url: '/api/v1/market-tools/search',
-        body: JSON.stringify({ query: 'what you need', limit: 10 }),
+        authorization: 'Bearer server-issued-key',
       })
+      expect(JSON.parse(quoteRequest?.body ?? 'null')).toEqual({ toolRef, input })
+      for (const command of [connectCommand, searchCommand, quoteCommand]) {
+        expect(command).not.toContain(serverAccount.accountRef)
+        expect(command).not.toContain(serverAccount.principalRef)
+      }
+      expect(requests.some(({ url }) => url === CALL_ROUTE_CONTRACT.call.path)).toBe(false)
+      expect(requests.map(({ url }) => url)).toEqual([
+        '/oauth/register',
+        '/oauth/device_authorization',
+        '/oauth/token',
+        '/api/v1/account',
+        '/api/v1/market-tools/search',
+        TOOL_QUOTE_PATH,
+      ])
     } finally {
       if (listening) {
         await new Promise<void>((resolveClose, reject) => {

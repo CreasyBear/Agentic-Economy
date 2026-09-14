@@ -1678,6 +1678,99 @@ describe('Customer Request OAuth HTTP adapter', () => {
     expect(reserveConsent).not.toHaveBeenCalled()
     expect(issueKey).not.toHaveBeenCalled()
   })
+  it('rejects missing and unsupported consent decisions before mutating the grant', async () => {
+    const cases = [
+      { grantRef: 'device:missing-decision', values: { grant_ref: 'device:missing-decision' } },
+      { grantRef: 'device:unknown-decision', values: { grant_ref: 'device:unknown-decision', decision: 'reject' } },
+    ] as const
+    for (const { grantRef, values } of cases) {
+      const store = storeFixture()
+      await store.insertGrant({ grantRef, revision: 1, flow: 'device_code', clientId: 'client-local', requestedScopes: ['market_tools:call', 'customer_requests:read_only'], requestedAccess: { environment: 'sandbox', ...allTools, expiresInSeconds: AGENT_ACCESS_KEY_TTL_SECONDS }, approvedAccess: { environment: 'sandbox', ...allTools, expiresInSeconds: AGENT_ACCESS_KEY_TTL_SECONDS }, deviceCodeHash: `d-${grantRef}`, userCodeHash: `u-${grantRef}`, status: 'pending', createdAt: 1_000, expiresAt: 601_000, nextPollAt: 1_000, displayName: 'Malformed decision assistant' })
+      const reserveConsent = vi.fn<NonNullable<OAuthApiOptions['reserveConsent']>>()
+      const issueKey = vi.fn<NonNullable<OAuthApiOptions['issueKey']>>()
+      const response = await handleOAuthConsentPost(formRequest('http://localhost/oauth/authorize', values), {
+        store,
+        authObject: { ...strictAuthObject, has: () => false, sessionClaims: {} },
+        reserveConsent,
+        issueKey,
+        now: () => 1_000,
+        canonicalBaseUrl: 'http://localhost',
+      })
+
+      expect(response.status).toBe(400)
+      await expect(response.json()).resolves.toMatchObject({ error: 'invalid_request' })
+      expect(store.grants.get(grantRef)?.status).toBe('pending')
+      expect(reserveConsent).not.toHaveBeenCalled()
+      expect(issueKey).not.toHaveBeenCalled()
+    }
+  })
+  it('rejects an oversized denial state before mutating the grant', async () => {
+    const store = storeFixture()
+    const grantRef = 'device:oversized-state'
+    await store.insertGrant({ grantRef, revision: 1, flow: 'device_code', clientId: 'client-local', requestedScopes: ['market_tools:call', 'customer_requests:read_only'], requestedAccess: { environment: 'sandbox', ...allTools, expiresInSeconds: AGENT_ACCESS_KEY_TTL_SECONDS }, approvedAccess: { environment: 'sandbox', ...allTools, expiresInSeconds: AGENT_ACCESS_KEY_TTL_SECONDS }, deviceCodeHash: 'd-oversized-state', userCodeHash: 'u-oversized-state', status: 'pending', createdAt: 1_000, expiresAt: 601_000, nextPollAt: 1_000, displayName: 'Oversized state assistant' })
+
+    const response = await handleOAuthConsentPost(formRequest('http://localhost/oauth/authorize', {
+      grant_ref: grantRef,
+      decision: 'deny',
+      state: 'x'.repeat(2_049),
+    }), {
+      store,
+      authObject: { ...strictAuthObject, has: () => false, sessionClaims: {} },
+      now: () => 1_000,
+      canonicalBaseUrl: 'http://localhost',
+    })
+
+    expect(response.status).toBe(400)
+    await expect(response.json()).resolves.toMatchObject({ error: 'invalid_request' })
+    expect(store.grants.get(grantRef)?.status).toBe('pending')
+  })
+  it('returns the registered callback with access_denied for authorization-code denial', async () => {
+    const store = storeFixture()
+    const grantRef = 'authorization:denied'
+    await store.insertGrant({
+      grantRef,
+      revision: 1,
+      flow: 'authorization_code',
+      clientId: 'client-auth-denied',
+      redirectUri: 'http://localhost/callback?existing=1',
+      requestedScopes: ['market_tools:call', 'customer_requests:read_only'],
+      requestedAccess: { environment: 'sandbox', ...allTools, expiresInSeconds: AGENT_ACCESS_KEY_TTL_SECONDS },
+      approvedAccess: { environment: 'sandbox', ...allTools, expiresInSeconds: AGENT_ACCESS_KEY_TTL_SECONDS },
+      codeChallenge: 'challenge-denied',
+      codeChallengeMethod: 'S256',
+      status: 'pending',
+      ownerId: 'user_local',
+      createdAt: 1_000,
+      expiresAt: 61_000,
+      displayName: 'Denied authorization client',
+    })
+
+    const response = await handleOAuthConsentPost(formRequest('http://localhost/oauth/authorize', {
+      grant_ref: grantRef,
+      decision: 'deny',
+      state: 'opaque-state',
+      redirect_uri: 'https://attacker.example/steal',
+    }), {
+      store,
+      authObject: { ...strictAuthObject, has: () => false, sessionClaims: {} },
+      now: () => 1_000,
+      canonicalBaseUrl: 'http://localhost',
+    })
+
+    expect(response.status).toBe(200)
+    const body = await response.json() as { kind: string; grantRef: string; redirectTo?: string }
+    expect(body.kind).toBe('denied')
+    expect(body.grantRef).toBe(grantRef)
+    expect(body.redirectTo).toBeDefined()
+    const redirectTo = new URL(body.redirectTo!)
+    expect(redirectTo.origin).toBe('http://localhost')
+    expect(redirectTo.pathname).toBe('/callback')
+    expect(redirectTo.searchParams.get('existing')).toBe('1')
+    expect(redirectTo.searchParams.get('error')).toBe('access_denied')
+    expect(redirectTo.searchParams.get('state')).toBe('opaque-state')
+    expect(body.redirectTo).not.toContain('attacker.example')
+    expect(store.grants.get(grantRef)?.status).toBe('denied')
+  })
   it('replays an identical completed approval without issuing another key', async () => {
     const store = storeFixture()
     await store.insertGrant({ grantRef: 'device:completed-replay', revision: 1, flow: 'device_code', clientId: 'client-local', requestedScopes: ['market_tools:call', 'customer_requests:read_only'], requestedAccess: { environment: 'sandbox', ...allTools, expiresInSeconds: AGENT_ACCESS_KEY_TTL_SECONDS }, approvedAccess: { environment: 'sandbox', ...allTools, expiresInSeconds: AGENT_ACCESS_KEY_TTL_SECONDS }, deviceCodeHash: 'd-replay', userCodeHash: 'u-replay', status: 'pending', createdAt: 1_000, expiresAt: 601_000, nextPollAt: 1_000, displayName: 'Replay-safe assistant' })

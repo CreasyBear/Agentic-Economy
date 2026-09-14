@@ -149,7 +149,7 @@ function consentFormReducer(state: ConsentFormState, action: ConsentFormAction):
 
 type ConsentActionResult =
   | Readonly<{ kind: 'approved'; grantRef: string; redirectTo?: string; readbackRef?: string }>
-  | Readonly<{ kind: 'denied'; grantRef: string }>
+  | Readonly<{ kind: 'denied'; grantRef: string; redirectTo?: string }>
   | Readonly<{ kind: 'outcome_unknown'; grantRef: string; readbackRef: string; correlationRef?: string }>
   | Readonly<{ kind: 'refused' | 'conflict'; code: string }>
   | Readonly<{ kind: 'rate_limited'; retryAfter: number }>
@@ -289,7 +289,7 @@ function AgentAccessAuthorizeForm({ locator, oauthState, details, submitApproval
         kind: 'decision_finished',
         status: result.kind === 'outcome_unknown' ? 'outcome_unknown' : 'error',
         ...(result.kind === 'unavailable' ? { errorReference: result.correlationRef } : {}),
-        ...('code' in result ? { errorCode: result.code } : {}),
+        errorCode: 'code' in result ? result.code : 'source_unavailable',
       })
     } catch (error) {
       if (isReverificationCancelledError(error)) {
@@ -298,7 +298,7 @@ function AgentAccessAuthorizeForm({ locator, oauthState, details, submitApproval
         setTimeout(() => approveButtonRef.current?.focus(), 0)
         return
       }
-      dispatch({ kind: 'decision_finished', status: 'error' })
+      dispatch({ kind: 'decision_finished', status: 'outcome_unknown' })
     }
   }
 
@@ -309,7 +309,10 @@ function AgentAccessAuthorizeForm({ locator, oauthState, details, submitApproval
         method: 'POST',
         credentials: 'same-origin',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({ grant_ref: grantRef, decision: 'deny' }).toString(),
+        body: new URLSearchParams({
+          grant_ref: grantRef, decision: 'deny',
+          ...(oauthState === undefined ? {} : { state: oauthState }),
+        }).toString(),
       }).then(async (response) => {
         if (!response.ok) {
           const snapshot = await response.text().catch(() => '')
@@ -317,9 +320,10 @@ function AgentAccessAuthorizeForm({ locator, oauthState, details, submitApproval
         }
         return await response.json() as ConsentActionResult
       })
-      dispatch({ kind: 'decision_finished', status: result.kind === 'denied' ? 'denied' : 'error' })
+      dispatch({ kind: 'decision_finished', status: result.kind === 'denied' ? 'denied' : 'outcome_unknown' })
+      if (result.kind === 'denied' && result.redirectTo !== undefined) window.location.assign(result.redirectTo)
     } catch (cause) {
-      dispatch(degrade(cause, { kind: 'decision_finished', status: 'error' } as const, { site: 'deny', reason: 'source_unavailable' }))
+      dispatch(degrade(cause, { kind: 'decision_finished', status: 'outcome_unknown' } as const, { site: 'deny', reason: 'source_unavailable' }))
     }
   }
 
@@ -523,7 +527,12 @@ function AgentAccessAuthorizeForm({ locator, oauthState, details, submitApproval
         ) : status === 'denied' ? (
           <ConnectionProblemAlert code="access_denied" />
         ) : status === 'outcome_unknown' ? (
-          <ConnectionProblemAlert code="outcome_unknown" technicalReference={grantRef} />
+          <div className="grid gap-3">
+            <ConnectionProblemAlert code="outcome_unknown" technicalReference={grantRef} />
+            <Button asChild variant="secondary">
+              <Link to="/agent-access/authorize" search={{ grant_ref: grantRef, ...(oauthState === undefined ? {} : { state: oauthState }) }} reloadDocument>Check approval status</Link>
+            </Button>
+          </div>
         ) : (
           <ConnectionProblemAlert code={state.errorCode ?? (state.errorReference === undefined ? 'expired_token' : 'source_unavailable')} {...(state.errorReference === undefined ? {} : { technicalReference: state.errorReference })} />
         )}

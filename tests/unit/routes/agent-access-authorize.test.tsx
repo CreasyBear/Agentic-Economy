@@ -69,6 +69,43 @@ afterEach(() => {
 })
 
 describe('/agent-access/authorize consent loading', () => {
+  it.each(['approve', 'deny'] as const)('keeps a lost %s response uncertain and offers the same approval request', async (decision) => {
+    mockConsent({ userCode: 'LOST-CODE', grantRef: 'device:lost-response', clientName: 'Lost response client', mode: 'read_only', oauthState: 'opaque return state' })
+    const fetchMock = vi.fn().mockRejectedValue(new TypeError('connection interrupted'))
+    vi.stubGlobal('fetch', fetchMock)
+    renderComponent()
+    fireEvent.click(screen.getByRole('button', { name: decision === 'approve' ? 'Connect agent' : 'Decline' }))
+    await waitFor(() => expect(screen.getByText('Approval outcome is not confirmed')).toBeTruthy())
+    expect(screen.queryByText('This connection request expired')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Connect agent' })).toBeNull()
+    const recovery = screen.getByRole('link', { name: 'Check approval status' })
+    const destination = new URL(recovery.getAttribute('href')!, 'https://ae.example')
+    expect(destination.pathname).toBe('/agent-access/authorize')
+    expect(destination.searchParams.get('grant_ref')).toBe('device:lost-response')
+    expect(destination.searchParams.get('state')).toBe('opaque return state')
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it.each(['approve', 'deny'] as const)('preserves OAuth state and follows the server %s callback', async (decision) => {
+    mockConsent({ userCode: 'CALL-BACK', grantRef: 'authorization:callback', clientName: 'Callback client', mode: 'read_only', flow: 'authorization_code', oauthState: 'opaque return state' })
+    const redirectTo = `https://client.example/callback?${decision === 'approve' ? 'code=issued' : 'error=access_denied'}&state=opaque+return+state`
+    const fetchMock = vi.fn().mockResolvedValue(Response.json({ kind: decision === 'approve' ? 'approved' : 'denied', grantRef: 'authorization:callback', redirectTo }))
+    vi.stubGlobal('fetch', fetchMock)
+    renderComponent()
+    const actualWindow = window
+    const assign = vi.fn()
+    vi.stubGlobal('window', new Proxy(actualWindow, {
+      get(target, property) {
+        return property === 'location' ? { assign } : Reflect.get(target, property, target)
+      },
+    }))
+    fireEvent.click(screen.getByRole('button', { name: decision === 'approve' ? 'Connect agent' : 'Decline' }))
+    await waitFor(() => expect(assign).toHaveBeenCalledWith(redirectTo))
+    const submitted = new URLSearchParams(fetchMock.mock.calls[0]?.[1]?.body)
+    expect(submitted.get('state')).toBe('opaque return state')
+    expect(submitted.get('decision')).toBe(decision)
+  })
+
   it('rejects malformed authority modes and target rows without losing valid Tool selection evidence', () => {
     const targetRows = encodeURIComponent(JSON.stringify([
       { principalRef: 'prn_valid', principalRevision: 3, displayName: 'Valid agent' },
@@ -120,12 +157,13 @@ describe('/agent-access/authorize consent loading', () => {
     if (typeof loader !== 'function') throw new Error('authorize_loader_missing')
 
     const loaded = await (loader as unknown as (
-      input: Readonly<{ deps: Readonly<{ userCode?: string }> }>,
-    ) => Promise<unknown>)({ deps: { userCode: 'LOAD-CODE' } })
+      input: Readonly<{ deps: Readonly<{ userCode?: string; state?: string }> }>,
+    ) => Promise<unknown>)({ deps: { userCode: 'LOAD-CODE', state: 'original client state' } })
 
     expect(loaded).toMatchObject({
       kind: 'ready',
       locator: { kind: 'user_code', value: 'LOAD-CODE' },
+      oauthState: 'original client state',
       details: {
         grantRef: 'grant-loader', clientName: 'Loader agent', mode: 'read_only',
         environment: 'production', expiresInSeconds: 7_200,
@@ -134,6 +172,44 @@ describe('/agent-access/authorize consent loading', () => {
       },
     })
     expect(serverMocks.readConsent).toHaveBeenCalledWith({ data: { userCode: 'LOAD-CODE' } })
+  })
+
+  it.each([
+    ['expired_token', 'This connection request expired', 'Return to your agent client and start the connection again.'],
+    ['invalid_grant', 'This connection is no longer valid', 'Reconnect from your agent client.'],
+  ] as const)('renders confirmed %s as a permanent connection problem', async (errorCode, heading, nextAction) => {
+    serverMocks.readConsent.mockResolvedValue({
+      status: 400,
+      html: JSON.stringify({ error: errorCode }),
+    })
+    const loader = AgentAccessAuthorizeRoute.options.loader
+    if (typeof loader !== 'function') throw new Error('authorize_loader_missing')
+
+    const loaded = await (loader as unknown as (
+      input: Readonly<{ deps: Readonly<{ grantRef?: string; state?: string }> }>,
+    ) => Promise<unknown>)({ deps: { grantRef: `grant-${errorCode}`, state: 'opaque return state' } })
+
+    expect(loaded).toEqual({ kind: 'problem', code: errorCode })
+    vi.spyOn(AgentAccessAuthorizeRoute, 'useLoaderData').mockReturnValue(loaded as never)
+    renderComponent()
+
+    expect(screen.getByText(heading)).toBeTruthy()
+    expect(screen.getByText(nextAction)).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Connect agent' })).toBeNull()
+    expect(screen.queryByText('Try loading it again')).toBeNull()
+  })
+
+  it('keeps a temporary consent read failure on the generic retry boundary', async () => {
+    serverMocks.readConsent.mockResolvedValue({ status: 503, html: JSON.stringify({ error: 'expired_token' }) })
+    const loader = AgentAccessAuthorizeRoute.options.loader
+    if (typeof loader !== 'function') throw new Error('authorize_loader_missing')
+
+    await expect((loader as unknown as (
+      input: Readonly<{ deps: Readonly<{ grantRef?: string }> }>,
+    ) => Promise<unknown>)({ deps: { grantRef: 'grant-temporary-failure' } })).rejects.toThrow('authorization_unavailable')
+
+    renderComponent(ErrorComponent)
+    expect(screen.getByText(/Try loading it again/u)).toBeTruthy()
   })
 
   it('shows terminal recovery copy when the consent request is unavailable', async () => {
@@ -489,15 +565,20 @@ function mockConsent(input: Readonly<{
   toolRefs?: readonly string[]
   reconnectPrincipalRef?: string
   reconnectAmbiguous?: boolean
+  oauthState?: string
+  flow?: 'device_code' | 'authorization_code'
 }>) {
   vi.spyOn(AgentAccessAuthorizeRoute, 'useLoaderData').mockReturnValue({
     kind: 'ready',
-    locator: { kind: 'user_code', value: input.userCode },
+    locator: input.flow === 'authorization_code'
+      ? { kind: 'grant_ref', value: input.grantRef }
+      : { kind: 'user_code', value: input.userCode },
+    ...(input.oauthState === undefined ? {} : { oauthState: input.oauthState }),
     details: {
       state: 'ready',
       grantRef: input.grantRef,
       grantRevision: 1,
-      flow: 'device_code',
+      flow: input.flow ?? 'device_code',
       clientName: input.clientName,
       mode: input.mode,
       environment: input.environment ?? 'sandbox',

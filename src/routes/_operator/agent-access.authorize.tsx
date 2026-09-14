@@ -13,6 +13,20 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { readAgentAccessConsentServer } from '@/lib/server/agent-access-consent.functions'
 import { readAgentConsentDetails } from '@/modules/agent-access/consent-read-model'
+import { presentConnectionProblem } from '@/modules/agent-access/public'
+
+type OAuthPermanentProblemCode = 'expired_token' | 'invalid_grant'
+
+function readOAuthPermanentProblemCode(body: string): OAuthPermanentProblemCode | undefined {
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(body) as unknown
+  } catch {
+    return undefined
+  }
+  if (typeof parsed !== 'object' || parsed === null || !('error' in parsed)) return undefined
+  return parsed.error === 'expired_token' || parsed.error === 'invalid_grant' ? parsed.error : undefined
+}
 
 export const Route = createFileRoute('/_operator/agent-access/authorize')({
   validateSearch: z.object({
@@ -37,7 +51,13 @@ export const Route = createFileRoute('/_operator/agent-access/authorize')({
       ...(deps.userCode === undefined ? {} : { userCode: deps.userCode }),
       ...(deps.grantRef === undefined ? {} : { grantRef: deps.grantRef }),
     } })
-    if (response.status < 200 || response.status >= 300) throw new Error('authorization_unavailable')
+    if (response.status < 200 || response.status >= 300) {
+      const problemCode = response.status >= 400 && response.status < 500
+        ? readOAuthPermanentProblemCode(response.html)
+        : undefined
+      if (problemCode !== undefined) return { kind: 'problem' as const, code: problemCode }
+      throw new Error('authorization_unavailable')
+    }
     const details = readAgentConsentDetails(response.html)
     if (details.state === 'outcome_unknown' && details.grantRef !== undefined) {
       return { kind: 'outcome_unknown' as const, grantRef: details.grantRef }
@@ -126,6 +146,22 @@ function AgentAccessAuthorizeRoute() {
               <Button asChild variant="secondary" className="mt-4 min-h-touch">
                 <Link to="/agent-access">Open Agents</Link>
               </Button>
+            </AlertDescription>
+          </Alert>
+        </AeSettingsStack>
+      </AeOperatorPage>
+    )
+  }
+  if (loaded.kind === 'problem') {
+    const presentation = presentConnectionProblem({ code: loaded.code })
+    return (
+      <AeOperatorPage operatorRole="owner" title="Review agent access" description="This request cannot be used." currentPath="/agent-access">
+        <AeSettingsStack>
+          <Alert variant="destructive">
+            <AlertTitle>{presentation.heading}</AlertTitle>
+            <AlertDescription>
+              <p>{presentation.outcome}</p>
+              <p className="mt-2">{presentation.nextAction}</p>
             </AlertDescription>
           </Alert>
         </AeSettingsStack>

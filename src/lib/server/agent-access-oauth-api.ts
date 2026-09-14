@@ -503,6 +503,11 @@ type ConsentApprovalFields = Readonly<{
   state: string | null
 }>
 
+function boundedConsentState(form: URLSearchParams): string | null | undefined {
+  const state = form.get('state')
+  return state !== null && state.length > 2_048 ? undefined : state
+}
+
 function consentApprovalFields(form: URLSearchParams): ConsentApprovalFields | undefined {
   const expectedGrantRevision = positiveFormInteger(form.get('expected_grant_revision'))
   const expectedTargetRevision = positiveFormInteger(form.get('expected_target_revision'))
@@ -510,13 +515,13 @@ function consentApprovalFields(form: URLSearchParams): ConsentApprovalFields | u
   const targetKind = form.get('connection_target')
   const principalRef = form.get('principal_ref')
   const replacementMode = form.get('replacement_mode')
-  const state = form.get('state')
+  const state = boundedConsentState(form)
   if (
     expectedGrantRevision === undefined
     || expectedTargetRevision === undefined
     || approvedToolSelection === undefined
     || (targetKind !== 'new_agent' && targetKind !== 'replace_credential')
-    || (state !== null && state.length > 2_048)
+    || state === undefined
   ) return undefined
   let reservationTarget: ConsentApprovalFields['reservationTarget']
   if (targetKind === 'new_agent') {
@@ -553,6 +558,9 @@ export async function handleOAuthConsentPost(request: Request, options: OAuthApi
   if (csrfDecision.kind === 'rejected') return oauthError('access_denied', 403)
   const grantRef = form.get('grant_ref')
   const decision = form.get('decision')
+  const state = boundedConsentState(form)
+  if (decision !== 'approve' && decision !== 'deny') return oauthError('invalid_request', 400)
+  if (state === undefined) return oauthError('invalid_request', 400)
   const authObject = await consentAuthObject(options)
   const [owner, limited] = await Promise.all([
     ownerIdentity(options, authObject),
@@ -561,8 +569,8 @@ export async function handleOAuthConsentPost(request: Request, options: OAuthApi
   if (limited !== undefined) return limited
   if (!owner.isAuthenticated || owner.userId === null || grantRef === null) return oauthError('access_denied', 403)
   const store = requireStore(options)
-  if (decision !== 'approve') {
-    return await denyConsentGrant(store, grantRef, owner.userId, options)
+  if (decision === 'deny') {
+    return await denyConsentGrant(store, grantRef, owner.userId, state, options)
   }
   const authorityMode = consentAuthorityMode(form)
   if (authorityMode === null || authorityMode === undefined) return oauthError('invalid_scope', 400)
@@ -595,6 +603,7 @@ async function denyConsentGrant(
   store: AgentAccessOAuthStore,
   grantRef: string,
   ownerId: string,
+  state: string | null,
   options: OAuthApiOptions,
 ): Promise<Response> {
   const denied = await denyGrant(store, {
@@ -603,6 +612,12 @@ async function denyConsentGrant(
     now: currentNow(options),
   })
   if (denied.kind !== 'ok') return oauthTransitionError(denied)
+  if (denied.value.flow === 'authorization_code' && denied.value.redirectUri !== undefined) {
+    const redirectTo = new URL(denied.value.redirectUri)
+    redirectTo.searchParams.set('error', 'access_denied')
+    if (state !== null) redirectTo.searchParams.set('state', state)
+    return consentJson({ kind: 'denied', grantRef, redirectTo: redirectTo.toString() }, 200)
+  }
   return consentJson({ kind: 'denied', grantRef }, 200)
 }
 
