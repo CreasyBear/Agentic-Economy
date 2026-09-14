@@ -792,6 +792,128 @@ describe('owner identity provisioning', () => {
     })
   })
 
+  it('removes session access on sign-out and restores the same account on a later sign-in', async () => {
+    // Requires: a verified owner identity with a stable Clerk tokenIdentifier
+    // and a fresh, valid token window.
+    // Ensures: sign-out has no current authority; a later valid sign-in resolves
+    // the original canonical Account, Principal, Ownership, and binding.
+    // Invariant: sign-out does not delete or rewrite durable identity facts.
+    // On violation: materialization refuses or any duplicate canonical row is a
+    // failing observable result.
+    const backend = convexTest(schema, modules)
+    const firstSession = backend.withIdentity(provisionedIdentity({ exp: 20 }))
+
+    await expect(firstSession.mutation(
+      api.interactiveAuthority.materializeCurrentInteractiveAuthority,
+      {},
+    )).resolves.toBe(true)
+    const beforeSignOut = await provisionedRows(backend)
+    const [beforeBinding] = beforeSignOut.bindings
+    const [beforePrincipal] = beforeSignOut.principals
+    const [beforeAccount] = beforeSignOut.accounts
+    const [beforeOwnership] = beforeSignOut.ownerships
+
+    await expect(backend.mutation(
+      api.interactiveAuthority.materializeCurrentInteractiveAuthority,
+      {},
+    )).resolves.toBe(false)
+    await expect(backend.action(resolveCurrentInteractiveAuthorityRef, {}))
+      .resolves.toBeNull()
+    await expect(provisionedRows(backend)).resolves.toEqual(beforeSignOut)
+
+    const laterSession = backend.withIdentity(provisionedIdentity({ exp: 30 }))
+    await expect(laterSession.mutation(
+      api.interactiveAuthority.materializeCurrentInteractiveAuthority,
+      {},
+    )).resolves.toBe(true)
+
+    const afterSignIn = await provisionedRows(backend)
+    expect(afterSignIn.bindings).toHaveLength(1)
+    expect(afterSignIn.principals).toHaveLength(1)
+    expect(afterSignIn.accounts).toHaveLength(1)
+    expect(afterSignIn.ownerships).toHaveLength(1)
+    expect(afterSignIn.memberships).toEqual([])
+    expect(afterSignIn.bindings[0]).toMatchObject({
+      bindingRef: beforeBinding!.bindingRef,
+      principalRef: beforePrincipal!.principalRef,
+      providerIdentifier: beforeBinding!.providerIdentifier,
+      credentialGeneration: 2,
+    })
+    expect(afterSignIn.principals[0]).toMatchObject({
+      principalRef: beforePrincipal!.principalRef,
+    })
+    expect(afterSignIn.accounts[0]).toMatchObject({
+      accountRef: beforeAccount!.accountRef,
+    })
+    expect(afterSignIn.ownerships[0]).toMatchObject({
+      ownershipRef: beforeOwnership!.ownershipRef,
+      accountRef: beforeAccount!.accountRef,
+      ownerPrincipalRef: beforePrincipal!.principalRef,
+    })
+    await expect(laterSession.action(resolveCurrentInteractiveAuthorityRef, {}))
+      .resolves.toMatchObject({
+        principalRef: beforePrincipal!.principalRef,
+        accountRef: beforeAccount!.accountRef,
+      })
+  })
+
+  it('keeps simultaneous first materializations on one canonical identity chain', async () => {
+    // Requires: two verified sessions presenting the same stable Clerk
+    // tokenIdentifier while no canonical authority rows exist.
+    // Ensures: both calls succeed and converge on one Account, Principal,
+    // Ownership, binding, and active credential chain.
+    // Invariant: the first-login race never creates a second Account or
+    // re-keys the canonical identity.
+    // On violation: either call refuses or any duplicate canonical row fails.
+    const backend = convexTest(schema, modules)
+    const firstSession = backend.withIdentity(provisionedIdentity({ exp: 20 }))
+    const simultaneousSession = backend.withIdentity(provisionedIdentity({ exp: 20 }))
+
+    await expect(Promise.all([
+      firstSession.mutation(
+        api.interactiveAuthority.materializeCurrentInteractiveAuthority,
+        {},
+      ),
+      simultaneousSession.mutation(
+        api.interactiveAuthority.materializeCurrentInteractiveAuthority,
+        {},
+      ),
+    ])).resolves.toEqual([true, true])
+
+    const provisioned = await provisionedRows(backend)
+    expect(provisioned.bindings).toHaveLength(1)
+    expect(provisioned.principals).toHaveLength(1)
+    expect(provisioned.accounts).toHaveLength(1)
+    expect(provisioned.ownerships).toHaveLength(1)
+    expect(provisioned.credentials).toHaveLength(1)
+    expect(provisioned.memberships).toEqual([])
+    const [binding] = provisioned.bindings
+    const [principal] = provisioned.principals
+    const [account] = provisioned.accounts
+    const [ownership] = provisioned.ownerships
+    const [credential] = provisioned.credentials
+    expect(binding).toMatchObject({
+      providerIdentifier: PROVISIONED_TOKEN,
+      principalRef: principal!.principalRef,
+      credentialGeneration: 1,
+    })
+    expect(ownership).toMatchObject({
+      accountRef: account!.accountRef,
+      ownerPrincipalRef: principal!.principalRef,
+    })
+    expect(credential).toMatchObject({
+      bindingRef: binding!.bindingRef,
+      principalRef: principal!.principalRef,
+      generation: 1,
+      lifecycle: 'active',
+    })
+    await expect(simultaneousSession.action(resolveCurrentInteractiveAuthorityRef, {}))
+      .resolves.toMatchObject({
+        principalRef: principal!.principalRef,
+        accountRef: account!.accountRef,
+      })
+  })
+
   it('rotates the credential generation for a fresh verified token window without re-keying identity', async () => {
     const backend = convexTest(schema, modules)
     const owner = backend.withIdentity(provisionedIdentity())

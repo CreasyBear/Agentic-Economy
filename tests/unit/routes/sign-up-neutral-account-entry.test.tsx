@@ -55,6 +55,7 @@ describe('sign-up account entry', () => {
     expect(document.body.textContent).not.toContain('manage Operations')
     expect(routeState.clerkProps).toMatchObject({
       fallbackRedirectUrl: '/owner/settings',
+      signInFallbackRedirectUrl: '/owner/settings',
       signInUrl: '/sign-in',
     })
   })
@@ -70,6 +71,7 @@ describe('sign-up account entry', () => {
     expect(screen.getByText('After you create your account, you’ll continue to the Tool publishing workspace.')).toBeTruthy()
     expect(routeState.clerkProps).toMatchObject({
       fallbackRedirectUrl: '/owner/supply',
+      signInFallbackRedirectUrl: '/owner/supply',
       signInUrl: '/sign-in',
     })
   })
@@ -85,6 +87,7 @@ describe('sign-up account entry', () => {
     expect(screen.getByText('After you create your account, you’ll return to the agent connection you started.')).toBeTruthy()
     expect(routeState.clerkProps).toMatchObject({
       fallbackRedirectUrl: '/agent-access',
+      signInFallbackRedirectUrl: '/agent-access',
       signInUrl: '/sign-in',
     })
   })

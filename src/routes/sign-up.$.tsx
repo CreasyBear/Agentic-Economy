@@ -89,6 +89,7 @@ function SignUpRoute() {
           <SignUp
             appearance={clerkAuthSurfaceAppearance}
             fallbackRedirectUrl={redirect ?? '/owner/settings'}
+            signInFallbackRedirectUrl={redirect ?? '/owner/settings'}
             signInUrl="/sign-in"
           />
         </AeSiteAuthPanel>

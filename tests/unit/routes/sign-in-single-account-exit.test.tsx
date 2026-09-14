@@ -58,6 +58,7 @@ describe('sign-in account exit', () => {
     expect(document.body.textContent).not.toContain('manage Operations')
     expect(routeState.clerkProps).toMatchObject({
       fallbackRedirectUrl: '/owner/settings',
+      signUpFallbackRedirectUrl: '/owner/settings',
       signUpUrl: '/sign-up',
     })
   })
@@ -76,6 +77,7 @@ describe('sign-in account exit', () => {
     expect(screen.queryByRole('link', { name: 'Create one' })).toBeNull()
     expect(routeState.clerkProps).toMatchObject({
       fallbackRedirectUrl: '/owner/supply',
+      signUpFallbackRedirectUrl: '/owner/supply',
       signUpUrl: '/sign-up',
     })
   })
@@ -91,6 +93,7 @@ describe('sign-in account exit', () => {
     expect(screen.getByText('After you sign in, you’ll return to the agent connection you started.')).toBeTruthy()
     expect(routeState.clerkProps).toMatchObject({
       fallbackRedirectUrl: '/agent-access',
+      signUpFallbackRedirectUrl: '/agent-access',
       signUpUrl: '/sign-up',
     })
   })
