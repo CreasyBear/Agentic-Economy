@@ -202,6 +202,7 @@ describe('owner credit target', () => {
   it('deduplicates transaction identity across recoverable pagination', async () => {
     const read = vi.fn(async () => ({
       ...emptyAccountHistory,
+      coverage: 'partial' as const,
       entries: [
         {
           transactionId: '2', transactionRef: 'transaction:2', occurredAt: 2, recordedAt: 2,
@@ -226,14 +227,14 @@ describe('owner credit target', () => {
         }],
         continueCursor: 'cursor:next',
         isDone: false,
-        coverage: 'partial',
       }}
       accountHistoryPort={{ read }}
     />)
 
-    expect(screen.getByText('Some transaction attribution is incomplete')).toBeTruthy()
+    expect(screen.queryByText('Some transaction attribution is incomplete')).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Load more history' }))
     await waitFor(() => expect(read).toHaveBeenCalledWith({ cursor: 'cursor:next' }))
+    expect(screen.getByText('Some transaction attribution is incomplete')).toBeTruthy()
     expect(screen.getAllByText('Credit added')).toHaveLength(1)
     expect(screen.getByText('Document adjustment')).toBeTruthy()
     expect(screen.getByText('No Balance change')).toBeTruthy()

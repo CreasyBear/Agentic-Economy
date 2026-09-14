@@ -367,6 +367,7 @@ type AccountHistoryState = Readonly<{
   source: AvailableAccountHistory
   entries: readonly AccountHistoryEntry[]
   cursor: string | undefined
+  coverage: AvailableAccountHistory['coverage']
   status: 'idle' | 'loading' | 'failed'
 }>
 
@@ -474,6 +475,7 @@ function AvailableAccountHistoryView({
     source: initial,
     entries: deduplicateHistory([], initial.entries),
     cursor: initial.isDone ? undefined : initial.continueCursor,
+    coverage: initial.coverage,
     status: 'idle',
   }))
   const columns = useMemo<ColumnDef<AccountHistoryEntry, unknown>[]>(() => [
@@ -559,6 +561,7 @@ function AvailableAccountHistoryView({
             source,
             entries: deduplicateHistory(current.entries, next.entries),
             cursor: next.isDone ? undefined : next.continueCursor,
+            coverage: current.coverage === 'partial' || next.coverage === 'partial' ? 'partial' : 'complete',
             status: 'idle',
           }
         : current)
@@ -572,7 +575,7 @@ function AvailableAccountHistoryView({
 
   return (
     <div className="grid gap-4">
-      {initial.coverage === 'partial' ? (
+      {state.coverage === 'partial' ? (
         <Alert>
           <AlertTitle>Some transaction attribution is incomplete</AlertTitle>
           <AlertDescription>Known booked transactions remain visible. Reversal netting or attribution may be incomplete, so these effects are not presented as a reconciliation to the balance above.</AlertDescription>
