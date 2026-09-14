@@ -98,7 +98,7 @@ describe('owner Overview', () => {
     reads.balance.mockResolvedValueOnce(availableBalance)
     const ready = await loadOverview()
     renderOverview(ready)
-    expect(screen.getByRole('link', { name: 'Explore Market' }).getAttribute('href')).toBe('/market')
+    expect(screen.getByRole('link', { name: 'Explore Market' }).getAttribute('href')).toBe('/owner/market')
   })
 
   it('shows Provider status only when the existing Provider projection says it applies', async () => {
