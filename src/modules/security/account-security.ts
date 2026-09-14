@@ -57,3 +57,19 @@ export type AccountSecurityHistoryResult =
 export function emptyAccountSecurityHistory(): AccountSecurityHistoryPage {
   return Object.freeze({ items: Object.freeze([]), continueCursor: '', isDone: true })
 }
+
+/** Preserve the first observed event when native pages repeat their boundary. */
+export function appendAccountSecurityHistoryPage(
+  current: AccountSecurityHistoryPage,
+  next: AccountSecurityHistoryPage,
+): AccountSecurityHistoryPage {
+  const seen = new Set(current.items.map((item) => item.eventRef))
+  return {
+    ...next,
+    items: [...current.items, ...next.items.filter((item) => {
+      if (seen.has(item.eventRef)) return false
+      seen.add(item.eventRef)
+      return true
+    })],
+  }
+}

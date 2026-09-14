@@ -145,6 +145,83 @@ describe('account security history', () => {
     expect(screen.getByText('Session revoked')).toBeTruthy()
     expect(readHistory).toHaveBeenCalledWith({ data: { cursor: 'cursor-1' } })
   })
+
+  it('keeps known Account events and the exact cursor when continuation is unavailable', async () => {
+    const first = available(false)
+    readHistory
+      .mockResolvedValueOnce({ kind: 'unavailable', reason: 'source_unavailable' })
+      .mockResolvedValueOnce({
+        kind: 'available',
+        page: {
+          items: [{
+            ...first.page.items[0]!,
+            eventRef: 'audit:clerk:older-after-retry',
+            eventType: 'account.session.ended',
+            correlationRef: 'clerk:older-after-retry',
+          }],
+          continueCursor: '',
+          isDone: true,
+        },
+      })
+    render(<AeAccountSecurityHistory initialResult={first} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Load older events' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Retry older events' })).toBeTruthy())
+    expect(screen.getByText('Session revoked')).toBeTruthy()
+    expect(screen.getByText('Older events could not be loaded. Known security history remains visible.')).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Retry older events' }))
+    await waitFor(() => expect(screen.getByText('Session ended')).toBeTruthy())
+    expect(screen.getByText('Session revoked')).toBeTruthy()
+    expect(readHistory).toHaveBeenNthCalledWith(1, { data: { cursor: 'cursor-1' } })
+    expect(readHistory).toHaveBeenNthCalledWith(2, { data: { cursor: 'cursor-1' } })
+  })
+
+  it('deduplicates a repeated native page boundary by durable event identity', async () => {
+    const first = available(false)
+    readHistory.mockResolvedValueOnce({
+      kind: 'available',
+      page: {
+        items: [first.page.items[0]!],
+        continueCursor: '',
+        isDone: true,
+      },
+    })
+    render(<AeAccountSecurityHistory initialResult={first} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Load older events' }))
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Load older events' })).toBeNull())
+    expect(screen.getAllByText('Session revoked')).toHaveLength(1)
+  })
+
+  it('does not append an old Account continuation after loader evidence is replaced', async () => {
+    const first = available(false)
+    let resolveOlder: ((result: AccountSecurityHistoryResult) => void) | undefined
+    readHistory.mockReturnValueOnce(new Promise<AccountSecurityHistoryResult>((resolve) => {
+      resolveOlder = resolve
+    }))
+    const next = available()
+    const replacement: AccountSecurityHistoryResult = {
+      kind: 'available',
+      page: {
+        ...next.page,
+        items: [{
+          ...next.page.items[0]!,
+          eventRef: 'audit:account:replacement',
+          eventType: 'account.session.ended',
+          correlationRef: 'account:replacement',
+        }],
+      },
+    }
+    const { rerender } = render(<AeAccountSecurityHistory initialResult={first} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Load older events' }))
+
+    rerender(<AeAccountSecurityHistory initialResult={replacement} />)
+    expect(await screen.findByText('Session ended')).toBeTruthy()
+    resolveOlder?.(available())
+    await waitFor(() => expect(screen.getByText('Session ended')).toBeTruthy())
+    expect(screen.queryByText('Session revoked')).toBeNull()
+  })
 })
 
 describe('Agent security history', () => {
@@ -178,6 +255,54 @@ describe('Agent security history', () => {
     expect(readHistory).toHaveBeenCalledWith({ data: { principalRef } })
     expect(document.body.textContent).not.toContain(principalRef)
     expect(document.body.textContent).not.toContain(`prn_${'b'.repeat(32)}`)
+  })
+
+  it('keeps known Agent events when loading older evidence fails', async () => {
+    const principalRef = `prn_${'c'.repeat(32)}`
+    readHistory
+      .mockResolvedValueOnce(available(false))
+      .mockResolvedValueOnce({ kind: 'unavailable', reason: 'source_unavailable' })
+
+    render(<AeAgentSecurityHistory principalRef={principalRef} />)
+
+    expect(await screen.findByText('Session revoked')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Load older events' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Retry older events' })).toBeTruthy())
+    expect(screen.getByText('Session revoked')).toBeTruthy()
+    expect(screen.getByText('Older events could not be loaded. Known security history remains visible.')).toBeTruthy()
+  })
+
+  it('ignores an old Agent read after the selected identity changes', async () => {
+    const firstPrincipalRef = `prn_${'d'.repeat(32)}`
+    const nextPrincipalRef = `prn_${'e'.repeat(32)}`
+    let resolveFirst: ((result: AccountSecurityHistoryResult) => void) | undefined
+    const firstRead = new Promise<AccountSecurityHistoryResult>((resolve) => {
+      resolveFirst = resolve
+    })
+    const next = available()
+    readHistory.mockImplementation(({ data }: { data: { principalRef: string } }) => data.principalRef === firstPrincipalRef
+      ? firstRead
+      : Promise.resolve({
+          kind: 'available' as const,
+          page: {
+            ...next.page,
+            items: [{
+              ...next.page.items[0]!,
+              eventRef: 'audit:agent:new-selection',
+              eventType: 'account.session.ended' as const,
+              correlationRef: 'agent:new-selection',
+            }],
+          },
+        }))
+
+    const { rerender } = render(<AeAgentSecurityHistory principalRef={firstPrincipalRef} />)
+    rerender(<AeAgentSecurityHistory principalRef={nextPrincipalRef} />)
+    expect(await screen.findByText('Session ended')).toBeTruthy()
+
+    resolveFirst?.(available())
+    await waitFor(() => expect(screen.getByText('Session ended')).toBeTruthy())
+    expect(screen.queryByText('Session revoked')).toBeNull()
+    expect(readHistory).toHaveBeenCalledWith({ data: { principalRef: nextPrincipalRef } })
   })
 })
 

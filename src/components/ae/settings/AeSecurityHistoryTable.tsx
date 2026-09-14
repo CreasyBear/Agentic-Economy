@@ -14,6 +14,7 @@ export function AeSecurityHistoryTable({
   emptyMessage,
   isDone,
   loading,
+  loadFailed = false,
   onLoadMore,
   showActorAndTarget = true,
 }: Readonly<{
@@ -22,6 +23,7 @@ export function AeSecurityHistoryTable({
   emptyMessage: string
   isDone: boolean
   loading: boolean
+  loadFailed?: boolean
   onLoadMore(): void
   showActorAndTarget?: boolean
 }>) {
@@ -38,6 +40,11 @@ export function AeSecurityHistoryTable({
         emptyMessage={emptyMessage}
         maxHeight="32rem"
       />
+      {loadFailed ? (
+        <p className="text-sm text-muted-foreground" role="status">
+          Older events could not be loaded. Known security history remains visible.
+        </p>
+      ) : null}
       {isDone ? null : (
         <Button
           type="button"
@@ -46,7 +53,7 @@ export function AeSecurityHistoryTable({
           disabled={loading}
           onClick={onLoadMore}
         >
-          {loading ? 'Loading…' : 'Load older events'}
+          {loading ? 'Loading…' : loadFailed ? 'Retry older events' : 'Load older events'}
         </Button>
       )}
     </div>
