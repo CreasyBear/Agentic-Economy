@@ -3,9 +3,34 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, expect, it, vi } from 'vitest'
 
 import { AeProviderToolDetail } from '@/components/ae/supply/AeProviderToolDetail'
-import type { ProviderToolStatus } from '@/modules/capability-supply/provider-tool-status'
+import { projectProviderToolStatus, type ProviderToolStatus } from '@/modules/capability-supply/provider-tool-status'
 
 afterEach(cleanup)
+
+it('lets the owner resume a saved draft through its exact setup link', () => {
+  const draft = projectProviderToolStatus({
+    schemaVersion: 'provider_tools:v1',
+    businessRef: 'business:one',
+    providerRef: 'provider:one',
+    toolRef: 'offering:saved-draft',
+    observedAt: 100,
+    draftPresent: true,
+    setupComplete: true,
+    submitted: false,
+    reviewActive: false,
+    routeable: false,
+    paused: false,
+    retired: false,
+    retirementProven: false,
+    blockerCodes: [],
+  })
+  const resumeHref = '/owner/operations/new?draft=saved-candidate'
+  render(<AeProviderToolDetail name="Saved Tool" status={draft} resumeHref={resumeHref} />)
+
+  expect(screen.getByRole('heading', { name: 'Draft' })).toBeTruthy()
+  expect(screen.getByRole('link', { name: 'Continue setup' }).getAttribute('href')).toBe(resumeHref)
+  expect(screen.getByText('Not available to buyers')).toBeTruthy()
+})
 
 const status = {
   schemaVersion: 'provider_tools:v1',
