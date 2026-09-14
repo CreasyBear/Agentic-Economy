@@ -67,6 +67,37 @@ export const callDispatchMutationResult = v.union(
   v.object({ kind: v.literal('refused'), code: v.string() }),
 )
 export const approvalDecision = v.union(v.literal('approve'), v.literal('deny'))
+const approvalDecisionContext = v.object({
+  agent: v.object({ principalRef: v.string(), applicationRef: v.string(), currentDisplayName: v.union(v.string(), v.null()) }),
+  purpose: v.null(),
+  acceptedQuote: v.union(
+    v.object({
+      kind: v.literal('available'),
+      quoteRef: v.string(),
+      tool: v.object({ name: v.string(), description: v.string() }),
+      provider: v.object({ ref: v.string(), name: v.null() }),
+      maximumSpend: v.object({ currency: v.literal('AUD'), units: v.string(), exponent: v.literal(6) }),
+      dataUse: v.array(v.object({
+        effectId: v.string(), inputPointer: v.string(),
+        classification: v.union(v.literal('public'), v.literal('personal'), v.literal('sensitive'), v.literal('credential')),
+        phase: v.union(v.literal('preparation'), v.literal('execution')),
+        recipient: v.union(
+          v.object({ kind: v.literal('candidate_binding') }),
+          v.object({ kind: v.literal('selected_binding') }),
+          v.object({ kind: v.literal('named_recipient'), recipientId: v.string() }),
+        ),
+        purposes: v.array(v.string()),
+      })),
+      effects: v.array(v.object({
+        effectId: v.string(),
+        class: v.union(v.literal('data_release'), v.literal('financial_exposure'), v.literal('external_state_change')),
+        authority: v.union(v.literal('none'), v.literal('explicit'), v.literal('mandate_or_explicit')),
+        reversibility: v.union(v.literal('not_applicable'), v.literal('reversible'), v.literal('conditional'), v.literal('irreversible')),
+      })),
+    }),
+    v.object({ kind: v.literal('unavailable'), reason: v.union(v.literal('quote_missing'), v.literal('quote_mismatch'), v.literal('material_invalid')) }),
+  ),
+})
 export const pendingApprovalView = v.object({
   callRef: v.string(),
   toolRef: v.string(),
@@ -80,6 +111,7 @@ export const pendingApprovalView = v.object({
     expiresAt: v.optional(v.string()),
   }),
   createdAt: v.number(),
+  decisionContext: v.optional(approvalDecisionContext),
 })
 export const approvalDecisionResult = v.union(
   v.object({ kind: v.union(v.literal('approved'), v.literal('denied'), v.literal('replayed')), callRef: v.string() }),

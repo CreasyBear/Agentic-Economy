@@ -11,7 +11,7 @@ import { readCurrentPublishedTool } from '../../capabilitySupplyTools'
 import { enqueueCallDispatch } from './dispatch'
 import { assertAgentAccessRateAdmission } from '../rateLimit'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
-import { pricingConfigDecisionAmount } from '@/modules/money/public'
+import { exactAmountSchema, pricingConfigDecisionAmount } from '@/modules/money/public'
 import { isBoundedJsonValue, type JsonValue } from '@/modules/capability-contract/public'
 import { isRecord } from '@/modules/common/is-record'
 import { createPublicToolRef, isPublicToolRef } from '@/modules/capability-supply/public'
@@ -37,6 +37,8 @@ import {
   type NormalizedStoredAgentAccessGrant,
 } from '@/modules/agent-access/policy'
 import { toolProviderRouteabilityIsFrozen } from '../providerOffboardingFreeze'
+import type { CallApprovalDecisionContext } from '@/modules/capability-execution/call-approval-contracts'
+import type { pendingApprovalView } from './contracts'
 
 export function assertJsonObject(value: unknown): asserts value is Record<string, JsonValue> {
   if (!isRecord(value) || !isBoundedJsonValue(value)) throw new Error('operation_invocation_json_invalid')
@@ -136,20 +138,7 @@ export type AbandonResult =
 type CallRow = Doc<'capabilityCalls'>
 type GrantRow = Doc<'agentAccessGrants'>
 
-export type PendingApprovalView = Readonly<{
-  callRef: string
-  toolRef: string
-  authorityRequest: {
-    kind: 'approval_required' | 'spending_policy'
-    toolRef: string
-    consequence: 'read_only' | 'communication' | 'external_effect'
-    retryClass: 'replayable' | 'attributable_retry' | 'reconcile_before_retry'
-    maximumSpend?: { currency: string; units: string; exponent: number }
-    dataFields: string[]
-    expiresAt?: string
-  }
-  createdAt: number
-}>
+export type PendingApprovalView = Infer<typeof pendingApprovalView>
 
 export type ApprovalDecisionResult =
   | { kind: 'approved' | 'denied' | 'replayed'; callRef: string }
@@ -579,17 +568,81 @@ export async function listPendingCallApprovalsHandler(
     ))
     .order('desc')
     .take(50)
-  return rows.flatMap((row) => {
+  const approvals = await Promise.all(rows.map(async (row): Promise<PendingApprovalView[]> => {
     if (row.grantExpiresAt <= now) return []
-    if (row.result?.kind !== 'needs_authority') return []
+    if (!pendingApprovalRow(row)) return []
     if (row.result.callRef !== row.callRef || row.result.toolRef !== row.toolRef) return []
     return [{
       callRef: row.callRef,
       toolRef: row.toolRef,
       authorityRequest: structuredClone(row.result.authorityRequest),
       createdAt: row.createdAt,
+      decisionContext: await approvalDecisionContext(ctx, row),
     }]
-  })
+  }))
+  return approvals.flat()
+}
+
+async function approvalDecisionContext(ctx: QueryCtx, row: PendingApprovalRow): Promise<CallApprovalDecisionContext> {
+  const [currentDisplayName, acceptedQuote] = await Promise.all([
+    approvalAgentName(ctx, row),
+    acceptedApprovalQuote(ctx, row),
+  ])
+  return {
+    agent: { principalRef: row.principalId, applicationRef: row.applicationRef, currentDisplayName },
+    purpose: null,
+    acceptedQuote,
+  }
+}
+
+async function approvalAgentName(ctx: QueryCtx, row: CallRow): Promise<string | null> {
+  const [principal, admission, membership] = await Promise.all([
+    ctx.db.query('principals').withIndex('by_principalRef', (q) => q.eq('principalRef', row.principalId)).unique(),
+    ctx.db.query('agentAccessPrincipals').withIndex('by_principalId', (q) => q.eq('principalId', row.principalId)).unique(),
+    ctx.db.query('memberships').withIndex('by_accountRef_and_memberPrincipalRef_and_lifecycle', (q) => q
+      .eq('accountRef', row.ownerId).eq('memberPrincipalRef', row.principalId).eq('lifecycle', 'active')).first(),
+  ])
+  return principal?.kind === 'agent' && principal.lifecycle === 'active'
+    && membership !== null && admission !== null
+    && admission.ownerId === row.ownerId && admission.applicationRef === row.applicationRef
+    && admission.environment === row.environment
+    ? principal.displayName : null
+}
+
+async function acceptedApprovalQuote(
+  ctx: QueryCtx,
+  row: PendingApprovalRow,
+): Promise<CallApprovalDecisionContext['acceptedQuote']> {
+  const quote = await ctx.db.query('capabilityQuotes')
+    .withIndex('by_quoteRef', (q) => q.eq('quoteRef', row.quoteRef)).unique()
+  if (quote === null) return { kind: 'unavailable', reason: 'quote_missing' }
+  // A consumed Quote stays the accepted record after expiry. It must link to
+  // this exact Call, Account, Agent, authority generation and input material.
+  if (![quote.state === 'consumed', quote.consumedCallRef === row.callRef,
+    quote.accountRef === row.ownerId, quote.principalId === row.principalId,
+    quote.applicationRef === row.applicationRef, quote.credentialId === row.credentialId,
+    quote.environment === row.environment, quote.grantRef === row.grantRef,
+    quote.grantGeneration === row.grantGeneration, quote.grantPolicyDigest === row.policyDigest,
+    quote.grantExpiresAt === row.grantExpiresAt, quote.toolRef === row.toolRef,
+    quote.inputDigest === row.inputDigest, quote.normalizedInputJson === row.inputJson,
+    quote.toolJson === row.toolJson,
+  ].every(Boolean)) return { kind: 'unavailable', reason: 'quote_mismatch' }
+  const material = loadApprovalMaterial(row)
+  const maximumSpend = { currency: 'AUD', units: quote.decisionAudUnits, exponent: 6 } as const
+  if (material === null || !exactAmountSchema.safeParse(maximumSpend).success
+    || quote.toolMaterialDigest !== material.operation.materialDigest
+    || quote.toolVersion !== material.operation.identity.publicationRevision
+    || !approvalRequestMatches(row, material.operation, materializeRuntimePublishedTool(material.operation))) {
+    return { kind: 'unavailable', reason: 'material_invalid' }
+  }
+  const contract = material.operation.contract
+  return {
+    kind: 'available', quoteRef: quote.quoteRef,
+    tool: { name: contract.name, description: contract.description },
+    provider: { ref: material.operation.identity.businessId, name: null },
+    maximumSpend,
+    dataUse: structuredClone(contract.dataUse), effects: structuredClone(contract.effects),
+  }
 }
 
 type NeedsAuthorityResult = Extract<NonNullable<CallRow['result']>, { kind: 'needs_authority' }>
