@@ -49,6 +49,8 @@ type FundingUiState = Readonly<{
   operation: 'idle' | 'starting' | 'checking'
   amountText: string
   amountInvalid: boolean
+  amountErrorMessage: string | undefined
+  quoteRefreshRequiredForDigest: string | undefined
   session: CreditPaymentSession | undefined
   paymentStatus: CreditPaymentStatus | undefined
   errorMessage: string | undefined
@@ -57,7 +59,9 @@ type FundingUiState = Readonly<{
 
 type FundingUiAction =
   | Readonly<{ type: 'amount_changed'; amountText: string; valid: boolean }>
-  | Readonly<{ type: 'amount_rejected' }>
+  | Readonly<{ type: 'amount_rejected'; errorMessage: string }>
+  | Readonly<{ type: 'quote_refresh_required'; policyDigest: string }>
+  | Readonly<{ type: 'quote_refresh_ready' }>
   | Readonly<{ type: 'operation_started'; operation: 'starting' | 'checking' }>
   | Readonly<{ type: 'operation_finished' }>
   | Readonly<{ type: 'recovery_found'; recovery: RecoveryLocator }>
@@ -72,6 +76,8 @@ const initialFundingUiState: FundingUiState = Object.freeze({
   operation: 'idle',
   amountText: '',
   amountInvalid: false,
+  amountErrorMessage: undefined,
+  quoteRefreshRequiredForDigest: undefined,
   session: undefined,
   paymentStatus: undefined,
   errorMessage: undefined,
@@ -81,9 +87,18 @@ const initialFundingUiState: FundingUiState = Object.freeze({
 function fundingUiReducer(state: FundingUiState, action: FundingUiAction): FundingUiState {
   switch (action.type) {
     case 'amount_changed':
-      return { ...state, amountText: action.amountText, amountInvalid: action.valid ? false : state.amountInvalid }
+      return {
+        ...state,
+        amountText: action.amountText,
+        amountInvalid: action.valid ? false : state.amountInvalid,
+        amountErrorMessage: action.valid ? undefined : state.amountErrorMessage,
+      }
     case 'amount_rejected':
-      return { ...state, amountInvalid: true }
+      return { ...state, amountInvalid: true, amountErrorMessage: action.errorMessage }
+    case 'quote_refresh_required':
+      return { ...state, quoteRefreshRequiredForDigest: action.policyDigest }
+    case 'quote_refresh_ready':
+      return { ...state, quoteRefreshRequiredForDigest: undefined, errorMessage: undefined }
     case 'operation_started':
       return { ...state, operation: action.operation, errorMessage: undefined }
     case 'operation_finished':
@@ -138,11 +153,21 @@ export function AeAccountFundingPanel({
   redirectToCheckout = defaultCheckoutRedirect,
 }: AeAccountFundingPanelProps) {
   const [state, dispatch] = useReducer(fundingUiReducer, initialFundingUiState)
-  const { amountInvalid, amountText, errorMessage, paymentStatus, recovery, session } = state
+  const {
+    amountErrorMessage,
+    amountInvalid,
+    amountText,
+    errorMessage,
+    paymentStatus,
+    quoteRefreshRequiredForDigest,
+    recovery,
+    session,
+  } = state
   const pending = state.operation === 'starting'
   const checking = state.operation === 'checking'
   const idempotencyKey = useRef<string | undefined>(undefined)
   const recoveryAttempted = useRef(false)
+  const quoteRefreshInFlight = useRef(false)
   const policy = useMemo(() => constraints?.kind === 'available'
     ? {
         minimumPrincipalUnits: BigInt(constraints.minimumPrincipalUnits),
@@ -164,6 +189,29 @@ export function AeAccountFundingPanel({
     [policy],
   )
   const selectedPrincipalUnits = canonicalAudUnits(amountText)
+  const quoteRefreshRequired = quoteRefreshRequiredForDigest !== undefined
+    && (constraints?.kind !== 'available'
+      || constraints.policyDigest === quoteRefreshRequiredForDigest)
+
+  useEffect(() => {
+    if (quoteRefreshRequiredForDigest === undefined
+      || constraints?.kind !== 'available'
+      || constraints.policyDigest === quoteRefreshRequiredForDigest) return
+    dispatch({ type: 'quote_refresh_ready' })
+  }, [constraints, quoteRefreshRequiredForDigest])
+
+  async function refreshFundingQuote() {
+    if (onRefresh === undefined || quoteRefreshInFlight.current) return
+    quoteRefreshInFlight.current = true
+    try {
+      await onRefresh()
+    } catch (cause) {
+      captureClientExceptionOnClient(cause)
+      dispatch({ type: 'error_changed', errorMessage: 'Funding limits changed before payment started. The quote could not be refreshed; try refreshing it again before paying.' })
+    } finally {
+      quoteRefreshInFlight.current = false
+    }
+  }
 
   const readCanonicalPayment = useCallback(async (locator: RecoveryLocator) => {
     if (port === undefined) return
@@ -211,10 +259,10 @@ export function AeAccountFundingPanel({
   }, [port, readCanonicalPayment])
 
   async function beginTopUp() {
-    if (pending || port === undefined) return
+    if (pending || quoteRefreshRequired || port === undefined) return
     const units = canonicalAudUnits(amountText)
     if (units === undefined || policy === undefined || constraints?.kind !== 'available' || quoteAudAccountFunding(units, policy) === undefined) {
-      dispatch({ type: 'amount_rejected' })
+      dispatch({ type: 'amount_rejected', errorMessage: fundingAmountErrorCopy(amountText, policy, constraints) })
       return
     }
     const nextIdempotencyKey = idempotencyKey.current ?? `account-funding:${randomId()}`
@@ -235,11 +283,14 @@ export function AeAccountFundingPanel({
       if (result.kind === 'refused') {
         dispatch({ type: 'error_changed', errorMessage: topUpErrorCopy(result) })
         if (result.code === 'price_changed') {
-          try {
-            await onRefresh?.()
-          } catch (cause) {
-            captureClientExceptionOnClient(cause)
-          }
+          dispatch({ type: 'quote_refresh_required', policyDigest: constraints.policyDigest })
+          dispatch({
+            type: 'error_changed',
+            errorMessage: onRefresh === undefined
+              ? 'Funding limits changed before payment started. A current quote is unavailable; refresh this page before trying again.'
+              : 'Funding limits changed before payment started. Refresh the quote before trying again.',
+          })
+          await refreshFundingQuote()
         }
         return
       }
@@ -311,7 +362,14 @@ export function AeAccountFundingPanel({
         {errorMessage !== undefined ? (
           <Alert variant={paymentStatus === 'failed' ? 'destructive' : 'default'}>
             <AlertTitle>{paymentStatus === 'failed' ? 'Payment did not complete' : 'Payment status'}</AlertTitle>
-            <AlertDescription>{errorMessage}</AlertDescription>
+            <AlertDescription>
+              <span>{errorMessage}</span>
+              {quoteRefreshRequired && onRefresh !== undefined ? (
+                <Button type="button" variant="secondary" disabled={pending || checking} onClick={() => void refreshFundingQuote()}>
+                  Refresh funding quote
+                </Button>
+              ) : null}
+            </AlertDescription>
           </Alert>
         ) : null}
         {checking ? <p className="text-sm text-muted-foreground" role="status">Checking payment status…</p> : null}
@@ -372,11 +430,26 @@ export function AeAccountFundingPanel({
               autoComplete="off"
               value={amountText}
               onChange={(event) => {
+                const units = canonicalAudUnits(event.target.value)
                 dispatch({
                   type: 'amount_changed',
                   amountText: event.target.value,
-                  valid: canonicalAudUnits(event.target.value) !== undefined,
+                  valid: units !== undefined
+                    && policy !== undefined
+                    && constraints?.kind === 'available'
+                    && quoteAudAccountFunding(units, policy) !== undefined,
                 })
+              }}
+              onBlur={() => {
+                if (amountText.trim().length === 0) return
+                const units = canonicalAudUnits(amountText)
+                const valid = units !== undefined
+                  && policy !== undefined
+                  && constraints?.kind === 'available'
+                  && quoteAudAccountFunding(units, policy) !== undefined
+                if (!valid) {
+                  dispatch({ type: 'amount_rejected', errorMessage: fundingAmountErrorCopy(amountText, policy, constraints) })
+                }
               }}
               disabled={pending || checking}
               placeholder="10.00"
@@ -386,7 +459,7 @@ export function AeAccountFundingPanel({
             <p id="account-funding-amount-help" className="text-xs text-muted-foreground">
               Add {formatAudAmountString(constraints.minimumPrincipalUnits)} to {formatAudAmountString(constraints.maximumPrincipalUnits)} in {formatAudAmountString(constraints.incrementUnits)} increments.
             </p>
-            {amountInvalid ? <p id="account-funding-amount-error" className="text-sm text-destructive" role="alert">Enter an amount within the displayed limits and increments.</p> : null}
+            {amountInvalid ? <p id="account-funding-amount-error" className="text-sm text-destructive" role="alert">{amountErrorMessage ?? 'Enter an amount within the displayed limits and increments.'}</p> : null}
             {preview === undefined ? null : (
               <div className="grid gap-3 rounded-lg border border-border/70 bg-muted/30 p-3 text-sm" role="group" aria-label="Funding quote and payment">
                 <p className="m-0 text-muted-foreground">
@@ -402,7 +475,7 @@ export function AeAccountFundingPanel({
                 </dl>
                 <div className="border-t border-border/70 pt-3">
                   <Button
-                    disabled={pending || checking}
+                    disabled={pending || checking || quoteRefreshRequired}
                     onClick={() => void beginTopUp()}
                     className="min-h-touch"
                   >
@@ -445,6 +518,20 @@ function topUpErrorCopy(result: MoneyRefusal | AccountFundingOutcomeUnknownResul
   if (result.code === 'commercial_policy_required') return 'Production funding is not enabled because the required commercial approvals are not current. No payment started.'
   if (result.code === 'funding_pending' || result.code === 'funding_outcome_unknown') return 'Payment is still being verified. Your Account balance will not change until the canonical server readback completes.'
   return 'Account funding could not be started. No payment was confirmed; try again.'
+}
+
+function fundingAmountErrorCopy(
+  amountText: string,
+  policy: AudFundingPolicy | undefined,
+  constraints: AccountFundingConstraints | undefined,
+): string {
+  const units = canonicalAudUnits(amountText)
+  if (units === undefined) return 'Enter a valid AUD amount with up to 6 decimal places.'
+  if (policy === undefined || constraints?.kind !== 'available') return 'Funding limits could not be confirmed. Refresh and try again.'
+  if (units < policy.minimumPrincipalUnits) return `Enter at least ${formatAudUnits(policy.minimumPrincipalUnits)}.`
+  if (units > policy.maximumPrincipalUnits) return `Enter no more than ${formatAudUnits(policy.maximumPrincipalUnits)}.`
+  if (units % policy.incrementUnits !== 0n) return `Enter an amount in ${formatAudUnits(policy.incrementUnits)} increments.`
+  return 'Enter an amount within the displayed limits and increments.'
 }
 
 function paymentReadErrorCopy(result: MoneyRefusal): string {

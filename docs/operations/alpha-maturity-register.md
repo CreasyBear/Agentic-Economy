@@ -41,12 +41,10 @@ For each assigned record:
    audit or cleanup loop between records. Missing paperwork does not invalidate
    correct work; establish the missing substantive evidence without restarting it.
 
-**Current controlled assignments:** backend next owns AM-07, following source
-acceptance of AM-06 and the earlier AM-20/02/04/05 outcomes. Follow the explicit
-order below. UX completed its authorized workspace source closeout and is
-archived; do not wake it for backend dependencies or deferred browser proof.
-AM-27's outstanding source dependencies remain with their owning records.
-Workers remain isolated; the manager resolves cross-record dependencies.
+**Current controlled assignments: STOPPED at Joel's request after AM-07.**
+AM-07 is source-accepted. Do not start AM-09 or another release record without
+new user authorization. Monitoring is paused. UX remains archived. Outstanding
+cross-record dependencies are retained for a future explicitly resumed session.
 
 **UX phase boundary:** address every existing finding at source first. During
 this phase use the selected skills/contracts and narrow relevant source checks;
@@ -156,7 +154,7 @@ at Quote/Call admission and before paid effects.
 
 | ID | Given / When → Then | Failure, recovery or linked check | Status | Source status / next owner action | Evidence or outstanding proof |
 | --- | --- | --- | --- | --- | --- |
-| AM-07 | Given a requested AUD credit amount, the Customer sees credit, separate service fee and total before authorizing Checkout; Checkout charges the accepted total without reducing the promised credit | Invalid or expired quotes are refused with a working correction/requote path before a changed obligation is accepted; no silent price or credit substitution | PARTIAL | SOURCE GAP (verification) — Funding + UX: finish fee/credit/total hierarchy and trace quote expiry/refusal to executable recovery. | Observed A$10 credit and A$10.55 total; quote expiry/invalid-input acceptance outstanding |
+| AM-07 | Given a requested AUD credit amount, the Customer sees credit, separate service fee and total before authorizing Checkout; Checkout charges the accepted total without reducing the promised credit | Invalid or expired quotes are refused with a working correction/requote path before a changed obligation is accepted; no silent price or credit substitution | PARTIAL | SOURCE VERIFIED — Exact credit/fee/tax/total precedes Checkout; invalid amounts retain correction, stale policy blocks Pay and refresh requires explicit acceptance of the new total. Canonical policy expiry and digest validation precede new obligations; accepted commands replay unchanged. | Source `542d59e0b` plus manager optional-prop test correction. Final three-file matrix 46/46 in candidate and main working tree; candidate combined typecheck and scoped lint pass. Five-minute advisory quote expiry is freshness, not payment authority; caller-supplied quote/expiry/total is refused. Checkout expiry and negative return remain AM-09. Hosted proof deferred. |
 | AM-08 | Given one successful sandbox Checkout, the Customer returns to the same Account and sees the exact requested credit, supported by matching Stripe settlement and Formance posting | Refreshing the return page preserves that balance and the same document references. Browser return alone cannot authorize credit; forced delivery/reordering checks are AM-10 | VERIFIED | SOURCE VERIFIED — Exact booking/finalization tests plus the retained successful payment/return receipt cover this narrow row. | A$10.55 payment → A$10 credit; event `evt_1UF9SZ70N4UjLqHtsVtI98CB`, PaymentIntent `pi_3UF9SY70N4UjLqHt0Pfx80wX`; return refresh retained the balance and documents |
 | AM-09 | Given Checkout that is cancelled, fails or expires, the Customer returns to an understandable funding state and can begin the permitted retry without repairing the Account | No confirmed settlement means no credit. If a payment did settle despite a failed browser return, show its durable status instead of inviting an unnecessary second payment | NOT VERIFIED | SOURCE GAP — Funding + UX: funding-return repair is integrated; resolve executable Checkout/Agent return context and negative-path coverage. | Hosted negative funding journeys outstanding |
 | AM-10 | Given an accepted funding payment, duplicate or reordered Stripe events converge on the same Account credit, fee and document identities | Replay or interrupt processing before and after posting; no duplicate or missing effect, false completion or second Checkout required to repair the first | PARTIAL | SOURCE GAP (verification) — Funding owner: map event reordering and interruption around posting to once-only convergence tests. | Refresh replay verified; forced event duplicate/reordering proof outstanding |
@@ -216,7 +214,7 @@ close its parent until the parent's acceptance is met.
 
 The **Record-by-record execution** assignment and numeric queue above supersede
 the earlier Provider/buyer milestone ordering. AM-20, AM-02, AM-04, AM-05 and AM-06 are now source-accepted;
-AM-07 is next. Historical contributor notes below remain evidence, not an active
+AM-07 is now source-accepted and execution is stopped at Joel's request. Historical contributor notes below remain evidence, not an active
 alternative queue. Run affected source checks at coherent integration boundaries;
 full browser/release review follows source completion. No deployment is authorized.
 
@@ -762,3 +760,22 @@ Hosted provider cleanup, simultaneous clients and production transaction
 scheduling remain unverified; hosted status remains NOT VERIFIED. Source totals
 are **9 verified, 17 unclosed, 6 hosted-only** out of 32. Backend next owns AM-07,
 then AM-09 after whole-record manager acceptance.
+
+
+## AM-07 manager source acceptance and requested stop — 2026-09-14
+
+AM-07 source is accepted after the final optional-prop test correction.
+`npm test -- tests/unit/ui/demand-console.test.tsx tests/unit/server/funding-handoff-api.test.ts tests/unit/convex/money-account-funding.test.ts`
+passes 46/46 in both candidate and main working tree. Candidate
+`npm run typecheck`, scoped Oxlint and diff checks pass. Earlier condition-level
+proof remains in `alpha-release-design.md`; no full browser or hosted claim.
+
+The five-file source patch and test correction are applied to main's working
+tree. Its funding test already contained unrelated uncommitted financial
+prerequisites: those edits and the new test remain unstaged together, preserved
+without folding the baseline into this acceptance commit. The candidate retains
+the complete committed source/test record. Other AM-07 files are committed on main.
+
+Totals: **10 source verified, 16 source unclosed, 6 hosted-only** out of 32.
+**STOPPED after AM-07 at Joel's request.** AM-09 is not started. Monitoring is
+paused and UX remains archived. Resume only on new user instruction.

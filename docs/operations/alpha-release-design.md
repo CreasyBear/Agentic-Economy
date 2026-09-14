@@ -322,6 +322,77 @@ indexes, lifecycle results and provider readback constrain the correction.
 The manager owns integrated source acceptance and combined typechecking. Hosted
 provider behavior remains an explicit operational question.
 
+## AM07 Funding quote and Checkout amount agreement
+
+**Contract:** the Customer can distinguish the AUD credit added to the Account,
+the separate funding service fee/tax and the total payable before authorizing
+Checkout. The accepted total buys the promised credit. Invalid, expired or
+changed quote material requires a clear correction before any changed obligation
+is accepted.
+
+  Requires: supported AUD amount/precision/increment, current canonical Account
+  authority, valid current quote/policy material for the supported funding path,
+  and a stable command identity for a retried Checkout request.
+  Ensures: credit is the requested principal; fee and tax are additional amounts;
+  total equals their sum. Provider Checkout uses the accepted command material,
+  and readback must match its amount, metadata, mode and expiry.
+  Invariant: no credential, advisory quote or browser return grants credit.
+  Replaying a command cannot change its Account, principal amount or financial
+  terms. A changed policy cannot silently replace an accepted owner quote.
+  On violation: refuse before creating a new financial command or provider
+  Session where refusal is established; preserve entered work and offer the
+  supported correction/requote. Uncertain provider outcomes recover the same
+  Session/command rather than inviting a second payment.
+
+| Condition | Source and existing evidence |
+| --- | --- |
+| Exact financial calculation | `aud-funding.ts` uses the existing exact-unit/Decimal helpers and commercial controls, rounds fee/tax to cents and adds them to the full principal. `funding-quote.test.ts` covers A$10 credit + A$0.50 fee + A$0.05 tax = A$10.55, constraints and unsupported/out-of-range precision. Public preflight quotes explicitly say `binding: false`; they are not payment authorization. |
+| Current owner policy | `moneyAccountFunding.reserveFundingHandler` validates canonical owner and expected commercial policy digest before storing the command. The existing changed-policy test refuses with no funding command. Its replay is bound to the original Account, input digest, amount and environment. |
+| Exact hosted Checkout | `stripe-checkout-evidence.ts` uses the installed Stripe client, fixed command material and provider idempotency key. Existing provider tests assert separate credit/fee line items, inclusive tax evidence, same-key replay, durable request readback, material-drift refusal and invalid amount refusal before provider I/O. |
+| Clear correction before payment | The funding panel preserves invalid input and explains format, minimum and increment errors accessibly. A changed policy blocks stale payment, refreshes through the existing owner callback and requires another explicit Pay action against the new displayed total. Failed refresh retains a retry even when constraints become unavailable; only an available different policy digest clears the block. |
+
+Eight selected quote/provider/canonical-policy checks pass. Six selected public
+preflight/owner entry cases also pass. The new canonical owner test fixes the
+principal/fee/tax/total, replays the exact command and refuses changed material
+without modifying its stored snapshot. Two HTTP cases reject caller-supplied
+advisory quote identity/expiry or total before handoff creation. Current-policy
+expiry and the entry adapter's no-provider-work refusal each pass a selected
+existing test. The UI agent reports all 30 cases in `demand-console.test.tsx`
+passing. Final review corrected the missing-constraints refresh edge and reran
+the five quote-refresh/input-correction cases: all pass (25 unrelated cases
+skipped). These are source checks; combined typecheck, integration acceptance
+and hosted proof remain with the integration owner.
+
+**Manager interpretation of expiry:** v3 public `binding: false` and its
+five-minute `expiresAt` describe estimate freshness, not an accepted purchase
+or an expiring quote token. Refresh that estimate through its existing quote
+endpoint before relying on it for comparison; the handoff accepts only requested
+principal plus idempotency key, never an advisory total. It reads current policy
+and returns the actual reserved terms before the payer reviews Stripe Checkout.
+The owner preview similarly sends the policy digest rather than a quote token.
+New obligations reject changed terms (`price_changed`) or unavailable/expired
+commercial policy (`commercial_policy_required`) before provider work. Already
+accepted same-command replay preserves immutable terms; it does not reprice.
+This distinction preserves the acceptance condition without claiming rejection
+of a nonexistent quote-token input or adding a parallel quote store. The HTTP
+rejection tests establish unsupported material refusal, not a token-expiry
+mechanism. Missing Checkout Session/negative-return recovery and the owner's
+lost `begin` response remain explicitly with AM09; these are not claimed fixed.
+
+The existing accepted AM08 settlement and credit receipt is reused; webhook
+reordering and cancelled/failed payment return retain AM09/10 ownership.
+
+Applied `sluice`, `contract-enforcer`, `idempotency-guardian` and the Stripe
+integration skill to the existing Checkout Sessions integration. Official
+[Checkout Session creation](https://docs.stripe.com/api/checkout/sessions/create)
+defines line items and a provider Session expiry of 30 minutes to 24 hours;
+that provider lifetime is distinct from AE's quote validity. No SDK migration,
+new payment service or homemade payment form is part of this record.
+Contract and failure review reused the existing component, exact-money helpers,
+canonical funding command and Stripe adapter. The change adds no service,
+dependency, storage or public protocol. The finite AM07 source assignment ends
+at this handoff; AM09 recovery is explicitly unverified here.
+
 ## Provider lifecycle contract
 
 The user submits one reviewed Tool version and sees its progress on the same

@@ -83,6 +83,28 @@ describe('agent funding handoff HTTP boundary', () => {
     })
   })
 
+  it.each([
+    ['advisory estimate', { quoteRef: `sha256:${'1'.repeat(64)}`, expiresAt: 1 }],
+    ['caller-priced total', { totalPaymentAmount: { currency: 'AUD', exponent: 6, units: '1' } }],
+  ] as const)('refuses %s material before creating a funding Session', async (_label, extra) => {
+    const funding = service()
+    const result = await handleFundingHandoffAction(
+      new Request('https://ae.example/api/v1/account/funding-sessions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Idempotency-Key': 'untrusted-quote-material' },
+        body: JSON.stringify({
+          principalAmount: { currency: 'AUD', exponent: 6, units: '5000000' },
+          ...extra,
+        }),
+      }),
+      'create', undefined,
+      { authenticate, resolvePrincipal, service: funding },
+    )
+    expect(result.status).toBe(400)
+    await expect(result.json()).resolves.toMatchObject({ code: 'invalid_request' })
+    expect(funding.create).not.toHaveBeenCalled()
+  })
+
   it('makes malformed session references indistinguishable from missing sessions', async () => {
     const funding = service()
     const result = await handleFundingHandoffAction(

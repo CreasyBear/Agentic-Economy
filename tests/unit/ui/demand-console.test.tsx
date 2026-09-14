@@ -462,6 +462,117 @@ describe('assistant access components', () => {
     expect(screen.getByRole('button', { name: /pay A\$7\.92 and add A\$7\.50/i })).toBeTruthy()
   })
 
+  it.each([
+    { value: 'not-an-amount', message: /Enter a valid AUD amount/u },
+    { value: '1.00', message: /Enter at least A\$5\.00/u },
+    { value: '5.005', message: /A\$0\.01 increments/u },
+  ])('keeps $value visible with an accessible correction before allowing exact payment', async ({ value, message }) => {
+    const begin = vi.fn(async (_input: AccountFundingBeginInput) => ({
+      kind: 'refused' as const,
+      code: 'stripe_setup_required' as const,
+      retryable: false,
+    }))
+    render(<AeAccountFundingPanel port={{ begin, read: vi.fn() }} constraints={fundingConstraints} />)
+
+    const input = screen.getByLabelText(/other amount/i) as HTMLInputElement
+    fireEvent.change(input, { target: { value } })
+    fireEvent.blur(input)
+
+    expect(input.value).toBe(value)
+    expect(input.getAttribute('aria-invalid')).toBe('true')
+    expect(screen.getByRole('alert').textContent).toMatch(message)
+    expect(screen.queryByRole('button', { name: /pay /i })).toBeNull()
+
+    fireEvent.change(input, { target: { value: '10.00' } })
+    expect(input.value).toBe('10.00')
+    expect(input.getAttribute('aria-invalid')).toBe('false')
+    expect(screen.queryByRole('alert')).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: /pay A\$10\.55 and add A\$10\.00/i }))
+    await waitFor(() => expect(begin).toHaveBeenCalledOnce())
+    expect(begin).toHaveBeenCalledWith({
+      amount: { currency: 'AUD', units: '10000000', exponent: 6 },
+      expectedPolicyDigest: fundingConstraints.policyDigest,
+      idempotencyKey: expect.any(String),
+    })
+  })
+
+  it('refreshes a changed funding quote before an explicit payment with the new policy digest', async () => {
+    const refreshedConstraints = {
+      ...fundingConstraints,
+      serviceFeeBps: 100,
+      policyDigest: `sha256:${'a'.repeat(64)}`,
+    }
+    let rerender: ReturnType<typeof render>['rerender'] | undefined
+    const onRefresh = vi.fn(async () => {
+      rerender?.(<AeAccountFundingPanel
+        port={{ begin, read: vi.fn() }}
+        constraints={refreshedConstraints}
+        onRefresh={onRefresh}
+      />)
+    })
+    const begin = vi.fn(async (_input: AccountFundingBeginInput) => ({
+      kind: 'refused' as const,
+      code: begin.mock.calls.length === 1 ? 'price_changed' as const : 'stripe_setup_required' as const,
+      retryable: begin.mock.calls.length === 1,
+    }))
+    const rendered = render(<AeAccountFundingPanel
+      port={{ begin, read: vi.fn() }}
+      constraints={fundingConstraints}
+      onRefresh={onRefresh}
+    />)
+    rerender = rendered.rerender
+
+    const input = screen.getByLabelText(/other amount/i)
+    fireEvent.change(input, { target: { value: '10.00' } })
+    fireEvent.click(screen.getByRole('button', { name: /pay A\$10\.55 and add A\$10\.00/i }))
+
+    await waitFor(() => expect(onRefresh).toHaveBeenCalledOnce())
+    expect(screen.getByRole('button', { name: /pay A\$10\.11 and add A\$10\.00/i })).toBeTruthy()
+    expect(begin).toHaveBeenCalledOnce()
+
+    fireEvent.click(screen.getByRole('button', { name: /pay A\$10\.11 and add A\$10\.00/i }))
+    await waitFor(() => expect(begin).toHaveBeenCalledTimes(2))
+    expect(begin.mock.calls[1]?.[0]).toMatchObject({
+      amount: { currency: 'AUD', units: '10000000', exponent: 6 },
+      expectedPolicyDigest: refreshedConstraints.policyDigest,
+    })
+  })
+
+  it('does not offer a stale payment when funding quote refresh fails', async () => {
+    const begin = vi.fn(async (_input: AccountFundingBeginInput) => ({
+      kind: 'refused' as const,
+      code: 'price_changed' as const,
+      retryable: true,
+    }))
+    const onRefresh = vi.fn(async () => {
+      throw new Error('quote source unavailable')
+    })
+    const { rerender } = render(<AeAccountFundingPanel
+      port={{ begin, read: vi.fn() }}
+      constraints={fundingConstraints}
+      onRefresh={onRefresh}
+    />)
+
+    const input = screen.getByLabelText(/other amount/i)
+    fireEvent.change(input, { target: { value: '10.00' } })
+    fireEvent.click(screen.getByRole('button', { name: /pay A\$10\.55 and add A\$10\.00/i }))
+
+    await waitFor(() => expect(onRefresh).toHaveBeenCalledOnce())
+    expect(begin).toHaveBeenCalledOnce()
+    expect(screen.getByRole('alert').textContent).toContain('could not be refreshed')
+    expect((screen.getByRole('button', { name: /pay A\$10\.55 and add A\$10\.00/i }) as HTMLButtonElement).disabled).toBe(true)
+
+    rerender(<AeAccountFundingPanel
+      port={{ begin, read: vi.fn() }}
+      onRefresh={onRefresh}
+    />)
+    expect(screen.queryByRole('button', { name: /pay /i })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh funding quote' }))
+    await waitFor(() => expect(onRefresh).toHaveBeenCalledTimes(2))
+    expect(begin).toHaveBeenCalledOnce()
+  })
+
   it('starts a bound hosted Checkout Session and redirects without persisting payment material', async () => {
     const session: CreditPaymentSession = {
       kind: 'hosted_redirect',
