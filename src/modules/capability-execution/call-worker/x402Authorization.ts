@@ -715,11 +715,15 @@ export function createX402PaymentCallbacks(
 ): X402PaymentCallbacks {
   const managedBuyer = input.useCustodySigner === true
     && input.dispatch.sellerOnboardingCanary === undefined
+  const managedCanary = input.useCustodySigner === true
+    && input.dispatch.environment === 'sandbox'
+    && input.dispatch.sellerOnboardingCanary?.executionPurpose === 'seller_onboarding_canary'
 
   const settleManagedPreparationFailure = async (
     attempt: X402AttemptMaterial | null | undefined,
     reason: 'authorization_unavailable' | 'preparation_failed',
   ): Promise<void> => {
+    if (!managedBuyer) return
     const observedAt = Date.now()
     if (attempt === null || attempt?.state === 'prepared') {
       await ctx.runAction(internal.moneyManagedCallLifecycle.releaseBeforeSubmission, {
@@ -763,7 +767,7 @@ export function createX402PaymentCallbacks(
     prepared: X402PreparedAuthorization,
     byDigest: boolean,
   ): Promise<string | undefined> => {
-    if (!managedBuyer) return undefined
+    if (!managedBuyer && !managedCanary) return undefined
     const requestFingerprint = requestFingerprintFromPrepared(prepared)
     const requestFingerprintContext = input.useCustodySigner === true
       ? (() => {
@@ -935,7 +939,7 @@ export function createX402PaymentCallbacks(
       })
     },
     prepareX402PaymentAuthorization: async (request) => {
-      if (!managedBuyer) return undefined
+      if (!managedBuyer && !managedCanary) return undefined
       if (
         request.attemptRef !== input.durableAttemptRef
         || request.effectGeneration !== input.effectGeneration
@@ -970,13 +974,13 @@ export function createX402PaymentCallbacks(
               exponent: request.paymentAmount.exponent,
             },
           }
-      const managedBuyerReservation = await ctx.runQuery(
+      const managedBuyerReservation = managedBuyer ? await ctx.runQuery(
         internal.moneyManagedCallLifecycle.readReservation,
         { callRef: input.dispatch.callRef },
-      )
-      if (managedBuyerReservation === null || managedBuyerReservation.state !== 'reserved') return undefined
-      const reservationRef = managedBuyerReservation.treasuryReservationRef
-        ?? managedBuyerReservation.reservationRef
+      ) : null
+      if (managedBuyer && (managedBuyerReservation === null || managedBuyerReservation.state !== 'reserved')) return undefined
+      const reservationRef = managedBuyerReservation?.treasuryReservationRef
+        ?? managedBuyerReservation?.reservationRef
       try {
         const prepareBase = {
           dispatchRef: input.dispatch.callRef,
@@ -998,7 +1002,7 @@ export function createX402PaymentCallbacks(
           amountUnits: request.paymentAmount.units,
           currency: request.paymentAmount.currency,
           exponent: request.paymentAmount.exponent,
-          reservationRef,
+          ...(reservationRef === undefined ? {} : { reservationRef }),
         }
         const prepareArgs = custody === undefined
           ? {
@@ -1013,7 +1017,9 @@ export function createX402PaymentCallbacks(
               ...(requestFingerprint === undefined ? {} : { requestFingerprint }),
             }
         const prepared = await ctx.runMutation(
-          internal.moneyX402PaymentAttempts.prepareX402PaymentAuthorization,
+          managedCanary
+            ? internal.moneyX402PaymentAttempts.prepareSellerOnboardingCanaryPaymentAuthorization
+            : internal.moneyX402PaymentAttempts.prepareX402PaymentAuthorization,
           prepareArgs,
         )
         return requestFingerprint === undefined

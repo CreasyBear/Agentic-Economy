@@ -1122,10 +1122,10 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
                 : authorizationCurrentOperation,
           )
         case 'moneyLedger:readOperatorAccountVersion': return operatorAccountVersion
-        case 'moneyManagedCallLifecycle:readReservation': return {
+        case 'moneyManagedCallLifecycle:readReservation': return sellerCanary === undefined ? {
           ...managedCallReservation,
           state: managedCallState,
-        }
+        } : null
         case 'capabilityCalls:readCurrentProviderConnectionAuthority':
           return sellerCanary === undefined
             ? { kind: 'credentialed' }
