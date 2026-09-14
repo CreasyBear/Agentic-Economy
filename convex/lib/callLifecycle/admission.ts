@@ -613,8 +613,10 @@ async function acceptedApprovalQuote(
   ctx: QueryCtx,
   row: PendingApprovalRow,
 ): Promise<CallApprovalDecisionContext['acceptedQuote']> {
+  const quoteRef = row.quoteRef
+  if (quoteRef === undefined) return { kind: 'unavailable', reason: 'quote_missing' }
   const quote = await ctx.db.query('capabilityQuotes')
-    .withIndex('by_quoteRef', (q) => q.eq('quoteRef', row.quoteRef)).unique()
+    .withIndex('by_quoteRef', (q) => q.eq('quoteRef', quoteRef)).unique()
   if (quote === null) return { kind: 'unavailable', reason: 'quote_missing' }
   // A consumed Quote stays the accepted record after expiry. It must link to
   // this exact Call, Account, Agent, authority generation and input material.

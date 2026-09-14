@@ -407,12 +407,14 @@ describe('capability operation approval Convex handlers', () => {
     expect(ctx.db.rows('capabilityQuotes')).toEqual([acceptedQuote()])
   })
 
-  it('keeps a pending approval visible with unavailable accepted facts when its Quote is missing', async () => {
-    const ctx = context({ invocation: invocation() })
+  it.each([quoteRef, undefined])('keeps a pending approval visible when its Quote or reference is missing: %s', async (reference) => {
+    const ctx = context({ invocation: invocation({ quoteRef: reference }) })
+    const query = vi.spyOn(ctx.db, 'query')
     await expect(listHandler(ctx, {})).resolves.toMatchObject([{ decisionContext: {
       agent: { currentDisplayName: null }, purpose: null,
       acceptedQuote: { kind: 'unavailable', reason: 'quote_missing' },
     } }])
+    if (reference === undefined) expect(query).not.toHaveBeenCalledWith('capabilityQuotes')
   })
 
   it.each([
