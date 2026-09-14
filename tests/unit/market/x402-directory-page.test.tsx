@@ -34,7 +34,7 @@ function show(search: Props['search'] = { offset: 20 }, items = entries, extra: 
     result.rerender(<RouterContextProvider router={router}><AeX402Directory
       page={{ kind: 'ok', items, total: 14455, offset: 20, limit: 20, nextOffset: 40, previousOffset: 0 }}
       {...extra} search={nextSearch} /></RouterContextProvider>)
-  }, updateCatalogue(nextSearch: Props['search'], nextPage: Props['page'], nextCatalogue: Props['catalogue']) {
+  }, updateCatalogue(nextSearch: Props['search'], nextPage: Props['page'], nextCatalogue: NonNullable<Props['catalogue']>) {
     result.rerender(<RouterContextProvider router={router}><AeX402Directory
       {...extra} page={nextPage} catalogue={nextCatalogue} search={nextSearch} /></RouterContextProvider>)
   } }
