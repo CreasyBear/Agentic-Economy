@@ -66,11 +66,11 @@ function OwnerMcpOAuthCallbackRoute() {
     <AeOperatorPage
       operatorRole="owner"
       title="Service connection"
-      description="Return to Add service after the source confirms authentication."
+      description="Return to Add Tool after the source confirms authentication."
       currentPath="/owner/operations/new"
       breadcrumbs={[
-        { label: 'Operations', href: '/owner/operations' },
-        { label: 'Add service', href: '/owner/operations/new' },
+        { label: 'Tools', href: '/owner/operations' },
+        { label: 'Add Tool', href: '/owner/operations/new' },
         { label: 'Service connection' },
       ]}
     >
@@ -79,12 +79,12 @@ function OwnerMcpOAuthCallbackRoute() {
           <AlertTitle>{connected ? 'Service connected' : statusUnavailable ? 'Connection status unavailable' : 'Service not connected'}</AlertTitle>
           <AlertDescription>
             <p>{connected
-              ? 'AE verified the live MCP source and stored its connection. Return to Add service to continue.'
-              : 'AE could not confirm the source connection. Return to Add service to review the saved source and current connection status before retrying.'}</p>
+              ? 'AE verified the live MCP source and stored its connection. Return to Add Tool to continue.'
+              : 'AE could not confirm the source connection. Return to Add Tool to review the saved source and current connection status before retrying.'}</p>
               <Button asChild variant="secondary" className="mt-4 min-h-touch">
               <Link to="/owner/operations/new" search={'continuationDraftRef' in result && result.continuationDraftRef !== undefined
                 ? { draft: result.continuationDraftRef }
-                : {}}>Return to Add service</Link>
+                : {}}>Return to Add Tool</Link>
             </Button>
           </AlertDescription>
         </Alert>

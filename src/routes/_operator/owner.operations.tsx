@@ -17,7 +17,7 @@ import { parseOwnerToolsCompatibilitySearch } from '@/lib/operator/supply-compat
 export const Route = createFileRoute('/_operator/owner/operations')({
   staticData: {
     nav: {
-      label: 'Operations',
+      label: 'Tools',
       operator: {
         roles: ['owner'],
         group: 'Supply',
@@ -47,7 +47,7 @@ export const Route = createFileRoute('/_operator/owner/operations')({
       offboarding: readOwnerProviderOffboardingServer().catch(() => ({ kind: 'unavailable' as const })),
     }
   },
-  head: () => ({ meta: [{ title: 'Operations | Agentic Economy' }, { name: 'robots', content: 'noindex' }] }),
+  head: () => ({ meta: [{ title: 'Tools | Agentic Economy' }, { name: 'robots', content: 'noindex' }] }),
   component: OwnerOfferingsRoute,
 })
 
@@ -62,7 +62,7 @@ function OwnerOfferingsPending() {
   return (
     <AeOperatorPage
       operatorRole="owner"
-      title="Operations"
+      title="Tools"
       description="Publish the exact tools agents can inspect and call."
       currentPath="/owner/operations"
     >

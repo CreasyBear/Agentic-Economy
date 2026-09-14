@@ -86,13 +86,13 @@ function NewOwnerOfferingRouteView({ publish }: Readonly<{
   const saveDraft = useServerFn(saveOwnerSupplySourceDraftServer)
 
   return (
-    <AeOperatorPage operatorRole="owner" title="Add Tool" description="Connect the interface you already operate. AE discovers the Tools and validates the one you submit." currentPath="/owner/operations/new" breadcrumbs={[{ label: 'Operations', href: '/owner/operations' }, { label: 'Add Tool' }]}>
+    <AeOperatorPage operatorRole="owner" title="Add Tool" description="Connect the interface you already operate. AE discovers the Tools and validates the one you submit." currentPath="/owner/operations/new" breadcrumbs={[{ label: 'Tools', href: '/owner/operations' }, { label: 'Add Tool' }]}>
       {identity.kind !== 'available' ? (
         <Alert variant="destructive">
           <AlertTitle>Provider workspace unavailable</AlertTitle>
           <AlertDescription className="grid gap-related">
-            <p>AE could not confirm the current Business. Return to Operations and try again.</p>
-            <Button asChild variant="outline" className="justify-self-start min-h-touch"><Link to="/owner/operations">Return to Operations</Link></Button>
+            <p>AE could not confirm the current Business. Return to Tools and try again.</p>
+            <Button asChild variant="outline" className="justify-self-start min-h-touch"><Link to="/owner/operations">Return to Tools</Link></Button>
           </AlertDescription>
         </Alert>
       ) : sourceUnavailable ? (

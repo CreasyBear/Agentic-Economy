@@ -123,7 +123,7 @@ function OwnerSupplyDetailRoute() {
       title={name}
       description="Current publication, source health, delivery and Qualified Use."
       currentPath={`/owner/operations/${encodeURIComponent(toolRef)}`}
-      breadcrumbs={[{ label: 'Operations', href: '/owner/operations' }, { label: name }]}
+      breadcrumbs={[{ label: 'Tools', href: '/owner/operations' }, { label: name }]}
     >
       <AeProviderToolDetail
         name={name}

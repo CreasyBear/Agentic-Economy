@@ -167,6 +167,8 @@ describe('Tools management disclosure', () => {
     expect(screen.getAllByTestId('provider-capability-list')).toHaveLength(1)
     expect(rendered.status).toHaveBeenCalledWith({ readback })
     expect(rendered.capabilities).toHaveBeenCalledWith({ catalog: readback.catalog })
+    expect(screen.getByRole('heading', { name: 'Tool availability' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Review public status' })).toBeNull()
   })
 
   it('opens authoritative earnings readback for a Connect return', async () => {
