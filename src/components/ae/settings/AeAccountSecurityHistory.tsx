@@ -8,57 +8,79 @@ import { Button } from '@/components/ui/button'
 import {
   readAccountSecurityHistoryServer,
 } from '@/modules/security/account-security.functions'
-import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
   appendAccountSecurityHistoryPage,
   type AccountSecurityHistoryResult,
 } from '@/modules/security/account-security'
 import { degrade } from '@/lib/observability/degrade'
 
+type AccountSecurityHistoryState = Readonly<{
+  source: AccountSecurityHistoryResult
+  result: AccountSecurityHistoryResult
+  status: 'idle' | 'loading' | 'failed'
+}>
+
+function initialSecurityHistoryState(source: AccountSecurityHistoryResult): AccountSecurityHistoryState {
+  return { source, result: source, status: 'idle' }
+}
+
 export function AeAccountSecurityHistory({
   initialResult,
 }: Readonly<{ initialResult: AccountSecurityHistoryResult }>) {
-  return <AccountSecurityHistoryFrame key={canonicalDigest(initialResult)} initialResult={initialResult} />
-}
-
-function AccountSecurityHistoryFrame({
-  initialResult,
-}: Readonly<{ initialResult: AccountSecurityHistoryResult }>) {
   const readHistory = useServerFn(readAccountSecurityHistoryServer)
-  const [result, setResult] = useState(initialResult)
-  const [loading, setLoading] = useState(false)
-  const [loadFailed, setLoadFailed] = useState(false)
+  const [state, setState] = useState(() => initialSecurityHistoryState(initialResult))
+
+  if (state.source !== initialResult) {
+    setState(initialSecurityHistoryState(initialResult))
+  }
+
+  const current = state.source === initialResult ? state : initialSecurityHistoryState(initialResult)
 
   const load = async (cursor: string | null) => {
-    setLoading(true)
-    setLoadFailed(false)
+    const source = current.source
+    const requestMatches = (candidate: AccountSecurityHistoryState) => candidate.source === source
+      && (cursor === null
+        || (candidate.result.kind === 'available' && candidate.result.page.continueCursor === cursor))
+
+    setState((candidate) => requestMatches(candidate)
+      ? { ...candidate, status: 'loading' }
+      : candidate)
     try {
       const next = await readHistory({ data: cursor === null ? {} : { cursor } })
-      if (next.kind === 'available' && result.kind === 'available' && cursor !== null) {
-        setResult({
-          kind: 'available',
-          page: {
-            ...next.page,
-            items: appendAccountSecurityHistoryPage(result.page, next.page).items,
+      setState((candidate) => {
+        if (!requestMatches(candidate)) return candidate
+        if (cursor === null) return { source, result: next, status: 'idle' }
+        if (candidate.result.kind !== 'available' || next.kind !== 'available') {
+          return { ...candidate, status: 'failed' }
+        }
+        return {
+          source,
+          result: {
+            kind: 'available',
+            page: {
+              ...next.page,
+              items: appendAccountSecurityHistoryPage(candidate.result.page, next.page).items,
+            },
           },
-        })
-      } else if (cursor !== null && result.kind === 'available') {
-        setLoadFailed(true)
-      } else {
-        setResult(next)
-      }
+          status: 'idle',
+        }
+      })
     } catch (cause) {
       const unavailable = degrade(cause, { kind: 'unavailable', reason: 'source_unavailable' } as const, {
         site: 'loadAccountSecurityHistory',
         reason: 'source_unavailable',
       })
-      if (cursor !== null && result.kind === 'available') setLoadFailed(true)
-      else setResult(unavailable)
-    } finally {
-      setLoading(false)
+      setState((candidate) => {
+        if (!requestMatches(candidate)) return candidate
+        return cursor !== null && candidate.result.kind === 'available'
+          ? { ...candidate, status: 'failed' }
+          : { source, result: unavailable, status: 'idle' }
+      })
     }
   }
 
+  const result = current.result
+  const loading = current.status === 'loading'
   const rows = result.kind === 'available' ? result.page.items : []
 
   return (
@@ -84,7 +106,7 @@ function AccountSecurityHistoryFrame({
           emptyMessage="No security events have been recorded since history activation."
           isDone={result.page.isDone}
           loading={loading}
-          loadFailed={loadFailed}
+          loadFailed={current.status === 'failed'}
           onLoadMore={() => void load(result.page.continueCursor)}
         />
       )}

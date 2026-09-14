@@ -1,5 +1,5 @@
 /** @vitest-environment jsdom */
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import '../../setup/jsdom-platform'
@@ -194,33 +194,44 @@ describe('account security history', () => {
     expect(screen.getAllByText('Session revoked')).toHaveLength(1)
   })
 
-  it('does not append an old Account continuation after loader evidence is replaced', async () => {
+  it('does not append an old Account continuation after equal-content loader evidence is replaced', async () => {
     const first = available(false)
     let resolveOlder: ((result: AccountSecurityHistoryResult) => void) | undefined
-    readHistory.mockReturnValueOnce(new Promise<AccountSecurityHistoryResult>((resolve) => {
+    const olderRead = new Promise<AccountSecurityHistoryResult>((resolve) => {
       resolveOlder = resolve
-    }))
-    const next = available()
+    })
+    readHistory.mockReturnValueOnce(olderRead)
     const replacement: AccountSecurityHistoryResult = {
       kind: 'available',
       page: {
-        ...next.page,
-        items: [{
-          ...next.page.items[0]!,
-          eventRef: 'audit:account:replacement',
-          eventType: 'account.session.ended',
-          correlationRef: 'account:replacement',
-        }],
+        ...first.page,
+        items: [...first.page.items],
       },
     }
     const { rerender } = render(<AeAccountSecurityHistory initialResult={first} />)
     fireEvent.click(screen.getByRole('button', { name: 'Load older events' }))
 
     rerender(<AeAccountSecurityHistory initialResult={replacement} />)
-    expect(await screen.findByText('Session ended')).toBeTruthy()
-    resolveOlder?.(available())
-    await waitFor(() => expect(screen.getByText('Session ended')).toBeTruthy())
-    expect(screen.queryByText('Session revoked')).toBeNull()
+    await act(async () => {
+      resolveOlder?.({
+        kind: 'available',
+        page: {
+          items: [{
+            ...first.page.items[0]!,
+            eventRef: 'audit:clerk:older-stale',
+            eventType: 'account.session.ended',
+            correlationRef: 'clerk:older-stale',
+          }],
+          continueCursor: '',
+          isDone: true,
+        },
+      })
+      await olderRead
+    })
+
+    expect(screen.getByText('Session revoked')).toBeTruthy()
+    expect(screen.queryByText('Session ended')).toBeNull()
+    expect(screen.getByRole('button', { name: 'Load older events' })).toBeTruthy()
   })
 })
 
@@ -299,8 +310,10 @@ describe('Agent security history', () => {
     rerender(<AeAgentSecurityHistory principalRef={nextPrincipalRef} />)
     expect(await screen.findByText('Session ended')).toBeTruthy()
 
-    resolveFirst?.(available())
-    await waitFor(() => expect(screen.getByText('Session ended')).toBeTruthy())
+    await act(async () => {
+      resolveFirst?.(available())
+      await firstRead
+    })
     expect(screen.queryByText('Session revoked')).toBeNull()
     expect(readHistory).toHaveBeenCalledWith({ data: { principalRef: nextPrincipalRef } })
   })
