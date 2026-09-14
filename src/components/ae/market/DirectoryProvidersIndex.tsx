@@ -5,10 +5,12 @@ import { ArrowRight, ArrowUpRight, Globe2 } from 'lucide-react'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import type { X402DirectoryProvidersPage } from '@/modules/market/x402-directory-catalogue'
+import { useMarketPath } from './market-navigation-context'
 
 type Props = { result: X402DirectoryProvidersPage }
 
 export function DirectoryProvidersIndex({ result }: Props) {
+  const marketPath = useMarketPath()
   if (result.kind === 'unavailable') return <div role="status" className="rounded-2xl border border-border p-8 text-sm text-muted-foreground">The Provider catalogue is unavailable. Try again shortly.</div>
   return <section aria-label="Provider catalogue" className="flex flex-col gap-6">
     <p className="text-sm text-muted-foreground">Provider hostnames from the indexed catalogue. Tool counts cover the completed directory scan.</p>
@@ -26,13 +28,13 @@ export function DirectoryProvidersIndex({ result }: Props) {
         </CardHeader>
         <CardContent className="flex flex-1 flex-col gap-5 p-5">
           <p className="text-sm text-muted-foreground">{provider.count.toLocaleString()} {provider.count === 1 ? 'Tool' : 'Tools'} in the indexed catalogue</p>
-          <Link to="/market" search={{ view: 'tools', provider: provider.key }} className="mt-auto flex min-h-11 items-center justify-between rounded-full border border-border px-4 text-sm font-medium hover:bg-muted" aria-label={`View Tools from ${provider.key}`}>Explore Tools<ArrowUpRight className="size-4" /></Link>
+          <Link to={marketPath} search={{ view: 'tools', provider: provider.key }} className="mt-auto flex min-h-11 items-center justify-between rounded-full border border-border px-4 text-sm font-medium hover:bg-muted" aria-label={`View Tools from ${provider.key}`}>Explore Tools<ArrowUpRight className="size-4" /></Link>
         </CardContent>
       </Card>)}
     </div>}
     <nav aria-label="Provider catalogue pages" className="flex items-center justify-between gap-4">
-      <Link to="/market" search={{ view: 'providers' }} className="text-sm text-muted-foreground underline underline-offset-4">First page</Link>
-      {!result.isDone && <Link to="/market" search={{ view: 'providers', providerCursor: result.continueCursor }} className="flex min-h-11 items-center gap-2 rounded-full border border-border px-5 text-sm font-medium hover:bg-muted">Next Providers<ArrowRight className="size-4" /></Link>}
+      <Link to={marketPath} search={{ view: 'providers' }} className="text-sm text-muted-foreground underline underline-offset-4">First page</Link>
+      {!result.isDone && <Link to={marketPath} search={{ view: 'providers', providerCursor: result.continueCursor }} className="flex min-h-11 items-center gap-2 rounded-full border border-border px-5 text-sm font-medium hover:bg-muted">Next Providers<ArrowRight className="size-4" /></Link>}
     </nav>
   </section>
 }

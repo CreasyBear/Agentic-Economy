@@ -5,6 +5,7 @@ import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious
 import type { X402MarketplaceHome, X402MarketplaceRail } from '@/modules/market/x402-marketplace-home'
 import type { SavedDirectoryTool } from './DirectorySavedTools'
 import { DirectoryToolCard } from './DirectoryToolCard'
+import { useMarketPath } from './market-navigation-context'
 
 type Props = Readonly<{
   home: X402MarketplaceHome
@@ -32,13 +33,14 @@ function collectionSearch(rail: X402MarketplaceRail) {
 
 /** Editorial collections of live directory matches, using the installed Embla carousel. */
 export function DirectoryHomeDiscovery({ home, onSave, isSaved, onCompare, isComparing, compareDisabled }: Props) {
+  const marketPath = useMarketPath()
   const rails = editorialOrder.flatMap(id => home.rails.filter(rail => rail.id === id))
   return <div className="pb-8">
     <nav aria-label="Discover Tools by job" className="mb-10 flex gap-2 overflow-x-auto border-b border-border pb-5 sm:justify-center sm:gap-3">
       {rails.map(rail => {
         const item = navigation[rail.id]
         const Icon = item.icon
-        return <Button key={rail.id} asChild variant="outline" className="shrink-0 gap-2 rounded-full border-border/70 bg-card px-4 sm:px-5"><Link to="/market" search={collectionSearch(rail)}><Icon className="size-4" aria-hidden="true" />{item.label}</Link></Button>
+        return <Button key={rail.id} asChild variant="outline" className="shrink-0 gap-2 rounded-full border-border/70 bg-card px-4 sm:px-5"><Link to={marketPath} search={collectionSearch(rail)}><Icon className="size-4" aria-hidden="true" />{item.label}</Link></Button>
       })}
     </nav>
     <div className="mb-8 flex items-baseline justify-between gap-3">
@@ -55,7 +57,7 @@ export function DirectoryHomeDiscovery({ home, onSave, isSaved, onCompare, isCom
               <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{rail.description}</p>
             </div>
             <div className="flex shrink-0 items-center gap-2">
-              <Button asChild variant="ghost" size="sm" className="mr-1 rounded-full"><Link to="/market" search={collectionSearch(rail)} aria-label={`View ${rail.category} collection`}>View collection<ArrowUpRight className="size-4" /></Link></Button>
+              <Button asChild variant="ghost" size="sm" className="mr-1 rounded-full"><Link to={marketPath} search={collectionSearch(rail)} aria-label={`View ${rail.category} collection`}>View collection<ArrowUpRight className="size-4" /></Link></Button>
               {rail.kind === 'ok' && rail.items.length > 0 ? <>
                 <CarouselPrevious className="static size-9 translate-y-0" aria-label={`Previous ${rail.category} Tools`} />
                 <CarouselNext className="static size-9 translate-y-0" aria-label={`Next ${rail.category} Tools`} />

@@ -79,6 +79,7 @@ import { Route as ApiBusinessesSearchRouteImport } from './routes/api.businesses
 import { Route as ApiBusinessesSlugRouteImport } from './routes/api.businesses.$slug'
 import { Route as OperatorOwnerSettingsRouteImport } from './routes/_operator/owner.settings'
 import { Route as OperatorOwnerOperationsRouteImport } from './routes/_operator/owner.operations'
+import { Route as OperatorOwnerMarketRouteImport } from './routes/_operator/owner.market'
 import { Route as OperatorOwnerCreditRouteImport } from './routes/_operator/owner.credit'
 import { Route as OperatorCallsCallRefRouteImport } from './routes/_operator/calls.$callRef'
 import { Route as OperatorAgentAccessAuthorizeRouteImport } from './routes/_operator/agent-access.authorize'
@@ -483,6 +484,11 @@ const OperatorOwnerOperationsRoute = OperatorOwnerOperationsRouteImport.update({
   path: '/owner/operations',
   getParentRoute: () => OperatorRoute,
 } as any)
+const OperatorOwnerMarketRoute = OperatorOwnerMarketRouteImport.update({
+  id: '/owner/market',
+  path: '/owner/market',
+  getParentRoute: () => OperatorRoute,
+} as any)
 const OperatorOwnerCreditRoute = OperatorOwnerCreditRouteImport.update({
   id: '/owner/credit',
   path: '/owner/credit',
@@ -788,6 +794,7 @@ export interface FileRoutesByFullPath {
   '/agent-access/authorize': typeof OperatorAgentAccessAuthorizeRoute
   '/calls/$callRef': typeof OperatorCallsCallRefRoute
   '/owner/credit': typeof OperatorOwnerCreditRoute
+  '/owner/market': typeof OperatorOwnerMarketRoute
   '/owner/operations': typeof OperatorOwnerOperationsRouteWithChildren
   '/owner/settings': typeof OperatorOwnerSettingsRoute
   '/api/businesses/$slug': typeof ApiBusinessesSlugRoute
@@ -905,6 +912,7 @@ export interface FileRoutesByTo {
   '/agent-access/authorize': typeof OperatorAgentAccessAuthorizeRoute
   '/calls/$callRef': typeof OperatorCallsCallRefRoute
   '/owner/credit': typeof OperatorOwnerCreditRoute
+  '/owner/market': typeof OperatorOwnerMarketRoute
   '/owner/operations': typeof OperatorOwnerOperationsRouteWithChildren
   '/owner/settings': typeof OperatorOwnerSettingsRoute
   '/api/businesses/$slug': typeof ApiBusinessesSlugRoute
@@ -1024,6 +1032,7 @@ export interface FileRoutesById {
   '/_operator/agent-access/authorize': typeof OperatorAgentAccessAuthorizeRoute
   '/_operator/calls/$callRef': typeof OperatorCallsCallRefRoute
   '/_operator/owner/credit': typeof OperatorOwnerCreditRoute
+  '/_operator/owner/market': typeof OperatorOwnerMarketRoute
   '/_operator/owner/operations': typeof OperatorOwnerOperationsRouteWithChildren
   '/_operator/owner/settings': typeof OperatorOwnerSettingsRoute
   '/api/businesses/$slug': typeof ApiBusinessesSlugRoute
@@ -1143,6 +1152,7 @@ export interface FileRouteTypes {
     | '/agent-access/authorize'
     | '/calls/$callRef'
     | '/owner/credit'
+    | '/owner/market'
     | '/owner/operations'
     | '/owner/settings'
     | '/api/businesses/$slug'
@@ -1260,6 +1270,7 @@ export interface FileRouteTypes {
     | '/agent-access/authorize'
     | '/calls/$callRef'
     | '/owner/credit'
+    | '/owner/market'
     | '/owner/operations'
     | '/owner/settings'
     | '/api/businesses/$slug'
@@ -1378,6 +1389,7 @@ export interface FileRouteTypes {
     | '/_operator/agent-access/authorize'
     | '/_operator/calls/$callRef'
     | '/_operator/owner/credit'
+    | '/_operator/owner/market'
     | '/_operator/owner/operations'
     | '/_operator/owner/settings'
     | '/api/businesses/$slug'
@@ -2024,6 +2036,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OperatorOwnerOperationsRouteImport
       parentRoute: typeof OperatorRoute
     }
+    '/_operator/owner/market': {
+      id: '/_operator/owner/market'
+      path: '/owner/market'
+      fullPath: '/owner/market'
+      preLoaderRoute: typeof OperatorOwnerMarketRouteImport
+      parentRoute: typeof OperatorRoute
+    }
     '/_operator/owner/credit': {
       id: '/_operator/owner/credit'
       path: '/owner/credit'
@@ -2393,6 +2412,7 @@ interface OperatorRouteChildren {
   OperatorAdminIndexHealthRoute: typeof OperatorAdminIndexHealthRoute
   OperatorCallsCallRefRoute: typeof OperatorCallsCallRefRoute
   OperatorOwnerCreditRoute: typeof OperatorOwnerCreditRoute
+  OperatorOwnerMarketRoute: typeof OperatorOwnerMarketRoute
   OperatorOwnerOperationsRoute: typeof OperatorOwnerOperationsRouteWithChildren
   OperatorOwnerSettingsRoute: typeof OperatorOwnerSettingsRoute
   OperatorOwnerIndexRoute: typeof OperatorOwnerIndexRoute
@@ -2407,6 +2427,7 @@ const OperatorRouteChildren: OperatorRouteChildren = {
   OperatorAdminIndexHealthRoute: OperatorAdminIndexHealthRoute,
   OperatorCallsCallRefRoute: OperatorCallsCallRefRoute,
   OperatorOwnerCreditRoute: OperatorOwnerCreditRoute,
+  OperatorOwnerMarketRoute: OperatorOwnerMarketRoute,
   OperatorOwnerOperationsRoute: OperatorOwnerOperationsRouteWithChildren,
   OperatorOwnerSettingsRoute: OperatorOwnerSettingsRoute,
   OperatorOwnerIndexRoute: OperatorOwnerIndexRoute,

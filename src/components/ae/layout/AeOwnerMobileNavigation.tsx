@@ -14,7 +14,7 @@ type MobileNavItem = { href: string; label: string; icon: LucideIcon; mobileOrde
 
 const OWNER_PRIMARY_DESTINATIONS = [
   { href: '/owner', mobileOrder: 0 },
-  { href: '/market', mobileOrder: 10 },
+  { href: '/owner/market', mobileOrder: 10 },
   { href: '/activity', mobileOrder: 20 },
   { href: '/owner/credit', mobileOrder: 30 },
 ] as const

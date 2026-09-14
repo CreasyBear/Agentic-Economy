@@ -1,62 +1,14 @@
 import { createFileRoute, type ErrorComponentProps } from "@tanstack/react-router";
-import { Store } from "lucide-react";
-
 import { AePublicPage } from "@/components/ae/layout/AePublicPage";
 import { AePageSkeleton, AePageState } from "@/components/ae/layout/AePageState";
 import { AeX402Directory } from "@/components/ae/market/AeX402Directory";
-import type { MarketReturnSearch } from '@/components/ae/market/market-return-context';
 import { Button } from "@/components/ui/button";
 import { readCanonicalBaseUrlServer } from "@/lib/server/canonical-url.functions";
-import { readX402DirectoryCatalogueServer, readX402DirectoryCatalogueOverviewServer, readX402DirectoryProvidersServer } from "@/modules/market/x402-directory-index.functions";
-import { x402DirectoryCatalogueInputSchema } from "@/modules/market/x402-directory-catalogue";
-import { directoryCatalogueSearchValues } from '@/modules/market/x402-directory-navigation';
-import { readX402MarketplaceHomeServer } from "@/modules/market/x402-marketplace-home.functions";
+import { loadMarketRouteData, marketLoaderDeps, validateMarketSearch } from '@/modules/market/market-route-data';
 import { buildPublicPageHead, buildSiteJsonLd } from "@/modules/seo/public";
 
-export type MarketSearch = MarketReturnSearch;
-
-/**
- * Legacy `?compare=` links pointed at the retired capability-catalog page
- * tree and carried `operation:v1:` tool references. The directory tree keys
- * comparisons by the x402 `resource` identifier instead, so this only keeps
- * the shape (1-4 unique, bounded values) and leaves resolving the values to
- * whatever entries the directory has already loaded.
- */
-export function parseMarketCompareRefs(value: unknown): readonly string[] | undefined {
-  if (typeof value !== "string" || value.length === 0 || value.length > 20_000) return undefined;
-  const refs = [...new Set(value.split(",").map((part) => part.trim()).filter((part) => part.length > 0 && part.length <= 8_192))];
-  if (refs.length === 0 || refs.length > 4) return undefined;
-  return refs;
-}
-
-export function validateMarketSearch(
-  search: Record<string, unknown>,
-): MarketSearch {
-  const directory = x402DirectoryCatalogueInputSchema.parse(directoryCatalogueSearchValues(search));
-  if (search.providerCursor !== undefined && (typeof search.providerCursor !== 'string' || search.providerCursor.length === 0 || search.providerCursor.length > 16384)) throw new Error('Invalid Provider catalogue cursor')
-  const compareRefs = parseMarketCompareRefs(search.compare);
-  return {
-    ...directory,
-    ...(typeof search.providerCursor === 'string' ? { providerCursor: search.providerCursor } : {}),
-    ...(search.view === "discover" || search.view === "tools" || search.view === "providers" || search.view === "saved" ? { view: search.view } : {}),
-    ...(compareRefs === undefined ? {} : { compare: compareRefs.join(",") }),
-    ...(typeof search.resource === "string" && search.resource.length > 0 && search.resource.length <= 8192
-      ? { resource: search.resource } : {}),
-  };
-}
-
-type MarketView = NonNullable<MarketSearch['view']>
-
-function resolveMarketView(search: MarketSearch): MarketView {
-  if (search.view !== undefined) return search.view
-  if (search.providerCursor !== undefined) return 'providers'
-  if (
-    search.compare !== undefined
-    || search.resource !== undefined
-    || Object.keys(directoryCatalogueSearchValues(search)).length > 0
-  ) return 'tools'
-  return 'discover'
-}
+export { parseMarketCompareRefs, validateMarketSearch } from '@/modules/market/market-route-data'
+export type { MarketSearch } from '@/modules/market/market-route-data'
 
 export const Route = createFileRoute("/market")({
   staticData: {
@@ -65,28 +17,16 @@ export const Route = createFileRoute("/market")({
       search: {},
       header: { order: 0 },
       footer: { column: 'Market', order: 0 },
-      operatorUtility: { roles: ['owner', 'admin', 'developer'], order: 0, icon: Store },
     },
   },
   validateSearch: validateMarketSearch,
-  loaderDeps: ({ search }) => ({
-    ...directoryCatalogueSearchValues(search),
-    ...(search.providerCursor === undefined ? {} : { providerCursor: search.providerCursor }),
-    ...(search.view === undefined ? {} : { view: search.view }),
-  }),
+  loaderDeps: ({ search }) => marketLoaderDeps(search),
   loader: async ({ deps }) => {
-    const catalogueInput = x402DirectoryCatalogueInputSchema.parse(directoryCatalogueSearchValues(deps))
-    const view = resolveMarketView(deps)
-    const showHome = view === 'discover'
-    const [catalogue, canonicalBaseUrl, home, overview, providers] = await Promise.all([
-      readX402DirectoryCatalogueServer({ data: { ...catalogueInput, ...(catalogueInput.query || catalogueInput.sort ? {} : { sort: 'adoption' }) } }),
+    const [data, canonicalBaseUrl] = await Promise.all([
+      loadMarketRouteData(deps),
       readCanonicalBaseUrlServer(),
-      showHome ? readX402MarketplaceHomeServer().catch(() => undefined) : Promise.resolve(undefined),
-      readX402DirectoryCatalogueOverviewServer(),
-      view === 'providers' && deps.query === undefined && deps.network === undefined && deps.provider === undefined && deps.maxUsdPrice === undefined && deps.directoryCategory === undefined ? readX402DirectoryProvidersServer({ data: { ...(deps.providerCursor === undefined ? {} : { providerCursor: deps.providerCursor }) } }) : Promise.resolve(undefined),
     ])
-    const page = catalogue?.kind === 'ok' ? catalogue.page : { kind: 'unavailable' as const, reason: catalogue?.reason === 'query_invalid' ? 'query_invalid' as const : 'source_unavailable' as const }
-    return { page, catalogue, overview, canonicalBaseUrl, home, providers, view }
+    return { ...data, canonicalBaseUrl }
   },
   staleTime: 30_000,
   preloadStaleTime: 30_000,
@@ -139,7 +79,7 @@ function MarketRoute() {
 
   return (
     <AePublicPage>
-      <AeX402Directory activeView={data.view} page={data.page} search={search} catalogue={data.catalogue} overview={data.overview} {...(data.providers === undefined ? {} : { providers: data.providers })} {...(data.home === undefined ? {} : { home: data.home })} />
+      <AeX402Directory marketPath="/market" activeView={data.view} page={data.page} search={search} catalogue={data.catalogue} overview={data.overview} {...(data.providers === undefined ? {} : { providers: data.providers })} {...(data.home === undefined ? {} : { home: data.home })} />
     </AePublicPage>
   );
 }

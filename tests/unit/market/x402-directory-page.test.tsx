@@ -22,8 +22,9 @@ function show(search: Props['search'] = { offset: 20 }, items = entries, extra: 
   const root = createRootRoute()
   const router = createRouter({ routeTree: root.addChildren([
     createRoute({ getParentRoute: () => root, path: '/market' }),
+    createRoute({ getParentRoute: () => root, path: '/owner/market' }),
     createRoute({ getParentRoute: () => root, path: '/tools/$providerHost/$slug' }),
-  ]), history: createMemoryHistory({ initialEntries: ['/market'] }) })
+  ]), history: createMemoryHistory({ initialEntries: [extra.marketPath ?? '/market'] }) })
   const result = render(<RouterContextProvider router={router}><AeX402Directory
     page={{ kind: 'ok', items, total: 14455, offset: 20, limit: 20, nextOffset: 40, previousOffset: 0 }}
     {...extra} search={search} /></RouterContextProvider>)
@@ -115,6 +116,17 @@ it('keeps comparison choices when a new search is submitted and results refresh'
   const comparison = screen.getByRole('dialog', { name: 'Compare Tools' })
   expect(within(comparison).getByText('Tool 0')).toBeTruthy()
   expect(within(comparison).getByText('Tool 1')).toBeTruthy()
+})
+it('keeps workspace searches and pagination inside the authenticated Market route', async () => {
+  const { router } = show({ offset: 20 }, entries, { workspace: true, marketPath: '/owner/market' })
+  expect(screen.getByRole('heading', { level: 2, name: 'Explore capabilities.' })).toBeTruthy()
+  expect(screen.getByRole('link', { name: 'Next page' }).getAttribute('href')).toContain('/owner/market')
+
+  fireEvent.change(screen.getByRole('searchbox', { name: 'Search Tools' }), { target: { value: 'new research' } })
+  fireEvent.submit(screen.getByRole('search'))
+
+  await waitFor(() => expect(router.state.location.pathname).toBe('/owner/market'))
+  expect(router.state.location.search).toMatchObject({ query: 'new research', view: 'tools' })
 })
 it('returns focus to Compare after dismissing the comparison dialog', async () => {
   show()

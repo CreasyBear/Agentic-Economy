@@ -7,6 +7,7 @@ import { operatorLayoutRouteOptions } from '@/lib/operator/route-options'
 import { operatorSurfaceForPath } from '@/lib/operator/operator-context'
 
 export const Route = createFileRoute('/_operator')({
+  staticData: { shell: 'operator' },
   ...operatorLayoutRouteOptions,
   component: OperatorLayoutRoute,
 })

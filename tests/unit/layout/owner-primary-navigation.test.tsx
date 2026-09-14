@@ -29,7 +29,7 @@ function renderNavigation(pathname: string) {
   }
   const routeTree = root.addChildren([
     createRoute({ getParentRoute: () => root, path: '/owner', staticData: { nav: { label: 'Overview', operator: { ...ownerNav, mobilePrimary: true, mobileOrder: 0 } } } }),
-    createRoute({ getParentRoute: () => root, path: '/market', staticData: { nav: { label: 'Market', operatorUtility: { roles: ['owner'], order: 0, icon: StoreIcon } } } }),
+    createRoute({ getParentRoute: () => root, path: '/owner/market', staticData: { nav: { label: 'Market', operator: { ...ownerNav, mobilePrimary: true, mobileOrder: 10, icon: StoreIcon } } } }),
     createRoute({ getParentRoute: () => root, path: '/activity', staticData: { nav: { label: 'Calls', operator: { ...ownerNav, mobilePrimary: true, mobileOrder: 10 } } } }),
     createRoute({ getParentRoute: () => root, path: '/owner/credit', staticData: { nav: { label: 'Balance', operator: ownerNav } } }),
     createRoute({ getParentRoute: () => root, path: '/agent-access', staticData: { nav: { label: 'Agents', operator: { ...ownerNav, mobilePrimary: true, mobileOrder: 20 } } } }),
@@ -56,7 +56,7 @@ describe('owner primary navigation', () => {
     const navigation = screen.getByRole('navigation', { name: 'Owner primary navigation' })
     const links = within(navigation).getAllByRole('link')
     expect(links.map(link => link.textContent)).toEqual(['Overview', 'Market', 'Calls', 'Balance'])
-    expect(links.map(link => link.getAttribute('href'))).toEqual(['/owner', '/market', '/activity', '/owner/credit'])
+    expect(links.map(link => link.getAttribute('href'))).toEqual(['/owner', '/owner/market', '/activity', '/owner/credit'])
     expect(links.filter(link => link.getAttribute('aria-current') === 'page').map(link => link.textContent)).toEqual(['Balance'])
     expect(navigation.querySelectorAll('svg[aria-hidden="true"]')).toHaveLength(4)
   })

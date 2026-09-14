@@ -69,5 +69,8 @@ declare module '@tanstack/react-router' {
   interface Register {
     router: ReturnType<typeof getRouter>
   }
-  interface StaticDataRouteOption { nav?: NavStaticData }
+  interface StaticDataRouteOption {
+    nav?: NavStaticData
+    shell?: 'operator'
+  }
 }

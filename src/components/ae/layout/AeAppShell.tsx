@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type ReactNode, type RefObject } from 'react'
-import { Link, useMatchRoute, useRouter } from '@tanstack/react-router'
+import { Link, useMatches, useMatchRoute, useRouter } from '@tanstack/react-router'
 import { Show, UserButton } from '@clerk/tanstack-react-start'
 import { MenuIcon, XIcon } from 'lucide-react'
 
@@ -89,6 +89,11 @@ export function AeAppShell({ children }: { children: ReactNode }) {
   const [commandOpen, setCommandOpen] = useState(false)
   const sentinelRef = useRef<HTMLDivElement>(null)
   const elevated = useHeaderElevated(sentinelRef)
+  const operatorWorkspace = useMatches().some(match => match.staticData.shell === 'operator')
+
+  useEffect(() => {
+    if (operatorWorkspace) setMobileNavOpen(false)
+  }, [operatorWorkspace])
 
   function handleCommandOpenChange(open: boolean) {
     if (open) setMobileNavOpen(false)
@@ -124,7 +129,7 @@ export function AeAppShell({ children }: { children: ReactNode }) {
               className="ae-nav flex h-full min-h-touch items-center gap-related px-1 shadow-none transition-shadow duration-200 ease-out data-[elevated]:shadow-soft motion-reduce:transition-none sm:px-2"
             >
               <BrandLink />
-              <AppHeaderNav />
+              {operatorWorkspace ? null : <AppHeaderNav />}
               <div className="ms-auto flex items-center gap-intra">
                 <AeCommandPanel />
                 <Show when="signed-out" fallback={<UserButton />}>
@@ -132,14 +137,14 @@ export function AeAppShell({ children }: { children: ReactNode }) {
                     <Link to="/sign-in/$" params={{ _splat: '' }}>Sign in</Link>
                   </Button>
                 </Show>
-                <SheetTrigger asChild>
+                {operatorWorkspace ? null : <SheetTrigger asChild>
                   <AeSiteIconButton
                     ariaLabel={mobileNavOpen ? 'Close public menu' : 'Open public menu'}
                     className="md:hidden"
                   >
                     <MenuIcon aria-hidden="true" />
                   </AeSiteIconButton>
-                </SheetTrigger>
+                </SheetTrigger>}
               </div>
             </div>
             <SheetContent side="left" className="w-80 max-w-[calc(100vw-2rem)] p-0" showCloseButton={false}>
