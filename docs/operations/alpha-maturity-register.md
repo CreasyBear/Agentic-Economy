@@ -42,8 +42,8 @@ For each assigned record:
    correct work; establish the missing substantive evidence without restarting it.
 
 **Current controlled assignments:** AM-20 is SOURCE VERIFIED after manager
-acceptance of the complete spending/refusal contract. Backend next owns AM-02,
-then the explicit order below. UX completed its authorized workspace source
+acceptance of the complete spending/refusal contract. AM-02 is also SOURCE
+VERIFIED; backend next owns AM-04, then the explicit order below. UX completed its authorized workspace source
 closeout and is archived; do not wake it for backend dependencies or deferred
 browser proof. AM-27's outstanding source dependencies remain with their owning
 records. Workers remain isolated; the manager resolves cross-record dependencies.
@@ -59,7 +59,7 @@ consolidated review of the integrated result. Repair defects found in that revie
 and recheck the affected behavior, without restarting open-ended audit cycles.
 This final review does not authorize deployment or hosted configuration repair.
 
-**Next source closeout order:** AM-02, AM-04, AM-05, AM-06, AM-07, AM-09, AM-10,
+**Next source closeout order:** AM-04, AM-05, AM-06, AM-07, AM-09, AM-10,
 AM-11, AM-12, AM-14, AM-15, AM-16, AM-17, AM-18, AM-21, AM-22, AM-23, AM-24,
 AM-26, AM-29. AM-27 retains its explicit source dependencies. Already
 source-verified rows are not reopened without relevant contrary evidence;
@@ -146,7 +146,7 @@ at Quote/Call admission and before paid effects.
 | ID | Given / When → Then | Failure, recovery or linked check | Status | Source status / next owner action | Evidence or outstanding proof |
 | --- | --- | --- | --- | --- | --- |
 | AM-01 | Given the named alpha candidate, a Customer uses the app and connected Agent against the same Account, balance and Tool state; web, backend and integrations resolve to the recorded targets | Health/readiness and release identities match the recorded candidate; sandbox fences refuse live funding/mainnet execution even through direct requests. An unavailable dependency cannot produce false success | PARTIAL | HOSTED ONLY — Release owner: target/revision alignment and effective sandbox-fence proof deferred; no additional source change indicated. | Targets and health recorded in [registry](deployment-registry.yaml#hostedalphareadback); current web and backend have different source revisions. Coherent candidate and effective restrictions need verification |
-| AM-02 | Given a fresh invited business user, signing up or signing in reaches the intended app page; signing out removes access and signing back in restores the correct Account context | Invalid or expired authentication and an interrupted return offer a working sign-in/recovery path; no redirect loop, lost destination or accidental second Account | PARTIAL | SOURCE GAP (verification) — Access owner: map interrupted sign-in/return and same-Account restoration to source tests; repair any uncovered transition. | Business Google sign-in verified in [cutover evidence](hosted-cutover-2026-09-12.md); full fresh-user and session-recovery journey outstanding |
+| AM-02 | Given a fresh invited business user, signing up or signing in reaches the intended app page; signing out removes access and signing back in restores the correct Account context | Invalid or expired authentication and an interrupted return offer a working sign-in/recovery path; no redirect loop, lost destination or accidental second Account | PARTIAL | SOURCE VERIFIED — Shared URL-parser validation rejects external/control-character and normalized authentication self-returns; documented Clerk reciprocal fallback settings preserve the intended destination through flow switching. Current-session guard and canonical first provisioning/restoration enforce one stable Account without rewriting durable identity on sign-out. | `eaa0d7256` integrated as `4997f7072`; [AM02 contract and source evidence](alpha-release-design.md#am02-interactive-authentication-and-account-recovery). Nine-file source matrix 125/125 on candidate and main; candidate combined typecheck and integrated changed-file lint pass. Real invitation/Google challenge, cookie/session termination and hosted concurrency remain unverified. AM-04 owns broader Account isolation. |
 | AM-03 | Given a bound Account, a genuine signed Clerk security event appears in that Account’s security history with its original event identity | Replaying the same event preserves one history record. Session enforcement and cross-Account isolation are separately required by AM-02/04; an event record alone does not prove them | VERIFIED | SOURCE VERIFIED — Signed/redacted webhook tests and retained event/replay evidence; preserve AM-02/04 separation. | Recorded event and duplicate-delivery readback `audit:clerk:1f0b1f8774643c66dedb9f68361d2a0963dac1a3886fe9a55cb6cc513ce11b3a`; signed delivery and persistence in registry |
 | AM-04 | Given two isolated Accounts with owner, Agent and administrator test roles, each actor can access only the Tools, Calls, money, credentials and documents its role permits | Changing identifiers or calling a route directly cannot read or mutate another Account’s private resources or bypass role restrictions; publicly discoverable Tool information remains public | NOT VERIFIED | SOURCE GAP (verification) — Access owner: complete two-Account/role negative-case coverage across the named resources. | Requires hosted negative checks with isolated test roles; do not infer from authenticated page load |
 | AM-05 | Given an owner with a spending policy, connecting and approving a buyer Agent lets it resume in the actual installed CLI or harness and request a Quote for the correct Account | An unapproved or expired connection offers the supported approval/reconnection path; no copied Account identifier, wallet setup or mandatory diagnostic sequence is needed to purchase | PARTIAL | SOURCE GAP — Access + UX: preserve buyer approval/return context and prove installed-client reconnection without operator diagnostics. | Provider CLI approval was proved; the complete buyer activation journey is outstanding |
@@ -215,8 +215,8 @@ close its parent until the parent's acceptance is met.
 ## Execution order and boundaries
 
 The **Record-by-record execution** assignment and numeric queue above supersede
-the earlier Provider/buyer milestone ordering. AM-20 is now source-accepted;
-AM-02 is next. Historical contributor notes below remain evidence, not an active
+the earlier Provider/buyer milestone ordering. AM-20 and AM-02 are now source-accepted;
+AM-04 is next. Historical contributor notes below remain evidence, not an active
 alternative queue. Run affected source checks at coherent integration boundaries;
 full browser/release review follows source completion. No deployment is authorized.
 
@@ -651,3 +651,28 @@ buyer file passed **16/16** in 29.95s; affected Quote/worker/refund checks passe
 lint passed. Older Provider candidate/main differences remain for their owning
 source records; this is not a claim of complete repository parity or alpha
 readiness. Backend is assigned AM-02, with AM-04 next after manager acceptance.
+
+
+### AM-02 manager source acceptance — 14 September 2026
+
+Source accepted at `eaa0d7256`, integrated as `4997f7072`. The complete sign-in,
+return, sign-out and same-Account restoration contract is mapped in the release
+design. Two source defects were reproduced before correction: control-character
+return targets could resolve externally, and auth-flow switching omitted Clerk's
+opposite-flow destination setting. Fixes reuse the platform URL parser and
+maintained Clerk API; no handrolled session/OAuth/retry machinery was added.
+
+The nine-file focused source command recorded in the worker outcome passed
+**125/125** on both candidate and integrated main. Actual canonical source tests
+cover unique first provisioning, anonymous refusal with unchanged durable facts,
+and same-identity restoration. Server guard tests use mocked Clerk/source
+boundaries, preserve destination and exercise missing/unavailable authority and
+retry. Candidate `npm run typecheck`, integrated changed-file `oxlint` and
+`git diff --check` pass. Changed source and its authority guards match across
+checkouts, so no unrelated full suite was repeated.
+
+Hosted invitation/OAuth, actual browser session termination and production
+transaction scheduling remain explicitly unverified. SOURCE VERIFIED does not
+change hosted status from PARTIAL. The source totals are now **6 verified,
+20 unclosed, 6 hosted-only** out of 32. Backend next owns AM-04; AM-05 follows only
+after manager acceptance of the whole AM-04 source contract.
