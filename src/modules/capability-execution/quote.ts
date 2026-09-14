@@ -266,12 +266,7 @@ export function projectToolQuoteRefusal(input: Readonly<{
           return {
             ...base,
             continuation: inspect(30000),
-            requiredActions: [operatorAction(
-              'set_sandbox_deployment_profile',
-              'Contact support',
-              'An AE operator must set AE_PACKAGE4_SANDBOX_DEPLOYMENT_PROFILE to local_ci or synthetic_vps_fixture before this Tool can be quoted.',
-              '/support',
-            )],
+            requiredActions: [requiredAction(true)],
           }
         case 'commercial_policy_missing':
         case 'commercial_policy_environment_mismatch':
@@ -283,12 +278,7 @@ export function projectToolQuoteRefusal(input: Readonly<{
           return {
             ...base,
             continuation: inspect(30000),
-            requiredActions: [operatorAction(
-              'activate_commercial_policy',
-              'Contact support',
-              `An AE operator must resolve ${reason} on the ${COMMERCIAL_POLICY_ADMIN_SURFACE} admin surface before this Tool can be quoted.`,
-              '/support',
-            )],
+            requiredActions: [requiredAction(true)],
           }
         default: {
           const unreachable: never = reason
