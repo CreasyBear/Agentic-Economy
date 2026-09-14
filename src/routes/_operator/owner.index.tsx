@@ -7,6 +7,7 @@ import { operatorRouteOptions } from '@/lib/operator/route-options'
 import { readAgentDirectoryServer } from '@/lib/server/agent-access-console.functions'
 import { readOwnerCallsServer } from '@/lib/server/call-history.functions'
 import { readAccountFundingBalanceServer } from '@/modules/money/money.functions'
+import { projectCallSummaryPurchaseStatus } from '@/modules/capability-execution/call-receipt-view'
 
 export const Route = createFileRoute('/_operator/owner/')({
   staticData: {
@@ -36,7 +37,7 @@ export const Route = createFileRoute('/_operator/owner/')({
       ? { kind: 'available', amount: balance.value.balance, locked: balance.value.locked }
       : { kind: 'unavailable' }
     const callsSnapshot: OwnerOverviewSnapshot['calls'] = calls.status === 'fulfilled'
-      ? { kind: 'available', attention: calls.value.page.filter(call => call.state === 'outcome_unknown').length, loaded: calls.value.page.length, complete: calls.value.isDone }
+      ? { kind: 'available', attention: calls.value.page.filter(call => projectCallSummaryPurchaseStatus(call).attention).length, loaded: calls.value.page.length, complete: calls.value.isDone }
       : { kind: 'unavailable' }
     const agentsSnapshot: OwnerOverviewSnapshot['agents'] = agents.status === 'fulfilled'
       ? { kind: 'available', connected: agents.value.items.filter(agent => agent.status === 'connected' || agent.status === 'attention').length, complete: agents.value.nextCursor === undefined }

@@ -53,6 +53,18 @@ export type CallReceiptView = Readonly<{
   complete: boolean
 }>
 
+export type BuyerCallPurchaseStatus = Readonly<{
+  kind: 'pending' | 'uncertain' | 'delivered' | 'refunded' | 'failed'
+  label: 'Open — pending' | 'Open — outcome uncertain' | 'Resolved — delivered' | 'Resolved — refunded' | 'Resolved — failed'
+  attention: boolean
+}>
+
+export type BuyerCallSummaryFacts = Readonly<{
+  state: 'completed' | 'refused' | 'outcome_unknown'
+  deliveryState: 'delivered' | 'not_delivered' | 'unknown'
+  paymentState: 'settled' | 'released' | 'unknown' | 'not_applicable'
+}>
+
 const stageLabels: Readonly<Record<CallReceiptStageId, string>> = {
   authorized: 'Authorized',
   reserved: 'Reserved',
@@ -142,20 +154,54 @@ export function projectCallReceipt(input: PublicCallStatusRead): CallReceiptView
  * presentation only; it does not add a purchase record or state machine.
  */
 export function purchaseStatusLabel(input: Extract<CallStatusResult, { kind: 'found' }>): string {
+  return projectFoundCallPurchaseStatus(input).label
+}
+
+export function projectFoundCallPurchaseStatus(
+  input: Extract<CallStatusResult, { kind: 'found' }>,
+): BuyerCallPurchaseStatus {
   const receipt = input.receipt ?? (input.result !== undefined && 'receipt' in input.result ? input.result.receipt : undefined)
   const usage = input.usage ?? (input.result?.kind === 'completed' ? input.result.usage : undefined)
   if (input.state === 'reconciliation_required'
     || input.result?.kind === 'reconciliation_required'
     || usage?.chargeState === 'outcome_unknown'
-    || receipt?.state === 'reconciliation_required') return 'Open — outcome uncertain'
+    || receipt?.state === 'reconciliation_required') return buyerPurchaseStatus('uncertain')
   if (receipt?.state === 'refunded' || receipt?.refundState === 'released' || usage?.chargeState === 'refunded') {
-    return 'Resolved — refunded'
+    return buyerPurchaseStatus('refunded')
   }
-  if (input.result?.kind === 'completed') return 'Resolved — delivered'
+  if (input.result?.kind === 'completed') return buyerPurchaseStatus('delivered')
   if (input.state === 'terminal' || input.state === 'cancelled' || input.state === 'invalidated' || input.result?.kind === 'refused') {
-    return 'Resolved — failed'
+    return buyerPurchaseStatus('failed')
   }
-  return 'Open — pending'
+  return buyerPurchaseStatus('pending')
+}
+
+/**
+ * Uses only the coarser Account Calls projection. Contradictory or unknown
+ * delivery/payment facts stay open instead of being smoothed into resolution.
+ */
+export function projectCallSummaryPurchaseStatus(input: BuyerCallSummaryFacts): BuyerCallPurchaseStatus {
+  if (input.state === 'outcome_unknown'
+    || input.deliveryState === 'unknown'
+    || input.paymentState === 'unknown') return buyerPurchaseStatus('uncertain')
+  if (input.paymentState === 'released') return buyerPurchaseStatus('refunded')
+  if (input.state === 'completed'
+    && input.deliveryState === 'delivered'
+    && (input.paymentState === 'settled' || input.paymentState === 'not_applicable')) {
+    return buyerPurchaseStatus('delivered')
+  }
+  if (input.state === 'refused'
+    && input.deliveryState === 'not_delivered'
+    && input.paymentState === 'not_applicable') return buyerPurchaseStatus('failed')
+  return buyerPurchaseStatus('uncertain')
+}
+
+function buyerPurchaseStatus(kind: BuyerCallPurchaseStatus['kind']): BuyerCallPurchaseStatus {
+  if (kind === 'pending') return { kind, label: 'Open — pending', attention: false }
+  if (kind === 'uncertain') return { kind, label: 'Open — outcome uncertain', attention: true }
+  if (kind === 'delivered') return { kind, label: 'Resolved — delivered', attention: false }
+  if (kind === 'refunded') return { kind, label: 'Resolved — refunded', attention: false }
+  return { kind, label: 'Resolved — failed', attention: false }
 }
 
 /** Derives the existing outcome evidence posture without reclassifying money or delivery facts. */

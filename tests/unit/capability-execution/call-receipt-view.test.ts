@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import type { CallReceipt } from '@/modules/capability-execution/call-contracts'
 import {
   outcomeRecordLabel,
+  projectCallSummaryPurchaseStatus,
   projectCallReceipt,
   purchaseStatusLabel,
 } from '@/modules/capability-execution/call-receipt-view'
@@ -29,6 +30,16 @@ const releasedReceipt: CallReceipt = {
 }
 
 describe('public Call receipt projection', () => {
+  it.each([
+    [{ state: 'completed', deliveryState: 'delivered', paymentState: 'settled' }, 'Resolved — delivered', false],
+    [{ state: 'completed', deliveryState: 'delivered', paymentState: 'released' }, 'Resolved — refunded', false],
+    [{ state: 'refused', deliveryState: 'not_delivered', paymentState: 'not_applicable' }, 'Resolved — failed', false],
+    [{ state: 'completed', deliveryState: 'delivered', paymentState: 'unknown' }, 'Open — outcome uncertain', true],
+    [{ state: 'completed', deliveryState: 'not_delivered', paymentState: 'settled' }, 'Open — outcome uncertain', true],
+  ] as const)('uses one fail-closed buyer purchase status for Account summary facts', (facts, label, attention) => {
+    expect(projectCallSummaryPurchaseStatus(facts)).toMatchObject({ label, attention })
+  })
+
   it('marks every stage complete only for a canonical completed result', () => {
     const view = projectCallReceipt({
       kind: 'found',

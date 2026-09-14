@@ -15,6 +15,7 @@ import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { operatorRouteOptions } from '@/lib/operator/route-options'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { projectCallSummaryPurchaseStatus } from '@/modules/capability-execution/call-receipt-view'
 import {
   readOwnerCallsServer,
   readOwnerSpendServer,
@@ -184,8 +185,8 @@ function ActivityAvailable({
   const router = useRouter()
   const [summaryRetryPending, setSummaryRetryPending] = useState(false)
   const { state: pagination, loadNextPage } = useCallPagination(initial)
-  const attention = pagination.items.filter((item) => item.state === 'outcome_unknown')
-  const recent = pagination.items.filter((item) => item.state !== 'outcome_unknown')
+  const attention = pagination.items.filter((item) => projectCallSummaryPurchaseStatus(item).attention)
+  const recent = pagination.items.filter((item) => !projectCallSummaryPurchaseStatus(item).attention)
   const columns = useMemo<ColumnDef<CallRow, unknown>[]>(
     () => [
       {
@@ -212,9 +213,9 @@ function ActivityAvailable({
       },
       {
         id: 'outcome',
-        accessorFn: (item) => callStateLabel(item.state),
-        header: ({ column }) => <AeOperatorSortableHeader label="Outcome" column={column} />,
-        cell: ({ row }) => callStateLabel(row.original.state),
+        accessorFn: (item) => projectCallSummaryPurchaseStatus(item).label,
+        header: ({ column }) => <AeOperatorSortableHeader label="Purchase status" column={column} />,
+        cell: ({ row }) => projectCallSummaryPurchaseStatus(row.original).label,
       },
       {
         id: 'when',
@@ -391,12 +392,6 @@ export type ActivityLoaderResult =
       periodStart: string
     }>
   | Readonly<{ kind: 'unavailable' }>
-
-function callStateLabel(state: CallRow['state']): string {
-  if (state === 'outcome_unknown') return 'Needs outcome confirmation'
-  if (state === 'completed') return 'Completed'
-  return 'Not completed'
-}
 
 function ActivityMetric({ label, value }: Readonly<{ label: string; value: string }>) {
   return (

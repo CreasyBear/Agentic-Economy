@@ -156,12 +156,27 @@ describe('Calls side-surface recovery', () => {
     const attention = screen.getByRole('region', { name: 'Needs attention' })
     const recent = screen.getByRole('region', { name: 'Recent Calls' })
     expect(within(attention).getByText('Tool attention')).toBeTruthy()
+    expect(within(attention).getByText('Open — outcome uncertain')).toBeTruthy()
     expect(within(attention).queryByText('Tool routine')).toBeNull()
     expect(within(recent).getByText('Tool routine')).toBeTruthy()
+    expect(within(recent).getByText('Resolved — delivered')).toBeTruthy()
     expect(within(recent).queryByText('Tool attention')).toBeNull()
     expect(attention.compareDocumentPosition(recent) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(within(attention).getByRole('link', { name: 'Review Tool attention' }).getAttribute('href')).toBe('/calls/attention')
     expect(screen.queryByText('reconciliation required')).toBeNull()
+  })
+
+  it('routes contradictory completed facts to attention instead of claiming resolution', () => {
+    renderActivity(available({
+      page: [{ ...callRow('contradictory', 'completed', 2), paymentState: 'unknown' }],
+      isDone: true,
+      continueCursor: '',
+    }))
+
+    const attention = screen.getByRole('region', { name: 'Needs attention' })
+    expect(within(attention).getByText('Tool contradictory')).toBeTruthy()
+    expect(within(attention).getByText('Open — outcome uncertain')).toBeTruthy()
+    expect(screen.getByRole('columnheader', { name: /Purchase status/u })).toBeTruthy()
   })
 
   it('preserves loaded Calls and the cursor when pagination fails, then retries that continuation', async () => {

@@ -14,7 +14,10 @@ vi.mock('@/components/ae/offerings/provider-workspace.functions', () => ({ readP
 import { Route } from '@/routes/_operator/owner.index'
 
 const availableBalance = { kind: 'available', accountRef: 'acct_one', balance: { currency: 'AUD', units: '25000000', exponent: 6 }, locked: false, version: 3 } as const
-const calls = { page: [{ callRef: 'call_attention', state: 'outcome_unknown' }, { callRef: 'call_done', state: 'completed' }], continueCursor: 'next', isDone: false }
+const calls = { page: [
+  { callRef: 'call_attention', state: 'outcome_unknown', deliveryState: 'unknown', paymentState: 'unknown' },
+  { callRef: 'call_done', state: 'completed', deliveryState: 'delivered', paymentState: 'settled' },
+], continueCursor: 'next', isDone: false }
 const agents = { items: [{ principalRef: 'prn_one', status: 'connected' }, { principalRef: 'prn_two', status: 'attention' }], details: [] }
 
 beforeEach(() => {
@@ -72,7 +75,11 @@ describe('owner Overview', () => {
   })
 
   it('does not turn an incomplete Calls page into a complete zero', async () => {
-    reads.calls.mockResolvedValueOnce({ page: [{ callRef: 'call_recent', state: 'completed' }], continueCursor: 'next', isDone: false })
+    reads.calls.mockResolvedValueOnce({
+      page: [{ callRef: 'call_recent', state: 'completed', deliveryState: 'delivered', paymentState: 'settled' }],
+      continueCursor: 'next',
+      isDone: false,
+    })
     renderOverview(await loadOverview())
 
     expect(screen.getByText('No attention in recent Calls')).toBeTruthy()
