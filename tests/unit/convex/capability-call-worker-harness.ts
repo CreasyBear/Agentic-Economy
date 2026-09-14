@@ -1196,6 +1196,20 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
           }
           return { kind: 'applied', attemptRef, effectGeneration: 1 }
         }
+        case 'capabilityCalls:refuseUnclaimed': {
+          if (canonicalClaimed) return { kind: 'claimed' }
+          if (dispatch.state !== 'pending') return { kind: 'terminal' }
+          const result = {
+            kind: 'refused', callRef: dispatch.callRef, toolRef: dispatch.toolRef,
+            code: args.code, retryable: args.retryable,
+            ...(args.nextAction === undefined ? {} : { nextAction: args.nextAction }),
+          }
+          dispatch.state = 'refused'
+          dispatch.dispatchState = 'failed'
+          dispatch.result = result
+          state.records.push({ state: 'refused', dispatchState: 'failed', result })
+          return { kind: 'refused', releaseRequired: sellerCanary === undefined && managedCallState === 'reserved' }
+        }
         case 'capabilityCalls:record':
           state.records.push(args)
           return null
@@ -1399,6 +1413,11 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
       state.mutations.push(path)
       state.mutationCalls.push({ path, args })
       switch (path) {
+        case 'capabilityCallWorker:reconcilePreClaimRefusal':
+          if (canonicalClaimed || dispatch.state !== 'refused') return { kind: 'not_claimed' }
+          managedCallState = 'released'
+          state.reconciliations.push(args)
+          return { kind: 'settled' }
         case 'moneyManagedCallLifecycle:settle':
           managedCallState = 'settled'
           return { kind: 'accepted', state: managedCallState, replayed: false }

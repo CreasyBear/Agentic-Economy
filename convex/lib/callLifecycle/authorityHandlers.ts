@@ -145,7 +145,7 @@ export async function reconcileCallWorkloadAuthorityHandler(
     ? await reconcilePersistedCallAuthority(ctx, args.callRef, now)
     : sellerCanaryAuthority
   if (authority === null) {
-    await refuseCallBeforeEffectForInvalidAuthority(ctx, args.callRef, now)
+    await refuseCallBeforeEffectForInvalidAuthority(ctx, args.callRef)
     return { kind: 'refused' }
   }
   return { kind: 'authorized', authority }
@@ -492,28 +492,21 @@ export async function reconcilePersistedCallAuthority(
 export async function refuseCallBeforeEffectForInvalidAuthority(
   ctx: MutationCtx,
   callRef: string,
-  now: number,
 ): Promise<void> {
-  const [row, control] = await Promise.all([
-    ctx.db.query('capabilityCalls')
-      .withIndex('by_callRef', (query) => query.eq('callRef', callRef))
-      .unique(),
-    ctx.db.query('actionExecutionControls')
-      .withIndex('by_executionRef', (query) => query.eq('executionRef', callRef))
-      .unique(),
-  ])
-  if (row === null || row.state !== 'pending' || control !== null) return
-  await ctx.db.patch(row._id, {
-    state: 'refused',
-    dispatchState: 'failed',
-    result: {
-      kind: 'refused',
-      toolRef: row.toolRef,
-      code: 'grant_not_found',
-      retryable: false,
-      nextAction: 'Refresh the agent grant and retry.',
-    },
-    updatedAt: now,
+  const row = await ctx.db.query('capabilityCalls')
+    .withIndex('by_callRef', (query) => query.eq('callRef', callRef))
+    .unique()
+  if (row === null || row.state !== 'pending') return
+  // The same transactional exclusion and durable refund intent applies when
+  // workload authority refuses before the worker's own preparation gates.
+  await ctx.runMutation(internal.capabilityCalls.refuseUnclaimed, {
+    callRef: row.callRef,
+    principalId: row.principalId,
+    credentialId: row.credentialId,
+    idempotencyKey: row.idempotencyKey,
+    code: 'grant_not_found',
+    retryable: false,
+    nextAction: 'Refresh the agent grant and retry.',
   })
 }
 

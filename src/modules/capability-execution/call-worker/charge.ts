@@ -62,20 +62,22 @@ export async function refuseBeforeClaim(
       ) return { kind: 'none' }
     }
   }
-  await ctx.runMutation(internal.capabilityCalls.record, {
+  const refusal = await ctx.runMutation(internal.capabilityCalls.refuseUnclaimed, {
     callRef: dispatch.callRef,
     principalId: dispatch.principalId,
-    state: 'refused',
-    result: {
-      kind: 'refused',
-      toolRef: dispatch.toolRef,
-      code,
-      retryable,
-      ...(nextAction === undefined ? {} : { nextAction }),
-    },
-    dispatchState: 'failed',
-    now: Date.now(),
+    credentialId: dispatch.credentialId,
+    idempotencyKey: dispatch.idempotencyKey,
+    code,
+    retryable,
+    ...(nextAction === undefined ? {} : { nextAction }),
   })
+  if (refusal.kind !== 'refused') return { kind: 'none' }
+  if (refusal.releaseRequired) {
+    // The mutation excluded claim and scheduled durable cleanup atomically.
+    // Run the same leased action now so an available ledger returns the hold
+    // before this worker completes; its scheduler/cron path survives failure.
+    await ctx.runAction(internal.capabilityCallWorker.reconcilePreClaimRefusal, { callRef: dispatch.callRef })
+  }
   return { kind: 'recorded' }
 }
 

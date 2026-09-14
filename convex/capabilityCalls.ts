@@ -70,6 +70,11 @@ import {
 import {
   dispatchHandler,
   openDispatchHandler,
+  readPreClaimRefusalHandler,
+  readPreClaimRefusalArgs,
+  refuseUnclaimedArgs,
+  refuseUnclaimedHandler,
+  refuseUnclaimedResult,
 } from './lib/callLifecycle/dispatch'
 import {
   readOwnerRecoveryHandler,
@@ -152,6 +157,12 @@ export const cancelBeforeClaim = internalMutation({
   handler: cancelBeforeClaimWithReconciliationInitialization,
 })
 
+export const refuseUnclaimed = internalMutation({
+  args: refuseUnclaimedArgs,
+  returns: refuseUnclaimedResult,
+  handler: refuseUnclaimedHandler,
+})
+
 export const listPendingCallApprovals = query({
   args: {},
   returns: v.array(pendingApprovalView),
@@ -168,6 +179,12 @@ export const openDispatch = internalQuery({
   args: { callRef: v.string() },
   returns: v.union(openDispatchValue, v.null()),
   handler: openDispatchHandler,
+})
+
+export const readPreClaimRefusal = internalQuery({
+  args: readPreClaimRefusalArgs,
+  returns: v.boolean(),
+  handler: readPreClaimRefusalHandler,
 })
 
 export const readReplay = internalQuery({

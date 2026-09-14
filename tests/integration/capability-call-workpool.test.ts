@@ -624,7 +624,7 @@ afterEach(() => {
 })
 
 describe('capability Call Workpool lifecycle', () => {
-  it.runIf(process.env.AE_FORMANCE_INTEGRATION === 'true')('buys a sandbox Tool through an exact Quote, real AUD ledger and durable worker without a second purchase on replay', async () => {
+  it.runIf(process.env.AE_FORMANCE_INTEGRATION === 'true')('buys a sandbox Tool through an exact Quote, real AUD ledger and durable worker without a second purchase on replay or a retained hold after revocation', async () => {
     const gatewayUrl = process.env.AE_FORMANCE_GATEWAY_URL ?? 'http://127.0.0.1:3069'
     const ledger = `ae-buyer-${Date.now()}-${process.pid}`
     const formance = createFormanceContext({ environment: 'sandbox', gatewayUrl, ledger, requestTimeoutMs: 10_000 })
@@ -762,6 +762,9 @@ describe('capability Call Workpool lifecycle', () => {
     const readBalance = async () => await readFormanceDisplayBalance(formance, { balanceKind: 'account_aud', subjectRef: buyer.principal.ownerId, now: Date.now() })
     expect(await readBalance()).toMatchObject({ kind: 'available', units: '10000000' })
 
+    let raceCallRef: string | undefined
+    let claimRaceResult: unknown
+    let fenceRaceResult: unknown
     const settlementHash: Hex = `0x${'4'.repeat(64)}`
     const deliveries: Array<{ payment: string; output: { result: string } }> = []
     providerFetch.mockImplementation(async (_url, init) => {
@@ -771,6 +774,11 @@ describe('capability Call Workpool lifecycle', () => {
       const authorization = (decoded.payload as { authorization: { from: Hex; to: Hex; value: string; validAfter: string; validBefore: string; nonce: Hex } }).authorization
       const output = { result: 'literal sandbox buyer result' }
       deliveries.push({ payment, output })
+      if (raceCallRef === undefined) throw new Error('buyer_race_call_missing')
+      fenceRaceResult = await backend.mutation(internal.capabilityCalls.refuseUnclaimed, {
+        callRef: raceCallRef, principalId: buyer.principal.principalId, credentialId: buyer.principal.credentialId,
+        idempotencyKey: 'buyer-purchase', code: 'test_refusal_race', retryable: false,
+      })
       external.receipt.mockResolvedValue({
         transactionHash: settlementHash, status: 'success', confirmations: 12n, blockHash: `0x${'5'.repeat(64)}`,
         blockNumber: 100n, observedBlockTimestamp: BigInt(Math.floor(Date.now() / 1000)), authorizationState: true,
@@ -788,15 +796,38 @@ describe('capability Call Workpool lifecycle', () => {
         'Payment-Response': encodePaymentResponseHeader({ success: true, transaction: settlementHash, network: BASE_SEPOLIA_NETWORK, payer: payer.address }),
       } })
     })
+    vi.mocked(defaultDnsResolver.lookup).mockImplementation(async () => {
+      if (raceCallRef !== undefined && claimRaceResult === undefined) {
+        const current = await readEvidence(backend, raceCallRef)
+        if (current.control?.control.control.state === 'leased' && current.attempt?.release.state !== 'possibly_released') {
+          claimRaceResult = await backend.mutation(internal.capabilityCalls.refuseUnclaimed, {
+            callRef: raceCallRef, principalId: buyer.principal.principalId, credentialId: buyer.principal.credentialId,
+            idempotencyKey: 'buyer-purchase', code: 'test_refusal_race', retryable: false,
+          })
+        }
+      }
+      return [{ address: '93.184.216.34', family: 4 }]
+    })
     const pending = await invokeCall(backend, buyer.principal, published.toolRef, 'buyer-purchase', 'buyer-purchase')
     expect(pending).toMatchObject({ kind: 'pending' })
     if (pending.kind !== 'pending') throw new Error('buyer_call_not_pending')
+    raceCallRef = pending.callRef
+    for (const mismatchedIdentity of [
+      { principalId: 'unrelated-principal' }, { credentialId: 'unrelated-credential' }, { idempotencyKey: 'another-purchase' },
+    ]) {
+      expect(await backend.mutation(internal.capabilityCalls.refuseUnclaimed, {
+        callRef: pending.callRef, principalId: buyer.principal.principalId, credentialId: buyer.principal.credentialId,
+        idempotencyKey: 'buyer-purchase', ...mismatchedIdentity, code: 'test_wrong_identity', retryable: false,
+      })).toEqual({ kind: 'not_found' })
+    }
     const beforeWork = await readEvidence(backend, pending.callRef)
     expect(beforeWork.call).toMatchObject({ formanceFinancialState: 'reserved' })
     expect(beforeWork.call?.sellerOnboardingCanary).toBeUndefined()
     expect(await readBalance()).toMatchObject({ kind: 'available', units: '8800000' })
     await backend.finishAllScheduledFunctions(() => vi.advanceTimersByTime(1))
     const completed = await readEvidence(backend, pending.callRef)
+    expect(claimRaceResult).toMatchObject({ kind: 'claimed' })
+    expect(fenceRaceResult).toMatchObject({ kind: 'possibly_released' })
     expect(completed.call, JSON.stringify(completed.call?.result)).toMatchObject({ state: 'completed', formanceFinancialState: 'settled', result: {
       kind: 'completed', callRef: pending.callRef, output: { result: 'literal sandbox buyer result' },
       usage: { chargeState: 'paid', amount: { currency: 'AUD', units: '1200000', exponent: 6 } }, receipt: {
@@ -837,6 +868,76 @@ describe('capability Call Workpool lifecycle', () => {
     expect(deliveries).toHaveLength(1)
     expect(signedAuthorizations).toHaveLength(1)
     expect(completed.history.map(row => row.kind)).toEqual(['claim_before_effect', 'release_fence_before_network', 'terminal_returned'])
+
+    // A second accepted purchase is revoked before its worker can claim it.
+    // The buyer retains the funds; revoked authority permits no Provider payment.
+    await backend.run(async (ctx) => await ctx.runMutation(components.workpool.config.update, { maxParallelism: 0 }))
+    const revoked = await invokeCall(backend, buyer.principal, published.toolRef, 'buyer-revoked', 'buyer-revoked')
+    expect(revoked).toMatchObject({ kind: 'pending' })
+    if (revoked.kind !== 'pending') throw new Error('buyer_revocation_call_not_pending')
+    expect(await readBalance()).toMatchObject({ kind: 'available', units: '7600000' })
+    expect(await backend.mutation(internal.agentAccessPolicy.revokeGrant, {
+      grantRef: buyer.grantRef, ownerId: buyer.principal.ownerId,
+      credentialId: buyer.principal.credentialId, principalId: buyer.principal.principalId, updatedAt: Date.now(),
+    })).toMatchObject({ kind: 'revoked' })
+    let failedRefundRequests = 0
+    const originalFetch = globalThis.fetch
+    const refundFetch = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const requestUrl = input instanceof Request ? input.url : String(input)
+      const requestMethod = init?.method ?? (input instanceof Request ? input.method : 'GET')
+      if (requestUrl.startsWith(gatewayUrl) && requestMethod === 'POST') {
+        failedRefundRequests += 1
+        throw new TypeError('test_refund_gateway_unavailable')
+      }
+      return await originalFetch(input, init)
+    })
+    await backend.run(async (ctx) => await ctx.runMutation(components.workpool.config.update, { maxParallelism: 1 }))
+    vi.advanceTimersByTime(120_000)
+    await backend.finishAllScheduledFunctions(() => vi.advanceTimersByTime(1))
+    const refused = await readEvidence(backend, revoked.callRef)
+    expect(refused.call).toMatchObject({ state: 'refused', formanceFinancialState: 'reserved',
+      result: { kind: 'refused', code: 'grant_not_found' },
+      reconciliation: { disposition: 'automatic', reason: 'refund_pending' } })
+    expect(failedRefundRequests).toBeGreaterThan(0)
+    expect(await backend.mutation(internal.capabilityCalls.refuseUnclaimed, {
+      callRef: revoked.callRef, principalId: buyer.principal.principalId, credentialId: buyer.principal.credentialId,
+      idempotencyKey: 'buyer-revoked', code: 'later_refusal_must_not_replace_original', retryable: true,
+    })).toEqual({ kind: 'refused', releaseRequired: true })
+    const refusalReplay = await readEvidence(backend, revoked.callRef)
+    expect(refusalReplay.call?.result).toEqual(refused.call?.result)
+    expect(refusalReplay.call?.reconciliation).toEqual(refused.call?.reconciliation)
+    expect(await readBalance()).toMatchObject({ kind: 'available', units: '7600000' })
+    expect(await backend.action(internal.capabilityCallWorker.run, { callRef: revoked.callRef })).toEqual({ kind: 'none' })
+    refundFetch.mockRestore()
+
+    // Simulate interruption after the ledger committed, before source financial
+    // finalization, by performing that real existing external booking step alone.
+    const material = await backend.query(internal.moneyManagedCall.readBooking, { callRef: revoked.callRef })
+    if (material.kind !== 'available') throw new Error('buyer_refund_booking_missing')
+    const ledgerRelease = await backend.action(internal.moneyFormance.releaseManagedCall, {
+      booking: material.booking, externalEvidenceDigest: material.booking.quoteDigest, submissionProvenAbsent: true,
+    })
+    expect(ledgerRelease).toMatchObject({ kind: 'completed', replayed: false })
+    expect(await readBalance()).toMatchObject({ kind: 'available', units: '8800000' })
+    expect((await readEvidence(backend, revoked.callRef)).call?.formanceFinancialState).toBe('reserved')
+    vi.advanceTimersByTime(3_600_000)
+    await backend.mutation(internal.workloadCron.ensurePlatformWorkloadIdentities, {})
+    const workload = await backend.query(internal.workloadCron.admit, { name: 'reconcile due facilitator invocations' })
+    expect(await backend.action(internal.capabilityCallWorker.reconcileScheduled, { workload }))
+      .toMatchObject({ selected: 1, claimed: 1, completed: 1, retried: 0, manualReview: 0 })
+    const released = await readEvidence(backend, revoked.callRef)
+    expect(released.call).toMatchObject({ state: 'refused', formanceFinancialState: 'released',
+      result: { kind: 'refused', code: 'grant_not_found' } })
+    expect(released.call?.reconciliation).toBeUndefined()
+    expect(released.call?.formanceSettlementRefs).toBeUndefined()
+    if (ledgerRelease.kind !== 'completed') throw new Error('buyer_refund_ledger_missing')
+    expect(released.call?.formanceReleaseRefs).toEqual(ledgerRelease.transactionRefs)
+    expect(await backend.action(internal.capabilityCallWorker.reconcilePreClaimRefusal, { callRef: revoked.callRef }))
+      .toEqual({ kind: 'not_claimed' })
+    expect(await readBalance()).toMatchObject({ kind: 'available', units: '8800000' })
+    expect(refused.history).toHaveLength(0)
+    expect(deliveries).toHaveLength(1)
+    expect(signedAuthorizations).toHaveLength(1)
   }, 30_000)
 
   it('executes once, replays without another effect, and refuses a revoked grant before claim', async () => {
