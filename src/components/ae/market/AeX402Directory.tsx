@@ -29,7 +29,7 @@ import type { X402DirectoryEntry, X402DirectoryFilters, X402DirectoryInput, X402
 
 type DirectorySearch = MarketReturnSearch
 
-type DirectoryProps = Readonly<{ page: X402DirectoryPage; search: DirectorySearch; home?: X402MarketplaceHome; catalogue?: X402DirectoryCatalogue; overview?: X402DirectoryCatalogueOverview; providers?: X402DirectoryProvidersPage }>
+type DirectoryProps = Readonly<{ page: X402DirectoryPage; search: DirectorySearch; activeView?: NonNullable<DirectorySearch['view']>; home?: X402MarketplaceHome; catalogue?: X402DirectoryCatalogue; overview?: X402DirectoryCatalogueOverview; providers?: X402DirectoryProvidersPage }>
 
 export function AeX402Directory(props: DirectoryProps) {
   return <DirectorySavedToolsProvider><DirectoryMarketplace {...props} /></DirectorySavedToolsProvider>
@@ -45,14 +45,14 @@ function directoryInput(search: X402DirectoryInput) {
   }
 }
 
-function DirectoryMarketplace({ page, search, home, catalogue, overview, providers }: DirectoryProps) {
+function DirectoryMarketplace({ page, search, activeView, home, catalogue, overview, providers }: DirectoryProps) {
   const navigate = useNavigate()
   const [comparison, setComparison] = useState<readonly SavedDirectoryTool[]>([])
   const [compareOpen, setCompareOpen] = useState(false)
   const searchInput = useRef<HTMLInputElement>(null)
   const compareTrigger = useRef<HTMLButtonElement>(null)
   const saved = useDirectorySavedTools()
-  const view = search.view ?? (home === undefined ? 'tools' : 'discover')
+  const view = activeView ?? search.view ?? (home === undefined ? 'tools' : 'discover')
   const { query, offset, network, provider, maxUsdPrice } = search
   const sourceInput = useMemo(() => directoryInput({ query, offset, network, provider, maxUsdPrice }), [query, offset, network, provider, maxUsdPrice])
   const coverage = catalogue?.kind === 'ok' ? catalogue.coverage : overview?.kind === 'ok' ? overview.coverage : undefined
@@ -300,5 +300,5 @@ function DirectoryMarketplace({ page, search, home, catalogue, overview, provide
 }
 
 export function X402DirectoryCards({ entries }: Readonly<{ entries: readonly X402DirectoryEntry[] }>) {
-  return <ul className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">{entries.map((entry, index) => <li key={`${entry.resource}:${index}`} className="min-w-0"><DirectoryToolCard entry={entry} /></li>)}</ul>
+  return <ul className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">{entries.map(entry => <li key={entry.resource} className="min-w-0"><DirectoryToolCard entry={entry} /></li>)}</ul>
 }

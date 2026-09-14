@@ -45,6 +45,19 @@ export function validateMarketSearch(
   };
 }
 
+type MarketView = NonNullable<MarketSearch['view']>
+
+function resolveMarketView(search: MarketSearch): MarketView {
+  if (search.view !== undefined) return search.view
+  if (search.providerCursor !== undefined) return 'providers'
+  if (
+    search.compare !== undefined
+    || search.resource !== undefined
+    || Object.keys(directoryCatalogueSearchValues(search)).length > 0
+  ) return 'tools'
+  return 'discover'
+}
+
 export const Route = createFileRoute("/market")({
   staticData: {
     nav: {
@@ -63,16 +76,17 @@ export const Route = createFileRoute("/market")({
   }),
   loader: async ({ deps }) => {
     const catalogueInput = x402DirectoryCatalogueInputSchema.parse(directoryCatalogueSearchValues(deps))
-    const showHome = deps.view === 'discover'
+    const view = resolveMarketView(deps)
+    const showHome = view === 'discover'
     const [catalogue, canonicalBaseUrl, home, overview, providers] = await Promise.all([
       readX402DirectoryCatalogueServer({ data: { ...catalogueInput, ...(catalogueInput.query || catalogueInput.sort ? {} : { sort: 'adoption' }) } }),
       readCanonicalBaseUrlServer(),
       showHome ? readX402MarketplaceHomeServer().catch(() => undefined) : Promise.resolve(undefined),
       readX402DirectoryCatalogueOverviewServer(),
-      deps.view === 'providers' && deps.query === undefined && deps.network === undefined && deps.provider === undefined && deps.maxUsdPrice === undefined && deps.directoryCategory === undefined ? readX402DirectoryProvidersServer({ data: { ...(deps.providerCursor === undefined ? {} : { providerCursor: deps.providerCursor }) } }) : Promise.resolve(undefined),
+      view === 'providers' && deps.query === undefined && deps.network === undefined && deps.provider === undefined && deps.maxUsdPrice === undefined && deps.directoryCategory === undefined ? readX402DirectoryProvidersServer({ data: { ...(deps.providerCursor === undefined ? {} : { providerCursor: deps.providerCursor }) } }) : Promise.resolve(undefined),
     ])
     const page = catalogue?.kind === 'ok' ? catalogue.page : { kind: 'unavailable' as const, reason: catalogue?.reason === 'query_invalid' ? 'query_invalid' as const : 'source_unavailable' as const }
-    return { page, catalogue, overview, canonicalBaseUrl, home, providers }
+    return { page, catalogue, overview, canonicalBaseUrl, home, providers, view }
   },
   staleTime: 30_000,
   preloadStaleTime: 30_000,
@@ -125,7 +139,7 @@ function MarketRoute() {
 
   return (
     <AePublicPage>
-      <AeX402Directory page={data.page} search={search} catalogue={data.catalogue} overview={data.overview} {...(data.providers === undefined ? {} : { providers: data.providers })} {...(data.home === undefined ? {} : { home: data.home })} />
+      <AeX402Directory activeView={data.view} page={data.page} search={search} catalogue={data.catalogue} overview={data.overview} {...(data.providers === undefined ? {} : { providers: data.providers })} {...(data.home === undefined ? {} : { home: data.home })} />
     </AePublicPage>
   );
 }

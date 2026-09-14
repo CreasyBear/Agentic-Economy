@@ -105,20 +105,31 @@ describe('indexed directory route', () => {
     expect(reads.home).not.toHaveBeenCalled();
   });
 
-  it('loads adoption-ranked Tools by default without fetching collections', async () => {
+  it('loads guided discovery and an adoption-ranked Tool preview by default', async () => {
     const loader = Route.options.loader;
     if (typeof loader !== 'function') throw new Error('loader_missing');
     const data = await loader({ deps: {} } as never);
-    expect(data).toMatchObject({ catalogue: { coverage: { indexedTotal: 4000 } } });
+    expect(data).toMatchObject({ view: 'discover', catalogue: { coverage: { indexedTotal: 4000 } } });
     expect(reads.catalogue).toHaveBeenCalledWith({ data: { sort: 'adoption' } });
-    expect(reads.home).not.toHaveBeenCalled();
+    expect(reads.home).toHaveBeenCalledOnce();
+  });
+
+  it('keeps guided discovery selected when optional collection data is unavailable', async () => {
+    reads.home.mockRejectedValueOnce(new Error('collections unavailable'));
+    const loader = Route.options.loader;
+    if (typeof loader !== 'function') throw new Error('loader_missing');
+
+    const data = await loader({ deps: {} } as never);
+
+    expect(data).toMatchObject({ view: 'discover', home: undefined });
   });
 
   it('does not expose the unfiltered index total as a filtered page match count', async () => {
     const loader = Route.options.loader;
     if (typeof loader !== 'function') throw new Error('loader_missing');
     const data = await loader({ deps: { provider: 'example.com' } } as never);
-    expect(data).toMatchObject({ catalogue: { coverage: { indexedTotal: 4000 } } });
+    expect(data).toMatchObject({ view: 'tools', catalogue: { coverage: { indexedTotal: 4000 } } });
+    expect(reads.home).not.toHaveBeenCalled();
     if (data.page.kind !== 'ok') throw new Error('page_missing');
     expect(data.page.total).toBeUndefined();
   });
