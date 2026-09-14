@@ -502,7 +502,7 @@ describe('assistant access components', () => {
     expect(screen.queryByRole('button', { name: /pay /i })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Add more credit' })).toBeNull()
     if (failure === 'refused') {
-      read.mockResolvedValueOnce({ kind: 'refused', code: 'source_unavailable', retryable: true })
+      read.mockResolvedValueOnce({ kind: 'refused', code: 'stripe_setup_required', retryable: false })
     } else {
       read.mockRejectedValueOnce(new Error('status source unavailable'))
     }
@@ -517,7 +517,7 @@ describe('assistant access components', () => {
   it('keeps an unreadable stored attempt recoverable through the same locator', async () => {
     const locator = { commandRef: 'sha256:stored-attempt', idempotencyKey: 'funding:stored-attempt' }
     window.sessionStorage.setItem('ae.account-funding.recovery.v1', JSON.stringify(locator))
-    const read = vi.fn(async () => ({ kind: 'refused' as const, code: 'source_unavailable', retryable: true }))
+    const read = vi.fn<AccountFundingPort['read']>(async () => ({ kind: 'refused', code: 'stripe_setup_required', retryable: false }))
     const begin = vi.fn()
     render(<AeAccountFundingPanel port={{ begin, read }} constraints={fundingConstraints} />)
 
