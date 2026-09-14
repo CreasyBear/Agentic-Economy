@@ -176,14 +176,14 @@ export function AeRecordTable<TData>({
             id: '__ae_action',
             enableSorting: false,
             enableHiding: false,
-            header: () => <span className="sr-only">{rowAction.label}</span>,
+            header: () => rowAction.label,
             cell: ({ row }) => <RecordTableAction row={row} action={rowAction} />,
           },
     [rowAction],
   )
 
   const resolvedColumns = useMemo(
-    () => [selectionColumn, actionColumn, ...columns].filter(
+    () => [selectionColumn, ...columns, actionColumn].filter(
       (column): column is ColumnDef<TData, unknown> => column !== undefined,
     ),
     [actionColumn, columns, selectionColumn],

@@ -212,6 +212,34 @@ describe('AeRecordTable interaction composition', () => {
     expect(actions[1]?.closest('tr')?.className).toContain('has-[:focus-visible]')
   })
 
+  it('keeps identity first and gives the trailing action a visible label', () => {
+    render(
+      <AeRecordTable
+        columns={columns}
+        data={rows}
+        caption="Operations"
+        hideFilter
+        getRowId={(row) => row.id}
+        rowAction={{
+          kind: 'button',
+          label: 'Inspect',
+          onOpen: () => undefined,
+          getAccessibleLabel: (row) => `Inspect ${row.name}`,
+        }}
+      />,
+    )
+
+    const table = screen.getByRole('table')
+    expect(within(table).getAllByRole('columnheader').map((header) => header.textContent)).toEqual([
+      'Name',
+      'Inspect',
+    ])
+    expect(within(table).getAllByRole('cell').slice(0, 2).map((cell) => cell.textContent)).toEqual([
+      'weather.lookup',
+      'Inspect',
+    ])
+  })
+
   it('composes controlled selected, mixed, all, and clear states with stable IDs', () => {
     render(<SelectableRecordTable />)
 
