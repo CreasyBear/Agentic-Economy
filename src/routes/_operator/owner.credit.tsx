@@ -3,15 +3,14 @@ import { Link, createFileRoute } from '@tanstack/react-router'
 import { useServerFn } from '@tanstack/react-start'
 import { Wallet } from 'lucide-react'
 
-import { AeOwnerCredit } from '@/components/ae/console/AeOwnerCredit'
+import { AeOwnerCredit, type AccountHistoryPort } from '@/components/ae/console/AeOwnerCredit'
 import type { AccountFundingPort } from '@/components/ae/console/AeCreditTopUpPanel'
 import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
 import { AeSettingsStack } from '@/components/ae/layout/AeSection'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { operatorRouteOptions } from '@/lib/operator/route-options'
 import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
-import { readAgentDirectoryServer } from '@/lib/server/agent-access-console.functions'
+import { readOwnerAccountHistoryServer } from '@/lib/server/call-history.functions'
 import {
   createOwnerStatementServer,
   createOwnerDailyCloseServer,
@@ -24,17 +23,19 @@ import {
   type MoneyProviderObligationView,
   type MoneyReconciliationCaseView,
 } from '@/lib/server/money-documents.functions'
-import type { AgentDirectoryProjection } from '@/modules/agent-access/agent-operator-view-model'
 import {
   beginAccountFundingServer,
+  readAccountFundingBalanceServer,
+  readAccountFundingConstraintsServer,
   readAccountFundingServer,
 } from '@/modules/money/money.functions'
-import type { AccountFundingBalance } from '@/modules/money/server'
+import type { AccountHistoryResult } from '@/modules/money/public'
+import type { AccountFundingBalance, AccountFundingConstraints } from '@/modules/money/server'
 
 export const Route = createFileRoute('/_operator/owner/credit')({
   staticData: {
     nav: {
-      label: 'Credit',
+      label: 'Balance',
       operator: {
         roles: ['owner'],
         group: 'Buy',
@@ -48,7 +49,7 @@ export const Route = createFileRoute('/_operator/owner/credit')({
   ...operatorRouteOptions,
   head: () => ({
     meta: [
-      { title: 'Credit | Agentic Economy' },
+      { title: 'Balance | Agentic Economy' },
       { name: 'robots', content: 'noindex' },
     ],
   }),
@@ -56,9 +57,11 @@ export const Route = createFileRoute('/_operator/owner/credit')({
 })
 
 function OwnerCreditRoute() {
-  const readDirectory = useServerFn(readAgentDirectoryServer)
   const beginAccountFunding = useServerFn(beginAccountFundingServer)
   const readAccountFunding = useServerFn(readAccountFundingServer)
+  const readAccountBalance = useServerFn(readAccountFundingBalanceServer)
+  const readAccountHistory = useServerFn(readOwnerAccountHistoryServer)
+  const readFundingConstraints = useServerFn(readAccountFundingConstraintsServer)
   const readDocuments = useServerFn(readOwnerMoneyDocumentsServer)
   const readReconciliation = useServerFn(readOwnerMoneyReconciliationServer)
   const readObligations = useServerFn(readOwnerProviderObligationsServer)
@@ -70,34 +73,92 @@ function OwnerCreditRoute() {
     begin: (data) => beginAccountFunding({ data }),
     read: (data) => readAccountFunding({ data }),
   }), [beginAccountFunding, readAccountFunding])
-  const [directory, setDirectory] = useState<AgentDirectoryProjection>(emptyAgentDirectory)
+  const accountHistoryPort = useMemo<AccountHistoryPort>(() => ({
+    read: (data) => readAccountHistory({ data }),
+  }), [readAccountHistory])
+  const [accountBalance, setAccountBalance] = useState<AccountFundingBalance>()
+  const [accountHistory, setAccountHistory] = useState<AccountHistoryResult>()
   const [documents, setDocuments] = useState<readonly MoneyDocumentView[]>([])
   const [reconciliationCases, setReconciliationCases] = useState<readonly MoneyReconciliationCaseView[]>([])
   const [providerObligations, setProviderObligations] = useState<readonly MoneyProviderObligationView[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string>()
+  const [fundingConstraints, setFundingConstraints] = useState<AccountFundingConstraints>()
+  const [balanceLoading, setBalanceLoading] = useState(true)
+  const [historyLoading, setHistoryLoading] = useState(true)
+  const [constraintsLoading, setConstraintsLoading] = useState(true)
+  const [unavailable, setUnavailable] = useState({
+    balance: false,
+    history: false,
+    documents: false,
+    reconciliation: false,
+    obligations: false,
+    constraints: false,
+  })
 
-  const load = useCallback(async () => {
-    setLoading(true)
+  const loadBalance = useCallback(async () => {
+    setBalanceLoading(true)
     try {
-      const [nextDirectory, nextDocuments, nextReconciliation, nextObligations] = await Promise.all([
-        readDirectory(),
-        readDocuments({ data: {} }),
-        readReconciliation({ data: {} }),
-        readObligations({ data: {} }),
-      ])
-      setDirectory(nextDirectory)
-      setDocuments(nextDocuments.page)
-      setReconciliationCases(nextReconciliation.page)
-      setProviderObligations(nextObligations.page)
-      setError(undefined)
+      const nextBalance = await readAccountBalance()
+      setAccountBalance((current) => nextBalance.kind === 'available' ? nextBalance : current ?? nextBalance)
+      setUnavailable((current) => ({ ...current, balance: nextBalance.kind !== 'available' }))
     } catch (cause) {
       captureClientExceptionOnClient(cause)
-      setError('Credit balance is temporarily unavailable.')
+      setUnavailable((current) => ({ ...current, balance: true }))
     } finally {
-      setLoading(false)
+      setBalanceLoading(false)
     }
-  }, [readDirectory, readDocuments, readObligations, readReconciliation])
+  }, [readAccountBalance])
+
+  const loadHistory = useCallback(async () => {
+    setHistoryLoading(true)
+    try {
+      const nextHistory = await readAccountHistory({ data: {} })
+      setAccountHistory((current) => nextHistory.kind === 'available' ? nextHistory : current ?? nextHistory)
+      setUnavailable((current) => ({ ...current, history: nextHistory.kind !== 'available' }))
+    } catch (cause) {
+      captureClientExceptionOnClient(cause)
+      setUnavailable((current) => ({ ...current, history: true }))
+    } finally {
+      setHistoryLoading(false)
+    }
+  }, [readAccountHistory])
+
+  const loadConstraints = useCallback(async () => {
+    setConstraintsLoading(true)
+    try {
+      const nextConstraints = await readFundingConstraints()
+      setFundingConstraints(nextConstraints)
+      setUnavailable((current) => ({ ...current, constraints: false }))
+    } catch (cause) {
+      captureClientExceptionOnClient(cause)
+      setUnavailable((current) => ({ ...current, constraints: true }))
+    } finally {
+      setConstraintsLoading(false)
+    }
+  }, [readFundingConstraints])
+
+  const loadAdministration = useCallback(async () => {
+    const [nextDocuments, nextReconciliation, nextObligations] = await Promise.allSettled([
+      readDocuments({ data: {} }),
+      readReconciliation({ data: {} }),
+      readObligations({ data: {} }),
+    ])
+    for (const result of [nextDocuments, nextReconciliation, nextObligations]) {
+      if (result.status === 'rejected') captureClientExceptionOnClient(result.reason)
+    }
+    if (nextDocuments.status === 'fulfilled') setDocuments(nextDocuments.value.page)
+    if (nextReconciliation.status === 'fulfilled') setReconciliationCases(nextReconciliation.value.page)
+    if (nextObligations.status === 'fulfilled') setProviderObligations(nextObligations.value.page)
+    setUnavailable((current) => ({
+      ...current,
+      documents: nextDocuments.status === 'rejected',
+      reconciliation: nextReconciliation.status === 'rejected',
+      obligations: nextObligations.status === 'rejected',
+    }))
+  }, [readDocuments, readObligations, readReconciliation])
+
+  const load = useCallback(async () => {
+    await Promise.all([loadBalance(), loadHistory(), loadConstraints(), loadAdministration()])
+  }, [loadAdministration, loadBalance, loadConstraints, loadHistory])
 
   useEffect(() => {
     void load()
@@ -106,7 +167,7 @@ function OwnerCreditRoute() {
   return (
     <AeOperatorPage
       operatorRole="owner"
-      title="Funding"
+      title="Balance"
       description="Fund the Account in AUD, then control each Agent's spending through its spending policy."
       currentPath="/owner/credit"
       actions={
@@ -116,32 +177,27 @@ function OwnerCreditRoute() {
       }
     >
       <AeSettingsStack>
-        {error === undefined ? null : (
-          <Alert variant="destructive">
-            <AlertTitle>Credit unavailable</AlertTitle>
-            <AlertDescription>
-              <p>{error}</p>
-              <Button type="button" variant="secondary" disabled={loading} onClick={() => void load()}>
-                {loading ? 'Trying again…' : 'Try again'}
-              </Button>
-            </AlertDescription>
-          </Alert>
-        )}
         <AeOwnerCredit
-          directory={directory}
-          loading={loading}
+          {...(accountBalance === undefined ? {} : { accountBalance })}
+          {...(accountHistory === undefined ? {} : { accountHistory })}
+          accountHistoryPort={accountHistoryPort}
+          balanceLoading={balanceLoading}
+          historyLoading={historyLoading}
+          constraintsLoading={constraintsLoading}
           accountFundingPort={accountFundingPort}
+          {...(fundingConstraints === undefined ? {} : { fundingConstraints })}
           onCreditRefresh={load}
           documents={documents}
           reconciliationCases={reconciliationCases}
           providerObligations={providerObligations}
+          unavailable={unavailable}
           onCreateStatement={async () => {
             const now = new Date()
             const periodStart = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)
             const periodEnd = Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1)
             const result = await createStatement({ data: { periodStart, periodEnd } })
             if (result.kind === 'refused') throw new Error(result.code)
-            await load()
+            await loadAdministration()
           }}
           onCreateDailyClose={async () => {
             const today = new Date()
@@ -149,12 +205,12 @@ function OwnerCreditRoute() {
             const periodStart = periodEnd - 24 * 60 * 60 * 1_000
             const result = await createDailyClose({ data: { periodStart, periodEnd } })
             if (result.kind === 'refused') throw new Error(result.code)
-            await load()
+            await loadAdministration()
           }}
           onSignDailyClose={async (documentRef: string, expectedRenderInputDigest: string) => {
             const result = await signDailyClose({ data: { documentRef, expectedRenderInputDigest } })
             if (result.kind === 'refused') throw new Error(result.code)
-            await load()
+            await loadAdministration()
           }}
           onOpenDocument={async (documentRef: string) => {
             const url = await renderDocument({ data: { documentRef } })
@@ -166,15 +222,3 @@ function OwnerCreditRoute() {
     </AeOperatorPage>
   )
 }
-
-const emptyAgentDirectory: AgentDirectoryProjection = Object.freeze({
-  items: Object.freeze([]),
-  details: Object.freeze([]),
-  accountBalance: Object.freeze({
-    kind: 'available',
-    accountRef: 'local-preview',
-    balance: Object.freeze({ currency: 'AUD', units: '0', exponent: 6 }),
-    locked: false,
-    version: 0,
-  } satisfies AccountFundingBalance),
-})

@@ -4,28 +4,36 @@ import { useMemo, useState, type ReactNode } from 'react'
 import type { ColumnDef } from '@tanstack/react-table'
 
 import { AeFactList } from '@/components/ae/data/AeFactList'
-import { AeEmptyState } from '@/components/ae/feedback/AeEmptyState'
-import { AeRecordSheet } from '@/components/ae/layout/AeRecordSheet'
 import { AeSection } from '@/components/ae/layout/AeSection'
 import {
   AeOperatorSortableHeader,
   AeRecordTable,
 } from '@/components/ae/operator/AeOperatorDataTable'
 import { Button } from '@/components/ui/button'
-import { stagedListPhase, useFirstLoadPending } from '@/components/ui/data-state'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Skeleton } from '@/components/ui/skeleton'
-import { formatCurrencyAmount, formatDisplayAmount, type ExactAmount } from '@/modules/money/public'
-import type { AccountFundingBalance } from '@/modules/money/server'
-import type { AgentActivityView, AgentDetail, AgentDirectoryProjection } from '@/modules/agent-access/agent-operator-view-model'
+import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
+import {
+  formatDisplayAmount,
+  type AccountHistoryEntry,
+  type AccountHistoryResult,
+  type ExactAmount,
+} from '@/modules/money/public'
+import type { AccountFundingBalance, AccountFundingConstraints } from '@/modules/money/server'
 import { formatTimestamp } from '@/lib/ui/format-time'
 import type { MoneyDocumentView, MoneyProviderObligationView, MoneyReconciliationCaseView } from '@/lib/server/money-documents.functions'
 import { AeAccountFundingPanel, type AccountFundingPort } from './AeCreditTopUpPanel'
 
 export type AeOwnerCreditProps = Readonly<{
-  directory: AgentDirectoryProjection
   accountBalance?: AccountFundingBalance
-  loading: boolean
+  accountHistory?: AccountHistoryResult
+  accountHistoryPort?: AccountHistoryPort
+  balanceLoading?: boolean
+  historyLoading?: boolean
+  constraintsLoading?: boolean
   accountFundingPort?: AccountFundingPort
+  fundingConstraints?: AccountFundingConstraints
   onCreditRefresh?: () => void | Promise<void>
   documents?: readonly MoneyDocumentView[]
   reconciliationCases?: readonly MoneyReconciliationCaseView[]
@@ -34,11 +42,17 @@ export type AeOwnerCreditProps = Readonly<{
   onCreateDailyClose?: () => Promise<void>
   onSignDailyClose?: (documentRef: string, expectedRenderInputDigest: string) => Promise<void>
   onOpenDocument?: (documentRef: string) => Promise<void>
+  unavailable?: Readonly<{
+    balance?: boolean
+    history?: boolean
+    documents?: boolean
+    reconciliation?: boolean
+    obligations?: boolean
+  }>
 }>
 
-type CreditChargeRow = Readonly<{
-  item: AgentDetail
-  entry: AgentActivityView
+export type AccountHistoryPort = Readonly<{
+  read: (input: Readonly<{ cursor?: string }>) => Promise<AccountHistoryResult>
 }>
 
 /**
@@ -62,10 +76,14 @@ function CreditSectionEmptyState({
 }
 
 export function AeOwnerCredit({
-  directory,
-  accountBalance: suppliedAccountBalance,
-  loading,
+  accountBalance,
+  accountHistory,
+  accountHistoryPort,
+  balanceLoading = false,
+  historyLoading = false,
+  constraintsLoading = false,
   accountFundingPort,
+  fundingConstraints,
   onCreditRefresh,
   documents = [],
   reconciliationCases = [],
@@ -74,59 +92,13 @@ export function AeOwnerCredit({
   onCreateDailyClose,
   onSignDailyClose,
   onOpenDocument,
+  unavailable = {},
 }: AeOwnerCreditProps) {
-  const accountBalance = suppliedAccountBalance ?? directory.accountBalance ?? unavailableAccountBalance
-  const items = directory.details
-  const balance = accountBalance.kind === 'available' ? accountBalance.balance : undefined
-  const balanceUnavailable = accountBalance.kind === 'refused'
-  const balanceLocked = accountBalance.kind === 'available' && accountBalance.locked
-  const activity = items
-    .flatMap((item) => item.activity.map((entry) => ({ item, entry })))
-    .sort((left, right) => right.entry.createdAt - left.entry.createdAt)
-  const activityCoverageIncomplete = items.some(({ dataState }) => dataState === 'unavailable' || dataState === 'partial')
-  const firstLoadPending = useFirstLoadPending(loading)
-  const activityPhase = stagedListPhase({ firstLoadPending, rows: activity })
-  const [selected, setSelected] = useState<CreditChargeRow>()
+  const balance = accountBalance?.kind === 'available' ? accountBalance.balance : undefined
+  const balanceUnavailable = accountBalance === undefined || accountBalance.kind === 'refused'
+  const balanceRefreshUnavailable = unavailable.balance === true && accountBalance?.kind === 'available'
+  const balanceLocked = accountBalance?.kind === 'available' && accountBalance.locked
   const [documentAction, setDocumentAction] = useState<'idle' | 'creating' | 'opening' | 'signing' | 'saved' | 'failed'>('idle')
-  const columns = useMemo<ColumnDef<CreditChargeRow, unknown>[]>(
-    () => [
-      {
-        id: 'tool',
-        accessorFn: (row) => row.entry.tool?.label ?? row.entry.toolLabel,
-        header: ({ column }) => <AeOperatorSortableHeader label="Tool" column={column} />,
-        cell: ({ row }) => (
-          <span className="font-medium text-foreground">
-            {row.original.entry.tool?.label ?? row.original.entry.toolLabel}
-          </span>
-        ),
-      },
-      {
-        id: 'agent',
-        accessorFn: (row) => row.item.agent.displayName,
-        header: ({ column }) => <AeOperatorSortableHeader label="Agent" column={column} />,
-        cell: ({ row }) => row.original.item.agent.displayName,
-      },
-      {
-        id: 'amount',
-        accessorFn: (row) => formatActivityAmount(row.entry),
-        header: ({ column }) => <AeOperatorSortableHeader label="Amount" column={column} />,
-        cell: ({ row }) => (
-          <span className="font-medium font-mono tabular-nums">{formatActivityAmount(row.original.entry)}</span>
-        ),
-      },
-      {
-        id: 'when',
-        accessorFn: (row) => row.entry.createdAt,
-        header: ({ column }) => <AeOperatorSortableHeader label="Created" column={column} />,
-        cell: ({ row }) => (
-          <time className="font-mono text-xs tabular-nums text-muted-foreground">
-            {formatTimestamp(row.original.entry.createdAt)}
-          </time>
-        ),
-      },
-    ],
-    [],
-  )
 
   return (
     <div className="grid gap-8">
@@ -135,34 +107,88 @@ export function AeOwnerCredit({
         title="Account balance"
         description="Browsing is free. Paid Calls reserve AUD from this Account and remain subject to each Agent’s spending policy."
       >
-        <AeFactList
-          facts={[
-            {
-              label: 'Available credit',
-              value: firstLoadPending
-                ? 'Checking…'
-                : balanceUnavailable
-                  ? 'Balance unavailable'
-                  : formatDisplayAmount(balance),
-              mono: true,
-            },
-            {
-              label: 'State',
-              value: balanceUnavailable
-                ? 'Account balance is temporarily unavailable.'
-                : balanceLocked
-                  ? 'Locked for reconciliation; new paid Calls are refused.'
-                  : 'Available for admitted paid Calls.',
-              muted: true,
-            },
-          ]}
-        />
-        <AeAccountFundingPanel
-          {...(accountFundingPort === undefined ? {} : { port: accountFundingPort })}
+        {balanceLoading && accountBalance === undefined ? (
+          <div className="grid gap-2 rounded-xl border border-border bg-card p-5" aria-busy="true" aria-label="Loading Account balance">
+            <Skeleton className="h-4 w-28" />
+            <Skeleton className="h-11 w-48" />
+            <Skeleton className="h-4 w-72 max-w-full" />
+          </div>
+        ) : balanceUnavailable ? (
+          <Alert>
+            <AlertTitle>Balance unavailable</AlertTitle>
+            <AlertDescription className="flex flex-wrap items-center gap-3">
+              <span>No balance is being inferred. Refresh to read the authoritative Account balance.</span>
+              {onCreditRefresh === undefined ? null : (
+                <Button type="button" variant="secondary" disabled={balanceLoading} onClick={() => { void onCreditRefresh() }}>
+                  {balanceLoading ? 'Refreshing…' : 'Refresh balance'}
+                </Button>
+              )}
+            </AlertDescription>
+          </Alert>
+        ) : (
+          <div className="grid gap-2 rounded-xl border border-border bg-card p-5 shadow-sm">
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Available credit</p>
+            <p className="font-mono text-4xl font-semibold tracking-tight tabular-nums sm:text-5xl">
+              {balance === undefined ? 'Checking…' : formatDisplayAmount(balance)}
+            </p>
+            <p className="text-sm text-muted-foreground">
+              {balanceLocked
+                ? 'Locked for reconciliation; new paid Calls are refused.'
+                : 'Available for admitted paid Calls. Agent spending policies still apply.'}
+            </p>
+          </div>
+        )}
+        {balanceRefreshUnavailable ? (
+          <Alert>
+            <AlertTitle>Balance could not be refreshed</AlertTitle>
+            <AlertDescription className="flex flex-wrap items-center gap-3">
+              <span>The last authoritative balance remains visible; it has not been replaced with an inferred amount.</span>
+              {onCreditRefresh === undefined ? null : (
+                <Button type="button" variant="secondary" disabled={balanceLoading} onClick={() => { void onCreditRefresh() }}>
+                  {balanceLoading ? 'Refreshing…' : 'Try balance again'}
+                </Button>
+              )}
+            </AlertDescription>
+          </Alert>
+        ) : null}
+        <div className="grid gap-3 rounded-xl border border-border/70 p-4">
+          <div>
+            <h3 className="font-medium">Add credit</h3>
+            <p className="text-sm text-muted-foreground">Review the exact credit, fee, and total before continuing to secure payment.</p>
+          </div>
+          <AeAccountFundingPanel
+            {...(accountFundingPort === undefined ? {} : { port: accountFundingPort })}
+            {...(fundingConstraints === undefined ? {} : { constraints: fundingConstraints })}
+            constraintsLoading={constraintsLoading}
+            {...(onCreditRefresh === undefined ? {} : { onRefresh: onCreditRefresh })}
+          />
+        </div>
+      </AeSection>
+
+      <AeSection
+        title="Balance history"
+        description="Booked Account transactions are shown once by transaction identity, newest recorded transaction first."
+      >
+        <AccountHistory
+          key={canonicalDigest(accountHistory ?? { kind: 'missing' })}
+          {...(accountHistory === undefined ? {} : { result: accountHistory })}
+          {...(accountHistoryPort === undefined ? {} : { port: accountHistoryPort })}
+          loading={historyLoading}
+          unavailable={unavailable.history === true}
           {...(onCreditRefresh === undefined ? {} : { onRefresh: onCreditRefresh })}
         />
       </AeSection>
 
+      {reconciliationCases.some((item) => item.status === 'open') ? (
+        <Alert>
+          <AlertTitle>Reconciliation needs attention</AlertTitle>
+          <AlertDescription>{reconciliationCases.filter((item) => item.status === 'open').length} open difference(s) may limit paid Calls. Details are available below.</AlertDescription>
+        </Alert>
+      ) : null}
+
+      <details className="rounded-lg border border-border p-4">
+        <summary className="cursor-pointer font-medium">Accounting records and administration</summary>
+        <div className="mt-6 grid gap-8">
       <AeSection
         title="Documents"
         description="Immutable funding receipts, fee documents, statements, and adjustments retain their source transactions and policy version."
@@ -212,7 +238,9 @@ export function AeOwnerCredit({
                   ? 'The document could not be prepared. Existing records were not changed.'
                   : 'Documents are generated from immutable Account postings.'}
         </p>
-        {documents.length === 0 ? (
+        {unavailable.documents ? (
+          <CreditSectionEmptyState title="Documents unavailable" description="Balance and funding remain independent. Refresh to try these records again." />
+        ) : documents.length === 0 ? (
           <CreditSectionEmptyState
             title="No documents yet"
             description="Funding receipts appear after confirmed settlement. Statements include settled Calls in the selected period."
@@ -270,7 +298,9 @@ export function AeOwnerCredit({
         title="Reconciliation"
         description="Processor, treasury, settlement, or document differences remain scope-limited cases until an owner closes them with evidence."
       >
-        {reconciliationCases.length === 0 ? (
+        {unavailable.reconciliation ? (
+          <CreditSectionEmptyState title="Reconciliation unavailable" description="No reconciliation state is being inferred." />
+        ) : reconciliationCases.length === 0 ? (
           <CreditSectionEmptyState
             title="No reconciliation differences"
             description="New paid Calls remain blocked only when their affected Account is locked for a proven mismatch."
@@ -295,7 +325,9 @@ export function AeOwnerCredit({
         title="Provider obligations"
         description="Managed x402 obligations retain distinct buyer AUD and Provider USDC evidence. They are never eligible for a second payout."
       >
-        {providerObligations.length === 0 ? (
+        {unavailable.obligations ? (
+          <CreditSectionEmptyState title="Provider obligations unavailable" description="No obligation state is being inferred." />
+        ) : providerObligations.length === 0 ? (
           <CreditSectionEmptyState title="No Provider obligations" description="A managed x402 Call creates one attributable upstream obligation." />
         ) : (
           <div className="grid gap-intra">
@@ -312,86 +344,9 @@ export function AeOwnerCredit({
           </div>
         )}
       </AeSection>
+        </div>
+      </details>
 
-      <AeSection
-        title="Recent activity"
-        description={directory.activityCoverage === 'recent'
-          ? 'Showing the latest 50 Calls for one or more Agents in the current UTC month. Older activity is not shown here.'
-          : 'Showing Calls created in the current UTC month. Amounts marked unknown are not included in settled-charge summaries.'}
-      >
-        {directory.nextCursor === undefined ? null : <p className="text-sm text-muted-foreground">Activity covers the first directory page only; more Agents are available in Agents.</p>}
-        {activityCoverageIncomplete ? <p className="text-sm text-muted-foreground">Some Agent activity or usage is unavailable. Coverage is incomplete.</p> : null}
-        {activityPhase === 'unloaded' ? (
-          <div className="grid gap-intra" aria-busy="true" aria-label="Loading recent activity">
-            <Skeleton className="h-touch w-full" />
-            <Skeleton className="h-touch w-full" />
-            <Skeleton className="h-touch w-full" />
-          </div>
-        ) : activityPhase === 'cached-rows' ? (
-          <AeRecordTable
-            columns={columns}
-            data={activity}
-            caption="Recent activity"
-            countLabel="activities"
-            filterPlaceholder="Filter activity…"
-            hideFilter={activity.length <= 1}
-            getRowId={(item) => item.entry.callRef}
-            rowAction={{
-              kind: 'button',
-              label: 'View',
-              onOpen: setSelected,
-              getAccessibleLabel: (item) =>
-                `View ${item.entry.tool?.label ?? item.entry.toolLabel}`,
-            }}
-          />
-        ) : activity.length === 0 && activityCoverageIncomplete ? (
-          <AeEmptyState
-            title="Activity unavailable"
-            description="Activity could not be read right now. Refresh to try again."
-            action={onCreditRefresh === undefined ? undefined : (
-              <Button
-                type="button"
-                variant="secondary"
-                className="min-h-touch"
-                disabled={loading}
-                onClick={() => { void onCreditRefresh() }}
-              >
-                {loading ? 'Refreshing activity…' : 'Refresh activity'}
-              </Button>
-            )}
-          />
-        ) : activity.length === 0 ? (
-          <CreditSectionEmptyState
-            title="No activity yet"
-            description="Browsing does not create a Call."
-            action={
-              <Button asChild size="sm" className="min-h-touch">
-                <a href="/market">Search Tools</a>
-              </Button>
-            }
-          />
-        ) : (
-          <p className="text-sm text-muted-foreground">Some activity details are temporarily unavailable.</p>
-        )}
-      </AeSection>
-
-      <AeRecordSheet
-        open={selected !== undefined}
-        onOpenChange={(open) => {
-          if (!open) setSelected(undefined)
-        }}
-        title={selected === undefined ? 'Activity' : (selected.entry.tool?.label ?? selected.entry.toolLabel)}
-        {...(selected === undefined ? {} : { facts: chargeFacts(selected) })}
-        {...(selected === undefined
-          ? {}
-          : {
-              action: (
-                <Button asChild className="min-h-touch">
-                  <a href={`/calls/${selected.entry.callRef}`}>View Call</a>
-                </Button>
-              ),
-            })}
-      />
     </div>
   )
 }
@@ -407,68 +362,285 @@ function documentKindLabel(kind: MoneyDocumentView['kind']): string {
   }
 }
 
-function chargeFacts(row: CreditChargeRow): readonly { label: string; value: string; muted?: boolean; mono?: boolean }[] {
-  return [
-    { label: 'Outcome', value: activityLabel(row.entry) },
-    { label: 'Agent', value: row.item.agent.displayName },
-    { label: 'Amount', value: formatActivityAmount(row.entry), mono: true },
-    { label: 'Payment', value: paymentStateLabel(row.entry.paymentState) },
-    { label: 'Delivery', value: deliveryStateLabel(row.entry.deliveryState) },
-    ...(row.entry.tool === undefined
-      ? []
-      : [{ label: 'Provider', value: row.entry.tool.provider }]),
-    { label: 'When', value: formatTimestamp(row.entry.createdAt), mono: true },
-  ]
+type AvailableAccountHistory = Extract<AccountHistoryResult, { kind: 'available' }>
+type AccountHistoryState = Readonly<{
+  source: AvailableAccountHistory
+  entries: readonly AccountHistoryEntry[]
+  cursor: string | undefined
+  status: 'idle' | 'loading' | 'failed'
+}>
+
+function AccountHistory({
+  result,
+  port,
+  loading,
+  unavailable,
+  onRefresh,
+}: Readonly<{
+  result?: AccountHistoryResult
+  port?: AccountHistoryPort
+  loading: boolean
+  unavailable: boolean
+  onRefresh?: () => void | Promise<void>
+}>) {
+  if (result?.kind !== 'available') {
+    return <UnavailableAccountHistory loading={loading} {...(onRefresh === undefined ? {} : { onRefresh })} />
+  }
+  return <AvailableAccountHistoryFrame
+    result={result}
+    {...(port === undefined ? {} : { port })}
+    refreshUnavailable={unavailable}
+    loading={loading}
+    {...(onRefresh === undefined ? {} : { onRefresh })}
+  />
 }
 
-function activityLabel(entry: AgentActivityView): string {
-  if (entry.state === 'outcome_unknown') return 'Call outcome needs checking'
-  if (entry.state === 'refused') return 'Call refused'
-  if (entry.deliveryState === 'not_delivered') return 'Call not delivered'
-  if (entry.deliveryState === 'unknown') return 'Call delivery needs checking'
-  if (entry.paymentState === 'released') return 'Refunded Call'
-  if (entry.paymentState === 'unknown') return 'Call payment needs checking'
-  return 'Completed Call'
+function UnavailableAccountHistory({
+  loading,
+  onRefresh,
+}: Readonly<{ loading: boolean; onRefresh?: () => void | Promise<void> }>) {
+  if (loading) {
+    return (
+      <div className="grid gap-intra" aria-busy="true" aria-label="Loading balance history">
+        <Skeleton className="h-touch w-full" />
+        <Skeleton className="h-touch w-full" />
+      </div>
+    )
+  }
+  return (
+    <Alert>
+      <AlertTitle>Balance history unavailable</AlertTitle>
+      <AlertDescription className="flex flex-wrap items-center gap-3">
+        <span>Known Account balance remains visible. No missing transaction or amount is being inferred.</span>
+        {onRefresh === undefined ? null : (
+          <Button type="button" variant="secondary" onClick={() => { void onRefresh() }}>Refresh history</Button>
+        )}
+      </AlertDescription>
+    </Alert>
+  )
 }
 
-function paymentStateLabel(state: AgentActivityView['paymentState']): string {
-  switch (state) {
-    case 'settled': return 'Settled'
-    case 'released': return 'Released / refunded'
-    case 'unknown': return 'Unknown'
-    case 'not_applicable': return 'Not applicable'
-    default: {
-      const exhaustive: never = state
-      return exhaustive
+function AvailableAccountHistoryFrame({
+  result,
+  port,
+  refreshUnavailable,
+  loading,
+  onRefresh,
+}: Readonly<{
+  result: AvailableAccountHistory
+  port?: AccountHistoryPort
+  refreshUnavailable: boolean
+  loading: boolean
+  onRefresh?: () => void | Promise<void>
+}>) {
+  return (
+    <div className="grid gap-4">
+      <HistoryRefreshWarning
+        visible={refreshUnavailable}
+        loading={loading}
+        {...(onRefresh === undefined ? {} : { onRefresh })}
+      />
+      <AvailableAccountHistoryView initial={result} {...(port === undefined ? {} : { port })} />
+    </div>
+  )
+}
+
+function HistoryRefreshWarning({
+  visible,
+  loading,
+  onRefresh,
+}: Readonly<{ visible: boolean; loading: boolean; onRefresh?: () => void | Promise<void> }>) {
+  if (!visible) return null
+  return (
+    <Alert>
+      <AlertTitle>Balance history could not be refreshed</AlertTitle>
+      <AlertDescription className="flex flex-wrap items-center gap-3">
+        <span>The last booked transactions remain visible. No later transaction or amount is being inferred.</span>
+        {onRefresh === undefined ? null : (
+          <Button type="button" variant="secondary" disabled={loading} onClick={() => { void onRefresh() }}>
+            {loading ? 'Refreshing…' : 'Try history again'}
+          </Button>
+        )}
+      </AlertDescription>
+    </Alert>
+  )
+}
+
+function AvailableAccountHistoryView({
+  initial,
+  port,
+}: Readonly<{ initial: AvailableAccountHistory; port?: AccountHistoryPort }>) {
+  const [state, setState] = useState<AccountHistoryState>(() => ({
+    source: initial,
+    entries: deduplicateHistory([], initial.entries),
+    cursor: initial.isDone ? undefined : initial.continueCursor,
+    status: 'idle',
+  }))
+  const columns = useMemo<ColumnDef<AccountHistoryEntry, unknown>[]>(() => [
+    {
+      id: 'activity',
+      accessorFn: (entry) => accountHistoryLabel(entry.kind),
+      header: ({ column }) => <AeOperatorSortableHeader label="Activity" column={column} />,
+      cell: ({ row }) => (
+        <div className="grid gap-1">
+          <span className="font-medium text-foreground">{accountHistoryLabel(row.original.kind)}</span>
+          <details className="text-xs text-muted-foreground">
+            <summary className="cursor-pointer">Transaction details</summary>
+            <dl className="mt-2 grid gap-1">
+              <div><dt className="inline">Transaction ID: </dt><dd className="inline font-mono">{row.original.transactionId}</dd></div>
+              <div><dt className="inline">Reference: </dt><dd className="inline font-mono">{row.original.transactionRef ?? 'Not recorded'}</dd></div>
+              <div><dt className="inline">Occurred: </dt><dd className="inline font-mono">{formatTimestamp(row.original.occurredAt)}</dd></div>
+              <div><dt className="inline">Source link: </dt><dd className="inline">Unavailable from Account history</dd></div>
+              {row.original.sourceDigest === null ? null : (
+                <div><dt className="inline">Evidence digest: </dt><dd className="inline break-all font-mono">{row.original.sourceDigest}</dd></div>
+              )}
+              {row.original.revertedAt === null ? null : (
+                <div><dt className="inline">Reverted: </dt><dd className="inline font-mono">{formatTimestamp(row.original.revertedAt)}</dd></div>
+              )}
+            </dl>
+          </details>
+        </div>
+      ),
+    },
+    {
+      id: 'accountEffect',
+      accessorFn: (entry) => BigInt(entry.accountEffect.units),
+      header: ({ column }) => <AeOperatorSortableHeader label="Balance effect" column={column} />,
+      cell: ({ row }) => row.original.accountEffect.units === '0'
+        ? <span className="text-muted-foreground">No Balance change</span>
+        : <span className="font-mono font-medium tabular-nums">{formatSignedAmount(row.original.accountEffect)}</span>,
+    },
+    {
+      id: 'documentEffect',
+      accessorFn: (entry) => BigInt(entry.documentEffectUnits),
+      header: ({ column }) => <AeOperatorSortableHeader label="Document effect" column={column} />,
+      cell: ({ row }) => row.original.documentEffectUnits === '0'
+        ? <span className="text-muted-foreground">None</span>
+        : <span className="font-mono tabular-nums">{formatSignedAmount({ currency: 'AUD', exponent: 6, units: row.original.documentEffectUnits })}</span>,
+    },
+    {
+      id: 'recorded',
+      accessorFn: (entry) => entry.recordedAt ?? entry.occurredAt,
+      header: ({ column }) => <AeOperatorSortableHeader label="Recorded" column={column} />,
+      cell: ({ row }) => (
+        <div className="grid gap-0.5">
+          <time className="font-mono text-xs tabular-nums text-muted-foreground">
+            {formatTimestamp(row.original.recordedAt ?? row.original.occurredAt)}
+          </time>
+          {row.original.recordedAt === null ? <span className="text-xs text-muted-foreground">Occurred time</span> : null}
+        </div>
+      ),
+    },
+    {
+      id: 'status',
+      accessorFn: (entry) => entry.reverted ? 'Reverted' : 'Booked',
+      header: ({ column }) => <AeOperatorSortableHeader label="Status" column={column} />,
+      cell: ({ row }) => row.original.reverted ? 'Reverted' : 'Booked',
+    },
+  ], [])
+
+  async function loadNextPage() {
+    if (state.cursor === undefined || state.status === 'loading' || port === undefined) return
+    const source = state.source
+    const cursor = state.cursor
+    setState((current) => current.source === source && current.cursor === cursor
+      ? { ...current, status: 'loading' }
+      : current)
+    try {
+      const next = await port.read({ cursor })
+      if (next.kind !== 'available'
+        || next.snapshotAt !== source.snapshotAt
+        || next.source !== source.source
+        || next.ordering !== source.ordering) {
+        throw new Error('account_history_continuation_mismatch')
+      }
+      setState((current) => current.source === source && current.cursor === cursor
+        ? {
+            source,
+            entries: deduplicateHistory(current.entries, next.entries),
+            cursor: next.isDone ? undefined : next.continueCursor,
+            status: 'idle',
+          }
+        : current)
+    } catch (cause) {
+      captureClientExceptionOnClient(cause)
+      setState((current) => current.source === source && current.cursor === cursor
+        ? { ...current, status: 'failed' }
+        : current)
     }
+  }
+
+  return (
+    <div className="grid gap-4">
+      {initial.coverage === 'partial' ? (
+        <Alert>
+          <AlertTitle>Some transaction attribution is incomplete</AlertTitle>
+          <AlertDescription>Known booked transactions remain visible. Reversal netting or attribution may be incomplete, so these effects are not presented as a reconciliation to the balance above.</AlertDescription>
+        </Alert>
+      ) : null}
+      <p className="text-sm text-muted-foreground">
+        Ordered by recorded transaction sequence, not effective date. Receipts and Call links are not available from this history yet.
+      </p>
+      {state.entries.length === 0 ? (
+        <CreditSectionEmptyState title="No booked Account transactions yet" description="Confirmed funding, Call spend, reversals, and document adjustments will appear here." />
+      ) : (
+        <AeRecordTable
+          columns={columns}
+          data={state.entries}
+          caption="Booked Account transactions"
+          countLabel="transactions"
+          filterPlaceholder="Filter Account history…"
+          hideFilter={state.entries.length <= 1}
+          getRowId={(entry) => entry.transactionId}
+        />
+      )}
+      {state.status === 'failed' ? (
+        <Alert>
+          <AlertTitle>More history could not be loaded</AlertTitle>
+          <AlertDescription>Existing transactions remain visible. Retry continues from the same Account cursor.</AlertDescription>
+        </Alert>
+      ) : null}
+      {state.cursor === undefined ? null : port === undefined ? (
+        <p className="text-sm text-muted-foreground">More booked transactions exist, but continuation is unavailable on this surface.</p>
+      ) : (
+        <div>
+          <Button type="button" variant="secondary" disabled={state.status === 'loading'} onClick={() => { void loadNextPage() }}>
+            {state.status === 'loading' ? 'Loading more…' : state.status === 'failed' ? 'Retry more history' : 'Load more history'}
+          </Button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function deduplicateHistory(
+  current: readonly AccountHistoryEntry[],
+  incoming: readonly AccountHistoryEntry[],
+): readonly AccountHistoryEntry[] {
+  const seen = new Set(current.map((entry) => entry.transactionId))
+  return [...current, ...incoming.filter((entry) => {
+    if (seen.has(entry.transactionId)) return false
+    seen.add(entry.transactionId)
+    return true
+  })]
+}
+
+function accountHistoryLabel(kind: AccountHistoryEntry['kind']): string {
+  switch (kind) {
+    case 'funding': return 'Credit added'
+    case 'funding_reversal': return 'Credit reversed'
+    case 'call_spend': return 'Call purchase'
+    case 'document_adjustment': return 'Document adjustment'
+    case 'unmapped': return 'Account movement'
   }
 }
 
-function deliveryStateLabel(state: AgentActivityView['deliveryState']): string {
-  switch (state) {
-    case 'delivered': return 'Delivered'
-    case 'not_delivered': return 'Not delivered'
-    case 'unknown': return 'Unknown'
-    default: {
-      const exhaustive: never = state
-      return exhaustive
-    }
-  }
+function formatSignedAmount(amount: ExactAmount): string {
+  const units = BigInt(amount.units)
+  const formatted = formatDisplayAmount({ ...amount, units: (units < 0n ? -units : units).toString() })
+  return units > 0n ? `+${formatted}` : units < 0n ? `−${formatted}` : formatted
 }
 
 function formatCreditAmount(amount: ExactAmount | undefined): string {
-  return amount === undefined ? 'Amount unknown' : formatCurrencyAmount(amount)
+  return amount === undefined ? 'Amount unknown' : formatDisplayAmount(amount)
 }
-
-function formatActivityAmount(entry: AgentActivityView): string {
-  if (entry.audAmountUnits === undefined || !/^(?:0|[1-9]\d*)$/u.test(entry.audAmountUnits)) {
-    return 'Amount unknown'
-  }
-  return formatDisplayAmount({ currency: 'AUD', exponent: 6, units: entry.audAmountUnits })
-}
-
-const unavailableAccountBalance: AccountFundingBalance = Object.freeze({
-  kind: 'refused',
-  code: 'billing_identity_missing',
-  retryable: true,
-})

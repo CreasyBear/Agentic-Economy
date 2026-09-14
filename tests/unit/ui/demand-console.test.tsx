@@ -13,8 +13,8 @@ import { canonicalAgentRecord } from '../../helpers/agent-directory-fixture'
 import { AeAssistantInstallFunnel } from '@/components/ae/console/AeAssistantInstallFunnel'
 import { AeAccountFundingPanel, type AccountFundingPort } from '@/components/ae/console/AeCreditTopUpPanel'
 import { AeOwnerCredit } from '@/components/ae/console/AeOwnerCredit'
-import type { CreditPaymentSession } from '@/modules/money/public'
-import type { AccountFundingBalance, AccountFundingBeginInput } from '@/modules/money/server'
+import type { AccountHistoryResult, CreditPaymentSession } from '@/modules/money/public'
+import type { AccountFundingBalance, AccountFundingBeginInput, AccountFundingConstraints } from '@/modules/money/server'
 
 vi.mock('@tanstack/react-router', () => ({
   Link: ({ to, params, children, ...props }: { to: string; params?: Record<string, string>; children: ReactNode }) => (
@@ -75,6 +75,30 @@ const accountBalance: AccountFundingBalance = {
   locked: false,
   version: 1,
 }
+const fundingConstraints: AccountFundingConstraints = {
+  kind: 'available',
+  environment: 'sandbox',
+  currency: 'AUD',
+  exponent: 6,
+  minimumPrincipalUnits: '5000000',
+  maximumPrincipalUnits: '25000000000',
+  incrementUnits: '10000',
+  serviceFeeBps: 500,
+  taxOnServiceFeeBps: 1000,
+  legalCustomerMaximumAccessibleUnits: '4999999999',
+  policyDigest: `sha256:${'f'.repeat(64)}`,
+}
+const emptyAccountHistory: AccountHistoryResult = {
+  kind: 'available',
+  entries: [],
+  snapshotAt: 1_788_120_000_000,
+  continueCursor: '',
+  isDone: true,
+  coverage: 'complete',
+  sourceLinkCoverage: 'unavailable',
+  source: 'formance_transaction_cursor',
+  ordering: 'recorded_transaction_sequence_desc',
+}
 
 
 afterEach(() => {
@@ -83,70 +107,50 @@ afterEach(() => {
 })
 
 describe('owner credit target', () => {
-  it('preserves refused Call state and unknown amount in activity details', () => {
-    const source = {
-        ...keyReadback,
-        activity: [{
-          callRef: 'call:refused',
-          credentialRef: 'credential:key_ui_1',
-          toolRef: 'tool:weather',
-          toolLabel: 'Weather lookup',
-          providerRef: 'provider:weather',
-          state: 'refused' as const,
-          deliveryState: 'not_delivered' as const,
-          paymentState: 'not_applicable' as const,
-          createdAt: 2,
-          updatedAt: 2,
-        }],
-      } as const
+  it('renders booked Account transactions instead of Agent activity approximations', () => {
     render(<AeOwnerCredit
-      directory={projectAgentDirectory([source], [canonicalAgentRecord([source])])}
       accountBalance={accountBalance}
-      loading={false}
+      accountHistory={emptyAccountHistory}
     />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'View Weather lookup' }))
-    expect(screen.getByText('Call refused')).toBeTruthy()
-    expect(screen.getAllByText('Amount unknown').length).toBeGreaterThan(0)
-    expect(screen.getByText('Not applicable')).toBeTruthy()
+    expect(screen.queryByText('Weather lookup')).toBeNull()
+    expect(screen.getByText('No booked Account transactions yet')).toBeTruthy()
   })
 
-  it('reads the current Tool Provider from the charge detail sheet', () => {
-    const source: AgentCredentialSource = {
-      ...keyReadback,
-      activity: [{
-        callRef: 'call:tool-provider',
-        credentialRef: 'credential:key_ui_1',
-        toolRef: `operation:v1:${'a'.repeat(64)}`,
-        toolLabel: 'Extract invoice fields',
-        providerRef: 'provider:ledger-labs',
-        state: 'completed' as const,
-        deliveryState: 'delivered' as const,
-        paymentState: 'settled' as const,
-        audAmountUnits: '500000',
-        createdAt: 3,
-        updatedAt: 3,
-        tool: { label: 'Extract invoice fields', provider: 'Ledger Labs' },
-      }],
-    }
+  it('keeps transaction identity and unavailable source links explicit', () => {
     render(<AeOwnerCredit
-      directory={projectAgentDirectory([source], [canonicalAgentRecord([source])])}
       accountBalance={accountBalance}
-      loading={false}
+      accountHistory={{
+        ...emptyAccountHistory,
+        entries: [{
+          transactionId: '42',
+          transactionRef: 'transaction:42',
+          occurredAt: 1_788_119_000_000,
+          recordedAt: 1_788_120_000_000,
+          kind: 'call_spend',
+          accountEffect: { currency: 'AUD', units: '-500000', exponent: 6 },
+          documentEffectUnits: '0',
+          reverted: false,
+          revertedAt: null,
+          sourceRef: null,
+          sourceDigest: `sha256:${'a'.repeat(64)}`,
+        }],
+      }}
     />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'View Extract invoice fields' }))
-    expect(screen.getByText('Provider')).toBeTruthy()
-    expect(screen.getByText('Ledger Labs')).toBeTruthy()
+    expect(screen.getByText('Call purchase')).toBeTruthy()
+    expect(screen.getByText('−A$0.50')).toBeTruthy()
+    fireEvent.click(screen.getByText('Transaction details'))
+    expect(screen.getByText(/Transaction ID:/).parentElement?.textContent).toContain('42')
+    expect(screen.getByText(/Source link:/).parentElement?.textContent).toContain('Unavailable from Account history')
   })
 
   it('keeps financial documents and owned reconciliation evidence on the Account surface', async () => {
     const onCreateStatement = vi.fn(async () => undefined)
     const onOpenDocument = vi.fn(async () => undefined)
     render(<AeOwnerCredit
-      directory={emptyDirectory}
       accountBalance={{ ...accountBalance, locked: true }}
-      loading={false}
+      accountHistory={emptyAccountHistory}
       documents={[{
         documentRef: 'money-document:statement:one',
         kind: 'statement',
@@ -179,6 +183,7 @@ describe('owner credit target', () => {
     />)
 
     expect(screen.getByText(/locked for reconciliation/i)).toBeTruthy()
+    fireEvent.click(screen.getByText('Accounting records and administration'))
     expect(screen.getByRole('heading', { name: 'Documents' })).toBeTruthy()
     expect(screen.getByText('Statement')).toBeTruthy()
     expect(screen.getByText('money-document:statement:one')).toBeTruthy()
@@ -192,6 +197,141 @@ describe('owner credit target', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Open document' }))
     await waitFor(() => expect(onOpenDocument).toHaveBeenCalledWith('money-document:statement:one'))
+  })
+
+  it('deduplicates transaction identity across recoverable pagination', async () => {
+    const read = vi.fn(async () => ({
+      ...emptyAccountHistory,
+      entries: [
+        {
+          transactionId: '2', transactionRef: 'transaction:2', occurredAt: 2, recordedAt: 2,
+          kind: 'funding' as const, accountEffect: { currency: 'AUD' as const, units: '10000000', exponent: 6 as const },
+          documentEffectUnits: '0', reverted: false, revertedAt: null, sourceRef: null, sourceDigest: null,
+        },
+        {
+          transactionId: '1', transactionRef: 'transaction:1', occurredAt: 1, recordedAt: 1,
+          kind: 'document_adjustment' as const, accountEffect: { currency: 'AUD' as const, units: '0', exponent: 6 as const },
+          documentEffectUnits: '-5', reverted: true, revertedAt: 3, sourceRef: null, sourceDigest: null,
+        },
+      ],
+    }))
+    render(<AeOwnerCredit
+      accountBalance={accountBalance}
+      accountHistory={{
+        ...emptyAccountHistory,
+        entries: [{
+          transactionId: '2', transactionRef: 'transaction:2', occurredAt: 2, recordedAt: 2,
+          kind: 'funding', accountEffect: { currency: 'AUD', units: '10000000', exponent: 6 },
+          documentEffectUnits: '0', reverted: false, revertedAt: null, sourceRef: null, sourceDigest: null,
+        }],
+        continueCursor: 'cursor:next',
+        isDone: false,
+        coverage: 'partial',
+      }}
+      accountHistoryPort={{ read }}
+    />)
+
+    expect(screen.getByText('Some transaction attribution is incomplete')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Load more history' }))
+    await waitFor(() => expect(read).toHaveBeenCalledWith({ cursor: 'cursor:next' }))
+    expect(screen.getAllByText('Credit added')).toHaveLength(1)
+    expect(screen.getByText('Document adjustment')).toBeTruthy()
+    expect(screen.getByText('No Balance change')).toBeTruthy()
+    expect(screen.getByText('−<A$0.01')).toBeTruthy()
+    expect(screen.getByText('Reverted')).toBeTruthy()
+  })
+
+  it('keeps booked rows and retries the same cursor after pagination fails', async () => {
+    const continuation = {
+      ...emptyAccountHistory,
+      entries: [{
+        transactionId: '1', transactionRef: 'transaction:1', occurredAt: 1, recordedAt: 1,
+        kind: 'funding' as const, accountEffect: { currency: 'AUD' as const, units: '5000000', exponent: 6 as const },
+        documentEffectUnits: '0', reverted: false, revertedAt: null, sourceRef: null, sourceDigest: null,
+      }],
+    }
+    const read = vi.fn()
+      .mockRejectedValueOnce(new Error('history unavailable'))
+      .mockResolvedValueOnce(continuation)
+    render(<AeOwnerCredit
+      accountBalance={accountBalance}
+      accountHistory={{ ...emptyAccountHistory, continueCursor: 'cursor:retry', isDone: false }}
+      accountHistoryPort={{ read }}
+    />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Load more history' }))
+    await waitFor(() => expect(screen.getByText('More history could not be loaded')).toBeTruthy())
+    expect(screen.getByText('No booked Account transactions yet')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Retry more history' }))
+    await waitFor(() => expect(screen.getByText('Credit added')).toBeTruthy())
+    expect(read).toHaveBeenNthCalledWith(1, { cursor: 'cursor:retry' })
+    expect(read).toHaveBeenNthCalledWith(2, { cursor: 'cursor:retry' })
+  })
+
+  it('ignores a late continuation after fresh Account history replaces its source', async () => {
+    let resolveContinuation: ((result: AccountHistoryResult) => void) | undefined
+    const read = vi.fn(() => new Promise<AccountHistoryResult>((resolve) => {
+      resolveContinuation = resolve
+    }))
+    const { rerender } = render(<AeOwnerCredit
+      accountBalance={accountBalance}
+      accountHistory={{ ...emptyAccountHistory, snapshotAt: 1, continueCursor: 'cursor:old', isDone: false }}
+      accountHistoryPort={{ read }}
+    />)
+    fireEvent.click(screen.getByRole('button', { name: 'Load more history' }))
+    await waitFor(() => expect(read).toHaveBeenCalledOnce())
+
+    rerender(<AeOwnerCredit
+      accountBalance={accountBalance}
+      accountHistory={{
+        ...emptyAccountHistory,
+        snapshotAt: 2,
+        entries: [{
+          transactionId: '9', transactionRef: 'transaction:fresh', occurredAt: 9, recordedAt: 9,
+          kind: 'call_spend', accountEffect: { currency: 'AUD', units: '-1000000', exponent: 6 },
+          documentEffectUnits: '0', reverted: false, revertedAt: null, sourceRef: null, sourceDigest: null,
+        }],
+      }}
+      accountHistoryPort={{ read }}
+    />)
+    resolveContinuation?.({
+      ...emptyAccountHistory,
+      snapshotAt: 1,
+      entries: [{
+        transactionId: '8', transactionRef: 'transaction:stale', occurredAt: 8, recordedAt: 8,
+        kind: 'funding', accountEffect: { currency: 'AUD', units: '1000000', exponent: 6 },
+        documentEffectUnits: '0', reverted: false, revertedAt: null, sourceRef: null, sourceDigest: null,
+      }],
+    })
+
+    await waitFor(() => expect(screen.getByText('Call purchase')).toBeTruthy())
+    expect(screen.queryByText('Credit added')).toBeNull()
+  })
+
+  it('never renders an unavailable balance as zero', () => {
+    render(<AeOwnerCredit accountHistory={emptyAccountHistory} />)
+    expect(screen.getByText('Balance unavailable')).toBeTruthy()
+    expect(document.body.textContent).not.toContain('A$0.00')
+  })
+
+  it('retains last authoritative balance and booked rows when refreshes fail', () => {
+    render(<AeOwnerCredit
+      accountBalance={accountBalance}
+      accountHistory={{
+        ...emptyAccountHistory,
+        entries: [{
+          transactionId: '7', transactionRef: 'transaction:7', occurredAt: 7, recordedAt: 7,
+          kind: 'funding', accountEffect: { currency: 'AUD', units: '5000000', exponent: 6 },
+          documentEffectUnits: '0', reverted: false, revertedAt: null, sourceRef: null, sourceDigest: null,
+        }],
+      }}
+      unavailable={{ balance: true, history: true }}
+    />)
+
+    expect(screen.getByText('A$12.50')).toBeTruthy()
+    expect(screen.getByText('Balance could not be refreshed')).toBeTruthy()
+    expect(screen.getByText('Balance history could not be refreshed')).toBeTruthy()
+    expect(screen.getByText('Credit added')).toBeTruthy()
   })
 })
 
@@ -273,21 +413,23 @@ describe('assistant access components', () => {
     render(
       <AeAccountFundingPanel
         port={{ begin, read }}
+        constraints={fundingConstraints}
         redirectToCheckout={redirectToCheckout}
       />,
     )
 
-    fireEvent.click(screen.getByRole('button', { name: /continue to stripe/i }))
-    expect(screen.getByText('Enter a valid AUD funding amount before starting payment.')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Enter an amount' }).hasAttribute('disabled')).toBe(true)
     expect(begin).not.toHaveBeenCalled()
 
-    fireEvent.change(screen.getByLabelText(/account funding amount/i), { target: { value: '10.00' } })
-    expect(screen.queryByText('Enter a valid AUD funding amount before starting payment.')).toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: /continue to stripe/i }))
+    fireEvent.change(screen.getByLabelText(/credit to add/i), { target: { value: '10.00' } })
+    expect(screen.getByText('A$10.00')).toBeTruthy()
+    expect(screen.getByText('A$0.55')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: /pay A\$10\.55 and add A\$10\.00/i }))
 
     await waitFor(() => expect(redirectToCheckout).toHaveBeenCalledWith(session.checkoutUrl))
     expect(begin).toHaveBeenCalledWith({
       amount: { currency: 'AUD', units: '10000000', exponent: 6 },
+      expectedPolicyDigest: fundingConstraints.policyDigest,
       idempotencyKey: expect.any(String),
     })
     expect(window.sessionStorage.getItem('ae.account-funding.recovery.v1')).not.toContain('checkout.stripe.com')
@@ -296,14 +438,23 @@ describe('assistant access components', () => {
     const firstKey = begin.mock.calls[0]?.[0]?.idempotencyKey
     cleanup()
     read.mockResolvedValue({ ...session, evidence: { ...session.evidence, status: 'succeeded' } })
-    render(<AeAccountFundingPanel port={{ begin, read }} redirectToCheckout={redirectToCheckout} />)
+    render(<AeAccountFundingPanel port={{ begin, read }} constraints={fundingConstraints} redirectToCheckout={redirectToCheckout} />)
     fireEvent.click(await screen.findByRole('button', { name: 'Add more credit' }))
     expect(window.sessionStorage.getItem('ae.account-funding.recovery.v1')).toBeNull()
-    fireEvent.change(screen.getByLabelText(/account funding amount/i), { target: { value: '5.00' } })
-    fireEvent.click(screen.getByRole('button', { name: /continue to stripe/i }))
+    fireEvent.change(screen.getByLabelText(/credit to add/i), { target: { value: '5.00' } })
+    fireEvent.click(screen.getByRole('button', { name: /pay A\$5\.28 and add A\$5\.00/i }))
     await waitFor(() => expect(begin).toHaveBeenCalledTimes(2))
     expect(begin.mock.calls[1]?.[0]?.idempotencyKey).not.toBe(firstKey)
     expect(begin.mock.calls[1]?.[0]?.amount.units).toBe('5000000')
+  })
+
+  it('quotes from the supplied authoritative constraints rather than a fixed client policy', () => {
+    render(<AeAccountFundingPanel
+      port={{ begin: vi.fn(), read: vi.fn() }}
+      constraints={{ ...fundingConstraints, serviceFeeBps: 100 }}
+    />)
+    fireEvent.change(screen.getByLabelText(/credit to add/i), { target: { value: '10.00' } })
+    expect(screen.getByRole('button', { name: /pay A\$10\.11 and add A\$10\.00/i })).toBeTruthy()
   })
 
   it('persists and reuses an outcome-unknown command locator without offering a retry', async () => {
@@ -316,21 +467,21 @@ describe('assistant access components', () => {
     }))
     const read = vi.fn(async () => ({ kind: 'refused' as const, code: 'funding_outcome_unknown' as const, retryable: true }))
     const port: AccountFundingPort = { begin, read }
-    render(<AeAccountFundingPanel port={port} />)
+    render(<AeAccountFundingPanel port={port} constraints={fundingConstraints} />)
 
-    fireEvent.change(screen.getByLabelText(/account funding amount/i), { target: { value: '10.00' } })
-    fireEvent.click(screen.getByRole('button', { name: /continue to stripe/i }))
+    fireEvent.change(screen.getByLabelText(/credit to add/i), { target: { value: '10.00' } })
+    fireEvent.click(screen.getByRole('button', { name: /pay A\$10\.55 and add A\$10\.00/i }))
 
-    expect(await screen.findByText(/do not retry with a new payment/i)).toBeTruthy()
+    expect(await screen.findByText(/do not start another payment/i)).toBeTruthy()
     const raw = window.sessionStorage.getItem('ae.account-funding.recovery.v1')
     const locator = raw === null ? undefined : JSON.parse(raw) as { commandRef: string; idempotencyKey: string }
     expect(locator).toMatchObject({ commandRef: 'sha256:topup-command-unknown' })
     expect(locator?.idempotencyKey).toBe(begin.mock.calls[0]?.[0]?.idempotencyKey)
-    expect(screen.queryByRole('button', { name: /continue to stripe/i })).toBeNull()
+    expect(screen.queryByRole('button', { name: /pay /i })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Add more credit' })).toBeNull()
 
     cleanup()
-    render(<AeAccountFundingPanel port={port} />)
+    render(<AeAccountFundingPanel port={port} constraints={fundingConstraints} />)
     await waitFor(() => expect(read).toHaveBeenCalledWith(locator))
   })
 
@@ -338,15 +489,15 @@ describe('assistant access components', () => {
     const begin = vi.fn(async () => ({ kind: 'refused' as const, code: 'stripe_setup_required' as const, retryable: false }))
     const read = vi.fn(async () => ({ kind: 'refused' as const, code: 'stripe_setup_required' as const, retryable: false }))
     render(
-      <AeAccountFundingPanel port={{ begin, read }} />
+      <AeAccountFundingPanel port={{ begin, read }} constraints={fundingConstraints} />
     )
-    fireEvent.change(screen.getByLabelText(/account funding amount/i), { target: { value: '10.00' } })
-    fireEvent.click(screen.getByRole('button', { name: /continue to stripe/i }))
+    fireEvent.change(screen.getByLabelText(/credit to add/i), { target: { value: '10.00' } })
+    fireEvent.click(screen.getByRole('button', { name: /pay A\$10\.55 and add A\$10\.00/i }))
 
     expect(begin).toHaveBeenCalledOnce()
     expect(await screen.findByText(/account funding is unavailable/i)).toBeTruthy()
     expect(screen.getByText(/no payment started.*balance did not change/i)).toBeTruthy()
-    expect(screen.queryByText(/payment succeeded|credit added/i)).toBeNull()
+    expect(screen.queryByText('Payment received')).toBeNull()
   })
 
   it('renders Agent usage without presenting a per-credential balance', () => {
@@ -418,33 +569,20 @@ describe('assistant access components', () => {
     expect(screen.queryByText('Usage details are temporarily unavailable')).toBeNull()
   })
 
-  it('shows failed owner activity as unavailable instead of a known empty period', () => {
-    const unavailablePeriodDirectory = projectAgentDirectory(
-      [keyReadback],
-      [canonicalAgentRecord([keyReadback])],
-      [],
-      [{
-        principalRef: keyReadback.principalId,
-        activity: [],
-        activityIsDone: true,
-        dataState: 'unavailable' as const,
-      }],
-    )
+  it('keeps the known balance when canonical history is unavailable', () => {
     const onCreditRefresh = vi.fn()
     render(
       <AeOwnerCredit
-        directory={unavailablePeriodDirectory}
         accountBalance={accountBalance}
-        loading={false}
+        accountHistory={{ kind: 'unavailable', code: 'source_unavailable' }}
         onCreditRefresh={onCreditRefresh}
       />,
     )
-    expect(screen.getByText('Some Agent activity or usage is unavailable. Coverage is incomplete.')).toBeTruthy()
-    expect(screen.getByText('Activity unavailable')).toBeTruthy()
-    expect(screen.getByText('Activity could not be read right now. Refresh to try again.')).toBeTruthy()
-    expect(screen.queryByText('No activity yet')).toBeNull()
-    expect(screen.queryByText('Browsing does not create a Call.')).toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: 'Refresh activity' }))
+    expect(screen.getByText('Balance history unavailable')).toBeTruthy()
+    expect(screen.getByText(/No missing transaction or amount is being inferred/)).toBeTruthy()
+    expect(screen.getByText('A$12.50')).toBeTruthy()
+    expect(screen.queryByText('No booked Account transactions yet')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh history' }))
     expect(onCreditRefresh).toHaveBeenCalledTimes(1)
   })
 

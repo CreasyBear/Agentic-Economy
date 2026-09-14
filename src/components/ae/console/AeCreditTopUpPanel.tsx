@@ -7,17 +7,16 @@ import { Label } from '@/components/ui/label'
 import { Spinner } from '@/components/ui/spinner'
 import {
   AUD_EXPONENT,
-  audFundingPolicyFromCommercialControls,
   canonicalAudUnits,
-  formatExactAmount,
+  formatDisplayAmount,
   isMoneyRefusal,
   quoteAudAccountFunding,
-  SANDBOX_COMMERCIAL_POLICY_CONTROLS,
   type CreditPaymentSession,
   type MoneyRefusal,
 } from '@/modules/money/public'
 import type {
   AccountFundingBeginInput,
+  AccountFundingConstraints,
   AccountFundingOutcomeUnknownResult,
   AccountFundingReadInput,
   AccountFundingStartResult,
@@ -33,6 +32,8 @@ export type AccountFundingPort = Readonly<{
 
 export type AeAccountFundingPanelProps = Readonly<{
   port?: AccountFundingPort
+  constraints?: AccountFundingConstraints
+  constraintsLoading?: boolean
   onRefresh?: () => void | Promise<void>
   redirectToCheckout?: (url: string) => void
 }>
@@ -47,6 +48,8 @@ const recoveryStorageKey = 'ae.account-funding.recovery.v1'
 
 export function AeAccountFundingPanel({
   port,
+  constraints,
+  constraintsLoading = false,
   onRefresh,
   redirectToCheckout = defaultCheckoutRedirect,
 }: AeAccountFundingPanelProps) {
@@ -60,15 +63,22 @@ export function AeAccountFundingPanel({
   const [recovery, setRecovery] = useState<RecoveryLocator>()
   const idempotencyKey = useRef<string | undefined>(undefined)
   const recoveryAttempted = useRef(false)
+  const policy = useMemo(() => constraints?.kind === 'available'
+    ? {
+        minimumPrincipalUnits: BigInt(constraints.minimumPrincipalUnits),
+        maximumPrincipalUnits: BigInt(constraints.maximumPrincipalUnits),
+        incrementUnits: BigInt(constraints.incrementUnits),
+        serviceFeeBps: constraints.serviceFeeBps,
+        taxOnServiceFeeBps: constraints.taxOnServiceFeeBps,
+        legalCustomerMaximumAccessibleUnits: BigInt(constraints.legalCustomerMaximumAccessibleUnits),
+      }
+    : undefined, [constraints])
   const preview = useMemo(() => {
     const units = canonicalAudUnits(amountText)
-    return units === undefined
+    return units === undefined || policy === undefined
       ? undefined
-      : quoteAudAccountFunding(
-          units,
-          audFundingPolicyFromCommercialControls(SANDBOX_COMMERCIAL_POLICY_CONTROLS),
-        )
-  }, [amountText])
+      : quoteAudAccountFunding(units, policy)
+  }, [amountText, policy])
 
   const readCanonicalPayment = useCallback(async (locator: RecoveryLocator) => {
     if (port === undefined) return
@@ -78,7 +88,9 @@ export function AeAccountFundingPanel({
       const result = await port.read(locator)
       if (isMoneyRefusal(result)) {
         setPaymentStatus(result.code === 'funding_pending' ? 'pending' : result.code === 'funding_outcome_unknown' ? 'outcome_unknown' : undefined)
-        setErrorMessage(topUpErrorCopy(result))
+        setErrorMessage(result.code === 'funding_pending' || result.code === 'funding_outcome_unknown'
+          ? undefined
+          : topUpErrorCopy(result))
         return
       }
       setSession(result)
@@ -118,7 +130,7 @@ export function AeAccountFundingPanel({
   async function beginTopUp() {
     if (pending || port === undefined) return
     const units = canonicalAudUnits(amountText)
-    if (units === undefined) {
+    if (units === undefined || policy === undefined || constraints?.kind !== 'available' || quoteAudAccountFunding(units, policy) === undefined) {
       setAmountInvalid(true)
       return
     }
@@ -129,6 +141,7 @@ export function AeAccountFundingPanel({
     try {
       const result = await port.begin({
         amount: { currency: 'AUD', units: units.toString(), exponent: AUD_EXPONENT },
+        expectedPolicyDigest: constraints.policyDigest,
         idempotencyKey: nextIdempotencyKey,
       })
       if (result.kind === 'outcome_unknown') {
@@ -136,11 +149,18 @@ export function AeAccountFundingPanel({
         setPaymentStatus('outcome_unknown')
         setRecovery(locator)
         persistRecovery(locator)
-        setErrorMessage(topUpErrorCopy(result))
+        setErrorMessage(undefined)
         return
       }
       if (result.kind === 'refused') {
         setErrorMessage(topUpErrorCopy(result))
+        if (result.code === 'price_changed') {
+          try {
+            await onRefresh?.()
+          } catch (cause) {
+            captureClientExceptionOnClient(cause)
+          }
+        }
         return
       }
       const locator = { externalRef: result.session.evidence.externalRef, idempotencyKey: nextIdempotencyKey }
@@ -185,10 +205,10 @@ export function AeAccountFundingPanel({
 
   return (
     <div className="grid gap-3">
-        {port === undefined ? (
+        {port === undefined || (!constraintsLoading && constraints?.kind !== 'available') ? (
           <Alert>
             <AlertTitle>Account funding is unavailable</AlertTitle>
-            <AlertDescription>Your authenticated Account could not be loaded. No payment was started.</AlertDescription>
+            <AlertDescription>Funding limits could not be confirmed. No payment was started.</AlertDescription>
           </Alert>
         ) : null}
         {errorMessage !== undefined ? (
@@ -197,23 +217,23 @@ export function AeAccountFundingPanel({
             <AlertDescription>{errorMessage}</AlertDescription>
           </Alert>
         ) : null}
-        {checking ? <p className="text-sm text-muted-foreground" role="status">Checking the canonical payment readback…</p> : null}
-        {paymentStatus === 'pending' ? <p className="text-sm text-muted-foreground" role="status">Payment is pending canonical server readback; the browser has not changed your Account balance.</p> : null}
+        {checking ? <p className="text-sm text-muted-foreground" role="status">Checking payment status…</p> : null}
+        {paymentStatus === 'pending' ? <p className="text-sm text-muted-foreground" role="status">Payment is still processing. Refresh its status before taking another action.</p> : null}
         {paymentStatus === 'outcome_unknown' ? (
           <Alert>
             <AlertTitle>Payment is still being verified</AlertTitle>
-            <AlertDescription>Do not retry with a new payment. The authenticated server is reconciling this payment before any Account balance change.</AlertDescription>
+            <AlertDescription>Do not start another payment. Refresh this payment’s status; credit appears only after confirmation.</AlertDescription>
           </Alert>
         ) : null}
         {paymentStatus === 'succeeded' ? (
           <Alert>
-            <AlertTitle>Payment verified</AlertTitle>
-            <AlertDescription>Your Account balance changes only after the canonical journal readback. The browser return did not grant funds.</AlertDescription>
+            <AlertTitle>Payment received</AlertTitle>
+            <AlertDescription>Check the Account balance and Balance history below to confirm the credit is available.</AlertDescription>
           </Alert>
         ) : null}
-        {session === undefined && recovery === undefined && port !== undefined ? (
+        {session === undefined && recovery === undefined && port !== undefined && constraints?.kind === 'available' ? (
           <div className="grid gap-2">
-            <Label htmlFor="account-funding-amount">Account funding amount (AUD)</Label>
+            <Label htmlFor="account-funding-amount">Credit to add (AUD)</Label>
             <Input
               id="account-funding-amount"
               inputMode="decimal"
@@ -228,22 +248,22 @@ export function AeAccountFundingPanel({
               aria-invalid={amountInvalid}
               aria-describedby={amountInvalid ? 'account-funding-amount-help account-funding-amount-error' : 'account-funding-amount-help'}
             />
-            <p id="account-funding-amount-help" className="text-xs text-muted-foreground">The configured minimum and maximum are enforced by the authenticated server.</p>
-            {amountInvalid ? <p id="account-funding-amount-error" className="text-sm text-destructive" role="alert">Enter a valid AUD funding amount before starting payment.</p> : null}
+            <p id="account-funding-amount-help" className="text-xs text-muted-foreground">
+              Add {formatAudAmountString(constraints.minimumPrincipalUnits)} to {formatAudAmountString(constraints.maximumPrincipalUnits)} in {formatAudAmountString(constraints.incrementUnits)} increments.
+            </p>
+            {amountInvalid ? <p id="account-funding-amount-error" className="text-sm text-destructive" role="alert">Enter an amount within the displayed limits and increments.</p> : null}
             {preview === undefined ? null : (
               <div className="grid gap-2 rounded-lg border border-border/70 bg-muted/30 p-3 text-sm">
                 <p className="m-0 text-muted-foreground">
-                  Your signed-in Account receives the requested AUD principal after Stripe confirms the full payment.
+                  Your Account receives the full credit amount after payment is confirmed.
                 </p>
               <dl className="grid grid-cols-[1fr_auto] gap-x-4 gap-y-1" aria-label="Funding quote">
-                <dt className="text-muted-foreground">Account principal</dt>
-                <dd className="font-mono">AUD {formatAudUnits(preview.principalUnits)}</dd>
-                <dt className="text-muted-foreground">Service fee</dt>
-                <dd className="font-mono">AUD {formatAudUnits(preview.serviceFeeUnits)}</dd>
-                <dt className="text-muted-foreground">Tax on service fee</dt>
-                <dd className="font-mono">AUD {formatAudUnits(preview.taxUnits)}</dd>
-                <dt className="font-medium">Total payment</dt>
-                <dd className="font-mono font-medium">AUD {formatAudUnits(preview.totalUnits)}</dd>
+                <dt className="text-muted-foreground">Credit added</dt>
+                <dd className="font-mono">{formatAudUnits(preview.principalUnits)}</dd>
+                <dt className="text-muted-foreground">Fee (including GST)</dt>
+                <dd className="font-mono">{formatAudUnits(preview.serviceFeeUnits + preview.taxUnits)}</dd>
+                <dt className="font-medium">Total payable</dt>
+                <dd className="font-mono font-medium">{formatAudUnits(preview.totalUnits)}</dd>
               </dl>
               </div>
             )}
@@ -252,13 +272,16 @@ export function AeAccountFundingPanel({
       <div className="flex flex-wrap gap-2">
         {session === undefined && recovery === undefined ? (
           <Button
-            variant="secondary"
-            disabled={pending || checking || port === undefined}
+            disabled={pending || checking || port === undefined || constraints?.kind !== 'available' || preview === undefined}
             onClick={() => void beginTopUp()}
             className="min-h-touch"
           >
             {pending ? <Spinner data-icon="inline-start" /> : null}
-            {pending ? 'Preparing secure payment…' : 'Continue to Stripe'}
+            {pending
+              ? 'Preparing secure payment…'
+              : preview === undefined
+                ? constraintsLoading ? 'Loading funding limits…' : constraints?.kind === 'available' ? 'Enter an amount' : 'Funding unavailable'
+                : `Pay ${formatAudUnits(preview.totalUnits)} and add ${formatAudUnits(preview.principalUnits)}`}
           </Button>
         ) : paymentStatus === 'succeeded' || paymentStatus === 'failed' ? (
           <Button type="button" variant="secondary" disabled={checking || pending} onClick={startAnotherPayment} className="min-h-touch">
@@ -279,13 +302,18 @@ function topUpErrorCopy(result: MoneyRefusal | AccountFundingOutcomeUnknownResul
   if (result.code === 'stripe_setup_required') return 'Account funding is unavailable right now. No payment started and your balance did not change. Try again later.'
   if (result.code === 'billing_identity_missing' || result.code === 'billing_identity_mismatch') return 'Your authenticated Account is unavailable. No payment started.'
   if (result.code === 'funding_amount_invalid') return 'That AUD principal is outside the configured limits. No payment started.'
+  if (result.code === 'price_changed') return 'Funding limits changed before payment started. Review the updated quote and try again.'
   if (result.code === 'commercial_policy_required') return 'Production funding is not enabled because the required commercial approvals are not current. No payment started.'
   if (result.code === 'funding_pending' || result.code === 'funding_outcome_unknown') return 'Payment is still being verified. Your Account balance will not change until the canonical server readback completes.'
   return 'Account funding could not be started. No payment was confirmed; try again.'
 }
 
 function formatAudUnits(units: bigint): string {
-  return formatExactAmount({ currency: 'AUD', units: units.toString(), exponent: AUD_EXPONENT }) ?? '—'
+  return formatDisplayAmount({ currency: 'AUD', units: units.toString(), exponent: AUD_EXPONENT })
+}
+
+function formatAudAmountString(units: string): string {
+  return formatDisplayAmount({ currency: 'AUD', units, exponent: AUD_EXPONENT })
 }
 
 function randomId(): string {

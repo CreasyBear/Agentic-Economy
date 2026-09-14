@@ -150,7 +150,6 @@ describe('assistant access owner continuation anchors', () => {
   it('keeps funding on Credit and revocation on Keys', () => {
     const { container: credit } = render(
       <AeOwnerCredit
-        directory={emptyDirectory}
         accountBalance={{
           kind: 'available',
           accountRef: 'account:test-owner',
@@ -158,7 +157,11 @@ describe('assistant access owner continuation anchors', () => {
           locked: false,
           version: 0,
         }}
-        loading={false}
+        accountHistory={{
+          kind: 'available', entries: [], snapshotAt: 1, continueCursor: '', isDone: true,
+          coverage: 'complete', sourceLinkCoverage: 'unavailable', source: 'formance_transaction_cursor',
+          ordering: 'recorded_transaction_sequence_desc',
+        }}
       />,
     )
     const { container: keys } = render(
@@ -175,7 +178,7 @@ describe('assistant access owner continuation anchors', () => {
     )
 
     expect(credit.querySelector('#fund')).not.toBeNull()
-    expect(credit.querySelector('a[href="/market"]')?.textContent).toBe('Search Tools')
+    expect(credit.textContent).toContain('Add credit')
     expect(keys.querySelector('#revoke')).not.toBeNull()
     expect(keys.querySelector('#fund')).toBeNull()
     expect(keys.querySelector('a[href="/for-agents"]')?.textContent).toBe('Connect agent')
