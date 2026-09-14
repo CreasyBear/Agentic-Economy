@@ -3,6 +3,7 @@ import { v, type Infer } from 'convex/values'
 import { degradeBackend } from '@/lib/observability/degrade-backend'
 import {
   isCanonicalCredentiallessX402ProviderConnection,
+  providerConnectionAuthorityProvenanceIsValid,
   type ProviderConnection,
 } from '@/modules/capability-supply/provider-connection'
 import {
@@ -27,8 +28,12 @@ import {
   setCapabilitySupplyEligibility,
   validRegistrationContext,
   x402PaymentProfileForEnvironment,
+  type CapabilityOfferingOrigin,
   type PublishPreparedCapabilityCommandResult,
 } from '@/modules/capability-supply/public'
+import { changeOfferingStatusInState, upsertAccessPathInState } from '@/modules/catalog/public'
+import { normalizeSupplyIntegrationDraft } from '@/modules/capability-supply/integration-draft'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { pricingConfigSourceAmount } from '@/modules/money/public'
 import {
   bindingIntegrityIsValid,
@@ -46,14 +51,28 @@ import type { MutationCtx } from './_generated/server'
 import { resolveBusinessActor } from './authz'
 import {
   preparedPublicationMaterialValue,
+  publishPreparedCapabilityHandler,
+  recordSupplyAdmissionCase,
   preparedPublicationResultValue,
 } from './capabilitySupplyPublish'
 import { capabilitySupplyPublicationPorts } from './capabilitySupplyPublicationPorts'
 import { capabilitySupplyWriterPorts } from './capabilitySupplyWriterPorts'
 import { toCapabilityBindingRow, toCapabilityOfferingRow } from './capabilitySupplyRowMappers'
-import { contextFields } from './capabilitySupplyShared'
+import {
+  contextFields,
+  rebuildCapabilityOriginSupplyProjection,
+} from './capabilitySupplyShared'
 import { requireSourceWrite, sourceWriteArgs } from './sourceWriteAdmission'
 import { toDomain as providerConnectionDomain } from './lib/providerConnections/codecs'
+import { agentAccessPrincipalValue, verifySupplyAgentPrincipal } from './agentAccessPrincipals'
+import { admitAgentPublicationConsequence } from './lib/agentPublicationConsequence'
+import { admitInteractiveOwnerConsequence } from './lib/ownerConsequence'
+import { clerkConsequenceProofValue } from './lib/consequenceProof'
+import { providerRouteabilityIsFrozen } from './lib/providerOffboardingFreeze'
+import {
+  loadExactOfferingSourceState,
+  persistOfferingSourceState,
+} from './catalogOfferingMutations'
 
 const sellerClaimValue = v.object({
   businessId: v.string(),
@@ -93,6 +112,29 @@ type StageOwnerX402CapabilityArgs = {
   sourceWrite?: unknown
   sourceWriteRequest?: unknown
 }
+
+type PublishPreparedCapabilityArgs = {
+  businessId: Id<'businesses'>
+  offeringRef: string
+  revision: number
+  sourceHash: string
+  runtimeEnvironment: 'sandbox' | 'production'
+  prepared: Infer<typeof preparedPublicationMaterialValue>
+  proof?: Infer<typeof clerkConsequenceProofValue>
+  operationKey: string
+  correlationId: string
+  reasonCode: string
+  evidenceRefs: string[]
+  agentPrincipal?: Infer<typeof agentAccessPrincipalValue>
+  sourceWrite?: unknown
+  sourceWriteRequest?: unknown
+}
+type CatalogOrigin = Extract<CapabilityOfferingOrigin, { kind: 'catalog_offering' }>
+type ConnectedCatalogTarget = Readonly<{
+  origin: CatalogOrigin
+  state: Awaited<ReturnType<typeof loadExactOfferingSourceState>>
+  path: Doc<'offeringAccessPaths'>
+}>
 
 function canonicalEndpoint(value: string): string | undefined {
   const endpoint = validPublicHttpsEndpoint(value)
@@ -139,27 +181,42 @@ function exactSandboxX402Material(
   prepared: Infer<typeof preparedPublicationMaterialValue>,
   claim: X402SellerClaim,
 ): boolean {
+  return exactSandboxX402PaymentMaterial(prepared, {
+    endpointUrl: claim.endpointUrl,
+    method: claim.method,
+    payTo: claim.payTo,
+  })
+}
+
+function exactSandboxX402PaymentMaterial(
+  prepared: Infer<typeof preparedPublicationMaterialValue>,
+  expected: Readonly<{
+    endpointUrl: string
+    method: 'GET' | 'POST'
+    payTo: string
+  }>,
+): boolean {
   if (
     prepared.sourceKind !== 'x402'
     || prepared.binding.adapter.adapterId !== 'x402-fetch:v2'
     || prepared.binding.authority.kind !== 'provider_connection'
   ) return false
   const endpoint = canonicalEndpoint(prepared.binding.endpointUrl)
-  const claimEndpoint = canonicalEndpoint(claim.endpointUrl)
+  const expectedEndpoint = canonicalEndpoint(expected.endpointUrl)
   const config = parseX402FetchTransportConfiguration(
     prepared.binding.adapter.config,
   )
   const profile = x402PaymentProfileForEnvironment('sandbox')
   if (
     endpoint === undefined
-    || claimEndpoint !== endpoint
+    || expectedEndpoint !== endpoint
     || config === undefined
     || profile === undefined
-    || config.method !== claim.method
+    || config.method !== expected.method
     || config.scheme !== profile.scheme
     || config.network !== profile.network
     || config.asset.toLowerCase() !== profile.asset.toLowerCase()
-    || config.payTo.toLowerCase() !== claim.payTo.toLowerCase()
+    || config.payTo.toLowerCase() !== expected.payTo.toLowerCase()
   ) return false
 
   const paymentRequired = parsePinnedX402PaymentRequiredJson(
@@ -316,9 +373,310 @@ async function exactCatalogTarget(
     && path.descriptor.method?.trim().toUpperCase() === args.sellerClaim.method
 }
 
+function connectedCatalogOrigin(
+  args: PublishPreparedCapabilityArgs,
+): CatalogOrigin | undefined {
+  const origin = args.prepared.offering.origin
+  return origin?.kind === 'catalog_offering'
+    && origin.offeringRef === args.offeringRef
+    && origin.offeringRevision === args.revision
+    && origin.offeringSourceHash === args.sourceHash
+    && origin.declaredAccessPathRef !== undefined
+    && origin.accessPathSourceHash !== undefined
+    ? origin
+    : undefined
+}
+
+async function exactConnectedCatalogTarget(
+  ctx: MutationCtx,
+  args: PublishPreparedCapabilityArgs,
+): Promise<ConnectedCatalogTarget | undefined> {
+  const origin = connectedCatalogOrigin(args)
+  if (origin === undefined || args.prepared.binding.authority.kind !== 'provider_connection') {
+    return undefined
+  }
+  const accessPathRef = origin.declaredAccessPathRef
+  if (accessPathRef === undefined) return undefined
+
+  let state: Awaited<ReturnType<typeof loadExactOfferingSourceState>>
+  let path: Doc<'offeringAccessPaths'> | null
+  try {
+    ;[state, path] = await Promise.all([
+      loadExactOfferingSourceState(ctx.db, args.businessId, { offeringRef: origin.offeringRef }),
+      ctx.db.query('offeringAccessPaths')
+        .withIndex('by_accessPathRef', (query) => query.eq('accessPathRef', accessPathRef))
+        .unique(),
+    ])
+  } catch (cause) {
+    return degradeBackend(cause, undefined, {
+      site: 'exactConnectedCatalogTarget',
+      reason: 'invalid_response',
+    })
+  }
+
+  const offering = state.offerings.find((item) => item.offeringRef === origin.offeringRef)
+  const revision = state.revisions.find((item) => (
+    item.offeringRef === origin.offeringRef
+      && item.revision === origin.offeringRevision
+  ))
+  const endpoint = canonicalEndpoint(args.prepared.binding.endpointUrl)
+  const selector = args.prepared.sourceSelector
+  const configuration = parseX402FetchTransportConfiguration(args.prepared.binding.adapter.config)
+  if (
+    offering === undefined
+    || revision === undefined
+    || path === null
+    || endpoint === undefined
+    || configuration === undefined
+    || offering.businessId !== String(args.businessId)
+    || offering.status !== 'draft' && offering.status !== 'published'
+    || offering.currentRevision !== origin.offeringRevision
+    || revision.businessId !== String(args.businessId)
+    || revision.sourceHash !== origin.offeringSourceHash
+    || path.businessId !== args.businessId
+    || path.offeringRef !== origin.offeringRef
+    || path.offeringRevision !== origin.offeringRevision
+    || path.offeringSourceHash !== origin.offeringSourceHash
+    || path.status !== 'draft' && path.status !== 'published'
+    || path.sourceHash !== origin.accessPathSourceHash
+    || path.descriptor.kind !== 'external_operation'
+    || canonicalEndpoint(path.descriptor.url) !== endpoint
+    || path.descriptor.method?.trim().toUpperCase() !== configuration.method
+    || !('resourceUrl' in selector)
+    || canonicalEndpoint(selector.resourceUrl) !== endpoint
+  ) return undefined
+
+  const draft = path.integrationDraft
+  if (draft === undefined) return undefined
+  const normalized = normalizeSupplyIntegrationDraft(draft)
+  if (
+    normalized.kind !== 'valid'
+    || normalized.source.kind !== 'x402'
+    || normalized.source.environment !== 'sandbox'
+    || normalized.targetUrl !== endpoint
+    || normalized.method !== configuration.method
+    || normalized.draft.sourceRevision !== args.prepared.sourceRevision
+    || normalized.draft.connectionRef !== args.prepared.binding.authority.connectionRef
+    || normalized.draft.sourceDigest.length === 0
+    || normalized.draft.candidateRef.length === 0
+    || args.evidenceRefs.filter((ref) => ref === normalized.draft.sourceDigest).length !== 1
+    || args.evidenceRefs.filter((ref) => ref === normalized.draft.candidateRef).length !== 1
+    || args.evidenceRefs.some((ref) => (
+      ref.startsWith('x402-payee-claim:') || ref.startsWith('x402-endpoint-inspection:')
+    ))
+  ) return undefined
+
+  return { origin, state, path }
+}
+
+function exactConnectedSandboxX402Material(
+  prepared: Infer<typeof preparedPublicationMaterialValue>,
+  connection: ProviderConnection,
+): boolean {
+  const endpoint = connection.grantedResources.length === 1
+    ? connection.grantedResources[0]
+    : undefined
+  return connection.x402Method !== undefined
+    && connection.x402Payee !== undefined
+    && connection.x402Payee.length === 42
+    && /^0x[0-9a-fA-F]{40}$/u.test(connection.x402Payee)
+    && endpoint !== undefined
+    && exactSandboxX402PaymentMaterial(prepared, {
+      endpointUrl: endpoint,
+      method: connection.x402Method,
+      payTo: connection.x402Payee,
+    })
+}
+
+function exactConnectionEvidence(
+  connection: ProviderConnection,
+  target: ConnectedCatalogTarget,
+  evidenceRefs: readonly string[],
+): Readonly<{ claimRef: string; inspectionRef: string }> | undefined {
+  const draft = target.path.integrationDraft
+  if (draft === undefined) return undefined
+  const claimRef = oneEvidenceRef(connection.evidenceRefs, 'x402-payee-claim:')
+  const inspectionRef = oneEvidenceRef(connection.evidenceRefs, 'x402-endpoint-inspection:')
+  if (
+    claimRef === undefined
+    || inspectionRef === undefined
+    || !/^x402-payee-claim:sha256:[0-9a-f]{64}$/u.test(claimRef)
+    || inspectionRef !== `x402-endpoint-inspection:${draft.sourceDigest}`
+    || evidenceRefs.filter((ref) => ref === draft.sourceDigest).length !== 1
+    || evidenceRefs.filter((ref) => ref === draft.candidateRef).length !== 1
+  ) return undefined
+  return { claimRef, inspectionRef }
+}
+
+async function exactConnectedStagingConnection(
+  ctx: MutationCtx,
+  input: Readonly<{
+    businessId: Id<'businesses'>
+    ownerId: string
+    prepared: Infer<typeof preparedPublicationMaterialValue>
+    target: ConnectedCatalogTarget
+    evidenceRefs: readonly string[]
+    now: number
+  }>,
+): Promise<Readonly<{
+  connection: Doc<'capabilityProviderConnections'>
+  evidence: Readonly<{ claimRef: string; inspectionRef: string }>
+}> | undefined> {
+  const authority = input.prepared.binding.authority
+  if (authority.kind !== 'provider_connection') return undefined
+  const connection = await ctx.db.query('capabilityProviderConnections')
+    .withIndex('by_connectionRef', (query) => query.eq('connectionRef', authority.connectionRef))
+    .unique()
+  if (connection === null) return undefined
+  const canonicalConnection: ProviderConnection = {
+    ...connection,
+    businessId: String(connection.businessId),
+  }
+  const endpoint = canonicalEndpoint(input.prepared.binding.endpointUrl)
+  if (
+    endpoint === undefined
+    || connection.lifecycle !== 'active'
+    || (connection.expiresAt !== undefined && connection.expiresAt <= input.now)
+    || String(connection.businessId) !== String(input.businessId)
+    || connection.owningAccountRef !== input.ownerId
+    || connection.providerRef !== authority.providerRef
+    || !isCanonicalCredentiallessX402ProviderConnection(canonicalConnection)
+    || !providerConnectionAuthorityProvenanceIsValid(canonicalConnection)
+    || connection.providerAccountRef !== `x402:${endpoint}`
+    || connection.grantedResources.length !== 1
+    || connection.grantedResources[0] !== endpoint
+    || !exactConnectedSandboxX402Material(input.prepared, canonicalConnection)
+  ) return undefined
+  const evidence = exactConnectionEvidence(canonicalConnection, input.target, input.evidenceRefs)
+  return evidence === undefined ? undefined : { connection, evidence }
+}
+
+function effectiveStagingEvidenceRefs(
+  sourceEvidenceRefs: readonly string[],
+  connectionEvidenceRefs: readonly string[],
+): string[] {
+  return [...new Set([
+    ...sourceEvidenceRefs,
+    ...connectionEvidenceRefs,
+  ])].filter((ref) => !ref.startsWith('x402-seller-canary-admission:'))
+}
+
+async function currentOwnerPrincipalRef(
+  ctx: MutationCtx,
+  businessId: Id<'businesses'>,
+): Promise<string | undefined> {
+  const business = await ctx.db.get(businessId)
+  if (business === null) return undefined
+  const account = await ctx.db.query('accounts')
+    .withIndex('by_accountRef', (query) => query.eq('accountRef', business.owningAccountRef))
+    .unique()
+  if (account === null || account.lifecycle !== 'active') return undefined
+  const ownership = await ctx.db.query('accountOwnerships')
+    .withIndex('by_ownershipRef', (query) => query.eq('ownershipRef', account.currentOwnershipRef))
+    .unique()
+  if (
+    ownership === null
+    || ownership.lifecycle !== 'active'
+    || ownership.accountRef !== account.accountRef
+  ) return undefined
+  const principal = await ctx.db.query('principals')
+    .withIndex('by_principalRef', (query) => query.eq('principalRef', ownership.ownerPrincipalRef))
+    .unique()
+  return principal !== null
+    && principal.kind === 'human'
+    && principal.lifecycle === 'active'
+    ? principal.principalRef
+    : undefined
+}
+
+async function activateConnectedCatalogDraft(
+  ctx: MutationCtx,
+  businessId: Id<'businesses'>,
+  origin: CatalogOrigin,
+  ownerPrincipalRef: string,
+  operationKey: string,
+  now: number,
+): Promise<void> {
+  const state = await loadExactOfferingSourceState(ctx.db, businessId, {
+    offeringRef: origin.offeringRef,
+  })
+  const offering = state.offerings.find((item) => item.offeringRef === origin.offeringRef)
+  const path = state.accessPaths.find((item) => item.accessPathRef === origin.declaredAccessPathRef)
+  if (
+    offering === undefined
+    || path === undefined
+    || offering.currentRevision !== origin.offeringRevision
+    || offering.status === 'retired'
+    || path.offeringRef !== origin.offeringRef
+    || path.offeringRevision !== origin.offeringRevision
+    || path.offeringSourceHash !== origin.offeringSourceHash
+    || path.sourceHash !== origin.accessPathSourceHash
+  ) throw new Error('connected_staging_catalog_origin_changed')
+
+  const authority = {
+    actorRef: ownerPrincipalRef,
+    ownerRef: ownerPrincipalRef,
+    businessOwnerRef: ownerPrincipalRef,
+  }
+  let next = state
+  if (offering.status !== 'published') {
+    const published = changeOfferingStatusInState(next, {
+      authority,
+      operationKey: `${operationKey}:catalog-offering`,
+      offeringRef: offering.offeringRef,
+      expectedRevision: origin.offeringRevision,
+      status: 'published',
+      now,
+    })
+    if (published.kind === 'error') {
+      throw new Error(`connected_staging_catalog_offering:${published.code}`)
+    }
+    next = published.state
+  }
+  if (path.status !== 'published') {
+    const activated = upsertAccessPathInState(next, {
+      authority,
+      operationKey: `${operationKey}:catalog-path`,
+      offeringRef: offering.offeringRef,
+      accessPathRef: path.accessPathRef,
+      expectedRevision: origin.offeringRevision,
+      status: 'published',
+      descriptor: path.descriptor,
+      now,
+    })
+    if (activated.kind === 'error') {
+      throw new Error(`connected_staging_catalog_path:${activated.code}`)
+    }
+    const activatedPath = activated.state.accessPaths.find((item) => item.accessPathRef === path.accessPathRef)
+    if (activatedPath?.sourceHash !== origin.accessPathSourceHash) {
+      throw new Error('connected_staging_catalog_material_changed')
+    }
+    next = activated.state
+  }
+  if (next !== state) {
+    const persisted = await persistOfferingSourceState(ctx.db, businessId, state, next, 'owner')
+    if (persisted.kind === 'error') {
+      throw new Error(`connected_staging_catalog_save:${persisted.code}`)
+    }
+
+  }
+}
+
+function catalogOriginsEqual(left: CatalogOrigin, right: CatalogOrigin): boolean {
+  return left.offeringRef === right.offeringRef
+    && left.offeringRevision === right.offeringRevision
+    && left.offeringSourceHash === right.offeringSourceHash
+    && left.declaredAccessPathRef === right.declaredAccessPathRef
+    && left.accessPathSourceHash === right.accessPathSourceHash
+}
+
 function stagingPublicationPorts(
   ctx: MutationCtx,
   businessId: Id<'businesses'>,
+  allowDraftCatalogOrigin?: (
+    origin: CatalogOrigin,
+    candidateBusinessId: string,
+  ) => Promise<boolean>,
 ) {
   const writer = capabilitySupplyWriterPorts(ctx.db)
   const stagingWriter = {
@@ -333,7 +691,7 @@ function stagingPublicationPorts(
         : null
     },
   }
-  return capabilitySupplyPublicationPorts(ctx, {
+  const ports = capabilitySupplyPublicationPorts(ctx, {
     registerOffering: (registration, now) => (
       registerCapabilityOffering(stagingWriter, registration, now)
     ),
@@ -349,6 +707,14 @@ function stagingPublicationPorts(
       setCapabilitySupplyEligibility(stagingWriter, eligibility, now)
     ),
   })
+  if (allowDraftCatalogOrigin === undefined) return ports
+  return {
+    ...ports,
+    catalogOriginIsCurrent: async (origin: CatalogOrigin, candidateBusinessId: string) => (
+      (await ports.catalogOriginIsCurrent?.(origin, candidateBusinessId) ?? false)
+      || await allowDraftCatalogOrigin(origin, candidateBusinessId)
+    ),
+  }
 }
 
 async function reuseExactStagedPublication(
@@ -570,10 +936,193 @@ export async function stageOwnerX402CapabilityHandler(
     correlationId: args.correlationId,
     reasonCode: args.reasonCode,
     evidenceRefs: [
-      ...args.evidenceRefs,
+      ...effectiveStagingEvidenceRefs(args.evidenceRefs, []),
       X402_SELLER_CANARY_ADMISSION_REQUIRED_REF,
     ],
     now,
   }, stagingPublicationPorts(ctx, args.businessId))
+  return convexStagingResult(result)
+}
+
+async function privateSandboxX402Business(
+  ctx: MutationCtx,
+  args: PublishPreparedCapabilityArgs,
+): Promise<Doc<'businesses'> | null> {
+  if (args.runtimeEnvironment !== 'sandbox' || args.prepared.sourceKind !== 'x402') return null
+  const business = await ctx.db.get(args.businessId)
+  if (business === null
+    || business.publicStatus !== 'unpublished'
+    || business.suppressedAt !== undefined
+    || business.businessContext?.kind !== 'programmable_provider') return null
+  const origin = connectedCatalogOrigin(args)
+  if (origin === undefined || origin.declaredAccessPathRef === undefined) return null
+  const path = await ctx.db.query('offeringAccessPaths')
+    .withIndex('by_accessPathRef', (query) => query.eq('accessPathRef', origin.declaredAccessPathRef!))
+    .unique()
+  return path?.integrationDraft?.sourceKind === 'x402'
+    ? business
+    : null
+}
+
+/**
+ * Registered publish entry point for a private Provider's connected sandbox
+ * x402 Tool. Every other publication keeps the generic handler and contract.
+ */
+export async function publishPreparedCapabilityWithOwnerStagingHandler(
+  ctx: MutationCtx,
+  args: PublishPreparedCapabilityArgs,
+): Promise<Infer<typeof preparedPublicationResultValue>> {
+  const business = await privateSandboxX402Business(ctx, args)
+  if (business === null) return publishPreparedCapabilityHandler(ctx, args)
+
+  const sourceWrite = await requireSourceWrite(ctx, args, 'catalog_publish')
+  if (sourceWrite.kind === 'rejected' || !validRegistrationContext(args)) {
+    return { kind: 'refused', reason: 'authorization_denied' }
+  }
+  const now = Date.now()
+  if (args.prepared.sourceAuthorityState !== 'verified') {
+    return { kind: 'refused', reason: 'authorization_denied' }
+  }
+
+  const agentAdmission = args.agentPrincipal === undefined
+    ? undefined
+    : await verifySupplyAgentPrincipal(ctx, args.agentPrincipal, true)
+  const ownerActor = args.agentPrincipal === undefined
+    ? await resolveBusinessActor(ctx)
+    : undefined
+  const ownerPrincipalRef = await currentOwnerPrincipalRef(ctx, args.businessId)
+  const ownerAuthorized = ownerActor?.kind === 'authenticated_owner'
+    && business.owningAccountRef === ownerActor.canonicalAccountRef
+    && ownerPrincipalRef === ownerActor.canonicalPrincipalRef
+  const agentAuthorized = agentAdmission?.kind === 'allowed'
+    && business.owningAccountRef === agentAdmission.ownerId
+    && ownerPrincipalRef !== undefined
+  if (!ownerAuthorized && !agentAuthorized) {
+    return { kind: 'refused', reason: 'authorization_denied' }
+  }
+  if (await providerRouteabilityIsFrozen(ctx, args.businessId)) {
+    return { kind: 'refused', reason: 'authorization_denied' }
+  }
+
+  const target = await exactConnectedCatalogTarget(ctx, args)
+  if (target === undefined) {
+    return { kind: 'refused', reason: 'catalog_offering_origin_changed' }
+  }
+  const connected = await exactConnectedStagingConnection(ctx, {
+    businessId: args.businessId,
+    ownerId: business.owningAccountRef,
+    prepared: args.prepared,
+    target,
+    evidenceRefs: args.evidenceRefs,
+    now,
+  })
+  if (connected === undefined) {
+    return { kind: 'refused', reason: 'connection_authority_stale' }
+  }
+  const evidenceRefs = effectiveStagingEvidenceRefs(
+    args.evidenceRefs,
+    connected.connection.evidenceRefs,
+  )
+  if (evidenceRefs.length === 0) {
+    return { kind: 'refused', reason: 'connection_authority_stale' }
+  }
+
+  const consequenceCommand = {
+    version: 'ae.publication-consequence:v1',
+    action: 'publication.publish',
+    operationKey: args.operationKey,
+    businessId: String(args.businessId),
+    offeringRef: args.offeringRef,
+    offeringRevision: args.revision,
+    offeringSourceHash: args.sourceHash,
+    publicationRef: args.prepared.offering.offeringId,
+    publicationRevision: 1,
+    sourceDigest: args.prepared.sourceDigest,
+    priceDigest: args.prepared.priceDigest,
+    bindingId: args.prepared.binding.bindingId,
+    documentDigest: canonicalDigest(args.prepared.documentJson),
+  }
+  if (agentAdmission?.kind === 'allowed') {
+    const consequence = await admitAgentPublicationConsequence(ctx, {
+      agent: agentAdmission,
+      action: 'publication.publish',
+      target: {
+        targetType: 'capability_publication',
+        targetRef: args.prepared.offering.offeringId,
+        targetRevision: 1,
+      },
+      resourceRefs: [
+        `offering:${args.offeringRef}`,
+        `publication:${args.prepared.offering.offeringId}`,
+      ],
+      consequenceSummary: 'Publish this exact Tool revision to the market.',
+      statusReadbackRef: `owner/operations/${args.offeringRef}`,
+      correlationRef: args.correlationId,
+      idempotencyRef: args.operationKey,
+      command: consequenceCommand,
+      now,
+    })
+    if (consequence === null) return { kind: 'refused', reason: 'authorization_denied' }
+  }
+  if (ownerActor?.kind === 'authenticated_owner') {
+    const consequence = await admitInteractiveOwnerConsequence(ctx, {
+      actor: ownerActor,
+      action: 'publication.publish',
+      target: {
+        targetType: 'capability_publication',
+        targetRef: args.prepared.offering.offeringId,
+        targetRevision: 1,
+      },
+      requiredScopes: ['catalog_publish'],
+      resourceRefs: [
+        `offering:${args.offeringRef}`,
+        `publication:${args.prepared.offering.offeringId}`,
+      ],
+      budgetAmount: 0,
+      consequenceSummary: 'Publish this exact Tool revision to the market.',
+      statusReadbackRef: `owner/operations/${args.offeringRef}`,
+      correlationRef: args.correlationId,
+      idempotencyRef: args.operationKey,
+      command: consequenceCommand,
+      ...(args.proof === undefined ? {} : { proof: args.proof }),
+      now,
+    })
+    if (consequence.kind === 'refused') return { kind: 'refused', reason: consequence.code }
+  }
+
+  const actorRef = agentAdmission?.kind === 'allowed'
+    ? agentAdmission.principalId
+    : ownerActor?.kind === 'authenticated_owner'
+      ? ownerActor.canonicalPrincipalRef
+      : ''
+  const result = await publishPreparedCapabilityCommand({
+    businessId: String(args.businessId),
+    runtimeEnvironment: 'sandbox',
+    prepared: args.prepared,
+    actor: { kind: 'owner', ref: actorRef },
+    origin: target.origin,
+    operationKey: args.operationKey,
+    correlationId: args.correlationId,
+    reasonCode: args.reasonCode,
+    evidenceRefs: [...evidenceRefs, X402_SELLER_CANARY_ADMISSION_REQUIRED_REF],
+    now,
+  }, stagingPublicationPorts(ctx, args.businessId, async (origin, candidateBusinessId) => (
+    candidateBusinessId === String(args.businessId) && catalogOriginsEqual(origin, target.origin)
+  )))
+  if (result.kind === 'refused') return convexStagingResult(result)
+
+  await activateConnectedCatalogDraft(
+    ctx,
+    args.businessId,
+    target.origin,
+    ownerPrincipalRef!,
+    args.operationKey,
+    now,
+  )
+  await recordSupplyAdmissionCase(ctx, {
+    ...args,
+    evidenceRefs,
+  }, result, now)
+  await rebuildCapabilityOriginSupplyProjection(ctx, args.businessId, now)
   return convexStagingResult(result)
 }

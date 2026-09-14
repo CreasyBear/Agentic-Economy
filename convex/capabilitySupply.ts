@@ -9,7 +9,6 @@ import { workloadCronSnapshotValue } from './workloadCron'
 
 import {
   publishPreparedCapabilityArgs,
-  publishPreparedCapabilityHandler,
   preparedPublicationResultValue,
   readCapabilityPublicationArgs,
   readCapabilityPublicationHandler,
@@ -61,6 +60,7 @@ import {
   stageOwnerX402CapabilityArgs,
   stageOwnerX402CapabilityHandler,
   stageOwnerX402CapabilityReturns,
+  publishPreparedCapabilityWithOwnerStagingHandler,
 } from './capabilitySupplyOwnerStaging'
 
 export {
@@ -93,7 +93,7 @@ export {
 export const publishPreparedCapability = mutationGeneric({
   args: publishPreparedCapabilityArgs,
   returns: preparedPublicationResultValue,
-  handler: publishPreparedCapabilityHandler,
+  handler: publishPreparedCapabilityWithOwnerStagingHandler,
 })
 
 export const verifyCapabilitySourceAuthority = mutationGeneric({

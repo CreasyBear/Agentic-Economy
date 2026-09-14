@@ -392,7 +392,7 @@ function convexPreparedPublicationResult(
   }
 }
 
-async function recordSupplyAdmissionCase(
+export async function recordSupplyAdmissionCase(
   ctx: MutationCtx,
   args: Readonly<{
     businessId: Id<'businesses'>
