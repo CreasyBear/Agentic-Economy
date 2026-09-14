@@ -196,9 +196,9 @@ function CompletedStageSummary({ step, detail, disabled, onEdit }: Readonly<{ st
 }
 
 function SupplyFlowFeedback({ error, requiredAction, success, publicationLocked }: Readonly<{
-  error?: string
-  requiredAction?: ReturnType<typeof useSupplyNativeStartState>['requiredAction']
-  success?: string
+  error: string | undefined
+  requiredAction: ReturnType<typeof useSupplyNativeStartState>['requiredAction']
+  success: string | undefined
   publicationLocked: boolean
 }>) {
   return (
