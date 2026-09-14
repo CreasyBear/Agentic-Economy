@@ -1,15 +1,38 @@
-import { useEffect, useState } from 'react'
-import { Link, createFileRoute } from '@tanstack/react-router'
+import { useCallback, useEffect, useReducer } from 'react'
+import { createFileRoute } from '@tanstack/react-router'
+import { z } from 'zod'
 
-import { AePageState } from '@/components/ae/layout/AePageState'
+import {
+  AeFundingReturnState,
+  type FundingReturnViewState,
+} from '@/components/ae/funding/AeFundingReturnState'
 import { RouteError, RoutePending } from '@/components/ae/layout/AeRouteStates'
-import { Button } from '@/components/ui/button'
 
-type PublicFunding = Readonly<{
-  state: 'awaiting_payment' | 'processing' | 'ready' | 'expired' | 'failed'
-  agentName: string
-  creditAmount: { currency: string; units: string; exponent: number }
-}>
+const publicFundingSchema = z.strictObject({
+  success: z.literal(true),
+  funding: z.strictObject({
+    state: z.enum(['awaiting_payment', 'processing', 'ready', 'expired', 'failed']),
+    agentName: z.string().min(1),
+    creditAmount: z.strictObject({
+      currency: z.literal('AUD'),
+      units: z.string().regex(/^\d+$/u),
+      exponent: z.literal(6),
+    }),
+  }),
+})
+
+type PublicFunding = z.infer<typeof publicFundingSchema>['funding']
+
+type FundingReadResult =
+  | Readonly<{ kind: 'found'; funding: PublicFunding }>
+  | Readonly<{ kind: 'not_found' }>
+  | Readonly<{ kind: 'unavailable' }>
+
+type FundingPageEvent =
+  | Readonly<{ type: 'check_started' }>
+  | Readonly<{ type: 'check_found'; funding: PublicFunding }>
+  | Readonly<{ type: 'check_not_found' }>
+  | Readonly<{ type: 'check_unavailable' }>
 
 export const Route = createFileRoute('/fund/$fundingSessionId')({
   head: () => ({ meta: [
@@ -25,64 +48,54 @@ export const Route = createFileRoute('/fund/$fundingSessionId')({
 
 function FundingReturnPage() {
   const { fundingSessionId } = Route.useParams()
-  const [funding, setFunding] = useState<PublicFunding | null | undefined>(undefined)
-  useEffect(() => {
-    let active = true
-    void fetch(`/api/v1/account/funding-sessions/public/${encodeURIComponent(fundingSessionId)}`, { cache: 'no-store' })
-      .then(async (result) => result.ok ? await result.json() as { funding: PublicFunding } : null)
-      .then((result) => { if (active) setFunding(result?.funding ?? null) })
-      .catch(() => { if (active) setFunding(null) })
-    return () => { active = false }
+  const [pageState, dispatch] = useReducer(fundingPageReducer, { kind: 'checking' })
+
+  const checkFunding = useCallback(async (signal?: AbortSignal) => {
+    dispatch({ type: 'check_started' })
+    try {
+      const result = await readPublicFunding(fundingSessionId, signal)
+      if (signal?.aborted === true) return
+      if (result.kind === 'found') dispatch({ type: 'check_found', funding: result.funding })
+      else if (result.kind === 'not_found') dispatch({ type: 'check_not_found' })
+      else dispatch({ type: 'check_unavailable' })
+    } catch {
+      if (signal?.aborted !== true) dispatch({ type: 'check_unavailable' })
+    }
   }, [fundingSessionId])
-  if (funding === undefined) return <AePageState tone="neutral" title="Checking funding" description="Confirming the latest Account credit status." />
-  if (funding === null) return <AePageState tone="neutral" title="Funding link unavailable" description="Ask the agent for a current funding link." />
-  const amount = `${funding.creditAmount.currency} ${(Number(funding.creditAmount.units) / 10 ** funding.creditAmount.exponent).toFixed(2)}`
-  if (funding.state === 'ready') {
-    return (
-      <AePageState
-        tone="positive"
-        title="Account credit added"
-        description={`${amount} is ready for ${funding.agentName}. You can return to the agent.`}
-        action={(
-          <div className="flex flex-col gap-3 sm:flex-row">
-            <Button asChild variant="default" className="min-h-touch"><Link to="/owner/credit">Go to credit</Link></Button>
-            <Button asChild variant="secondary" className="min-h-touch"><Link to="/market">Back to Market</Link></Button>
-          </div>
-        )}
-      />
-    )
+
+  useEffect(() => {
+    const controller = new AbortController()
+    void checkFunding(controller.signal)
+    return () => controller.abort()
+  }, [checkFunding])
+
+  return <AeFundingReturnState pageState={pageState} onCheck={checkFunding} />
+}
+
+function fundingPageReducer(state: FundingReturnViewState, event: FundingPageEvent): FundingReturnViewState {
+  switch (event.type) {
+    case 'check_started':
+      return state.kind === 'found' ? { ...state, refresh: 'checking' } : { kind: 'checking' }
+    case 'check_found':
+      return { kind: 'found', funding: event.funding, refresh: 'idle' }
+    case 'check_not_found':
+      return { kind: 'not_found' }
+    case 'check_unavailable':
+      return state.kind === 'found' ? { ...state, refresh: 'failed' } : { kind: 'unavailable' }
+    default: {
+      const exhaustive: never = event
+      return exhaustive
+    }
   }
-  if (funding.state === 'processing') {
-    return (
-      <AePageState
-        tone="neutral"
-        title="Payment received"
-        description={`Account credit is being confirmed for ${funding.agentName}. Do not pay again.`}
-        action={<Button asChild variant="default" className="min-h-touch"><Link to="/owner/credit">Check credit</Link></Button>}
-      />
-    )
-  }
-  if (funding.state === 'awaiting_payment') {
-    return (
-      <AePageState
-        tone="neutral"
-        title="Payment not completed"
-        description={`Return to Stripe to finish adding ${amount} for ${funding.agentName}.`}
-        action={<Button asChild variant="default" className="min-h-touch"><Link to="/owner/credit">Check credit</Link></Button>}
-      />
-    )
-  }
-  return (
-    <AePageState
-      tone="neutral"
-      title="Funding link ended"
-      description={`Ask ${funding.agentName} to create a new funding link.`}
-      action={(
-        <div className="flex flex-col gap-3 sm:flex-row">
-          <Button asChild variant="default" className="min-h-touch"><Link to="/owner/credit">Try again</Link></Button>
-          <Button asChild variant="secondary" className="min-h-touch"><Link to="/market">Back to Market</Link></Button>
-        </div>
-      )}
-    />
+}
+
+async function readPublicFunding(fundingSessionId: string, signal?: AbortSignal): Promise<FundingReadResult> {
+  const response = await fetch(
+    `/api/v1/account/funding-sessions/public/${encodeURIComponent(fundingSessionId)}`,
+    { cache: 'no-store', ...(signal === undefined ? {} : { signal }) },
   )
+  if (response.status === 404) return { kind: 'not_found' }
+  if (!response.ok) return { kind: 'unavailable' }
+  const parsed = publicFundingSchema.safeParse(await response.json())
+  return parsed.success ? { kind: 'found', funding: parsed.data.funding } : { kind: 'unavailable' }
 }
