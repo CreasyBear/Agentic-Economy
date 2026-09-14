@@ -49,6 +49,11 @@ import {
   x402SellerClaimDigest,
   x402SellerClaimMessage,
 } from '@/modules/capability-supply/public'
+import {
+  createProviderConnection,
+  createX402ProviderConnection,
+  projectProviderConnectionOwner,
+} from '@/modules/capability-supply/provider-connection'
 
 const principal: AgentAccessPrincipal = {
   principalId: 'principal:supply-actions',
@@ -110,24 +115,55 @@ const sellerObservation = {
   discovery: { kind: 'admitted' as const },
   digest: sellerObservationDigest,
 }
-const connectedProjection = {
+const x402ConnectionResult = createX402ProviderConnection({
+  commandId: 'command:x402:supply-actions',
   connectionRef: 'connection:x402:one',
   businessId: 'business:supply-actions',
   providerRef: 'provider:x402:provider.example',
   providerAccountRef: `x402:${sellerEndpoint}`,
-  adapterId: 'x402-fetch:v2',
-  grantedScopes: [],
-  grantedResources: [sellerEndpoint],
-  authorityGeneration: 1,
-  authorityDigest: `sha256:${'d'.repeat(64)}`,
-  lifecycle: 'active' as const,
-  available: true,
-  credentialConfigured: false,
-  observedAt: 10,
+  resourceUrl: sellerEndpoint,
+  method: 'POST',
+  payee: sellerPayTo,
   evidenceRefs: [`x402-endpoint-inspection:${sellerObservationDigest}`],
-  createdAt: 10,
-  updatedAt: 10,
-}
+  owningAccountRef: 'account:supply-actions',
+  installedByPrincipalRef: 'principal:supply-actions',
+  authorityGrantRef: 'grant:supply-actions',
+  authorityGrantGeneration: 1,
+}, 10)
+if (x402ConnectionResult.kind !== 'applied') throw new Error('x402_connection_fixture_failed')
+const connectedProjection = projectProviderConnectionOwner(x402ConnectionResult.connection, 10)
+
+const sourceConnectionResult = createProviderConnection({
+  commandId: 'command:http:supply-actions',
+  connectionRef: 'connection:http:one',
+  owningAccountRef: 'account:supply-actions',
+  installedByPrincipalRef: 'principal:supply-actions',
+  authorityGrantRef: 'grant:http:supply-actions',
+  authorityGrantGeneration: 1,
+  secretRef: 'env:PROVIDER_API_KEY',
+  businessId: 'business:supply-actions',
+  providerRef: 'provider:http:provider.example',
+  providerAccountRef: 'account:http:provider.example',
+  adapterId: 'http-json:v1',
+  credentialRef: 'env:PROVIDER_API_KEY',
+  sourceOrigin: 'https://provider.example',
+  sourceEnvironment: 'sandbox',
+  sourceAuthentication: { kind: 'api_key', location: 'header', name: 'X-API-Key' },
+  requestedScopes: ['orders:read'],
+  grantedScopes: ['orders:read'],
+  requestedResources: ['https://provider.example/orders'],
+  grantedResources: ['https://provider.example/orders'],
+  evidenceRefs: ['evidence:http-connection'],
+}, 20)
+if (sourceConnectionResult.kind !== 'applied') throw new Error('http_connection_fixture_failed')
+const sourceHealthProjection = projectProviderConnectionOwner({
+  ...sourceConnectionResult.connection,
+  healthStatus: 'healthy',
+  healthCheckedAt: 30,
+  healthSubject: 'https://provider.example/orders',
+  healthObservationDigest: `sha256:${'f'.repeat(64)}`,
+  healthReasonCode: 'health_check_passed',
+}, 30)
 
 function setHappyPublishResponses() {
   const readback = {
@@ -552,28 +588,10 @@ describe('supply action runtime boundaries', () => {
   })
 
   it('lists provider connections through the agent-aware source mutation without exposing credential material', async () => {
-    const connection = {
-      connectionRef: 'connection:x402:one',
-      businessId: 'business:supply-actions',
-      providerRef: 'provider:x402:provider.example',
-      providerAccountRef: 'x402:https://provider.example/pay',
-      adapterId: 'x402:v1',
-      grantedScopes: ['x402:pay'],
-      grantedResources: ['https://provider.example/pay'],
-      authorityGeneration: 1,
-      authorityDigest: 'sha256:authority',
-      lifecycle: 'active',
-      available: true,
-      credentialConfigured: false,
-      observedAt: 10,
-      evidenceRefs: ['evidence:connection'],
-      createdAt: 10,
-      updatedAt: 10,
-    }
     mocks.callPublicSourceMutation.mockResolvedValue({
       kind: 'available',
       businessId: 'business:supply-actions',
-      connections: [connection],
+      connections: [connectedProjection, sourceHealthProjection],
     })
     const service = createSupplyManagementService(new Request('https://agent.example/api/v1/supply/connections/list'), '{}')
 
@@ -586,7 +604,26 @@ describe('supply action runtime boundaries', () => {
     expect(result).toEqual({
       kind: 'available',
       businessId: 'business:supply-actions',
-      connections: [{ ...connection, reasonCode: null }],
+      connections: [connectedProjection, sourceHealthProjection],
+    })
+    expect(result).toMatchObject({
+      connections: [
+        {
+          x402Method: 'POST',
+          x402Payee: sellerPayTo,
+          reasonCode: null,
+        },
+        {
+          sourceOrigin: 'https://provider.example',
+          sourceEnvironment: 'sandbox',
+          sourceAuthentication: { kind: 'api_key', location: 'header', name: 'X-API-Key' },
+          healthStatus: 'healthy',
+          healthCheckedAt: 30,
+          healthSubject: 'https://provider.example/orders',
+          healthReasonCode: 'health_check_passed',
+          reasonCode: null,
+        },
+      ],
     })
     expect(mocks.callPublicSourceMutation).toHaveBeenCalledWith(
       { name: 'capabilityProviderConnectionAgents:list' },
@@ -597,6 +634,7 @@ describe('supply action runtime boundaries', () => {
       }),
     )
     expect(JSON.stringify(result)).not.toContain('credentialRef')
+    expect(JSON.stringify(result)).not.toContain('healthObservationDigest')
   })
 
   it('reinspects and verifies the exact seller claim before admitting an agent connection write', async () => {
@@ -889,7 +927,7 @@ describe('supply action runtime boundaries', () => {
     mocks.callPublicSourceMutation.mockResolvedValue({
       kind: 'found',
       connection: {
-        connectionRef: 'connection:x402:one',
+        ...connectedProjection,
         credentialRef: 'secret:must-not-cross-boundary',
       },
     })
