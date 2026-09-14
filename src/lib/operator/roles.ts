@@ -1,13 +1,13 @@
 export type OperatorRole = 'owner' | 'admin' | 'developer'
 
 export const roleHomeHref: Record<OperatorRole, string> = {
-  owner: '/owner/operations',
+  owner: '/owner',
   admin: '/admin/index-health',
   developer: '/developers/discovery',
 }
 
 export const roleLabel: Record<OperatorRole, string> = {
-  owner: 'Buy and supply',
+  owner: 'Workspace',
   admin: 'Administration',
   developer: 'Developer tools',
 }

@@ -200,7 +200,7 @@ export function AeOperatorSidebar({ operatorRole, operatorContext, currentPath, 
               <SidebarMenuButton asChild size="lg" tooltip={roleLabel[operatorRole]} className="h-14 rounded-none border-b border-sidebar-border px-1 hover:bg-transparent">
                 <Link
                   to={roleHomeHref[operatorRole]}
-                  aria-label={operatorRole === 'owner' ? 'Tools home' : `${roleLabel[operatorRole]} home`}
+                  aria-label={`${roleLabel[operatorRole]} home`}
                   onClick={closeMobileNavigation}
                 >
                   <span className={isCollapsed ? 'sr-only' : 'flex items-center gap-2 truncate font-sans text-xs font-medium text-muted-foreground'}>

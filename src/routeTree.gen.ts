@@ -56,6 +56,7 @@ import { Route as DotwellKnownOauthAuthorizationServerRouteImport } from './rout
 import { Route as DotwellKnownHttpMessageSignaturesDirectoryRouteImport } from './routes/[.]well-known/http-message-signatures-directory'
 import { Route as DotwellKnownApiCatalogRouteImport } from './routes/[.]well-known/api-catalog'
 import { Route as SlugUcpRouteImport } from './routes/$slug.ucp'
+import { Route as OperatorOwnerIndexRouteImport } from './routes/_operator/owner.index'
 import { Route as ToolsProviderHostSlugRouteImport } from './routes/tools.$providerHost.$slug'
 import { Route as ApiV1SandboxReferenceRouteImport } from './routes/api.v1.sandbox-reference'
 import { Route as ApiV1ReleaseRouteImport } from './routes/api.v1.release'
@@ -362,6 +363,11 @@ const SlugUcpRoute = SlugUcpRouteImport.update({
   id: '/ucp',
   path: '/ucp',
   getParentRoute: () => SlugRoute,
+} as any)
+const OperatorOwnerIndexRoute = OperatorOwnerIndexRouteImport.update({
+  id: '/owner/',
+  path: '/owner/',
+  getParentRoute: () => OperatorRoute,
 } as any)
 const ToolsProviderHostSlugRoute = ToolsProviderHostSlugRouteImport.update({
   id: '/tools/$providerHost/$slug',
@@ -805,6 +811,7 @@ export interface FileRoutesByFullPath {
   '/api/v1/release': typeof ApiV1ReleaseRoute
   '/api/v1/sandbox-reference': typeof ApiV1SandboxReferenceRoute
   '/tools/$providerHost/$slug': typeof ToolsProviderHostSlugRoute
+  '/owner/': typeof OperatorOwnerIndexRoute
   '/owner/operations/$toolRef': typeof OperatorOwnerOperationsToolRefRoute
   '/owner/operations/new': typeof OperatorOwnerOperationsNewRoute
   '/api/stripe/webhook/accounts-v2': typeof ApiStripeWebhookAccountsV2Route
@@ -921,6 +928,7 @@ export interface FileRoutesByTo {
   '/api/v1/release': typeof ApiV1ReleaseRoute
   '/api/v1/sandbox-reference': typeof ApiV1SandboxReferenceRoute
   '/tools/$providerHost/$slug': typeof ToolsProviderHostSlugRoute
+  '/owner': typeof OperatorOwnerIndexRoute
   '/owner/operations/$toolRef': typeof OperatorOwnerOperationsToolRefRoute
   '/owner/operations/new': typeof OperatorOwnerOperationsNewRoute
   '/api/stripe/webhook/accounts-v2': typeof ApiStripeWebhookAccountsV2Route
@@ -1039,6 +1047,7 @@ export interface FileRoutesById {
   '/api/v1/release': typeof ApiV1ReleaseRoute
   '/api/v1/sandbox-reference': typeof ApiV1SandboxReferenceRoute
   '/tools/$providerHost/$slug': typeof ToolsProviderHostSlugRoute
+  '/_operator/owner/': typeof OperatorOwnerIndexRoute
   '/_operator/owner/operations/$toolRef': typeof OperatorOwnerOperationsToolRefRoute
   '/_operator/owner/operations/new': typeof OperatorOwnerOperationsNewRoute
   '/api/stripe/webhook/accounts-v2': typeof ApiStripeWebhookAccountsV2Route
@@ -1157,6 +1166,7 @@ export interface FileRouteTypes {
     | '/api/v1/release'
     | '/api/v1/sandbox-reference'
     | '/tools/$providerHost/$slug'
+    | '/owner/'
     | '/owner/operations/$toolRef'
     | '/owner/operations/new'
     | '/api/stripe/webhook/accounts-v2'
@@ -1273,6 +1283,7 @@ export interface FileRouteTypes {
     | '/api/v1/release'
     | '/api/v1/sandbox-reference'
     | '/tools/$providerHost/$slug'
+    | '/owner'
     | '/owner/operations/$toolRef'
     | '/owner/operations/new'
     | '/api/stripe/webhook/accounts-v2'
@@ -1390,6 +1401,7 @@ export interface FileRouteTypes {
     | '/api/v1/release'
     | '/api/v1/sandbox-reference'
     | '/tools/$providerHost/$slug'
+    | '/_operator/owner/'
     | '/_operator/owner/operations/$toolRef'
     | '/_operator/owner/operations/new'
     | '/api/stripe/webhook/accounts-v2'
@@ -1851,6 +1863,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/$slug/ucp'
       preLoaderRoute: typeof SlugUcpRouteImport
       parentRoute: typeof SlugRoute
+    }
+    '/_operator/owner/': {
+      id: '/_operator/owner/'
+      path: '/owner'
+      fullPath: '/owner/'
+      preLoaderRoute: typeof OperatorOwnerIndexRouteImport
+      parentRoute: typeof OperatorRoute
     }
     '/tools/$providerHost/$slug': {
       id: '/tools/$providerHost/$slug'
@@ -2376,6 +2395,7 @@ interface OperatorRouteChildren {
   OperatorOwnerCreditRoute: typeof OperatorOwnerCreditRoute
   OperatorOwnerOperationsRoute: typeof OperatorOwnerOperationsRouteWithChildren
   OperatorOwnerSettingsRoute: typeof OperatorOwnerSettingsRoute
+  OperatorOwnerIndexRoute: typeof OperatorOwnerIndexRoute
   OperatorOwnerSupplyConnectionsNewRoute: typeof OperatorOwnerSupplyConnectionsNewRoute
   OperatorOwnerSupplyConnectionsOauthCallbackRoute: typeof OperatorOwnerSupplyConnectionsOauthCallbackRoute
 }
@@ -2388,6 +2408,7 @@ const OperatorRouteChildren: OperatorRouteChildren = {
   OperatorOwnerCreditRoute: OperatorOwnerCreditRoute,
   OperatorOwnerOperationsRoute: OperatorOwnerOperationsRouteWithChildren,
   OperatorOwnerSettingsRoute: OperatorOwnerSettingsRoute,
+  OperatorOwnerIndexRoute: OperatorOwnerIndexRoute,
   OperatorOwnerSupplyConnectionsNewRoute:
     OperatorOwnerSupplyConnectionsNewRoute,
   OperatorOwnerSupplyConnectionsOauthCallbackRoute:

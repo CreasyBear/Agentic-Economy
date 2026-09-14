@@ -12,6 +12,17 @@ type AeOwnerMobileNavigationProps = {
 
 type MobileNavItem = { href: string; label: string; icon: LucideIcon; mobileOrder: number }
 
+const OWNER_PRIMARY_DESTINATIONS = [
+  { href: '/owner', mobileOrder: 0 },
+  { href: '/market', mobileOrder: 10 },
+  { href: '/activity', mobileOrder: 20 },
+  { href: '/owner/credit', mobileOrder: 30 },
+] as const
+
+function normalizedPath(path: string): string {
+  return path.length > 1 && path.endsWith('/') ? path.slice(0, -1) : path
+}
+
 /** Mirrors the pre-staticData resolveOperatorNavItem canonicalization for the
  * owner surface: /owner/supply/* and /owner/settings/* routes are not
  * route-tree descendants of the sidebar item that owns them. */
@@ -37,14 +48,18 @@ export function AeOwnerMobileNavigation({ operatorContext, currentPath }: AeOwne
   const items = useMemo<MobileNavItem[]>(() => {
     if (operatorContext !== undefined && !operatorContext.allowedSurfaces.includes('owner')) return []
 
+    const routes = Object.values(router.routesByPath)
     const collected: MobileNavItem[] = []
-    for (const route of Object.values(router.routesByPath)) {
-      const nav = route.options.staticData?.nav
-      const operator = nav?.operator
-      if (operator === undefined || nav === undefined) continue
-      if (!operator.roles.includes('owner')) continue
-      if (operator.mobilePrimary !== true) continue
-      collected.push({ href: route.fullPath, label: nav.label, icon: operator.icon, mobileOrder: operator.mobileOrder ?? 0 })
+    for (const destination of OWNER_PRIMARY_DESTINATIONS) {
+      const route = routes.find(candidate => normalizedPath(candidate.fullPath) === destination.href)
+      const nav = route?.options.staticData?.nav
+      const ownerNav = nav?.operator?.roles.includes('owner') === true
+        ? nav.operator
+        : nav?.operatorUtility?.roles.includes('owner') === true
+          ? nav.operatorUtility
+          : undefined
+      if (nav === undefined || ownerNav === undefined) continue
+      collected.push({ href: destination.href, label: nav.label, icon: ownerNav.icon, mobileOrder: destination.mobileOrder })
     }
     return collected.sort((left, right) => left.mobileOrder - right.mobileOrder)
   }, [router, operatorContext])
@@ -59,7 +74,7 @@ export function AeOwnerMobileNavigation({ operatorContext, currentPath }: AeOwne
       aria-label="Owner primary navigation"
       className="fixed inset-x-0 bottom-0 z-20 border-t border-border bg-background/95 pb-[env(safe-area-inset-bottom,0px)] backdrop-blur supports-[backdrop-filter]:bg-background/85 md:hidden"
     >
-      <div className="grid min-h-touch grid-cols-3 px-gutter">
+      <div className="grid min-h-touch grid-cols-4 px-gutter">
         {items.map((item) => {
           const current = item.href === currentHref
           const Icon = item.icon
@@ -68,6 +83,7 @@ export function AeOwnerMobileNavigation({ operatorContext, currentPath }: AeOwne
             <Link
               key={item.href}
               to={item.href}
+              activeOptions={{ exact: true }}
               aria-current={current ? 'page' : undefined}
               className="relative flex min-h-touch min-w-touch flex-col items-center justify-center gap-1 px-2 py-1 font-sans text-xs font-medium text-muted-foreground no-underline hover:bg-muted/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset aria-[current=page]:font-semibold aria-[current=page]:text-foreground aria-[current=page]:after:absolute aria-[current=page]:after:inset-x-4 aria-[current=page]:after:top-0 aria-[current=page]:after:h-0.5 aria-[current=page]:after:bg-info"
             >
