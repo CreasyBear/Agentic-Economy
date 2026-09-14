@@ -1,11 +1,10 @@
 "use node";
 
-import type { FunctionReturnType } from 'convex/server'
-
 import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 import { Agent, fetch as guardedFetch } from 'undici'
+import type { FunctionReturnType } from 'convex/server'
 import { persistCanonicalReleaseFence, type CanonicalClaimSnapshot } from '@/modules/action-execution/runtime'
 import { invokePreparedRouteTransport, prepareRegisteredRouteTransportInvocation, type RouteTransportFetch, type RouteTransportObservation, type RouteTransportRuntime } from '@/modules/capability-supply/route-transport-runtime'
 import { parseAdmittedX402CatalogPayment, parsePublishedToolSnapshot } from '@/modules/capability-supply/public'
