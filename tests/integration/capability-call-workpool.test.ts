@@ -648,10 +648,13 @@ async function registerRotatingBuyer(backend: ConvexFixtureBackend) {
   const owner = (await publishedBusinessOwner(backend, 'rotating-buyer')).owner
   const serviceKey = 'rotating-buyer-service-test-key-32-bytes'
   vi.stubEnv('AE_CONVEX_SERVER_FUNCTION_TOKEN', serviceKey)
-  const sign = async (operation: string, command: Record<string, unknown>) => await createCustomerRequestServiceAssertion({
-    key: serviceKey, operation, command: toStableHashValue(command), issuedAt: Date.now(),
-    principal: { principalId: 'ae:server-function', ownerId: 'ae:server-function', credentialId: 'ae:server-function', scopes: [MARKET_TOOLS_CALL_SCOPE] },
-  })
+  const sign = async (operation: string, command: Record<string, unknown>) => {
+    const assertion = await createCustomerRequestServiceAssertion({
+      key: serviceKey, operation, command: toStableHashValue(command), issuedAt: Date.now(),
+      principal: { principalId: 'ae:server-function', ownerId: 'ae:server-function', credentialId: 'ae:server-function', scopes: [MARKET_TOOLS_CALL_SCOPE] },
+    })
+    return { ...assertion, scopes: [...assertion.scopes] }
+  }
   const limit = { currency: 'AUD' as const, units: '1200000', exponent: 6 as const }
   const policy = buildAgentAccessPolicy({ environment: 'sandbox', currency: 'AUD', exponent: 6,
     maximumSpendPerCall: limit, maximumDailySpend: limit, maximumMonthlySpend: limit })
@@ -798,7 +801,7 @@ async function prepareFundedSandboxBuyer(options: {
   expect(qualification, JSON.stringify(qualification)).toMatchObject({ status: 'eligible', reasons: [] })
   const buyer = options.buyerSetup === undefined
     ? await seedPrincipal(backend, 'funded-buyer', Date.now(), published.toolRef, [CUSTOMER_REQUEST_SPENDING_POLICY_SCOPE, MARKET_TOOLS_CALL_SCOPE],
-      { environment: 'sandbox', spendUnits: '5000000', maximumConcurrentCalls: options.maximumConcurrentCalls })
+      { environment: 'sandbox', spendUnits: '5000000', ...(options.maximumConcurrentCalls === undefined ? {} : { maximumConcurrentCalls: options.maximumConcurrentCalls }) })
     : await options.buyerSetup(backend)
   expect(buyer.principal.ownerId).not.toBe(provider.canonicalAccountRef)
   const custody = cdpX402CustodyConfigurationFromEnvironment()

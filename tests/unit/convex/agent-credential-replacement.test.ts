@@ -131,7 +131,9 @@ async function readGrant(backend: ConvexFixtureBackend, grantRef: string) {
     .withIndex('by_grantRef', (query) => query.eq('grantRef', grantRef))
     .unique())
   if (stored === null) throw new Error(`grant_missing:${grantRef}`)
-  return normalizeStoredAgentAccessGrant(stored)
+  const grant = normalizeStoredAgentAccessGrant(stored)
+  if (grant.format !== 'ae.agent-access-grant:v2') throw new Error(`grant_format_unexpected:${grantRef}`)
+  return grant
 }
 
 async function resolve(
