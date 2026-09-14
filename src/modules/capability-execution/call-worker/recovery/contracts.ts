@@ -7,6 +7,12 @@ import {
 import { x402PaymentReconciliationEvidenceValue } from '@/modules/action-execution/runtime'
 import type { RecoveryRow } from '../../../../../convex/capabilityCallProjection'
 
+// Internal recovery also handles platform validation, which has no buyer
+// reservation. Public buyer evidence keeps its required reservation contract.
+export const internalX402RecoveryEvidenceValue = x402PaymentReconciliationEvidenceValue.omit('reservationRef').extend({
+  reservationRef: v.optional(v.string()),
+})
+
 export const recoveryArgs = {
   callRef: v.string(),
   principalId: v.string(),
@@ -19,7 +25,7 @@ export const recoveryArgs = {
     v.literal('reconcile_managed_signing'),
   ),
   idempotencyKey: v.optional(v.string()),
-  evidence: v.optional(v.union(reconciliationEvidenceValue, x402PaymentReconciliationEvidenceValue)),
+  evidence: v.optional(v.union(reconciliationEvidenceValue, internalX402RecoveryEvidenceValue)),
 } as const
 
 export type RecoveredCall = RecoveryRow & Readonly<{ grantRef: string }>

@@ -4,7 +4,6 @@ import {
   readPublicExecutionStatus,
   type ReconciliationEvidence,
 } from '@/modules/action-execution/runtime'
-import { x402PaymentReconciliationEvidenceValue } from '@/modules/action-execution/runtime'
 import type { CallReceipt } from '@/modules/capability-execution/call-contracts'
 import {
   verifyExactEvmX402AuthorizationCancellation,
@@ -19,8 +18,9 @@ import type { ActionCtx } from '../../../../../convex/_generated/server'
 import { internal } from '../../../../../convex/_generated/api'
 import { readX402EvmReceipt } from '../x402Route'
 import type { RecoveryWorkContext } from './loading'
+import { internalX402RecoveryEvidenceValue } from './contracts'
 
-type X402Evidence = Infer<typeof x402PaymentReconciliationEvidenceValue>
+type X402Evidence = Infer<typeof internalX402RecoveryEvidenceValue>
 type RecoveryStatus = Exclude<Awaited<ReturnType<typeof readPublicExecutionStatus>>, { kind: 'refused' }>
 
 type FailedAuthorizationAttempt = Readonly<{
@@ -119,16 +119,22 @@ function x402EvidenceFacts(work: RecoveryWorkContext, submitted: X402Evidence) {
   if (
     x402Attempt === null
     || providerRef === undefined
-    || recovered.sellerOnboardingCanary !== undefined
-    || work.managedReservation === null
-    || x402Attempt.reservationRef === undefined
   ) return undefined
+  const observedAt = Date.parse(submitted.observedAt)
+  if (recovered.sellerOnboardingCanary !== undefined) {
+    return recovered.environment === 'sandbox'
+      && work.managedReservation === null
+      && x402Attempt.reservationRef === undefined
+      && submitted.reservationRef === undefined
+      ? { providerRef, observedAt }
+      : undefined
+  }
+  if (work.managedReservation === null || x402Attempt.reservationRef === undefined) return undefined
   const acceptedRefs = [
     work.managedReservation.reservationRef,
     work.managedReservation.treasuryReservationRef,
   ].filter((value): value is string => typeof value === 'string')
   if (!acceptedRefs.includes(x402Attempt.reservationRef)) return undefined
-  const observedAt = Date.parse(submitted.observedAt)
   return { providerRef, observedAt }
 }
 
@@ -313,8 +319,7 @@ async function persistX402Money(
   submitted: X402Evidence,
   observedAt: number,
 ): Promise<boolean> {
-  if (work.recovered.sellerOnboardingCanary !== undefined) return false
-  const payment = await ctx.runMutation(internal.moneyX402PaymentAttempts.reconcileX402PaymentAttempt, {
+  const command = {
     dispatchRef: work.recovered.callRef,
     attemptRef: submitted.attemptRef,
     effectGeneration: submitted.effectGeneration,
@@ -322,7 +327,6 @@ async function persistX402Money(
     inputDigest: submitted.inputDigest,
     evidenceRef: submitted.evidenceRef,
     evidenceDigest: submitted.digest,
-    reservationRef: submitted.reservationRef,
     paymentIdentifier: submitted.paymentIdentifier,
     challengeDigest: submitted.challengeDigest,
     settlementStatus: submitted.settlementStatus,
@@ -334,6 +338,17 @@ async function persistX402Money(
     transportRequestDigest: submitted.requestDigest,
     paymentObservationDigest: submitted.paymentObservationDigest,
     observedAt,
+  }
+  if (work.recovered.sellerOnboardingCanary !== undefined) {
+    const payment = await ctx.runMutation(
+      internal.moneyX402PaymentAttempts.reconcileSellerOnboardingCanaryPaymentAttempt,
+      command,
+    )
+    return payment.kind === 'settled'
+  }
+  if (submitted.reservationRef === undefined) return false
+  const payment = await ctx.runMutation(internal.moneyX402PaymentAttempts.reconcileX402PaymentAttempt, {
+    ...command, reservationRef: submitted.reservationRef,
   })
   if (payment.kind !== 'settled') {
     await ctx.runMutation(internal.moneyManagedCallLifecycle.markOutcomeUnknown, {

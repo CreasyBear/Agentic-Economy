@@ -1,4 +1,5 @@
 import { internalMutation, internalQuery } from './_generated/server'
+import { v } from 'convex/values'
 import {
   claimX402PaymentAuthorizationArgs,
   claimX402PaymentAuthorizationHandler,
@@ -51,6 +52,13 @@ import { X402_MANAGED_CUSTODY_REF } from '@/modules/capability-execution/call-wo
 import {
   readExactSellerOnboardingCanaryPlatformGrantHandler,
   SELLER_ONBOARDING_CANARY_MAXIMUM_DAILY_ATOMIC,
+  SELLER_ONBOARDING_CANARY_MAXIMUM_PER_CALL_ATOMIC,
+  SELLER_ONBOARDING_CANARY_PLATFORM_GRANT_REF,
+  SELLER_ONBOARDING_CANARY_PLATFORM_PRINCIPAL_ID,
+  SELLER_ONBOARDING_CANARY_PLATFORM_OWNER_ID,
+  SELLER_ONBOARDING_CANARY_PLATFORM_CREDENTIAL_ID,
+  SELLER_ONBOARDING_CANARY_PLATFORM_APPLICATION_REF,
+  SELLER_ONBOARDING_CANARY_BUDGET_POLICY_REF,
 } from './capabilitySupplyCanaryFunding'
 import {
   BASE_SEPOLIA_NETWORK,
@@ -258,6 +266,77 @@ export const reconcileX402PaymentAttempt = internalMutation({
     ) {
       return { kind: 'reconciliation_required' as const }
     }
+    return await reconcileX402PaymentAttemptHandler(ctx, args)
+  },
+})
+
+/**
+ * Records verified evidence for an already authorized platform payment. This
+ * cannot sign, submit, reserve buyer funds or authorize another attempt. Expiry
+ * or revocation prevents new spend, but must not hide an existing payment.
+ * Only the exact retained Call and current payment attempt may be reconciled;
+ * conflicting evidence remains unresolved in the shared attempt writer.
+ */
+export const reconcileSellerOnboardingCanaryPaymentAttempt = internalMutation({
+  args: { ...reconcileX402PaymentAttemptArgs, reservationRef: v.optional(v.string()) },
+  returns: reconcileX402PaymentAttemptReturns,
+  handler: async (ctx, args) => {
+    const call = await ctx.db.query('capabilityCalls')
+      .withIndex('by_callRef', (query) => query.eq('callRef', args.dispatchRef)).unique()
+    const canary = call?.sellerOnboardingCanary
+    if (call === null || canary === undefined || args.reservationRef !== undefined
+      || call.environment !== 'sandbox' || call.attemptRef !== args.attemptRef
+      || call.toolRef !== args.toolRef || call.inputDigest !== args.inputDigest
+      || canary.executionPurpose !== 'seller_onboarding_canary'
+      || canary.callRef !== call.callRef || canary.toolRef !== call.toolRef
+      || canary.inputDigest !== call.inputDigest || canary.idempotencyKey !== call.idempotencyKey
+      || canary.funding.kind !== 'ae_owned' || canary.funding.ledgerEffects !== 'external_spend_only'
+      || canary.accountingPolicy.recordBuyerUsage !== false
+      || canary.accountingPolicy.accrueProviderEarnings !== false
+      || canary.accountingPolicy.accruePlatformRake !== false
+      || canary.accountingPolicy.recordQualifiedUse !== false
+      || call.grantRef !== SELLER_ONBOARDING_CANARY_PLATFORM_GRANT_REF
+      || call.ownerId !== SELLER_ONBOARDING_CANARY_PLATFORM_OWNER_ID
+      || call.principalId !== SELLER_ONBOARDING_CANARY_PLATFORM_PRINCIPAL_ID
+      || call.credentialId !== SELLER_ONBOARDING_CANARY_PLATFORM_CREDENTIAL_ID
+      || call.applicationRef !== SELLER_ONBOARDING_CANARY_PLATFORM_APPLICATION_REF
+      || canary.funding.grantRef !== call.grantRef || canary.funding.ownerId !== call.ownerId
+      || canary.funding.principalId !== call.principalId || canary.funding.credentialId !== call.credentialId
+      || canary.funding.applicationRef !== call.applicationRef
+      || canary.funding.grantGeneration !== call.grantGeneration
+      || canary.funding.policyDigest !== call.policyDigest
+      || canary.funding.budgetRef !== SELLER_ONBOARDING_CANARY_BUDGET_POLICY_REF
+      || args.currency !== 'USD' || args.exponent !== 6
+      || canary.funding.requestedSpend.currency !== args.currency
+      || canary.funding.requestedSpend.exponent !== args.exponent
+      || canary.funding.requestedSpend.units !== args.amountUnits
+      || !/^[1-9][0-9]{0,77}$/.test(args.amountUnits)
+      || BigInt(args.amountUnits) > BigInt(SELLER_ONBOARDING_CANARY_MAXIMUM_PER_CALL_ATOMIC)
+    ) return { kind: 'reconciliation_required' as const }
+    const withinSealedLimit = compareExactAmounts(canary.funding.requestedSpend, canary.funding.maximumSpend)
+    if (withinSealedLimit !== -1 && withinSealedLimit !== 0) return { kind: 'reconciliation_required' as const }
+    const [attempt, control] = await Promise.all([
+      ctx.db.query('moneyX402PaymentAttempts')
+        .withIndex('by_attemptRef_and_effectGeneration', (query) => query
+          .eq('attemptRef', args.attemptRef).eq('effectGeneration', args.effectGeneration)).unique(),
+      ctx.db.query('actionExecutionControls')
+        .withIndex('by_executionRef', (query) => query.eq('executionRef', call.callRef)).unique(),
+    ])
+    const identity = callAttemptIdentityDigest({
+      callRef: call.callRef, principalId: call.principalId, credentialId: call.credentialId,
+      applicationRef: call.applicationRef, environment: call.environment,
+      toolRef: call.toolRef, idempotencyKey: call.idempotencyKey, inputDigest: call.inputDigest,
+      attemptRef: args.attemptRef, effectGeneration: args.effectGeneration,
+    })
+    if (attempt === null || attempt.reservationRef !== undefined
+      || attempt.credentialRef !== X402_MANAGED_CUSTODY_REF
+      || attempt.scheme !== 'exact' || attempt.network !== BASE_SEPOLIA_NETWORK
+      || attempt.asset.toLowerCase() !== BASE_SEPOLIA_USDC_ADDRESS.toLowerCase()
+      || attempt.payTo.toLowerCase() !== canary.sellerPayTo.toLowerCase()
+      || args.paymentIdentifier !== identity || attempt.operationKeyDigest !== identity
+      || control?.currentAttemptRef !== args.attemptRef
+      || control.currentEffectGeneration !== args.effectGeneration
+    ) return { kind: 'reconciliation_required' as const }
     return await reconcileX402PaymentAttemptHandler(ctx, args)
   },
 })

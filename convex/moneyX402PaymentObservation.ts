@@ -101,7 +101,7 @@ type ReconcileArgs = {
   inputDigest: string
   evidenceRef: string
   evidenceDigest: string
-  reservationRef: string
+  reservationRef?: string
   paymentIdentifier: string
   challengeDigest: string
   settlementStatus: 'settled' | 'not_settled'

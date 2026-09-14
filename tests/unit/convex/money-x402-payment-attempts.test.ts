@@ -19,6 +19,7 @@ import {
   readX402PaymentAuthorization,
   readX402PaymentAuthorizationByDigest,
   reconcileX402PaymentAttempt,
+  reconcileSellerOnboardingCanaryPaymentAttempt,
   recordX402PaymentAuthorizationFailure,
   recordX402PaymentObservation,
   recordX402PaymentSignatureDigest,
@@ -170,6 +171,83 @@ describe('platform-funded validation payment preparation', () => {
     return { db, args, call, operation: worker.state.operation }
   }
   const prepareCanary = (prepareSellerOnboardingCanaryPaymentAuthorization as unknown as HandlerExport)._handler
+  const reconcileCanary = (reconcileSellerOnboardingCanaryPaymentAttempt as unknown as HandlerExport)._handler
+
+  async function uncertainPayment() {
+    const { db, args, call } = await fixture()
+    await prepareCanary({ db }, args)
+    const proof: Record<string, unknown> = {
+      ...reconciliationArgs(), dispatchRef: args.dispatchRef, toolRef: args.toolRef,
+      inputDigest: args.inputDigest, paymentIdentifier: args.paymentIdentifier,
+      reservationRef: undefined, currency: args.currency,
+    }
+    const row = db.rows('moneyX402PaymentAttempts')[0]!
+    await db.patch(row._id, {
+      state: 'reconciliation_required', settlementStatus: 'unknown',
+      paymentObservationDigest: proof.paymentObservationDigest,
+      transportObservationDigest: proof.transportObservationDigest,
+      transportRequestDigest: proof.transportRequestDigest,
+    })
+    await db.patch('call:validation', { state: 'reconciliation_required', dispatchState: 'reconciliation_required' })
+    return { db, proof, call, row }
+  }
+
+  it.each(['settled', 'not_settled'] as const)('reconciles %s after expiry and revocation, with no buyer accounting', async (settlementStatus) => {
+    const { db, proof, call } = await uncertainPayment()
+    proof.settlementStatus = settlementStatus
+    await db.patch(db.rows('agentAccessGrants')[0]!._id, { lifecycle: 'revoked' })
+    await db.patch('call:validation', { sellerOnboardingCanary: {
+      ...(call.sellerOnboardingCanary as Record<string, unknown>), expiresAt: 1,
+    } })
+    const ctx = { db, runMutation: async () => null }
+    await expect(reconcileCanary(ctx, proof)).resolves.toEqual({ kind: 'settled', settlementStatus })
+    const writes = db.patchCalls.length
+    await expect(reconcileCanary(ctx, proof)).resolves.toEqual({ kind: 'settled', settlementStatus })
+    expect(db.patchCalls).toHaveLength(writes)
+    expect(db.rows('moneyX402PaymentAttempts')).toHaveLength(1)
+    expect(db.rows('moneyX402PaymentAttempts')[0]).toMatchObject({ state: 'observed', settlementStatus })
+    expect(db.rows('moneyManagedCallReservations')).toEqual([])
+    expect(db.patchCalls.every(({ id }) => !id.startsWith('reservation:'))).toBe(true)
+  })
+
+  it.each([
+    ['buyer reservation', { reservationRef: 'buyer:reservation' }],
+    ['different attempt', { attemptRef: 'attempt:other' }],
+    ['different generation', { effectGeneration: 2 }],
+    ['different Tool', { toolRef: 'tool:other' }],
+    ['different input', { inputDigest: 'changed' }],
+    ['different payment', { paymentIdentifier: 'changed' }],
+    ['different amount', { amountUnits: '2' }],
+    ['different currency', { currency: 'AUD' }],
+    ['different observation', { transportObservationDigest: 'changed' }],
+  ])('refuses platform reconciliation with %s', async (_name, change) => {
+    const { db, proof } = await uncertainPayment()
+    const before = JSON.stringify(db.rows('moneyX402PaymentAttempts'))
+    await expect(reconcileCanary({ db }, { ...proof, ...change })).resolves.toEqual({ kind: 'reconciliation_required' })
+    expect(JSON.stringify(db.rows('moneyX402PaymentAttempts'))).toBe(before)
+  })
+
+  it.each(['mainnet', 'different recipient', 'buyer Call', 'superseded attempt'] as const)(
+    'refuses platform reconciliation against %s', async (change) => {
+      const { db, proof, row } = await uncertainPayment()
+      if (change === 'mainnet') await db.patch(row._id, { network: 'eip155:8453' })
+      if (change === 'different recipient') await db.patch(row._id, { payTo: '0x0000000000000000000000000000000000000001' })
+      if (change === 'buyer Call') await db.patch('call:validation', { sellerOnboardingCanary: undefined })
+      if (change === 'superseded attempt') await db.patch(db.rows('actionExecutionControls')[0]!._id, { currentEffectGeneration: 2 })
+      const before = JSON.stringify(db.rows('moneyX402PaymentAttempts'))
+      await expect(reconcileCanary({ db }, proof)).resolves.toEqual({ kind: 'reconciliation_required' })
+      expect(JSON.stringify(db.rows('moneyX402PaymentAttempts'))).toBe(before)
+    },
+  )
+
+  it('retains the first reconciled result when a later proof conflicts', async () => {
+    const { db, proof } = await uncertainPayment()
+    const ctx = { db, runMutation: async () => null }
+    await reconcileCanary(ctx, proof)
+    const before = JSON.stringify(db.rows('moneyX402PaymentAttempts'))
+    await expect(reconcileCanary(ctx, { ...proof, evidenceDigest: 'conflicting' })).resolves.toEqual({ kind: 'reconciliation_required' })
+    expect(JSON.stringify(db.rows('moneyX402PaymentAttempts'))).toBe(before)
+  })
 
   it('prepares and replays one durable payment without a buyer reservation', async () => {
     const { db, args } = await fixture()
