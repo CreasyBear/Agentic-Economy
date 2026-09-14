@@ -160,7 +160,9 @@ hosted and task-level alpha gates below.
 | 13. Market default | **Fixed in source** | `c7a9546e0`, integrated as `bf9a71be7`, makes guided discovery the deterministic default. |
 | 14, 16. Market refinement and pagination | **Fixed in source** | `8d885b887` progressively discloses advanced source facts and preserves loaded rows/cursor across failure, retry and stale responses. |
 | 18. Agent connection progression | **Active** | `575540d92` gives setup an ordered connect → approve → confirm path and an exact directory refresh that cannot be repeated while pending. Originating Tool/Agent continuation is still unavailable, so the complete handoff contract remains open. |
-| 2, 4–9, 15, 17, 19–25 and all unlisted P0/P1 boundaries | **Open or dependency-blocked** | Continue source-first repair against the work and acceptance tables below; do not infer completion from adjacent component changes. |
+| 22, 25. Call context and route-keyed state | **Fixed in source** | `5b80b32b9` moves the unchanged `/calls/:callRef` URL under the authenticated owner shell and scopes the stateful controller to `callRef`; a late result cannot replace a newly navigated Call. |
+| 23, 24. Call hierarchy and recovery burden | **Active** | `5b80b32b9` leads with outcome/buyer money/time, one state-supported remedy and Provider output; raw lifecycle, identifiers, settlement detail, evidence reconciliation and reuse recipes are disclosed second. Recognizable Tool/Provider/Agent facts and privilege-gated reconciliation still need owning projections. |
+| 2, 4–9, 15, 17, 19–21 and all unlisted P0/P1 boundaries | **Open or dependency-blocked** | Continue source-first repair against the work and acceptance tables below; do not infer completion from adjacent component changes. |
 
 ### P0 — alpha blockers
 
