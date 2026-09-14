@@ -133,9 +133,9 @@ export async function importX402Capability(
   }
   const offeredPrice = input.commercial.offering.presentation.price;
   if (
-    offeredPrice === undefined ||
-    offeredPrice.kind !== "fixed" ||
-    compareExactAmounts(offeredPrice.amount, resourcePrice.data) !== 0
+    offeredPrice !== undefined &&
+    (offeredPrice.kind !== "fixed" ||
+      compareExactAmounts(offeredPrice.amount, resourcePrice.data) !== 0)
   ) {
     return { kind: "refused", reason: "commercial_metadata_inconsistent" };
   }

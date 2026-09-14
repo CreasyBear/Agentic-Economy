@@ -124,7 +124,6 @@ const connectedProjection = {
   available: true,
   credentialConfigured: false,
   observedAt: 10,
-  reasonCode: null,
   evidenceRefs: [`x402-endpoint-inspection:${sellerObservationDigest}`],
   createdAt: 10,
   updatedAt: 10,
@@ -567,7 +566,6 @@ describe('supply action runtime boundaries', () => {
       available: true,
       credentialConfigured: false,
       observedAt: 10,
-      reasonCode: null,
       evidenceRefs: ['evidence:connection'],
       createdAt: 10,
       updatedAt: 10,
@@ -585,7 +583,11 @@ describe('supply action runtime boundaries', () => {
       correlationId: 'transport:connections',
     })
 
-    expect(result).toEqual({ kind: 'available', businessId: 'business:supply-actions', connections: [connection] })
+    expect(result).toEqual({
+      kind: 'available',
+      businessId: 'business:supply-actions',
+      connections: [{ ...connection, reasonCode: null }],
+    })
     expect(mocks.callPublicSourceMutation).toHaveBeenCalledWith(
       { name: 'capabilityProviderConnectionAgents:list' },
       expect.objectContaining({
@@ -637,7 +639,13 @@ describe('supply action runtime boundaries', () => {
       correlationId: 'transport-only-correlation',
     })
 
-    expect(result).toMatchObject({ kind: 'applied', connection: { connectionRef: connectedProjection.connectionRef } })
+    expect(result).toMatchObject({
+      kind: 'applied',
+      connection: {
+        connectionRef: connectedProjection.connectionRef,
+        reasonCode: null,
+      },
+    })
     expect(mocks.inspectX402SellerEndpoint).toHaveBeenCalledWith({
       endpointUrl: sellerEndpoint,
       method: 'POST',

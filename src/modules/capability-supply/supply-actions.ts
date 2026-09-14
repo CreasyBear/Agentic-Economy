@@ -312,7 +312,9 @@ export const providerConnectionProjectionSchema = z.strictObject({
   observedAt: z.number(),
   expiresAt: z.number().optional(),
   revokedAt: z.number().optional(),
-  reasonCode: z.string().nullable(),
+  // Convex omits this field when an active connection has no lifecycle reason.
+  // Keep the public projection shape stable by materializing the canonical null.
+  reasonCode: z.string().nullable().default(null),
   evidenceRefs: z.array(z.string()),
   createdAt: z.number(),
   updatedAt: z.number(),

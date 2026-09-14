@@ -199,6 +199,24 @@ describe("capability publication importers", () => {
     });
   });
 
+  it("admits an omitted display price while still binding the upstream payment amount", async () => {
+    const base = matchingX402Import();
+    const { price: _displayPrice, ...presentation } = base.commercial.offering.presentation;
+    const input = {
+      ...base,
+      commercial: {
+        ...base.commercial,
+        offering: { ...base.commercial.offering, presentation },
+      },
+    };
+
+    expect(await importX402Capability(input)).toMatchObject({ kind: "normalized" });
+    expect(await importX402Capability({
+      ...input,
+      resource: { ...input.resource, price: { currency: "USD", units: "999999", exponent: 6 } },
+    })).toEqual({ kind: "refused", reason: "payment_required_invalid" });
+  });
+
   it("rejects a V1 claim as an invalid PaymentRequired document", async () => {
     const base = matchingX402Import();
     const result = await importX402Capability({
