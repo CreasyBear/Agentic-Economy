@@ -87,6 +87,21 @@ it('compares published facts and links straight to the one canonical Tool detail
   expect(within(comparison).getByText('Output 0')).toBeTruthy()
   const inspect = within(comparison).getAllByRole('link', { name: 'Inspect Tool' })[0]!
   expect(toolHref(inspect).pathname).toBe(`/tools/${priced[0]!.provider}/${priced[0]!.slug}`)
+  expect(inspect.closest('th')).not.toBeNull()
+  expect(within(comparison).getByRole('columnheader', { name: 'Fact' }).className).toContain('left-0')
+  expect(within(comparison).getAllByRole('row')).toHaveLength(8)
+})
+it('labels the card comparison control visibly and preserves its pressed state', () => {
+  show(undefined, entries)
+
+  const compare = screen.getByRole('button', { name: 'Add Tool 0 to comparison' })
+  expect(compare.textContent).toContain('Compare')
+  expect(compare.getAttribute('aria-pressed')).toBe('false')
+  fireEvent.click(compare)
+
+  const selected = screen.getByRole('button', { name: 'Remove Tool 0 from comparison' })
+  expect(selected.textContent).toContain('Compare')
+  expect(selected.getAttribute('aria-pressed')).toBe('true')
 })
 it('keeps Provider price evidence secondary and settlement networks off Tool cards', () => {
   const priced = entries.map((entry, index) => ({ ...entry, prices: [{ network: 'eip155:8453', networkLabel: 'Base', scheme: 'exact', amount: `${index + 1} USDC`, decimalAmount: String(index + 1), symbol: 'USDC' }] }))

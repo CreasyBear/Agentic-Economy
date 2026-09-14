@@ -2,7 +2,7 @@
 // Copyright (c) 2026 Vendo Connect Inc., Vendo Sp. z o.o.
 // See docs/licenses/spree-storefront.txt for licence and source provenance.
 import { Link } from '@tanstack/react-router'
-import { ArrowUpRightIcon, CheckIcon, HeartIcon, PlusIcon } from 'lucide-react'
+import { ArrowUpRightIcon, CheckIcon, HeartIcon } from 'lucide-react'
 import { memo } from 'react'
 
 import { Badge } from '@/components/ui/badge'
@@ -63,8 +63,9 @@ export const DirectoryToolCard = memo(function DirectoryToolCard({ entry, onSave
           <p className="mt-0.5 break-words text-sm font-medium tabular-nums">{directoryPrice(entry)}</p>
           <p className="mt-0.5 truncate text-xs text-muted-foreground">{directoryPriceContext(entry)}</p>
         </div>
-        {onCompare === undefined ? null : <Button variant="ghost" size="icon-sm" className="relative z-10" onClick={onCompare} disabled={compareDisabled === true} aria-label={`${comparing ? 'Remove' : 'Add'} ${title} ${comparing ? 'from' : 'to'} comparison`} aria-pressed={comparing === true}>
-          {comparing ? <CheckIcon /> : <PlusIcon />}
+        {onCompare === undefined ? null : <Button variant={comparing ? 'secondary' : 'ghost'} size="sm" className="relative z-10" onClick={onCompare} disabled={compareDisabled === true} aria-label={`${comparing ? 'Remove' : 'Add'} ${title} ${comparing ? 'from' : 'to'} comparison`} aria-pressed={comparing === true}>
+          {comparing ? <CheckIcon aria-hidden="true" /> : null}
+          Compare
         </Button>}
       </CardFooter>
     </Card>
