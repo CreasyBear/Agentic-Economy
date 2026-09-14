@@ -175,9 +175,9 @@ describe('source-native Provider start', () => {
       />,
     )
 
-    expect((screen.getByLabelText('OpenAPI URL') as HTMLInputElement).value).toBe('https://provider.example/openapi.yaml')
-    expect(screen.getByLabelText('Production').getAttribute('aria-checked')).toBe('true')
-    expect(screen.getByRole('radio', { name: /Reference lookup/i }).getAttribute('aria-checked')).toBe('true')
+    expect(screen.getByText('Source complete')).toBeTruthy()
+    expect(screen.getByText('OpenAPI · https://provider.example/openapi.yaml · Production')).toBeTruthy()
+    expect(screen.getByText('Tool complete')).toBeTruthy()
     expect((screen.getByLabelText('Tool name') as HTMLInputElement).value).toBe('Reference lookup')
     expect((screen.getByLabelText('Description') as HTMLTextAreaElement).value).toBe('Looks up one public reference.')
     expect(onPreview).not.toHaveBeenCalled()
@@ -221,6 +221,10 @@ describe('source-native Provider start', () => {
     expect(screen.queryByLabelText(/tool definition/i)).toBeNull()
     expect(screen.queryByLabelText(/source revision/i)).toBeNull()
 
+    expect(screen.getByRole('button', { name: /x402 recommended for alpha/i }).getAttribute('aria-pressed')).toBe('true')
+    fireEvent.click(screen.getByRole('button', { name: 'Other source types' }))
+    fireEvent.mouseDown(screen.getByRole('tab', { name: 'OpenAPI' }))
+
     fireEvent.change(screen.getByLabelText('OpenAPI URL'), {
       target: { value: 'https://provider.example/openapi.yaml' },
     })
@@ -241,11 +245,13 @@ describe('source-native Provider start', () => {
       businessRef: 'business:one',
       candidate: expect.objectContaining({ candidateRef: candidate.candidateRef }),
     }))
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Send input data to the Provider' }))
+    fireEvent.click(screen.getByRole('radio', { name: 'Personal data' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Continue to review' }))
+    expect(screen.getByRole('group', { name: 'Tool publication decision' })).toBeTruthy()
     fireEvent.click(screen.getByRole('checkbox', { name: 'I am authorised to publish this service' }))
     fireEvent.click(screen.getByRole('checkbox', { name: 'The information is accurate' }))
     fireEvent.click(screen.getByRole('checkbox', { name: 'Publish after validation succeeds' }))
-    fireEvent.click(screen.getByRole('checkbox', { name: 'Send input data to the Provider' }))
-    fireEvent.click(screen.getByRole('radio', { name: 'Personal data' }))
     fireEvent.click(screen.getByRole('button', { name: 'Submit for validation' }))
 
     await waitFor(() => expect(onPublish).toHaveBeenCalledOnce())
@@ -279,6 +285,8 @@ describe('source-native Provider start', () => {
       },
     }))
     expect(await screen.findByText(/submitted for validation/i)).toBeTruthy()
+    expect(screen.queryByText('tool:lookup')).toBeNull()
+    expect(screen.getByRole('link', { name: 'Open Tools' }).getAttribute('href')).toBe('/owner/operations')
   })
 
   it('renders one direct hosted action when protected discovery requires connection', async () => {
@@ -316,6 +324,7 @@ describe('source-native Provider start', () => {
       />,
     )
 
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Source' }))
     fireEvent.click(screen.getByRole('button', { name: 'Discover endpoints' }))
 
     const action = await screen.findByRole('link', { name: 'Connect server' })
@@ -373,6 +382,7 @@ describe('source-native Provider start', () => {
       />,
     )
 
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Source' }))
     fireEvent.click(screen.getByRole('button', { name: 'Discover endpoints' }))
 
     expect(await screen.findByText('Select MCP server')).toBeTruthy()

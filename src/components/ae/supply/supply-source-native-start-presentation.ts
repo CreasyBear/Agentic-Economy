@@ -145,10 +145,21 @@ export function publicationValidationMessage(input: Readonly<{
   connectionRef: string
   attestation: Record<AttestationKey, boolean>
 }>): string | undefined {
+  const termsMessage = publicationTermsValidationMessage(input)
+  if (termsMessage !== undefined) return termsMessage
+  if (!Object.values(input.attestation).every(Boolean)) return 'Confirm all three publication statements before submitting.'
+  return undefined
+}
+
+export function publicationTermsValidationMessage(input: Readonly<{
+  category: string
+  pricing: PublishSupplyToolV2Input['pricing'] | undefined
+  requiresConnection: boolean
+  connectionRef: string
+}>): string | undefined {
   if (input.category.trim() === '') return 'Enter a category before submitting this Tool.'
   if (input.pricing === undefined) return 'Enter a valid AUD price, or choose Free.'
   if (input.requiresConnection && input.connectionRef === '') return 'Choose a connected source before submitting this Tool.'
-  if (!Object.values(input.attestation).every(Boolean)) return 'Confirm all three publication statements before submitting.'
   return undefined
 }
 

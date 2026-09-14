@@ -1,4 +1,5 @@
 import { AeInlineState } from '@/components/ae/feedback/AeInlineState'
+import { AeFactList } from '@/components/ae/data/AeFactList'
 import { AeSection } from '@/components/ae/layout/AeSection'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
@@ -12,7 +13,8 @@ import type { SupplyToolCandidate } from '@/modules/capability-supply/source-pre
 import { TextAreaField, TextField } from './SupplyFieldPrimitives'
 import type { AttestationKey } from './supply-source-native-start-presentation'
 
-export function SupplyPublicationSection({
+export function SupplyPublicationFlow({
+  reviewing,
   name,
   description,
   category,
@@ -45,8 +47,11 @@ export function SupplyPublicationSection({
   onFinancialExposureChange,
   onDataClassificationChange,
   onAttestationChange,
+  onContinueToReview,
+  onEditTerms,
   onSubmit,
 }: Readonly<{
+  reviewing: boolean
   name: string
   description: string
   category: string
@@ -79,10 +84,12 @@ export function SupplyPublicationSection({
   onFinancialExposureChange: (value: boolean) => void
   onDataClassificationChange: (value: 'public' | 'personal' | 'sensitive') => void
   onAttestationChange: (key: AttestationKey, checked: boolean) => void
+  onContinueToReview: () => void
+  onEditTerms: () => void
   onSubmit: () => void
 }>) {
-  return (
-    <AeSection title="Review and submit" description="Review facts derived from the source, then declare only the terms AE owns.">
+  if (!reviewing) return (
+    <AeSection title="Terms" description="Review facts derived from the source, then declare only the terms AE owns.">
       <FieldGroup className="gap-5">
         <TextField id="supply-native-name" label="Tool name" value={name} onChange={onNameChange} description="Shown to agents in discovery." />
         <TextAreaField id="supply-native-description" label="Description" value={description} onChange={onDescriptionChange} description="What this Tool does and returns." />
@@ -102,12 +109,44 @@ export function SupplyPublicationSection({
           />
         )}
         <ConsequencesField externalEffect={externalEffect} dataRelease={dataRelease} financialExposure={financialExposure} dataClassification={dataClassification} onExternalEffectChange={onExternalEffectChange} onDataReleaseChange={onDataReleaseChange} onFinancialExposureChange={onFinancialExposureChange} onDataClassificationChange={onDataClassificationChange} />
-        <AttestationField values={attestation} onChange={onAttestationChange} />
+        <Button type="button" className="min-h-touch justify-self-start" disabled={submitDisabled} onClick={onContinueToReview}>
+          Continue to review
+        </Button>
+      </FieldGroup>
+    </AeSection>
+  )
+
+  const consequenceSummary = [
+    ...(externalEffect ? ['changes an external system'] : []),
+    ...(dataRelease ? [`sends ${dataClassification} input data to the Provider`] : []),
+    ...(financialExposure ? ['can create financial exposure'] : []),
+  ].join(' · ') || 'No declared external effect, data release, or financial exposure'
+  const priceSummary = pricingKind === 'free'
+    ? 'Free'
+    : pricingKind === 'source_x402'
+      ? 'Provider source payment'
+      : `AUD ${price}`
+
+  return (
+    <AeSection title="Review" description="Confirm the exact Tool presentation and declared terms before validation starts.">
+      <div className="grid gap-related rounded-xl border border-border bg-card p-4" role="group" aria-label="Tool publication decision">
+        <AeFactList facts={[
+          { label: 'Tool', value: name },
+          { label: 'Description', value: description },
+          { label: 'Category', value: category },
+          { label: 'Price', value: priceSummary, mono: pricingKind === 'fixed_aud' },
+          { label: 'Source connection', value: selected.authentication.kind === 'public' ? 'Public source' : connectionRef === '' ? 'Not selected' : 'Connected source selected' },
+          { label: 'Declared behavior', value: consequenceSummary },
+        ]} />
+        <Button type="button" variant="secondary" className="justify-self-start min-h-touch" disabled={submitDisabled} onClick={onEditTerms}>Edit terms</Button>
+        <div className="border-t border-border pt-related">
+          <AttestationField values={attestation} onChange={onAttestationChange} />
+        </div>
         <div role="status" aria-live="polite">{saving ? <AeInlineState state="saving" description="Submitting the exact source revision for validation." /> : null}</div>
         <Button type="button" className="min-h-touch justify-self-start" disabled={submitDisabled} aria-busy={saving || undefined} onClick={onSubmit}>
           {saving ? 'Submitting…' : 'Submit for validation'}
         </Button>
-      </FieldGroup>
+      </div>
     </AeSection>
   )
 }

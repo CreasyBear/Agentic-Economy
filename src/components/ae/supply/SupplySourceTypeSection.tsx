@@ -1,22 +1,16 @@
 import { AeSection } from '@/components/ae/layout/AeSection'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { SUPPLY_SOURCE_TYPE_COPY } from '@/content/reason-copy'
-import type { SupplySourcePreview } from '@/modules/capability-supply/source-preview'
 import { TextField } from './SupplyFieldPrimitives'
 import type { Environment, SourceKind } from './supply-source-native-start-presentation'
 
-type RequiredAction = Extract<SupplySourcePreview, { kind: 'action_required' }>['requiredAction']
-
 export function SupplySourceTypeSection({
-  error,
-  requiredAction,
-  success,
   sourceKind,
   environment,
   definitionUrl,
@@ -42,9 +36,6 @@ export function SupplySourceTypeSection({
   onFieldError,
   onDiscover,
 }: Readonly<{
-  error?: string
-  requiredAction?: RequiredAction
-  success?: string
   sourceKind: SourceKind
   environment: Environment
   definitionUrl: string
@@ -71,33 +62,37 @@ export function SupplySourceTypeSection({
   onDiscover: () => void
 }>) {
   return (
-    <AeSection title="Add service" description="Start with the interface you already operate. AE discovers the Tools and derives the protocol facts.">
-      {error === undefined ? null : <Alert variant="destructive" role="alert"><AlertTitle>Action required</AlertTitle><AlertDescription>{error}</AlertDescription></Alert>}
-      {requiredAction === undefined ? null : (
-        <Alert role="status">
-          <AlertTitle>{requiredAction.title}</AlertTitle>
-          <AlertDescription>
-            <p>{requiredAction.description}</p>
-            {requiredAction.cta === null ? null : (
-              <Button asChild variant="secondary" className="mt-4 min-h-touch">
-                <a href={requiredAction.cta}>{requiredAction.ctaLabel}</a>
-              </Button>
-            )}
-          </AlertDescription>
-        </Alert>
-      )}
-      {success === undefined ? null : <Alert><AlertTitle>Submitted</AlertTitle><AlertDescription>{success}</AlertDescription></Alert>}
+    <AeSection title="Source" description="Start with the interface you already operate. AE discovers the Tools and derives the protocol facts.">
       <FieldGroup className="gap-5">
         <Field>
           <FieldLabel>Source type</FieldLabel>
-          <Tabs value={sourceKind} onValueChange={onSourceKindChange}>
-            <TabsList className="max-w-full overflow-x-auto" aria-label="Source type">
-              <TabsTrigger value="openapi">OpenAPI</TabsTrigger>
-              <TabsTrigger value="mcp">MCP</TabsTrigger>
-              <TabsTrigger value="agent_plugin">Agent Plugin</TabsTrigger>
-              <TabsTrigger value="x402">x402</TabsTrigger>
-            </TabsList>
-          </Tabs>
+          <Button
+            type="button"
+            variant={sourceKind === 'x402' ? 'secondary' : 'outline'}
+            className="h-auto w-full justify-start whitespace-normal p-4 text-left"
+            aria-pressed={sourceKind === 'x402'}
+            disabled={disabled}
+            onClick={() => onSourceKindChange('x402')}
+          >
+            <span className="grid gap-1">
+              <span className="font-medium">x402 <span className="text-xs text-muted-foreground">Recommended for alpha</span></span>
+              <span className="font-normal text-muted-foreground">Use an endpoint that already publishes its payment terms.</span>
+            </span>
+          </Button>
+          <Collapsible defaultOpen={sourceKind !== 'x402'}>
+            <CollapsibleTrigger asChild>
+              <Button type="button" variant="ghost" className="w-fit min-h-touch" disabled={disabled}>Other source types</Button>
+            </CollapsibleTrigger>
+            <CollapsibleContent className="pt-2">
+              <Tabs value={sourceKind} onValueChange={onSourceKindChange}>
+                <TabsList className="max-w-full overflow-x-auto" aria-label="Other source types">
+                  <TabsTrigger value="openapi" disabled={disabled}>OpenAPI</TabsTrigger>
+                  <TabsTrigger value="mcp" disabled={disabled}>MCP</TabsTrigger>
+                  <TabsTrigger value="agent_plugin" disabled={disabled}>Agent Plugin</TabsTrigger>
+                </TabsList>
+              </Tabs>
+            </CollapsibleContent>
+          </Collapsible>
           <FieldDescription>{SUPPLY_SOURCE_TYPE_COPY[sourceKind]}</FieldDescription>
         </Field>
         <EnvironmentField value={environment} disabled={disabled} onChange={onEnvironmentChange} />
