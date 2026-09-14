@@ -1,8 +1,10 @@
 # Daily and monthly spending limits
 
-Status: period enforcement and owner monetary-limit update implemented with
-focused local evidence below. The release manager accepted the nonnegative
-mechanism. Combined release checks and hosted cutover remain manager-owned.
+Status: source outcome ready for final manager acceptance. Final consequence
+integration now proves actual worker execution after monetary-limit changes and
+scheduled pre-submission fund return after revocation/expiry. All 16 local
+registered-buyer/native scenarios pass. Combined release checks and hosted cutover
+remain manager-owned.
 
 ## Buyer contract and reproduced defect
 
@@ -444,3 +446,42 @@ revocation exception.
 These establish this item's source contracts and local integration outcomes.
 Combined generated bindings/typecheck/release gates and hosted evidence remain
 with the release manager; source completion does not imply alpha release approval.
+
+
+### Final worker consequence integration
+
+The earlier owner-update journey proved reconciliation, replay and cancellation;
+it did not dispatch the accepted Call after changing its policy. Manager review
+identified exact active-P1 grant reads in worker preparation, final release and
+payment callbacks, despite the accepted-call reconciliation allowing the original
+purchase. The full registered-buyer worker variant reproduced failure before claim.
+
+The correction reuses `reconcilePersistedCallAuthority` through the internal
+`readAcceptedCallGrantAfterLimitUpdate` reader. On an exact active-grant miss,
+preparation and the shared final-release/payment validity check can recover the
+original grant material only after fresh, Call-scoped canonical reconciliation.
+The superseded access grant stays revoked. Its canonical accepted delegation and
+the current same-credential delegation must still satisfy the monetary-only
+contract above. Original booking, grant identity, policy digest, signature and
+spend evidence remain unchanged; substituting P2 authority would rewrite the
+accepted purchase. No generic revoked-grant admission is added. Active-grant and
+Provider-canary paths retain their existing checks.
+
+Local variants deliver, settle and replay once when the owner updates limits
+before dispatch OR after claim but before payment. They also refuse the next Call
+after revoking the current grant. The expanded journey exposed a scheduled refund
+attribution mismatch: canonical wildcard Tool scope, independent canonical/access
+grant generations and expired customer authority were treated incorrectly.
+The manager's bounded `workloadCron.ts` correction preserves immutable Account
+attribution and requires same-Call, existing pre-submission refund proof for
+expired/revoked refund bookkeeping. Ordinary consequences retain live delegation
+admission; this does not authorize another paid effect.
+
+Final `capability-call-workpool.test.ts` run: all 16 scenarios pass, including both
+policy-change execution timings followed by current-grant revocation, real native
+refund success without source acknowledgement, and scheduled recovery after
+original authority expiry. Each variant retains one delivered result, one
+signature, the original reservation/settlement references, exact replay and final
+AUD8.80 buyer balance after refunding the second Call. All 100 focused
+worker/authority tests and explicit changed-file lint pass. Combined source
+acceptance remains with the release manager.

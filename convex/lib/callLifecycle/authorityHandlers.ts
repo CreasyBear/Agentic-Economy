@@ -520,6 +520,22 @@ async function reconcileAcceptedCallAfterLimitUpdate(
   }
 }
 
+/** Return original grant material only when the accepted purchase remains
+ * authorized under the narrow monetary-update contract. This never makes a
+ * superseded grant active or authorizes a new purchase. Each effect check reads
+ * current canonical authority again in this transaction. */
+export async function readAcceptedCallGrantAfterLimitUpdateHandler(
+  ctx: MutationCtx,
+  args: Readonly<{ callRef: string }>,
+): Promise<ReturnType<typeof normalizeStoredAgentAccessGrant> | null> {
+  const authority = await reconcilePersistedCallAuthority(ctx, args.callRef, Date.now())
+  if (authority === null) return null
+  const row = await ctx.db.query('agentAccessGrants')
+    .withIndex('by_grantRef', q => q.eq('grantRef', authority.grantRef)).unique()
+  if (row === null || row.lifecycle !== 'revoked') return null
+  return normalizeStoredAgentAccessGrant(row)
+}
+
 export async function reconcilePersistedCallAuthority(
   ctx: MutationCtx,
   callRef: string,

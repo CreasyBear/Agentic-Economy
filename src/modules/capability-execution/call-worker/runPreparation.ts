@@ -1,5 +1,8 @@
 "use node";
 
+import { makeFunctionReference } from 'convex/server'
+import type { NormalizedStoredAgentAccessGrant } from '@/modules/agent-access/policy'
+
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { isBoundedJsonValue } from '@/modules/capability-contract/public'
@@ -60,6 +63,10 @@ import {
   type ConnectionAuthority,
 } from './lease'
 import { routeCallSigningKey } from './x402Route'
+
+export const acceptedCallGrantAfterLimitUpdateRef = makeFunctionReference<
+  'mutation', { callRef: string }, NormalizedStoredAgentAccessGrant | null
+>('capabilityCalls:readAcceptedCallGrantAfterLimitUpdate')
 
 export type SellerCanaryOperationSnapshot = Readonly<{
   toolJson: string
@@ -326,7 +333,7 @@ export async function prepareCallRun(
   }
   const sellerCanary = dispatch.sellerOnboardingCanary
   const grantReadAt = Date.now()
-  const grant = sellerCanary === undefined
+  let grant = sellerCanary === undefined
     ? await ctx.runQuery(internal.agentAccessPolicy.readActiveGrant, {
         credentialId: dispatch.credentialId,
         environment: dispatch.environment,
@@ -357,6 +364,9 @@ export async function prepareCallRun(
             now: grantReadAt,
           },
         )
+  if (grant === null && sellerCanary === undefined) {
+    grant = await ctx.runMutation(acceptedCallGrantAfterLimitUpdateRef, { callRef: dispatch.callRef })
+  }
   if (grant === null) return await refuseBeforeClaim(ctx, dispatch, 'grant_not_found', false, 'Refresh the agent grant and retry.')
   if (grant.generation < dispatch.grantGeneration) {
     return await refuseBeforeClaim(ctx, dispatch, 'grant_generation_stale', false, 'Refresh the agent grant and retry.')

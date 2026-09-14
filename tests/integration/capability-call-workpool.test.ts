@@ -1301,8 +1301,24 @@ describe('capability Call Workpool lifecycle', () => {
     expect(providerFetch.mock.calls.filter(([, init]) => new Headers(init?.headers as HeadersInit).has('payment-signature'))).toHaveLength(0)
   })
 
-  it.runIf(process.env.AE_FORMANCE_INTEGRATION === 'true')('buys a sandbox Tool through an exact Quote, real AUD ledger and durable worker without a second purchase on replay or a retained hold after revocation', async () => {
-    const { gatewayUrl, formance, backend, published, buyer, resource, payer, signedAuthorizations, readBalance } = await prepareFundedSandboxBuyer()
+  it.runIf(process.env.AE_FORMANCE_INTEGRATION === 'true').each(['none', 'before_dispatch', 'after_claim'])('buys a sandbox Tool through an exact Quote, real AUD ledger and durable worker without a second purchase on replay or a retained hold after revocation (policy update: %s)', async (policyUpdatePhase) => {
+    let registered: Awaited<ReturnType<typeof registerRotatingBuyer>> | undefined
+    const { gatewayUrl, formance, backend, published, buyer, resource, payer, signedAuthorizations, readBalance } = await prepareFundedSandboxBuyer(policyUpdatePhase !== 'none' ? {
+      buyerSetup: async backend => { registered = await registerRotatingBuyer(backend, '5000000', '5000000'); return registered },
+    } : {})
+    let revocationGrantRef = buyer.grantRef
+    const updatePolicyForAcceptedCall = async () => {
+      if (registered === undefined) throw new Error('policy_worker_owner_missing')
+      const updated = await registered.owner.mutation(api.agentSpendingPolicy.updateForServer, {
+        principalRef: buyer.principal.principalId, expectedGeneration: 1,
+        idempotencyKey: 'policy-before-worker', correlationRef: 'policy-before-worker',
+        maximumSpendPerCall: { currency: 'AUD', exponent: 6, units: '1200000' },
+        maximumDailySpend: { currency: 'AUD', exponent: 6, units: '3600000' },
+        maximumMonthlySpend: { currency: 'AUD', exponent: 6, units: '3600000' },
+      })
+      if (updated.kind !== 'completed') throw new Error('policy_worker_update_failed')
+      revocationGrantRef = updated.grantRef
+    }
 
     let raceCallRef: string | undefined
     let claimRaceResult: unknown
@@ -1342,6 +1358,7 @@ describe('capability Call Workpool lifecycle', () => {
       if (raceCallRef !== undefined && claimRaceResult === undefined) {
         const current = await readEvidence(backend, raceCallRef)
         if (current.control?.control.control.state === 'leased' && current.attempt?.release.state !== 'possibly_released') {
+          if (policyUpdatePhase === 'after_claim') await updatePolicyForAcceptedCall()
           claimRaceResult = await backend.mutation(internal.capabilityCalls.refuseUnclaimed, {
             callRef: raceCallRef, principalId: buyer.principal.principalId, credentialId: buyer.principal.credentialId,
             idempotencyKey: 'buyer-purchase', code: 'test_refusal_race', retryable: false,
@@ -1366,10 +1383,11 @@ describe('capability Call Workpool lifecycle', () => {
     expect(beforeWork.call).toMatchObject({ formanceFinancialState: 'reserved' })
     expect(beforeWork.call?.sellerOnboardingCanary).toBeUndefined()
     expect(await readBalance()).toMatchObject({ kind: 'available', units: '8800000' })
+    if (policyUpdatePhase === 'before_dispatch') await updatePolicyForAcceptedCall()
     await backend.finishAllScheduledFunctions(() => vi.advanceTimersByTime(1))
     const completed = await readEvidence(backend, pending.callRef)
-    expect(claimRaceResult).toMatchObject({ kind: 'claimed' })
-    expect(fenceRaceResult).toMatchObject({ kind: 'possibly_released' })
+    expect(claimRaceResult, JSON.stringify(completed.call?.result)).toMatchObject({ kind: 'claimed' })
+    expect(fenceRaceResult, JSON.stringify(completed.call?.result)).toMatchObject({ kind: 'possibly_released' })
     expect(completed.call, JSON.stringify(completed.call?.result)).toMatchObject({ state: 'completed', formanceFinancialState: 'settled', result: {
       kind: 'completed', callRef: pending.callRef, output: { result: 'literal sandbox buyer result' },
       usage: { chargeState: 'paid', amount: { currency: 'AUD', units: '1200000', exponent: 6 } }, receipt: {
@@ -1419,7 +1437,7 @@ describe('capability Call Workpool lifecycle', () => {
     if (revoked.kind !== 'pending') throw new Error('buyer_revocation_call_not_pending')
     expect(await readBalance()).toMatchObject({ kind: 'available', units: '7600000' })
     expect(await backend.mutation(internal.agentAccessPolicy.revokeGrant, {
-      grantRef: buyer.grantRef, ownerId: buyer.principal.ownerId,
+      grantRef: revocationGrantRef, ownerId: buyer.principal.ownerId,
       credentialId: buyer.principal.credentialId, principalId: buyer.principal.principalId, updatedAt: Date.now(),
     })).toMatchObject({ kind: 'revoked' })
     let failedRefundRequests = 0

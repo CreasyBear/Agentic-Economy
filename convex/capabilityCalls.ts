@@ -1,4 +1,5 @@
 import { v } from 'convex/values'
+import { normalizedAgentAccessGrantValue } from '@/modules/agent-access/public'
 import { paginationOptsValidator } from 'convex/server'
 import { action, internalMutation, internalQuery, mutation, query } from './_generated/server'
 import {
@@ -60,6 +61,7 @@ import {
   canonicalOwnerReconcileHandler,
   canonicalOwnerStatusHandler,
   reconcileCallWorkloadAuthorityHandler,
+  readAcceptedCallGrantAfterLimitUpdateHandler,
   resolveCallAgentAuthorityHandler,
 } from './lib/callLifecycle/authorityHandlers'
 import {
@@ -113,6 +115,12 @@ export const reconcileCallWorkloadAuthority = internalMutation({
   args: { callRef: v.string() },
   returns: reconciledCallAuthorityResult,
   handler: reconcileCallWorkloadAuthorityHandler,
+})
+
+export const readAcceptedCallGrantAfterLimitUpdate = internalMutation({
+  args: { callRef: v.string() },
+  returns: v.union(normalizedAgentAccessGrantValue, v.null()),
+  handler: readAcceptedCallGrantAfterLimitUpdateHandler,
 })
 
 export const admit = internalMutation({

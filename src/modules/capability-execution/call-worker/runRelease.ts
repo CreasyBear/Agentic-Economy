@@ -1,3 +1,4 @@
+import type { FunctionReturnType } from 'convex/server'
 "use node";
 
 import { degradeBackend } from '@/lib/observability/degrade-backend'
@@ -18,7 +19,7 @@ import { convergePreRelease, type WorkerResult } from './charge'
 import { brokeredProviderAuthorityValidator, createBrokeredX402PaymentCallbacks, credentiallessX402ConnectionAuthorityValidator, routeInvocation, X402_MANAGED_CUSTODY_REF } from './x402Route'
 import { issueProviderLease, providerCredentialReader, providerLeaseAuthorityValidator, settleProviderLease, type ProviderLeaseAuthority } from './lease'
 import { runCommittedManagedX402Transport } from './brokeredX402'
-import { exactSellerCanarySnapshotMatches, type CallPreparation, type SellerCanaryOperationSnapshot } from './runPreparation'
+import { acceptedCallGrantAfterLimitUpdateRef, exactSellerCanarySnapshotMatches, type CallPreparation, type SellerCanaryOperationSnapshot } from './runPreparation'
 import {
   invokeProviderConsequenceViaVercel,
   providerConsequenceX402PaymentCustodyAvailable,
@@ -37,7 +38,7 @@ type GrantValidityExpectation = Readonly<{
   policyDigest: string
 }>
 
-function activeGrantMatches(
+function grantIdentityMatches(
   candidate: unknown,
   expected: GrantValidityExpectation,
 ): boolean {
@@ -51,7 +52,6 @@ function activeGrantMatches(
     && grant.environment === expected.environment
     && grant.generation === expected.generation
     && grant.spendingPolicyDigest === expected.policyDigest
-    && grant.lifecycle === 'active'
 }
 
 export async function releaseCallRun(
@@ -277,23 +277,58 @@ export async function releaseCallRun(
     generation: dispatch.grantGeneration,
     policyDigest: grant.spendingPolicyDigest,
   }
+  const readCurrentGrant = async (now: number): Promise<
+    FunctionReturnType<typeof internal.capabilitySupplyCanaryFunding.readExactSellerOnboardingCanaryPlatformGrant>
+    | FunctionReturnType<typeof internal.agentAccessPolicy.readActiveGrant>
+  > => {
+    const canary = dispatch.sellerOnboardingCanary
+    if (canary !== undefined) {
+      return await ctx.runQuery(
+        internal.capabilitySupplyCanaryFunding.readExactSellerOnboardingCanaryPlatformGrant,
+        {
+          sellerOwnerId: canary.ownerId,
+          expected: {
+            kind: 'persisted_dispatch',
+            grantRef: dispatch.grantRef,
+            principalId: dispatch.principalId,
+            ownerId: dispatch.ownerId,
+            credentialId: dispatch.credentialId,
+            applicationRef: dispatch.applicationRef,
+            environment: 'sandbox',
+            generation: dispatch.grantGeneration,
+            spendingPolicyDigest: dispatch.policyDigest,
+            expiresAt: dispatch.grantExpiresAt,
+          },
+          now,
+        },
+      )
+    }
+    return await ctx.runQuery(internal.agentAccessPolicy.readActiveGrant, {
+      grantRef: grantValidityExpectation.grantRef,
+      ownerId: grantValidityExpectation.ownerId,
+      credentialId: grantValidityExpectation.credentialId,
+      principalId: grantValidityExpectation.principalId,
+      applicationRef: grantValidityExpectation.applicationRef,
+      environment: grantValidityExpectation.environment,
+      generation: grantValidityExpectation.generation,
+      now,
+    })
+  }
+  const readGrantValidity = async (): Promise<boolean> => {
+    const currentGrant = await readCurrentGrant(Date.now())
+    if (currentGrant?.lifecycle === 'active' && grantIdentityMatches(currentGrant, grantValidityExpectation)) return true
+    if (dispatch.sellerOnboardingCanary !== undefined) return false
+    // The original purchase may survive a monetary-only revision, but only
+    // fresh canonical Call authority can authorize this exact next effect.
+    const acceptedGrant = await ctx.runMutation(acceptedCallGrantAfterLimitUpdateRef, { callRef: dispatch.callRef })
+    return acceptedGrant?.lifecycle === 'revoked' && grantIdentityMatches(acceptedGrant, grantValidityExpectation)
+  }
   const isGrantStillValid = async (): Promise<boolean> => {
-    let currentGrant: unknown
     try {
-      currentGrant = await ctx.runQuery(internal.agentAccessPolicy.readActiveGrant, {
-        grantRef: grantValidityExpectation.grantRef,
-        ownerId: grantValidityExpectation.ownerId,
-        credentialId: grantValidityExpectation.credentialId,
-        principalId: grantValidityExpectation.principalId,
-        applicationRef: grantValidityExpectation.applicationRef,
-        environment: grantValidityExpectation.environment,
-        generation: grantValidityExpectation.generation,
-        now: Date.now(),
-      })
+      return await readGrantValidity()
     } catch (cause) {
       return degradeBackend(cause, false, { site: 'isGrantStillValid', reason: 'source_unavailable' })
     }
-    return activeGrantMatches(currentGrant, grantValidityExpectation)
   }
   let brokeredPaymentPossiblySubmitted = false
   const paymentCallbacks = connectionAuthority === undefined
@@ -335,18 +370,9 @@ export async function releaseCallRun(
       ? { beforeX402PaymentAuthorizationRead: persistBrokeredReleaseFence }
       : {}),
   }
-  let finalGrant
+  let finalGrantIsValid
   try {
-    finalGrant = await ctx.runQuery(internal.agentAccessPolicy.readActiveGrant, {
-      grantRef: persistedAuthority.grantRef,
-      ownerId: dispatch.ownerId,
-      credentialId: dispatch.credentialId,
-      environment: dispatch.environment,
-      principalId: dispatch.principalId,
-      applicationRef: dispatch.applicationRef,
-      generation: dispatch.grantGeneration,
-      now: Date.now(),
-    })
+    finalGrantIsValid = await readGrantValidity()
   } catch (cause) {
     await settleProviderLease(ctx, dispatch, operation, leaseRef, leaseAuthority, false, durableAttemptRef, durableEffectGeneration)
     await closeDispatcher()
@@ -363,7 +389,7 @@ export async function releaseCallRun(
       { site: 'releaseCallRun', reason: 'source_unavailable' },
     )
   }
-  if (!activeGrantMatches(finalGrant, grantValidityExpectation)) {
+  if (!finalGrantIsValid) {
     await settleProviderLease(ctx, dispatch, operation, leaseRef, leaseAuthority, false, durableAttemptRef, durableEffectGeneration)
     await closeDispatcher()
     return await convergePreRelease(
