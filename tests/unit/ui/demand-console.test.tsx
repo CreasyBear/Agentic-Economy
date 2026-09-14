@@ -399,7 +399,8 @@ describe('assistant access components', () => {
     fireEvent.click(tenDollarChoice)
     expect(tenDollarChoice.getAttribute('aria-pressed')).toBe('true')
     expect((screen.getByLabelText(/other amount/i) as HTMLInputElement).value).toBe('10')
-    expect(screen.getByRole('button', { name: /pay A\$10\.55 and add A\$10\.00/i })).toBeTruthy()
+    const quotedPayment = screen.getByRole('button', { name: /pay A\$10\.55 and add A\$10\.00/i })
+    expect(screen.getByRole('group', { name: 'Funding quote and payment' }).contains(quotedPayment)).toBe(true)
 
     fireEvent.change(screen.getByLabelText(/other amount/i), { target: { value: '7.50' } })
     expect(tenDollarChoice.getAttribute('aria-pressed')).toBe('false')
@@ -443,7 +444,7 @@ describe('assistant access components', () => {
       />,
     )
 
-    expect(screen.getByRole('button', { name: 'Enter an amount' }).hasAttribute('disabled')).toBe(true)
+    expect(screen.queryByRole('button', { name: 'Enter an amount' })).toBeNull()
     expect(begin).not.toHaveBeenCalled()
 
     fireEvent.change(screen.getByLabelText(/other amount/i), { target: { value: '10.00' } })

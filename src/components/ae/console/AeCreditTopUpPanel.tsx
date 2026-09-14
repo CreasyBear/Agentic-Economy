@@ -388,18 +388,30 @@ export function AeAccountFundingPanel({
             </p>
             {amountInvalid ? <p id="account-funding-amount-error" className="text-sm text-destructive" role="alert">Enter an amount within the displayed limits and increments.</p> : null}
             {preview === undefined ? null : (
-              <div className="grid gap-2 rounded-lg border border-border/70 bg-muted/30 p-3 text-sm">
+              <div className="grid gap-3 rounded-lg border border-border/70 bg-muted/30 p-3 text-sm" role="group" aria-label="Funding quote and payment">
                 <p className="m-0 text-muted-foreground">
                   Your Account receives the full credit amount after payment is confirmed.
                 </p>
-              <dl className="grid grid-cols-[1fr_auto] gap-x-4 gap-y-1" aria-label="Funding quote">
-                <dt className="text-muted-foreground">Credit added</dt>
-                <dd className="font-mono">{formatAudUnits(preview.principalUnits)}</dd>
-                <dt className="text-muted-foreground">Fee (including GST)</dt>
-                <dd className="font-mono">{formatAudUnits(preview.serviceFeeUnits + preview.taxUnits)}</dd>
-                <dt className="font-medium">Total payable</dt>
-                <dd className="font-mono font-medium">{formatAudUnits(preview.totalUnits)}</dd>
-              </dl>
+                <dl className="grid grid-cols-[1fr_auto] gap-x-4 gap-y-1" aria-label="Funding quote">
+                  <dt className="text-muted-foreground">Credit added</dt>
+                  <dd className="font-mono">{formatAudUnits(preview.principalUnits)}</dd>
+                  <dt className="text-muted-foreground">Fee (including GST)</dt>
+                  <dd className="font-mono">{formatAudUnits(preview.serviceFeeUnits + preview.taxUnits)}</dd>
+                  <dt className="font-medium">Total payable</dt>
+                  <dd className="font-mono font-medium">{formatAudUnits(preview.totalUnits)}</dd>
+                </dl>
+                <div className="border-t border-border/70 pt-3">
+                  <Button
+                    disabled={pending || checking}
+                    onClick={() => void beginTopUp()}
+                    className="min-h-touch"
+                  >
+                    {pending ? <Spinner data-icon="inline-start" /> : null}
+                    {pending
+                      ? 'Preparing secure payment…'
+                      : `Pay ${formatAudUnits(preview.totalUnits)} and add ${formatAudUnits(preview.principalUnits)}`}
+                  </Button>
+                </div>
               </div>
             )}
           </div>
@@ -408,19 +420,6 @@ export function AeAccountFundingPanel({
         {checkoutResumable ? (
           <Button type="button" disabled={checking || pending} onClick={resumeCheckout} className="min-h-touch">
             Continue secure payment
-          </Button>
-        ) : session === undefined && recovery === undefined ? (
-          <Button
-            disabled={pending || checking || port === undefined || constraints?.kind !== 'available' || preview === undefined}
-            onClick={() => void beginTopUp()}
-            className="min-h-touch"
-          >
-            {pending ? <Spinner data-icon="inline-start" /> : null}
-            {pending
-              ? 'Preparing secure payment…'
-              : preview === undefined
-                ? constraintsLoading ? 'Loading funding limits…' : constraints?.kind === 'available' ? 'Enter an amount' : 'Funding unavailable'
-                : `Pay ${formatAudUnits(preview.totalUnits)} and add ${formatAudUnits(preview.principalUnits)}`}
           </Button>
         ) : paymentStatus === 'succeeded' || paymentStatus === 'failed' ? (
           <Button type="button" variant="secondary" disabled={checking || pending} onClick={startAnotherPayment} className="min-h-touch">
