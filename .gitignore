@@ -45,6 +45,8 @@ graphify-out/
 !/docs/adr/*.md
 !/docs/operations/
 !/docs/operations/**
+!/docs/improvements/
+!/docs/improvements/**
 /convex/README.md
 /tools/ae/README.md
 /eval/**/*.md
