@@ -144,12 +144,30 @@ function legacyStoredGrant(ownerId = 'owner:server-wrapper'): LegacyStoredGrant 
   }
 }
 
-const ownerIdentity = (): UserIdentity => ({
-  subject: 'owner_readback',
+const ownerIdentity = (subject = 'owner_readback'): UserIdentity => ({
+  subject,
   issuer: 'https://clerk.example.test',
-  tokenIdentifier: 'https://clerk.example.test|owner_readback',
+  tokenIdentifier: `https://clerk.example.test|${subject}`,
   exp: Math.floor(Date.now() / 1_000) + 3_600,
 })
+
+async function ownerAccountRef(backend: Backend, identity: UserIdentity): Promise<string> {
+  return await backend.run(async (ctx) => {
+    const binding = await ctx.db.query('externalIdentityBindings')
+      .withIndex('by_providerNamespace_and_providerIdentifier', (query) => query
+        .eq('providerNamespace', 'clerk/user')
+        .eq('providerIdentifier', identity.tokenIdentifier))
+      .unique()
+    if (binding === null) throw new Error('owner_binding_missing')
+    const ownership = await ctx.db.query('accountOwnerships')
+      .withIndex('by_ownerPrincipalRef_and_lifecycle', (query) => query
+        .eq('ownerPrincipalRef', binding.principalRef)
+        .eq('lifecycle', 'active'))
+      .unique()
+    if (ownership === null) throw new Error('owner_ownership_missing')
+    return ownership.accountRef
+  })
+}
 
 async function serviceAuth(
   operation: string,
@@ -239,6 +257,39 @@ describe('agent access Convex server grant wrappers', () => {
       })
   })
 
+  it('refuses missing, credential-mismatched, inactive, and expired principals without writing grants', async () => {
+    process.env.AE_CONVEX_SERVER_FUNCTION_TOKEN = SERVICE_KEY
+
+    for (const mode of ['missing-principal', 'credential-mismatch', 'inactive-principal', 'expired-principal'] as const) {
+      const backend = convexTest(schema, modules)
+      const current = grant({ grantRef: `grant:refusal:${mode}` })
+      if (mode !== 'missing-principal') {
+        await seedCanonicalPrincipal(backend, current)
+      }
+      if (mode === 'inactive-principal' || mode === 'expired-principal') {
+        await backend.run(async (ctx) => {
+          const principal = await ctx.db.query('agentAccessPrincipals')
+            .withIndex('by_principalId', (query) => query.eq('principalId', current.principalId)).unique()
+          if (principal === null) throw new Error('principal_fixture_missing')
+          await ctx.db.patch(principal._id, mode === 'inactive-principal'
+            ? { lifecycle: 'revoked' }
+            : { expiresAt: Date.now() - 1 })
+        })
+      }
+      const submitted = mode === 'credential-mismatch'
+        ? grant({ grantRef: current.grantRef, credentialId: 'key_credential_mismatch' })
+        : current
+      const assertion = await serviceAuth('agentAccessPolicy.registerGrantForServer', { grant: submitted }, submitted)
+      const before = await backend.run(async (ctx) => await ctx.db.query('agentAccessGrants').collect())
+
+      await expect(backend.mutation(registerGrantForServer, { grant: submitted, serviceAuth: assertion }))
+        .resolves.toEqual({ kind: 'refused', code: 'authentication_required' })
+
+      await expect(backend.run(async (ctx) => await ctx.db.query('agentAccessGrants').collect()))
+        .resolves.toEqual(before)
+    }
+  })
+
   it('reads legacy v1 rows with derived selection while preserving v1 format and digest', async () => {
     const backend = convexTest(schema, modules)
     const legacy = legacyStoredGrant()
@@ -297,6 +348,67 @@ describe('agent access Convex server grant wrappers', () => {
         maximumCallsPerHour: legacy.policy.rate.maximumCallsPerHour,
       },
     }])
+  })
+
+  it('isolates owner grant readbacks by canonical account', async () => {
+    const backend = convexTest(schema, modules)
+    const identityA = ownerIdentity('owner_readback_a')
+    const identityB = ownerIdentity('owner_readback_b')
+    const ownerA = backend.withIdentity(identityA)
+    const ownerB = backend.withIdentity(identityB)
+    await expect(ownerA.mutation(api.interactiveAuthority.materializeCurrentInteractiveAuthority, {})).resolves.toBe(true)
+    await expect(ownerB.mutation(api.interactiveAuthority.materializeCurrentInteractiveAuthority, {})).resolves.toBe(true)
+    const accountA = await ownerAccountRef(backend, identityA)
+    const accountB = await ownerAccountRef(backend, identityB)
+    expect(accountA).not.toBe(accountB)
+
+    const grantA = { ...grant({
+      grantRef: 'grant:owner-readback-a',
+      principalId: 'clerk_api_key:owner_readback_a',
+      credentialId: 'key_owner_readback_a',
+    }), ownerId: accountA }
+    const grantB = { ...grant({
+      grantRef: 'grant:owner-readback-b',
+      principalId: 'clerk_api_key:owner_readback_b',
+      credentialId: 'key_owner_readback_b',
+    }), ownerId: accountB }
+    await backend.run(async (ctx) => {
+      await ctx.db.insert('agentAccessGrants', grantA)
+      await ctx.db.insert('agentAccessGrants', grantB)
+    })
+
+    const readbacksA = await ownerA.query(api.agentAccessPolicy.listOwnerGrantReadbacks, {})
+    expect(readbacksA).toHaveLength(1)
+    expect(readbacksA[0]).toMatchObject({ principalId: grantA.principalId, credentialId: grantA.credentialId })
+    expect(readbacksA.some((readback) => readback.principalId === grantB.principalId)).toBe(false)
+
+    const readbacksB = await ownerB.query(api.agentAccessPolicy.listOwnerGrantReadbacks, {})
+    expect(readbacksB).toHaveLength(1)
+    expect(readbacksB[0]).toMatchObject({ principalId: grantB.principalId, credentialId: grantB.credentialId })
+    expect(readbacksB.some((readback) => readback.principalId === grantA.principalId)).toBe(false)
+  })
+
+  it('denies anonymous and admin identities without owner authority', async () => {
+    const backend = convexTest(schema, modules)
+    await expect(backend.query(api.agentAccessPolicy.listOwnerGrantReadbacks, {})).resolves.toEqual([])
+    await expect(backend.query(api.agentAccessPolicy.listOwnerGrantReadbacks, { requireAuthority: true }))
+      .rejects.toThrow('agent_access_owner_authority_required')
+
+    const adminIdentity = ownerIdentity('admin_without_owner')
+    await backend.run(async (ctx) => {
+      await ctx.db.insert('adminMemberships', {
+        clerkUserId: adminIdentity.subject,
+        tokenIdentifier: adminIdentity.tokenIdentifier,
+        role: 'owner_admin',
+        state: 'active',
+        grantedBy: 'agent-access-policy-test',
+        grantedAt: 1,
+      })
+    })
+    const admin = backend.withIdentity(adminIdentity)
+    await expect(admin.query(api.agentAccessPolicy.listOwnerGrantReadbacks, {})).resolves.toEqual([])
+    await expect(admin.query(api.agentAccessPolicy.listOwnerGrantReadbacks, { requireAuthority: true }))
+      .rejects.toThrow('agent_access_owner_authority_required')
   })
 
   it('rejects all four hybrid stored grant shapes at the schema boundary', async () => {

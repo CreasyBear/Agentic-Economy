@@ -94,6 +94,79 @@ concurrent scheduling, or the fresh invited-user hosted journey. Those proofs
 remain explicitly deferred to hosted acceptance; Account isolation beyond this
 session/context boundary belongs to AM04.
 
+## AM04 Account and role isolation
+
+**Contract:** a caller's current canonical authority determines access to private
+Account resources. Knowing a locator, holding credit or having administrator
+membership does not substitute for that authority. Public Tool information
+retains its public discovery contract.
+
+  Requires: an owner has current canonical interactive authority for the Account;
+  an Agent has the specific current delegated authority and authenticated service
+  admission required by the operation; an administrator has an active durable
+  membership permitting the requested administrative action.
+  Ensures: private reads select the authorized Account and private mutations
+  validate the resource's Account before effects. Each legitimate owner can
+  still read and manage their own resources. Delegated Agent operations preserve
+  their narrower Principal, Account, application, environment and resource scope.
+  Invariant: changing a business, Tool, Call, document, grant or continuation
+  locator cannot grant authority. Refusals disclose no private record and leave
+  the protected resources unchanged. Administrator authority never implicitly
+  grants another customer's ownership; internal functions are trusted dispatch
+  boundaries, not additional public role APIs.
+  On violation: preserve the surface's existing concealed-not-found or explicit
+  authentication refusal contract. Do not turn missing authority into a successful
+  empty read where the caller explicitly requires authority. Do not add a common
+  error wrapper that erases those established API meanings.
+
+| Resource and permitted behavior | Enforcement and attributable source evidence |
+| --- | --- |
+| Private owner Tool management | `capabilityProviderTools` resolves current owner authority and checks the Business's canonical Account before read/list/slug resolution. `authz-actor-isolation.test.ts` covers owner/member success, workload/anonymous/stranger/wrong-Account/stale-generation refusal and unchanged authority rows. `capability-supply-owner-funnel-read.test.ts` covers real owner Tool detail, another valid Account and locator substitution. |
+| Delegated Provider Tool operations | `listAgent`/`readAgent` require source admission, canonical supplier Agent authority and Business/Account equality. `capability-supply-private-provider-preparation.test.ts` owns the actual issued-Agent private read/write and cross-Account cases. Public query declaration does not make private preparation public. |
+| Public Tool discovery | `capabilitySupplyTools` search/detail/compare use the existing public current-Tool projection without owner admission. `canonical-tool-reads.test.ts` exercises public discovery through the anonymous backend. Account isolation must not add an owner check to this path. |
+| Calls | Public Agent wrappers reconcile current canonical authority, then recovery matches Principal, Account, application and environment. Public owner recovery and the worker independently check current Account ownership. `capability-call-authority-boundary.test.ts` and `capability-call-recovery.test.ts` cover canonical admission, scope substitutions, replacement/revocation and refused recovery without worker effects. `account-call-isolation.test.ts` adds actual persisted Calls in two valid Accounts: each owner reads their private input and cancels their own Call; the other owner, administrator, workload and anonymous caller cannot read, cancel or reconcile them, with both rows unchanged after refusals. |
+| Money | `moneyOwnerSpend.readOwnerHistory` resolves the Account through `moneyAccountFunding.readBalanceSubject` on every page; the Formance adapter scopes the official ledger query and binds continuation cursors to that Account. `money-account-history.test.ts` proves both owners' query scopes, foreign cursor refusal before the ledger, client Account injection refusal, and no ledger access for anonymous/admin-without-ownership/workload identities. `money-account-funding.test.ts` proves issued-Agent handoff Account/Principal binding and another Agent's refusal. The deliberately public payer receipt exposes only its limited funding status, Agent display name and amount. |
+| Credentials and provider connections | `agentAccessPolicy` owner readbacks use the canonical Account; server registration requires the service assertion and an active matching unexpired canonical Agent. `agentAccessPolicy.test.ts` proves two-owner readback exclusion, anonymous/admin-without-owner refusal and unchanged grants on missing/mismatched/inactive/expired Principal refusal. `provider-connection-agent-lifecycle.test.ts` proves genuine supplier-Agent management and rejects missing admission or another Account's Business. Canonical Account and external owner token are distinct facts; comparing them as aliases would break valid registration. |
+| Secret material boundary | The secret lifecycle HTTP bridge requires its server transport credential and exact command schema before internal dispatch (`secret-lifecycle-http.test.ts`). Stored pointers/journals contain references and authority, not secret bytes. `secretLifecyclePersistence` validates the delegated snapshot and resource for effects and binds journal reads to its Account; `secretPointerPersistence` checks pointer/command Account identity. `secret-lifecycle-operations.test.ts` proves provision/rotation positives and cross-Account or expired snapshot refusal without journal/pointer effects. These server primitives do not grant a browser owner or administrator raw-secret access. |
+| Documents | `moneyDocuments` derives statement Account and document identity from owner authority, filters lists by Account, and requires Account equality for signing and URL issuance. `money-documents.test.ts` covers two-owner create/list/sign/download positives, replay, foreign document/cursor refusal or non-disclosure, role denials and stored-state preservation. A storage URL already issued to an authorized owner is a bearer capability; these checks prove issuance isolation, not revocation of an already-issued URL. |
+| Administrator privileges | `authz` reads durable active token-bound membership; `admin-authority.test.ts` protects the source-owned role/action matrix and audited destructive denials. `operator-context.test.ts` proves an administrator without ownership gets admin/developer access without owner access. Resource tests separately prove that this privilege cannot cross customer Account boundaries. |
+
+Applied skills: `sluice` keeps the work on existing interfaces with narrow
+behavioral checks; `contract-enforcer` supplies the preconditions, guarantees,
+invariants and failure contracts above. The `iceinvein-design-review`
+non-interactive procedure was used against this contract because Joel already
+directed autonomous execution. Its thesis is the first paragraph; conceptual
+integrity is strong because all private paths use current canonical authority
+while public discovery remains separately defined. The material risks are
+confusing administrator with owner, testing only invalid fixtures, and assuming
+source proof establishes hosted identity/configuration correctness. No new IAM
+model, permission middleware, test framework, service or dependency is justified.
+The fixed register and existing fixtures bound the work; unrelated behavior and
+hosted proof remain with their existing records.
+
+This section establishes source obligations and their evidence, not hosted
+acceptance. Real isolated Clerk/Agent/admin sessions, deployed source bindings,
+direct hosted route probes and storage behavior remain unverified until the
+consolidated hosted acceptance phase. Source completion requires the focused
+tests above to pass; the manager owns register acceptance and integrated checks.
+
+Source verification on 14 September 2026: five new/changed test files passed
+22 tests; the existing public two-supplier discovery case passed; 16 selected
+existing role/isolation/funding/secret-boundary cases passed across seven files.
+The filtered runs skipped unrelated cases intentionally. All five changed test
+files passed explicit Oxlint and the patch passed whitespace checks. No product
+code, API, schema, dependency or provider configuration changed. Combined
+typechecking and integration remain manager-owned.
+
+The independent bounded test review found no production defect. Its evidence
+limits are retained: Call refusal checks snapshot the protected Call rows, not
+every audit or ledger table; administrator foreign-Account refusal and
+administrator-without-ownership refusal are separate cases. Client-selected
+Account injection is rejected by the actual public Convex argument validator
+before the handler; the TypeScript function-reference annotation grants no API
+authority. Formance filtering is asserted at the external SDK boundary, while
+ledger-internal filtering correctness remains the provider contract.
+
 ## Provider lifecycle contract
 
 The user submits one reviewed Tool version and sees its progress on the same

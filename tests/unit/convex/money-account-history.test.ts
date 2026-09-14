@@ -1,7 +1,7 @@
 import { makeFunctionReference } from 'convex/server'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { convexTestWithMarketComponents, publishedBusinessOwner } from '../../helpers/convex-fixtures'
+import { convexTestWithMarketComponents, ownerAdmin, publishedBusinessOwner } from '../../helpers/convex-fixtures'
 import { formanceAccountMetadataDigest } from '@/modules/money/formance-workflows'
 import type { AccountHistoryResult } from '@/modules/money/public'
 
@@ -46,6 +46,34 @@ describe('authenticated Account history', () => {
     ledger.listTransactions.mockResolvedValueOnce({ v2TransactionsCursorResponse: { cursor: { data: [], hasMore: false, pageSize: 15 } } })
     await expect(first.owner.action(readHistory, { cursor: result.continueCursor })).resolves.toMatchObject({ kind: 'available', isDone: true })
     expect(ledger.listTransactions.mock.calls[1]?.[0]).toEqual({ ledger: 'test-ledger', cursor: 'official:next' })
+
+    ledger.listTransactions.mockResolvedValueOnce({ v2TransactionsCursorResponse: { cursor: { data: [], hasMore: false, pageSize: 15 } } })
+    await expect(second.owner.action(readHistory, {})).resolves.toMatchObject({ kind: 'available', isDone: true })
+    expect(ledger.listTransactions.mock.calls[2]?.[0].query.$and[0])
+      .toEqual({ $match: { 'metadata[account_digest]': formanceAccountMetadataDigest(second.canonicalAccountRef) } })
+  })
+
+  it('does not derive owner money access from administrator membership or a workload identity', async () => {
+    vi.stubEnv('AE_CONVEX_SERVER_FUNCTION_TOKEN', 'account-history-test-cursor-key-32-bytes')
+    const backend = convexTestWithMarketComponents()
+    const administrator = await ownerAdmin(backend, 'user_history-admin-only')
+    const workload = await publishedBusinessOwner(backend, 'history-workload')
+    await backend.run(async (ctx) => {
+      const principal = await ctx.db.query('principals').withIndex('by_principalRef', (q) =>
+        q.eq('principalRef', workload.canonicalPrincipalRef)).unique()
+      if (principal === null) throw new Error('history_workload_fixture_missing')
+      await ctx.db.patch(principal._id, { kind: 'workload' })
+      for (const ownership of await ctx.db.query('accountOwnerships').collect()) {
+        if (ownership.accountRef !== workload.canonicalAccountRef) {
+          await ctx.db.delete(ownership._id)
+        }
+      }
+    })
+    for (const caller of [administrator, workload.owner, backend]) {
+      await expect(caller.action(readHistory, {}))
+        .resolves.toEqual({ kind: 'refused', code: 'billing_identity_missing' })
+    }
+    expect(ledger.listTransactions).not.toHaveBeenCalled()
   })
 
   it('does not accept a client-selected Account or mask missing cursor configuration as empty history', async () => {
