@@ -809,3 +809,38 @@ private visibility and duplicate replay. Targeted lint, typecheck and the
 dependency ratchet passed. Source commit `fdffc62e5` has not been deployed;
 full validation, promotion and replay after promotion remain
 unverified and must be covered by the lifecycle integration slice.
+
+#### Platform validation payment preparation — 2026-09-14
+
+Implemented a separate internal authorization entry at
+`moneyX402PaymentAttempts.prepareSellerOnboardingCanaryPaymentAuthorization`.
+It delegates to the existing durable payment-attempt writer after checking the
+stored sandbox validation Call, current leased attempt and effect generation,
+exact Tool material, network/asset/payee, approved source amount, disabled buyer
+accounting, and the exact active platform grant. Buyer reservations are refused.
+The same attempt, signing identity, custody budget and replay machinery are
+retained; no ledger reservation or new payment driver was introduced.
+
+`x402Authorization` now directs platform validation preparation through that
+entry and does not query or release buyer funds on this path. Tests exercise the
+callback-to-handler path as well as refusal and replay. The worker fixture now
+returns no managed buyer reservation for a validation Call, matching admission.
+The existing source-currency/exponent contract is retained alongside the explicit
+Base Sepolia USDC asset; no conversion of accepted payment material was added.
+
+Four focused suites pass (138 tests): payment attempts, worker charge behavior,
+custody authorization and fixed platform funding. Checks cover wrong recipient,
+mainnet, changed amount/currency/input/payment identity, revoked grant, expired
+validation, buyer-usage flags, cancellation, unmanaged credentials and mismatched
+attempts/generations. Typecheck, targeted lint and the dependency ratchet passed.
+Source commit: `686c5382f`.
+This is preparation proof only: the release worker still refuses the validation
+rail and no live payment was made or deployment changed.
+
+Next bounded implementation: update `runRelease.ts` to reread the exact platform
+grant, select the existing managed custody callbacks, and pass verified settlement
+facts into the canary projector. Extend the charge suite and honest worker fixture
+for these observable results. Then extend the same attempt's recovery before
+enabling automatic admission/promotion. The generic persisted billing-authority
+reader and x402 recovery currently assume a buyer credential/reservation; they
+remain explicit work, not permission to invent one for platform validation.
