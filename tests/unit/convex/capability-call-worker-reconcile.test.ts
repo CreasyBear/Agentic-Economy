@@ -245,6 +245,22 @@ describe('scheduled capability invocation reconciliation primitives', () => {
     ])
   })
 
+  it('reaches a due automatic refund after a full older page awaiting manual review', async () => {
+    const blocked = Array.from({ length: 25 }, (_, index) => ({
+      ...row(`manual:${index}`, { attemptCount: 5, nextAttemptAt: 1_000, disposition: 'manual_review', reason: 'refund_pending' }),
+      state: 'refused',
+    }))
+    const refund = {
+      ...row('automatic-refund', { attemptCount: 0, nextAttemptAt: 2_000, disposition: 'automatic', reason: 'refund_pending' }),
+      state: 'refused',
+    }
+    const db = new MemoryDb([...blocked, refund])
+    expect(await listHandler({ db }, { now: 3_000, limit: 25 })).toEqual([
+      { callRef: 'automatic-refund', attemptCount: 0, nextAttemptAt: 2_000, preClaimRefusal: true },
+    ])
+    expect(blocked.every((item) => item.reconciliation?.disposition === 'manual_review')).toBe(true)
+  })
+
   it('retains the refused refund until durable release, including errors and lease takeover', async () => {
     const refund = row('refund', { attemptCount: 0, nextAttemptAt: 1_000, disposition: 'automatic', reason: 'refund_pending' })
     refund.state = 'refused'

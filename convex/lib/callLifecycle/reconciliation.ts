@@ -260,8 +260,10 @@ export async function listDueAutomaticReconciliationCandidatesHandler(
       .order('asc')
       .take(limit),
     ctx.db.query('capabilityCalls')
-      .withIndex('by_state_and_reconciliation_nextAttemptAt', (q) => (
+      .withIndex('by_state_and_reconciliation_disposition_reason_nextAttemptAt', (q) => (
         q.eq('state', 'refused')
+          .eq('reconciliation.disposition', 'automatic')
+          .eq('reconciliation.reason', 'refund_pending')
           .gte('reconciliation.nextAttemptAt', 0)
           .lte('reconciliation.nextAttemptAt', args.now)
       ))
