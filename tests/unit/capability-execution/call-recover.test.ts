@@ -124,12 +124,15 @@ describe('operation.invoke recover/reconcile', () => {
       lifecycle: 'active' as const,
       grantGeneration: 1,
     }
-    const runQuery = vi.fn()
-      .mockResolvedValueOnce(dispatch)
-      .mockResolvedValueOnce(dispatch)
-      .mockResolvedValueOnce(principalRow)
-      .mockResolvedValueOnce({})
-      .mockResolvedValueOnce({ toolJson: JSON.stringify(operation) })
+    const runQuery = vi.fn(async (reference: unknown) => {
+      const path = typeof reference === 'string' ? reference : getFunctionName(reference as never)
+      if (path === 'capabilityCalls:openDispatch') return dispatch
+      if (path === 'actionExecutionControl:readControl') return null
+      if (path === 'agentAccessPrincipals:getAgentPrincipal') return principalRow
+      if (path === 'agentAccessPolicy:readActiveGrant') return { generation: 1 }
+      if (path === 'capabilitySupplyTools:readCurrentPublishedToolSnapshot') return { toolJson: JSON.stringify(operation) }
+      throw new Error(`unexpected_query:${path}`)
+    })
     const runMutation = vi.fn(async (reference: unknown, _args: Record<string, unknown>) => {
       const path = typeof reference === 'string' ? reference : getFunctionName(reference as never)
       if (path === 'capabilityCalls:reconcileCallWorkloadAuthority') {
@@ -146,7 +149,8 @@ describe('operation.invoke recover/reconcile', () => {
           },
         }
       }
-      return { kind: 'accepted' as const }
+      if (path === 'capabilityCalls:refuseUnclaimed') return { kind: 'refused' as const, releaseRequired: false }
+      throw new Error(`unexpected_mutation:${path}`)
     })
     const workerAction = run as unknown as {
       _handler: (ctx: unknown, args: { callRef: string }) => Promise<unknown>
@@ -156,20 +160,16 @@ describe('operation.invoke recover/reconcile', () => {
     const result = await handler({ runQuery, runMutation }, { callRef: dispatch.callRef })
 
     expect(result).toEqual({ kind: 'recorded' })
-    expect(runQuery).toHaveBeenCalledTimes(6)
-    const recordCall = runMutation.mock.calls.find(([reference]) => (
-      getFunctionName(reference as never) === 'capabilityCalls:record'
+    const refusal = runMutation.mock.calls.find(([reference]) => (
+      getFunctionName(reference as never) === 'capabilityCalls:refuseUnclaimed'
     ))
-    expect(recordCall?.[1]).toMatchObject({
-      state: 'refused',
-      dispatchState: 'failed',
-      result: {
-        kind: 'refused',
-        toolRef: operationRef,
-        code: 'environment_mismatch',
-        retryable: false,
-        nextAction: toolEnvironmentMismatchNextAction,
-      },
+    expect(refusal?.[1]).toMatchObject({
+      callRef: dispatch.callRef,
+      principalId: productionPrincipal.principalId,
+      credentialId: productionPrincipal.credentialId,
+      code: 'environment_mismatch',
+      retryable: false,
+      nextAction: toolEnvironmentMismatchNextAction,
     })
   })
 })
