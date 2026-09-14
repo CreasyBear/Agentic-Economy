@@ -11,7 +11,7 @@ export type OwnerOverviewSnapshot = Readonly<{
   balance: Readonly<{ kind: 'available'; amount: ExactAmount; locked: boolean }> | Readonly<{ kind: 'unavailable' }>
   calls: Readonly<{ kind: 'available'; attention: number; loaded: number; complete: boolean }> | Readonly<{ kind: 'unavailable' }>
   agents: Readonly<{ kind: 'available'; connected: number; complete: boolean }> | Readonly<{ kind: 'unavailable' }>
-  provider?: Readonly<{ kind: 'available'; name: string; tools: number }> | Readonly<{ kind: 'attention' | 'unavailable' }>
+  provider?: Readonly<{ kind: 'available'; name: string; tools: number }> | Readonly<{ kind: 'attention' }> | Readonly<{ kind: 'unavailable' }>
 }>
 
 type NextAction = Readonly<{ label: string; description: string; href: string }>
