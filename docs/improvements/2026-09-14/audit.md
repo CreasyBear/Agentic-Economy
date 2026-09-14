@@ -181,6 +181,7 @@ hosted and task-level alpha gates below.
 | P1. Progressive Agent detail | **Fixed in source** | `6f036062c` reduces the open Agent sheet to authority, monthly limit, recent Calls/attention and last use. Existing spending, activity, Tool-scope and technical facts remain available under task-labelled disclosures rather than fifteen peer facts. |
 | P1. Provider Tool decision rows | **Fixed in source** | `d9ac6b329` consolidates lifecycle, availability, readiness and blocker into one Status cell, removes access-route plumbing from the first layer, and gives each Tool one dynamically labelled trailing continuation on desktop and compact layouts. |
 | P1. Recognizable Market comparison | **Fixed in source** | `2c8f4da5a` replaces the icon-only card control with a visible Compare label and pressed state. In the matrix, sticky Tool headers retain their own Inspect action and the sticky Fact column keeps horizontally scrolled values anchored. |
+| P1. Stable Tool-inspector first render | **Fixed in source** | `60ca789c5` replaces the post-paint viewport effect and two mutually exclusive structures with one CSS-responsive Tool inspector. The same research tabs and single safe continuation retain identity while their order and columns adapt at the desktop breakpoint. |
 | 7, 17 and all unlisted P0/P1 boundaries | **Open, active or dependency-blocked** | Continue source-first repair against the work and acceptance tables below; do not infer completion from adjacent component changes. |
 
 ### P0 — alpha blockers
