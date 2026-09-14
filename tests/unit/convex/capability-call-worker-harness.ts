@@ -288,7 +288,7 @@ function operationWithPricing(
   }
 }
 
-function operationFor(kind: WorkerKind, validUntil: number, priceUnits = '1', brokered = false): PublishedTool {
+function operationFor(kind: WorkerKind, validUntil: number, priceUnits = '1', brokered = false, environment: 'sandbox' | 'production' = 'sandbox'): PublishedTool {
   const fixture = buildDevelopmentPublishedToolEvidence()
   const pricedOperation = operationWithPricing(fixture.tool, brokered
         ? {
@@ -296,8 +296,8 @@ function operationFor(kind: WorkerKind, validUntil: number, priceUnits = '1', br
             kind: 'managed_x402',
             effectTiming: 'payment_required_before_effect',
             sourceRequirement: {
-              network: 'eip155:8453',
-              asset: '0xmock-usdc',
+              network: environment === 'production' ? BASE_MAINNET_NETWORK : BASE_SEPOLIA_NETWORK,
+              asset: environment === 'production' ? BASE_MAINNET_USDC_ADDRESS : BASE_SEPOLIA_USDC_ADDRESS,
               atomicUnits: '1',
             },
             pricingPolicyRef: 'pricing-policy:sandbox-managed-x402:v1',
@@ -311,8 +311,18 @@ function operationFor(kind: WorkerKind, validUntil: number, priceUnits = '1', br
             amountUnits: priceUnits,
           })
   if (kind === 'x402') {
+    const profile = environment === 'production'
+      ? { network: BASE_MAINNET_NETWORK, asset: BASE_MAINNET_USDC_ADDRESS }
+      : { network: BASE_SEPOLIA_NETWORK, asset: BASE_SEPOLIA_USDC_ADDRESS }
+    const config = { ...JSON.parse(pricedOperation.transport.configJson), ...profile }
+    const required = JSON.parse(config.paymentRequiredJson)
+    config.paymentRequiredJson = JSON.stringify({ ...required,
+      accepts: required.accepts.map((entry: Record<string, unknown>) => ({ ...entry, ...profile })),
+    })
     return {
       ...pricedOperation,
+      binding: { ...pricedOperation.binding, adapter: { ...pricedOperation.binding.adapter, config } },
+      transport: { ...pricedOperation.transport, configJson: JSON.stringify(config), configDigest: canonicalDigest(config) },
       readiness: { ...pricedOperation.readiness, validUntil },
     }
   }
@@ -366,6 +376,7 @@ function sealCurrentOperation(operation: PublishedTool): PublishedTool {
     ...identityBase,
     offeringDigest: capabilityOfferingRegistrationHash(operation.offering),
     bindingDigest: capabilityBindingRegistrationHash(operation.binding, operation.transport),
+    transportConfigDigest: operation.transport.configDigest,
     runtimeEnvironment: operation.runtimeEnvironment,
     ...(connectionAuthority === undefined ? {} : { connectionAuthority: { ...connectionAuthority } }),
   }
@@ -429,6 +440,7 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
     now + 120_000,
     options.priceUnits,
     kind === 'x402',
+    environment,
   )
   const x402Profile = environment === 'production'
     ? { network: BASE_MAINNET_NETWORK, asset: BASE_MAINNET_USDC_ADDRESS }

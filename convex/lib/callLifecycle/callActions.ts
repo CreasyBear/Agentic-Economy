@@ -617,6 +617,7 @@ export async function callHandler(
       toolRef: args.toolRef,
       input: args.input,
       idempotencyKey: args.idempotencyKey,
+      ...(args.decisionPrice === undefined ? {} : { decisionPrice: args.decisionPrice }),
     },
     principal,
     correlationId: args.correlationId,

@@ -41,6 +41,7 @@ export async function prepareOwnerPublicationCommand(
   source: CapabilityPublicationImport,
   operationKey: string,
   origin?: CatalogOfferingOrigin,
+  runtimeEnvironment: 'production' | 'sandbox' = 'production',
 ) {
   const offering =
     source.kind === 'ae_envelope' ? source.offering : source.commercial.offering
@@ -167,7 +168,7 @@ export async function prepareOwnerPublicationCommand(
       offeringRef,
       revision,
       sourceHash,
-      runtimeEnvironment: 'production',
+      runtimeEnvironment,
       prepared: preparedMaterial,
       operationKey,
       proof: {
@@ -233,20 +234,22 @@ export function openApiSource(
   }
 }
 
-export function x402Source(): Extract<
+export function x402Source(environment: 'sandbox' | 'production' = 'production', endpoint = 'https://provider.example/paid-lookup'): Extract<
   CapabilityPublicationImport,
   { kind: 'x402' }
 > {
-  const endpoint = 'https://provider.example/paid-lookup'
   const price = { currency: 'USD', units: '100', exponent: 2 }
-  const asset = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913'
+  const asset = environment === 'sandbox'
+    ? '0x036CbD53842c5426634e7929541eC2318f3dCF7e'
+    : '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913'
+  const network = environment === 'sandbox' ? 'eip155:84532' : 'eip155:8453'
   const payTo = '0xbA667287B8Ef89565F8fD7AcD4d22Ce98E0f39cd'
   const paymentRequired = validatePaymentRequired({
     x402Version: 2,
     resource: { url: endpoint },
     accepts: [{
       scheme: 'exact',
-      network: 'eip155:8453',
+      network,
       amount: '1000000',
       asset,
       payTo,
@@ -267,7 +270,7 @@ export function x402Source(): Extract<
       method: 'POST',
       price,
       scheme: 'exact',
-      network: 'eip155:8453',
+      network,
       asset,
       payTo,
       routeAmountExponent: 2,

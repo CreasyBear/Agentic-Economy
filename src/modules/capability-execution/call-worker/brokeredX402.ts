@@ -16,12 +16,15 @@ import {
 import {
   callReceiptPaymentProfile,
   type CallReceipt,
+  type CallUsageSummary,
+  type CallResult,
 } from '@/modules/capability-execution/call-contracts'
 import type { ActionCtx } from '../../../../convex/_generated/server'
 import { internal } from '../../../../convex/_generated/api'
-import type { CanonicalClaimSnapshot } from '@/modules/action-execution/runtime'
 import {
   canonicalTerminalOutcome,
+  canonicalPort,
+  readCanonicalSnapshot,
   finalizeCallDispatch,
   type OpenDispatch,
   parseContractOutput,
@@ -129,7 +132,6 @@ export async function runCommittedManagedX402Transport(
     durableAttemptRef: string
     durableEffectGeneration: number
     operationKeyDigest: string
-    fenced: CanonicalClaimSnapshot
   }>,
 ): Promise<RouteTransportObservation> {
   const observation = await invokePreparedRouteTransport(input.prepared, input.runtime)
@@ -231,6 +233,12 @@ async function projectManagedCall(
   financialState: 'settled' | 'released' | 'unknown',
   settlementRef?: string,
 ): Promise<void> {
+  // Payment authorization advances the durable release fence during transport.
+  // Finalize from that current version, bound to this same attempt and effect.
+  const snapshot = await readCanonicalSnapshot(canonicalPort(ctx), input.dispatch.callRef, input.durableAttemptRef)
+  if (snapshot === undefined || snapshot.attempt.effectGeneration !== input.durableEffectGeneration) {
+    throw new Error('managed_call_terminal_snapshot_missing')
+  }
   const managed = reservation as {
     decisionAudUnits: string
     sourceUsdcUnits?: string
@@ -266,10 +274,16 @@ async function projectManagedCall(
         : 'unknown',
     lossState: financialState === 'settled' ? 'none' : financialState === 'released' ? 'none' : 'unknown',
   })
-  if (receipt === undefined) throw new Error('managed_call_receipt_invalid')
+  if (receipt === undefined || receipt.commercialModel !== 'account_aud') throw new Error('managed_call_receipt_invalid')
 
   if (financialState === 'settled' && output.valid && observation.disposition === 'succeeded') {
-    await finalizeCallDispatch(ctx, input.dispatch, input.fenced,
+    const usage: CallUsageSummary = {
+      usageRef: `operation-usage:${input.dispatch.callRef}:${input.durableAttemptRef}`,
+      observedAt: Date.parse(recordedAt), chargeState: 'paid',
+      amount: receipt.buyerCharge, priceDigest: receipt.priceDigest,
+      ...(receipt.transactionRef === undefined ? {} : { transactionRef: receipt.transactionRef }),
+    }
+    await finalizeCallDispatch(ctx, input.dispatch, snapshot,
       canonicalTerminalOutcome(observation, recordedAt, true, 'released'), {
         state: 'completed',
         result: {
@@ -279,7 +293,9 @@ async function projectManagedCall(
           output: output.output,
           evidenceHash,
           receipt,
-        },
+          usage,
+        } satisfies CallResult,
+        usage,
         evidenceHash,
         attemptRef: input.durableAttemptRef,
         dispatchState: 'completed',
@@ -288,7 +304,7 @@ async function projectManagedCall(
   }
 
   if (financialState === 'unknown') {
-    await finalizeCallDispatch(ctx, input.dispatch, input.fenced,
+    await finalizeCallDispatch(ctx, input.dispatch, snapshot,
       canonicalTerminalOutcome({ ...observation, disposition: 'unknown', releaseStarted: true }, recordedAt, output.valid, 'unknown'), {
         state: 'reconciliation_required',
         result: {
@@ -312,7 +328,7 @@ async function projectManagedCall(
   }
 
   const paidButInvalid = financialState === 'settled' && !output.valid
-  await finalizeCallDispatch(ctx, input.dispatch, input.fenced,
+  await finalizeCallDispatch(ctx, input.dispatch, snapshot,
     paidButInvalid
       ? {
           kind: 'returned',

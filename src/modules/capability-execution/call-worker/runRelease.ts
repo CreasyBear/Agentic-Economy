@@ -6,10 +6,10 @@ import type { StableHashValue } from '@/modules/common/stable-hash'
 import { Agent, fetch as guardedFetch } from 'undici'
 import { persistCanonicalReleaseFence, type CanonicalClaimSnapshot } from '@/modules/action-execution/runtime'
 import { invokePreparedRouteTransport, prepareRegisteredRouteTransportInvocation, type RouteTransportFetch, type RouteTransportObservation, type RouteTransportRuntime } from '@/modules/capability-supply/route-transport-runtime'
-import { parsePublishedToolSnapshot } from '@/modules/capability-supply/public'
+import { parseAdmittedX402CatalogPayment, parsePublishedToolSnapshot } from '@/modules/capability-supply/public'
 import { currentToolQuotesMatch } from '../current-tool-quote'
 import { chargeSettlementOutcome, credentialFromEnvironment, x402PaymentCredentialRefFromEnvironment } from '@/modules/capability-supply/server'
-import { pricingConfigSourceAmount } from '@/modules/money/public'
+import { pricingConfigSourceAmount, type ExactAmount } from '@/modules/money/public'
 import { createGuardedLookup, defaultDnsResolver, isPublicHttpTarget } from '@/modules/network-guard/public'
 import { internal } from '../../../../convex/_generated/api'
 import type { ActionCtx } from '../../../../convex/_generated/server'
@@ -115,6 +115,24 @@ export async function releaseCallRun(
     leaseAuthority = lease.leaseAuthority
   }
 
+  let paymentMaximumSpend: ExactAmount | undefined = isManagedCanary
+    ? dispatch.sellerOnboardingCanary?.funding.requestedSpend
+    : undefined
+  if (economicRail === 'brokered_x402') {
+    const payment = parseAdmittedX402CatalogPayment(baseBinding.adapterId, baseBinding.configJson)
+    if (payment === undefined || pricingConfig.kind !== 'managed_x402'
+      || payment.assetAmountExponent !== 6
+      || payment.network !== pricingConfig.sourceRequirement.network
+      || payment.asset.toLowerCase() !== pricingConfig.sourceRequirement.asset.toLowerCase()) {
+      return await convergePreRelease(ctx, dispatch, claimed, 'pre_release_failed', false, 'payment_authority_invalid')
+    }
+    // Transport amounts use the admitted route denomination. Keep the exact
+    // committed token units; buyer AUD authority and ledger amounts stay separate.
+    paymentMaximumSpend = {
+      currency: payment.currency, exponent: payment.assetAmountExponent,
+      units: dispatch.sourceUsdcUnits ?? pricingConfigSourceAmount(pricingConfig).units,
+    }
+  }
   const invocation = routeInvocation(
     baseBinding,
     input,
@@ -136,11 +154,7 @@ export async function releaseCallRun(
     operation.readiness.validUntil,
     operation.readiness.qualificationDigest,
     connectionAuthority,
-    economicRail === 'brokered_x402'
-      ? (dispatch.sourceUsdcUnits === undefined ? pricingConfigSourceAmount(pricingConfig) : { currency: 'USDC', exponent: 6, units: dispatch.sourceUsdcUnits })
-      : isManagedCanary
-        ? dispatch.sellerOnboardingCanary?.funding.requestedSpend
-        : undefined,
+    paymentMaximumSpend,
     dispatch.committedPaymentRequiredJson,
   )
   const preparation = prepareRegisteredRouteTransportInvocation(
@@ -551,7 +565,6 @@ export async function releaseCallRun(
         durableAttemptRef,
         durableEffectGeneration,
         operationKeyDigest,
-        fenced: fenced ?? claimed,
       })
       await settleProviderLease(ctx, dispatch, operation, leaseRef, leaseAuthority, observation.releaseStarted, durableAttemptRef, durableEffectGeneration)
       finalizationStarted = true
