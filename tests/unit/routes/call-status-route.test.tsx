@@ -320,9 +320,11 @@ describe('/calls/$callRef', () => {
       attemptRef: 'attempt:uncertain',
       effectGeneration: 2,
       ownerContext: null,
-    }, { onReconcile: vi.fn() })
+    }, { onReconcile: vi.fn(), onRefresh: vi.fn(async () => undefined) })
 
     expect(screen.getByText('Evidence submission is unavailable')).toBeTruthy()
+    expect(screen.getByText(/Permission to submit Provider evidence could not be confirmed/)).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Refresh current status' })).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Submit reconciliation' })).toBeNull()
     expect(screen.queryByLabelText('Evidence source')).toBeNull()
   })

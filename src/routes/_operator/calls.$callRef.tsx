@@ -390,7 +390,7 @@ function ownerCallIdentityFacts(result: FoundCallStatus) {
           {recordedTool?.name ?? 'Recorded Tool name unavailable'}
         </Link>
       ),
-      definition: recordedTool === undefined ? undefined : 'Name retained with the Call snapshot, not read from the current catalogue.',
+      ...(recordedTool === undefined ? {} : { definition: 'Name retained with the Call snapshot, not read from the current catalogue.' }),
     },
     {
       label: 'Provider at Call',
@@ -403,7 +403,7 @@ function ownerCallIdentityFacts(result: FoundCallStatus) {
       value: context === undefined || context === null
         ? 'Agent details unavailable'
         : context.agent.currentDisplayName ?? 'Current Agent name not available',
-      definition: context === undefined || context === null ? undefined : 'Current account-owned label; it may differ from the label at Call time.',
+      ...(context === undefined || context === null ? {} : { definition: 'Current account-owned label; it may differ from the label at Call time.' }),
     },
     {
       label: 'Purpose',
@@ -727,9 +727,9 @@ function CallRecoveryActions({
       </div>
       <StatusFeedback feedback={actions?.feedback} callRef={result.callRef} />
       <ReconciliationBlockers availability={availability} />
-      <RecoveryPrimaryActions availability={availability} actions={actions} />
+      <RecoveryPrimaryActions availability={availability} {...(actions === undefined ? {} : { actions })} />
       {availability.canReconcileNow ? (
-        <AdvancedReconciliation actions={actions} recoveryPending={availability.recoveryPending} />
+        <AdvancedReconciliation {...(actions === undefined ? {} : { actions })} recoveryPending={availability.recoveryPending} />
       ) : null}
     </section>
   )
@@ -750,7 +750,7 @@ function ReconciliationBlockers({ availability }: Readonly<{ availability: CallR
         <Alert>
           <AlertTitle>Evidence submission is unavailable</AlertTitle>
           <AlertDescription>
-            This receipt source does not grant the signed-in account permission to submit Provider evidence. Refresh the current Call before relying on a newer permission state; no evidence can be submitted here now.
+            Permission to submit Provider evidence could not be confirmed from this receipt source. Refresh this exact Call to check again; no evidence can be submitted here until permission is available.
           </AlertDescription>
         </Alert>
       ) : null}
