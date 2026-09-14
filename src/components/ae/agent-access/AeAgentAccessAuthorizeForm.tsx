@@ -327,12 +327,13 @@ function AgentAccessAuthorizeForm({ locator, oauthState, details, submitApproval
     <AeOperatorPage operatorRole="owner" title="Review agent access" description="Choose what this agent may do, then approve or decline." currentPath="/agent-access">
       <AeSettingsStack>
         {status === 'idle' ? (
-          <>
+          <div className="grid overflow-hidden rounded-xl border border-border bg-card shadow-sm" role="group" aria-label={`Access decision for ${clientName}`}>
             <AeSection
               title={`Connect ${clientName}`}
               description={accessProfile === 'provider'
                 ? 'This separate credential can inspect and manage your provider Tools.'
                 : 'How much may this agent do without asking you?'}
+              className="p-4 sm:p-5"
             >
               {agentTargets.length === 0 && agentTargetsError === undefined && agentTargetsNextCursor === undefined ? null : <fieldset className="grid gap-3" disabled={pending}>
                 <legend className="text-sm font-medium text-foreground">Connection</legend>
@@ -503,9 +504,10 @@ function AgentAccessAuthorizeForm({ locator, oauthState, details, submitApproval
               </Collapsible>
               <p id="consent-expiry" className="sr-only">Access expires {formatConsentDuration(expiresInSeconds)} after issue. You can revoke it at any time from Agents.</p>
             </AeSection>
-            <div className="flex flex-wrap gap-3">
+            <div className="flex flex-wrap gap-3 border-t border-border bg-muted/20 p-4 sm:px-5">
               <Button
                 ref={approveButtonRef}
+                type="button"
                 aria-describedby="consent-expiry"
                 variant={connectionTarget === 'replace_credential' && replacementMode === 'compromise' ? 'destructive' : 'default'}
                 onClick={() => void approve()}
@@ -513,9 +515,9 @@ function AgentAccessAuthorizeForm({ locator, oauthState, details, submitApproval
               >
                 {pending ? approvalPendingLabel : approvalLabel}
               </Button>
-              <Button aria-describedby="consent-expiry" variant="secondary" onClick={() => void deny()} disabled={pending}>{pending ? 'Working…' : 'Decline'}</Button>
+              <Button type="button" aria-describedby="consent-expiry" variant="secondary" onClick={() => void deny()} disabled={pending}>{pending ? 'Working…' : 'Decline'}</Button>
             </div>
-          </>
+          </div>
         ) : status === 'approved' ? (
           <Alert><AlertTitle>Connected to {clientName}</AlertTitle><AlertDescription>Return there to continue. This connection remains signed in until it expires or you disconnect it.</AlertDescription></Alert>
         ) : status === 'denied' ? (

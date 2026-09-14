@@ -200,8 +200,12 @@ describe('/agent-access/authorize consent loading', () => {
 
     renderComponent()
 
-    expect(await screen.findByRole('button', { name: 'Connect agent' })).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Decline' })).toBeTruthy()
+    const connect = await screen.findByRole('button', { name: 'Connect agent' })
+    const decline = screen.getByRole('button', { name: 'Decline' })
+    const decisionRegion = screen.getByRole('group', { name: 'Access decision for Test assistant' })
+    expect(decisionRegion.contains(connect)).toBe(true)
+    expect(decisionRegion.contains(decline)).toBe(true)
+    expect(decisionRegion.textContent).toContain('No additional spend or rate controls were supplied.')
     expect(screen.queryByRole('radio', { name: /New agent/ })).toBeNull()
     expect(document.body.textContent).not.toContain('Request revision')
     fireEvent.click(screen.getByRole('button', { name: 'Technical details' }))
