@@ -14,6 +14,8 @@ import type * as agentAccessPolicy from "../agentAccessPolicy.js";
 import type * as agentAccessPrincipals from "../agentAccessPrincipals.js";
 import type * as agentDirectory from "../agentDirectory.js";
 import type * as agentMoneyReads from "../agentMoneyReads.js";
+import type * as agentSpendingPeriods from "../agentSpendingPeriods.js";
+import type * as agentSpendingPolicy from "../agentSpendingPolicy.js";
 import type * as authorityBoundary from "../authorityBoundary.js";
 import type * as authz from "../authz.js";
 import type * as businessSupplyProjectionSnapshot from "../businessSupplyProjectionSnapshot.js";
@@ -108,6 +110,7 @@ import type * as lib_agentAccess_principals_revocation from "../lib/agentAccess/
 import type * as lib_agentAccess_principals_verification from "../lib/agentAccess/principals/verification.js";
 import type * as lib_agentMoneyReads from "../lib/agentMoneyReads.js";
 import type * as lib_agentPublicationConsequence from "../lib/agentPublicationConsequence.js";
+import type * as lib_agentSpendingPeriods from "../lib/agentSpendingPeriods.js";
 import type * as lib_authorityRegistrars from "../lib/authorityRegistrars.js";
 import type * as lib_callLifecycle_admission from "../lib/callLifecycle/admission.js";
 import type * as lib_callLifecycle_authorityHandlers from "../lib/callLifecycle/authorityHandlers.js";
@@ -220,6 +223,8 @@ declare const fullApi: ApiFromModules<{
   agentAccessPrincipals: typeof agentAccessPrincipals;
   agentDirectory: typeof agentDirectory;
   agentMoneyReads: typeof agentMoneyReads;
+  agentSpendingPeriods: typeof agentSpendingPeriods;
+  agentSpendingPolicy: typeof agentSpendingPolicy;
   authorityBoundary: typeof authorityBoundary;
   authz: typeof authz;
   businessSupplyProjectionSnapshot: typeof businessSupplyProjectionSnapshot;
@@ -314,6 +319,7 @@ declare const fullApi: ApiFromModules<{
   "lib/agentAccess/principals/verification": typeof lib_agentAccess_principals_verification;
   "lib/agentMoneyReads": typeof lib_agentMoneyReads;
   "lib/agentPublicationConsequence": typeof lib_agentPublicationConsequence;
+  "lib/agentSpendingPeriods": typeof lib_agentSpendingPeriods;
   "lib/authorityRegistrars": typeof lib_authorityRegistrars;
   "lib/callLifecycle/admission": typeof lib_callLifecycle_admission;
   "lib/callLifecycle/authorityHandlers": typeof lib_callLifecycle_authorityHandlers;
