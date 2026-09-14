@@ -76,10 +76,18 @@ describe('owner receipt context', () => {
   )
 
   it.each([
-    { toolJson: undefined }, { toolJson: '{}' }, { inputJson: '{malformed' },
+    { toolJson: '{}' }, { inputJson: '{malformed' },
     { inputDigest: 'sha256:other' }, { requestDigest: 'sha256:other' }, { environment: 'production' as const },
   ])('marks untrustworthy snapshot material unavailable: %j', async (overrides) => {
     const { backend } = await fixture(overrides)
+    expect(await backend.query(internal.capabilityCalls.readOwnerReceiptContext, queryArgs)).toMatchObject({
+      recordedTool: { kind: 'unavailable' },
+    })
+  })
+
+  it('marks a removed Call snapshot unavailable', async () => {
+    const { backend, ids } = await fixture()
+    await backend.run(async (ctx) => { await ctx.db.patch(ids.call, { toolJson: undefined }) })
     expect(await backend.query(internal.capabilityCalls.readOwnerReceiptContext, queryArgs)).toMatchObject({
       recordedTool: { kind: 'unavailable' },
     })
