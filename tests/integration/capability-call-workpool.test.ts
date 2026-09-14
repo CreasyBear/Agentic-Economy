@@ -236,7 +236,7 @@ async function seedPrincipal(
   now: number,
   toolRef: string,
   scopesOverride?: readonly string[],
-  options: { environment?: 'production' | 'sandbox'; spendUnits?: string } = {},
+  options: { environment?: 'production' | 'sandbox'; spendUnits?: string; maximumConcurrentCalls?: number } = {},
 ): Promise<{ principal: TestPrincipal; grantRef: string }> {
   const ref = (kind: 'prn' | 'acc' | 'grt' | 'eid' | 'crd' | 'own', material: string) =>
     `${kind}_${canonicalDigest({ kind, material }).slice(7, 39)}`
@@ -254,7 +254,7 @@ async function seedPrincipal(
   }
   const grantRef = ref('grt', suffix)
   const amount = { currency: 'AUD' as const, units: options.spendUnits ?? '0', exponent: 6 as const }
-  const policy = buildAgentAccessPolicy({
+  const basePolicy = buildAgentAccessPolicy({
     environment: principal.environment,
     currency: 'AUD',
     exponent: 6,
@@ -263,6 +263,7 @@ async function seedPrincipal(
     maximumMonthlySpend: amount,
   }
   )
+  const policy = { ...basePolicy, budget: { ...basePolicy.budget, maximumConcurrentCalls: options.maximumConcurrentCalls ?? basePolicy.budget.maximumConcurrentCalls } }
   const expiresAt = now + 7 * 24 * 60 * 60 * 1_000
   const grantDecision = createAgentAccessGrant({
     grantRef,
@@ -640,7 +641,7 @@ afterEach(() => {
   external.receipt.mockReset()
 })
 
-async function prepareFundedSandboxBuyer() {
+async function prepareFundedSandboxBuyer(options: { treasuryTotalUnits?: string; maximumConcurrentCalls?: number } = {}) {
   const gatewayUrl = process.env.AE_FORMANCE_GATEWAY_URL ?? 'http://127.0.0.1:3069'
   const ledger = `ae-buyer-${Date.now()}-${process.pid}`
   const formance = createFormanceContext({ environment: 'sandbox', gatewayUrl, ledger, requestTimeoutMs: 10_000 })
@@ -759,14 +760,14 @@ async function prepareFundedSandboxBuyer() {
   })
   expect(qualification, JSON.stringify(qualification)).toMatchObject({ status: 'eligible', reasons: [] })
   const buyer = await seedPrincipal(backend, 'funded-buyer', Date.now(), published.toolRef, [CUSTOMER_REQUEST_SPENDING_POLICY_SCOPE, MARKET_TOOLS_CALL_SCOPE],
-    { environment: 'sandbox', spendUnits: '5000000' })
+    { environment: 'sandbox', spendUnits: '5000000', maximumConcurrentCalls: options.maximumConcurrentCalls })
   expect(buyer.principal.ownerId).not.toBe(provider.canonicalAccountRef)
   const custody = cdpX402CustodyConfigurationFromEnvironment()
   if (custody === undefined) throw new Error('buyer_custody_fixture_invalid')
   expect(await backend.mutation(internal.moneyTreasury.recordObservation, {
     environment: 'sandbox', custodyRef: cdpX402CustodyBudgetRef(custody, 'sandbox'), custodyGeneration: custody.credentialGeneration,
     network: BASE_SEPOLIA_NETWORK, asset: 'USDC', exponent: 6, observationRef: 'buyer-journey:treasury',
-    totalUnits: '10000000', bufferUnits: '1000000', evidenceRef: 'cdp:buyer-journey:treasury',
+    totalUnits: options.treasuryTotalUnits ?? '10000000', bufferUnits: '1000000', evidenceRef: 'cdp:buyer-journey:treasury',
     evidenceDigest: canonicalDigest({ treasury: 'buyer-journey' }), observedAt: Date.now(),
   })).toMatchObject({ kind: 'accepted' })
   const funding = await bookFormanceFundingSettlement(formance, {
@@ -781,6 +782,100 @@ async function prepareFundedSandboxBuyer() {
 }
 
 describe('capability Call Workpool lifecycle', () => {
+  it.runIf(process.env.AE_FORMANCE_INTEGRATION === 'true')('preserves buyer credit and Agent allowance when concurrent quoted Calls exhaust treasury capacity', async () => {
+    // Observe the real ledger rejection without replacing its request or result.
+    const nativeBulkErrors: unknown[] = []
+    const realFetch = globalThis.fetch
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (...args) => {
+      const response = await realFetch(...args)
+      const body = await response.clone().json().catch(() => null) as { errorCode?: string; data?: Array<{ responseType?: string }> } | null
+      if (body?.errorCode !== undefined) nativeBulkErrors.push(body)
+      if (Array.isArray(body?.data) && body.data.some(row => row.responseType === 'ERROR')) nativeBulkErrors.push(...body.data)
+      return response
+    })
+    const { backend, formance, published, buyer, signedAuthorizations, readBalance } = await prepareFundedSandboxBuyer({ treasuryTotalUnits: '2000000', maximumConcurrentCalls: 2 })
+    await backend.run(async (ctx) => await ctx.runMutation(components.workpool.config.update, { maxParallelism: 0 }))
+    const keys = ['treasury-first', 'treasury-second']
+    for (const key of keys) {
+      const quote = await backend.action(api.capabilityQuotes.quote, await withSourceWrite('protected_action', {
+        operationKey: `test:${key}:quote`, correlationId: `test:${key}:quote`,
+        principal: { ...buyer.principal, scopes: [...buyer.principal.scopes] }, toolRef: published.toolRef, input: INPUT,
+      }))
+      expect(quote).toMatchObject({ kind: 'committed' })
+      if (quote.kind !== 'committed') throw new Error('treasury_contention_quote_missing')
+      quoteByCallKey.set(`${buyer.principal.credentialId}:${key}`, quote.quoteRef)
+    }
+    const quoted = await backend.run(async (ctx) => await ctx.db.query('capabilityQuotes')
+      .withIndex('by_quoteRef', q => q.eq('quoteRef', quoteByCallKey.get(`${buyer.principal.credentialId}:${keys[0]}`)!)).unique())
+    if (quoted === null) throw new Error('treasury_contention_quote_not_persisted')
+    const exposureBefore = await readFormanceDisplayBalance(formance, {
+      balanceKind: 'legal_customer_exposure', subjectRef: quoted.legalCustomerRef, generation: quoted.legalCustomerGeneration, now: Date.now(),
+    })
+    if (exposureBefore.kind !== 'available') throw new Error('treasury_contention_exposure_missing')
+    const results = await Promise.all(keys.map(key => invokeCall(backend, buyer.principal, published.toolRef, key, key)))
+    expect(results.filter(result => result.kind === 'pending')).toHaveLength(1)
+    expect(results.filter(result => result.kind === 'refused'), JSON.stringify({ results, nativeBulkErrors })).toEqual([expect.objectContaining({
+      code: 'commercial_policy_unavailable', retryable: false,
+    })])
+    expect(nativeBulkErrors).toContainEqual(expect.objectContaining({
+      errorCode: 'INSUFFICIENT_FUND', errorDescription: expect.stringContaining('@treasury:corporate:'),
+    }))
+    const winner = results.find(result => result.kind === 'pending')
+    if (winner?.kind !== 'pending') throw new Error('treasury_contention_winner_missing')
+    const material = await backend.query(internal.moneyManagedCall.readBooking, { callRef: winner.callRef })
+    if (material.kind !== 'available') throw new Error('treasury_contention_booking_missing')
+    const assertCapacity = async () => {
+      expect(await readBalance()).toMatchObject({ kind: 'available', units: '8800000' })
+      for (const [balanceKind, subjectRef, generation, units] of [
+        ['agent_budget', material.booking.principalRef, material.booking.agentBudgetGeneration, '3800000'],
+        ['treasury_usdc', material.booking.treasuryRef, material.booking.treasuryGeneration, '0'],
+        ['legal_customer_exposure', material.booking.legalCustomerRef, material.booking.legalCustomerGeneration, (BigInt(exposureBefore.units) - 1200000n).toString()],
+      ] as const) {
+        expect(await readFormanceDisplayBalance(formance, { balanceKind, subjectRef, generation, now: Date.now() }))
+          .toMatchObject({ kind: 'available', units })
+      }
+      const rows = await backend.run(async (ctx) => await ctx.db.query('capabilityCalls').collect())
+      expect(rows).toHaveLength(1)
+      expect(rows[0]).toMatchObject({ callRef: winner.callRef, formanceFinancialState: 'reserved' })
+      expect(signedAuthorizations).toHaveLength(0)
+      expect(providerFetch.mock.calls.filter(([, init]) => new Headers(init?.headers as HeadersInit).has('payment-signature'))).toHaveLength(0)
+    }
+    await assertCapacity()
+    const loserKey = keys[results.findIndex(result => result.kind === 'refused')]!
+    expect(await invokeCall(backend, buyer.principal, published.toolRef, loserKey, `${loserKey}:retry`)).toMatchObject({
+      kind: 'refused', code: 'commercial_policy_unavailable', retryable: false,
+    })
+    await assertCapacity()
+    expect(await backend.action(api.capabilityCalls.cancelCall, {
+      ...await recoveryActionArgs(buyer.principal, winner.callRef, 'treasury-cancel-winner', 'cancel:treasury-cancel-winner'),
+      idempotencyKey: 'treasury-cancel-winner',
+    })).toMatchObject({ kind: 'found', state: 'cancelled', callRef: winner.callRef })
+    await backend.finishAllScheduledFunctions(() => vi.advanceTimersByTime(1))
+    expect(await readBalance()).toMatchObject({ kind: 'available', units: '10000000' })
+    // The refused command remains usable once actual capacity is available.
+    const resumed = await invokeCall(backend, buyer.principal, published.toolRef, loserKey, `${loserKey}:capacity-restored`)
+    expect(resumed).toMatchObject({ kind: 'pending' })
+    if (resumed.kind !== 'pending') throw new Error('treasury_contention_retry_not_accepted')
+    expect(await readBalance()).toMatchObject({ kind: 'available', units: '8800000' })
+    expect(await backend.action(api.capabilityCalls.cancelCall, {
+      ...await recoveryActionArgs(buyer.principal, resumed.callRef, 'treasury-cancel-resumed', 'cancel:treasury-cancel-resumed'),
+      idempotencyKey: 'treasury-cancel-resumed',
+    })).toMatchObject({ kind: 'found', state: 'cancelled', callRef: resumed.callRef })
+    await backend.run(async (ctx) => await ctx.runMutation(components.workpool.config.update, { maxParallelism: 1 }))
+    await backend.finishAllScheduledFunctions(() => vi.advanceTimersByTime(1))
+    expect(await readBalance()).toMatchObject({ kind: 'available', units: '10000000' })
+    for (const [balanceKind, subjectRef, generation, units] of [
+      ['agent_budget', material.booking.principalRef, material.booking.agentBudgetGeneration, '5000000'],
+      ['treasury_usdc', material.booking.treasuryRef, material.booking.treasuryGeneration, '1000000'],
+      ['legal_customer_exposure', material.booking.legalCustomerRef, material.booking.legalCustomerGeneration, exposureBefore.units],
+    ] as const) {
+      expect(await readFormanceDisplayBalance(formance, { balanceKind, subjectRef, generation, now: Date.now() }))
+        .toMatchObject({ kind: 'available', units })
+    }
+    expect(signedAuthorizations).toHaveLength(0)
+    expect(providerFetch.mock.calls.filter(([, init]) => new Headers(init?.headers as HeadersInit).has('payment-signature'))).toHaveLength(0)
+  })
+
   it.runIf(process.env.AE_FORMANCE_INTEGRATION === 'true')('buys a sandbox Tool through an exact Quote, real AUD ledger and durable worker without a second purchase on replay or a retained hold after revocation', async () => {
     const { gatewayUrl, formance, backend, published, buyer, resource, payer, signedAuthorizations, readBalance } = await prepareFundedSandboxBuyer()
 

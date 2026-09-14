@@ -313,6 +313,151 @@ describe('Package 4 official Formance boundary', () => {
     expect(ledger.createBulk).toHaveBeenCalledOnce()
   })
 
+  it.each(['short errors', 'staged success then errors'] as const)('classifies %s as refused only after every reference is absent', async (responseKind) => {
+    const prepared = prepareFormanceManagedCallReservation(managedCallBooking())
+    if (prepared.kind !== 'prepared') throw new Error(prepared.code)
+    const ledger = {
+      getSchema: vi.fn(async () => ({
+        v2SchemaResponse: { data: { version: 'v1.3.0', ...PACKAGE4_FORMANCE_SCHEMA } },
+      })),
+      listTransactions: vi.fn(async () => ({
+        v2TransactionsCursorResponse: { cursor: { data: [] } },
+      })),
+      createBulk: vi.fn(async () => ({
+        v2BulkResponse: {
+          data: [
+            ...(responseKind === 'staged success then errors' ? [{
+              responseType: 'CREATE_TRANSACTION', logID: 1, data: {
+                reference: prepared.bulk.commands[0]!.commandRef, postings: [],
+              },
+            }] : []),
+            { responseType: 'ERROR', errorCode: 'INSUFFICIENT_FUND', errorDescription: 'treasury', logID: 1 },
+            { responseType: 'ERROR', errorCode: 'INTERNAL', errorDescription: 'context canceled', logID: 2 },
+          ],
+        },
+      })),
+    }
+    const context = {
+      configuration: {
+        environment: 'sandbox',
+        gatewayUrl: 'http://127.0.0.1:8080',
+        ledger: 'test-ledger',
+        requestTimeoutMs: 1_000,
+      },
+      sdk: { ledger: { v2: ledger } },
+    } as unknown as FormanceContext
+
+    expect(await executeFormanceMoneyBulk(context, prepared.bulk)).toEqual({
+      kind: 'refused',
+      code: 'formance_bulk_refused',
+      retryable: false,
+    })
+    expect(ledger.createBulk).toHaveBeenCalledOnce()
+    expect(ledger.listTransactions).toHaveBeenCalledTimes(prepared.bulk.commands.length * 2)
+  })
+
+  it.each(['partial', 'unavailable', 'conflict'] as const)(
+    'keeps a native bulk rejection outcome_unknown when readback is %s',
+    async (readbackKind) => {
+      const prepared = prepareFormanceManagedCallReservation(managedCallBooking())
+      if (prepared.kind !== 'prepared') throw new Error(prepared.code)
+      const commands = prepared.bulk.commands
+      const readsByReference = new Map<string, number>()
+      const ledger = {
+        getSchema: vi.fn(async () => ({
+          v2SchemaResponse: { data: { version: 'v1.3.0', ...PACKAGE4_FORMANCE_SCHEMA } },
+        })),
+        listTransactions: vi.fn(async ({ query }: { query: { $match: { reference: string } } }) => {
+          const reference = query.$match.reference
+          const command = commands.find((candidate) => candidate.commandRef === reference)!
+          const readNumber = readsByReference.get(reference) ?? 0
+          readsByReference.set(reference, readNumber + 1)
+          if (readNumber === 0) {
+            return { v2TransactionsCursorResponse: { cursor: { data: [] } } }
+          }
+          if (readbackKind === 'unavailable' && reference === commands[0]!.commandRef) {
+            return {}
+          }
+          if (readbackKind === 'partial' && reference !== commands[0]!.commandRef) {
+            return { v2TransactionsCursorResponse: { cursor: { data: [] } } }
+          }
+          const metadata = readbackKind === 'conflict'
+            ? { ...command.metadata, command_digest: DIGEST_B }
+            : command.metadata
+          return {
+            v2TransactionsCursorResponse: {
+              cursor: {
+                data: [{
+                  id: 1n,
+                  reference,
+                  template: command.template,
+                  metadata,
+                  postings: [],
+                }],
+              },
+            },
+          }
+        }),
+        createBulk: vi.fn(async () => ({
+          v2BulkResponse: {
+            data: [
+              { responseType: 'ERROR', errorCode: 'INSUFFICIENT_FUND', errorDescription: 'treasury', logID: 1 },
+              { responseType: 'ERROR', errorCode: 'INTERNAL', errorDescription: 'context canceled', logID: 2 },
+            ],
+          },
+        })),
+      }
+      const context = {
+        configuration: {
+          environment: 'sandbox',
+          gatewayUrl: 'http://127.0.0.1:8080',
+          ledger: 'test-ledger',
+          requestTimeoutMs: 1_000,
+        },
+        sdk: { ledger: { v2: ledger } },
+      } as unknown as FormanceContext
+
+      expect(await executeFormanceMoneyBulk(context, prepared.bulk)).toEqual({
+        kind: 'outcome_unknown',
+        reference: commands[0]!.commandRef,
+        statusRef: `formance-transaction:${commands[0]!.commandRef}`,
+      })
+      expect(ledger.createBulk).toHaveBeenCalledOnce()
+    },
+  )
+
+  it('keeps SDK-invalid bulk responses outcome_unknown even when references are absent', async () => {
+    const prepared = prepareFormanceManagedCallReservation(managedCallBooking())
+    if (prepared.kind !== 'prepared') throw new Error(prepared.code)
+    const ledger = {
+      getSchema: vi.fn(async () => ({
+        v2SchemaResponse: { data: { version: 'v1.3.0', ...PACKAGE4_FORMANCE_SCHEMA } },
+      })),
+      listTransactions: vi.fn(async () => ({
+        v2TransactionsCursorResponse: { cursor: { data: [] } },
+      })),
+      createBulk: vi.fn(async () => {
+        throw Object.assign(new Error('Invalid bulk response'), { name: 'SDKValidationError', statusCode: 400 })
+      }),
+    }
+    const context = {
+      configuration: {
+        environment: 'sandbox',
+        gatewayUrl: 'http://127.0.0.1:8080',
+        ledger: 'test-ledger',
+        requestTimeoutMs: 1_000,
+      },
+      sdk: { ledger: { v2: ledger } },
+    } as unknown as FormanceContext
+
+    expect(await executeFormanceMoneyBulk(context, prepared.bulk)).toEqual({
+      kind: 'outcome_unknown',
+      reference: prepared.bulk.commands[0]!.commandRef,
+      statusRef: `formance-transaction:${prepared.bulk.commands[0]!.commandRef}`,
+    })
+    expect(ledger.listTransactions).toHaveBeenCalledTimes(prepared.bulk.commands.length * 2)
+  })
+
   it('reads exact Account period spend through official filtered cursors', async () => {
     const listTransactions = vi.fn()
       .mockResolvedValueOnce({

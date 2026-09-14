@@ -1289,11 +1289,21 @@ export async function executeFormanceMoneyBulk(
       schemaVersion: PACKAGE4_FORMANCE_REQUIREMENTS.schemaVersion,
     }, NO_RETRY)
     const rows = response.v2BulkResponse?.data
-    if (rows === undefined || rows.length !== commands.length) return unknown(commands[0]!.commandRef)
-    if (rows.every((row) => row.responseType === 'ERROR')) {
-      recordMetric('write_bulk', 'refused', startedAt)
-      return refused('formance_bulk_refused')
+    if (rows === undefined) return unknown(commands[0]!.commandRef)
+    // Native atomic responses may include staged successes before a later error.
+    // The SDK validates response shape; final reference readback decides whether
+    // those staged entries were committed or rolled back.
+    if (rows.some((row) => row.responseType === 'ERROR')) {
+      const reconciled = await readBulkReferences(context, commands)
+      const result = reconciled.kind === 'absent'
+        ? refused('formance_bulk_refused')
+        : reconciled.kind === 'completed'
+          ? reconciled.result
+          : unknown(commands[0]!.commandRef)
+      recordMetric('write_bulk', result.kind, startedAt)
+      return result
     }
+    if (rows.length !== commands.length) return unknown(commands[0]!.commandRef)
     if (!rows.every((row, index) => row.responseType === 'CREATE_TRANSACTION'
       && row.data.reference === commands[index]!.commandRef
       && row.data.postings.every(({ amount }) => formanceSafeUnitsFromSdk(amount) !== undefined))) {
@@ -1309,13 +1319,11 @@ export async function executeFormanceMoneyBulk(
     const reconciled = await readBulkReferences(context, commands)
     const result = reconciled.kind === 'completed'
       ? reconciled.result
-      : reconciled.kind === 'refused'
-        ? reconciled.code === 'formance_bulk_partial_state'
-          ? unknown(commands[0]!.commandRef)
-          : refused(reconciled.code)
-        : reconciled.kind === 'unavailable'
+      : reconciled.kind === 'absent'
+        ? errorName(error) === 'SDKValidationError'
           ? unknown(commands[0]!.commandRef)
           : mapFormanceWriteError(error, commands[0]!.commandRef)
+        : unknown(commands[0]!.commandRef)
     recordMetric('write_bulk', result.kind, startedAt)
     return result
   }
