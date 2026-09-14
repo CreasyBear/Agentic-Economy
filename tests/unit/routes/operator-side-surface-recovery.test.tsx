@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
-import { createElement, type ReactNode } from 'react'
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { type ReactNode } from 'react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { RouterContextProvider, createMemoryHistory, createRootRoute, createRoute, createRouter } from '@tanstack/react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import '../../setup/jsdom-platform'
@@ -22,7 +22,7 @@ vi.mock('@/components/ae/layout/AeOperatorPage', () => ({
   AeOperatorPage: ({ children, title }: { children: ReactNode; title: string }) => <main><h1>{title}</h1>{children}</main>,
 }))
 
-import { Route as ActivityRoute } from '@/routes/_operator/activity'
+import { ActivityPage, Route as ActivityRoute, type ActivityLoaderResult } from '@/routes/_operator/activity'
 
 afterEach(() => {
   cleanup()
@@ -32,16 +32,45 @@ afterEach(() => {
   routeDiagnostics.capture.mockReset()
 })
 
-function renderActivity(result: unknown) {
-  vi.spyOn(ActivityRoute, 'useLoaderData').mockReturnValue(result as never)
-  const Component = ActivityRoute.options.component
-  if (Component === undefined) throw new Error('activity_component_missing')
+function renderActivity(result: ActivityLoaderResult) {
   const rootRoute = createRootRoute()
   const routeTree = rootRoute.addChildren([createRoute({ getParentRoute: () => rootRoute, path: '/' })])
   const router = createRouter({ routeTree, history: createMemoryHistory({ initialEntries: ['/'] }) })
   const invalidate = vi.spyOn(router, 'invalidate').mockResolvedValue(undefined)
-  render(<RouterContextProvider router={router}>{createElement(Component)}</RouterContextProvider>)
-  return invalidate
+  const rendered = render(<RouterContextProvider router={router}><ActivityPage result={result} /></RouterContextProvider>)
+  return {
+    invalidate,
+    updateResult(next: ActivityLoaderResult) {
+      rendered.rerender(<RouterContextProvider router={router}><ActivityPage result={next} /></RouterContextProvider>)
+    },
+  }
+}
+
+function callRow(callRef: string, state: 'completed' | 'refused' | 'outcome_unknown', createdAt: number) {
+  return {
+    callRef,
+    accountRef: 'account:owner',
+    principalRef: 'principal:agent',
+    credentialRef: 'credential:agent',
+    applicationRef: 'application:agent',
+    toolRef: `operation:v1:${'a'.repeat(64)}`,
+    providerRef: 'provider:one',
+    toolLabel: `Tool ${callRef}`,
+    state,
+    deliveryState: state === 'completed' ? 'delivered' as const : state === 'refused' ? 'not_delivered' as const : 'unknown' as const,
+    paymentState: state === 'completed' ? 'settled' as const : state === 'refused' ? 'not_applicable' as const : 'unknown' as const,
+    latencyMs: 100,
+    createdAt,
+    updatedAt: createdAt,
+  }
+}
+
+const usage = { kind: 'available' as const, callCountUnits: '2', completedCountUnits: '1', outcomeUnknownCountUnits: '1' }
+const spend = { kind: 'available' as const, spendUnits: '1000000' }
+const periodStart = '2026-09'
+
+function available(calls: Extract<ActivityLoaderResult, { kind: 'available' }>['calls']): ActivityLoaderResult {
+  return { kind: 'available', calls, usage, spend, periodStart }
 }
 
 describe('Calls side-surface recovery', () => {
@@ -52,7 +81,7 @@ describe('Calls side-surface recovery', () => {
     const loader = ActivityRoute.options.loader as () => Promise<unknown>
     await expect(loader()).resolves.toEqual({ kind: 'unavailable' })
     expect(routeDiagnostics.capture).toHaveBeenCalledWith(expect.any(Error), { 'ae.surface': 'operator_activity_loader' })
-    const invalidate = renderActivity({ kind: 'unavailable' })
+    const { invalidate } = renderActivity({ kind: 'unavailable' })
     fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
     await waitFor(() => expect(invalidate).toHaveBeenCalledTimes(1))
   })
@@ -72,5 +101,91 @@ describe('Calls side-surface recovery', () => {
       spend,
       periodStart: new Date().toISOString().slice(0, 7),
     })
+  })
+
+  it('keeps Calls available with one actionable partial-state message when a summary fails', async () => {
+    const calls = { page: [], isDone: true, continueCursor: null }
+    const spend = { kind: 'available', spendUnits: '0' }
+    serverMocks.readCalls.mockResolvedValue(calls)
+    serverMocks.readUsage.mockRejectedValue(new Error('usage offline'))
+    serverMocks.readSpend.mockResolvedValue(spend)
+    const loader = ActivityRoute.options.loader as () => Promise<unknown>
+    const result = await loader()
+
+    expect(result).toMatchObject({
+      kind: 'available',
+      calls,
+      usage: { kind: 'unavailable', code: 'source_unavailable' },
+      spend,
+    })
+    const { invalidate } = renderActivity(result as ActivityLoaderResult)
+    expect(screen.getAllByText('Some summaries are unavailable')).toHaveLength(1)
+    expect(screen.getByText('No Calls yet')).toBeTruthy()
+    expect(screen.queryByText('Usage unavailable')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh summaries' }))
+    await waitFor(() => expect(invalidate).toHaveBeenCalledTimes(1))
+  })
+
+  it('foregrounds Calls needing attention and keeps routine history separate', () => {
+    renderActivity(available({
+      page: [callRow('routine', 'completed', 2), callRow('attention', 'outcome_unknown', 1)],
+      isDone: true,
+      continueCursor: '',
+    }))
+
+    const attention = screen.getByRole('region', { name: 'Needs attention' })
+    const recent = screen.getByRole('region', { name: 'Recent Calls' })
+    expect(within(attention).getByText('Tool attention')).toBeTruthy()
+    expect(within(attention).queryByText('Tool routine')).toBeNull()
+    expect(within(recent).getByText('Tool routine')).toBeTruthy()
+    expect(within(recent).queryByText('Tool attention')).toBeNull()
+    expect(attention.compareDocumentPosition(recent) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(within(attention).getByRole('link', { name: 'Review Tool attention' }).getAttribute('href')).toBe('/calls/attention')
+    expect(screen.queryByText('reconciliation required')).toBeNull()
+  })
+
+  it('preserves loaded Calls and the cursor when pagination fails, then retries that continuation', async () => {
+    serverMocks.readCalls
+      .mockRejectedValueOnce(new Error('continuation offline'))
+      .mockResolvedValueOnce({ page: [callRow('older', 'completed', 1)], isDone: true, continueCursor: '' })
+    renderActivity(available({
+      page: [callRow('newer', 'completed', 2)],
+      isDone: false,
+      continueCursor: 'cursor:older',
+    }))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Load more' }))
+    expect((await screen.findByRole('alert')).textContent).toContain('Current Calls and the continuation are unchanged')
+    expect(screen.getByText('Tool newer')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Try loading more again' }))
+
+    await waitFor(() => expect(screen.getByText('Tool older')).toBeTruthy())
+    expect(serverMocks.readCalls).toHaveBeenNthCalledWith(1, { data: { cursor: 'cursor:older' } })
+    expect(serverMocks.readCalls).toHaveBeenNthCalledWith(2, { data: { cursor: 'cursor:older' } })
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Load more' })).toBeNull()
+  })
+
+  it('rejects a stale pagination response after refreshed loader Calls replace the page', async () => {
+    let resolveContinuation: (value: unknown) => void = () => undefined
+    serverMocks.readCalls.mockImplementation(() => new Promise((resolve) => { resolveContinuation = resolve }))
+    const view = renderActivity(available({
+      page: [callRow('initial', 'completed', 3)],
+      isDone: false,
+      continueCursor: 'cursor:initial',
+    }))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Load more' }))
+    view.updateResult(available({
+      page: [callRow('refreshed', 'completed', 4)],
+      isDone: false,
+      continueCursor: 'cursor:refreshed',
+    }))
+    resolveContinuation({ page: [callRow('stale', 'completed', 2)], isDone: true, continueCursor: '' })
+
+    await waitFor(() => expect(screen.getByText('Tool refreshed')).toBeTruthy())
+    expect(screen.queryByText('Tool initial')).toBeNull()
+    expect(screen.queryByText('Tool stale')).toBeNull()
+    expect(screen.getByRole('button', { name: 'Load more' })).toBeTruthy()
   })
 })

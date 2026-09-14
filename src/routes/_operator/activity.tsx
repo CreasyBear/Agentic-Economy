@@ -6,14 +6,15 @@ import { Activity } from 'lucide-react'
 import { AeEmptyState } from '@/components/ae/feedback/AeEmptyState'
 import { AeDegradedState } from '@/components/ae/feedback/AeDegradedState'
 import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
-import { AeRecordSheet } from '@/components/ae/layout/AeRecordSheet'
 import { AeSection } from '@/components/ae/layout/AeSection'
 import {
   AeOperatorSortableHeader,
   AeRecordTable,
 } from '@/components/ae/operator/AeOperatorDataTable'
 import { Button } from '@/components/ui/button'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { operatorRouteOptions } from '@/lib/operator/route-options'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
   readOwnerCallsServer,
   readOwnerSpendServer,
@@ -44,18 +45,23 @@ export const Route = createFileRoute('/_operator/activity')({
   },
   ...operatorRouteOptions,
   loader: async (): Promise<ActivityLoaderResult> => {
-    try {
-      const periodStart = new Date().toISOString().slice(0, 7)
-      const period = { dimensionKind: 'account' as const, periodKind: 'month' as const, periodStart }
-      const [calls, usage, spend] = await Promise.all([
-        readOwnerCallsServer({ data: {} }),
-        readOwnerUsageServer({ data: period }),
-        readOwnerSpendServer({ data: period }),
-      ])
-      return { kind: 'available', calls, usage, spend, periodStart }
-    } catch (cause) {
-      captureRouteException(cause, { 'ae.surface': 'operator_activity_loader' })
-      return { kind: 'unavailable' }
+    const periodStart = new Date().toISOString().slice(0, 7)
+    const period = { dimensionKind: 'account' as const, periodKind: 'month' as const, periodStart }
+    const [calls, usage, spend] = await Promise.allSettled([
+      readOwnerCallsServer({ data: {} }),
+      readOwnerUsageServer({ data: period }),
+      readOwnerSpendServer({ data: period }),
+    ])
+    for (const result of [calls, usage, spend]) {
+      if (result.status === 'rejected') captureRouteException(result.reason, { 'ae.surface': 'operator_activity_loader' })
+    }
+    if (calls.status === 'rejected') return { kind: 'unavailable' }
+    return {
+      kind: 'available',
+      calls: calls.value,
+      usage: usage.status === 'fulfilled' ? usage.value : { kind: 'unavailable', code: 'source_unavailable' },
+      spend: spend.status === 'fulfilled' ? spend.value : { kind: 'unavailable', code: 'source_unavailable' },
+      periodStart,
     }
   },
   head: () => ({ meta: [
@@ -67,6 +73,10 @@ export const Route = createFileRoute('/_operator/activity')({
 
 function ActivityRoute() {
   const result = Route.useLoaderData()
+  return <ActivityPage result={result} />
+}
+
+export function ActivityPage({ result }: Readonly<{ result: ActivityLoaderResult }>) {
   const router = useRouter()
   const [retryPending, setRetryPending] = useState(false)
   if (result.kind === 'unavailable') {
@@ -103,11 +113,61 @@ function ActivityRoute() {
     )
   }
   return <ActivityAvailable
+    key={canonicalDigest(result.calls)}
     initial={result.calls}
     usage={result.usage}
     spend={result.spend}
     periodStart={result.periodStart}
   />
+}
+
+type CallPage = Extract<ActivityLoaderResult, { kind: 'available' }>['calls']
+type CallRow = CallPage['page'][number]
+type CallPaginationState = Readonly<{
+  source: CallPage
+  items: readonly CallRow[]
+  cursor: string | undefined
+  status: 'idle' | 'loading' | 'failed'
+}>
+
+function initialCallPaginationState(source: CallPage): CallPaginationState {
+  return {
+    source,
+    items: source.page,
+    cursor: source.isDone ? undefined : source.continueCursor,
+    status: 'idle',
+  }
+}
+
+function useCallPagination(initial: CallPage) {
+  const [state, setState] = useState(() => initialCallPaginationState(initial))
+
+  async function loadNextPage() {
+    if (state.cursor === undefined || state.status === 'loading') return
+    const source = initial
+    const cursor = state.cursor
+    setState((current) => current.source === source && current.cursor === cursor
+      ? { ...current, status: 'loading' }
+      : current)
+    try {
+      const next = await readOwnerCallsServer({ data: { cursor } })
+      setState((current) => current.source === source && current.cursor === cursor
+        ? {
+            source,
+            items: [...current.items, ...next.page],
+            cursor: next.isDone ? undefined : next.continueCursor,
+            status: 'idle',
+          }
+        : current)
+    } catch (cause) {
+      captureClientExceptionOnClient(cause)
+      setState((current) => current.source === source && current.cursor === cursor
+        ? { ...current, status: 'failed' }
+        : current)
+    }
+  }
+
+  return { state, loadNextPage }
 }
 
 function ActivityAvailable({
@@ -121,10 +181,11 @@ function ActivityAvailable({
   spend: Extract<ActivityLoaderResult, { kind: 'available' }>['spend']
   periodStart: string
 }>) {
-  const [activity, setActivity] = useState(initial.page)
-  const [cursor, setCursor] = useState(initial.isDone ? undefined : initial.continueCursor)
-  const [loadMorePending, setLoadMorePending] = useState(false)
-  const [selected, setSelected] = useState<CallRow | undefined>()
+  const router = useRouter()
+  const [summaryRetryPending, setSummaryRetryPending] = useState(false)
+  const { state: pagination, loadNextPage } = useCallPagination(initial)
+  const attention = pagination.items.filter((item) => item.state === 'outcome_unknown')
+  const recent = pagination.items.filter((item) => item.state !== 'outcome_unknown')
   const columns = useMemo<ColumnDef<CallRow, unknown>[]>(
     () => [
       {
@@ -176,113 +237,148 @@ function ActivityAvailable({
       description="Your agent’s calls in task language, with the amount, outcome, and durable receipt together."
       currentPath="/activity"
     >
-      <div className="grid gap-section">
-        <AeSection
-          title="Usage"
-          description={`Exact Call counts for ${periodStart}. Counts belong to this Account, across credentials.`}
-        >
-          {usage.kind === 'available' ? (
-            <div className="grid gap-related sm:grid-cols-3">
-              <ActivityMetric label="Calls" value={usage.callCountUnits} />
-              <ActivityMetric label="Completed" value={usage.completedCountUnits} />
-              <ActivityMetric label="Needs reconciliation" value={usage.outcomeUnknownCountUnits} />
-            </div>
-          ) : (
-            <p className="text-sm text-muted-foreground">Usage unavailable</p>
-          )}
-        </AeSection>
-        <AeSection
-          title="Spend"
-          description={`Captured buyer spend for ${periodStart}. Corporate treasury remains separate.`}
-        >
-          <ActivityMetric
-            label="Account spend"
-            value={spend.kind === 'available'
-              ? formatDisplayAmount({ currency: 'AUD', exponent: 6, units: spend.spendUnits })
-              : '—'}
-          />
-        </AeSection>
-      </div>
-      {activity.length === 0 && usage.kind === 'available' ? (
-        <AeEmptyState
-          title="No calls yet"
-          description="Find a capability and complete one call. Its task, outcome, amount, and receipt will appear here."
-          action={
-            <Button asChild className="min-h-touch">
-              <Link to="/market">Find Tools</Link>
+      {usage.kind !== 'available' || spend.kind !== 'available' ? (
+        <Alert>
+          <AlertTitle>Some summaries are unavailable</AlertTitle>
+          <AlertDescription className="flex flex-wrap items-center gap-3">
+            <span>Available Calls remain visible. No missing count or amount is being inferred.</span>
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={summaryRetryPending}
+              onClick={() => {
+                if (summaryRetryPending) return
+                setSummaryRetryPending(true)
+                void router.invalidate()
+                  .catch((cause) => captureClientExceptionOnClient(cause))
+                  .finally(() => setSummaryRetryPending(false))
+              }}
+            >
+              {summaryRetryPending ? 'Refreshing…' : 'Refresh summaries'}
             </Button>
-          }
-        />
-      ) : activity.length === 0 ? (
-        <AeEmptyState
-          title="Usage unavailable"
-          description="Call counts could not be confirmed. Refresh to check for calls."
-        />
-      ) : (
-        <>
-          <AeRecordTable
-            columns={columns}
-            data={activity}
-            caption="Calls"
-            countLabel="calls"
-            filterPlaceholder="Filter calls…"
-            getRowId={(item) => item.callRef}
-            rowAction={{
-              kind: 'button',
-              label: 'View',
-              onOpen: setSelected,
-              getAccessibleLabel: (item) =>
-                `View ${item.toolLabel}`,
-            }}
+          </AlertDescription>
+        </Alert>
+      ) : null}
+      <div className="grid gap-section">
+        {pagination.items.length === 0 && pagination.cursor === undefined ? (
+          <AeEmptyState
+            title="No Calls yet"
+            description="Find a Tool and complete one Call. Its task, outcome, amount, and receipt will appear here."
+            action={<Button asChild className="min-h-touch"><Link to="/owner/market">Find Tools</Link></Button>}
           />
-          <AeRecordSheet
-            open={selected !== undefined}
-            onOpenChange={(open) => {
-              if (!open) setSelected(undefined)
-            }}
-            title={selected === undefined ? 'Call' : selected.toolLabel}
-            {...(selected === undefined ? {} : { facts: activityFacts(selected) })}
-            {...(selected === undefined
-              ? {}
-              : {
-                  action: (
-                    <Button asChild className="min-h-touch">
-                      <Link
-                        to="/calls/$callRef"
-                        params={{ callRef: selected.callRef }}
-                      >
-                        View receipt
-                      </Link>
-                    </Button>
-                  ),
-                })}
-          />
-          {cursor === undefined ? null : (
-            <div className="flex justify-center pt-4">
-              <Button
-                type="button"
-                variant="secondary"
-                className="min-h-touch"
-                disabled={loadMorePending}
-                onClick={() => {
-                  if (loadMorePending) return
-                  setLoadMorePending(true)
-                  void readOwnerCallsServer({ data: { cursor } })
-                    .then((next) => {
-                      setActivity((current) => [...current, ...next.page])
-                      setCursor(next.isDone ? undefined : next.continueCursor)
-                    })
-                    .catch((cause) => captureClientExceptionOnClient(cause))
-                    .finally(() => setLoadMorePending(false))
-                }}
-              >
-                {loadMorePending ? 'Loading…' : 'Load more'}
-              </Button>
-            </div>
-          )}
-        </>
-      )}
+        ) : (
+          <>
+            <CallQueue
+              title="Needs attention"
+              description={pagination.cursor === undefined
+                ? 'Calls whose outcome still needs confirmation.'
+                : 'Calls needing confirmation in the loaded Account history. Load more to check older Calls.'}
+              rows={attention}
+              emptyMessage={pagination.cursor === undefined ? 'No Calls need attention.' : 'No loaded Calls need attention.'}
+              columns={columns}
+              attention
+            />
+            <CallQueue
+              title="Recent Calls"
+              description="Completed and refused Calls, separate from work that still needs a decision."
+              rows={recent}
+              emptyMessage="No routine Calls in the loaded history."
+              columns={columns}
+            />
+            <CallPaginationControl pagination={pagination} onLoadMore={loadNextPage} />
+          </>
+        )}
+        <MonthlyCallSummary usage={usage} spend={spend} periodStart={periodStart} />
+      </div>
     </AeOperatorPage>
+  )
+}
+
+function CallQueue({
+  title,
+  description,
+  rows,
+  emptyMessage,
+  columns,
+  attention = false,
+}: Readonly<{
+  title: string
+  description: string
+  rows: readonly CallRow[]
+  emptyMessage: string
+  columns: ColumnDef<CallRow, unknown>[]
+  attention?: boolean
+}>) {
+  return (
+    <AeSection title={title} description={description}>
+      {rows.length === 0 ? <p className="text-sm text-muted-foreground">{emptyMessage}</p> : (
+        <AeRecordTable
+          columns={columns}
+          data={rows}
+          caption={title}
+          countLabel={attention ? 'Calls needing attention' : 'recent Calls'}
+          filterPlaceholder={attention ? 'Filter attention queue…' : 'Filter recent Calls…'}
+          hideFilter={rows.length <= 1}
+          getRowId={(item) => item.callRef}
+          rowAction={{
+            kind: 'link',
+            label: attention ? 'Review' : 'View receipt',
+            getHref: (item) => `/calls/${encodeURIComponent(item.callRef)}`,
+            getAccessibleLabel: (item) => `${attention ? 'Review' : 'View receipt for'} ${item.toolLabel}`,
+          }}
+        />
+      )}
+    </AeSection>
+  )
+}
+
+function CallPaginationControl({
+  pagination,
+  onLoadMore,
+}: Readonly<{ pagination: CallPaginationState; onLoadMore: () => Promise<void> }>) {
+  if (pagination.cursor === undefined) return null
+  return (
+    <div className="flex flex-col items-center gap-intra border-t border-border pt-related">
+      {pagination.status === 'failed' ? (
+        <p role="alert" className="text-sm text-destructive">More Calls could not be loaded. Current Calls and the continuation are unchanged.</p>
+      ) : null}
+      <Button
+        type="button"
+        variant="secondary"
+        className="min-h-touch"
+        disabled={pagination.status === 'loading'}
+        aria-busy={pagination.status === 'loading' || undefined}
+        onClick={() => { void onLoadMore() }}
+      >
+        {pagination.status === 'loading' ? 'Loading…' : pagination.status === 'failed' ? 'Try loading more again' : 'Load more'}
+      </Button>
+    </div>
+  )
+}
+
+function MonthlyCallSummary({
+  usage,
+  spend,
+  periodStart,
+}: Readonly<{
+  usage: Extract<ActivityLoaderResult, { kind: 'available' }>['usage']
+  spend: Extract<ActivityLoaderResult, { kind: 'available' }>['spend']
+  periodStart: string
+}>) {
+  return (
+    <AeSection title="This month" description={`Account-level Call and spend summary for ${periodStart}.`}>
+      <div className="grid gap-related sm:grid-cols-2 lg:grid-cols-4">
+        <ActivityMetric label="Calls" value={usage.kind === 'available' ? usage.callCountUnits : '—'} />
+        <ActivityMetric label="Completed" value={usage.kind === 'available' ? usage.completedCountUnits : '—'} />
+        <ActivityMetric label="Needs attention" value={usage.kind === 'available' ? usage.outcomeUnknownCountUnits : '—'} />
+        <ActivityMetric
+          label="Account spend"
+          value={spend.kind === 'available'
+            ? formatDisplayAmount({ currency: 'AUD', exponent: 6, units: spend.spendUnits })
+            : '—'}
+        />
+      </div>
+    </AeSection>
   )
 }
 
@@ -290,42 +386,16 @@ export type ActivityLoaderResult =
   | Readonly<{
       kind: 'available'
       calls: Awaited<ReturnType<typeof readOwnerCallsServer>>
-      usage: Awaited<ReturnType<typeof readOwnerUsageServer>>
-      spend: Awaited<ReturnType<typeof readOwnerSpendServer>>
+      usage: Awaited<ReturnType<typeof readOwnerUsageServer>> | Readonly<{ kind: 'unavailable'; code: 'source_unavailable' }>
+      spend: Awaited<ReturnType<typeof readOwnerSpendServer>> | Readonly<{ kind: 'unavailable'; code: 'source_unavailable' }>
       periodStart: string
     }>
   | Readonly<{ kind: 'unavailable' }>
 
-type CallRow = Extract<ActivityLoaderResult, { kind: 'available' }>['calls']['page'][number]
-
-function activityFacts(item: CallRow) {
-  return [
-    { label: 'Amount', value: item.audAmountUnits === undefined ? 'Not applicable' : formatDisplayAmount({ currency: 'AUD', exponent: 6, units: item.audAmountUnits }), mono: true },
-    { label: 'Outcome', value: callStateLabel(item.state) },
-    { label: 'Delivery', value: item.deliveryState.replaceAll('_', ' ') },
-    { label: 'Payment', value: item.paymentState.replaceAll('_', ' ') },
-    ...(item.providerObligationState === undefined
-      ? []
-      : [{ label: 'Provider obligation', value: item.providerObligationState.replaceAll('_', ' ') }]),
-    ...(item.providerAmountUnits === undefined
-      ? []
-      : [{ label: 'Provider amount', value: formatDisplayAmount({ currency: 'USDC', exponent: 6, units: item.providerAmountUnits }), mono: true }]),
-    { label: 'Latency', value: `${item.latencyMs} ms`, mono: true },
-    { label: 'When', value: `${formatUtcTimestamp(item.createdAt)} UTC` },
-    { label: 'Call reference', value: shortReference(item.callRef), mono: true },
-    { label: 'Provider', value: item.providerRef, mono: true },
-    ...(item.receiptRef === undefined ? [] : [{ label: 'Receipt', value: shortReference(item.receiptRef), mono: true }]),
-    ...(item.recoveryRef === undefined ? [] : [{ label: 'Recovery', value: shortReference(item.recoveryRef), mono: true }]),
-  ]
-}
-
 function callStateLabel(state: CallRow['state']): string {
-  if (state === 'outcome_unknown') return 'reconciliation required'
-  return state
-}
-
-function shortReference(reference: string): string {
-  return reference.length <= 20 ? reference : `${reference.slice(0, 10)}…${reference.slice(-6)}`
+  if (state === 'outcome_unknown') return 'Needs outcome confirmation'
+  if (state === 'completed') return 'Completed'
+  return 'Not completed'
 }
 
 function ActivityMetric({ label, value }: Readonly<{ label: string; value: string }>) {
