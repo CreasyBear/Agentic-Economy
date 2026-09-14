@@ -52,13 +52,47 @@ Run with `AE_FORMANCE_INTEGRATION=true`,
 pointing to the release owner's prepared installed CLI, then
 `npm test -- tests/integration/capability-call-workpool.test.ts --no-file-parallelism`.
 
+## Credential replacement
+
+Credential/access-grant generation and spending-policy generation identify
+different things. Replacement previously advanced both, and the grant writer
+required them to match. The funded regression reproduced a fresh Quote for a
+successor after the predecessor had reserved the Agent's entire AUD1.20 allowance.
+
+Replacement now loads the authoritative predecessor grant and preserves its
+complete normalized policy, including budget/rate generations and limits. It
+rejects caller policy, authority-mode or scope drift before creating successor
+records. The existing grant writer permits independent
+positive policy generations while retaining its normalization, digest, identity,
+expiry, replay and stale-grant controls. Credential and access-grant generations
+advance from their own predecessors; they need not match each other. Replacement
+audit events record the access-grant generation. Planned and compromised-predecessor
+paths remain supported. The canonical current grant generation selects the
+predecessor before the query's result bound; historical revoked grants cannot
+prevent compromise recovery.
+
+The registered, real-ledger test proves that a prepared successor cannot Quote;
+after promotion the old credential is refused and the successor receives
+`budget_exceeded` while the original reservation consumes the allowance. The
+successor can cancel the original Call by its retained reference. Once that
+refund restores capacity, its next purchase uses the same principal and budget
+generation. Final cancellation and queue drain restore exactly AUD10 of buyer
+credit and AUD1.20 of allowance, with no payment signature or paid Provider request.
+
+The focused replacement tests additionally cover caller policy, authority-mode
+and scope drift with no successor records; compromise with historical revoked
+grants; independent credential/grant generations; promotion replay; and
+pre-promotion admission. All 31 checks passed across the
+seven-case Workpool integration, the three replacement regressions,
+`convex/agentAccessPrincipals.test.ts` and `convex/agentAccessPolicy.test.ts`.
+Cold source review found the authority drift, independent-version and revoked-history
+cases; all were repaired and the final source remedy cleared review. Focused lint
+and diff checks passed. Hosted credential-provider behavior remains
+unverified by these source tests.
+
 ## Remaining boundary
 
-This treasury test uses one credential. A separate registered issuance/replacement
-regression confirms that current replacement advances budget/rate generations
-with credential generation; the successor is correctly unavailable until
-promotion, but its fresh budget generation can reset allowance. That repair and
-actual shared-capacity proof remain separate. AM-20 also requires attributable
-funding/policy refusal and continuation coverage. Test actual rotation behavior;
-do not assign equal budget generations in a fixture and treat that assumption as
-proof. Hosted acceptance remains separate.
+AM-20 still needs complete attribution of its other funding/policy refusal and
+safe-continuation obligations before whole-row source closure. The treasury and
+rotation proofs do not establish hosted acceptance or close AM-06's full access
+and history obligations. Preserve that distinction in the release register.

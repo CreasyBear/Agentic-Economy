@@ -84,6 +84,8 @@ import {
 } from '@/lib/server/call-api'
 import { projectCallReceipt } from '@/modules/capability-execution/call-receipt-view'
 import { callStatusResultSchema } from '@/modules/capability-execution/call-recovery.actions'
+import { issuedAgentGrantRef } from '@/modules/agent-access/issued-agent-binding'
+import { createCustomerRequestServiceAssertion, toStableHashValue } from '@/modules/agent-access/service-auth-envelope'
 import { createFormanceContext, installPackage4FormanceSchema, readFormanceAccount, readFormanceTransactionByReference } from '@/modules/money/formance'
 import { bookFormanceFundingSettlement, formanceAccountMetadataDigest, readFormanceDisplayBalance } from '@/modules/money/formance-workflows'
 import { BASE_SEPOLIA_NETWORK, BASE_SEPOLIA_USDC_ADDRESS, cdpX402CustodyConfigurationFromEnvironment,
@@ -641,7 +643,42 @@ afterEach(() => {
   external.receipt.mockReset()
 })
 
-async function prepareFundedSandboxBuyer(options: { treasuryTotalUnits?: string; maximumConcurrentCalls?: number } = {}) {
+async function registerRotatingBuyer(backend: ConvexFixtureBackend) {
+  const subject = 'user_rotating-buyer'
+  const owner = (await publishedBusinessOwner(backend, 'rotating-buyer')).owner
+  const serviceKey = 'rotating-buyer-service-test-key-32-bytes'
+  vi.stubEnv('AE_CONVEX_SERVER_FUNCTION_TOKEN', serviceKey)
+  const sign = async (operation: string, command: Record<string, unknown>) => await createCustomerRequestServiceAssertion({
+    key: serviceKey, operation, command: toStableHashValue(command), issuedAt: Date.now(),
+    principal: { principalId: 'ae:server-function', ownerId: 'ae:server-function', credentialId: 'ae:server-function', scopes: [MARKET_TOOLS_CALL_SCOPE] },
+  })
+  const limit = { currency: 'AUD' as const, units: '1200000', exponent: 6 as const }
+  const policy = buildAgentAccessPolicy({ environment: 'sandbox', currency: 'AUD', exponent: 6,
+    maximumSpendPerCall: limit, maximumDailySpend: limit, maximumMonthlySpend: limit })
+  const input = {
+    issuanceKey: 'rotating-buyer-initial', grantRef: issuedAgentGrantRef(subject, 'rotating-buyer-initial'),
+    credentialId: 'credential:rotating-buyer-initial', displayName: 'Rotating buyer',
+    applicationRef: 'agentic-economy', environment: 'sandbox' as const,
+    scopes: [CUSTOMER_REQUEST_SPENDING_POLICY_SCOPE, MARKET_TOOLS_CALL_SCOPE], authorityMode: 'spending_policy' as const,
+    toolAccess: 'all_admitted' as const, toolRefs: [],
+    spendingPolicy: { ...policy, budget: { ...policy.budget, maximumConcurrentCalls: 2 } },
+    createdAt: Date.now(), expiresAt: Date.now() + 600_000,
+  }
+  expect(await owner.mutation(api.agentAccessPrincipals.registerIssuedAgentBindingForServer, {
+    ...input, serviceAuth: await sign('agentAccessPrincipals.registerIssuedAgentBindingForServer', input),
+  })).toMatchObject({ kind: 'recorded' })
+  const row = await backend.run(async ctx => await ctx.db.query('agentAccessPrincipals')
+    .withIndex('by_credentialId', q => q.eq('credentialId', input.credentialId)).unique())
+  if (row === null) throw new Error('rotating_buyer_missing')
+  const principal: TestPrincipal = { principalId: row.principalId, ownerId: row.ownerId, credentialId: row.credentialId,
+    applicationRef: row.applicationRef, environment: 'sandbox', scopes: [...row.scopes], authorityMode: 'spending_policy' }
+  return { principal, grantRef: input.grantRef, owner, input, subject, sign }
+}
+
+async function prepareFundedSandboxBuyer(options: {
+  treasuryTotalUnits?: string; maximumConcurrentCalls?: number
+  buyerSetup?: (backend: ConvexFixtureBackend) => Promise<{ principal: TestPrincipal; grantRef: string }>
+} = {}) {
   const gatewayUrl = process.env.AE_FORMANCE_GATEWAY_URL ?? 'http://127.0.0.1:3069'
   const ledger = `ae-buyer-${Date.now()}-${process.pid}`
   const formance = createFormanceContext({ environment: 'sandbox', gatewayUrl, ledger, requestTimeoutMs: 10_000 })
@@ -759,8 +796,10 @@ async function prepareFundedSandboxBuyer(options: { treasuryTotalUnits?: string;
     }, now: Date.now() })
   })
   expect(qualification, JSON.stringify(qualification)).toMatchObject({ status: 'eligible', reasons: [] })
-  const buyer = await seedPrincipal(backend, 'funded-buyer', Date.now(), published.toolRef, [CUSTOMER_REQUEST_SPENDING_POLICY_SCOPE, MARKET_TOOLS_CALL_SCOPE],
-    { environment: 'sandbox', spendUnits: '5000000', maximumConcurrentCalls: options.maximumConcurrentCalls })
+  const buyer = options.buyerSetup === undefined
+    ? await seedPrincipal(backend, 'funded-buyer', Date.now(), published.toolRef, [CUSTOMER_REQUEST_SPENDING_POLICY_SCOPE, MARKET_TOOLS_CALL_SCOPE],
+      { environment: 'sandbox', spendUnits: '5000000', maximumConcurrentCalls: options.maximumConcurrentCalls })
+    : await options.buyerSetup(backend)
   expect(buyer.principal.ownerId).not.toBe(provider.canonicalAccountRef)
   const custody = cdpX402CustodyConfigurationFromEnvironment()
   if (custody === undefined) throw new Error('buyer_custody_fixture_invalid')
@@ -782,6 +821,70 @@ async function prepareFundedSandboxBuyer(options: { treasuryTotalUnits?: string;
 }
 
 describe('capability Call Workpool lifecycle', () => {
+  it.runIf(process.env.AE_FORMANCE_INTEGRATION === 'true')('retains one funded Agent allowance through registered credential replacement and concurrent old/new requests', async () => {
+    let registered: Awaited<ReturnType<typeof registerRotatingBuyer>> | undefined
+    const { backend, formance, published, buyer, readBalance, signedAuthorizations } = await prepareFundedSandboxBuyer({
+      buyerSetup: async backend => { registered = await registerRotatingBuyer(backend); return registered },
+    })
+    if (registered === undefined) throw new Error('rotating_buyer_not_registered')
+    const { owner, input, subject, sign } = registered
+    await backend.run(async ctx => await ctx.runMutation(components.workpool.config.update, { maxParallelism: 0 }))
+    const accepted = await invokeCall(backend, buyer.principal, published.toolRef, 'rotation-purchase', 'rotation-purchase')
+    expect(accepted).toMatchObject({ kind: 'pending' })
+    if (accepted.kind !== 'pending') throw new Error('rotation_purchase_not_accepted')
+    const booking = await backend.query(internal.moneyManagedCall.readBooking, { callRef: accepted.callRef })
+    if (booking.kind !== 'available') throw new Error('rotation_booking_missing')
+    expect(await readFormanceDisplayBalance(formance, {
+      balanceKind: 'agent_budget', subjectRef: buyer.principal.principalId, generation: booking.booking.agentBudgetGeneration, now: Date.now(),
+    })).toMatchObject({ kind: 'available', units: '0' })
+    const replacement = {
+      principalRef: buyer.principal.principalId, replacementMode: 'planned' as const,
+      issuanceKey: 'rotating-buyer-successor', grantRef: issuedAgentGrantRef(subject, 'rotating-buyer-successor'),
+      credentialId: 'credential:rotating-buyer-successor', applicationRef: input.applicationRef, environment: input.environment,
+      scopes: input.scopes, authorityMode: input.authorityMode, toolAccess: input.toolAccess, toolRefs: input.toolRefs,
+      spendingPolicy: input.spendingPolicy, createdAt: Date.now(), expiresAt: input.expiresAt,
+    }
+    const prepared = await owner.mutation(api.agentAccessPrincipals.prepareCredentialReplacementForServer, {
+      ...replacement, serviceAuth: await sign('agentAccessPrincipals.prepareCredentialReplacementForServer', replacement),
+    })
+    expect(prepared).toMatchObject({ kind: 'recorded', generation: 2 })
+    if (prepared.kind !== 'recorded' && prepared.kind !== 'replayed') throw new Error('rotation_not_prepared')
+    const successor: TestPrincipal = { ...buyer.principal, credentialId: replacement.credentialId }
+    const quote = async (principal: TestPrincipal, suffix: string) => await backend.action(api.capabilityQuotes.quote,
+      await withSourceWrite('protected_action', { operationKey: `rotation:quote:${suffix}`, correlationId: `rotation:quote:${suffix}`,
+        principal: { ...principal, scopes: [...principal.scopes] }, toolRef: published.toolRef, input: INPUT }))
+    expect(await quote(successor, 'before-promotion')).toMatchObject({ kind: 'refused', code: 'grant_not_found' })
+    const transition = { principalRef: buyer.principal.principalId, successorCredentialRef: prepared.successorCredentialRef, successorGrantRef: replacement.grantRef }
+    expect(await owner.mutation(api.agentAccessPrincipals.promoteCredentialReplacementForServer, {
+      ...transition, serviceAuth: await sign('agentAccessPrincipals.promoteCredentialReplacementForServer', transition),
+    })).toMatchObject({ kind: 'completed', providerCredentialId: buyer.principal.credentialId })
+    const [oldQuote, newQuote] = await Promise.all([quote(buyer.principal, 'revoked'), quote(successor, 'promoted')])
+    expect(oldQuote).toMatchObject({ kind: 'refused', code: 'grant_not_found' })
+    expect(newQuote).toMatchObject({ kind: 'refused', code: 'budget_exceeded', reason: 'period_budget_exhausted' })
+    expect(await readBalance()).toMatchObject({ kind: 'available', units: '8800000' })
+    expect(await backend.run(async ctx => await ctx.db.query('capabilityCalls').collect())).toHaveLength(1)
+    const cancel = async (callRef: string, key: string) => await backend.action(api.capabilityCalls.cancelCall, {
+      ...await recoveryActionArgs(successor, callRef, key, `cancel:${key}`), idempotencyKey: key,
+    })
+    expect(await cancel(accepted.callRef, 'rotation-cancel-original')).toMatchObject({ kind: 'found', state: 'cancelled', callRef: accepted.callRef })
+    await backend.finishAllScheduledFunctions(() => vi.advanceTimersByTime(1))
+    expect(await readBalance()).toMatchObject({ kind: 'available', units: '10000000' })
+    const resumed = await invokeCall(backend, successor, published.toolRef, 'rotation-after-refund', 'rotation-after-refund')
+    expect(resumed).toMatchObject({ kind: 'pending' })
+    if (resumed.kind !== 'pending') throw new Error('rotation_continuation_not_accepted')
+    const nextBooking = await backend.query(internal.moneyManagedCall.readBooking, { callRef: resumed.callRef })
+    expect(nextBooking).toMatchObject({ kind: 'available', booking: { principalRef: buyer.principal.principalId,
+      agentBudgetGeneration: booking.booking.agentBudgetGeneration } })
+    expect(await cancel(resumed.callRef, 'rotation-cancel-next')).toMatchObject({ kind: 'found', state: 'cancelled' })
+    await backend.run(async ctx => await ctx.runMutation(components.workpool.config.update, { maxParallelism: 1 }))
+    await backend.finishAllScheduledFunctions(() => vi.advanceTimersByTime(1))
+    expect(await readBalance()).toMatchObject({ kind: 'available', units: '10000000' })
+    expect(await readFormanceDisplayBalance(formance, { balanceKind: 'agent_budget', subjectRef: buyer.principal.principalId,
+      generation: booking.booking.agentBudgetGeneration, now: Date.now() })).toMatchObject({ kind: 'available', units: '1200000' })
+    expect(signedAuthorizations).toHaveLength(0)
+    expect(providerFetch.mock.calls.filter(([, init]) => new Headers(init?.headers as HeadersInit).has('payment-signature'))).toHaveLength(0)
+  })
+
   it.runIf(process.env.AE_FORMANCE_INTEGRATION === 'true')('preserves buyer credit and Agent allowance when concurrent quoted Calls exhaust treasury capacity', async () => {
     // Observe the real ledger rejection without replacing its request or result.
     const nativeBulkErrors: unknown[] = []
