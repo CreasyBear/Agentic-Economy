@@ -24,13 +24,14 @@ export async function assertAdmission(
 export async function assertAgentAccessRateAdmission(
   ctx: RunMutationCtx,
   input: Readonly<{
-    applicationRef: string
-    credentialId: string
+    principalRef: string
     maximumCallsPerMinute: number
     maximumCallsPerHour: number
   }>,
 ): Promise<RateLimitReturns> {
-  const key = `agent-access:${input.applicationRef}:${input.credentialId}`
+  // Rate state belongs to the Agent. Credential rotation must not create a
+  // fresh bucket, while the hour/minute token-bucket attempts stay separate.
+  const key = `agent-access:${input.principalRef}`
   const hour = await rateLimiter.limit(ctx, 'agent-access-hour', {
     key,
     config: {

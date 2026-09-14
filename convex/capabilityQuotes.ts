@@ -55,6 +55,16 @@ import {
 } from '@/modules/capability-execution/quote'
 import { resolveAndBindLegalCustomer } from './lib/moneyLegalCustomer'
 import { toolProviderRouteabilityIsFrozen } from './lib/providerOffboardingFreeze'
+import {
+  prepareAgentSpendingPeriods,
+  spendingPeriodsAreCurrent,
+} from './lib/agentSpendingPeriods'
+import {
+  spendingPeriodAdjustmentValue,
+  spendingPeriodsValue,
+  type SpendingPeriods,
+  type SpendingPeriodAdjustment,
+} from '@/modules/money/internal/spending-period-values'
 
 const LEGAL_CUSTOMER_REQUIRED: CommercialPolicyRefusalReason = 'legal_customer_required'
 
@@ -169,6 +179,11 @@ const formanceFinancialSnapshot = v.object({
   formanceSchemaVersion: v.string(),
   buyerTaxBps: v.number(),
   observedAt: v.number(),
+  spendingPeriods: v.optional(spendingPeriodsValue),
+  dailyPeriodAvailableUnits: v.optional(v.string()),
+  monthlyPeriodAvailableUnits: v.optional(v.string()),
+  dailyPeriodObservedAt: v.optional(v.number()),
+  monthlyPeriodObservedAt: v.optional(v.number()),
   treasury: v.optional(v.object({
     custodyRef: v.string(),
     custodyGeneration: v.number(),
@@ -193,6 +208,11 @@ const financialSubjectsResult = v.union(
     policyGeneration: v.number(),
     buyerTaxBps: v.number(),
     financialMode: v.union(v.literal('none'), v.literal('formance')),
+    authorityDigest: v.string(),
+    dailyLimitUnits: v.string(),
+    monthlyLimitUnits: v.string(),
+    spendingPeriods: v.optional(spendingPeriodsValue),
+    spendingPeriodCommands: v.array(spendingPeriodAdjustmentValue),
     treasury: v.optional(v.object({
       custodyRef: v.string(),
       custodyGeneration: v.number(),
@@ -206,6 +226,22 @@ const financialSubjectsResult = v.union(
 )
 
 type FinancialSubjectsResult = Infer<typeof financialSubjectsResult>
+
+const spendingPeriodPreparationResult = v.union(
+  v.object({
+    kind: v.literal('prepared'),
+    spendingPeriods: spendingPeriodsValue,
+    commands: v.array(spendingPeriodAdjustmentValue),
+  }),
+  v.object({ kind: v.literal('refused'), reason: v.string() }),
+)
+
+function spendingPeriodPreparationIsRetryable(reason: string | undefined): boolean {
+  if (reason === undefined) return true
+  return reason === 'spending_period_reservation_recovery_pending'
+    || reason === 'spending_period_command_pending'
+    || reason === 'spending_period_adjustment_in_progress'
+}
 
 const TREASURY_REF_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,499}$/u
 const TREASURY_UNITS_PATTERN = /^(?:0|[1-9]\d{0,15})$/u
@@ -424,9 +460,30 @@ async function prepareFinancialSubjectsHandler(
         network: paymentProfile.network,
       })
   const fundingPolicy = audFundingPolicyFromCommercialControls(policy.controls)
+  const daily = grantReadback.budget.maximumDailySpend
   const monthly = grantReadback.budget.maximumMonthlySpend
-  if (monthly.currency !== 'AUD' || monthly.exponent !== 6) {
+  if (daily.currency !== 'AUD' || daily.exponent !== 6
+    || monthly.currency !== 'AUD' || monthly.exponent !== 6) {
     return { kind: 'refused', code: 'budget_exceeded' }
+  }
+  const financialMode = pricing.config.kind === 'fixed_aud' && pricing.config.amountUnits === '0'
+    ? 'none' as const
+    : 'formance' as const
+  let spendingPeriods: SpendingPeriods | undefined
+  let spendingPeriodCommands: SpendingPeriodAdjustment[] = []
+  if (financialMode === 'formance') {
+    const prepared = await prepareAgentSpendingPeriods(ctx, {
+      principalRef: authority.principal.principalId,
+      dailyLimitUnits: daily.units,
+      monthlyLimitUnits: monthly.units,
+      authorityDigest: authority.policyDigest,
+      now,
+    })
+    if (prepared.kind === 'refused') {
+      return { kind: 'refused', code: 'inspection_unavailable', reason: prepared.reason }
+    }
+    spendingPeriods = prepared.spendingPeriods
+    spendingPeriodCommands = [...prepared.commands]
   }
   return {
     kind: 'prepared',
@@ -440,9 +497,12 @@ async function prepareFinancialSubjectsHandler(
     policyDigest: policy.policyDigest,
     policyGeneration: 1,
     buyerTaxBps: policy.controls.tax.callTaxBps ?? 0,
-    financialMode: pricing.config.kind === 'fixed_aud' && pricing.config.amountUnits === '0'
-      ? 'none'
-      : 'formance',
+    financialMode,
+    authorityDigest: authority.policyDigest,
+    dailyLimitUnits: daily.units,
+    monthlyLimitUnits: monthly.units,
+    ...(spendingPeriods === undefined ? {} : { spendingPeriods }),
+    spendingPeriodCommands,
     ...(observation === undefined || treasuryTarget === undefined
       ? {}
       : {
@@ -511,6 +571,8 @@ async function issueQuoteHandler(
     return refuse(args, 'grant_not_found', false)
   }
   const grantReadback = projectAgentAccessGrant(grant)
+  const dailyLimit = grantReadback.budget.maximumDailySpend
+  const monthlyLimit = grantReadback.budget.maximumMonthlySpend
   if (args.formance.accountRef !== authority.principal.ownerId
     || args.formance.principalRef !== authority.principal.principalId
     || args.formance.budgetGeneration !== grantReadback.budget.generation
@@ -533,6 +595,41 @@ async function issueQuoteHandler(
     ? { revenueUnits: '0', taxUnits: '0' }
     : splitInclusiveAudTax(pricing.price.units, args.formance.buyerTaxBps)
   if (buyerSale === undefined) return refuse(args, 'pricing_setup_required', false)
+  const paid = pricing.price.units !== '0'
+  const spendingPeriods = paid ? args.formance.spendingPeriods : undefined
+  if (paid) {
+    // v1.4 is the period-aware booking variant. A paid periodless snapshot is
+    // an old accepted record only; it cannot create a new Quote.
+    if (args.formance.formanceSchemaVersion !== PACKAGE4_FORMANCE_REQUIREMENTS.schemaVersion
+      || spendingPeriods === undefined) {
+      return refuse(args, 'budget_exceeded', false, { reason: 'spending_periods_required' })
+    }
+    if (!await spendingPeriodsAreCurrent(ctx, {
+      principalRef: authority.principal.principalId,
+      dailyLimitUnits: dailyLimit.units,
+      monthlyLimitUnits: monthlyLimit.units,
+      now,
+      spendingPeriods,
+    })) {
+      return refuse(args, 'inspection_unavailable', true, { reason: 'spending_periods_not_current' })
+    }
+    const dailyAvailable = args.formance.dailyPeriodAvailableUnits
+    const monthlyAvailable = args.formance.monthlyPeriodAvailableUnits
+    const dailyObservedAt = args.formance.dailyPeriodObservedAt
+    const monthlyObservedAt = args.formance.monthlyPeriodObservedAt
+    if (dailyAvailable === undefined || monthlyAvailable === undefined
+      || dailyObservedAt === undefined || monthlyObservedAt === undefined
+      || dailyObservedAt > now || monthlyObservedAt > now
+      || now - dailyObservedAt > 15_000 || now - monthlyObservedAt > 15_000) {
+      return refuse(args, 'inspection_unavailable', true)
+    }
+    if (BigInt(dailyAvailable) < BigInt(pricing.price.units)) {
+      return refuse(args, 'budget_exceeded', false, { reason: 'daily_limit_exhausted' })
+    }
+    if (BigInt(monthlyAvailable) < BigInt(pricing.price.units)) {
+      return refuse(args, 'budget_exceeded', false, { reason: 'monthly_limit_exhausted' })
+    }
+  }
   if ((pricing.sourceRequirement === undefined) !== (args.liveX402Requirement === undefined)) {
     return refuse(args, 'tool_not_ready', true)
   }
@@ -579,9 +676,6 @@ async function issueQuoteHandler(
         }
     return refuse(args, 'insufficient_balance', false, { ...(funding === undefined ? {} : { funding }) })
   }
-  if (BigInt(args.formance.budgetAvailableUnits) < BigInt(pricing.price.units)) {
-    return refuse(args, 'budget_exceeded', false, { reason: 'period_budget_exhausted' })
-  }
   if (BigInt(args.formance.legalExposureAvailableUnits) < BigInt(pricing.price.units)) {
     return refuse(args, 'budget_exceeded', false, { reason: 'account_limit' })
   }
@@ -600,7 +694,11 @@ async function issueQuoteHandler(
     authority.expiresAt,
     operation.readiness.validUntil,
     pricing.rateEvidence?.expiresAt ?? Number.MAX_SAFE_INTEGER,
+    spendingPeriods === undefined
+      ? Number.MAX_SAFE_INTEGER
+      : Math.min(spendingPeriods.daily.periodEndAt, spendingPeriods.monthly.periodEndAt),
   )
+  if (expiresAt <= now) return refuse(args, 'inspection_unavailable', true, { reason: 'spending_period_expired' })
   const evidenceMaterial = {
     format: 'ae.operation-commitment:v1',
     principalId: authority.principal.principalId,
@@ -634,6 +732,11 @@ async function issueQuoteHandler(
     accountAvailableUnits: args.formance.accountAvailableUnits,
     budgetAvailableUnits: args.formance.budgetAvailableUnits,
     legalExposureAvailableUnits: args.formance.legalExposureAvailableUnits,
+    ...(spendingPeriods === undefined ? {} : {
+      spendingPeriods,
+      dailyPeriodAvailableUnits: args.formance.dailyPeriodAvailableUnits,
+      monthlyPeriodAvailableUnits: args.formance.monthlyPeriodAvailableUnits,
+    }),
     ...(treasury === undefined ? {} : {
       treasuryCustodyRef: treasury.custodyRef,
       treasuryCustodyGeneration: treasury.custodyGeneration,
@@ -701,6 +804,13 @@ async function issueQuoteHandler(
     buyerTaxUnits: buyerSale.taxUnits,
     accountAvailableUnits: args.formance.accountAvailableUnits,
     budgetAvailableUnits: args.formance.budgetAvailableUnits,
+    ...(spendingPeriods === undefined ? {} : {
+      spendingPeriods,
+      dailyPeriodAvailableUnits: args.formance.dailyPeriodAvailableUnits,
+      monthlyPeriodAvailableUnits: args.formance.monthlyPeriodAvailableUnits,
+      dailyPeriodObservedAt: args.formance.dailyPeriodObservedAt,
+      monthlyPeriodObservedAt: args.formance.monthlyPeriodObservedAt,
+    }),
     legalExposureAvailableUnits: args.formance.legalExposureAvailableUnits,
     balanceUnits,
     ...(treasury === undefined ? {} : {
@@ -777,6 +887,55 @@ export const prepareFinancialSubjects = internalMutation({
   handler: prepareFinancialSubjectsHandler,
 })
 
+// Internal continuation used after a native period command is acknowledged.
+// It deliberately omits source-write material: the outer Quote mutation has
+// already consumed that nonce, and this bounded recheck is part of the same
+// request's control recovery.
+export const prepareSpendingPeriods = internalMutation({
+  args: {
+    principal: principalValue,
+    toolRef: v.string(),
+  },
+  returns: spendingPeriodPreparationResult,
+  handler: async (ctx, args) => {
+    const now = Date.now()
+    const authority = await resolveCurrentAgentAuthority(
+      ctx,
+      args.principal,
+      now,
+      { kind: 'new_operation', toolRef: args.toolRef },
+    )
+    if (authority === null) return { kind: 'refused' as const, reason: 'spending_period_authority_stale' }
+    const grantRow = await ctx.db.query('agentAccessGrants')
+      .withIndex('by_grantRef', (query) => query.eq('grantRef', authority.grantRef))
+      .unique()
+    if (grantRow === null) return { kind: 'refused' as const, reason: 'spending_period_authority_stale' }
+    let grant
+    try {
+      grant = normalizeStoredAgentAccessGrant(grantRow as never)
+    } catch {
+      return { kind: 'refused' as const, reason: 'spending_period_authority_stale' }
+    }
+    if (grant === undefined || grant.generation !== authority.grantGeneration) {
+      return { kind: 'refused' as const, reason: 'spending_period_authority_stale' }
+    }
+    const projected = projectAgentAccessGrant(grant)
+    const daily = projected.budget.maximumDailySpend
+    const monthly = projected.budget.maximumMonthlySpend
+    if (daily.currency !== 'AUD' || daily.exponent !== 6
+      || monthly.currency !== 'AUD' || monthly.exponent !== 6) {
+      return { kind: 'refused' as const, reason: 'spending_period_input_invalid' }
+    }
+    return await prepareAgentSpendingPeriods(ctx, {
+      principalRef: authority.principal.principalId,
+      dailyLimitUnits: daily.units,
+      monthlyLimitUnits: monthly.units,
+      authorityDigest: authority.policyDigest,
+      now,
+    })
+  },
+})
+
 export const quote = action({
   args: { ...principalAndSourceArgs, toolRef: v.string(), input: jsonObject },
   returns: quoteResult,
@@ -785,9 +944,43 @@ export const quote = action({
       internal.capabilityQuotes.prepareFinancialSubjects,
       args,
     )
-    if (subjects.kind === 'refused') return refuse(args, subjects.code, subjects.code !== 'input_invalid' && subjects.code !== 'grant_not_found' && subjects.code !== 'tool_unsupported', {
+    if (subjects.kind === 'refused') return refuse(args, subjects.code, subjects.code !== 'input_invalid' && subjects.code !== 'grant_not_found' && subjects.code !== 'tool_unsupported'
+      && (subjects.code !== 'inspection_unavailable' || spendingPeriodPreparationIsRetryable(subjects.reason)), {
       ...(subjects.reason === undefined ? {} : { reason: subjects.reason }),
     })
+    let spendingPeriods = subjects.spendingPeriods
+    if (subjects.financialMode === 'formance') {
+      if (spendingPeriods === undefined) return refuse(args, 'inspection_unavailable', true)
+      let commands = [...subjects.spendingPeriodCommands]
+      // A pending command is an externally observable control effect. Apply at
+      // most two rounds, re-preparing after each acknowledgement so an
+      // interrupted prior revision and one current policy change can recover
+      // without turning Quote creation into an unbounded retry loop.
+      for (let round = 0; round < 2 && commands.length > 0; round += 1) {
+        for (const command of commands) {
+          const adjusted = await ctx.runAction(internal.moneyFormance.adjustSpendingPeriod, command)
+          const expectedReferenceCount = command.previousLimitUnits === command.targetLimitUnits ? 0 : 1
+          if (adjusted.kind !== 'completed' || adjusted.transactionRefs.length !== expectedReferenceCount) {
+            return refuse(args, 'inspection_unavailable', true)
+          }
+          const acknowledged = await ctx.runMutation(internal.agentSpendingPeriods.acknowledge, {
+            command,
+            transactionRefs: [...adjusted.transactionRefs],
+          })
+          if (acknowledged.kind === 'conflict') return refuse(args, 'inspection_unavailable', true)
+        }
+        const refreshed = await ctx.runMutation(internal.capabilityQuotes.prepareSpendingPeriods, {
+          principal: args.principal,
+          toolRef: args.toolRef,
+        })
+        if (refreshed.kind === 'refused') {
+          return refuse(args, 'inspection_unavailable', spendingPeriodPreparationIsRetryable(refreshed.reason), { reason: refreshed.reason })
+        }
+        spendingPeriods = refreshed.spendingPeriods
+        commands = [...refreshed.commands]
+      }
+      if (commands.length > 0) return refuse(args, 'inspection_unavailable', true)
+    }
     const live = await ctx.runAction(inspectLiveX402RequirementRef, {
       principal: args.principal,
       toolRef: args.toolRef,
@@ -824,16 +1017,6 @@ export const quote = action({
     }
     const capacityCommands = [
       {
-        commandRef: `capacity:agent:${subjects.principalRef}:${subjects.budgetGeneration}`,
-        idempotencyKey: `capacity:agent:${subjects.principalRef}:${subjects.budgetGeneration}`,
-        kind: 'agent_budget' as const,
-        subjectRef: subjects.principalRef,
-        generation: subjects.budgetGeneration,
-        targetUnits: subjects.budgetUnits,
-        policyDigest: subjects.policyDigest,
-        externalEvidenceDigest: subjects.policyDigest,
-      },
-      {
         commandRef: `capacity:legal:${subjects.legalCustomerRef}:${subjects.legalCustomerGeneration}`,
         idempotencyKey: `capacity:legal:${subjects.legalCustomerRef}:${subjects.legalCustomerGeneration}`,
         kind: 'legal_customer_exposure' as const,
@@ -865,13 +1048,23 @@ export const quote = action({
         return refuse(args, 'inspection_unavailable', synced.kind !== 'refused')
       }
     }
-    const [account, budget, exposure, treasury] = await Promise.all([
+    const periodSnapshot = spendingPeriods
+    if (periodSnapshot === undefined) return refuse(args, 'inspection_unavailable', true)
+    const [account, dailyPeriod, monthlyPeriod, exposure, treasury] = await Promise.all([
       ctx.runAction(internal.moneyFormance.readDisplayBalance, {
         balanceKind: 'account_aud', subjectRef: subjects.accountRef,
       }),
-      ctx.runAction(internal.moneyFormance.readDisplayBalance, {
-        balanceKind: 'agent_budget', subjectRef: subjects.principalRef,
-        generation: subjects.budgetGeneration,
+      ctx.runAction(internal.moneyFormance.readSpendingPeriod, {
+        principalRef: subjects.principalRef,
+        periodKind: 'day',
+        periodStartAt: periodSnapshot.daily.periodStartAt,
+        periodEndAt: periodSnapshot.daily.periodEndAt,
+      }),
+      ctx.runAction(internal.moneyFormance.readSpendingPeriod, {
+        principalRef: subjects.principalRef,
+        periodKind: 'month',
+        periodStartAt: periodSnapshot.monthly.periodStartAt,
+        periodEndAt: periodSnapshot.monthly.periodEndAt,
       }),
       ctx.runAction(internal.moneyFormance.readDisplayBalance, {
         balanceKind: 'legal_customer_exposure', subjectRef: subjects.legalCustomerRef,
@@ -885,14 +1078,16 @@ export const quote = action({
           }),
     ])
     if (account.kind !== 'available'
-      || budget.kind !== 'available'
+      || dailyPeriod.kind !== 'available'
+      || monthlyPeriod.kind !== 'available'
       || exposure.kind !== 'available'
       || (treasury !== undefined && treasury.kind !== 'available')) {
       return refuse(args, 'inspection_unavailable', true)
     }
     const observedAt = Math.min(
       account.observedAt,
-      budget.observedAt,
+      dailyPeriod.observedAt,
+      monthlyPeriod.observedAt,
       exposure.observedAt,
       treasury?.observedAt ?? Number.MAX_SAFE_INTEGER,
     )
@@ -908,7 +1103,14 @@ export const quote = action({
           accountAvailableUnits: account.units,
           principalRef: subjects.principalRef,
           budgetGeneration: subjects.budgetGeneration,
-          budgetAvailableUnits: budget.units,
+          // Keep the historical field as a compatibility projection of the
+          // monthly period readback. New admission uses both period fields.
+          budgetAvailableUnits: monthlyPeriod.units,
+          spendingPeriods: periodSnapshot,
+          dailyPeriodAvailableUnits: dailyPeriod.units,
+          monthlyPeriodAvailableUnits: monthlyPeriod.units,
+          dailyPeriodObservedAt: dailyPeriod.observedAt,
+          monthlyPeriodObservedAt: monthlyPeriod.observedAt,
           legalCustomerRef: subjects.legalCustomerRef,
           legalCustomerGeneration: subjects.legalCustomerGeneration,
           legalExposureAvailableUnits: exposure.units,

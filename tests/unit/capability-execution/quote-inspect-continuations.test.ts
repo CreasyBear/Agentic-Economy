@@ -45,6 +45,23 @@ describe('tool.quote continuations', () => {
     expect(Number(result.continuation !== undefined) + Number(result.requiredActions !== undefined)).toBe(1)
   })
 
+  it('directs ambiguous earlier spending to support without an automatic retry loop', () => {
+    const result = projectToolQuoteRefusal({ toolRef, input, code: 'inspection_unavailable', retryable: true,
+      correlationRef: 'request:history', reason: 'spending_period_legacy_history_requires_support' })
+    expect(result).toMatchObject({ retryable: false, requiredActions: [{ cta: '/support',
+      title: 'Verify earlier spending', description: expect.stringContaining('earlier spending') }] })
+    expect(result.continuation).toBeUndefined()
+    expect(toolQuoteResultSchema.safeParse(result).success).toBe(true)
+  })
+
+  it.each(['daily_limit_exhausted', 'monthly_limit_exhausted'])('discloses UTC for %s without funding advice', reason => {
+    const result = projectToolQuoteRefusal({ toolRef, input, code: 'budget_exceeded', retryable: false,
+      correlationRef: 'request:period', reason })
+    expect(result.requiredActions?.[0]).toMatchObject({ cta: '/agent-access', description: expect.stringContaining('UTC') })
+    expect(result.continuation).toBeUndefined()
+    expect(toolQuoteResultSchema.safeParse(result).success).toBe(true)
+  })
+
   it('rejects legacy operation refusal labels at the Tool Quote boundary', () => {
     const result = toolQuoteResultSchema.safeParse({
       kind: 'refused',

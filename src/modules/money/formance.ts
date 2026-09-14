@@ -24,6 +24,11 @@ const MAXIMUM_TIMEOUT_MS = 30_000
 const AUD_ASSET = 'AUD/6'
 const USDC_ASSET = 'USDC/6'
 
+/** The schema used by accepted periodless Calls before the alpha cutover. */
+export const LEGACY_FORMANCE_SCHEMA_VERSION = 'v1.3.0' as const
+/** The current schema pin, shared with the commercial policy requirements. */
+export const FORMANCE_SCHEMA_VERSION = PACKAGE4_FORMANCE_REQUIREMENTS.schemaVersion
+
 export const PACKAGE4_FORMANCE_TEMPLATE_NAMES = Object.freeze([
   'FUNDING_SETTLED',
   'FUNDING_REVERSED',
@@ -39,7 +44,17 @@ export const PACKAGE4_FORMANCE_TEMPLATE_NAMES = Object.freeze([
   'PROVIDER_REVERSED',
 ] as const)
 
-export type FormanceMoneyTemplate = (typeof PACKAGE4_FORMANCE_TEMPLATE_NAMES)[number]
+export const FORMANCE_TEMPLATE_NAMES = Object.freeze([
+  ...PACKAGE4_FORMANCE_TEMPLATE_NAMES,
+  'SPENDING_PERIOD_INCREASED',
+  'SPENDING_PERIOD_DECREASED',
+] as const)
+
+export type FormanceMoneyTemplate = (typeof FORMANCE_TEMPLATE_NAMES)[number]
+
+export const LEGACY_FORMANCE_TEMPLATE_NAMES = PACKAGE4_FORMANCE_TEMPLATE_NAMES
+
+export type FormanceLegacyMoneyTemplate = (typeof LEGACY_FORMANCE_TEMPLATE_NAMES)[number]
 
 const ALLOWED_METADATA_KEYS = new Set([
   'account_digest',
@@ -134,6 +149,25 @@ export type FormanceSchemaInstallResult =
   | Readonly<{ kind: 'unavailable'; code: string }>
 
 export type FormanceAccountReadResult =
+  | Readonly<{
+      kind: 'completed'
+      address: string
+      volumes: Readonly<Record<string, Readonly<{
+        inputUnits: string
+        outputUnits: string
+        balanceUnits: string
+      }>>>
+    }>
+  | Readonly<{ kind: 'not_found' }>
+  | Readonly<{ kind: 'setup_required'; code: string }>
+  | Readonly<{ kind: 'unavailable'; code: string }>
+
+/**
+ * Capacity readback keeps signed native balances. It is deliberately separate
+ * from FormanceAccountReadResult: buyer funds and ordinary capacity reads must
+ * continue rejecting a negative ledger balance as malformed money data.
+ */
+export type FormanceSignedAccountReadResult =
   | Readonly<{
       kind: 'completed'
       address: string
@@ -506,12 +540,176 @@ send $amount (
   }),
 })
 
-export const PACKAGE4_FORMANCE_SCHEMA_DIGEST = canonicalDigest({
+const PERIOD_RESERVATION_AUD_TEMPLATE = Object.freeze({
+  description: 'Atomically reserve buyer AUD, both spending periods, and legal-customer exposure',
+  runtime: 'machine' as const,
+  script: `vars {
+  account $account_available
+  account $call_reserved
+  account $legal_available
+  account $legal_reserved
+  account $daily_available
+  account $daily_reserved
+  account $monthly_available
+  account $monthly_reserved
+  monetary $buyer_amount
+  monetary $exposure_amount
+  monetary $daily_amount
+  monetary $monthly_amount
+}
+send $buyer_amount (
+  source = $account_available
+  destination = $call_reserved
+)
+send $exposure_amount (
+  source = $legal_available
+  destination = $legal_reserved
+)
+send $daily_amount (
+  source = $daily_available
+  destination = $daily_reserved
+)
+send $monthly_amount (
+  source = $monthly_available
+  destination = $monthly_reserved
+)`,
+})
+
+const PERIOD_RELEASE_AUD_TEMPLATE = Object.freeze({
+  description: 'Release buyer AUD, both spending periods, and legal-customer exposure',
+  runtime: 'machine' as const,
+  script: `vars {
+  account $account_available
+  account $call_reserved
+  account $legal_available
+  account $legal_reserved
+  account $daily_available
+  account $daily_reserved
+  account $monthly_available
+  account $monthly_reserved
+  monetary $buyer_amount
+  monetary $exposure_amount
+  monetary $daily_amount
+  monetary $monthly_amount
+}
+send $buyer_amount (
+  source = $call_reserved
+  destination = $account_available
+)
+send $exposure_amount (
+  source = $legal_reserved
+  destination = $legal_available
+)
+send $daily_amount (
+  source = $daily_reserved
+  destination = $daily_available
+)
+send $monthly_amount (
+  source = $monthly_reserved
+  destination = $monthly_available
+)`,
+})
+
+const PERIOD_SETTLEMENT_AUD_TEMPLATE = Object.freeze({
+  description: 'Capture buyer sale and both original spending periods',
+  runtime: 'machine' as const,
+  script: `vars {
+  account $call_reserved
+  account $revenue
+  account $tax
+  account $legal_reserved
+  account $legal_settled
+  account $daily_reserved
+  account $daily_spent
+  account $monthly_reserved
+  account $monthly_spent
+  monetary $revenue_amount
+  monetary $tax_amount
+  monetary $exposure_amount
+  monetary $daily_amount
+  monetary $monthly_amount
+}
+send $revenue_amount (
+  source = $call_reserved
+  destination = $revenue
+)
+send $tax_amount (
+  source = $call_reserved
+  destination = $tax
+)
+send $exposure_amount (
+  source = $legal_reserved
+  destination = $legal_settled
+)
+send $daily_amount (
+  source = $daily_reserved
+  destination = $daily_spent
+)
+send $monthly_amount (
+  source = $monthly_reserved
+  destination = $monthly_spent
+)`,
+})
+
+const SPENDING_PERIOD_INCREASE_TEMPLATE = Object.freeze({
+  description: 'Apply an authorized spending-period limit increase',
+  runtime: 'machine' as const,
+  script: `vars {
+  account $period_available
+  monetary $amount
+}
+send $amount (
+  source = @world
+  destination = $period_available
+)`,
+})
+
+const SPENDING_PERIOD_DECREASE_TEMPLATE = Object.freeze({
+  description: 'Apply an authorized spending-period limit decrease',
+  runtime: 'machine' as const,
+  script: `vars {
+  account $period_available
+  account $retired
+  monetary $amount
+}
+send $amount (
+  source = $period_available allowing unbounded overdraft
+  destination = $retired
+)`,
+})
+
+/** v1.4 adds period accounts while retaining every v1.3 template verbatim. */
+export const FORMANCE_SCHEMA: FormanceSchemaData = Object.freeze({
+  ...PACKAGE4_FORMANCE_SCHEMA,
+  chart: Object.freeze({
+    ...PACKAGE4_FORMANCE_SCHEMA.chart,
+    spending_periods: digestSegment({ available: leaf, reserved: leaf, spent: leaf }),
+  }),
+  transactions: Object.freeze({
+    ...PACKAGE4_FORMANCE_SCHEMA.transactions,
+    CALL_RESERVED_AUD: PERIOD_RESERVATION_AUD_TEMPLATE,
+    CALL_RELEASED_AUD: PERIOD_RELEASE_AUD_TEMPLATE,
+    BUYER_SALE_SETTLED: PERIOD_SETTLEMENT_AUD_TEMPLATE,
+    SPENDING_PERIOD_INCREASED: SPENDING_PERIOD_INCREASE_TEMPLATE,
+    SPENDING_PERIOD_DECREASED: SPENDING_PERIOD_DECREASE_TEMPLATE,
+  }),
+}) as FormanceSchemaData
+
+export const LEGACY_FORMANCE_SCHEMA_DIGEST = canonicalDigest({
   format: 'ae.package4.formance-schema:v1',
   schema: PACKAGE4_FORMANCE_SCHEMA,
 })
 
-const PACKAGE4_FORMANCE_SCHEMA_READBACK_DIGEST = schemaReadbackDigest(PACKAGE4_FORMANCE_SCHEMA)
+/** Historical digest export; keep it byte-identical for legacy recovery. */
+export const PACKAGE4_FORMANCE_SCHEMA_DIGEST = LEGACY_FORMANCE_SCHEMA_DIGEST
+
+export const FORMANCE_SCHEMA_DIGEST = canonicalDigest({
+  format: 'ae.package4.formance-schema:v1',
+  schema: FORMANCE_SCHEMA,
+})
+
+const LEGACY_FORMANCE_SCHEMA_READBACK_DIGEST = schemaReadbackDigest(PACKAGE4_FORMANCE_SCHEMA)
+const FORMANCE_SCHEMA_READBACK_DIGEST = schemaReadbackDigest(FORMANCE_SCHEMA)
 
 const NO_RETRY = Object.freeze({ retries: Object.freeze({ strategy: 'none' as const }) })
 
@@ -597,10 +795,14 @@ export function createFormanceContext(configuration: FormanceConfiguration): For
 export function validateFormanceMoneyCommand(command: FormanceMoneyCommand): string | undefined {
   if (!COMMAND_REFERENCE_PATTERN.test(command.commandRef)) return 'formance_command_reference_invalid'
   if (!DIGEST_PATTERN.test(command.idempotencyKey)) return 'formance_idempotency_key_invalid'
-  if (command.schemaVersion !== PACKAGE4_FORMANCE_REQUIREMENTS.schemaVersion) {
+  if (command.schemaVersion !== FORMANCE_SCHEMA_VERSION
+    && command.schemaVersion !== LEGACY_FORMANCE_SCHEMA_VERSION) {
     return 'formance_schema_version_invalid'
   }
-  if (!PACKAGE4_FORMANCE_TEMPLATE_NAMES.includes(command.template)) {
+  const allowedTemplates = command.schemaVersion === LEGACY_FORMANCE_SCHEMA_VERSION
+    ? LEGACY_FORMANCE_TEMPLATE_NAMES
+    : FORMANCE_TEMPLATE_NAMES
+  if (!allowedTemplates.some((template) => template === command.template)) {
     return 'formance_template_invalid'
   }
   const variables = Object.entries(command.variables)
@@ -610,7 +812,11 @@ export function validateFormanceMoneyCommand(command: FormanceMoneyCommand): str
       || value.length === 0
       || value.length > MAX_VARIABLE_VALUE_LENGTH
       || value !== value.trim()
-      || !validFormanceVariableValue(value, command.template === 'BUYER_SALE_SETTLED' && key === 'tax_amount')) return 'formance_variables_invalid'
+      || !validFormanceVariableValue(
+        value,
+        command.template === 'BUYER_SALE_SETTLED'
+          && key === 'tax_amount',
+      )) return 'formance_variables_invalid'
   }
   if (!validFormanceMetadata(command.metadata)
     || command.metadata.idempotency_digest !== command.idempotencyKey) {
@@ -659,6 +865,20 @@ export function formanceSafeUnitsFromSdk(value: bigint | number | string): strin
   return Number.isSafeInteger(number) && BigInt(number) === units ? units.toString() : undefined
 }
 
+/** Parse native capacity balances, whose control adjustment may intentionally be negative. */
+export function formanceSignedSafeUnitsFromSdk(value: bigint | number | string): string | undefined {
+  if (typeof value === 'string' && !/^-?(?:0|[1-9]\d*)$/u.test(value)) return undefined
+  let units: bigint
+  try {
+    units = typeof value === 'bigint' ? value : BigInt(value)
+  } catch (cause) {
+    return degradeBackend(cause, undefined, { site: 'formanceSignedSafeUnitsFromSdk', reason: 'invalid_response' })
+  }
+  const absolute = units < 0n ? -units : units
+  const number = Number(absolute)
+  return Number.isSafeInteger(number) && BigInt(number) === absolute ? units.toString() : undefined
+}
+
 function validFormanceVariableValue(value: string, allowZeroTax = false): boolean {
   const monetary = /^(AUD|USDC)\/6 (.+)$/u.exec(value)
   return monetary === null
@@ -675,8 +895,14 @@ export async function installPackage4FormanceSchema(
 ): Promise<FormanceSchemaInstallResult> {
   const startedAt = Date.now()
   try {
-    const current = await readSchema(context)
-    if (current.kind === 'ready') {
+    const current = await readSchema(context, FORMANCE_SCHEMA_VERSION)
+    const legacy = await readSchema(context, LEGACY_FORMANCE_SCHEMA_VERSION)
+    if (current.kind === 'setup_required' || legacy.kind === 'setup_required') {
+      return current.kind === 'setup_required' ? current : legacy
+    }
+    if (current.kind !== 'ready' && current.code !== 'formance_schema_absent') return current
+    if (legacy.kind !== 'ready' && legacy.code !== 'formance_schema_absent') return legacy
+    if (current.kind === 'ready' && legacy.kind === 'ready') {
       recordMetric('install_schema', 'replayed', startedAt)
       return Object.freeze({
         kind: 'completed',
@@ -686,23 +912,17 @@ export async function installPackage4FormanceSchema(
         replayed: true,
       })
     }
-    if (current.kind === 'setup_required') return current
-    if (current.code !== 'formance_schema_absent') return current
 
     await ensureLedger(context)
-    try {
-      await context.sdk.ledger.v2.insertSchema({
-        idempotencyKey: PACKAGE4_FORMANCE_SCHEMA_DIGEST.slice('sha256:'.length),
-        ledger: context.configuration.ledger,
-        version: PACKAGE4_FORMANCE_REQUIREMENTS.schemaVersion,
-        v2SchemaData: PACKAGE4_FORMANCE_SCHEMA,
-      }, NO_RETRY)
-    } catch (cause) {
-      degradeBackend(cause, undefined, { site: 'installPackage4FormanceSchema', reason: 'source_unavailable' })
-      const reconciled = await readSchema(context)
-      if (reconciled.kind !== 'ready') return reconciled
+    if (legacy.kind !== 'ready') {
+      const installedLegacy = await insertSchemaVersion(context, LEGACY_FORMANCE_SCHEMA_VERSION)
+      if (installedLegacy.kind !== 'ready') return installedLegacy
     }
-    const installed = await readSchema(context)
+    if (current.kind !== 'ready') {
+      const installedCurrent = await insertSchemaVersion(context, FORMANCE_SCHEMA_VERSION)
+      if (installedCurrent.kind !== 'ready') return installedCurrent
+    }
+    const installed = await readSchema(context, FORMANCE_SCHEMA_VERSION)
     if (installed.kind !== 'ready') return installed
     recordMetric('install_schema', 'completed', startedAt)
     return Object.freeze({
@@ -779,6 +999,58 @@ export async function readFormanceAccount(
   } catch (error) {
     if (statusCode(error) === 404) return Object.freeze({ kind: 'not_found' })
     recordMetric('read_account', 'unavailable', startedAt)
+    return Object.freeze({ kind: 'unavailable', code: 'formance_read_unavailable' })
+  }
+}
+
+/**
+ * Read a native capacity account while preserving a signed available balance.
+ * This boundary is only for spending-period control accounts; customer money
+ * continues through readFormanceAccount, which rejects negative balances.
+ *
+ * CONTRACT: readFormanceSignedAccount(context, address)
+ *   Requires: address is a valid Formance account address and the source is a
+ *     capacity account whose native balance may be negative after an authorized
+ *     limit decrease.
+ *   Ensures: returns exact safe input/output/balance units, preserving the sign
+ *     of balanceUnits; an absent account is reported as not_found.
+ *   Invariant: no ledger state changes and ordinary buyer-money validation is
+ *     untouched.
+ *   On violation: returns setup_required for malformed address or unsafe native
+ *     integers, unavailable for source failures, and never coerces bad data.
+ */
+export async function readFormanceSignedAccount(
+  context: FormanceContext,
+  address: string,
+): Promise<FormanceSignedAccountReadResult> {
+  const startedAt = Date.now()
+  if (!validFormanceAccountAddress(address)) {
+    return Object.freeze({ kind: 'setup_required', code: 'formance_account_address_invalid' })
+  }
+  try {
+    const response = await context.sdk.ledger.v2.getAccount({
+      address,
+      expand: 'volumes',
+      ledger: context.configuration.ledger,
+    }, NO_RETRY)
+    const account = response.v2AccountResponse?.data
+    if (account === undefined) return Object.freeze({ kind: 'not_found' })
+    const volumes: Record<string, { inputUnits: string; outputUnits: string; balanceUnits: string }> = {}
+    for (const [asset, volume] of Object.entries(account.volumes ?? {})) {
+      const inputUnits = formanceSafeUnitsFromSdk(volume.input)
+      const outputUnits = formanceSafeUnitsFromSdk(volume.output)
+      const balanceUnits = formanceSignedSafeUnitsFromSdk(volume.balance ?? 0n)
+      if (inputUnits === undefined || outputUnits === undefined || balanceUnits === undefined) {
+        recordMetric('read_signed_account', 'unsafe_integer', startedAt)
+        return Object.freeze({ kind: 'setup_required', code: 'formance_unsafe_integer' })
+      }
+      volumes[asset] = Object.freeze({ inputUnits, outputUnits, balanceUnits })
+    }
+    recordMetric('read_signed_account', 'completed', startedAt)
+    return Object.freeze({ kind: 'completed', address: account.address, volumes: Object.freeze(volumes) })
+  } catch (error) {
+    if (statusCode(error) === 404) return Object.freeze({ kind: 'not_found' })
+    recordMetric('read_signed_account', 'unavailable', startedAt)
     return Object.freeze({ kind: 'unavailable', code: 'formance_read_unavailable' })
   }
 }
@@ -1187,7 +1459,7 @@ export async function executeFormanceMoneyCommand(
   const startedAt = Date.now()
   const invalid = validateFormanceMoneyCommand(command)
   if (invalid !== undefined) return refused(invalid)
-  const schema = await readSchema(context)
+  const schema = await readSchema(context, command.schemaVersion as SupportedFormanceSchemaVersion)
   if (schema.kind !== 'ready') {
     return schema.kind === 'setup_required'
       ? refused(schema.code)
@@ -1259,7 +1531,10 @@ export async function executeFormanceMoneyBulk(
     const invalid = validateFormanceMoneyCommand(command)
     if (invalid !== undefined) return refused(invalid)
   }
-  const schema = await readSchema(context)
+  const schemaVersions = new Set(commands.map(({ schemaVersion }) => schemaVersion))
+  if (schemaVersions.size !== 1) return refused('formance_bulk_schema_mismatch')
+  const schemaVersion = commands[0]!.schemaVersion
+  const schema = await readSchema(context, schemaVersion as SupportedFormanceSchemaVersion)
   if (schema.kind !== 'ready') {
     return schema.kind === 'setup_required'
       ? refused(schema.code)
@@ -1286,7 +1561,7 @@ export async function executeFormanceMoneyBulk(
         },
         ik: command.idempotencyKey,
       })),
-      schemaVersion: PACKAGE4_FORMANCE_REQUIREMENTS.schemaVersion,
+      schemaVersion,
     }, NO_RETRY)
     const rows = response.v2BulkResponse?.data
     if (rows === undefined) return unknown(commands[0]!.commandRef)
@@ -1387,7 +1662,7 @@ async function ensureLedger(context: FormanceContext): Promise<void> {
       ledger: context.configuration.ledger,
       v2CreateLedgerRequest: {
         metadata: {
-          purpose_digest: PACKAGE4_FORMANCE_SCHEMA_DIGEST.slice('sha256:'.length),
+          purpose_digest: FORMANCE_SCHEMA_DIGEST.slice('sha256:'.length),
         },
       },
     }, NO_RETRY)
@@ -1396,11 +1671,60 @@ async function ensureLedger(context: FormanceContext): Promise<void> {
   }
 }
 
-async function readSchema(context: FormanceContext): Promise<FormanceHealthResult> {
+type SupportedFormanceSchemaVersion =
+  | typeof LEGACY_FORMANCE_SCHEMA_VERSION
+  | typeof FORMANCE_SCHEMA_VERSION
+
+function schemaDefinition(version: SupportedFormanceSchemaVersion): Readonly<{
+  version: SupportedFormanceSchemaVersion
+  schema: FormanceSchemaData
+  digest: string
+  readbackDigest: string
+}> {
+  return version === LEGACY_FORMANCE_SCHEMA_VERSION
+    ? {
+        version,
+        schema: PACKAGE4_FORMANCE_SCHEMA,
+        digest: PACKAGE4_FORMANCE_SCHEMA_DIGEST,
+        readbackDigest: LEGACY_FORMANCE_SCHEMA_READBACK_DIGEST,
+      }
+    : {
+        version,
+        schema: FORMANCE_SCHEMA,
+        digest: FORMANCE_SCHEMA_DIGEST,
+        readbackDigest: FORMANCE_SCHEMA_READBACK_DIGEST,
+      }
+}
+
+async function insertSchemaVersion(
+  context: FormanceContext,
+  version: SupportedFormanceSchemaVersion,
+): Promise<FormanceHealthResult> {
+  const definition = schemaDefinition(version)
+  try {
+    await context.sdk.ledger.v2.insertSchema({
+      idempotencyKey: definition.digest.slice('sha256:'.length),
+      ledger: context.configuration.ledger,
+      version: definition.version,
+      v2SchemaData: definition.schema,
+    }, NO_RETRY)
+  } catch (cause) {
+    degradeBackend(cause, undefined, { site: 'insertSchemaVersion', reason: 'source_unavailable' })
+    const reconciled = await readSchema(context, version)
+    if (reconciled.kind !== 'ready') return reconciled
+  }
+  return await readSchema(context, version)
+}
+
+async function readSchema(
+  context: FormanceContext,
+  version: SupportedFormanceSchemaVersion = FORMANCE_SCHEMA_VERSION,
+): Promise<FormanceHealthResult> {
+  const definition = schemaDefinition(version)
   try {
     const response = await context.sdk.ledger.v2.getSchema({
       ledger: context.configuration.ledger,
-      version: PACKAGE4_FORMANCE_REQUIREMENTS.schemaVersion,
+      version: definition.version,
     }, NO_RETRY)
     const schema = response.v2SchemaResponse?.data
     if (schema === undefined) return Object.freeze({ kind: 'unavailable', code: 'formance_schema_response_invalid' })
@@ -1409,8 +1733,7 @@ async function readSchema(context: FormanceContext): Promise<FormanceHealthResul
       queries: schema.queries ?? {},
       transactions: schema.transactions ?? {},
     })
-    if (schema.version !== PACKAGE4_FORMANCE_REQUIREMENTS.schemaVersion
-      || readbackDigest !== PACKAGE4_FORMANCE_SCHEMA_READBACK_DIGEST) {
+    if (schema.version !== definition.version || readbackDigest !== definition.readbackDigest) {
       return Object.freeze({ kind: 'setup_required', code: 'formance_schema_drift' })
     }
     return Object.freeze({
@@ -1418,7 +1741,7 @@ async function readSchema(context: FormanceContext): Promise<FormanceHealthResul
       gatewayVersion: PACKAGE4_FORMANCE_REQUIREMENTS.gatewayVersion,
       ledgerVersion: PACKAGE4_FORMANCE_REQUIREMENTS.ledgerVersion,
       schemaVersion: schema.version,
-      schemaDigest: PACKAGE4_FORMANCE_SCHEMA_DIGEST,
+      schemaDigest: definition.digest,
     })
   } catch (error) {
     if (statusCode(error) === 404) {

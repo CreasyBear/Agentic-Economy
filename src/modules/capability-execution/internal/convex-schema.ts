@@ -4,6 +4,7 @@ import {
   acceptedAuthorityValue,
   type CanonicalClaimAuthority,
 } from '@/modules/action-execution/runtime'
+import { spendingPeriodsValue } from '@/modules/money/internal/spending-period-values'
 
 export type CallPersistedAuthority = CanonicalClaimAuthority & Readonly<{
   format: 'operation-invoke-authority:v1'
@@ -363,6 +364,13 @@ export const capabilityCallTables = {
     buyerTaxUnits: v.string(),
     accountAvailableUnits: v.string(),
     budgetAvailableUnits: v.string(),
+    // Period identities and native readbacks are immutable Quote evidence.
+    // They are optional only for historical periodless rows.
+    spendingPeriods: v.optional(spendingPeriodsValue),
+    dailyPeriodAvailableUnits: v.optional(v.string()),
+    monthlyPeriodAvailableUnits: v.optional(v.string()),
+    dailyPeriodObservedAt: v.optional(v.number()),
+    monthlyPeriodObservedAt: v.optional(v.number()),
     legalExposureAvailableUnits: v.string(),
     balanceUnits: v.string(),
     treasuryCustodyRef: v.optional(v.string()),
@@ -450,6 +458,7 @@ export const capabilityCallTables = {
     // Idempotency is keyed by the stable Principal, never by the rotating
     // credential: a replaced credential must replay, not mint a second Call.
     .index('by_principalId_and_idempotencyKey', ['principalId', 'idempotencyKey'])
+    .index('by_principalId_and_formanceFinancialState', ['principalId', 'formanceFinancialState'])
     .index('by_credentialId_and_createdAt', ['credentialId', 'createdAt'])
     .index('by_credentialId_and_state', ['credentialId', 'state'])
     .index('by_credentialId_and_state_and_grantExpiresAt', ['credentialId', 'state', 'grantExpiresAt'])

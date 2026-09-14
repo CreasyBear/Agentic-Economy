@@ -39,7 +39,7 @@ afterEach(() => {
 
 describe('Package 4 official Formance boundary', () => {
   it('locks the immutable schema to the approved named machine templates', () => {
-    expect(PACKAGE4_FORMANCE_REQUIREMENTS.schemaVersion).toBe('v1.3.0')
+    expect(PACKAGE4_FORMANCE_REQUIREMENTS.schemaVersion).toBe('v1.4.0')
     expect(PACKAGE4_FORMANCE_SCHEMA_DIGEST).toMatch(/^sha256:[a-f0-9]{64}$/u)
     expect(Object.keys(PACKAGE4_FORMANCE_SCHEMA.transactions ?? {})).toEqual(
       PACKAGE4_FORMANCE_TEMPLATE_NAMES,
@@ -74,7 +74,7 @@ describe('Package 4 official Formance boundary', () => {
     expect(settlement).toMatchObject({
       kind: 'prepared',
       command: {
-        schemaVersion: 'v1.3.0',
+        schemaVersion: 'v1.4.0',
         template: 'FUNDING_SETTLED',
         variables: {
           principal_amount: 'AUD/6 100000000',

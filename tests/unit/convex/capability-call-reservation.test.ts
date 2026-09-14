@@ -17,6 +17,7 @@ import { abandon, reserve } from '../../../convex/capabilityCalls'
 import { callArgs } from '../../../convex/lib/callLifecycle/contracts'
 import { buildDevelopmentPublishedToolEvidence } from '../../../tools/dev/fixtures/capability-supply/development-published-tool-evidence'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { convexTestWithMarketComponents } from '../../helpers/convex-fixtures'
 
 type Row = Record<string, unknown> & { _id: string }
 type Filter = (row: Row) => boolean
@@ -535,15 +536,14 @@ describe('capability operation reservation admission', () => {
     expect(mocks.assertAgentAccessRateAdmission).toHaveBeenCalledTimes(1)
     expect(ctx.db.rows('capabilityCalls')).toHaveLength(0)
   })
-  it('passes the persisted grant rate policy to the canonical application credential key', async () => {
+  it('passes the persisted grant rate policy to the canonical Agent principal key', async () => {
     const ctx = context({
       policy: { rate: { maximumCallsPerMinute: 7, maximumCallsPerHour: 42 }, budget: { maximumConcurrentInvocations: 2 } },
     })
 
     await expect(reserveHandler(ctx, argsFor(ctx))).resolves.toMatchObject({ kind: 'reserved' })
     expect(mocks.assertAgentAccessRateAdmission).toHaveBeenCalledWith(ctx, {
-      applicationRef: 'application:one',
-      credentialId: 'credential:one',
+      principalRef: 'principal:one',
       maximumCallsPerMinute: 7,
       maximumCallsPerHour: 42,
     })
@@ -578,7 +578,7 @@ describe('capability operation reservation admission', () => {
     for (const state of ['completed', 'refused', 'cancelled'] as const) available.db.seed('capabilityCalls', invocation({ state }))
     await expect(reserveHandler(available, argsFor(available))).resolves.toMatchObject({ kind: 'reserved' })
   })
-  it('does not let an expired pending grant consume concurrency', async () => {
+  it('counts an expired pending grant against Agent concurrency', async () => {
     const ctx = context({
       policy: { rate: { maximumCallsPerMinute: 10, maximumCallsPerHour: 100 }, budget: { maximumConcurrentInvocations: 1 } },
     })
@@ -587,7 +587,7 @@ describe('capability operation reservation admission', () => {
       grantExpiresAt: now,
     }))
 
-    await expect(reserveHandler(ctx, argsFor(ctx))).resolves.toMatchObject({ kind: 'reserved' })
+    await expect(reserveHandler(ctx, argsFor(ctx))).resolves.toMatchObject({ kind: 'refused', code: 'concurrency_limited' })
   })
 
   it('refuses expired and environment-mismatched grants with stable codes', async () => {
@@ -635,5 +635,28 @@ describe('capability operation reservation admission', () => {
 
     await expect(abandonHandler(ctx, abandonmentArgs())).resolves.toEqual({ kind: 'dispatch_started' })
     expect(ctx.db.rows('capabilityCalls')).toHaveLength(1)
+  })
+})
+
+describe('registered Agent access rate limiter', () => {
+  it('keeps one token bucket across credential rotation while isolating another Agent', async () => {
+    const { assertAgentAccessRateAdmission } = await vi.importActual<typeof import('../../../convex/lib/rateLimit')>(
+      '../../../convex/lib/rateLimit',
+    )
+    const backend = convexTestWithMarketComponents()
+    const limits = { maximumCallsPerMinute: 1, maximumCallsPerHour: 1 }
+    const admit = (principalRef: string, credentialId: string) => backend.run(ctx => {
+      // Keep the rotated credential in the call material to make the ignored
+      // credential dimension explicit; the helper's contract keys by principal.
+      const input = { principalRef, credentialId, ...limits }
+      return assertAgentAccessRateAdmission(ctx, input)
+    })
+
+    await expect(admit('principal:native-rotation', 'credential:native-a'))
+      .resolves.toMatchObject({ ok: true })
+    await expect(admit('principal:native-rotation', 'credential:native-b'))
+      .resolves.toMatchObject({ ok: false, retryAfter: expect.any(Number) })
+    await expect(admit('principal:native-other', 'credential:native-c'))
+      .resolves.toMatchObject({ ok: true })
   })
 })

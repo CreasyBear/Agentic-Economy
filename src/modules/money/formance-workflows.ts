@@ -1,6 +1,7 @@
 "use node"
 
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { currentUtcDayBounds, currentUtcMonthBounds } from '@/modules/common/utc-calendar'
 
 import {
   canonicalFormanceUnits,
@@ -8,13 +9,17 @@ import {
   executeFormanceMoneyCommand,
   formanceMonetaryVariable,
   readFormanceAccount,
+  readFormanceSignedAccount,
   readFormanceTransactionByReference,
+  LEGACY_FORMANCE_SCHEMA_VERSION,
+  FORMANCE_SCHEMA_VERSION,
   type FormanceContext,
   type FormanceMoneyCommand,
   type FormanceMoneyBulkCommand,
   type FormanceMoneyResult,
 } from './formance'
 import { PACKAGE4_FORMANCE_REQUIREMENTS } from './internal/commercial-policy'
+import { spendingPeriodAdjustmentReference } from './internal/spending-period-values'
 
 const SHA256 = /^sha256:[a-f0-9]{64}$/u
 const BOUNDED_REFERENCE = /^[\u0020-\u007e]{1,500}$/u
@@ -75,6 +80,33 @@ export type FormanceManagedCallBooking = Readonly<{
   rateEvidenceDigest: string
   treasuryEvidenceDigest: string
   x402RequirementDigest: string
+  spendingPeriods?: FormanceManagedCallSpendingPeriods
+}>
+
+export type FormanceManagedCallSpendingPeriod = Readonly<{
+  periodStartAt: number
+  periodEndAt: number
+  revision: number
+  limitUnits: string
+}>
+
+export type FormanceManagedCallSpendingPeriods = Readonly<{
+  version: 'ae.spending-periods:v1'
+  daily: FormanceManagedCallSpendingPeriod
+  monthly: FormanceManagedCallSpendingPeriod
+}>
+
+export type FormanceSpendingPeriodKind = 'day' | 'month'
+
+export type FormanceSpendingPeriodAdjustment = Readonly<{
+  principalRef: string
+  periodKind: FormanceSpendingPeriodKind
+  periodStartAt: number
+  periodEndAt: number
+  revision: number
+  previousLimitUnits: string
+  targetLimitUnits: string
+  authorityDigest: string
 }>
 
 export type FormanceManagedCallFinalization = Readonly<{
@@ -167,13 +199,12 @@ export function prepareFormanceManagedCallReservation(
     managedCallCommand(input, 'reserve-aud', 'CALL_RESERVED_AUD', {
       account_available: accounts.accountAvailable,
       call_reserved: accounts.callReserved,
-      agent_available: accounts.agentAvailable,
-      agent_reserved: accounts.agentReserved,
       legal_available: accounts.legalAvailable,
       legal_reserved: accounts.legalReserved,
       buyer_amount: amounts.buyer,
-      budget_amount: amounts.buyer,
       exposure_amount: amounts.buyer,
+      ...managedCallGenerationBudgetVariables(input, accounts, amounts, 'reserve'),
+      ...managedCallPeriodVariables(input, accounts, amounts, 'reserve'),
     }),
     managedCallCommand(input, 'reserve-usdc', 'CALL_RESERVED_USDC', {
       source: accounts.treasuryAvailable,
@@ -203,13 +234,12 @@ export function prepareFormanceManagedCallRelease(
     managedCallCommand(input.booking, 'release-aud', 'CALL_RELEASED_AUD', {
       account_available: accounts.accountAvailable,
       call_reserved: accounts.callReserved,
-      agent_available: accounts.agentAvailable,
-      agent_reserved: accounts.agentReserved,
       legal_available: accounts.legalAvailable,
       legal_reserved: accounts.legalReserved,
       buyer_amount: amounts.buyer,
-      budget_amount: amounts.buyer,
       exposure_amount: amounts.buyer,
+      ...managedCallGenerationBudgetVariables(input.booking, accounts, amounts, 'release'),
+      ...managedCallPeriodVariables(input.booking, accounts, amounts, 'release'),
     }, input.externalEvidenceDigest),
     managedCallCommand(input.booking, 'release-usdc', 'CALL_RELEASED_USDC', {
       treasury_committed: accounts.treasuryCommitted,
@@ -234,14 +264,13 @@ export function prepareFormanceManagedCallSettlement(
       call_reserved: accounts.callReserved,
       revenue: 'platform:revenue:sales',
       tax: 'platform:tax:gst',
-      agent_reserved: accounts.agentReserved,
-      agent_spent: accounts.agentSpent,
       legal_reserved: accounts.legalReserved,
       legal_settled: accounts.legalSettled,
       revenue_amount: amounts.revenue,
       tax_amount: amounts.tax,
-      budget_amount: amounts.buyer,
       exposure_amount: amounts.buyer,
+      ...managedCallGenerationBudgetVariables(input.booking, accounts, amounts, 'settle'),
+      ...managedCallPeriodVariables(input.booking, accounts, amounts, 'settle'),
     }, input.externalEvidenceDigest),
     managedCallCommand(input.booking, 'settle-provider', 'PROVIDER_SETTLED', {
       treasury_committed: accounts.treasuryCommitted,
@@ -427,6 +456,111 @@ export async function syncFormanceCapacity(
   })
 }
 
+/**
+ * CONTRACT: adjustFormanceSpendingPeriod(context, input)
+ *   Requires: a valid UTC day/month interval, a positive authoritative
+ *     revision, canonical nonnegative previous/target ceilings, and a signed
+ *     authority digest. The previous ceiling is supplied by the durable
+ *     control row; it is never read from native balance.
+ *   Ensures: applies exactly target - previous once, using a stable
+ *     principal/period/revision reference and idempotency key. A decrease may
+ *     retire an exact delta into a negative available capacity balance; an
+ *     increase credits the period from @world. Equal ceilings produce a
+ *     successful no-op with no transaction reference.
+ *   Invariant: spending-period accounts remain stable by principal, kind, and
+ *     UTC start; no purchase or buyer account is mutated by this command.
+ *   On violation: returns a non-retryable refusal before reading or writing the
+ *     ledger. Native ambiguity remains outcome_unknown through the existing
+ *     exact-reference executor.
+ */
+export async function adjustFormanceSpendingPeriod(
+  context: FormanceContext,
+  input: FormanceSpendingPeriodAdjustment,
+): Promise<FormanceMoneyResult> {
+  const semantic = spendingPeriodAdjustmentSemantic(input)
+  if (semantic === undefined) return refused('formance_spending_period_adjustment_input_invalid')
+  const delta = BigInt(input.targetLimitUnits) - BigInt(input.previousLimitUnits)
+  if (delta === 0n) return Object.freeze({ kind: 'completed', transactionRefs: Object.freeze([]), replayed: false })
+
+  const periodAccount = formanceSpendingPeriodAccount(
+    input.principalRef,
+    input.periodKind,
+    input.periodStartAt,
+  )
+  const identity = {
+    principalRef: input.principalRef,
+    periodKind: input.periodKind,
+    periodStartAt: input.periodStartAt,
+    revision: input.revision,
+  }
+  const idempotencyDigest = digestValue('spending-period-adjustment-idempotency', identity)
+  const commandDigest = digestValue('spending-period-adjustment-command', semantic)
+  const decrease = delta < 0n
+  const absoluteDelta = (decrease ? -delta : delta).toString()
+  const retired = `adjustments:${digestReference('spending_period', identity)}:buyer`
+  return await executeFormanceMoneyCommand(context, {
+    commandRef: spendingPeriodAdjustmentReference(input),
+    idempotencyKey: idempotencyDigest,
+    schemaVersion: FORMANCE_SCHEMA_VERSION,
+    template: decrease ? 'SPENDING_PERIOD_DECREASED' : 'SPENDING_PERIOD_INCREASED',
+    variables: Object.freeze({
+      period_available: periodAccount.available,
+      ...(decrease ? { retired } : {}),
+      amount: `AUD/6 ${absoluteDelta}`,
+    }),
+    metadata: Object.freeze({
+      command_digest: commandDigest,
+      idempotency_digest: idempotencyDigest,
+      policy_digest: stripDigest(input.authorityDigest),
+      principal_digest: digestReference('principal', input.principalRef),
+    }),
+  })
+}
+
+/**
+ * CONTRACT: readFormanceSpendingPeriod(context, input)
+ *   Requires: a genuine UTC day or month interval. The account is derived from
+ *     the supplied principal and period identity, never from the current clock.
+ *   Ensures: returns the native available capacity with negative deficits
+ *     clamped to spendable zero and marks the read non-authoritative for an
+ *     admission consequence.
+ *   Invariant: the ledger remains the only usage/balance authority; this query
+ *     does not create, reset, or alter a period account.
+ *   On violation: returns setup_required for malformed periods or unsafe data,
+ *     unavailable for source failures, and not a magic numeric fallback.
+ */
+export async function readFormanceSpendingPeriod(
+  context: FormanceContext,
+  input: Readonly<{
+    principalRef: string
+    periodKind: FormanceSpendingPeriodKind
+    periodStartAt: number
+    periodEndAt: number
+  }>,
+): Promise<FormanceDisplayBalanceResult> {
+  if (spendingPeriodIdentity(input) === undefined) {
+    return Object.freeze({ kind: 'setup_required', code: 'formance_spending_period_input_invalid' })
+  }
+  const read = await readFormanceSignedAccount(
+    context,
+    formanceSpendingPeriodAccount(input.principalRef, input.periodKind, input.periodStartAt).available,
+  )
+  if (read.kind === 'setup_required' || read.kind === 'unavailable') return read
+  const balance = read.kind === 'not_found' ? '0' : read.volumes['AUD/6']?.balanceUnits ?? '0'
+  const units = BigInt(balance) < 0n ? '0' : balance
+  return Object.freeze({
+    kind: 'available',
+    balanceKind: 'agent_budget',
+    subjectRef: input.principalRef,
+    currency: 'AUD',
+    exponent: 6,
+    units,
+    observedAt: Date.now(),
+    source: 'formance_live_read',
+    authoritativeForConsequences: false,
+  })
+}
+
 export async function readFormanceDisplayBalance(
   context: FormanceContext,
   input: Readonly<{
@@ -576,6 +710,174 @@ function capacitySemantic(input: FormanceCapacitySync) {
   return Object.freeze({ format: 'ae.formance-capacity-sync:v1', ...input })
 }
 
+function validManagedCallSpendingPeriods(
+  input: FormanceManagedCallBooking,
+): boolean {
+  const periods = input.spendingPeriods
+  if (periods === undefined || typeof periods !== 'object' || periods === null
+    || periods.version !== 'ae.spending-periods:v1') return false
+  if (!validSpendingPeriod(input.principalRef, 'day', periods.daily)
+    || !validSpendingPeriod(input.principalRef, 'month', periods.monthly)) return false
+  return periods.daily.periodStartAt >= periods.monthly.periodStartAt
+    && periods.daily.periodEndAt <= periods.monthly.periodEndAt
+}
+
+function validSpendingPeriod(
+  principalRef: unknown,
+  periodKind: FormanceSpendingPeriodKind,
+  period: unknown,
+): period is FormanceManagedCallSpendingPeriod {
+  if (!boundedReference(principalRef)
+    || typeof period !== 'object'
+    || period === null) return false
+  const candidate = period as Partial<FormanceManagedCallSpendingPeriod>
+  if (!Number.isSafeInteger(candidate.periodStartAt)
+    || !Number.isSafeInteger(candidate.periodEndAt)
+    || !positiveGeneration(candidate.revision)
+    || canonicalFormanceUnits(candidate.limitUnits ?? '', false) === undefined) return false
+  return validUtcPeriod(periodKind, candidate.periodStartAt, candidate.periodEndAt)
+}
+
+function validUtcPeriod(
+  periodKind: FormanceSpendingPeriodKind,
+  periodStartAt: number,
+  periodEndAt: number,
+): boolean {
+  if (!Number.isSafeInteger(periodStartAt)
+    || !Number.isSafeInteger(periodEndAt)
+    || periodStartAt < 0
+    || periodEndAt <= periodStartAt) return false
+  try {
+    const expected = periodKind === 'day'
+      ? currentUtcDayBounds(periodStartAt)
+      : currentUtcMonthBounds(periodStartAt)
+    return expected.periodStartAt === periodStartAt && expected.periodEndAt === periodEndAt
+  } catch {
+    return false
+  }
+}
+
+function spendingPeriodIdentity(input: Readonly<{
+  principalRef: unknown
+  periodKind: unknown
+  periodStartAt: unknown
+  periodEndAt: unknown
+}>): input is Readonly<{
+  principalRef: string
+  periodKind: FormanceSpendingPeriodKind
+  periodStartAt: number
+  periodEndAt: number
+}> {
+  if (typeof input !== 'object' || input === null) return false
+  return (input.periodKind === 'day' || input.periodKind === 'month')
+    && validSpendingPeriod(input.principalRef, input.periodKind, {
+      periodStartAt: input.periodStartAt,
+      periodEndAt: input.periodEndAt,
+      revision: 1,
+      limitUnits: '0',
+    })
+}
+
+function spendingPeriodAccounts(input: FormanceManagedCallBooking): Readonly<Record<string, string>> {
+  const periods = input.spendingPeriods
+  if (periods === undefined) return Object.freeze({})
+  const daily = formanceSpendingPeriodAccount(input.principalRef, 'day', periods.daily.periodStartAt)
+  const monthly = formanceSpendingPeriodAccount(input.principalRef, 'month', periods.monthly.periodStartAt)
+  return Object.freeze({
+    dailyAvailable: daily.available,
+    dailyReserved: daily.reserved,
+    dailySpent: daily.spent,
+    monthlyAvailable: monthly.available,
+    monthlyReserved: monthly.reserved,
+    monthlySpent: monthly.spent,
+  })
+}
+
+export function formanceSpendingPeriodAccount(
+  principalRef: string,
+  periodKind: FormanceSpendingPeriodKind,
+  periodStartAt: number,
+): Readonly<{ available: string; reserved: string; spent: string }> {
+  const digest = digestReference('spending_period', { principalRef, periodKind, periodStartAt })
+  return Object.freeze({
+    available: `spending_periods:${digest}:available`,
+    reserved: `spending_periods:${digest}:reserved`,
+    spent: `spending_periods:${digest}:spent`,
+  })
+}
+
+function spendingPeriodAdjustmentSemantic(input: FormanceSpendingPeriodAdjustment) {
+  if (typeof input !== 'object' || input === null
+    || !spendingPeriodIdentity(input)
+    || !positiveGeneration(input.revision)
+    || canonicalFormanceUnits(input.previousLimitUnits, false) === undefined
+    || canonicalFormanceUnits(input.targetLimitUnits, false) === undefined
+    || !SHA256.test(input.authorityDigest)) return undefined
+  return Object.freeze({
+    format: 'ae.formance-spending-period-adjustment:v1',
+    ...input,
+  })
+}
+
+function managedCallGenerationBudgetVariables(
+  input: FormanceManagedCallBooking,
+  accounts: NonNullable<ReturnType<typeof managedCallAccounts>>,
+  amounts: Readonly<{ buyer: string }>,
+  operation: 'reserve' | 'release' | 'settle',
+): Readonly<Record<string, string>> {
+  // v1.3 accepted Calls reserve the generation budget. v1.4 period-aware
+  // Calls use daily/monthly capacity as that budget and must not debit a
+  // second, generation-scoped allowance.
+  if (input.spendingPeriods !== undefined) return Object.freeze({})
+  return operation === 'settle'
+    ? Object.freeze({
+        agent_reserved: accounts.agentReserved,
+        agent_spent: accounts.agentSpent,
+        budget_amount: amounts.buyer,
+      })
+    : Object.freeze({
+        agent_available: accounts.agentAvailable,
+        agent_reserved: accounts.agentReserved,
+        budget_amount: amounts.buyer,
+      })
+}
+
+function managedCallPeriodVariables(
+  input: FormanceManagedCallBooking,
+  accounts: NonNullable<ReturnType<typeof managedCallAccounts>>,
+  amounts: Readonly<{ buyer: string }>,
+  operation: 'reserve' | 'release' | 'settle',
+): Readonly<Record<string, string>> {
+  if (input.spendingPeriods === undefined
+    || accounts.dailyAvailable === undefined
+    || accounts.dailyReserved === undefined
+    || accounts.dailySpent === undefined
+    || accounts.monthlyAvailable === undefined
+    || accounts.monthlyReserved === undefined
+    || accounts.monthlySpent === undefined) return Object.freeze({})
+  const fields = operation === 'reserve'
+    ? {
+        daily_available: accounts.dailyAvailable,
+        daily_reserved: accounts.dailyReserved,
+        monthly_available: accounts.monthlyAvailable,
+        monthly_reserved: accounts.monthlyReserved,
+      }
+    : operation === 'release'
+      ? {
+          daily_reserved: accounts.dailyReserved,
+          daily_available: accounts.dailyAvailable,
+          monthly_reserved: accounts.monthlyReserved,
+          monthly_available: accounts.monthlyAvailable,
+        }
+      : {
+          daily_reserved: accounts.dailyReserved,
+          daily_spent: accounts.dailySpent,
+          monthly_reserved: accounts.monthlyReserved,
+          monthly_spent: accounts.monthlySpent,
+        }
+  return Object.freeze({ ...fields, daily_amount: amounts.buyer, monthly_amount: amounts.buyer })
+}
+
 function managedCallAccounts(input: FormanceManagedCallBooking) {
   if (!managedCallSemantic(input)) return undefined
   const callDigest = digestReference('call', input.callRef)
@@ -591,6 +893,7 @@ function managedCallAccounts(input: FormanceManagedCallBooking) {
     subjectRef: input.treasuryRef,
     generation: input.treasuryGeneration,
   })
+  const periodAccounts = spendingPeriodAccounts(input)
   return Object.freeze({
     accountAvailable: `accounts:${digestReference('account', input.accountRef)}:available`,
     callReserved: `calls:${callDigest}:buyer_reserved`,
@@ -606,6 +909,7 @@ function managedCallAccounts(input: FormanceManagedCallBooking) {
     obligationSettled: `provider_obligations:${callDigest}:settled`,
     obligationReversed: `provider_obligations:${callDigest}:reversed`,
     providerSettlement: `providers:${digestReference('provider', input.providerRef)}:settlement`,
+    ...periodAccounts,
   })
 }
 
@@ -659,6 +963,7 @@ function managedCallSemantic(input: FormanceManagedCallBooking): boolean {
     && canonicalFormanceUnits(input.buyerTaxUnits, false) !== undefined
     && BigInt(input.buyerRevenueUnits) + BigInt(input.buyerTaxUnits)
       === BigInt(input.buyerAmountUnits)
+    && (input.spendingPeriods === undefined || validManagedCallSpendingPeriods(input))
 }
 
 function managedCallCommand(
@@ -676,14 +981,20 @@ function managedCallCommand(
   return Object.freeze({
     commandRef: formanceReference(identity, stage),
     idempotencyKey: idempotencyDigest,
-    schemaVersion: PACKAGE4_FORMANCE_REQUIREMENTS.schemaVersion,
+    schemaVersion: input.spendingPeriods === undefined
+      ? LEGACY_FORMANCE_SCHEMA_VERSION
+      : FORMANCE_SCHEMA_VERSION,
     template,
     variables: Object.freeze({ ...variables }),
     metadata: Object.freeze({
       account_digest: digestReference('account', input.accountRef),
       call_digest: digestReference('call', input.callRef),
       command_digest: digestValue('managed-call-command', {
-        format: 'ae.formance-managed-call:v1',
+        format: input.spendingPeriods === undefined
+          ? 'ae.formance-managed-call:v1'
+          : 'ae.formance-managed-call:v2',
+        // The legacy branch intentionally receives the original object shape;
+        // adding a missing optional property would change accepted digests.
         input,
         stage,
         template,
@@ -756,12 +1067,12 @@ function stripDigest(value: string): string {
   return value.slice('sha256:'.length)
 }
 
-function boundedReference(value: string): boolean {
-  return value === value.trim() && BOUNDED_REFERENCE.test(value)
+function boundedReference(value: unknown): value is string {
+  return typeof value === 'string' && value === value.trim() && BOUNDED_REFERENCE.test(value)
 }
 
-function positiveGeneration(value: number | undefined): value is number {
-  return value !== undefined && Number.isSafeInteger(value) && value > 0
+function positiveGeneration(value: unknown): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value > 0
 }
 
 async function executePrepared(

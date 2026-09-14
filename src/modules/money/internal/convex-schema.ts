@@ -1,3 +1,4 @@
+import { spendingPeriodAdjustmentValue } from './spending-period-values'
 import { defineTable } from 'convex/server'
 import { v } from 'convex/values'
 
@@ -169,6 +170,21 @@ export const x402PaymentAuthorizationFailureDetailValue = v.union(
   v.literal('authority_read_failed'),
 )
 export const moneyTables = {
+  // Applied configuration and one durable external command; never a spend counter.
+  agentSpendingPeriods: defineTable({
+    principalRef: v.string(),
+    periodKind: v.union(v.literal('day'), v.literal('month')),
+    periodStartAt: v.number(),
+    periodEndAt: v.number(),
+    appliedRevision: v.number(),
+    appliedLimitUnits: v.string(),
+    pending: v.optional(spendingPeriodAdjustmentValue),
+    appliedCommandDigest: v.optional(v.string()),
+    transactionRefs: v.optional(v.array(v.string())),
+    cutover: v.literal('clean_period'),
+  }).index('by_principalRef_and_periodKind_and_periodStartAt', [
+    'principalRef', 'periodKind', 'periodStartAt',
+  ]),
   moneyStripeWebhookInbox: defineTable({
     stripeEventId: identifier,
     eventType: identifier,

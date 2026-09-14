@@ -89,7 +89,7 @@ import { callStatusResultSchema } from '@/modules/capability-execution/call-reco
 import { issuedAgentGrantRef } from '@/modules/agent-access/issued-agent-binding'
 import { createCustomerRequestServiceAssertion, toStableHashValue } from '@/modules/agent-access/service-auth-envelope'
 import { createFormanceContext, installPackage4FormanceSchema, readFormanceAccount, readFormanceTransactionByReference } from '@/modules/money/formance'
-import { bookFormanceFundingSettlement, formanceAccountMetadataDigest, readFormanceDisplayBalance } from '@/modules/money/formance-workflows'
+import { bookFormanceFundingSettlement, formanceAccountMetadataDigest, readFormanceDisplayBalance, readFormanceSpendingPeriod, type FormanceManagedCallBooking } from '@/modules/money/formance-workflows'
 import { BASE_SEPOLIA_NETWORK, BASE_SEPOLIA_USDC_ADDRESS, cdpX402CustodyConfigurationFromEnvironment,
   cdpX402CustodyBudgetRef, cdpX402PolicyRulesDigest } from '@/modules/capability-supply/server'
 
@@ -645,7 +645,23 @@ afterEach(() => {
   external.receipt.mockReset()
 })
 
-async function registerRotatingBuyer(backend: ConvexFixtureBackend) {
+async function expectAgentPeriodBalances(
+  context: ReturnType<typeof createFormanceContext>,
+  booking: FormanceManagedCallBooking,
+  units: string,
+) {
+  if (booking.spendingPeriods === undefined) throw new Error('buyer_period_booking_missing')
+  for (const [periodKind, period] of [
+    ['day', booking.spendingPeriods.daily], ['month', booking.spendingPeriods.monthly],
+  ] as const) {
+    expect(await readFormanceSpendingPeriod(context, {
+      principalRef: booking.principalRef, periodKind,
+      periodStartAt: period.periodStartAt, periodEndAt: period.periodEndAt,
+    })).toMatchObject({ kind: 'available', units })
+  }
+}
+
+async function registerRotatingBuyer(backend: ConvexFixtureBackend, monthlyUnits = '1200000', dailyUnits = '1200000', maximumConcurrentCalls = 2) {
   const subject = 'user_rotating-buyer'
   const owner = (await publishedBusinessOwner(backend, 'rotating-buyer')).owner
   const serviceKey = 'rotating-buyer-service-test-key-32-bytes'
@@ -659,14 +675,14 @@ async function registerRotatingBuyer(backend: ConvexFixtureBackend) {
   }
   const limit = { currency: 'AUD' as const, units: '1200000', exponent: 6 as const }
   const policy = buildAgentAccessPolicy({ environment: 'sandbox', currency: 'AUD', exponent: 6,
-    maximumSpendPerCall: limit, maximumDailySpend: limit, maximumMonthlySpend: limit })
+    maximumSpendPerCall: limit, maximumDailySpend: { ...limit, units: dailyUnits }, maximumMonthlySpend: { ...limit, units: monthlyUnits } })
   const input = {
     issuanceKey: 'rotating-buyer-initial', grantRef: issuedAgentGrantRef(subject, 'rotating-buyer-initial'),
     credentialId: 'credential:rotating-buyer-initial', displayName: 'Rotating buyer',
     applicationRef: 'agentic-economy', environment: 'sandbox' as const,
     scopes: [CUSTOMER_REQUEST_SPENDING_POLICY_SCOPE, MARKET_TOOLS_CALL_SCOPE], authorityMode: 'spending_policy' as const,
     toolAccess: 'all_admitted' as const, toolRefs: [],
-    spendingPolicy: { ...policy, budget: { ...policy.budget, maximumConcurrentCalls: 2 } },
+    spendingPolicy: { ...policy, budget: { ...policy.budget, maximumConcurrentCalls } },
     createdAt: Date.now(), expiresAt: Date.now() + 600_000,
   }
   expect(await owner.mutation(api.agentAccessPrincipals.registerIssuedAgentBindingForServer, {
@@ -683,6 +699,7 @@ async function registerRotatingBuyer(backend: ConvexFixtureBackend) {
 async function prepareFundedSandboxBuyer(options: {
   treasuryTotalUnits?: string; maximumConcurrentCalls?: number
   accountPrincipalUnits?: string
+  initialTime?: number
   buyerSetup?: (backend: ConvexFixtureBackend) => Promise<{ principal: TestPrincipal; grantRef: string }>
 } = {}) {
   const gatewayUrl = process.env.AE_FORMANCE_GATEWAY_URL ?? 'http://127.0.0.1:3069'
@@ -745,6 +762,7 @@ async function prepareFundedSandboxBuyer(options: {
   external.rate.mockImplementation(async () => ({ source: 'coinbase', base: 'USDC', quote: 'AUD', rate: '1.2', fetchedAt: Date.now() }))
 
   vi.useFakeTimers()
+  if (options.initialTime !== undefined) vi.setSystemTime(options.initialTime)
   const backend = convexTestWithWorkers()
   const provider = await publishedBusinessOwner(backend, 'buyer-journey-provider')
   const offeringRef = 'catalog-offering:buyer-journey'
@@ -828,6 +846,151 @@ async function prepareFundedSandboxBuyer(options: {
 }
 
 describe('capability Call Workpool lifecycle', () => {
+  it.runIf(process.env.AE_FORMANCE_INTEGRATION === 'true')('enforces a distinct daily limit while monthly capacity remains available', async () => {
+    const { backend, published, buyer, readBalance, signedAuthorizations } = await prepareFundedSandboxBuyer({
+      buyerSetup: backend => registerRotatingBuyer(backend, '5000000'),
+    })
+    await backend.run(async ctx => await ctx.runMutation(components.workpool.config.update, { maxParallelism: 0 }))
+    const first = await invokeCall(backend, buyer.principal, published.toolRef, 'daily-first', 'daily-first')
+    if (first.kind !== 'pending') throw new Error(`daily_first_call_missing:${JSON.stringify(first)}`)
+    const inspected = await backend.action(api.capabilityQuotes.quote, await withSourceWrite('protected_action', {
+      operationKey: 'daily-second', correlationId: 'daily-second', principal: { ...buyer.principal, scopes: [...buyer.principal.scopes] },
+      toolRef: published.toolRef, input: INPUT,
+    }))
+    const second = inspected.kind === 'committed'
+      ? await invokeCall(backend, buyer.principal, published.toolRef, 'daily-second', 'daily-second')
+      : inspected
+    const balanceAfterSecond = await readBalance()
+    for (const [index, result] of [first, second].entries()) {
+      if (result.kind !== 'pending') continue
+      const key = `daily-cancel-${index}`
+      expect(await backend.action(api.capabilityCalls.cancelCall, {
+        ...await recoveryActionArgs(buyer.principal, result.callRef, key, `cancel:${key}`), idempotencyKey: key,
+      })).toMatchObject({ kind: 'found', state: 'cancelled', callRef: result.callRef })
+    }
+    await backend.run(async ctx => await ctx.runMutation(components.workpool.config.update, { maxParallelism: 1 }))
+    await backend.finishAllScheduledFunctions(() => vi.advanceTimersByTime(1))
+    expect(await readBalance()).toMatchObject({ kind: 'available', units: '10000000' })
+    expect(signedAuthorizations).toHaveLength(0)
+    expect(providerFetch.mock.calls.filter(([, init]) => new Headers(init?.headers as HeadersInit).has('payment-signature'))).toHaveLength(0)
+    expect(second, JSON.stringify({ second, balanceAfterSecond })).toMatchObject({ kind: 'refused', code: 'budget_exceeded' })
+    expect(balanceAfterSecond).toMatchObject({ kind: 'available', units: '8800000' })
+  })
+
+  it.runIf(process.env.AE_FORMANCE_INTEGRATION === 'true')('admits only one concurrent quoted Call against one daily allowance', async () => {
+    const { backend, formance, published, buyer, readBalance, signedAuthorizations } = await prepareFundedSandboxBuyer({
+      buyerSetup: backend => registerRotatingBuyer(backend, '5000000'),
+    })
+    await backend.run(async ctx => await ctx.runMutation(components.workpool.config.update, { maxParallelism: 0 }))
+    const keys = ['period-race-one', 'period-race-two']
+    const quote = async (key: string) => await backend.action(api.capabilityQuotes.quote, await withSourceWrite('protected_action', {
+      operationKey: key, correlationId: key, principal: { ...buyer.principal, scopes: [...buyer.principal.scopes] },
+      toolRef: published.toolRef, input: INPUT,
+    }))
+    for (const key of keys) {
+      const offered = await quote(key)
+      if (offered.kind !== 'committed') throw new Error(`race_quote_missing:${JSON.stringify(offered)}`)
+      quoteByCallKey.set(`${buyer.principal.credentialId}:${key}`, offered.quoteRef)
+    }
+    const results = await Promise.all(keys.map(key => invokeCall(backend, buyer.principal, published.toolRef, key, key)))
+    expect(results.filter(result => result.kind === 'pending'), JSON.stringify(results)).toHaveLength(1)
+    expect(results.filter(result => result.kind === 'refused'), JSON.stringify(results)).toHaveLength(1)
+    const winner = results.find(result => result.kind === 'pending')
+    if (winner?.kind !== 'pending') throw new Error('period_race_winner_missing')
+    const booking = await backend.query(internal.moneyManagedCall.readBooking, { callRef: winner.callRef })
+    if (booking.kind !== 'available' || booking.booking.spendingPeriods === undefined) throw new Error('period_race_booking_missing')
+    expect(await backend.run(ctx => ctx.db.query('capabilityCalls').collect())).toHaveLength(1)
+    expect(await readBalance()).toMatchObject({ kind: 'available', units: '8800000' })
+    expect(await quote('period-race-refreshed')).toMatchObject({ kind: 'refused', code: 'budget_exceeded', reason: 'daily_limit_exhausted' })
+    const key = 'period-race-cancel'
+    const cancel = async () => await backend.action(api.capabilityCalls.cancelCall, {
+      ...await recoveryActionArgs(buyer.principal, winner.callRef, key, `cancel:${key}`), idempotencyKey: key,
+    })
+    expect(await cancel()).toMatchObject({ kind: 'found', state: 'cancelled' })
+    await backend.finishAllScheduledFunctions(() => vi.advanceTimersByTime(1))
+    expect(await cancel()).toMatchObject({ kind: 'found', state: 'cancelled' })
+    await backend.run(async ctx => await ctx.runMutation(components.workpool.config.update, { maxParallelism: 1 }))
+    await backend.finishAllScheduledFunctions(() => vi.advanceTimersByTime(1))
+    expect(await readBalance()).toMatchObject({ kind: 'available', units: '10000000' })
+    for (const [periodKind, period, units] of [
+      ['day', booking.booking.spendingPeriods.daily, '1200000'],
+      ['month', booking.booking.spendingPeriods.monthly, '5000000'],
+    ] as const) expect(await readFormanceSpendingPeriod(formance, { principalRef: buyer.principal.principalId,
+      periodKind, periodStartAt: period.periodStartAt, periodEndAt: period.periodEndAt })).toMatchObject({ kind: 'available', units })
+    expect(signedAuthorizations).toHaveLength(0)
+    expect(providerFetch.mock.calls.filter(([, init]) => new Headers(init?.headers as HeadersInit).has('payment-signature'))).toHaveLength(0)
+  })
+
+  for (const [label, start, monthlyUnits] of [
+    ['day', Date.UTC(2026, 8, 14, 23, 59, 50), '2400000'],
+    ['month', Date.UTC(2026, 8, 30, 23, 59, 50), '2400000'],
+  ] as const) {
+    it.runIf(process.env.AE_FORMANCE_INTEGRATION === 'true')(`keeps original holds and recovery across a UTC ${label} boundary`, async () => {
+      const { backend, formance, published, buyer, readBalance } = await prepareFundedSandboxBuyer({
+        initialTime: start,
+        buyerSetup: backend => registerRotatingBuyer(backend, monthlyUnits, '2400000'),
+      })
+      await backend.run(async ctx => await ctx.runMutation(components.workpool.config.update, { maxParallelism: 0 }))
+      const quote = async (key: string) => await backend.action(api.capabilityQuotes.quote, await withSourceWrite('protected_action', {
+        operationKey: key, correlationId: key, principal: { ...buyer.principal, scopes: [...buyer.principal.scopes] },
+        toolRef: published.toolRef, input: INPUT,
+      }))
+      const unused = await quote('boundary-unused')
+      if (unused.kind !== 'committed') throw new Error(`boundary_quote_missing:${JSON.stringify(unused)}`)
+      expect(unused.expiresAt).toBe(start + 10_000)
+      const first = await invokeCall(backend, buyer.principal, published.toolRef, 'boundary-first', 'boundary-first')
+      if (first.kind !== 'pending') throw new Error(`boundary_first_call_missing:${JSON.stringify(first)}`)
+      const old = await backend.query(internal.moneyManagedCall.readBooking, { callRef: first.callRef })
+      if (old.kind !== 'available' || old.booking.spendingPeriods === undefined) throw new Error('old_period_booking_missing')
+      vi.setSystemTime(start + 10_001)
+      const expired = await backend.action(api.capabilityCalls.call, await withSourceWrite('protected_action', {
+        operationKey: 'boundary-expired', correlationId: 'boundary-expired', principal: { ...buyer.principal, scopes: [...buyer.principal.scopes] },
+        quoteRef: unused.quoteRef, idempotencyKey: 'boundary-expired',
+      }))
+      expect(expired).toMatchObject({ kind: 'refused' })
+      // Accepted replay retains the original Call even though its Quote's day ended.
+      expect(await invokeCall(backend, buyer.principal, published.toolRef, 'boundary-first', 'boundary-first-replay'))
+        .toMatchObject({ kind: 'pending', callRef: first.callRef })
+      const second = await invokeCall(backend, buyer.principal, published.toolRef, 'boundary-second', 'boundary-second')
+      if (second.kind !== 'pending') throw new Error(`boundary_second_call_missing:${JSON.stringify(second)}`)
+      const current = await backend.query(internal.moneyManagedCall.readBooking, { callRef: second.callRef })
+      if (current.kind !== 'available' || current.booking.spendingPeriods === undefined) throw new Error('current_period_booking_missing')
+      expect(current.booking.spendingPeriods.daily.periodStartAt).not.toBe(old.booking.spendingPeriods.daily.periodStartAt)
+      if (label === 'day') {
+        expect(current.booking.spendingPeriods.monthly).toEqual(old.booking.spendingPeriods.monthly)
+        expect(await quote('boundary-month-exhausted')).toMatchObject({ kind: 'refused', code: 'budget_exceeded', reason: 'monthly_limit_exhausted' })
+      } else {
+        expect(current.booking.spendingPeriods.monthly.periodStartAt).not.toBe(old.booking.spendingPeriods.monthly.periodStartAt)
+      }
+      expect(await readBalance()).toMatchObject({ kind: 'available', units: '7600000' })
+      const cancel = async (callRef: string, key: string) => await backend.action(api.capabilityCalls.cancelCall, {
+        ...await recoveryActionArgs(buyer.principal, callRef, key, `cancel:${key}`), idempotencyKey: key,
+      })
+      expect(await cancel(first.callRef, 'boundary-release-original')).toMatchObject({ kind: 'found', state: 'cancelled' })
+      // Complete this cancelled Call's canonical refund while the current Call
+      // remains held. Drain the full worker queue only after both cancellations.
+      expect(await backend.action(internal.moneyManagedCallLifecycle.releaseBeforeSubmission, {
+        callRef: first.callRef, now: Date.now(),
+      })).toMatchObject({ kind: 'accepted', state: 'released' })
+      expect(await cancel(first.callRef, 'boundary-release-original')).toMatchObject({ kind: 'found', state: 'cancelled' })
+      const periodBalance = async (booking: FormanceManagedCallBooking, periodKind: 'day' | 'month') => {
+        const period = periodKind === 'day' ? booking.spendingPeriods!.daily : booking.spendingPeriods!.monthly
+        return await readFormanceSpendingPeriod(formance, { principalRef: booking.principalRef, periodKind,
+          periodStartAt: period.periodStartAt, periodEndAt: period.periodEndAt })
+      }
+      expect(await periodBalance(old.booking, 'day')).toMatchObject({ kind: 'available', units: '2400000' })
+      expect(await periodBalance(current.booking, 'day')).toMatchObject({ kind: 'available', units: '1200000' })
+      // A late old-month release changes the old month; it never tops up the new month.
+      if (label === 'month') expect(await periodBalance(old.booking, 'month')).toMatchObject({ kind: 'available', units: '2400000' })
+      expect(await periodBalance(current.booking, 'month')).toMatchObject({ kind: 'available', units: '1200000' })
+      expect(await readBalance()).toMatchObject({ kind: 'available', units: '8800000' })
+      expect(await cancel(second.callRef, 'boundary-release-current')).toMatchObject({ kind: 'found', state: 'cancelled' })
+      await backend.run(async ctx => await ctx.runMutation(components.workpool.config.update, { maxParallelism: 1 }))
+      await backend.finishAllScheduledFunctions(() => vi.advanceTimersByTime(1))
+      expect(await readBalance()).toMatchObject({ kind: 'available', units: '10000000' })
+    })
+  }
+
   it.runIf(process.env.AE_FORMANCE_INTEGRATION === 'true')('refuses a quoted purchase after funds are reserved and permits continuation only after funding', async () => {
     const { backend, formance, published, buyer, readBalance, signedAuthorizations } = await prepareFundedSandboxBuyer({
       accountPrincipalUnits: '1200000', maximumConcurrentCalls: 2,
@@ -893,10 +1056,13 @@ describe('capability Call Workpool lifecycle', () => {
     expect(providerFetch.mock.calls.filter(([, init]) => new Headers(init?.headers as HeadersInit).has('payment-signature'))).toHaveLength(0)
   })
 
-  it.runIf(process.env.AE_FORMANCE_INTEGRATION === 'true')('retains one funded Agent allowance through registered credential replacement and concurrent old/new requests', async () => {
+  it.runIf(process.env.AE_FORMANCE_INTEGRATION === 'true').each([
+    { capacity: 'spending allowance', limitUnits: '1200000', maximumConcurrentCalls: 2 },
+    { capacity: 'concurrency allowance', limitUnits: '2400000', maximumConcurrentCalls: 1 },
+  ])('retains one Agent $capacity through registered credential replacement', async ({ limitUnits, maximumConcurrentCalls }) => {
     let registered: Awaited<ReturnType<typeof registerRotatingBuyer>> | undefined
     const { backend, formance, published, buyer, readBalance, signedAuthorizations } = await prepareFundedSandboxBuyer({
-      buyerSetup: async backend => { registered = await registerRotatingBuyer(backend); return registered },
+      buyerSetup: async backend => { registered = await registerRotatingBuyer(backend, limitUnits, limitUnits, maximumConcurrentCalls); return registered },
     })
     if (registered === undefined) throw new Error('rotating_buyer_not_registered')
     const { owner, input, subject, sign } = registered
@@ -906,9 +1072,7 @@ describe('capability Call Workpool lifecycle', () => {
     if (accepted.kind !== 'pending') throw new Error('rotation_purchase_not_accepted')
     const booking = await backend.query(internal.moneyManagedCall.readBooking, { callRef: accepted.callRef })
     if (booking.kind !== 'available') throw new Error('rotation_booking_missing')
-    expect(await readFormanceDisplayBalance(formance, {
-      balanceKind: 'agent_budget', subjectRef: buyer.principal.principalId, generation: booking.booking.agentBudgetGeneration, now: Date.now(),
-    })).toMatchObject({ kind: 'available', units: '0' })
+    await expectAgentPeriodBalances(formance, booking.booking, (BigInt(limitUnits) - 1200000n).toString())
     const replacement = {
       principalRef: buyer.principal.principalId, replacementMode: 'planned' as const,
       issuanceKey: 'rotating-buyer-successor', grantRef: issuedAgentGrantRef(subject, 'rotating-buyer-successor'),
@@ -932,7 +1096,13 @@ describe('capability Call Workpool lifecycle', () => {
     })).toMatchObject({ kind: 'completed', providerCredentialId: buyer.principal.credentialId })
     const [oldQuote, newQuote] = await Promise.all([quote(buyer.principal, 'revoked'), quote(successor, 'promoted')])
     expect(oldQuote).toMatchObject({ kind: 'refused', code: 'grant_not_found' })
-    expect(newQuote).toMatchObject({ kind: 'refused', code: 'budget_exceeded', reason: 'period_budget_exhausted' })
+    if (maximumConcurrentCalls === 1) {
+      expect(newQuote).toMatchObject({ kind: 'committed' })
+      expect(await invokeCall(backend, successor, published.toolRef, 'rotation-over-concurrency', 'rotation-over-concurrency'))
+        .toMatchObject({ kind: 'refused', code: 'concurrency_limited' })
+    } else {
+      expect(newQuote).toMatchObject({ kind: 'refused', code: 'budget_exceeded', reason: 'daily_limit_exhausted' })
+    }
     expect(await readBalance()).toMatchObject({ kind: 'available', units: '8800000' })
     expect(await backend.run(async ctx => await ctx.db.query('capabilityCalls').collect())).toHaveLength(1)
     const cancel = async (callRef: string, key: string) => await backend.action(api.capabilityCalls.cancelCall, {
@@ -946,13 +1116,12 @@ describe('capability Call Workpool lifecycle', () => {
     if (resumed.kind !== 'pending') throw new Error('rotation_continuation_not_accepted')
     const nextBooking = await backend.query(internal.moneyManagedCall.readBooking, { callRef: resumed.callRef })
     expect(nextBooking).toMatchObject({ kind: 'available', booking: { principalRef: buyer.principal.principalId,
-      agentBudgetGeneration: booking.booking.agentBudgetGeneration } })
+      agentBudgetGeneration: booking.booking.agentBudgetGeneration, spendingPeriods: booking.booking.spendingPeriods } })
     expect(await cancel(resumed.callRef, 'rotation-cancel-next')).toMatchObject({ kind: 'found', state: 'cancelled' })
     await backend.run(async ctx => await ctx.runMutation(components.workpool.config.update, { maxParallelism: 1 }))
     await backend.finishAllScheduledFunctions(() => vi.advanceTimersByTime(1))
     expect(await readBalance()).toMatchObject({ kind: 'available', units: '10000000' })
-    expect(await readFormanceDisplayBalance(formance, { balanceKind: 'agent_budget', subjectRef: buyer.principal.principalId,
-      generation: booking.booking.agentBudgetGeneration, now: Date.now() })).toMatchObject({ kind: 'available', units: '1200000' })
+    await expectAgentPeriodBalances(formance, booking.booking, limitUnits)
     expect(signedAuthorizations).toHaveLength(0)
     expect(providerFetch.mock.calls.filter(([, init]) => new Headers(init?.headers as HeadersInit).has('payment-signature'))).toHaveLength(0)
   })
@@ -1000,9 +1169,9 @@ describe('capability Call Workpool lifecycle', () => {
     const material = await backend.query(internal.moneyManagedCall.readBooking, { callRef: winner.callRef })
     if (material.kind !== 'available') throw new Error('treasury_contention_booking_missing')
     const assertCapacity = async () => {
+      await expectAgentPeriodBalances(formance, material.booking, '3800000')
       expect(await readBalance()).toMatchObject({ kind: 'available', units: '8800000' })
       for (const [balanceKind, subjectRef, generation, units] of [
-        ['agent_budget', material.booking.principalRef, material.booking.agentBudgetGeneration, '3800000'],
         ['treasury_usdc', material.booking.treasuryRef, material.booking.treasuryGeneration, '0'],
         ['legal_customer_exposure', material.booking.legalCustomerRef, material.booking.legalCustomerGeneration, (BigInt(exposureBefore.units) - 1200000n).toString()],
       ] as const) {
@@ -1039,8 +1208,8 @@ describe('capability Call Workpool lifecycle', () => {
     await backend.run(async (ctx) => await ctx.runMutation(components.workpool.config.update, { maxParallelism: 1 }))
     await backend.finishAllScheduledFunctions(() => vi.advanceTimersByTime(1))
     expect(await readBalance()).toMatchObject({ kind: 'available', units: '10000000' })
+    await expectAgentPeriodBalances(formance, material.booking, '5000000')
     for (const [balanceKind, subjectRef, generation, units] of [
-      ['agent_budget', material.booking.principalRef, material.booking.agentBudgetGeneration, '5000000'],
       ['treasury_usdc', material.booking.treasuryRef, material.booking.treasuryGeneration, '1000000'],
       ['legal_customer_exposure', material.booking.legalCustomerRef, material.booking.legalCustomerGeneration, exposureBefore.units],
     ] as const) {

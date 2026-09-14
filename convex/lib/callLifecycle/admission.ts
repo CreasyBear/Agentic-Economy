@@ -34,9 +34,11 @@ import type { SellerOnboardingCanaryExecutionEnvelope } from '@/modules/capabili
 import {
   normalizeStoredAgentAccessGrant,
   normalizeStoredAgentAccessGrantForTool,
+  projectAgentAccessGrant,
   type NormalizedStoredAgentAccessGrant,
 } from '@/modules/agent-access/policy'
 import { toolProviderRouteabilityIsFrozen } from '../providerOffboardingFreeze'
+import { spendingPeriodsAreCurrent } from '../agentSpendingPeriods'
 import type { CallApprovalDecisionContext } from '@/modules/capability-execution/call-approval-contracts'
 import type { pendingApprovalView } from './contracts'
 
@@ -223,6 +225,7 @@ function existingReservationMatches(existing: CallRow, args: ReserveArgs): boole
     existing.grantRef !== undefined,
     existing.policyDigest !== undefined,
     existing.grantExpiresAt !== undefined,
+    existing.quoteRef === args.quoteRef,
     existing.principalId === args.principalId,
     existing.ownerId === args.ownerId,
     existing.applicationRef === args.applicationRef,
@@ -353,18 +356,18 @@ async function concurrencyAdmissionRefusal(
   args: ReserveArgs,
   concurrentLimit: number,
 ): Promise<GrantRefusal | null> {
+  // A pending or uncertain Call remains an active Agent commitment until its
+  // lifecycle resolves. Credential rotation and grant expiry do not free it.
   const pendingRows = await ctx.db.query('capabilityCalls')
-    .withIndex('by_credentialId_and_state_and_grantExpiresAt', (query) => (
-      query.eq('credentialId', args.credentialId)
-        .eq('state', 'pending')
-        .gt('grantExpiresAt', args.now)
+    .withIndex('by_principalId_and_state', (query) => (
+      query.eq('principalId', args.principalId).eq('state', 'pending')
     ))
     .take(concurrentLimit)
   if (pendingRows.length >= concurrentLimit) {
     return { kind: 'refused', code: 'concurrency_limited', retryable: true, nextAction: 'Retry after an active invocation completes.' }
   }
   const reconciliationRows = await ctx.db.query('capabilityCalls')
-    .withIndex('by_credentialId_and_state', (query) => query.eq('credentialId', args.credentialId).eq('state', 'reconciliation_required'))
+    .withIndex('by_principalId_and_state', (query) => query.eq('principalId', args.principalId).eq('state', 'reconciliation_required'))
     .take(concurrentLimit - pendingRows.length)
   return pendingRows.length + reconciliationRows.length >= concurrentLimit
     ? { kind: 'refused', code: 'concurrency_limited', retryable: true, nextAction: 'Resolve an active invocation before retrying.' }
@@ -410,8 +413,7 @@ async function rateAndConcurrencyRefusal(
   grant: NormalizedStoredAgentAccessGrant,
 ): Promise<GrantRefusal | null> {
   const rate = await assertAgentAccessRateAdmission(ctx, {
-    applicationRef: args.applicationRef,
-    credentialId: args.credentialId,
+    principalRef: args.principalId,
     maximumCallsPerMinute: grant.spendingPolicy.rate.maximumCallsPerMinute,
     maximumCallsPerHour: grant.spendingPolicy.rate.maximumCallsPerHour,
   })
@@ -432,11 +434,81 @@ async function rateAndConcurrencyRefusal(
   )
 }
 
+/**
+ * Paid period-aware Quotes must prove that both acknowledged control rows are
+ * still current immediately before the Call/Quote transaction. This runs only
+ * after the existing current-grant resolution; exact idempotent replay has
+ * already returned above and therefore retains its original booking.
+ */
+async function spendingPeriodAdmissionRefusal(
+  ctx: MutationCtx,
+  args: ReserveArgs,
+  commitment: CommitmentRow | null,
+  grant: NormalizedStoredAgentAccessGrant,
+): Promise<GrantRefusal | null> {
+  if (commitment === null || args.sellerOnboardingCanary !== undefined
+    || commitment.decisionAudUnits === '0') return null
+  const periods = commitment.spendingPeriods
+  if (commitment.formanceSchemaVersion !== 'v1.4.0' || periods === undefined) {
+    return {
+      kind: 'refused',
+      code: 'budget_exceeded',
+      retryable: false,
+      nextAction: 'Request a fresh Quote to refresh current spending limits.',
+    }
+  }
+  const projected = projectAgentAccessGrant(grant)
+  const daily = projected.budget.maximumDailySpend
+  const monthly = projected.budget.maximumMonthlySpend
+  if (daily.currency !== 'AUD' || daily.exponent !== 6
+    || monthly.currency !== 'AUD' || monthly.exponent !== 6) {
+    return {
+      kind: 'refused',
+      code: 'budget_exceeded',
+      retryable: false,
+      nextAction: 'Request a fresh Quote to refresh current spending limits.',
+    }
+  }
+  if (!await spendingPeriodsAreCurrent(ctx, {
+    principalRef: args.principalId,
+    dailyLimitUnits: daily.units,
+    monthlyLimitUnits: monthly.units,
+    now: args.now,
+    spendingPeriods: periods,
+  })) {
+    return {
+      kind: 'refused',
+      code: 'budget_exceeded',
+      retryable: true,
+      nextAction: 'Request a fresh Quote to refresh current spending limits.',
+    }
+  }
+  const amount = BigInt(commitment.decisionAudUnits)
+  if (BigInt(daily.units) < amount) {
+    return {
+      kind: 'refused',
+      code: 'budget_exceeded',
+      retryable: false,
+      nextAction: 'Request a fresh Quote after the daily spending limit changes.',
+    }
+  }
+  if (BigInt(monthly.units) < amount) {
+    return {
+      kind: 'refused',
+      code: 'budget_exceeded',
+      retryable: false,
+      nextAction: 'Request a fresh Quote after the monthly spending limit changes.',
+    }
+  }
+  return null
+}
+
 async function persistReservedCall(
   ctx: MutationCtx,
   args: ReserveArgs,
   reservation: CallIdempotencyReservation,
   commitment: CommitmentRow | null,
+  formanceFinancialState?: 'reservation_pending',
 ): Promise<void> {
   await ctx.db.insert('capabilityCalls', {
     ...reservation,
@@ -445,6 +517,7 @@ async function persistReservedCall(
     ...(args.sellerOnboardingCanary === undefined
       ? {}
       : { sellerOnboardingCanary: structuredClone(args.sellerOnboardingCanary) }),
+    ...(formanceFinancialState === undefined ? {} : { formanceFinancialState }),
     ownerId: args.ownerId,
     state: 'pending',
     createdAt: args.now,
@@ -489,9 +562,21 @@ export async function reserveHandler(
   if (grantDecision.kind === 'refused') return grantDecision
   const normalizedGrant = grantDecision.grant
 
+  const periodRefusal = await spendingPeriodAdmissionRefusal(ctx, args, commitment, normalizedGrant)
+  if (periodRefusal !== null) return periodRefusal
+
   const admissionRefusal = await rateAndConcurrencyRefusal(ctx, args, normalizedGrant)
   if (admissionRefusal !== null) return admissionRefusal
-  await persistReservedCall(ctx, args, reservation, commitment)
+  const paidPeriodAwareCall = commitment !== null
+    && commitment.decisionAudUnits !== '0'
+    && commitment.spendingPeriods !== undefined
+  await persistReservedCall(
+    ctx,
+    args,
+    reservation,
+    commitment,
+    paidPeriodAwareCall ? 'reservation_pending' : undefined,
+  )
   await recordMarketEvidenceFact(ctx, 'ae_invocation', reservation.callRef, args.now, {
     toolRef: reservation.toolRef,
   })

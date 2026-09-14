@@ -6,7 +6,7 @@ import schema from '../../../convex/schema'
 import { internal } from '../../../convex/_generated/api'
 import { buildDevelopmentPublishedToolEvidence } from '../../../tools/dev/fixtures/capability-supply/development-published-tool-evidence'
 import { canonicalDigest } from '../../../src/modules/common/canonical-digest'
-import { PACKAGE4_FORMANCE_REQUIREMENTS, quoteManagedX402BuyerAud } from '../../../src/modules/money/public'
+import { quoteManagedX402BuyerAud } from '../../../src/modules/money/public'
 import { convexTestWithMarketComponents, publishedBusinessOwner } from '../../helpers/convex-fixtures'
 import { withSourceWrite } from '../../helpers/source-write-admission'
 
@@ -59,7 +59,9 @@ function commitment() {
     budgetPolicyRef: 'budget:managed-call',
     budgetGeneration: 1,
     maximumSpendPerCallUnits: '6000000',
-    formanceSchemaVersion: PACKAGE4_FORMANCE_REQUIREMENTS.schemaVersion,
+    // This fixture represents a historical accepted periodless Call. New
+    // paid bookings select v1.4.0 and carry both immutable periods.
+    formanceSchemaVersion: 'v1.3.0',
     policyGeneration: 1,
     legalCustomerRef: 'principal:legal-customer',
     legalCustomerGeneration: 1,

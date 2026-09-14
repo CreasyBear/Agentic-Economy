@@ -23,6 +23,7 @@ import {
   PACKAGE4_FORMANCE_REQUIREMENTS,
   splitInclusiveAudTax,
 } from '@/modules/money/public'
+import { spendingPeriodAdjustmentReference, type SpendingPeriods } from '@/modules/money/internal/spending-period-values'
 import {
   cdpX402CustodyBudgetRef,
   cdpX402CustodyConfigurationFromEnvironment,
@@ -85,6 +86,7 @@ type PreparedSubjects = Readonly<{
   policyDigest: string
   policyGeneration: number
   buyerTaxBps: number
+  spendingPeriods: SpendingPeriods
   treasury?: Readonly<{
     custodyRef: string
     custodyGeneration: number
@@ -445,7 +447,18 @@ async function prepareSubjects(
     }),
   )
   if (result.kind !== 'prepared') throw new Error(`quote_subjects_refused:${result.code}`)
-  return result
+  for (const command of result.spendingPeriodCommands) {
+    const transactionRefs = command.previousLimitUnits === command.targetLimitUnits
+      ? []
+      : [spendingPeriodAdjustmentReference(command)]
+    await backend.mutation(internal.agentSpendingPeriods.acknowledge, {
+      command,
+      transactionRefs,
+    })
+  }
+  const spendingPeriods = result.spendingPeriods
+  if (spendingPeriods === undefined) throw new Error('quote_period_snapshot_missing')
+  return { ...result, spendingPeriods }
 }
 
 function formanceSnapshot(
@@ -465,6 +478,11 @@ function formanceSnapshot(
     policyGeneration: subjects.policyGeneration,
     formanceSchemaVersion: PACKAGE4_FORMANCE_REQUIREMENTS.schemaVersion,
     buyerTaxBps: subjects.buyerTaxBps,
+    spendingPeriods: subjects.spendingPeriods,
+    dailyPeriodAvailableUnits: '20000000',
+    monthlyPeriodAvailableUnits: '20000000',
+    dailyPeriodObservedAt: Date.now(),
+    monthlyPeriodObservedAt: Date.now(),
     observedAt: Date.now(),
   }
 }
@@ -523,6 +541,88 @@ describe('legal customer binding refusals', () => {
 })
 
 describe('direct Quote handlers', () => {
+  it('refuses shared legal-account exposure without issuing a Quote or advising a top-up', async () => {
+    const backend = convexTestWithMarketComponents()
+    const suffix = 'quote-account-exposure'
+    const fixture = await publishCurrentTool(backend, suffix)
+    await seedCommercialPolicies(backend, suffix, Date.now())
+    const agent = await seedAgent(backend, { canonicalAccountRef: fixture.accountRef }, fixture.toolRef, suffix, '20000000')
+    await backend.finishAllScheduledFunctions(() => undefined)
+    await observeHealthyReadiness(backend, fixture, suffix)
+    const input = { request: 'Perth' }
+    const subjects = await prepareSubjects(backend, agent, fixture.toolRef, input, suffix)
+    const result = await backend.mutation(internal.capabilityQuotes.issueQuote, {
+      operationKey: `${suffix}:issue`, correlationId: `${suffix}:issue`,
+      principal: agent.principal, toolRef: fixture.toolRef, input,
+      formance: { ...formanceSnapshot(subjects), legalExposureAvailableUnits: '0' },
+    })
+    expect(result).toMatchObject({ kind: 'refused', code: 'budget_exceeded', reason: 'account_limit' })
+    expect(await backend.run(ctx => ctx.db.query('capabilityQuotes').take(1))).toEqual([])
+    expect(await backend.run(ctx => ctx.db.query('capabilityCalls').take(1))).toEqual([])
+    const projected = projectToolQuoteRefusal({ toolRef: fixture.toolRef, input,
+      code: 'budget_exceeded', retryable: false, reason: 'account_limit', correlationRef: suffix })
+    expect(projected.continuation?.action).not.toBe('funding.handoff.config')
+    expect(projected.requiredActions).toMatchObject([{ action: 'review_account_exposure', cta: '/support' }])
+  })
+
+  it('refuses production Quote preparation and issuance in hosted alpha before upstream actions', async () => {
+    const backend = convexTestWithMarketComponents()
+    const suffix = 'quote-hosted-alpha'
+    const fixture = await publishCurrentTool(backend, suffix)
+    await seedCommercialPolicies(backend, suffix, Date.now())
+    const agent = await seedAgent(backend, { canonicalAccountRef: fixture.accountRef }, fixture.toolRef, suffix, '20000000')
+    await backend.finishAllScheduledFunctions(() => undefined)
+    await observeHealthyReadiness(backend, fixture, suffix)
+    const input = { request: 'Perth' }
+    const subjects = await prepareSubjects(backend, agent, fixture.toolRef, input, suffix)
+    const upstream = vi.fn(async () => { throw new Error('production_quote_upstream_released') })
+    const handler = (quote as unknown as { _handler: (ctx: unknown, args: unknown) => Promise<unknown> })._handler
+    vi.stubEnv('AE_SERVICE_MODE', 'hosted_alpha')
+    try {
+      const args = { principal: agent.principal, toolRef: fixture.toolRef, input,
+        operationKey: `${suffix}:blocked`, correlationId: `${suffix}:blocked` }
+      await expect(handler({ runMutation: backend.mutation, runAction: upstream },
+        await withSourceWrite('protected_action', args))).resolves.toMatchObject({
+        kind: 'refused', code: 'tool_unsupported',
+      })
+      await expect(backend.mutation(internal.capabilityQuotes.issueQuote, {
+        ...args, formance: formanceSnapshot(subjects),
+      })).resolves.toMatchObject({ kind: 'refused', code: 'tool_unsupported', retryable: false })
+      expect(upstream).not.toHaveBeenCalled()
+    } finally { vi.unstubAllEnvs() }
+  })
+
+  it('refuses issuance when the current Tool environment changes after Quote preparation', async () => {
+    const backend = convexTestWithMarketComponents()
+    const suffix = 'quote-environment-drift'
+    const fixture = await publishCurrentTool(backend, suffix)
+    await seedCommercialPolicies(backend, suffix, Date.now())
+    const agent = await seedAgent(backend, { canonicalAccountRef: fixture.accountRef }, fixture.toolRef, suffix, '20000000')
+    await backend.finishAllScheduledFunctions(() => undefined)
+    await observeHealthyReadiness(backend, fixture, suffix)
+    const input = { request: 'Perth' }
+    const subjects = await prepareSubjects(backend, agent, fixture.toolRef, input, suffix)
+
+    await backend.run(async ctx => {
+      const publication = await ctx.db.query('capabilityPublications')
+        .withIndex('by_toolRef_and_disposition', q => q.eq('toolRef', fixture.toolRef).eq('disposition', 'current'))
+        .unique()
+      if (publication === null) throw new Error('quote_drift_publication_missing')
+      expect(publication.runtimeEnvironment).toBe('production')
+      await ctx.db.patch(publication._id, { runtimeEnvironment: 'sandbox' })
+    })
+
+    await expect(backend.mutation(internal.capabilityQuotes.issueQuote, {
+      operationKey: `${suffix}:issue`, correlationId: `${suffix}:issue`,
+      principal: agent.principal, toolRef: fixture.toolRef, input,
+      formance: formanceSnapshot(subjects),
+    })).resolves.toMatchObject({
+      kind: 'refused', code: 'tool_unsupported', retryable: false,
+      reason: 'The current Tool environment is not permitted for this purchase.',
+    })
+    expect(await backend.run(ctx => ctx.db.query('capabilityQuotes').take(1))).toEqual([])
+  })
+
   it('issues current Quote material, projects policy, refuses stale budgets and per-Call limits, and preserves identities', async () => {
     const backend = convexTestWithMarketComponents()
     const suffix = 'quote-handler'
@@ -600,6 +700,9 @@ describe('direct Quote handlers', () => {
       accountAvailableUnits: '20000000',
       budgetAvailableUnits: subjects.budgetUnits,
       legalExposureAvailableUnits: subjects.legalExposureUnits,
+      spendingPeriods: subjects.spendingPeriods,
+      dailyPeriodAvailableUnits: '20000000',
+      monthlyPeriodAvailableUnits: '20000000',
       commercialPolicyDigest: subjects.policyDigest,
       expiresAt: stored.expiresAt,
     }
