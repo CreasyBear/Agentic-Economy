@@ -182,6 +182,8 @@ describe('assistant access owner continuation anchors', () => {
     expect(keys.querySelector('#revoke')).not.toBeNull()
     expect(keys.querySelector('#fund')).toBeNull()
     expect(keys.querySelector('a[href="/for-agents"]')?.textContent).toBe('Connect agent')
+    expect(keys.querySelector('a[href="/owner/credit"]')).toBeNull()
+    expect(within(keys).queryByRole('heading', { name: 'Credit' })).toBeNull()
   })
 
   it('confirms only the exact route-selected caller without exposing locator or key canaries', async () => {

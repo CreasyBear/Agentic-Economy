@@ -150,12 +150,6 @@ export function AeAgentOperatorConsole({
   return (
     <div className="grid gap-8">
       <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">{approvalStatus ?? ''}</p>
-      <AeSection title="Credit" description="Paid Calls use shared Account credit within each Agent’s spending policy.">
-        <Button asChild variant="secondary" className="w-fit min-h-touch">
-          <a href="/owner/credit">Open Credit</a>
-        </Button>
-      </AeSection>
-
       {approvalsSection}
 
       {selectedPrincipalId === undefined || selected !== undefined ? null : (
