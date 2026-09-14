@@ -159,7 +159,8 @@ hosted and task-level alpha gates below.
 | 10–12. Funding continuation and failure states | **Fixed in source** | `61b7b0866` preserves the exact payment attempt and gives each visible nonterminal/failure state an honest executable continuation. |
 | 13. Market default | **Fixed in source** | `c7a9546e0`, integrated as `bf9a71be7`, makes guided discovery the deterministic default. |
 | 14, 16. Market refinement and pagination | **Fixed in source** | `8d885b887` progressively discloses advanced source facts and preserves loaded rows/cursor across failure, retry and stale responses. |
-| 2, 4–9, 15, 18–25 and all unlisted P0/P1 boundaries | **Open or dependency-blocked** | Continue source-first repair against the work and acceptance tables below; do not infer completion from adjacent component changes. |
+| 18. Agent connection progression | **Active** | `575540d92` gives setup an ordered connect → approve → confirm path and an exact directory refresh that cannot be repeated while pending. Originating Tool/Agent continuation is still unavailable, so the complete handoff contract remains open. |
+| 2, 4–9, 15, 17, 19–25 and all unlisted P0/P1 boundaries | **Open or dependency-blocked** | Continue source-first repair against the work and acceptance tables below; do not infer completion from adjacent component changes. |
 
 ### P0 — alpha blockers
 
