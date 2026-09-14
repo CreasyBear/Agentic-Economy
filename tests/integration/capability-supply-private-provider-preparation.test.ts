@@ -113,7 +113,7 @@ describe('private Provider preparation authority', () => {
       )),
     )
     expect(save).toMatchObject({ kind: 'saved', candidateRef, sourceDigest })
-    if (save.kind !== 'saved') throw new Error(`private_provider_save:${save.reason}`)
+    if (save.kind !== 'saved') throw new Error(`private_provider_save:${save.kind}`)
 
     const read = await backend.mutation(
       api.capabilitySupplyOwnerFunnel.readAgentOwnerSupplyFunnel,

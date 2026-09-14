@@ -733,3 +733,29 @@ reports catalogue absent, quoting unavailable, funding configured, sellable fals
 The preceding deployment `dpl_Ga3QwZy4kWCZg1cn1yxd2icHFs8V` is retained as a
 rollback reference; it contains the importer fix but the incomplete projection
 fix. No credentials or authority scope changed during these code corrections.
+
+#### Source progress and remaining execution gap — 2026-09-14
+
+The following fixes are committed locally but are not yet deployed:
+
+- `40e5a9859`: authorised agents can save and reserve drafts for their own
+  unsuppressed private programmable Provider. Ordinary public publication guards
+  remain intact. Three focused suites passed (20 tests).
+- `584d2fac5`: a healthy readiness probe retains `under_review` and pending
+  admission while paid validation is required; it does not create public market
+  presence. Both fenced and ordinary readiness cases passed.
+- `a9763d3ee`: saved Draft status links back to its existing setup flow. The
+  status and detail suites passed (23 tests).
+
+Typecheck and the dependency ratchet passed for these changes. Connected x402
+staging is still under implementation and review; these checks do not establish
+that the full submission lifecycle works.
+
+The execution audit found a separate hard blocker: the Call worker's
+`managed_testnet_canary` branch currently refuses execution before transport.
+Its existing custody payment callbacks must be connected with the fixed platform
+grant, exact publication and release fence, settlement evidence, and retry
+controls preserved. Removing the refusal alone is insufficient. Promotion also
+exists only as an unregistered handler. Complete automatic validation and
+promotion through the existing admission lifecycle before claiming a public
+sandbox Tool or alpha readiness. No paid testnet Call has been proven.
