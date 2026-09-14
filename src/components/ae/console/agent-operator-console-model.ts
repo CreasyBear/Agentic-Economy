@@ -108,30 +108,54 @@ function humanizeIdentifier(value: string): string {
 
 export function agentFacts(detail: AgentDetail): readonly AeFact[] {
   const usage = detail.usage
+  const calls = usage === undefined
+    ? 'Unavailable'
+    : `${usage.callCount} this month · ${usage.outcomeUnknownCallCount === 0
+      ? 'none need checking'
+      : `${usage.outcomeUnknownCallCount} ${usage.outcomeUnknownCallCount === 1 ? 'needs' : 'need'} checking`}`
+  return [
+    { label: 'Authority', value: scopeLabel(detail.authorityMode) },
+    { label: 'Monthly limit', value: formatAmount(detail.grant?.budget.maximumMonthlySpend), mono: true },
+    { label: 'Recent Calls', value: calls },
+    { label: 'Last used', value: detail.agent.lastSeenAt === undefined
+      ? 'No activity recorded'
+      : formatTimestamp(detail.agent.lastSeenAt),
+      mono: true },
+  ]
+}
+
+export function agentSpendingPolicyFacts(detail: AgentDetail): readonly AeFact[] {
+  return [
+    { label: 'Per Call', value: formatAmount(detail.grant?.budget.maximumSpendPerCall), mono: true },
+    { label: 'Daily budget', value: formatAmount(detail.grant?.budget.maximumDailySpend), mono: true },
+    { label: 'Monthly budget', value: formatAmount(detail.grant?.budget.maximumMonthlySpend), mono: true },
+    { label: 'Rate', value: detail.grant === undefined ? 'Unavailable' : `${detail.grant.rate.maximumCallsPerMinute}/min · ${detail.grant.rate.maximumCallsPerHour}/hour`, mono: true },
+    { label: 'Concurrency', value: detail.grant === undefined ? 'Unavailable' : String(detail.grant.budget.maximumConcurrentCalls), mono: true },
+  ]
+}
+
+export function agentActivityFacts(detail: AgentDetail): readonly AeFact[] {
+  const usage = detail.usage
   const settledCharges = usage === undefined
     ? 'Unavailable'
     : usage.amountCoverage === 'complete' && usage.settledSpend !== undefined
       ? formatAmount(usage.settledSpend)
       : 'Amount coverage incomplete'
   return [
-    { label: 'Environment', value: environmentLabel(detail.agent.environment) },
-    { label: 'Last used', value: detail.agent.lastSeenAt === undefined
-      ? 'No activity recorded'
-      : formatTimestamp(detail.agent.lastSeenAt),
-      mono: true },
-    { label: 'Per call', value: formatAmount(detail.grant?.budget.maximumSpendPerCall), mono: true},
-    { label: 'Daily budget', value: formatAmount(detail.grant?.budget.maximumDailySpend), mono: true},
-    { label: 'Monthly budget', value: formatAmount(detail.grant?.budget.maximumMonthlySpend), mono: true},
-    { label: 'Rate', value: detail.grant === undefined ? 'Unavailable' : `${detail.grant.rate.maximumCallsPerMinute}/min · ${detail.grant.rate.maximumCallsPerHour}/hour`, mono: true},
-    { label: 'Concurrency', value: detail.grant === undefined ? 'Unavailable' : String(detail.grant.budget.maximumConcurrentCalls), mono: true},
-    { label: 'Authority', value: scopeLabel(detail.authorityMode) },
-    { label: 'Tools', value: toolAccessLabel(detail) },
     { label: 'Calls this month', value: usage === undefined ? 'Unavailable' : String(usage.callCount), mono: true },
     { label: 'Completed', value: usage === undefined ? 'Unavailable' : String(usage.completedCallCount), mono: true },
     { label: 'Needs checking', value: usage === undefined ? 'Unavailable' : String(usage.outcomeUnknownCallCount) },
     { label: 'Settled charges', value: settledCharges, mono: true },
     { label: 'Amount coverage', value: usage === undefined ? 'Unavailable' : usage.amountCoverage === 'complete' ? 'Complete' : 'Incomplete' },
     { label: 'Usage data', value: dataLabel(detail.dataState), muted: true },
+  ]
+}
+
+export function agentAccessFacts(detail: AgentDetail): readonly AeFact[] {
+  return [
+    { label: 'Environment', value: environmentLabel(detail.agent.environment) },
+    { label: 'Authority', value: scopeLabel(detail.authorityMode) },
+    { label: 'Tools', value: toolAccessLabel(detail) },
   ]
 }
 

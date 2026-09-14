@@ -202,6 +202,7 @@ describe('assistant access owner continuation anchors', () => {
 
     const dialog = screen.getByRole('dialog', { name: 'Route assistant' })
     fireEvent.click(within(dialog).getByRole('button', { name: 'Technical details' }))
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Tool access' }))
     expect(dialog.textContent).toContain('•••• 12345678')
     expect(dialog.textContent).not.toContain(KEY_ID_CANARY)
     expect(dialog.textContent).not.toContain(PRINCIPAL_ID)
@@ -299,6 +300,31 @@ describe('assistant access owner continuation anchors', () => {
     expect(dialog.textContent).toContain('Last used')
   })
 
+  it('keeps the Agent decision summary compact and discloses supporting facts by task', () => {
+    render(
+      <AeAgentOperatorConsole
+        {...consoleProps()}
+        selectedPrincipalId={PRINCIPAL_ID}
+        getAgentHref={(principalRef) => `/agent-access?caller=${principalRef}`}
+      />,
+    )
+
+    const dialog = screen.getByRole('dialog', { name: 'Route assistant' })
+    expect(within(dialog).getByText('Authority', { selector: 'dt' })).toBeTruthy()
+    expect(within(dialog).getByText('Monthly limit', { selector: 'dt' })).toBeTruthy()
+    expect(within(dialog).getByText('Recent Calls', { selector: 'dt' })).toBeTruthy()
+    expect(within(dialog).getByText('Last used', { selector: 'dt' })).toBeTruthy()
+    expect(within(dialog).queryByText('Daily budget', { selector: 'dt' })).toBeNull()
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Spending policy' }))
+    expect(within(dialog).getByText('Daily budget', { selector: 'dt' })).toBeTruthy()
+    expect(within(dialog).getByText('Concurrency', { selector: 'dt' })).toBeTruthy()
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Activity' }))
+    expect(within(dialog).getByText('Settled charges', { selector: 'dt' })).toBeTruthy()
+    expect(within(dialog).getByText('Usage data', { selector: 'dt' })).toBeTruthy()
+  })
+
   it('shows the exact selected Tool authority', () => {
     const toolRefs = [
       `operation:v1:${'1'.repeat(64)}`,
@@ -319,6 +345,7 @@ describe('assistant access owner continuation anchors', () => {
     )
 
     const dialog = screen.getByRole('dialog', { name: 'Route assistant' })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Tool access' }))
     for (const toolRef of toolRefs) {
       const link = within(dialog).getByRole('link', { name: toolRef })
       expect(link.getAttribute('href')).toBe(`/tools/${encodeURIComponent(toolRef)}`)

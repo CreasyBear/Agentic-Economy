@@ -3,7 +3,7 @@
 import { useRef, useState, type ReactNode } from 'react'
 
 import { AeConfirmDialog } from '@/components/ae/feedback/AeConfirmDialog'
-import { AeFactList } from '@/components/ae/data/AeFactList'
+import { AeFactList, type AeFact } from '@/components/ae/data/AeFactList'
 import { AeRecordSheet } from '@/components/ae/layout/AeRecordSheet'
 import { AeSection } from '@/components/ae/layout/AeSection'
 import { Button } from '@/components/ui/button'
@@ -23,8 +23,11 @@ import { AeAgentConnectionReceipts } from './AeAgentConnectionReceipts'
 import { AeAgentCredentialHistory } from './AeAgentCredentialHistory'
 import { AeAgentDirectoryTable } from './AeAgentDirectoryTable'
 import {
+  agentAccessFacts,
+  agentActivityFacts,
   agentFacts,
   agentRecoveryCopy,
+  agentSpendingPolicyFacts,
   agentStatusLabel,
   technicalAgentFacts,
 } from './agent-operator-console-model'
@@ -195,7 +198,11 @@ export function AeAgentOperatorConsole({
             )}
             <p className="text-sm text-muted-foreground">Counts and settled charges cover Calls created in the current UTC calendar month. Released or refunded payments are excluded. This is not a net-spend statement.</p>
             {selected.activityTruncated ? <p className="text-sm text-muted-foreground">Recent activity shows only the latest 50 Calls by creation time; monthly counts cover the full period when available.</p> : null}
-            <AeAgentAuthorizedTools detail={selected} />
+            <AgentFactsDisclosure label="Spending policy" facts={agentSpendingPolicyFacts(selected)} />
+            <AgentFactsDisclosure label="Activity" facts={agentActivityFacts(selected)} />
+            <AgentFactsDisclosure label="Tool access" facts={agentAccessFacts(selected)}>
+              <AeAgentAuthorizedTools detail={selected} />
+            </AgentFactsDisclosure>
             <AeAgentConnectionReceipts
               detail={selected}
               {...(lifecyclePending === undefined ? {} : { lifecyclePending })}
@@ -259,5 +266,27 @@ export function AeAgentOperatorConsole({
       />
 
     </div>
+  )
+}
+
+function AgentFactsDisclosure({
+  label,
+  facts,
+  children,
+}: Readonly<{
+  label: string
+  facts: readonly AeFact[]
+  children?: ReactNode
+}>) {
+  return (
+    <Collapsible>
+      <CollapsibleTrigger asChild>
+        <Button type="button" variant="ghost" className="w-fit min-h-touch">{label}</Button>
+      </CollapsibleTrigger>
+      <CollapsibleContent className="grid gap-3 pt-2">
+        <AeFactList density="compact" facts={facts} />
+        {children}
+      </CollapsibleContent>
+    </Collapsible>
   )
 }
