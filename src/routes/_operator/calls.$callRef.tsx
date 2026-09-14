@@ -94,8 +94,8 @@ const pendingReconciliationAttemptSchema = z.strictObject({
   observedAt: z.string().refine((value) => Number.isFinite(Date.parse(value))),
   draft: z.strictObject({
     resolution: z.enum(['not_released', 'released']),
-    source: z.string().min(1).max(300),
-    evidenceRef: z.string().min(1).max(300),
+    source: z.string().trim().min(1).max(300),
+    evidenceRef: z.string().trim().min(1).max(300),
   }),
 })
 type PendingReconciliationAttempt = z.infer<typeof pendingReconciliationAttemptSchema>
@@ -117,12 +117,36 @@ function readStoredReconciliationAttempt(result: FoundCallStatus): PendingReconc
     readCallRecoveryStorage(callRecoveryStorageKey('reconcile', result.callRef)),
   )
   if (!parsed.success) return undefined
-  return parsed.data.callRef === result.callRef
-    && parsed.data.toolRef === result.toolRef
-    && parsed.data.attemptRef === result.attemptRef
-    && parsed.data.effectGeneration === result.effectGeneration
-    ? parsed.data
-    : undefined
+  return reconciliationAttemptMatches(result, parsed.data) ? parsed.data : undefined
+}
+
+function reconciliationBindingIdentity(result: FoundCallStatus): string | undefined {
+  if (result.state !== 'reconciliation_required' || result.attemptRef === undefined || result.effectGeneration === undefined) return undefined
+  return canonicalDigest({
+    invocationRef: result.callRef,
+    operationRef: result.toolRef,
+    attemptRef: result.attemptRef,
+    effectGeneration: result.effectGeneration,
+  })
+}
+
+function reconciliationCommandIdentity(result: FoundCallStatus, draft: CallReconciliationForm): string | undefined {
+  const binding = reconciliationBindingIdentity(result)
+  if (binding === undefined) return undefined
+  return canonicalDigest({
+    binding,
+    resolution: draft.resolution,
+    source: draft.source,
+    evidenceRef: draft.evidenceRef,
+  })
+}
+
+function reconciliationAttemptMatches(result: FoundCallStatus, attempt: PendingReconciliationAttempt): boolean {
+  return attempt.callRef === result.callRef
+    && attempt.toolRef === result.toolRef
+    && attempt.attemptRef === result.attemptRef
+    && attempt.effectGeneration === result.effectGeneration
+    && attempt.identity === reconciliationCommandIdentity(result, attempt.draft)
 }
 
 function readCallRecoveryStorage(key: string): unknown {
@@ -269,16 +293,12 @@ function CallStatusController({ loadedResult }: Readonly<{ loadedResult: CallSta
     setReconcilePending(true)
     setFeedback(undefined)
     try {
-      const attemptIdentity = canonicalDigest({
-        invocationRef: result.callRef,
-        attemptRef: result.attemptRef,
-        effectGeneration: result.effectGeneration,
-        operationRef: result.toolRef,
-        resolution: input.resolution,
-        source,
-        evidenceRef,
-      })
-      const attempt: PendingReconciliationAttempt = reconciliationAttempt?.identity === attemptIdentity
+      const draft = { resolution: input.resolution, source, evidenceRef }
+      const attemptIdentity = reconciliationCommandIdentity(result, draft)
+      if (attemptIdentity === undefined) return
+      const attempt: PendingReconciliationAttempt = reconciliationAttempt !== undefined
+        && reconciliationAttemptMatches(result, reconciliationAttempt)
+        && reconciliationAttempt.identity === attemptIdentity
         ? reconciliationAttempt
         : {
           version: 1,
@@ -289,7 +309,7 @@ function CallStatusController({ loadedResult }: Readonly<{ loadedResult: CallSta
           identity: attemptIdentity,
           idempotencyKey: crypto.randomUUID(),
           observedAt: new Date().toISOString(),
-          draft: { resolution: input.resolution, source, evidenceRef },
+          draft,
         }
       setReconciliationAttempt(attempt)
       persistCallRecoveryStorage('reconcile', result.callRef, attempt)
@@ -331,6 +351,8 @@ function CallStatusController({ loadedResult }: Readonly<{ loadedResult: CallSta
   }
 
   const retainedReconciliation = result.kind === 'found'
+    && reconciliationAttempt !== undefined
+    && reconciliationAttemptMatches(result, reconciliationAttempt)
     ? reconciliationAttempt
     : undefined
 
@@ -827,7 +849,11 @@ function CallRecoveryActions({
       <ReconciliationBlockers availability={availability} />
       <RecoveryPrimaryActions availability={availability} {...(actions === undefined ? {} : { actions })} />
       {availability.canReconcileNow ? (
-        <AdvancedReconciliation {...(actions === undefined ? {} : { actions })} recoveryPending={availability.recoveryPending} />
+        <AdvancedReconciliation
+          key={reconciliationBindingIdentity(result)}
+          {...(actions === undefined ? {} : { actions })}
+          recoveryPending={availability.recoveryPending}
+        />
       ) : null}
     </section>
   )

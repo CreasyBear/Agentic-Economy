@@ -561,6 +561,30 @@ describe('/calls/$callRef', () => {
     expect(window.sessionStorage.length).toBe(0)
   })
 
+  it('rejects a stored reconciliation draft whose content no longer matches its identity digest', async () => {
+    reconcileMock.mockRejectedValueOnce(new Error('transport unavailable'))
+    const result = {
+      kind: 'found', version: 1, callRef, toolRef, state: 'reconciliation_required',
+      attemptRef: 'attempt:uncertain', effectGeneration: 2, ownerContext,
+    } as const
+    const firstView = renderRouteComponent(result)
+    fireEvent.change(screen.getByLabelText('Evidence source'), { target: { value: 'Provider control plane' } })
+    fireEvent.change(screen.getByLabelText('Evidence reference'), { target: { value: 'evt_123' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Submit reconciliation' }))
+    expect(await screen.findByText('The reconciliation source is unavailable. No new Call state is claimed.')).toBeTruthy()
+    const storageKey = Object.keys(window.sessionStorage)[0]
+    if (storageKey === undefined) throw new Error('reconciliation_storage_key_missing')
+    const stored = JSON.parse(window.sessionStorage.getItem(storageKey) ?? '{}') as { draft?: { source?: string } }
+    if (stored.draft === undefined) throw new Error('reconciliation_storage_draft_missing')
+    stored.draft.source = 'Tampered source'
+    window.sessionStorage.setItem(storageKey, JSON.stringify(stored))
+    firstView.unmount()
+
+    renderRouteComponent(result)
+    expect((screen.getByLabelText('Evidence source') as HTMLInputElement).value).toBe('')
+    expect((screen.getByLabelText('Evidence reference') as HTMLInputElement).value).toBe('')
+  })
+
   it('does not reuse a stored reconciliation attempt after the Call generation changes', async () => {
     reconcileMock
       .mockRejectedValueOnce(new Error('transport unavailable'))
@@ -591,6 +615,74 @@ describe('/calls/$callRef', () => {
     expect(second.idempotencyKey).not.toBe(first.idempotencyKey)
     expect(second.evidence.effectGeneration).toBe(3)
     expect(window.sessionStorage.length).toBe(0)
+  })
+
+  it('clears old reconciliation evidence when an in-place refresh advances the Call generation', async () => {
+    reconcileMock
+      .mockRejectedValueOnce(new Error('transport unavailable'))
+      .mockResolvedValueOnce({ kind: 'found', version: 3, callRef, toolRef, state: 'terminal' })
+    readStatusMock.mockResolvedValueOnce({
+      kind: 'found', version: 2, callRef, toolRef, state: 'reconciliation_required',
+      attemptRef: 'attempt:uncertain', effectGeneration: 3, ownerContext,
+    })
+    renderRouteComponent({
+      kind: 'found', version: 1, callRef, toolRef, state: 'reconciliation_required',
+      attemptRef: 'attempt:uncertain', effectGeneration: 2, ownerContext,
+    })
+    fireEvent.change(screen.getByLabelText('Evidence source'), { target: { value: 'Old provider source' } })
+    fireEvent.change(screen.getByLabelText('Evidence reference'), { target: { value: 'evt_old' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Submit reconciliation' }))
+    expect(await screen.findByText('The reconciliation source is unavailable. No new Call state is claimed.')).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh current status' }))
+    await screen.findByText('Current status refreshed. The current state is Reconciliation required.')
+    expect((screen.getByLabelText('Evidence source') as HTMLInputElement).value).toBe('')
+    expect((screen.getByLabelText('Evidence reference') as HTMLInputElement).value).toBe('')
+    fireEvent.click(screen.getByRole('button', { name: 'Submit reconciliation' }))
+    expect(reconcileMock).toHaveBeenCalledTimes(1)
+
+    fireEvent.change(screen.getByLabelText('Evidence source'), { target: { value: 'Current provider source' } })
+    fireEvent.change(screen.getByLabelText('Evidence reference'), { target: { value: 'evt_current' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Submit reconciliation' }))
+    await waitFor(() => expect(reconcileMock).toHaveBeenCalledTimes(2))
+    const first = reconcileMock.mock.calls[0]?.[0]?.data
+    const second = reconcileMock.mock.calls[1]?.[0]?.data
+    expect(second.idempotencyKey).not.toBe(first.idempotencyKey)
+    expect(second.evidence).toMatchObject({
+      effectGeneration: 3,
+      source: 'Current provider source',
+      evidenceRef: 'evt_current',
+    })
+  })
+
+  it('clears old reconciliation evidence when loader data replaces the same Call generation', async () => {
+    reconcileMock.mockRejectedValueOnce(new Error('transport unavailable'))
+    const first = {
+      kind: 'found', version: 1, callRef, toolRef, state: 'reconciliation_required',
+      attemptRef: 'attempt:uncertain', effectGeneration: 2, ownerContext,
+    } as const
+    const next = { ...first, version: 2, effectGeneration: 3 } as const
+    const loader = vi.spyOn(Route, 'useLoaderData').mockReturnValue(first)
+    const Component = Route.options.component
+    if (Component === undefined) throw new Error('call_status_route_component_missing')
+    const rootRoute = createRootRoute()
+    const routeTree = rootRoute.addChildren([createRoute({ getParentRoute: () => rootRoute, path: '/' })])
+    const router = createRouter({ routeTree, history: createMemoryHistory({ initialEntries: ['/'] }) })
+    const view = render(
+      <RouterContextProvider router={router}>{createElement(Component)}</RouterContextProvider>,
+    )
+    fireEvent.change(screen.getByLabelText('Evidence source'), { target: { value: 'Old provider source' } })
+    fireEvent.change(screen.getByLabelText('Evidence reference'), { target: { value: 'evt_old' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Submit reconciliation' }))
+    expect(await screen.findByText('The reconciliation source is unavailable. No new Call state is claimed.')).toBeTruthy()
+
+    loader.mockReturnValue(next)
+    view.rerender(<RouterContextProvider router={router}>{createElement(Component)}</RouterContextProvider>)
+
+    expect((screen.getByLabelText('Evidence source') as HTMLInputElement).value).toBe('')
+    expect((screen.getByLabelText('Evidence reference') as HTMLInputElement).value).toBe('')
+    fireEvent.click(screen.getByRole('button', { name: 'Submit reconciliation' }))
+    expect(reconcileMock).toHaveBeenCalledTimes(1)
   })
 
   it('uses a new reconciliation attempt when the evidence changes', async () => {
