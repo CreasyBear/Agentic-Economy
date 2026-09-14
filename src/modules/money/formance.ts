@@ -897,9 +897,8 @@ export async function installPackage4FormanceSchema(
   try {
     const current = await readSchema(context, FORMANCE_SCHEMA_VERSION)
     const legacy = await readSchema(context, LEGACY_FORMANCE_SCHEMA_VERSION)
-    if (current.kind === 'setup_required' || legacy.kind === 'setup_required') {
-      return current.kind === 'setup_required' ? current : legacy
-    }
+    if (current.kind === 'setup_required') return current
+    if (legacy.kind === 'setup_required') return legacy
     if (current.kind !== 'ready' && current.code !== 'formance_schema_absent') return current
     if (legacy.kind !== 'ready' && legacy.code !== 'formance_schema_absent') return legacy
     if (current.kind === 'ready' && legacy.kind === 'ready') {

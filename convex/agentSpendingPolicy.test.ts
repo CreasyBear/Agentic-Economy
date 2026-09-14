@@ -16,6 +16,7 @@ import {
   type AgentSpendingLimitsResult,
   type AgentSpendingLimitsUpdate,
 } from '../src/modules/agent-access/spending-policy-update'
+import { normalizeStoredAgentAccessGrant } from '../src/modules/agent-access/policy'
 import { issuedAgentGrantRef } from '../src/modules/agent-access/issued-agent-binding'
 import { defaultSandboxAgentAccessPolicy } from '../src/modules/agent-access/sandbox-policy'
 import schema from './schema'
@@ -55,7 +56,11 @@ const identity = (subject: string): UserIdentity => ({
   exp: 1_000,
 })
 
-const amount = (units: string) => ({ currency: 'AUD', units, exponent: 6 })
+const amount = (units: string): AgentSpendingLimitsUpdate['maximumSpendPerCall'] => ({
+  currency: 'AUD',
+  units,
+  exponent: 6,
+})
 
 function bindingInput(subject = 'user_owner'): IssuedAgentBindingRegistration {
   const issuanceKey = 'spending-policy-agent-12345678'
@@ -162,6 +167,10 @@ describe('owner Agent spending policy mutation', () => {
     if (before.admission === null || before.credential === null || before.grant === null) {
       throw new Error('spending_policy_before_material_missing')
     }
+    const beforeGrant = normalizeStoredAgentAccessGrant(before.grant)
+    if (beforeGrant.format !== 'ae.agent-access-grant:v2') {
+      throw new Error('spending_policy_before_grant_format_invalid')
+    }
 
     await expect(owner.query(readPolicy, { principalRef })).resolves.toMatchObject({
       kind: 'current',
@@ -236,9 +245,9 @@ describe('owner Agent spending policy mutation', () => {
           maximumDailySpend: amount('3500000'),
           maximumMonthlySpend: amount('9000000'),
         },
-        rate: before.grant.spendingPolicy.rate,
-        toolAccess: before.grant.spendingPolicy.toolAccess,
-        toolRefs: before.grant.spendingPolicy.toolRefs,
+        rate: beforeGrant.spendingPolicy.rate,
+        toolAccess: beforeGrant.spendingPolicy.toolAccess,
+        toolRefs: beforeGrant.spendingPolicy.toolRefs,
       },
     })
     expect(afterFirst.oldGrant).toMatchObject({ lifecycle: 'revoked', generation: 1 })

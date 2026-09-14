@@ -778,7 +778,14 @@ function spendingPeriodIdentity(input: Readonly<{
     })
 }
 
-function spendingPeriodAccounts(input: FormanceManagedCallBooking): Readonly<Record<string, string>> {
+function spendingPeriodAccounts(input: FormanceManagedCallBooking): Readonly<{
+  dailyAvailable?: string
+  dailyReserved?: string
+  dailySpent?: string
+  monthlyAvailable?: string
+  monthlyReserved?: string
+  monthlySpent?: string
+}> {
   const periods = input.spendingPeriods
   if (periods === undefined) return Object.freeze({})
   const daily = formanceSpendingPeriodAccount(input.principalRef, 'day', periods.daily.periodStartAt)
