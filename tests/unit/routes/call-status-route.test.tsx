@@ -471,6 +471,27 @@ describe('/calls/$callRef', () => {
     expect(keys[1]).toBe(keys[0])
   })
 
+  it('reuses the cancellation key after reload until a response is confirmed', async () => {
+    cancelMock
+      .mockRejectedValueOnce(new Error('transport unavailable'))
+      .mockResolvedValueOnce({ kind: 'found', version: 2, callRef, toolRef, state: 'cancelled' })
+    const firstView = renderRouteComponent({ kind: 'found', version: 1, callRef, toolRef, state: 'retryable' })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel Call' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm cancellation' }))
+    expect(await screen.findByText('The cancellation source is unavailable. No new Call state is claimed.')).toBeTruthy()
+    firstView.unmount()
+
+    renderRouteComponent({ kind: 'found', version: 1, callRef, toolRef, state: 'retryable' })
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel Call' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm cancellation' }))
+    await waitFor(() => expect(cancelMock).toHaveBeenCalledTimes(2))
+
+    const keys = cancelMock.mock.calls.map((call) => call[0]?.data?.idempotencyKey)
+    expect(keys[1]).toBe(keys[0])
+    expect(window.sessionStorage.length).toBe(0)
+  })
+
   it('reuses the exact reconciliation attempt after an unconfirmed transport outcome', async () => {
     reconcileMock
       .mockRejectedValueOnce(new Error('transport unavailable'))
@@ -500,6 +521,76 @@ describe('/calls/$callRef', () => {
     expect(second.evidence.observedAt).toBe(first.evidence.observedAt)
     expect(second.evidence.digest).toBe(first.evidence.digest)
     expect(second.evidence).toEqual(first.evidence)
+  })
+
+  it('restores and reuses the exact reconciliation attempt after reload', async () => {
+    reconcileMock
+      .mockRejectedValueOnce(new Error('transport unavailable'))
+      .mockResolvedValueOnce({ kind: 'found', version: 2, callRef, toolRef, state: 'terminal' })
+    const result = {
+      kind: 'found',
+      version: 1,
+      callRef,
+      toolRef,
+      state: 'reconciliation_required',
+      attemptRef: 'attempt:uncertain',
+      effectGeneration: 2,
+      ownerContext,
+    } as const
+    const firstView = renderRouteComponent(result)
+
+    fireEvent.click(screen.getByRole('combobox', { name: 'Observed provider outcome' }))
+    fireEvent.click(screen.getByRole('option', { name: 'Effect released' }))
+    fireEvent.change(screen.getByLabelText('Evidence source'), { target: { value: 'Provider control plane' } })
+    fireEvent.change(screen.getByLabelText('Evidence reference'), { target: { value: 'evt_123' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Submit reconciliation' }))
+    expect(await screen.findByText('The reconciliation source is unavailable. No new Call state is claimed.')).toBeTruthy()
+    firstView.unmount()
+
+    renderRouteComponent(result)
+    expect((screen.getByLabelText('Evidence source') as HTMLInputElement).value).toBe('Provider control plane')
+    expect((screen.getByLabelText('Evidence reference') as HTMLInputElement).value).toBe('evt_123')
+    expect(screen.getByRole('combobox', { name: 'Observed provider outcome' }).textContent).toContain('Effect released')
+    fireEvent.click(screen.getByRole('button', { name: 'Submit reconciliation' }))
+    await waitFor(() => expect(reconcileMock).toHaveBeenCalledTimes(2))
+
+    const first = reconcileMock.mock.calls[0]?.[0]?.data
+    const second = reconcileMock.mock.calls[1]?.[0]?.data
+    expect(second.idempotencyKey).toBe(first.idempotencyKey)
+    expect(second.evidence).toEqual(first.evidence)
+    expect(window.sessionStorage.length).toBe(0)
+  })
+
+  it('does not reuse a stored reconciliation attempt after the Call generation changes', async () => {
+    reconcileMock
+      .mockRejectedValueOnce(new Error('transport unavailable'))
+      .mockResolvedValueOnce({ kind: 'found', version: 3, callRef, toolRef, state: 'terminal' })
+    const firstView = renderRouteComponent({
+      kind: 'found', version: 1, callRef, toolRef, state: 'reconciliation_required',
+      attemptRef: 'attempt:uncertain', effectGeneration: 2, ownerContext,
+    })
+    fireEvent.change(screen.getByLabelText('Evidence source'), { target: { value: 'Provider control plane' } })
+    fireEvent.change(screen.getByLabelText('Evidence reference'), { target: { value: 'evt_123' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Submit reconciliation' }))
+    expect(await screen.findByText('The reconciliation source is unavailable. No new Call state is claimed.')).toBeTruthy()
+    firstView.unmount()
+
+    renderRouteComponent({
+      kind: 'found', version: 2, callRef, toolRef, state: 'reconciliation_required',
+      attemptRef: 'attempt:uncertain', effectGeneration: 3, ownerContext,
+    })
+    expect((screen.getByLabelText('Evidence source') as HTMLInputElement).value).toBe('')
+    expect((screen.getByLabelText('Evidence reference') as HTMLInputElement).value).toBe('')
+    fireEvent.change(screen.getByLabelText('Evidence source'), { target: { value: 'Provider control plane' } })
+    fireEvent.change(screen.getByLabelText('Evidence reference'), { target: { value: 'evt_123' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Submit reconciliation' }))
+    await waitFor(() => expect(reconcileMock).toHaveBeenCalledTimes(2))
+
+    const first = reconcileMock.mock.calls[0]?.[0]?.data
+    const second = reconcileMock.mock.calls[1]?.[0]?.data
+    expect(second.idempotencyKey).not.toBe(first.idempotencyKey)
+    expect(second.evidence.effectGeneration).toBe(3)
+    expect(window.sessionStorage.length).toBe(0)
   })
 
   it('uses a new reconciliation attempt when the evidence changes', async () => {

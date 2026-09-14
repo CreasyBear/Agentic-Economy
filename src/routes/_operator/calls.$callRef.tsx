@@ -2,6 +2,7 @@ import { Link, createFileRoute, useRouter } from '@tanstack/react-router'
 import { useServerFn } from '@tanstack/react-start'
 import { AlertTriangleIcon, CheckCircle2Icon, CircleIcon, Clock3Icon } from 'lucide-react'
 import { useRef, useState, type FormEvent, type ReactNode } from 'react'
+import { z } from 'zod'
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { AeCopyCommand } from '@/components/ae/data/AeCopyCommand'
@@ -51,6 +52,7 @@ import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { nextActionForCallStatus } from '@/modules/market/suggested-next-action'
 import { formatCurrencyAmount } from '@/modules/money/public'
 import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
+import { captureRouteException } from '@/lib/observability/capture-route-exception'
 
 export type CallStatusPageResult = OwnerCallStatusResult | Readonly<{
   kind: 'source_unavailable'
@@ -70,10 +72,88 @@ export type CallStatusPageActions = Readonly<{
   cancelPending?: boolean
   onReconcile?: (input: CallReconciliationForm) => void
   reconcilePending?: boolean
+  reconciliationDraft?: CallReconciliationForm
   feedback?: Readonly<{ kind: 'success' | 'error'; message: string }>
 }>
 
 type FoundCallStatus = Extract<OwnerCallStatusResult, { kind: 'found' }>
+
+const pendingCancellationSchema = z.strictObject({
+  version: z.literal(1),
+  callRef: z.string().min(1).max(300),
+  idempotencyKey: z.string().min(1).max(200),
+})
+const pendingReconciliationAttemptSchema = z.strictObject({
+  version: z.literal(1),
+  callRef: z.string().min(1).max(300),
+  toolRef: z.string().min(1).max(300),
+  attemptRef: z.string().min(1).max(300),
+  effectGeneration: z.number().int().nonnegative(),
+  identity: z.string().regex(/^sha256:[0-9a-f]{64}$/u),
+  idempotencyKey: z.string().min(1).max(200),
+  observedAt: z.string().refine((value) => Number.isFinite(Date.parse(value))),
+  draft: z.strictObject({
+    resolution: z.enum(['not_released', 'released']),
+    source: z.string().min(1).max(300),
+    evidenceRef: z.string().min(1).max(300),
+  }),
+})
+type PendingReconciliationAttempt = z.infer<typeof pendingReconciliationAttemptSchema>
+
+const CALL_RECOVERY_STORAGE_PREFIX = 'ae.call-recovery:v1'
+
+function callRecoveryStorageKey(kind: 'cancel' | 'reconcile', callRef: string): string {
+  return `${CALL_RECOVERY_STORAGE_PREFIX}:${kind}:${canonicalDigest(callRef)}`
+}
+
+function readStoredCancellationKey(callRef: string): string | undefined {
+  const parsed = pendingCancellationSchema.safeParse(readCallRecoveryStorage(callRecoveryStorageKey('cancel', callRef)))
+  return parsed.success && parsed.data.callRef === callRef ? parsed.data.idempotencyKey : undefined
+}
+
+function readStoredReconciliationAttempt(result: FoundCallStatus): PendingReconciliationAttempt | undefined {
+  if (result.state !== 'reconciliation_required' || result.attemptRef === undefined || result.effectGeneration === undefined) return undefined
+  const parsed = pendingReconciliationAttemptSchema.safeParse(
+    readCallRecoveryStorage(callRecoveryStorageKey('reconcile', result.callRef)),
+  )
+  if (!parsed.success) return undefined
+  return parsed.data.callRef === result.callRef
+    && parsed.data.toolRef === result.toolRef
+    && parsed.data.attemptRef === result.attemptRef
+    && parsed.data.effectGeneration === result.effectGeneration
+    ? parsed.data
+    : undefined
+}
+
+function readCallRecoveryStorage(key: string): unknown {
+  if (typeof window === 'undefined') return undefined
+  try {
+    const raw = window.sessionStorage.getItem(key)
+    if (raw === null || raw.length > 4_096) return undefined
+    return JSON.parse(raw) as unknown
+  } catch (cause) {
+    captureRouteException(cause, { site: 'readCallRecoveryStorage' }, 'warning')
+    return undefined
+  }
+}
+
+function persistCallRecoveryStorage(kind: 'cancel' | 'reconcile', callRef: string, value: unknown): void {
+  if (typeof window === 'undefined') return
+  try {
+    window.sessionStorage.setItem(callRecoveryStorageKey(kind, callRef), JSON.stringify(value))
+  } catch (cause) {
+    captureRouteException(cause, { site: 'persistCallRecoveryStorage' }, 'warning')
+  }
+}
+
+function clearCallRecoveryStorage(kind: 'cancel' | 'reconcile', callRef: string): void {
+  if (typeof window === 'undefined') return
+  try {
+    window.sessionStorage.removeItem(callRecoveryStorageKey(kind, callRef))
+  } catch (cause) {
+    captureRouteException(cause, { site: 'clearCallRecoveryStorage' }, 'warning')
+  }
+}
 
 export const Route = createFileRoute('/_operator/calls/$callRef')({
   loader: ({ params }) => readOwnerCallStatusServer({ data: { callRef: params.callRef } })
@@ -110,11 +190,9 @@ function CallStatusController({ loadedResult }: Readonly<{ loadedResult: CallSta
   const reconcile = useServerFn(reconcileOwnerCallServer)
   const router = useRouter()
   const cancelIdempotencyKeyRef = useRef<string | undefined>(undefined)
-  const reconciliationAttemptRef = useRef<Readonly<{
-    identity: string
-    idempotencyKey: string
-    observedAt: string
-  }> | undefined>(undefined)
+  const [reconciliationAttempt, setReconciliationAttempt] = useState<PendingReconciliationAttempt | undefined>(() => (
+    loadedResult.kind === 'found' ? readStoredReconciliationAttempt(loadedResult) : undefined
+  ))
   const setResult = (current: CallStatusPageResult) => {
     setLocalStatus({ source: loadedResult, current })
   }
@@ -125,6 +203,7 @@ function CallStatusController({ loadedResult }: Readonly<{ loadedResult: CallSta
     setFeedback(undefined)
     try {
       const refreshed = await readStatus({ data: { callRef: result.callRef } })
+      setReconciliationAttempt(refreshed.kind === 'found' ? readStoredReconciliationAttempt(refreshed) : undefined)
       setResult(refreshed)
       setFeedback(refreshFeedback(refreshed))
     } catch (cause) {
@@ -139,7 +218,12 @@ function CallStatusController({ loadedResult }: Readonly<{ loadedResult: CallSta
     if (refreshPending || cancelPending || reconcilePending || result.kind !== 'found' || !(result.state === 'authorized' || result.state === 'retryable' || result.state === 'leased')) return
     setCancelPending(true)
     setFeedback(undefined)
-    cancelIdempotencyKeyRef.current ??= crypto.randomUUID()
+    cancelIdempotencyKeyRef.current ??= readStoredCancellationKey(result.callRef) ?? crypto.randomUUID()
+    persistCallRecoveryStorage('cancel', result.callRef, {
+      version: 1,
+      callRef: result.callRef,
+      idempotencyKey: cancelIdempotencyKeyRef.current,
+    })
     try {
       const recovery = await cancel({
         data: {
@@ -148,6 +232,7 @@ function CallStatusController({ loadedResult }: Readonly<{ loadedResult: CallSta
         },
       })
       cancelIdempotencyKeyRef.current = undefined
+      clearCallRecoveryStorage('cancel', result.callRef)
       setResult(statusFromRecovery(recovery))
       setFeedback(cancelFeedback(recovery))
       try {
@@ -193,14 +278,21 @@ function CallStatusController({ loadedResult }: Readonly<{ loadedResult: CallSta
         source,
         evidenceRef,
       })
-      if (reconciliationAttemptRef.current?.identity !== attemptIdentity) {
-        reconciliationAttemptRef.current = {
+      const attempt: PendingReconciliationAttempt = reconciliationAttempt?.identity === attemptIdentity
+        ? reconciliationAttempt
+        : {
+          version: 1,
+          callRef: result.callRef,
+          toolRef: result.toolRef,
+          attemptRef: result.attemptRef,
+          effectGeneration: result.effectGeneration,
           identity: attemptIdentity,
           idempotencyKey: crypto.randomUUID(),
           observedAt: new Date().toISOString(),
+          draft: { resolution: input.resolution, source, evidenceRef },
         }
-      }
-      const attempt = reconciliationAttemptRef.current
+      setReconciliationAttempt(attempt)
+      persistCallRecoveryStorage('reconcile', result.callRef, attempt)
       const material = {
         kind: 'action_invocation_reconciliation' as const,
         version: 1 as const,
@@ -220,7 +312,8 @@ function CallStatusController({ loadedResult }: Readonly<{ loadedResult: CallSta
           evidence: { ...material, digest: canonicalDigest(material) },
         },
       })
-      reconciliationAttemptRef.current = undefined
+      setReconciliationAttempt(undefined)
+      clearCallRecoveryStorage('reconcile', result.callRef)
       setResult(statusFromRecovery(recovery))
       setFeedback(reconcileFeedback(recovery))
       try {
@@ -237,6 +330,10 @@ function CallStatusController({ loadedResult }: Readonly<{ loadedResult: CallSta
     }
   }
 
+  const retainedReconciliation = result.kind === 'found'
+    ? reconciliationAttempt
+    : undefined
+
   return (
     <CallStatusPage
       result={result}
@@ -247,6 +344,7 @@ function CallStatusController({ loadedResult }: Readonly<{ loadedResult: CallSta
         cancelPending,
         onReconcile: (input) => { void reconcileCurrentCall(input) },
         reconcilePending,
+        ...(retainedReconciliation === undefined ? {} : { reconciliationDraft: retainedReconciliation.draft }),
         ...(feedback === undefined ? {} : { feedback }),
       }}
     />
@@ -813,9 +911,9 @@ function AdvancedReconciliation({
   actions,
   recoveryPending,
 }: Readonly<{ actions?: CallStatusPageActions; recoveryPending: boolean }>) {
-  const [resolution, setResolution] = useState<CallReconciliationForm['resolution']>('not_released')
-  const [source, setSource] = useState('')
-  const [evidenceRef, setEvidenceRef] = useState('')
+  const [resolution, setResolution] = useState<CallReconciliationForm['resolution']>(actions?.reconciliationDraft?.resolution ?? 'not_released')
+  const [source, setSource] = useState(actions?.reconciliationDraft?.source ?? '')
+  const [evidenceRef, setEvidenceRef] = useState(actions?.reconciliationDraft?.evidenceRef ?? '')
   function submitReconciliation(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     actions?.onReconcile?.({ resolution, source, evidenceRef })
