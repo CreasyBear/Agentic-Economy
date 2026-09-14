@@ -79,6 +79,8 @@ import {
   handleToolQuotePost,
   handleToolCallPost,
   handleCallStatusGet,
+  handleCallCancelPost,
+  handleCallReconcilePost,
 } from '@/lib/server/call-api'
 import { projectCallReceipt } from '@/modules/capability-execution/call-receipt-view'
 import { callStatusResultSchema } from '@/modules/capability-execution/call-recovery.actions'
@@ -416,6 +418,7 @@ async function serveCallRoutes(input: Readonly<{
   apiKeySubject: string
   scopes: readonly string[]
   principal: TestPrincipal
+  loseCallAcknowledgement?: () => boolean
 }>): Promise<Readonly<{ origin: string; close: () => Promise<void> }>> {
   const authenticate = async () => ({
     isAuthenticated: true as const,
@@ -423,7 +426,7 @@ async function serveCallRoutes(input: Readonly<{
     id: input.apiKeyId,
     subject: input.apiKeySubject,
     scopes: input.scopes,
-    claims: { aeEnvironment: 'production' },
+    claims: { aeEnvironment: input.principal.environment },
   })
   const resolvePrincipal = async () => input.principal
   const server = createServer(async (incoming, outgoing) => {
@@ -454,10 +457,19 @@ async function serveCallRoutes(input: Readonly<{
       } else if (url.pathname === '/api/v1/tools/call') {
         response = await handleToolCallPost(request, { authenticate, resolvePrincipal })
       } else if (url.pathname.startsWith('/api/v1/calls/')) {
-        const callRef = decodeURIComponent(url.pathname.slice('/api/v1/calls/'.length))
-        response = await handleCallStatusGet(request, callRef, { authenticate, resolvePrincipal })
+        const segments = url.pathname.slice('/api/v1/calls/'.length).split('/')
+        const callRef = decodeURIComponent(segments[0]!)
+        response = segments[1] === 'cancel'
+          ? await handleCallCancelPost(request, callRef, { authenticate, resolvePrincipal })
+          : segments[1] === 'reconcile'
+            ? await handleCallReconcilePost(request, callRef, { authenticate, resolvePrincipal })
+            : await handleCallStatusGet(request, callRef, { authenticate, resolvePrincipal })
       } else {
         response = Response.json({ code: 'route_not_found' }, { status: 404 })
+      }
+      if (url.pathname === '/api/v1/tools/call' && response.ok && input.loseCallAcknowledgement?.()) {
+        outgoing.destroy()
+        return
       }
       outgoing.statusCode = response.status
       response.headers.forEach((value, name) => outgoing.setHeader(name, value))
@@ -485,6 +497,11 @@ async function serveCallRoutes(input: Readonly<{
 }
 
 async function installPackagedCli(root: string): Promise<string> {
+  const preparedCli = process.env.AE_TEST_INSTALLED_CLI
+  if (preparedCli !== undefined) {
+    await access(preparedCli)
+    return preparedCli
+  }
   const packageDirectory = join(root, 'package')
   const consumerDirectory = join(root, 'consumer')
   await mkdir(packageDirectory, { recursive: true })
@@ -623,144 +640,149 @@ afterEach(() => {
   external.receipt.mockReset()
 })
 
+async function prepareFundedSandboxBuyer() {
+  const gatewayUrl = process.env.AE_FORMANCE_GATEWAY_URL ?? 'http://127.0.0.1:3069'
+  const ledger = `ae-buyer-${Date.now()}-${process.pid}`
+  const formance = createFormanceContext({ environment: 'sandbox', gatewayUrl, ledger, requestTimeoutMs: 10_000 })
+  expect(await installPackage4FormanceSchema(formance)).toMatchObject({ kind: 'completed' })
+  vi.stubEnv('AE_FORMANCE_ENVIRONMENT', 'sandbox')
+  vi.stubEnv('AE_FORMANCE_GATEWAY_URL', gatewayUrl)
+  vi.stubEnv('AE_FORMANCE_LEDGER', ledger)
+  vi.stubEnv('AE_ROUTE_CALL_SIGNING_SECRET', 'buyer-integration-signing-secret-test-32-bytes')
+  vi.stubEnv('AE_ROUTE_CALL_SIGNING_KEY_ID', 'route-calls:buyer-integration')
+  vi.stubEnv('AE_X402_RPC_URLS_JSON', JSON.stringify({ [BASE_SEPOLIA_NETWORK]: ['https://rpc.example.test'] }))
+  installTestSourceWriteSecret()
+  vi.spyOn(defaultDnsResolver, 'lookup').mockResolvedValue([{ address: '93.184.216.34', family: 4 }])
+
+  // CDP's external API is replaced, while the real custody policy, signing-intent,
+  // fingerprint and authorization code runs against these documented responses.
+  const payer = privateKeyToAccount(`0x${'11'.repeat(32)}`)
+  const accountPolicyId = '11111111-1111-4111-8111-111111111111'
+  const projectPolicyId = '22222222-2222-4222-8222-222222222222'
+  const typedData = { primaryType: 'TransferWithAuthorization', types: { TransferWithAuthorization: [
+    { name: 'from', type: 'address' }, { name: 'to', type: 'address' }, { name: 'value', type: 'uint256' },
+    { name: 'validAfter', type: 'uint256' }, { name: 'validBefore', type: 'uint256' }, { name: 'nonce', type: 'bytes32' },
+  ] } }
+  const accountPolicy = { id: accountPolicyId, scope: 'account' as const, rules: [{ action: 'accept', operation: 'signEvmTypedData', criteria: [
+    { type: 'evmTypedDataVerifyingContract', addresses: [BASE_SEPOLIA_USDC_ADDRESS], operator: 'in' },
+    { type: 'evmTypedDataField', types: typedData, conditions: [
+      { path: 'from', operator: 'in', addresses: [payer.address] }, { path: 'value', operator: '<=', value: '1000000' },
+    ] },
+  ] }] }
+  const projectPolicy = { id: projectPolicyId, scope: 'project' as const, rules: [
+    { action: 'reject', operation: 'signEvmTypedData', criteria: [
+      { type: 'evmTypedDataVerifyingContract', addresses: [BASE_SEPOLIA_USDC_ADDRESS], operator: 'not in' },
+    ] },
+    { action: 'reject', operation: 'signEvmTypedData', criteria: [
+      { type: 'evmTypedDataField', types: typedData, conditions: [{ path: 'value', operator: '>', value: '1000000' }] },
+    ] },
+  ] }
+  const policyDigest = cdpX402PolicyRulesDigest(accountPolicy, projectPolicy)
+  if (policyDigest === undefined) throw new Error('buyer_policy_fixture_invalid')
+  for (const [name, value] of Object.entries({
+    AE_X402_CUSTODY_ENABLED: 'true', AE_X402_CUSTODY_MAX_ATOMIC: '1000000', AE_X402_CUSTODY_DAILY_MAX_ATOMIC: '10000000',
+    CDP_API_KEY_ID: 'test-key-id', CDP_API_KEY_SECRET: 'test-key-secret', CDP_WALLET_SECRET: 'test-wallet-secret',
+    AE_X402_CDP_ACCOUNT_NAME: 'buyer-source-integration', AE_X402_CDP_EXPECTED_EVM_ADDRESS: payer.address,
+    AE_X402_CDP_ACCOUNT_POLICY_ID: accountPolicyId, AE_X402_CDP_PROJECT_POLICY_ID: projectPolicyId,
+    AE_X402_CDP_POLICY_RULES_DIGEST: policyDigest, AE_X402_CDP_CREDENTIAL_GENERATION: '1',
+  })) vi.stubEnv(name, value)
+  const signedAuthorizations: string[] = []
+  external.cdpClient.mockReturnValue({
+    policies: { getPolicyById: async ({ id }: { id: string }) => id === accountPolicyId ? accountPolicy : projectPolicy },
+    evm: {
+      getAccount: async () => ({ address: payer.address, policies: [accountPolicyId, projectPolicyId] }),
+      signTypedData: async (data: Parameters<typeof payer.signTypedData>[0] & { idempotencyKey: string }) => {
+        const signature = await payer.signTypedData(data)
+        signedAuthorizations.push(data.idempotencyKey)
+        return { signature }
+      },
+    },
+  })
+  external.rate.mockImplementation(async () => ({ source: 'coinbase', base: 'USDC', quote: 'AUD', rate: '1.2', fetchedAt: Date.now() }))
+
+  vi.useFakeTimers()
+  const backend = convexTestWithWorkers()
+  const provider = await publishedBusinessOwner(backend, 'buyer-journey-provider')
+  const offeringRef = 'catalog-offering:buyer-journey'
+  const sourceHash = 'catalog-source:buyer-journey'
+  await seedCatalogOffering(backend, provider.businessId, 'buyer-journey', '/paid-lookup', 'POST')
+  const endpoint = 'https://buyer-journey.example.test/paid-lookup'
+  const baseSource = x402Source('sandbox', endpoint)
+  const source = { ...baseSource, commercial: { ...baseSource.commercial, authority: {
+    kind: 'provider_connection' as const, connectionRef: 'connection:owner:x402', providerRef: 'provider:x402:buyer-journey',
+  } } }
+  const resource = source.resource as { paymentRequired: Parameters<typeof encodePaymentRequiredHeader>[0] }
+  providerFetch.mockImplementation(async () => new UndiciResponse('', {
+    status: 402, headers: { 'Payment-Required': encodePaymentRequiredHeader(resource.paymentRequired) },
+  }))
+  const sellerClaim = {
+    businessId: String(provider.businessId), endpointUrl: endpoint, method: 'POST' as const,
+    observationDigest: canonicalDigest({ kind: 'official-x402-v2-unpaid-inspection', endpoint,
+      network: BASE_SEPOLIA_NETWORK, payTo: '0xbA667287B8Ef89565F8fD7AcD4d22Ce98E0f39cd' }),
+    payTo: '0xbA667287B8Ef89565F8fD7AcD4d22Ce98E0f39cd', expiresAt: Date.now() + 300_000,
+  }
+  const connection = createX402ProviderConnection({
+    commandId: 'connection:buyer-journey:create', connectionRef: 'connection:owner:x402',
+    businessId: String(provider.businessId), providerRef: 'provider:x402:buyer-journey', providerAccountRef: `x402:${endpoint}`,
+    resourceUrl: endpoint, method: sellerClaim.method, payee: sellerClaim.payTo,
+    evidenceRefs: [`x402-payee-claim:${x402SellerClaimDigest(sellerClaim)}`, `x402-endpoint-inspection:${sellerClaim.observationDigest}`],
+    owningAccountRef: provider.canonicalAccountRef, installedByPrincipalRef: provider.canonicalPrincipalRef,
+    authorityGrantRef: 'grant:buyer-provider-fixture', authorityGrantGeneration: 1,
+  }, Date.now())
+  if (connection.kind !== 'applied') throw new Error(`buyer_connection_fixture:${connection.kind}`)
+  await backend.run(async (ctx) => await ctx.db.insert('capabilityProviderConnections',
+    providerConnectionRow(connection.connection, connection.connection.lastCommandId ?? '', connection.commandDigest)))
+  const accessPath = await backend.run(async (ctx) => await ctx.db.query('offeringAccessPaths')
+    .withIndex('by_offeringRef_and_status', q => q.eq('offeringRef', offeringRef).eq('status', 'published')).unique())
+  if (accessPath === null) throw new Error('buyer_access_path_fixture_missing')
+  const prepared = await prepareOwnerPublicationCommand(backend, provider.businessId, offeringRef, 1, sourceHash,
+    source, 'buyer-journey:publish', { kind: 'catalog_offering', offeringRef, offeringRevision: 1, offeringSourceHash: sourceHash,
+      declaredAccessPathRef: accessPath.accessPathRef, accessPathSourceHash: accessPath.sourceHash }, 'sandbox')
+  if (prepared.kind !== 'prepared') throw new Error(`buyer_tool_prepare:${prepared.reason}`)
+  const published = await provider.owner.mutation(api.capabilitySupply.publishPreparedCapability, prepared.command)
+  if (published.kind !== 'published') throw new Error(`buyer_tool_publish:${published.kind}`)
+  await admitPublication(backend, published, 'buyer-journey')
+  await backend.finishAllScheduledFunctions(() => vi.advanceTimersByTime(1))
+  expect(await backend.mutation(internal.capabilitySupply.observeCapabilityReadiness, {
+    publicationRef: published.publicationRef, expectedRevision: published.publicationRevision, credentialState: 'ready', healthState: 'healthy',
+    validUntil: Date.now() + 3_600_000, operationKey: 'buyer-journey:ready', correlationId: 'buyer-journey',
+    reasonCode: 'test_readiness', evidenceRefs: ['test:buyer-journey'],
+  })).toMatchObject({ kind: 'observed' })
+  const qualification = await backend.run(async (ctx) => {
+    const row = await ctx.db.query('capabilityPublications').withIndex('by_publicationRef_and_revision', q => q
+      .eq('publicationRef', published.publicationRef).eq('revision', published.publicationRevision)).unique()
+    if (row === null) throw new Error('buyer_publication_missing')
+    return await qualifySuppliedCandidate(capabilitySupplyGraphPorts(ctx.db), { candidate: {
+      publicationRef: row.publicationRef, revision: row.revision, networkId: row.networkId, businessId: row.businessId,
+      offeringId: row.offeringId, bindingId: row.bindingId, contractRef: { capabilityId: row.capabilityId, version: row.version, contractDigest: row.contractDigest },
+    }, now: Date.now() })
+  })
+  expect(qualification, JSON.stringify(qualification)).toMatchObject({ status: 'eligible', reasons: [] })
+  const buyer = await seedPrincipal(backend, 'funded-buyer', Date.now(), published.toolRef, [CUSTOMER_REQUEST_SPENDING_POLICY_SCOPE, MARKET_TOOLS_CALL_SCOPE],
+    { environment: 'sandbox', spendUnits: '5000000' })
+  expect(buyer.principal.ownerId).not.toBe(provider.canonicalAccountRef)
+  const custody = cdpX402CustodyConfigurationFromEnvironment()
+  if (custody === undefined) throw new Error('buyer_custody_fixture_invalid')
+  expect(await backend.mutation(internal.moneyTreasury.recordObservation, {
+    environment: 'sandbox', custodyRef: cdpX402CustodyBudgetRef(custody, 'sandbox'), custodyGeneration: custody.credentialGeneration,
+    network: BASE_SEPOLIA_NETWORK, asset: 'USDC', exponent: 6, observationRef: 'buyer-journey:treasury',
+    totalUnits: '10000000', bufferUnits: '1000000', evidenceRef: 'cdp:buyer-journey:treasury',
+    evidenceDigest: canonicalDigest({ treasury: 'buyer-journey' }), observedAt: Date.now(),
+  })).toMatchObject({ kind: 'accepted' })
+  const funding = await bookFormanceFundingSettlement(formance, {
+    commandRef: 'buyer-journey:funding', idempotencyKey: 'buyer-journey:funding', accountRef: buyer.principal.ownerId,
+    processorRef: 'stripe:sandbox:buyer-journey', principalUnits: '10000000', serviceFeeUnits: '500000', taxUnits: '50000', totalUnits: '10550000',
+    policyDigest, externalEvidenceDigest: canonicalDigest({ funding: 'verified sandbox fixture' }),
+  })
+  expect(funding, JSON.stringify(funding)).toMatchObject({ kind: 'completed', replayed: false })
+  const readBalance = async () => await readFormanceDisplayBalance(formance, { balanceKind: 'account_aud', subjectRef: buyer.principal.ownerId, now: Date.now() })
+  expect(await readBalance()).toMatchObject({ kind: 'available', units: '10000000' })
+  return { gatewayUrl, formance, backend, published, buyer, resource, payer, signedAuthorizations, readBalance }
+}
+
 describe('capability Call Workpool lifecycle', () => {
   it.runIf(process.env.AE_FORMANCE_INTEGRATION === 'true')('buys a sandbox Tool through an exact Quote, real AUD ledger and durable worker without a second purchase on replay or a retained hold after revocation', async () => {
-    const gatewayUrl = process.env.AE_FORMANCE_GATEWAY_URL ?? 'http://127.0.0.1:3069'
-    const ledger = `ae-buyer-${Date.now()}-${process.pid}`
-    const formance = createFormanceContext({ environment: 'sandbox', gatewayUrl, ledger, requestTimeoutMs: 10_000 })
-    expect(await installPackage4FormanceSchema(formance)).toMatchObject({ kind: 'completed' })
-    vi.stubEnv('AE_FORMANCE_ENVIRONMENT', 'sandbox')
-    vi.stubEnv('AE_FORMANCE_GATEWAY_URL', gatewayUrl)
-    vi.stubEnv('AE_FORMANCE_LEDGER', ledger)
-    vi.stubEnv('AE_ROUTE_CALL_SIGNING_SECRET', 'buyer-integration-signing-secret-test-32-bytes')
-    vi.stubEnv('AE_ROUTE_CALL_SIGNING_KEY_ID', 'route-calls:buyer-integration')
-    vi.stubEnv('AE_X402_RPC_URLS_JSON', JSON.stringify({ [BASE_SEPOLIA_NETWORK]: ['https://rpc.example.test'] }))
-    installTestSourceWriteSecret()
-    vi.spyOn(defaultDnsResolver, 'lookup').mockResolvedValue([{ address: '93.184.216.34', family: 4 }])
-
-    // CDP's external API is replaced, while the real custody policy, signing-intent,
-    // fingerprint and authorization code runs against these documented responses.
-    const payer = privateKeyToAccount(`0x${'11'.repeat(32)}`)
-    const accountPolicyId = '11111111-1111-4111-8111-111111111111'
-    const projectPolicyId = '22222222-2222-4222-8222-222222222222'
-    const typedData = { primaryType: 'TransferWithAuthorization', types: { TransferWithAuthorization: [
-      { name: 'from', type: 'address' }, { name: 'to', type: 'address' }, { name: 'value', type: 'uint256' },
-      { name: 'validAfter', type: 'uint256' }, { name: 'validBefore', type: 'uint256' }, { name: 'nonce', type: 'bytes32' },
-    ] } }
-    const accountPolicy = { id: accountPolicyId, scope: 'account' as const, rules: [{ action: 'accept', operation: 'signEvmTypedData', criteria: [
-      { type: 'evmTypedDataVerifyingContract', addresses: [BASE_SEPOLIA_USDC_ADDRESS], operator: 'in' },
-      { type: 'evmTypedDataField', types: typedData, conditions: [
-        { path: 'from', operator: 'in', addresses: [payer.address] }, { path: 'value', operator: '<=', value: '1000000' },
-      ] },
-    ] }] }
-    const projectPolicy = { id: projectPolicyId, scope: 'project' as const, rules: [
-      { action: 'reject', operation: 'signEvmTypedData', criteria: [
-        { type: 'evmTypedDataVerifyingContract', addresses: [BASE_SEPOLIA_USDC_ADDRESS], operator: 'not in' },
-      ] },
-      { action: 'reject', operation: 'signEvmTypedData', criteria: [
-        { type: 'evmTypedDataField', types: typedData, conditions: [{ path: 'value', operator: '>', value: '1000000' }] },
-      ] },
-    ] }
-    const policyDigest = cdpX402PolicyRulesDigest(accountPolicy, projectPolicy)
-    if (policyDigest === undefined) throw new Error('buyer_policy_fixture_invalid')
-    for (const [name, value] of Object.entries({
-      AE_X402_CUSTODY_ENABLED: 'true', AE_X402_CUSTODY_MAX_ATOMIC: '1000000', AE_X402_CUSTODY_DAILY_MAX_ATOMIC: '10000000',
-      CDP_API_KEY_ID: 'test-key-id', CDP_API_KEY_SECRET: 'test-key-secret', CDP_WALLET_SECRET: 'test-wallet-secret',
-      AE_X402_CDP_ACCOUNT_NAME: 'buyer-source-integration', AE_X402_CDP_EXPECTED_EVM_ADDRESS: payer.address,
-      AE_X402_CDP_ACCOUNT_POLICY_ID: accountPolicyId, AE_X402_CDP_PROJECT_POLICY_ID: projectPolicyId,
-      AE_X402_CDP_POLICY_RULES_DIGEST: policyDigest, AE_X402_CDP_CREDENTIAL_GENERATION: '1',
-    })) vi.stubEnv(name, value)
-    const signedAuthorizations: string[] = []
-    external.cdpClient.mockReturnValue({
-      policies: { getPolicyById: async ({ id }: { id: string }) => id === accountPolicyId ? accountPolicy : projectPolicy },
-      evm: {
-        getAccount: async () => ({ address: payer.address, policies: [accountPolicyId, projectPolicyId] }),
-        signTypedData: async (data: Parameters<typeof payer.signTypedData>[0] & { idempotencyKey: string }) => {
-          const signature = await payer.signTypedData(data)
-          signedAuthorizations.push(data.idempotencyKey)
-          return { signature }
-        },
-      },
-    })
-    external.rate.mockImplementation(async () => ({ source: 'coinbase', base: 'USDC', quote: 'AUD', rate: '1.2', fetchedAt: Date.now() }))
-
-    vi.useFakeTimers()
-    const backend = convexTestWithWorkers()
-    const provider = await publishedBusinessOwner(backend, 'buyer-journey-provider')
-    const offeringRef = 'catalog-offering:buyer-journey'
-    const sourceHash = 'catalog-source:buyer-journey'
-    await seedCatalogOffering(backend, provider.businessId, 'buyer-journey', '/paid-lookup', 'POST')
-    const endpoint = 'https://buyer-journey.example.test/paid-lookup'
-    const baseSource = x402Source('sandbox', endpoint)
-    const source = { ...baseSource, commercial: { ...baseSource.commercial, authority: {
-      kind: 'provider_connection' as const, connectionRef: 'connection:owner:x402', providerRef: 'provider:x402:buyer-journey',
-    } } }
-    const resource = source.resource as { paymentRequired: Parameters<typeof encodePaymentRequiredHeader>[0] }
-    providerFetch.mockImplementation(async () => new UndiciResponse('', {
-      status: 402, headers: { 'Payment-Required': encodePaymentRequiredHeader(resource.paymentRequired) },
-    }))
-    const sellerClaim = {
-      businessId: String(provider.businessId), endpointUrl: endpoint, method: 'POST' as const,
-      observationDigest: canonicalDigest({ kind: 'official-x402-v2-unpaid-inspection', endpoint,
-        network: BASE_SEPOLIA_NETWORK, payTo: '0xbA667287B8Ef89565F8fD7AcD4d22Ce98E0f39cd' }),
-      payTo: '0xbA667287B8Ef89565F8fD7AcD4d22Ce98E0f39cd', expiresAt: Date.now() + 300_000,
-    }
-    const connection = createX402ProviderConnection({
-      commandId: 'connection:buyer-journey:create', connectionRef: 'connection:owner:x402',
-      businessId: String(provider.businessId), providerRef: 'provider:x402:buyer-journey', providerAccountRef: `x402:${endpoint}`,
-      resourceUrl: endpoint, method: sellerClaim.method, payee: sellerClaim.payTo,
-      evidenceRefs: [`x402-payee-claim:${x402SellerClaimDigest(sellerClaim)}`, `x402-endpoint-inspection:${sellerClaim.observationDigest}`],
-      owningAccountRef: provider.canonicalAccountRef, installedByPrincipalRef: provider.canonicalPrincipalRef,
-      authorityGrantRef: 'grant:buyer-provider-fixture', authorityGrantGeneration: 1,
-    }, Date.now())
-    if (connection.kind !== 'applied') throw new Error(`buyer_connection_fixture:${connection.kind}`)
-    await backend.run(async (ctx) => await ctx.db.insert('capabilityProviderConnections',
-      providerConnectionRow(connection.connection, connection.connection.lastCommandId ?? '', connection.commandDigest)))
-    const accessPath = await backend.run(async (ctx) => await ctx.db.query('offeringAccessPaths')
-      .withIndex('by_offeringRef_and_status', q => q.eq('offeringRef', offeringRef).eq('status', 'published')).unique())
-    if (accessPath === null) throw new Error('buyer_access_path_fixture_missing')
-    const prepared = await prepareOwnerPublicationCommand(backend, provider.businessId, offeringRef, 1, sourceHash,
-      source, 'buyer-journey:publish', { kind: 'catalog_offering', offeringRef, offeringRevision: 1, offeringSourceHash: sourceHash,
-        declaredAccessPathRef: accessPath.accessPathRef, accessPathSourceHash: accessPath.sourceHash }, 'sandbox')
-    if (prepared.kind !== 'prepared') throw new Error(`buyer_tool_prepare:${prepared.reason}`)
-    const published = await provider.owner.mutation(api.capabilitySupply.publishPreparedCapability, prepared.command)
-    if (published.kind !== 'published') throw new Error(`buyer_tool_publish:${published.kind}`)
-    await admitPublication(backend, published, 'buyer-journey')
-    await backend.finishAllScheduledFunctions(() => vi.advanceTimersByTime(1))
-    expect(await backend.mutation(internal.capabilitySupply.observeCapabilityReadiness, {
-      publicationRef: published.publicationRef, expectedRevision: published.publicationRevision, credentialState: 'ready', healthState: 'healthy',
-      validUntil: Date.now() + 3_600_000, operationKey: 'buyer-journey:ready', correlationId: 'buyer-journey',
-      reasonCode: 'test_readiness', evidenceRefs: ['test:buyer-journey'],
-    })).toMatchObject({ kind: 'observed' })
-    const qualification = await backend.run(async (ctx) => {
-      const row = await ctx.db.query('capabilityPublications').withIndex('by_publicationRef_and_revision', q => q
-        .eq('publicationRef', published.publicationRef).eq('revision', published.publicationRevision)).unique()
-      if (row === null) throw new Error('buyer_publication_missing')
-      return await qualifySuppliedCandidate(capabilitySupplyGraphPorts(ctx.db), { candidate: {
-        publicationRef: row.publicationRef, revision: row.revision, networkId: row.networkId, businessId: row.businessId,
-        offeringId: row.offeringId, bindingId: row.bindingId, contractRef: { capabilityId: row.capabilityId, version: row.version, contractDigest: row.contractDigest },
-      }, now: Date.now() })
-    })
-    expect(qualification, JSON.stringify(qualification)).toMatchObject({ status: 'eligible', reasons: [] })
-    const buyer = await seedPrincipal(backend, 'funded-buyer', Date.now(), published.toolRef, undefined,
-      { environment: 'sandbox', spendUnits: '5000000' })
-    expect(buyer.principal.ownerId).not.toBe(provider.canonicalAccountRef)
-    const custody = cdpX402CustodyConfigurationFromEnvironment()
-    if (custody === undefined) throw new Error('buyer_custody_fixture_invalid')
-    expect(await backend.mutation(internal.moneyTreasury.recordObservation, {
-      environment: 'sandbox', custodyRef: cdpX402CustodyBudgetRef(custody, 'sandbox'), custodyGeneration: custody.credentialGeneration,
-      network: BASE_SEPOLIA_NETWORK, asset: 'USDC', exponent: 6, observationRef: 'buyer-journey:treasury',
-      totalUnits: '10000000', bufferUnits: '1000000', evidenceRef: 'cdp:buyer-journey:treasury',
-      evidenceDigest: canonicalDigest({ treasury: 'buyer-journey' }), observedAt: Date.now(),
-    })).toMatchObject({ kind: 'accepted' })
-    const funding = await bookFormanceFundingSettlement(formance, {
-      commandRef: 'buyer-journey:funding', idempotencyKey: 'buyer-journey:funding', accountRef: buyer.principal.ownerId,
-      processorRef: 'stripe:sandbox:buyer-journey', principalUnits: '10000000', serviceFeeUnits: '500000', taxUnits: '50000', totalUnits: '10550000',
-      policyDigest, externalEvidenceDigest: canonicalDigest({ funding: 'verified sandbox fixture' }),
-    })
-    expect(funding, JSON.stringify(funding)).toMatchObject({ kind: 'completed', replayed: false })
-    const readBalance = async () => await readFormanceDisplayBalance(formance, { balanceKind: 'account_aud', subjectRef: buyer.principal.ownerId, now: Date.now() })
-    expect(await readBalance()).toMatchObject({ kind: 'available', units: '10000000' })
+    const { gatewayUrl, formance, backend, published, buyer, resource, payer, signedAuthorizations, readBalance } = await prepareFundedSandboxBuyer()
 
     let raceCallRef: string | undefined
     let claimRaceResult: unknown
@@ -932,13 +954,131 @@ describe('capability Call Workpool lifecycle', () => {
     expect(released.call?.formanceSettlementRefs).toBeUndefined()
     if (ledgerRelease.kind !== 'completed') throw new Error('buyer_refund_ledger_missing')
     expect(released.call?.formanceReleaseRefs).toEqual(ledgerRelease.transactionRefs)
-    expect(await backend.action(internal.capabilityCallWorker.reconcilePreClaimRefusal, { callRef: revoked.callRef }))
+    expect(await backend.action(internal.capabilityCallWorker.reconcilePreClaimRefund, { callRef: revoked.callRef }))
       .toEqual({ kind: 'not_claimed' })
     expect(await readBalance()).toMatchObject({ kind: 'available', units: '8800000' })
     expect(refused.history).toHaveLength(0)
     expect(deliveries).toHaveLength(1)
     expect(signedAuthorizations).toHaveLength(1)
   }, 30_000)
+
+  it.runIf(process.env.AE_FORMANCE_INTEGRATION === 'true').each(['before claim', 'after possible submission'] as const)(
+    'resumes a paid Call from fresh installed CLI processes after acknowledgement loss %s', async (interruption) => {
+      const { backend, published, buyer, resource, signedAuthorizations, readBalance } = await prepareFundedSandboxBuyer()
+      await backend.run(async (ctx) => await ctx.runMutation(components.workpool.config.update, { maxParallelism: 0 }))
+      let paidRequests = 0
+      providerFetch.mockImplementation(async (_url, init) => {
+        if (!new Headers(init?.headers as HeadersInit).has('payment-signature')) {
+          return new UndiciResponse('', { status: 402, headers: { 'Payment-Required': encodePaymentRequiredHeader(resource.paymentRequired) } })
+        }
+        paidRequests += 1
+        throw new TypeError('test_provider_response_lost_after_submission')
+      })
+      let loseAcknowledgement = true
+      const restoreTransport = setPublicSourceTransportForTests({
+        query: backend.query as ConvexSourceTransport['query'],
+        mutation: backend.mutation as ConvexSourceTransport['mutation'],
+        action: backend.action as ConvexSourceTransport['action'],
+      })
+      const served = await serveCallRoutes({
+        apiKeyId: buyer.principal.credentialId, apiKeySubject: 'user_paid_recovery',
+        scopes: buyer.principal.scopes, principal: buyer.principal,
+        loseCallAcknowledgement: () => {
+          const lose = loseAcknowledgement
+          loseAcknowledgement = false
+          return lose
+        },
+      })
+      const root = await mkdtemp(join(tmpdir(), 'ae-paid-recovery-'))
+      const cliDist = resolve('packages/cli/dist')
+      const cliDistWasPresent = await access(cliDist).then(() => true, () => false)
+      try {
+        const cli = await installPackagedCli(root)
+        const runFreshCli = async (args: readonly string[]) => {
+          const result = await execFileAsync(cli, [...args, '--base-url', served.origin, '--json'], {
+            env: { ...process.env, AE_CONFIG_DIR: join(root, 'config'), AE_API_KEY: buyer.principal.credentialId, AE_API_KEY_ORIGIN: served.origin },
+            maxBuffer: 4 * 1024 * 1024,
+          }).then(({ stdout }) => ({ status: 0, stdout }), (error: { code: number; stdout: string }) => ({ status: error.code, stdout: error.stdout }))
+          return { status: result.status, result: JSON.parse(result.stdout) as Record<string, unknown> }
+        }
+        const first = await runFreshCli(['call', published.toolRef, '--input', JSON.stringify(INPUT), '--idempotency-key', 'paid-recovery-purchase'])
+        expect(first).toMatchObject({ status: 1, result: { code: 'call-transport-unknown' } })
+        const recoveryRef = (first.result.detail as { recoveryRef: string }).recoveryRef
+        expect(recoveryRef).toEqual(expect.any(String))
+        const calls = await backend.run(async (ctx) => await ctx.db.query('capabilityCalls').collect())
+        expect(calls).toHaveLength(1)
+        const callRef = calls[0]!.callRef
+        const reservationRefs = calls[0]!.formanceReservationRefs
+        expect(reservationRefs).toHaveLength(3)
+        expect(await readBalance()).toMatchObject({ kind: 'available', units: '8800000' })
+        if (interruption === 'after possible submission') {
+          await backend.run(async (ctx) => await ctx.runMutation(components.workpool.config.update, { maxParallelism: 1 }))
+          vi.advanceTimersByTime(120_000)
+          await backend.finishAllScheduledFunctions(() => vi.advanceTimersByTime(1))
+          expect((await readEvidence(backend, callRef)).call).toMatchObject({ state: 'reconciliation_required' })
+        }
+        const resumed = await runFreshCli(['call', 'resume', recoveryRef])
+        expect(resumed, JSON.stringify(resumed)).toMatchObject({ status: 0, result: { callRef } })
+        const status = await runFreshCli(['status', callRef])
+        expect(status).toMatchObject({ status: 0, result: {
+          kind: 'found', callRef, state: interruption === 'before claim' ? 'in_progress' : 'reconciliation_required',
+        } })
+        const cancelled = await runFreshCli(['cancel', callRef, '--idempotency-key', 'paid-recovery-cancel'])
+        expect(cancelled, JSON.stringify(cancelled)).toMatchObject({ status: 0, result: {
+          kind: 'found', callRef, state: interruption === 'before claim' ? 'cancelled' : 'reconciliation_required',
+        } })
+        await backend.finishAllScheduledFunctions(() => vi.advanceTimersByTime(1))
+        const retained = await readEvidence(backend, callRef)
+        expect(retained.call?.formanceReservationRefs).toEqual(reservationRefs)
+        expect(retained.call?.formanceSettlementRefs).toBeUndefined()
+        if (interruption === 'before claim') {
+          expect(retained.call?.formanceFinancialState).toBe('released')
+          expect(retained.call?.formanceReleaseRefs).toHaveLength(2)
+          expect(retained.call?.reconciliation).toBeUndefined()
+        } else {
+          expect(['possibly_submitted', 'outcome_unknown']).toContain(retained.call?.formanceFinancialState)
+          expect(retained.call?.formanceReleaseRefs).toBeUndefined()
+        }
+        expect(await readBalance()).toMatchObject({ kind: 'available', units: interruption === 'before claim' ? '10000000' : '8800000' })
+        expect(paidRequests).toBe(interruption === 'before claim' ? 0 : 1)
+        expect(signedAuthorizations).toHaveLength(paidRequests)
+        expect(await backend.run(async (ctx) => await ctx.db.query('capabilityCalls').collect())).toHaveLength(1)
+        expect(await runFreshCli(['call', 'resume', recoveryRef])).toMatchObject({ status: 0, result: { callRef } })
+        expect(await readBalance()).toMatchObject({ kind: 'available', units: interruption === 'before claim' ? '10000000' : '8800000' })
+        expect(paidRequests).toBe(interruption === 'before claim' ? 0 : 1)
+        expect(signedAuthorizations).toHaveLength(interruption === 'before claim' ? 0 : 1)
+        if (interruption === 'after possible submission') {
+          const statusResponse = await fetch(`${served.origin}/api/v1/calls/${encodeURIComponent(callRef)}`, {
+            headers: { Authorization: `Bearer ${buyer.principal.credentialId}` },
+          })
+          expect(statusResponse.status).toBe(200)
+          const current = callStatusResultSchema.parse(await statusResponse.json())
+          expect(status.result).toMatchObject(current)
+          if (current.kind !== 'found' || current.attemptRef === undefined || current.effectGeneration === undefined) throw new Error('paid_recovery_identity_missing')
+          const unsupportedRelease = {
+            kind: 'action_invocation_reconciliation', version: 1, evidenceRef: 'client:unverified-absence', source: 'client',
+            invocationRef: callRef, attemptRef: current.attemptRef, effectGeneration: current.effectGeneration,
+            resolution: 'not_released', observedAt: new Date().toISOString(),
+          }
+          const reconciled = await runFreshCli(['recover', callRef, JSON.stringify({
+            ...unsupportedRelease, digest: canonicalDigest(unsupportedRelease),
+          }), '--idempotency-key', 'paid-recovery-unverified-release'])
+          expect(reconciled, JSON.stringify(reconciled)).toMatchObject({ status: 0, result: { kind: 'found', callRef, state: 'reconciliation_required' } })
+          const freshPurchase = await runFreshCli(['call', published.toolRef, '--input', JSON.stringify(INPUT)])
+          expect(freshPurchase).toMatchObject({ status: 1, result: { code: 'call-recovery-required' } })
+          expect(await backend.run(async (ctx) => await ctx.db.query('capabilityCalls').collect())).toHaveLength(1)
+          expect(await readBalance()).toMatchObject({ kind: 'available', units: '8800000' })
+          expect(paidRequests).toBe(1)
+          expect(signedAuthorizations).toHaveLength(1)
+        }
+      } finally {
+        restoreTransport()
+        await served.close()
+        await rm(root, { recursive: true, force: true })
+        if (!cliDistWasPresent) await rm(cliDist, { recursive: true, force: true })
+      }
+    }, 120_000,
+  )
 
   it('executes once, replays without another effect, and refuses a revoked grant before claim', async () => {
     const signingSecretSentinel = 'call-workpool-signing-secret-sentinel-32-bytes'

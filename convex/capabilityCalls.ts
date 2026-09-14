@@ -70,8 +70,8 @@ import {
 import {
   dispatchHandler,
   openDispatchHandler,
-  readPreClaimRefusalHandler,
-  readPreClaimRefusalArgs,
+  readPreClaimRefundHandler,
+  readPreClaimRefundArgs,
   refuseUnclaimedArgs,
   refuseUnclaimedHandler,
   refuseUnclaimedResult,
@@ -181,10 +181,10 @@ export const openDispatch = internalQuery({
   handler: openDispatchHandler,
 })
 
-export const readPreClaimRefusal = internalQuery({
-  args: readPreClaimRefusalArgs,
+export const readPreClaimRefund = internalQuery({
+  args: readPreClaimRefundArgs,
   returns: v.boolean(),
-  handler: readPreClaimRefusalHandler,
+  handler: readPreClaimRefundHandler,
 })
 
 export const readReplay = internalQuery({

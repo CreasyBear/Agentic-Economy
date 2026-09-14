@@ -242,7 +242,11 @@ async function submitOrReadCall(record: CallRecoveryRecord, options: CliOptions)
       if (result.kind === 'pending' && options.wait === true) result = await waitForCallResult(options, record, result)
     }
     record = await observeResult(record, result)
-    const rendered: Record<string, unknown> = { ...callOutput(result, options), recoveryRef: record.recoveryRef }
+    const rendered: Record<string, unknown> = {
+      ...callOutput(result, options),
+      ...(record.callRef === undefined ? {} : { callRef: record.callRef }),
+      recoveryRef: record.recoveryRef,
+    }
     if (options.json) { printJson(rendered); return }
     heading(`Tool ${record.toolRef}`)
     table([

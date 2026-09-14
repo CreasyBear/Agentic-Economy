@@ -76,7 +76,7 @@ export async function refuseBeforeClaim(
     // The mutation excluded claim and scheduled durable cleanup atomically.
     // Run the same leased action now so an available ledger returns the hold
     // before this worker completes; its scheduler/cron path survives failure.
-    await ctx.runAction(internal.capabilityCallWorker.reconcilePreClaimRefusal, { callRef: dispatch.callRef })
+    await ctx.runAction(internal.capabilityCallWorker.reconcilePreClaimRefund, { callRef: dispatch.callRef })
   }
   return { kind: 'recorded' }
 }

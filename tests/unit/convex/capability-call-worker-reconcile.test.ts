@@ -233,37 +233,37 @@ describe('scheduled capability invocation reconciliation primitives', () => {
     expect(JSON.stringify(candidates)).not.toContain('secret')
   })
 
-  it('selects a due refused refund despite older refusals without reconciliation', async () => {
+  it.each(['refused', 'cancelled'])('selects a due %s refund despite older terminal rows without reconciliation', async (state) => {
     const old = row('already-refused')
-    old.state = 'refused'
+    old.state = state
     delete old.reconciliation
     const refund = row('refund', { attemptCount: 0, nextAttemptAt: 1_000, disposition: 'automatic', reason: 'refund_pending' })
-    refund.state = 'refused'
+    refund.state = state
     const db = new MemoryDb([old, refund])
     expect(await listHandler({ db }, { now: 2_000, limit: 1 })).toEqual([
-      { callRef: 'refund', attemptCount: 0, nextAttemptAt: 1_000, preClaimRefusal: true },
+      { callRef: 'refund', attemptCount: 0, nextAttemptAt: 1_000, preClaimRefund: true },
     ])
   })
 
-  it('reaches a due automatic refund after a full older page awaiting manual review', async () => {
+  it.each(['refused', 'cancelled'])('reaches a due automatic %s refund after a full older page awaiting manual review', async (state) => {
     const blocked = Array.from({ length: 25 }, (_, index) => ({
       ...row(`manual:${index}`, { attemptCount: 5, nextAttemptAt: 1_000, disposition: 'manual_review', reason: 'refund_pending' }),
-      state: 'refused',
+      state,
     }))
     const refund = {
       ...row('automatic-refund', { attemptCount: 0, nextAttemptAt: 2_000, disposition: 'automatic', reason: 'refund_pending' }),
-      state: 'refused',
+      state,
     }
     const db = new MemoryDb([...blocked, refund])
     expect(await listHandler({ db }, { now: 3_000, limit: 25 })).toEqual([
-      { callRef: 'automatic-refund', attemptCount: 0, nextAttemptAt: 2_000, preClaimRefusal: true },
+      { callRef: 'automatic-refund', attemptCount: 0, nextAttemptAt: 2_000, preClaimRefund: true },
     ])
     expect(blocked.every((item) => item.reconciliation?.disposition === 'manual_review')).toBe(true)
   })
 
-  it('retains the refused refund until durable release, including errors and lease takeover', async () => {
+  it.each(['refused', 'cancelled'])('retains the %s refund until durable release, including errors and lease takeover', async (state) => {
     const refund = row('refund', { attemptCount: 0, nextAttemptAt: 1_000, disposition: 'automatic', reason: 'refund_pending' })
-    refund.state = 'refused'
+    refund.state = state
     refund.formanceFinancialState = 'reserved'
     const db = new MemoryDb([refund])
     await claimHandler({ db }, { callRef: 'refund', leaseOwner: 'interrupted', now: 1_000 })
@@ -277,7 +277,7 @@ describe('scheduled capability invocation reconciliation primitives', () => {
     await claimHandler({ db }, { callRef: 'refund', leaseOwner: 'complete', now: 421_005 })
     expect(await finishHandler({ db }, { callRef: 'refund', leaseOwner: 'complete', now: 421_006, outcome: 'success' })).toEqual({ kind: 'completed' })
     expect(refund.reconciliation).toBeUndefined()
-    expect(refund.state).toBe('refused')
+    expect(refund.state).toBe(state)
   })
 
   it('wins the first lease, blocks a live lease, rejects stale finishes, and permits takeover after expiry', async () => {

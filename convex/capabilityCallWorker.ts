@@ -94,11 +94,11 @@ function isTerminalRecoveryResult(result: RecoveryResult): boolean {
 
 type PreClaimRefundResult = { kind: 'settled' | 'retried' | 'manual_review' | 'not_claimed' }
 
-async function reconcilePreClaimRefusalHandler(
+async function reconcilePreClaimRefundHandler(
   ctx: ActionCtx,
   args: { callRef: string },
 ): Promise<PreClaimRefundResult> {
-  if (!await ctx.runQuery(internal.capabilityCalls.readPreClaimRefusal, args)) return { kind: 'not_claimed' }
+  if (!await ctx.runQuery(internal.capabilityCalls.readPreClaimRefund, args)) return { kind: 'not_claimed' }
   const leaseOwner = `pre-claim-refund:${crypto.randomUUID()}`
   const claim = await ctx.runMutation(internal.capabilityCalls.claimAutomaticReconciliationCandidate, {
     ...args, leaseOwner, now: Date.now(),
@@ -106,9 +106,9 @@ async function reconcilePreClaimRefusalHandler(
   if (claim.kind !== 'claimed') return { kind: 'not_claimed' }
   let outcome: 'success' | 'reconciliation_required' | 'error' = 'reconciliation_required'
   try {
-    // The persisted refusal excludes claim atomically. Recheck that exact proof
+    // The persisted refusal or cancellation excludes claim atomically. Recheck that exact proof
     // after the lease; cleanup returns a hold and grants no purchase authority.
-    if (!await ctx.runQuery(internal.capabilityCalls.readPreClaimRefusal, args)) {
+    if (!await ctx.runQuery(internal.capabilityCalls.readPreClaimRefund, args)) {
       throw new Error('pre_claim_refund_proof_changed')
     }
     const released = await ctx.runAction(internal.moneyManagedCallLifecycle.releaseBeforeSubmission, {
@@ -116,7 +116,7 @@ async function reconcilePreClaimRefusalHandler(
     })
     if (released.kind === 'accepted' && released.state === 'released') outcome = 'success'
   } catch (cause) {
-    degradeBackend(cause, undefined, { site: 'reconcilePreClaimRefusal', reason: 'source_unavailable' })
+    degradeBackend(cause, undefined, { site: 'reconcilePreClaimRefund', reason: 'source_unavailable' })
     outcome = 'error'
   }
   const finished = await ctx.runMutation(internal.capabilityCalls.finishAutomaticReconciliation, {
@@ -126,10 +126,10 @@ async function reconcilePreClaimRefusalHandler(
     : finished.kind === 'manual_review' ? 'manual_review' : 'retried' }
 }
 
-export const reconcilePreClaimRefusal = internalAction({
+export const reconcilePreClaimRefund = internalAction({
   args: { callRef: v.string() },
   returns: v.object({ kind: v.union(v.literal('settled'), v.literal('retried'), v.literal('manual_review'), v.literal('not_claimed')) }),
-  handler: reconcilePreClaimRefusalHandler,
+  handler: reconcilePreClaimRefundHandler,
 })
 
 export const run = internalAction({
@@ -287,16 +287,16 @@ export const reconcileScheduled = internalAction({
         snapshot: workload,
         resourceInvocationRef: candidate.callRef,
       })
-      if (candidate.preClaimRefusal === true) {
+      if (candidate.preClaimRefund === true) {
         try {
-          const refund = await reconcilePreClaimRefusalHandler(invocationContext, { callRef: candidate.callRef })
+          const refund = await reconcilePreClaimRefundHandler(invocationContext, { callRef: candidate.callRef })
           if (refund.kind !== 'not_claimed') claimed += 1
           if (refund.kind === 'settled') completed += 1
           else if (refund.kind === 'retried') retried += 1
           else if (refund.kind === 'manual_review') manualReview += 1
         } catch (cause) {
           // The persisted lease and refund intent survive interruption.
-          degradeBackend(cause, undefined, { site: 'reconcilePreClaimRefusal', reason: 'source_unavailable' })
+          degradeBackend(cause, undefined, { site: 'reconcilePreClaimRefund', reason: 'source_unavailable' })
         }
         continue
       }

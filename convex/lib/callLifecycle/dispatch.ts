@@ -92,13 +92,13 @@ export const refuseUnclaimedResult = v.union(
   v.object({ kind: v.literal('not_found') }),
 )
 
-export const readPreClaimRefusalArgs = {
+export const readPreClaimRefundArgs = {
   callRef: v.string(),
 } as const
 
 export type RefuseUnclaimedArgs = ObjectType<typeof refuseUnclaimedArgs>
 export type RefuseUnclaimedResult = Infer<typeof refuseUnclaimedResult>
-export type ReadPreClaimRefusalArgs = ObjectType<typeof readPreClaimRefusalArgs>
+export type ReadPreClaimRefundArgs = ObjectType<typeof readPreClaimRefundArgs>
 
 type SellerCanaryRearmInput = Readonly<{
   envelope: SellerOnboardingCanaryExecutionEnvelope
@@ -1223,7 +1223,7 @@ export async function refuseUnclaimedHandler(
   const row = await ctx.db.query('capabilityCalls')
     .withIndex('by_callRef', (query) => query.eq('callRef', args.callRef))
     .unique()
-  if (!cancellationIdentityMatches(row, args)) return { kind: 'not_found' }
+  if (!purchaseIdentityMatches(row, args)) return { kind: 'not_found' }
 
   const [control, attempts] = await Promise.all([
     ctx.db.query('actionExecutionControls')
@@ -1273,7 +1273,7 @@ export async function refuseUnclaimedHandler(
     updatedAt: now,
   })
   if (shouldScheduleRefund) {
-    await ctx.scheduler.runAfter(0, internal.capabilityCallWorker.reconcilePreClaimRefusal, {
+    await ctx.scheduler.runAfter(0, internal.capabilityCallWorker.reconcilePreClaimRefund, {
       callRef: row.callRef,
     })
   }
@@ -1289,20 +1289,24 @@ function hasBuyerFormanceRefs(row: CallRow): boolean {
 
 /**
  * Read-only proof consumed by refund cleanup. It is true only for a refused
- * Call with no canonical control or attempt and an existing Formance buyer
- * reservation/refund schedule; it grants no execution authority.
+ * Call or cancelled unstarted Call with no canonical control or
+ * attempt and an existing Formance buyer reservation/refund schedule; it
+ * grants no execution authority.
  */
-export async function readPreClaimRefusalHandler(
+export async function readPreClaimRefundHandler(
   ctx: QueryCtx,
-  args: ReadPreClaimRefusalArgs,
+  args: ReadPreClaimRefundArgs,
 ): Promise<boolean> {
   const row = await ctx.db.query('capabilityCalls')
     .withIndex('by_callRef', (query) => query.eq('callRef', args.callRef))
     .unique()
+  const result = row?.result
+  const validTerminalResult = row !== null
+    && ((row.state === 'refused' && result?.kind === 'refused')
+      || (row.state === 'cancelled' && result?.kind === 'refused' && result.code === 'invocation_cancelled'))
   if (
     row === null
-    || row.state !== 'refused'
-    || row.result?.kind !== 'refused'
+    || !validTerminalResult
     || row.dispatchState !== 'failed'
     || row.attemptRef !== undefined
     || row.reconciliation?.reason !== 'refund_pending'
@@ -1330,17 +1334,32 @@ type CancellationArgs = Readonly<{
 function cancellationIdentityMatches(row: CallRow | null, args: CancellationArgs): row is CallRow {
   if (row === null) return false
   return [
+    row.callRef === args.callRef,
     row.principalId === args.principalId,
     row.credentialId === args.credentialId,
-    row.idempotencyKey === args.idempotencyKey,
   ].every(Boolean)
+}
+
+function purchaseIdentityMatches(
+  row: CallRow | null,
+  args: Readonly<Pick<RefuseUnclaimedArgs, 'callRef' | 'principalId' | 'credentialId' | 'idempotencyKey'>>,
+): row is CallRow {
+  return cancellationIdentityMatches(row, args)
+    && row.idempotencyKey === args.idempotencyKey
 }
 
 function cancelledResult(workId?: string): CallDispatchMutationResult {
   return workId === undefined ? { kind: 'cancelled' } : { kind: 'cancelled', workId }
 }
 
-async function patchCancelledInvocation(ctx: MutationCtx, row: CallRow): Promise<void> {
+async function patchCancelledInvocation(
+  ctx: MutationCtx,
+  row: CallRow,
+  refundBeforeClaim = false,
+): Promise<void> {
+  const now = Date.now()
+  const hasRefundSchedule = row.reconciliation?.reason === 'refund_pending'
+  const shouldScheduleRefund = refundBeforeClaim && isBuyerFormanceReservation(row) && !hasRefundSchedule
   await ctx.db.patch(row._id, {
     state: 'cancelled',
     result: {
@@ -1352,8 +1371,14 @@ async function patchCancelledInvocation(ctx: MutationCtx, row: CallRow): Promise
     workId: undefined,
     attemptRef: undefined,
     dispatchState: 'failed',
-    updatedAt: Date.now(),
+    ...(shouldScheduleRefund ? { reconciliation: refundReconciliation(now) } : {}),
+    updatedAt: now,
   })
+  if (shouldScheduleRefund) {
+    await ctx.scheduler.runAfter(0, internal.capabilityCallWorker.reconcilePreClaimRefund, {
+      callRef: row.callRef,
+    })
+  }
 }
 
 function cancellationNeedsReconciliation(
@@ -1418,8 +1443,14 @@ export async function cancelBeforeClaimHandler(
     .withIndex('by_executionRef', (query) => query.eq('executionRef', args.callRef))
     .unique()
   if (control === null && row.state === 'pending') {
+    const attempts = await ctx.db.query('actionExecutionAttempts')
+      .withIndex('by_executionRef_and_attemptNumber', (query) => query.eq('executionRef', args.callRef))
+      .take(1)
+    if (row.attemptRef !== undefined || attempts.length > 0 || financialStateHasReleaseUncertainty(row)) {
+      return { kind: 'refused', code: 'invocation_state_refused' }
+    }
     const workId = row.workId
-    await patchCancelledInvocation(ctx, row)
+    await patchCancelledInvocation(ctx, row, true)
     return cancelledResult(workId)
   }
   if (control === null) return { kind: 'refused', code: 'invocation_state_refused' }

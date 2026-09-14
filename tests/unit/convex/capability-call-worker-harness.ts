@@ -1413,7 +1413,7 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
       state.mutations.push(path)
       state.mutationCalls.push({ path, args })
       switch (path) {
-        case 'capabilityCallWorker:reconcilePreClaimRefusal':
+        case 'capabilityCallWorker:reconcilePreClaimRefund':
           if (canonicalClaimed || dispatch.state !== 'refused') return { kind: 'not_claimed' }
           managedCallState = 'released'
           state.reconciliations.push(args)

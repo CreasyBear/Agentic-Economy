@@ -41,7 +41,7 @@ export const reconciliationCandidateValue = v.object({
   callRef: v.string(),
   attemptCount: v.number(),
   nextAttemptAt: v.number(),
-  preClaimRefusal: v.optional(v.literal(true)),
+  preClaimRefund: v.optional(v.literal(true)),
 })
 export const reconciliationClaimResult = v.union(
   v.object({ kind: v.literal('claimed'), principalId: v.string(), credentialId: v.string() }),
@@ -89,9 +89,10 @@ function hasClaimableReconciliation(
   const leaseAvailable = reconciliation.leaseOwner === undefined
     || reconciliation.leaseExpiresAt === undefined
     || reconciliation.leaseExpiresAt <= now
+  const isPreClaimRefund = (row.state === 'refused' || row.state === 'cancelled')
+    && reconciliation.reason === 'refund_pending'
   return [
-    row.state === 'reconciliation_required'
-      || (row.state === 'refused' && reconciliation.reason === 'refund_pending'),
+    row.state === 'reconciliation_required' || isPreClaimRefund,
     reconciliation.disposition === 'automatic',
     reconciliation.nextAttemptAt <= now,
     leaseAvailable,
@@ -105,9 +106,10 @@ function hasCurrentAutomaticLease(
   now: number,
 ): reconciliation is CallReconciliation {
   if (!isValidCallReconciliation(reconciliation)) return false
+  const isPreClaimRefund = (row.state === 'refused' || row.state === 'cancelled')
+    && reconciliation.reason === 'refund_pending'
   return [
-    row.state === 'reconciliation_required'
-      || (row.state === 'refused' && reconciliation.reason === 'refund_pending'),
+    row.state === 'reconciliation_required' || isPreClaimRefund,
     reconciliation.disposition === 'automatic',
     reconciliation.leaseOwner === leaseOwner,
     reconciliation.leaseExpiresAt !== undefined,
@@ -248,10 +250,10 @@ export async function listDueAutomaticReconciliationCandidatesHandler(
   if (limit === 0) return []
 
   // The index is partitioned by state, so keep each scan bounded and merge the
-  // two bounded pages before applying the one total output limit. Refund
-  // candidates carry an explicit flag so the worker cannot widen them into
-  // ordinary execution-authority recovery.
-  const [reconciliationRows, refundRows] = await Promise.all([
+  // bounded pages before applying the one total output limit. Refund candidates
+  // carry an explicit flag so the worker cannot widen them into ordinary
+  // execution-authority recovery.
+  const [reconciliationRows, refusedRefundRows, cancelledRefundRows] = await Promise.all([
     ctx.db.query('capabilityCalls')
       .withIndex('by_state_and_reconciliation_nextAttemptAt', (q) => (
         q.eq('state', 'reconciliation_required')
@@ -269,8 +271,18 @@ export async function listDueAutomaticReconciliationCandidatesHandler(
       ))
       .order('asc')
       .take(limit),
+    ctx.db.query('capabilityCalls')
+      .withIndex('by_state_and_reconciliation_disposition_reason_nextAttemptAt', (q) => (
+        q.eq('state', 'cancelled')
+          .eq('reconciliation.disposition', 'automatic')
+          .eq('reconciliation.reason', 'refund_pending')
+          .gte('reconciliation.nextAttemptAt', 0)
+          .lte('reconciliation.nextAttemptAt', args.now)
+      ))
+      .order('asc')
+      .take(limit),
   ])
-  const rows = [...reconciliationRows, ...refundRows]
+  const rows = [...reconciliationRows, ...refusedRefundRows, ...cancelledRefundRows]
     .filter((row) => hasClaimableReconciliation(row, args.now))
     .sort((left, right) => {
       const leftDue = left.reconciliation?.nextAttemptAt ?? Number.POSITIVE_INFINITY
@@ -285,13 +297,14 @@ export async function listDueAutomaticReconciliationCandidatesHandler(
       || reconciliation.disposition !== 'automatic'
       || reconciliation.nextAttemptAt > args.now
     ) return []
-    const preClaimRefusal = row.state === 'refused' && reconciliation.reason === 'refund_pending'
-    if (row.state !== 'reconciliation_required' && !preClaimRefusal) return []
+    const preClaimRefund = (row.state === 'refused' || row.state === 'cancelled')
+      && reconciliation.reason === 'refund_pending'
+    if (row.state !== 'reconciliation_required' && !preClaimRefund) return []
     return [{
       callRef: row.callRef,
       attemptCount: reconciliation.attemptCount,
       nextAttemptAt: reconciliation.nextAttemptAt,
-      ...(preClaimRefusal ? { preClaimRefusal: true as const } : {}),
+      ...(preClaimRefund ? { preClaimRefund: true as const } : {}),
     }]
   })
 }
@@ -338,10 +351,12 @@ export async function finishAutomaticReconciliationHandler(
   if (!hasCurrentAutomaticLease(row, reconciliation, args.leaseOwner, args.now)) {
     return { kind: 'refused', code: 'stale_lease' }
   }
-  // A refund candidate may only clear its schedule after the existing
-  // Formance reservation has reached the durable released state. Treat an
-  // early success/terminal report as a retry while retaining refund_pending.
-  const isPreClaimRefund = row.state === 'refused' && reconciliation.reason === 'refund_pending'
+  // A pre-claim refund candidate may only clear its schedule after the
+  // existing Formance reservation has reached the durable released state.
+  // Treat an early success/terminal report as a retry while retaining
+  // refund_pending.
+  const isPreClaimRefund = (row.state === 'refused' || row.state === 'cancelled')
+    && reconciliation.reason === 'refund_pending'
   const outcome = isPreClaimRefund
     && row.formanceFinancialState !== 'released'
     && (args.outcome === 'success' || args.outcome === 'terminal')

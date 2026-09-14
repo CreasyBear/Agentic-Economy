@@ -96,6 +96,17 @@ const evidenceMaterial = {
 }
 const evidence = { ...evidenceMaterial, digest: canonicalDigest(evidenceMaterial) }
 
+const x402EvidenceMaterial = {
+  kind: 'x402_payment_reconciliation' as const, version: 1 as const,
+  evidenceRef: 'evidence:payment', source: 'provider:one', invocationRef: 'invocation:one', attemptRef: 'attempt:one',
+  effectGeneration: 1, operationRef: OPERATION_REF, inputDigest: 'sha256:input', requestDigest: 'sha256:request',
+  transportObservationDigest: 'sha256:transport', paymentObservationDigest: 'sha256:payment', providerRef: 'provider:one',
+  paymentIdentifier: 'payment:one', reservationRef: 'reservation:one', challengeDigest: 'sha256:challenge',
+  amount: { currency: 'USDC', units: '1000000', exponent: 6 }, settlementStatus: 'settled' as const,
+  paymentResponseDigest: 'sha256:response', transactionHash: `0x${'4'.repeat(64)}`, observedAt: evidenceMaterial.observedAt,
+}
+const x402Evidence = { ...x402EvidenceMaterial, digest: canonicalDigest(x402EvidenceMaterial) }
+
 function capture(stream: NodeJS.WriteStream): { read: () => string; restore: () => void } {
   const writes: string[] = []
   const spy = vi.spyOn(stream, 'write').mockImplementation((chunk) => {
@@ -628,7 +639,7 @@ describe('CLI Call recovery projections', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2)
   })
 
-  it('recovers through the canonical root command with positional evidence', async () => {
+  it.each([evidence, x402Evidence])('recovers through the canonical root command with $kind positional evidence', async (evidence) => {
     setApiKey('ae-test-caller-key')
     const output = capture(process.stdout)
     const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
@@ -666,6 +677,19 @@ describe('CLI Call recovery projections', () => {
       nextCommand: 'ae status invocation:one --base-url https://market.example --json',
     })
     expect(rendered).not.toContain('recover:one')
+  })
+
+  it.each([
+    { ...x402Evidence, digest: 'sha256:incorrect' },
+    { ...x402Evidence, invocationRef: 'invocation:other', digest: canonicalDigest({ ...x402EvidenceMaterial, invocationRef: 'invocation:other' }) },
+  ])('refuses invalid x402 recovery evidence before sending a request', async (invalidEvidence) => {
+    setApiKey('ae-test-caller-key')
+    const fetchMock = vi.fn<typeof fetch>()
+    vi.stubGlobal('fetch', fetchMock)
+    await expect(runRecoverCommand(['invocation:one', JSON.stringify(invalidEvidence)], {
+      ...baseOptions, idempotencyKey: 'recover:one',
+    })).rejects.toMatchObject({ kind: 'INVALID_ARGUMENT' })
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 
   it('never prints recovery idempotency material in human output', async () => {
