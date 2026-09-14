@@ -280,7 +280,7 @@ describe('/calls/$callRef', () => {
     expect(screen.getByText('Did money move?')).toBeTruthy()
     expect(screen.getByText('What happens automatically')).toBeTruthy()
     expect(screen.getByText('What you can do')).toBeTruthy()
-    expect(screen.getByText('Reference kept')).toBeTruthy()
+    expect(screen.queryByText('Reference kept')).toBeNull()
     expect(screen.getByText('The external effect may have started. Reconcile before retrying.')).toBeTruthy()
   })
 
@@ -409,10 +409,10 @@ describe('/calls/$callRef', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Refresh current status' }))
 
-    await waitFor(() => expect(screen.getAllByText('Terminal').length).toBeGreaterThan(0))
+    await waitFor(() => expect(screen.getAllByText('Resolved — failed').length).toBeGreaterThan(0))
     expect(readStatusMock).toHaveBeenCalledWith({ data: { callRef } })
     expect(screen.queryByText('In progress')).toBeNull()
-    expect(screen.getByText('Current status refreshed. The current state is Terminal.')).toBeTruthy()
+    expect(screen.getByText('Current status refreshed. Purchase status: Resolved — failed.')).toBeTruthy()
   })
 
   it('renders a new route-keyed Call immediately without mirroring the previous record', () => {
@@ -635,7 +635,7 @@ describe('/calls/$callRef', () => {
     expect(await screen.findByText('The reconciliation source is unavailable. No new Call state is claimed.')).toBeTruthy()
 
     fireEvent.click(screen.getByRole('button', { name: 'Refresh current status' }))
-    await screen.findByText('Current status refreshed. The current state is Reconciliation required.')
+    await screen.findByText('Current status refreshed. Purchase status: Open — outcome uncertain.')
     expect((screen.getByLabelText('Evidence source') as HTMLInputElement).value).toBe('')
     expect((screen.getByLabelText('Evidence reference') as HTMLInputElement).value).toBe('')
     fireEvent.click(screen.getByRole('button', { name: 'Submit reconciliation' }))

@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState, type ReactNode } from 'react'
+import { useMemo, useRef, useState, type ReactNode } from 'react'
 import type { ColumnDef } from '@tanstack/react-table'
 
 import { AeFactList } from '@/components/ae/data/AeFactList'
@@ -55,6 +55,35 @@ export type AccountHistoryPort = Readonly<{
   read: (input: Readonly<{ cursor?: string }>) => Promise<AccountHistoryResult>
 }>
 
+type DocumentAction =
+  | Readonly<{ kind: 'create_statement' }>
+  | Readonly<{ kind: 'create_daily_close' }>
+  | Readonly<{ kind: 'open'; documentRef: string }>
+  | Readonly<{ kind: 'sign'; documentRef: string }>
+
+type DocumentActionStatus = 'pending' | 'succeeded' | 'failed'
+type DocumentActionKey = 'create_statement' | 'create_daily_close' | `open:${string}` | `sign:${string}`
+
+function documentActionKey(action: DocumentAction): DocumentActionKey {
+  return action.kind === 'create_statement' || action.kind === 'create_daily_close'
+    ? action.kind
+    : `${action.kind}:${action.documentRef}`
+}
+
+function DocumentActionNotice({ status, pending, succeeded, failed }: Readonly<{
+  status: DocumentActionStatus | undefined
+  pending: string
+  succeeded: string
+  failed: string
+}>) {
+  if (status === undefined) return null
+  return (
+    <p className="text-sm text-muted-foreground" role="status" aria-live="polite">
+      {status === 'pending' ? pending : status === 'succeeded' ? succeeded : failed}
+    </p>
+  )
+}
+
 /**
  * A section with nothing to show reads as one line, not a full card body.
  * `AeEmptyState`'s reserved min-height and page-scale padding are meant for
@@ -98,7 +127,23 @@ export function AeOwnerCredit({
   const balanceUnavailable = accountBalance === undefined || accountBalance.kind === 'refused'
   const balanceRefreshUnavailable = unavailable.balance === true && accountBalance?.kind === 'available'
   const balanceLocked = accountBalance?.kind === 'available' && accountBalance.locked
-  const [documentAction, setDocumentAction] = useState<'idle' | 'creating' | 'opening' | 'signing' | 'saved' | 'failed'>('idle')
+  const [documentActions, setDocumentActions] = useState<Readonly<Partial<Record<DocumentActionKey, DocumentActionStatus>>>>({})
+  const documentActionsInFlight = useRef(new Set<DocumentActionKey>())
+
+  function runDocumentAction(action: DocumentAction, operation: () => Promise<void>) {
+    const key = documentActionKey(action)
+    if (documentActionsInFlight.current.has(key)) return
+    documentActionsInFlight.current.add(key)
+    setDocumentActions((current) => ({ ...current, [key]: 'pending' }))
+    void Promise.resolve()
+      .then(operation)
+      .then(() => setDocumentActions((current) => ({ ...current, [key]: 'succeeded' })))
+      .catch(() => setDocumentActions((current) => ({ ...current, [key]: 'failed' })))
+      .finally(() => documentActionsInFlight.current.delete(key))
+  }
+
+  const createStatementStatus = documentActions[documentActionKey({ kind: 'create_statement' })]
+  const createDailyCloseStatus = documentActions[documentActionKey({ kind: 'create_daily_close' })]
 
   return (
     <div className="grid gap-8">
@@ -126,7 +171,7 @@ export function AeOwnerCredit({
             </AlertDescription>
           </Alert>
         ) : (
-          <div className="grid gap-2 rounded-xl border border-border bg-card p-5 shadow-sm">
+          <div className="grid gap-2 rounded-xl border border-border bg-card p-5 shadow-soft">
             <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Available credit</p>
             <p className="font-mono text-4xl font-semibold tracking-tight tabular-nums sm:text-5xl">
               {balance === undefined ? 'Checking…' : formatDisplayAmount(balance)}
@@ -194,50 +239,42 @@ export function AeOwnerCredit({
         description="Immutable funding receipts, fee documents, statements, and adjustments retain their source transactions and policy version."
       >
         {onCreateStatement === undefined ? null : (
-          <div className="flex flex-wrap gap-2">
-            <Button
-              type="button"
-              variant="secondary"
-              disabled={documentAction === 'creating' || documentAction === 'opening' || documentAction === 'signing'}
-              onClick={() => {
-                setDocumentAction('creating')
-                void onCreateStatement()
-                  .then(() => setDocumentAction('saved'))
-                  .catch(() => setDocumentAction('failed'))
-              }}
-            >
-              {documentAction === 'creating' ? 'Creating…' : 'Create current statement'}
-            </Button>
-            {onCreateDailyClose === undefined ? null : (
+          <div className="grid gap-intra">
+            <div className="flex flex-wrap gap-2">
               <Button
                 type="button"
                 variant="secondary"
-                disabled={documentAction === 'creating' || documentAction === 'opening' || documentAction === 'signing'}
-                onClick={() => {
-                  setDocumentAction('creating')
-                  void onCreateDailyClose()
-                    .then(() => setDocumentAction('saved'))
-                    .catch(() => setDocumentAction('failed'))
-                }}
+                disabled={createStatementStatus === 'pending'}
+                onClick={() => runDocumentAction({ kind: 'create_statement' }, onCreateStatement)}
               >
-                Create yesterday’s close
+                {createStatementStatus === 'pending' ? 'Creating statement…' : 'Create current statement'}
               </Button>
-            )}
+              {onCreateDailyClose === undefined ? null : (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  disabled={createDailyCloseStatus === 'pending'}
+                  onClick={() => runDocumentAction({ kind: 'create_daily_close' }, onCreateDailyClose)}
+                >
+                  {createDailyCloseStatus === 'pending' ? 'Creating daily close…' : 'Create yesterday’s close'}
+                </Button>
+              )}
+            </div>
+            <DocumentActionNotice
+              status={createStatementStatus}
+              pending="Creating the current statement…"
+              succeeded="Statement generation started. Its status remains visible below."
+              failed="The statement could not be created. Existing records were not changed."
+            />
+            <DocumentActionNotice
+              status={createDailyCloseStatus}
+              pending="Creating yesterday’s daily close…"
+              succeeded="Daily close generation started. Its status remains visible below."
+              failed="The daily close could not be created. Existing records were not changed."
+            />
           </div>
         )}
-        <p className="text-sm text-muted-foreground" role="status" aria-live="polite">
-          {documentAction === 'creating'
-            ? 'Creating statement…'
-            : documentAction === 'opening'
-              ? 'Preparing document…'
-              : documentAction === 'signing'
-                ? 'Signing daily close…'
-              : documentAction === 'saved'
-                ? 'Document generation started. Its status remains visible below.'
-                : documentAction === 'failed'
-                  ? 'The document could not be prepared. Existing records were not changed.'
-                  : 'Documents are generated from immutable Account postings.'}
-        </p>
+        <p className="text-sm text-muted-foreground">Documents are generated from immutable Account postings.</p>
         {unavailable.documents ? (
           <CreditSectionEmptyState title="Documents unavailable" description="Balance and funding remain independent. Refresh to try these records again." />
         ) : documents.length === 0 ? (
@@ -247,49 +284,62 @@ export function AeOwnerCredit({
           />
         ) : (
           <div className="grid gap-intra">
-            {documents.map((document) => (
-              <div key={document.documentRef} className="flex flex-col gap-3 rounded-lg border border-border p-4 sm:flex-row sm:items-center sm:justify-between">
+            {documents.map((document) => {
+              const openStatus = documentActions[documentActionKey({ kind: 'open', documentRef: document.documentRef })]
+              const signStatus = documentActions[documentActionKey({ kind: 'sign', documentRef: document.documentRef })]
+              const label = documentKindLabel(document.kind)
+              return <div key={document.documentRef} className="flex flex-col gap-3 rounded-lg border border-border p-4 sm:flex-row sm:items-center sm:justify-between">
                 <AeFactList facts={[
-                  { label: 'Document', value: documentKindLabel(document.kind) },
+                  { label: 'Document', value: label },
                   { label: 'Amount', value: formatCreditAmount({ currency: 'AUD', exponent: 6, units: document.amountUnits }), mono: true },
                   { label: 'Issued', value: formatTimestamp(document.createdAt), mono: true },
                   { label: 'Status', value: document.state === 'issued' ? 'Ready' : document.state === 'awaiting_signature' ? 'Awaiting owner signature' : document.state === 'failed' ? 'Needs attention' : 'Preparing' },
                   { label: 'Source records', value: String(document.sourceCount), mono: true },
                   { label: 'Reference', value: document.documentRef, mono: true },
                 ]} />
-                <div className="flex flex-wrap gap-2">
-                {document.kind === 'daily_close' && document.state === 'awaiting_signature' && onSignDailyClose !== undefined ? (
-                  <Button
-                    type="button"
-                    disabled={documentAction !== 'idle' && documentAction !== 'saved'}
-                    onClick={() => {
-                      setDocumentAction('signing')
-                      void onSignDailyClose(document.documentRef, document.renderInputDigest)
-                        .then(() => setDocumentAction('saved'))
-                        .catch(() => setDocumentAction('failed'))
-                    }}
-                  >
-                    Sign close
-                  </Button>
-                ) : null}
-                {onOpenDocument === undefined ? null : (
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    disabled={document.state !== 'issued' || documentAction === 'creating' || documentAction === 'opening'}
-                    onClick={() => {
-                      setDocumentAction('opening')
-                      void onOpenDocument(document.documentRef)
-                        .then(() => setDocumentAction('saved'))
-                        .catch(() => setDocumentAction('failed'))
-                    }}
-                  >
-                    {document.state === 'issued' ? 'Open document' : 'Preparing…'}
-                  </Button>
-                )}
+                <div className="grid gap-intra">
+                  <div className="flex flex-wrap gap-2">
+                    {document.kind === 'daily_close' && document.state === 'awaiting_signature' && onSignDailyClose !== undefined ? (
+                      <Button
+                        type="button"
+                        disabled={signStatus === 'pending'}
+                        onClick={() => runDocumentAction(
+                          { kind: 'sign', documentRef: document.documentRef },
+                          () => onSignDailyClose(document.documentRef, document.renderInputDigest),
+                        )}
+                      >
+                        {signStatus === 'pending' ? 'Signing close…' : 'Sign close'}
+                      </Button>
+                    ) : null}
+                    {onOpenDocument === undefined ? null : (
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        disabled={document.state !== 'issued' || openStatus === 'pending'}
+                        onClick={() => runDocumentAction(
+                          { kind: 'open', documentRef: document.documentRef },
+                          () => onOpenDocument(document.documentRef),
+                        )}
+                      >
+                        {openStatus === 'pending' ? 'Opening…' : document.state === 'issued' ? 'Open document' : 'Preparing…'}
+                      </Button>
+                    )}
+                  </div>
+                  <DocumentActionNotice
+                    status={signStatus}
+                    pending={`Signing ${label}…`}
+                    succeeded={`${label} signed. Its updated status remains visible in this row.`}
+                    failed={`${label} could not be signed. This record remains unchanged.`}
+                  />
+                  <DocumentActionNotice
+                    status={openStatus}
+                    pending={`Opening ${label}…`}
+                    succeeded={`${label} opened in a new tab.`}
+                    failed={`${label} could not be opened. This record remains available.`}
+                  />
                 </div>
               </div>
-            ))}
+            })}
           </div>
         )}
       </AeSection>

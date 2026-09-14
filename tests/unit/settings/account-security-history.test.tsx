@@ -37,7 +37,11 @@ describe('account security history', () => {
   it('keeps compromise recovery as independent source checks without claiming containment', () => {
     render(<AeCompromiseRecoveryChecklist />)
 
-    expect(screen.getByRole('heading', { name: 'If you suspect compromise' })).toBeTruthy()
+    const title = screen.getByText('If you suspect compromise')
+    const disclosure = title.closest('details')
+    expect(disclosure?.hasAttribute('open')).toBe(false)
+    fireEvent.click(disclosure?.querySelector('summary') as HTMLElement)
+    expect(disclosure?.hasAttribute('open')).toBe(true)
     expect(screen.getByText('This page does not mark the Account contained')).toBeTruthy()
     expect(screen.getByText(/Resetting MFA alone does not revoke existing sessions/u)).toBeTruthy()
     expect(screen.getAllByText('Review at source')).toHaveLength(5)

@@ -100,17 +100,17 @@ export function AeOwnerOverview({ snapshot }: Readonly<{ snapshot: OwnerOverview
     ? countLabel(snapshot.agents.connected, 'connected Agent', 'connected Agents', snapshot.agents.complete)
     : 'Agents unavailable'
 
-  return <AeOperatorPage operatorRole="owner" title="Overview" description="Your Account’s money, Agents and Calls—together, without mixing their responsibilities." currentPath="/owner">
+  return <AeOperatorPage operatorRole="owner" title="Overview" description="See what needs attention, your available Balance, and connected Agents." currentPath="/owner">
     <div className="grid gap-section pb-page">
-      <section aria-label="Account summary" className="grid gap-related md:grid-cols-2 xl:grid-cols-3">
-        <OverviewCard title="Available Balance" description={snapshot.balance.kind === 'available' && snapshot.balance.locked ? 'Credit is recorded, but spending is temporarily locked.' : 'AUD credit available for authorized Agent Calls.'} value={balanceValue} action={{ label: 'Open Balance', href: '/owner/credit' }} icon={WalletIcon} dominant />
-        <OverviewCard title="Calls" description="Outcomes that may need a decision appear before routine history." value={callsValue} action={{ label: 'Open Calls', href: '/activity' }} icon={ActivityIcon} />
-        <OverviewCard title="Agents" description="Connection and authority remain separate from Account funding." value={agentsValue} action={{ label: 'Open Agents', href: '/agent-access' }} icon={BotIcon} />
-        {providerCard === undefined ? null : <OverviewCard title="Provider workspace" description={providerCard.description} value={providerCard.value} action={{ label: 'Open My Tools', href: '/owner/operations' }} icon={StoreIcon} />}
-      </section>
-      <AeSection title="Next step" description={next.description}>
+      <AeSection title="Next step" description={next.description} className="rounded-xl border border-border bg-card p-gutter shadow-soft">
         <Button asChild className="w-fit min-h-touch"><Link to={next.href}>{next.label}</Link></Button>
       </AeSection>
+      <section aria-label="Account summary" className="grid gap-related md:grid-cols-2 xl:grid-cols-3">
+        <OverviewCard title="Available Balance" description={snapshot.balance.kind === 'available' && snapshot.balance.locked ? 'Credit is recorded, but spending is temporarily locked.' : 'AUD credit available for authorized Agent Calls.'} value={balanceValue} action={{ label: 'Open Balance', href: '/owner/credit' }} icon={WalletIcon} dominant />
+        <OverviewCard title="Calls" description="Work waiting for a decision appears before completed Calls." value={callsValue} action={{ label: 'Open Calls', href: '/activity' }} icon={ActivityIcon} />
+        <OverviewCard title="Agents" description="See connected Agents and review their access." value={agentsValue} action={{ label: 'Open Agents', href: '/agent-access' }} icon={BotIcon} />
+        {providerCard === undefined ? null : <OverviewCard title="Provider workspace" description={providerCard.description} value={providerCard.value} action={{ label: 'Open My Tools', href: '/owner/operations' }} icon={StoreIcon} />}
+      </section>
       <ProviderSetupEntry provider={snapshot.provider} />
     </div>
   </AeOperatorPage>

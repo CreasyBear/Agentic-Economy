@@ -26,7 +26,7 @@ export const Route = createFileRoute('/_operator/owner/settings')({
   head: () => ({
     meta: [
       { title: 'Account & security | Agentic Economy' },
-      { name: 'description', content: 'Profile, authentication, sessions, recovery, and security.' },
+      { name: 'description', content: 'Manage your owner profile, active sessions, recovery, and security history.' },
       { name: 'robots', content: 'noindex' },
     ],
   }),

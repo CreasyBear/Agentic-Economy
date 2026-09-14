@@ -1,7 +1,7 @@
 /**
  * @vitest-environment jsdom
  */
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import '../../setup/jsdom-platform'
@@ -193,10 +193,65 @@ describe('owner credit target', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Create current statement' }))
     await waitFor(() => expect(onCreateStatement).toHaveBeenCalledOnce())
-    expect(screen.getByRole('status').textContent).toContain('Document generation started.')
+    expect(screen.getByRole('status').textContent).toContain('Statement generation started.')
 
     fireEvent.click(screen.getByRole('button', { name: 'Open document' }))
     await waitFor(() => expect(onOpenDocument).toHaveBeenCalledWith('money-document:statement:one'))
+  })
+
+  it('keeps document operations scoped to their exact record and action', async () => {
+    const pending = new Map<string, { resolve: () => void; reject: () => void }>()
+    const onOpenDocument = vi.fn((documentRef: string) => new Promise<void>((resolve, reject) => {
+      pending.set(documentRef, { resolve: () => resolve(), reject: () => reject(new Error('open unavailable')) })
+    }))
+    const onCreateStatement = vi.fn(() => { throw new Error('statement unavailable') })
+    const baseDocument = {
+      amountUnits: '12500000',
+      residualUnits: '0',
+      sourceTransactionRefs: ['journal:call:one'],
+      policyRefs: ['commercial-policy:sandbox:v1'],
+      policyDigest: `sha256:${'a'.repeat(64)}`,
+      renderInputDigest: `sha256:${'b'.repeat(64)}`,
+      templateVersion: 'ae.money-document:html:v1' as const,
+      state: 'issued' as const,
+      sourceCount: 1,
+      rendered: false,
+      createdAt: 1_788_120_000_000,
+    }
+    render(<AeOwnerCredit
+      accountBalance={accountBalance}
+      accountHistory={emptyAccountHistory}
+      documents={[
+        { ...baseDocument, documentRef: 'money-document:statement:one', kind: 'statement' },
+        { ...baseDocument, documentRef: 'money-document:tax:two', kind: 'tax_invoice' },
+      ]}
+      onCreateStatement={onCreateStatement}
+      onOpenDocument={onOpenDocument}
+    />)
+
+    fireEvent.click(screen.getByText('Accounting records and administration'))
+    const openButtons = screen.getAllByRole('button', { name: 'Open document' })
+    fireEvent.click(openButtons[0]!)
+
+    expect(screen.getByRole('button', { name: 'Create current statement' }).hasAttribute('disabled')).toBe(false)
+    expect(screen.getByRole('button', { name: 'Open document' }).hasAttribute('disabled')).toBe(false)
+    expect(screen.getByText('Opening Statement…')).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Create current statement' }))
+    expect(await screen.findByText('The statement could not be created. Existing records were not changed.')).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open document' }))
+    expect(screen.getByText('Opening Tax invoice…')).toBeTruthy()
+    await waitFor(() => expect(onOpenDocument).toHaveBeenCalledTimes(2))
+
+    await act(async () => {
+      pending.get('money-document:statement:one')?.resolve()
+      pending.get('money-document:tax:two')?.reject()
+      await Promise.resolve()
+    })
+
+    expect(screen.getByText('Statement opened in a new tab.')).toBeTruthy()
+    expect(screen.getByText('Tax invoice could not be opened. This record remains available.')).toBeTruthy()
   })
 
   it('deduplicates transaction identity across recoverable pagination', async () => {

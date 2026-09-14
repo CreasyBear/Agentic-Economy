@@ -43,6 +43,11 @@ type LifecycleIssue = Readonly<{
   retry?: LifecycleCommand
 }>
 
+type DirectoryPaginationIssue = Readonly<{
+  source: AgentDirectoryProjection
+  cursor: string
+}>
+
 const canonicalPrincipalIdPattern = /^prn_[0-9a-f]{32}$/u
 const canonicalToolRefPattern = /^operation:v1:[0-9a-f]{64}$/u
 
@@ -107,6 +112,7 @@ function AgentAccessHome() {
   const [loading, setLoading] = useState(false)
   const [loadingMore, setLoadingMore] = useState(false)
   const [directoryError, setDirectoryError] = useState<string>()
+  const [directoryPaginationIssue, setDirectoryPaginationIssue] = useState<DirectoryPaginationIssue>()
   const [lifecycleIssue, setLifecycleIssue] = useState<LifecycleIssue>()
   const [lifecyclePending, setLifecyclePending] = useState<LifecycleCommand>()
   const readApprovals = useServerFn(listPendingCallApprovalsServer)
@@ -134,28 +140,31 @@ function AgentAccessHome() {
   const loadMore = useCallback(async () => {
     const cursor = directory.nextCursor
     if (cursor === undefined || loadingMore) return
+    const source = directory
     setLoadingMore(true)
     try {
       const next = await readDirectoryPage({ data: { cursor } })
-      setDirectory((current) => ({
-        items: [...current.items, ...next.items],
-        details: [...current.details, ...next.details],
-        ...(next.accountBalance === undefined && current.accountBalance === undefined
-          ? {}
-          : { accountBalance: next.accountBalance ?? current.accountBalance }),
-        activityCoverage: current.activityCoverage === 'recent' || next.activityCoverage === 'recent'
-          ? 'recent'
-          : 'complete',
-        ...(next.nextCursor === undefined ? {} : { nextCursor: next.nextCursor }),
-      }))
-      setDirectoryError(undefined)
+      setDirectory((current) => current === source && current.nextCursor === cursor
+        ? {
+            items: [...current.items, ...next.items],
+            details: [...current.details, ...next.details],
+            ...(next.accountBalance === undefined && current.accountBalance === undefined
+              ? {}
+              : { accountBalance: next.accountBalance ?? current.accountBalance }),
+            activityCoverage: current.activityCoverage === 'recent' || next.activityCoverage === 'recent'
+              ? 'recent'
+              : 'complete',
+            ...(next.nextCursor === undefined ? {} : { nextCursor: next.nextCursor }),
+          }
+        : current)
+      setDirectoryPaginationIssue((current) => current?.source === source && current.cursor === cursor ? undefined : current)
     } catch (cause) {
       captureClientExceptionOnClient(cause)
-      setDirectoryError('More agents could not be loaded. The agents already shown are still current.')
+      setDirectoryPaginationIssue({ source, cursor })
     } finally {
       setLoadingMore(false)
     }
-  }, [directory.nextCursor, loadingMore, readDirectoryPage])
+  }, [directory, loadingMore, readDirectoryPage])
   const loadApprovals = useCallback(async () => {
     setApprovalsLoading(true)
     try {
@@ -293,16 +302,18 @@ function AgentAccessHome() {
       setApprovalDecision(undefined)
     }
   }
+  const currentPaginationIssue = directoryPaginationIssue?.source === directory
+    && directoryPaginationIssue.cursor === directory.nextCursor
   return (
     <AeOperatorPage
       operatorRole="owner"
       title="Agents"
-      description="Connect independent agents, review their access, and manage credential history."
+      description="Connect Agents, review requests, and control what each Agent can do."
       currentPath="/agent-access"
     >
       {directoryError === undefined ? null : (
         <Alert>
-          <AlertTitle>Agent access unavailable</AlertTitle>
+          <AlertTitle>{directory.items.length === 0 ? 'Agent access unavailable' : 'Agents could not be refreshed'}</AlertTitle>
           <AlertDescription>
             <p>{directoryError}</p>
             <Button type="button" variant="secondary" disabled={loading} onClick={() => void load()}>{loading ? 'Trying again…' : 'Try again'}</Button>
@@ -334,42 +345,25 @@ function AgentAccessHome() {
           </AlertDescription>
         </Alert>
       )}
-      {directory.items.length === 0 ? (
+      {directory.items.length === 0 && search.caller === undefined ? (
         <AeAssistantInstallFunnel
           canonicalBaseUrl={canonicalBaseUrl}
           checkingConnection={loading}
           onCheckConnection={() => void load()}
           {...(search.resumeTool === undefined ? {} : { resumeToolRef: search.resumeTool })}
         />
-      ) : (
-        <AeSection title="Connections" description="Your agents stay connected until expiry or until you disconnect them.">
-          {search.resumeTool === undefined ? null : (
-            <div className="grid gap-3 rounded-lg border border-border bg-muted/30 p-4">
-              <div>
-                <h3 className="font-medium">{hasConnectedAgent ? 'An Agent connection is available' : 'The selected Tool is waiting for a connection'}</h3>
-                <p className="text-sm text-muted-foreground">
-                  {hasConnectedAgent
-                    ? 'Return to the selected Tool, copy its reference, and continue in your agent client. Browser access does not create a Call.'
-                    : 'No connected Agent is confirmed yet. Add an agent below, approve access, then check the connection before returning.'}
-                </p>
-              </div>
-              {hasConnectedAgent ? (
-                <Button asChild className="w-fit min-h-touch">
-                  <Link to="/tools/$toolRef" params={{ toolRef: search.resumeTool }}>Return to selected Tool</Link>
-                </Button>
-              ) : null}
-            </div>
-          )}
-          <Button type="button" variant="secondary" className="w-fit min-h-touch" onClick={() => setShowSetup((value) => !value)}>
-            {showSetup ? 'Hide setup' : 'Add another agent'}
-          </Button>
-          {showSetup ? (
-            <AeAssistantInstallFunnel
-              canonicalBaseUrl={canonicalBaseUrl}
-              checkingConnection={loading}
-              onCheckConnection={() => void load()}
-              {...(search.resumeTool === undefined ? {} : { resumeToolRef: search.resumeTool })}
-            />
+      ) : directory.items.length === 0 || search.resumeTool === undefined ? null : (
+        <AeSection
+          title={hasConnectedAgent ? 'Continue with the selected Tool' : 'Finish the Agent connection'}
+          description={hasConnectedAgent
+            ? 'Return to the Tool, then continue in your agent client. Browser access does not create a Call.'
+            : 'The selected Tool remains saved while you finish connecting an Agent.'}
+          className="rounded-xl border border-border bg-card p-gutter shadow-soft"
+        >
+          {hasConnectedAgent ? (
+            <Button asChild className="w-fit min-h-touch">
+              <Link to="/tools/$toolRef" params={{ toolRef: search.resumeTool }}>Return to selected Tool</Link>
+            </Button>
           ) : null}
         </AeSection>
       )}
@@ -394,7 +388,7 @@ function AgentAccessHome() {
           ? { agentHistory: <AeAgentSecurityHistory key={search.caller} principalRef={search.caller} /> }
           : {})}
         {...(lifecyclePending === undefined ? {} : { lifecyclePending })}
-        accessUnavailable={directoryError !== undefined}
+        accessUnavailable={directoryError !== undefined && directory.items.length === 0}
         approvals={approvals}
         approvalsLoading={approvalsLoading}
         {...(approvalsError === undefined ? {} : { approvalsError })}
@@ -406,15 +400,35 @@ function AgentAccessHome() {
         }}
       />}
       {directory.nextCursor === undefined ? null : (
-        <Button
-          type="button"
-          variant="secondary"
-          className="mt-4 w-fit"
-          disabled={loadingMore}
-          onClick={() => void loadMore()}
-        >
-          {loadingMore ? 'Loading more agents…' : 'Load more agents'}
-        </Button>
+        <div className="grid w-fit gap-intra">
+          {currentPaginationIssue ? (
+            <p role="alert" className="text-sm text-muted-foreground">More Agents could not be loaded. The Agents already shown remain available.</p>
+          ) : null}
+          <Button
+            type="button"
+            variant="secondary"
+            className="w-fit"
+            disabled={loadingMore}
+            onClick={() => void loadMore()}
+          >
+            {loadingMore ? 'Loading more Agents…' : currentPaginationIssue ? 'Try loading more Agents again' : 'Load more Agents'}
+          </Button>
+        </div>
+      )}
+      {directory.items.length === 0 ? null : (
+        <AeSection title="Add another Agent" description="Existing Agents remain connected until expiry or until you disconnect them.">
+          <Button type="button" variant="secondary" className="w-fit min-h-touch" onClick={() => setShowSetup((value) => !value)}>
+            {showSetup ? 'Hide setup' : 'Connect another Agent'}
+          </Button>
+          {showSetup ? (
+            <AeAssistantInstallFunnel
+              canonicalBaseUrl={canonicalBaseUrl}
+              checkingConnection={loading}
+              onCheckConnection={() => void load()}
+              {...(search.resumeTool === undefined ? {} : { resumeToolRef: search.resumeTool })}
+            />
+          ) : null}
+        </AeSection>
       )}
     </AeOperatorPage>
   )

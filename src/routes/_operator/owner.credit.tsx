@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Link, createFileRoute } from '@tanstack/react-router'
+import { createFileRoute } from '@tanstack/react-router'
 import { useServerFn } from '@tanstack/react-start'
 import { Wallet } from 'lucide-react'
 
@@ -7,7 +7,6 @@ import { AeOwnerCredit, type AccountHistoryPort } from '@/components/ae/console/
 import type { AccountFundingPort } from '@/components/ae/console/AeCreditTopUpPanel'
 import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
 import { AeSettingsStack } from '@/components/ae/layout/AeSection'
-import { Button } from '@/components/ui/button'
 import { operatorRouteOptions } from '@/lib/operator/route-options'
 import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
 import { readOwnerAccountHistoryServer } from '@/lib/server/call-history.functions'
@@ -168,13 +167,8 @@ function OwnerCreditRoute() {
     <AeOperatorPage
       operatorRole="owner"
       title="Balance"
-      description="Fund the Account in AUD, then control each Agent's spending through its spending policy."
+      description="Add AUD credit for paid Calls. Each Agent’s spending limit remains separate."
       currentPath="/owner/credit"
-      actions={
-        <Button asChild variant="secondary">
-          <Link to="/agent-access">Open Agents</Link>
-        </Button>
-      }
     >
       <AeSettingsStack>
         <AeOwnerCredit

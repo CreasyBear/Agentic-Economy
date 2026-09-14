@@ -62,6 +62,9 @@ describe('owner Overview', () => {
     expect(screen.getByRole('link', { name: 'Review Call' }).getAttribute('href')).toBe('/activity')
     expect(screen.queryByText('Provider workspace')).toBeNull()
     expect(screen.getByRole('link', { name: 'Offer a Tool' }).getAttribute('href')).toBe('/owner/operations')
+    const nextStep = screen.getByRole('region', { name: 'Next step' })
+    const summary = screen.getByRole('region', { name: 'Account summary' })
+    expect(nextStep.compareDocumentPosition(summary) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
   it('preserves known Calls and Agents when the Balance read fails', async () => {

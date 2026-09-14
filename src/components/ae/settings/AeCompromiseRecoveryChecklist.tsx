@@ -1,6 +1,6 @@
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
-import { AeSection, AeSettingsRow } from '@/components/ae/layout/AeSection'
+import { AeSettingsRow } from '@/components/ae/layout/AeSection'
 
 const recoveryChecks = [
   {
@@ -32,29 +32,34 @@ const recoveryChecks = [
 
 export function AeCompromiseRecoveryChecklist() {
   return (
-    <AeSection
-      id="compromise-recovery"
-      title="If you suspect compromise"
-      description="Containment spans independent systems. Review each source and rely on the state it reports."
-    >
-      <Alert>
-        <AlertTitle>This page does not mark the Account contained</AlertTitle>
-        <AlertDescription>
-          Resetting MFA alone does not revoke existing sessions, Agent credentials, Provider connection authority, or Provider payout authority.
-        </AlertDescription>
-      </Alert>
-      <ol className="grid gap-intra" aria-label="Compromise recovery checks">
-        {recoveryChecks.map((check) => (
-          <li key={check.title}>
-            <AeSettingsRow
-              title={check.title}
-              description={check.description}
-              href={check.href}
-              action={<Badge variant="secondary">Review at source</Badge>}
-            />
-          </li>
-        ))}
-      </ol>
-    </AeSection>
+    <details id="compromise-recovery" className="rounded-lg border border-border p-gutter">
+      <summary className="cursor-pointer marker:text-muted-foreground">
+        <span className="ml-intra inline-grid gap-intra align-middle">
+          <span className="font-sans text-base font-semibold leading-snug tracking-tight text-foreground">If you suspect compromise</span>
+          <span className="text-sm font-normal text-muted-foreground">Open the containment checklist for sessions, Agents, Provider connections, and payout authority.</span>
+        </span>
+      </summary>
+      <div className="mt-related grid gap-related">
+        <Alert>
+          <AlertTitle>This page does not mark the Account contained</AlertTitle>
+          <AlertDescription>
+            Resetting MFA alone does not revoke existing sessions, Agent credentials, Provider connection authority, or Provider payout authority.
+          </AlertDescription>
+        </Alert>
+        <p className="text-sm text-muted-foreground">Containment spans independent systems. Review each source and rely on the state it reports.</p>
+        <ol className="grid gap-intra" aria-label="Compromise recovery checks">
+          {recoveryChecks.map((check) => (
+            <li key={check.title}>
+              <AeSettingsRow
+                title={check.title}
+                description={check.description}
+                href={check.href}
+                action={<Badge variant="secondary">Review at source</Badge>}
+              />
+            </li>
+          ))}
+        </ol>
+      </div>
+    </details>
   )
 }

@@ -427,7 +427,7 @@ function StatusUnchanged({
         <AePageState
           state="pending"
           title="No status change"
-          description={`Call ${result.callRef} remains at version ${result.version}.`}
+          description={`This Call remains at version ${result.version}.`}
           action={actions?.onRefresh === undefined ? undefined : (
             <Button
               type="button"
@@ -644,7 +644,6 @@ function CallIssue({ issue }: Readonly<{ issue: CallIssueView }>) {
             { label: "Did money move?", value: issue.moneyMovement },
             { label: "What happens automatically", value: issue.automaticNext },
             { label: "What you can do", value: issue.userNext },
-            { label: "Reference kept", value: <Ref value={issue.retainedReference} />, mono: true },
           ]}
         />
       </AlertDescription>
@@ -1022,7 +1021,7 @@ function statusFromRecovery(result: CallRecoveryResult): CallStatusPageResult {
 
 function refreshFeedback(result: CallStatusResult): CallStatusPageActions['feedback'] {
   if (result.kind === 'found') {
-    return { kind: 'success', message: `Current status refreshed. The current state is ${machineLabel(result.state)}.` }
+    return { kind: 'success', message: `Current status refreshed. Purchase status: ${purchaseStatusLabel(result)}.` }
   }
   if (result.kind === 'unchanged') {
     return { kind: 'success', message: `No status change. The Call remains at version ${result.version}.` }

@@ -85,7 +85,7 @@ export function ActivityPage({ result }: Readonly<{ result: ActivityLoaderResult
       <AeOperatorPage
         operatorRole="owner"
         title="Calls"
-        description="Your agent’s calls in task language, with the amount, outcome, and durable receipt together."
+        description="Review Calls that need attention, then inspect recent outcomes and receipts."
         currentPath="/activity"
       >
         <AeDegradedState
@@ -235,31 +235,9 @@ function ActivityAvailable({
     <AeOperatorPage
       operatorRole="owner"
       title="Calls"
-      description="Your agent’s calls in task language, with the amount, outcome, and durable receipt together."
+      description="Review Calls that need attention, then inspect recent outcomes and receipts."
       currentPath="/activity"
     >
-      {usage.kind !== 'available' || spend.kind !== 'available' ? (
-        <Alert>
-          <AlertTitle>Some summaries are unavailable</AlertTitle>
-          <AlertDescription className="flex flex-wrap items-center gap-3">
-            <span>Available Calls remain visible. No missing count or amount is being inferred.</span>
-            <Button
-              type="button"
-              variant="secondary"
-              disabled={summaryRetryPending}
-              onClick={() => {
-                if (summaryRetryPending) return
-                setSummaryRetryPending(true)
-                void router.invalidate()
-                  .catch((cause) => captureClientExceptionOnClient(cause))
-                  .finally(() => setSummaryRetryPending(false))
-              }}
-            >
-              {summaryRetryPending ? 'Refreshing…' : 'Refresh summaries'}
-            </Button>
-          </AlertDescription>
-        </Alert>
-      ) : null}
       <div className="grid gap-section">
         {pagination.items.length === 0 && pagination.cursor === undefined ? (
           <AeEmptyState
@@ -289,7 +267,19 @@ function ActivityAvailable({
             <CallPaginationControl pagination={pagination} onLoadMore={loadNextPage} />
           </>
         )}
-        <MonthlyCallSummary usage={usage} spend={spend} periodStart={periodStart} />
+        <MonthlyCallSummary
+          usage={usage}
+          spend={spend}
+          periodStart={periodStart}
+          retryPending={summaryRetryPending}
+          onRetry={() => {
+            if (summaryRetryPending) return
+            setSummaryRetryPending(true)
+            void router.invalidate()
+              .catch((cause) => captureClientExceptionOnClient(cause))
+              .finally(() => setSummaryRetryPending(false))
+          }}
+        />
       </div>
     </AeOperatorPage>
   )
@@ -361,13 +351,29 @@ function MonthlyCallSummary({
   usage,
   spend,
   periodStart,
+  retryPending,
+  onRetry,
 }: Readonly<{
   usage: Extract<ActivityLoaderResult, { kind: 'available' }>['usage']
   spend: Extract<ActivityLoaderResult, { kind: 'available' }>['spend']
   periodStart: string
+  retryPending: boolean
+  onRetry: () => void
 }>) {
+  const unavailable = usage.kind !== 'available' || spend.kind !== 'available'
   return (
     <AeSection title="This month" description={`Account-level Call and spend summary for ${periodStart}.`}>
+      {unavailable ? (
+        <Alert>
+          <AlertTitle>Some summaries are unavailable</AlertTitle>
+          <AlertDescription className="flex flex-wrap items-center gap-3">
+            <span>Available Calls remain visible. No missing count or amount is being inferred.</span>
+            <Button type="button" variant="secondary" disabled={retryPending} onClick={onRetry}>
+              {retryPending ? 'Refreshing…' : 'Refresh summaries'}
+            </Button>
+          </AlertDescription>
+        </Alert>
+      ) : null}
       <div className="grid gap-related sm:grid-cols-2 lg:grid-cols-4">
         <ActivityMetric label="Calls" value={usage.kind === 'available' ? usage.callCountUnits : '—'} />
         <ActivityMetric label="Completed" value={usage.kind === 'available' ? usage.completedCountUnits : '—'} />

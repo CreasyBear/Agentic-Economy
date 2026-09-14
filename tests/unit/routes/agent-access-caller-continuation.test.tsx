@@ -51,14 +51,14 @@ vi.mock('@tanstack/react-start', () => ({
 vi.mock('@/components/ae/console/AeAgentOperatorConsole', () => ({
   AeAgentOperatorConsole: (props: Record<string, unknown>) => {
     routeHarness.consoleProps = props
-    return null
+    return <div data-testid="agent-console" />
   },
 }))
 
 vi.mock('@/components/ae/console/AeAssistantInstallFunnel', () => ({
   AeAssistantInstallFunnel: (props: Record<string, unknown>) => {
     routeHarness.installProps = props
-    return null
+    return <div data-testid="agent-install" />
   },
 }))
 
@@ -317,6 +317,38 @@ describe('agent-access caller route continuation', () => {
     expect(routeHarness.installProps).toBeTruthy()
   })
 
+  it('keeps known Agents visible when a directory refresh fails', async () => {
+    installServerFns(async () => { throw new Error('directory offline') })
+    renderRoute()
+
+    const consoleView = screen.getByTestId('agent-console')
+    const addAgent = screen.getByRole('region', { name: 'Add another Agent' })
+    expect(consoleView.compareDocumentPosition(addAgent) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Connect another Agent' }))
+    const checkConnection = routeHarness.installProps?.onCheckConnection as (() => void) | undefined
+    act(() => checkConnection?.())
+
+    expect(await screen.findByText('Agents could not be refreshed')).toBeTruthy()
+    expect(routeHarness.consoleProps?.accessUnavailable).toBe(false)
+    expect(routeHarness.consoleProps?.directory).toEqual(directory)
+    expect(screen.getByTestId('agent-console')).toBeTruthy()
+  })
+
+  it('scopes an older-page failure beside its retry without hiding loaded Agents', async () => {
+    const pagedDirectory = { ...directory, nextCursor: 'cursor:more' }
+    routeHarness.loaderData = { canonicalBaseUrl: 'https://market.example', directory: pagedDirectory }
+    installServerFns(async () => { throw new Error('older agents offline') })
+    renderRoute()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Load more Agents' }))
+
+    expect((await screen.findByRole('alert')).textContent).toContain('The Agents already shown remain available')
+    expect(screen.getByRole('button', { name: 'Try loading more Agents again' })).toBeTruthy()
+    expect(routeHarness.consoleProps?.accessUnavailable).toBe(false)
+    expect(routeHarness.consoleProps?.directory).toEqual(pagedDirectory)
+  })
+
   it('preserves an unmatched loader-backed locator for the in-shell not-found state', async () => {
     routeHarness.search = { caller: FOREIGN_PRINCIPAL_ID }
     installServerFns()
@@ -324,6 +356,7 @@ describe('agent-access caller route continuation', () => {
     renderRoute()
     await waitFor(() => expect(routeHarness.consoleProps?.selectedPrincipalId).toBe(FOREIGN_PRINCIPAL_ID))
     expect(routeHarness.navigate).not.toHaveBeenCalled()
+    expect(screen.queryByTestId('agent-install')).toBeNull()
   })
 
   it('clears selection with replace and revokes only the selected key id', async () => {

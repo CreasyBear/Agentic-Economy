@@ -327,7 +327,7 @@ function AgentAccessAuthorizeForm({ locator, oauthState, details, submitApproval
     <AeOperatorPage operatorRole="owner" title="Review agent access" description="Choose what this agent may do, then approve or decline." currentPath="/agent-access">
       <AeSettingsStack>
         {status === 'idle' ? (
-          <div className="grid overflow-hidden rounded-xl border border-border bg-card shadow-sm" role="group" aria-label={`Access decision for ${clientName}`}>
+          <div className="grid overflow-hidden rounded-xl border border-border bg-card shadow-soft" role="group" aria-label={`Access decision for ${clientName}`}>
             <AeSection
               title={`Connect ${clientName}`}
               description={accessProfile === 'provider'
