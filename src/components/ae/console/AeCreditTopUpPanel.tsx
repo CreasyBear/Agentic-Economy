@@ -113,7 +113,12 @@ function fundingUiReducer(state: FundingUiState, action: FundingUiAction): Fundi
         ...(action.recovery === undefined ? {} : { recovery: action.recovery }),
       }
     case 'payment_started':
-      return { ...state, session: action.session, recovery: action.recovery }
+      return {
+        ...state,
+        session: action.session,
+        paymentStatus: action.session.evidence.status,
+        recovery: action.recovery,
+      }
     case 'error_changed':
       return { ...state, errorMessage: action.errorMessage }
     case 'reset':
@@ -164,7 +169,7 @@ export function AeAccountFundingPanel({
           paymentStatus: result.code === 'funding_pending' ? 'pending' : result.code === 'funding_outcome_unknown' ? 'outcome_unknown' : undefined,
           errorMessage: result.code === 'funding_pending' || result.code === 'funding_outcome_unknown'
             ? undefined
-            : topUpErrorCopy(result),
+            : paymentReadErrorCopy(result),
         })
         return
       }
@@ -235,7 +240,15 @@ export function AeAccountFundingPanel({
       dispatch({ type: 'payment_started', session: result.session, recovery: locator })
       persistRecovery(locator)
       if (result.session.kind === 'hosted_redirect' && result.session.checkoutUrl !== undefined) {
-        redirectToCheckout(result.session.checkoutUrl)
+        try {
+          redirectToCheckout(result.session.checkoutUrl)
+        } catch (cause) {
+          captureClientExceptionOnClient(cause)
+          dispatch({
+            type: 'error_changed',
+            errorMessage: 'Secure checkout could not be opened. This payment attempt is preserved; continue the same payment below.',
+          })
+        }
       }
     } catch (cause) {
       captureClientExceptionOnClient(cause)
@@ -265,6 +278,21 @@ export function AeAccountFundingPanel({
     await readCanonicalPayment(recovery)
   }
 
+  function resumeCheckout() {
+    if (!isCheckoutResumable(session) || pending || checking) return
+    try {
+      redirectToCheckout(session.checkoutUrl)
+    } catch (cause) {
+      captureClientExceptionOnClient(cause)
+      dispatch({
+        type: 'error_changed',
+        errorMessage: 'Secure checkout could not be opened. This payment attempt is preserved; try continuing it again.',
+      })
+    }
+  }
+
+  const checkoutResumable = isCheckoutResumable(session)
+
   return (
     <div className="grid gap-3">
         {port === undefined || (!constraintsLoading && constraints?.kind !== 'available') ? (
@@ -280,7 +308,13 @@ export function AeAccountFundingPanel({
           </Alert>
         ) : null}
         {checking ? <p className="text-sm text-muted-foreground" role="status">Checking payment status…</p> : null}
-        {paymentStatus === 'pending' ? <p className="text-sm text-muted-foreground" role="status">Payment is still processing. Refresh its status before taking another action.</p> : null}
+        {paymentStatus === 'pending' ? (
+          <p className="text-sm text-muted-foreground" role="status">
+            {checkoutResumable
+              ? 'Secure checkout is ready. Continue this payment, or refresh its status if checkout was already completed.'
+              : 'Payment is still processing. Refresh its status before taking another action.'}
+          </p>
+        ) : null}
         {paymentStatus === 'outcome_unknown' ? (
           <Alert>
             <AlertTitle>Payment is still being verified</AlertTitle>
@@ -335,7 +369,11 @@ export function AeAccountFundingPanel({
           </div>
         ) : null}
       <div className="flex flex-wrap gap-2">
-        {session === undefined && recovery === undefined ? (
+        {checkoutResumable ? (
+          <Button type="button" disabled={checking || pending} onClick={resumeCheckout} className="min-h-touch">
+            Continue secure payment
+          </Button>
+        ) : session === undefined && recovery === undefined ? (
           <Button
             disabled={pending || checking || port === undefined || constraints?.kind !== 'available' || preview === undefined}
             onClick={() => void beginTopUp()}
@@ -352,7 +390,8 @@ export function AeAccountFundingPanel({
           <Button type="button" variant="secondary" disabled={checking || pending} onClick={startAnotherPayment} className="min-h-touch">
             Add more credit
           </Button>
-        ) : recovery !== undefined && (paymentStatus === 'pending' || paymentStatus === 'outcome_unknown') ? (
+        ) : null}
+        {recovery !== undefined && paymentStatus !== 'succeeded' && paymentStatus !== 'failed' ? (
           <Button type="button" variant="ghost" disabled={checking || pending} onClick={() => void refreshPayment()} className="min-h-touch">
             {checking ? <Spinner data-icon="inline-start" /> : null}
             {checking ? 'Checking payment…' : 'Refresh payment status'}
@@ -371,6 +410,21 @@ function topUpErrorCopy(result: MoneyRefusal | AccountFundingOutcomeUnknownResul
   if (result.code === 'commercial_policy_required') return 'Production funding is not enabled because the required commercial approvals are not current. No payment started.'
   if (result.code === 'funding_pending' || result.code === 'funding_outcome_unknown') return 'Payment is still being verified. Your Account balance will not change until the canonical server readback completes.'
   return 'Account funding could not be started. No payment was confirmed; try again.'
+}
+
+function paymentReadErrorCopy(result: MoneyRefusal): string {
+  if (result.code === 'funding_pending' || result.code === 'funding_outcome_unknown') {
+    return 'Payment is still being verified. Your Account balance will not change until the canonical server readback completes.'
+  }
+  return 'This payment attempt could not be read. It remains unresolved; refresh this exact payment before starting another.'
+}
+
+function isCheckoutResumable(session: CreditPaymentSession | undefined): session is CreditPaymentSession & Readonly<{ checkoutUrl: string }> {
+  return session?.kind === 'hosted_redirect'
+    && session.checkoutUrl !== undefined
+    && session.evidence.status === 'pending'
+    && session.evidence.checkoutStatus === 'open'
+    && session.evidence.paymentStatus === 'unpaid'
 }
 
 function formatAudUnits(units: bigint): string {

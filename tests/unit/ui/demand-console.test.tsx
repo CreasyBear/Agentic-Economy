@@ -435,6 +435,10 @@ describe('assistant access components', () => {
     })
     expect(window.sessionStorage.getItem('ae.account-funding.recovery.v1')).not.toContain('checkout.stripe.com')
     expect(read).not.toHaveBeenCalled()
+    const continueButton = await screen.findByRole('button', { name: 'Continue secure payment' })
+    expect(screen.getByRole('button', { name: 'Refresh payment status' })).toBeTruthy()
+    fireEvent.click(continueButton)
+    expect(redirectToCheckout).toHaveBeenCalledTimes(2)
 
     const firstKey = begin.mock.calls[0]?.[0]?.idempotencyKey
     cleanup()
@@ -447,6 +451,73 @@ describe('assistant access components', () => {
     await waitFor(() => expect(begin).toHaveBeenCalledTimes(2))
     expect(begin.mock.calls[1]?.[0]?.idempotencyKey).not.toBe(firstKey)
     expect(begin.mock.calls[1]?.[0]?.amount.units).toBe('5000000')
+  })
+
+  it('preserves the exact checkout when browser navigation is blocked', async () => {
+    const session: CreditPaymentSession = {
+      kind: 'hosted_redirect',
+      evidence: {
+        provider: 'stripe', externalRef: 'cs_blocked', amount: { currency: 'AUD', units: '10550000', exponent: 6 },
+        status: 'pending', checkoutStatus: 'open', paymentStatus: 'unpaid', checkoutMode: 'hosted_page',
+        checkoutExpiresAt: 3_600_000, requestDigest: 'digest:request', metadataDigest: 'digest:metadata',
+        checkoutSessionDigest: 'digest:checkout', evidenceDigest: 'digest:evidence', evidenceRef: 'stripe:checkout:cs_blocked', observedAt: 1,
+      },
+      checkoutUrl: 'https://checkout.stripe.com/c/pay/cs_blocked',
+      expiresAt: 3_600_000,
+    }
+    const begin = vi.fn(async () => ({ kind: 'ok' as const, commandRef: 'funding:blocked', session }))
+    const redirectToCheckout = vi.fn(() => { throw new Error('popup blocked') })
+    render(<AeAccountFundingPanel port={{ begin, read: vi.fn() }} constraints={fundingConstraints} redirectToCheckout={redirectToCheckout} />)
+
+    fireEvent.change(screen.getByLabelText(/credit to add/i), { target: { value: '10.00' } })
+    fireEvent.click(screen.getByRole('button', { name: /pay A\$10\.55 and add A\$10\.00/i }))
+
+    expect(await screen.findByText(/This payment attempt is preserved/u)).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Continue secure payment' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Refresh payment status' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Add more credit' })).toBeNull()
+  })
+
+  it('resumes an exact checkout returned by canonical payment readback', async () => {
+    const locator = { externalRef: 'cs_readback', idempotencyKey: 'funding:readback' }
+    window.sessionStorage.setItem('ae.account-funding.recovery.v1', JSON.stringify(locator))
+    const session: CreditPaymentSession = {
+      kind: 'hosted_redirect',
+      evidence: {
+        provider: 'stripe', externalRef: locator.externalRef, amount: { currency: 'AUD', units: '10550000', exponent: 6 },
+        status: 'pending', checkoutStatus: 'open', paymentStatus: 'unpaid', checkoutMode: 'hosted_page',
+        checkoutExpiresAt: 3_600_000, requestDigest: 'digest:request', metadataDigest: 'digest:metadata',
+        checkoutSessionDigest: 'digest:checkout', evidenceDigest: 'digest:evidence', evidenceRef: 'stripe:checkout:cs_readback', observedAt: 1,
+      },
+      checkoutUrl: 'https://checkout.stripe.com/c/pay/cs_readback',
+      expiresAt: 3_600_000,
+    }
+    const read = vi.fn(async () => session)
+    const redirectToCheckout = vi.fn()
+    render(<AeAccountFundingPanel port={{ begin: vi.fn(), read }} constraints={fundingConstraints} redirectToCheckout={redirectToCheckout} />)
+
+    await waitFor(() => expect(read).toHaveBeenCalledWith(locator))
+    fireEvent.click(await screen.findByRole('button', { name: 'Continue secure payment' }))
+    expect(redirectToCheckout).toHaveBeenCalledWith(session.checkoutUrl)
+    expect(screen.queryByRole('button', { name: /pay /i })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Add more credit' })).toBeNull()
+  })
+
+  it('keeps an unreadable stored attempt recoverable through the same locator', async () => {
+    const locator = { commandRef: 'sha256:stored-attempt', idempotencyKey: 'funding:stored-attempt' }
+    window.sessionStorage.setItem('ae.account-funding.recovery.v1', JSON.stringify(locator))
+    const read = vi.fn(async () => ({ kind: 'refused' as const, code: 'source_unavailable', retryable: true }))
+    const begin = vi.fn()
+    render(<AeAccountFundingPanel port={{ begin, read }} constraints={fundingConstraints} />)
+
+    expect(await screen.findByText(/remains unresolved/u)).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /pay /i })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Add more credit' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh payment status' }))
+    await waitFor(() => expect(read).toHaveBeenCalledTimes(2))
+    expect(read).toHaveBeenNthCalledWith(1, locator)
+    expect(read).toHaveBeenNthCalledWith(2, locator)
+    expect(begin).not.toHaveBeenCalled()
   })
 
   it('quotes from the supplied authoritative constraints rather than a fixed client policy', () => {
