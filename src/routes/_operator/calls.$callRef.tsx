@@ -1,14 +1,14 @@
 import { Link, createFileRoute, useRouter } from '@tanstack/react-router'
 import { useServerFn } from '@tanstack/react-start'
 import { AlertTriangleIcon, CheckCircle2Icon, CircleIcon, Clock3Icon } from 'lucide-react'
-import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
+import { useRef, useState, type FormEvent, type ReactNode } from 'react'
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { AeCopyCommand } from '@/components/ae/data/AeCopyCommand'
 import { AeCopyReference } from '@/components/ae/data/AeCopyReference'
 import { AeFactList } from '@/components/ae/data/AeFactList'
 import { AeConfirmDialog } from '@/components/ae/feedback/AeConfirmDialog'
-import { AePublicPage } from '@/components/ae/layout/AePublicPage'
+import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
 import { AePageState } from '@/components/ae/layout/AePageState'
 import { AeSection } from '@/components/ae/layout/AeSection'
 import { Badge } from '@/components/ui/badge'
@@ -74,7 +74,7 @@ export type CallStatusPageActions = Readonly<{
 
 type FoundCallStatus = Extract<CallStatusResult, { kind: 'found' }>
 
-export const Route = createFileRoute('/calls/$callRef')({
+export const Route = createFileRoute('/_operator/calls/$callRef')({
   loader: ({ params }) => readOwnerCallStatusServer({ data: { callRef: params.callRef } })
     .catch((): CallStatusPageResult => ({
       kind: 'source_unavailable',
@@ -91,7 +91,15 @@ export const Route = createFileRoute('/calls/$callRef')({
 
 function CallStatusRoute() {
   const loadedResult = Route.useLoaderData()
-  const [result, setResult] = useState<CallStatusPageResult>(loadedResult)
+  return <CallStatusController key={loadedResult.callRef} loadedResult={loadedResult} />
+}
+
+function CallStatusController({ loadedResult }: Readonly<{ loadedResult: CallStatusPageResult }>) {
+  const [localStatus, setLocalStatus] = useState<Readonly<{
+    source: CallStatusPageResult
+    current: CallStatusPageResult
+  }>>({ source: loadedResult, current: loadedResult })
+  const result = localStatus.source === loadedResult ? localStatus.current : loadedResult
   const [refreshPending, setRefreshPending] = useState(false)
   const [cancelPending, setCancelPending] = useState(false)
   const [reconcilePending, setReconcilePending] = useState(false)
@@ -106,9 +114,9 @@ function CallStatusRoute() {
     idempotencyKey: string
     observedAt: string
   }> | undefined>(undefined)
-  useEffect(() => {
-    setResult(loadedResult)
-  }, [loadedResult])
+  const setResult = (current: CallStatusPageResult) => {
+    setLocalStatus({ source: loadedResult, current })
+  }
 
   async function refreshCurrentStatus() {
     if (refreshPending || cancelPending || reconcilePending || !canRefreshStatus(result)) return
@@ -253,6 +261,38 @@ export function CallStatusPage({
   return <StatusFound result={result} {...(actions === undefined ? {} : { actions })} />
 }
 
+function CallWorkspacePage({
+  callRef,
+  description,
+  pending = false,
+  children,
+}: Readonly<{
+  callRef: string
+  description: string
+  pending?: boolean
+  children: ReactNode
+}>) {
+  return (
+    <AeOperatorPage
+      operatorRole="owner"
+      title="Call receipt"
+      description={description}
+      currentPath={`/calls/${encodeURIComponent(callRef)}`}
+      breadcrumbs={[{ label: 'Calls', href: '/activity' }, { label: 'Call receipt' }]}
+      actions={(
+        <Button asChild variant="outline" className="min-h-touch">
+          <Link to="/activity">Back to Calls</Link>
+        </Button>
+      )}
+      pending={pending}
+    >
+      <article id="receipt" className="grid scroll-mt-6 gap-section pb-page">
+        {children}
+      </article>
+    </AeOperatorPage>
+  )
+}
+
 function StatusUnchanged({
   result,
   actions,
@@ -261,8 +301,7 @@ function StatusUnchanged({
   actions?: CallStatusPageActions
 }>) {
   return (
-    <AePublicPage>
-      <article className="ae-rail grid gap-section pb-page">
+    <CallWorkspacePage callRef={result.callRef} description="Checking whether this exact Call has changed.">
         <AePageState
           state="pending"
           title="No status change"
@@ -278,8 +317,7 @@ function StatusUnchanged({
             </Button>
           )}
         />
-      </article>
-    </AePublicPage>
+    </CallWorkspacePage>
   )
 }
 
@@ -289,62 +327,103 @@ function StatusFound({
 }: Readonly<{ result: FoundCallStatus; actions?: CallStatusPageActions }>) {
   const receiptView = projectCallReceipt(result)
   return (
-    <AePublicPage>
-      <article id="receipt" className="ae-rail grid scroll-mt-6 gap-section pb-page">
-        <header className="grid gap-related">
+    <CallWorkspacePage callRef={result.callRef} description={receiptView.statusDetail}>
+        <section className="grid gap-related" aria-labelledby="call-summary-title">
           <div className="flex flex-wrap gap-intra">
-            <Badge variant="outline">Receipt</Badge>
             <Badge variant={receiptView.complete ? 'success' : receiptView.issue === undefined ? 'secondary' : 'warning'}>{receiptView.statusLabel}</Badge>
           </div>
           <div className="grid gap-intra">
-            <h1 className="text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">Call receipt</h1>
-            <p className="max-w-3xl text-muted-foreground">{receiptView.statusDetail}</p>
+            <h2 id="call-summary-title" className="text-xl font-semibold tracking-tight text-foreground">Call summary</h2>
+            <p className="text-sm text-muted-foreground">The outcome and buyer-facing money facts for this exact Call.</p>
           </div>
           <AeFactList
             facts={[
-              { label: "Call reference", value: <Ref value={result.callRef} />, mono: true },
               {
-                label: "Current Tool",
+                label: "Tool",
                 value: (
                   <Link
                     to="/tools/$toolRef"
                     params={{ toolRef: result.toolRef }}
-                    className="break-all font-medium text-brand underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    className="font-medium text-brand underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   >
-                    {result.toolRef}
+                    Open Tool details
                   </Link>
                 ),
               },
+              { label: "Buyer amount", value: buyerAmountLabel(receiptView) },
+              { label: "Recorded", value: recordedAtLabel(receiptView) },
               { label: "Purchase status", value: purchaseStatusLabel(result) },
               { label: "Outcome record", value: outcomeRecordLabel(result) },
-              { label: "Call state", value: machineLabel(result.state) },
-              ...(result.attemptRef === undefined ? [] : [{ label: "Attempt reference", value: <Ref value={result.attemptRef} />, mono: true }]),
-              ...(result.effectGeneration === undefined ? [] : [{ label: "Effect generation", value: String(result.effectGeneration) }]),
-              ...(result.evidenceHash === undefined ? [] : [{ label: "Evidence hash", value: <Ref value={result.evidenceHash} />, mono: true }]),
             ]}
           />
-        </header>
-        <ReceiptTimeline stages={receiptView.stages} />
+        </section>
         {receiptView.issue === undefined ? null : <CallIssue issue={receiptView.issue} />}
         <CallRecoveryActions result={result} {...(actions === undefined ? {} : { actions })} />
-        <CallSuggestedNextAction result={result} />
-
-        <ReceiptMoneyFacts view={receiptView} />
         {result.result === undefined ? (
           <section className="grid gap-intra border-t border-border pt-section" aria-labelledby="current-result-title">
             <h2 id="current-result-title" className="text-xl font-semibold tracking-tight text-foreground">Current result</h2>
             <p className="text-muted-foreground">No canonical result is recorded yet. The state above remains authoritative.</p>
           </section>
-        ) : <ResultDetails result={result.result} />}
+        ) : <CallOutput result={result.result} />}
+        <ReceiptMoneyFacts view={receiptView} />
         {receiptView.complete ? (
           <CallReuseActions
             key={receiptView.toolRef ?? receiptView.callRef}
             view={receiptView}
           />
         ) : null}
-        <MachineReadableReceipt view={receiptView} />
-      </article>
-    </AePublicPage>
+        <TechnicalCallRecord result={result} view={receiptView} />
+    </CallWorkspacePage>
+  )
+}
+
+function buyerAmountLabel(view: CallReceiptView): string {
+  if (view.receipt?.commercialModel === 'account_aud') return formatCurrencyAmount(view.receipt.totalBuyerCharge)
+  if (view.receipt?.commercialModel === 'seller_canary_x402') return formatCurrencyAmount(view.receipt.totalBuyerAuthorization)
+  if (view.usage !== undefined) return formatCurrencyAmount(view.usage.amount)
+  return 'Not recorded yet'
+}
+
+function recordedAtLabel(view: CallReceiptView): ReactNode {
+  if (view.usage !== undefined) {
+    return <time dateTime={timestampIso(view.usage.observedAt)}>{formatUtcTimestamp(view.usage.observedAt)} UTC</time>
+  }
+  const issuedAt = view.receipt?.issuedAt
+  if (issuedAt === undefined) return 'Not recorded yet'
+  const timestamp = Date.parse(issuedAt)
+  return Number.isFinite(timestamp)
+    ? <time dateTime={issuedAt}>{formatUtcTimestamp(timestamp)} UTC</time>
+    : issuedAt
+}
+
+function CallOutput({ result }: Readonly<{ result: CallResult }>) {
+  if (result.kind !== 'completed') return null
+  return (
+    <AeSection title="Output" description="The Provider output recorded for this Call.">
+      <pre className="max-h-96 overflow-auto whitespace-pre-wrap break-words rounded-card bg-muted p-gutter text-xs text-foreground"><code>{JSON.stringify(result.output, null, 2)}</code></pre>
+    </AeSection>
+  )
+}
+
+function TechnicalCallRecord({ result, view }: Readonly<{ result: FoundCallStatus; view: CallReceiptView }>) {
+  return (
+    <details className="border-t border-border pt-related">
+      <summary className="flex min-h-touch cursor-pointer items-center text-sm font-medium text-foreground">Technical record</summary>
+      <div className="grid gap-section pt-related">
+        <AeFactList facts={[
+          { label: "Call reference", value: <Ref value={result.callRef} />, mono: true },
+          { label: "Tool reference", value: <Ref value={result.toolRef} />, mono: true },
+          { label: "Call state", value: machineLabel(result.state) },
+          ...(result.attemptRef === undefined ? [] : [{ label: "Attempt reference", value: <Ref value={result.attemptRef} />, mono: true }]),
+          ...(result.effectGeneration === undefined ? [] : [{ label: "Effect generation", value: String(result.effectGeneration) }]),
+          ...(result.evidenceHash === undefined ? [] : [{ label: "Evidence hash", value: <Ref value={result.evidenceHash} />, mono: true }]),
+        ]} />
+        <ReceiptTimeline stages={view.stages} />
+        {result.result === undefined ? null : <ResultDetails result={result.result} />}
+        <CallSuggestedNextAction result={result} />
+        <MachineReadableReceipt view={view} />
+      </div>
+    </details>
   )
 }
 
@@ -400,7 +479,7 @@ function StageIcon({ state }: Readonly<{ state: CallReceiptStageView['state'] }>
 
 function CallIssue({ issue }: Readonly<{ issue: CallIssueView }>) {
   return (
-    <Alert variant="destructive" role="alert">
+    <Alert role="alert">
       <AlertTriangleIcon aria-hidden="true" />
       <AlertTitle>{issue.title}</AlertTitle>
       <AlertDescription>
@@ -422,7 +501,7 @@ function ReceiptMoneyFacts({ view }: Readonly<{ view: CallReceiptView }>) {
   return (
     <AeSection
       title="Money before and after the call"
-      description="Authorization is the pre-call ceiling. Usage is the post-call recorded amount. Missing facts stay missing."
+      description="Buyer authorization is the pre-call ceiling. The recorded outcome is shown separately; missing facts stay missing."
     >
       <div className="grid gap-section">
         <div className="grid gap-related">
@@ -450,7 +529,6 @@ function ReceiptAuthorizationFacts({ receipt }: Readonly<{ receipt: CallReceipt 
         { label: "Buyer charge", value: formatCurrencyAmount(receipt.buyerCharge) },
         { label: "Service fee", value: formatCurrencyAmount(receipt.serviceFee) },
         { label: "Total buyer charge", value: formatCurrencyAmount(receipt.totalBuyerCharge) },
-        { label: "Provider obligation", value: formatCurrencyAmount(receipt.providerObligation.amount) },
       ]
     : [
         { label: "Provider quote", value: formatCurrencyAmount(receipt.providerQuotedAmount) },
@@ -458,12 +536,7 @@ function ReceiptAuthorizationFacts({ receipt }: Readonly<{ receipt: CallReceipt 
         { label: "Buyer authorized up to", value: formatCurrencyAmount(receipt.totalBuyerAuthorization) },
       ]
   return (
-    <AeFactList
-      facts={[
-        ...commercialFacts,
-        { label: "Price digest", value: <Ref value={receipt.priceDigest} />, mono: true },
-      ]}
-    />
+    <AeFactList facts={commercialFacts} />
   )
 }
 
@@ -471,9 +544,6 @@ function ReceiptSettlementFacts({
   usage,
   receipt,
 }: Readonly<{ usage: CallUsageSummary | undefined; receipt: CallReceipt | undefined }>) {
-  const settlementTransactionHash = receipt?.commercialModel === 'account_aud'
-    ? receipt.providerSettlement.transactionHash
-    : receipt?.settlementTransactionHash
   return (
     <AeFactList
       facts={[
@@ -481,16 +551,12 @@ function ReceiptSettlementFacts({
           { label: "Recorded outcome", value: machineLabel(usage.chargeState) },
           { label: "Exact amount", value: formatCurrencyAmount(usage.amount) },
           { label: "Observed", value: <time dateTime={timestampIso(usage.observedAt)}>{formatUtcTimestamp(usage.observedAt)} UTC</time> },
-          { label: "Usage reference", value: <Ref value={usage.usageRef} />, mono: true },
-          ...(usage.transactionRef === undefined ? [] : [{ label: "Transaction reference", value: <Ref value={usage.transactionRef} />, mono: true }]),
           ...(usage.durationMs === undefined ? [] : [{ label: "Duration", value: `${usage.durationMs} ms` }]),
         ]),
         ...(receipt === undefined ? [] : [
           { label: "Receipt state", value: machineLabel(receipt.state) },
-          { label: "Receipt reference", value: <Ref value={receipt.receiptRef} />, mono: true },
           { label: "Refund state", value: machineLabel(receipt.refundState ?? 'not recorded') },
           { label: "Loss state", value: machineLabel(receipt.lossState ?? 'not recorded') },
-          ...(settlementTransactionHash === undefined ? [] : [{ label: "Settlement transaction", value: <Ref value={settlementTransactionHash} />, mono: true }]),
         ]),
       ]}
     />
@@ -515,28 +581,30 @@ function CallReuseActions({ view }: Readonly<{ view: CallReceiptView }>) {
   const prompt = `Use Agentic Economy to inspect ${toolRef}. Reconfirm current terms and ${inputInstruction}. Ask me for any required approval. Create a new idempotency key, invoke the Tool once, follow its Call reference to a terminal result, and return the output with its receipt. Do not replay ${view.callRef} as a new Call.`
   return (
     <AeSection
-      title="Use this capability again"
-      description="A new run needs fresh input and a new idempotency key. The completed receipt above never becomes the identity for another call."
+      title="Use this Tool again"
+      description="Review the Tool and its current terms before starting a separate Call. This receipt will not be reused."
     >
-      <div className="flex flex-wrap gap-intra">
-        <Button asChild className="min-h-touch">
-          <Link to="/tools/$toolRef" params={{ toolRef }}>Run again</Link>
-        </Button>
-        <Button asChild variant="outline" className="min-h-touch"><a href="#receipt">View receipt</a></Button>
-      </div>
-      {priorInputJson === undefined ? null : (
-        <div className="grid gap-intra">
-          <h3 className="text-sm font-medium text-foreground">Previous input</h3>
-          <p className="text-sm text-muted-foreground">Owner-visible input from this Call. Reconfirm current terms before running it again.</p>
-          <pre className="overflow-auto whitespace-pre-wrap break-words text-xs"><code>{JSON.stringify(view.previousInput, null, 2)}</code></pre>
+      <Button asChild className="w-fit min-h-touch">
+        <Link to="/tools/$toolRef" params={{ toolRef }}>Review Tool</Link>
+      </Button>
+      <details className="border-t border-border pt-related">
+        <summary className="flex min-h-touch cursor-pointer items-center text-sm font-medium text-foreground">Technical ways to reuse</summary>
+        <div className="grid gap-section pt-related">
+          {priorInputJson === undefined ? null : (
+            <div className="grid gap-intra">
+              <h3 className="text-sm font-medium text-foreground">Previous input</h3>
+              <p className="text-sm text-muted-foreground">Owner-visible input from this Call. Reconfirm current terms before running it again.</p>
+              <pre className="overflow-auto whitespace-pre-wrap break-words text-xs"><code>{JSON.stringify(view.previousInput, null, 2)}</code></pre>
+            </div>
+          )}
+          <div className="grid gap-section">
+            <ReuseCopy title="Copy as CLI" description="Run with the installed Agentic Economy CLI." label="CLI command" code={cli} />
+            <ReuseCopy title="Copy as API request" description="Call the canonical authenticated HTTP boundary." label="API request" code={api} />
+            <ReuseCopy title="Add to MCP" description="Give an MCP-capable agent the exact endpoint and Tool." label="MCP setup instruction" code={mcp} />
+            <ReuseCopy title="Copy agent prompt" description="Hand the task to an agent without reusing this receipt identity." label="agent prompt" code={prompt} />
+          </div>
         </div>
-      )}
-      <div className="grid gap-section">
-        <ReuseCopy title="Copy as CLI" description="Run with the installed Agentic Economy CLI." label="CLI command" code={cli} />
-        <ReuseCopy title="Copy as API request" description="Call the canonical authenticated HTTP boundary." label="API request" code={api} />
-        <ReuseCopy title="Add to MCP" description="Give an MCP-capable agent the exact endpoint and Tool." label="MCP setup instruction" code={mcp} />
-        <ReuseCopy title="Copy agent prompt" description="Hand the task to an agent without reusing this receipt identity." label="agent prompt" code={prompt} />
-      </div>
+      </details>
     </AeSection>
   )
 }
@@ -602,68 +670,11 @@ function CallRecoveryActions({
           </AlertDescription>
         </Alert>
       ) : null}
-      {canReconcileNow ? (
-        <form onSubmit={submitReconciliation}>
-          <FieldGroup className="max-w-xl">
-            <Field data-disabled={actions?.reconcilePending || undefined}>
-              <FieldLabel htmlFor="reconciliation-resolution">Observed provider outcome</FieldLabel>
-              <Select
-                value={resolution}
-                onValueChange={(value) => setResolution(value as CallReconciliationForm['resolution'])}
-                disabled={recoveryPending}
-                required
-              >
-                <SelectTrigger id="reconciliation-resolution" className="min-h-touch w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectGroup>
-                    <SelectItem value="not_released">Effect not released</SelectItem>
-                    <SelectItem value="released">Effect released</SelectItem>
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
-            </Field>
-            <Field data-disabled={actions?.reconcilePending || undefined}>
-              <FieldLabel htmlFor="reconciliation-source">Evidence source</FieldLabel>
-              <Input
-                id="reconciliation-source"
-                maxLength={300}
-                value={source}
-                onChange={(event) => setSource(event.target.value)}
-                placeholder="Provider control plane"
-                disabled={recoveryPending}
-                required
-                className="min-h-touch"
-              />
-            </Field>
-            <Field data-disabled={actions?.reconcilePending || undefined}>
-              <FieldLabel htmlFor="reconciliation-reference">Evidence reference</FieldLabel>
-              <Input
-                id="reconciliation-reference"
-                maxLength={300}
-                value={evidenceRef}
-                onChange={(event) => setEvidenceRef(event.target.value)}
-                placeholder="Provider event or incident reference"
-                disabled={recoveryPending}
-                required
-                className="min-h-touch"
-              />
-            </Field>
-            <Field orientation="horizontal">
-              <Button type="submit" className="min-h-touch" disabled={recoveryPending}>
-                {actions?.reconcilePending === true ? 'Reconciling Call…' : 'Submit reconciliation'}
-              </Button>
-            </Field>
-          </FieldGroup>
-        </form>
-      ) : null}
       {canRefreshNow || (canCancelNow && actions?.onCancel !== undefined) ? (
         <div className="flex flex-wrap gap-intra">
           {canRefreshNow ? (
             <Button
               type="button"
-              variant="outline"
               className="min-h-touch"
               disabled={actions?.refreshPending === true || actions?.cancelPending === true || actions?.reconcilePending === true}
               onClick={() => { void actions?.onRefresh?.() }}
@@ -683,6 +694,65 @@ function CallRecoveryActions({
             </Button>
           ) : null}
         </div>
+      ) : null}
+      {canReconcileNow ? (
+        <details className="border-t border-border pt-related">
+          <summary className="flex min-h-touch cursor-pointer items-center text-sm font-medium text-foreground">Advanced evidence reconciliation</summary>
+          <form className="pt-related" onSubmit={submitReconciliation}>
+            <FieldGroup className="max-w-xl">
+              <Field data-disabled={actions?.reconcilePending || undefined}>
+                <FieldLabel htmlFor="reconciliation-resolution">Observed provider outcome</FieldLabel>
+                <Select
+                  value={resolution}
+                  onValueChange={(value) => setResolution(value as CallReconciliationForm['resolution'])}
+                  disabled={recoveryPending}
+                  required
+                >
+                  <SelectTrigger id="reconciliation-resolution" className="min-h-touch w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      <SelectItem value="not_released">Effect not released</SelectItem>
+                      <SelectItem value="released">Effect released</SelectItem>
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+              </Field>
+              <Field data-disabled={actions?.reconcilePending || undefined}>
+                <FieldLabel htmlFor="reconciliation-source">Evidence source</FieldLabel>
+                <Input
+                  id="reconciliation-source"
+                  maxLength={300}
+                  value={source}
+                  onChange={(event) => setSource(event.target.value)}
+                  placeholder="Provider control plane"
+                  disabled={recoveryPending}
+                  required
+                  className="min-h-touch"
+                />
+              </Field>
+              <Field data-disabled={actions?.reconcilePending || undefined}>
+                <FieldLabel htmlFor="reconciliation-reference">Evidence reference</FieldLabel>
+                <Input
+                  id="reconciliation-reference"
+                  maxLength={300}
+                  value={evidenceRef}
+                  onChange={(event) => setEvidenceRef(event.target.value)}
+                  placeholder="Provider event or incident reference"
+                  disabled={recoveryPending}
+                  required
+                  className="min-h-touch"
+                />
+              </Field>
+              <Field orientation="horizontal">
+                <Button type="submit" className="min-h-touch" disabled={recoveryPending}>
+                  {actions?.reconcilePending === true ? 'Reconciling Call…' : 'Submit reconciliation'}
+                </Button>
+              </Field>
+            </FieldGroup>
+          </form>
+        </details>
       ) : null}
       <AeConfirmDialog
         open={cancelDialogOpen}
@@ -816,12 +886,6 @@ function ResultDetails({ result }: Readonly<{ result: CallResult }>) {
           </>
         )}
       </dl>
-      {result.kind === 'completed' ? (
-        <div className="grid min-w-0 gap-intra">
-          <h3 className="text-base font-semibold text-foreground">Output</h3>
-          <pre className="max-h-96 overflow-auto whitespace-pre-wrap break-words rounded-card bg-muted p-gutter text-xs text-foreground"><code>{JSON.stringify(result.output, null, 2)}</code></pre>
-        </div>
-      ) : null}
     </AeSection>
   )
 }
@@ -836,35 +900,32 @@ function StatusRefused({
   const canRetry = result.retryable && actions?.onRefresh !== undefined
   const receiptView = projectCallReceipt(result)
   return (
-    <AePublicPage>
-      <section id="receipt" className="ae-rail grid scroll-mt-6 gap-section pb-page">
+    <CallWorkspacePage callRef={result.callRef} description={receiptView.statusDetail}>
         <div className="grid gap-related">
           <Badge variant="warning" className="w-fit">{receiptView.statusLabel}</Badge>
-          <h1 className="text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">Call receipt</h1>
-          <p className="text-muted-foreground">{receiptView.statusDetail}</p>
-          <Ref value={result.callRef} />
-          {result.code === 'invocation_not_found' ? (
-            <StatusSignInAction callRef={result.callRef} />
-          ) : canRetry && actions !== undefined ? (
+          {canRetry && actions !== undefined ? (
             <RefreshStatusButton actions={actions} />
           ) : null}
           <StatusFeedback feedback={actions?.feedback} callRef={result.callRef} />
         </div>
-        <ReceiptTimeline stages={receiptView.stages} />
         {receiptView.issue === undefined ? null : <CallIssue issue={receiptView.issue} />}
         <ReceiptMoneyFacts view={receiptView} />
-        <AeSection title="Refusal" description="The server response is shown without inventing Call state.">
-          <AeFactList
-            facts={[
-              { label: "Code", value: machineLabel(result.code) },
-              { label: "Retryable", value: result.retryable ? 'Yes' : 'No' },
-              ...(result.nextAction === undefined ? [] : [{ label: "Next action", value: result.nextAction }]),
-            ]}
-          />
-        </AeSection>
-        <MachineReadableReceipt view={receiptView} />
-      </section>
-    </AePublicPage>
+        <details className="border-t border-border pt-related">
+          <summary className="flex min-h-touch cursor-pointer items-center text-sm font-medium text-foreground">Technical record</summary>
+          <div className="grid gap-section pt-related">
+            <Ref value={result.callRef} />
+            <ReceiptTimeline stages={receiptView.stages} />
+            <AeSection title="Refusal evidence" description="The server response is shown without inventing Call state.">
+              <AeFactList facts={[
+                { label: "Code", value: machineLabel(result.code) },
+                { label: "Retryable", value: result.retryable ? 'Yes' : 'No' },
+                ...(result.nextAction === undefined ? [] : [{ label: "Next action", value: result.nextAction }]),
+              ]} />
+            </AeSection>
+            <MachineReadableReceipt view={receiptView} />
+          </div>
+        </details>
+    </CallWorkspacePage>
   )
 }
 
@@ -877,22 +938,22 @@ function StatusUnavailable({
 }>) {
   const receiptView = projectCallReceipt(result)
   return (
-    <AePublicPage>
-      <section id="receipt" className="ae-rail grid scroll-mt-6 gap-section pb-page">
+    <CallWorkspacePage callRef={result.callRef} description={receiptView.statusDetail}>
         <div className="grid gap-related">
           <Badge variant="warning" className="w-fit">Receipt unavailable</Badge>
-          <h1 className="text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">Call receipt</h1>
-          <p className="text-muted-foreground">{receiptView.statusDetail}</p>
-          <Ref value={result.callRef} />
           {actions?.onRefresh === undefined ? null : <RefreshStatusButton actions={actions} />}
           <StatusFeedback feedback={actions?.feedback} callRef={result.callRef} />
         </div>
-        <ReceiptTimeline stages={receiptView.stages} />
         {receiptView.issue === undefined ? null : <CallIssue issue={receiptView.issue} />}
-        <ReceiptMoneyFacts view={receiptView} />
-        <MachineReadableReceipt view={receiptView} />
-      </section>
-    </AePublicPage>
+        <details className="border-t border-border pt-related">
+          <summary className="flex min-h-touch cursor-pointer items-center text-sm font-medium text-foreground">Technical record</summary>
+          <div className="grid gap-section pt-related">
+            <Ref value={result.callRef} />
+            <ReceiptTimeline stages={receiptView.stages} />
+            <MachineReadableReceipt view={receiptView} />
+          </div>
+        </details>
+    </CallWorkspacePage>
   )
 }
 
@@ -935,25 +996,14 @@ function StatusFeedback({
   )
 }
 
-function StatusSignInAction({ callRef }: Readonly<{ callRef: string }>) {
-  const redirect = `/calls/${encodeURIComponent(callRef)}`
-  return (
-    <Button asChild className="min-h-touch w-fit">
-      <Link to="/sign-in/$" params={{ _splat: '' }} search={{ redirect }}>
-        Sign in to view current status
-      </Link>
-    </Button>
-  )
-}
-
 function CallStatusPending() {
+  const { callRef } = Route.useParams()
   return (
-    <AePublicPage>
-      <section className="ae-rail py-page" aria-busy="true" aria-live="polite">
-        <h1 className="sr-only">Call receipt</h1>
+    <CallWorkspacePage callRef={callRef} description="Checking the exact current owner-scoped Call receipt." pending>
+      <section className="py-page" aria-busy="true" aria-live="polite">
         <p className="text-muted-foreground">Checking the exact current owner-scoped Call receipt…</p>
       </section>
-    </AePublicPage>
+    </CallWorkspacePage>
   )
 }
 

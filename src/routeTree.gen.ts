@@ -43,7 +43,6 @@ import { Route as FundCancelledRouteImport } from './routes/fund.cancelled'
 import { Route as FundFundingSessionIdRouteImport } from './routes/fund.$fundingSessionId'
 import { Route as DevelopersDiscoveryRouteImport } from './routes/developers.discovery'
 import { Route as DevelopersApiRouteImport } from './routes/developers.api'
-import { Route as CallsCallRefRouteImport } from './routes/calls.$callRef'
 import { Route as ApiReadyRouteImport } from './routes/api.ready'
 import { Route as ApiHealthRouteImport } from './routes/api.health'
 import { Route as ApiBusinessesRouteImport } from './routes/api.businesses'
@@ -81,6 +80,7 @@ import { Route as ApiBusinessesSlugRouteImport } from './routes/api.businesses.$
 import { Route as OperatorOwnerSettingsRouteImport } from './routes/_operator/owner.settings'
 import { Route as OperatorOwnerOperationsRouteImport } from './routes/_operator/owner.operations'
 import { Route as OperatorOwnerCreditRouteImport } from './routes/_operator/owner.credit'
+import { Route as OperatorCallsCallRefRouteImport } from './routes/_operator/calls.$callRef'
 import { Route as OperatorAgentAccessAuthorizeRouteImport } from './routes/_operator/agent-access.authorize'
 import { Route as OperatorAdminIndexHealthRouteImport } from './routes/_operator/admin.index-health'
 import { Route as OperatorAdminAuditEventsRouteImport } from './routes/_operator/admin.audit-events'
@@ -296,11 +296,6 @@ const DevelopersApiRoute = DevelopersApiRouteImport.update({
   path: '/developers/api',
   getParentRoute: () => rootRouteImport,
 } as any)
-const CallsCallRefRoute = CallsCallRefRouteImport.update({
-  id: '/calls/$callRef',
-  path: '/calls/$callRef',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const ApiReadyRoute = ApiReadyRouteImport.update({
   id: '/api/ready',
   path: '/api/ready',
@@ -491,6 +486,11 @@ const OperatorOwnerOperationsRoute = OperatorOwnerOperationsRouteImport.update({
 const OperatorOwnerCreditRoute = OperatorOwnerCreditRouteImport.update({
   id: '/owner/credit',
   path: '/owner/credit',
+  getParentRoute: () => OperatorRoute,
+} as any)
+const OperatorCallsCallRefRoute = OperatorCallsCallRefRouteImport.update({
+  id: '/calls/$callRef',
+  path: '/calls/$callRef',
   getParentRoute: () => OperatorRoute,
 } as any)
 const OperatorAgentAccessAuthorizeRoute =
@@ -767,7 +767,6 @@ export interface FileRoutesByFullPath {
   '/api/businesses': typeof ApiBusinessesRouteWithChildren
   '/api/health': typeof ApiHealthRoute
   '/api/ready': typeof ApiReadyRoute
-  '/calls/$callRef': typeof CallsCallRefRoute
   '/developers/api': typeof DevelopersApiRoute
   '/developers/discovery': typeof DevelopersDiscoveryRoute
   '/fund/$fundingSessionId': typeof FundFundingSessionIdRoute
@@ -787,6 +786,7 @@ export interface FileRoutesByFullPath {
   '/admin/audit-events': typeof OperatorAdminAuditEventsRoute
   '/admin/index-health': typeof OperatorAdminIndexHealthRoute
   '/agent-access/authorize': typeof OperatorAgentAccessAuthorizeRoute
+  '/calls/$callRef': typeof OperatorCallsCallRefRoute
   '/owner/credit': typeof OperatorOwnerCreditRoute
   '/owner/operations': typeof OperatorOwnerOperationsRouteWithChildren
   '/owner/settings': typeof OperatorOwnerSettingsRoute
@@ -884,7 +884,6 @@ export interface FileRoutesByTo {
   '/api/businesses': typeof ApiBusinessesRouteWithChildren
   '/api/health': typeof ApiHealthRoute
   '/api/ready': typeof ApiReadyRoute
-  '/calls/$callRef': typeof CallsCallRefRoute
   '/developers/api': typeof DevelopersApiRoute
   '/developers/discovery': typeof DevelopersDiscoveryRoute
   '/fund/$fundingSessionId': typeof FundFundingSessionIdRoute
@@ -904,6 +903,7 @@ export interface FileRoutesByTo {
   '/admin/audit-events': typeof OperatorAdminAuditEventsRoute
   '/admin/index-health': typeof OperatorAdminIndexHealthRoute
   '/agent-access/authorize': typeof OperatorAgentAccessAuthorizeRoute
+  '/calls/$callRef': typeof OperatorCallsCallRefRoute
   '/owner/credit': typeof OperatorOwnerCreditRoute
   '/owner/operations': typeof OperatorOwnerOperationsRouteWithChildren
   '/owner/settings': typeof OperatorOwnerSettingsRoute
@@ -1003,7 +1003,6 @@ export interface FileRoutesById {
   '/api/businesses': typeof ApiBusinessesRouteWithChildren
   '/api/health': typeof ApiHealthRoute
   '/api/ready': typeof ApiReadyRoute
-  '/calls/$callRef': typeof CallsCallRefRoute
   '/developers/api': typeof DevelopersApiRoute
   '/developers/discovery': typeof DevelopersDiscoveryRoute
   '/fund/$fundingSessionId': typeof FundFundingSessionIdRoute
@@ -1023,6 +1022,7 @@ export interface FileRoutesById {
   '/_operator/admin/audit-events': typeof OperatorAdminAuditEventsRoute
   '/_operator/admin/index-health': typeof OperatorAdminIndexHealthRoute
   '/_operator/agent-access/authorize': typeof OperatorAgentAccessAuthorizeRoute
+  '/_operator/calls/$callRef': typeof OperatorCallsCallRefRoute
   '/_operator/owner/credit': typeof OperatorOwnerCreditRoute
   '/_operator/owner/operations': typeof OperatorOwnerOperationsRouteWithChildren
   '/_operator/owner/settings': typeof OperatorOwnerSettingsRoute
@@ -1122,7 +1122,6 @@ export interface FileRouteTypes {
     | '/api/businesses'
     | '/api/health'
     | '/api/ready'
-    | '/calls/$callRef'
     | '/developers/api'
     | '/developers/discovery'
     | '/fund/$fundingSessionId'
@@ -1142,6 +1141,7 @@ export interface FileRouteTypes {
     | '/admin/audit-events'
     | '/admin/index-health'
     | '/agent-access/authorize'
+    | '/calls/$callRef'
     | '/owner/credit'
     | '/owner/operations'
     | '/owner/settings'
@@ -1239,7 +1239,6 @@ export interface FileRouteTypes {
     | '/api/businesses'
     | '/api/health'
     | '/api/ready'
-    | '/calls/$callRef'
     | '/developers/api'
     | '/developers/discovery'
     | '/fund/$fundingSessionId'
@@ -1259,6 +1258,7 @@ export interface FileRouteTypes {
     | '/admin/audit-events'
     | '/admin/index-health'
     | '/agent-access/authorize'
+    | '/calls/$callRef'
     | '/owner/credit'
     | '/owner/operations'
     | '/owner/settings'
@@ -1357,7 +1357,6 @@ export interface FileRouteTypes {
     | '/api/businesses'
     | '/api/health'
     | '/api/ready'
-    | '/calls/$callRef'
     | '/developers/api'
     | '/developers/discovery'
     | '/fund/$fundingSessionId'
@@ -1377,6 +1376,7 @@ export interface FileRouteTypes {
     | '/_operator/admin/audit-events'
     | '/_operator/admin/index-health'
     | '/_operator/agent-access/authorize'
+    | '/_operator/calls/$callRef'
     | '/_operator/owner/credit'
     | '/_operator/owner/operations'
     | '/_operator/owner/settings'
@@ -1473,7 +1473,6 @@ export interface RootRouteChildren {
   ApiBusinessesRoute: typeof ApiBusinessesRouteWithChildren
   ApiHealthRoute: typeof ApiHealthRoute
   ApiReadyRoute: typeof ApiReadyRoute
-  CallsCallRefRoute: typeof CallsCallRefRoute
   DevelopersApiRoute: typeof DevelopersApiRoute
   DevelopersDiscoveryRoute: typeof DevelopersDiscoveryRoute
   FundFundingSessionIdRoute: typeof FundFundingSessionIdRoute
@@ -1773,13 +1772,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DevelopersApiRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/calls/$callRef': {
-      id: '/calls/$callRef'
-      path: '/calls/$callRef'
-      fullPath: '/calls/$callRef'
-      preLoaderRoute: typeof CallsCallRefRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/api/ready': {
       id: '/api/ready'
       path: '/api/ready'
@@ -2037,6 +2029,13 @@ declare module '@tanstack/react-router' {
       path: '/owner/credit'
       fullPath: '/owner/credit'
       preLoaderRoute: typeof OperatorOwnerCreditRouteImport
+      parentRoute: typeof OperatorRoute
+    }
+    '/_operator/calls/$callRef': {
+      id: '/_operator/calls/$callRef'
+      path: '/calls/$callRef'
+      fullPath: '/calls/$callRef'
+      preLoaderRoute: typeof OperatorCallsCallRefRouteImport
       parentRoute: typeof OperatorRoute
     }
     '/_operator/agent-access/authorize': {
@@ -2392,6 +2391,7 @@ interface OperatorRouteChildren {
   OperatorAgentAccessRoute: typeof OperatorAgentAccessRouteWithChildren
   OperatorAdminAuditEventsRoute: typeof OperatorAdminAuditEventsRoute
   OperatorAdminIndexHealthRoute: typeof OperatorAdminIndexHealthRoute
+  OperatorCallsCallRefRoute: typeof OperatorCallsCallRefRoute
   OperatorOwnerCreditRoute: typeof OperatorOwnerCreditRoute
   OperatorOwnerOperationsRoute: typeof OperatorOwnerOperationsRouteWithChildren
   OperatorOwnerSettingsRoute: typeof OperatorOwnerSettingsRoute
@@ -2405,6 +2405,7 @@ const OperatorRouteChildren: OperatorRouteChildren = {
   OperatorAgentAccessRoute: OperatorAgentAccessRouteWithChildren,
   OperatorAdminAuditEventsRoute: OperatorAdminAuditEventsRoute,
   OperatorAdminIndexHealthRoute: OperatorAdminIndexHealthRoute,
+  OperatorCallsCallRefRoute: OperatorCallsCallRefRoute,
   OperatorOwnerCreditRoute: OperatorOwnerCreditRoute,
   OperatorOwnerOperationsRoute: OperatorOwnerOperationsRouteWithChildren,
   OperatorOwnerSettingsRoute: OperatorOwnerSettingsRoute,
@@ -2575,7 +2576,6 @@ const rootRouteChildren: RootRouteChildren = {
   ApiBusinessesRoute: ApiBusinessesRouteWithChildren,
   ApiHealthRoute: ApiHealthRoute,
   ApiReadyRoute: ApiReadyRoute,
-  CallsCallRefRoute: CallsCallRefRoute,
   DevelopersApiRoute: DevelopersApiRoute,
   DevelopersDiscoveryRoute: DevelopersDiscoveryRoute,
   FundFundingSessionIdRoute: FundFundingSessionIdRoute,

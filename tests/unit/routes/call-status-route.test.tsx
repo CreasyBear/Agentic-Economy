@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createElement } from 'react'
 import '../../setup/jsdom-platform'
 
-import type { CallStatusPageActions, CallStatusPageResult } from '@/routes/calls.$callRef'
+import type { CallStatusPageActions, CallStatusPageResult } from '@/routes/_operator/calls.$callRef'
 
 const readStatusMock = vi.hoisted(() => vi.fn())
 const cancelMock = vi.hoisted(() => vi.fn())
@@ -19,7 +19,7 @@ vi.mock('@/modules/capability-execution/call-recovery.functions', () => ({
   reconcileOwnerCallServer: reconcileMock,
 }))
 
-import { CallStatusPage, Route } from '@/routes/calls.$callRef'
+import { CallStatusPage, Route } from '@/routes/_operator/calls.$callRef'
 
 const callRef = 'invocation:exact-owner-status'
 const toolRef = `operation:v1:${'a'.repeat(64)}`
@@ -114,7 +114,7 @@ describe('/calls/$callRef', () => {
 
     expect(screen.getByRole('heading', { level: 1, name: 'Call receipt' })).toBeTruthy()
     expect(screen.getAllByText(callRef).length).toBeGreaterThan(0)
-    const toolLink = screen.getByRole('link', { name: toolRef })
+    const toolLink = screen.getByRole('link', { name: 'Open Tool details' })
     expect(toolLink.getAttribute('href')).toBe(`/tools/${encodeURIComponent(toolRef)}`)
     expect(screen.getAllByText('Terminal').length).toBeGreaterThan(0)
     expect(screen.getAllByText('AUD 1.25').length).toBeGreaterThan(0)
@@ -122,6 +122,45 @@ describe('/calls/$callRef', () => {
     expect(screen.getByText('3')).toBeTruthy()
     expect(screen.getByText('sha256:top-level-evidence')).toBeTruthy()
     expect(screen.getByText(/"temperature": 24/)).toBeTruthy()
+  })
+
+  it('keeps the owner Calls context and progressively discloses technical evidence', () => {
+    renderWithRouter({
+      kind: 'found',
+      version: 1,
+      callRef,
+      toolRef,
+      state: 'terminal',
+      attemptRef: 'attempt:exact',
+      effectGeneration: 3,
+      result: {
+        kind: 'completed',
+        callRef,
+        toolRef,
+        output: { temperature: 24 },
+        evidenceHash: 'sha256:result-evidence',
+        usage: {
+          usageRef: 'usage:exact',
+          observedAt: Date.UTC(2026, 7, 12),
+          chargeState: 'paid',
+          amount: { currency: 'AUD', units: '125', exponent: 2 },
+          priceDigest: 'sha256:price',
+        },
+      },
+    })
+
+    expect(screen.getByRole('main')).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Back to Calls' }).getAttribute('href')).toBe('/activity')
+    expect(screen.getByRole('heading', { name: 'Call summary' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Output' })).toBeTruthy()
+
+    const technical = screen.getByText('Technical record').closest('details')
+    expect(technical).not.toBeNull()
+    expect((technical as HTMLDetailsElement).open).toBe(false)
+    expect(within(technical as HTMLElement).getAllByText(callRef).length).toBeGreaterThan(0)
+    expect(within(technical as HTMLElement).getByText('attempt:exact')).toBeTruthy()
+    expect(within(technical as HTMLElement).getByText('3')).toBeTruthy()
+    expect(within(technical as HTMLElement).getByRole('heading', { name: 'What happened', hidden: true })).toBeTruthy()
   })
 
   it('presents a completed receipt as six recorded stages with money facts and reuse actions', () => {
@@ -176,10 +215,11 @@ describe('/calls/$callRef', () => {
     }
     expect(screen.getByRole('heading', { name: 'Money before and after the call' })).toBeTruthy()
     expect(screen.getByText('Buyer charge')).toBeTruthy()
-    expect(screen.getByText('Provider obligation')).toBeTruthy()
+    expect(screen.queryByText('Provider obligation')).toBeNull()
     expect(screen.getAllByText('AUD 1.250000').length).toBeGreaterThan(0)
-    expect(screen.getByRole('link', { name: 'Run again' })).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Review Tool' })).toBeTruthy()
     expect(screen.queryByRole('button', { name: /Save capability|Capability saved/ })).toBeNull()
+    fireEvent.click(screen.getByText('Technical ways to reuse'))
     expect(screen.getByRole('heading', { name: 'Copy as CLI' })).toBeTruthy()
     expect(screen.getAllByText(/\{"city":"Perth","units":"metric"\}/).length).toBeGreaterThan(0)
     expect(screen.getByRole('heading', { name: 'Copy as API request' })).toBeTruthy()
@@ -331,6 +371,33 @@ describe('/calls/$callRef', () => {
     expect(screen.getByText('Current status refreshed. The current state is Terminal.')).toBeTruthy()
   })
 
+  it('renders a new route-keyed Call immediately without mirroring the previous record', () => {
+    const first = { kind: 'found', version: 1, callRef, toolRef, state: 'in_progress' } as const
+    const nextCallRef = 'invocation:next-owner-status'
+    const nextToolRef = `operation:v1:${'b'.repeat(64)}`
+    const next = { kind: 'found', version: 1, callRef: nextCallRef, toolRef: nextToolRef, state: 'authorized' } as const
+    const loader = vi.spyOn(Route, 'useLoaderData').mockReturnValue(first)
+    const Component = Route.options.component
+    if (Component === undefined) throw new Error('call_status_route_component_missing')
+    const rootRoute = createRootRoute()
+    const routeTree = rootRoute.addChildren([
+      createRoute({ getParentRoute: () => rootRoute, path: '/' }),
+      createRoute({ getParentRoute: () => rootRoute, path: '/tools/$toolRef' }),
+      createRoute({ getParentRoute: () => rootRoute, path: '/activity' }),
+    ])
+    const router = createRouter({ routeTree, history: createMemoryHistory({ initialEntries: ['/'] }) })
+    const view = render(
+      <RouterContextProvider router={router}>{createElement(Component)}</RouterContextProvider>,
+    )
+
+    expect(screen.getByRole('link', { name: 'Open Tool details' }).getAttribute('href')).toContain(encodeURIComponent(toolRef))
+    loader.mockReturnValue(next)
+    view.rerender(<RouterContextProvider router={router}>{createElement(Component)}</RouterContextProvider>)
+
+    expect(screen.getByRole('link', { name: 'Open Tool details' }).getAttribute('href')).toContain(encodeURIComponent(nextToolRef))
+    expect(screen.queryByText(callRef)).toBeNull()
+  })
+
   it('keeps the displayed state and makes no newer-state claim when refresh cannot read the source', async () => {
     readStatusMock.mockRejectedValue(new Error('offline'))
     renderRouteComponent({ kind: 'found', version: 1, callRef, toolRef, state: 'in_progress' })
@@ -420,7 +487,7 @@ describe('/calls/$callRef', () => {
     expect(second.evidence.digest).not.toBe(first.evidence.digest)
   })
 
-  it('shows sign-in only for the auth-shaped opaque refusal', () => {
+  it('keeps an opaque not-found refusal inside the authenticated Calls workspace', () => {
     renderWithRouter({
       kind: 'refused',
       callRef,
@@ -431,10 +498,8 @@ describe('/calls/$callRef', () => {
 
     expect(screen.getByRole('heading', { level: 1, name: 'Call receipt' })).toBeTruthy()
     expect(screen.getAllByText(/No current execution state is claimed/i).length).toBeGreaterThan(0)
-    const signInLink = screen.getByRole('link', { name: 'Sign in to view current status' })
-    const signInUrl = new URL(signInLink.getAttribute('href') ?? '', 'https://agentic-economy.test')
-    expect(signInUrl.pathname).toMatch(/^\/sign-in\/?$/)
-    expect(signInUrl.searchParams.get('redirect')).toBe(`/calls/${encodeURIComponent(callRef)}`)
+    expect(screen.getByRole('link', { name: 'Back to Calls' }).getAttribute('href')).toBe('/activity')
+    expect(screen.queryByRole('link', { name: 'Sign in to view current status' })).toBeNull()
   })
 
   it.each([
@@ -471,7 +536,8 @@ describe('/calls/$callRef', () => {
       nextAction: 'Use the Tool environment recorded at creation.',
     }, { onRefresh: vi.fn() })
 
-    const refusal = screen.getByRole('heading', { level: 2, name: 'Refusal' }).closest('section')
+    fireEvent.click(screen.getByText('Technical record'))
+    const refusal = screen.getByRole('heading', { level: 2, name: 'Refusal evidence' }).closest('section')
     expect(refusal).not.toBeNull()
     expect(within(refusal as HTMLElement).getByText('Use the Tool environment recorded at creation.')).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Refresh current status' })).toBeNull()
