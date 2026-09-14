@@ -70,8 +70,10 @@ export const Route = createFileRoute('/_operator/agent-access')({
   ...operatorRouteOptions,
   validateSearch: validateAgentAccessSearch,
   loader: async () => {
-    const canonicalBaseUrl = await readCanonicalBaseUrlServer()
-    const directory = await readAgentDirectoryServer()
+    const [canonicalBaseUrl, directory] = await Promise.all([
+      readCanonicalBaseUrlServer(),
+      readAgentDirectoryServer(),
+    ])
     return { canonicalBaseUrl, directory }
   },
   head: () => ({ meta: [
@@ -119,7 +121,7 @@ function AgentAccessHome() {
       setDirectoryError(undefined)
     } catch (cause) {
       captureClientExceptionOnClient(cause)
-      setDirectoryError('Agent access and balance are temporarily unavailable.')
+      setDirectoryError('The Agent directory is temporarily unavailable. Known Balance information is unaffected.')
     } finally {
       setLoading(false)
     }
@@ -328,13 +330,23 @@ function AgentAccessHome() {
         </Alert>
       )}
       {directory.items.length === 0 ? (
-        <AeAssistantInstallFunnel canonicalBaseUrl={canonicalBaseUrl} />
+        <AeAssistantInstallFunnel
+          canonicalBaseUrl={canonicalBaseUrl}
+          checkingConnection={loading}
+          onCheckConnection={() => void load()}
+        />
       ) : (
         <AeSection title="Connections" description="Your agents stay connected until expiry or until you disconnect them.">
           <Button type="button" variant="secondary" className="w-fit min-h-touch" onClick={() => setShowSetup((value) => !value)}>
             {showSetup ? 'Hide setup' : 'Add another agent'}
           </Button>
-          {showSetup ? <AeAssistantInstallFunnel canonicalBaseUrl={canonicalBaseUrl} /> : null}
+          {showSetup ? (
+            <AeAssistantInstallFunnel
+              canonicalBaseUrl={canonicalBaseUrl}
+              checkingConnection={loading}
+              onCheckConnection={() => void load()}
+            />
+          ) : null}
         </AeSection>
       )}
       {directory.items.length === 0 && search.caller === undefined ? null : <AeAgentOperatorConsole
