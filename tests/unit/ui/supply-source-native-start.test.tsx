@@ -23,6 +23,37 @@ const candidate = {
   disposition: { kind: 'supported' as const },
 }
 
+function deferred<T>() {
+  let resolve: (value: T) => void = () => undefined
+  let reject: (reason: unknown) => void = () => undefined
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise
+    reject = rejectPromise
+  })
+  return { promise, resolve, reject }
+}
+
+const selectedOpenApiInitial = {
+  source: {
+    kind: 'openapi' as const,
+    definitionUrl: 'https://provider.example/openapi.yaml',
+    environment: 'sandbox' as const,
+  },
+  preview: {
+    kind: 'ready' as const,
+    sourceDigest: `sha256:${'b'.repeat(64)}`,
+    sourceRevision: `openapi:sha256:${'b'.repeat(64)}`,
+    provenance: {
+      sourceKind: 'openapi' as const,
+      sourceUrl: 'https://provider.example/openapi.yaml',
+      authority: 'unverified_public' as const,
+    },
+    authentication: [{ kind: 'public' as const }],
+    candidates: [candidate],
+  },
+  candidateRef: candidate.candidateRef,
+}
+
 describe('source-native Provider start', () => {
   it('hands the selected protected source directly to its durable connection ceremony', async () => {
     const protectedCandidate = {
@@ -287,6 +318,96 @@ describe('source-native Provider start', () => {
     expect(await screen.findByText(/submitted for validation/i)).toBeTruthy()
     expect(screen.queryByText('tool:lookup')).toBeNull()
     expect(screen.getByRole('link', { name: 'Open Tools' }).getAttribute('href')).toBe('/owner/operations')
+  })
+
+  it('does not let an edit overtake a deferred Tool selection', async () => {
+    const selection = deferred<{ kind: 'saved' }>()
+    render(
+      <AeSupplySourceNativeStart
+        businessRef="business:one"
+        initial={{ ...selectedOpenApiInitial, candidateRef: '' }}
+        onPreview={vi.fn()}
+        onConnect={vi.fn()}
+        onSelectCandidate={vi.fn(() => selection.promise)}
+        onPublish={vi.fn()}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('radio', { name: /Reference lookup/i }))
+    const editSource = screen.getByRole('button', { name: 'Edit Source' }) as HTMLButtonElement
+    expect(editSource.disabled).toBe(true)
+    fireEvent.click(editSource)
+    expect(screen.queryByRole('heading', { name: 'Source' })).toBeNull()
+
+    selection.resolve({ kind: 'saved' })
+    expect(await screen.findByRole('heading', { name: 'Terms' })).toBeTruthy()
+    expect((screen.getByLabelText('Tool name') as HTMLInputElement).value).toBe('Reference lookup')
+  })
+
+  it('locks an uncertain publication command and keeps its attested facts immutable', async () => {
+    const publication = deferred<never>()
+    const onPublish = vi.fn(() => publication.promise)
+    render(
+      <AeSupplySourceNativeStart
+        businessRef="business:one"
+        initial={selectedOpenApiInitial}
+        onPreview={vi.fn()}
+        onConnect={vi.fn()}
+        onSelectCandidate={vi.fn()}
+        onPublish={onPublish}
+      />,
+    )
+
+    fireEvent.change(screen.getByLabelText('Category'), { target: { value: 'Research' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Continue to review' }))
+    for (const name of [
+      'I am authorised to publish this service',
+      'The information is accurate',
+      'Publish after validation succeeds',
+    ]) fireEvent.click(screen.getByRole('checkbox', { name }))
+    fireEvent.click(screen.getByRole('button', { name: 'Submit for validation' }))
+
+    expect((screen.getByRole('button', { name: 'Edit Source' }) as HTMLButtonElement).disabled).toBe(true)
+    expect((screen.getByRole('button', { name: 'Edit Tool' }) as HTMLButtonElement).disabled).toBe(true)
+    expect((screen.getByRole('button', { name: 'Edit Terms' }) as HTMLButtonElement).disabled).toBe(true)
+    expect((screen.getByRole('button', { name: 'Edit terms' }) as HTMLButtonElement).disabled).toBe(true)
+    expect((screen.getByRole('checkbox', { name: 'The information is accurate' }) as HTMLButtonElement).disabled).toBe(true)
+
+    publication.reject(new Error('response lost'))
+    expect(await screen.findByText(/could not confirm submission/i)).toBeTruthy()
+    expect((screen.getByRole('button', { name: 'Submit for validation' }) as HTMLButtonElement).disabled).toBe(true)
+    expect(screen.getByRole('link', { name: 'Open Tools' }).getAttribute('href')).toBe('/owner/operations')
+    expect(onPublish).toHaveBeenCalledOnce()
+  })
+
+  it('requires fresh publication statements after terms are reopened', () => {
+    render(
+      <AeSupplySourceNativeStart
+        businessRef="business:one"
+        initial={selectedOpenApiInitial}
+        onPreview={vi.fn()}
+        onConnect={vi.fn()}
+        onSelectCandidate={vi.fn()}
+        onPublish={vi.fn()}
+      />,
+    )
+
+    fireEvent.change(screen.getByLabelText('Category'), { target: { value: 'Research' } })
+    fireEvent.click(screen.getByRole('radio', { name: 'Fixed AUD price' }))
+    fireEvent.change(screen.getByLabelText('AUD price'), { target: { value: '12.30' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Continue to review' }))
+    expect(screen.getAllByText('AUD 12.30').length).toBeGreaterThan(0)
+    for (const name of [
+      'I am authorised to publish this service',
+      'The information is accurate',
+      'Publish after validation succeeds',
+    ]) fireEvent.click(screen.getByRole('checkbox', { name }))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Edit terms' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Continue to review' }))
+    expect(screen.getByRole('checkbox', { name: 'I am authorised to publish this service' }).getAttribute('aria-checked')).toBe('false')
+    expect(screen.getByRole('checkbox', { name: 'The information is accurate' }).getAttribute('aria-checked')).toBe('false')
+    expect(screen.getByRole('checkbox', { name: 'Publish after validation succeeds' }).getAttribute('aria-checked')).toBe('false')
   })
 
   it('renders one direct hosted action when protected discovery requires connection', async () => {

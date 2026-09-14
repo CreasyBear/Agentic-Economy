@@ -5,7 +5,13 @@ import type { ProviderConnectionOwnerProjection } from '@/modules/capability-sup
 import type { SupplySourceInput, SupplySourcePreview, SupplyToolCandidate } from '@/modules/capability-supply/source-preview'
 import type { PublishSupplyToolV2Input } from '@/modules/capability-supply/supply-publication-v2'
 import type { SupplyPublishResult } from '@/modules/capability-supply/supply-actions'
-import { parseDecimalExactAmount, rescaleExactAmount } from '@/modules/money/public'
+import {
+  displayPriceFromPricingConfig,
+  fixedAudPricingConfig,
+  formatCurrencyAmount,
+  parseDecimalExactAmount,
+  rescaleExactAmount,
+} from '@/modules/money/public'
 
 export type SourceKind = SupplySourceInput['kind']
 export type Environment = SupplySourceInput['environment']
@@ -131,6 +137,18 @@ export function pricingInput(
   const parsed = parseDecimalExactAmount('AUD', value, 2)
   const amount = parsed === undefined ? undefined : rescaleExactAmount(parsed, 6)
   return amount === undefined ? undefined : { kind: 'fixed_aud', amount }
+}
+
+export function publicationPriceSummary(pricing: PublishSupplyToolV2Input['pricing'] | undefined): string {
+  if (pricing === undefined) return 'Price needed'
+  if (pricing.kind === 'free') return 'Free'
+  if (pricing.kind === 'source_x402') return 'Provider source payment'
+  const config = fixedAudPricingConfig(pricing.amount)
+  if (config === undefined) return 'Price needed'
+  const display = displayPriceFromPricingConfig(config)
+  if (display.kind !== 'fixed') return 'Price confirmed at inspection'
+  const amount = rescaleExactAmount(display.amount, 2) ?? display.amount
+  return formatCurrencyAmount(amount)
 }
 
 export function publicationError(reason: string): string {

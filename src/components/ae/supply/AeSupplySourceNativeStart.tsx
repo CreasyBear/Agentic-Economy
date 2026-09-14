@@ -9,6 +9,7 @@ import { SupplyCandidateSection } from './SupplyCandidateSection'
 import { SupplyPublicationFlow } from './SupplyPublicationFlow'
 import { SupplyRemoteSelectionSection } from './SupplyRemoteSelectionSection'
 import { SupplySourceTypeSection } from './SupplySourceTypeSection'
+import { pricingInput, publicationPriceSummary } from './supply-source-native-start-presentation'
 import { useSupplyNativeStartState, type SupplyNativeStartProps } from './useSupplyNativeStartState'
 
 type SupplyStage = 'source' | 'tool' | 'terms' | 'review'
@@ -22,7 +23,7 @@ export function AeSupplySourceNativeStart(props: SupplyNativeStartProps) {
   return (
     <div className="grid gap-section">
       <SupplyProgress current={stage} />
-      <SupplyFlowFeedback error={vm.error} requiredAction={vm.requiredAction} success={vm.success} />
+      <SupplyFlowFeedback error={vm.error} requiredAction={vm.requiredAction} success={vm.success} publicationLocked={vm.publicationLocked} />
 
       {stage === 'source' ? (
         <SupplySourceTypeSection
@@ -92,7 +93,7 @@ export function AeSupplySourceNativeStart(props: SupplyNativeStartProps) {
 
       {stage !== 'tool' || vm.preview === undefined ? null : (
         <div className="grid gap-related">
-          <CompletedStageSummary step="Source" detail={sourceSummary(vm.source)} onEdit={vm.editSource} />
+          <CompletedStageSummary step="Source" detail={sourceSummary(vm.source)} disabled={vm.pending !== undefined} onEdit={vm.editSource} />
           <SupplyCandidateSection
             candidates={vm.preview.candidates}
             selectedRef={vm.selectedRef}
@@ -107,9 +108,9 @@ export function AeSupplySourceNativeStart(props: SupplyNativeStartProps) {
       {vm.selected === undefined || (stage !== 'terms' && stage !== 'review') ? null : (
         <div className="grid gap-section">
           <div className="sticky top-20 z-10 grid gap-intra rounded-xl border border-border bg-background/95 p-3 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/85 sm:grid-cols-2">
-            <CompletedStageSummary step="Source" detail={sourceSummary(vm.source)} onEdit={vm.editSource} />
-            <CompletedStageSummary step="Tool" detail={vm.selected.title} onEdit={vm.editTool} />
-            {stage === 'review' ? <CompletedStageSummary step="Terms" detail={termsSummary(vm)} onEdit={() => vm.setReviewing(false)} /> : null}
+            <CompletedStageSummary step="Source" detail={sourceSummary(vm.source)} disabled={vm.pending !== undefined || vm.publicationLocked} onEdit={vm.editSource} />
+            <CompletedStageSummary step="Tool" detail={vm.selected.title} disabled={vm.pending !== undefined || vm.publicationLocked} onEdit={vm.editTool} />
+            {stage === 'review' ? <CompletedStageSummary step="Terms" detail={termsSummary(vm)} disabled={vm.pending !== undefined || vm.publicationLocked} onEdit={vm.editTerms} /> : null}
           </div>
           <SupplyPublicationFlow
             reviewing={stage === 'review'}
@@ -130,7 +131,7 @@ export function AeSupplySourceNativeStart(props: SupplyNativeStartProps) {
             dataClassification={vm.dataClassification}
             attestation={vm.attestation}
             saving={vm.pending === 'publish'}
-            submitDisabled={vm.pending !== undefined || vm.success !== undefined}
+            disabled={vm.pending !== undefined || vm.publicationLocked}
             onNameChange={vm.setName}
             onDescriptionChange={vm.setDescription}
             onCategoryChange={vm.setCategory}
@@ -146,7 +147,7 @@ export function AeSupplySourceNativeStart(props: SupplyNativeStartProps) {
             onDataClassificationChange={vm.setDataClassification}
             onAttestationChange={(key, checked) => vm.setAttestation((current) => ({ ...current, [key]: checked }))}
             onContinueToReview={vm.continueToReview}
-            onEditTerms={() => vm.setReviewing(false)}
+            onEditTerms={vm.editTerms}
             onSubmit={() => void vm.submit()}
           />
         </div>
@@ -182,26 +183,27 @@ function SupplyProgress({ current }: Readonly<{ current: SupplyStage }>) {
   )
 }
 
-function CompletedStageSummary({ step, detail, onEdit }: Readonly<{ step: string; detail: string; onEdit: () => void }>) {
+function CompletedStageSummary({ step, detail, disabled, onEdit }: Readonly<{ step: string; detail: string; disabled: boolean; onEdit: () => void }>) {
   return (
     <div className="flex min-w-0 items-center justify-between gap-3 rounded-lg border border-border/70 bg-card px-3 py-2">
       <span className="grid min-w-0 gap-0.5">
         <span className="text-xs font-medium text-muted-foreground">{step} complete</span>
         <span className="truncate text-sm text-foreground" title={detail}>{detail}</span>
       </span>
-      <Button type="button" size="sm" variant="ghost" className="min-h-touch shrink-0" onClick={onEdit}>Edit {step}</Button>
+      <Button type="button" size="sm" variant="ghost" className="min-h-touch shrink-0" disabled={disabled} onClick={onEdit}>Edit {step}</Button>
     </div>
   )
 }
 
-function SupplyFlowFeedback({ error, requiredAction, success }: Readonly<{
+function SupplyFlowFeedback({ error, requiredAction, success, publicationLocked }: Readonly<{
   error?: string
   requiredAction?: ReturnType<typeof useSupplyNativeStartState>['requiredAction']
   success?: string
+  publicationLocked: boolean
 }>) {
   return (
     <>
-      {error === undefined ? null : <Alert variant="destructive" role="alert"><AlertTitle>Action required</AlertTitle><AlertDescription>{error}</AlertDescription></Alert>}
+      {error === undefined ? null : <Alert variant="destructive" role="alert"><AlertTitle>Action required</AlertTitle><AlertDescription><p>{error}</p>{publicationLocked ? <Button asChild variant="outline" className="mt-4 min-h-touch"><a href="/owner/operations">Open Tools</a></Button> : null}</AlertDescription></Alert>}
       {requiredAction === undefined ? null : (
         <Alert role="status">
           <AlertTitle>{requiredAction.title}</AlertTitle>
@@ -238,6 +240,6 @@ function sourceSummary(source: SupplySourceInput | undefined): string {
 }
 
 function termsSummary(vm: ReturnType<typeof useSupplyNativeStartState>): string {
-  const price = vm.pricingKind === 'free' ? 'Free' : vm.pricingKind === 'source_x402' ? 'Provider source payment' : `AUD ${vm.price}`
+  const price = publicationPriceSummary(pricingInput(vm.pricingKind, vm.price))
   return `${vm.category || 'Category needed'} · ${price}`
 }
