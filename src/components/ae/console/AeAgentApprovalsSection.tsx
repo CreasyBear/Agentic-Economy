@@ -6,7 +6,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import type { PendingCallApproval } from '@/modules/capability-execution/call-approval.functions'
-import { approvalFacts } from './agent-operator-console-model'
+import { approvalCanApprove, approvalFacts, approvalToolDescription, approvalToolName } from './agent-operator-console-model'
 
 export function AeAgentApprovalsSection({
   approvals,
@@ -49,29 +49,46 @@ export function AeAgentApprovalsSection({
           {approvals.map((approval) => {
             const deciding = decision?.callRef === approval.callRef
             const controlsDisabled = decision !== undefined
+            const canApprove = approvalCanApprove(approval)
+            const toolName = approvalToolName(approval)
             return (
-              <li key={approval.callRef} className="grid min-w-0 gap-4 py-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+              <li key={approval.callRef} className="grid min-w-0 gap-5 py-5">
                 <div className="grid min-w-0 gap-3">
                   <div className="grid gap-1">
-                    <p className="text-sm font-medium text-muted-foreground">Tool</p>
-                    <Link
-                      to="/tools/$toolRef"
-                      params={{ toolRef: approval.toolRef }}
-                      className="break-all font-medium text-foreground underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    >
-                      {approval.toolRef}
-                    </Link>
+                    <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Approval request</p>
+                    {canApprove ? (
+                      <Link
+                        to="/tools/$toolRef"
+                        params={{ toolRef: approval.toolRef }}
+                        className="w-fit text-lg font-semibold text-foreground underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      >
+                        {toolName}
+                      </Link>
+                    ) : <h3 className="text-lg font-semibold text-foreground">{toolName}</h3>}
+                    <p className="max-w-3xl text-sm leading-relaxed text-muted-foreground">{approvalToolDescription(approval)}</p>
                   </div>
                   <AeFactList
                     density="compact"
+                    className="sm:grid-cols-2 lg:grid-cols-3"
                     facts={approvalFacts(approval)}
                   />
                 </div>
-                <div className="flex w-full flex-col gap-2 sm:flex-row lg:w-auto">
+                {canApprove ? null : (
+                  <Alert>
+                    <AlertTitle>Decision facts are incomplete</AlertTitle>
+                    <AlertDescription className="grid gap-3">
+                      <p>Approval remains unavailable until the accepted Quote can show the exact Tool, Provider, AUD ceiling, effects and data release. You can refresh these details or decline the request now.</p>
+                      <Button type="button" variant="outline" className="w-fit" disabled={loading} onClick={onRetry}>
+                        {loading ? 'Refreshing details…' : 'Refresh decision details'}
+                      </Button>
+                    </AlertDescription>
+                  </Alert>
+                )}
+                <div className="flex w-full flex-col gap-2 border-t border-border pt-4 sm:flex-row sm:justify-end">
                   <Button
                     type="button"
                     className="min-h-touch w-full sm:w-auto"
-                    disabled={controlsDisabled}
+                    disabled={controlsDisabled || !canApprove}
                     onClick={() => onDecide(approval.callRef, approval.toolRef, 'approve')}
                   >
                     {deciding && decision?.decision === 'approve' ? 'Approving once…' : 'Approve once'}

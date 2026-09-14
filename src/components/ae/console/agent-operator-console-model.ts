@@ -9,20 +9,101 @@ import type { PendingCallApproval } from '@/modules/capability-execution/call-ap
 import type { AgentConnectionReadback } from '@/modules/agent-access/public'
 import { NATIVE_MCP_CLIENTS } from '@/lib/cli-distribution'
 
+type AcceptedApprovalQuote = Extract<NonNullable<PendingCallApproval['decisionContext']>['acceptedQuote'], { kind: 'available' }>
+
 export function approvalFacts(approval: PendingCallApproval): readonly AeFact[] {
+  const context = approval.decisionContext
+  const acceptedQuote = context?.acceptedQuote.kind === 'available' ? context.acceptedQuote : undefined
   const facts: AeFact[] = [
-    { label: 'Consequence', value: consequenceLabel(approval.authorityRequest.consequence) },
+    {
+      label: 'Agent',
+      value: context === undefined
+        ? 'Agent details unavailable'
+        : context.agent.currentDisplayName === null
+          ? 'Current Agent name not available'
+          : `${context.agent.currentDisplayName} (current account label)`,
+    },
+    { label: 'Purpose', value: 'Not recorded for this Call' },
+    {
+      label: 'Provider',
+      value: acceptedQuote === undefined
+        ? 'Accepted Provider details unavailable'
+        : acceptedQuote.provider.name ?? `${acceptedQuote.provider.ref} (name not recorded)`,
+    },
+    {
+      label: 'Maximum AUD spend',
+      value: acceptedQuote === undefined ? 'Accepted Quote unavailable' : formatCurrencyAmount(acceptedQuote.maximumSpend),
+      mono: acceptedQuote !== undefined,
+    },
+    { label: 'Action class', value: consequenceLabel(approval.authorityRequest.consequence) },
+    {
+      label: 'Declared effects',
+      value: acceptedQuote === undefined ? 'Accepted Tool contract unavailable' : approvalEffectsLabel(acceptedQuote.effects),
+    },
+    {
+      label: 'Declared data release',
+      value: acceptedQuote === undefined ? 'Accepted Tool contract unavailable' : approvalDataUseLabel(acceptedQuote.dataUse),
+    },
   ]
-  if (approval.authorityRequest.maximumSpend !== undefined) {
-    facts.push({ label: 'Maximum spend', value: formatCurrencyAmount(approval.authorityRequest.maximumSpend), mono: true})
-  }
-  facts.push({
-    label: 'Data fields',
-    value: approval.authorityRequest.dataFields.length === 0
-      ? 'None'
-      : approval.authorityRequest.dataFields.join(', '),
-  })
   return facts
+}
+
+export function approvalCanApprove(approval: PendingCallApproval): boolean {
+  return approval.decisionContext?.acceptedQuote.kind === 'available'
+}
+
+export function approvalToolName(approval: PendingCallApproval): string {
+  return approval.decisionContext?.acceptedQuote.kind === 'available'
+    ? approval.decisionContext.acceptedQuote.tool.name
+    : 'Tool details unavailable'
+}
+
+export function approvalToolDescription(approval: PendingCallApproval): string {
+  return approval.decisionContext?.acceptedQuote.kind === 'available'
+    ? approval.decisionContext.acceptedQuote.tool.description
+    : 'The accepted Quote could not be read from this approval source.'
+}
+
+function approvalEffectsLabel(effects: AcceptedApprovalQuote['effects']): string {
+  if (effects.length === 0) return 'None declared in the accepted Tool contract; this is not a guarantee of no effects.'
+  return effects.map(effect => `${effectClassLabel(effect.class)} · ${reversibilityLabel(effect.reversibility)}`).join('; ')
+}
+
+function approvalDataUseLabel(dataUse: AcceptedApprovalQuote['dataUse']): string {
+  if (dataUse.length === 0) return 'None declared in the accepted Tool contract; this is not a guarantee of no disclosure.'
+  return dataUse.map(declaration => {
+    const field = declaration.inputPointer.slice(1).replaceAll('~1', '/').replaceAll('~0', '~').replaceAll('/', '.')
+    const recipient = declaration.recipient.kind === 'candidate_binding'
+      ? 'candidate Provider'
+      : declaration.recipient.kind === 'selected_binding'
+        ? 'selected Provider'
+        : `named recipient ${declaration.recipient.recipientId}`
+    const purposes = declaration.purposes.map(humanizeIdentifier).join(', ')
+    return `${dataClassificationLabel(declaration.classification)} ${field} to ${recipient} during ${declaration.phase} for ${purposes}`
+  }).join('; ')
+}
+
+function effectClassLabel(effectClass: 'data_release' | 'financial_exposure' | 'external_state_change'): string {
+  if (effectClass === 'data_release') return 'Releases data'
+  if (effectClass === 'financial_exposure') return 'Creates financial exposure'
+  return 'Changes external state'
+}
+
+function reversibilityLabel(reversibility: 'not_applicable' | 'reversible' | 'conditional' | 'irreversible'): string {
+  if (reversibility === 'not_applicable') return 'reversibility not applicable'
+  if (reversibility === 'conditional') return 'reversibility depends on conditions'
+  return reversibility
+}
+
+function dataClassificationLabel(classification: 'public' | 'personal' | 'sensitive' | 'credential'): string {
+  if (classification === 'public') return 'Public data:'
+  if (classification === 'personal') return 'Personal data:'
+  if (classification === 'sensitive') return 'Sensitive data:'
+  return 'Credential:'
+}
+
+function humanizeIdentifier(value: string): string {
+  return value.replaceAll(/[._-]+/gu, ' ')
 }
 
 export function agentFacts(detail: AgentDetail): readonly AeFact[] {

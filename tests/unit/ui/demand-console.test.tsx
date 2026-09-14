@@ -468,6 +468,35 @@ describe('assistant access components', () => {
             dataFields: ['recipient.email', 'message.subject'],
           },
           createdAt: 1,
+          decisionContext: {
+            agent: {
+              principalRef: 'principal:agent:one',
+              applicationRef: 'application:agent:one',
+              currentDisplayName: 'Inbox assistant',
+            },
+            purpose: null,
+            acceptedQuote: {
+              kind: 'available',
+              quoteRef: 'quote:one',
+              tool: { name: 'Send an email', description: 'Sends one email to the selected recipient.' },
+              provider: { ref: 'provider:mail:one', name: null },
+              maximumSpend: { currency: 'AUD', units: '1250000', exponent: 6 },
+              dataUse: [{
+                effectId: 'release-recipient',
+                inputPointer: '/recipient/email',
+                classification: 'personal',
+                phase: 'execution',
+                recipient: { kind: 'selected_binding' },
+                purposes: ['message_delivery'],
+              }],
+              effects: [{
+                effectId: 'send-message',
+                class: 'external_state_change',
+                authority: 'explicit',
+                reversibility: 'irreversible',
+              }],
+            },
+          },
         }]}
         approvalsLoading={false}
         approvalDecision={{ callRef: 'call:approval:one', decision: 'approve' }}
@@ -479,10 +508,15 @@ describe('assistant access components', () => {
     )
 
     expect(screen.getByRole('heading', { name: 'Waiting for approval' })).toBeTruthy()
-    expect(screen.getByRole('link', { name: 'market.email.send:v1' }).getAttribute('href')).toBe('/tools/market.email.send%3Av1')
+    expect(screen.getByRole('link', { name: 'Send an email' }).getAttribute('href')).toBe('/tools/market.email.send%3Av1')
+    expect(screen.getByText('Sends one email to the selected recipient.')).toBeTruthy()
+    expect(screen.getByText('Inbox assistant (current account label)')).toBeTruthy()
+    expect(screen.getByText('Not recorded for this Call')).toBeTruthy()
+    expect(screen.getByText('provider:mail:one (name not recorded)')).toBeTruthy()
     expect(screen.getByText('Sends a communication')).toBeTruthy()
-    expect(screen.getByText('USD 1.25')).toBeTruthy()
-    expect(screen.getByText('recipient.email, message.subject')).toBeTruthy()
+    expect(screen.getByText('AUD 1.250000')).toBeTruthy()
+    expect(screen.getByText('Changes external state · irreversible')).toBeTruthy()
+    expect(screen.getByText('Personal data: recipient.email to selected Provider during execution for message delivery')).toBeTruthy()
     expect(screen.getByRole('status').textContent).toBe('market.email.send:v1 approved once.')
     const approveButton = screen.getByRole('button', { name: 'Approving once…' })
     const declineButton = screen.getByRole('button', { name: 'Decline' })
@@ -491,5 +525,44 @@ describe('assistant access components', () => {
     fireEvent.click(declineButton)
     expect(onDecideApproval).not.toHaveBeenCalled()
     expect(screen.queryByText(/call:approval:one|credential|transport|input/iu)).toBeNull()
+  })
+
+  it('does not allow approval when accepted Quote decision facts are unavailable', () => {
+    const onDecideApproval = vi.fn()
+    const onRetryApprovals = vi.fn()
+    render(
+      <AeAgentOperatorConsole
+        directory={emptyDirectory}
+        loading={false}
+        onRevokeCredential={() => undefined}
+        onDisconnectAgent={() => undefined}
+        approvals={[{
+          callRef: 'call:approval:legacy',
+          toolRef: 'market.email.send:v1',
+          authorityRequest: {
+            kind: 'approval_required',
+            toolRef: 'market.email.send:v1',
+            consequence: 'communication',
+            retryClass: 'reconcile_before_retry',
+            maximumSpend: { currency: 'USD', units: '900', exponent: 2 },
+            dataFields: [],
+          },
+          createdAt: 1,
+        }]}
+        approvalsLoading={false}
+        onRetryApprovals={onRetryApprovals}
+        onDecideApproval={onDecideApproval}
+        accessUnavailable
+      />,
+    )
+
+    expect(screen.getByRole('heading', { name: 'Tool details unavailable' })).toBeTruthy()
+    expect(screen.getByText('Decision facts are incomplete')).toBeTruthy()
+    expect(screen.getByText('Accepted Quote unavailable')).toBeTruthy()
+    expect(screen.queryByText('USD 9.00')).toBeNull()
+    expect(screen.getByRole('button', { name: 'Approve once' }).hasAttribute('disabled')).toBe(true)
+    expect(screen.getByRole('button', { name: 'Decline' }).hasAttribute('disabled')).toBe(false)
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh decision details' }))
+    expect(onRetryApprovals).toHaveBeenCalledOnce()
   })
 })
