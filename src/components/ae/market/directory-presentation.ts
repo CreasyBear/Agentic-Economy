@@ -13,6 +13,13 @@ export function directoryPrice(entry: X402DirectoryEntry): string {
   return price.symbol === undefined || price.decimalAmount === undefined ? 'See payment details' : price.amount
 }
 
+/** Buyer-facing provenance for a directory price before AE admission and Quote. */
+export function directoryPriceContext(entry: X402DirectoryEntry): string {
+  if (entry.prices.length === 0) return 'No Provider price published'
+  if (entry.prices.length > 1) return `${entry.prices.length} Provider payment options`
+  return 'Provider price per Call'
+}
+
 export function directoryCount(value: number): string {
   return new Intl.NumberFormat('en-AU', { notation: value >= 10_000 ? 'compact' : 'standard', maximumFractionDigits: 1 }).format(value)
 }

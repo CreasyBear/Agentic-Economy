@@ -13,7 +13,7 @@ import { directoryProviderKey, directorySlugBase } from '@/modules/market/x402-d
 import type { X402DirectoryEntry } from '@/modules/market/x402-directory'
 import { MARKET_LINK_STATE } from './market-return-context'
 import { DirectoryToolIdentity } from './DirectoryToolIdentity'
-import { directoryDate, directoryNetworkLabel, directoryOutputLabel, directoryPrice, directoryTitle } from './directory-presentation'
+import { directoryDate, directoryOutputLabel, directoryPrice, directoryPriceContext, directoryTitle } from './directory-presentation'
 
 type DirectoryToolCardProps = Readonly<{
   entry: X402DirectoryEntry
@@ -25,7 +25,6 @@ type DirectoryToolCardProps = Readonly<{
 }>
 
 export const DirectoryToolCard = memo(function DirectoryToolCard({ entry, onSave, saved, onCompare, comparing, compareDisabled }: DirectoryToolCardProps) {
-  const network = directoryNetworkLabel(entry)
   const title = directoryTitle(entry)
   const slug = entry.slug ?? directorySlugBase(entry.resource)
   const description = entry.description !== title ? entry.description : entry.schemaSummary
@@ -60,8 +59,9 @@ export const DirectoryToolCard = memo(function DirectoryToolCard({ entry, onSave
       </CardContent>
       <CardFooter className="flex-wrap justify-between gap-2 border-t border-border px-5 py-3">
         <div className="min-w-0">
-          <p className="break-words text-sm font-semibold tabular-nums">{directoryPrice(entry)}</p>
-          <p className="mt-0.5 truncate text-xs text-muted-foreground">{network ?? 'Provider price'}{entry.prices.length > 1 ? ` · ${entry.prices.length} payment options` : ' · per Call'}</p>
+          <p className="text-[0.6875rem] font-medium uppercase tracking-wide text-muted-foreground">Provider-listed price</p>
+          <p className="mt-0.5 break-words text-sm font-medium tabular-nums">{directoryPrice(entry)}</p>
+          <p className="mt-0.5 truncate text-xs text-muted-foreground">{directoryPriceContext(entry)}</p>
         </div>
         {onCompare === undefined ? null : <Button variant="ghost" size="icon-sm" className="relative z-10" onClick={onCompare} disabled={compareDisabled === true} aria-label={`${comparing ? 'Remove' : 'Add'} ${title} ${comparing ? 'from' : 'to'} comparison`} aria-pressed={comparing === true}>
           {comparing ? <CheckIcon /> : <PlusIcon />}

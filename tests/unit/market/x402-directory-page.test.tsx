@@ -88,6 +88,15 @@ it('compares published facts and links straight to the one canonical Tool detail
   const inspect = within(comparison).getAllByRole('link', { name: 'Inspect Tool' })[0]!
   expect(toolHref(inspect).pathname).toBe(`/tools/${priced[0]!.provider}/${priced[0]!.slug}`)
 })
+it('keeps Provider price evidence secondary and settlement networks off Tool cards', () => {
+  const priced = entries.map((entry, index) => ({ ...entry, prices: [{ network: 'eip155:8453', networkLabel: 'Base', scheme: 'exact', amount: `${index + 1} USDC`, decimalAmount: String(index + 1), symbol: 'USDC' }] }))
+  show(undefined, priced)
+
+  expect(screen.getAllByText('Provider-listed price')).toHaveLength(priced.length)
+  expect(screen.getAllByText('Provider price per Call')).toHaveLength(priced.length)
+  expect(screen.getByText('1 USDC')).toBeTruthy()
+  expect(screen.queryByText('Base')).toBeNull()
+})
 it('groups the provider view by exact hostname and opens that provider filter', async () => {
   const { router } = show({ view: 'providers', query: 'research', network: 'eip155:8453', maxUsdPrice: 0.01 }, entries.map((entry, index) => ({ ...entry, provider: index === 19 ? 'other.example.com' : entry.provider })))
   expect(screen.getByText('19 Tools in these results')).toBeTruthy()

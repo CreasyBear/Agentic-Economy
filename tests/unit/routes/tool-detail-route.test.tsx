@@ -395,6 +395,7 @@ describe('/tools/$toolRef', () => {
 
     const execution = screen.getByRole('complementary', { name: 'What you can do next' })
     expect(within(execution).getByText(/Paste this reference into your existing agent client/i)).toBeTruthy()
+    expect(within(execution).getByText(/exact buyer amount in AUD/i)).toBeTruthy()
     expect(within(execution).getByRole('button', { name: 'Copy Tool reference' })).toBeTruthy()
     expect(within(execution).queryByText(/ae connect/)).toBeNull()
     expect(within(execution).queryByText(/ae call/)).toBeNull()
@@ -496,6 +497,7 @@ const x402Tool = projectCapabilityTool({
     const continuation = screen.getByRole('complementary', { name: 'What you can do next' })
     expect(within(continuation).getByRole('link', { name: 'Find Tool alternatives' })).toBeTruthy()
     expect(within(continuation).getByText(/not operational/i)).toBeTruthy()
+    expect(within(continuation).queryByText(/exact buyer amount in AUD/i)).toBeNull()
   })
 
   it('fails closed when a stale source sends a non-canonical availability posture', () => {

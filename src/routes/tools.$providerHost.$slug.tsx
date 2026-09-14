@@ -2,7 +2,7 @@ import { Await, createFileRoute } from '@tanstack/react-router'
 
 import { AePageSkeleton, AePageState } from '@/components/ae/layout/AePageState'
 import { AePublicPage } from '@/components/ae/layout/AePublicPage'
-import { directoryNetworkLabel, directoryPrice, directoryTitle } from '@/components/ae/market/directory-presentation'
+import { directoryPrice, directoryPriceContext, directoryTitle } from '@/components/ae/market/directory-presentation'
 import type { X402DirectoryEntry } from '@/modules/market/x402-directory'
 import { readX402DirectoryCatalogueBySlugServer } from '@/modules/market/x402-directory-index.functions'
 import type { X402DirectoryCatalogueResource } from '@/modules/market/x402-directory-catalogue'
@@ -61,7 +61,6 @@ function DirectoryToolCanonicalRoute() {
 
 /** Renders at once from the indexed lookup, before the admission promise resolves - title, Provider, price and description, per the design's "no blank first content" requirement. */
 function DirectoryEntrySummaryPage({ entry }: Readonly<{ entry: X402DirectoryEntry }>) {
-  const network = directoryNetworkLabel(entry)
   return (
     <AePublicPage
       kind="workspace"
@@ -72,8 +71,9 @@ function DirectoryEntrySummaryPage({ entry }: Readonly<{ entry: X402DirectoryEnt
       <div className="grid max-w-2xl gap-related">
         <p className="text-sm leading-relaxed text-muted-foreground">{entry.description}</p>
         <div>
+          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Provider-listed price</p>
           <p className="text-lg font-semibold tabular-nums">{directoryPrice(entry)}</p>
-          <p className="mt-0.5 text-xs text-muted-foreground">{network ?? 'Provider price'}{entry.prices.length > 1 ? ` · ${entry.prices.length} payment options` : ' · per Call'}</p>
+          <p className="mt-0.5 text-xs text-muted-foreground">{directoryPriceContext(entry)}</p>
         </div>
         <p role="status" className="text-sm text-muted-foreground">Checking whether this Tool is ready to call…</p>
       </div>

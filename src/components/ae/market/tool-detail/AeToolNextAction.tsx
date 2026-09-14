@@ -66,9 +66,11 @@ export function AeToolNextAction({
           />
         ) : null}
 
-        <p className="text-xs leading-5 text-background/55">
-          Your agent confirms exact price, authority, balance, and availability through tool.quote before it can call.
-        </p>
+        {nextAction.label === 'Tool reference' ? (
+          <p className="text-xs leading-5 text-background/55">
+            Your agent confirms the exact buyer amount in AUD, authority, balance, and availability through tool.quote before it can Call.
+          </p>
+        ) : null}
       </aside>
     )
   }
