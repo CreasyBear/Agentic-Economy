@@ -122,7 +122,7 @@ export async function reserveOwnerCapabilityPublicationHandler(
       ? await resolveBusinessActor(ctx)
       : undefined
     const owned = admission?.kind === 'allowed'
-      ? await ownsPublishedBusinessForOwnerId(ctx, args.businessId, admission.ownerId)
+      ? (await nativeSubmissionBusiness(ctx, args.businessId))?.owningAccountRef === admission.ownerId
       : ownerActor?.kind === 'authenticated_owner'
         && (await nativeSubmissionBusiness(ctx, args.businessId))?.owningAccountRef === ownerActor.canonicalAccountRef
     if (!owned) {
