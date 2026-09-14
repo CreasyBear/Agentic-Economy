@@ -72,6 +72,12 @@ function isPathActive(currentPath: string, href: string): boolean {
   return currentPath === href || currentPath.startsWith(`${href}/`)
 }
 
+/** Supply is a disclosed Provider mode, not a default buyer responsibility. */
+function shouldDiscloseNavGroup(role: OperatorRole, currentPath: string, group: string): boolean {
+  if (role !== 'owner' || group !== 'Supply') return true
+  return ownerWorkspaceOwnerForPath(currentPath) === 'operations'
+}
+
 function formatNavBadge(value: OperatorNavBadgeValue): string | undefined {
   if (typeof value === 'number') {
     if (!Number.isFinite(value) || value <= 0) {
@@ -154,6 +160,7 @@ export function AeOperatorSidebar({ operatorRole, operatorContext, currentPath, 
       if (operator === undefined || nav === undefined) continue
       if (!operator.roles.includes(operatorRole)) continue
       if (!advanced && operator.tier !== 'core') continue
+      if (!shouldDiscloseNavGroup(operatorRole, currentPath, operator.group)) continue
 
       const item: SidebarNavItem = { href: route.fullPath, label: nav.label, icon: operator.icon, order: operator.order }
       const existing = groupsById.get(operator.group)
@@ -167,7 +174,7 @@ export function AeOperatorSidebar({ operatorRole, operatorContext, currentPath, 
     return Array.from(groupsById.values())
       .sort((left, right) => left.groupOrder - right.groupOrder)
       .map((group) => ({ ...group, items: group.items.slice().sort((left, right) => left.order - right.order) }))
-  }, [router, operatorRole, operatorContext, suppressSurfaceNavigation])
+  }, [router, operatorRole, operatorContext, currentPath, suppressSurfaceNavigation])
 
   const utilityItems = useMemo<SidebarUtilityItem[]>(() => {
     const items: Array<SidebarUtilityItem & { order: number }> = []
