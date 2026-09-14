@@ -104,10 +104,11 @@ function fundingUiReducer(state: FundingUiState, action: FundingUiAction): Fundi
       }
     }
     case 'payment_refused':
-      return { ...state, paymentStatus: action.paymentStatus, errorMessage: action.errorMessage }
+      return { ...state, session: undefined, paymentStatus: action.paymentStatus, errorMessage: action.errorMessage }
     case 'payment_outcome_unknown':
       return {
         ...state,
+        session: undefined,
         paymentStatus: 'outcome_unknown',
         errorMessage: undefined,
         ...(action.recovery === undefined ? {} : { recovery: action.recovery }),

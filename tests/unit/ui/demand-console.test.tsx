@@ -478,7 +478,7 @@ describe('assistant access components', () => {
     expect(screen.queryByRole('button', { name: 'Add more credit' })).toBeNull()
   })
 
-  it('resumes an exact checkout returned by canonical payment readback', async () => {
+  it.each(['refused', 'transport failure'] as const)('resumes confirmed checkout, then requires status refresh after %s', async (failure) => {
     const locator = { externalRef: 'cs_readback', idempotencyKey: 'funding:readback' }
     window.sessionStorage.setItem('ae.account-funding.recovery.v1', JSON.stringify(locator))
     const session: CreditPaymentSession = {
@@ -492,7 +492,7 @@ describe('assistant access components', () => {
       checkoutUrl: 'https://checkout.stripe.com/c/pay/cs_readback',
       expiresAt: 3_600_000,
     }
-    const read = vi.fn(async () => session)
+    const read = vi.fn<AccountFundingPort['read']>(async () => session)
     const redirectToCheckout = vi.fn()
     render(<AeAccountFundingPanel port={{ begin: vi.fn(), read }} constraints={fundingConstraints} redirectToCheckout={redirectToCheckout} />)
 
@@ -501,6 +501,17 @@ describe('assistant access components', () => {
     expect(redirectToCheckout).toHaveBeenCalledWith(session.checkoutUrl)
     expect(screen.queryByRole('button', { name: /pay /i })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Add more credit' })).toBeNull()
+    if (failure === 'refused') {
+      read.mockResolvedValueOnce({ kind: 'refused', code: 'source_unavailable', retryable: true })
+    } else {
+      read.mockRejectedValueOnce(new Error('status source unavailable'))
+    }
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh payment status' }))
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Continue secure payment' })).toBeNull())
+    expect(screen.getByRole('button', { name: 'Refresh payment status' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /pay /i })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Add more credit' })).toBeNull()
+    expect(read).toHaveBeenLastCalledWith(locator)
   })
 
   it('keeps an unreadable stored attempt recoverable through the same locator', async () => {
