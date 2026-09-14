@@ -1174,7 +1174,18 @@ export const readForCall = internalQuery({
         || call.quoteRef !== row.quoteRef
         || call.credentialId !== args.principal.credentialId
         || call.idempotencyKey !== args.idempotencyKey) return null
-    } else if (row.state !== 'issued' || row.expiresAt <= args.now) return null
+    } else {
+      if (row.state !== 'issued' || row.expiresAt <= args.now) return null
+      // An unused Quote binds the policy decision that created it. Refuse its
+      // stale version before live Tool inspection; accepted replay above retains
+      // the original purchase even after an owner changes future spending limits.
+      const current = await ctx.db.query('agentAccessPrincipals')
+        .withIndex('by_principalId', q => q.eq('principalId', row.principalId)).unique()
+      if (current === null || current.lifecycle !== 'active'
+        || current.ownerId !== row.accountRef || current.credentialId !== row.credentialId
+        || current.grantGeneration !== row.grantGeneration
+        || current.spendingPolicyDigest !== row.grantPolicyDigest) return null
+    }
     try {
       const input = JSON.parse(row.normalizedInputJson) as unknown
       return isBoundedJsonValue(input) && typeof input === 'object' && input !== null && !Array.isArray(input)

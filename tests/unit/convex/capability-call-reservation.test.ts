@@ -429,6 +429,19 @@ describe('capability operation reservation admission', () => {
     expect(mocks.assertAgentAccessRateAdmission).toHaveBeenCalledTimes(1)
   })
 
+  it.each(['v1.3.0', 'v1.4.0'])('refuses new paid admission without period evidence under %s', async schemaVersion => {
+    const ctx = context(selectedGrantOverrides([OPERATION_REF]))
+    const reservationArgs = argsFor(ctx)
+    Object.assign(ctx.db.rows('capabilityQuotes')[0]!, {
+      decisionAudUnits: '1', formanceSchemaVersion: schemaVersion,
+    })
+    expect(await reserveHandler(ctx, reservationArgs)).toMatchObject({ kind: 'refused', code: 'budget_exceeded' })
+    expect(ctx.db.rows('capabilityCalls')).toEqual([])
+    expect(ctx.db.rows('capabilityQuotes')[0]).toMatchObject({ state: 'issued' })
+    expect(mocks.assertAgentAccessRateAdmission).not.toHaveBeenCalled()
+    expect(ctx.runMutation).not.toHaveBeenCalled()
+  })
+
   it('admits v1 all-admitted and a v2 grant selecting the exact Operation', async () => {
     const legacy = context()
     await expect(reserveHandler(legacy, args())).resolves.toMatchObject({ kind: 'reserved' })

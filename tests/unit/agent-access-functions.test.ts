@@ -36,11 +36,14 @@ import {
   buildOwnerAgentAccessPolicy,
   disconnectAgentServer,
   issueAgentAccessKeyServer,
+  readAgentSpendingLimitsServer,
   renameAgentServer,
   revokeAgentCredentialServer,
+  updateAgentSpendingLimitsServer,
 } from '@/modules/agent-access/agent-access.functions'
 
 const amount = (units: string) => ({ currency: 'USD', units, exponent: 2 })
+const spendingAmount = (units: string) => ({ currency: 'AUD', units, exponent: 6 })
 
 const clerkApi = {
   list: vi.fn(),
@@ -306,5 +309,100 @@ describe('owner agent-access issuance policy', () => {
       })
     expect(clerkApi.get).not.toHaveBeenCalled()
     expect(clerkApi.revoke).not.toHaveBeenCalled()
+  })
+})
+
+describe('owner spending policy limits', () => {
+  const update = {
+    principalRef: 'prn_agent_a',
+    expectedGeneration: 3,
+    idempotencyKey: 'spending-limits-12345678',
+    maximumSpendPerCall: spendingAmount('1000000'),
+    maximumDailySpend: spendingAmount('5000000'),
+    maximumMonthlySpend: spendingAmount('20000000'),
+  }
+
+  it('forwards each spending limit and the original idempotency key to the canonical mutation', async () => {
+    serverMocks.callSourceMutation.mockImplementation(async (reference: { name: string }, input: Record<string, unknown>) => {
+      expect(reference).toEqual({ name: 'agentSpendingPolicy:updateForServer' })
+      expect(input).toMatchObject({
+        ...update,
+        correlationRef: expect.any(String),
+      })
+      expect(input.idempotencyKey).toBe(update.idempotencyKey)
+      return {
+        kind: 'completed',
+        principalRef: update.principalRef,
+        grantRef: 'agt_grant_a',
+        generation: 4,
+        spendingPolicyDigest: 'sha256:spending-policy',
+        correlationRef: input.correlationRef,
+      }
+    })
+
+    await expect(updateAgentSpendingLimitsServer({ data: update })).resolves.toMatchObject({
+      kind: 'completed',
+      principalRef: update.principalRef,
+      grantRef: 'agt_grant_a',
+      generation: 4,
+    })
+    expect(serverMocks.callSourceQuery).toHaveBeenCalledWith(
+      { name: 'agentAccessPolicy:listOwnerGrantReadbacks' },
+      { requireAuthority: true },
+    )
+  })
+
+  it('preserves the canonical authentication refusal for a principal outside the owner authority', async () => {
+    serverMocks.callSourceMutation.mockResolvedValue({
+      kind: 'refused',
+      code: 'authentication_required',
+      correlationRef: 'corr-owner-refused',
+    })
+
+    await expect(updateAgentSpendingLimitsServer({ data: update })).resolves.toEqual({
+      kind: 'refused',
+      code: 'authentication_required',
+      correlationRef: 'corr-owner-refused',
+    })
+    expect(serverMocks.callSourceMutation).toHaveBeenCalledWith(
+      { name: 'agentSpendingPolicy:updateForServer' },
+      expect.objectContaining({ principalRef: update.principalRef }),
+    )
+  })
+
+  it('degrades a source transport failure to one correlated unavailable refusal', async () => {
+    serverMocks.callSourceMutation.mockRejectedValue(new Error('source_down'))
+
+    await expect(updateAgentSpendingLimitsServer({ data: update })).resolves.toEqual({
+      kind: 'refused',
+      code: 'source_unavailable',
+      correlationRef: expect.any(String),
+    })
+    expect(serverMocks.callSourceMutation).toHaveBeenCalledWith(
+      { name: 'agentSpendingPolicy:updateForServer' },
+      expect.objectContaining({ idempotencyKey: update.idempotencyKey, correlationRef: expect.any(String) }),
+    )
+  })
+
+  it('reads current limits through the owner check and canonical policy query', async () => {
+    const current = {
+      kind: 'current' as const,
+      principalRef: update.principalRef,
+      grantRef: 'agt_grant_a',
+      generation: update.expectedGeneration,
+      spendingPolicyDigest: 'sha256:spending-policy',
+      maximumSpendPerCall: update.maximumSpendPerCall,
+      maximumDailySpend: update.maximumDailySpend,
+      maximumMonthlySpend: update.maximumMonthlySpend,
+    }
+    serverMocks.callSourceQuery.mockImplementation(async (reference: { name: string }, input: Record<string, unknown>) => {
+      if (reference.name === 'agentAccessPolicy:listOwnerGrantReadbacks') return []
+      expect(reference).toEqual({ name: 'agentSpendingPolicy:readCurrent' })
+      expect(input).toEqual({ principalRef: update.principalRef })
+      return current
+    })
+
+    await expect(readAgentSpendingLimitsServer({ data: { principalRef: update.principalRef } }))
+      .resolves.toEqual(current)
   })
 })

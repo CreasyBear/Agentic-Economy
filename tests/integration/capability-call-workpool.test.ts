@@ -1126,6 +1126,87 @@ describe('capability Call Workpool lifecycle', () => {
     expect(providerFetch.mock.calls.filter(([, init]) => new Headers(init?.headers as HeadersInit).has('payment-signature'))).toHaveLength(0)
   })
 
+  it.runIf(process.env.AE_FORMANCE_INTEGRATION === 'true')('updates owner limits without reviving stale Quotes, reminting usage or stranding accepted Calls', async () => {
+    let registered: Awaited<ReturnType<typeof registerRotatingBuyer>> | undefined
+    const { backend, formance, published, buyer, readBalance, signedAuthorizations } = await prepareFundedSandboxBuyer({
+      buyerSetup: async backend => { registered = await registerRotatingBuyer(backend, '3600000', '3600000'); return registered },
+    })
+    if (registered === undefined) throw new Error('policy_buyer_not_registered')
+    const owner = registered.owner
+    await backend.run(async ctx => await ctx.runMutation(components.workpool.config.update, { maxParallelism: 0 }))
+    const quote = async (suffix: string) => backend.action(api.capabilityQuotes.quote, await withSourceWrite('protected_action', {
+      principal: { ...buyer.principal, scopes: [...buyer.principal.scopes] }, toolRef: published.toolRef, input: INPUT,
+      operationKey: `policy-quote:${suffix}`, correlationId: `policy-quote:${suffix}`,
+    }))
+    const stale = await quote('before-change')
+    if (stale.kind !== 'committed') throw new Error('original_policy_quote_missing')
+    const first = await invokeCall(backend, buyer.principal, published.toolRef, 'policy-first', 'policy-first')
+    if (first.kind !== 'pending') throw new Error('policy_first_call_missing')
+    const original = await backend.query(internal.moneyManagedCall.readBooking, { callRef: first.callRef })
+    if (original.kind !== 'available') throw new Error('policy_original_booking_missing')
+    await expectAgentPeriodBalances(formance, original.booking, '2400000')
+    const amount = (units: string) => ({ currency: 'AUD', exponent: 6, units })
+    const update = (expectedGeneration: number, units: string, key: string) => owner.mutation(api.agentSpendingPolicy.updateForServer, {
+      principalRef: buyer.principal.principalId, expectedGeneration, idempotencyKey: key,
+      maximumSpendPerCall: amount('1200000'), maximumDailySpend: amount(units), maximumMonthlySpend: amount(units),
+      correlationRef: `policy-update:${key}`,
+    })
+    expect(await owner.query(api.agentSpendingPolicy.readCurrent, { principalRef: buyer.principal.principalId }))
+      .toMatchObject({ kind: 'current', generation: 1, maximumDailySpend: amount('3600000') })
+    const lowered = await update(1, '1200000', 'lower')
+    expect(lowered).toMatchObject({ kind: 'completed', generation: 2 })
+    expect(await update(1, '1200000', 'lower')).toMatchObject({ kind: 'replayed', generation: 2 })
+    expect(await backend.action(api.capabilityCalls.call, await withSourceWrite('protected_action', {
+      principal: { ...buyer.principal, scopes: [...buyer.principal.scopes] }, quoteRef: stale.quoteRef,
+      idempotencyKey: 'stale-policy-call', operationKey: 'stale-policy-call', correlationId: 'stale-policy-call',
+    }))).toMatchObject({ kind: 'refused', code: 'operation_not_current' })
+    expect(await backend.run(ctx => ctx.db.query('capabilityCalls').collect())).toHaveLength(1)
+    expect(await backend.run(ctx => ctx.db.query('capabilityQuotes').withIndex('by_quoteRef', q => q.eq('quoteRef', stale.quoteRef)).unique()))
+      .toMatchObject({ state: 'issued' })
+    expect(await quote('lowered')).toMatchObject({ kind: 'refused', code: 'budget_exceeded', reason: 'daily_limit_exhausted' })
+    await expectAgentPeriodBalances(formance, original.booking, '0')
+    expect(await backend.mutation(internal.capabilityCalls.reconcileCallWorkloadAuthority, { callRef: first.callRef }))
+      .toMatchObject({ kind: 'authorized', authority: { grantRef: buyer.grantRef, grantGeneration: 1 } })
+    expect(await backend.query(internal.moneyManagedCall.readBooking, { callRef: first.callRef })).toEqual(original)
+    expect(await invokeCall(backend, buyer.principal, published.toolRef, 'policy-first', 'policy-first-replay'))
+      .toMatchObject({ kind: 'pending', callRef: first.callRef })
+
+    // A real native increase succeeds before its source acknowledgement. A newer
+    // owner decision must recover that exact pending command, then only its delta.
+    expect(await update(2, '2400000', 'intermediate')).toMatchObject({ kind: 'completed', generation: 3 })
+    const pending = await backend.mutation(internal.capabilityQuotes.prepareSpendingPeriods, {
+      principal: { ...buyer.principal, scopes: [...buyer.principal.scopes] }, toolRef: published.toolRef,
+    })
+    if (pending.kind !== 'prepared' || pending.commands.length !== 2) throw new Error('policy_pending_delta_missing')
+    const submitted = await backend.action(internal.moneyFormance.adjustSpendingPeriod, pending.commands[0]!)
+    expect(submitted).toMatchObject({ kind: 'completed', replayed: false })
+    expect(await update(3, '3600000', 'latest')).toMatchObject({ kind: 'completed', generation: 4 })
+    const latest = await quote('latest-after-lost-ack')
+    expect(latest).toMatchObject({ kind: 'committed' })
+    await expectAgentPeriodBalances(formance, original.booking, '2400000')
+    expect(await backend.action(internal.moneyFormance.adjustSpendingPeriod, pending.commands[0]!))
+      .toMatchObject({ kind: 'completed', replayed: true,
+        transactionRefs: submitted.kind === 'completed' ? submitted.transactionRefs : [] })
+    expect(await update(1, '1200000', 'lower')).toMatchObject({ kind: 'replayed', generation: 2 })
+    expect(await owner.query(api.agentSpendingPolicy.readCurrent, { principalRef: buyer.principal.principalId }))
+      .toMatchObject({ kind: 'current', generation: 4, maximumDailySpend: amount('3600000') })
+    expect(await readBalance()).toMatchObject({ kind: 'available', units: '8800000' })
+    const second = await invokeCall(backend, buyer.principal, published.toolRef, 'policy-second', 'policy-second')
+    if (second.kind !== 'pending') throw new Error('new_policy_call_missing')
+    await expectAgentPeriodBalances(formance, original.booking, '1200000')
+    for (const result of [first, second]) {
+      const key = `policy-cancel:${result.callRef}`
+      expect(await backend.action(api.capabilityCalls.cancelCall, {
+        ...await recoveryActionArgs(buyer.principal, result.callRef, key, `cancel:${key}`), idempotencyKey: key,
+      })).toMatchObject({ kind: 'found', state: 'cancelled', callRef: result.callRef })
+    }
+    await backend.finishAllScheduledFunctions(() => vi.advanceTimersByTime(1))
+    await expectAgentPeriodBalances(formance, original.booking, '3600000')
+    expect(await readBalance()).toMatchObject({ kind: 'available', units: '10000000' })
+    expect(signedAuthorizations).toHaveLength(0)
+    expect(providerFetch.mock.calls.filter(([, init]) => new Headers(init?.headers as HeadersInit).has('payment-signature'))).toHaveLength(0)
+  })
+
   it.runIf(process.env.AE_FORMANCE_INTEGRATION === 'true')('preserves buyer credit and Agent allowance when concurrent quoted Calls exhaust treasury capacity', async () => {
     // Observe the real ledger rejection without replacing its request or result.
     const nativeBulkErrors: unknown[] = []

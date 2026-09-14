@@ -1,8 +1,8 @@
 # Daily and monthly spending limits
 
-Status: period implementation and focused local evidence established; remaining
-AM-20 source conditions are tracked below. The release manager accepted the
-nonnegative mechanism. Hosted cutover remains a separate release operation.
+Status: period enforcement and owner monetary-limit update implemented with
+focused local evidence below. The release manager accepted the nonnegative
+mechanism. Combined release checks and hosted cutover remain manager-owned.
 
 ## Buyer contract and reproduced defect
 
@@ -317,17 +317,26 @@ hidden in this spending-limit change.
 | Admission versus control transaction race | Admission reads period rows and writes indexed `reservation_pending`; adjustment preparation reads the unresolved reservation index | Source fence and pre-existing unresolved-reservation test established; production Convex concurrent-transaction scheduling is not proved by convex-test |
 | Legal-account exposure | Existing native legal-capacity posting and Quote `account_limit` guard | Quote account_limit refusal produces support guidance, no Quote/Call or funding action; real two-Agent/two-account native contention has one winner, all loser references absent, no partial debit, once-only release and same-booking retry |
 | Native rate/concurrency | Maintained Convex rate-limiter and indexed Call admission | Rate buckets and active Call counts now use stable Agent principal; actual maintained rate-limiter component and registered credential rotation tests pass; expired grants do not release pending/uncertain concurrency |
-| Same-Agent policy change after Quote | Current authority requires stored Agent/grant policy/generation agreement; replacement intentionally preserves policy | **Active implementation:** manager authorized a bounded owner-authenticated monetary-limit update and readback within AM-20. Helper-level deltas alone do not establish buyer acceptance |
+| Same-Agent policy change after Quote | Owner server functions → `agentSpendingPolicy:updateForServer` / `readCurrent`; canonical owner/delegation, expected generation, immutable command identity and existing audit event | Actual registered-buyer/native journey passes: stale Quote refusal, lowered ceiling against retained usage, accepted Call recovery, lost-ack delta followed by a newer increase, old command replay without reverting current policy, exact cancellation restoration |
 
-The missing policy-change acceptance is specifically: obtain P1 Quote, perform an
-authorized P2 update for the same Agent, refuse the unused P1 Quote before any
-reservation/provider effect, then issue/enforce a P2 Quote against retained usage.
-`agentAccessPolicy.registerGrantForServer` has no production wrapper caller and a
-new grant alone does not update `agentAccessPrincipals`; current-authority matching
-correctly rejects that mismatch. Credential replacement is not a policy editor.
-The release manager authorized completing this same-Agent update within AM-20.
-Use the existing owner-authenticated application caller and delegation service;
-no UI/editor, new service or parallel usage counter is included.
+The current owner caller edits only AUD/6 per-Call, daily and monthly limits.
+It reuses the canonical owner/Agent resolver, delegation service, access-grant
+persistence and audit event. It preserves credential, nonmonetary policy and
+canonical delegation bounds. No UI/editor, new service or parallel usage counter
+is included. Credential replacement remains a separate transition.
+
+The registered-buyer case `updates owner limits without reviving stale Quotes,
+reminting usage or stranding accepted Calls` uses actual owner update/readback and
+local native ledger effects. Starting at AUD3.60 limits with AUD1.20 held, lowering
+to AUD1.20 leaves zero capacity; an unused old Quote is refused without another
+Call. An AUD2.40 revision succeeds natively without acknowledgement, followed by
+an AUD3.60 owner revision. A fresh Quote recovers the original command before
+applying the next delta, leaving exactly AUD2.40 available. Replaying the old
+owner command returns its original revision while current readback stays on the
+latest revision. A second Call is admitted; cancelling both restores exactly
+AUD3.60 period capacity and AUD10 buyer funds, with zero signatures or paid
+Provider requests. The original accepted Call retains its booking and authority
+through workload reconciliation and replay.
 
 Local checks exercise the real pinned Ledger/official SDK and convex-test source
 transactions. They do not establish hosted deployment, actual Stripe Checkout,
@@ -376,3 +385,62 @@ recovery separate. Reject editing through credential replacement, raw test-only
 patches, a new policy framework/table, unused mutation helpers and a new UI flow.
 The original period implementation is retained; this closes its actual caller
 rather than replacing it or reopening the design.
+
+
+### New paid-admission reachability
+
+The supported `tool.call` action declares HTTP/MCP/CLI/chat surfaces in
+`call.actions.ts`; `src/lib/server/call-api.ts` targets the single public
+`capabilityCalls:call` action. That action runs `canonicalCallHandler`, then the
+existing Call application and `reserveFormanceBackedInvocation`, which invokes
+only internal `capabilityCalls.reserve` / `reserveHandler` for a new reservation.
+`commitmentMatchesReservation` requires a real issued, caller-bound Quote for
+ordinary purchases. `spendingPeriodAdmissionRefusal` then requires v1.4 plus
+acknowledged current daily/monthly evidence for every positive AUD Quote before
+Call insertion. The focused reservation cases reject periodless paid v1.3 AND
+v1.4 material without consuming the Quote, invoking rate admission or inserting
+any Call. The complete reservation file has 23 passing cases.
+
+Optional historical period fields therefore do not license new paid buyer
+admissions. Exact existing reservation replay occurs first and preserves its
+original booking. Free Quotes and the separately authenticated Provider canary
+protocol keep their existing distinct paths; canary identity is checked before
+reservation and does not establish buyer spending-policy authority. No new legacy
+alias or compatibility admission has been added.
+
+### Accepted purchase after a monetary policy update
+
+An owner update revokes the superseded access-policy grant while preserving its
+canonical delegation for an already accepted purchase. Workload reconciliation
+checks live current authority and the original immutable consumed Quote/Call/grant
+and original canonical delegation. Only the same credential, Agent, Account,
+application, environment, expiry, scopes/tool selection, authority mode and
+rate/concurrency policy can preserve that accepted authority while monetary limits
+change. It returns the original authority record; it does not rewrite the booking
+with the latest policy. New admissions always require current policy. Revoked or
+changed credential/delegation evidence remains refused. This bounded branch is in
+`reconcileAcceptedCallAfterLimitUpdate`; it introduces no new storage or generic
+revocation exception.
+
+### Owner-update completion evidence
+
+- `convex/agentSpendingPolicy.test.ts`: actual owner read/update, coherent grant and
+  audit readback, original command replay after a newer update, wrong owner and
+  unauthenticated refusal, invalid/oversized/out-of-order amounts without writes,
+  pending credential replacement even behind two cancelled successors, and two
+  concurrent edits yielding one winner/one revision conflict. Three scenarios pass.
+- `tests/unit/agent-access-functions.test.ts`: supported application server callers
+  enforce owner access, validate input, preserve command identity and expose typed
+  source-unavailable results. Fifteen tests pass.
+- Final affected authority, Quote, reservation and server-caller matrix: 143 tests
+  pass across five files. New paid periodless admission is refused under both
+  v1.3 and v1.4 without consuming a Quote or creating a Call.
+- Final `capability-call-workpool.test.ts`: all 14 registered-buyer/native-ledger
+  scenarios pass, including the complete policy-update journey above and retained
+  funding, treasury, credential rotation, calendar, contention and recovery cases.
+- Explicit changed-file lint and whitespace checks pass. The bounded independent
+  review of the new accepted-Call authority exception found no concrete defect.
+
+These establish this item's source contracts and local integration outcomes.
+Combined generated bindings/typecheck/release gates and hosted evidence remain
+with the release manager; source completion does not imply alpha release approval.
