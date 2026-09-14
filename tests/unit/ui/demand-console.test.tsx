@@ -382,6 +382,30 @@ describe('assistant access components', () => {
     expect(screen.queryByRole('link', { name: /agent-access\.json/u })).toBeNull()
   })
 
+  it('offers policy-valid top-up choices while preserving exact manual entry', () => {
+    render(
+      <AeAccountFundingPanel
+        port={{ begin: vi.fn(), read: vi.fn() }}
+        constraints={fundingConstraints}
+      />,
+    )
+
+    const suggestedAmounts = screen.getByRole('group', { name: 'Choose a credit amount' })
+    expect(suggestedAmounts.textContent).toContain('A$5.00')
+    expect(suggestedAmounts.textContent).toContain('A$10.00')
+    expect(suggestedAmounts.textContent).toContain('A$25.00')
+
+    const tenDollarChoice = screen.getByRole('button', { name: 'A$10.00' })
+    fireEvent.click(tenDollarChoice)
+    expect(tenDollarChoice.getAttribute('aria-pressed')).toBe('true')
+    expect((screen.getByLabelText(/other amount/i) as HTMLInputElement).value).toBe('10')
+    expect(screen.getByRole('button', { name: /pay A\$10\.55 and add A\$10\.00/i })).toBeTruthy()
+
+    fireEvent.change(screen.getByLabelText(/other amount/i), { target: { value: '7.50' } })
+    expect(tenDollarChoice.getAttribute('aria-pressed')).toBe('false')
+    expect(screen.getByRole('button', { name: /pay A\$7\.92 and add A\$7\.50/i })).toBeTruthy()
+  })
+
   it('starts a bound hosted Checkout Session and redirects without persisting payment material', async () => {
     const session: CreditPaymentSession = {
       kind: 'hosted_redirect',
@@ -422,8 +446,8 @@ describe('assistant access components', () => {
     expect(screen.getByRole('button', { name: 'Enter an amount' }).hasAttribute('disabled')).toBe(true)
     expect(begin).not.toHaveBeenCalled()
 
-    fireEvent.change(screen.getByLabelText(/credit to add/i), { target: { value: '10.00' } })
-    expect(screen.getByText('A$10.00')).toBeTruthy()
+    fireEvent.change(screen.getByLabelText(/other amount/i), { target: { value: '10.00' } })
+    expect(screen.getAllByText('A$10.00').length).toBeGreaterThan(0)
     expect(screen.getByText('A$0.55')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: /pay A\$10\.55 and add A\$10\.00/i }))
 
@@ -446,7 +470,7 @@ describe('assistant access components', () => {
     render(<AeAccountFundingPanel port={{ begin, read }} constraints={fundingConstraints} redirectToCheckout={redirectToCheckout} />)
     fireEvent.click(await screen.findByRole('button', { name: 'Add more credit' }))
     expect(window.sessionStorage.getItem('ae.account-funding.recovery.v1')).toBeNull()
-    fireEvent.change(screen.getByLabelText(/credit to add/i), { target: { value: '5.00' } })
+    fireEvent.change(screen.getByLabelText(/other amount/i), { target: { value: '5.00' } })
     fireEvent.click(screen.getByRole('button', { name: /pay A\$5\.28 and add A\$5\.00/i }))
     await waitFor(() => expect(begin).toHaveBeenCalledTimes(2))
     expect(begin.mock.calls[1]?.[0]?.idempotencyKey).not.toBe(firstKey)
@@ -469,7 +493,7 @@ describe('assistant access components', () => {
     const redirectToCheckout = vi.fn(() => { throw new Error('popup blocked') })
     render(<AeAccountFundingPanel port={{ begin, read: vi.fn() }} constraints={fundingConstraints} redirectToCheckout={redirectToCheckout} />)
 
-    fireEvent.change(screen.getByLabelText(/credit to add/i), { target: { value: '10.00' } })
+    fireEvent.change(screen.getByLabelText(/other amount/i), { target: { value: '10.00' } })
     fireEvent.click(screen.getByRole('button', { name: /pay A\$10\.55 and add A\$10\.00/i }))
 
     expect(await screen.findByText(/This payment attempt is preserved/u)).toBeTruthy()
@@ -536,7 +560,7 @@ describe('assistant access components', () => {
       port={{ begin: vi.fn(), read: vi.fn() }}
       constraints={{ ...fundingConstraints, serviceFeeBps: 100 }}
     />)
-    fireEvent.change(screen.getByLabelText(/credit to add/i), { target: { value: '10.00' } })
+    fireEvent.change(screen.getByLabelText(/other amount/i), { target: { value: '10.00' } })
     expect(screen.getByRole('button', { name: /pay A\$10\.11 and add A\$10\.00/i })).toBeTruthy()
   })
 
@@ -552,7 +576,7 @@ describe('assistant access components', () => {
     const port: AccountFundingPort = { begin, read }
     render(<AeAccountFundingPanel port={port} constraints={fundingConstraints} />)
 
-    fireEvent.change(screen.getByLabelText(/credit to add/i), { target: { value: '10.00' } })
+    fireEvent.change(screen.getByLabelText(/other amount/i), { target: { value: '10.00' } })
     fireEvent.click(screen.getByRole('button', { name: /pay A\$10\.55 and add A\$10\.00/i }))
 
     expect(await screen.findByText(/do not start another payment/i)).toBeTruthy()
@@ -574,7 +598,7 @@ describe('assistant access components', () => {
     render(
       <AeAccountFundingPanel port={{ begin, read }} constraints={fundingConstraints} />
     )
-    fireEvent.change(screen.getByLabelText(/credit to add/i), { target: { value: '10.00' } })
+    fireEvent.change(screen.getByLabelText(/other amount/i), { target: { value: '10.00' } })
     fireEvent.click(screen.getByRole('button', { name: /pay A\$10\.55 and add A\$10\.00/i }))
 
     expect(begin).toHaveBeenCalledOnce()
@@ -596,14 +620,16 @@ describe('assistant access components', () => {
         onDecideApproval={() => undefined}
       />,
     )
-    expect(screen.getByRole('heading', { name: 'Credit' })).toBeTruthy()
-    expect(screen.getByRole('link', { name: 'Open Credit' })).toBeTruthy()
+    expect(screen.queryByRole('heading', { name: 'Credit' })).toBeNull()
+    expect(screen.queryByRole('link', { name: 'Open Credit' })).toBeNull()
     expect(screen.queryByText('Rotate, replace, or recover a key')).toBeNull()
     expect(screen.queryByText('Provider reauthorization required')).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'View UI assistant' }))
     expect(screen.queryByText(/USD 12\.5/u)).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Activity' }))
     expect(screen.getByText(/AUD 5\.005/u)).toBeTruthy()
     expect(screen.queryByText('Balance')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Spending policy' }))
     expect(screen.getAllByText('Browse only').length).toBeGreaterThan(0)
     expect(screen.getAllByText('Sandbox').length).toBeGreaterThan(0)
     expect(screen.getByText('30/min · 300/hour')).toBeTruthy()
@@ -646,6 +672,7 @@ describe('assistant access components', () => {
       />,
     )
     fireEvent.click(screen.getByRole('button', { name: 'View UI assistant' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Activity' }))
     expect(screen.getByText('Calls this month').nextElementSibling?.textContent).toBe('0')
     expect(screen.getAllByText('AUD 0.000000').length).toBeGreaterThan(0)
     expect(screen.getByText('No usage yet')).toBeTruthy()

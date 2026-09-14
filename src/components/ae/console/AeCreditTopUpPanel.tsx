@@ -11,6 +11,7 @@ import {
   formatDisplayAmount,
   isMoneyRefusal,
   quoteAudAccountFunding,
+  type AudFundingPolicy,
   type CreditPaymentSession,
   type MoneyRefusal,
 } from '@/modules/money/public'
@@ -158,6 +159,11 @@ export function AeAccountFundingPanel({
       ? undefined
       : quoteAudAccountFunding(units, policy)
   }, [amountText, policy])
+  const suggestedPrincipalUnits = useMemo(
+    () => policy === undefined ? [] : fundingSuggestionUnits(policy),
+    [policy],
+  )
+  const selectedPrincipalUnits = canonicalAudUnits(amountText)
 
   const readCanonicalPayment = useCallback(async (locator: RecoveryLocator) => {
     if (port === undefined) return
@@ -330,7 +336,36 @@ export function AeAccountFundingPanel({
         ) : null}
         {session === undefined && recovery === undefined && port !== undefined && constraints?.kind === 'available' ? (
           <div className="grid gap-2">
-            <Label htmlFor="account-funding-amount">Credit to add (AUD)</Label>
+            {suggestedPrincipalUnits.length > 0 ? (
+              <fieldset className="grid gap-2">
+                <legend className="text-sm font-medium">Choose a credit amount</legend>
+                <div className="flex flex-wrap gap-2">
+                  {suggestedPrincipalUnits.map((units) => {
+                    const selected = selectedPrincipalUnits === units
+                    return (
+                      <Button
+                        key={units.toString()}
+                        type="button"
+                        size="sm"
+                        variant={selected ? 'secondary' : 'outline'}
+                        aria-pressed={selected}
+                        disabled={pending || checking}
+                        onClick={() => {
+                          dispatch({
+                            type: 'amount_changed',
+                            amountText: audInputTextFromUnits(units),
+                            valid: true,
+                          })
+                        }}
+                      >
+                        {formatAudUnits(units)}
+                      </Button>
+                    )
+                  })}
+                </div>
+              </fieldset>
+            ) : null}
+            <Label htmlFor="account-funding-amount">Other amount (AUD)</Label>
             <Input
               id="account-funding-amount"
               inputMode="decimal"
@@ -434,6 +469,31 @@ function formatAudUnits(units: bigint): string {
 
 function formatAudAmountString(units: string): string {
   return formatDisplayAmount({ currency: 'AUD', units, exponent: AUD_EXPONENT })
+}
+
+function fundingSuggestionUnits(policy: AudFundingPolicy): readonly bigint[] {
+  if (policy.minimumPrincipalUnits <= 0n || policy.maximumPrincipalUnits <= 0n || policy.incrementUnits <= 0n) return []
+  const alignUp = (units: bigint) => ((units + policy.incrementUnits - 1n) / policy.incrementUnits) * policy.incrementUnits
+  const alignDown = (units: bigint) => (units / policy.incrementUnits) * policy.incrementUnits
+  const minimum = alignUp(policy.minimumPrincipalUnits)
+  const maximum = alignDown(policy.maximumPrincipalUnits)
+  if (minimum > maximum) return []
+
+  const preferred = [minimum, alignUp(minimum * 2n), alignUp(minimum * 5n)]
+  const fallbacks = [maximum, alignDown(minimum + ((maximum - minimum) / 2n))]
+  const valid = [...preferred, ...fallbacks]
+    .filter((units, index, values) => values.indexOf(units) === index)
+    .filter((units) => quoteAudAccountFunding(units, policy) !== undefined)
+    .slice(0, 3)
+
+  return Object.freeze([...valid].sort((left, right) => left < right ? -1 : left > right ? 1 : 0))
+}
+
+function audInputTextFromUnits(units: bigint): string {
+  const scale = 10n ** BigInt(AUD_EXPONENT)
+  const whole = units / scale
+  const fraction = (units % scale).toString().padStart(AUD_EXPONENT, '0').replace(/0+$/u, '')
+  return fraction.length === 0 ? whole.toString() : `${whole}.${fraction}`
 }
 
 function randomId(): string {
