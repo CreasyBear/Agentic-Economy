@@ -44,12 +44,14 @@ export type AeRecordTableRowAction<TData> =
   | Readonly<{
       kind: 'link'
       label: string
+      getLabel?: (row: TData) => string
       getHref: (row: TData) => string
       getAccessibleLabel: (row: TData) => string
     }>
   | Readonly<{
       kind: 'button'
       label: string
+      getLabel?: (row: TData) => string
       onOpen: (row: TData) => void
       getAccessibleLabel: (row: TData) => string
     }>
@@ -401,6 +403,7 @@ function RecordTableAction<TData>({
   action: AeRecordTableRowAction<TData>
 }) {
   const accessibleLabel = action.getAccessibleLabel(row.original)
+  const label = action.getLabel?.(row.original) ?? action.label
   const control =
     action.kind === 'link' ? (
       <Button
@@ -411,7 +414,7 @@ function RecordTableAction<TData>({
         data-ae-row-action-id={row.id}
       >
         <Link to={action.getHref(row.original)} aria-label={accessibleLabel}>
-          {action.label}
+          {label}
         </Link>
       </Button>
     ) : (
@@ -424,7 +427,7 @@ function RecordTableAction<TData>({
         data-ae-row-action-id={row.id}
         onClick={() => action.onOpen(row.original)}
       >
-        {action.label}
+        {label}
       </Button>
     )
 

@@ -1,6 +1,5 @@
 import { Link } from '@tanstack/react-router'
 import type { ColumnDef, OnChangeFn, SortingState } from '@tanstack/react-table'
-import { BotIcon, Link2Icon } from 'lucide-react'
 import { useEffect, useMemo, useRef } from 'react'
 
 import { AeEmptyState } from '@/components/ae/feedback/AeEmptyState'
@@ -112,7 +111,7 @@ export function AeOwnerOfferingsList({
     {
       id: 'status',
       accessorFn: (item) => item.lifecycleLabel ?? statusLabel(item.status),
-      header: ({ column }) => <AeOperatorSortableHeader label="Lifecycle" column={column} />,
+      header: ({ column }) => <AeOperatorSortableHeader label="Status" column={column} />,
       cell: ({ row }) => (
         <div className="grid gap-1">
           <Badge variant="outline">
@@ -121,46 +120,16 @@ export function AeOwnerOfferingsList({
           {row.original.availability === undefined ? null : (
             <span className="text-xs text-muted-foreground">{availabilityLabel(row.original.availability)}</span>
           )}
+          {row.original.support === undefined ? null : (
+            <span className="text-xs text-muted-foreground">
+              {row.original.support.routeable ? 'Ready now' : 'Not ready'}
+            </span>
+          )}
+          {row.original.blocker === undefined ? null : (
+            <span className="text-xs text-muted-foreground">{row.original.blocker}</span>
+          )}
         </div>
       ),
-    },
-    {
-      id: 'blocker',
-      accessorFn: (item) => item.blocker ?? '',
-      header: 'Blocker',
-      cell: ({ row }) => <span className="text-xs text-muted-foreground">{row.original.blocker ?? '—'}</span>,
-    },
-    {
-      id: 'continuation',
-      header: 'Next action',
-      cell: ({ row }) => row.original.continuation === undefined ? null : (
-        <Button asChild size="sm" variant="secondary" className="min-h-touch w-full whitespace-normal sm:w-auto">
-          <a href={row.original.continuation.href}>{row.original.continuation.label}</a>
-        </Button>
-      ),
-    },
-    {
-      id: 'routes',
-      accessorFn: (item) => item.accessPathCount,
-      header: 'Access',
-      cell: ({ row }) => (
-        <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-          <Link2Icon className="size-3.5" aria-hidden="true" />
-          {row.original.accessPathCount === 0
-            ? 'No access route'
-            : `${row.original.accessPathCount} ${row.original.accessPathCount === 1 ? 'route' : 'routes'}`}
-        </span>
-      ),
-    },
-    {
-      id: 'ready',
-      accessorFn: (item) => item.support?.routeable === true,
-      header: 'Readiness',
-      cell: ({ row }) => row.original.support?.routeable === true ? (
-        <span className="inline-flex items-center gap-1.5 text-xs">
-          <BotIcon className="size-3.5" aria-hidden="true" /> Ready now
-        </span>
-      ) : <span className="text-xs text-muted-foreground">—</span>,
     },
   ], [])
 
@@ -216,10 +185,10 @@ export function AeOwnerOfferingsList({
                       <div className="grid gap-1">
                         <h3 className="break-words font-semibold">{item.offering.name}</h3>
                         <p className="text-sm text-muted-foreground">
-                          {item.lifecyclePending ? 'Loading lifecycle' : item.lifecycleLabel} / {item.availability === undefined ? 'Availability unknown' : availabilityLabel(item.availability)}
+                          {item.lifecyclePending ? 'Loading lifecycle' : item.lifecycleLabel} · {item.availability === undefined ? 'Availability unknown' : availabilityLabel(item.availability)}
                         </p>
+                        {item.blocker === undefined ? null : <p className="text-sm text-muted-foreground">{item.blocker}</p>}
                       </div>
-                      <p className="text-sm text-muted-foreground">{item.blocker ?? 'No blocker'}</p>
                       <Button asChild variant="secondary" className="min-h-touch w-full whitespace-normal">
                         <a
                           href={action.href}
@@ -238,13 +207,14 @@ export function AeOwnerOfferingsList({
           } : {})}
           rowAction={{
             kind: 'link',
-            label: 'Open',
+            label: 'Next action',
+            getLabel: (item) => item.continuation?.label ?? 'Open Tool',
             // Well 8 Lane C: prefer the slug-resolved continuation href when
             // this row came through the provider workspace projection - it
             // is more precise than reconstructing one from offeringRef alone
             // (which the route still accepts for pre-publish Tools).
             getHref: (item) => item.continuation?.href ?? `/owner/operations/${encodeURIComponent(item.offering.offeringRef)}`,
-            getAccessibleLabel: (item) => `Open ${item.offering.name}`,
+            getAccessibleLabel: (item) => `${item.continuation?.label ?? 'Open Tool'} for ${item.offering.name}`,
           }}
         />
       )}
@@ -265,8 +235,5 @@ function availabilityLabel(value: 'available' | 'unavailable' | 'unknown'): stri
 function compactSortValue(item: OwnerOfferingSummary, id: string): string {
   if (id === 'name') return item.offering.name
   if (id === 'status') return item.lifecycleLabel ?? statusLabel(item.status)
-  if (id === 'blocker') return item.blocker ?? ''
-  if (id === 'routes') return String(item.accessPathCount)
-  if (id === 'ready') return String(item.support?.routeable === true)
   return item.offering.name
 }
