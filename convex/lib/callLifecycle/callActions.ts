@@ -359,6 +359,7 @@ async function abandonFinancialReservation(
     kind: 'refused',
     code: 'commercial_policy_unavailable',
     retryable,
+    nextAction: 'Request a new Quote for this Tool to check current funds and spending limits. Contact AE support if the purchase remains unavailable.',
   }
 }
 

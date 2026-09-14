@@ -90,9 +90,44 @@ cases; all were repaired and the final source remedy cleared review. Focused lin
 and diff checks passed. Hosted credential-provider behavior remains
 unverified by these source tests.
 
-## Remaining boundary
+## Funding refusal and continuation
 
-AM-20 still needs complete attribution of its other funding/policy refusal and
-safe-continuation obligations before whole-row source closure. The treasury and
-rotation proofs do not establish hosted acceptance or close AM-06's full access
-and history obligations. Preserve that distinction in the release register.
+Two valid Quotes may outlive the funds available when they were issued. The
+registered-action/real-ledger test gives the buyer AUD1.20 and issues two Quotes.
+The first Call reserves that credit. The second is refused, leaves only the
+first Call in storage, and admits no paid effect. This reproduced a missing
+`nextAction` on the definite financial refusal. The existing abandonment boundary
+now directs the buyer to request a fresh Quote for current funding/allowance
+guidance, with AE support as the fallback. Unknown reservation outcomes continue
+through existing reconciliation and do not receive this refusal instruction.
+
+The fresh Quote returns `insufficient_balance` with a deterministic
+`funding.handoff.create` continuation. The fixture uses the existing funding
+calculator and ledger settlement workflow to credit that amount once, proves
+funding replay does not credit twice, obtains a new Quote, and completes admission
+of the second Call. Cancelling both Calls and draining Workpool returns the
+original credit plus the top-up, with no signature or paid Provider request.
+Stripe Checkout and its webhook verification remain outside this fixture.
+
+The Quote projector also previously told buyers to change an internal deployment
+profile or invoke an internal commercial-policy admin function. `14112aa8c`
+reuses the existing support action while preserving the diagnostic reason and
+30-second Quote recheck. Its 27 continuation tests pass. The funded regression,
+existing Quote tests and reservation tests pass together: 43 tests across three
+files. Cold review of both repairs found no remaining defect; focused lint and
+diff checks passed.
+
+## Remaining source acceptance
+
+| Obligation | Evidence and next required proof |
+| --- | --- |
+| Funds change after Quote; definite refusal has safe continuation | Real ledger/registered actions prove refusal, fresh funding guidance, once-only top-up and subsequent admission. Hosted funding handoff is separate. |
+| Treasury contention; no partial capacity or paid effect | Real ledger concurrent Calls, reference readback, retry and cancellation proof above. |
+| Credential replacement preserves shared capacity and authority | Registered replacement plus funded allowance proof above. |
+| Per-Call allowance and period/account refusal reasons | `capability-quotes.test.ts` covers per-Call refusal; rotation covers exhaustion of the existing Agent allowance. Add explicit legal-account exposure and changed-policy-after-Quote acceptance before whole-row closure. |
+| Advertised daily and monthly limits | Buyer Quote preparation currently loads `maximumMonthlySpend` into a generation-based allowance (`convex/capabilityQuotes.ts`, `prepareFinancialSubjectsHandler`). The exposed policy includes a separate daily limit. A distinct daily limit and calendar-period rollover are not established by the current evidence; reproduce and design their enforcement before claiming policy acceptance. |
+| Concurrency and rate policy | Existing reservation tests cover no insertion on rate refusal and pending/uncertain Call counting for concurrency. Native limiter is mocked there; broader runtime limits remain unproven by that test alone. |
+
+AM-20 remains source-partial. These proofs do not establish hosted acceptance or
+close AM-06's full access/history obligations. Preserve that distinction in the
+release register.

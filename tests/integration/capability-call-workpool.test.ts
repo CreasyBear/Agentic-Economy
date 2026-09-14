@@ -60,6 +60,8 @@ import {
 } from '@/modules/agent-access/policy'
 import {
   COMMERCIAL_POLICY_FAMILIES,
+  audFundingPolicyFromCommercialControls,
+  quoteAudAccountFunding,
 } from '@/modules/money/public'
 import { PRODUCTION_COMMERCIAL_POLICY_CONTROLS } from '../helpers/commercial-policy-fixtures'
 import { defaultDnsResolver } from '@/modules/network-guard/public'
@@ -680,6 +682,7 @@ async function registerRotatingBuyer(backend: ConvexFixtureBackend) {
 
 async function prepareFundedSandboxBuyer(options: {
   treasuryTotalUnits?: string; maximumConcurrentCalls?: number
+  accountPrincipalUnits?: string
   buyerSetup?: (backend: ConvexFixtureBackend) => Promise<{ principal: TestPrincipal; grantRef: string }>
 } = {}) {
   const gatewayUrl = process.env.AE_FORMANCE_GATEWAY_URL ?? 'http://127.0.0.1:3069'
@@ -812,18 +815,84 @@ async function prepareFundedSandboxBuyer(options: {
     totalUnits: options.treasuryTotalUnits ?? '10000000', bufferUnits: '1000000', evidenceRef: 'cdp:buyer-journey:treasury',
     evidenceDigest: canonicalDigest({ treasury: 'buyer-journey' }), observedAt: Date.now(),
   })).toMatchObject({ kind: 'accepted' })
+  const principalUnits = options.accountPrincipalUnits ?? '10000000'
   const funding = await bookFormanceFundingSettlement(formance, {
     commandRef: 'buyer-journey:funding', idempotencyKey: 'buyer-journey:funding', accountRef: buyer.principal.ownerId,
-    processorRef: 'stripe:sandbox:buyer-journey', principalUnits: '10000000', serviceFeeUnits: '500000', taxUnits: '50000', totalUnits: '10550000',
+    processorRef: 'stripe:sandbox:buyer-journey', principalUnits, serviceFeeUnits: '500000', taxUnits: '50000', totalUnits: (BigInt(principalUnits) + 550000n).toString(),
     policyDigest, externalEvidenceDigest: canonicalDigest({ funding: 'verified sandbox fixture' }),
   })
   expect(funding, JSON.stringify(funding)).toMatchObject({ kind: 'completed', replayed: false })
   const readBalance = async () => await readFormanceDisplayBalance(formance, { balanceKind: 'account_aud', subjectRef: buyer.principal.ownerId, now: Date.now() })
-  expect(await readBalance()).toMatchObject({ kind: 'available', units: '10000000' })
+  expect(await readBalance()).toMatchObject({ kind: 'available', units: principalUnits })
   return { gatewayUrl, formance, backend, published, buyer, resource, payer, signedAuthorizations, readBalance }
 }
 
 describe('capability Call Workpool lifecycle', () => {
+  it.runIf(process.env.AE_FORMANCE_INTEGRATION === 'true')('refuses a quoted purchase after funds are reserved and permits continuation only after funding', async () => {
+    const { backend, formance, published, buyer, readBalance, signedAuthorizations } = await prepareFundedSandboxBuyer({
+      accountPrincipalUnits: '1200000', maximumConcurrentCalls: 2,
+    })
+    await backend.run(async ctx => await ctx.runMutation(components.workpool.config.update, { maxParallelism: 0 }))
+    const quote = async (key: string) => await backend.action(api.capabilityQuotes.quote, await withSourceWrite('protected_action', {
+      operationKey: key, correlationId: key, principal: { ...buyer.principal, scopes: [...buyer.principal.scopes] },
+      toolRef: published.toolRef, input: INPUT,
+    }))
+    for (const key of ['funds-first', 'funds-second']) {
+      const result = await quote(key)
+      if (result.kind !== 'committed') throw new Error('funds_quote_missing')
+      quoteByCallKey.set(`${buyer.principal.credentialId}:${key}`, result.quoteRef)
+    }
+    const first = await invokeCall(backend, buyer.principal, published.toolRef, 'funds-first', 'funds-first')
+    if (first.kind !== 'pending') throw new Error('funds_first_call_missing')
+    expect(await readBalance()).toMatchObject({ kind: 'available', units: '0' })
+    const refused = await invokeCall(backend, buyer.principal, published.toolRef, 'funds-second', 'funds-second')
+    expect(refused).toMatchObject({
+      kind: 'refused', code: 'commercial_policy_unavailable', retryable: false,
+      nextAction: 'Request a new Quote for this Tool to check current funds and spending limits. Contact AE support if the purchase remains unavailable.',
+    })
+    expect(await backend.run(async ctx => await ctx.db.query('capabilityCalls').collect())).toHaveLength(1)
+    const shortfall = await quote('funds-refresh')
+    expect(shortfall).toMatchObject({ kind: 'refused', code: 'insufficient_balance', retryable: false })
+    if (shortfall.kind !== 'refused' || shortfall.continuation?.action !== 'funding.handoff.create') throw new Error('funds_handoff_missing')
+    const replayedShortfall = await quote('funds-refresh-repeat')
+    if (replayedShortfall.kind !== 'refused') throw new Error('funds_handoff_replay_missing')
+    expect(replayedShortfall.continuation).toEqual(shortfall.continuation)
+    const amount = shortfall.continuation.input.principalAmount
+    expect(amount).toMatchObject({ currency: 'AUD', exponent: 6 })
+    const fundingQuote = quoteAudAccountFunding(BigInt(amount.units), audFundingPolicyFromCommercialControls(PRODUCTION_COMMERCIAL_POLICY_CONTROLS))
+    if (fundingQuote === undefined) throw new Error('funds_topup_quote_invalid')
+    // Verified funding settlement enters through the existing ledger workflow;
+    // Stripe Checkout itself is outside this source integration fixture.
+    const funding = {
+      commandRef: 'funds-topup', idempotencyKey: shortfall.continuation.input.idempotencyKey,
+      accountRef: buyer.principal.ownerId, processorRef: 'stripe:sandbox:funds-topup',
+      principalUnits: amount.units, serviceFeeUnits: fundingQuote.serviceFeeUnits.toString(),
+      taxUnits: fundingQuote.taxUnits.toString(), totalUnits: fundingQuote.totalUnits.toString(),
+      policyDigest: canonicalDigest({ fixture: 'funds-topup' }), externalEvidenceDigest: canonicalDigest({ funding: 'verified sandbox topup' }),
+    }
+    const funded = await bookFormanceFundingSettlement(formance, funding)
+    expect(funded, JSON.stringify(funded)).toMatchObject({ kind: 'completed', replayed: false })
+    expect(await bookFormanceFundingSettlement(formance, funding)).toMatchObject({ kind: 'completed', replayed: true })
+    const refreshed = await quote('funds-after-topup')
+    if (refreshed.kind !== 'committed') throw new Error('funds_refreshed_quote_missing')
+    quoteByCallKey.set(`${buyer.principal.credentialId}:funds-second`, refreshed.quoteRef)
+    const second = await invokeCall(backend, buyer.principal, published.toolRef, 'funds-second', 'funds-second')
+    expect(second).toMatchObject({ kind: 'pending' })
+    if (second.kind !== 'pending') throw new Error('funds_second_call_missing')
+    for (const [index, callRef] of [first.callRef, second.callRef].entries()) {
+      const key = `funds-cancel-${index}`
+      expect(await backend.action(api.capabilityCalls.cancelCall, {
+        ...await recoveryActionArgs(buyer.principal, callRef, key, `cancel:${key}`), idempotencyKey: key,
+      })).toMatchObject({ kind: 'found', state: 'cancelled', callRef })
+    }
+    await backend.finishAllScheduledFunctions(() => vi.advanceTimersByTime(1))
+    await backend.run(async ctx => await ctx.runMutation(components.workpool.config.update, { maxParallelism: 1 }))
+    await backend.finishAllScheduledFunctions(() => vi.advanceTimersByTime(1))
+    expect(await readBalance()).toMatchObject({ kind: 'available', units: (1200000n + BigInt(amount.units)).toString() })
+    expect(signedAuthorizations).toHaveLength(0)
+    expect(providerFetch.mock.calls.filter(([, init]) => new Headers(init?.headers as HeadersInit).has('payment-signature'))).toHaveLength(0)
+  })
+
   it.runIf(process.env.AE_FORMANCE_INTEGRATION === 'true')('retains one funded Agent allowance through registered credential replacement and concurrent old/new requests', async () => {
     let registered: Awaited<ReturnType<typeof registerRotatingBuyer>> | undefined
     const { backend, formance, published, buyer, readBalance, signedAuthorizations } = await prepareFundedSandboxBuyer({
