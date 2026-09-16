@@ -6,12 +6,20 @@ import type { ComponentType, ReactNode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import '../../setup/jsdom-platform'
 
-const routeState = vi.hoisted(() => ({ component: undefined as ComponentType | undefined }))
+const routeState = vi.hoisted(() => ({
+  component: undefined as ComponentType | undefined,
+  search: {} as { callRef?: string },
+}))
 
 vi.mock('@tanstack/react-router', () => ({
   createFileRoute: () => (options: { component: ComponentType }) => {
     routeState.component = options.component
-    return { ...options, options, useLoaderData: () => 'https://ae.example' }
+    return {
+      ...options,
+      options,
+      useLoaderData: () => 'https://ae.example',
+      useSearch: () => routeState.search,
+    }
   },
   Link: ({
     children,
@@ -73,9 +81,28 @@ describe('/support', () => {
     expect(screen.getByText('ae doctor --base-url "https://ae.example"')).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Review agent setup' }).getAttribute('href')).toBe('/for-agents')
   })
+
+  it('renders without callRef: plain support email and no reference banner', () => {
+    renderRoute()
+    expect(screen.getByRole('link', { name: 'Email support' }).getAttribute('href')).toBe('mailto:support@aecon.ai')
+    expect(screen.queryByText(/Referenced Call:/)).toBeNull()
+  })
+
+  it('renders with callRef: shows reference banner and prefilled support email', () => {
+    const callRef = 'call_abc123'
+    renderRoute({ callRef })
+    expect(screen.getByText(`Referenced Call: ${callRef}`)).toBeTruthy()
+    const href = screen.getByRole('link', { name: 'Email support' }).getAttribute('href')
+    expect(href).toContain('mailto:support@aecon.ai?')
+    expect(href).toContain(`subject=Help%20with%20Call%20${encodeURIComponent(callRef)}`)
+    expect(href).toContain(
+      `body=I%20need%20help%20with%20Call%20reference%3A%20${encodeURIComponent(callRef)}%0A%0AWhat%20happened%3A%0A`,
+    )
+  })
 })
 
-function renderRoute() {
+function renderRoute(search: { callRef?: string } = {}) {
+  routeState.search = search
   const Component = routeState.component
   if (Component === undefined) throw new Error('Support route component was not captured.')
   render(<Component />)

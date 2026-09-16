@@ -1,8 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { ActionCtx } from '../../../convex/_generated/server'
-import type { RouteTransportInvocation } from '@/modules/capability-supply/route-transport-runtime'
-import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
   invokeProviderConsequenceViaVercel,
   providerConsequenceX402PaymentCustodyAvailable,
@@ -12,6 +10,9 @@ import {
   providerConsequenceTicketClaimsDigest,
   type CanonicalProviderConsequenceTicket,
 } from '@/modules/capability-execution/provider-consequence-runtime'
+import {
+  createTestProviderInvocation,
+} from '../../helpers/route-transport-fixtures'
 
 vi.mock('@/modules/network-guard/server', () => ({
   sendGuardedHttpRequest: async (request: Request) => await fetch(request.url, {
@@ -33,54 +34,9 @@ const PAYMENT_SECRET_REF = `sec_${'6'.repeat(32)}`
 const GENERATION = `sgn_${'2'.repeat(32)}`
 const CANONICAL_CONNECTION_REF = `con_${'3'.repeat(32)}`
 
-type ProviderInvocation = Extract<
-  RouteTransportInvocation,
-  Readonly<{ binding: Readonly<{ authority: Readonly<{ kind: 'provider_connection' }> }> }>
->
-
-function invocation(): ProviderInvocation {
-  const config = {
-    method: 'POST' as const,
-    requestTimeoutMs: 5_000,
-    credential: { kind: 'bearer' as const },
-  }
-  return {
-    binding: {
-      adapterId: 'http-json:v1',
-      endpointUrl: 'https://provider.example/run',
-      authority: {
-        kind: 'provider_connection',
-        connectionRef: 'connection:test',
-        providerRef: 'provider:test',
-      },
-      configJson: JSON.stringify(config),
-      configDigest: canonicalDigest(config),
-    },
-    authority: {
-      attemptRef: 'attempt:test',
-      effectGeneration: 4,
-      operationKeyDigest: DIGEST('3'),
-      mandateDigest: DIGEST('4'),
-      grantDigest: DIGEST('5'),
-      capabilityContractDigest: DIGEST('6'),
-      maximumSpend: { currency: 'USD', units: '0', exponent: 2 },
-      expiresAt: NOW + 20_000,
-      callIdentity: { keyId: 'route-calls:test', signature: 'hmac-sha256:test' },
-      authorityGeneration: 7,
-      authorityDigest: DIGEST('7'),
-      leaseRef: 'lease:test',
-      callRef: 'call:test',
-      toolRef: 'tool:test',
-      grantedScopes: ['provider:invoke'],
-      grantedResources: ['tool:test'],
-      readinessValidUntil: NOW + 15_000,
-      readinessDigest: DIGEST('8'),
-    },
-    inputJson: JSON.stringify({ destination: 'PER' }),
-  }
-}
-
-function ticket(routeInvocation = invocation()): CanonicalProviderConsequenceTicket {
+function ticket(
+  routeInvocation = createTestProviderInvocation({ now: NOW }),
+): CanonicalProviderConsequenceTicket {
   const invocationDigest = providerConsequenceInvocationDigest(routeInvocation)
   if (invocationDigest === undefined) throw new Error('test_fixture_invalid')
   return {
@@ -123,7 +79,7 @@ function ticket(routeInvocation = invocation()): CanonicalProviderConsequenceTic
   }
 }
 
-function issued(routeInvocation = invocation()) {
+function issued(routeInvocation = createTestProviderInvocation({ now: NOW })) {
   const canonicalTicket = ticket(routeInvocation)
   return {
     kind: 'issued' as const,
@@ -176,7 +132,7 @@ describe('provider consequence Convex-to-Vercel bridge', () => {
   })
 
   it('journals the exact admitted authority and sends the one-time token only to Vercel', async () => {
-    const routeInvocation = invocation()
+    const routeInvocation = createTestProviderInvocation({ now: NOW, effectGeneration: 4 })
     const issue = issued(routeInvocation)
     const ctx = context(issue)
     let fetchCount = 0
@@ -233,7 +189,7 @@ describe('provider consequence Convex-to-Vercel bridge', () => {
     vi.stubGlobal('fetch', fetchMock)
 
     const result = await invokeProviderConsequenceViaVercel(context(issued()), {
-      invocation: invocation(),
+      invocation: createTestProviderInvocation({ now: NOW }),
       requestDigest: DIGEST('a'),
     })
 
@@ -248,7 +204,7 @@ describe('provider consequence Convex-to-Vercel bridge', () => {
   })
 
   it('binds provider-direct x402 to a distinct payment pointer and fails before journal or transport when absent', async () => {
-    const routeInvocation = invocation()
+    const routeInvocation = createTestProviderInvocation({ now: NOW })
     ;(routeInvocation.binding as { adapterId: string }).adapterId = 'x402-fetch:v2'
     const issue = issued(routeInvocation)
     let fetchCount = 0
@@ -303,7 +259,7 @@ describe('provider consequence Convex-to-Vercel bridge', () => {
     vi.stubGlobal('fetch', fetchMock)
 
     await expect(invokeProviderConsequenceViaVercel(context(issued()), {
-      invocation: invocation(),
+      invocation: createTestProviderInvocation({ now: NOW }),
       requestDigest: DIGEST('a'),
     })).resolves.toEqual({
       transport: 'http',
@@ -321,7 +277,7 @@ describe('provider consequence Convex-to-Vercel bridge', () => {
     const started = await invokeProviderConsequenceViaVercel(context({
       kind: 'started',
       ticketRef: 'provider-ticket:test',
-    }), { invocation: invocation(), requestDigest: DIGEST('a') })
+    }), { invocation: createTestProviderInvocation({ now: NOW }), requestDigest: DIGEST('a') })
     const completed = await invokeProviderConsequenceViaVercel(context({
       kind: 'completed',
       ticketRef: 'provider-ticket:test',
@@ -332,7 +288,7 @@ describe('provider consequence Convex-to-Vercel bridge', () => {
         requestDigest: DIGEST('a'),
         outputJson: '{}',
       }),
-    }), { invocation: invocation(), requestDigest: DIGEST('a') })
+    }), { invocation: createTestProviderInvocation({ now: NOW }), requestDigest: DIGEST('a') })
 
     expect(started).toMatchObject({
       disposition: 'unknown',
@@ -346,7 +302,7 @@ describe('provider consequence Convex-to-Vercel bridge', () => {
   it('fails closed before release for incomplete authority, bad configuration, and journal errors', async () => {
     const fetchMock = vi.fn<typeof globalThis.fetch>()
     vi.stubGlobal('fetch', fetchMock)
-    const missingLease = invocation()
+    const missingLease = createTestProviderInvocation({ now: NOW })
     delete (missingLease.authority as { leaseRef?: string }).leaseRef
     const incompleteCtx = context(issued())
     await expect(invokeProviderConsequenceViaVercel(incompleteCtx, {
@@ -358,7 +314,7 @@ describe('provider consequence Convex-to-Vercel bridge', () => {
     process.env.AE_PROVIDER_CONSEQUENCE_ORIGIN = 'http://localhost:3000'
     const unavailableCtx = context(issued())
     await expect(invokeProviderConsequenceViaVercel(unavailableCtx, {
-      invocation: invocation(),
+      invocation: createTestProviderInvocation({ now: NOW }),
       requestDigest: DIGEST('a'),
     })).resolves.toMatchObject({
       disposition: 'refused',
@@ -372,7 +328,7 @@ describe('provider consequence Convex-to-Vercel bridge', () => {
       runMutation: vi.fn(async () => { throw new Error('journal_down') }),
     } as unknown as ActionCtx
     await expect(invokeProviderConsequenceViaVercel(journalFailure, {
-      invocation: invocation(),
+      invocation: createTestProviderInvocation({ now: NOW }),
       requestDigest: DIGEST('a'),
     })).resolves.toMatchObject({
       disposition: 'refused',
@@ -387,7 +343,7 @@ describe('provider consequence Convex-to-Vercel bridge', () => {
     vi.stubGlobal('fetch', fetchMock)
 
     for (const adapterId of ['mcp-jsonrpc:v1', 'x402-fetch:v2']) {
-      const candidate = invocation()
+      const candidate = createTestProviderInvocation({ now: NOW })
       ;(candidate.binding as { adapterId: string }).adapterId = adapterId
       delete (candidate.authority as { leaseRef?: string }).leaseRef
       await expect(invokeProviderConsequenceViaVercel(context(issued()), {
@@ -399,7 +355,7 @@ describe('provider consequence Convex-to-Vercel bridge', () => {
       })
     }
 
-    const keyless = invocation()
+    const keyless = createTestProviderInvocation({ now: NOW })
     ;(keyless.binding as unknown as { authority: { kind: 'keyless' } }).authority = { kind: 'keyless' }
     await expect(invokeProviderConsequenceViaVercel(context(issued()), {
       invocation: keyless,
@@ -410,7 +366,7 @@ describe('provider consequence Convex-to-Vercel bridge', () => {
       'leaseRef', 'callRef', 'toolRef', 'attemptRef', 'effectGeneration',
       'operationKeyDigest', 'grantedScopes', 'grantedResources', 'readinessValidUntil',
     ] as const) {
-      const candidate = invocation()
+      const candidate = createTestProviderInvocation({ now: NOW })
       delete (candidate.authority as unknown as Record<string, unknown>)[field]
       await expect(invokeProviderConsequenceViaVercel(context(issued()), {
         invocation: candidate,
@@ -420,12 +376,12 @@ describe('provider consequence Convex-to-Vercel bridge', () => {
 
     process.env.AE_PROVIDER_CONSEQUENCE_ORIGIN = 'https://agentic-economy.example/path'
     await expect(invokeProviderConsequenceViaVercel(context(issued()), {
-      invocation: invocation(), requestDigest: DIGEST('a'),
+      invocation: createTestProviderInvocation({ now: NOW }), requestDigest: DIGEST('a'),
     })).resolves.toMatchObject({ failureCode: 'provider_consequence_runtime_unavailable' })
 
     process.env.AE_PROVIDER_CONSEQUENCE_ORIGIN = 'https://agentic-economy.example:443'
     await expect(invokeProviderConsequenceViaVercel(context(issued()), {
-      invocation: invocation(), requestDigest: DIGEST('a'),
+      invocation: createTestProviderInvocation({ now: NOW }), requestDigest: DIGEST('a'),
     })).resolves.toMatchObject({ failureCode: 'provider_consequence_runtime_unavailable' })
 
     process.env.AE_PROVIDER_CONSEQUENCE_ORIGIN = 'https://agentic-economy.example'
@@ -438,24 +394,24 @@ describe('provider consequence Convex-to-Vercel bridge', () => {
     }
     vi.stubGlobal('URL', ThrowingURL)
     await expect(invokeProviderConsequenceViaVercel(context(issued()), {
-      invocation: invocation(), requestDigest: DIGEST('a'),
+      invocation: createTestProviderInvocation({ now: NOW }), requestDigest: DIGEST('a'),
     })).resolves.toMatchObject({ failureCode: 'provider_consequence_runtime_unavailable' })
     vi.stubGlobal('URL', RealURL)
 
     delete process.env.AE_PROVIDER_TICKET_SIGNING_SECRET_REF
     await expect(invokeProviderConsequenceViaVercel(context(issued()), {
-      invocation: invocation(), requestDigest: DIGEST('a'),
+      invocation: createTestProviderInvocation({ now: NOW }), requestDigest: DIGEST('a'),
     })).resolves.toMatchObject({ failureCode: 'provider_consequence_runtime_unavailable' })
     process.env.AE_PROVIDER_TICKET_SIGNING_SECRET_REF = SIGNING_SECRET_REF
 
-    const withoutReadinessDigest = invocation()
+    const withoutReadinessDigest = createTestProviderInvocation({ now: NOW })
     delete (withoutReadinessDigest.authority as { readinessDigest?: string }).readinessDigest
     await expect(invokeProviderConsequenceViaVercel(context({ kind: 'unavailable' }), {
       invocation: withoutReadinessDigest, requestDigest: DIGEST('a'),
     })).resolves.toMatchObject({ failureCode: 'provider_consequence_ticket_unavailable' })
 
     await expect(invokeProviderConsequenceViaVercel(context({ kind: 'unavailable' }), {
-      invocation: invocation(), requestDigest: DIGEST('a'),
+      invocation: createTestProviderInvocation({ now: NOW }), requestDigest: DIGEST('a'),
     })).resolves.toMatchObject({ failureCode: 'provider_consequence_ticket_unavailable' })
     expect(fetchMock).not.toHaveBeenCalled()
   })
@@ -471,7 +427,7 @@ describe('provider consequence Convex-to-Vercel bridge', () => {
         : response)
       vi.stubGlobal('fetch', fetchMock)
       await expect(invokeProviderConsequenceViaVercel(context(issued()), {
-        invocation: invocation(),
+        invocation: createTestProviderInvocation({ now: NOW }),
         requestDigest: DIGEST('a'),
       })).resolves.toEqual({
         transport: 'http',
@@ -496,7 +452,7 @@ describe('provider consequence Convex-to-Vercel bridge', () => {
       const fetchMock = vi.fn<typeof globalThis.fetch>(async () => response)
       vi.stubGlobal('fetch', fetchMock)
       await expect(invokeProviderConsequenceViaVercel(context(issued()), {
-        invocation: invocation(),
+        invocation: createTestProviderInvocation({ now: NOW }),
         requestDigest: DIGEST('a'),
       })).resolves.toEqual({
         transport: 'http',

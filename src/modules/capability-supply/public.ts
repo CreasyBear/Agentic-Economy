@@ -757,6 +757,13 @@ export function capabilityBindingEligibilityHash(input: Readonly<{
 }
 
 export {
+  buildX402AttemptObservation,
+  claimX402SigningSlot,
+  parseStoredX402Request,
+  type StoredX402Request,
+} from './internal/x402-payment-lifecycle'
+
+export {
   SELLER_ONBOARDING_CANARY_PURPOSE,
   createSellerOnboardingCanaryCommitment,
   createX402SellerOnboarding,

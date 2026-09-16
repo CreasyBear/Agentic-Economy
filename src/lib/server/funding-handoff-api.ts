@@ -127,7 +127,7 @@ export function createFundingHandoffService(
         environment: context.environment,
         idempotencyKey: input.idempotencyKey,
         successReturnRef: `${baseUrl}/fund/{CHECKOUT_SESSION_ID}`,
-        cancelReturnRef: `${baseUrl}/fund/cancelled`,
+        cancelReturnRef: `${baseUrl}/fund/{CHECKOUT_SESSION_ID}`,
         checkoutExpiresAt,
         agentPrincipal: principal,
         operationKey,

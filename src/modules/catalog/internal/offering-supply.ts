@@ -348,7 +348,7 @@ function isPublicIpv6Host(bareHost: string): boolean {
   const mappedIpv4 = extractEmbeddedIpv4Address(bareHost)
   if (mappedIpv4 !== undefined) return !isPrivateIpv4Host(mappedIpv4)
   const bytes = parseIpv6Bytes(bareHost)
-  if (bytes === undefined) return false
+  if (bytes === undefined || bytes[0] === undefined) return false
   return (bytes[0] & 0xfe) !== 0xfc
 }
 

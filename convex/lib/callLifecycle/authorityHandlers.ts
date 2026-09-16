@@ -470,10 +470,13 @@ async function reconcileAcceptedCallAfterLimitUpdate(
     || current.principal.authorityMode !== 'spending_policy'
     || current.grantGeneration <= row.grantGeneration
     || current.expiresAt !== row.grantExpiresAt) return null
+  const quoteRef = row.quoteRef
   const [oldRow, currentRow, quote, delegation, currentDelegation] = await Promise.all([
     ctx.db.query('agentAccessGrants').withIndex('by_grantRef', q => q.eq('grantRef', row.grantRef)).unique(),
     ctx.db.query('agentAccessGrants').withIndex('by_grantRef', q => q.eq('grantRef', current.grantRef)).unique(),
-    ctx.db.query('capabilityQuotes').withIndex('by_quoteRef', q => q.eq('quoteRef', row.quoteRef!)).unique(),
+    quoteRef === undefined
+      ? Promise.resolve(null)
+      : ctx.db.query('capabilityQuotes').withIndex('by_quoteRef', q => q.eq('quoteRef', quoteRef)).unique(),
     ctx.db.query('authorityDelegationGrants').withIndex('by_grantRef', q => q.eq('grantRef', row.grantRef)).unique(),
     ctx.db.query('authorityDelegationGrants').withIndex('by_grantRef', q => q.eq('grantRef', current.grantRef)).unique(),
   ])

@@ -98,7 +98,7 @@ describe('GET /api/v1/registry hostile inputs', () => {
     return new Request(url)
   }
 
-  it.each(INVALID_LIMIT_STRINGS)('rejects limit=%s as 400 invalid_query_parameter', async (limit) => {
+  it.each(INVALID_LIMIT_STRINGS.map(limit => ({ limit, label: limit })))('rejects limit=$label as 400 invalid_query_parameter', async ({ limit }) => {
     const backend = await setup()
     await seedCompletedGeneration(backend, `gen-limit-${limit}`, 2)
     const response = await handleApiRegistryRequest(registryRequest({ limit }))
@@ -245,11 +245,11 @@ describe('POST /api/v1/market-tools/list and /search hostile inputs', () => {
   for (const route of routes) {
     describe(route.name, () => {
       it.each([
-        ['limit: 0', 0],
-        ['limit: -5', -5],
-        ['limit: 1.5', 1.5],
-        ['limit: "not-a-number"', 'not-a-number'],
-      ])('rejects %s as 400 invalid_body', async (_label, limit) => {
+        { label: 'limit: 0', limit: 0 },
+        { label: 'limit: -5', limit: -5 },
+        { label: 'limit: 1.5', limit: 1.5 },
+        { label: 'limit: "not-a-number"', limit: 'not-a-number' },
+      ])('rejects $label as 400 invalid_body', async ({ limit }) => {
         const response = await route.handler(jsonRequest(route.path, { ...route.base, limit }))
         await expectProblemJson(response, { status: 400, kind: 'INVALID_ARGUMENT', code: 'invalid_body' })
       })
@@ -345,7 +345,7 @@ describe('GET /api/businesses hostile inputs', () => {
     return new Request(url)
   }
 
-  it.each(INVALID_LIMIT_STRINGS)('rejects limit=%s as 400 invalid_query_parameter', async (limit) => {
+  it.each(INVALID_LIMIT_STRINGS.map(limit => ({ limit, label: limit })))('rejects limit=$label as 400 invalid_query_parameter', async ({ limit }) => {
     const response = await handleDurableListBusinessesRequest(businessesRequest({ limit }))
     await expectProblemJson(response, { status: 400, kind: 'INVALID_ARGUMENT', code: 'invalid_query_parameter' })
   })

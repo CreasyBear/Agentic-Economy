@@ -18,6 +18,16 @@ export const LEGACY_AGENT_ACCESS_POLICY_FORMAT = 'ae.agent-access-policy:v1' as 
 export const LEGACY_AGENT_ACCESS_GRANT_FORMAT = 'ae.agent-access-grant:v1' as const
 export const AGENT_ACCESS_POLICY_FORMAT = 'ae.agent-access-policy:v2' as const
 export const AGENT_ACCESS_GRANT_FORMAT = 'ae.agent-access-grant:v2' as const
+
+export {
+  agentSpendingLimitsReadResultValue,
+  agentSpendingLimitsResultValue,
+  agentSpendingLimitsUpdateArgs,
+  agentSpendingLimitsUpdateSchema,
+  type AgentSpendingLimitsReadResult,
+  type AgentSpendingLimitsResult,
+  type AgentSpendingLimitsUpdate,
+} from './spending-policy-update'
 export const AGENT_ACCESS_ENVIRONMENT_VALUES = ['sandbox', 'production'] as const
 export const AGENT_ACCESS_TOOL_ACCESS_VALUES = ['all_admitted', 'selected_tools'] as const
 export const AGENT_ACCESS_LIFECYCLE_VALUES = ['active', 'revoked', 'expired'] as const

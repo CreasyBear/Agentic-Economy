@@ -164,28 +164,19 @@ describe('catalogue-status route', () => {
   })
 
   describe('catalogueFreshness function', () => {
-    it('returns fresh when completedAt is exactly at 36h boundary', () => {
+    it.each([
+      { label: 'at boundary', offset: CATALOGUE_STALE_AFTER_MS, expected: 'fresh' },
+      { label: 'over boundary', offset: CATALOGUE_STALE_AFTER_MS + 1, expected: 'stale' },
+    ])('returns $expected when completedAt is $label', ({ offset, expected }) => {
       const now = 1000
-      const completedAt = now - CATALOGUE_STALE_AFTER_MS
+      const completedAt = now - offset
       const result = catalogueFreshness({
         kind: 'ready',
         coverage: { generation: 'g', completedAt },
         refreshState: 'complete',
       }, now)
 
-      expect(result.status).toBe('fresh')
-    })
-
-    it('returns stale when completedAt is 36h + 1ms ago', () => {
-      const now = 1000
-      const completedAt = now - CATALOGUE_STALE_AFTER_MS - 1
-      const result = catalogueFreshness({
-        kind: 'ready',
-        coverage: { generation: 'g', completedAt },
-        refreshState: 'complete',
-      }, now)
-
-      expect(result.status).toBe('stale')
+      expect(result.status).toBe(expected)
     })
   })
 })

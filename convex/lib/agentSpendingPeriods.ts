@@ -1,8 +1,12 @@
 import type { MutationCtx, QueryCtx } from '../_generated/server'
 import { canonicalDigest, isCanonicalDigest } from '../../src/modules/common/canonical-digest'
-import { currentUtcDayBounds, currentUtcMonthBounds } from '../../src/modules/common/utc-calendar'
-import { PACKAGE4_FORMANCE_REQUIREMENTS } from '../../src/modules/money/internal/commercial-policy'
-import { spendingPeriodAdjustmentReference, type SpendingPeriods, type SpendingPeriodAdjustment } from '../../src/modules/money/internal/spending-period-values'
+import { currentUtcDayBounds, currentUtcMonthBounds } from '../../src/modules/common/freshness'
+import {
+  PACKAGE4_FORMANCE_REQUIREMENTS,
+  spendingPeriodAdjustmentReference,
+  type SpendingPeriods,
+  type SpendingPeriodAdjustment,
+} from '../../src/modules/money/public'
 
 type PeriodRequest = Readonly<{
   principalRef: string
@@ -178,13 +182,18 @@ export async function prepareAgentSpendingPeriods(
     snapshots.push({
       periodStartAt: period.periodStartAt,
       periodEndAt: period.periodEndAt,
-      revision: pending?.revision ?? row!.appliedRevision,
-      limitUnits: pending?.targetLimitUnits ?? row!.appliedLimitUnits,
+      revision: pending?.revision ?? row?.appliedRevision ?? 0,
+      limitUnits: pending?.targetLimitUnits ?? row?.appliedLimitUnits ?? period.limitUnits,
     })
+  }
+  const dailySnapshot = snapshots[0]
+  const monthlySnapshot = snapshots[1]
+  if (dailySnapshot === undefined || monthlySnapshot === undefined) {
+    return { kind: 'refused', reason: 'spending_periods_preparation_failed' }
   }
   return {
     kind: 'prepared',
-    spendingPeriods: { version: 'ae.spending-periods:v1', daily: snapshots[0]!, monthly: snapshots[1]! },
+    spendingPeriods: { version: 'ae.spending-periods:v1', daily: dailySnapshot, monthly: monthlySnapshot },
     commands,
   }
 }

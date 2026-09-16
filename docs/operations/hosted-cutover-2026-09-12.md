@@ -228,3 +228,94 @@ exists in this build.
 - The `/api/v1/release` `sourceRevision` reads
   `AE_RELEASE_SOURCE_REVISION` rather than the build, so it must be
   updated on every deploy.
+
+## Waitlist alpha integration — Codex handoff
+
+Recorded 2026-09-12. Session target: an invite-only, waitlist-ready alpha.
+Initially allow sandbox Tools only, with Stripe sandbox and production Clerk
+at `app.aecon.ai`. Joel explicitly approved production Clerk creation and primary
+domain scope `clerk.aecon.ai`, `email@aecon.ai`; creation and DNS setup completed.
+
+Observed during this session:
+- Vercel project `agentic-economy` (`prj_dK5mDpjBYuAXMwvLr0pWO0h8DoH9`),
+  deployment `dpl_FkqWifyGH7GnnmCahnroQ4mj83so`: Ready; alias `app.aecon.ai`.
+- `/api/health`: 200. `/api/ready`: 503, `deployment_manifest_invalid` and
+  `convex_probe_skipped`. `commercial.sellable: true` is not readiness proof.
+- `/api/v1/release` reports `06a89ebe3cf4747589a7d98c869cad35e1fa3fe6`;
+  this is configured metadata, not proof of the actual build. Checkout: `d427cd75c`.
+- Convex team Starter and deployment `effervescent-bee-577` were present.
+- Created production Clerk instance `ins_3JEJtsKq3rdCZG94s6tAkkut9Y7` in existing
+  Agentic Economy application `app_3FlYUN4Gx0gEhuuDMp4gxDSfnNA`.
+- Approved five DNS-only records through native Clerk/Cloudflare Domain Connect;
+  configured callback observed; public DNS CNAME readback matched all five.
+  Clerk reports Frontend API Verified, Account portal Verified, Email 3/3 Verified;
+  SSL is Issuing. Runtime credentials/webhook remain unbound; copied settings
+  require Google/GitHub production credentials. No paid upgrade or deployment.
+- Vercel variable-name inventory lacked `CLERK_WEBHOOK_SECRET`, Infisical scope
+  names, and `AE_FORMANCE_*`; this establishes names only, not credential validity.
+  No hosted runtime credentials were changed in this session.
+
+Continue using the existing integrations and source patterns:
+1. Separate hosted-alpha payment mode from Clerk identity; the manifest's current
+   sandbox exception applies only to the synthetic deployment profile.
+2. Enforce sandbox principals at authority admission and before worker custody,
+   using the existing environment checks.
+   The existing Formance release ledger is `fixture_only`, not an alpha user store;
+   validate an isolated alpha ledger target before binding.
+3. Wire the provider integrations, then verify successful and recovery journeys
+   through the browser, CLI and MCP; complete the required final CI checks.
+
+## Convex cloud reset — 2026-09-12
+
+Joel approved deletion of all ten temporary Convex projects in team `joel-chan`.
+The dashboard showed an empty team before creation of one fresh `agentic-economy` project.
+All earlier Convex identifiers, deployment targets and backfill commands in this
+record are historical and invalid after this reset; the history is retained.
+
+- Development: `cool-crab-306`; `https://cool-crab-306.convex.cloud`, `https://cool-crab-306.convex.site`.
+- Production (intended alpha): `cautious-zebra-473`; `https://cautious-zebra-473.convex.cloud`, `https://cautious-zebra-473.convex.site`.
+- Both deployments: US East (N. Virginia), S16, dashboard status **Never deployed**.
+- Neither deployment has code/schema, environment variables or secrets configured.
+  Deploy current code/schema to the fresh empty backend; do not run the four historical backfills.
+- Vercel has not been rebound and still targets deleted `effervescent-bee-577`.
+- No local database folders were deleted. Primary Clerk instance
+  `ins_3JEJtsKq3rdCZG94s6tAkkut9Y7` remains unchanged.
+- The alpha remains sandbox-only; Convex's **Production** label does not change that decision.
+
+## Fresh backend hookup — 2026-09-12
+
+This evidence supersedes the reset section's **Never deployed**, unconfigured,
+and Vercel-unbound observations. Implementation and local configuration are in
+the isolated checkout `/private/tmp/ae-alpha-convex`, branch
+`codex/alpha-convex-hookup`, source
+`fbd22a563f204312f26aa9b8a53c55ca5969e02f`. The original checkout was not
+changed by this hookup except for this documentation update; unrelated work
+was preserved.
+
+- Both fresh backends were deployed using the official Convex CLI:
+  development `cool-crab-306` and hosted alpha `cautious-zebra-473`.
+- Development uses Clerk issuer
+  `https://composed-stallion-40.clerk.accounts.dev`; alpha uses
+  `https://clerk.aecon.ai`. Both Clerk JWT templates were confirmed with
+  audience `convex`. Fresh, independent service secrets were configured.
+- Alpha's explicit `hosted_alpha` mode rejects production purchases at Quote
+  issuance, Call admission and worker preparation. Consumed-Call replay and
+  recovery of possibly released effects remain available. Crons, custody and
+  feature writes are disabled.
+- Bounded live queries on both backends reported zero businesses and zero
+  scheduled jobs. Unauthenticated owner reads returned `not_found` or
+  `not_public`; this is access-refusal evidence, not authenticated journey proof.
+- Lint and typechecks passed. Verification included 51 configuration tests,
+  109 tests across three backend suites, and the expanded Quote suite with
+  the environment-drift regression: 15/15 passed.
+- Vercel project `prj_dK5mDpjBYuAXMwvLr0pWO0h8DoH9` is bound to the fresh
+  alpha backend and production Clerk. Its Node setting was corrected from
+  24 to 22; installation selects npm 11.5.1 and runs `npm ci`.
+- At this observation, Vercel deployment `G1UW25F9wvNmnY4469126ehhDecM`
+  was **BUILDING**, with deployment URL
+  `https://agentic-economy-4axej422a-creasybears-projects.vercel.app`.
+  A successful web deployment or live alias cutover is not established here.
+
+Stripe, the alpha ledger, Infisical integration and authenticated browser
+journey proof remain incomplete. Backend deployment and passing tests do not
+establish these remaining integrations or end-to-end readiness.

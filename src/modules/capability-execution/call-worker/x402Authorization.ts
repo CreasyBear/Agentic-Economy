@@ -3,6 +3,9 @@ import { isRecord } from '@/modules/common/is-record'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 import { Agent } from 'undici'
 import {
+  claimX402SigningSlot,
+} from '@/modules/capability-supply/public'
+import {
   cdpX402CustodyBudgetRef,
   cdpX402CustodyConfigurationFromEnvironment,
   cdpX402RequestFingerprint,
@@ -614,76 +617,40 @@ async function readOrClaimManagedAuthorization(
       requestFingerprintContext,
     )
   }
-  const claim = await ctx.runMutation(internal.moneyX402PaymentAttempts.claimX402PaymentAuthorization, {
-    custodyRef: prepared.custodyRef,
-    authorizationDigest: prepared.authorizationDigest,
+
+  const readMaterial = async () => await readX402AuthorizationMaterial(
+    ctx,
+    prepared,
+    byDigest,
     requestFingerprint,
-    custodyGeneration: custodyConfiguration.credentialGeneration,
-  })
-  if (claim.kind === 'stored') {
-    const converged = await readX402AuthorizationMaterial(
-      ctx,
-      prepared,
-      byDigest,
+    custodyConfiguration.credentialGeneration,
+  )
+
+  const signedHeader = await claimX402SigningSlot({
+    claim: async () => await ctx.runMutation(internal.moneyX402PaymentAttempts.claimX402PaymentAuthorization, {
+      custodyRef: prepared.custodyRef,
+      authorizationDigest: prepared.authorizationDigest,
       requestFingerprint,
-      custodyConfiguration.credentialGeneration,
-    )
-    if (converged === null) throw new Error('x402_payment_reconciliation_required')
-    return await signAndCommitManagedAuthorization(
-      ctx,
-      converged,
-      requestFingerprint,
-      requestFingerprintContext,
-    )
-  }
-  if (claim.kind === 'pending') {
-    const deadline = Date.now() + 1_000
-    while (Date.now() < deadline) {
-      const converged = await readX402AuthorizationMaterial(
-        ctx,
-        prepared,
-        byDigest,
-        requestFingerprint,
-        custodyConfiguration.credentialGeneration,
-      )
-      if (storedAuthorizationFromMaterial(converged) !== undefined) {
-        return await signAndCommitManagedAuthorization(
-          ctx,
-          converged as X402AttemptMaterial,
-          requestFingerprint,
-          requestFingerprintContext,
-        )
-      }
-      if (converged === null || converged.state !== 'prepared') {
+      custodyGeneration: custodyConfiguration.credentialGeneration,
+    }),
+    readMaterial,
+    hasStoredSignature: (row) => storedAuthorizationFromMaterial(row) !== undefined,
+    signAndCommit: async (row, isClaimWinner) => {
+      if (row.state !== 'prepared') {
         throw new Error('x402_payment_reconciliation_required')
       }
-      await new Promise<void>((resolve) => setTimeout(resolve, 25))
-    }
-    throw new Error('x402_payment_reconciliation_required')
-  }
-  const claimedMaterial = await readX402AuthorizationMaterial(
-    ctx,
-    prepared,
-    byDigest,
-    requestFingerprint,
-    custodyConfiguration.credentialGeneration,
-  )
-  if (claimedMaterial === null) throw new Error('x402_payment_reconciliation_required')
-  const signedHeader = await signAndCommitManagedAuthorization(
-    ctx,
-    claimedMaterial,
-    requestFingerprint,
-    requestFingerprintContext,
-    true,
-  )
+      return await signAndCommitManagedAuthorization(
+        ctx,
+        row,
+        requestFingerprint,
+        requestFingerprintContext,
+        isClaimWinner,
+      )
+    },
+  })
   if (signedHeader === undefined) return undefined
-  const reread = await readX402AuthorizationMaterial(
-    ctx,
-    prepared,
-    byDigest,
-    requestFingerprint,
-    custodyConfiguration.credentialGeneration,
-  )
+
+  const reread = await readMaterial()
   if (reread === null) throw new Error('x402_payment_reconciliation_required')
   const first = storedAuthorizationFromMaterial(reread)
   if (first === undefined) throw new Error('x402_payment_reconciliation_required')

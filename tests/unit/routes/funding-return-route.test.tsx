@@ -16,6 +16,7 @@ vi.mock('@/components/ae/layout/AePageState', () => ({
 }))
 
 import { Route as FundingRoute } from '@/routes/fund.$fundingSessionId'
+import { Route as CancelledRoute } from '@/routes/fund.cancelled'
 
 const fetchMock = vi.fn<typeof fetch>()
 
@@ -134,5 +135,22 @@ describe('public funding return', () => {
     expect(await screen.findByRole('heading', { name: 'Funding link unavailable' })).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Open Market' })).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull()
+  })
+})
+
+describe('AM-09 lost Checkout session cancel page', () => {
+  it('does not invite a new payment without a Checkout session', () => {
+    const Component = CancelledRoute.options.component
+    if (Component === undefined) throw new Error('funding_cancelled_component_missing')
+    const rootRoute = createRootRoute()
+    const routeTree = rootRoute.addChildren([
+      createRoute({ getParentRoute: () => rootRoute, path: '/' }),
+      createRoute({ getParentRoute: () => rootRoute, path: '/market' }),
+    ])
+    const router = createRouter({ routeTree, history: createMemoryHistory({ initialEntries: ['/'] }) })
+    render(<RouterContextProvider router={router}>{createElement(Component)}</RouterContextProvider>)
+    expect(screen.getByRole('heading', { name: 'Payment cancelled' })).toBeTruthy()
+    expect(screen.queryByRole('link', { name: 'Try again' })).toBeNull()
+    expect(screen.getByRole('link', { name: 'Back to Market' })).toBeTruthy()
   })
 })

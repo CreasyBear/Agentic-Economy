@@ -1,0 +1,137 @@
+
+> agentic-economy@0.1.0 typecheck
+> tsc --noEmit
+
+convex/chatMessages.ts(222,3): error TS2719: Type '(ctx: import("/Users/joelchan/Documents/Coding/App-Dev/live/01. Pre-Implementation/Agentic-Economy/node_modules/convex/dist/esm-types/server/registration").GenericQueryCtx<{ credentials: { document: { _id: import("/Users/joelchan/Documents/Coding/App-Dev/live/01. Pre-Implementation/Agentic-Economy/node_modules/conve...' is not assignable to type '(ctx: import("/Users/joelchan/Documents/Coding/App-Dev/live/01. Pre-Implementation/Agentic-Economy/node_modules/convex/dist/esm-types/server/registration").GenericQueryCtx<{ credentials: { document: { _id: import("/Users/joelchan/Documents/Coding/App-Dev/live/01. Pre-Implementation/Agentic-Economy/node_modules/conve...'. Two different types with this name exist, but they are unrelated.
+  Type 'Promise<{ streams: SyncStreamsReturnValue; page: UIMessage[]; isDone: boolean; continueCursor: string; splitCursor?: string | null; pageStatus?: "SplitRecommended" | "SplitRequired" | null; }>' is not assignable to type 'ValidatorTypeToReturnType<{ splitCursor?: string | null | undefined; pageStatus?: "SplitRecommended" | "SplitRequired" | null | undefined; page: { metadata?: any; userId?: string; agentName?: string; text: string; ... 7 more ...; parts: any[]; }[]; continueCursor: string; isDone: boolean; streams?: { ...; } | { ...;...'.
+    Type 'Promise<{ streams: SyncStreamsReturnValue; page: UIMessage[]; isDone: boolean; continueCursor: string; splitCursor?: string | null; pageStatus?: "SplitRecommended" | "SplitRequired" | null; }>' is not assignable to type 'Promise<{ splitCursor?: string | null | undefined; pageStatus?: "SplitRecommended" | "SplitRequired" | null | undefined; page: { metadata?: any; userId?: string; agentName?: string; text: string; ... 7 more ...; parts: any[]; }[]; continueCursor: string; isDone: boolean; streams?: { ...; } | { ...; }; }>'.
+      Type '{ streams: SyncStreamsReturnValue; page: UIMessage[]; isDone: boolean; continueCursor: Cursor; splitCursor?: Cursor | null; pageStatus?: "SplitRecommended" | "SplitRequired" | null; }' is not assignable to type '{ splitCursor?: string | null | undefined; pageStatus?: "SplitRecommended" | "SplitRequired" | null | undefined; page: { metadata?: any; userId?: string; agentName?: string; text: string; key: string; ... 6 more ...; parts: any[]; }[]; continueCursor: string; isDone: boolean; streams?: { ...; } | { ...; }; }' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+        Types of property 'streams' are incompatible.
+          Type 'SyncStreamsReturnValue' is not assignable to type '{ kind: "list"; messages: { userId?: string | undefined; agentName?: string | undefined; model?: string | undefined; provider?: string | undefined; providerOptions?: Record<string, Record<string, any>> | undefined; ... 4 more ...; streamId: string; }[]; } | { ...; }'.
+            Type 'undefined' is not assignable to type '{ kind: "list"; messages: { userId?: string | undefined; agentName?: string | undefined; model?: string | undefined; provider?: string | undefined; providerOptions?: Record<string, Record<string, any>> | undefined; ... 4 more ...; streamId: string; }[]; } | { ...; }'.
+convex/moneyLedger.ts(104,24): error TS2322: Type 'Promise<{ items: readonly []; kind: "refused"; code: "account_aud_required"; }>' is not assignable to type 'ValidatorTypeToReturnType<{ code: "account_aud_required"; kind: "refused"; items: string[]; }>'.
+  Type 'Promise<{ items: readonly []; kind: "refused"; code: "account_aud_required"; }>' is not assignable to type 'Promise<{ code: "account_aud_required"; kind: "refused"; items: string[]; }>'.
+    Type '{ items: readonly []; kind: "refused"; code: "account_aud_required"; }' is not assignable to type '{ code: "account_aud_required"; kind: "refused"; items: string[]; }'.
+      Types of property 'items' are incompatible.
+        The type 'readonly []' is 'readonly' and cannot be assigned to the mutable type 'string[]'.
+convex/moneyLedger.ts(110,24): error TS2322: Type 'Promise<{ items: readonly []; kind: "refused"; code: "account_aud_required"; }>' is not assignable to type 'ValidatorTypeToReturnType<{ code: "account_aud_required"; kind: "refused"; items: string[]; }>'.
+  Type 'Promise<{ items: readonly []; kind: "refused"; code: "account_aud_required"; }>' is not assignable to type 'Promise<{ code: "account_aud_required"; kind: "refused"; items: string[]; }>'.
+    Type '{ items: readonly []; kind: "refused"; code: "account_aud_required"; }' is not assignable to type '{ code: "account_aud_required"; kind: "refused"; items: string[]; }'.
+      Types of property 'items' are incompatible.
+        The type 'readonly []' is 'readonly' and cannot be assigned to the mutable type 'string[]'.
+convex/secretLifecycleHttp.ts(63,26): error TS2339: Property 'AE_SECRET_LIFECYCLE_RPC_TOKEN' does not exist on type 'Env'.
+src/components/ae/chat/Chat.tsx(154,24): error TS2339: Property 'id' does not exist on type 'UIMessageLike'.
+src/components/ae/supply/AeSupplySourceNativeStart.tsx(2,25): error TS2307: Cannot find module '@tanstack/react-form' or its corresponding type declarations.
+src/components/ae/supply/AeSupplySourceNativeStart.tsx(265,43): error TS7006: Parameter 'meta' implicitly has an 'any' type.
+src/components/ae/supply/AeSupplySourceNativeStart.tsx(511,17): error TS7006: Parameter 'field' implicitly has an 'any' type.
+src/components/ae/supply/AeSupplySourceNativeStart.tsx(524,17): error TS7006: Parameter 'field' implicitly has an 'any' type.
+src/components/ae/supply/AeSupplySourceNativeStart.tsx(537,17): error TS7006: Parameter 'field' implicitly has an 'any' type.
+src/components/ae/supply/AeSupplySourceNativeStart.tsx(550,17): error TS7006: Parameter 'field' implicitly has an 'any' type.
+src/components/ae/supply/AeSupplySourceNativeStart.tsx(563,17): error TS7006: Parameter 'field' implicitly has an 'any' type.
+src/modules/capability-execution/call-worker/providerConsequenceBridge.ts(96,19): error TS2339: Property 'AE_PROVIDER_CONSEQUENCE_ORIGIN' does not exist on type 'Env'.
+src/modules/capability-execution/call-worker/providerConsequenceBridge.ts(110,32): error TS2551: Property 'AE_X402_PAYMENT_SECRET_REF' does not exist on type 'Env'. Did you mean 'AE_X402_PAYMENT_CREDENTIAL_REF'?
+src/modules/capability-execution/call-worker/providerConsequenceBridge.ts(139,32): error TS2339: Property 'AE_PROVIDER_TICKET_SIGNING_SECRET_REF' does not exist on type 'Env'.
+src/modules/capability-execution/call-worker/providerConsequenceBridge.ts(140,32): error TS2551: Property 'AE_X402_PAYMENT_SECRET_REF' does not exist on type 'Env'. Did you mean 'AE_X402_PAYMENT_CREDENTIAL_REF'?
+src/modules/model-gateway/public.ts(53,37): error TS2339: Property 'AE_OPENROUTER_API_BASE_URL' does not exist on type 'Env'.
+src/modules/model-gateway/public.ts(54,19): error TS2339: Property 'SITE_URL' does not exist on type 'Env'.
+tests/integration/chat-durable-messaging-share.test.ts(212,33): error TS7006: Parameter 'message' implicitly has an 'any' type.
+tests/integration/chat-durable-messaging-share.test.ts(213,44): error TS7006: Parameter 'message' implicitly has an 'any' type.
+tests/integration/chat-scheduled-authority.test.ts(285,35): error TS7031: Binding element 'role' implicitly has an 'any' type.
+tests/integration/chat-scheduled-authority.test.ts(559,41): error TS7031: Binding element 'role' implicitly has an 'any' type.
+tests/integration/chat-scheduled-authority.test.ts(560,42): error TS7031: Binding element 'role' implicitly has an 'any' type.
+tests/integration/chat-scheduled-authority.test.ts(574,39): error TS7031: Binding element 'role' implicitly has an 'any' type.
+tests/unit/convex/provider-connection-changed-coverage-check.ts(111,17): error TS2532: Object is possibly 'undefined'.
+tests/unit/convex/provider-connection-changed-coverage-check.ts(119,17): error TS2532: Object is possibly 'undefined'.
+tests/unit/convex/provider-connection-changed-coverage-check.ts(129,32): error TS2532: Object is possibly 'undefined'.
+tests/unit/convex/provider-connection-changed-coverage-check.ts(145,44): error TS2532: Object is possibly 'undefined'.
+tests/unit/dev/local-connect.test.ts(16,8): error TS5097: An import path can only end with a '.ts' extension when 'allowImportingTsExtensions' is enabled.
+tests/unit/dev/local-connect.test.ts(759,7): error TS2322: Type '(options: { secretKey: string; }) => { users: { getUserList: ({ emailAddress }: { emailAddress: readonly string[]; }) => Promise<{ data: { id: string; }[]; }>; }; sessions: { createSession: ({ userId }: { userId: string; }) => Promise<...>; getToken: (sessionId: string) => Promise<...>; }; }' is not assignable to type '(options: { secretKey?: string; }) => ClerkClient'.
+  Types of parameters 'options' and 'options' are incompatible.
+    Type '{ secretKey?: string; }' is not assignable to type '{ secretKey: string; }'.
+      Property 'secretKey' is optional in type '{ secretKey?: string; }' but required in type '{ secretKey: string; }'.
+tests/unit/dev/local-connect.test.ts(779,7): error TS2322: Type '() => { users: { getUserList: () => Promise<{ data: never[]; }>; }; sessions: { createSession: () => Promise<{ id: string; }>; getToken: () => Promise<{ jwt: string; }>; }; }' is not assignable to type '(options: { secretKey?: string; }) => ClerkClient'.
+  Type '{ users: { getUserList: () => Promise<{ data: never[]; }>; }; sessions: { createSession: () => Promise<{ id: string; }>; getToken: () => Promise<{ jwt: string; }>; }; }' is not assignable to type 'ClerkClient'.
+    Property 'telemetry' is missing in type '{ users: { getUserList: () => Promise<{ data: never[]; }>; }; sessions: { createSession: () => Promise<{ id: string; }>; getToken: () => Promise<{ jwt: string; }>; }; }' but required in type '{ telemetry: TelemetryCollector; }'.
+tests/unit/dev/local-dev.test.ts(37,8): error TS5097: An import path can only end with a '.ts' extension when 'allowImportingTsExtensions' is enabled.
+tests/unit/dev/local-dev.test.ts(150,30): error TS2345: Argument of type '{ pid: number; kill: (signal: string) => void; }' is not assignable to parameter of type 'LocalDevChild'.
+  Types of property 'kill' are incompatible.
+    Type '(signal: string) => void' is not assignable to type '(signal?: Signals | undefined) => unknown'.
+      Types of parameters 'signal' and 'signal' are incompatible.
+        Type 'string | undefined' is not assignable to type 'string'.
+          Type 'undefined' is not assignable to type 'string'.
+tests/unit/dev/local-dev.test.ts(170,20): error TS2345: Argument of type '{ done: Promise<void>; terminate: (...args: readonly unknown[]) => void; }' is not assignable to parameter of type 'ManagedChild'.
+  Type '{ done: Promise<void>; terminate: (...args: readonly unknown[]) => void; }' is missing the following properties from type 'ManagedChild': child, ready, output
+tests/unit/dev/local-dev.test.ts(182,7): error TS2322: Type 'Promise<void>' is not assignable to type 'Promise<ManagedChildResult>'.
+  Type 'void' is not assignable to type 'ManagedChildResult'.
+tests/unit/dev/local-dev.test.ts(431,58): error TS2345: Argument of type '(url: URL) => Promise<{ status: number; }>' is not assignable to parameter of type '{ (input: URL | RequestInfo, init?: RequestInit | undefined): Promise<Response>; (input: string | URL | Request, init?: RequestInit | undefined): Promise<...>; }'.
+  Types of parameters 'url' and 'input' are incompatible.
+    Type 'URL | RequestInfo' is not assignable to type 'URL'.
+      Type 'string' is not assignable to type 'URL'.
+tests/unit/dev/local-dev.test.ts(441,58): error TS2345: Argument of type '() => Promise<{ status: number; }>' is not assignable to parameter of type '{ (input: URL | RequestInfo, init?: RequestInit | undefined): Promise<Response>; (input: string | URL | Request, init?: RequestInit | undefined): Promise<...>; }'.
+  Type 'Promise<{ status: number; }>' is not assignable to type 'Promise<Response>'.
+    Type '{ status: number; }' is missing the following properties from type 'Response': headers, ok, redirected, statusText, and 11 more.
+tests/unit/dev/local-dev.test.ts(445,58): error TS2345: Argument of type '() => Promise<{ status: number; }>' is not assignable to parameter of type '{ (input: URL | RequestInfo, init?: RequestInit | undefined): Promise<Response>; (input: string | URL | Request, init?: RequestInit | undefined): Promise<...>; }'.
+  Type 'Promise<{ status: number; }>' is not assignable to type 'Promise<Response>'.
+    Type '{ status: number; }' is missing the following properties from type 'Response': headers, ok, redirected, statusText, and 11 more.
+tests/unit/dev/local-dev.test.ts(455,46): error TS2345: Argument of type '() => Promise<{ status: number; }>' is not assignable to parameter of type '{ (input: URL | RequestInfo, init?: RequestInit | undefined): Promise<Response>; (input: string | URL | Request, init?: RequestInit | undefined): Promise<...>; }'.
+  Type 'Promise<{ status: number; }>' is not assignable to type 'Promise<Response>'.
+    Type '{ status: number; }' is missing the following properties from type 'Response': headers, ok, redirected, statusText, and 11 more.
+tests/unit/dev/local-dev.test.ts(456,52): error TS2345: Argument of type '() => Promise<{ status: number; }>' is not assignable to parameter of type '{ (input: URL | RequestInfo, init?: RequestInit | undefined): Promise<Response>; (input: string | URL | Request, init?: RequestInit | undefined): Promise<...>; }'.
+  Type 'Promise<{ status: number; }>' is not assignable to type 'Promise<Response>'.
+    Type '{ status: number; }' is missing the following properties from type 'Response': headers, ok, redirected, statusText, and 11 more.
+tests/unit/dev/local-source-write-secret.test.ts(6,8): error TS5097: An import path can only end with a '.ts' extension when 'allowImportingTsExtensions' is enabled.
+tests/unit/dev/local-source-write-secret.test.ts(18,7): error TS2322: Type '() => Uint8Array<ArrayBuffer>' is not assignable to type '(size: number) => Buffer<ArrayBufferLike>'.
+  Type 'Uint8Array<ArrayBuffer>' is missing the following properties from type 'Buffer<ArrayBufferLike>': write, toJSON, equals, compare, and 66 more.
+tests/unit/dev/local-source-write-secret.test.ts(33,7): error TS2322: Type '() => Uint8Array<ArrayBuffer>' is not assignable to type '(size: number) => Buffer<ArrayBufferLike>'.
+  Type 'Uint8Array<ArrayBuffer>' is missing the following properties from type 'Buffer<ArrayBufferLike>': write, toJSON, equals, compare, and 66 more.
+tests/unit/dev/local-source-write-secret.test.ts(43,7): error TS2322: Type '() => Uint8Array<ArrayBuffer>' is not assignable to type '(size: number) => Buffer<ArrayBufferLike>'.
+  Type 'Uint8Array<ArrayBuffer>' is missing the following properties from type 'Buffer<ArrayBufferLike>': write, toJSON, equals, compare, and 66 more.
+tests/unit/dev/local-source-write-secret.test.ts(64,7): error TS2322: Type '() => Uint8Array<ArrayBuffer>' is not assignable to type '(size: number) => Buffer<ArrayBufferLike>'.
+  Type 'Uint8Array<ArrayBuffer>' is missing the following properties from type 'Buffer<ArrayBufferLike>': write, toJSON, equals, compare, and 66 more.
+tools/dev/local-connect.ts(30,52): error TS5097: An import path can only end with a '.ts' extension when 'allowImportingTsExtensions' is enabled.
+tools/dev/local-connect.ts(510,42): error TS2379: Argument of type '{ secretKey: string | undefined; }' is not assignable to parameter of type '{ secretKey?: string; }' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'secretKey' are incompatible.
+    Type 'string | undefined' is not assignable to type 'string'.
+      Type 'undefined' is not assignable to type 'string'.
+tools/dev/local-connect.ts(577,46): error TS2379: Argument of type '{ baseUrl: string; userCode: string; authorityMode: "read_only" | "approval_required" | "spending_policy" | "unrestricted_test_only" | undefined; fetchImpl: FetchLike; ownerSessionToken: string; }' is not assignable to parameter of type '{ baseUrl: string; userCode: string; authorityMode?: "read_only" | "approval_required" | "spending_policy" | "unrestricted_test_only"; fetchImpl?: FetchLike; ownerSessionToken?: string; }' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'authorityMode' are incompatible.
+    Type '"read_only" | "approval_required" | "spending_policy" | "unrestricted_test_only" | undefined' is not assignable to type '"read_only" | "approval_required" | "spending_policy" | "unrestricted_test_only"'.
+      Type 'undefined' is not assignable to type '"read_only" | "approval_required" | "spending_policy" | "unrestricted_test_only"'.
+tools/dev/local-dev.ts(8,90): error TS5097: An import path can only end with a '.ts' extension when 'allowImportingTsExtensions' is enabled.
+tools/dev/local-dev.ts(825,23): error TS2379: Argument of type 'ChildProcessByStdio<null, Readable, Readable>' is not assignable to parameter of type 'LocalDevChild' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'pid' are incompatible.
+    Type 'number | undefined' is not assignable to type 'number'.
+      Type 'undefined' is not assignable to type 'number'.
+tools/dev/local-dev.ts(828,41): error TS2379: Argument of type 'ChildProcessByStdio<null, Readable, Readable>' is not assignable to parameter of type 'LocalDevChild' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'pid' are incompatible.
+    Type 'number | undefined' is not assignable to type 'number'.
+      Type 'undefined' is not assignable to type 'number'.
+tools/dev/local-dev.ts(957,64): error TS2379: Argument of type 'ManagedChildResult' is not assignable to parameter of type 'ChildFailureResult' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'timeoutMs' are incompatible.
+    Type 'number | null' is not assignable to type 'number'.
+      Type 'null' is not assignable to type 'number'.
+tools/dev/local-dev.ts(975,41): error TS2379: Argument of type 'ManagedChildResult' is not assignable to parameter of type 'ChildFailureResult & { requestedSignal?: Signals | null; }' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Type 'ManagedChildResult' is not assignable to type 'ChildFailureResult' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+    Types of property 'timeoutMs' are incompatible.
+      Type 'number | null' is not assignable to type 'number'.
+        Type 'null' is not assignable to type 'number'.
+tools/dev/local-dev.ts(990,44): error TS2379: Argument of type 'ManagedChildResult' is not assignable to parameter of type 'ChildFailureResult & { requestedSignal?: Signals | null; }' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Type 'ManagedChildResult' is not assignable to type 'ChildFailureResult' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+    Types of property 'timeoutMs' are incompatible.
+      Type 'number | null' is not assignable to type 'number'.
+        Type 'null' is not assignable to type 'number'.
+tools/dev/local-dev.ts(1004,54): error TS2379: Argument of type 'ManagedChildResult' is not assignable to parameter of type 'ChildFailureResult & { requestedSignal?: Signals | null; }' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Type 'ManagedChildResult' is not assignable to type 'ChildFailureResult' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+    Types of property 'timeoutMs' are incompatible.
+      Type 'number | null' is not assignable to type 'number'.
+        Type 'null' is not assignable to type 'number'.
+tools/dev/local-dev.ts(1019,38): error TS2379: Argument of type 'ManagedChildResult' is not assignable to parameter of type 'ChildFailureResult & { requestedSignal?: Signals | null; }' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Type 'ManagedChildResult' is not assignable to type 'ChildFailureResult' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+    Types of property 'timeoutMs' are incompatible.
+      Type 'number | null' is not assignable to type 'number'.
+        Type 'null' is not assignable to type 'number'.
+tools/dev/local-dev.ts(1138,41): error TS2379: Argument of type 'ManagedChildResult' is not assignable to parameter of type 'ChildFailureResult & { requestedSignal?: Signals | null; }' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Type 'ManagedChildResult' is not assignable to type 'ChildFailureResult' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+    Types of property 'timeoutMs' are incompatible.
+      Type 'number | null' is not assignable to type 'number'.
+        Type 'null' is not assignable to type 'number'.

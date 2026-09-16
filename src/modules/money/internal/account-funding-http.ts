@@ -348,7 +348,7 @@ export async function beginAccountFundingThroughSource(
   })
   const baseUrl = resolveCanonicalBaseUrl().baseUrl
   const successReturnRef = `${baseUrl}/owner/credit?funding={CHECKOUT_SESSION_ID}`
-  const cancelReturnRef = `${baseUrl}/fund/cancelled`
+  const cancelReturnRef = `${baseUrl}/owner/credit?funding={CHECKOUT_SESSION_ID}`
   const checkoutExpiresAt = (Math.floor(Date.now() / 1_000) + 60 * 60) * 1_000
   const operationKey = 'moneyAccountFunding:reserve'
   const correlationId = commandRef

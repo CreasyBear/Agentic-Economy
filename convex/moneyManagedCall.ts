@@ -4,9 +4,13 @@ import { degradeBackend } from '@/lib/observability/degrade-backend'
 import type { Doc } from './_generated/dataModel'
 import { internalMutation, internalQuery, type MutationCtx } from './_generated/server'
 import { canonicalDigest } from '../src/modules/common/canonical-digest'
-import { currentUtcDayBounds, currentUtcMonthBounds } from '../src/modules/common/utc-calendar'
-import { PACKAGE4_FORMANCE_REQUIREMENTS, validateExecutableRateEvidenceIntegrity, type ExecutableRateEvidence } from '../src/modules/money/public'
-import { spendingPeriodsValue } from '../src/modules/money/internal/spending-period-values'
+import { currentUtcDayBounds, currentUtcMonthBounds } from '../src/modules/common/freshness'
+import {
+  PACKAGE4_FORMANCE_REQUIREMENTS,
+  spendingPeriodsValue,
+  validateExecutableRateEvidenceIntegrity,
+  type ExecutableRateEvidence,
+} from '../src/modules/money/public'
 import { parsePublishedToolSnapshot } from '../src/modules/capability-supply/public'
 
 const transactionRefsValue = v.array(v.string())

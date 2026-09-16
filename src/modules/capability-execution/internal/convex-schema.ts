@@ -4,7 +4,7 @@ import {
   acceptedAuthorityValue,
   type CanonicalClaimAuthority,
 } from '@/modules/action-execution/runtime'
-import { spendingPeriodsValue } from '@/modules/money/internal/spending-period-values'
+import { spendingPeriodsValue } from '@/modules/money/public'
 
 export type CallPersistedAuthority = CanonicalClaimAuthority & Readonly<{
   format: 'operation-invoke-authority:v1'

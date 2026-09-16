@@ -1,0 +1,96 @@
+{
+  "recorded_at": "2026-09-12T10:01:11.641380+00:00",
+  "model": "gpt-5.6-luna",
+  "reasoning_effort": "max",
+  "completed_microtasks": 3,
+  "completed_modules": 0,
+  "claims_independently_corroborated": 0,
+  "stopped_broad_assignments": [
+    "systematic_units",
+    "systematic_relations",
+    "systematic_behaviors"
+  ],
+  "reviews": [
+    {
+      "id": "MR-001",
+      "agent": "freshness_threshold",
+      "file": "src/modules/common/freshness.ts",
+      "symbol": "sourceFreshnessState",
+      "line": 16,
+      "sha256": "bcb5f0285a4c339e47c0c628f83df8ca698e164f33dad07f5b9bc9e4a8723c5d",
+      "question": "What is the exact absence/failure/age precedence?",
+      "observations": [
+        "Missing completedAt -> absent even if failed=true.",
+        "Present completion and failed=true -> failed.",
+        "Otherwise age > threshold -> stale; equality or younger -> fresh.",
+        "Future completion -> fresh assuming nonnegative threshold."
+      ],
+      "assumptions": [
+        "Meaningful finite numeric time values and nonnegative threshold are caller obligations, not validated here."
+      ],
+      "open": [
+        "Caller validation",
+        "Freshness source provenance",
+        "Whether absent-before-failed matches each consumer contract"
+      ],
+      "evidence_correction": "Parent corrected returned line range 20-27 to actual function lines 16-24; returned content hash matches.",
+      "parent_hash_matches": true,
+      "status": "local-contract-reviewed; callers-unreviewed",
+      "verification": "Source reasoning; examples not executed; tests not run."
+    },
+    {
+      "id": "MR-002",
+      "agent": "stable_serialization",
+      "file": "src/modules/common/stable-hash.ts",
+      "symbol": "stableStringify",
+      "line": 9,
+      "sha256": "1f1c398d3b194e0660a12404a15e9a4c9990e5796febb653f531ac713640159f",
+      "question": "Are object insertion order and array order handled deterministically for finite JSON values?",
+      "observations": [
+        "Object keys sorted before recursive serialization at lines20-23.",
+        "Array mapping preserves order at lines14-15.",
+        "{b:2,a:1} serializes as {\"a\":1,\"b\":2}; reversed insertion yields same result.",
+        "[2,1] and [1,2] retain their distinct order."
+      ],
+      "assumptions": [
+        "Finite, acyclic JSON data without exotic objects or invalid values."
+      ],
+      "open": [
+        "Caller enforcement of assumed input domain",
+        "Descriptor hashing contract",
+        "All other exported helpers and cross-module digest consumers"
+      ],
+      "parent_hash_matches": true,
+      "status": "local-contract-reviewed; callers-unreviewed",
+      "verification": "Source reasoning; examples not executed; tests not run."
+    },
+    {
+      "id": "MR-003",
+      "agent": "bounded_json_cycles",
+      "file": "src/modules/common/bounded-json.ts",
+      "symbol": "isBoundedJsonValue",
+      "line": 15,
+      "sha256": "ec5db59b80e17a617cbf180022bd25f5bcba0122eaac8ce4d6ec60a5434cc89b",
+      "question": "Does active-path cycle detection permit repeated references and enforce exact traversal bounds?",
+      "observations": [
+        "Root counts as node1 at depth0.",
+        "Active-path repeats return false; shared references on separate successful branches are allowed but each traversal counts again.",
+        "Root array with9999 null children visits10000 nodes and is within budget;10000 children exceeds budget.",
+        "Deepest value at depth64 is within budget;depth65 exceeds it."
+      ],
+      "assumptions": [
+        "Ordinary data access without throwing proxy/getter behavior."
+      ],
+      "open": [
+        "Exception behavior on arbitrary unknown objects",
+        "parseBoundedJson behavior",
+        "Caller contracts",
+        "Dependency-direction and side effects"
+      ],
+      "evidence_correction": "Parent narrowed the agent's broad returns-false-on-violation statement: arbitrary proxy/getter exception behavior was not assessed.",
+      "parent_hash_matches": true,
+      "status": "local-contract-reviewed; callers-unreviewed",
+      "verification": "Source reasoning; examples not executed; tests not run."
+    }
+  ]
+}

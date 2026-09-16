@@ -4,7 +4,7 @@ import { listAgentAccessKeysServer } from '@/modules/agent-access/agent-access.f
 import type { AgentAccessKeyInventoryItem } from '@/modules/agent-access/agent-access'
 import type { AgentAccessOwnerGrantReadback } from '@/modules/agent-access/policy'
 import type { AgentConnectionReadback } from '@/modules/agent-access/agent-connection'
-import { currentUtcMonthBounds } from '@/modules/common/utc-calendar'
+import { currentUtcMonthBounds } from '@/modules/common/freshness'
 import type { AccountFundingBalance } from '@/modules/money/server'
 import type {
   AgentActivityView,

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import { CUSTOMER_REQUEST_SPENDING_POLICY_SCOPE, MARKET_TOOLS_CALL_SCOPE, MARKET_SUPPLY_MANAGE_SCOPE } from '@/modules/agent-access/contract'
 import { AGENT_ACCESS_KEY_TTL_SECONDS } from '@/modules/agent-access/agent-access'
+import { createOAuthStoreFixture } from '../helpers/agent-access-oauth-store-fixture'
 
 import {
   approveGrant,
@@ -22,56 +23,7 @@ import {
   type AgentAccessOAuthStore,
 } from '@/modules/agent-access/oauth-state'
 
-function storeFixture(): AgentAccessOAuthStore & {
-  grants: Map<string, AgentAccessOAuthGrant>
-  updates: Array<Readonly<{
-    expectedStatus: AgentAccessOAuthGrant['status']
-    expectedRevision: number
-    patchStatus?: AgentAccessOAuthGrant['status']
-    expectedIssuanceStartedAt?: number
-  }>>
-} {
-  const grants = new Map<string, AgentAccessOAuthGrant>()
-  const updates: Array<Readonly<{
-    expectedStatus: AgentAccessOAuthGrant['status']
-    expectedRevision: number
-    patchStatus?: AgentAccessOAuthGrant['status']
-    expectedIssuanceStartedAt?: number
-  }>> = []
-  return {
-    grants,
-    updates,
-    async insertGrant(grant) { grants.set(grant.grantRef, grant) },
-    async getGrantByHash(kind, hash) {
-      for (const grant of grants.values()) {
-        const value = kind === 'device' ? grant.deviceCodeHash : kind === 'user' ? grant.userCodeHash : grant.authorizationCodeHash
-        if (value === hash) return grant
-      }
-      return null
-    },
-    async getGrantByRef(grantRef) { return grants.get(grantRef) ?? null },
-    async updateGrant(grantRef, expectedStatus, expectedRevision, patch, expectedIssuanceStartedAt) {
-      const current = grants.get(grantRef)
-      updates.push({
-        expectedStatus,
-        expectedRevision,
-        ...(patch.status === undefined ? {} : { patchStatus: patch.status }),
-        ...(expectedIssuanceStartedAt === undefined ? {} : { expectedIssuanceStartedAt }),
-      })
-      if (current === undefined
-        || current.status !== expectedStatus
-        || current.revision !== expectedRevision
-        || (expectedIssuanceStartedAt !== undefined
-          && current.issuanceStartedAt !== expectedIssuanceStartedAt)) return null
-      const pollScheduleOnly = Object.keys(patch).length === 1 && patch.nextPollAt !== undefined
-      const updated = { ...current, ...patch, revision: pollScheduleOnly ? current.revision : current.revision + 1 }
-      grants.set(grantRef, updated)
-      return updated
-    },
-    async insertClient() {},
-    async getClient() { return null },
-  }
-}
+const storeFixture = createOAuthStoreFixture
 
 const deviceClient: AgentAccessOAuthClient = {
   clientId: 'client-device',

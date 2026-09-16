@@ -4,7 +4,7 @@ import { StoreIcon } from 'lucide-react'
 import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
 import { AeX402Directory } from '@/components/ae/market/AeX402Directory'
 import { operatorRouteOptions } from '@/lib/operator/route-options'
-import { loadMarketRouteData, marketLoaderDeps, validateMarketSearch } from '@/modules/market/market-route-data'
+import { loadMarketRouteData, marketLoaderDeps, validateMarketSearch } from '@/modules/market/market.functions'
 
 export const Route = createFileRoute('/_operator/owner/market')({
   staticData: {

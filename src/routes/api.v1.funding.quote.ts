@@ -2,10 +2,8 @@ import { createFileRoute } from '@tanstack/react-router'
 
 import { readBoundedRequestJson } from '@/lib/server/bounded-request-body'
 import { degrade } from '@/lib/observability/degrade'
-import { methodNotAllowed } from '@/lib/server/method-guard'
+import { executeCorrelatedJsonRoute, postOnlyRoute } from '@/lib/server/gateway-json-route'
 import { problem } from '@/lib/server/problem'
-import { withHttpRateLimit } from '@/lib/server/rate-limit'
-import { runWithRequestCorrelation, withRequestCorrelationHeader } from '@/lib/server/request-correlation'
 import {
   commercialPolicyControlsFromFundingProjection,
   fundingQuoteInputSchema,
@@ -17,17 +15,7 @@ const MAX_FUNDING_QUOTE_BODY_BYTES = 2 * 1024
 
 export const Route = createFileRoute('/api/v1/funding/quote')({
   server: {
-    handlers: {
-      POST: ({ request }) => handleFundingQuoteRequest(request),
-      GET: () => methodNotAllowed(['POST']),
-      PUT: () => methodNotAllowed(['POST']),
-      PATCH: () => methodNotAllowed(['POST']),
-      DELETE: () => methodNotAllowed(['POST']),
-      HEAD: () => methodNotAllowed(['POST']),
-      OPTIONS: () => methodNotAllowed(['POST']),
-      TRACE: () => methodNotAllowed(['POST']),
-      CONNECT: () => methodNotAllowed(['POST']),
-    },
+    handlers: postOnlyRoute((request) => handleFundingQuoteRequest(request)),
   },
 })
 
@@ -35,62 +23,60 @@ export async function handleFundingQuoteRequest(
   request: Request,
   options: Readonly<{ now?: number }> = {},
 ): Promise<Response> {
-  return await runWithRequestCorrelation(request, async ({ correlationId }) => {
-    let response: Response
-    try {
-      response = await withHttpRateLimit(request, 'public-read', async () => {
-        if (!request.headers.get('content-type')?.toLowerCase().includes('application/json')) {
-          return problem({ status: 415, kind: 'UNSUPPORTED_MEDIA_TYPE', code: 'invalid_content_type' })
-        }
-        const bounded = await readBoundedRequestJson(request, MAX_FUNDING_QUOTE_BODY_BYTES)
-        if (!bounded.ok) {
-          return problem({
-            status: bounded.code === 'payload_too_large' ? 413 : 400,
-            kind: bounded.code === 'payload_too_large' ? 'PAYLOAD_TOO_LARGE' : 'INVALID_ARGUMENT',
-            code: bounded.code,
-          })
-        }
-        const parsed = fundingQuoteInputSchema.safeParse(bounded.value)
-        if (!parsed.success) {
-          return problem({
-            status: 400,
-            kind: 'INVALID_ARGUMENT',
-            code: 'invalid_funding_quote',
-            detail: 'Amount must use exact currency, integer units, and exponent fields.',
-          })
-        }
-        const live = await readPlatformFundingConstraintsThroughSource()
-        if (live.kind !== 'available') {
-          return problem({
-            status: 503,
-            kind: 'UNAVAILABLE',
-            code: 'funding_quote_unavailable',
-            retryable: true,
-          })
-        }
-        const quote = quoteFunding({
-          amount: parsed.data.amount,
-          now: options.now ?? Date.now(),
-          controls: commercialPolicyControlsFromFundingProjection(live),
+  return await executeCorrelatedJsonRoute(
+    request,
+    'public-read',
+    async () => {
+      if (!request.headers.get('content-type')?.toLowerCase().includes('application/json')) {
+        return problem({ status: 415, kind: 'UNSUPPORTED_MEDIA_TYPE', code: 'invalid_content_type' })
+      }
+      const bounded = await readBoundedRequestJson(request, MAX_FUNDING_QUOTE_BODY_BYTES)
+      if (!bounded.ok) {
+        return problem({
+          status: bounded.code === 'payload_too_large' ? 413 : 400,
+          kind: bounded.code === 'payload_too_large' ? 'PAYLOAD_TOO_LARGE' : 'INVALID_ARGUMENT',
+          code: bounded.code,
         })
-        if (quote === undefined) {
-          return problem({
-            status: 400,
-            kind: 'INVALID_ARGUMENT',
-            code: 'funding_amount_out_of_range',
-            detail: 'The requested AUD principal does not meet the current funding constraints.',
-          })
-        }
-        return Response.json(quote, { headers: { 'Cache-Control': 'no-store' } })
+      }
+      const parsed = fundingQuoteInputSchema.safeParse(bounded.value)
+      if (!parsed.success) {
+        return problem({
+          status: 400,
+          kind: 'INVALID_ARGUMENT',
+          code: 'invalid_funding_quote',
+          detail: 'Amount must use exact currency, integer units, and exponent fields.',
+        })
+      }
+      const live = await readPlatformFundingConstraintsThroughSource()
+      if (live.kind !== 'available') {
+        return problem({
+          status: 503,
+          kind: 'UNAVAILABLE',
+          code: 'funding_quote_unavailable',
+          retryable: true,
+        })
+      }
+      const quote = quoteFunding({
+        amount: parsed.data.amount,
+        now: options.now ?? Date.now(),
+        controls: commercialPolicyControlsFromFundingProjection(live),
       })
-    } catch (cause) {
-      response = degrade(cause, problem({
+      if (quote === undefined) {
+        return problem({
+          status: 400,
+          kind: 'INVALID_ARGUMENT',
+          code: 'funding_amount_out_of_range',
+          detail: 'The requested AUD principal does not meet the current funding constraints.',
+        })
+      }
+      return Response.json(quote, { headers: { 'Cache-Control': 'no-store' } })
+    },
+    (cause) =>
+      degrade(cause, problem({
         status: 503,
         kind: 'UNAVAILABLE',
         code: 'funding_quote_unavailable',
         retryable: true,
-      }), { site: 'handleFundingQuoteRequest', reason: 'source_unavailable' })
-    }
-    return withRequestCorrelationHeader(response, correlationId)
-  })
+      }), { site: 'handleFundingQuoteRequest', reason: 'source_unavailable' }),
+  )
 }

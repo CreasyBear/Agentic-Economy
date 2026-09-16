@@ -10,7 +10,7 @@ import {
   spendingPeriodsAreCurrent,
 } from '../../convex/lib/agentSpendingPeriods'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
-import { spendingPeriodAdjustmentReference, type SpendingPeriodAdjustment } from '@/modules/money/internal/spending-period-values'
+import { spendingPeriodAdjustmentReference, type SpendingPeriodAdjustment } from '@/modules/money/public'
 
 const now = Date.UTC(2026, 8, 14, 12)
 const input = {

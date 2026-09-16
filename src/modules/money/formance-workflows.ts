@@ -1,7 +1,7 @@
 "use node"
 
 import { canonicalDigest } from '@/modules/common/canonical-digest'
-import { currentUtcDayBounds, currentUtcMonthBounds } from '@/modules/common/utc-calendar'
+import { currentUtcDayBounds, currentUtcMonthBounds } from '@/modules/common/freshness'
 
 import {
   canonicalFormanceUnits,
@@ -18,6 +18,7 @@ import {
   type FormanceMoneyBulkCommand,
   type FormanceMoneyResult,
 } from './formance'
+import { completed, refused, unavailable } from './formance-result'
 import { PACKAGE4_FORMANCE_REQUIREMENTS } from './internal/commercial-policy'
 import { spendingPeriodAdjustmentReference } from './internal/spending-period-values'
 
@@ -1105,14 +1106,3 @@ async function executePreparedBulk(
     : await executeFormanceMoneyBulk(context, prepared.bulk)
 }
 
-function completed(reference: string, replayed: boolean): FormanceMoneyResult {
-  return Object.freeze({ kind: 'completed', transactionRefs: Object.freeze([reference]), replayed })
-}
-
-function refused(code: string): Readonly<{ kind: 'refused'; code: string; retryable: false }> {
-  return Object.freeze({ kind: 'refused', code, retryable: false })
-}
-
-function unavailable(code: string): FormanceMoneyResult {
-  return Object.freeze({ kind: 'unavailable', code, submissionProvenAbsent: true })
-}

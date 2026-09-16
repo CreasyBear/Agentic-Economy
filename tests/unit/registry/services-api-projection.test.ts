@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
 import type { OfferingPrice } from '@/modules/catalog/public'
-
 import type { CatalogOfferingToolMapEntry } from '@/modules/capability-supply/public'
 import type {
   PublicBusinessCatalogApiV2Page,
@@ -8,6 +7,47 @@ import type {
   ServiceToolMap,
 } from '@/modules/registry/public'
 import { projectPublicServicesPage, projectPublicServicesSearchPage } from '@/modules/registry/public'
+import {
+  USDC_BASE_SEPOLIA_PAYMENT,
+  acmeCatalogPage,
+  acmeProjectedServiceExpectation,
+  dualOfferingToolMap,
+  linkedToolEntry,
+  linkedToolMap,
+  malformedSearchUrlMappingPage,
+  mappingPage,
+  mappingPageWithAdditionalPath,
+  mappingPageWithPrices,
+  offeringToolMap,
+  singleOfferingMappingPage,
+} from '../../helpers/services-api-projection-fixtures'
+
+const SERVICE_CORE_KEYS = ['ae', 'category', 'description', 'domain', 'endpoints', 'enriched', 'id', 'integrationType', 'name', 'networks', 'priceSummary', 'provider', 'providerUrl', 'serviceName', 'tags'] as const
+const SERVICE_AE_KEYS = ['businessContext', 'disposition', 'links', 'observedAt', 'offerings', 'photos', 'publicUrl', 'source', 'trustTier'] as const
+const SERVICE_AE_LINK_KEYS = ['business', 'manifest'] as const
+const SERVICE_TOP_LEVEL_LEAKS = ['trustTier', 'suburb', 'stateTerritory', 'publicUrl', 'source', 'offerings'] as const
+const ENDPOINT_CORE_KEYS = ['ae', 'description', 'method', 'parameters', 'quality', 'serviceName', 'tags', 'url'] as const
+const ENDPOINT_CORE_KEYS_ENRICHED = [...ENDPOINT_CORE_KEYS.slice(0, 4), 'pricing', ...ENDPOINT_CORE_KEYS.slice(4)] as const
+const ENDPOINT_AE_UNLINKED_KEYS = ['access', 'authentication', 'execution', 'offeringRef', 'provenance', 'settlementSupport'] as const
+const ENDPOINT_AE_LINKED_KEYS = ['access', 'authentication', 'authorityMode', 'execution', 'offeringRef', 'provenance', 'settlementSupport', 'sourceKind', 'toolRef'] as const
+const LEGACY_ENDPOINT_TOP_KEYS = ['summary', 'catalogPrice', 'offeringRef', 'toolRef'] as const
+const CREDENTIAL_LEAK_PATTERN = /credentialRef|credentialValue|env:/u
+const CREDENTIAL_LEAK_AMBIGUOUS_PATTERN = /credentialRef|credentialValue|env/u
+const CREDENTIAL_LEAK_AUTH_PATTERN = /credentialRef|secret|env/i
+
+function expectSortedKeys(target: object, keys: readonly string[]) {
+  expect(Object.keys(target).sort()).toEqual([...keys].sort())
+}
+
+function expectAbsentProperties(target: object, keys: readonly string[]) {
+  for (const key of keys) {
+    expect(target).not.toHaveProperty(key)
+  }
+}
+
+function firstProjectedService(page: PublicBusinessCatalogApiV2Page = mappingPage(), toolMap?: ServiceToolMap) {
+  return projectPublicServicesPage(page, toolMap).services[0]!
+}
 
 describe('catalogue Services API Service mapping', () => {
   it('omits businesses without public offerings while preserving page and search cursors', () => {
@@ -21,10 +61,7 @@ describe('catalogue Services API Service mapping', () => {
       offerings: [],
       accessSummary: { humanRequest: false, externalOperation: false, aeSupportedAction: false },
     }
-    const page: PublicBusinessCatalogApiV2Page = {
-      ...source,
-      page: [emptyBusiness, publishedBusiness],
-    }
+    const page: PublicBusinessCatalogApiV2Page = { ...source, page: [emptyBusiness, publishedBusiness] }
     const projectedPage = projectPublicServicesPage(page)
     expect(projectedPage.services.map(({ id }) => id)).toEqual(['api-exa-ai'])
     expect(projectedPage.isDone).toBe(source.isDone)
@@ -45,32 +82,13 @@ describe('catalogue Services API Service mapping', () => {
 
   it('mirrors the v2 Service/Endpoint core keys and nests AE-only data', () => {
     const result = projectPublicServicesPage(mappingPage())
-
     expect(result.schemaVersion).toBe('public-services-api:v3')
     expect(result.services).toHaveLength(1)
     const service = result.services[0]!
     const firstEndpoint = service.endpoints[0]!
     const secondEndpoint = service.endpoints[1]!
 
-    // Exact catalogue Services API Service core names. AE-only merchandising and
-    // source data stay together under `ae`, never leak into the core.
-    expect(Object.keys(service).sort()).toEqual([
-      'ae',
-      'category',
-      'description',
-      'domain',
-      'endpoints',
-      'enriched',
-      'id',
-      'integrationType',
-      'name',
-      'networks',
-      'priceSummary',
-      'provider',
-      'providerUrl',
-      'serviceName',
-      'tags',
-    ])
+    expectSortedKeys(service, SERVICE_CORE_KEYS)
     expect(service).toMatchObject({
       id: 'api-exa-ai',
       name: 'EXA AI',
@@ -86,25 +104,11 @@ describe('catalogue Services API Service mapping', () => {
       tags: ['search'],
       priceSummary: { currency: 'USDC', minAmount: '0.01', maxAmount: '0.07', avgCostBasis: 'varies' },
     })
-    expect(Object.keys(service.ae).sort()).toEqual([
-      'businessContext',
-      'disposition',
-      'links',
-      'observedAt',
-      'offerings',
-      'photos',
-      'publicUrl',
-      'source',
-      'trustTier',
-    ])
-    expect(Object.keys(service.ae.links).sort()).toEqual(['business', 'manifest'])
+    expectSortedKeys(service.ae, SERVICE_AE_KEYS)
+    expectSortedKeys(service.ae.links, SERVICE_AE_LINK_KEYS)
     expect(service.ae).toMatchObject({
       trustTier: 'listed',
-      businessContext: {
-        kind: 'programmable_provider',
-        website: 'https://api.example',
-        providerIdentifier: 'EXA AI',
-      },
+      businessContext: { kind: 'programmable_provider', website: 'https://api.example', providerIdentifier: 'EXA AI' },
       publicUrl: 'https://api.example',
       photos: [],
       observedAt: 1_700_000_000_000,
@@ -115,26 +119,9 @@ describe('catalogue Services API Service mapping', () => {
         expect.objectContaining({ offeringRef: 'offering:api-exa-ai:contents' }),
       ]),
     })
-    expect(service).not.toHaveProperty('trustTier')
-    expect(service).not.toHaveProperty('suburb')
-    expect(service).not.toHaveProperty('stateTerritory')
-    expect(service).not.toHaveProperty('publicUrl')
-    expect(service).not.toHaveProperty('source')
-    expect(service).not.toHaveProperty('offerings')
+    expectAbsentProperties(service, SERVICE_TOP_LEVEL_LEAKS)
 
-    // Exact catalogue Services API Endpoint core names. Legacy AE endpoint fields
-    // (`summary`, `catalogPrice`, `offeringRef`, `toolRef`) are absent at
-    // the top level; the linkage belongs under `ae`.
-    expect(Object.keys(firstEndpoint).sort()).toEqual([
-      'ae',
-      'description',
-      'method',
-      'parameters',
-      'quality',
-      'serviceName',
-      'tags',
-      'url',
-    ])
+    expectSortedKeys(firstEndpoint, ENDPOINT_CORE_KEYS)
     expect(firstEndpoint).toMatchObject({
       url: 'https://api.exa.ai/search',
       method: 'GET',
@@ -152,55 +139,27 @@ describe('catalogue Services API Service mapping', () => {
         settlementSupport: 'unpriced',
       },
     })
-    expect(Object.keys(firstEndpoint.ae).sort()).toEqual([
-      'access',
-      'authentication',
-      'execution',
-      'offeringRef',
-      'provenance',
-      'settlementSupport',
-    ])
+    expectSortedKeys(firstEndpoint.ae, ENDPOINT_AE_UNLINKED_KEYS)
     expect(secondEndpoint.ae.offeringRef).toBe('offering:api-exa-ai:contents')
-    expect(firstEndpoint).not.toHaveProperty('summary')
-    expect(firstEndpoint).not.toHaveProperty('catalogPrice')
-    expect(firstEndpoint).not.toHaveProperty('offeringRef')
-    expect(firstEndpoint).not.toHaveProperty('toolRef')
-    expect(firstEndpoint).not.toHaveProperty('name')
-
-    // NEGATIVE: endpoints[] must not inline the full execution schema.
-    expect(firstEndpoint).not.toHaveProperty('inputJsonSchema')
-    expect(firstEndpoint).not.toHaveProperty('outputJsonSchema')
-    // NEGATIVE: a field with no source (toolRef) stays absent, not fabricated.
+    expectAbsentProperties(firstEndpoint, [...LEGACY_ENDPOINT_TOP_KEYS, 'name'])
+    expectAbsentProperties(firstEndpoint, ['inputJsonSchema', 'outputJsonSchema'])
     expect(firstEndpoint.ae).not.toHaveProperty('toolRef')
   })
 
   it('derives integrationType 1P only from linked provider-owned supply', () => {
-    expect(projectPublicServicesPage(mappingPage()).services[0]!).toMatchObject({ integrationType: '3P' })
-    const observedService = projectPublicServicesPage(mappingPage('publicly_observed')).services[0]!
+    expect(firstProjectedService()).toMatchObject({ integrationType: '3P' })
+    const observedService = firstProjectedService(mappingPage('publicly_observed'))
     expect(observedService).toMatchObject({ integrationType: '3P' })
     expect(observedService.endpoints[0]).not.toHaveProperty('providerName')
   })
 
   it('enriches a linked endpoint with toolRef+parameters+pricing and keeps an unlinked one absent (W1)', () => {
-    const toolMap = linkedToolMap('offering:api-exa-ai:search')
-    const result = projectPublicServicesPage(mappingPage(), toolMap)
-
-    const service = result.services[0]!
+    const service = firstProjectedService(mappingPage(), linkedToolMap('offering:api-exa-ai:search'))
     const searchEndpoint = service.endpoints[0]!
     const contentsEndpoint = service.endpoints[1]!
 
     expect(service.enriched).toBe(true)
-    expect(Object.keys(searchEndpoint).sort()).toEqual([
-      'ae',
-      'description',
-      'method',
-      'parameters',
-      'pricing',
-      'quality',
-      'serviceName',
-      'tags',
-      'url',
-    ])
+    expectSortedKeys(searchEndpoint, ENDPOINT_CORE_KEYS_ENRICHED)
     expect(searchEndpoint.ae).toMatchObject({
       toolRef: 'operation:v1:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
       offeringRef: 'offering:api-exa-ai:search',
@@ -212,38 +171,25 @@ describe('catalogue Services API Service mapping', () => {
       sourceKind: 'openapi_http',
       settlementSupport: 'catalog_only',
     })
-    expect(Object.keys(searchEndpoint.ae).sort()).toEqual([
-      'access',
-      'authentication',
-      'authorityMode',
-      'execution',
-      'offeringRef',
-      'provenance',
-      'settlementSupport',
-      'sourceKind',
-      'toolRef',
-    ])
-    for (const legacyKey of ['summary', 'catalogPrice', 'offeringRef', 'toolRef']) {
-      expect(searchEndpoint).not.toHaveProperty(legacyKey)
-    }
+    expectSortedKeys(searchEndpoint.ae, ENDPOINT_AE_LINKED_KEYS)
+    expectAbsentProperties(searchEndpoint, LEGACY_ENDPOINT_TOP_KEYS)
     expect(searchEndpoint.parameters).toEqual([
       { group: 'body', name: 'query', type: 'string', description: 'Search query', required: true },
     ])
     expect(searchEndpoint.pricing).toEqual({ scheme: 'exact', amount: '0.01', currency: 'USDC' })
     expect(searchEndpoint.pricing).not.toHaveProperty('network')
 
-    // The contents offering is NOT in the map -> stays absent, never fabricated.
     expect(contentsEndpoint.ae).not.toHaveProperty('toolRef')
     expect(contentsEndpoint).not.toHaveProperty('pricing')
     expect(contentsEndpoint.parameters).toEqual([])
     expect(contentsEndpoint.tags).toEqual(['search'])
     expect(contentsEndpoint.quality).toBeNull()
-    // Unmapped run still yields plain endpoints (fully additive).
-    const plainEndpoint = projectPublicServicesPage(mappingPage()).services[0]!.endpoints[0]!
+
+    const plainEndpoint = firstProjectedService().endpoints[0]!
     expect(plainEndpoint.ae).not.toHaveProperty('toolRef')
     expect(plainEndpoint).not.toHaveProperty('pricing')
   })
- 
+
   it('preserves Agent Plugin MCP provenance in the public endpoint projection', () => {
     const linked = linkedToolMap('offering:api-exa-ai:search')
     const pluginMap: ServiceToolMap = {
@@ -253,20 +199,18 @@ describe('catalogue Services API Service mapping', () => {
         sourceKind: 'agent_plugin_mcp' as const,
       })),
     }
-    const endpoint = projectPublicServicesPage(mappingPage(), pluginMap).services[0]!.endpoints[0]!
-    expect(endpoint.ae).toMatchObject({ sourceKind: 'agent_plugin_mcp' })
+    expect(firstProjectedService(mappingPage(), pluginMap).endpoints[0]!.ae).toMatchObject({
+      sourceKind: 'agent_plugin_mcp',
+    })
   })
 
   it('refuses stale or ambiguous Tool linkage', () => {
     const current = linkedToolMap('offering:api-exa-ai:search')
     const stale: ServiceToolMap = {
       ...current,
-      'offering:api-exa-ai:search': [{
-        ...current['offering:api-exa-ai:search']![0]!,
-        offeringRevision: 2,
-      }],
+      'offering:api-exa-ai:search': [{ ...current['offering:api-exa-ai:search']![0]!, offeringRevision: 2 }],
     }
-    expect(projectPublicServicesPage(mappingPage(), stale).services[0]!.enriched).toBe(false)
+    expect(firstProjectedService(mappingPage(), stale).enriched).toBe(false)
 
     const ambiguous: ServiceToolMap = {
       'offering:api-exa-ai:search': [
@@ -274,8 +218,9 @@ describe('catalogue Services API Service mapping', () => {
         ...current['offering:api-exa-ai:search']!,
       ],
     }
-    expect(projectPublicServicesPage(mappingPage(), ambiguous).services[0]!.enriched).toBe(false)
-    const ambiguousEndpoint = projectPublicServicesPage(mappingPage(), ambiguous).services[0]!.endpoints[0]!
+    const ambiguousService = firstProjectedService(mappingPage(), ambiguous)
+    expect(ambiguousService.enriched).toBe(false)
+    const ambiguousEndpoint = ambiguousService.endpoints[0]!
     expect(ambiguousEndpoint.ae).toMatchObject({
       access: 'external',
       execution: 'catalog_only',
@@ -284,12 +229,12 @@ describe('catalogue Services API Service mapping', () => {
     })
     expect(ambiguousEndpoint.ae).not.toHaveProperty('toolRef')
     expect(ambiguousEndpoint).not.toHaveProperty('pricing')
-    expect(JSON.stringify(ambiguousEndpoint)).not.toMatch(/credentialRef|credentialValue|route/u)
+    expect(JSON.stringify(ambiguousEndpoint)).not.toMatch(CREDENTIAL_LEAK_AMBIGUOUS_PATTERN)
 
-    const additionalPath = projectPublicServicesPage(
+    const additionalPath = firstProjectedService(
       mappingPageWithAdditionalPath(),
       linkedToolMap('offering:api-exa-ai:search'),
-    ).services[0]!
+    )
     expect(additionalPath.enriched).toBe(true)
     expect(additionalPath.endpoints[0]!.ae.toolRef).toBeDefined()
     expect(additionalPath.endpoints[1]!.ae).not.toHaveProperty('toolRef')
@@ -311,68 +256,31 @@ describe('catalogue Services API Service mapping', () => {
         },
       ],
     }
-    const endpoints = projectPublicServicesPage(mappingPageWithAdditionalPath(), toolMap).services[0]!.endpoints
-
-    expect(endpoints.map((endpoint) => endpoint.ae.toolRef)).toEqual([
-      first.toolRef,
-      secondToolRef,
-      undefined,
-    ])
-    expect(JSON.stringify(endpoints)).not.toMatch(/credentialRef|credentialValue|env:/)
+    const endpoints = firstProjectedService(mappingPageWithAdditionalPath(), toolMap).endpoints
+    expect(endpoints.map((endpoint) => endpoint.ae.toolRef)).toEqual([first.toolRef, secondToolRef, undefined])
+    expect(JSON.stringify(endpoints)).not.toMatch(CREDENTIAL_LEAK_PATTERN)
   })
 
   it('uses the canonical tool_call execution enum only for linked ae_api_key Tools', () => {
     const entry = linkedToolEntry('offering:api-exa-ai:search')
-    const endpoint = projectPublicServicesPage(mappingPage(), {
-      'offering:api-exa-ai:search': [{ ...entry }],
-    }).services[0]!.endpoints[0]!
-
-    expect(endpoint.ae).toMatchObject({
-      access: 'external',
-      execution: 'tool_call',
-      toolRef: entry.toolRef,
-    })
+    const endpoint = firstProjectedService(mappingPage(), offeringToolMap({ 'offering:api-exa-ai:search': entry })).endpoints[0]!
+    expect(endpoint.ae).toMatchObject({ access: 'external', execution: 'tool_call', toolRef: entry.toolRef })
   })
 
   it('does not claim executable settlement for a non-routeable operation', () => {
-    const entry = linkedToolEntry('offering:api-exa-ai:search', {
-      network: 'eip155:84532',
-      asset: '0x0000000000000000000000000000000000000001',
-      currency: 'USDC',
-      routeAmountExponent: 2,
-      assetAmountExponent: 6,
-    })
-    const toolMap: ServiceToolMap = {
-      'offering:api-exa-ai:search': [{ ...entry, routeable: false }],
-    }
-    const endpoint = projectPublicServicesPage(mappingPage(), toolMap).services[0]!.endpoints[0]!
+    const entry = linkedToolEntry('offering:api-exa-ai:search', USDC_BASE_SEPOLIA_PAYMENT)
+    const endpoint = firstProjectedService(mappingPage(), offeringToolMap({
+      'offering:api-exa-ai:search': { ...entry, routeable: false },
+    })).endpoints[0]!
     expect(endpoint.ae.settlementSupport).toBe('catalog_only')
     expect(endpoint.ae).toMatchObject({ access: 'external', execution: 'catalog_only' })
   })
-
 })
+
 describe('catalogue Services API payment network projection', () => {
   it('deduplicates the payment network shared by two linked endpoints', () => {
-    const network = 'eip155:84532'
-    const toolMap: ServiceToolMap = {
-      'offering:api-exa-ai:search': [linkedToolEntry('offering:api-exa-ai:search', {
-        network,
-        asset: '0x0000000000000000000000000000000000000001',
-        currency: 'USDC',
-        routeAmountExponent: 2,
-        assetAmountExponent: 6,
-      })],
-      'offering:api-exa-ai:contents': [linkedToolEntry('offering:api-exa-ai:contents', {
-        network,
-        asset: '0x0000000000000000000000000000000000000001',
-        currency: 'USDC',
-        routeAmountExponent: 2,
-        assetAmountExponent: 6,
-      })],
-    }
-
-    const service = projectPublicServicesPage(mappingPage(), toolMap).services[0]!
-
+    const network = USDC_BASE_SEPOLIA_PAYMENT.network
+    const service = firstProjectedService(mappingPage(), dualOfferingToolMap(USDC_BASE_SEPOLIA_PAYMENT))
     expect(service.networks).toEqual([network])
     expect(service.endpoints.map((endpoint) => endpoint.pricing?.network)).toEqual([network, network])
     expect(service).not.toHaveProperty('networkId')
@@ -380,39 +288,31 @@ describe('catalogue Services API payment network projection', () => {
   })
 
   it('sorts distinct CAIP-2 networks and never substitutes the AE registry partition', () => {
-    const toolMap: ServiceToolMap = {
-      'offering:api-exa-ai:search': [linkedToolEntry('offering:api-exa-ai:search', {
+    const service = firstProjectedService(mappingPage(), offeringToolMap({
+      'offering:api-exa-ai:search': {
         network: 'solana:mainnet',
         asset: 'So11111111111111111111111111111111111111112',
         currency: 'USDC',
         routeAmountExponent: 2,
         assetAmountExponent: 6,
-      })],
-      'offering:api-exa-ai:contents': [linkedToolEntry('offering:api-exa-ai:contents', {
+      },
+      'offering:api-exa-ai:contents': {
         network: 'eip155:8453',
         asset: '0x0000000000000000000000000000000000000001',
         currency: 'USDC',
         routeAmountExponent: 2,
         assetAmountExponent: 6,
-      })],
-    }
-
-    const service = projectPublicServicesPage(mappingPage(), toolMap).services[0]!
-
+      },
+    }))
     expect(service.networks).toEqual(['eip155:8453', 'solana:mainnet'])
     expect(service.networks).not.toContain('ae:public')
-    expect(service.endpoints.map((endpoint) => endpoint.pricing?.network)).toEqual([
-      'solana:mainnet',
-      'eip155:8453',
-    ])
+    expect(service.endpoints.map((endpoint) => endpoint.pricing?.network)).toEqual(['solana:mainnet', 'eip155:8453'])
   })
 
   it('excludes keyless and unlinked endpoints from payment networks', () => {
-    const toolMap = linkedToolMap('offering:api-exa-ai:search')
-    const service = projectPublicServicesPage(mappingPage(), toolMap).services[0]!
+    const service = firstProjectedService(mappingPage(), linkedToolMap('offering:api-exa-ai:search'))
     const keylessEndpoint = service.endpoints[0]!
     const unlinkedEndpoint = service.endpoints[1]!
-
     expect(service.networks).toEqual([])
     expect(keylessEndpoint.pricing).toEqual({ scheme: 'exact', amount: '0.01', currency: 'USDC' })
     expect(keylessEndpoint.pricing).not.toHaveProperty('network')
@@ -422,101 +322,21 @@ describe('catalogue Services API payment network projection', () => {
   })
 
   it('omits pricing and network on a payment-price currency mismatch', () => {
-    const toolMap: ServiceToolMap = {
-      'offering:api-exa-ai:search': [linkedToolEntry('offering:api-exa-ai:search', {
-        network: 'eip155:84532',
-        asset: '0x0000000000000000000000000000000000000001',
-        currency: 'USD',
-        routeAmountExponent: 2,
-        assetAmountExponent: 6,
-      })],
-    }
-
-    const endpoint = projectPublicServicesPage(mappingPage(), toolMap).services[0]!.endpoints[0]!
-
+    const endpoint = firstProjectedService(mappingPage(), offeringToolMap({
+      'offering:api-exa-ai:search': { ...USDC_BASE_SEPOLIA_PAYMENT, currency: 'USD' },
+    })).endpoints[0]!
     expect(endpoint).not.toHaveProperty('pricing')
     expect(endpoint.pricing).toBeUndefined()
-    expect(endpoint.ae).toMatchObject({
-      toolRef: expect.any(String),
-      settlementSupport: 'catalog_only',
-    })
+    expect(endpoint.ae).toMatchObject({ toolRef: expect.any(String), settlementSupport: 'catalog_only' })
     expect(endpoint.ae).not.toHaveProperty('networkId')
   })
 })
 
 describe('public services API projection', () => {
   it('rolls one published business into ONE canonical Service with flat endpoints across offerings', () => {
-    const result = projectPublicServicesPage(page())
-
+    const result = projectPublicServicesPage(acmeCatalogPage())
     expect(result.services).toHaveLength(1)
-    expect(result.services[0]).toMatchObject({
-      id: 'acme-plumbing',
-      name: 'Acme Plumbing',
-      category: 'plumbing',
-      description: 'A rapid plumbing checkup. An inspection by request.',
-      domain: 'acme.example',
-      networks: [],
-      enriched: false,
-      integrationType: '3P',
-      serviceName: 'Acme Plumbing',
-      tags: ['plumbing'],
-      priceSummary: { currency: 'AUD', minAmount: '80.00', maxAmount: '80.00', avgCostBasis: 'exact' },
-      ae: {
-        businessContext: { kind: 'local_human', suburb: 'Fremantle', stateTerritory: 'WA' },
-        source: 'business_published',
-        offerings: [
-          {
-            offeringRef: 'offering-open',
-            revision: 3,
-            name: 'Emergency checkup',
-            price: { kind: 'fixed', amount: { currency: 'AUD', units: '8000', exponent: 2 }, unit: 'job', taxTreatment: 'inclusive' },
-            support: { integrated: false, routeable: false, observedAt: 1_700_000_000_001 },
-          },
-          { offeringRef: 'offering-empty', name: 'Inspection' },
-        ],
-        links: {
-          business: '/api/businesses/acme-plumbing',
-          manifest: '/acme-plumbing/ucp',
-        },
-      },
-      endpoints: [
-        {
-          url: 'https://another-origin.example/api/provider/acme-plumbing/checkup-quote',
-          description: 'Returns a provider quote.',
-          method: 'POST',
-          serviceName: 'Acme Plumbing',
-          parameters: [],
-          quality: null,
-          tags: ['plumbing'],
-          ae: {
-            offeringRef: 'offering-open',
-            provenance: 'business_declared',
-            access: 'external',
-            authentication: { kind: 'unknown' },
-            execution: 'catalog_only',
-            authenticationSummary: 'Provider endpoint does not expose credentials.',
-            settlementSupport: 'unpriced',
-          },
-        },
-        {
-          url: 'https://provider.example/operations/emergency-checkup',
-          description: 'Provider-owned operation.',
-          method: 'POST',
-          serviceName: 'Acme Plumbing',
-          parameters: [],
-          quality: null,
-          tags: ['plumbing'],
-          ae: {
-            offeringRef: 'offering-open',
-            provenance: 'publicly_observed',
-            access: 'external',
-            authentication: { kind: 'unknown' },
-            execution: 'catalog_only',
-            settlementSupport: 'unpriced',
-          },
-        },
-      ],
-    })
+    expect(result.services[0]).toMatchObject(acmeProjectedServiceExpectation())
     expect(result.services[0]).not.toHaveProperty('offerings')
     expect(result.services[0]!.ae).not.toHaveProperty('responseTimeMinutes')
     expect(result.services[0]!.endpoints[1]).not.toHaveProperty('providerName')
@@ -525,9 +345,8 @@ describe('public services API projection', () => {
   })
 
   it('passes source cursor state through', () => {
-    const source = page()
+    const source = acmeCatalogPage()
     const result = projectPublicServicesPage(source)
-
     expect(result).toMatchObject({
       kind: 'ok',
       schemaVersion: 'public-services-api:v3',
@@ -537,13 +356,11 @@ describe('public services API projection', () => {
     expect(result.isDone).toBe(source.isDone)
     expect(result.continueCursor).toBe(source.continueCursor)
   })
-
 })
 
 describe('catalogue Services API merchandising fields (CAVEAT 2)', () => {
   it('derives provider identity and domain from programmable-provider context', () => {
-    const service = projectPublicServicesPage(mappingPage()).services[0]!
-
+    const service = firstProjectedService()
     expect(service.provider).toBe('EXA AI')
     expect(service.providerUrl).toBe('https://api.example')
     expect(service.domain).toBe('api.example')
@@ -552,19 +369,15 @@ describe('catalogue Services API merchandising fields (CAVEAT 2)', () => {
 
   it('omits provider URL and domain when the programmable-provider website is not http(s)', () => {
     const source = mappingPage()
-    const page = {
+    const pageWithBadUrl: PublicBusinessCatalogApiV2Page = {
       ...source,
       page: source.page.map((business) => ({
         ...business,
         publicUrl: 'not-a-url',
-        businessContext: {
-          kind: 'programmable_provider' as const,
-          website: 'not-a-url',
-          providerIdentifier: 'EXA AI',
-        },
+        businessContext: { kind: 'programmable_provider' as const, website: 'not-a-url', providerIdentifier: 'EXA AI' },
       })),
     }
-    const service = projectPublicServicesPage(page).services[0]!
+    const service = firstProjectedService(pageWithBadUrl)
     expect(service.provider).toBe('EXA AI')
     expect(service.providerUrl).toBe('not-a-url')
     expect(service).not.toHaveProperty('domain')
@@ -573,35 +386,34 @@ describe('catalogue Services API merchandising fields (CAVEAT 2)', () => {
 })
 
 describe('Service price summary honesty', () => {
-  it('omits a summary when a starting price has no published upper bound', () => {
-    const service = projectPublicServicesPage(mappingPageWithPrices([
-      { kind: 'from', amount: { currency: 'USDC', units: '1', exponent: 2 }, taxTreatment: 'inclusive' },
-      { kind: 'fixed', amount: { currency: 'USDC', units: '7', exponent: 2 }, taxTreatment: 'inclusive' },
-    ])).services[0]!
-    expect(service).not.toHaveProperty('priceSummary')
-  })
-
-  it('omits a summary for prices with incomparable units or tax treatment', () => {
-    const service = projectPublicServicesPage(mappingPageWithPrices([
-      { kind: 'fixed', amount: { currency: 'USDC', units: '1', exponent: 2 }, unit: 'hour', taxTreatment: 'inclusive' },
-      { kind: 'range', minimum: { currency: 'USDC', units: '4', exponent: 2 }, maximum: { currency: 'USDC', units: '7', exponent: 2 }, unit: 'job', taxTreatment: 'exclusive' },
-    ])).services[0]!
-    expect(service).not.toHaveProperty('priceSummary')
+  it.each([
+    {
+      label: 'a starting price has no published upper bound',
+      prices: [
+        { kind: 'from', amount: { currency: 'USDC', units: '1', exponent: 2 }, taxTreatment: 'inclusive' },
+        { kind: 'fixed', amount: { currency: 'USDC', units: '7', exponent: 2 }, taxTreatment: 'inclusive' },
+      ] satisfies readonly [OfferingPrice, OfferingPrice],
+    },
+    {
+      label: 'prices have incomparable units or tax treatment',
+      prices: [
+        { kind: 'fixed', amount: { currency: 'USDC', units: '1', exponent: 2 }, unit: 'hour', taxTreatment: 'inclusive' },
+        { kind: 'range', minimum: { currency: 'USDC', units: '4', exponent: 2 }, maximum: { currency: 'USDC', units: '7', exponent: 2 }, unit: 'job', taxTreatment: 'exclusive' },
+      ] satisfies readonly [OfferingPrice, OfferingPrice],
+    },
+  ])('omits a summary when $label', ({ prices }) => {
+    expect(firstProjectedService(mappingPageWithPrices(prices))).not.toHaveProperty('priceSummary')
   })
 })
 
 describe('sub-cent catalog price representation (CAVEAT 3)', () => {
   it('maps a sub-cent catalog price while preserving the exact Service priceSummary', () => {
-    const map: ServiceToolMap = {
-      'offering:api-exa-ai:search': [{
+    const service = firstProjectedService(mappingPage(), offeringToolMap({
+      'offering:api-exa-ai:search': {
         ...linkedToolEntry('offering:api-exa-ai:search'),
         catalogPrice: { scheme: 'exact', amount: '0.007', currency: 'USDC' },
-      }],
-    }
-    const service = projectPublicServicesPage(mappingPage(), map).services[0]!
-
-    // Catalog pricing mirrors catalogue Services API's pricing shape; subCent is AE
-    // execution metadata, not a leaked core field.
+      },
+    }))
     const endpoint = service.endpoints[0]!
     expect(endpoint.pricing).toEqual({ scheme: 'exact', amount: '0.007', currency: 'USDC' })
     expect(endpoint.pricing).not.toHaveProperty('network')
@@ -609,9 +421,6 @@ describe('sub-cent catalog price representation (CAVEAT 3)', () => {
     expect(endpoint.ae.settlementSupport).toBe('catalog_only')
     expect(endpoint.ae.toolRef).toBeDefined()
     expect(service.enriched).toBe(true)
-
-    // An admitted endpoint price is the source of the Service aggregate; the
-    // human offering price is used only when no endpoint price exists.
     expect(service.priceSummary).toEqual({
       currency: 'USDC',
       minAmount: '0.007',
@@ -625,18 +434,16 @@ describe('sub-cent catalog price representation (CAVEAT 3)', () => {
   })
 
   it('aggregates endpoint prices exactly at a common exponent', () => {
-    const toolMap: ServiceToolMap = {
-      'offering:api-exa-ai:search': [{
+    const service = firstProjectedService(mappingPage(), offeringToolMap({
+      'offering:api-exa-ai:search': {
         ...linkedToolEntry('offering:api-exa-ai:search'),
         catalogPrice: { scheme: 'exact', amount: '0.001', currency: 'USDC' },
-      }],
-      'offering:api-exa-ai:contents': [{
+      },
+      'offering:api-exa-ai:contents': {
         ...linkedToolEntry('offering:api-exa-ai:contents'),
         catalogPrice: { scheme: 'exact', amount: '0.007', currency: 'USDC' },
-      }],
-    }
-    const service = projectPublicServicesPage(mappingPage(), toolMap).services[0]!
-
+      },
+    }))
     expect(service.priceSummary).toEqual({
       currency: 'USDC',
       minAmount: '0.001',
@@ -647,22 +454,15 @@ describe('sub-cent catalog price representation (CAVEAT 3)', () => {
   })
 
   it('exposes public auth and execution only from linked operation metadata', () => {
-    const source = mappingPage()
-    if (source.kind !== 'ok') throw new Error('Expected a mapping page.')
-    const oneOfferingPage: PublicBusinessCatalogApiV2Page = {
-      ...source,
-      page: source.page.map((business) => ({ ...business, offerings: [business.offerings[0]!] })),
-    }
-    const toolMap: ServiceToolMap = {
-      'offering:api-exa-ai:search': [{
+    const oneOfferingPage = singleOfferingMappingPage()
+    const service = firstProjectedService(oneOfferingPage, offeringToolMap({
+      'offering:api-exa-ai:search': {
         ...linkedToolEntry('offering:api-exa-ai:search'),
         authorityMode: 'provider_owned',
         authentication: { kind: 'platform_credential', scheme: 'api_key', in: 'header', name: 'X-API-Key' },
-      }],
-    }
-    const service = projectPublicServicesPage(oneOfferingPage, toolMap).services[0]!
+      },
+    }))
     const endpoint = service.endpoints[0]!
-
     expect(service.integrationType).toBe('1P')
     expect(service.provider).toBe('EXA AI')
     expect(endpoint.providerName).toBe('EXA AI')
@@ -672,52 +472,28 @@ describe('sub-cent catalog price representation (CAVEAT 3)', () => {
       authorityMode: 'provider_owned',
       sourceKind: 'openapi_http',
     })
-    const toolCallService = projectPublicServicesPage(oneOfferingPage, {
-      'offering:api-exa-ai:search': [{
-        ...linkedToolEntry('offering:api-exa-ai:search'),
-        authorityMode: 'provider_owned',
-      }],
-    }).services[0]!
-    expect(toolCallService.endpoints[0]!.ae.execution).toBe('tool_call')
-    expect(JSON.stringify(endpoint)).not.toMatch(/credentialRef|secret|env/i)
+    expect(firstProjectedService(oneOfferingPage, offeringToolMap({
+      'offering:api-exa-ai:search': { ...linkedToolEntry('offering:api-exa-ai:search'), authorityMode: 'provider_owned' },
+    })).endpoints[0]!.ae.execution).toBe('tool_call')
+    expect(JSON.stringify(endpoint)).not.toMatch(CREDENTIAL_LEAK_AUTH_PATTERN)
 
-    const unlinked = projectPublicServicesPage(oneOfferingPage).services[0]!
+    const unlinked = firstProjectedService(oneOfferingPage)
     expect(unlinked.integrationType).toBe('3P')
     expect(unlinked.provider).toBe('EXA AI')
     expect(unlinked.endpoints[0]).not.toHaveProperty('providerName')
   })
 
   it('omits malformed endpoint URLs instead of fabricating callable paths', () => {
-    const source = mappingPage()
-    if (source.kind !== 'ok') throw new Error('Expected a mapping page.')
-    const malformedPage: PublicBusinessCatalogApiV2Page = {
-      ...source,
-      page: source.page.map((business) => ({
-        ...business,
-        offerings: business.offerings.map((offering, index) => index === 0
-          ? { ...offering, accessPaths: [{ ...offering.accessPaths[0]!, url: 'not-a-url' }] }
-          : offering),
-      })),
-    }
-    const service = projectPublicServicesPage(malformedPage).services[0]!
-
+    const service = firstProjectedService(malformedSearchUrlMappingPage())
     expect(service.endpoints).toHaveLength(1)
     expect(service.endpoints[0]!.url).toBe('https://api.exa.ai/contents')
     expect(service.endpoints.some((endpoint) => endpoint.url === 'not-a-url')).toBe(false)
   })
 
   it('emits executable settlement without a sub-cent marker when the decimal equals the integer-minor amount', () => {
-    const toolMap: ServiceToolMap = {
-      'offering:api-exa-ai:search': [linkedToolEntry('offering:api-exa-ai:search', {
-        network: 'eip155:84532',
-        asset: '0x0000000000000000000000000000000000000001',
-        currency: 'USDC',
-        routeAmountExponent: 2,
-        assetAmountExponent: 6,
-      })],
-    }
-    const service = projectPublicServicesPage(mappingPage(), toolMap).services[0]!
-    const endpoint = service.endpoints[0]!
+    const endpoint = firstProjectedService(mappingPage(), offeringToolMap({
+      'offering:api-exa-ai:search': USDC_BASE_SEPOLIA_PAYMENT,
+    })).endpoints[0]!
     expect(endpoint.pricing).toEqual({
       scheme: 'exact',
       amount: '0.01',
@@ -728,231 +504,3 @@ describe('sub-cent catalog price representation (CAVEAT 3)', () => {
     expect(endpoint.ae.settlementSupport).toBe('executable')
   })
 })
-
-function mappingPage(provenance: 'business_declared' | 'publicly_observed' = 'business_declared'): PublicBusinessCatalogApiV2Page {
-  return {
-    kind: 'ok',
-    schemaVersion: 'public-business-catalog-api:v2',
-    page: [
-      {
-        schemaVersion: 'public-business-catalog-api:v2',
-        businessId: 'business:api-exa-ai',
-        slug: 'api-exa-ai',
-        name: 'EXA AI',
-        category: 'search',
-        businessContext: {
-          kind: 'programmable_provider',
-          website: 'https://api.example',
-          providerIdentifier: 'EXA AI',
-        },
-        publicUrl: 'https://api.example',
-        trustTier: 'listed',
-        photos: [],
-        observedAt: 1_700_000_000_000,
-        disposition: 'current',
-        offerings: [
-          {
-            offeringRef: 'offering:api-exa-ai:search',
-            revision: 1,
-            name: 'Web search',
-            category: 'search',
-            summary: 'Search the open web.',
-            price: { kind: 'fixed', amount: { currency: 'USDC', units: '1', exponent: 2 }, taxTreatment: 'inclusive' },
-            accessPaths: [
-              {
-                accessPathRef: 'path-search',
-                offeringRevision: 1,
-                kind: 'external_operation',
-                name: 'Web search',
-                summary: 'Search the open web.',
-                url: 'https://api.exa.ai/search',
-                method: 'GET',
-                provenance,
-              },
-            ],
-            support: { integrated: true, aeSupportedAction: true, observedAt: 1_700_000_000_001 },
-          },
-          {
-            offeringRef: 'offering:api-exa-ai:contents',
-            revision: 1,
-            name: 'Page contents',
-            category: 'search',
-            summary: 'Read the text of a page.',
-            price: { kind: 'range', minimum: { currency: 'USDC', units: '4', exponent: 2 }, maximum: { currency: 'USDC', units: '7', exponent: 2 }, taxTreatment: 'inclusive' },
-            accessPaths: [
-              {
-                accessPathRef: 'path-contents',
-                offeringRevision: 1,
-                kind: 'external_operation',
-                name: 'Page contents',
-                summary: 'Read the text of a page.',
-                url: 'https://api.exa.ai/contents',
-                method: 'POST',
-                provenance,
-              },
-            ],
-            support: { integrated: true, aeSupportedAction: true },
-          },
-        ],
-        accessSummary: { humanRequest: false, externalOperation: true, aeSupportedAction: true },
-      },
-    ],
-    isDone: true,
-    continueCursor: '',
-  }
-}
-
-function mappingPageWithPrices(prices: readonly [OfferingPrice, OfferingPrice]): PublicBusinessCatalogApiV2Page {
-  const source = mappingPage()
-  if (source.kind !== 'ok') return source
-  return {
-    ...source,
-    page: source.page.map((business) => ({
-      ...business,
-      offerings: business.offerings.map((offering, index) => {
-        const price = prices[index]
-        return price === undefined ? offering : { ...offering, price }
-      }),
-    })),
-  }
-}
-function mappingPageWithAdditionalPath(): PublicBusinessCatalogApiV2Page {
-  const source = mappingPage()
-  if (source.kind !== 'ok') return source
-  return {
-    ...source,
-    page: source.page.map((business) => ({
-      ...business,
-      offerings: business.offerings.map((offering, index) => index !== 0
-        ? offering
-        : {
-            ...offering,
-            accessPaths: [
-              ...offering.accessPaths,
-              {
-                accessPathRef: 'path-search-mirror',
-                offeringRevision: 1,
-                kind: 'external_operation' as const,
-                name: 'Search mirror',
-                summary: 'A second published path.',
-                url: 'https://mirror.example/search',
-                method: 'POST' as const,
-                provenance: 'publicly_observed' as const,
-              },
-            ],
-          }),
-    })),
-  }
-}
-
-
-function page(): PublicBusinessCatalogApiV2Page {
-  return {
-    kind: 'ok',
-    schemaVersion: 'public-business-catalog-api:v2',
-    page: [
-      {
-        schemaVersion: 'public-business-catalog-api:v2',
-        businessId: 'business-acme',
-        slug: 'acme-plumbing',
-        name: 'Acme Plumbing',
-        category: 'plumbing',
-        businessContext: { kind: 'local_human', suburb: 'Fremantle', stateTerritory: 'WA' },
-        publicUrl: 'https://acme.example',
-        trustTier: 'listed',
-        photos: [],
-        observedAt: 1_700_000_000_000,
-        disposition: 'current',
-        offerings: [
-          {
-            offeringRef: 'offering-open',
-            revision: 3,
-            name: 'Emergency checkup',
-            category: 'plumbing',
-            summary: 'A rapid plumbing checkup.',
-            availabilitySummary: 'Weekdays by appointment',
-            pricingSummary: 'From $80',
-            price: {
-              kind: 'fixed',
-              amount: { currency: 'AUD', units: '8000', exponent: 2 },
-              unit: 'job',
-              taxTreatment: 'inclusive',
-            },
-            accessPaths: [
-              {
-                accessPathRef: 'path-open',
-                offeringRevision: 3,
-                kind: 'external_operation',
-                summary: 'Returns a provider quote.',
-                name: 'Get a checkup quote',
-                url: 'https://another-origin.example/api/provider/acme-plumbing/checkup-quote',
-                method: 'POST',
-                authenticationSummary: 'Provider endpoint does not expose credentials.',
-                provenance: 'business_declared',
-              },
-              {
-                accessPathRef: 'path-external',
-                offeringRevision: 3,
-                kind: 'external_operation',
-                name: 'Provider operation',
-                summary: 'Provider-owned operation.',
-                url: 'https://provider.example/operations/emergency-checkup',
-                method: 'POST',
-                provenance: 'publicly_observed',
-              },
-              {
-                accessPathRef: 'path-human',
-                offeringRevision: 3,
-                kind: 'human_request',
-                channel: 'website',
-                disclosure: 'Use the website.',
-              },
-            ],
-            support: { integrated: false, aeSupportedAction: false, observedAt: 1_700_000_000_001 },
-          },
-          {
-            offeringRef: 'offering-empty',
-            revision: 1,
-            name: 'Inspection',
-            category: 'plumbing',
-            summary: 'An inspection by request.',
-            accessPaths: [],
-            support: { integrated: false, aeSupportedAction: false },
-          },
-        ],
-        accessSummary: { humanRequest: true, externalOperation: true, aeSupportedAction: false },
-      },
-    ],
-    isDone: false,
-    continueCursor: 'cursor-out',
-  }
-}
-
-function linkedToolMap(offeringRef: string): ServiceToolMap {
-  return { [offeringRef]: [linkedToolEntry(offeringRef)] }
-}
-
-function linkedToolEntry(
-  offeringRef: string,
-  payment?: NonNullable<CatalogOfferingToolMapEntry['payment']>,
-): CatalogOfferingToolMapEntry {
-  const contents = offeringRef.endsWith(':contents')
-  return {
-    offeringRef,
-    offeringRevision: 1,
-    offeringSourceHash: contents ? 'source:contents-offering' : 'source:search-offering',
-    declaredAccessPathRef: contents ? 'path-contents' : 'path-search',
-    accessPathSourceHash: contents ? 'source:contents-path' : 'source:search-path',
-    endpointUrl: contents ? 'https://api.exa.ai/contents' : 'https://api.exa.ai/search',
-    method: contents ? 'POST' : 'GET',
-    authorityMode: 'ae_curated_external',
-    sourceKind: 'openapi_http',
-    authentication: payment === undefined ? { kind: 'ae_api_key' } : { kind: 'x402' },
-    routeable: true,
-    readiness: { observedAt: 1_700_000_000_001 },
-    toolRef: 'operation:v1:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef' as CatalogOfferingToolMapEntry['toolRef'],
-    parameters: [{ group: 'body', name: 'query', type: 'string', description: 'Search query', required: true }],
-    catalogPrice: { scheme: 'exact', amount: '0.01', currency: 'USDC' },
-    ...(payment === undefined ? {} : { payment }),
-  }
-}

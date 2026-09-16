@@ -561,13 +561,13 @@ function preparedX402Custody(
     },
     readX402PaymentAuthorization: async ({ custodyRef, authorizationDigest }) => {
       const prepared = custody.get(custodyRef)
-      return prepared?.authorizationDigest === authorizationDigest
+      return prepared !== undefined && prepared.authorizationDigest === authorizationDigest
         ? prepared.readAuthorization()
         : undefined
     },
     readX402PaymentAuthorizationByDigest: async ({ custodyRef, authorizationDigest }) => {
       const prepared = custody.get(custodyRef)
-      return prepared?.authorizationDigest === authorizationDigest
+      return prepared !== undefined && prepared.authorizationDigest === authorizationDigest
         ? prepared.readAuthorization()
         : undefined
     },

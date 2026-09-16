@@ -1,12 +1,11 @@
 import { createFileRoute } from '@tanstack/react-router'
+import type { z } from 'zod'
 
 import { degrade } from '@/lib/observability/degrade'
-import { methodNotAllowed } from '@/lib/server/method-guard'
+import { executeCorrelatedJsonRoute, postOnlyRoute } from '@/lib/server/gateway-json-route'
 import { toolReadUnavailableResponse } from '@/lib/server/tool-read-problem'
 import { readToolReadRequest } from '@/lib/server/tool-read-request'
 import { problem } from '@/lib/server/problem'
-import { withHttpRateLimit } from '@/lib/server/rate-limit'
-import { runWithRequestCorrelation, withRequestCorrelationHeader } from '@/lib/server/request-correlation'
 import {
   toolCompareInputSchema,
 } from '@/modules/capability-supply/public'
@@ -17,39 +16,32 @@ const MAX_TOOL_COMPARE_BODY_BYTES = 8 * 1024
 
 export const Route = createFileRoute('/api/v1/market-tools/compare')({
   server: {
-    handlers: {
-      POST: ({ request }) => handleMarketToolCompareRequest(request),
-      GET: () => methodNotAllowed(['POST']),
-      PUT: () => methodNotAllowed(['POST']),
-      PATCH: () => methodNotAllowed(['POST']),
-      DELETE: () => methodNotAllowed(['POST']),
-      HEAD: () => methodNotAllowed(['POST']),
-      OPTIONS: () => methodNotAllowed(['POST']),
-      TRACE: () => methodNotAllowed(['POST']),
-      CONNECT: () => methodNotAllowed(['POST']),
-    },
+    handlers: postOnlyRoute((request) => handleMarketToolCompareRequest(request)),
   },
 })
 
 export async function handleMarketToolCompareRequest(request: Request): Promise<Response> {
-  return await runWithRequestCorrelation(request, async ({ correlationId }) => {
-    let response: Response
-    try {
+  let parsedData: z.infer<typeof toolCompareInputSchema>
+  return await executeCorrelatedJsonRoute(
+    request,
+    'public-read',
+    async () => {
+      const result = toolChoiceCompareOutputSchema.safeParse(await registryToolsCompareAction.run({
+        data: parsedData,
+        context: { caller: 'http', request },
+      }))
+      if (!result.success) return problem({ status: 503, kind: 'INTERNAL', code: 'tool_read_result_invalid' })
+      return Response.json(result.data, { headers: { 'Cache-Control': 'no-store' } })
+    },
+    (cause) => degrade(cause, toolReadUnavailableResponse(), {
+      site: 'handleMarketToolCompareRequest',
+      reason: 'source_unavailable',
+    }),
+    async () => {
       const parsed = await readToolReadRequest(request, MAX_TOOL_COMPARE_BODY_BYTES, toolCompareInputSchema)
-      response = !parsed.ok ? parsed.response : await withHttpRateLimit(request, 'public-read', async () => {
-        const result = toolChoiceCompareOutputSchema.safeParse(await registryToolsCompareAction.run({
-          data: parsed.data,
-          context: { caller: 'http', request },
-        }))
-        if (!result.success) return problem({ status: 503, kind: 'INTERNAL', code: 'tool_read_result_invalid' })
-        return Response.json(result.data, { headers: { 'Cache-Control': 'no-store' } })
-      })
-    } catch (cause) {
-      response = degrade(cause, toolReadUnavailableResponse(), {
-        site: 'handleMarketToolCompareRequest',
-        reason: 'source_unavailable',
-      })
-    }
-    return withRequestCorrelationHeader(response, correlationId)
-  })
+      if (!parsed.ok) return parsed.response
+      parsedData = parsed.data
+      return null
+    },
+  )
 }

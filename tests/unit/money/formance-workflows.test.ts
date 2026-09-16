@@ -16,7 +16,7 @@ import {
   readFormanceSpendingPeriod,
   type FormanceManagedCallBooking,
 } from '@/modules/money/formance-workflows'
-import { currentUtcDayBounds, currentUtcMonthBounds } from '@/modules/common/utc-calendar'
+import { currentUtcDayBounds, currentUtcMonthBounds } from '@/modules/common/freshness'
 
 const DIGEST_A = `sha256:${'a'.repeat(64)}`
 const DIGEST_B = `sha256:${'b'.repeat(64)}`

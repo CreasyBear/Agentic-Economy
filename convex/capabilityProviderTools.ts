@@ -102,6 +102,13 @@ function sourceKind(sourceKind: Doc<'capabilityPublications'>['sourceKind'] | un
   return sourceKind ?? 'unavailable'
 }
 
+function projectedSourceKind(
+  publicationKind: Doc<'capabilityPublications'>['sourceKind'] | undefined,
+  draftKind: 'openapi' | 'mcp' | 'agent_plugin' | 'x402' | undefined,
+) {
+  return publicationKind === undefined ? draftKind ?? 'unavailable' : sourceKind(publicationKind)
+}
+
 async function projectIdentity(
   ctx: MutationCtx | QueryCtx,
   identity: Doc<'capabilityProviderToolProjections'>,
@@ -121,10 +128,11 @@ async function projectIdentity(
     ctx.db.query('capabilityProviderOffboardingCases').withIndex('by_businessId_and_updatedAt', (query) => query.eq('businessId', identity.businessId)).order('desc').first(),
   ])
   if (offering === null || revision === null || offering.businessId !== identity.businessId || revision.businessId !== identity.businessId) return null
+  const draft = paths.find((path) => path.integrationDraft !== undefined)?.integrationDraft
   const binding = identity.bindingId === undefined
     ? null
     : await ctx.db.query('capabilityTransportBindings').withIndex('by_bindingId', (query) => query.eq('bindingId', identity.bindingId as string)).unique()
-  const connectionRef = publication?.connectionAuthority?.connectionRef
+  const connectionRef = publication?.connectionAuthority?.connectionRef ?? draft?.connectionRef
   const connection = connectionRef === undefined
     ? null
     : await ctx.db.query('capabilityProviderConnections').withIndex('by_connectionRef', (query) => query.eq('connectionRef', connectionRef)).unique()
@@ -156,7 +164,7 @@ async function projectIdentity(
   const routeabilityFrozen = offboarding?.routeabilityFrozenAt !== undefined
   if (routeabilityFrozen) blockers.add('provider_offboarding')
   const routeable = qualification?.status === 'eligible' && !routeabilityFrozen
-  const setupComplete = publication !== null || paths.some((path) => path.integrationDraft !== undefined)
+  const setupComplete = publication !== null || draft !== undefined
   const callsOverflow = calls.length > EVIDENCE_READ_LIMIT
   const usesOverflow = qualifiedUses.length > EVIDENCE_READ_LIMIT
   const boundedCalls = calls.slice(0, EVIDENCE_READ_LIMIT)
@@ -167,7 +175,7 @@ async function projectIdentity(
     providerRef: identity.providerRef,
     toolRef: identity.toolRef,
     revision: identity.publicationRevision ?? identity.offeringRevision,
-    observedAt: publication?.readinessObservedAt ?? identity.updatedAt,
+    observedAt: publication?.readinessObservedAt ?? draft?.updatedAt ?? identity.updatedAt,
     ...(publication?.readinessValidUntil === undefined ? {} : { validUntil: publication.readinessValidUntil }),
     draftPresent: true,
     setupComplete,
@@ -179,9 +187,9 @@ async function projectIdentity(
     retirementProven: offboarding?.state === 'retired',
     blockerCodes: [...blockers],
     source: {
-      kind: sourceKind(publication?.sourceKind),
-      ...(publication?.sourceRevision === undefined ? {} : { revision: publication.sourceRevision }),
-      ...(publication?.sourceDigest === undefined ? {} : { digest: publication.sourceDigest }),
+      kind: projectedSourceKind(publication?.sourceKind, draft?.sourceKind),
+      ...((publication?.sourceRevision ?? draft?.sourceRevision) === undefined ? {} : { revision: publication?.sourceRevision ?? draft?.sourceRevision }),
+      ...((publication?.sourceDigest ?? draft?.sourceDigest) === undefined ? {} : { digest: publication?.sourceDigest ?? draft?.sourceDigest }),
     },
     routeability: { available: routeable, reasonCodes: [...blockers] },
     authority: connectionRef === undefined
@@ -191,7 +199,7 @@ async function projectIdentity(
       connection: connectionRef === undefined ? 'not_required' : blockers.has('credential_lost') ? 'action_required' : 'connected',
       validation: admissionCase?.terminalDecision === 'published' ? 'passed' : admissionCase?.terminalDecision === 'action_required' ? 'failed' : admissionCase === null ? 'not_started' : 'in_progress',
       publication: offering.status === 'retired' ? 'removed' : offering.status === 'paused' || publication?.disposition === 'withdrawn' ? 'paused' : publication === null ? 'not_published' : 'published',
-      freshness: publication?.readinessOutcome === 'healthy' && (publication.readinessValidUntil ?? 0) > now ? 'current' : publication?.readinessOutcome === undefined ? 'unobserved' : (publication.readinessValidUntil ?? 0) <= now ? 'stale' : 'failed',
+      freshness: publication?.readinessOutcome === 'healthy' && (publication.readinessValidUntil ?? 0) > now ? 'current' : publication?.readinessOutcome === undefined ? draft === undefined ? 'unobserved' : 'current' : (publication.readinessValidUntil ?? 0) <= now ? 'stale' : 'failed',
       delivery: callsOverflow
         ? { kind: 'unavailable', reason: 'window_too_large', provenance: 'canonical_call_receipts' }
         : boundedCalls.length === 0

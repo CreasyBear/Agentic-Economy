@@ -65,7 +65,7 @@ import {
   spendingPeriodsValue,
   type SpendingPeriods,
   type SpendingPeriodAdjustment,
-} from '@/modules/money/internal/spending-period-values'
+} from '@/modules/money/public'
 
 const LEGAL_CUSTOMER_REQUIRED: CommercialPolicyRefusalReason = 'legal_customer_required'
 
@@ -134,6 +134,11 @@ const quoteResult = v.union(
     budget: v.object({ principalRef: v.string(), maximumPerCall: exactAud }),
     policyRefs: v.array(v.string()),
     evidenceDigest: v.string(),
+    parties: v.object({
+      seller: v.string(),
+      provider: v.string(),
+      paymentRecipient: v.string(),
+    }),
     continuation: v.object({
       action: v.literal('tool.call'),
       method: v.literal('POST'),
@@ -855,6 +860,11 @@ async function issueQuoteHandler(
     budget: { principalRef: authority.principal.principalId, maximumPerCall: maximum as never },
     policyRefs: [...policyGate.policyRefs],
     evidenceDigest,
+    parties: {
+      seller: 'Agentic Economy',
+      provider: operation.identity.businessId,
+      paymentRecipient: operation.identity.paymentRecipient,
+    },
     continuation: {
       action: 'tool.call',
       method: 'POST',

@@ -644,3 +644,13 @@ export type {
 export { formatDisplayPrice, formatDisplayAmount } from './internal/display-price'
 export { accountHistoryResultSchema } from './internal/account-history'
 export type { AccountHistoryEntry, AccountHistoryResult } from './internal/account-history'
+export {
+  spendingPeriodsValue,
+  spendingPeriodAdjustmentValue,
+  spendingPeriodAdjustmentReference,
+} from './internal/spending-period-values'
+export type {
+  SpendingPeriods,
+  SpendingPeriodAdjustment,
+} from './internal/spending-period-values'
+

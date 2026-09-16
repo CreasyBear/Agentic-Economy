@@ -52,6 +52,7 @@ const durableTables = [
   'businessOfferings',
   'businessOfferingRevisions',
   'offeringAccessPaths',
+  'agentSpendingPeriods',
   'moneyCommercialPolicies',
   'moneyReconciliationCases',
   'moneyDocuments',
@@ -359,7 +360,7 @@ describe('Convex schema', () => {
   const exported = SchemaExport.parse(JSON.parse(String(exportSchema.call(schema))))
 
   it('contains exactly the source-owned durable tables', () => {
-    expect(durableTables).toHaveLength(86)
+    expect(durableTables).toHaveLength(87)
     expect(exported.tables.map((table) => table.tableName).sort()).toEqual([...durableTables].sort())
   })
 

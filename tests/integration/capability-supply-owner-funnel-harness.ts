@@ -5,6 +5,7 @@ import { api, internal } from '../../convex/_generated/api'
 import type { Id } from '../../convex/_generated/dataModel'
 import {
   preparePublicationDraft,
+  X402_SELLER_CANARY_ADMISSION_REQUIRED_REF,
   type CapabilityPublicationImport,
   type CapabilityPublicationOfferingDraft,
 } from '@/modules/capability-supply/public'
@@ -178,7 +179,12 @@ export async function prepareOwnerPublicationCommand(
       },
       correlationId: `owner-supply:${offeringRef}`,
       reasonCode: 'owner_supply_publication',
-      evidenceRefs: [...source.evidenceRefs],
+      evidenceRefs: [
+        ...source.evidenceRefs,
+        ...(runtimeEnvironment === 'sandbox' && source.kind === 'x402'
+          ? [X402_SELLER_CANARY_ADMISSION_REQUIRED_REF]
+          : []),
+      ],
     })) satisfies PublishPreparedCapabilityArgs,
   }
 }

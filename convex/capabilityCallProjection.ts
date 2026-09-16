@@ -45,6 +45,9 @@ import type { SellerOnboardingCanaryExecutionEnvelope } from '@/modules/capabili
 import { agentAccessPrincipalValue, verifySupplyAgentPrincipal } from './agentAccessPrincipals'
 import { requireSourceWrite, sourceWriteArgs } from './sourceWriteAdmission'
 import { callState } from './lib/callLifecycle/contracts'
+import { canonicalTerminalOutcome } from './lib/callLifecycle/terminalProjection'
+
+export { canonicalTerminalOutcome } from './lib/callLifecycle/terminalProjection'
 
 export type OpenDispatch = Readonly<{
   committedPaymentRequiredJson?: string
@@ -473,69 +476,6 @@ export function parseContractOutput(
       : { valid: false }
   } catch (cause) {
     return degradeBackend(cause, { valid: false }, { site: 'parseContractOutput', reason: 'invalid_response' })
-  }
-}
-
-export function canonicalTerminalOutcome(
-  observation: RouteTransportObservation,
-  recordedAt: string,
-  contractValidOutput = true,
-  deliveryOutcome?: 'not_released' | 'released' | 'unknown',
-): CanonicalTerminalOutcome {
-  const evidenceDigest = transportObservationDigest(observation)
-  if (deliveryOutcome === 'unknown') {
-    return {
-      kind: 'uncertain',
-      errorDigest: evidenceDigest,
-      reconciliationRequiredAt: new Date(Date.parse(recordedAt) + 1_000).toISOString(),
-      release: 'possibly_released',
-    }
-  }
-  if (
-    deliveryOutcome === 'not_released'
-    && observation.disposition === 'succeeded'
-    && !contractValidOutput
-  ) {
-    return { kind: 'failed', errorDigest: evidenceDigest, release: 'not_released' }
-  }
-  if (
-    observation.disposition === 'succeeded'
-    && observation.outputJson !== undefined
-    && contractValidOutput
-    && !observation.releaseStarted
-  ) {
-    return { kind: 'failed', errorDigest: evidenceDigest, release: 'not_released' }
-  }
-  if (
-    observation.disposition === 'succeeded'
-    && observation.outputJson !== undefined
-    && contractValidOutput
-  ) {
-    return {
-      kind: 'returned',
-      businessOutcome: 'operation_succeeded',
-      resultRef: `operation-result:v1:${evidenceDigest}`,
-      resultDigest: evidenceDigest,
-      resultReferenceable: true,
-      release: 'released',
-    }
-  }
-  if (
-    observation.disposition === 'succeeded'
-    && observation.outputJson !== undefined
-    && !contractValidOutput
-    && !observation.releaseStarted
-  ) {
-    return { kind: 'failed', errorDigest: evidenceDigest, release: 'not_released' }
-  }
-  if (observation.disposition === 'refused' && !observation.releaseStarted) {
-    return { kind: 'failed', errorDigest: evidenceDigest, release: 'not_released' }
-  }
-  return {
-    kind: 'uncertain',
-    errorDigest: evidenceDigest,
-    reconciliationRequiredAt: new Date(Date.parse(recordedAt) + 1_000).toISOString(),
-    release: 'possibly_released',
   }
 }
 

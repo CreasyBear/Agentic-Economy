@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 
-import { methodNotAllowed } from '@/lib/server/method-guard'
+import { defineRouteHandlers } from '@/lib/server/gateway-json-route'
 
 function readReleaseIdentity(head = false): Response {
   const sourceRevision = process.env.AE_RELEASE_SOURCE_REVISION?.trim()
@@ -16,16 +16,9 @@ function readReleaseIdentity(head = false): Response {
 
 export const Route = createFileRoute('/api/v1/release')({
   server: {
-    handlers: {
+    handlers: defineRouteHandlers({
       GET: () => readReleaseIdentity(),
-      POST: () => methodNotAllowed(['GET', 'HEAD']),
-      PUT: () => methodNotAllowed(['GET', 'HEAD']),
-      PATCH: () => methodNotAllowed(['GET', 'HEAD']),
-      DELETE: () => methodNotAllowed(['GET', 'HEAD']),
       HEAD: () => readReleaseIdentity(true),
-      OPTIONS: () => methodNotAllowed(['GET', 'HEAD']),
-      TRACE: () => methodNotAllowed(['GET', 'HEAD']),
-      CONNECT: () => methodNotAllowed(['GET', 'HEAD']),
-    },
+    }),
   },
 })

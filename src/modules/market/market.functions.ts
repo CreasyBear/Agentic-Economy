@@ -23,3 +23,11 @@ export const readMarketRouteServer = createServerFn({ method: "GET" })
         ...(data.cursor === undefined ? {} : { cursor: data.cursor }),
       }),
   );
+
+export {
+  loadMarketRouteData,
+  marketLoaderDeps,
+  validateMarketSearch,
+  parseMarketCompareRefs,
+  type MarketSearch,
+} from './market-route-data'

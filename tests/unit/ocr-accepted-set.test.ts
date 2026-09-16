@@ -30,7 +30,7 @@ describe('ocr accepted set', () => {
     expect(redactPayload).toEqual(expect.any(Function))
     expect(validateAuditEvent).toEqual(expect.any(Function))
 
-    const funding = readFileSync(join(repoRoot, 'convex/moneyAccountFunding.ts'), 'utf8')
+    const funding = readFileSync(join(repoRoot, 'convex/lib/money/funding-stripe-event-pipeline.ts'), 'utf8')
     expect(funding).toContain('async function prepareFundingRefundEvent')
 
     const reactDoctor = readFileSync(join(repoRoot, '.github/workflows/react-doctor.yml'), 'utf8')

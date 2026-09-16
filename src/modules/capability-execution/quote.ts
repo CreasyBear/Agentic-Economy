@@ -129,6 +129,11 @@ export const toolQuoteResultSchema = z.union([
     }),
     policyRefs: z.array(z.string()),
     evidenceDigest: z.string(),
+    parties: z.strictObject({
+      seller: z.string(),
+      provider: z.string(),
+      paymentRecipient: z.string(),
+    }).optional(),
     continuation: callContinuationSchema,
   }),
   z.strictObject({

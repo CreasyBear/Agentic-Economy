@@ -33,6 +33,7 @@ const forbiddenImportSelectors = [
 const deployableAllowlist = new Set([
   'convex/devSeed.ts',
   'convex/devSeedStore.ts',
+  'convex/devSeedFixtures.ts',
   'convex/curatedProviders.ts',
 ])
 

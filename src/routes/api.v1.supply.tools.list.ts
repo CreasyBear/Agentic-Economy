@@ -1,14 +1,8 @@
 import { createFileRoute } from '@tanstack/react-router'
 
 import { handleSupplyActionPost } from '@/lib/server/supply-action-api'
-import { methodNotAllowed } from '@/lib/server/method-guard'
+import { postOnlyRoute } from '@/lib/server/gateway-json-route'
 
 export const Route = createFileRoute('/api/v1/supply/tools/list')({
-  server: { handlers: {
-    POST: ({ request }) => handleSupplyActionPost(request, 'toolsList'),
-    GET: () => methodNotAllowed(['POST']),
-    PUT: () => methodNotAllowed(['POST']),
-    PATCH: () => methodNotAllowed(['POST']),
-    DELETE: () => methodNotAllowed(['POST']),
-  } },
+  server: { handlers: postOnlyRoute((request) => handleSupplyActionPost(request, 'toolsList')) },
 })

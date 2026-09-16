@@ -16,9 +16,11 @@ import { buildBrokeredX402Receipt } from './call-worker/brokeredX402'
 import {
   configuredX402RpcUrl,
   configuredX402RpcUrls,
+  createManagedX402PaymentCallbacks,
   readX402Authorization,
   readX402EvmReceipt,
   replayManagedX402SigningForRecovery,
+  X402_MANAGED_CUSTODY_REF,
 } from './call-worker/x402Route'
 import {
   invokeProviderConsequenceViaVercel,
@@ -53,6 +55,7 @@ export {
   cancelRecovery,
   configuredX402RpcUrl,
   configuredX402RpcUrls,
+  createManagedX402PaymentCallbacks,
   expireAuthorizationRecovery,
   invokeProviderConsequenceViaVercel,
   prepareCallRun,
@@ -64,5 +67,6 @@ export {
   recoverCapabilityCall,
   recoveryArgs,
   replayManagedX402SigningForRecovery,
+  X402_MANAGED_CUSTODY_REF,
 }
 export type { WorkerResult }

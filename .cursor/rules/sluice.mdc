@@ -1,0 +1,32 @@
+---
+name: sluice
+description: Use at the start of any request that changes code. Routes work into bypass, fast, main, or deep by change shape and applies only that channel's rules. Also use when asked to work faster or with less process.
+alwaysApply: false
+---
+
+# Sluice
+
+Iceinvein workflow. Full text and scripts: `.claude/skills/sluice/` (installed for Claude; Cursor reads this rule). Deep-channel plan format: `.claude/skills/sluice/references/deep-channel.md`.
+
+Pick a channel from the change's shape, state it in one line, then proceed.
+
+| Channel | Signal | Rules | Say |
+|---|---|---|---|
+| `bypass` | No code change | none | nothing |
+| `fast` | Existing interfaces, one subsystem | test-first, verify | Fast channel, existing interfaces. Test first, then implement. |
+| `main` | Adds an interface, or two subsystems | + agree intent, review before merge | Main channel, new interface. Agreeing the shape first. |
+| `deep` | Three+ subsystems, or a plan was asked for | + written design and plan | Deep channel, several subsystems. Design before code. |
+
+The words ` channel` must open the message or follow `Sluice:`. Escalate out loud if the channel changes. Explicit "just do it" collapses to `fast`.
+
+Rules (read the matching file under `.claude/skills/sluice/references/` only on friction):
+
+- **Agree intent** before building. One question at a time. Recommend, don't survey.
+- **Test first.** Fail the test, then write the least code that turns it green.
+- **Root cause** before fix.
+- **Verify** before claiming. Run the command this turn.
+- **Review** before merge.
+- **Finish** deliberately. Partner picks merge, PR, or leave it.
+- **Meter** the run on handback.
+
+Deep channel writes design under `docs/designs/`, plan under `docs/plans/` (this repo's convention). Stops: design sign-off, then plan + pre-flight before Task 1. Inert tasks first. Exactly one `Flips` task. Do not run alongside a superpowers-style fixed pipeline if that pipeline already governs the work.

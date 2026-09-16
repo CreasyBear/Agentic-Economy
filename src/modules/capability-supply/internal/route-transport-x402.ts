@@ -2,7 +2,6 @@ import { prepareX402Request } from './x402-request'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 import { cancelResponseBody } from '@/lib/server/bounded-request-body'
-import type { ExactAmount } from '@/modules/money/public'
 import {
   readX402PaymentPayerAndNonce,
   readX402PaymentResponseHeader,
@@ -52,33 +51,23 @@ import type { X402PaymentSignatureRequest } from './x402-challenge'
 
 export type { X402PaymentSignatureRequest }
 
-export type X402PaymentAuthorizationIdentity = Readonly<{
-  paymentIdentifier: string
-  challengeDigest: string
-  attemptRef: string
-  effectGeneration: number
-  paymentAmount: ExactAmount
-}>
+import {
+  buildX402AttemptObservation,
+  parseStoredX402Request,
+  type StoredX402Request,
+  type X402PaymentAuthorizationIdentity,
+  type X402PreparedAuthorization,
+  type X402PaymentAttemptEvent,
+} from './x402-payment-lifecycle'
 
-export type X402PreparedAuthorization = Readonly<{
-  custodyRef: string
-  authorizationDigest: string
-}>
-
-export type X402PaymentAttemptEvent = Readonly<{
-  paymentIdentifier: string
-  attemptRef: string
-  challengeDigest: string
-  scheme: string
-  network: string
-  asset: string
-  payTo: string
-  amount: ExactAmount
-  providerEndpoint: string
-  custodyRef: string
-  authorizationDigest: string
-  settlementEvidence?: X402SettlementEvidence
-}>
+export {
+  buildX402AttemptObservation,
+  parseStoredX402Request,
+  type StoredX402Request,
+  type X402PaymentAuthorizationIdentity,
+  type X402PreparedAuthorization,
+  type X402PaymentAttemptEvent,
+}
 
 export type X402RouteTransportRuntime = RouteTransportRuntime &
   Readonly<{

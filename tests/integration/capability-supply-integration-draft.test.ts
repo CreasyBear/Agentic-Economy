@@ -214,6 +214,16 @@ describe('Provider source integration draft', () => {
       schemaVersion: 'provider_tools:v1',
       toolRef: resumed.offeringRef,
       state: 'Draft',
+      source: {
+        kind: 'openapi',
+        revision: `openapi:${sourceDigest}`,
+        digest: sourceDigest,
+      },
+      health: {
+        connection: 'not_required',
+        freshness: 'current',
+        publication: 'not_published',
+      },
     })
     expect(ownerExact).toMatchObject({ kind: 'available', resumeCandidateRef: candidateRef })
     const ownerDirectory = await owner.query(
@@ -230,7 +240,7 @@ describe('Provider source integration draft', () => {
       }],
     })
     expect(ownerDirectory.kind === 'available' ? JSON.parse(ownerDirectory.page[0]!.statusJson) : ownerDirectory)
-      .toMatchObject({ schemaVersion: 'provider_tools:v1', state: 'Draft' })
+      .toMatchObject({ schemaVersion: 'provider_tools:v1', state: 'Draft', source: { kind: 'openapi' } })
     await expect(foreignOwner.query(
       api.capabilityProviderTools.readOwner,
       { businessId, offeringRef: resumed.offeringRef, now: 1_000 },

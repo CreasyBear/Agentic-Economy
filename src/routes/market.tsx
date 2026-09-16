@@ -4,11 +4,11 @@ import { AePageSkeleton, AePageState } from "@/components/ae/layout/AePageState"
 import { AeX402Directory } from "@/components/ae/market/AeX402Directory";
 import { Button } from "@/components/ui/button";
 import { readCanonicalBaseUrlServer } from "@/lib/server/canonical-url.functions";
-import { loadMarketRouteData, marketLoaderDeps, validateMarketSearch } from '@/modules/market/market-route-data';
+import { loadMarketRouteData, marketLoaderDeps, validateMarketSearch } from '@/modules/market/market.functions';
 import { buildPublicPageHead, buildSiteJsonLd } from "@/modules/seo/public";
 
-export { parseMarketCompareRefs, validateMarketSearch } from '@/modules/market/market-route-data'
-export type { MarketSearch } from '@/modules/market/market-route-data'
+export { parseMarketCompareRefs, validateMarketSearch } from '@/modules/market/market.functions'
+export type { MarketSearch } from '@/modules/market/market.functions'
 
 export const Route = createFileRoute("/market")({
   staticData: {

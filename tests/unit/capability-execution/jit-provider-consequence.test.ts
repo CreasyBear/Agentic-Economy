@@ -1,343 +1,55 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { encodePaymentRequiredHeader, encodePaymentResponseHeader } from '@x402/core/http'
+import { encodePaymentResponseHeader } from '@x402/core/http'
 
 import { canonicalDigest } from '@/modules/common/canonical-digest'
-import { stableStringify, type StableHashValue } from '@/modules/common/stable-hash'
 import {
-  createJitProviderConsequenceBoundary,
   ProviderConsequencePreReleaseRefusal,
   providerConsequenceInvocationDigest,
   providerConsequenceTicketClaimsDigest,
   type CanonicalProviderConsequenceTicket,
-  type JitProviderX402Runtime,
   type JitProviderX402RuntimeFactory,
-  type ProviderConsequenceJournal,
   type ProviderConsequenceJournalBeginResult,
   type ProviderConsequenceTicketVerifier,
 } from '@/modules/capability-execution/provider-consequence-runtime'
+import { secretGeneration, secretRef } from '@/modules/secrets/public'
+import type { RouteTransportFetch, RouteTransportInvocation } from '@/modules/capability-supply/route-transport-runtime'
 import {
-  secretGeneration,
-  secretRef,
-  type InfisicalVaultConfiguration,
-  type ProductionSecretRuntimeOptions,
-  type SecretPointer,
-  type SecretPointerStore,
-} from '@/modules/secrets/public'
-import type {
-  RouteTransportFetch,
-  RouteTransportInvocation,
-} from '@/modules/capability-supply/route-transport-runtime'
+  buildTrackedX402Factory,
+  callbackScopedX402Runtime,
+  CLAIM_REF,
+  CREDENTIAL,
+  execute,
+  expectExecute,
+  expectJournalBeginForTicket,
+  expectJsonExcludesCredential,
+  expectNoJournalBeginOrSend,
+  expectNoSend,
+  expectRefusedTicketInvalid,
+  harness,
+  journal,
+  journalWithBegin,
+  journalWithPatches,
+  jitInvocation,
+  jwt,
+  NOW,
+  OPAQUE_TICKET,
+  PAYMENT_GENERATION,
+  PAYMENT_REF,
+  paymentRequired402Response,
+  REF,
+  requestDigest,
+  sendReturning402,
+  ticket,
+  unreadableJsonResponse,
+  vaultFetch,
+  viCallbackScopedX402Factory,
+  X402_PAYMENT_CREDENTIAL_REF,
+  x402Challenge,
+  x402Harness,
+} from './jit-provider-consequence.harness'
 
 const { getVercelOidcToken } = vi.hoisted(() => ({ getVercelOidcToken: vi.fn() }))
 vi.mock('@vercel/oidc', () => ({ getVercelOidcToken }))
-
-// Capture one real wall-clock instant for the module. The x402 transport
-// deliberately checks requirement lifetime against Date.now(), so a fixed
-// future epoch turns this suite into a date-dependent time bomb.
-const NOW = Math.floor(Date.now() / 1_000) * 1_000
-const REF = secretRef('sec_11111111111111111111111111111111')
-const GENERATION = secretGeneration('sgn_11111111111111111111111111111111')
-const PAYMENT_REF = secretRef('sec_22222222222222222222222222222222')
-const PAYMENT_GENERATION = secretGeneration('sgn_22222222222222222222222222222222')
-const CREDENTIAL = 'provider-secret-never-return'
-type ProviderRouteTransportInvocation = Extract<
-  RouteTransportInvocation,
-  Readonly<{ binding: Readonly<{ authority: Readonly<{ kind: 'provider_connection' }> }> }>
->
-
-function invocation(): ProviderRouteTransportInvocation {
-  const config = {
-    method: 'POST' as const,
-    requestTimeoutMs: 5_000,
-    credential: { kind: 'bearer' as const },
-  }
-  const connection = {
-    kind: 'provider_connection' as const,
-    connectionRef: 'connection:test-provider',
-    providerRef: 'provider:test',
-  }
-  return {
-    binding: {
-      adapterId: 'http-json:v1',
-      endpointUrl: 'https://provider.example/run',
-      authority: connection,
-      configJson: JSON.stringify(config),
-      configDigest: canonicalDigest(config),
-    },
-    authority: {
-      attemptRef: 'operation-attempt:invocation:test:1',
-      effectGeneration: 1,
-      operationKeyDigest: canonicalDigest({ operation: 'test' }),
-      mandateDigest: canonicalDigest({ mandate: 'test' }),
-      grantDigest: canonicalDigest({ grant: 'test' }),
-      capabilityContractDigest: canonicalDigest({ contract: 'test' }),
-      maximumSpend: { currency: 'USD', units: '0', exponent: 2 },
-      expiresAt: NOW + 120_000,
-      callIdentity: { keyId: 'route-calls:2026-08', signature: 'hmac-sha256:signed-call' },
-      authorityGeneration: 4,
-      authorityDigest: canonicalDigest({ connection: 'test', generation: 4 }),
-      leaseRef: 'lease:test',
-      callRef: 'call:test',
-      toolRef: 'tool:test',
-      grantedScopes: ['provider:invoke'],
-      grantedResources: ['tool:test'],
-      readinessValidUntil: NOW + 20_000,
-      readinessDigest: canonicalDigest({ readiness: 'test' }),
-    },
-    inputJson: JSON.stringify({ destination: 'PER' }),
-  }
-}
-
-const X402_PAYMENT_CREDENTIAL_REF = 'env:AE_X402_PAYMENT_PRIVATE_KEY'
-
-function x402Challenge() {
-  return {
-    x402Version: 2 as const,
-    resource: { url: 'https://provider.example/paid' },
-    accepts: [{
-      scheme: 'exact',
-      network: 'eip155:84532' as const,
-      amount: '1250000',
-      asset: '0x0000000000000000000000000000000000000001',
-      payTo: '0x0000000000000000000000000000000000000002',
-      maxTimeoutSeconds: 60,
-      extra: {},
-    }],
-  }
-}
-
-function x402Invocation(): ProviderRouteTransportInvocation {
-  const base = invocation()
-  const challenge = x402Challenge()
-  const requirement = challenge.accepts[0]
-  if (requirement === undefined) throw new Error('test_fixture_invalid')
-  const config = {
-    method: 'POST' as const,
-    requestTimeoutMs: 5_000,
-    scheme: 'exact' as const,
-    network: requirement.network,
-    currency: 'USD',
-    routeAmountExponent: 2,
-    assetAmountExponent: 6,
-    asset: requirement.asset,
-    payTo: requirement.payTo,
-    paymentRequiredJson: stableStringify(challenge as StableHashValue),
-  }
-  return {
-    ...base,
-    binding: {
-      ...base.binding,
-      adapterId: 'x402-fetch:v2',
-      endpointUrl: challenge.resource.url,
-      configJson: JSON.stringify(config),
-      configDigest: canonicalDigest(config),
-    },
-    authority: {
-      ...base.authority,
-      maximumSpend: { currency: 'USD', units: '125', exponent: 2 },
-    },
-  }
-}
-
-function requestDigest(routeInvocation: RouteTransportInvocation): string {
-  return canonicalDigest({
-    adapterId: routeInvocation.binding.adapterId,
-    endpointUrl: routeInvocation.binding.endpointUrl,
-    configDigest: routeInvocation.binding.configDigest,
-    attemptRef: routeInvocation.authority.attemptRef,
-    operationKeyDigest: routeInvocation.authority.operationKeyDigest,
-    mandateDigest: routeInvocation.authority.mandateDigest,
-    grantDigest: routeInvocation.authority.grantDigest,
-    capabilityContractDigest: routeInvocation.authority.capabilityContractDigest,
-    inputJson: routeInvocation.inputJson,
-  } as StableHashValue)
-}
-
-function ticket(routeInvocation = invocation()): CanonicalProviderConsequenceTicket {
-  const authority = routeInvocation.authority
-  const {
-    callRef,
-    toolRef,
-    leaseRef,
-    grantedScopes,
-    grantedResources,
-    readinessValidUntil,
-    readinessDigest,
-  } = authority
-  if (callRef === undefined
-    || toolRef === undefined
-    || leaseRef === undefined
-    || grantedScopes === undefined
-    || grantedResources === undefined
-    || readinessValidUntil === undefined) throw new Error('test_fixture_invalid')
-  const invocationDigest = providerConsequenceInvocationDigest(routeInvocation)
-  if (invocationDigest === undefined) throw new Error('test_fixture_invalid')
-  return Object.freeze({
-    version: 'provider-consequence:v1',
-    ticketRef: 'provider-effect-ticket:test',
-    effectRef: 'connection-effect:test',
-    requestDigest: requestDigest(routeInvocation),
-    invocationDigest,
-    issuedAt: NOW - 1_000,
-    expiresAt: NOW + 10_000,
-    callRef,
-    toolRef,
-    leaseRef,
-    connectionRef: routeInvocation.binding.authority.connectionRef,
-    authorityGeneration: authority.authorityGeneration,
-    providerRef: routeInvocation.binding.authority.providerRef,
-    adapterId: routeInvocation.binding.adapterId,
-    authorityDigest: authority.authorityDigest,
-    grantedScopes,
-    grantedResources,
-    readinessValidUntil,
-    ...(readinessDigest === undefined ? {} : { readinessDigest }),
-    owningAccountRef: 'acc_11111111111111111111111111111111',
-    activeAccountRef: 'acc_11111111111111111111111111111111',
-    actorPrincipalRef: 'prn_11111111111111111111111111111111',
-    grantRef: 'grant:test',
-    grantGeneration: 3,
-    secret: { secretRef: REF, activeGeneration: GENERATION, pointerRevision: 7 },
-    ...(routeInvocation.binding.adapterId === 'x402-fetch:v2'
-      ? { paymentSecret: {
-          secretRef: PAYMENT_REF,
-          activeGeneration: PAYMENT_GENERATION,
-          pointerRevision: 8,
-        } }
-      : {}),
-  })
-}
-
-function vault(scope: 'platform' | 'customer'): InfisicalVaultConfiguration {
-  return {
-    scope,
-    baseUrl: 'https://app.infisical.com',
-    projectId: scope === 'platform' ? 'project-platform' : 'project-customer',
-    environment: 'production',
-    secretPath: scope === 'platform' ? '/agentic-economy/platform' : '/agentic-economy/customer',
-    machineIdentityId: scope === 'platform' ? 'identity-platform' : 'identity-customer',
-  }
-}
-
-function pointerStore(pointer: SecretPointer): SecretPointerStore {
-  return {
-    getActive: async () => pointer,
-    advanceActive: async () => { throw new Error('pointer_advance_forbidden') },
-  }
-}
-
-function vaultFetch(secretValue = CREDENTIAL): typeof fetch {
-  return vi.fn(async (input: string | URL | Request) => {
-    const url = new URL(String(input))
-    if (url.pathname === '/api/v1/auth/oidc-auth/login') {
-      return Response.json({
-        accessToken: 'vault-access-token',
-        tokenType: 'Bearer',
-        expiresIn: 600,
-        accessTokenMaxTTL: 600,
-      })
-    }
-    const projectId = url.searchParams.get('projectId') ?? ''
-    return Response.json({
-      secret: {
-        secretKey: `${REF}--${GENERATION}`,
-        secretValue,
-        environment: 'production',
-        workspace: projectId,
-      },
-    })
-  }) as typeof fetch
-}
-
-function jwt(): string {
-  const seconds = NOW / 1_000
-  return [
-    Buffer.from(JSON.stringify({ alg: 'RS256', kid: 'key-1' })).toString('base64url'),
-    Buffer.from(JSON.stringify({ iat: seconds - 60, nbf: seconds - 60, exp: seconds + 3_540 })).toString('base64url'),
-    Buffer.from('signature').toString('base64url'),
-  ].join('.')
-}
-
-function journal(): ProviderConsequenceJournal {
-  return {
-    begin: vi.fn(async () => ({ kind: 'claimed' as const, claimRef: 'claim:test' })),
-    complete: vi.fn(async () => undefined),
-    abortBeforeRelease: vi.fn(async () => undefined),
-  }
-}
-
-function secretRuntimeOptions(
-  pointer: SecretPointer,
-  fetch: typeof globalThis.fetch,
-  now?: () => number,
-): ProductionSecretRuntimeOptions {
-  return {
-    configuration: { platform: vault('platform'), customer: vault('customer') },
-    platform: { pointerStore: pointerStore(pointer), generationProbe: { validate: async () => undefined } },
-    customer: { pointerStore: pointerStore(pointer), generationProbe: { validate: async () => undefined } },
-    fetch,
-    ...(now === undefined ? {} : { now }),
-  }
-}
-
-type HarnessOverrides = Readonly<{
-  routeInvocation?: RouteTransportInvocation
-  verifiedTicket?: CanonicalProviderConsequenceTicket
-  verifyTicket?: ProviderConsequenceTicketVerifier
-  journal?: ProviderConsequenceJournal
-  pointer?: SecretPointer
-  vaultFetch?: typeof fetch
-  send?: RouteTransportFetch
-  now?: number
-  boundaryNow?: () => number
-  createCallbackScopedX402Runtime?: JitProviderX402RuntimeFactory
-}>
-
-function harness(overrides: HarnessOverrides = {}) {
-  const routeInvocation = overrides.routeInvocation ?? invocation()
-  const verifiedTicket = overrides.verifiedTicket ?? ticket()
-  const durableJournal = overrides.journal ?? journal()
-  const pointer = overrides.pointer ?? Object.freeze({
-    secretRef: REF,
-    activeGeneration: GENERATION,
-    revision: 7,
-  })
-  const send = overrides.send ?? vi.fn<RouteTransportFetch>(async () =>
-    Response.json({ serviceReference: 'service:jit' }))
-  const boundary = createJitProviderConsequenceBoundary({
-    verifyTicket: overrides.verifyTicket ?? (async (opaque) =>
-      opaque === 'opaque-ticket' ? verifiedTicket : undefined),
-    journal: durableJournal,
-    secretRuntime: secretRuntimeOptions(pointer, overrides.vaultFetch ?? vaultFetch(), () => overrides.now ?? NOW),
-    send,
-    now: overrides.boundaryNow ?? (() => overrides.now ?? NOW),
-    ...(overrides.createCallbackScopedX402Runtime === undefined
-      ? {}
-      : { createCallbackScopedX402Runtime: overrides.createCallbackScopedX402Runtime }),
-  })
-  return { boundary, durableJournal, routeInvocation, send }
-}
-
-function callbackScopedX402Runtime(
-  overrides: Partial<JitProviderX402Runtime> = {},
-): JitProviderX402Runtime {
-  return {
-    readX402PaymentCredentialRef: async () => X402_PAYMENT_CREDENTIAL_REF,
-    validateProviderConnectionAuthority: async () => ({ kind: 'valid' as const }),
-    x402PaymentSigningAvailable: () => true,
-    verifyX402Settlement: async () => true,
-    prepareX402PaymentAuthorization: async () => ({
-      custodyRef: 'sha256:customer-custody-reference',
-      authorizationDigest: canonicalDigest({ authorization: 'signed-payment' }),
-    }),
-    readX402PaymentAuthorization: async () => 'signed-payment',
-    readX402PaymentAuthorizationByDigest: async () => 'signed-payment',
-    beforeX402PaymentAuthorizationRead: async () => true,
-    markX402PaymentPossiblySubmitted: async () => undefined,
-    observeX402PaymentAttempt: async () => undefined,
-    ...overrides,
-  }
-}
 
 describe('JIT provider consequence boundary', () => {
   beforeEach(() => {
@@ -346,35 +58,20 @@ describe('JIT provider consequence boundary', () => {
   })
 
   it('performs provider I/O inside callback-scoped production customer secret use', async () => {
-    const routeInvocation = invocation()
+    const routeInvocation = jitInvocation()
     const canonicalTicket = ticket(routeInvocation)
-    const durableJournal = journal()
     let callbackActive = false
-    const send = vi.fn<RouteTransportFetch>(async (_target, init) => {
-      callbackActive = true
-      expect(init?.headers).toMatchObject({ Authorization: `Bearer ${CREDENTIAL}` })
-      return Response.json({ serviceReference: 'service:jit' })
-    })
-    const pointer: SecretPointer = Object.freeze({
-      secretRef: REF,
-      activeGeneration: GENERATION,
-      revision: 7,
-    })
-    const boundary = createJitProviderConsequenceBoundary({
-      verifyTicket: async (opaque) => opaque === 'opaque-ticket' ? canonicalTicket : undefined,
-      journal: durableJournal,
-      secretRuntime: {
-        configuration: { platform: vault('platform'), customer: vault('customer') },
-        platform: { pointerStore: pointerStore(pointer), generationProbe: { validate: async () => undefined } },
-        customer: { pointerStore: pointerStore(pointer), generationProbe: { validate: async () => undefined } },
-        fetch: vaultFetch(),
-        now: () => NOW,
-      },
-      send,
-      now: () => NOW,
+    const active = harness({
+      routeInvocation,
+      verifiedTicket: canonicalTicket,
+      send: vi.fn<RouteTransportFetch>(async (_target, init) => {
+        callbackActive = true
+        expect(init?.headers).toMatchObject({ Authorization: `Bearer ${CREDENTIAL}` })
+        return Response.json({ serviceReference: 'service:jit' })
+      }),
     })
 
-    const result = await boundary.execute({ ticket: 'opaque-ticket', invocation: routeInvocation })
+    const result = await execute(active)
 
     expect(result).toMatchObject({
       transport: 'http',
@@ -383,18 +80,10 @@ describe('JIT provider consequence boundary', () => {
       outputJson: JSON.stringify({ serviceReference: 'service:jit' }),
     })
     expect(callbackActive).toBe(true)
-    expect(send).toHaveBeenCalledOnce()
-    expect(durableJournal.begin).toHaveBeenCalledWith({
-      ticketRef: canonicalTicket.ticketRef,
-      effectRef: canonicalTicket.effectRef,
-      requestDigest: canonicalTicket.requestDigest,
-      invocationDigest: canonicalTicket.invocationDigest,
-      ticketClaimsDigest: providerConsequenceTicketClaimsDigest(canonicalTicket),
-      expiresAt: canonicalTicket.expiresAt,
-      now: NOW,
-    })
-    expect(durableJournal.complete).toHaveBeenCalledWith({ claimRef: 'claim:test', observation: result })
-    expect(JSON.stringify(result)).not.toContain(CREDENTIAL)
+    expect(active.send).toHaveBeenCalledOnce()
+    expectJournalBeginForTicket(active.durableJournal, canonicalTicket)
+    expect(active.durableJournal.complete).toHaveBeenCalledWith({ claimRef: CLAIM_REF, observation: result })
+    expectJsonExcludesCredential(result)
   })
 
   it.each([
@@ -402,21 +91,13 @@ describe('JIT provider consequence boundary', () => {
     ['unverifiable ticket', 'opaque-ticket', async () => undefined],
     ['verifier outage', 'opaque-ticket', async () => { throw new Error('verification-outage') }],
   ])('fails closed before journal or provider I/O for %s', async (_case, opaque, verifyTicket) => {
-    const durableJournal = journal()
-    const send = vi.fn<RouteTransportFetch>()
-    const { boundary, routeInvocation } = harness({
-      verifyTicket,
-      journal: durableJournal,
-      send,
-    })
-
-    await expect(boundary.execute({ ticket: opaque, invocation: routeInvocation })).resolves.toMatchObject({
+    const active = harness({ verifyTicket, send: vi.fn<RouteTransportFetch>() })
+    await expectExecute(active, {
       disposition: 'refused',
       releaseStarted: false,
       failureCode: 'provider_consequence_ticket_invalid',
-    })
-    expect(durableJournal.begin).not.toHaveBeenCalled()
-    expect(send).not.toHaveBeenCalled()
+    }, opaque)
+    expectNoJournalBeginOrSend(active)
   })
 
   it.each([
@@ -435,28 +116,18 @@ describe('JIT provider consequence boundary', () => {
     ['account attribution malformed', (value: CanonicalProviderConsequenceTicket) => ({ ...value, activeAccountRef: 'account:caller' })],
     ['unverified cross-account attribution', (value: CanonicalProviderConsequenceTicket) => ({ ...value, activeAccountRef: 'acc_22222222222222222222222222222222' })],
   ])('rejects hostile canonical-ticket mismatch: %s', async (_case, mutate) => {
-    const routeInvocation = invocation()
-    const durableJournal = journal()
-    const send = vi.fn<RouteTransportFetch>()
-    const { boundary } = harness({
+    const routeInvocation = jitInvocation()
+    const active = harness({
       routeInvocation,
       verifiedTicket: mutate(ticket(routeInvocation)) as CanonicalProviderConsequenceTicket,
-      journal: durableJournal,
-      send,
+      send: vi.fn<RouteTransportFetch>(),
     })
-
-    await expect(boundary.execute({ ticket: 'opaque-ticket', invocation: routeInvocation })).resolves.toMatchObject({
-      disposition: 'refused',
-      releaseStarted: false,
-      failureCode: 'provider_consequence_ticket_invalid',
-    })
-    expect(durableJournal.begin).not.toHaveBeenCalled()
-    expect(send).not.toHaveBeenCalled()
+    await expectRefusedTicketInvalid(active, routeInvocation)
   })
 
   it('does not disclose or send when a valid ticket is replayed against another connection', async () => {
-    const original = invocation()
-    const substituted = invocation()
+    const original = jitInvocation()
+    const substituted = jitInvocation()
     if (substituted.binding.authority.kind !== 'provider_connection') throw new Error('test_fixture_invalid')
     const crossAccountInvocation: RouteTransportInvocation = {
       ...substituted,
@@ -465,21 +136,20 @@ describe('JIT provider consequence boundary', () => {
         authority: { ...substituted.binding.authority, connectionRef: 'connection:other-account' },
       },
     }
-    const send = vi.fn<RouteTransportFetch>()
-    const { boundary } = harness({
+    const active = harness({
       routeInvocation: crossAccountInvocation,
       verifiedTicket: ticket(original),
-      send,
+      send: vi.fn<RouteTransportFetch>(),
     })
 
-    const result = await boundary.execute({ ticket: 'opaque-ticket', invocation: crossAccountInvocation })
+    const result = await execute(active, OPAQUE_TICKET, crossAccountInvocation)
     expect(result).toMatchObject({ disposition: 'refused', failureCode: 'provider_consequence_ticket_invalid' })
-    expect(send).not.toHaveBeenCalled()
+    expectNoSend(active)
     expect(JSON.stringify(result)).not.toContain('acc_11111111111111111111111111111111')
   })
 
   it('binds account and secret claims to the durable issued ticket before secret or provider I/O', async () => {
-    const routeInvocation = invocation()
+    const routeInvocation = jitInvocation()
     const issued = ticket(routeInvocation)
     const substituted: CanonicalProviderConsequenceTicket = {
       ...issued,
@@ -496,28 +166,24 @@ describe('JIT provider consequence boundary', () => {
     expect(providerConsequenceTicketClaimsDigest(substituted)).not.toBe(
       providerConsequenceTicketClaimsDigest(issued),
     )
-    const durableJournal: ProviderConsequenceJournal = {
-      ...journal(),
-      begin: vi.fn(async (input) => input.ticketClaimsDigest === providerConsequenceTicketClaimsDigest(issued)
-        ? { kind: 'claimed', claimRef: 'claim:test' }
-        : { kind: 'unavailable' }),
-    }
     const active = harness({
       routeInvocation,
       verifiedTicket: substituted,
-      journal: durableJournal,
+      journal: journalWithBegin(async (input: any) => input.ticketClaimsDigest === providerConsequenceTicketClaimsDigest(issued)
+        ? { kind: 'claimed', claimRef: CLAIM_REF }
+        : { kind: 'unavailable' }),
     })
-    await expect(active.boundary.execute({ ticket: 'opaque-ticket', invocation: routeInvocation })).resolves.toMatchObject({
+    await expectExecute(active, {
       disposition: 'refused',
       releaseStarted: false,
       failureCode: 'provider_consequence_ticket_unavailable',
     })
     expect(getVercelOidcToken).not.toHaveBeenCalled()
-    expect(active.send).not.toHaveBeenCalled()
+    expectNoSend(active)
   })
 
   it('binds call identity and monetary authority even though the legacy request digest omits them', async () => {
-    const original = invocation()
+    const original = jitInvocation()
     const altered: RouteTransportInvocation = {
       ...original,
       authority: {
@@ -529,16 +195,11 @@ describe('JIT provider consequence boundary', () => {
     expect(requestDigest(altered)).toBe(requestDigest(original))
     expect(providerConsequenceInvocationDigest(altered)).not.toBe(providerConsequenceInvocationDigest(original))
     const active = harness({ routeInvocation: altered, verifiedTicket: ticket(original) })
-    await expect(active.boundary.execute({ ticket: 'opaque-ticket', invocation: altered })).resolves.toMatchObject({
-      disposition: 'refused',
-      releaseStarted: false,
-      failureCode: 'provider_consequence_ticket_invalid',
-    })
-    expect(active.send).not.toHaveBeenCalled()
+    await expectRefusedTicketInvalid(active, altered)
   })
 
   it('digests only fully materialized provider consequences and canonicalizes absent optional fields', () => {
-    const provider = invocation()
+    const provider = jitInvocation()
     const keyless: RouteTransportInvocation = {
       ...provider,
       binding: { ...provider.binding, authority: { kind: 'public_upstream' } },
@@ -566,28 +227,25 @@ describe('JIT provider consequence boundary', () => {
   })
 
   it.each([
-    ['unavailable', { kind: 'unavailable' as const }, 'refused', false, 'provider_consequence_ticket_unavailable'],
-    ['started', { kind: 'started' as const }, 'unknown', true, 'provider_consequence_started'],
-  ])('honors durable single-use journal state %s without a duplicate send', async (
-    _case,
+    { label: 'unavailable', beginResult: { kind: 'unavailable' as const }, disposition: 'refused', releaseStarted: false, failureCode: 'provider_consequence_ticket_unavailable' },
+    { label: 'started', beginResult: { kind: 'started' as const }, disposition: 'unknown', releaseStarted: true, failureCode: 'provider_consequence_started' },
+  ])('honors durable single-use journal state $label without a duplicate send', async ({
     beginResult,
     disposition,
     releaseStarted,
     failureCode,
-  ) => {
-    const durableJournal: ProviderConsequenceJournal = {
-      ...journal(),
-      begin: vi.fn(async () => beginResult as ProviderConsequenceJournalBeginResult),
-    }
-    const send = vi.fn<RouteTransportFetch>()
-    const { boundary, routeInvocation } = harness({ journal: durableJournal, send })
-    const result = await boundary.execute({ ticket: 'opaque-ticket', invocation: routeInvocation })
+  }) => {
+    const active = harness({
+      journal: journalWithBegin(async () => beginResult as ProviderConsequenceJournalBeginResult),
+      send: vi.fn<RouteTransportFetch>(),
+    })
+    const result = await execute(active)
     expect(result).toMatchObject({ disposition, releaseStarted, failureCode })
-    expect(send).not.toHaveBeenCalled()
+    expectNoSend(active)
   })
 
   it('returns the exact sanitized completed replay without reacquiring material or sending', async () => {
-    const routeInvocation = invocation()
+    const routeInvocation = jitInvocation()
     const replay = {
       transport: 'http' as const,
       disposition: 'succeeded' as const,
@@ -595,22 +253,21 @@ describe('JIT provider consequence boundary', () => {
       requestDigest: requestDigest(routeInvocation),
       outputJson: JSON.stringify({ serviceReference: 'service:replayed' }),
     }
-    const durableJournal: ProviderConsequenceJournal = {
-      ...journal(),
-      begin: vi.fn(async () => ({ kind: 'completed' as const, observation: replay })),
-    }
-    const send = vi.fn<RouteTransportFetch>()
-    const { boundary } = harness({ routeInvocation, journal: durableJournal, send })
-    await expect(boundary.execute({ ticket: 'opaque-ticket', invocation: routeInvocation })).resolves.toEqual(replay)
+    const active = harness({
+      routeInvocation,
+      journal: journalWithBegin(async () => ({ kind: 'completed' as const, observation: replay })),
+      send: vi.fn<RouteTransportFetch>(),
+    })
+    await expect(execute(active)).resolves.toEqual(replay)
     expect(getVercelOidcToken).not.toHaveBeenCalled()
-    expect(send).not.toHaveBeenCalled()
+    expectNoSend(active)
   })
 
   it('turns an invalid completed replay or journal outage into a fixed fail-closed outcome', async () => {
-    const routeInvocation = invocation()
-    const invalidReplayJournal: ProviderConsequenceJournal = {
-      ...journal(),
-      begin: vi.fn(async () => ({
+    const routeInvocation = jitInvocation()
+    const invalidReplay = harness({
+      routeInvocation,
+      journal: journalWithBegin(async () => ({
         kind: 'completed' as const,
         observation: {
           transport: 'http' as const,
@@ -619,19 +276,17 @@ describe('JIT provider consequence boundary', () => {
           requestDigest: canonicalDigest({ request: 'other' }),
         },
       })),
-    }
-    const invalidReplay = harness({ routeInvocation, journal: invalidReplayJournal })
-    await expect(invalidReplay.boundary.execute({ ticket: 'opaque-ticket', invocation: routeInvocation })).resolves.toMatchObject({
+    })
+    await expectExecute(invalidReplay, {
       disposition: 'unknown',
       failureCode: 'provider_consequence_replay_invalid',
     })
 
-    const outageJournal: ProviderConsequenceJournal = {
-      ...journal(),
-      begin: vi.fn(async () => { throw new Error('journal-outage') }),
-    }
-    const outage = harness({ routeInvocation, journal: outageJournal })
-    await expect(outage.boundary.execute({ ticket: 'opaque-ticket', invocation: routeInvocation })).resolves.toMatchObject({
+    const outage = harness({
+      routeInvocation,
+      journal: journalWithBegin(async () => { throw new Error('journal-outage') }),
+    })
+    await expectExecute(outage, {
       disposition: 'refused',
       releaseStarted: false,
       failureCode: 'provider_consequence_journal_unavailable',
@@ -650,18 +305,15 @@ describe('JIT provider consequence boundary', () => {
       observation: { transport: 'http', disposition: 'succeeded', releaseStarted: 'yes' },
     }],
   ])('rejects malformed remote journal result before secret or provider I/O: %s', async (_case, remoteResult) => {
-    const durableJournal: ProviderConsequenceJournal = {
-      ...journal(),
-      begin: vi.fn(async () => remoteResult),
-    }
+    const durableJournal = journalWithBegin(async () => remoteResult)
     const active = harness({ journal: durableJournal })
-    await expect(active.boundary.execute({ ticket: 'opaque-ticket', invocation: active.routeInvocation })).resolves.toMatchObject({
+    await expectExecute(active, {
       disposition: 'refused',
       releaseStarted: false,
       failureCode: 'provider_consequence_journal_invalid',
     })
     expect(getVercelOidcToken).not.toHaveBeenCalled()
-    expect(active.send).not.toHaveBeenCalled()
+    expectNoSend(active)
     expect(durableJournal.complete).not.toHaveBeenCalled()
     expect(durableJournal.abortBeforeRelease).not.toHaveBeenCalled()
   })
@@ -669,16 +321,12 @@ describe('JIT provider consequence boundary', () => {
   it('rejects a non-serializable completed journal observation before secret or provider I/O', async () => {
     const observation: Record<string, unknown> = { kind: 'completed' }
     observation.observation = observation
-    const durableJournal: ProviderConsequenceJournal = {
-      ...journal(),
-      begin: vi.fn(async () => observation),
-    }
-    const active = harness({ journal: durableJournal })
-    await expect(active.boundary.execute({ ticket: 'opaque-ticket', invocation: active.routeInvocation })).resolves.toMatchObject({
+    const active = harness({ journal: journalWithBegin(async () => observation) })
+    await expectExecute(active, {
       disposition: 'refused',
       failureCode: 'provider_consequence_journal_invalid',
     })
-    expect(active.send).not.toHaveBeenCalled()
+    expectNoSend(active)
   })
 
   it('fails closed before provider I/O on exact stale pointer, identity, and vault outages', async () => {
@@ -689,46 +337,45 @@ describe('JIT provider consequence boundary', () => {
         revision: 8,
       }),
     })
-    await expect(stale.boundary.execute({ ticket: 'opaque-ticket', invocation: stale.routeInvocation })).resolves.toMatchObject({
+    await expectExecute(stale, {
       disposition: 'refused',
       releaseStarted: false,
       failureCode: 'provider_consequence_secret_unavailable',
     })
-    expect(stale.send).not.toHaveBeenCalled()
+    expectNoSend(stale)
     expect(stale.durableJournal.abortBeforeRelease).toHaveBeenCalledOnce()
 
     getVercelOidcToken.mockRejectedValueOnce(new Error(`identity-${CREDENTIAL}`))
     const identity = harness()
-    await expect(identity.boundary.execute({ ticket: 'opaque-ticket', invocation: identity.routeInvocation })).resolves.toMatchObject({
+    await expectExecute(identity, {
       disposition: 'refused',
       releaseStarted: false,
       failureCode: 'provider_consequence_secret_unavailable',
     })
-    expect(identity.send).not.toHaveBeenCalled()
+    expectNoSend(identity)
 
-    const vault = harness({ vaultFetch: vi.fn(async () => { throw new Error(`vault-${CREDENTIAL}`) }) as typeof fetch })
-    const vaultResult = await vault.boundary.execute({ ticket: 'opaque-ticket', invocation: vault.routeInvocation })
+    const vaultHarness = harness({ vaultFetch: vi.fn(async () => { throw new Error(`vault-${CREDENTIAL}`) }) as typeof fetch })
+    const vaultResult = await execute(vaultHarness)
     expect(vaultResult).toMatchObject({ disposition: 'refused', failureCode: 'provider_consequence_secret_unavailable' })
-    expect(JSON.stringify(vaultResult)).not.toContain(CREDENTIAL)
-    expect(vault.send).not.toHaveBeenCalled()
+    expectJsonExcludesCredential(vaultResult)
+    expectNoSend(vaultHarness)
   })
 
   it('records started transport failures as unknown and never performs a duplicate send', async () => {
     const durableJournal = journal()
     const send = vi.fn<RouteTransportFetch>(async () => { throw new Error(`network-${CREDENTIAL}`) })
     const active = harness({ journal: durableJournal, send })
-    const first = await active.boundary.execute({ ticket: 'opaque-ticket', invocation: active.routeInvocation })
+    const first = await execute(active)
     expect(first).toMatchObject({ disposition: 'unknown', releaseStarted: true })
     expect(send).toHaveBeenCalledOnce()
     expect(durableJournal.complete).toHaveBeenCalledOnce()
-    expect(JSON.stringify(first)).not.toContain(CREDENTIAL)
+    expectJsonExcludesCredential(first)
 
-    const startedJournal: ProviderConsequenceJournal = {
-      ...journal(),
-      begin: vi.fn(async () => ({ kind: 'started' as const })),
-    }
-    const replay = harness({ journal: startedJournal, send })
-    await expect(replay.boundary.execute({ ticket: 'opaque-ticket', invocation: replay.routeInvocation })).resolves.toMatchObject({
+    const replay = harness({
+      journal: journalWithBegin(async () => ({ kind: 'started' as const })),
+      send,
+    })
+    await expectExecute(replay, {
       disposition: 'unknown',
       failureCode: 'provider_consequence_started',
     })
@@ -736,12 +383,12 @@ describe('JIT provider consequence boundary', () => {
   })
 
   it('returns reconciliation-required unknown when the completion acknowledgement is unavailable', async () => {
-    const durableJournal: ProviderConsequenceJournal = {
-      ...journal(),
-      complete: vi.fn(async () => { throw new Error('completion-outage') }),
-    }
-    const active = harness({ journal: durableJournal })
-    await expect(active.boundary.execute({ ticket: 'opaque-ticket', invocation: active.routeInvocation })).resolves.toMatchObject({
+    const active = harness({
+      journal: journalWithPatches({
+        complete: async () => { throw new Error('completion-outage') },
+      }),
+    })
+    await expectExecute(active, {
       disposition: 'unknown',
       releaseStarted: true,
       failureCode: 'provider_consequence_completion_unknown',
@@ -750,25 +397,20 @@ describe('JIT provider consequence boundary', () => {
   })
 
   it('returns route preparation refusal before ticket verification', async () => {
-    const malformed = invocation()
-    const verifyTicket = vi.fn<ProviderConsequenceTicketVerifier>()
-    const { boundary } = harness({
-      routeInvocation: {
-        ...malformed,
-        binding: { ...malformed.binding, configDigest: canonicalDigest({ config: 'wrong' }) },
-      },
-      verifyTicket,
-    })
-    const result = await boundary.execute({ ticket: 'opaque-ticket', invocation: {
+    const malformed = jitInvocation()
+    const invalidInvocation: RouteTransportInvocation = {
       ...malformed,
       binding: { ...malformed.binding, configDigest: canonicalDigest({ config: 'wrong' }) },
-    } })
+    }
+    const verifyTicket = vi.fn<ProviderConsequenceTicketVerifier>()
+    const active = harness({ routeInvocation: invalidInvocation, verifyTicket })
+    const result = await execute(active, OPAQUE_TICKET, invalidInvocation)
     expect(result).toMatchObject({ disposition: 'refused', failureCode: 'adapter_config_invalid' })
     expect(verifyTicket).not.toHaveBeenCalled()
   })
 
   it('requires a provider lease authority with every consequence binding field materialized', async () => {
-    const routeInvocation = invocation()
+    const routeInvocation = jitInvocation()
     const missing = [
       'callRef',
       'toolRef',
@@ -782,14 +424,14 @@ describe('JIT provider consequence boundary', () => {
       Reflect.deleteProperty(authority, field)
       const malformed: RouteTransportInvocation = { ...routeInvocation, authority }
       const active = harness({ routeInvocation: malformed })
-      const result = await active.boundary.execute({ ticket: 'opaque-ticket', invocation: malformed })
+      const result = await execute(active, OPAQUE_TICKET, malformed)
       expect(result).toMatchObject({ disposition: 'refused', failureCode: 'provider_consequence_ticket_invalid' })
-      expect(active.send).not.toHaveBeenCalled()
+      expectNoSend(active)
     }
   })
 
   it('refuses keyless invocations and uses the real wall clock when no test clock is supplied', async () => {
-    const provider = invocation()
+    const provider = jitInvocation()
     const keyless: RouteTransportInvocation = {
       ...provider,
       binding: {
@@ -810,50 +452,41 @@ describe('JIT provider consequence boundary', () => {
         callIdentity: provider.authority.callIdentity,
       },
     }
-    const verifyTicket = vi.fn(async () => ticket())
-    const durableJournal = journal()
-    const send = vi.fn<RouteTransportFetch>()
-    const boundary = createJitProviderConsequenceBoundary({
-      verifyTicket,
-      journal: durableJournal,
-      secretRuntime: secretRuntimeOptions(
-        Object.freeze({ secretRef: REF, activeGeneration: GENERATION, revision: 7 }),
-        vaultFetch(),
-      ),
-      send,
+    const active = harness({
+      verifyTicket: vi.fn(async () => ticket()),
+      send: vi.fn<RouteTransportFetch>(),
+      omitTestClock: true,
     })
-    const result = await boundary.execute({ ticket: 'opaque-ticket', invocation: keyless })
+    const result = await execute(active, OPAQUE_TICKET, keyless)
     expect(result).toMatchObject({ disposition: 'refused', failureCode: 'provider_consequence_ticket_invalid' })
-    expect(send).not.toHaveBeenCalled()
+    expectNoSend(active)
   })
 
   it('does not send when the fetched secret material is blank', async () => {
     const active = harness({ vaultFetch: vaultFetch('   ') })
-    const result = await active.boundary.execute({ ticket: 'opaque-ticket', invocation: active.routeInvocation })
+    const result = await execute(active)
     expect(result).toMatchObject({ disposition: 'refused', releaseStarted: false, failureCode: 'credential_unavailable' })
-    expect(active.send).not.toHaveBeenCalled()
+    expectNoSend(active)
     expect(active.durableJournal.complete).toHaveBeenCalledOnce()
 
     const empty = harness({ vaultFetch: vaultFetch('') })
-    await expect(empty.boundary.execute({ ticket: 'opaque-ticket', invocation: empty.routeInvocation }))
-      .resolves.toMatchObject({ disposition: 'refused', failureCode: 'credential_unavailable' })
-    expect(empty.send).not.toHaveBeenCalled()
+    await expectExecute(empty, { disposition: 'refused', failureCode: 'credential_unavailable' })
+    expectNoSend(empty)
   })
 
   it('refuses x402 support when the callback-scoped custody and reconciliation factory is absent', async () => {
-    const routeInvocation = x402Invocation()
-    const active = harness({ routeInvocation, verifiedTicket: ticket(routeInvocation) })
-    await expect(active.boundary.execute({ ticket: 'opaque-ticket', invocation: routeInvocation })).resolves.toMatchObject({
+    const { routeInvocation, ...active } = x402Harness()
+    await expectExecute(active, {
       transport: 'x402',
       disposition: 'refused',
       releaseStarted: false,
       failureCode: 'payment_custody_unavailable',
-    })
-    expect(active.send).not.toHaveBeenCalled()
+    }, OPAQUE_TICKET, routeInvocation)
+    expectNoSend(active)
   })
 
   it('rejects missing, malformed, or provider-secret-reused x402 payment pointers before journal or provider I/O', async () => {
-    const routeInvocation = x402Invocation()
+    const { routeInvocation } = x402Harness()
     const canonical = ticket(routeInvocation)
     for (const paymentSecret of [
       undefined,
@@ -866,21 +499,19 @@ describe('JIT provider consequence boundary', () => {
         ...(paymentSecret === undefined ? {} : { paymentSecret }),
       }
       if (paymentSecret === undefined) Reflect.deleteProperty(verifiedTicket, 'paymentSecret')
-      const active = harness({ routeInvocation, verifiedTicket })
-      await expect(active.boundary.execute({ ticket: 'opaque-ticket', invocation: routeInvocation }))
-        .resolves.toMatchObject({
-          transport: 'x402',
-          disposition: 'refused',
-          releaseStarted: false,
-          failureCode: 'provider_consequence_ticket_invalid',
-        })
-      expect(active.durableJournal.begin).not.toHaveBeenCalled()
-      expect(active.send).not.toHaveBeenCalled()
+      const active = x402Harness({ verifiedTicket })
+      await expectExecute(active, {
+        transport: 'x402',
+        disposition: 'refused',
+        releaseStarted: false,
+        failureCode: 'provider_consequence_ticket_invalid',
+      }, OPAQUE_TICKET, routeInvocation)
+      expectNoJournalBeginOrSend(active)
     }
   })
 
   it('rejects a caller-injected payment pointer on a non-payment provider ticket', async () => {
-    const routeInvocation = invocation()
+    const routeInvocation = jitInvocation()
     const canonical = ticket(routeInvocation)
     const active = harness({
       routeInvocation,
@@ -894,54 +525,29 @@ describe('JIT provider consequence boundary', () => {
       },
     })
 
-    await expect(active.boundary.execute({ ticket: 'opaque-ticket', invocation: routeInvocation }))
-      .resolves.toMatchObject({
-        transport: 'http',
-        disposition: 'refused',
-        releaseStarted: false,
-        failureCode: 'provider_consequence_ticket_invalid',
-      })
-    expect(active.durableJournal.begin).not.toHaveBeenCalled()
-    expect(active.send).not.toHaveBeenCalled()
+    await expectExecute(active, {
+      transport: 'http',
+      disposition: 'refused',
+      releaseStarted: false,
+      failureCode: 'provider_consequence_ticket_invalid',
+    })
+    expectNoJournalBeginOrSend(active)
   })
 
   it('runs x402 custody, one signed submission, and reconciliation inside the JIT callback', async () => {
-    const routeInvocation = x402Invocation()
+    const { createCallbackScopedX402Runtime, prepareX402PaymentAuthorization,
+      readX402PaymentAuthorization, readX402PaymentAuthorizationByDigest,
+      markX402PaymentPossiblySubmitted, observeX402PaymentAttempt } = buildTrackedX402Factory()
     const challenge = x402Challenge()
-    const prepareX402PaymentAuthorization = vi.fn(async () => ({
-      custodyRef: 'sha256:customer-custody-reference',
-      authorizationDigest: canonicalDigest({ authorization: 'signed-payment' }),
-    }))
-    const readX402PaymentAuthorization = vi.fn(async () => 'signed-payment')
-    const readX402PaymentAuthorizationByDigest = vi.fn(async () => 'signed-payment')
-    const markX402PaymentPossiblySubmitted = vi.fn(async () => undefined)
-    const observeX402PaymentAttempt = vi.fn(async () => undefined)
-    const createCallbackScopedX402Runtime = vi.fn<JitProviderX402RuntimeFactory>(async () => ({
-      readX402PaymentCredentialRef: async () => X402_PAYMENT_CREDENTIAL_REF,
-      validateProviderConnectionAuthority: async () => ({ kind: 'valid' as const }),
-      x402PaymentSigningAvailable: () => true,
-      verifyX402Settlement: async () => true,
-      prepareX402PaymentAuthorization,
-      readX402PaymentAuthorization,
-      readX402PaymentAuthorizationByDigest,
-      beforeX402PaymentAuthorizationRead: async () => true,
-      markX402PaymentPossiblySubmitted,
-      observeX402PaymentAttempt,
-    }))
-    const send = vi.fn<RouteTransportFetch>(async () => new Response(null, {
-      status: 402,
-      headers: { 'Payment-Required': encodePaymentRequiredHeader(challenge) },
-    }))
     const durableJournal = journal()
-    const active = harness({
-      routeInvocation,
-      verifiedTicket: ticket(routeInvocation),
+    const send = sendReturning402(challenge)
+    const { routeInvocation, ...active } = x402Harness({
       createCallbackScopedX402Runtime,
       journal: durableJournal,
       send,
     })
 
-    const result = await active.boundary.execute({ ticket: 'opaque-ticket', invocation: routeInvocation })
+    const result = await execute(active, OPAQUE_TICKET, routeInvocation)
 
     expect(result).toMatchObject({
       transport: 'x402',
@@ -970,33 +576,15 @@ describe('JIT provider consequence boundary', () => {
     expect(send.mock.calls[1]?.[1]?.headers).toMatchObject({
       'Payment-Signature': 'signed-payment',
     })
-    expect(durableJournal.complete).toHaveBeenCalledWith({ claimRef: 'claim:test', observation: result })
+    expect(durableJournal.complete).toHaveBeenCalledWith({ claimRef: CLAIM_REF, observation: result })
     expect(JSON.stringify(result)).not.toContain('signed-payment')
   })
 
   it('quarantines an x402 provider observation that echoes encoded leased secret material', async () => {
-    const routeInvocation = x402Invocation()
-    const createCallbackScopedX402Runtime = vi.fn<JitProviderX402RuntimeFactory>(async () => ({
-      readX402PaymentCredentialRef: async () => X402_PAYMENT_CREDENTIAL_REF,
-      validateProviderConnectionAuthority: async () => ({ kind: 'valid' as const }),
-      x402PaymentSigningAvailable: () => true,
-      verifyX402Settlement: async () => true,
-      prepareX402PaymentAuthorization: async () => ({
-        custodyRef: 'sha256:customer-custody-reference',
-        authorizationDigest: canonicalDigest({ authorization: 'signed-payment' }),
-      }),
-      readX402PaymentAuthorization: async () => 'signed-payment',
-      readX402PaymentAuthorizationByDigest: async () => 'signed-payment',
-      beforeX402PaymentAuthorizationRead: async () => true,
-      markX402PaymentPossiblySubmitted: async () => undefined,
-      observeX402PaymentAttempt: async () => undefined,
-    }))
     const challenge = x402Challenge()
+    const durableJournal = journal()
     const send = vi.fn<RouteTransportFetch>()
-      .mockResolvedValueOnce(new Response(null, {
-        status: 402,
-        headers: { 'Payment-Required': encodePaymentRequiredHeader(challenge) },
-      }))
+      .mockResolvedValueOnce(paymentRequired402Response(challenge))
       .mockResolvedValueOnce(Response.json({
         serviceReference: Buffer.from(CREDENTIAL).toString('base64'),
       }, {
@@ -1010,16 +598,13 @@ describe('JIT provider consequence boundary', () => {
           }),
         },
       }))
-    const durableJournal = journal()
-    const active = harness({
-      routeInvocation,
-      verifiedTicket: ticket(routeInvocation),
-      createCallbackScopedX402Runtime,
+    const { routeInvocation, ...active } = x402Harness({
+      createCallbackScopedX402Runtime: viCallbackScopedX402Factory(),
       journal: durableJournal,
       send,
     })
 
-    const result = await active.boundary.execute({ ticket: 'opaque-ticket', invocation: routeInvocation })
+    const result = await execute(active, OPAQUE_TICKET, routeInvocation)
 
     expect(result).toEqual({
       transport: 'x402',
@@ -1028,41 +613,30 @@ describe('JIT provider consequence boundary', () => {
       requestDigest: requestDigest(routeInvocation),
       failureCode: 'provider_consequence_secret_echo',
     })
-    expect(JSON.stringify(result)).not.toContain(CREDENTIAL)
-    expect(JSON.stringify(result)).not.toContain(Buffer.from(CREDENTIAL).toString('base64'))
+    expectJsonExcludesCredential(result)
     expect(send).toHaveBeenCalledTimes(2)
-    expect(durableJournal.complete).toHaveBeenCalledWith({ claimRef: 'claim:test', observation: result })
+    expect(durableJournal.complete).toHaveBeenCalledWith({ claimRef: CLAIM_REF, observation: result })
   })
 
   it('does not advertise x402 execution when the callback-scoped signer reports unavailable', async () => {
-    const routeInvocation = x402Invocation()
-    const active = harness({
-      routeInvocation,
-      verifiedTicket: ticket(routeInvocation),
+    const { routeInvocation, ...active } = x402Harness({
       createCallbackScopedX402Runtime: async () => callbackScopedX402Runtime({
         x402PaymentSigningAvailable: () => false,
       }),
     })
-    await expect(active.boundary.execute({ ticket: 'opaque-ticket', invocation: routeInvocation })).resolves.toMatchObject({
+    await expectExecute(active, {
       transport: 'x402',
       disposition: 'refused',
       releaseStarted: false,
       failureCode: 'payment_signature_unavailable',
-    })
-    expect(active.send).not.toHaveBeenCalled()
+    }, OPAQUE_TICKET, routeInvocation)
+    expectNoSend(active)
   })
 
   it('leaves a post-release x402 exception started and unknown without making the ticket retryable', async () => {
-    const routeInvocation = x402Invocation()
-    const challenge = x402Challenge()
     const durableJournal = journal()
-    const send = vi.fn<RouteTransportFetch>(async () => new Response(null, {
-      status: 402,
-      headers: { 'Payment-Required': encodePaymentRequiredHeader(challenge) },
-    }))
-    const active = harness({
-      routeInvocation,
-      verifiedTicket: ticket(routeInvocation),
+    const send = sendReturning402()
+    const { routeInvocation, ...active } = x402Harness({
       journal: durableJournal,
       send,
       createCallbackScopedX402Runtime: async () => callbackScopedX402Runtime({
@@ -1070,12 +644,12 @@ describe('JIT provider consequence boundary', () => {
       }),
     })
 
-    await expect(active.boundary.execute({ ticket: 'opaque-ticket', invocation: routeInvocation })).resolves.toMatchObject({
+    await expectExecute(active, {
       transport: 'x402',
       disposition: 'unknown',
       releaseStarted: true,
       failureCode: 'provider_consequence_release_unknown',
-    })
+    }, OPAQUE_TICKET, routeInvocation)
     expect(send).toHaveBeenCalledTimes(2)
     expect(durableJournal.abortBeforeRelease).not.toHaveBeenCalled()
     expect(durableJournal.complete).not.toHaveBeenCalled()
@@ -1088,21 +662,17 @@ describe('JIT provider consequence boundary', () => {
     })
     const active = harness({ journal: durableJournal, send })
 
-    await expect(active.boundary.execute({
-      ticket: 'opaque-ticket',
-      invocation: active.routeInvocation,
-    })).resolves.toMatchObject({
+    await expectExecute(active, {
       disposition: 'refused',
       releaseStarted: false,
       failureCode: 'provider_consequence_target_refused',
     })
     expect(send).toHaveBeenCalledOnce()
-    expect(durableJournal.abortBeforeRelease).toHaveBeenCalledWith({ claimRef: 'claim:test' })
+    expect(durableJournal.abortBeforeRelease).toHaveBeenCalledWith({ claimRef: CLAIM_REF })
     expect(durableJournal.complete).not.toHaveBeenCalled()
   })
 
   it('does not abort or retry when expiry is detected after x402 authorization and submission fencing', async () => {
-    const routeInvocation = x402Invocation()
     const durableJournal = journal()
     const markX402PaymentPossiblySubmitted = vi.fn(async () => undefined)
     const clock = vi.fn()
@@ -1110,28 +680,21 @@ describe('JIT provider consequence boundary', () => {
       .mockReturnValueOnce(NOW)
       .mockReturnValueOnce(NOW)
       .mockReturnValue(NOW + 10_000)
-    const challenge = x402Challenge()
-    const send = vi.fn<RouteTransportFetch>(async () => new Response(null, {
-      status: 402,
-      headers: { 'Payment-Required': encodePaymentRequiredHeader(challenge) },
-    }))
-    const active = harness({
-      routeInvocation,
-      verifiedTicket: ticket(routeInvocation),
+    const { routeInvocation, ...active } = x402Harness({
       journal: durableJournal,
       boundaryNow: clock,
-      send,
+      send: sendReturning402(),
       createCallbackScopedX402Runtime: async () => callbackScopedX402Runtime({
         markX402PaymentPossiblySubmitted,
       }),
     })
 
-    await expect(active.boundary.execute({ ticket: 'opaque-ticket', invocation: routeInvocation })).resolves.toMatchObject({
+    await expectExecute(active, {
       transport: 'x402',
       disposition: 'unknown',
       releaseStarted: true,
       failureCode: 'provider_consequence_release_unknown',
-    })
+    }, OPAQUE_TICKET, routeInvocation)
     expect(markX402PaymentPossiblySubmitted).toHaveBeenCalledOnce()
     expect(active.send).toHaveBeenCalledOnce()
     expect(durableJournal.abortBeforeRelease).not.toHaveBeenCalled()
@@ -1139,18 +702,15 @@ describe('JIT provider consequence boundary', () => {
   })
 
   it('fails closed when the callback-scoped x402 runtime factory is unavailable', async () => {
-    const routeInvocation = x402Invocation()
-    const active = harness({
-      routeInvocation,
-      verifiedTicket: ticket(routeInvocation),
+    const { routeInvocation, ...active } = x402Harness({
       createCallbackScopedX402Runtime: async () => { throw new Error('x402-runtime-factory-outage') },
     })
-    await expect(active.boundary.execute({ ticket: 'opaque-ticket', invocation: routeInvocation })).resolves.toMatchObject({
+    await expectExecute(active, {
       disposition: 'refused',
       releaseStarted: false,
       failureCode: 'payment_custody_unavailable',
-    })
-    expect(active.send).not.toHaveBeenCalled()
+    }, OPAQUE_TICKET, routeInvocation)
+    expectNoSend(active)
   })
 
   it.each([
@@ -1173,19 +733,14 @@ describe('JIT provider consequence boundary', () => {
       observeX402PaymentAttempt: async () => undefined,
     }],
   ])('fails closed for malformed callback-scoped x402 runtime: %s', async (_case, runtime) => {
-    const routeInvocation = x402Invocation()
     const createCallbackScopedX402Runtime = (async () => runtime) as unknown as JitProviderX402RuntimeFactory
-    const active = harness({
-      routeInvocation,
-      verifiedTicket: ticket(routeInvocation),
-      createCallbackScopedX402Runtime,
-    })
-    await expect(active.boundary.execute({ ticket: 'opaque-ticket', invocation: routeInvocation })).resolves.toMatchObject({
+    const { routeInvocation, ...active } = x402Harness({ createCallbackScopedX402Runtime })
+    await expectExecute(active, {
       disposition: 'refused',
       releaseStarted: false,
       failureCode: 'payment_custody_unavailable',
-    })
-    expect(active.send).not.toHaveBeenCalled()
+    }, OPAQUE_TICKET, routeInvocation)
+    expectNoSend(active)
   })
 
   it('rechecks ticket expiry immediately before the underlying provider call', async () => {
@@ -1194,32 +749,30 @@ describe('JIT provider consequence boundary', () => {
       .mockReturnValueOnce(NOW)
       .mockReturnValue(NOW + 10_000)
     const active = harness({ boundaryNow: clock })
-    const result = await active.boundary.execute({ ticket: 'opaque-ticket', invocation: active.routeInvocation })
+    const result = await execute(active)
     expect(result).toMatchObject({
       disposition: 'refused',
       releaseStarted: false,
       failureCode: 'provider_consequence_expired',
     })
-    expect(active.send).not.toHaveBeenCalled()
+    expectNoSend(active)
     expect(active.durableJournal.abortBeforeRelease).toHaveBeenCalledOnce()
     expect(active.durableJournal.complete).not.toHaveBeenCalled()
   })
 
   it('persists the registered transport unknown result when response handling fails after provider I/O begins', async () => {
     const durableJournal = journal()
-    const response = Response.json({ serviceReference: 'service:unreadable' })
-    Object.defineProperty(response, 'headers', {
-      get: () => { throw new Error('response-headers-unavailable') },
+    const active = harness({
+      journal: durableJournal,
+      send: vi.fn<RouteTransportFetch>(async () => unreadableJsonResponse()),
     })
-    const send = vi.fn<RouteTransportFetch>(async () => response)
-    const active = harness({ journal: durableJournal, send })
-    const result = await active.boundary.execute({ ticket: 'opaque-ticket', invocation: active.routeInvocation })
+    const result = await execute(active)
     expect(result).toMatchObject({
       disposition: 'unknown',
       releaseStarted: true,
       failureCode: 'network_error',
     })
-    expect(durableJournal.complete).toHaveBeenCalledWith({ claimRef: 'claim:test', observation: result })
+    expect(durableJournal.complete).toHaveBeenCalledWith({ claimRef: CLAIM_REF, observation: result })
   })
 
   it.each([
@@ -1232,10 +785,7 @@ describe('JIT provider consequence boundary', () => {
       send: vi.fn(async () => Response.json({ serviceReference: echoed })),
     })
 
-    const result = await active.boundary.execute({
-      ticket: 'opaque-ticket',
-      invocation: active.routeInvocation,
-    })
+    const result = await execute(active)
 
     expect(result).toEqual({
       transport: 'http',
@@ -1244,25 +794,21 @@ describe('JIT provider consequence boundary', () => {
       requestDigest: requestDigest(active.routeInvocation),
       failureCode,
     })
-    expect(JSON.stringify(result)).not.toContain(CREDENTIAL)
-    expect(JSON.stringify(result)).not.toContain(Buffer.from(CREDENTIAL).toString('base64'))
+    expectJsonExcludesCredential(result)
     expect(durableJournal.complete).toHaveBeenCalledWith({
-      claimRef: 'claim:test',
+      claimRef: CLAIM_REF,
       observation: result,
     })
   })
 
   it('keeps observed transport failures unknown when the journal cannot acknowledge completion', async () => {
-    const durableJournal: ProviderConsequenceJournal = {
-      ...journal(),
-      complete: vi.fn(async () => { throw new Error('journal-completion-outage') }),
-    }
-    const response = Response.json({ serviceReference: 'service:unreadable' })
-    Object.defineProperty(response, 'headers', {
-      get: () => { throw new Error('response-headers-unavailable') },
+    const active = harness({
+      journal: journalWithPatches({
+        complete: async () => { throw new Error('journal-completion-outage') },
+      }),
+      send: vi.fn(async () => unreadableJsonResponse()),
     })
-    const active = harness({ journal: durableJournal, send: vi.fn(async () => response) })
-    await expect(active.boundary.execute({ ticket: 'opaque-ticket', invocation: active.routeInvocation })).resolves.toMatchObject({
+    await expectExecute(active, {
       disposition: 'unknown',
       releaseStarted: true,
       failureCode: 'provider_consequence_completion_unknown',
@@ -1271,12 +817,12 @@ describe('JIT provider consequence boundary', () => {
 
   it('remains fail closed when abort-before-release cannot be acknowledged', async () => {
     getVercelOidcToken.mockRejectedValueOnce(new Error('identity-outage'))
-    const durableJournal: ProviderConsequenceJournal = {
-      ...journal(),
-      abortBeforeRelease: vi.fn(async () => { throw new Error('abort-outage') }),
-    }
-    const active = harness({ journal: durableJournal })
-    await expect(active.boundary.execute({ ticket: 'opaque-ticket', invocation: active.routeInvocation })).resolves.toMatchObject({
+    const active = harness({
+      journal: journalWithPatches({
+        abortBeforeRelease: async () => { throw new Error('abort-outage') },
+      }),
+    })
+    await expectExecute(active, {
       disposition: 'refused',
       releaseStarted: false,
       failureCode: 'provider_consequence_secret_unavailable',

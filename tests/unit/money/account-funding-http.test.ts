@@ -139,6 +139,9 @@ describe('Account AUD funding HTTP boundary', () => {
     const bindArgs = sourceMocks.callPublicSourceMutation.mock.calls[1]?.[1]
     expect(bindArgs).not.toHaveProperty('checkoutUrl')
     expect(JSON.stringify(bindArgs)).not.toContain('logical-attempt-one')
+    const reserveArgs = sourceMocks.callPublicSourceMutation.mock.calls[0]?.[1]
+    expect(reserveArgs?.successReturnRef).toMatch(/\/fund\/\{CHECKOUT_SESSION_ID\}$/u)
+    expect(reserveArgs?.cancelReturnRef).toBe(reserveArgs?.successReturnRef)
   })
 
   it('reserves the authenticated Account before creating one Stripe checkout', async () => {
@@ -187,6 +190,12 @@ describe('Account AUD funding HTTP boundary', () => {
       commandRef: durable.commandRef,
       inputDigest: durable.inputDigest,
     })
+    expect(sourceMocks.callSourceMutation.mock.calls[0]?.[1]).toMatchObject({
+      successReturnRef: expect.stringMatching(/\/owner\/credit\?funding=\{CHECKOUT_SESSION_ID\}$/u),
+      cancelReturnRef: expect.stringMatching(/\/owner\/credit\?funding=\{CHECKOUT_SESSION_ID\}$/u),
+    })
+    expect(sourceMocks.callSourceMutation.mock.calls[0]?.[1].cancelReturnRef)
+      .toBe(sourceMocks.callSourceMutation.mock.calls[0]?.[1].successReturnRef)
     expect(createOrRecoverCreditPayment).toHaveBeenCalledWith(expect.objectContaining({
       commandRef: durable.commandRef,
       principalId: durable.actorPrincipalRef,
@@ -221,7 +230,7 @@ describe('Account AUD funding HTTP boundary', () => {
     expect(provider.createOrRecoverCreditPayment).not.toHaveBeenCalled()
   })
 
-  it('reads an uncertain command without creating another payment', async () => {
+  it('AM-09 reads an uncertain command without creating another payment', async () => {
     const durable = command({ state: 'outcome_unknown' as const })
     sourceMocks.callSourceQuery.mockResolvedValueOnce({ kind: 'accepted', command: durable })
     const provider = {

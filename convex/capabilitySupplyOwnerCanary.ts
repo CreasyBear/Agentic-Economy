@@ -26,6 +26,8 @@ import {
 import {
   createSellerOnboardingCanaryCommitment,
   sellerOnboardingCanaryExecutionEnvelope,
+  X402_SELLER_CANARY_ADMISSION_REQUIRED_REF,
+  x402SellerCanaryAdmissionIsSatisfied,
 } from '@/modules/capability-supply/public'
 import {
   materializeRuntimePublishedTool,
@@ -107,6 +109,29 @@ type RequestArgs = {
   sourceWriteRequest?: unknown
 }
 type CanaryEnvelope = NonNullable<Doc<'capabilityCalls'>['sellerOnboardingCanary']>
+
+async function existingCanaryForPublication(
+  ctx: MutationCtx,
+  publication: Doc<'capabilityPublications'>,
+): Promise<CanaryEnvelope | null> {
+  const offering = await ctx.db.query('capabilityOfferings')
+    .withIndex('by_offeringId', (query) => query.eq('offeringId', publication.offeringId))
+    .unique()
+  const origin = offering?.origin
+  if (origin?.kind !== 'catalog_offering') return null
+  const rows = await ctx.db.query('capabilityCalls')
+    .withIndex('by_sellerOnboardingCanary_target', (query) => (
+      query.eq('sellerOnboardingCanary.businessId', String(publication.businessId))
+        .eq('sellerOnboardingCanary.offeringRef', origin.offeringRef)
+        .eq('sellerOnboardingCanary.offeringRevision', origin.offeringRevision)
+        .eq('sellerOnboardingCanary.offeringSourceHash', origin.offeringSourceHash)
+        .eq('sellerOnboardingCanary.publicationRef', publication.publicationRef)
+        .eq('sellerOnboardingCanary.publicationRevision', publication.revision)
+    ))
+    .take(2)
+  const row = rows.length === 1 ? rows[0] : undefined
+  return row?.sellerOnboardingCanary ?? null
+}
 
 function operationGrant(grant: AgentAccessGrant): CallGrant {
   return {
@@ -255,6 +280,76 @@ export async function requestSellerOnboardingCanaryHandler(
   if (business === null || business.owningAccountRef !== actor.canonicalAccountRef) {
     return { kind: 'refused', code: 'authorization_denied' }
   }
+  return await requestSellerOnboardingCanaryWithOwner(ctx, {
+    ...args,
+    ownerId: actor.canonicalAccountRef,
+  })
+}
+
+export async function requestSellerOnboardingCanaryForAdmittedPublicationHandler(
+  ctx: MutationCtx,
+  args: Readonly<{
+    publicationRef: string
+    publicationRevision: number
+    operationKey: string
+    correlationId: string
+  }>,
+): Promise<Infer<typeof requestSellerOnboardingCanaryResult>> {
+  const publication = await ctx.db.query('capabilityPublications')
+    .withIndex('by_publicationRef_and_revision', (query) => (
+      query.eq('publicationRef', args.publicationRef).eq('revision', args.publicationRevision)
+    ))
+    .unique()
+  if (
+    publication === null
+    || publication.disposition !== 'current'
+    || publication.runtimeEnvironment !== 'sandbox'
+    || publication.sourceKind !== 'x402'
+    || publication.registrationEvidenceRefs.filter(
+      (ref) => ref === X402_SELLER_CANARY_ADMISSION_REQUIRED_REF,
+    ).length !== 1
+  ) {
+    return { kind: 'refused', code: 'staging_snapshot_missing' }
+  }
+  const business = await ctx.db.get(publication.businessId)
+  if (business === null) return { kind: 'refused', code: 'authorization_denied' }
+  const snapshot = await readExactSellerCanaryOperationSnapshotHandler(ctx, {
+    publicationRef: args.publicationRef,
+    revision: args.publicationRevision,
+  })
+  if (snapshot === null) {
+    if (!x402SellerCanaryAdmissionIsSatisfied(publication.registrationEvidenceRefs)) {
+      return { kind: 'refused', code: 'staging_snapshot_missing' }
+    }
+    const existing = await existingCanaryForPublication(ctx, publication)
+    if (existing === null) return { kind: 'refused', code: 'staging_snapshot_missing' }
+    return {
+      kind: 'replayed',
+      canaryRef: existing.canaryRef,
+      callRef: existing.callRef,
+      toolRef: existing.toolRef,
+    }
+  }
+  return await requestSellerOnboardingCanaryWithOwner(ctx, {
+    businessId: publication.businessId,
+    offeringRef: snapshot.offeringRef,
+    offeringRevision: snapshot.offeringRevision,
+    offeringSourceHash: snapshot.offeringSourceHash,
+    publicationRef: args.publicationRef,
+    publicationRevision: args.publicationRevision,
+    operationKey: args.operationKey,
+    correlationId: args.correlationId,
+    ownerId: business.owningAccountRef,
+  })
+}
+
+async function requestSellerOnboardingCanaryWithOwner(
+  ctx: MutationCtx,
+  args: RequestArgs & { ownerId: string },
+): Promise<Infer<typeof requestSellerOnboardingCanaryResult>> {
+  if (args.input !== undefined && !isBoundedJsonValue(args.input)) {
+    return { kind: 'refused', code: 'input_invalid' }
+  }
   if (!await exactCatalogIdentity(ctx, args)) return { kind: 'refused', code: 'catalog_revision_changed' }
 
   const snapshot = await readExactSellerCanaryOperationSnapshotHandler(ctx, {
@@ -293,7 +388,7 @@ export async function requestSellerOnboardingCanaryHandler(
   const now = Date.now()
   const grant = await readExactSellerOnboardingCanaryPlatformGrantHandler(
     ctx,
-    sellerOnboardingCanaryPlatformGrantExpectation(actor.canonicalAccountRef, now),
+    sellerOnboardingCanaryPlatformGrantExpectation(args.ownerId, now),
   )
   if (grant === null) return { kind: 'refused', code: 'canary_grant_missing' }
   const maximumSpend = grant.spendingPolicy.budget.maximumSpendPerCall
@@ -303,7 +398,7 @@ export async function requestSellerOnboardingCanaryHandler(
   }
   const inputDigest = canonicalDigest(canaryInput)
   const canaryCommitment = (idempotencyKey: string) => createSellerOnboardingCanaryCommitment({
-    ownerId: actor.canonicalAccountRef,
+    ownerId: args.ownerId,
     businessId: String(args.businessId),
     offeringRef: snapshot.offeringRef,
     offeringRevision: snapshot.offeringRevision,
@@ -499,6 +594,17 @@ export const requestSellerOnboardingCanary = internalMutation({
   args: requestSellerOnboardingCanaryArgs,
   returns: requestSellerOnboardingCanaryResult,
   handler: requestSellerOnboardingCanaryHandler,
+})
+
+export const requestSellerOnboardingCanaryForAdmittedPublication = internalMutation({
+  args: {
+    publicationRef: v.string(),
+    publicationRevision: v.number(),
+    operationKey: v.string(),
+    correlationId: v.string(),
+  },
+  returns: requestSellerOnboardingCanaryResult,
+  handler: requestSellerOnboardingCanaryForAdmittedPublicationHandler,
 })
 
 export const readSellerOnboardingCanaryEvidence = internalQuery({
