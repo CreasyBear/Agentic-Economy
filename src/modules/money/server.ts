@@ -29,7 +29,9 @@ export {
   beginAccountFundingThroughSource,
   fundingEvidence,
   fundingPaymentRequest,
+  readAccountFundingConstraintsThroughSource,
   readAccountFundingThroughSource,
+  readPlatformFundingConstraintsThroughSource,
 } from './internal/account-funding-http'
 export {
   paymentBindingSchema,
@@ -42,6 +44,8 @@ export type {
   AccountFundingCommandView,
   AccountFundingBeginInput,
   AccountFundingBalance,
+  AccountFundingConstraints,
+  PlatformFundingConstraints,
   AccountFundingOutcomeUnknownResult,
   AccountFundingReadInput,
   AccountFundingServerRuntime,

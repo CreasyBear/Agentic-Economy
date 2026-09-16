@@ -609,6 +609,7 @@ export {
   FUNDING_CONSTRAINTS_PATH,
   FUNDING_QUOTE_PATH,
   FUNDING_PREFLIGHT_ROUTE_CONTRACTS,
+  commercialPolicyControlsFromFundingProjection,
   fundingConstraintsSchema,
   fundingQuoteInputSchema,
   fundingQuoteSchema,

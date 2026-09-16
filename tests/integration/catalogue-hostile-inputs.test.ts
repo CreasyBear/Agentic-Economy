@@ -389,6 +389,13 @@ describe('GET /api/businesses hostile inputs', () => {
     await expectProblemJson(response, { status: 400, kind: 'INVALID_ARGUMENT', code: 'invalid_cursor' })
   })
 
+  it('rejects a raw numeric engine offset as 400 invalid_cursor', async () => {
+    const response = await handleDurableListBusinessesRequest(businessesRequest({ cursor: '1' }))
+    expect(response.status).not.toBe(503)
+    expect(response.status).not.toBe(200)
+    await expectProblemJson(response, { status: 400, kind: 'INVALID_ARGUMENT', code: 'invalid_cursor' })
+  })
+
   it('rejects a repeated limit param as 400 invalid_query_parameter naming the parameter', async () => {
     const response = await handleDurableListBusinessesRequest(businessesRequest({ limit: ['1', '999'] }))
     // Fixed: registry and businesses used to disagree on which duplicate wins

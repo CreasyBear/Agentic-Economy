@@ -369,7 +369,7 @@ export async function handleOAuthAuthorizeGet(request: Request, options: OAuthAp
   const owner = await ownerIdentity(options)
   if (!owner.isAuthenticated || owner.userId === null) {
     const login = new URL('/sign-in', baseUrl(request, options))
-    login.searchParams.set('redirect_url', url.toString())
+    login.searchParams.set('redirect', `${url.pathname}${url.search}`)
     return redirectTo(login)
   }
   const result = await beginAuthorizationCodeGrant(requireStore(options), {

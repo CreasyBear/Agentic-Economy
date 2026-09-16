@@ -7,13 +7,17 @@ import { resolveCanonicalBaseUrl } from '@/lib/server/canonical-url'
 import { callPublicSourceMutation, callSourceQuery, sourceMutation, sourceQuery } from '@/lib/server/convex-source'
 import { response } from '@/lib/server/no-store-response'
 import { problem } from '@/lib/server/problem'
+import { withHttpRateLimit } from '@/lib/server/rate-limit'
 import { runWithRequestCorrelation, withRequestCorrelationHeader } from '@/lib/server/request-correlation'
 import { sourceWriteAdmissionFromRequest, sourceWriteRequestFromAdmission } from '@/lib/server/source-write-admission'
 import { createAccountManagementService } from '@/modules/agent-access/account.actions'
 import { MARKET_TOOLS_CALL_SCOPE } from '@/modules/agent-access/contract'
 import {
+  commercialPolicyControlsFromFundingProjection,
+  isMoneyRefusal,
   readFundingConstraints,
   type CreditPaymentPort,
+  type MoneyRefusal,
 } from '@/modules/money/public'
 import {
   createFundingHandoffInputSchema,
@@ -30,10 +34,10 @@ import { createStripeMoneyProvider, readStripeMoneyProviderConfig } from '@/lib/
 import {
   fundingEvidence,
   fundingPaymentRequest,
+  readPlatformFundingConstraintsThroughSource,
   type AccountFundingCommandView,
   type FundingProviderEvidence,
 } from '@/modules/money/server'
-import { isMoneyRefusal, type MoneyRefusal } from '@/modules/money/public'
 import type { AgentAccessPrincipal } from '@/modules/agent-access/agent-access'
 import { z } from 'zod'
 
@@ -99,7 +103,13 @@ export function createFundingHandoffService(
   }
   return {
     config: async () => {
-      const constraints = readFundingConstraints()
+      const live = await readPlatformFundingConstraintsThroughSource()
+      if (live.kind !== 'available') {
+        throw new Error('funding_constraints_unavailable')
+      }
+      const constraints = readFundingConstraints(
+        commercialPolicyControlsFromFundingProjection(live),
+      )
       return fundingHandoffConfigResultSchema.parse({
         kind: 'funding_config', success: true, currency: 'AUD',
         minimum: constraints.minimum, maximum: constraints.maximum, increment: constraints.increment,
@@ -217,6 +227,8 @@ export async function handleFundingHandoffAction(
   options: FundingHandoffHandlerOptions = {},
 ): Promise<Response> {
   return await runWithRequestCorrelation(request, async ({ correlationId }) => {
+    const rateLimitName = actionName === 'config' ? 'public-read' : 'public-mutation'
+    return withRequestCorrelationHeader(await withHttpRateLimit(request, rateLimitName, async () => {
     const body = actionName === 'config' ? { ok: true as const, text: '{}' } : await readBoundedRequestText(request, MAX_BODY_BYTES)
     if (!body.ok) return withRequestCorrelationHeader(problem({ status: 413, kind: 'PAYLOAD_TOO_LARGE', code: body.code }), correlationId)
     const resolvePrincipal = options.resolvePrincipal ?? (options.authenticate === undefined ? resolveAgentAccessPrincipal(request, body.text, correlationId) : undefined)
@@ -301,6 +313,7 @@ export async function handleFundingHandoffAction(
     if (result.kind === 'not_found') return withRequestCorrelationHeader(problem({ status: 404, kind: 'NOT_FOUND', code: 'funding_session_not_found' }), correlationId)
     return withRequestCorrelationHeader(response(result, actionName === 'create' ? 201 : 200, {
       ...(result.kind === 'funding_session' && result.idempotentReplay ? { 'Idempotent-Replay': 'true' } : {}),
+    }), correlationId)
     }), correlationId)
   })
 }

@@ -437,6 +437,26 @@ describe('operation recovery HTTP adapters', () => {
     expect(executor.readCallStatus).not.toHaveBeenCalled()
   })
 
+  it('refuses duplicate and unknown query keys before reading Call status', async () => {
+    const executor = service()
+    const duplicate = await handleCallStatusGet(
+      new Request(`https://ae.example/api/v1/calls/${callRef}?afterVersion=1&afterVersion=2`),
+      callRef,
+      { authenticate, resolvePrincipal: resolveCanonicalPrincipal, callService: executor },
+    )
+    expect(duplicate.status).toBe(400)
+    await expect(duplicate.json()).resolves.toMatchObject({ code: 'invalid_query_parameter' })
+
+    const unknown = await handleCallStatusGet(
+      new Request(`https://ae.example/api/v1/calls/${callRef}?unexpected=1`),
+      callRef,
+      { authenticate, resolvePrincipal: resolveCanonicalPrincipal, callService: executor },
+    )
+    expect(unknown.status).toBe(400)
+    await expect(unknown.json()).resolves.toMatchObject({ code: 'invalid_query_parameter' })
+    expect(executor.readCallStatus).not.toHaveBeenCalled()
+  })
+
   it('projects status and cancellation through one principal and correlation', async () => {
     const executor = service()
     const statusResponse = await handleCallStatusGet(

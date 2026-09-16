@@ -56,10 +56,10 @@ function installRealRateLimiterTransport(backend: ConvexFixtureBackend) {
   }
 }
 
-function catalogueRequest(apiKey: string): Request {
+function catalogueRequest(ip: string): Request {
   return new Request('https://ae.test/api/v1/market-tools/list', {
     method: 'POST',
-    headers: { 'content-type': 'application/json', 'x-api-key': apiKey },
+    headers: { 'content-type': 'application/json', 'cf-connecting-ip': ip },
     body: '{}',
   })
 }
@@ -83,21 +83,28 @@ describe('catalogue route real rate limiting', () => {
   })
 
   it('429s a client past a tiny real budget with an RFC 9457 problem and Retry-After, while a different client is still admitted', async () => {
+    const previousServerKey = process.env.AE_CONVEX_SERVER_FUNCTION_TOKEN
+    process.env.AE_CONVEX_SERVER_FUNCTION_TOKEN =
+      'catalogue-rate-limit-test-token-at-least-32-characters'
     const backend = convexTestWithMarketComponents()
     setPublicSourceTransportForTests(installRealRateLimiterTransport(backend) as never)
+    try {
+      const admitted = await handleMarketToolListRequest(catalogueRequest('203.0.113.10'))
+      expect(admitted.status).toBe(200)
 
-    const admitted = await handleMarketToolListRequest(catalogueRequest('client-a-secret-key'))
-    expect(admitted.status).toBe(200)
+      const limited = await handleMarketToolListRequest(catalogueRequest('203.0.113.10'))
+      expect(limited.status).toBe(429)
+      expect(limited.headers.get('content-type')).toContain('application/problem+json')
+      const retryAfterSeconds = Number(limited.headers.get('retry-after'))
+      expect(Number.isFinite(retryAfterSeconds)).toBe(true)
+      expect(retryAfterSeconds).toBeGreaterThan(0)
+      await expect(limited.json()).resolves.toMatchObject({ status: 429, code: 'rate_limited' })
 
-    const limited = await handleMarketToolListRequest(catalogueRequest('client-a-secret-key'))
-    expect(limited.status).toBe(429)
-    expect(limited.headers.get('content-type')).toContain('application/problem+json')
-    const retryAfterSeconds = Number(limited.headers.get('retry-after'))
-    expect(Number.isFinite(retryAfterSeconds)).toBe(true)
-    expect(retryAfterSeconds).toBeGreaterThan(0)
-    await expect(limited.json()).resolves.toMatchObject({ status: 429, code: 'rate_limited' })
-
-    const otherClient = await handleMarketToolListRequest(catalogueRequest('client-b-secret-key'))
-    expect(otherClient.status).toBe(200)
+      const otherClient = await handleMarketToolListRequest(catalogueRequest('203.0.113.11'))
+      expect(otherClient.status).toBe(200)
+    } finally {
+      if (previousServerKey === undefined) delete process.env.AE_CONVEX_SERVER_FUNCTION_TOKEN
+      else process.env.AE_CONVEX_SERVER_FUNCTION_TOKEN = previousServerKey
+    }
   })
 })

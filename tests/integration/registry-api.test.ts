@@ -14,7 +14,9 @@ import {
   getPublicBusinessOfferingSupplyBySlug,
   listPublicBusinessOfferingSupply,
   searchPublicBusinessOfferingSupply,
+  PublicBusinessCatalogApiSchemaVersion,
 } from '@/modules/registry/public'
+import { decodeOpaqueCursor } from '@/modules/registry/opaque-cursor'
 import type {
   RegistrySourceState,
 } from '@/modules/registry/public'
@@ -308,8 +310,11 @@ describe('registry public API routes', () => {
           },
         ],
         hasMore: true,
-        nextCursor: '1',
       })
+      expect(decodeOpaqueCursor(body.nextCursor, {
+        kind: 'businesses',
+        scope: PublicBusinessCatalogApiSchemaVersion,
+      })).toBe('1')
       expect(typeof body.page[0].observedAt).toBe('number')
       // v2 publishes a business identifier by contract.
       expect(body.page[0].businessId).toBe('business:adelaide-listed-provider')
@@ -626,11 +631,19 @@ describe('registry public API routes', () => {
     })
 
     expect(first.page.map((item) => item.slug)).toEqual(['aardvark-plumbing'])
-    expect(first.continueCursor).toBe('1')
+    expect(first.continueCursor).not.toBe('1')
+    expect(decodeOpaqueCursor(first.continueCursor, {
+      kind: 'businesses',
+      scope: PublicBusinessCatalogApiSchemaVersion,
+    })).toBe('1')
     expect(second.page.map((item) => item.slug)).toEqual([
       'demo-listed-provider',
     ])
-    expect(second.continueCursor).toBe('2')
+    expect(second.continueCursor).not.toBe('2')
+    expect(decodeOpaqueCursor(second.continueCursor, {
+      kind: 'businesses',
+      scope: PublicBusinessCatalogApiSchemaVersion,
+    })).toBe('2')
     expect(third.page.map((item) => item.slug)).toEqual(['zebra-plumbing'])
     expect(third.isDone).toBe(true)
   })

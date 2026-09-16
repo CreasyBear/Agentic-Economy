@@ -11,6 +11,7 @@ import { resolveCanonicalBaseUrl } from '@/lib/server/canonical-url'
 import { readBoundedRequestText } from '@/lib/server/bounded-request-body'
 import { response } from '@/lib/server/no-store-response'
 import { problem } from '@/lib/server/problem'
+import { withHttpRateLimit } from '@/lib/server/rate-limit'
 import {
   runWithRequestCorrelation,
   withRequestCorrelationHeader,
@@ -46,6 +47,7 @@ export async function handleAgentAccountGet(
   options: AgentAccountHandlerOptions = {},
 ): Promise<Response> {
   return await runWithRequestCorrelation(request, async ({ correlationId }) => {
+    return withRequestCorrelationHeader(await withHttpRateLimit(request, 'public-read', async () => {
     const resolvePrincipal = options.resolvePrincipal
       ?? (options.authenticate === undefined
         ? resolveAgentAccessPrincipal(request, '', correlationId)
@@ -87,6 +89,7 @@ export async function handleAgentAccountGet(
     return withRequestCorrelationHeader(response(result, 200, {
       'Content-Type': AGENT_ACCOUNT_SELF_ROUTE_CONTRACT.media.response,
     }), correlationId)
+    }), correlationId)
   })
 }
 
@@ -97,6 +100,7 @@ export async function handleAgentAccountActionPost(
   options: AgentAccountHandlerOptions = {},
 ): Promise<Response> {
   return await runWithRequestCorrelation(request, async ({ correlationId }) => {
+    return withRequestCorrelationHeader(await withHttpRateLimit(request, 'public-mutation', async () => {
     const bounded = await readBoundedRequestText(request, MAX_ACCOUNT_ACTION_BODY_BYTES)
     if (!bounded.ok) {
       return withRequestCorrelationHeader(problem({
@@ -180,5 +184,6 @@ export async function handleAgentAccountActionPost(
         detail: 'The account money source is temporarily unavailable.',
       }), correlationId), { site: 'handleAgentAccountActionPost', reason: 'source_unavailable' })
     }
+    }), correlationId)
   })
 }

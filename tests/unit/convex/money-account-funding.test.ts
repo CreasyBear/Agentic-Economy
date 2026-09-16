@@ -11,20 +11,36 @@ import { defaultSandboxAgentAccessPolicy } from '@/modules/agent-access/sandbox-
 import { CUSTOMER_REQUEST_READ_ONLY_SCOPE, MARKET_TOOLS_CALL_SCOPE } from '@/modules/agent-access/contract'
 import type { AgentAccessPrincipal } from '@/modules/agent-access/agent-access'
 import type { ConvexFixtureBackend } from '../../helpers/convex-fixtures'
+import { evaluateCommercialPolicyGate } from '@/modules/money/public'
 
 const reserve = anyApi.moneyAccountFunding?.reserve
 const bind = anyApi.moneyAccountFunding?.bind
 const signDailyClose = anyApi.moneyDocuments?.signOwnerDailyClose
 const listCases = anyApi.moneyReconciliationCases?.listOwnerCases
+const resolveOwnerCase = anyApi.moneyReconciliationCases?.resolveOwnerCase
 const reserveAgentHandoff = anyApi.moneyAccountFunding?.reserveAgentHandoff
 const bindAgentHandoff = anyApi.moneyAccountFunding?.bindAgentHandoff
 const readAgentHandoff = anyApi.moneyAccountFunding?.readAgentHandoff
 const readPayerSafeHandoff = anyApi.moneyAccountFunding?.readPayerSafeHandoff
-if (reserve === undefined || bind === undefined || signDailyClose === undefined || listCases === undefined) {
+if (
+  reserve === undefined
+  || bind === undefined
+  || signDailyClose === undefined
+  || listCases === undefined
+  || resolveOwnerCase === undefined
+) {
   throw new Error('Account funding functions missing')
 }
 
 const SERVICE_KEY = 'funding-handoff-test-key-material-32-bytes'
+const sandboxGate = evaluateCommercialPolicyGate({
+  environment: 'sandbox',
+  now: 0,
+  approvals: [],
+  sandboxFixture: 'managed_x402_deterministic_v1',
+})
+if (sandboxGate.kind !== 'admitted') throw new Error('sandbox_commercial_policy_missing')
+const SANDBOX_POLICY_DIGEST = sandboxGate.policyDigest
 const registerBinding = makeFunctionReference<'mutation', Record<string, unknown>, Record<string, unknown>>(
   'agentAccessPrincipals:registerIssuedAgentBindingForServer',
 )
@@ -67,6 +83,54 @@ describe('Account AUD funding through Formance', () => {
     vi.useRealTimers()
     if (previousServiceKey === undefined) delete process.env.AE_CONVEX_SERVER_FUNCTION_TOKEN
     else process.env.AE_CONVEX_SERVER_FUNCTION_TOKEN = previousServiceKey
+  })
+
+  it('refuses a changed funding policy before creating a funding command', async () => {
+    const backend = convexTestWithMarketComponents()
+    const fixture = await publishedBusinessOwner(backend, 'funding-policy-drift')
+    await expect(fixture.owner.mutation(reserve, await withSourceWrite('billing', {
+      amountUnits: '5000000',
+      environment: 'sandbox',
+      expectedPolicyDigest: `sha256:${'0'.repeat(64)}`,
+      commandRef: 'account-funding:policy-drift',
+      idempotencyKey: 'account-funding:policy-drift',
+      inputDigest: `sha256:${'1'.repeat(64)}`,
+      successReturnRef: 'owner/credit',
+      operationKey: 'moneyAccountFunding:reserve',
+      correlationId: 'account-funding:policy-drift',
+    }))).resolves.toEqual({ kind: 'refused', code: 'price_changed', retryable: false })
+    await expect(backend.run(async (ctx) => ctx.db.query('moneyFundingCommands').collect())).resolves.toEqual([])
+  })
+
+  it('quotes one owner funding command and replays it without changing the obligation', async () => {
+    const backend = convexTestWithMarketComponents()
+    const fixture = await publishedBusinessOwner(backend, 'funding-owner-replay')
+    const base = {
+      amountUnits: '10000000', environment: 'sandbox' as const,
+      expectedPolicyDigest: SANDBOX_POLICY_DIGEST,
+      commandRef: 'account-funding:owner-replay', idempotencyKey: 'account-funding:owner-replay',
+      inputDigest: `sha256:${'2'.repeat(64)}`, successReturnRef: 'owner/credit',
+      operationKey: 'moneyAccountFunding:reserve', correlationId: 'account-funding:owner-replay',
+    }
+    const first = await fixture.owner.mutation(reserve, await withSourceWrite('billing', base))
+    expect(first).toMatchObject({ kind: 'accepted', command: {
+      accountRef: fixture.canonicalAccountRef, principalUnits: '10000000',
+      serviceFeeUnits: '500000', taxUnits: '50000', totalUnits: '10550000', state: 'pending',
+    } })
+    if (first.kind !== 'accepted') throw new Error('funding fixture not reserved')
+    const storedBeforeConflict = await backend.run(async (ctx) => ctx.db.query('moneyFundingCommands').collect())
+
+    await expect(fixture.owner.mutation(reserve, await withSourceWrite('billing', {
+      ...base, correlationId: 'account-funding:owner-replay-retry',
+    }))).resolves.toEqual(first)
+
+    await expect(fixture.owner.mutation(reserve, await withSourceWrite('billing', {
+      ...base, amountUnits: '11000000', expectedPolicyDigest: `sha256:${'0'.repeat(64)}`,
+      inputDigest: `sha256:${'3'.repeat(64)}`, correlationId: 'account-funding:owner-replay-conflict',
+    }))).resolves.toEqual({ kind: 'refused', code: 'funding_idempotency_conflict', retryable: false })
+
+    await expect(backend.run(async (ctx) => ctx.db.query('moneyFundingCommands').collect()))
+      .resolves.toEqual(storedBeforeConflict)
   })
 
   it('binds an agent handoff to one principal while exposing only a payer-safe receipt', async () => {
@@ -124,6 +188,7 @@ describe('Account AUD funding through Formance', () => {
     const fixture = await publishedBusinessOwner(backend, 'formance-account-funding')
     const base = {
       amountUnits: '5000000', environment: 'sandbox' as const,
+      expectedPolicyDigest: SANDBOX_POLICY_DIGEST,
       commandRef: 'account-funding:formance-one', idempotencyKey: 'account-funding:formance-one',
       inputDigest: `sha256:${'a'.repeat(64)}`, successReturnRef: 'owner/credit',
       operationKey: 'moneyAccountFunding:reserve', correlationId: 'account-funding:formance-one',
@@ -213,6 +278,7 @@ describe('Account AUD funding through Formance', () => {
     const fixture = await publishedBusinessOwner(backend, 'formance-funding-conflict')
     const reserved = await fixture.owner.mutation(reserve, await withSourceWrite('billing', {
       amountUnits: '5000000', environment: 'sandbox', commandRef: 'account-funding:conflict',
+      expectedPolicyDigest: SANDBOX_POLICY_DIGEST,
       idempotencyKey: 'account-funding:conflict', inputDigest: `sha256:${'1'.repeat(64)}`,
       successReturnRef: 'owner/credit', operationKey: 'moneyAccountFunding:reserve',
       correlationId: 'account-funding:conflict',
@@ -250,6 +316,7 @@ describe('Account AUD funding through Formance', () => {
     const fixture = await publishedBusinessOwner(backend, 'formance-funding-processing')
     const reserved = await fixture.owner.mutation(reserve, await withSourceWrite('billing', {
       amountUnits: '5000000', environment: 'sandbox', commandRef: 'account-funding:processing',
+      expectedPolicyDigest: SANDBOX_POLICY_DIGEST,
       idempotencyKey: 'account-funding:processing', inputDigest: `sha256:${'1'.repeat(64)}`,
       successReturnRef: 'owner/credit', operationKey: 'moneyAccountFunding:reserve',
       correlationId: 'account-funding:processing',
@@ -437,6 +504,202 @@ describe('Account AUD funding through Formance', () => {
     await expect(fixture.owner.query(listCases, {
       paginationOpts: { numItems: 10, cursor: null },
     })).resolves.toMatchObject({ page: [expect.objectContaining({ scopeType: 'account' })] })
+  })
+
+  it('occupies one funding-command reversal for two succeeded Stripe refunds', async () => {
+    const backend = convexTestWithMarketComponents()
+    const fixture = await publishedBusinessOwner(backend, 'formance-funding-second-refund')
+    const commandRef = 'account-funding:second-refund'
+    const paymentId = 'pi_second_refund'
+    await insertSettledFunding(backend, {
+      accountRef: fixture.canonicalAccountRef,
+      actorPrincipalRef: fixture.canonicalPrincipalRef,
+      commandRef,
+      paymentId,
+    })
+    const firstEvent = refundEvent({
+      stripeEventId: 'evt_second_refund_one',
+      refundId: 're_second_refund_one',
+      paymentId,
+      observedAt: 1_800_000_000_400,
+    })
+    const secondEvent = refundEvent({
+      stripeEventId: 'evt_second_refund_two',
+      refundId: 're_second_refund_two',
+      paymentId,
+      observedAt: 1_800_000_000_500,
+    })
+    const first = await fixture.owner.mutation(
+      internal.moneyAccountFunding.prepareVerifiedEvent,
+      await withSourceWrite('billing', {
+        event: firstEvent,
+        refundReadback: refundEvidence(firstEvent),
+        operationKey: 'moneyAccountFunding:applyVerifiedEvent',
+        correlationId: firstEvent.stripeEventId,
+      }),
+    )
+    expect(first).toMatchObject({
+      kind: 'prepared',
+      bookingKind: 'reversal',
+      booking: {
+        commandRef: 'funding-reversal:re_second_refund_one',
+        idempotencyKey: 'funding-reversal:re_second_refund_one',
+      },
+    })
+    const second = await fixture.owner.mutation(
+      internal.moneyAccountFunding.prepareVerifiedEvent,
+      await withSourceWrite('billing', {
+        event: secondEvent,
+        refundReadback: refundEvidence(secondEvent),
+        operationKey: 'moneyAccountFunding:applyVerifiedEvent',
+        correlationId: secondEvent.stripeEventId,
+      }),
+    )
+    expect(JSON.stringify(second)).not.toContain('funding-reversal:re_second_refund_two')
+    expect(second).toMatchObject({
+      kind: 'prepared',
+      bookingKind: 'reversal',
+      booking: {
+        commandRef: 'funding-reversal:re_second_refund_one',
+        idempotencyKey: 'funding-reversal:re_second_refund_one',
+      },
+    })
+    const command = await backend.run(async (ctx) => ctx.db.query('moneyFundingCommands')
+      .withIndex('by_commandRef', (query) => query.eq('commandRef', commandRef)).unique())
+    expect(command).toMatchObject({
+      reversalState: 'pending',
+      reversalRefundId: firstEvent.refundId,
+    })
+  })
+
+  it('replays a second paid checkout on an already-succeeded funding command', async () => {
+    const backend = convexTestWithMarketComponents()
+    const fixture = await publishedBusinessOwner(backend, 'formance-funding-second-paid')
+    const commandRef = 'account-funding:second-paid'
+    const paymentId = 'pi_second_paid'
+    await insertSettledFunding(backend, {
+      accountRef: fixture.canonicalAccountRef,
+      actorPrincipalRef: fixture.canonicalPrincipalRef,
+      commandRef,
+      paymentId,
+    })
+    const metadataDigest = `sha256:${'7'.repeat(64)}`
+    const checkoutSessionDigest = `sha256:${'c'.repeat(64)}`
+    const paymentIntentDigest = `sha256:${'d'.repeat(64)}`
+    await backend.run(async (ctx) => {
+      const command = await ctx.db.query('moneyFundingCommands')
+        .withIndex('by_commandRef', (query) => query.eq('commandRef', commandRef)).unique()
+      if (command === null) throw new Error('settled_funding_missing')
+      await ctx.db.patch(command._id, { metadataDigest })
+    })
+    const amount = { currency: 'AUD' as const, units: '5280000', exponent: 6 as const }
+    const readback = {
+      externalRef: `cs_${paymentId}`,
+      amount,
+      status: 'succeeded' as const,
+      evidenceRef: `stripe:checkout:cs_${paymentId}`,
+      requestDigest: `sha256:${'b'.repeat(64)}`,
+      metadataDigest,
+      checkoutSessionDigest,
+      paymentIntentDigest,
+      evidenceDigest: `sha256:${'e'.repeat(64)}`,
+      paymentId,
+    }
+    const event = {
+      kind: 'checkout' as const,
+      stripeEventId: 'evt_second_paid_checkout',
+      eventType: 'checkout.session.completed' as const,
+      externalRef: readback.externalRef,
+      sessionId: readback.externalRef,
+      commandRef,
+      paymentId,
+      checkoutSessionDigest,
+      paymentIntentDigest,
+      status: 'paid' as const,
+      amount,
+      metadataDigest,
+      payloadDigest: `sha256:${'f'.repeat(64)}`,
+      observedAt: 1_800_000_000_600,
+    }
+    await expect(fixture.owner.mutation(
+      internal.moneyAccountFunding.prepareVerifiedEvent,
+      await withSourceWrite('billing', {
+        event,
+        readback,
+        operationKey: 'moneyAccountFunding:applyVerifiedEvent',
+        correlationId: event.stripeEventId,
+      }),
+    )).resolves.toEqual({
+      kind: 'accepted',
+      status: 'replayed',
+      appliedRef: `formance:tx:${paymentId}`,
+    })
+  })
+
+  it('refuses owner close of a processor_difference funding lock without source-write', async () => {
+    const backend = convexTestWithMarketComponents()
+    const fixture = await publishedBusinessOwner(backend, 'formance-funding-lock-close')
+    const commandRef = 'account-funding:lock-close'
+    const paymentId = 'pi_lock_close'
+    await insertSettledFunding(backend, {
+      accountRef: fixture.canonicalAccountRef,
+      actorPrincipalRef: fixture.canonicalPrincipalRef,
+      commandRef,
+      paymentId,
+    })
+    const partial = refundEvent({
+      stripeEventId: 'evt_lock_close_partial',
+      refundId: 're_lock_close_partial',
+      paymentId,
+      amountUnits: '100',
+      observedAt: 1_800_000_000_700,
+    })
+    await expect(fixture.owner.mutation(
+      internal.moneyAccountFunding.prepareVerifiedEvent,
+      await withSourceWrite('billing', {
+        event: partial,
+        refundReadback: refundEvidence(partial),
+        operationKey: 'moneyAccountFunding:applyVerifiedEvent',
+        correlationId: partial.stripeEventId,
+      }),
+    )).resolves.toMatchObject({ kind: 'accepted', status: 'ignored' })
+    const openCase = await backend.run(async (ctx) => ctx.db.query('moneyReconciliationCases')
+      .withIndex('by_accountRef_and_status_and_createdAt', (index) => index
+        .eq('accountRef', fixture.canonicalAccountRef)
+        .eq('status', 'open'))
+      .unique())
+    if (openCase === null) throw new Error('funding_lock_missing')
+    await expect(fixture.owner.mutation(resolveOwnerCase, {
+      caseRef: openCase.caseRef,
+      confirmation: openCase.caseRef,
+      resolutionEvidenceRef: 'owner-opinion',
+    })).resolves.toEqual({ kind: 'refused', code: 'source_write_denied' })
+    await expect(fixture.owner.mutation(resolveOwnerCase, await withSourceWrite('billing', {
+      caseRef: openCase.caseRef,
+      confirmation: openCase.caseRef,
+      resolutionEvidenceRef: 'stripe:repair:lock-close',
+      operationKey: 'moneyReconciliationCases:resolveOwnerCase',
+      correlationId: openCase.caseRef,
+    }))).resolves.toEqual({ kind: 'resolved', caseRef: openCase.caseRef })
+    await backend.run(async (ctx) => {
+      await ctx.db.insert('moneyReconciliationCases', {
+        caseRef: 'money-case:projection-owner-close',
+        accountRef: fixture.canonicalAccountRef,
+        kind: 'projection_mismatch',
+        status: 'open',
+        scopeType: 'account',
+        scopeRef: fixture.canonicalAccountRef,
+        reasonCode: 'projection_mismatch',
+        evidenceRefs: ['owner-projection'],
+        createdAt: 1_800_000_000_800,
+        updatedAt: 1_800_000_000_800,
+      })
+    })
+    await expect(fixture.owner.mutation(resolveOwnerCase, {
+      caseRef: 'money-case:projection-owner-close',
+      confirmation: 'money-case:projection-owner-close',
+      resolutionEvidenceRef: 'owner-projection-close',
+    })).resolves.toEqual({ kind: 'resolved', caseRef: 'money-case:projection-owner-close' })
   })
 
   it('binds a daily close signature to the authenticated owner and frozen document digest', async () => {

@@ -2,7 +2,7 @@ import type { SourceHash } from '@/modules/common/ids'
 import type { RedactedPayload } from '@/modules/common/audit-events'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 
-const sensitiveKeyPattern = /email|phone|contact|cookie|authorization|secret|token|session/i
+const sensitiveKeyPattern = /email|phone|contact|cookie|authorization|secret|token|session|password|api[_-]?key|private[_-]?key|credential/i
 
 export function redactPayload(value: unknown): RedactedPayload {
   if (value === null) {

@@ -204,6 +204,9 @@ export function createHostedMoneyRuntime(
   const topupQuery = sourceQuery<Record<string, unknown>, unknown>(
     "moneyAccountFunding:read",
   );
+  const fundingConstraintsQuery = sourceQuery<Record<string, unknown>, unknown>(
+    "moneyCommercialPolicy:readOwnerFundingConstraints",
+  );
 
   const readSnapshot = async (): Promise<HostedMoneySnapshot> => {
     const client = await transport();
@@ -372,9 +375,18 @@ export function createHostedMoneyRuntime(
   };
 
   const beginTopup = async (): Promise<GatewayTopupPreparationArtifact> => {
+    const constraints = record(await (await transport()).query(fundingConstraintsQuery, {
+      environment: "production",
+      now: Date.now(),
+    }));
+    const expectedPolicyDigest = constraints?.policyDigest;
+    if (constraints?.kind !== "available" || typeof expectedPolicyDigest !== "string") {
+      throw new GatewaySmokeError("gateway_smoke_topup_policy_unavailable");
+    }
     const begun = await beginAccountFundingThroughSource(
       {
         amount: topupAmount,
+        expectedPolicyDigest,
         idempotencyKey: topupIdempotencyKey,
       },
       context,

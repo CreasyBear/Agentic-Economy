@@ -6,6 +6,7 @@ import {
   type CallHandlerOptions,
 } from '@/lib/server/call-api'
 import type { AgentAccessPrincipalResolver } from '@/lib/server/agent-access-auth'
+import { setHttpRateLimitAdmissionForTests } from '@/lib/server/rate-limit'
 import { toolQuoteResultSchema } from '@/modules/capability-execution/quote'
 import { callMachineResultSchema } from '@/modules/capability-execution/call-contracts'
 import { callStatusResultSchema } from '@/modules/capability-execution/call-recovery.actions'
@@ -155,6 +156,18 @@ describe('operation.invoke HTTP adapter', () => {
       kind: 'UNSUPPORTED_MEDIA_TYPE',
       code: 'invalid_content_type',
     })
+    expect(executor.quoteTool).not.toHaveBeenCalled()
+  })
+
+  it('rate-limits Tool Quote before service dispatch when admission is denied', async () => {
+    setHttpRateLimitAdmissionForTests(async () => ({ ok: false, retryAfter: 5_000 }))
+    const executor = service({ kind: 'completed' })
+    const response = await handleToolQuotePost(
+      postWithContentType({ toolRef: operationRef, input: {} }, '/api/v1/tools/quote', 'application/json'),
+      { authenticate, resolvePrincipal: resolveCanonicalPrincipal, callService: executor },
+    )
+
+    expect(response.status).toBe(429)
     expect(executor.quoteTool).not.toHaveBeenCalled()
   })
 

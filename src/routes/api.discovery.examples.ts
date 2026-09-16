@@ -1,6 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 
 import { methodNotAllowed } from '@/lib/server/method-guard'
+import { withHttpRateLimit } from '@/lib/server/rate-limit'
 import type { DiscoverySourceState } from '@/modules/discovery/public'
 import { generateDeveloperDiscoveryExamples } from '@/modules/discovery/developer-discovery'
 import type { ReadDeveloperDiscoveryRouteOptions } from '@/modules/discovery/developer-discovery'
@@ -32,6 +33,7 @@ export async function handleDeveloperDiscoveryExamplesRequest(
   state?: DiscoverySourceState,
   options: ReadDeveloperDiscoveryRouteOptions = {}
 ): Promise<Response> {
+  return await withHttpRateLimit(request, 'public-read', async () => {
   const routeOptions = await readDeveloperDiscoveryRuntimeOptions(request, state, options)
   const artifact = generateDeveloperDiscoveryExamples(state, routeOptions)
   const fetchReadback = readDeveloperDiscoveryFetchReadback(
@@ -42,4 +44,5 @@ export async function handleDeveloperDiscoveryExamplesRequest(
   )
 
   return developerDiscoveryJsonResponse(await withDirectoryFreshness(artifact), fetchReadback)
+  })
 }

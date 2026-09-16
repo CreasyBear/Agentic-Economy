@@ -122,4 +122,22 @@ describe('operation invocation history HTTP adapter', () => {
     if (response.status !== 400) throw new Error(await response.clone().text())
     expect(executor.listCalls).not.toHaveBeenCalled()
   })
+
+  it('refuses duplicate and unknown query keys before reading history', async () => {
+    const executor = service()
+    const duplicate = await handleCallListGet(
+      new Request('https://ae.example/api/v1/calls?limit=5&limit=9'),
+      { authenticate, resolvePrincipal, callService: executor },
+    )
+    expect(duplicate.status).toBe(400)
+    await expect(duplicate.json()).resolves.toMatchObject({ code: 'invalid_query_parameter' })
+
+    const unknown = await handleCallListGet(
+      new Request('https://ae.example/api/v1/calls?limit=5&unexpected=1'),
+      { authenticate, resolvePrincipal, callService: executor },
+    )
+    expect(unknown.status).toBe(400)
+    await expect(unknown.json()).resolves.toMatchObject({ code: 'invalid_query_parameter' })
+    expect(executor.listCalls).not.toHaveBeenCalled()
+  })
 })

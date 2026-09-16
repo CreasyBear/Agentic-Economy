@@ -201,6 +201,7 @@ export type AuditEventSink = {
 }
 
 const stateChangingEvents: Partial<Record<AuditEventType, true>> = {
+  'dispute.opened': true,
   'dispute.updated': true,
   'dispute.closed': true,
   'admin.membership_bootstrapped': true,
@@ -209,6 +210,7 @@ const stateChangingEvents: Partial<Record<AuditEventType, true>> = {
   'capability_contract.registered': true,
   'capability_offering.registered': true,
   'capability_binding.registered': true,
+  'capability_binding.quarantined': true,
   'capability_supply.eligibility_changed': true,
   'capability_publication.published': true,
   'developer_discovery.generated': true,
@@ -297,9 +299,15 @@ export function validateAuditEvent(input: AuditEventInput): AuditValidationResul
     ) {
       return { valid: false, reason: 'missing_security_context' }
     }
-    if (containsSecretMaterial(input.redactedPayload) || input.evidenceRefs?.some((value) => secretValuePattern.test(value)) === true) {
-      return { valid: false, reason: 'unsafe_security_evidence' }
-    }
+  }
+
+  if (
+    (package3AuditEventTypes.has(input.eventType)
+      || input.eventType.startsWith('billing.')
+      || input.eventType.startsWith('api_key.'))
+    && (containsSecretMaterial(input.redactedPayload) || input.evidenceRefs?.some((value) => secretValuePattern.test(value)) === true)
+  ) {
+    return { valid: false, reason: 'unsafe_security_evidence' }
   }
 
   if (stateChangingEvents[input.eventType] === true && (input.beforeState === undefined || input.afterState === undefined)) {

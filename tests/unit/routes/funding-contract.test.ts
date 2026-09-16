@@ -1,16 +1,52 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { getFunctionName } from 'convex/server'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { setPublicSourceTransportForTests } from '@/lib/server/convex-source'
 import { setHttpRateLimitAdmissionForTests } from '@/lib/server/rate-limit'
+import { createFundingHandoffService } from '@/lib/server/funding-handoff-api'
 import { handleFundingConstraintsRequest } from '@/routes/api.v1.funding.constraints'
 import { handleFundingQuoteRequest } from '@/routes/api.v1.funding.quote'
 
+const LIVE_SERVICE_FEE_BPS = 250
+
+function sandboxFundingProjection(serviceFeeBps = 500) {
+  return {
+    kind: 'available' as const,
+    environment: 'sandbox' as const,
+    currency: 'AUD' as const,
+    exponent: 6 as const,
+    minimumPrincipalUnits: '5000000',
+    maximumPrincipalUnits: '25000000000',
+    incrementUnits: '10000',
+    serviceFeeBps,
+    taxOnServiceFeeBps: 1000,
+  }
+}
+
+function installPlatformFundingQuery(serviceFeeBps = 500) {
+  const query = vi.fn(async (reference: Parameters<typeof getFunctionName>[0]) => {
+    expect(getFunctionName(reference)).toBe('moneyCommercialPolicy:readPlatformFundingConstraints')
+    return sandboxFundingProjection(serviceFeeBps)
+  })
+  return setPublicSourceTransportForTests({
+    query,
+    mutation: vi.fn(),
+    action: vi.fn(),
+  } as never)
+}
+
 describe('public funding preflight', () => {
+  let restorePublicSource: (() => void) | undefined
+
   beforeEach(() => {
     setHttpRateLimitAdmissionForTests(async () => ({ ok: true }))
+    restorePublicSource = installPlatformFundingQuery()
   })
 
   afterEach(() => {
     setHttpRateLimitAdmissionForTests(undefined)
+    restorePublicSource?.()
+    restorePublicSource = undefined
   })
 
   it('returns cacheable constraints and a caller correlation ref', async () => {
@@ -78,5 +114,49 @@ describe('public funding preflight', () => {
     ))
     expect(invalid.status).toBe(400)
     await expect(invalid.json()).resolves.toMatchObject({ code: 'funding_amount_out_of_range' })
+  })
+
+  it('projects live commercial-policy bps through public constraints, quote, and handoff config', async () => {
+    restorePublicSource?.()
+    restorePublicSource = installPlatformFundingQuery(LIVE_SERVICE_FEE_BPS)
+
+    const constraints = await handleFundingConstraintsRequest(new Request(
+      'https://ae.example/api/v1/funding/constraints',
+    ))
+    expect(constraints.status).toBe(200)
+    await expect(constraints.json()).resolves.toMatchObject({
+      kind: 'funding_constraints',
+      serviceFeeBps: LIVE_SERVICE_FEE_BPS,
+    })
+
+    const quote = await handleFundingQuoteRequest(new Request(
+      'https://ae.example/api/v1/funding/quote',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ amount: { currency: 'AUD', units: '10000000', exponent: 6 } }),
+      },
+    ), { now: 10_000 })
+    expect(quote.status).toBe(200)
+    await expect(quote.json()).resolves.toMatchObject({
+      kind: 'funding_quote',
+      serviceFeeBps: LIVE_SERVICE_FEE_BPS,
+      serviceFee: { currency: 'AUD', units: '250000', exponent: 6 },
+      taxOnServiceFee: { currency: 'AUD', units: '30000', exponent: 6 },
+      totalPayment: { currency: 'AUD', units: '10280000', exponent: 6 },
+    })
+
+    const handoff = createFundingHandoffService(
+      new Request('https://ae.example/api/v1/account/funding/config'),
+      '{}',
+    )
+    await expect(handoff.config()).resolves.toMatchObject({
+      kind: 'funding_config',
+      success: true,
+      currency: 'AUD',
+      minimum: { currency: 'AUD', units: '5000000', exponent: 6 },
+      maximum: { currency: 'AUD', units: '25000000000', exponent: 6 },
+      increment: { currency: 'AUD', units: '10000', exponent: 6 },
+    })
   })
 })

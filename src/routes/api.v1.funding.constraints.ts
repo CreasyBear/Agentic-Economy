@@ -5,7 +5,11 @@ import { methodNotAllowed } from '@/lib/server/method-guard'
 import { problem } from '@/lib/server/problem'
 import { withHttpRateLimit } from '@/lib/server/rate-limit'
 import { runWithRequestCorrelation, withRequestCorrelationHeader } from '@/lib/server/request-correlation'
-import { readFundingConstraints } from '@/modules/money/public'
+import {
+  commercialPolicyControlsFromFundingProjection,
+  readFundingConstraints,
+} from '@/modules/money/public'
+import { readPlatformFundingConstraintsThroughSource } from '@/modules/money/server'
 
 export const Route = createFileRoute('/api/v1/funding/constraints')({
   server: {
@@ -28,8 +32,8 @@ export async function handleFundingConstraintsRequest(request: Request, head = f
     let response: Response
     try {
       response = await withHttpRateLimit(request, 'public-read', async () => {
-        const constraints = readFundingConstraints()
-        if (constraints === undefined) {
+        const live = await readPlatformFundingConstraintsThroughSource()
+        if (live.kind !== 'available') {
           return problem({
             status: 503,
             kind: 'UNAVAILABLE',
@@ -37,6 +41,9 @@ export async function handleFundingConstraintsRequest(request: Request, head = f
             retryable: true,
           })
         }
+        const constraints = readFundingConstraints(
+          commercialPolicyControlsFromFundingProjection(live),
+        )
         return Response.json(constraints, {
           headers: { 'Cache-Control': 'public, max-age=60, stale-while-revalidate=60' },
         })

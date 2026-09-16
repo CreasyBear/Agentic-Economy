@@ -6,7 +6,12 @@ import { methodNotAllowed } from '@/lib/server/method-guard'
 import { problem } from '@/lib/server/problem'
 import { withHttpRateLimit } from '@/lib/server/rate-limit'
 import { runWithRequestCorrelation, withRequestCorrelationHeader } from '@/lib/server/request-correlation'
-import { fundingQuoteInputSchema, quoteFunding } from '@/modules/money/public'
+import {
+  commercialPolicyControlsFromFundingProjection,
+  fundingQuoteInputSchema,
+  quoteFunding,
+} from '@/modules/money/public'
+import { readPlatformFundingConstraintsThroughSource } from '@/modules/money/server'
 
 const MAX_FUNDING_QUOTE_BODY_BYTES = 2 * 1024
 
@@ -54,7 +59,20 @@ export async function handleFundingQuoteRequest(
             detail: 'Amount must use exact currency, integer units, and exponent fields.',
           })
         }
-        const quote = quoteFunding({ amount: parsed.data.amount, now: options.now ?? Date.now() })
+        const live = await readPlatformFundingConstraintsThroughSource()
+        if (live.kind !== 'available') {
+          return problem({
+            status: 503,
+            kind: 'UNAVAILABLE',
+            code: 'funding_quote_unavailable',
+            retryable: true,
+          })
+        }
+        const quote = quoteFunding({
+          amount: parsed.data.amount,
+          now: options.now ?? Date.now(),
+          controls: commercialPolicyControlsFromFundingProjection(live),
+        })
         if (quote === undefined) {
           return problem({
             status: 400,

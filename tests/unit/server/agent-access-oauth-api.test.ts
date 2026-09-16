@@ -11,7 +11,8 @@ import {
   handleOAuthTokenPost,
   type OAuthApiOptions,
 } from '@/lib/server/agent-access-oauth-api'
-import { consentAccessSummary, parseAuthorizationDetails } from '@/lib/server/agent-access-oauth/protocol'
+import { sanitizeAuthRedirectTarget } from '@/lib/client/auth-redirect'
+import { consentAccessSummary, parseAuthorizationDetails, validRedirectUri } from '@/lib/server/agent-access-oauth/protocol'
 import { defaultSandboxAgentAccessPolicy } from '@/modules/agent-access/sandbox-policy'
 import {
   buildProductionAgentAccessPolicy,
@@ -49,6 +50,25 @@ it('shows the effective default Sandbox spending limits before approval', () => 
   expect(summary).toContain('Maximum concurrent Calls: 1')
   expect(summary).toContain('Maximum calls per minute: 30')
   expect(summary).not.toContain('No additional spend')
+})
+
+describe('validRedirectUri', () => {
+  it('rejects javascript, data, file, and ftp even when the host is loopback', () => {
+    expect(validRedirectUri('javascript://127.0.0.1/')).toBe(false)
+    expect(validRedirectUri('javascript://localhost/x')).toBe(false)
+    expect(validRedirectUri('javascript://[::1]/x')).toBe(false)
+    expect(validRedirectUri('data://127.0.0.1/')).toBe(false)
+    expect(validRedirectUri('file://127.0.0.1/cb')).toBe(false)
+    expect(validRedirectUri('ftp://127.0.0.1/x')).toBe(false)
+  })
+
+  it('accepts http loopback and https client redirects, and still refuses plain http on a public host', () => {
+    expect(validRedirectUri('http://127.0.0.1/cb')).toBe(true)
+    expect(validRedirectUri('http://localhost/cb')).toBe(true)
+    expect(validRedirectUri('http://[::1]/cb')).toBe(true)
+    expect(validRedirectUri('https://app.example/cb')).toBe(true)
+    expect(validRedirectUri('http://evil.example/cb')).toBe(false)
+  })
 })
 
 function consentSecurity(store: ReturnType<typeof storeFixture>, ownerId = 'user_local'): Pick<OAuthApiOptions, 'authObject' | 'reserveConsent'> {
@@ -727,6 +747,41 @@ describe('Customer Request OAuth HTTP adapter', () => {
       requestedScopes: ['market_tools:call', 'customer_requests:approval_required'],
       offlineAccess: true,
     })
+  })
+
+  it('returns signed-out authorize to a relative path sign-in will accept', async () => {
+    const store = storeFixture()
+    await store.insertClient({
+      clientId: 'client-signed-out-return',
+      clientName: 'Signed-out return',
+      redirectUris: ['http://127.0.0.1/callback'],
+      grantTypes: ['authorization_code'],
+      tokenEndpointAuthMethod: 'none',
+      createdAt: 1_000,
+    })
+    const authorizationUrl = new URL('http://localhost/oauth/authorize')
+    authorizationUrl.search = new URLSearchParams({
+      client_id: 'client-signed-out-return',
+      redirect_uri: 'http://127.0.0.1/callback',
+      response_type: 'code',
+      state: 'state-signed-out',
+      code_challenge: 'challenge-signed-out',
+      code_challenge_method: 'S256',
+    }).toString()
+
+    const response = await handleOAuthAuthorizeGet(new Request(authorizationUrl), {
+      store,
+      now: () => 1_000,
+      authenticateOwner: async () => ({ isAuthenticated: false, userId: null }),
+    })
+
+    expect(response.status).toBe(302)
+    const location = new URL(response.headers.get('location')!)
+    expect(location.pathname).toBe('/sign-in')
+    expect(location.searchParams.get('redirect_url')).toBeNull()
+    const redirect = location.searchParams.get('redirect')
+    expect(redirect).toBe(`${authorizationUrl.pathname}${authorizationUrl.search}`)
+    expect(sanitizeAuthRedirectTarget(redirect)).toBe(redirect)
   })
 
   it('rejects invalid authorization details before inserting a grant', async () => {

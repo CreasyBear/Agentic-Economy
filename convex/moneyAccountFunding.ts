@@ -131,6 +131,7 @@ const fundingResultValue = v.union(
 const reserveFundingArgsValue = v.object({
   amountUnits: v.string(),
   environment: environmentValue,
+  expectedPolicyDigest: v.string(),
   commandRef: v.string(),
   idempotencyKey: v.string(),
   inputDigest: v.string(),
@@ -390,7 +391,8 @@ async function reserveFundingHandler(
   const sourceWrite = await requireSourceWrite(ctx, args, 'billing')
   if (sourceWrite.kind === 'rejected') return refused('source_write_denied')
   if (!POSITIVE_UNITS.test(args.amountUnits)
-    || !SHA256.test(args.inputDigest)) return refused('funding_amount_invalid')
+    || !SHA256.test(args.inputDigest)
+    || !SHA256.test(args.expectedPolicyDigest)) return refused('funding_amount_invalid')
   const actor = await resolveBusinessActor(ctx)
   if (actor.kind !== 'authenticated_owner') return refused('billing_identity_missing')
 
@@ -415,6 +417,7 @@ async function reserveFundingHandler(
       : {}),
   })
   if (policy.kind === 'refused') return refused('commercial_policy_required')
+  if (policy.policyDigest !== args.expectedPolicyDigest) return refused('price_changed')
   const fundingPolicy = audFundingPolicyFromCommercialControls(policy.controls)
   const quote = quoteAudAccountFunding(BigInt(args.amountUnits), fundingPolicy)
   if (quote === undefined) return refused('funding_amount_invalid')
@@ -923,6 +926,11 @@ async function prepareFundingSettlementEvent(
   }
   if (args.readback.status !== 'succeeded') return refused('funding_pending', true)
   if (command.state === 'failed') return refused('funding_state_conflict')
+  if (command.state === 'succeeded') {
+    return command.appliedTransactionRef === undefined
+      ? refused('funding_state_conflict')
+      : { kind: 'accepted', status: 'replayed', appliedRef: command.appliedTransactionRef }
+  }
   if (priorEvent === null) await ctx.db.insert('moneyStripeEvents', {
     ...eventRowFields(event), status: 'received',
   })
@@ -1033,6 +1041,20 @@ async function prepareFundingRefundEvent(
     })
     return { kind: 'accepted', status: 'ignored', appliedRef: caseRef }
   }
+  if (
+    command.reversalState === 'pending'
+    && command.reversalRefundId !== undefined
+  ) {
+    return {
+      kind: 'prepared',
+      bookingKind: 'reversal',
+      booking: fundingReversalBooking(command, command.reversalRefundId, command.reversalEvidenceDigest ?? readback.evidenceDigest),
+    }
+  }
+  if (command.reversalState === 'succeeded' && command.reversalTransactionRef !== undefined) {
+    return { kind: 'accepted', status: 'replayed', appliedRef: command.reversalTransactionRef }
+  }
+  if (command.reversalState === 'outcome_unknown') return refused('funding_state_conflict')
   if (priorEvent === null) await ctx.db.insert('moneyStripeEvents', {
     ...eventRowFields(event), status: 'received',
   })
@@ -1047,18 +1069,35 @@ async function prepareFundingRefundEvent(
   return {
     kind: 'prepared',
     bookingKind: 'reversal',
-    booking: {
-      commandRef: `funding-reversal:${event.refundId}`,
-      accountRef: command.accountRef,
-      processorRef: command.externalRef ?? event.paymentId,
-      idempotencyKey: `funding-reversal:${event.refundId}`,
-      principalUnits: command.principalUnits,
-      serviceFeeUnits: command.serviceFeeUnits,
-      taxUnits: command.taxUnits,
-      totalUnits: command.totalUnits,
-      policyDigest: command.commercialPolicyDigest,
-      externalEvidenceDigest: readback.evidenceDigest,
-    },
+    booking: fundingReversalBooking(command, event.refundId, readback.evidenceDigest),
+  }
+}
+
+function fundingReversalBooking(
+  command: Readonly<{
+    accountRef: string
+    externalRef?: string
+    paymentId?: string
+    principalUnits: string
+    serviceFeeUnits: string
+    taxUnits: string
+    totalUnits: string
+    commercialPolicyDigest: string
+  }>,
+  refundId: string,
+  evidenceDigest: string,
+): Infer<typeof fundingBookingValue> {
+  return {
+    commandRef: `funding-reversal:${refundId}`,
+    accountRef: command.accountRef,
+    processorRef: command.externalRef ?? command.paymentId ?? refundId,
+    idempotencyKey: `funding-reversal:${refundId}`,
+    principalUnits: command.principalUnits,
+    serviceFeeUnits: command.serviceFeeUnits,
+    taxUnits: command.taxUnits,
+    totalUnits: command.totalUnits,
+    policyDigest: command.commercialPolicyDigest,
+    externalEvidenceDigest: evidenceDigest,
   }
 }
 

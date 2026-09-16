@@ -1,6 +1,7 @@
 export {
   beginAccountFundingServer,
   readAccountFundingBalanceServer,
+  readAccountFundingConstraintsServer,
   readAccountFundingServer,
 } from './internal/account-funding-http'
 export {

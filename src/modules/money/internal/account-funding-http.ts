@@ -5,6 +5,7 @@ import { z } from 'zod'
 
 import { resolveCanonicalBaseUrl } from '@/lib/server/canonical-url'
 import {
+  callPublicSourceQuery,
   callSourceMutation,
   callSourceQuery,
   callSourceAction,
@@ -49,6 +50,7 @@ type FundingEnvironment = 'sandbox' | 'production'
 
 export type AccountFundingBeginInput = Readonly<{
   amount: Readonly<{ currency: 'AUD'; units: string; exponent: 6 }>
+  expectedPolicyDigest: string
   idempotencyKey: string
 }>
 
@@ -79,6 +81,36 @@ export type AccountFundingBalance =
       version: number
       updatedAt?: number
       lastTransactionRef?: string
+    }>
+  | MoneyRefusal
+
+export type AccountFundingConstraints =
+  | Readonly<{
+      kind: 'available'
+      environment: FundingEnvironment
+      currency: 'AUD'
+      exponent: 6
+      minimumPrincipalUnits: string
+      maximumPrincipalUnits: string
+      incrementUnits: string
+      serviceFeeBps: number
+      taxOnServiceFeeBps: number
+      legalCustomerMaximumAccessibleUnits: string
+      policyDigest: string
+    }>
+  | MoneyRefusal
+
+export type PlatformFundingConstraints =
+  | Readonly<{
+      kind: 'available'
+      environment: FundingEnvironment
+      currency: 'AUD'
+      exponent: 6
+      minimumPrincipalUnits: string
+      maximumPrincipalUnits: string
+      incrementUnits: string
+      serviceFeeBps: number
+      taxOnServiceFeeBps: number
     }>
   | MoneyRefusal
 
@@ -143,6 +175,7 @@ type SourceWriteBoundArgs = Readonly<{
 type ReserveFundingArgs = Readonly<{
   amountUnits: string
   environment: FundingEnvironment
+  expectedPolicyDigest: string
   commandRef: string
   idempotencyKey: string
   inputDigest: string
@@ -181,6 +214,7 @@ const beginInputSchema = z.strictObject({
     units: z.string().regex(/^[1-9]\d{0,29}$/u),
     exponent: z.literal(AUD_EXPONENT),
   }),
+  expectedPolicyDigest: z.string().regex(/^sha256:[0-9a-f]{64}$/u),
   idempotencyKey: idempotencyKeySchema,
 })
 const readInputSchema = z.union([
@@ -210,6 +244,14 @@ const readFundingQuery = sourceQuery<AccountFundingReadInput, FundingResult>(
 const readFundingBalanceAction = sourceAction<Record<string, never>, AccountFundingBalance>(
   'moneyAccountFundingFormance:readBalance',
 )
+const readOwnerFundingConstraintsQuery = sourceQuery<
+  { environment: FundingEnvironment; now: number },
+  AccountFundingConstraints
+>('moneyCommercialPolicy:readOwnerFundingConstraints')
+const readPlatformFundingConstraintsQuery = sourceQuery<
+  { environment: FundingEnvironment; now: number },
+  PlatformFundingConstraints
+>('moneyCommercialPolicy:readPlatformFundingConstraints')
 export const readWebhookFundingCommandQuery = sourceQuery<
   WebhookFundingCommandInput,
   FundingResult
@@ -244,6 +286,44 @@ export const readAccountFundingBalanceServer = createServerFn({ method: 'GET' })
     return await callSourceAction(readFundingBalanceAction, {})
   })
 
+export const readAccountFundingConstraintsServer = createServerFn({ method: 'GET' })
+  .handler(async (): Promise<AccountFundingConstraints> => {
+    setResponseHeader('cache-control', 'no-store')
+    return await readAccountFundingConstraintsThroughSource()
+  })
+
+export async function readAccountFundingConstraintsThroughSource(
+  runtime: AccountFundingServerRuntime = {},
+): Promise<AccountFundingConstraints> {
+  const providerContext = createAccountFundingProvider(runtime)
+  if (isMoneyRefusal(providerContext)) return providerContext
+  return await callSourceQuery(readOwnerFundingConstraintsQuery, {
+    environment: providerContext.environment,
+    now: Date.now(),
+  })
+}
+
+export async function readPlatformFundingConstraintsThroughSource(
+  runtime: AccountFundingServerRuntime = {},
+): Promise<PlatformFundingConstraints> {
+  return await callPublicSourceQuery(readPlatformFundingConstraintsQuery, {
+    environment: fundingEnvironmentFromRuntime(runtime),
+    now: Date.now(),
+  })
+}
+
+function fundingEnvironmentFromRuntime(
+  runtime: AccountFundingServerRuntime,
+): FundingEnvironment {
+  if (runtime.mode !== undefined) return runtime.mode === 'live' ? 'production' : 'sandbox'
+  if (runtime.config !== undefined) {
+    return runtime.config.mode === 'live' ? 'production' : 'sandbox'
+  }
+  const config = readStripeMoneyProviderConfig(runtime.env ?? process.env)
+  if (isMoneyRefusal(config)) return 'sandbox'
+  return config.mode === 'live' ? 'production' : 'sandbox'
+}
+
 export async function beginAccountFundingThroughSource(
   input: AccountFundingBeginInput,
   context?: unknown,
@@ -263,6 +343,7 @@ export async function beginAccountFundingThroughSource(
     format: 'ae.account-funding-input:v1',
     ownerId,
     amount: input.amount,
+    expectedPolicyDigest: input.expectedPolicyDigest,
     idempotencyKey: input.idempotencyKey,
   })
   const baseUrl = resolveCanonicalBaseUrl().baseUrl
@@ -274,6 +355,7 @@ export async function beginAccountFundingThroughSource(
   const command = {
     amountUnits: input.amount.units,
     environment: providerContext.environment,
+    expectedPolicyDigest: input.expectedPolicyDigest,
     commandRef,
     idempotencyKey: input.idempotencyKey,
     inputDigest,

@@ -75,6 +75,14 @@ export type ToolFact = Readonly<{
   value: string
 }>
 
+export const INSPECT_ACCOUNT_AVAILABLE_LABEL = 'Account available'
+export const INSPECT_AGENT_MAXIMUM_LABEL = 'Agent maximum'
+
+const INSPECT_OWNER_FUNDING_FACT_LABELS = new Set<string>([
+  INSPECT_ACCOUNT_AVAILABLE_LABEL,
+  INSPECT_AGENT_MAXIMUM_LABEL,
+])
+
 export type CallResultState = CallResult['kind']
 
 type CardChrome = Readonly<{
@@ -606,7 +614,7 @@ function projectCallResult(result: CallResult): ToolCardProjection {
   }
 }
 
-function projectInspectResult(
+export function projectInspectResult(
   result: Extract<ToolQuoteResult, { kind: 'committed' }>,
 ): ToolCardProjection {
   return {
@@ -616,8 +624,8 @@ function projectInspectResult(
     toolRefs: [result.toolRef],
     facts: [
       { label: 'Decision price', value: formatCurrencyAmount(result.price) },
-      { label: 'Account available', value: formatCurrencyAmount(result.account.available) },
-      { label: 'Agent maximum', value: formatCurrencyAmount(result.budget.maximumPerCall) },
+      { label: INSPECT_ACCOUNT_AVAILABLE_LABEL, value: formatCurrencyAmount(result.account.available) },
+      { label: INSPECT_AGENT_MAXIMUM_LABEL, value: formatCurrencyAmount(result.budget.maximumPerCall) },
       ...(result.sourceRequirement === undefined
         ? []
         : [{ label: 'Provider requirement', value: formatCurrencyAmount(result.sourceRequirement) }]),
@@ -827,6 +835,10 @@ export function projectToolCard(part: unknown): ToolCardProjection | null {
   return projectLiveBody(toolId, output)
 }
 
+function shareableInspectFacts(facts: readonly ToolFact[]): readonly ToolFact[] {
+  return facts.filter((fact) => !INSPECT_OWNER_FUNDING_FACT_LABELS.has(fact.label))
+}
+
 export function serializeToolCard(card: ToolCardProjection): Record<string, unknown> | null {
   switch (card.kind) {
     case 'working':
@@ -862,7 +874,7 @@ export function serializeToolCard(card: ToolCardProjection): Record<string, unkn
         title: card.title,
         state: 'complete',
         toolRefs: [...card.toolRefs],
-        facts: card.facts.map((fact) => ({ ...fact })),
+        facts: shareableInspectFacts(card.facts).map((fact) => ({ ...fact })),
       }
     case 'execute':
       return {

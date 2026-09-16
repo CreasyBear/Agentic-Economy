@@ -16,11 +16,14 @@ import {
 } from './offering-api-projection'
 import { registrySearchTokens } from './search-documents'
 import type { PublicBusinessCatalogSearchInput } from './search-input'
+import { decodeOpaqueCursor, encodeOpaqueCursor } from '../opaque-cursor'
 
 export type { PublicBusinessCatalogSearchInput }
 
 const defaultLimit = 20
 const maxLimit = 50
+const BUSINESSES_LIST_CURSOR = { kind: 'businesses' as const, scope: PublicBusinessCatalogApiSchemaVersion }
+const BUSINESSES_SEARCH_CURSOR = { kind: 'businesses' as const, scope: `${PublicBusinessCatalogApiSchemaVersion}:search` }
 
 export type PublicBusinessCatalogQueryInput = {
   paginationOpts: {
@@ -147,7 +150,9 @@ function paginateCatalogs(
   items: readonly PublicBusinessCatalogApiV2Dto[],
   input: PublicBusinessCatalogQueryInput,
 ): PublicBusinessCatalogApiV2Page {
-  const requestedStart = input.paginationOpts.cursor === null ? 0 : Number(input.paginationOpts.cursor)
+  const requestedStart = input.paginationOpts.cursor === null
+    ? 0
+    : Number(decodeOpaqueCursor(input.paginationOpts.cursor, BUSINESSES_LIST_CURSOR))
   if (!Number.isSafeInteger(requestedStart) || requestedStart < 0) {
     throw new Error('registry_invalid_cursor')
   }
@@ -158,7 +163,7 @@ function paginateCatalogs(
     schemaVersion: PublicBusinessCatalogApiSchemaVersion,
     page,
     isDone: nextIndex >= items.length,
-    continueCursor: String(nextIndex),
+    continueCursor: encodeOpaqueCursor({ ...BUSINESSES_LIST_CURSOR, cursor: String(nextIndex) }),
   }
 }
 
@@ -171,7 +176,9 @@ function paginateSearchCatalogs(
   const startIndex = input.cursor === undefined
     ? 0
     : (() => {
-        const index = items.findIndex((item) => item.slug === input.cursor)
+        const decoded = decodeOpaqueCursor(input.cursor, BUSINESSES_SEARCH_CURSOR)
+        if (decoded === undefined) throw new Error('registry_invalid_cursor')
+        const index = items.findIndex((item) => item.slug === decoded)
         if (index < 0) throw new Error('registry_invalid_cursor')
         return index + 1
       })()
@@ -185,7 +192,7 @@ function paginateSearchCatalogs(
     items: pageItems,
     pagination: {
       ...(input.cursor === undefined ? {} : { cursor: input.cursor }),
-      ...(next === undefined ? {} : { nextCursor: next.slug }),
+      ...(next === undefined ? {} : { nextCursor: encodeOpaqueCursor({ ...BUSINESSES_SEARCH_CURSOR, cursor: next.slug }) }),
       limit,
       total: items.length,
       hasMore: next !== undefined,

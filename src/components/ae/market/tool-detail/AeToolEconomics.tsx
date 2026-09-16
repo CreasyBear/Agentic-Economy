@@ -6,12 +6,13 @@ import { formatCurrencyAmount, formatDisplayPrice } from '@/modules/money/public
 
 export function AeToolEconomics({
   tool,
-}: Readonly<{ tool: PublicToolDescriptor }>) {
+}: Readonly<{
+  tool: PublicToolDescriptor
+}>) {
   const breakdown = tool.commercial.priceBreakdown
   const priceEvidence = tool.commercial.priceEvidence
   const managed = tool.authentication.kind === 'x402'
-  const displayPrice = tool.commercial.displayPrice
-  const audEstimate = displayPrice?.kind === 'indicative' ? formatDisplayPrice(displayPrice) : undefined
+  const audEstimate = formatDisplayPrice(tool.commercial.displayPrice)
   const pricing = audEstimate === undefined
     ? tool.commercial.price.kind === 'fixed'
       ? 'Fixed price'
@@ -32,10 +33,10 @@ export function AeToolEconomics({
     },
     {
       label: managed ? 'Call fee' : 'AE fee',
-      value: managed ? 'No Call markup' : breakdown === undefined ? 'Not itemized' : formatCurrencyAmount(breakdown.agenticEconomyFee),
+      value: managed ? '0%' : breakdown === undefined ? 'Not itemized' : formatCurrencyAmount(breakdown.agenticEconomyFee),
       mono: breakdown !== undefined,
     },
-    ...(managed ? [{ label: 'Payment', value: 'Uses your AE balance' }, { label: 'Top-up fee', value: '5% fee + GST on the fee' }] : []),
+    ...(managed ? [{ label: 'Payment', value: 'Uses your AE balance' }] : []),
     {
       label: 'Output evidence',
       value: evidenceFields === 0 ? 'None published' : `${evidenceFields} named`,

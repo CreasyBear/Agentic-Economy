@@ -11,7 +11,8 @@ import {
 } from '@/lib/server/agent-access-auth'
 import { resolveCanonicalBaseUrl } from '@/lib/server/canonical-url'
 import { ConvexSourceError, callPublicSourceAction, sourceAction } from '@/lib/server/convex-source'
-import { problem } from '@/lib/server/problem'
+import { problem, duplicateQueryParameterProblem } from '@/lib/server/problem'
+import { withHttpRateLimit } from '@/lib/server/rate-limit'
 import { runWithRequestCorrelation, withRequestCorrelationHeader } from '@/lib/server/request-correlation'
 import { sourceWriteAdmissionFromRequest, sourceWriteRequestFromAdmission } from '@/lib/server/source-write-admission'
 import { response } from '@/lib/server/no-store-response'
@@ -455,11 +456,41 @@ export async function authenticateCallGateway(
 }
 
 
+const CALL_LIST_QUERY_KEYS = new Set(['limit', 'cursor', 'state'])
+const CALL_STATUS_QUERY_KEYS = new Set(['afterVersion'])
+
+function callQueryParameterProblem(url: URL, allowed: ReadonlySet<string>): Response | undefined {
+  const duplicate = duplicateQueryParameterProblem(url)
+  if (duplicate !== undefined) return duplicate
+  for (const key of url.searchParams.keys()) {
+    if (!allowed.has(key)) {
+      return problem({
+        status: 400,
+        kind: 'INVALID_ARGUMENT',
+        code: 'invalid_query_parameter',
+        detail: `Query parameter '${key}' is not supported.`,
+      })
+    }
+  }
+  return undefined
+}
+
+async function withCallHttpRateLimit(
+  request: Request,
+  correlationId: string,
+  name: 'public-read' | 'public-mutation',
+  operation: () => Promise<Response>,
+): Promise<Response> {
+  const response = await withHttpRateLimit(request, name, operation)
+  return withRequestCorrelationHeader(response, correlationId)
+}
+
 export async function handleToolQuotePost(
   request: Request,
   options: CallHandlerOptions = {},
 ): Promise<Response> {
   return await runWithRequestCorrelation(request, async ({ correlationId }) => {
+    return await withCallHttpRateLimit(request, correlationId, 'public-mutation', async () => {
     const bounded = await readBoundedRequestText(request, MAX_CALL_BODY_BYTES)
     if (!bounded.ok) {
       return withRequestCorrelationHeader(problem({
@@ -507,6 +538,7 @@ export async function handleToolQuotePost(
     } catch (error) {
       return gatewayErrorResponse(error, 'tool_quote_unavailable', correlationId)
     }
+    })
   })
 }
 
@@ -515,6 +547,7 @@ export async function handleToolCallPost(
   options: CallHandlerOptions = {},
 ): Promise<Response> {
   return await runWithRequestCorrelation(request, async ({ correlationId }) => {
+    return await withCallHttpRateLimit(request, correlationId, 'public-mutation', async () => {
     const startedAt = Date.now()
     const bounded = await readBoundedRequestText(request, MAX_CALL_BODY_BYTES)
     if (!bounded.ok) {
@@ -586,6 +619,7 @@ export async function handleToolCallPost(
       })
       return gatewayErrorResponse(error, 'call_unavailable', correlationId)
     }
+    })
   })
 }
 type RecoveryBodyKind = 'cancel' | 'reconcile'
@@ -680,6 +714,10 @@ export async function handleCallStatusGet(
   options: CallHandlerOptions = {},
 ): Promise<Response> {
   return await runWithRequestCorrelation(request, async ({ correlationId }) => {
+    const url = new URL(request.url)
+    const queryProblem = callQueryParameterProblem(url, CALL_STATUS_QUERY_KEYS)
+    if (queryProblem !== undefined) return withRequestCorrelationHeader(queryProblem, correlationId)
+    return await withCallHttpRateLimit(request, correlationId, 'public-read', async () => {
     const startedAt = Date.now()
     const admitted = await authenticateCallGateway(request, correlationId, options, '')
     if (admitted instanceof Response) return admitted
@@ -692,7 +730,6 @@ export async function handleCallStatusGet(
         durationMs: Date.now() - startedAt,
       })
     }
-    const url = new URL(request.url)
     const rawAfterVersion = url.searchParams.get('afterVersion')
     const parsed = callStatusInputSchema.safeParse({
       callRef,
@@ -735,6 +772,7 @@ export async function handleCallStatusGet(
       })
       return gatewayErrorResponse(error, 'call_runtime_unavailable', correlationId)
     }
+    })
   })
 }
 
@@ -743,9 +781,12 @@ export async function handleCallListGet(
   options: CallHandlerOptions = {},
 ): Promise<Response> {
   return await runWithRequestCorrelation(request, async ({ correlationId }) => {
+    const url = new URL(request.url)
+    const queryProblem = callQueryParameterProblem(url, CALL_LIST_QUERY_KEYS)
+    if (queryProblem !== undefined) return withRequestCorrelationHeader(queryProblem, correlationId)
+    return await withCallHttpRateLimit(request, correlationId, 'public-read', async () => {
     const admitted = await authenticateCallGateway(request, correlationId, options, '')
     if (admitted instanceof Response) return admitted
-    const url = new URL(request.url)
     const rawLimit = url.searchParams.get('limit')
     const rawCursor = url.searchParams.get('cursor')
     const rawState = url.searchParams.get('state')
@@ -774,6 +815,7 @@ export async function handleCallListGet(
     } catch (error) {
       return gatewayErrorResponse(error, 'call_runtime_unavailable', correlationId)
     }
+    })
   })
 }
 
@@ -783,6 +825,7 @@ export async function handleCallCancelPost(
   options: CallHandlerOptions = {},
 ): Promise<Response> {
   return await runWithRequestCorrelation(request, async ({ correlationId }) => {
+    return await withCallHttpRateLimit(request, correlationId, 'public-mutation', async () => {
     const startedAt = Date.now()
     const parsed = await parseRecoveryBody(request, callRef, 'cancel', correlationId)
     if (!parsed.ok) return parsed.response
@@ -829,6 +872,7 @@ export async function handleCallCancelPost(
       })
       return gatewayErrorResponse(error, 'call_runtime_unavailable', correlationId)
     }
+    })
   })
 }
 
@@ -838,6 +882,7 @@ export async function handleCallReconcilePost(
   options: CallHandlerOptions = {},
 ): Promise<Response> {
   return await runWithRequestCorrelation(request, async ({ correlationId }) => {
+    return await withCallHttpRateLimit(request, correlationId, 'public-mutation', async () => {
     const startedAt = Date.now()
     const parsed = await parseRecoveryBody(request, callRef, 'reconcile', correlationId)
     if (!parsed.ok) return parsed.response
@@ -885,5 +930,6 @@ export async function handleCallReconcilePost(
       })
       return gatewayErrorResponse(error, 'call_runtime_unavailable', correlationId)
     }
+    })
   })
 }

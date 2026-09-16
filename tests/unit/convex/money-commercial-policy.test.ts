@@ -29,6 +29,18 @@ const changeCommercialPolicy = makeFunctionReference<
   PolicyChangeResult
 >('moneyCommercialPolicy:change')
 
+const readOwnerFundingConstraints = makeFunctionReference<
+  'query',
+  { environment: 'sandbox' | 'production'; now: number },
+  Record<string, unknown>
+>('moneyCommercialPolicy:readOwnerFundingConstraints')
+
+const readPlatformFundingConstraints = makeFunctionReference<
+  'query',
+  { environment: 'sandbox' | 'production'; now: number },
+  Record<string, unknown>
+>('moneyCommercialPolicy:readPlatformFundingConstraints')
+
 function command(overrides: Record<string, unknown> = {}) {
   const now = Date.now()
   return {
@@ -49,6 +61,105 @@ function command(overrides: Record<string, unknown> = {}) {
 }
 
 describe('commercial policy persistence', () => {
+  it('projects the authenticated sandbox funding limits without exposing approval records', async () => {
+    const backend = convexTest(schema, convexModules)
+    const owner = await ownerAdmin(backend, 'user_funding-constraints')
+
+    await expect(owner.query(readOwnerFundingConstraints, {
+      environment: 'sandbox',
+      now: Date.now(),
+    })).resolves.toMatchObject({
+      kind: 'available',
+      environment: 'sandbox',
+      currency: 'AUD',
+      exponent: 6,
+      minimumPrincipalUnits: '5000000',
+      maximumPrincipalUnits: '25000000000',
+      incrementUnits: '10000',
+      serviceFeeBps: 500,
+      taxOnServiceFeeBps: 1000,
+      legalCustomerMaximumAccessibleUnits: '4999999999',
+      policyDigest: expect.stringMatching(/^sha256:/u),
+    })
+  })
+
+  it('projects public funding numbers without the owner digest or legal max', async () => {
+    const backend = convexTest(schema, convexModules)
+    const projected = await backend.query(readPlatformFundingConstraints, {
+      environment: 'sandbox',
+      now: Date.now(),
+    })
+    expect(projected).toMatchObject({
+      kind: 'available',
+      environment: 'sandbox',
+      currency: 'AUD',
+      exponent: 6,
+      minimumPrincipalUnits: '5000000',
+      maximumPrincipalUnits: '25000000000',
+      incrementUnits: '10000',
+      serviceFeeBps: 500,
+      taxOnServiceFeeBps: 1000,
+    })
+    expect(projected).not.toHaveProperty('policyDigest')
+    expect(projected).not.toHaveProperty('legalCustomerMaximumAccessibleUnits')
+  })
+
+  it('refuses the owner funding projection without an authenticated owner', async () => {
+    const backend = convexTest(schema, convexModules)
+    const refused = await backend.query(readOwnerFundingConstraints, {
+      environment: 'sandbox',
+      now: Date.now(),
+    })
+    expect(refused).toEqual({
+      kind: 'refused',
+      code: 'billing_identity_missing',
+      retryable: false,
+    })
+    expect(refused).not.toHaveProperty('policyDigest')
+    expect(refused).not.toHaveProperty('legalCustomerMaximumAccessibleUnits')
+  })
+
+  it('ignores caller now on the public funding projection', async () => {
+    const backend = convexTest(schema, convexModules)
+    const wallNow = Date.now()
+    const twoDays = 2 * 86_400_000
+    await backend.run(async (ctx) => {
+      for (const [index, family] of COMMERCIAL_POLICY_FAMILIES.entries()) {
+        await ctx.db.insert('moneyCommercialPolicies', {
+          policyRef: `commercial-policy:${family}:1`,
+          family,
+          environment: 'production',
+          revision: 1,
+          lifecycle: 'active',
+          effectiveAt: wallNow - 1,
+          expiresAt: wallNow + twoDays,
+          evidenceRef: `approval:${family}:1`,
+          evidenceDigest: `sha256:${String(index).repeat(64)}`,
+          control: PRODUCTION_COMMERCIAL_POLICY_CONTROLS[family],
+          approvedByPrincipalRef: 'prn_00000000000040008000000000000021',
+          activeAccountRef: 'acc_00000000000040008000000000000021',
+          authorityGeneration: 1,
+          correlationRef: `correlation:${family}:1`,
+          idempotencyRef: `idempotency:${family}:1`,
+          commandDigest: `sha256:${String(index + 1).repeat(64)}`,
+          activatedAt: wallNow - 1,
+          updatedAt: wallNow - 1,
+        })
+      }
+    })
+
+    const projected = await backend.query(readPlatformFundingConstraints, {
+      environment: 'production',
+      now: wallNow + twoDays,
+    })
+    expect(projected).toMatchObject({
+      kind: 'available',
+      environment: 'production',
+      serviceFeeBps: PRODUCTION_COMMERCIAL_POLICY_CONTROLS.operations.fundingServiceFeeBps,
+    })
+    expect(projected).not.toHaveProperty('policyDigest')
+  })
+
   it('reads one bounded canonical production decision across all six families', async () => {
     const backend = convexTest(schema, convexModules)
     const now = Date.now()

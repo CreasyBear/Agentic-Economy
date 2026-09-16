@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { setPublicSourceTransportForTests } from '@/lib/server/convex-source'
+import { setHttpRateLimitAdmissionForTests } from '@/lib/server/rate-limit'
 import { createFixtureDiscoverySourceState } from '../helpers/discovery-fixture-source-state'
 import type { DiscoverySourceState } from '@/modules/discovery/public'
 import type {
@@ -23,6 +24,17 @@ const privateOrAuthorityPattern =
 describe('developer discovery route handlers', () => {
   afterEach(() => {
     setPublicSourceTransportForTests(undefined)
+  })
+
+  it('rate-limits discovery schema and examples when admission is denied', async () => {
+    setHttpRateLimitAdmissionForTests(async () => ({ ok: false, retryAfter: 5_000 }))
+    const request = new Request('https://ae.test/api/discovery/schema')
+    const schemaResponse = await handleDeveloperDiscoverySchemaRequest(request)
+    const examplesResponse = await handleDeveloperDiscoveryExamplesRequest(
+      new Request('https://ae.test/api/discovery/examples'),
+    )
+    expect(schemaResponse.status).toBe(429)
+    expect(examplesResponse.status).toBe(429)
   })
 
   it('reports the x402 directory freshness instead of the old generatedAt: 0 / freshness "current" contradiction (swarm row 21)', async () => {

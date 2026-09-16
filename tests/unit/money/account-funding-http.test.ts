@@ -5,12 +5,14 @@ import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
   beginAccountFundingThroughSource,
   ingestVerifiedStripeEventThroughSource,
+  readAccountFundingConstraintsThroughSource,
   readAccountFundingThroughSource,
 } from '@/modules/money/server'
 import { createFundingHandoffService } from '@/lib/server/funding-handoff-api'
 
 const input = {
   amount: { currency: 'AUD', units: '5000000', exponent: 6 },
+  expectedPolicyDigest: `sha256:${'1'.repeat(64)}`,
   idempotencyKey: 'account-funding:test-one',
 } as const
 
@@ -38,6 +40,7 @@ function command(overrides: Record<string, unknown> = {}) {
       format: 'ae.account-funding-input:v1',
       ownerId: 'owner-1',
       amount: input.amount,
+      expectedPolicyDigest: input.expectedPolicyDigest,
       idempotencyKey: input.idempotencyKey,
     }),
     successReturnRef: 'https://ae.test/owner/credit?funding={CHECKOUT_SESSION_ID}',
@@ -52,6 +55,27 @@ function command(overrides: Record<string, unknown> = {}) {
 }
 
 describe('Account AUD funding HTTP boundary', () => {
+  it('reads display constraints from the same environment selected for funding admission', async () => {
+    const constraints = {
+      kind: 'available' as const,
+      environment: 'production' as const,
+      currency: 'AUD' as const,
+      exponent: 6 as const,
+      minimumPrincipalUnits: '5000000',
+      maximumPrincipalUnits: '25000000000',
+      incrementUnits: '10000',
+      serviceFeeBps: 500,
+      taxOnServiceFeeBps: 1000,
+      legalCustomerMaximumAccessibleUnits: '4999999999',
+      policyDigest: `sha256:${'a'.repeat(64)}`,
+    }
+    sourceMocks.callSourceQuery.mockResolvedValueOnce(constraints)
+    const provider = { createOrRecoverCreditPayment: vi.fn(), readCreditPayment: vi.fn() }
+
+    await expect(readAccountFundingConstraintsThroughSource({ provider, mode: 'live' })).resolves.toEqual(constraints)
+    expect(sourceMocks.callSourceQuery).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ environment: 'production' }))
+  })
+
   it('returns one direct hosted Checkout handoff after durable reserve and evidence bind', async () => {
     sourceMocks.sourceWriteAdmissionFromRequest.mockResolvedValue({
       version: 'source-write:v2', keyId: 'test', scope: 'billing', operationKey: 'test',
@@ -159,6 +183,7 @@ describe('Account AUD funding HTTP boundary', () => {
     expect(sourceMocks.callSourceMutation.mock.calls[0]?.[1]).toMatchObject({
       amountUnits: '5000000',
       environment: 'sandbox',
+      expectedPolicyDigest: input.expectedPolicyDigest,
       commandRef: durable.commandRef,
       inputDigest: durable.inputDigest,
     })
