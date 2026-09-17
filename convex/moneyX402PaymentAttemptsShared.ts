@@ -1,1 +1,1 @@
-export * from './lib/x402-payment-attempt'
+export * from './lib/x402PaymentAttempt'

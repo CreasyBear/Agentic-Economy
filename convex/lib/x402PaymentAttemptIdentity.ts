@@ -19,7 +19,7 @@ import {
   type RecordObservationArgs,
   type ReconcileArgs,
   x402PaymentAuthorizationStored,
-} from './x402-payment-attempt-schema'
+} from './x402PaymentAttemptSchema'
 
 export function x402PaymentEnvironmentFenceValid(
   input: Readonly<{

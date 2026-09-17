@@ -15,7 +15,7 @@ import {
   finalizeFundingRefundHandler,
   markFundingBookingUnknownHandler,
   markFundingReversalUnknownHandler,
-} from './lib/money/funding-stripe-event-pipeline'
+} from './lib/money/fundingStripeEventPipeline'
 import { exactAmount, serverFunctionAuth, stripeMoneyWebhookEventArg } from './moneyLedgerValues'
 import {
   agentAccessPrincipalValue,

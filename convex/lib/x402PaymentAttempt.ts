@@ -30,7 +30,7 @@ import {
   readX402PaymentAuthorizationReturns,
   x402PaymentAttemptReadValue,
   x402PaymentAuthorizationMaterial,
-} from './x402-payment-attempt-schema'
+} from './x402PaymentAttemptSchema'
 import {
   assertManagedCustodyPolicy,
   assertX402PaymentEnvironmentFence,
@@ -49,10 +49,10 @@ import {
   x402AuthorizationDigest,
   x402CustodyRefDigest,
   x402PaymentIdentityDigest,
-} from './x402-payment-attempt-identity'
+} from './x402PaymentAttemptIdentity'
 
-export * from './x402-payment-attempt-schema'
-export * from './x402-payment-attempt-identity'
+export * from './x402PaymentAttemptSchema'
+export * from './x402PaymentAttemptIdentity'
 
 export async function loadByAttempt(
   ctx: QueryCtx | MutationCtx,

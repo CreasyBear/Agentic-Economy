@@ -39,7 +39,7 @@ import {
   recordX402PaymentSigningIntentArgs,
   recordX402PaymentSigningIntentHandler,
   recordX402PaymentSigningIntentReturns,
-} from './lib/x402-payment-attempt'
+} from './lib/x402PaymentAttempt'
 import { persistedCallAuthorityIsCurrent } from './moneyBillingAuthorization'
 import { callAttemptIdentityDigest } from './capabilityCallIdentity'
 import { compareExactAmounts } from '@/modules/money/public'
