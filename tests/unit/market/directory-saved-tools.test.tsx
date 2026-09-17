@@ -113,8 +113,8 @@ describe('browser-local saved directory Tools', () => {
   })
 
   it('continues in memory when storage cannot be read or written, and supports removal', async () => {
-    vi.spyOn(window.localStorage, 'getItem').mockImplementation(() => { throw new DOMException('blocked', 'SecurityError') })
-    vi.spyOn(window.localStorage, 'setItem').mockImplementation(() => { throw new DOMException('blocked', 'SecurityError') })
+    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new DOMException('blocked', 'SecurityError') })
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new DOMException('blocked', 'SecurityError') })
     show()
     await waitFor(() => expect(screen.getByRole('alert')).toBeTruthy())
     fireEvent.click(screen.getByRole('button', { name: 'Save Tool' }))
@@ -128,7 +128,7 @@ describe('browser-local saved directory Tools', () => {
   it('retains session changes after a write failure while leaving the stored document unchanged', () => {
     persist([tool(2)])
     const original = window.localStorage.getItem(DIRECTORY_SAVED_TOOLS_STORAGE_KEY)
-    vi.spyOn(window.localStorage, 'setItem').mockImplementation(() => { throw new DOMException('full', 'QuotaExceededError') })
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new DOMException('full', 'QuotaExceededError') })
     show()
     fireEvent.click(screen.getByRole('button', { name: 'Save Tool' }))
     expect(screen.getByText('2 saved Tools')).toBeTruthy()

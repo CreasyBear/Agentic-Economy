@@ -1,3 +1,7 @@
+import {
+  BASE_MAINNET_NETWORK,
+  BASE_MAINNET_USDC_ADDRESS,
+} from '@/modules/capability-supply/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { stableStringify } from '@/modules/common/stable-hash'
 import type { StableHashValue } from '@/modules/common/stable-hash'
@@ -46,9 +50,9 @@ export const unsignedMaterial = {
   resource: { url: 'https://provider.example/pay' },
   accepted: {
     scheme: 'exact',
-    network: 'eip155:8453',
+    network: BASE_MAINNET_NETWORK,
     amount: '1',
-    asset: '0x833589',
+    asset: BASE_MAINNET_USDC_ADDRESS,
     payTo: '0xrecipient',
     maxTimeoutSeconds: 60,
     extra: { assetTransferMethod: 'eip3009' },
@@ -86,8 +90,8 @@ export function attempt(): Row {
     providerEndpoint: 'https://provider.example/pay',
     credentialRef: 'credential:test',
     scheme: 'exact',
-    network: 'eip155:8453',
-    asset: '0x833589',
+    network: BASE_MAINNET_NETWORK,
+    asset: BASE_MAINNET_USDC_ADDRESS,
     payTo: '0xrecipient',
     amountUnits: '1',
     currency: 'USDC',
@@ -263,6 +267,7 @@ export function seedPaymentObservationAttempt(
 
 export function prepareArgs(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
+    aeEnvironment: 'production',
     dispatchRef: 'invocation:test',
     attemptRef: 'attempt:test',
     effectGeneration: 1,
@@ -276,8 +281,8 @@ export function prepareArgs(overrides: Record<string, unknown> = {}): Record<str
     providerEndpoint: 'https://provider.example/pay',
     credentialRef: 'credential:test',
     scheme: 'exact',
-    network: 'eip155:8453',
-    asset: '0x833589',
+    network: BASE_MAINNET_NETWORK,
+    asset: BASE_MAINNET_USDC_ADDRESS,
     payTo: '0xrecipient',
     amountUnits: '1',
     currency: 'USDC',
@@ -332,8 +337,8 @@ export function eventArgs(): Record<string, unknown> {
     paymentIdentifier,
     challengeDigest: 'sha256:challenge',
     scheme: 'exact',
-    network: 'eip155:8453',
-    asset: '0x833589',
+    network: BASE_MAINNET_NETWORK,
+    asset: BASE_MAINNET_USDC_ADDRESS,
     payTo: '0xrecipient',
     amountUnits: '1',
     currency: 'USDC',

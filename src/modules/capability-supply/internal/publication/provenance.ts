@@ -1,6 +1,7 @@
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 
+import type { ListingTier } from '../tool-projection-types'
 import type { SupplyCommandActor } from '../shared'
 
 export const CAPABILITY_PUBLICATION_AUTHORITY_MODES = [
@@ -22,7 +23,7 @@ export type CapabilityPublicationAuthorityMode =
  */
 export function listingTier(
   authorityMode: CapabilityPublicationAuthorityMode,
-): 'reviewed' | 'listed' {
+): ListingTier {
   switch (authorityMode) {
     case 'provider_owned':
     case 'ae_curated_external':

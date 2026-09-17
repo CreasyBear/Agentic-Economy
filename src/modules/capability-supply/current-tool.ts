@@ -9,14 +9,18 @@ import type { PublicCapabilityUnavailableReason, PublicToolPrice } from './tool-
 import type { PublishedTool } from './published-tool'
 import {
   capabilityBindingRegistrationHash,
-  capabilityToolId,
   capabilityOfferingRegistrationHash,
-  connectionAuthoritySnapshotIsValid,
+} from './internal/registration-schema'
+import {
+  capabilityToolId,
   createPublicToolRef,
+} from './internal/public-tool-ref'
+import {
   isPublicToolRef,
-  publishedToolIdentityDigest,
   type PublicToolRef,
-} from './public'
+} from '@/modules/common/tool-ref'
+import { connectionAuthoritySnapshotIsValid } from './internal/binding'
+import { publishedToolIdentityDigest } from './published-tool'
 
 const CURRENT_OPERATION_UNAVAILABLE_REASONS: readonly PublicCapabilityUnavailableReason[] = [
   'setup_required',

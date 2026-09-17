@@ -16,8 +16,44 @@ import {
   MCP_TOOL_LIST_TOOL_LIMIT,
 } from '@/modules/capability-supply/route-transport-runtime'
 import { inspectSource, validHttpsUrl } from './publication-importer-types'
-import type { McpSourceDiscovery } from '../source-preview'
 import { degradeBackend } from '@/lib/observability/degrade-backend'
+
+export type McpSourceDiscovery =
+  | Readonly<{
+      kind: 'ready'
+      serverUrl: string
+      registryName?: string
+      verifiedNamespace?: boolean
+      protocolVersion: string
+      sourceDigest: string
+      tools: readonly Readonly<{
+        name: string
+        title?: string
+        description?: string
+        inputSchema: Readonly<Record<string, JsonValue>>
+        outputSchema?: Readonly<Record<string, JsonValue>>
+      }>[]
+    }>
+  | Readonly<{
+      kind: 'authentication_required'
+      authenticationUrl: string
+      serverUrl: string
+    }>
+  | Readonly<{
+      kind: 'remote_selection_required'
+      registryName: string
+      sourceDigest: string
+      sourceRevision: string
+      remotes: readonly Readonly<{
+        remoteRef: string
+        name: string
+        serverUrl: string
+      }>[]
+    }>
+  | Readonly<{
+      kind: 'refused'
+      reason: string
+    }>
 
 const REQUEST_TIMEOUT_MS = 10_000
 const MAXIMUM_RESPONSE_BYTES = 262_144

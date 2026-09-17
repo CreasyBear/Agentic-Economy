@@ -3,7 +3,7 @@ import {
   capabilityBindingEligibilityHash,
   capabilityOfferingEligibilityHash,
   capabilitySupplyEligibilityHash,
-} from '@/modules/capability-supply/public'
+} from '../registration-schema'
 
 import {
   connectionAuthoritySnapshotMatches,

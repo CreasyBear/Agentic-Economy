@@ -152,7 +152,10 @@ export const prepareSellerOnboardingCanaryPaymentAuthorization = internalMutatio
       || BigInt(args.amountUnits) > BigInt(grant.spendingPolicy.budget.maximumSpendPerCall.units)
     ) throw new Error('seller_canary_payment_grant_invalid')
 
-    return await prepareX402PaymentAuthorizationHandler(ctx, args)
+    return await prepareX402PaymentAuthorizationHandler(ctx, {
+      ...args,
+      aeEnvironment: args.aeEnvironment ?? 'sandbox',
+    })
   },
 })
 

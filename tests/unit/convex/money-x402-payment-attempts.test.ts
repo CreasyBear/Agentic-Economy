@@ -7,7 +7,12 @@ import {
 } from '@/modules/capability-execution/call-runtime'
 import { provisionSellerOnboardingCanaryFunding } from '../../../convex/capabilitySupplyCanaryFunding'
 import { callAttemptIdentityDigest } from '../../../convex/capabilityCallIdentity'
-import { BASE_SEPOLIA_NETWORK, BASE_SEPOLIA_USDC_ADDRESS } from '@/modules/capability-supply/public'
+import {
+  BASE_MAINNET_NETWORK,
+  BASE_MAINNET_USDC_ADDRESS,
+  BASE_SEPOLIA_NETWORK,
+  BASE_SEPOLIA_USDC_ADDRESS,
+} from '@/modules/capability-supply/public'
 import { describe, expect, it, vi } from 'vitest'
 
 import {
@@ -129,6 +134,7 @@ describe('platform-funded validation payment preparation', () => {
       } },
     }))
     const args = prepareArgs({
+      aeEnvironment: 'sandbox',
       dispatchRef: call.callRef, toolRef: call.toolRef, inputDigest: call.inputDigest,
       reservationRef: undefined, credentialRef: X402_MANAGED_CUSTODY_REF, currency: 'USD', amountUnits: requestedSpend.units,
       network: BASE_SEPOLIA_NETWORK, asset: BASE_SEPOLIA_USDC_ADDRESS,
@@ -246,6 +252,16 @@ describe('platform-funded validation payment preparation', () => {
 })
 
 describe('money x402 payment authorization attempt', () => {
+  it('rejects sandbox chain material when production environment is declared', async () => {
+    const db = new MemoryDb()
+    await expect(prepare({ db }, prepareArgs({
+      aeEnvironment: 'production',
+      network: BASE_SEPOLIA_NETWORK,
+      asset: BASE_SEPOLIA_USDC_ADDRESS,
+    }))).rejects.toThrow('x402_payment_environment_fence_violated')
+    expectNoPaymentAttempts(db)
+  })
+
   it.each([
     { label: 'partial', override: { custodyBudgetRef: 'wallet:budget' } },
     { label: 'blank budget ref', override: { custodyBudgetRef: '  ', custodyGeneration: 1, custodyDailyMaximumUnits: '100' } },
@@ -290,8 +306,8 @@ describe('money x402 payment authorization attempt', () => {
     })
     expect(material).toMatchObject({
       scheme: 'exact',
-      network: 'eip155:8453',
-      asset: '0x833589',
+      network: BASE_MAINNET_NETWORK,
+      asset: BASE_MAINNET_USDC_ADDRESS,
       payTo: '0xrecipient',
       ...unsignedIdentityFields,
       paymentSignatureDigest: firstDigest,

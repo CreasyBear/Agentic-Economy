@@ -13,6 +13,7 @@ import {
   usageValue,
 } from '@/modules/capability-execution/convex'
 import { recordMarketEvidenceFact } from '../../marketEvidence'
+import { materializePurchaseResolutionRecord } from './purchaseResolutionMaterialize'
 import {
   assertCallResultJson,
   canonicalCommandReadbackMatches,
@@ -405,6 +406,7 @@ export async function finalizeDispatchHandler(
     updatedAt: finalizedAt,
   })
   await upsertCallProjection(ctx, row, normalizedProjection, finalizedAt)
+  await materializePurchaseResolutionRecord(ctx, row, normalizedProjection, finalizedAt)
   await recordFinalizationEvidence(ctx, row, normalizedProjection.state)
   return {
     kind: canonicalResult.kind,

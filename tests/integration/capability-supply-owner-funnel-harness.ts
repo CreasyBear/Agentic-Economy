@@ -1,7 +1,15 @@
 import type { FunctionArgs } from 'convex/server'
 import { validatePaymentRequired } from '@x402/core/schemas'
+import { expect } from 'vitest'
 
 import { api, internal } from '../../convex/_generated/api'
+import { toRow as providerConnectionRow } from '../../convex/lib/providerConnections/codecs'
+import { createX402ProviderConnection } from '@/modules/capability-supply/provider-connection'
+import {
+  BASE_SEPOLIA_NETWORK,
+  BASE_SEPOLIA_USDC_ADDRESS,
+  x402SellerClaimDigest,
+} from '@/modules/capability-supply/public'
 import type { Id } from '../../convex/_generated/dataModel'
 import {
   preparePublicationDraft,
@@ -624,3 +632,313 @@ export async function seedCatalogOffering(
     })
   })
 }
+
+const DEFAULT_X402_PAY_TO = '0xbA667287B8Ef89565F8fD7AcD4d22Ce98E0f39cd'
+
+export function x402SourceForConnection(
+  endpoint: string,
+  connectionRef: string,
+  providerRef: string,
+) {
+  const source = x402Source('sandbox', endpoint)
+  if (!isRecord(source.resource)) throw new Error('owner_publication_x402_resource_invalid')
+  const payTo = source.resource.payTo as string
+  const price = { currency: 'USD', units: '1', exponent: 2 }
+  const paymentRequired = validatePaymentRequired({
+    x402Version: 2,
+    resource: { url: endpoint },
+    accepts: [{
+      scheme: 'exact',
+      network: BASE_SEPOLIA_NETWORK,
+      amount: '10000',
+      asset: BASE_SEPOLIA_USDC_ADDRESS,
+      payTo,
+      maxTimeoutSeconds: 60,
+      extra: {
+        name: 'USD Coin',
+        version: '2',
+        assetTransferMethod: 'eip3009',
+      },
+    }],
+  })
+  return {
+    ...source,
+    resource: {
+      ...source.resource,
+      price,
+      network: BASE_SEPOLIA_NETWORK,
+      asset: BASE_SEPOLIA_USDC_ADDRESS,
+      paymentRequired,
+    },
+    commercial: {
+      ...source.commercial,
+      offering: {
+        ...source.commercial.offering,
+        presentation: {
+          ...source.commercial.offering.presentation,
+          price: { kind: 'fixed' as const, amount: price },
+        },
+      },
+      authority: {
+        kind: 'provider_connection' as const,
+        connectionRef,
+        providerRef,
+      },
+    },
+  }
+}
+
+export async function publishOwnerOpenApiCapability(input: Readonly<{
+  backend: ConvexFixtureBackend
+  businessId: Id<'businesses'>
+  owner: ReturnType<ConvexFixtureBackend['withIdentity']>
+  offeringRef: string
+  sourceHash: string
+  capabilityId: string
+  operationKey: string
+  catalogOrigin: CatalogOfferingOrigin
+  observeReadiness?: Readonly<{
+    operationKey: string
+    correlationId: string
+    evidenceRef: string
+  }>
+}>) {
+  const prepared = await prepareOwnerPublicationCommand(
+    input.backend,
+    input.businessId,
+    input.offeringRef,
+    1,
+    input.sourceHash,
+    openApiSource(input.capabilityId),
+    input.operationKey,
+    input.catalogOrigin,
+  )
+  if (prepared.kind === 'refused') {
+    throw new Error(`publication_prepare_failed:${prepared.reason}`)
+  }
+  const published = await input.owner.mutation(
+    api.capabilitySupply.publishPreparedCapability,
+    prepared.command,
+  )
+  if (published.kind === 'refused') {
+    throw new Error(`publication_publish_failed:${published.reason}`)
+  }
+  if (published.kind !== 'published') {
+    throw new Error(`publication_publish_replayed_unexpectedly:${published.kind}`)
+  }
+  if (input.observeReadiness !== undefined) {
+    await input.backend.mutation(internal.capabilitySupply.observeCapabilityReadiness, {
+      publicationRef: published.publicationRef,
+      expectedRevision: published.publicationRevision,
+      credentialState: 'ready',
+      healthState: 'healthy',
+      validUntil: Date.now() + 60_000,
+      operationKey: input.observeReadiness.operationKey,
+      correlationId: input.observeReadiness.correlationId,
+      reasonCode: 'readiness_probe',
+      evidenceRefs: [input.observeReadiness.evidenceRef],
+    })
+  }
+  return { prepared, published }
+}
+
+export async function seedPaidX402Publication(
+  backend: ConvexFixtureBackend,
+  slug: string,
+  overrides: Readonly<{
+    endpoint?: string
+    providerRef?: string
+    payTo?: string
+  }> = {},
+) {
+  const identity = await createPublishedBusinessOwner(backend, slug)
+  const offeringRef = `catalog-offering:${slug}`
+  const sourceHash = canonicalDigest({ offering: slug, revision: 1 })
+  const endpoint = overrides.endpoint ?? 'https://provider.example/paid-lookup'
+  const accessPathRef = `access-path:${slug}`
+  const accessPathSourceHash = canonicalDigest({ accessPath: slug, revision: 1 })
+  const connectionRef = `connection:x402:${slug}`
+  const providerRef = overrides.providerRef ?? 'provider:x402:paid-lookup'
+  const payTo = overrides.payTo ?? DEFAULT_X402_PAY_TO
+
+  await seedCatalogOffering(backend, identity.businessId, offeringRef, 1, 1, sourceHash)
+  await backend.run(async (ctx) => {
+    await ctx.db.insert('offeringAccessPaths', {
+      accessPathRef,
+      businessId: identity.businessId,
+      offeringRef,
+      offeringRevision: 1,
+      offeringSourceHash: sourceHash,
+      status: 'published',
+      descriptor: {
+        kind: 'external_operation',
+        name: 'Paid lookup',
+        summary: 'Returns one paid lookup result.',
+        url: endpoint,
+        method: 'POST',
+        provenance: 'business_declared',
+      },
+      sourceHash: accessPathSourceHash,
+      createdAt: 1,
+      updatedAt: 1,
+    })
+  })
+
+  const now = Date.now()
+  const sellerClaim = {
+    businessId: String(identity.businessId),
+    endpointUrl: endpoint,
+    method: 'POST' as const,
+    observationDigest: canonicalDigest({
+      kind: 'official-x402-v2-unpaid-inspection',
+      endpoint,
+      network: BASE_SEPOLIA_NETWORK,
+      payTo,
+    }),
+    payTo,
+    expiresAt: now + 5 * 60_000,
+  }
+  const claimEvidence = `x402-payee-claim:${x402SellerClaimDigest(sellerClaim)}`
+  const inspectionEvidence = `x402-endpoint-inspection:${sellerClaim.observationDigest}`
+  const createdConnection = createX402ProviderConnection({
+    commandId: `connect-${slug}`,
+    connectionRef,
+    businessId: String(identity.businessId),
+    providerRef,
+    providerAccountRef: `x402:${endpoint}`,
+    resourceUrl: endpoint,
+    method: sellerClaim.method,
+    payee: sellerClaim.payTo,
+    evidenceRefs: [claimEvidence, inspectionEvidence],
+    owningAccountRef: identity.canonicalAccountRef,
+    installedByPrincipalRef: identity.canonicalPrincipalRef,
+    authorityGrantRef: `grant:${slug}`,
+    authorityGrantGeneration: 1,
+  }, now)
+  if (createdConnection.kind !== 'applied') {
+    throw new Error(`connection_provision_failed:${createdConnection.kind}`)
+  }
+  await backend.run(async (ctx) => {
+    await ctx.db.insert(
+      'capabilityProviderConnections',
+      providerConnectionRow(
+        createdConnection.connection,
+        createdConnection.connection.lastCommandId ?? '',
+        createdConnection.commandDigest,
+      ),
+    )
+  })
+
+  const prepared = await prepareOwnerPublicationCommand(
+    backend,
+    identity.businessId,
+    offeringRef,
+    1,
+    sourceHash,
+    x402SourceForConnection(endpoint, connectionRef, providerRef),
+    `owner-supply:${slug}:publish`,
+    {
+      kind: 'catalog_offering',
+      offeringRef,
+      offeringRevision: 1,
+      offeringSourceHash: sourceHash,
+      declaredAccessPathRef: accessPathRef,
+      accessPathSourceHash,
+    },
+    'sandbox',
+  )
+  if (prepared.kind === 'refused') {
+    throw new Error(`publication_prepare_failed:${prepared.reason}`)
+  }
+  const {
+    runtimeEnvironment: _runtimeEnvironment,
+    proof: _proof,
+    sourceWrite: _sourceWrite,
+    sourceWriteRequest: _sourceWriteRequest,
+    ...unsignedCommand
+  } = prepared.command
+  const published = await identity.owner.mutation(
+    api.capabilitySupply.stageOwnerX402Capability,
+    await withSourceWrite('catalog_publish', {
+      ...unsignedCommand,
+      sellerClaim,
+      evidenceRefs: [claimEvidence, inspectionEvidence],
+      operationKey: `owner-supply:${slug}:stage`,
+      correlationId: `owner-supply:${slug}:stage`,
+    }),
+  )
+  if (published.kind === 'refused') {
+    throw new Error(`publication_stage_failed:${published.reason}`)
+  }
+
+  const readinessObservedAt = Date.now()
+  const readinessValidUntil = readinessObservedAt + 3_600_000
+  await backend.mutation(internal.capabilitySupply.observeCapabilityReadiness, {
+    publicationRef: published.publicationRef,
+    expectedRevision: published.publicationRevision,
+    credentialState: 'ready',
+    healthState: 'healthy',
+    validUntil: readinessValidUntil,
+    operationKey: `readiness-probe:${slug}`,
+    correlationId: `readiness-probe:${slug}`,
+    reasonCode: 'readiness_probe',
+    evidenceRefs: [`readiness:probe:${slug}`],
+  })
+  await backend.run(async (ctx) => {
+    const row = await ctx.db.query('capabilityPublications')
+      .withIndex('by_publicationRef_and_revision', (query) => (
+        query.eq('publicationRef', published.publicationRef)
+          .eq('revision', published.publicationRevision)
+      ))
+      .unique()
+    if (row === null) throw new Error('publication_missing_for_readiness')
+    await ctx.db.patch(row._id, {
+      credentialState: 'ready',
+      healthState: 'healthy',
+      readinessObservedAt,
+      readinessValidUntil,
+    })
+  })
+  await backend.finishAllScheduledFunctions(() => undefined)
+  await backend.run(async (ctx) => {
+    const row = await ctx.db.query('capabilityPublications')
+      .withIndex('by_publicationRef_and_revision', (query) => (
+        query.eq('publicationRef', published.publicationRef)
+          .eq('revision', published.publicationRevision)
+      ))
+      .unique()
+    if (row === null) throw new Error('publication_missing_after_probe_drain')
+    await ctx.db.patch(row._id, {
+      credentialState: 'ready',
+      healthState: 'healthy',
+      readinessObservedAt,
+      readinessValidUntil,
+    })
+  })
+  await expect(
+    backend.query(
+      internal.capabilitySupplyCurrentTool.readExactSellerCanaryOperationSnapshot,
+      {
+        publicationRef: published.publicationRef,
+        revision: published.publicationRevision,
+      },
+    ),
+  ).resolves.not.toBeNull()
+
+  return {
+    ...identity,
+    offeringRef,
+    sourceHash,
+    endpoint,
+    accessPathRef,
+    accessPathSourceHash,
+    connectionRef,
+    providerRef,
+    payTo,
+    published,
+    sellerClaim,
+    claimEvidence,
+    inspectionEvidence,
+  }
+}
+

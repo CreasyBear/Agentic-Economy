@@ -65,7 +65,8 @@ export async function sourceWriteAdmission(
 
 export async function withSourceWrite<T extends { operationKey: string; correlationId: string }>(
   scope: SourceWriteAdmissionScope,
-  args: T
+  args: T,
+  options: { nonce?: string } = {},
 ): Promise<T & { sourceWriteRequest: SourceWriteAdmissionRequest; sourceWrite: SourceWriteAdmission }> {
   installTestSourceWriteSecret()
   const sourceWriteRequest = sourceWriteRequestFor(args)
@@ -77,6 +78,7 @@ export async function withSourceWrite<T extends { operationKey: string; correlat
       operationKey: args.operationKey,
       correlationId: args.correlationId,
       commandDigest: sourceWriteCommandDigest(args),
+      ...(options.nonce === undefined ? {} : { nonce: options.nonce }),
       request: sourceWriteRequest,
       now: new Date().getTime(),
       env: { AE_SOURCE_WRITE_SECRET: testSourceWriteSecret },

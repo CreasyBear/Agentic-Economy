@@ -6,6 +6,11 @@ import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { directoryNetwork, directoryProviderKey, directorySlugBase, directorySlugWithMethod, isDirectoryEntryEligible } from '@/modules/market/x402-directory-index'
 import { canonicalProviderWebsite, isProgrammableProviderBusinessContext } from '@/modules/business/public'
 import { listingTier, sourceRouteRef } from '@/modules/capability-supply/public'
+import {
+  displayPriceFromPricingConfig,
+  normalizePricingConfig,
+  pricingConfigSourceAmount,
+} from '@/modules/money/public'
 import { internal } from './_generated/api'
 import type { Doc, Id } from './_generated/dataModel'
 import { internalMutation, internalQuery, type MutationCtx } from './_generated/server'
@@ -322,7 +327,34 @@ export function providerKeyForBusiness(business: Doc<'businesses'>): string {
   return business.slug
 }
 
-function providerOfferingPrices(offering: Doc<'capabilityOfferings'>, networkId: string): DirectoryEntry['prices'] {
+function providerOfferingPrices(
+  pricingConfigJson: string | undefined,
+  offering: Doc<'capabilityOfferings'>,
+  networkId: string,
+): DirectoryEntry['prices'] {
+  if (pricingConfigJson !== undefined) {
+    try {
+      const parsed = JSON.parse(pricingConfigJson) as unknown
+      const normalized = normalizePricingConfig(parsed)
+      if (normalized.kind === 'valid') {
+        const config = normalized.config
+        if (config.kind === 'managed_x402') {
+          const amount = pricingConfigSourceAmount(config)
+          const decimalAmount = new Decimal(amount.units).div(new Decimal(10).pow(amount.exponent)).toFixed()
+          return [{ network: networkId, scheme: 'exact', amount: amount.units, asset: amount.currency, symbol: amount.currency, decimalAmount }]
+        }
+        const display = displayPriceFromPricingConfig(config)
+        if (display.kind === 'fixed') {
+          const amount = display.amount
+          const decimalAmount = new Decimal(amount.units).div(new Decimal(10).pow(amount.exponent)).toFixed()
+          return [{ network: networkId, scheme: 'exact', amount: amount.units, asset: amount.currency, symbol: amount.currency, decimalAmount }]
+        }
+        return []
+      }
+    } catch {
+      // fallback to offering presentation price if pricingConfigJson parsing fails
+    }
+  }
   const price = offering.presentation.price
   if (price === undefined || price.kind === 'on_request') return []
   const amount = price.kind === 'fixed' ? price.amount : price.minimum
@@ -339,7 +371,7 @@ function providerOfferingPrices(offering: Doc<'capabilityOfferings'>, networkId:
  */
 function providerDirectoryEntry(
   resource: string, providerKey: string, business: Doc<'businesses'>, offering: Doc<'capabilityOfferings'>,
-  publication: Pick<Doc<'capabilityPublications'>, 'sourceKind' | 'networkId'>,
+  publication: Pick<Doc<'capabilityPublications'>, 'sourceKind' | 'networkId' | 'pricingConfigJson'>,
 ): DirectoryEntry {
   return {
     resource, title: offering.presentation.label, description: offering.presentation.summary,
@@ -350,7 +382,7 @@ function providerDirectoryEntry(
     // consistent across both sources.
     provider: providerKey,
     category: business.category.trim().toLowerCase() || 'uncategorized',
-    prices: providerOfferingPrices(offering, publication.networkId),
+    prices: providerOfferingPrices(publication.pricingConfigJson, offering, publication.networkId),
     metadataJson: '',
   }
 }

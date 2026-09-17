@@ -37,7 +37,7 @@ export type X402PaymentRequirementLike = Readonly<{
   extra: Readonly<Record<string, unknown>>
 }>
 
-const SANDBOX_PAYMENT_PROFILE: X402PaymentProfile = Object.freeze({
+export const SANDBOX_PAYMENT_PROFILE: X402PaymentProfile = Object.freeze({
   profile: 'base-sepolia-usdc-exact',
   aeEnvironment: 'sandbox',
   network: BASE_SEPOLIA_NETWORK,
@@ -46,7 +46,7 @@ const SANDBOX_PAYMENT_PROFILE: X402PaymentProfile = Object.freeze({
   transferMethod: 'eip3009',
 })
 
-const PRODUCTION_PAYMENT_PROFILE: X402PaymentProfile = Object.freeze({
+export const PRODUCTION_PAYMENT_PROFILE: X402PaymentProfile = Object.freeze({
   profile: 'base-usdc-exact',
   aeEnvironment: 'production',
   network: BASE_MAINNET_NETWORK,

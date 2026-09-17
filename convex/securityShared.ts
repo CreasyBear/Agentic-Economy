@@ -175,7 +175,9 @@ export function summarizeAudit(event: AuditEventContract) {
       | 'admin.membership_granted'
       | 'admin.membership_revoked'
       | 'admin.action_denied'
-      | 'dispute.closed',
+      | 'dispute.closed'
+      | 'business.suppressed'
+      | 'business.unsuppressed',
     actorRef: event.actorRef,
     targetRef: event.targetRef,
     ...(event.beforeState === undefined ? {} : { beforeState: event.beforeState }),

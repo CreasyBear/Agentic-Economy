@@ -1,5 +1,5 @@
 /// <reference types="vite/client" />
-import { anyApi, makeFunctionReference } from 'convex/server'
+import { anyApi } from 'convex/server'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { components, internal } from '../../../convex/_generated/api'
@@ -11,17 +11,21 @@ import {
   am10SettlementBooking,
   am10VerifiedEventArgs,
   am12RefundArgs,
+  am09UnpaidCheckoutEvent,
+  boundAm09AgentHandoff,
+  expectFundingDocumentsForTransaction,
+  fundingRows,
+  insertSettledFunding,
+  patchFundingCommand,
   refundEvent,
   refundEvidence,
-  type Am10BoundFunding,
-  type Am10CheckoutEventType,
-  type Am12RefundEventType,
+  reserveBoundAm10Funding,
+  settleAm10PaidCheckoutReorder,
+  settleAm12RefundReorder,
 } from '../../helpers/money-funding-fixtures'
-import { createCustomerRequestServiceAssertion, toStableHashValue } from '@/modules/agent-access/service-auth-envelope'
-import { issuedAgentGrantRef } from '@/modules/agent-access/issued-agent-binding'
+import { issueBuyerAgent } from '../../helpers/issued-buyer-agent'
 import { defaultSandboxAgentAccessPolicy } from '@/modules/agent-access/sandbox-policy'
 import { CUSTOMER_REQUEST_READ_ONLY_SCOPE, MARKET_TOOLS_CALL_SCOPE } from '@/modules/agent-access/contract'
-import type { AgentAccessPrincipal } from '@/modules/agent-access/agent-access'
 import type { ConvexFixtureBackend } from '../../helpers/convex-fixtures'
 import { evaluateCommercialPolicyGate } from '@/modules/money/public'
 
@@ -53,42 +57,28 @@ const sandboxGate = evaluateCommercialPolicyGate({
 })
 if (sandboxGate.kind !== 'admitted') throw new Error('sandbox_commercial_policy_missing')
 const SANDBOX_POLICY_DIGEST = sandboxGate.policyDigest
-const registerBinding = makeFunctionReference<'mutation', Record<string, unknown>, Record<string, unknown>>(
-  'agentAccessPrincipals:registerIssuedAgentBindingForServer',
-)
 
-async function issueBuyerAgent(
+async function fundingBuyerAgent(
   backend: ConvexFixtureBackend,
   owner: ReturnType<ConvexFixtureBackend['withIdentity']>,
   subject: string,
-): Promise<AgentAccessPrincipal> {
-  const now = Date.now()
-  const issuanceKey = `funding-${subject}`
-  const input = {
-    issuanceKey, grantRef: issuedAgentGrantRef(subject, issuanceKey), credentialId: `credential:${subject}`,
-    displayName: `${subject} buyer`, applicationRef: 'agentic-economy', environment: 'sandbox' as const,
-    scopes: [MARKET_TOOLS_CALL_SCOPE, CUSTOMER_REQUEST_READ_ONLY_SCOPE], authorityMode: 'read_only' as const,
-    toolAccess: 'all_admitted' as const, toolRefs: [] as string[],
-    spendingPolicy: defaultSandboxAgentAccessPolicy({ currency: 'AUD', exponent: 6 }), createdAt: now, expiresAt: now + 600_000,
-  }
-  const serviceAuth = await createCustomerRequestServiceAssertion({
-    key: SERVICE_KEY, operation: 'agentAccessPrincipals.registerIssuedAgentBindingForServer',
-    command: toStableHashValue({ ...input, scopes: [...input.scopes] }),
-    principal: { principalId: 'ae:server-function', ownerId: 'ae:server-function', credentialId: 'ae:server-function', scopes: [MARKET_TOOLS_CALL_SCOPE] },
-    issuedAt: now,
-  })
-  const result = await owner.mutation(registerBinding, { ...input, serviceAuth })
-  if (result.kind !== 'recorded' && result.kind !== 'replayed') throw new Error(`buyer_binding_failed:${JSON.stringify(result)}`)
-  const stored = await backend.run(async (ctx) => ctx.db.query('agentAccessPrincipals')
-    .withIndex('by_credentialId', (index) => index.eq('credentialId', input.credentialId)).unique())
-  if (stored === null) throw new Error('buyer_principal_missing')
-  return {
-    principalId: stored.principalId, ownerId: stored.ownerId, credentialId: stored.credentialId,
-    applicationRef: stored.applicationRef, environment: stored.environment, scopes: [...stored.scopes], authorityMode: stored.authorityMode,
-  }
+) {
+  return (await issueBuyerAgent(backend, owner, subject, {
+    serviceKey: SERVICE_KEY,
+    issuanceKey: `funding-${subject}`,
+    registration: {
+      displayName: `${subject} buyer`,
+      applicationRef: 'agentic-economy',
+      environment: 'sandbox',
+      scopes: [MARKET_TOOLS_CALL_SCOPE, CUSTOMER_REQUEST_READ_ONLY_SCOPE],
+      authorityMode: 'read_only',
+      toolAccess: 'all_admitted',
+      toolRefs: [],
+      spendingPolicy: defaultSandboxAgentAccessPolicy({ currency: 'AUD', exponent: 6 }),
+    },
+  })).principal
 }
 
-type ConvexBackend = ReturnType<typeof convexTestWithMarketComponents>
 type PublishedOwner = Awaited<ReturnType<typeof publishedBusinessOwner>>
 type OwnerCheckoutBindEvidence = ReturnType<typeof am10BindEvidence>
 
@@ -98,6 +88,7 @@ function ownerReserveInput(
   commandRef: string,
   overrides: Partial<{
     amountUnits: string
+    environment: 'sandbox' | 'production'
     expectedPolicyDigest: string
     inputDigest: string
     correlationId: string
@@ -199,67 +190,6 @@ async function workpoolFixture(slug: string, maxParallelism = 1) {
   return { backend, fixture }
 }
 
-async function fundingRows(backend: ConvexBackend, commandRef: string) {
-  return await backend.run(async (ctx) => ({
-    command: await ctx.db.query('moneyFundingCommands')
-      .withIndex('by_commandRef', (query) => query.eq('commandRef', commandRef)).unique(),
-    stripeEvents: await ctx.db.query('moneyStripeEvents').collect(),
-    documents: await ctx.db.query('moneyDocuments').collect(),
-  }))
-}
-
-function expectFundingDocumentsForTransaction(
-  documents: Awaited<ReturnType<typeof fundingRows>>['documents'],
-  formanceTransactionRef: string,
-): void {
-  expect(documents).toHaveLength(2)
-  expect(documents).toEqual(expect.arrayContaining([
-    expect.objectContaining({ kind: 'funding_receipt', sourceTransactionRefs: [formanceTransactionRef] }),
-    expect.objectContaining({ kind: 'service_fee_document', sourceTransactionRefs: [formanceTransactionRef] }),
-  ]))
-}
-
-async function insertSettledFunding(
-  backend: ConvexBackend,
-  input: Readonly<{
-    accountRef: string
-    actorPrincipalRef: string
-    commandRef: string
-    paymentId: string
-  }>,
-): Promise<void> {
-  await backend.run(async (ctx) => {
-    await ctx.db.insert('moneyFundingCommands', {
-      commandRef: input.commandRef,
-      accountRef: input.accountRef,
-      legalCustomerRef: `legal-customer:${input.accountRef}`,
-      actorPrincipalRef: input.actorPrincipalRef,
-      environment: 'sandbox',
-      currency: 'AUD',
-      exponent: 6,
-      principalUnits: '5000000',
-      serviceFeeUnits: '250000',
-      taxUnits: '30000',
-      totalUnits: '5280000',
-      commercialPolicyDigest: sha256('1'),
-      commercialPolicyRefs: ['commercial-policy:sandbox'],
-      idempotencyKey: input.commandRef,
-      inputDigest: sha256('2'),
-      successReturnRef: 'owner/credit',
-      providerRecoveryDeadlineAt: 1_900_000_000_000,
-      state: 'succeeded',
-      externalRef: `cs_${input.paymentId}`,
-      providerStatus: 'succeeded',
-      paymentId: input.paymentId,
-      appliedStripeEventId: `evt_${input.paymentId}`,
-      appliedPayloadDigest: sha256('3'),
-      appliedTransactionRef: `formance:tx:${input.paymentId}`,
-      createdAt: 1_800_000_000_000,
-      updatedAt: 1_800_000_000_000,
-    })
-  })
-}
-
 describe('Account AUD funding through Formance', () => {
   const previousServiceKey = process.env.AE_CONVEX_SERVER_FUNCTION_TOKEN
   beforeEach(() => { process.env.AE_CONVEX_SERVER_FUNCTION_TOKEN = SERVICE_KEY })
@@ -267,6 +197,17 @@ describe('Account AUD funding through Formance', () => {
     vi.useRealTimers()
     if (previousServiceKey === undefined) delete process.env.AE_CONVEX_SERVER_FUNCTION_TOKEN
     else process.env.AE_CONVEX_SERVER_FUNCTION_TOKEN = previousServiceKey
+  })
+
+  it('refuses production funding when deployment is hosted_alpha', async () => {
+    vi.stubEnv('AE_SERVICE_MODE', 'hosted_alpha')
+    const { backend, fixture } = await publishedOwnerFixture('funding-hosted-alpha-fence')
+    await expect(ownerReserve(fixture, 'account-funding:hosted-alpha-fence', {
+      environment: 'production',
+      expectedPolicyDigest: sha256('production-policy'),
+    })).resolves.toMatchObject({ kind: 'refused', code: 'environment_mismatch', retryable: false })
+    await expect(backend.run(async (ctx) => ctx.db.query('moneyFundingCommands').collect())).resolves.toEqual([])
+    vi.unstubAllEnvs()
   })
 
   it('refuses a changed funding policy before creating a funding command', async () => {
@@ -310,8 +251,8 @@ describe('Account AUD funding through Formance', () => {
     const backend = convexTestWithMarketComponents()
     const firstOwner = await publishedBusinessOwner(backend, 'funding-agent-first')
     const secondOwner = await publishedBusinessOwner(backend, 'funding-agent-second')
-    const first = await issueBuyerAgent(backend, firstOwner.owner, 'user_funding-agent-first')
-    const second = await issueBuyerAgent(backend, secondOwner.owner, 'user_funding-agent-second')
+    const first = await fundingBuyerAgent(backend, firstOwner.owner, 'user_funding-agent-first')
+    const second = await fundingBuyerAgent(backend, secondOwner.owner, 'user_funding-agent-second')
     const checkoutExpiresAt = (Math.floor(Date.now() / 1000) + 3600) * 1000
     const command = {
       principalAmountUnits: '5000000', environment: 'sandbox' as const, idempotencyKey: 'caller-key-one',
@@ -1030,22 +971,29 @@ describe('Account AUD funding through Formance', () => {
     expectFundingDocumentsForTransaction(rows.documents, formanceTransactionRef)
   })
 
-  it('AM-10 settles checkout.session.completed then async_payment_succeeded on one Formance booking', async () => {
-    await settleAm10PaidCheckoutReorder({
+  it.each([
+    {
+      title: 'AM-10 settles checkout.session.completed then async_payment_succeeded on one Formance booking',
       slug: 'reorder',
-      first: { stripeEventId: 'evt_am10_completed', eventType: 'checkout.session.completed' },
-      second: { stripeEventId: 'evt_am10_async', eventType: 'checkout.session.async_payment_succeeded' },
+      first: { stripeEventId: 'evt_am10_completed', eventType: 'checkout.session.completed' as const },
+      second: { stripeEventId: 'evt_am10_async', eventType: 'checkout.session.async_payment_succeeded' as const },
       formanceTransactionRef: 'formance:tx:am10-reorder',
       conflictTransactionRef: 'formance:tx:am10-other',
-    })
-  })
-
-  it('AM-10 settles async_payment_succeeded then checkout.session.completed on one Formance booking', async () => {
-    await settleAm10PaidCheckoutReorder({
+    },
+    {
+      title: 'AM-10 settles async_payment_succeeded then checkout.session.completed on one Formance booking',
       slug: 'reverse',
-      first: { stripeEventId: 'evt_am10_async_first', eventType: 'checkout.session.async_payment_succeeded' },
-      second: { stripeEventId: 'evt_am10_completed_second', eventType: 'checkout.session.completed' },
+      first: { stripeEventId: 'evt_am10_async_first', eventType: 'checkout.session.async_payment_succeeded' as const },
+      second: { stripeEventId: 'evt_am10_completed_second', eventType: 'checkout.session.completed' as const },
       formanceTransactionRef: 'formance:tx:am10-reverse',
+    },
+  ])('$title', async ({ slug, first, second, formanceTransactionRef, conflictTransactionRef }) => {
+    await settleAm10PaidCheckoutReorder({
+      slug,
+      first,
+      second,
+      formanceTransactionRef,
+      ...(conflictTransactionRef === undefined ? {} : { conflictTransactionRef }),
     })
   })
 
@@ -1108,22 +1056,29 @@ describe('Account AUD funding through Formance', () => {
     ])
   })
 
-  it('AM-12 reverses refund.created then refund.updated on one Formance booking', async () => {
-    await settleAm12RefundReorder({
+  it.each([
+    {
+      title: 'AM-12 reverses refund.created then refund.updated on one Formance booking',
       slug: 'reorder',
-      first: { stripeEventId: 'evt_am12_created', eventType: 'refund.created' },
-      second: { stripeEventId: 'evt_am12_updated', eventType: 'refund.updated' },
+      first: { stripeEventId: 'evt_am12_created', eventType: 'refund.created' as const },
+      second: { stripeEventId: 'evt_am12_updated', eventType: 'refund.updated' as const },
       formanceTransactionRef: 'formance:tx:am12-reorder',
       conflictTransactionRef: 'formance:tx:am12-other',
-    })
-  })
-
-  it('AM-12 reverses refund.updated then refund.created on one Formance booking', async () => {
-    await settleAm12RefundReorder({
+    },
+    {
+      title: 'AM-12 reverses refund.updated then refund.created on one Formance booking',
       slug: 'reverse',
-      first: { stripeEventId: 'evt_am12_updated_first', eventType: 'refund.updated' },
-      second: { stripeEventId: 'evt_am12_created_second', eventType: 'refund.created' },
+      first: { stripeEventId: 'evt_am12_updated_first', eventType: 'refund.updated' as const },
+      second: { stripeEventId: 'evt_am12_created_second', eventType: 'refund.created' as const },
       formanceTransactionRef: 'formance:tx:am12-reverse',
+    },
+  ])('$title', async ({ slug, first, second, formanceTransactionRef, conflictTransactionRef }) => {
+    await settleAm12RefundReorder({
+      slug,
+      first,
+      second,
+      formanceTransactionRef,
+      ...(conflictTransactionRef === undefined ? {} : { conflictTransactionRef }),
     })
   })
 
@@ -1247,318 +1202,4 @@ describe('Account AUD funding through Formance', () => {
     ])
   })
 })
-
-async function settleAm10PaidCheckoutReorder(input: Readonly<{
-  slug: string
-  first: Readonly<{ stripeEventId: string, eventType: Am10CheckoutEventType }>
-  second: Readonly<{ stripeEventId: string, eventType: Am10CheckoutEventType }>
-  formanceTransactionRef: string
-  conflictTransactionRef?: string
-}>): Promise<void> {
-  vi.useFakeTimers()
-  const backend = convexTestWithWorkers()
-  await backend.run(async (ctx) => {
-    await ctx.runMutation(components.workpool.config.update, { maxParallelism: 1 })
-  })
-  const fixture = await publishedBusinessOwner(backend, `am10-${input.slug}`)
-  const bound = await reserveBoundAm10Funding(fixture, input.slug)
-  const booking = am10SettlementBooking(bound)
-  const firstEvent = am10PaidCheckoutEvent({
-    stripeEventId: input.first.stripeEventId,
-    eventType: input.first.eventType,
-    commandRef: bound.commandRef,
-    evidence: bound.evidence,
-    payloadDigest: `sha256:${'f'.repeat(64)}`,
-  })
-  const secondEvent = am10PaidCheckoutEvent({
-    stripeEventId: input.second.stripeEventId,
-    eventType: input.second.eventType,
-    commandRef: bound.commandRef,
-    evidence: bound.evidence,
-    payloadDigest: `sha256:${'0'.repeat(64)}`,
-  })
-  const firstArgs = await am10VerifiedEventArgs(firstEvent, bound.evidence)
-  const secondArgs = await am10VerifiedEventArgs(secondEvent, bound.evidence)
-  const firstPrepared = await fixture.owner.mutation(
-    internal.moneyAccountFunding.prepareVerifiedEvent, firstArgs,
-  )
-  expect(firstPrepared).toMatchObject({ kind: 'prepared', booking })
-  const secondPrepared = await fixture.owner.mutation(
-    internal.moneyAccountFunding.prepareVerifiedEvent, secondArgs,
-  )
-  expect(secondPrepared).toMatchObject({ kind: 'prepared', booking })
-  const preparedRows = await fundingRows(backend, bound.commandRef)
-  expect(preparedRows.stripeEvents).toHaveLength(2)
-  expect(preparedRows.stripeEvents).toEqual(expect.arrayContaining([
-    expect.objectContaining({ stripeEventId: firstEvent.stripeEventId, status: 'received' }),
-    expect.objectContaining({ stripeEventId: secondEvent.stripeEventId, status: 'received' }),
-  ]))
-  await expect(fixture.owner.mutation(internal.moneyAccountFunding.finalizeVerifiedEvent, {
-    ...firstArgs, formanceTransactionRef: input.formanceTransactionRef,
-  })).resolves.toEqual({
-    kind: 'accepted', status: 'applied', appliedRef: input.formanceTransactionRef,
-  })
-  expect((await fundingRows(backend, bound.commandRef)).documents).toHaveLength(2)
-  await expect(fixture.owner.mutation(internal.moneyAccountFunding.finalizeVerifiedEvent, {
-    ...secondArgs, formanceTransactionRef: input.formanceTransactionRef,
-  })).resolves.toEqual({
-    kind: 'accepted', status: 'replayed', appliedRef: input.formanceTransactionRef,
-  })
-  if (input.conflictTransactionRef !== undefined) {
-    await expect(fixture.owner.mutation(internal.moneyAccountFunding.finalizeVerifiedEvent, {
-      ...secondArgs, formanceTransactionRef: input.conflictTransactionRef,
-    })).resolves.toEqual({
-      kind: 'refused', code: 'funding_idempotency_conflict', retryable: false,
-    })
-  }
-  await backend.finishAllScheduledFunctions(() => vi.advanceTimersByTime(1))
-  const rows = await fundingRows(backend, bound.commandRef)
-  expect(rows.command).toMatchObject({
-    state: 'succeeded',
-    appliedTransactionRef: input.formanceTransactionRef,
-  })
-  expect(rows.stripeEvents).toHaveLength(2)
-  expect(rows.stripeEvents).toEqual(expect.arrayContaining([
-    expect.objectContaining({
-      stripeEventId: firstEvent.stripeEventId,
-      status: 'applied',
-      appliedRef: input.formanceTransactionRef,
-    }),
-    expect.objectContaining({
-      stripeEventId: secondEvent.stripeEventId,
-      status: 'received',
-    }),
-  ]))
-  expect(rows.documents).toHaveLength(2)
-  expectFundingDocumentsForTransaction(rows.documents, input.formanceTransactionRef)
-}
-
-async function reserveBoundAm10Funding(
-  fixture: PublishedOwner,
-  slug: string,
-): Promise<Am10BoundFunding> {
-  if (reserve === undefined || bind === undefined) {
-    throw new Error('Account funding functions missing')
-  }
-  const commandRef = `account-funding:am10-${slug}`
-  const reserved = await fixture.owner.mutation(reserve, await withSourceWrite('billing', {
-    amountUnits: '5000000', environment: 'sandbox' as const,
-    expectedPolicyDigest: SANDBOX_POLICY_DIGEST,
-    commandRef, idempotencyKey: commandRef,
-    inputDigest: `sha256:${'a'.repeat(64)}`, successReturnRef: 'owner/credit',
-    operationKey: 'moneyAccountFunding:reserve', correlationId: commandRef,
-  }))
-  if (reserved.kind !== 'accepted' || reserved.command.metadataDigest === undefined) {
-    throw new Error('funding fixture not reserved')
-  }
-  const evidence = am10BindEvidence(reserved.command.metadataDigest, slug)
-  await expect(fixture.owner.mutation(bind, await withSourceWrite('billing', {
-    commandRef, evidence, operationKey: 'moneyAccountFunding:bind',
-    correlationId: commandRef,
-  }))).resolves.toMatchObject({ kind: 'accepted', command: { state: 'pending' } })
-  return {
-    commandRef,
-    idempotencyKey: reserved.command.idempotencyKey,
-    accountRef: fixture.canonicalAccountRef,
-    evidence,
-  }
-}
-
-type Am09HandoffEvidence = Readonly<{
-  externalRef: string
-  amount: { currency: 'AUD'; units: string; exponent: 6 }
-  status: 'pending'
-  evidenceRef: string
-  requestDigest: string
-  metadataDigest: string
-  checkoutSessionDigest: string
-  evidenceDigest: string
-  checkoutStatus: 'open' | 'complete' | 'expired'
-  paymentStatus: 'unpaid' | 'paid' | 'no_payment_required'
-  checkoutMode: 'hosted_page'
-  checkoutExpiresAt: number
-}>
-
-async function boundAm09AgentHandoff(
-  slug: string,
-  evidenceOverrides: Partial<Pick<Am09HandoffEvidence, 'checkoutStatus' | 'paymentStatus'>> = {},
-) {
-  if (
-    reserveAgentHandoff === undefined
-    || bindAgentHandoff === undefined
-    || readPayerSafeHandoff === undefined
-  ) {
-    throw new Error('Agent funding handoff functions missing')
-  }
-  const backend = convexTestWithMarketComponents()
-  const published = await publishedBusinessOwner(backend, `am09-${slug}`)
-  const agent = await issueBuyerAgent(backend, published.owner, `user_am09-${slug}`)
-  const checkoutExpiresAt = (Math.floor(Date.now() / 1000) + 3600) * 1000
-  const reserved = await backend.mutation(reserveAgentHandoff, await withSourceWrite('billing', {
-    principalAmountUnits: '5000000',
-    environment: 'sandbox' as const,
-    idempotencyKey: `am09-${slug}`,
-    successReturnRef: 'https://ae.test/fund/{CHECKOUT_SESSION_ID}',
-    cancelReturnRef: 'https://ae.test/fund/{CHECKOUT_SESSION_ID}',
-    checkoutExpiresAt,
-    agentPrincipal: agent,
-    operationKey: 'moneyAccountFunding:reserveAgentHandoff',
-    correlationId: `am09-${slug}`,
-  }))
-  if (reserved.kind !== 'accepted' || reserved.command.metadataDigest === undefined) {
-    throw new Error('handoff_not_reserved')
-  }
-  const evidence: Am09HandoffEvidence = {
-    externalRef: `cs_am09_${slug}`,
-    amount: { currency: 'AUD', exponent: 6, units: reserved.command.totalUnits },
-    status: 'pending',
-    evidenceRef: `stripe:checkout:cs_am09_${slug}`,
-    requestDigest: `sha256:${'2'.repeat(64)}`,
-    metadataDigest: reserved.command.metadataDigest,
-    checkoutSessionDigest: `sha256:${'3'.repeat(64)}`,
-    evidenceDigest: `sha256:${'4'.repeat(64)}`,
-    checkoutStatus: 'open',
-    paymentStatus: 'unpaid',
-    checkoutMode: 'hosted_page',
-    checkoutExpiresAt,
-    ...evidenceOverrides,
-  }
-  await expect(backend.mutation(bindAgentHandoff, await withSourceWrite('billing', {
-    commandRef: reserved.command.commandRef,
-    evidence,
-    agentPrincipal: agent,
-    operationKey: 'moneyAccountFunding:bindAgentHandoff',
-    correlationId: `am09-${slug}-bind`,
-  }))).resolves.toMatchObject({ kind: 'accepted', command: { externalRef: evidence.externalRef } })
-  return {
-    backend,
-    owner: published.owner,
-    commandRef: reserved.command.commandRef,
-    evidence,
-  }
-}
-
-function am09UnpaidCheckoutEvent(input: Readonly<{
-  stripeEventId: string
-  eventType: 'checkout.session.async_payment_failed'
-  status: 'failed'
-  commandRef: string
-  evidence: Am09HandoffEvidence
-}>) {
-  return {
-    kind: 'checkout' as const,
-    stripeEventId: input.stripeEventId,
-    eventType: input.eventType,
-    externalRef: input.evidence.externalRef,
-    sessionId: input.evidence.externalRef,
-    commandRef: input.commandRef,
-    checkoutSessionDigest: input.evidence.checkoutSessionDigest,
-    status: input.status,
-    amount: input.evidence.amount,
-    metadataDigest: input.evidence.metadataDigest,
-    payloadDigest: `sha256:${'f'.repeat(64)}`,
-    observedAt: 1_800_000_000_000,
-  }
-}
-
-async function patchFundingCommand(
-  backend: ConvexBackend,
-  commandRef: string,
-  patch: Readonly<{ state?: 'succeeded'; appliedTransactionRef?: string }>,
-): Promise<void> {
-  await backend.run(async (ctx) => {
-    const command = await ctx.db.query('moneyFundingCommands')
-      .withIndex('by_commandRef', (query) => query.eq('commandRef', commandRef)).unique()
-    if (command === null) throw new Error('funding command missing')
-    await ctx.db.patch(command._id, patch)
-  })
-}
-
-
-async function settleAm12RefundReorder(input: Readonly<{
-  slug: string
-  first: Readonly<{ stripeEventId: string; eventType: Exclude<Am12RefundEventType, 'refund.failed'> }>
-  second: Readonly<{ stripeEventId: string; eventType: Exclude<Am12RefundEventType, 'refund.failed'> }>
-  formanceTransactionRef: string
-  conflictTransactionRef?: string
-}>): Promise<void> {
-  const backend = convexTestWithWorkers({ pauseWorkpool: true })
-  const fixture = await publishedBusinessOwner(backend, `am12-${input.slug}`)
-  const commandRef = `account-funding:am12-${input.slug}`
-  const paymentId = `pi_am12_${input.slug}`
-  const refundId = 're_am12_one'
-  await insertSettledFunding(backend, {
-    accountRef: fixture.canonicalAccountRef,
-    actorPrincipalRef: fixture.canonicalPrincipalRef,
-    commandRef,
-    paymentId,
-  })
-  const bookingKey = `funding-reversal:${refundId}`
-  const firstEvent = refundEvent({
-    stripeEventId: input.first.stripeEventId,
-    eventType: input.first.eventType,
-    refundId,
-    paymentId,
-    payloadDigest: `sha256:${'a'.repeat(64)}`,
-    observedAt: 1_800_000_001_100,
-  })
-  const secondEvent = refundEvent({
-    stripeEventId: input.second.stripeEventId,
-    eventType: input.second.eventType,
-    refundId,
-    paymentId,
-    payloadDigest: `sha256:${'b'.repeat(64)}`,
-    observedAt: 1_800_000_001_200,
-  })
-  const firstArgs = await am12RefundArgs(firstEvent)
-  const secondArgs = await am12RefundArgs(secondEvent)
-  const firstPrepared = await fixture.owner.mutation(
-    internal.moneyAccountFunding.prepareVerifiedEvent, firstArgs,
-  )
-  expect(firstPrepared).toMatchObject({
-    kind: 'prepared',
-    bookingKind: 'reversal',
-    booking: { idempotencyKey: bookingKey },
-  })
-  const secondPrepared = await fixture.owner.mutation(
-    internal.moneyAccountFunding.prepareVerifiedEvent, secondArgs,
-  )
-  expect(secondPrepared).toMatchObject({
-    kind: 'prepared',
-    bookingKind: 'reversal',
-    booking: { idempotencyKey: bookingKey },
-  })
-  const preparedRows = await fundingRows(backend, commandRef)
-  expect(preparedRows.stripeEvents).toHaveLength(2)
-  expect(preparedRows.stripeEvents).toEqual(expect.arrayContaining([
-    expect.objectContaining({ stripeEventId: firstEvent.stripeEventId, status: 'received' }),
-    expect.objectContaining({ stripeEventId: secondEvent.stripeEventId, status: 'received' }),
-  ]))
-  await expect(fixture.owner.mutation(internal.moneyAccountFunding.finalizeVerifiedRefund, {
-    ...firstArgs, formanceTransactionRef: input.formanceTransactionRef,
-  })).resolves.toEqual({
-    kind: 'accepted', status: 'applied', appliedRef: input.formanceTransactionRef,
-  })
-  expect((await fundingRows(backend, commandRef)).documents).toEqual([
-    expect.objectContaining({
-      kind: 'adjustment',
-      sourceTransactionRefs: [input.formanceTransactionRef],
-    }),
-  ])
-  await expect(fixture.owner.mutation(internal.moneyAccountFunding.finalizeVerifiedRefund, {
-    ...secondArgs, formanceTransactionRef: input.formanceTransactionRef,
-  })).resolves.toEqual({
-    kind: 'accepted', status: 'replayed', appliedRef: input.formanceTransactionRef,
-  })
-  expect((await fundingRows(backend, commandRef)).documents).toHaveLength(1)
-  expect((await fundingRows(backend, commandRef)).command).toMatchObject({
-    state: 'reversed',
-    reversalTransactionRef: input.formanceTransactionRef,
-  })
-  if (input.conflictTransactionRef !== undefined) {
-    await expect(fixture.owner.mutation(internal.moneyAccountFunding.finalizeVerifiedRefund, {
-      ...secondArgs, formanceTransactionRef: input.conflictTransactionRef,
-    })).resolves.toEqual({ kind: 'refused', code: 'funding_idempotency_conflict', retryable: false })
-  }
-}
 

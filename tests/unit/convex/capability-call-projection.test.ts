@@ -397,4 +397,260 @@ describe('Account Call projection', () => {
     })
 
   }, 30_000)
+
+  it('reconciles Call records across Operator Logs, Usage, Spend, and Provider obligations without drift', async () => {
+    const backend = convexTestWithMarketComponents()
+    const fixture = await publishedBusinessOwner(backend, 'cross-surface-reconcile')
+    const operation = buildDevelopmentPublishedToolEvidence().tool
+    const principalRef = 'principal:cross-surface-reconcile'
+    const periodStartAt = Date.UTC(2026, 8, 10)
+    const periodEndAt = Date.UTC(2026, 8, 11)
+    const settledAt = periodStartAt + 100
+    const uncertainAt = periodStartAt + 200
+    const settledCallRef = 'operation-invocation:cross-surface-settled'
+    const uncertainCallRef = 'operation-invocation:cross-surface-uncertain'
+    const settledReceipt = {
+      commercialModel: 'account_aud' as const,
+      receiptRef: 'receipt:cross-surface-settled',
+      state: 'settled' as const,
+      buyerCharge: { currency: 'AUD', units: '2500000', exponent: 6 },
+      serviceFee: { currency: 'AUD', units: '0', exponent: 6 },
+      totalBuyerCharge: { currency: 'AUD', units: '2500000', exponent: 6 },
+      providerObligation: {
+        amount: { currency: 'USDC', units: '1500000', exponent: 6 },
+        settlementMethod: 'managed_x402' as const,
+        payoutEligible: false as const,
+      },
+      providerSettlement: {
+        amount: { currency: 'USDC', units: '1500000', exponent: 6 },
+        network: 'eip155:84532' as const,
+        asset: '0x036CbD53842c5426634e7929541eC2318f3dCF7e' as const,
+        transactionHash: '0xsettled-cross-surface',
+      },
+      priceDigest: operation.priceDigest,
+      transactionRef: 'journal:call-reservation:cross-surface-settled',
+      accountingTransactionRefs: ['journal:call-reservation:cross-surface-settled'],
+      refundState: 'not_applicable' as const,
+      lossState: 'none' as const,
+      evidenceHash: 'sha256:cross-surface-settled',
+      issuedAt: new Date(settledAt).toISOString(),
+    }
+    const uncertainProviderAmount = { currency: 'USDC', units: '1000000', exponent: 6 }
+    const uncertainReceipt = {
+      commercialModel: 'account_aud' as const,
+      receiptRef: 'receipt:cross-surface-uncertain',
+      state: 'reconciliation_required' as const,
+      buyerCharge: { currency: 'AUD', units: '1000000', exponent: 6 },
+      serviceFee: { currency: 'AUD', units: '0', exponent: 6 },
+      totalBuyerCharge: { currency: 'AUD', units: '1000000', exponent: 6 },
+      providerObligation: {
+        amount: uncertainProviderAmount,
+        settlementMethod: 'managed_x402' as const,
+        payoutEligible: false as const,
+      },
+      providerSettlement: {
+        amount: uncertainProviderAmount,
+        network: 'eip155:84532' as const,
+        asset: '0x036CbD53842c5426634e7929541eC2318f3dCF7e' as const,
+      },
+      priceDigest: operation.priceDigest,
+      transactionRef: 'journal:call-reservation:cross-surface-uncertain',
+      accountingTransactionRefs: ['journal:call-reservation:cross-surface-uncertain'],
+      refundState: 'unknown' as const,
+      lossState: 'unknown' as const,
+      evidenceHash: 'sha256:cross-surface-uncertain',
+      issuedAt: new Date(uncertainAt).toISOString(),
+    }
+    const callBase = {
+      principalId: principalRef,
+      ownerId: fixture.canonicalAccountRef,
+      credentialId: 'credential:cross-surface-reconcile',
+      applicationRef: 'application:cross-surface-reconcile',
+      toolRef: operation.operationId,
+      environment: 'sandbox' as const,
+      grantRef: 'grant:cross-surface-reconcile',
+      grantGeneration: 1,
+      policyDigest: 'sha256:grant-cross-surface',
+      grantExpiresAt: periodEndAt + 60_000,
+      toolJson: JSON.stringify(operation),
+      inputJson: '{}',
+      inputDigest: 'sha256:input-cross-surface',
+      requestDigest: 'sha256:request-cross-surface',
+      quoteRef: 'operation-commitment:cross-surface',
+    }
+    await backend.run(async (ctx) => {
+      await ctx.db.insert('capabilityCalls', {
+        ...callBase,
+        callRef: settledCallRef,
+        idempotencyKey: 'idempotency:cross-surface-settled',
+        state: 'completed',
+        dispatchState: 'completed',
+        result: {
+          kind: 'completed',
+          callRef: settledCallRef,
+          toolRef: operation.operationId,
+          output: { ok: true },
+          evidenceHash: settledReceipt.evidenceHash,
+          receipt: settledReceipt,
+        },
+        evidenceHash: settledReceipt.evidenceHash,
+        attemptRef: 'operation-attempt:cross-surface-settled',
+        createdAt: settledAt - 50,
+        updatedAt: settledAt,
+      })
+      await ctx.db.insert('capabilityCalls', {
+        ...callBase,
+        callRef: uncertainCallRef,
+        idempotencyKey: 'idempotency:cross-surface-uncertain',
+        state: 'reconciliation_required',
+        dispatchState: 'reconciliation_required',
+        result: {
+          kind: 'reconciliation_required',
+          callRef: uncertainCallRef,
+          toolRef: operation.operationId,
+          evidence: {
+            attemptRef: 'operation-attempt:cross-surface-uncertain',
+            effectGeneration: 1,
+            requiredAt: uncertainReceipt.issuedAt,
+            retry: 'reconcile_before_retry',
+            evidenceSource: 'test:cross-surface-reconcile',
+          },
+          receipt: uncertainReceipt,
+        },
+        evidenceHash: uncertainReceipt.evidenceHash,
+        attemptRef: 'operation-attempt:cross-surface-uncertain',
+        createdAt: uncertainAt - 50,
+        updatedAt: uncertainAt,
+      })
+      await ctx.db.insert('moneyProviderObligations', {
+        obligationRef: `provider-obligation:${settledCallRef}`,
+        callRef: settledCallRef,
+        toolRef: operation.operationId,
+        providerRef: operation.identity.businessId,
+        buyerAccountRef: fixture.canonicalAccountRef,
+        buyerAsset: 'AUD',
+        buyerExponent: 6,
+        buyerAmountUnits: '2500000',
+        providerAsset: 'USDC',
+        providerExponent: 6,
+        providerAmountUnits: '1500000',
+        settlementMethod: 'managed_x402',
+        state: 'settled',
+        payoutEligibility: 'ineligible_x402',
+        evidenceRefs: ['evidence:cross-surface-settled'],
+        createdAt: settledAt - 50,
+        updatedAt: settledAt,
+        settledAt,
+      })
+    })
+
+    await expect(backend.mutation(internal.capabilityCallProjections.rebuild, {
+      paginationOpts: { numItems: 100, cursor: null },
+    })).resolves.toMatchObject({ isDone: true, rebuilt: 2 })
+
+    const listOwnerCalls = anyApi.capabilityCallProjections?.listOwnerCalls
+    if (listOwnerCalls === undefined) throw new Error('Call history query missing')
+    const activityPage = await fixture.owner.query(listOwnerCalls, {
+      principalRef,
+      paginationOpts: { numItems: 50, cursor: null },
+    })
+    expect(activityPage.page).toHaveLength(2)
+    expect(activityPage.page.find((call: { callRef: string }) => call.callRef === settledCallRef))
+      .toMatchObject({
+        paymentState: 'settled',
+        deliveryState: 'delivered',
+        audAmountUnits: '2500000',
+        providerAmountUnits: '1500000',
+      })
+    expect(activityPage.page.find((call: { callRef: string }) => call.callRef === uncertainCallRef))
+      .toMatchObject({
+        paymentState: 'unknown',
+        deliveryState: 'unknown',
+        audAmountUnits: '1000000',
+        recoveryRef: uncertainCallRef,
+      })
+
+    const readOwnerAgentReadback = anyApi.capabilityCallProjections?.readOwnerAgentReadback
+    if (readOwnerAgentReadback === undefined) throw new Error('Owner Agent readback query missing')
+    const combinedReadback = await fixture.owner.query(readOwnerAgentReadback, {
+      principalRef,
+      periodStartAt,
+      periodEndAt,
+      paginationOpts: { numItems: 50, cursor: null },
+    })
+    expect(combinedReadback.usage).toMatchObject({
+      kind: 'available',
+      callCountUnits: '2',
+      completedCountUnits: '1',
+      outcomeUnknownCountUnits: '1',
+      amountCoverage: 'incomplete',
+    })
+    expect(combinedReadback.usage).not.toHaveProperty('settledSpendUnits')
+
+    const settledOnlyReadback = await fixture.owner.query(readOwnerAgentReadback, {
+      principalRef,
+      periodStartAt,
+      periodEndAt: settledAt + 1,
+      paginationOpts: { numItems: 50, cursor: null },
+    })
+    expect(settledOnlyReadback.usage).toMatchObject({
+      kind: 'available',
+      callCountUnits: '1',
+      amountCoverage: 'complete',
+      settledSpendUnits: '2500000',
+    })
+
+    const obligations = await backend.run(async (ctx) => {
+      const settled = await ctx.db.query('moneyProviderObligations')
+        .withIndex('by_callRef', (index) => index.eq('callRef', settledCallRef))
+        .unique()
+      const uncertain = await ctx.db.query('moneyProviderObligations')
+        .withIndex('by_callRef', (index) => index.eq('callRef', uncertainCallRef))
+        .unique()
+      return { settled, uncertain }
+    })
+    expect(obligations.settled).toEqual(expect.objectContaining({
+      obligationRef: `provider-obligation:${settledCallRef}`,
+      state: 'settled',
+      buyerAmountUnits: '2500000',
+      providerAmountUnits: '1500000',
+      payoutEligibility: 'ineligible_x402',
+      settledAt,
+    }))
+    expect(obligations.uncertain).toBeNull()
+
+    const projectionsBeforeRebuild = await backend.run(async (ctx) => await ctx.db
+      .query('capabilityCallProjections')
+      .withIndex('by_accountRef_and_createdAt', (index) => index.eq('accountRef', fixture.canonicalAccountRef))
+      .collect())
+    expect(projectionsBeforeRebuild).toHaveLength(2)
+
+    await expect(backend.mutation(internal.capabilityCallProjections.rebuild, {
+      paginationOpts: { numItems: 100, cursor: null },
+    })).resolves.toMatchObject({ isDone: true, rebuilt: 2 })
+    await expect(backend.mutation(internal.capabilityCallProjections.rebuild, {
+      paginationOpts: { numItems: 100, cursor: null },
+    })).resolves.toMatchObject({ isDone: true, rebuilt: 2 })
+
+    const projectionsAfterRebuild = await backend.run(async (ctx) => await ctx.db
+      .query('capabilityCallProjections')
+      .withIndex('by_accountRef_and_createdAt', (index) => index.eq('accountRef', fixture.canonicalAccountRef))
+      .collect())
+    expect(projectionsAfterRebuild).toHaveLength(2)
+    expect(projectionsAfterRebuild.map((row) => ({
+      callRef: row.callRef,
+      audAmountUnits: row.audAmountUnits,
+      providerAmountUnits: row.providerAmountUnits,
+      paymentState: row.paymentState,
+      deliveryState: row.deliveryState,
+      recoveryRef: row.recoveryRef,
+    }))).toEqual(projectionsBeforeRebuild.map((row) => ({
+      callRef: row.callRef,
+      audAmountUnits: row.audAmountUnits,
+      providerAmountUnits: row.providerAmountUnits,
+      paymentState: row.paymentState,
+      deliveryState: row.deliveryState,
+      recoveryRef: row.recoveryRef,
+    })))
+  })
 })

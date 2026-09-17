@@ -106,6 +106,7 @@ export function gatewayDetail(code: string): string {
     case 'result_invalid':
     case 'call_result_invalid':
       return 'The Call service returned an invalid result.'
+    case 'invocation_not_found':
     case 'call_not_found':
       return 'The Call was not found.'
     default:

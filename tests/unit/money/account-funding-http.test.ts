@@ -55,6 +55,20 @@ function command(overrides: Record<string, unknown> = {}) {
 }
 
 describe('Account AUD funding HTTP boundary', () => {
+  it('refuses live Stripe configuration when deployment is hosted_alpha', async () => {
+    await expect(readAccountFundingConstraintsThroughSource({
+      env: {
+        AE_SERVICE_MODE: 'hosted_alpha',
+        STRIPE_SECRET_KEY: 'sk_live_secret_key_material',
+        STRIPE_WEBHOOK_SECRET: 'whsec_secret',
+      },
+    })).resolves.toMatchObject({
+      kind: 'refused',
+      code: 'stripe_setup_required',
+      retryable: false,
+    })
+  })
+
   it('reads display constraints from the same environment selected for funding admission', async () => {
     const constraints = {
       kind: 'available' as const,

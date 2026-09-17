@@ -9,8 +9,9 @@ import type {
   ToolComparisonFact,
   ToolComparisonValue,
   ToolDetailResult,
-  ToolSearchFilters,
-  ToolSearchResult,
+} from "./tool-detail-compare";
+import type { ToolSearchFilters, ToolSearchResult } from "./tool-search";
+import type {
   PublicDataUsePolicy,
   PublicEffectPolicy,
   PublicToolAvailability,
@@ -20,7 +21,7 @@ import type {
   PublicToolPrice,
   PublicToolPriceEvidence,
   PublicRecoveryPolicy,
-} from "../tool-projection";
+} from "./tool-projection-types";
 import type {
   DeepWritable,
   ToolCompareWireResult,
@@ -156,7 +157,16 @@ export function serializeToolDescriptor(
             currency: tool.catalogPrice.currency,
           },
         }),
-  };
+    ...(tool.canonical === undefined
+      ? {}
+      : {
+          canonical: {
+            providerHost: tool.canonical.providerHost,
+            slug: tool.canonical.slug,
+            path: tool.canonical.path,
+          },
+        }),
+  } satisfies ToolSurfaceWireDescriptor;
 }
 function serializeInputExamples(
   examples: readonly CapabilityInputExample[],

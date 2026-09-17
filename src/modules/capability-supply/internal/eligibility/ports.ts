@@ -1,6 +1,6 @@
 import type { CapabilityBindingRow } from '../binding'
-import type { CapabilityOfferingOrigin } from '../../public'
-import type { PublicToolRef } from '../../public'
+import type { CapabilityOfferingOrigin } from '../registration-schema'
+import type { PublicToolRef } from '@/modules/common/tool-ref'
 import type { ProviderConnection } from '../../provider-connection'
 import type { CapabilityContractRef, CapabilityOfferingRow } from '../offering'
 import type { CapabilityPublicationLifecycleRow } from '../publication'

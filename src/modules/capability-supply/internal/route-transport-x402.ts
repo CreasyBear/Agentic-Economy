@@ -11,7 +11,7 @@ import {
 import {
   verifyX402SignedReceipt,
 } from './x402-offer-receipt'
-import type { RouteTransportRuntime } from './route-transport-call'
+import type { RouteTransportRuntime } from './route-transport-runtime-types'
 import type {
   ProviderConnectionAuthorityValidationResult,
   RouteTransportInvocation,

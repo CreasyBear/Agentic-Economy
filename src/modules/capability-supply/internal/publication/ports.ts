@@ -1,11 +1,11 @@
 import type { ExactCapabilityContractResult } from '@/modules/capability-contract-registry/public'
 import type { CapabilityContractRef } from '@/modules/capability-contract/public'
+import type { PublicToolRef } from '@/modules/common/tool-ref'
+import type { CapabilityOfferingOrigin } from '../registration-schema'
 import type {
-  CapabilityOfferingOrigin,
   CapabilityPublicationSource,
   CapabilityPublicationSourceSelector,
-  PublicToolRef,
-} from '@/modules/capability-supply/public'
+} from '../publication-importer-types'
 import type { CapabilityConnectionAuthoritySnapshot } from '../binding/registration'
 import type {
   RotateCapabilityTransportBindingAuthorityInput,

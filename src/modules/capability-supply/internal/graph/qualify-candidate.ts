@@ -2,10 +2,7 @@ import type { CapabilityContractRef } from '@/modules/capability-contract/public
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 import { uniqueSorted } from '@/modules/common/unique-sorted'
-import {
-  capabilityToolId,
-  createPublicToolRef,
-} from '@/modules/capability-supply/public'
+import { capabilityToolId, createPublicToolRef } from '../public-tool-ref'
 import {
   compareExactAmounts,
   displayPriceFromPricingConfig,

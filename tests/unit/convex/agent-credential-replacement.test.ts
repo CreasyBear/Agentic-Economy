@@ -23,8 +23,8 @@ import {
 import { createAgentAccessGrant, normalizeStoredAgentAccessGrant } from '@/modules/agent-access/policy'
 import { internal } from '../../../convex/_generated/api'
 import { resolveCanonicalAgentBinding } from '../../../convex/authorityBoundary'
-import type { ConvexFixtureBackend } from '../../helpers/convex-fixtures'
-import { convexTestWithWorkers, publishedBusinessOwner } from '../../helpers/convex-fixtures'
+import { convexTestWithWorkers, publishedBusinessOwner, type ConvexFixtureBackend } from '../../helpers/convex-fixtures'
+import { issueBuyerAgent as registerIssuedBuyerAgent } from '../../helpers/issued-buyer-agent'
 
 const SERVICE_KEY = 'agent-credential-replacement-test-key-32-bytes'
 const REGISTER_OPERATION = 'agentAccessPrincipals.registerIssuedAgentBindingForServer'
@@ -32,11 +32,6 @@ const NOW = 10_000
 
 type RegisterResult = Readonly<Record<string, unknown>>
 
-const registerBinding = makeFunctionReference<
-  'mutation',
-  IssuedAgentBindingRegistration & Readonly<{ serviceAuth: CustomerRequestServiceAssertion }>,
-  RegisterResult
->('agentAccessPrincipals:registerIssuedAgentBindingForServer')
 const prepareReplacement = makeFunctionReference<
   'mutation',
   AgentCredentialReplacementRegistration & Readonly<{ serviceAuth: CustomerRequestServiceAssertion }>,
@@ -92,49 +87,23 @@ async function issueBuyerAgent(
   owner: ReturnType<ConvexFixtureBackend['withIdentity']>,
   subject: string,
 ): Promise<IssuedBuyer> {
-  const issuanceKey = `buyer-${subject}`
-  const input: IssuedAgentBindingRegistration = {
-    issuanceKey,
-    grantRef: issuedAgentGrantRef(subject, issuanceKey),
-    credentialId: `credential:${subject}`,
-    displayName: 'Buyer credential rotation fixture',
-    applicationRef: 'agentic-economy',
-    environment: 'sandbox',
-    scopes: [MARKET_TOOLS_CALL_SCOPE, CUSTOMER_REQUEST_SPENDING_POLICY_SCOPE],
-    authorityMode: 'spending_policy',
-    toolAccess: 'all_admitted',
-    toolRefs: [],
-    spendingPolicy: defaultSandboxAgentAccessPolicy({ currency: 'AUD', exponent: 6 }),
+  return await registerIssuedBuyerAgent(backend, owner, subject, {
+    serviceKey: SERVICE_KEY,
+    registerOperation: REGISTER_OPERATION,
+    issuanceKey: `buyer-${subject}`,
     createdAt: NOW,
     expiresAt: NOW + 600_000,
-  }
-  const registered = await owner.mutation(registerBinding, {
-    ...input,
-    serviceAuth: await serviceAssertion(REGISTER_OPERATION, {
-      ...input,
-      scopes: [...input.scopes],
-      toolRefs: [...input.toolRefs],
-    }),
-  })
-  if (registered.kind !== 'recorded' && registered.kind !== 'replayed') {
-    throw new Error(`buyer_binding_failed:${String(registered.kind)}`)
-  }
-  const stored = await backend.run(async (ctx) => await ctx.db.query('agentAccessPrincipals')
-    .withIndex('by_credentialId', (query) => query.eq('credentialId', input.credentialId))
-    .unique())
-  if (stored === null) throw new Error('buyer_principal_missing')
-  return {
-    input,
-    principal: {
-      principalId: stored.principalId,
-      ownerId: stored.ownerId,
-      credentialId: stored.credentialId,
-      applicationRef: stored.applicationRef,
-      environment: stored.environment,
-      scopes: [...stored.scopes],
-      authorityMode: stored.authorityMode,
+    registration: {
+      displayName: 'Buyer credential rotation fixture',
+      applicationRef: 'agentic-economy',
+      environment: 'sandbox',
+      scopes: [MARKET_TOOLS_CALL_SCOPE, CUSTOMER_REQUEST_SPENDING_POLICY_SCOPE],
+      authorityMode: 'spending_policy',
+      toolAccess: 'all_admitted',
+      toolRefs: [],
+      spendingPolicy: defaultSandboxAgentAccessPolicy({ currency: 'AUD', exponent: 6 }),
     },
-  }
+  })
 }
 
 async function readGrant(backend: ConvexFixtureBackend, grantRef: string) {

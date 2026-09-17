@@ -1,6 +1,7 @@
 import { type Infer } from 'convex/values'
 import type { Doc } from '../../_generated/dataModel'
 import type { MutationCtx } from '../../_generated/server'
+import type { AgentAccessPrincipal } from '@/modules/agent-access/agent-access'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { isBoundedJsonValue } from '@/modules/capability-contract/public'
 import { isRecord } from '@/modules/common/is-record'
@@ -182,4 +183,35 @@ export function purchaseIdentityMatches(
 ): row is CallRow {
   return cancellationIdentityMatches(row, args)
     && row.idempotencyKey === args.idempotencyKey
+}
+
+// A Call is identified by the Principal tuple that survives a credential
+// rotation. The stored credentialId stays on the row as effect evidence.
+export type CallIdentityArgs = Readonly<{
+  principalId: string
+  ownerId: string
+  applicationRef: string
+  environment: 'sandbox' | 'production'
+}>
+
+export function callIdentity(principal: AgentAccessPrincipal): CallIdentityArgs {
+  return {
+    principalId: principal.principalId,
+    ownerId: principal.ownerId,
+    applicationRef: principal.applicationRef,
+    environment: principal.environment,
+  }
+}
+
+export function callIdentityMatches<T extends CallIdentityArgs>(
+  row: T | null,
+  identity: CallIdentityArgs,
+): row is T {
+  if (row === null) return false
+  return [
+    row.principalId === identity.principalId,
+    row.ownerId === identity.ownerId,
+    row.applicationRef === identity.applicationRef,
+    row.environment === identity.environment,
+  ].every(Boolean)
 }

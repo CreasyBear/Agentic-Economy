@@ -244,6 +244,7 @@ export function ownerRecoveryContext(
   const runAction = vi.fn(async (_reference: unknown, _args: unknown) => workerResult)
   const runQuery = vi.fn(async (reference: unknown) => {
     if (functionPath(reference) === 'capabilityCalls:readOwnerRecovery') return recoveryRow
+    if (functionPath(reference) === 'capabilityCalls:readPurchaseResolution') return null
     if (functionPath(reference) === 'capabilityCalls:readOwnerReceiptContext') return {
       purpose: null,
       agent: { principalRef: principal.principalId, applicationRef: principal.applicationRef, currentDisplayName: null },
@@ -270,6 +271,7 @@ export function recoveryContext(options: Readonly<{
   const runQuery = vi.fn(async (reference: unknown, queryArgs: unknown) => {
     switch (functionPath(reference)) {
       case 'capabilityCalls:readOwnerRecovery': return options.row
+      case 'capabilityCalls:readPurchaseResolution': return null
       case 'agentAccessPolicy:readActiveGrant': {
         const requestedGeneration = typeof queryArgs === 'object'
           && queryArgs !== null
@@ -512,7 +514,7 @@ export function expectAgentRecoverWorkerAction(
 }
 
 export function expectReadOwnerRecoveryQuery(context: ReturnType<typeof recoveryContext>) {
-  expect(context.runQuery).toHaveBeenCalledTimes(1)
+  expect(context.runQuery).toHaveBeenCalled()
   expect(functionPath(context.runQuery.mock.calls[0]?.[0])).toBe('capabilityCalls:readOwnerRecovery')
 }
 

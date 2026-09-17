@@ -12,10 +12,8 @@ import {
   validateX402PaymentRequired,
   type X402ValidatedPaymentRequired,
 } from "./x402-payment-signer";
-import {
-  admitProviderSchema,
-  type SchemaDereferencer,
-} from "./admit-provider-schema";
+import { admitProviderSchema } from "./admit-provider-schema";
+import type { SchemaDereferencer } from "./admit-provider-schema-types";
 import { publicationMaterialContainsCredential } from "./publication/source";
 import { validPublicHttpsEndpoint } from "./transport-adapters";
 import {

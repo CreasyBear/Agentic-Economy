@@ -29,6 +29,7 @@ graphify-out/
 !/.claude/settings.json
 /agent/
 /skills-lock.json
+/.agent-skills.lock
 /PAPERCUTS.md
 /CLAUDE.md
 /RULES.MD

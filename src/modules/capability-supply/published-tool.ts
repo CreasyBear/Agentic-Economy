@@ -14,18 +14,22 @@ import type { StableHashValue } from '@/modules/common/stable-hash'
 import { isRecord } from '@/modules/common/is-record'
 import { degradeBackend } from '@/lib/observability/degrade-backend'
 
+import { admitRegisteredTransport } from './internal/transport-adapters'
 import {
-  admitRegisteredTransport,
   capabilityBindingRegistrationHash,
-  capabilityToolId,
   capabilityOfferingRegistrationHash,
-  connectionAuthoritySnapshotIsValid,
-  createPublicToolRef,
   type AdmittedTransportMaterial,
-  type CapabilityConnectionAuthoritySnapshot,
   type CapabilityOfferingRegistration,
   type CapabilityTransportBindingRegistration,
-} from './public'
+} from './internal/registration-schema'
+import {
+  capabilityToolId,
+  createPublicToolRef,
+} from './internal/public-tool-ref'
+import {
+  connectionAuthoritySnapshotIsValid,
+  type CapabilityConnectionAuthoritySnapshot,
+} from './internal/binding'
 import type { SuppliedCandidateQualification } from './server'
 
 export type PublishedToolUsageObservation = Readonly<{

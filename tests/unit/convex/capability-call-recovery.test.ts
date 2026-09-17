@@ -185,7 +185,12 @@ describe('capability operation recovery Convex adapters', () => {
 
   it('retains readable status when optional owner context cannot be read', async () => {
     const ctx = ownerRecoveryContext(ownerIdentity, foundWorkerResult('reconciliation_required'))
-    ctx.runQuery.mockResolvedValueOnce(row).mockRejectedValueOnce(new Error('source unavailable'))
+    ctx.runQuery.mockImplementation(async (reference: unknown) => {
+      if (functionPath(reference) === 'capabilityCalls:readOwnerRecovery') return row
+      if (functionPath(reference) === 'capabilityCalls:readPurchaseResolution') return null
+      if (functionPath(reference) === 'capabilityCalls:readOwnerReceiptContext') throw new Error('source unavailable')
+      throw new Error(`unexpected_owner_query:${functionPath(reference)}`)
+    })
     await expect(readOwnerCallStatusHandler(ctx, { callRef })).resolves.toMatchObject({
       kind: 'found', callRef, state: 'reconciliation_required', ownerContext: null,
     })

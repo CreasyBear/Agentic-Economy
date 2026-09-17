@@ -1,5 +1,7 @@
 import { v, type Infer } from 'convex/values'
 
+import { resolveServiceMode, serviceModeAllowsEnvironment } from '@/lib/deployment/service-mode'
+
 import type { Doc } from './_generated/dataModel'
 import type { MutationCtx, QueryCtx } from './_generated/server'
 import { env, internalMutation, internalQuery, mutation, query } from './_generated/server'
@@ -319,6 +321,9 @@ async function reserveFundingHandler(
   ctx: MutationCtx,
   args: ReserveFundingArgs,
 ): Promise<FundingResult> {
+  if (!serviceModeAllowsEnvironment(resolveServiceMode(env), args.environment)) {
+    return refused('environment_mismatch')
+  }
   const sourceWrite = await requireSourceWrite(ctx, args, 'billing')
   if (sourceWrite.kind === 'rejected') return refused('source_write_denied')
   if (!POSITIVE_UNITS.test(args.amountUnits)
@@ -422,6 +427,9 @@ async function reserveAgentHandoffHandler(
   ctx: MutationCtx,
   args: Infer<typeof reserveAgentHandoffArgsValue>,
 ): Promise<FundingResult> {
+  if (!serviceModeAllowsEnvironment(resolveServiceMode(env), args.environment)) {
+    return refused('environment_mismatch')
+  }
   const admission = await admitAgentHandoff(ctx, args)
   const callerKey = args.idempotencyKey.trim()
   if (admission === null) return refused('billing_identity_missing')

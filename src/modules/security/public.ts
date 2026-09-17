@@ -59,6 +59,7 @@ export const AdminActionValues = [
   'register_capability_supply',
   'control_kernel_incidents',
   'manage_commercial_policy',
+  'suppress_business',
 ] as const
 export type AdminAction = (typeof AdminActionValues)[number]
 

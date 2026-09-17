@@ -1,5 +1,5 @@
 import { bearerChallenge } from '@/lib/http/oauth-challenge'
-import { gatewayFailureToProblem } from '@/lib/errors'
+import { gatewayFailureToProblem, operationInvokeResultToProblem } from '@/lib/errors'
 import { readBoundedRequestText } from '@/lib/server/bounded-request-body'
 import { isJsonContentType } from '@/lib/server/json-content-type'
 import {
@@ -635,7 +635,16 @@ export async function handleCallStatusGet(
           detail: gatewayDetail(failure.code),
         }), correlationId)
       }
+      const refusalProblem = projected.data.kind === 'refused'
+        ? operationInvokeResultToProblem(projected.data)
+        : null
       telemetry(recoveryTelemetryForResult(projected.data, parsed.data.callRef))
+      if (refusalProblem !== null) {
+        return withRequestCorrelationHeader(problem({
+          ...refusalProblem,
+          detail: gatewayDetail(refusalProblem.code),
+        }), correlationId)
+      }
       return withRequestCorrelationHeader(response(projected.data, 200, callJsonResponseHeaders), correlationId)
     } catch (error) {
       const mapped = gatewayErrorCode(error, 'call_runtime_unavailable')

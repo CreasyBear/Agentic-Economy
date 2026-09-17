@@ -22,6 +22,7 @@ import {
   type StripeMoneyMode,
   type StripeMoneyProviderConfig,
 } from '@/lib/server/stripe-money-provider'
+import { expectedStripeMoneyModeForDeployment } from '@/lib/server/stripe-money-provider-config'
 import { idempotencyKeySchema } from '@/modules/common/action'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
@@ -306,21 +307,28 @@ export async function readAccountFundingConstraintsThroughSource(
 export async function readPlatformFundingConstraintsThroughSource(
   runtime: AccountFundingServerRuntime = {},
 ): Promise<PlatformFundingConstraints> {
+  const environment = fundingEnvironmentFromRuntime(runtime)
+  if (isMoneyRefusal(environment)) return environment
   return await callPublicSourceQuery(readPlatformFundingConstraintsQuery, {
-    environment: fundingEnvironmentFromRuntime(runtime),
+    environment,
     now: Date.now(),
   })
 }
 
 function fundingEnvironmentFromRuntime(
   runtime: AccountFundingServerRuntime,
-): FundingEnvironment {
+): FundingEnvironment | MoneyRefusal {
   if (runtime.mode !== undefined) return runtime.mode === 'live' ? 'production' : 'sandbox'
   if (runtime.config !== undefined) {
     return runtime.config.mode === 'live' ? 'production' : 'sandbox'
   }
-  const config = readStripeMoneyProviderConfig(runtime.env ?? process.env)
-  if (isMoneyRefusal(config)) return 'sandbox'
+  const deploymentEnv = runtime.env ?? process.env
+  const config = readStripeMoneyProviderConfig(deploymentEnv)
+  if (isMoneyRefusal(config)) {
+    // If Stripe provider config is not fully configured in this runtime/environment,
+    // platform public constraints default to sandbox.
+    return 'sandbox'
+  }
   return config.mode === 'live' ? 'production' : 'sandbox'
 }
 
@@ -475,12 +483,20 @@ async function markFundingOutcomeUnknown(
 function createAccountFundingProvider(
   runtime: AccountFundingServerRuntime,
 ): Readonly<{ provider: CreditPaymentPort; environment: FundingEnvironment }> | MoneyRefusal {
+  const deploymentEnv = runtime.env ?? process.env
+  const expectedMode = expectedStripeMoneyModeForDeployment(
+    deploymentEnv,
+    runtime.mode ?? runtime.config?.mode,
+  )
   if (runtime.provider !== undefined) {
     const mode = runtime.mode ?? runtime.config?.mode ?? 'test'
+    if (expectedMode !== undefined && mode !== expectedMode) {
+      return refusal('stripe_setup_required', false)
+    }
     return { provider: runtime.provider, environment: mode === 'live' ? 'production' : 'sandbox' }
   }
   const config = runtime.config
-    ?? readStripeMoneyProviderConfig(runtime.env ?? process.env, runtime.mode)
+    ?? readStripeMoneyProviderConfig(deploymentEnv, expectedMode)
   if (isMoneyRefusal(config)) return config
   const provider = createStripeMoneyProvider({
     config,

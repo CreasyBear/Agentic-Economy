@@ -10,7 +10,7 @@ import {
 } from '@/modules/money/public'
 import type { ExactAmount } from '@/modules/money/public'
 import { isProviderConnectionCredentialRef } from '../provider-connection'
-import type { RouteTransportRuntime } from './route-transport-call'
+import type { RouteTransportRuntime } from './route-transport-runtime-types'
 import type { RouteTransportInvocation } from './route-transport-invocation'
 import {
   decodeX402PaymentRequiredHeader,
@@ -28,11 +28,11 @@ import {
   type RouteTransportObservation,
 } from './route-transport-observation'
 import { degradeBackend } from '@/lib/observability/degrade-backend'
-import type {
-  X402Configuration,
-  X402PaymentAuthorizationIdentity,
-} from './route-transport-x402'
+import type { X402FetchTransportConfiguration } from './transport-adapters'
+import type { X402PaymentAuthorizationIdentity } from './x402-payment-lifecycle'
 import type { X402Challenge } from './x402-challenge'
+
+type X402Configuration = X402FetchTransportConfiguration
 
 export type { X402Challenge }
 

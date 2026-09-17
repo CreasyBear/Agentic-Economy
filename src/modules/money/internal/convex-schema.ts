@@ -428,6 +428,15 @@ export const moneyTables = {
   })
     .index('by_accountRef', ['accountRef'])
     .index('by_legalCustomerRef_and_state', ['legalCustomerRef', 'state']),
+  moneyCustomerTaxFacts: defineTable({
+    accountRef: identifier,
+    abn: v.string(),
+    gstRegistered: v.boolean(),
+    legalCustomerRef: identifier,
+    effectiveAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index('by_accountRef', ['accountRef']),
   moneyTreasuryObservations: defineTable({
     observationRef: identifier,
     environment: v.union(v.literal('sandbox'), v.literal('production')),

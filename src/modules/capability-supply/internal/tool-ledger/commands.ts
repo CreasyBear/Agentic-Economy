@@ -1,5 +1,4 @@
 import {
-  admitRegisteredTransport,
   capabilityBindingEligibilityHash,
   capabilityBindingRegistrationHash,
   capabilityOfferingEligibilityHash,
@@ -8,7 +7,8 @@ import {
   defineCapabilityTransportBindingRegistration,
   type CapabilityOfferingRegistration,
   type CapabilityTransportBindingRegistration,
-} from '@/modules/capability-supply/public'
+} from '../registration-schema'
+import { admitRegisteredTransport } from '../transport-adapters'
 import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { isCanonicalDigest } from '@/modules/common/canonical-digest'
 import { type StableHashValue } from '@/modules/common/stable-hash'

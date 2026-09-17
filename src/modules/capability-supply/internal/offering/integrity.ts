@@ -1,5 +1,5 @@
 import { degradeBackend } from '@/lib/observability/degrade-backend'
-import { capabilityOfferingRegistrationHash } from '@/modules/capability-supply/public'
+import { capabilityOfferingRegistrationHash } from '../registration-schema'
 
 import { offeringRegistrationFromRow, type CapabilityOfferingRow } from './registration'
 

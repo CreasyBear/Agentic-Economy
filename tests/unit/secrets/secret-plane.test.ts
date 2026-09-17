@@ -137,7 +137,7 @@ function setup(validation: boolean | 'throw' = true, useDefaultUuid = false) {
   return { plane, store, pointerStore }
 }
 
-async function expectSafeFailure(operation: Promise<unknown>, code: string): Promise<void> {
+async function expectSafeFailure(operation: Promise<unknown>, code: string): Promise<SecretPlaneError> {
   let failure: unknown
   try {
     await operation
@@ -146,6 +146,17 @@ async function expectSafeFailure(operation: Promise<unknown>, code: string): Pro
   }
   expect(failure).toMatchObject({ code })
   expect(JSON.stringify(failure)).not.toContain(CANARY)
+  return failure as SecretPlaneError
+}
+
+function expectActiveGenerationIntact(store: MemorySecretStore, pointerStore: MemoryPointerStore): void {
+  expect(pointerStore.pointer).toEqual({ secretRef: REF, activeGeneration: FIRST, revision: 1 })
+  expectNeverDeletedActiveGeneration(store)
+}
+
+function expectNeverDeletedActiveGeneration(store: MemorySecretStore): void {
+  expect(store.events).not.toContain(`delete:${FIRST}`)
+  expect(new TextDecoder().decode(store.material.get(`${REF}:${FIRST}`))).toBe('current')
 }
 
 describe('SecretPlane', () => {
@@ -397,5 +408,64 @@ describe('SecretPlane', () => {
     }), 'secret_store_unavailable')
     expect(context.store.events).toEqual([`write:${NEXT}`, `delete:${NEXT}`])
     expect(context.store.material.has(`${REF}:${NEXT}`)).toBe(false)
+  })
+
+  it('keeps the prior active generation when discard fails during a failed advance', async () => {
+    const context = setup()
+    context.pointerStore.failAdvance = true
+    context.store.failDelete = true
+    const failure = await expectSafeFailure(
+      context.plane.rotate({ secretRef: REF }, source()),
+      'secret_pointer_advance_failed',
+    )
+    expect(failure.message).toBe('The active secret generation could not be advanced.')
+    expectActiveGenerationIntact(context.store, context.pointerStore)
+    expect(context.store.events).toContain(`delete:${NEXT}`)
+    expect(context.store.material.has(`${REF}:${NEXT}`)).toBe(true)
+  })
+
+  it('never deletes the active generation on write, validation, advance, or reconcile failure', async () => {
+    const write = setup()
+    write.store.failWrite = true
+    await expectSafeFailure(write.plane.rotate({ secretRef: REF }, source()), 'secret_store_unavailable')
+    expectActiveGenerationIntact(write.store, write.pointerStore)
+
+    const invalid = setup(false)
+    invalid.store.failDelete = true
+    await expectSafeFailure(invalid.plane.rotate({ secretRef: REF }, source()), 'secret_generation_validation_failed')
+    expectActiveGenerationIntact(invalid.store, invalid.pointerStore)
+
+    const stale = setup()
+    stale.pointerStore.failAdvance = true
+    await expectSafeFailure(stale.plane.rotate({ secretRef: REF }, source()), 'secret_pointer_advance_failed')
+    expectActiveGenerationIntact(stale.store, stale.pointerStore)
+
+    const uncertain = setup()
+    uncertain.pointerStore.failGetAfter = 1
+    await expectSafeFailure(uncertain.plane.rotate({ secretRef: REF }, source()), 'secret_pointer_reconciliation_failed')
+    expectNeverDeletedActiveGeneration(uncertain.store)
+    expect(uncertain.store.material.has(`${REF}:${NEXT}`)).toBe(true)
+  })
+
+  it('zeros leased bytes when the lease scope exits or fails', async () => {
+    const material = new TextEncoder().encode(CANARY)
+    let leased: Uint8Array | undefined
+    await expect(withEphemeralSecretMaterial(material, async (lease) => {
+      await lease.useBytes(async (bytes) => {
+        leased = bytes
+        throw new Error('lease callback failed')
+      })
+    })).rejects.toThrow('lease callback failed')
+    expect(leased).toBeDefined()
+    expect([...leased!]).toEqual(Array.from({ length: leased!.byteLength }, () => 0))
+
+    let sourceBytes: Uint8Array | undefined
+    await source().withMaterial(async (lease) => {
+      await lease.useBytes(async (bytes) => {
+        sourceBytes = bytes
+      })
+    })
+    expect(sourceBytes).toBeDefined()
+    expect([...sourceBytes!]).toEqual(Array.from({ length: sourceBytes!.byteLength }, () => 0))
   })
 })

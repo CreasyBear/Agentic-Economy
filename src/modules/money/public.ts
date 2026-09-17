@@ -15,6 +15,16 @@ export {
   SANDBOX_COMMERCIAL_POLICY_CONTROLS,
   validCommercialPolicyControl,
 } from './internal/commercial-policy'
+export {
+  admitTaxInvoiceIssuance,
+  calculateAudGstSplit,
+  isValidAbn,
+} from './internal/tax-invoice-control'
+export type {
+  CustomerTaxFacts,
+  TaxInvoiceIssuanceAdmission,
+  TaxInvoiceIssuanceWithheldReason,
+} from './internal/tax-invoice-control'
 export type {
   CommercialPolicyApproval,
   CommercialPolicyControl,

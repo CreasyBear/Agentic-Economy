@@ -4,12 +4,9 @@ import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { parseBoundedJson } from '@/modules/common/bounded-json'
 import { isRecord } from '@/modules/common/is-record'
 import type { StableHashValue } from '@/modules/common/stable-hash'
-import type { ExactAmount } from '@/modules/money/public'
 import { validPublicHttpsEndpoint, parseX402FetchTransportConfiguration } from './transport-adapters'
 import {
   isProviderConnectionCredentialRef,
-  type ProviderConnectionCredentialResolution,
-  type ProviderConnectionLeaseCredentialResolution,
 } from '../provider-connection'
 import {
   isHttpConfiguration,
@@ -19,16 +16,11 @@ import {
   providerAuthorityFailure,
   invokeHttp,
   type HttpConfiguration,
-  type RouteTransportFetch,
 } from './route-transport-http-json'
 import { isMcpConfiguration, invokeMcp, type McpConfiguration } from './route-transport-mcp'
 import {
   invokeX402,
   type X402Configuration,
-  type X402PaymentAttemptEvent,
-  type X402PaymentAuthorizationIdentity,
-  type X402PaymentSignatureRequest,
-  type X402PreparedAuthorization,
   type X402RouteTransportRuntime,
 } from './route-transport-x402'
 import { prepareX402Request } from './x402-request'
@@ -38,7 +30,6 @@ import {
   transportKind,
   type RouteTransportObservation,
 } from './route-transport-observation'
-import type { X402SettlementResponse } from './x402-payment-signer'
 import type {
   ProviderConnectionAuthorityLookup,
   ProviderConnectionAuthorityValidationResult,
@@ -48,80 +39,22 @@ import type {
   RouteTransportCancellationInvocationFor,
   RouteTransportInvocation,
 } from './route-transport-invocation'
+import type {
+  ProviderConnectionAuthorityReader,
+  ProviderConnectionAuthorityValidator,
+  RouteTransportRuntime,
+} from './route-transport-runtime-types'
 
 export type {
   ProviderConnectionAuthorityLookup,
   ProviderConnectionAuthorityValidationResult,
+  ProviderConnectionAuthorityReader,
+  ProviderConnectionAuthorityValidator,
   ProviderRouteTransportInvocation,
   PublicUpstreamRouteTransportInvocation,
   RouteTransportInvocation,
+  RouteTransportRuntime,
 }
-
-export type ProviderConnectionAuthorityReader = (
-  input: ProviderConnectionAuthorityLookup,
-) =>
-  | ProviderConnectionCredentialResolution
-  | ProviderConnectionLeaseCredentialResolution
-  | Promise<
-      | ProviderConnectionCredentialResolution
-      | ProviderConnectionLeaseCredentialResolution
-    >
-
-export type ProviderConnectionAuthorityValidator = (
-  input: ProviderConnectionAuthorityLookup,
-) =>
-  | ProviderConnectionAuthorityValidationResult
-  | Promise<ProviderConnectionAuthorityValidationResult>
-
-export type RouteTransportRuntime = Readonly<{
-  send: RouteTransportFetch
-  resolveCredential: (
-    reference: string,
-  ) => string | undefined | Promise<string | undefined>
-
-  readProviderConnectionCredentialRef?: ProviderConnectionAuthorityReader
-  readX402PaymentCredentialRef?: () =>
-    string | undefined | Promise<string | undefined>
-  validateProviderConnectionAuthority?: ProviderConnectionAuthorityValidator
-  x402PaymentSigningAvailable?: (
-    input: Readonly<{
-      credentialRef: string
-      network: string
-      asset: string
-      payTo: string
-      maximumSpend: ExactAmount
-    }>,
-  ) => boolean
-  verifyX402Settlement?: (
-    input: Readonly<{
-      response: X402SettlementResponse
-      requirement: X402PaymentSignatureRequest['selectedRequirement']
-      paymentSignature: string
-      paymentIdentifier: string
-      challengeDigest: string
-    }>,
-  ) => boolean | Promise<boolean>
-  prepareX402PaymentAuthorization?: (
-    request: X402PaymentSignatureRequest & X402PaymentAuthorizationIdentity,
-  ) => Promise<X402PreparedAuthorization | undefined>
-  readX402PaymentAuthorization?: (
-    prepared: X402PreparedAuthorization,
-  ) => Promise<string | undefined>
-  /** Restores custody material by the persisted opaque digest after process loss. */
-  readX402PaymentAuthorizationByDigest?: (
-    prepared: X402PreparedAuthorization,
-  ) => Promise<string | undefined>
-  markX402PaymentPossiblySubmitted?: (
-    event: X402PaymentAttemptEvent,
-  ) => Promise<void> | void
-  observeX402PaymentAttempt?: (
-    event: X402PaymentAttemptEvent &
-      Readonly<{
-        state: 'settled' | 'not_settled' | 'reconciliation_required'
-        evidenceRefs: readonly string[]
-      }>,
-  ) => Promise<void> | void
-}>
 
 type RegisteredConfiguration =
   HttpConfiguration | McpConfiguration | X402Configuration

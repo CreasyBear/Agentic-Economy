@@ -4,6 +4,7 @@ import type {
   CallUsageSummary,
 } from './call-contracts'
 import type { CallStatusResult } from './call-recovery-contracts'
+import type { PurchaseResolutionRecord } from './purchase-resolution'
 import type { JsonValue } from '@/modules/capability-contract/public'
 
 export type PublicCallStatusRead = CallStatusResult | Readonly<{
@@ -50,6 +51,7 @@ export type CallReceiptView = Readonly<{
   resultKind?: CallResult['kind']
   evidenceHash?: string
   issue?: CallIssueView
+  purchaseResolution?: PurchaseResolutionRecord
   complete: boolean
 }>
 
@@ -132,6 +134,7 @@ export function projectCallReceipt(input: PublicCallStatusRead): CallReceiptView
   const usage = input.usage ?? (result?.kind === 'completed' ? result.usage : undefined)
   const completed = result?.kind === 'completed'
   const issue = issueFromFound(input, result, usage, receipt)
+  const purchaseResolution = input.purchaseResolution
   return {
     version: 'ae.public-invocation-receipt:v1',
     callRef: input.callRef,
@@ -145,6 +148,7 @@ export function projectCallReceipt(input: PublicCallStatusRead): CallReceiptView
     ...(result === undefined ? {} : { resultKind: result.kind }),
     ...(input.evidenceHash === undefined ? {} : { evidenceHash: input.evidenceHash }),
     ...(issue === undefined ? {} : { issue }),
+    ...(purchaseResolution === undefined ? {} : { purchaseResolution }),
     complete: completed,
   }
 }
