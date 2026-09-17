@@ -97,6 +97,7 @@ jobs:
       # only credential this job receives.
       - name: Run source release contract without deployment credentials
         env:
+          NODE_OPTIONS: --max-old-space-size=4096
           CLERK_JWT_ISSUER_DOMAIN: https://relative-phoenix-8958.clerk.accounts.dev
           CLERK_PUBLISHABLE_KEY: ${{ secrets.AE_AUTHENTICATED_E2E_CLERK_PUBLISHABLE_KEY }}
           VITE_CLERK_PUBLISHABLE_KEY: ${{ secrets.AE_AUTHENTICATED_E2E_CLERK_PUBLISHABLE_KEY }}

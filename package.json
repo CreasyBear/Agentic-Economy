@@ -19,7 +19,7 @@
     "env:example": "tsx tools/release/render-env-example.ts",
     "env:example:check": "tsx tools/release/render-env-example.ts --check",
     "build": "npm run pack:cli:public && vite build",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "node --max-old-space-size=4096 ./node_modules/typescript/bin/tsc --noEmit",
     "lint": "oxlint src convex tests tools --deny-warnings",
     "deps:check": "node tools/dev/deps-ratchet.ts",
     "generate:convex": "node tools/dev/require-supported-node.ts -- convex codegen --typecheck=disable",
