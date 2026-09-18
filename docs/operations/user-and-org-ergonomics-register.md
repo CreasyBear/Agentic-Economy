@@ -15,10 +15,10 @@
 | Wave | Workflows | Scope | Verified | In Review | Pending | Target Status |
 | :--- | :---: | :--- | :---: | :---: | :---: | :---: |
 | **Wave 1: Buyer Onboarding & Developer Launchpad** | 6 | `W-01`, `W-02`, `W-25`, `W-26`, `W-27`, `W-29` | 6 | 0 | 0 | **VERIFIED** |
-| **Wave 2: Financial Peace-of-Mind & Spend Observability** | 8 | `W-20`, `W-21`, `W-22`, `W-23`, `W-24`, `W-38`, `W-39`, `W-40` | 0 | 0 | 8 | `PENDING` |
+| **Wave 2: Financial Peace-of-Mind & Spend Observability** | 8 | `W-20`, `W-21`, `W-22`, `W-23`, `W-24`, `W-38`, `W-39`, `W-40` | 1 | 0 | 7 | `IN PROGRESS` |
 | **Wave 3: Supplier Monetization & Testing Playground** | 8 | `W-30`, `W-31`, `W-32`, `W-33`, `W-34`, `W-35`, `W-36`, `W-37` | 0 | 0 | 8 | `PENDING` |
 | **Wave 4: Team Operations, Identity & Tactile Standards** | 22 | `W-03`–`W-09`, `W-10`–`W-19`, `W-28`, `W-41`–`W-44` | 0 | 0 | 22 | `PENDING` |
-| **Total** | **44** | **All 44 Standard Workflows** | **6** | **0** | **38** | `IN PROGRESS` |
+| **Total** | **44** | **All 44 Standard Workflows** | **7** | **0** | **37** | `IN PROGRESS` |
 
 ---
 
@@ -110,15 +110,17 @@
 # Wave 2: Financial Peace-of-Mind & Spend Observability
 
 ### W-20: Prepaid Credit Top-Up Console
-- **Surfaces:** `src/routes/_operator/owner.credit.tsx`, `src/components/ae/console/AeOwnerCredit.tsx`
+- **Surfaces:** `src/routes/_operator/owner.credit.tsx`, `src/components/ae/console/AeCreditTopUpPanel.tsx`, `src/components/ae/console/AeOwnerCredit.tsx`, `src/components/ae/console/credit-top-up-format.ts`
 - **Incumbent Baseline:** Basic input field with Stripe checkout redirection.
 - **Ergonomic Gap:** User must manually calculate GST or guess common refill amounts; no instant post-payment balance verification.
 - **Target Ergonomic Spec:**
-  - Preset denomination chips (`+A$50`, `+A$100`, `+A$250`, `Custom`) with keyboard navigation.
-  - Live calculated Australian GST summary (`A$10.00 GST included`).
-  - Instant balance refresh and celebratory confirmation upon return from checkout.
-- **Subagent Assignment:** Grok (Scout) $\rightarrow$ Composer (Craft) $\rightarrow$ Orchestrator (Verify)
-- **Status:** `PENDING`
+  - Tactile denomination chips (`+A$5.00`, `+A$10.00`, `+A$25.00`, etc.) with pill styling, monospace tabular figures, and keyboard navigation.
+  - 4-row live Australian GST breakdown (Credit added, Platform fee, Australian GST 10%, Total payable) with explanatory footnote.
+  - Zero-CLS reserved quote shell (`min-h-[13.5rem]`) and constraints skeleton.
+  - Instant celebratory confirmation toast upon return from checkout and updated available credit messaging.
+  - Rule 4 failure and status playbooks stating money safety and explicit next steps.
+- **Subagent Assignment:** Grok (Scout: `b11ccd1e-ee09-45d4-99ba-5a3522c305c5`) $\rightarrow$ Composer (Craft: `74ab4eda-b4ba-49b2-89d7-14126746e726`) $\rightarrow$ Orchestrator (Verify)
+- **Status:** `VERIFIED`
 
 ---
 

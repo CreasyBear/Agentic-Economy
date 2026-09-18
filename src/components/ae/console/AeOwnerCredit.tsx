@@ -265,6 +265,7 @@ export function AeOwnerCredit({
             {...(accountFundingPort === undefined ? {} : { port: accountFundingPort })}
             {...(fundingConstraints === undefined ? {} : { constraints: fundingConstraints })}
             constraintsLoading={constraintsLoading}
+            {...(accountBalance === undefined ? {} : { accountBalance })}
             {...(onCreditRefresh === undefined ? {} : { onRefresh: onCreditRefresh })}
           />
         </div>

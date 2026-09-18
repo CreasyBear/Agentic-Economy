@@ -18,14 +18,40 @@ export type RecoveryLocator =
 
 export type CreditPaymentStatus = CreditPaymentSession['evidence']['status']
 
+const FINANCIAL_UNCHANGED = 'A$0.00 deducted — your balance is unchanged.'
+const FINANCIAL_NO_PAYMENT = 'No payment started. Your balance is unchanged.'
+
+export function formatAustralianGstPercentLabel(taxOnServiceFeeBps: number): string {
+  if (taxOnServiceFeeBps % 100 === 0) {
+    return `Australian GST (${taxOnServiceFeeBps / 100}%)`
+  }
+  return `Australian GST (${(taxOnServiceFeeBps / 100).toFixed(2)}%)`
+}
+
+export function formatAudGstNote(taxUnits: bigint, taxOnServiceFeeBps: number): string {
+  return `Includes ${formatAudUnits(taxUnits)} ${formatAustralianGstPercentLabel(taxOnServiceFeeBps)} on the platform fee.`
+}
+
 export function topUpErrorCopy(result: MoneyRefusal | AccountFundingOutcomeUnknownResult): string {
-  if (result.code === 'stripe_setup_required') return 'Account funding is unavailable right now. No payment started and your balance did not change. Try again later.'
-  if (result.code === 'billing_identity_missing' || result.code === 'billing_identity_mismatch') return 'Your authenticated Account is unavailable. No payment started.'
-  if (result.code === 'funding_amount_invalid') return 'That AUD principal is outside the configured limits. No payment started.'
-  if (result.code === 'price_changed') return 'Funding limits changed before payment started. Review the updated quote and try again.'
-  if (result.code === 'commercial_policy_required') return 'Production funding is not enabled because the required commercial approvals are not current. No payment started.'
-  if (result.code === 'funding_pending' || result.code === 'funding_outcome_unknown') return 'Payment is still being verified. Your Account balance will not change until the canonical server readback completes.'
-  return 'Account funding could not be started. No payment was confirmed; try again.'
+  if (result.code === 'stripe_setup_required') {
+    return 'Account funding is unavailable right now. No payment started and your balance did not change. Try again later.'
+  }
+  if (result.code === 'billing_identity_missing' || result.code === 'billing_identity_mismatch') {
+    return `Your signed-in Account could not be confirmed. ${FINANCIAL_NO_PAYMENT} Refresh this page and sign in again.`
+  }
+  if (result.code === 'funding_amount_invalid') {
+    return `That amount is outside the allowed range. ${FINANCIAL_NO_PAYMENT} Use a suggested amount or the limits shown under the field.`
+  }
+  if (result.code === 'price_changed') {
+    return `Funding limits changed before payment started. ${FINANCIAL_NO_PAYMENT} Choose Refresh funding quote, then review the new total.`
+  }
+  if (result.code === 'commercial_policy_required') {
+    return `Production funding is not enabled for this workspace. ${FINANCIAL_NO_PAYMENT} Complete commercial approvals, then retry.`
+  }
+  if (result.code === 'funding_pending' || result.code === 'funding_outcome_unknown') {
+    return 'Payment is still being verified. Your balance will not change until confirmation. Do not start another payment. Choose Refresh payment status.'
+  }
+  return `Account funding could not be started or read. No payment was confirmed. ${FINANCIAL_UNCHANGED} Refresh this payment, or try again.`
 }
 
 export function fundingAmountErrorCopy(
@@ -44,9 +70,9 @@ export function fundingAmountErrorCopy(
 
 export function paymentReadErrorCopy(result: MoneyRefusal): string {
   if (result.code === 'funding_pending' || result.code === 'funding_outcome_unknown') {
-    return 'Payment is still being verified. Your Account balance will not change until the canonical server readback completes.'
+    return 'Payment is still being verified. Your balance will not change until confirmation. Do not start another payment. Choose Refresh payment status.'
   }
-  return 'This payment attempt could not be read. It remains unresolved; refresh this exact payment before starting another.'
+  return 'This payment attempt could not be read. It remains unresolved; choose Refresh payment status before starting another.'
 }
 
 export function isCheckoutResumable(session: CreditPaymentSession | undefined): session is CreditPaymentSession & Readonly<{ checkoutUrl: string }> {
@@ -67,12 +93,14 @@ export function canStartAnotherPayment(
 
 export function fundingReadCopy(session: CreditPaymentSession): string | undefined {
   const status = session.evidence.status
-  if (status === 'failed') return 'The provider did not complete this payment. No Account funds were added.'
+  if (status === 'failed') {
+    return `The card payment did not complete. ${FINANCIAL_UNCHANGED} No credit was added. Choose Add more credit to start a new payment.`
+  }
   if (session.evidence.checkoutStatus === 'expired' && status !== 'succeeded') {
-    return 'This checkout expired. No Account funds were added.'
+    return `This checkout expired before payment finished. ${FINANCIAL_UNCHANGED} Choose Add more credit and try again.`
   }
   if (status === 'outcome_unknown') {
-    return 'Payment status is still being verified. No Account funds were added by this browser return.'
+    return 'Payment is still being verified. Your balance will not change until confirmation. Do not start another payment. Choose Refresh payment status.'
   }
   return undefined
 }

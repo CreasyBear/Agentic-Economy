@@ -1,7 +1,7 @@
 /**
  * @vitest-environment jsdom
  */
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import '../../setup/jsdom-platform'
@@ -11,6 +11,7 @@ import type { AgentCredentialSource, AgentDirectoryProjection } from '@/modules/
 import { projectAgentDirectory } from '@/modules/agent-access/agent-access-console'
 import { canonicalAgentRecord } from '../../helpers/agent-directory-fixture'
 import { AeAssistantInstallFunnel } from '@/components/ae/console/AeAssistantInstallFunnel'
+import { toast } from '@/lib/ui/toast'
 import { AeAccountFundingPanel, type AccountFundingPort } from '@/components/ae/console/AeCreditTopUpPanel'
 import { AeOwnerCredit } from '@/components/ae/console/AeOwnerCredit'
 import type { AccountHistoryResult, CreditPaymentSession } from '@/modules/money/public'
@@ -20,6 +21,15 @@ vi.mock('@tanstack/react-router', () => ({
   Link: ({ to, params, children, ...props }: { to: string; params?: Record<string, string>; children: ReactNode }) => (
     <a href={params?.toolRef === undefined ? to : to.replace('$toolRef', encodeURIComponent(params.toolRef))} {...props}>{children}</a>
   ),
+}))
+
+vi.mock('@/lib/ui/toast', () => ({
+  toast: {
+    success: vi.fn(),
+    error: vi.fn(),
+    info: vi.fn(),
+    warning: vi.fn(),
+  },
 }))
 
 
@@ -132,6 +142,7 @@ const emptyAccountHistory: AccountHistoryResult = {
 
 afterEach(() => {
   cleanup()
+  vi.clearAllMocks()
   window.sessionStorage.clear()
   window.history.replaceState(null, '', '/')
 })
@@ -531,6 +542,77 @@ describe('assistant access components', () => {
     expect(screen.queryByRole('link', { name: /agent-access\.json/u })).toBeNull()
   })
 
+  it('itemizes Australian GST on the platform fee in the funding quote', () => {
+    render(
+      <AeAccountFundingPanel
+        port={{ begin: vi.fn(), read: vi.fn() }}
+        constraints={fundingConstraints}
+      />,
+    )
+
+    fireEvent.change(screen.getByLabelText(/other amount/i), { target: { value: '10.00' } })
+
+    const quote = within(screen.getByLabelText('Funding quote'))
+    expect(quote.getByText('Platform fee')).toBeTruthy()
+    expect(quote.getByText('A$0.50')).toBeTruthy()
+    expect(quote.getByText('Australian GST (10%)')).toBeTruthy()
+    expect(quote.getByText('A$0.05')).toBeTruthy()
+    expect(screen.getByText(/Includes A\$0\.05 Australian GST \(10%\) on the platform fee\./)).toBeTruthy()
+    expect(screen.getByRole('button', { name: /pay A\$10\.55 and add A\$10\.00/i })).toBeTruthy()
+  })
+
+  it('keeps quote geometry when the amount is empty or invalid', () => {
+    render(<AeAccountFundingPanel port={{ begin: vi.fn(), read: vi.fn() }} constraints={fundingConstraints} />)
+
+    expect(screen.getByRole('group', { name: 'Funding quote and payment' })).toBeTruthy()
+    expect(screen.getByText(/Enter or choose an amount to see credit, fee, GST, and total\./)).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Choose an amount to continue' }).hasAttribute('disabled')).toBe(true)
+
+    const input = screen.getByLabelText(/other amount/i)
+    fireEvent.change(input, { target: { value: '1.00' } })
+    fireEvent.blur(input)
+    expect(screen.getByRole('group', { name: 'Funding quote and payment' })).toBeTruthy()
+    expect(screen.getByRole('alert').textContent).toMatch(/Enter at least A\$5\.00/)
+  })
+
+  it('celebrates a succeeded return with toast and available-credit copy', async () => {
+    window.history.replaceState(null, '', '/owner/credit?funding=cs_succeeded')
+    const session = am09ReturnedCheckout({
+      externalRef: 'cs_succeeded',
+      status: 'succeeded',
+      checkoutStatus: 'complete',
+    })
+    const read = vi.fn(async () => session)
+    render(
+      <AeAccountFundingPanel
+        port={{ begin: vi.fn(), read }}
+        constraints={fundingConstraints}
+        accountBalance={accountBalance}
+      />,
+    )
+
+    await waitFor(() => expect(read).toHaveBeenCalled())
+    await waitFor(() => expect(toast.success).toHaveBeenCalledOnce())
+    expect(toast.success).toHaveBeenCalledWith('Payment received', {
+      description: 'Available credit is now A$12.50. Paid Calls can use it immediately.',
+    })
+    expect(screen.getByText(/Credit is available in your balance above and ready for Calls\./)).toBeTruthy()
+  })
+
+  it('failed checkout states the balance is unchanged and offers Add more credit', async () => {
+    window.history.replaceState(null, '', '/owner/credit?funding=cs_failed_copy')
+    const session = am09ReturnedCheckout({
+      externalRef: 'cs_failed_copy',
+      status: 'failed',
+      checkoutStatus: 'complete',
+    })
+    render(<AeAccountFundingPanel port={{ begin: vi.fn(), read: vi.fn(async () => session) }} constraints={fundingConstraints} />)
+
+    expect(await screen.findByText(/A\$0\.00 deducted/u)).toBeTruthy()
+    expect(screen.getByText(/unchanged/u)).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Add more credit' })).toBeTruthy()
+  })
+
   it('offers policy-valid top-up choices while preserving exact manual entry', () => {
     render(
       <AeAccountFundingPanel
@@ -544,7 +626,9 @@ describe('assistant access components', () => {
     expect(suggestedAmounts.textContent).toContain('A$10.00')
     expect(suggestedAmounts.textContent).toContain('A$25.00')
 
-    const tenDollarChoice = screen.getByRole('button', { name: 'A$10.00' })
+    const tenDollarChoice = screen.getByRole('button', { name: '+A$10.00' })
+    expect(tenDollarChoice.className).toMatch(/font-mono/)
+    expect(tenDollarChoice.className).toMatch(/tabular-nums/)
     fireEvent.click(tenDollarChoice)
     expect(tenDollarChoice.getAttribute('aria-pressed')).toBe('true')
     expect((screen.getByLabelText(/other amount/i) as HTMLInputElement).value).toBe('10')
@@ -575,7 +659,8 @@ describe('assistant access components', () => {
     expect(input.value).toBe(value)
     expect(input.getAttribute('aria-invalid')).toBe('true')
     expect(screen.getByRole('alert').textContent).toMatch(message)
-    expect(screen.queryByRole('button', { name: /pay /i })).toBeNull()
+    expect(screen.getByRole('group', { name: 'Funding quote and payment' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Choose an amount to continue' }).hasAttribute('disabled')).toBe(true)
 
     fireEvent.change(input, { target: { value: '10.00' } })
     expect(input.value).toBe('10.00')
@@ -709,7 +794,10 @@ describe('assistant access components', () => {
 
     fireEvent.change(screen.getByLabelText(/other amount/i), { target: { value: '10.00' } })
     expect(screen.getAllByText('A$10.00').length).toBeGreaterThan(0)
-    expect(screen.getByText('A$0.55')).toBeTruthy()
+    const quote = within(screen.getByLabelText('Funding quote'))
+    expect(quote.getByText('Platform fee')).toBeTruthy()
+    expect(quote.getByText('A$0.50')).toBeTruthy()
+    expect(quote.getByText('A$0.05')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: /pay A\$10\.55 and add A\$10\.00/i }))
 
     await waitFor(() => expect(redirectToCheckout).toHaveBeenCalledWith(session.checkoutUrl))
@@ -864,7 +952,8 @@ describe('assistant access components', () => {
     const read = vi.fn(async () => session)
     render(<AeAccountFundingPanel port={{ begin, read }} constraints={fundingConstraints} />)
 
-    expect(await screen.findByText(/The provider did not complete this payment/u)).toBeTruthy()
+    expect(await screen.findByText(/A\$0\.00 deducted/u)).toBeTruthy()
+    expect(screen.getByText(/unchanged/u)).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Continue secure payment' })).toBeNull()
     expect(begin).not.toHaveBeenCalled()
     fireEvent.click(await screen.findByRole('button', { name: 'Add more credit' }))
@@ -888,7 +977,7 @@ describe('assistant access components', () => {
     const read = vi.fn(async () => session)
     render(<AeAccountFundingPanel port={{ begin, read }} constraints={fundingConstraints} />)
 
-    expect(await screen.findByText(/This checkout expired/u)).toBeTruthy()
+    expect(await screen.findByText(/checkout expired before payment finished/i)).toBeTruthy()
     expect(screen.queryByText(/still processing/i)).toBeNull()
     expect(screen.queryByRole('button', { name: 'Continue secure payment' })).toBeNull()
     expect(begin).not.toHaveBeenCalled()
