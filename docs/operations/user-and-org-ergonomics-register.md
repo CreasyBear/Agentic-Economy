@@ -14,11 +14,11 @@
 
 | Wave | Workflows | Scope | Verified | In Review | Pending | Target Status |
 | :--- | :---: | :--- | :---: | :---: | :---: | :---: |
-| **Wave 1: Buyer Onboarding & Developer Launchpad** | 6 | `W-01`, `W-02`, `W-25`, `W-26`, `W-27`, `W-29` | 4 | 0 | 2 | `IN PROGRESS` |
+| **Wave 1: Buyer Onboarding & Developer Launchpad** | 6 | `W-01`, `W-02`, `W-25`, `W-26`, `W-27`, `W-29` | 5 | 0 | 1 | `IN PROGRESS` |
 | **Wave 2: Financial Peace-of-Mind & Spend Observability** | 8 | `W-20`, `W-21`, `W-22`, `W-23`, `W-24`, `W-38`, `W-39`, `W-40` | 0 | 0 | 8 | `PENDING` |
 | **Wave 3: Supplier Monetization & Testing Playground** | 8 | `W-30`, `W-31`, `W-32`, `W-33`, `W-34`, `W-35`, `W-36`, `W-37` | 0 | 0 | 8 | `PENDING` |
 | **Wave 4: Team Operations, Identity & Tactile Standards** | 22 | `W-03`–`W-09`, `W-10`–`W-19`, `W-28`, `W-41`–`W-44` | 0 | 0 | 22 | `PENDING` |
-| **Total** | **44** | **All 44 Standard Workflows** | **4** | **0** | **40** | `IN PROGRESS` |
+| **Total** | **44** | **All 44 Standard Workflows** | **5** | **0** | **39** | `IN PROGRESS` |
 
 ---
 
@@ -79,16 +79,17 @@
 ---
 
 ### W-27: One-Time API Key Reveal Modal
-- **Surfaces:** `src/components/ae/console/AeKeyRevealDialog.tsx`
+- **Surfaces:** `src/components/ae/console/AeKeyRevealDialog.tsx`, `src/components/ae/data/AeCopyCommand.tsx`
 - **Incumbent Baseline:** Dialog displaying generated secret key string with copy button.
 - **Ergonomic Gap:** Secret is exposed in plain text by default; copy button gives basic feedback; dismissal warning is small text.
 - **Target Ergonomic Spec:**
-  - Monospace secret display with masked toggle (`••••••••••••••••` / `Reveal`).
-  - Prominent 1-click copy button with dynamic badge: *"Copied to clipboard — paste into ~/.cursor/mcp.json"*.
-  - Explicit security guardrail banner: *"This secret will never be shown again. Store it securely."*
-  - Requires explicit checkbox confirmation (*"I have safely stored this secret"*) before modal can be dismissed.
-- **Subagent Assignment:** Grok (Scout) $\rightarrow$ Composer (Craft) $\rightarrow$ Orchestrator (Verify)
-- **Status:** `PENDING`
+  - Monospace secret display with masked toggle (`••••••••••••••••` / eye toggle) and single-line zero-CLS well.
+  - Secret copy copies full secret even when masked, with 2000ms checkmark transition and inline confirmation status.
+  - Snippets show redacted bullets when masked while preserving full secret in clipboard on copy.
+  - Security guardrail banner: *"This secret will never be shown again. Store it securely."*
+  - Requires explicit checkbox confirmation before modal can be dismissed; attempts to close trigger a warning ring and prompt without silent failure.
+- **Subagent Assignment:** Grok (Scout: `2be458c7-d9ed-4991-ab30-f1a6ec99e9cd`) $\rightarrow$ Composer (Craft: `adf95465-161c-4b10-bc1c-6202dd5361d7`) $\rightarrow$ Orchestrator (Verify)
+- **Status:** `VERIFIED`
 
 ---
 

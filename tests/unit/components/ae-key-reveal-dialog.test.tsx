@@ -20,6 +20,8 @@ vi.mock('@/lib/ui/toast', () => ({
   toast: mockToast,
 }))
 
+const MASKED_SECRET_DISPLAY = '••••••••••••••••'
+
 const baseReveal: IssuedAgentAccessReveal = {
   keyId: 'key_reveal_test_1',
   secret: 'sek_test_super_secret_reveal_value',
@@ -61,7 +63,7 @@ describe('AeKeyRevealDialog (W-27)', () => {
     expect(document.body.textContent).not.toContain(baseReveal.secret)
   })
 
-  it('T2: renders title, display name, environment, exact warning text, and plaintext secret', () => {
+  it('T2: renders title, display name, environment, guardrail copy, and masked secret by default', () => {
     render(
       <AeKeyRevealDialog
         open={true}
@@ -75,13 +77,15 @@ describe('AeKeyRevealDialog (W-27)', () => {
     expect(screen.getByText(/step 2 of 2 · save & install/i)).toBeInTheDocument()
     expect(screen.getByText('Research Bot')).toBeInTheDocument()
     expect(screen.getByText('Sandbox')).toBeInTheDocument()
-    expect(screen.getByText('Save this secret key securely. You will not be able to view it again.')).toBeInTheDocument()
+    expect(
+      screen.getByText('This secret will never be shown again. Store it securely.'),
+    ).toBeInTheDocument()
 
-    const secretElement = screen.getByText(baseReveal.secret)
-    expect(secretElement.tagName.toLowerCase()).toBe('code')
+    expect(screen.getByText(MASKED_SECRET_DISPLAY)).toBeInTheDocument()
+    expect(document.body.textContent).not.toContain(baseReveal.secret)
   })
 
-  it('T3: copy button copies secret to clipboard and triggers success toast', async () => {
+  it('T3: copy button copies secret to clipboard while masked and triggers success toast', async () => {
     const writeTextMock = vi.fn().mockResolvedValue(undefined)
     Object.assign(navigator, {
       clipboard: {
@@ -97,6 +101,8 @@ describe('AeKeyRevealDialog (W-27)', () => {
         canonicalBaseUrl={canonicalBaseUrl}
       />,
     )
+
+    expect(document.body.textContent).not.toContain(baseReveal.secret)
 
     const copyBtn = screen.getByRole('button', { name: /copy secret key/i })
     fireEvent.click(copyBtn)
@@ -149,7 +155,7 @@ describe('AeKeyRevealDialog (W-27)', () => {
     expect(onOpenChange).toHaveBeenCalledWith(false)
   })
 
-  it('T6: renders quickstart snippet tabs for Cursor, Claude Code, Python, and cURL', async () => {
+  it('T6: renders quickstart snippet tabs without plaintext secret while masked', async () => {
     render(
       <AeKeyRevealDialog
         open={true}
@@ -159,13 +165,13 @@ describe('AeKeyRevealDialog (W-27)', () => {
       />,
     )
 
-    // Check tab triggers exist
+    expect(document.body.textContent).not.toContain(baseReveal.secret)
+
     expect(screen.getByRole('tab', { name: /cursor/i })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: /claude code/i })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: /python/i })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: /curl/i })).toBeInTheDocument()
 
-    // Default tab is Cursor -> contains mcpServers and destination guide
     expect(screen.getByText(new RegExp('mcpServers'))).toBeInTheDocument()
     expect(screen.getByText(AGENT_ACCESS_SNIPPET_DESTINATIONS.cursor)).toBeInTheDocument()
 
@@ -224,7 +230,6 @@ describe('AeKeyRevealDialog (W-27)', () => {
     fireEvent.click(checkbox)
     expect(screen.getByRole('button', { name: /done/i })).toBeEnabled()
 
-    // Rerender with new reveal
     const nextReveal: IssuedAgentAccessReveal = {
       ...baseReveal,
       keyId: 'key_reveal_test_2',
@@ -242,5 +247,85 @@ describe('AeKeyRevealDialog (W-27)', () => {
 
     expect(screen.getByRole('button', { name: /done/i })).toBeDisabled()
     expect(screen.getByRole('checkbox', { name: /i have saved my secret key securely/i })).not.toBeChecked()
+  })
+
+  it('T9: Show secret reveals plaintext in the well and toggles aria-label to Hide secret', () => {
+    render(
+      <AeKeyRevealDialog
+        open={true}
+        reveal={baseReveal}
+        onOpenChange={vi.fn()}
+        canonicalBaseUrl={canonicalBaseUrl}
+      />,
+    )
+
+    const showBtn = screen.getByRole('button', { name: /show secret/i })
+    fireEvent.click(showBtn)
+
+    expect(screen.getByText(baseReveal.secret)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /hide secret/i })).toBeInTheDocument()
+  })
+
+  it('T10: close attempt while unchecked does not call onOpenChange(false) and shows blocked cue', () => {
+    const onOpenChange = vi.fn()
+    render(
+      <AeKeyRevealDialog
+        open={true}
+        reveal={baseReveal}
+        onOpenChange={onOpenChange}
+        canonicalBaseUrl={canonicalBaseUrl}
+      />,
+    )
+
+    const closeBtn = screen.getByRole('button', { name: /close/i })
+    fireEvent.click(closeBtn)
+
+    expect(onOpenChange).not.toHaveBeenCalledWith(false)
+    expect(
+      screen.getByText('Confirm you have saved the secret before closing.'),
+    ).toBeInTheDocument()
+  })
+
+  it('T11: Escape while unchecked does not close and shows blocked dismiss cue', () => {
+    const onOpenChange = vi.fn()
+    render(
+      <AeKeyRevealDialog
+        open={true}
+        reveal={baseReveal}
+        onOpenChange={onOpenChange}
+        canonicalBaseUrl={canonicalBaseUrl}
+      />,
+    )
+
+    const dialog = screen.getByRole('dialog')
+    fireEvent.keyDown(dialog, { key: 'Escape', code: 'Escape' })
+
+    expect(onOpenChange).not.toHaveBeenCalledWith(false)
+    expect(
+      screen.getByText('Confirm you have saved the secret before closing.'),
+    ).toBeInTheDocument()
+  })
+
+  it('T12: checking the box enables Done and allows closing via close button', () => {
+    const onOpenChange = vi.fn()
+    render(
+      <AeKeyRevealDialog
+        open={true}
+        reveal={baseReveal}
+        onOpenChange={onOpenChange}
+        canonicalBaseUrl={canonicalBaseUrl}
+      />,
+    )
+
+    const checkbox = screen.getByRole('checkbox', { name: /i have saved my secret key securely/i })
+    fireEvent.click(checkbox)
+
+    const doneBtn = screen.getByRole('button', { name: /done/i })
+    expect(doneBtn).toBeEnabled()
+
+    const closeBtn = screen.getByRole('button', { name: /close/i })
+    fireEvent.click(closeBtn)
+
+    expect(onOpenChange).toHaveBeenCalledWith(false)
   })
 })

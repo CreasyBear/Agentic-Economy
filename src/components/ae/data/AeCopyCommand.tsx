@@ -75,7 +75,7 @@ export function AeCopyCommand({
               aria-hidden="true"
               className={cn(
                 'absolute inset-0 size-4 transition-[opacity,transform,filter] duration-base ease-standard motion-reduce:transition-none',
-                copied ? 'scale-100 opacity-100 blur-0' : 'scale-[0.25] opacity-0 blur-[4px]',
+                copied ? 'scale-100 opacity-100 blur-0 text-success' : 'scale-[0.25] opacity-0 blur-[4px]',
               )}
             />
           </span>
