@@ -14,11 +14,11 @@
 
 | Wave | Workflows | Scope | Verified | In Review | Pending | Target Status |
 | :--- | :---: | :--- | :---: | :---: | :---: | :---: |
-| **Wave 1: Buyer Onboarding & Developer Launchpad** | 6 | `W-01`, `W-02`, `W-25`, `W-26`, `W-27`, `W-29` | 2 | 0 | 4 | `IN PROGRESS` |
+| **Wave 1: Buyer Onboarding & Developer Launchpad** | 6 | `W-01`, `W-02`, `W-25`, `W-26`, `W-27`, `W-29` | 3 | 0 | 3 | `IN PROGRESS` |
 | **Wave 2: Financial Peace-of-Mind & Spend Observability** | 8 | `W-20`, `W-21`, `W-22`, `W-23`, `W-24`, `W-38`, `W-39`, `W-40` | 0 | 0 | 8 | `PENDING` |
 | **Wave 3: Supplier Monetization & Testing Playground** | 8 | `W-30`, `W-31`, `W-32`, `W-33`, `W-34`, `W-35`, `W-36`, `W-37` | 0 | 0 | 8 | `PENDING` |
 | **Wave 4: Team Operations, Identity & Tactile Standards** | 22 | `W-03`–`W-09`, `W-10`–`W-19`, `W-28`, `W-41`–`W-44` | 0 | 0 | 22 | `PENDING` |
-| **Total** | **44** | **All 44 Standard Workflows** | **2** | **0** | **42** | `IN PROGRESS` |
+| **Total** | **44** | **All 44 Standard Workflows** | **3** | **0** | **41** | `IN PROGRESS` |
 
 ---
 
@@ -51,18 +51,14 @@
 ---
 
 ### W-25: Multi-Harness Connect Agent Wizard
-- **Surfaces:** `src/components/ae/console/AeConnectAgentWizardDialog.tsx`, `src/modules/agent-access/config-snippets.ts`
+- **Surfaces:** `src/components/ae/console/AeConnectAgentWizardDialog.tsx`, `src/components/ae/console/AeKeyRevealDialog.tsx`, `src/modules/agent-access/config-snippets.ts`, `src/components/ae/data/AeCopyCommand.tsx`
 - **Incumbent Baseline:** 3-step modal with environment selection, spending limits, and plain key generation.
 - **Ergonomic Gap:** Key is generated in isolation; developer must figure out how to configure their specific client environment; no direct copyable snippets for Cursor, Claude Code, Python, or cURL.
 - **Target Ergonomic Spec:**
-  - Step 3 becomes a **Multi-Stack Developer Launchpad** with 4 tabs:
-    1. **Cursor (`mcp.json`):** Formatted JSON configuration snippet with key embedded.
-    2. **Claude Code CLI:** One-line terminal command `claude mcp add ...`.
-    3. **Python SDK:** Minimal 4-line snippet importing `@agentic-economy/sdk`.
-    4. **Raw cURL:** Pre-baked curl command with Authorization Bearer header.
-  - One-click copy on each snippet with checkmark micro-animation (`Copied!`).
-- **Subagent Assignment:** Grok (Scout) $\rightarrow$ Composer (Craft) $\rightarrow$ Orchestrator (Verify)
-- **Status:** `PENDING`
+  - Step 1: 620px dialog, tactile Label-wrapped environment and authority cards, reserved spend limit slot with tabular A$ amounts, live name counter, Rule 4 error triplets.
+  - Step 2: Multi-Stack Developer Launchpad with destination guides for Cursor, Claude, Python, and cURL, tab-specific copy hints, and clean non-prompt formatting for JSON/Python.
+- **Subagent Assignment:** Grok (Scout: `2c984b5d-212d-4453-9ed0-dd757c77cf23`) $\rightarrow$ Composer (Craft: `861b596f-9320-4a34-8d7c-ee1fb63de359`) $\rightarrow$ Orchestrator (Verify)
+- **Status:** `VERIFIED`
 
 ---
 

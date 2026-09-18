@@ -1,5 +1,19 @@
 export type AgentAccessConfigSnippetId = 'cursor' | 'claude' | 'python' | 'curl'
 
+export const AGENT_ACCESS_SNIPPET_DESTINATIONS: Readonly<Record<AgentAccessConfigSnippetId, string>> = {
+  cursor: 'Add to .cursor/mcp.json (project) or ~/.cursor/mcp.json (user).',
+  claude: 'Run in your terminal to install the MCP tool.',
+  python: 'Use in your Python agent script.',
+  curl: 'Run in your terminal to verify the credential (account whoami — not a purchase).',
+}
+
+export const AGENT_ACCESS_SNIPPET_COPY_HINTS: Readonly<Record<AgentAccessConfigSnippetId, string>> = {
+  cursor: 'Copied to clipboard — paste into ~/.cursor/mcp.json',
+  claude: 'Copied to clipboard — paste into your terminal',
+  python: 'Copied to clipboard — paste into your Python agent script',
+  curl: 'Copied to clipboard — paste into your terminal',
+}
+
 export type AgentAccessConfigSnippets = Readonly<{
   cursor: string
   claude: string

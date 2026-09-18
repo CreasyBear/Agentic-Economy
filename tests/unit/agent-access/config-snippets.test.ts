@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { buildAgentAccessConfigSnippets } from '@/modules/agent-access/config-snippets'
+import {
+  AGENT_ACCESS_SNIPPET_COPY_HINTS,
+  AGENT_ACCESS_SNIPPET_DESTINATIONS,
+  buildAgentAccessConfigSnippets,
+} from '@/modules/agent-access/config-snippets'
 
 describe('buildAgentAccessConfigSnippets (W-27)', () => {
   const secret = 'sek_test_1234567890abcdef'
@@ -53,6 +57,15 @@ describe('buildAgentAccessConfigSnippets (W-27)', () => {
     expect(snippets.curl).toContain('-H "Accept: application/json"')
     expect(snippets.curl).not.toContain('/api/v1/tools/call')
     expect(snippets.curl).not.toContain('tool.quote')
+  })
+
+  it('T7a: exports destination and copy-hint metadata for each harness tab', () => {
+    expect(AGENT_ACCESS_SNIPPET_DESTINATIONS.cursor).toContain('mcp.json')
+    expect(AGENT_ACCESS_SNIPPET_DESTINATIONS.claude).toContain('terminal')
+    expect(AGENT_ACCESS_SNIPPET_DESTINATIONS.python).toContain('Python')
+    expect(AGENT_ACCESS_SNIPPET_DESTINATIONS.curl).toContain('whoami')
+    expect(AGENT_ACCESS_SNIPPET_COPY_HINTS.cursor).toContain('~/.cursor/mcp.json')
+    expect(AGENT_ACCESS_SNIPPET_COPY_HINTS.claude).toContain('terminal')
   })
 
   it('T7: secret containing quotes or backslashes still yields parseable Cursor JSON', () => {

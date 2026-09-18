@@ -6,6 +6,10 @@ import '../../setup/jsdom-platform'
 
 import { AeKeyRevealDialog } from '@/components/ae/console/AeKeyRevealDialog'
 import type { IssuedAgentAccessReveal } from '@/components/ae/console/AeConnectAgentWizardDialog'
+import {
+  AGENT_ACCESS_SNIPPET_COPY_HINTS,
+  AGENT_ACCESS_SNIPPET_DESTINATIONS,
+} from '@/modules/agent-access/config-snippets'
 
 const mockToast = vi.hoisted(() => ({
   success: vi.fn(),
@@ -68,7 +72,9 @@ describe('AeKeyRevealDialog (W-27)', () => {
     )
 
     expect(screen.getByRole('dialog', { name: /save your secret key/i })).toBeInTheDocument()
-    expect(screen.getByText(/Research Bot · sandbox/i)).toBeInTheDocument()
+    expect(screen.getByText(/step 2 of 2 · save & install/i)).toBeInTheDocument()
+    expect(screen.getByText('Research Bot')).toBeInTheDocument()
+    expect(screen.getByText('Sandbox')).toBeInTheDocument()
     expect(screen.getByText('Save this secret key securely. You will not be able to view it again.')).toBeInTheDocument()
 
     const secretElement = screen.getByText(baseReveal.secret)
@@ -97,7 +103,9 @@ describe('AeKeyRevealDialog (W-27)', () => {
 
     expect(writeTextMock).toHaveBeenCalledWith(baseReveal.secret)
     await waitFor(() => {
-      expect(mockToast.success).toHaveBeenCalledWith('Secret key copied')
+      expect(mockToast.success).toHaveBeenCalledWith(
+        'Copied to clipboard — save this secret; it will not be shown again.',
+      )
     })
   })
 
@@ -141,7 +149,7 @@ describe('AeKeyRevealDialog (W-27)', () => {
     expect(onOpenChange).toHaveBeenCalledWith(false)
   })
 
-  it('T6: renders quickstart snippet tabs for Cursor, Claude Code, Python, and cURL', () => {
+  it('T6: renders quickstart snippet tabs for Cursor, Claude Code, Python, and cURL', async () => {
     render(
       <AeKeyRevealDialog
         open={true}
@@ -157,8 +165,38 @@ describe('AeKeyRevealDialog (W-27)', () => {
     expect(screen.getByRole('tab', { name: /python/i })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: /curl/i })).toBeInTheDocument()
 
-    // Default tab is Cursor -> contains mcpServers
+    // Default tab is Cursor -> contains mcpServers and destination guide
     expect(screen.getByText(new RegExp('mcpServers'))).toBeInTheDocument()
+    expect(screen.getByText(AGENT_ACCESS_SNIPPET_DESTINATIONS.cursor)).toBeInTheDocument()
+
+    fireEvent.mouseDown(screen.getByRole('tab', { name: /claude code/i }))
+    await waitFor(() => {
+      expect(screen.getByText(AGENT_ACCESS_SNIPPET_DESTINATIONS.claude)).toBeInTheDocument()
+    })
+
+    fireEvent.mouseDown(screen.getByRole('tab', { name: /^python$/i }))
+    await waitFor(() => {
+      expect(screen.getByText(AGENT_ACCESS_SNIPPET_DESTINATIONS.python)).toBeInTheDocument()
+    })
+    expect(screen.queryByText(AGENT_ACCESS_SNIPPET_COPY_HINTS.python)).not.toBeInTheDocument()
+
+    fireEvent.mouseDown(screen.getByRole('tab', { name: /curl/i }))
+    await waitFor(() => {
+      expect(screen.getByText(AGENT_ACCESS_SNIPPET_DESTINATIONS.curl)).toBeInTheDocument()
+    })
+  })
+
+  it('T6b: production reveal shows Production environment badge', () => {
+    render(
+      <AeKeyRevealDialog
+        open={true}
+        reveal={{ ...baseReveal, environment: 'production' }}
+        onOpenChange={vi.fn()}
+        canonicalBaseUrl={canonicalBaseUrl}
+      />,
+    )
+
+    expect(screen.getByText('Production')).toBeInTheDocument()
   })
 
   it('T7: does not use localStorage or sessionStorage in component source', async () => {

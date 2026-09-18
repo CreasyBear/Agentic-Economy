@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { AlertTriangleIcon, CheckIcon, CopyIcon } from 'lucide-react'
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import {
@@ -19,7 +20,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { AeCopyCommand } from '@/components/ae/data/AeCopyCommand'
 import { degrade } from '@/lib/observability/degrade'
 import { toast } from '@/lib/ui/toast'
-import { buildAgentAccessConfigSnippets } from '@/modules/agent-access/config-snippets'
+import {
+  AGENT_ACCESS_SNIPPET_COPY_HINTS,
+  AGENT_ACCESS_SNIPPET_DESTINATIONS,
+  buildAgentAccessConfigSnippets,
+} from '@/modules/agent-access/config-snippets'
 import type { IssuedAgentAccessReveal } from './AeConnectAgentWizardDialog'
 
 export type AeKeyRevealDialogProps = Readonly<{
@@ -38,7 +43,6 @@ export function AeKeyRevealDialog({
   const [acknowledged, setAcknowledged] = useState(false)
   const [copiedSecret, setCopiedSecret] = useState(false)
 
-  // Reset acknowledgement when a different key is revealed
   useEffect(() => {
     setAcknowledged(false)
     setCopiedSecret(false)
@@ -59,12 +63,15 @@ export function AeKeyRevealDialog({
     canonicalBaseUrl: effectiveOrigin,
   })
 
+  const environmentLabel = reveal.environment === 'sandbox' ? 'Sandbox' : 'Production'
+  const environmentBadgeVariant = reveal.environment === 'sandbox' ? 'secondary' : 'warning'
+
   const handleCopySecret = async () => {
     try {
       await navigator.clipboard.writeText(reveal.secret)
       setCopiedSecret(true)
       setTimeout(() => setCopiedSecret(false), 2000)
-      toast.success('Secret key copied')
+      toast.success('Copied to clipboard — save this secret; it will not be shown again.')
     } catch (cause) {
       degrade(cause, undefined, { site: 'AeKeyRevealDialog.copySecret', reason: 'source_unavailable' })
       toast.error('Copy failed')
@@ -87,12 +94,15 @@ export function AeKeyRevealDialog({
         <DialogHeader>
           <DialogTitle>Save your secret key</DialogTitle>
           <DialogDescription>
-            {reveal.displayName} · {reveal.environment}
+            Step 2 of 2 · Save & install
           </DialogDescription>
+          <div className="flex flex-wrap items-center gap-2 pt-1">
+            <span className="text-sm text-muted-foreground">{reveal.displayName}</span>
+            <Badge variant={environmentBadgeVariant}>{environmentLabel}</Badge>
+          </div>
         </DialogHeader>
 
         <div className="grid gap-4 py-2">
-          {/* Warning Alert */}
           <Alert className="border-warning-ring bg-warning-subtle text-warning-foreground">
             <AlertTriangleIcon className="size-4" />
             <AlertTitle>Save this secret key securely</AlertTitle>
@@ -101,7 +111,6 @@ export function AeKeyRevealDialog({
             </AlertDescription>
           </Alert>
 
-          {/* Monospace Plaintext Key Display */}
           <div className="grid gap-1.5">
             <Label className="text-xs text-muted-foreground">Secret key</Label>
             <div className="flex items-center justify-between gap-2 rounded-md border bg-muted/40 p-3">
@@ -131,7 +140,6 @@ export function AeKeyRevealDialog({
             </div>
           </div>
 
-          {/* Quick-Start Code Snippets */}
           <div className="grid gap-2 pt-2">
             <Label className="text-xs font-medium text-foreground">Quickstart configuration</Label>
             <Tabs defaultValue="cursor" className="w-full">
@@ -144,51 +152,56 @@ export function AeKeyRevealDialog({
 
               <TabsContent value="cursor" className="pt-2">
                 <p className="text-xs text-muted-foreground mb-2">
-                  Add to your <code className="font-mono text-[11px]">~/.cursor/mcp.json</code> file:
+                  {AGENT_ACCESS_SNIPPET_DESTINATIONS.cursor}
                 </p>
                 <AeCopyCommand
                   label="Cursor configuration"
                   code={snippets.cursor}
                   comfortable
+                  prompt={false}
+                  copiedHint={AGENT_ACCESS_SNIPPET_COPY_HINTS.cursor}
                 />
               </TabsContent>
 
               <TabsContent value="claude" className="pt-2">
                 <p className="text-xs text-muted-foreground mb-2">
-                  Run in your terminal to install the MCP tool:
+                  {AGENT_ACCESS_SNIPPET_DESTINATIONS.claude}
                 </p>
                 <AeCopyCommand
                   label="Claude Code command"
                   code={snippets.claude}
                   comfortable
+                  copiedHint={AGENT_ACCESS_SNIPPET_COPY_HINTS.claude}
                 />
               </TabsContent>
 
               <TabsContent value="python" className="pt-2">
                 <p className="text-xs text-muted-foreground mb-2">
-                  Initialize the Python client:
+                  {AGENT_ACCESS_SNIPPET_DESTINATIONS.python}
                 </p>
                 <AeCopyCommand
                   label="Python snippet"
                   code={snippets.python}
                   comfortable
+                  prompt={false}
+                  copiedHint={AGENT_ACCESS_SNIPPET_COPY_HINTS.python}
                 />
               </TabsContent>
 
               <TabsContent value="curl" className="pt-2">
                 <p className="text-xs text-muted-foreground mb-2">
-                  Verify credential with account whoami request:
+                  {AGENT_ACCESS_SNIPPET_DESTINATIONS.curl}
                 </p>
                 <AeCopyCommand
                   label="cURL request"
                   code={snippets.curl}
                   comfortable
+                  copiedHint={AGENT_ACCESS_SNIPPET_COPY_HINTS.curl}
                 />
               </TabsContent>
             </Tabs>
           </div>
 
-          {/* Acknowledgement Checkbox */}
           <div className="flex items-center gap-2 pt-3 border-t">
             <Checkbox
               id="agent-access-key-saved"

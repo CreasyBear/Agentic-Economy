@@ -19,6 +19,7 @@ describe('AeConnectAgentWizardDialog (W-26)', () => {
     )
 
     expect(screen.getByRole('dialog', { name: /connect new agent/i })).toBeInTheDocument()
+    expect(screen.getByText(/step 1 of 2 · set policy/i)).toBeInTheDocument()
     expect(screen.getByLabelText(/agent name/i)).toBeInTheDocument()
     expect(screen.getByRole('radio', { name: /sandbox/i })).toBeInTheDocument()
     expect(screen.getByRole('radio', { name: /production/i })).toBeInTheDocument()
@@ -49,6 +50,7 @@ describe('AeConnectAgentWizardDialog (W-26)', () => {
     expect(submitBtn).toBeEnabled()
 
     expect(nameInput).toHaveAttribute('maxLength', '80')
+    expect(screen.getByText('16/80')).toBeInTheDocument()
   })
 
   it('T3: sandbox default shows informational spend limits and omits budget args on submit', async () => {
@@ -68,10 +70,10 @@ describe('AeConnectAgentWizardDialog (W-26)', () => {
       />,
     )
 
-    expect(screen.getByText(/sandbox spend limits/i)).toBeInTheDocument()
-    expect(screen.getByText(/\$1\.00 \/ call/i)).toBeInTheDocument()
-    expect(screen.getByText(/\$5\.00 \/ day/i)).toBeInTheDocument()
-    expect(screen.getByText(/\$20\.00 \/ month/i)).toBeInTheDocument()
+    expect(screen.getByText(/A\$1\.00 \/ call/i)).toBeInTheDocument()
+    expect(screen.getByText(/A\$5\.00 \/ day/i)).toBeInTheDocument()
+    expect(screen.getByText(/A\$20\.00 \/ month/i)).toBeInTheDocument()
+    expect(screen.getByText(/per-call ≤ daily ≤ monthly/i)).toBeInTheDocument()
 
     const nameInput = screen.getByLabelText(/agent name/i)
     fireEvent.change(nameInput, { target: { value: 'Test Assistant' } })
@@ -116,7 +118,7 @@ describe('AeConnectAgentWizardDialog (W-26)', () => {
     const prodRadio = screen.getByRole('radio', { name: /production/i })
     fireEvent.click(prodRadio)
 
-    const perCallInput = screen.getByLabelText(/maximum spend per call/i)
+    const perCallInput = screen.getByLabelText(/max spend per call/i)
     const dailyInput = screen.getByLabelText(/daily spend limit/i)
     const monthlyInput = screen.getByLabelText(/monthly spend limit/i)
 
@@ -156,7 +158,7 @@ describe('AeConnectAgentWizardDialog (W-26)', () => {
     fireEvent.change(screen.getByLabelText(/agent name/i), { target: { value: 'Prod Worker' } })
     fireEvent.click(screen.getByRole('radio', { name: /production/i }))
 
-    const perCallInput = screen.getByLabelText(/maximum spend per call/i)
+    const perCallInput = screen.getByLabelText(/max spend per call/i)
     const dailyInput = screen.getByLabelText(/daily spend limit/i)
     const monthlyInput = screen.getByLabelText(/monthly spend limit/i)
 
@@ -253,6 +255,9 @@ describe('AeConnectAgentWizardDialog (W-26)', () => {
     await waitFor(() => {
       expect(screen.getByText(/could not connect agent/i)).toBeInTheDocument()
     })
+
+    expect(screen.getByText(/A\$0\.00 deducted — your balance is safe/i)).toBeInTheDocument()
+    expect(screen.queryByText(/invalid_input/i)).not.toBeInTheDocument()
 
     expect(onSuccess).not.toHaveBeenCalled()
     expect(onOpenChange).not.toHaveBeenCalledWith(false)

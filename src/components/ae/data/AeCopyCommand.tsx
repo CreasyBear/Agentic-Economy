@@ -12,6 +12,10 @@ type AeCopyCommandProps = Readonly<{
   className?: string
   compact?: boolean
   comfortable?: boolean
+  /** When true (default), show a `$` prompt prefix in comfortable layout. */
+  prompt?: boolean
+  /** Custom copied status text; also extends revert timeout to 2000ms. */
+  copiedHint?: string
 }>
 
 /** Product-level command treatment. `$ORIGIN` resolves only when the user copies. */
@@ -22,19 +26,28 @@ export function AeCopyCommand({
   className,
   compact = false,
   comfortable = false,
+  prompt = true,
+  copiedHint,
 }: AeCopyCommandProps) {
   const resolveCopyText = useCallback(
     () => copyText.replaceAll('$ORIGIN', window.location.origin),
     [copyText],
   )
+  const copyTimeout = copiedHint !== undefined ? 2_000 : 1_600
   const { status, isCopied: copied, copy } = useClipboardCopy(resolveCopyText, {
-    timeout: 1_600,
+    timeout: copyTimeout,
   })
+
+  const copiedMessage = copied
+    ? (copiedHint ?? `${label} copied.`)
+    : status === 'failed'
+      ? 'Copy failed. Select the command and copy it manually.'
+      : ''
 
   return (
     <div className={cn('grid min-w-0 gap-1.5', className)}>
       <div className={cn('flex min-w-0 items-start gap-2 rounded-md border bg-muted/35', compact ? 'p-2' : comfortable ? 'p-related' : 'p-3')}>
-        {comfortable ? (
+        {comfortable && prompt ? (
           <span className="mt-0.5 font-mono text-sm text-muted-foreground" aria-hidden="true">
             $
           </span>
@@ -69,7 +82,7 @@ export function AeCopyCommand({
         </Button>
       </div>
       <p role="status" aria-live="polite" className={cn('min-h-4 text-xs', status === 'failed' ? 'text-destructive' : 'text-muted-foreground')}>
-        {copied ? `${label} copied.` : status === 'failed' ? 'Copy failed. Select the command and copy it manually.' : ''}
+        {copiedMessage}
       </p>
     </div>
   )
