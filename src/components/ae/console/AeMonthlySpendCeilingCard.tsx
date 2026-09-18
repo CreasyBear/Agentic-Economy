@@ -15,8 +15,35 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Progress } from '@/components/ui/progress'
+import { toast } from '@/lib/ui/toast'
 import { AUD_EXPONENT, canonicalAudUnits, formatDisplayAmount } from '@/modules/money/public'
 import { audInputTextFromUnits } from './credit-top-up-format'
+import {
+  MONTHLY_SPEND_CEILING_PRESETS,
+  buildCeilingPreviewStatement,
+  ceilingTextFromPresetId,
+  mapMonthlySpendCeilingDiagnostic,
+  matchingMonthlySpendCeilingPresetId,
+  utilizationBand,
+  type MonthlySpendCeilingDiagnostic,
+  type MonthlySpendCeilingPresetId,
+} from './monthly-spend-ceiling-copy'
+
+const SWITCH_PRESS_CLASS =
+  'enabled:active:scale-[0.98] transition-transform duration-100 ease-out motion-reduce:transition-none motion-reduce:active:scale-100'
+
+const PRIMARY_BUTTON_PRESS_CLASS =
+  'min-h-touch enabled:active:scale-[0.98] transition-transform duration-100 ease-out motion-reduce:transition-none motion-reduce:active:scale-100'
+
+const PRESET_CHIP_CLASS =
+  'inline-flex min-h-touch items-center rounded-full border border-border bg-container px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted/60 enabled:active:scale-[0.98] transition-transform duration-100 ease-out motion-reduce:transition-none motion-reduce:active:scale-100'
+
+const PROGRESS_BAND_CLASS = {
+  normal: '[&_[data-slot=progress-indicator]]:bg-success',
+  warning: '[&_[data-slot=progress-indicator]]:bg-warning',
+  critical: '[&_[data-slot=progress-indicator]]:bg-warning',
+  exceeded: '[&_[data-slot=progress-indicator]]:bg-destructive',
+} as const
 
 export interface AeMonthlySpendCeilingCardProps {
   settings?: {
@@ -55,6 +82,7 @@ export function AeMonthlySpendCeilingCard({
     () => audInputTextFromUnits(BigInt(resolvedSettings.ceilingUnits)),
   )
   const [saving, setSaving] = useState(false)
+  const [diagnostic, setDiagnostic] = useState<MonthlySpendCeilingDiagnostic | null>(null)
 
   useEffect(() => {
     setEnabled(resolvedSettings.enabled)
@@ -68,6 +96,7 @@ export function AeMonthlySpendCeilingCard({
 
   const ceilingUnits = BigInt(resolvedSettings.ceilingUnits)
   const percent = utilizationPercent(spendUnits, ceilingUnits)
+  const band = utilizationBand(percent)
 
   const spendFormatted = formatDisplayAmount({
     currency: 'AUD',
@@ -80,17 +109,109 @@ export function AeMonthlySpendCeilingCard({
     units: resolvedSettings.ceilingUnits,
   })
 
+  const selectedPresetId = useMemo(
+    () => matchingMonthlySpendCeilingPresetId(ceilingText),
+    [ceilingText],
+  )
+
+  const previewStatement = useMemo(
+    () => buildCeilingPreviewStatement(enabled, ceilingText),
+    [enabled, ceilingText],
+  )
+
+  function resetDialogForm() {
+    setEnabled(resolvedSettings.enabled)
+    setCeilingText(audInputTextFromUnits(BigInt(resolvedSettings.ceilingUnits)))
+    setDiagnostic(null)
+  }
+
+  function clearDiagnostic() {
+    setDiagnostic(null)
+  }
+
+  function applyPreset(presetId: MonthlySpendCeilingPresetId) {
+    setCeilingText(ceilingTextFromPresetId(presetId))
+    clearDiagnostic()
+  }
+
+  function renderCardAlertSlot() {
+    if (resolvedSettings.enabled && percent >= 90 && percent < 100) {
+      return (
+        <Alert className="border-warning-ring bg-warning-subtle text-warning-foreground">
+          <AlertTitle>Approaching monthly limit ({percent}%)</AlertTitle>
+        </Alert>
+      )
+    }
+    if (resolvedSettings.enabled && percent >= 100) {
+      return (
+        <Alert variant="destructive">
+          <AlertTitle>Monthly spending limit reached</AlertTitle>
+          <AlertDescription>
+            Paid Calls are paused until next month or the cap is raised.
+          </AlertDescription>
+        </Alert>
+      )
+    }
+    if (monthSpend?.kind === 'unavailable') {
+      return (
+        <Alert>
+          <AlertDescription>Monthly spend data is unavailable.</AlertDescription>
+        </Alert>
+      )
+    }
+    return null
+  }
+
+  function renderDialogDiagnosticSlot() {
+    if (diagnostic === null) return null
+    return (
+      <Alert variant="destructive">
+        <AlertTitle className="text-sm">{diagnostic.whatHappened}</AlertTitle>
+        <AlertDescription className="grid gap-1 text-xs">
+          <span>{diagnostic.financialImpact}</span>
+          <span>{diagnostic.nextStep}</span>
+        </AlertDescription>
+      </Alert>
+    )
+  }
+
   async function handleSave() {
-    const nextCeilingUnits = canonicalAudUnits(ceilingText)
-    if (nextCeilingUnits === undefined) return
+    let nextUnits = canonicalAudUnits(ceilingText)
+    if (enabled) {
+      if (nextUnits === undefined) {
+        const diag = mapMonthlySpendCeilingDiagnostic('invalid_amount')
+        setDiagnostic(diag)
+        toast.error(diag.whatHappened, { description: diag.nextStep })
+        return
+      }
+    } else {
+      nextUnits = nextUnits ?? BigInt(resolvedSettings.ceilingUnits || '0')
+    }
+
+    setDiagnostic(null)
     setSaving(true)
     try {
       await onSave({
         enabled,
-        ceilingUnits: nextCeilingUnits.toString(),
+        ceilingUnits: nextUnits.toString(),
         expectedRevision: resolvedSettings.revision,
       })
+      if (enabled) {
+        toast.success(
+          `Monthly spending cap updated: ${formatDisplayAmount({
+            currency: 'AUD',
+            exponent: AUD_EXPONENT,
+            units: nextUnits.toString(),
+          })}`,
+        )
+      } else {
+        toast.success('Monthly spending cap disabled')
+      }
       setDialogOpen(false)
+    } catch (error: unknown) {
+      const diag = mapMonthlySpendCeilingDiagnostic(error)
+      setDiagnostic(diag)
+      toast.error(diag.whatHappened, { description: diag.nextStep })
     } finally {
       setSaving(false)
     }
@@ -100,51 +221,50 @@ export function AeMonthlySpendCeilingCard({
     <div className="grid gap-3 rounded-xl border border-border/70 p-4">
       <div>
         <h3 className="font-medium">Organization monthly spending cap</h3>
-        {!resolvedSettings.enabled ? (
-          <p className="text-sm text-muted-foreground">
-            No monthly spending limit is set for this workspace. Calls are bounded only by available prepaid balance and individual agent policies.
-          </p>
-        ) : null}
       </div>
 
-      {resolvedSettings.enabled ? (
-        <div className="grid gap-3">
-          <p className="text-sm">
-            {spendFormatted} spent of {ceilingFormatted} ({percent}%)
+      <div className="min-h-[2.75rem]">
+        {resolvedSettings.enabled ? (
+          <p className="font-mono text-sm tabular-nums" role="status" aria-live="polite">
+            {spendFormatted} spent of {ceilingFormatted} monthly cap ({percent}%)
           </p>
-          <Progress value={percent} />
-          {percent >= 80 && percent < 100 ? (
-            <Alert>
-              <AlertTitle>Approaching monthly limit ({percent}%)</AlertTitle>
-            </Alert>
-          ) : null}
-          {percent >= 100 ? (
-            <Alert variant="destructive">
-              <AlertTitle>Monthly spending limit reached</AlertTitle>
-              <AlertDescription>
-                Paid Calls are paused until next month or the cap is raised.
-              </AlertDescription>
-            </Alert>
-          ) : null}
-          {monthSpend?.kind === 'unavailable' ? (
-            <Alert>
-              <AlertDescription>Monthly spend data is unavailable.</AlertDescription>
-            </Alert>
-          ) : null}
-        </div>
-      ) : null}
+        ) : (
+          <p className="text-sm text-muted-foreground" role="status">
+            Monthly spending cap is disabled. Calls are bounded only by prepaid credit and agent spending policies — no surprise overage charges.
+          </p>
+        )}
+      </div>
+
+      <Progress
+        value={resolvedSettings.enabled ? percent : 0}
+        className={PROGRESS_BAND_CLASS[resolvedSettings.enabled ? band : 'normal']}
+      />
+
+      <div className="min-h-[5.5rem]">{renderCardAlertSlot()}</div>
 
       <div>
         <Button
           type="button"
           variant="secondary"
-          onClick={() => setDialogOpen(true)}
+          className={PRIMARY_BUTTON_PRESS_CLASS}
+          onClick={() => {
+            resetDialogForm()
+            setDialogOpen(true)
+          }}
         >
           {resolvedSettings.enabled ? 'Edit Limit' : 'Set Limit'}
         </Button>
       </div>
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+      <Dialog
+        open={dialogOpen}
+        onOpenChange={(open) => {
+          setDialogOpen(open)
+          if (open) {
+            resetDialogForm()
+          }
+        }}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Organization monthly spending cap</DialogTitle>
@@ -153,6 +273,26 @@ export function AeMonthlySpendCeilingCard({
             </DialogDescription>
           </DialogHeader>
 
+          <fieldset className="grid gap-2">
+            <legend className="text-sm font-medium">Quick setup</legend>
+            <div className="flex flex-wrap gap-2">
+              {MONTHLY_SPEND_CEILING_PRESETS.map((preset) => {
+                const selected = selectedPresetId === preset.id
+                return (
+                  <button
+                    key={preset.id}
+                    type="button"
+                    aria-pressed={selected}
+                    onClick={() => applyPreset(preset.id)}
+                    className={`${PRESET_CHIP_CLASS}${selected ? ' border-foreground bg-muted' : ''}`}
+                  >
+                    {preset.label}
+                  </button>
+                )
+              })}
+            </div>
+          </fieldset>
+
           <div className="flex items-center justify-between gap-4">
             <span className="text-sm">Monthly spending cap</span>
             <button
@@ -160,9 +300,12 @@ export function AeMonthlySpendCeilingCard({
               role="switch"
               aria-checked={enabled}
               aria-label="Monthly spending cap"
-              className="relative inline-flex h-6 w-11 shrink-0 rounded-full border border-input bg-muted transition-colors data-[state=on]:bg-primary"
+              className={`relative inline-flex h-6 w-11 shrink-0 rounded-full border border-input bg-muted transition-colors data-[state=on]:bg-primary ${SWITCH_PRESS_CLASS}`}
               data-state={enabled ? 'on' : 'off'}
-              onClick={() => setEnabled((current) => !current)}
+              onClick={() => {
+                setEnabled((current) => !current)
+                clearDiagnostic()
+              }}
             >
               <span
                 className="pointer-events-none block size-5 translate-x-0.5 rounded-full border border-border bg-background shadow-none transition-transform data-[state=on]:translate-x-[1.375rem]"
@@ -177,12 +320,27 @@ export function AeMonthlySpendCeilingCard({
               id="monthly-spend-ceiling-cap"
               inputMode="decimal"
               value={ceilingText}
-              onChange={(event) => setCeilingText(event.target.value)}
+              onChange={(event) => {
+                setCeilingText(event.target.value)
+                clearDiagnostic()
+              }}
+              className="font-mono tabular-nums"
             />
           </div>
 
+          <p className="min-h-[2.75rem] text-sm text-muted-foreground" role="status" aria-live="polite">
+            {previewStatement}
+          </p>
+
+          <div className="min-h-[5.5rem]">{renderDialogDiagnosticSlot()}</div>
+
           <DialogFooter>
-            <Button type="button" disabled={saving} onClick={() => { void handleSave() }}>
+            <Button
+              type="button"
+              disabled={saving}
+              className={PRIMARY_BUTTON_PRESS_CLASS}
+              onClick={() => { void handleSave() }}
+            >
               {saving ? 'Saving…' : 'Save'}
             </Button>
           </DialogFooter>

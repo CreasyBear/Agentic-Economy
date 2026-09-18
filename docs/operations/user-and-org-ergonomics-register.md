@@ -15,10 +15,10 @@
 | Wave | Workflows | Scope | Verified | In Review | Pending | Target Status |
 | :--- | :---: | :--- | :---: | :---: | :---: | :---: |
 | **Wave 1: Buyer Onboarding & Developer Launchpad** | 6 | `W-01`, `W-02`, `W-25`, `W-26`, `W-27`, `W-29` | 6 | 0 | 0 | **VERIFIED** |
-| **Wave 2: Financial Peace-of-Mind & Spend Observability** | 8 | `W-20`, `W-21`, `W-22`, `W-23`, `W-24`, `W-38`, `W-39`, `W-40` | 3 | 0 | 5 | `IN PROGRESS` |
+| **Wave 2: Financial Peace-of-Mind & Spend Observability** | 8 | `W-20`, `W-21`, `W-22`, `W-23`, `W-24`, `W-38`, `W-39`, `W-40` | 4 | 0 | 4 | `IN PROGRESS` |
 | **Wave 3: Supplier Monetization & Testing Playground** | 8 | `W-30`, `W-31`, `W-32`, `W-33`, `W-34`, `W-35`, `W-36`, `W-37` | 0 | 0 | 8 | `PENDING` |
 | **Wave 4: Team Operations, Identity & Tactile Standards** | 22 | `W-03`–`W-09`, `W-10`–`W-19`, `W-28`, `W-41`–`W-44` | 0 | 0 | 22 | `PENDING` |
-| **Total** | **44** | **All 44 Standard Workflows** | **9** | **0** | **35** | `IN PROGRESS` |
+| **Total** | **44** | **All 44 Standard Workflows** | **10** | **0** | **34** | `IN PROGRESS` |
 
 ---
 
@@ -158,16 +158,20 @@
 
 ---
 
-### W-23: Organization Monthly Spend Velocity Gauge
-- **Surfaces:** `src/components/ae/console/AeMonthlySpendCeilingCard.tsx`, `convex/moneyMonthlySpendBudget.ts`
+### W-23: Organization Monthly Hard Ceiling
+- **Surfaces:** `src/components/ae/console/AeMonthlySpendCeilingCard.tsx`, `src/components/ae/console/monthly-spend-ceiling-copy.ts`, `src/components/ae/console/AeOwnerCredit.tsx`, `convex/moneyMonthlySpendBudget.ts`
 - **Incumbent Baseline:** Basic text input and save button.
 - **Ergonomic Gap:** Static number gives zero context on whether the workspace is about to hit its ceiling.
 - **Target Ergonomic Spec:**
-  - Real-time spend progress bar: Current month spend vs Monthly cap.
-  - Dynamic color gradient: Green ($\le 70\%$) $\rightarrow$ Amber ($\le 90\%$) $\rightarrow$ Crimson ($> 90\%$).
-  - Predictive burn forecast: *"At current pace, projected month-end spend is A$184.20 (within A$200.00 cap)"*.
-- **Subagent Assignment:** Grok (Scout) $\rightarrow$ Composer (Craft) $\rightarrow$ Orchestrator (Verify)
-- **Status:** `PENDING`
+  - High-trust textual summary with tabular figures: `A$145.20 spent of A$500.00 monthly cap (29%)` in reserved `min-h-[2.75rem]` slot.
+  - Clear reassurance when disabled explaining calls are bounded only by prepaid credit and agent spending policies, with no surprise overage charges.
+  - Velocity progress gauge with semantic utilization color mapping (`bg-success`, `bg-warning`, `bg-destructive`).
+  - Reserved `min-h-[5.5rem]` alert slot displaying approaching limit warning (≥90%), limit reached danger alert (≥100%), and spend data status.
+  - Modal dialog with tactile preset chips (A$100, A$250, A$500, A$1,000) and live natural language consequence preview.
+  - Rule 4 diagnostic alert and `toast.error` for invalid inputs or revision conflicts; `toast.success` confirming cap status.
+  - Zero-CLS loading skeleton in owner credit console.
+- **Subagent Assignment:** Grok (Scout: `5127474d-a6e9-49a8-9c67-6b7fcd5360ce`) $\rightarrow$ Composer (Craft: `d9ad5b19-295b-4e44-9a40-f26e631e2e10`) $\rightarrow$ Orchestrator (Verify)
+- **Status:** `VERIFIED`
 
 ---
 

@@ -234,12 +234,26 @@ export function AeOwnerCredit({
             </AlertDescription>
           </Alert>
         ) : null}
-        {monthlySpendCeilingSettings !== undefined && onSaveMonthlySpendCeiling !== undefined ? (
-          <AeMonthlySpendCeilingCard
-            settings={monthlySpendCeilingSettings}
-            {...(monthlySpendMonthSpend === undefined ? {} : { monthSpend: monthlySpendMonthSpend })}
-            onSave={onSaveMonthlySpendCeiling}
-          />
+        {onSaveMonthlySpendCeiling !== undefined ? (
+          monthlySpendCeilingSettings !== undefined ? (
+            <AeMonthlySpendCeilingCard
+              settings={monthlySpendCeilingSettings}
+              {...(monthlySpendMonthSpend === undefined ? {} : { monthSpend: monthlySpendMonthSpend })}
+              onSave={onSaveMonthlySpendCeiling}
+            />
+          ) : (
+            <div
+              className="grid gap-3 rounded-xl border border-border/70 p-4"
+              aria-busy="true"
+              aria-label="Loading monthly spending cap"
+            >
+              <Skeleton className="h-5 w-56" />
+              <Skeleton className="min-h-[2.75rem] w-full" />
+              <Skeleton className="h-2 w-full" />
+              <Skeleton className="min-h-[5.5rem] w-full" />
+              <Skeleton className="h-9 w-24" />
+            </div>
+          )
         ) : null}
         {onManageSavedPaymentMethods !== undefined ? (
           <AeSavedPaymentMethodsCard
