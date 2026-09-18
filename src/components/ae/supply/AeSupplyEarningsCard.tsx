@@ -1,10 +1,18 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useReverification } from "@clerk/tanstack-react-start";
 import { isReverificationCancelledError } from "@clerk/tanstack-react-start/errors";
 import { useServerFn } from "@tanstack/react-start";
+import {
+  AlertCircleIcon,
+  CheckCircle2Icon,
+  ExternalLinkIcon,
+} from "lucide-react";
 
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { degrade } from "@/lib/observability/degrade";
+import { toast } from "@/lib/ui/toast";
 import { AeEmptyState } from "@/components/ae/feedback/AeEmptyState";
 import { AeFactList } from "@/components/ae/data/AeFactList";
 import { AeConfirmDialog } from "@/components/ae/feedback/AeConfirmDialog";
@@ -18,6 +26,18 @@ import {
   type OwnerConnectReadinessReadback,
 } from "@/modules/money/money.functions";
 import { compareExactAmounts, formatCurrencyAmount } from "@/modules/money/public";
+
+const TACTILE =
+  "enabled:active:scale-[0.98] transition-transform duration-100 ease-out motion-reduce:transition-none motion-reduce:active:scale-100";
+const FINANCIAL_SAFE =
+  "A$0.00 affected — your earnings and payout configuration remain safe.";
+const WHAT_HAPPENED = "Could not open Stripe Express dashboard.";
+
+type Rule4Diagnostic = Readonly<{
+  whatHappened: string;
+  financialImpact: string;
+  nextStep: string;
+}>;
 
 export function AeSupplyEarningsCard({
   readback,
@@ -98,8 +118,10 @@ function EarningsCurrencyCard({
 }>) {
   const [busy, setBusy] = useState<string | undefined>();
   const [message, setMessage] = useState<string | undefined>();
+  const [diagnosticError, setDiagnosticError] = useState<Rule4Diagnostic>();
   const [confirmAction, setConfirmAction] = useState<"connect" | "onboarding" | "transfer">();
   const payoutActionRef = useRef<HTMLButtonElement>(null);
+  const expressActionRef = useRef<HTMLButtonElement>(null);
   const createConnect = useReverification(useServerFn(createOwnerConnectAccountServer));
   const createOnboarding = useReverification(useServerFn(createOwnerOnboardingLinkServer));
   const createExpressLoginLink = useServerFn(createOwnerExpressLoginLinkServer);
@@ -176,9 +198,33 @@ function EarningsCurrencyCard({
         ? "AE is reconciling the recorded transfer. Do not retry it."
         : undefined;
 
+  useEffect(() => {
+    function refocusExpressAction() {
+      if (document.visibilityState === "visible") {
+        expressActionRef.current?.focus();
+      }
+    }
+    window.addEventListener("focus", refocusExpressAction);
+    document.addEventListener("visibilitychange", refocusExpressAction);
+    return () => {
+      window.removeEventListener("focus", refocusExpressAction);
+      document.removeEventListener("visibilitychange", refocusExpressAction);
+    };
+  }, []);
+
+  function reportSsoFailure(nextStep: string) {
+    setDiagnosticError({
+      whatHappened: WHAT_HAPPENED,
+      financialImpact: FINANCIAL_SAFE,
+      nextStep,
+    });
+    toast.error(WHAT_HAPPENED, { description: nextStep });
+  }
+
   async function createAccount() {
     setBusy("connect");
     setMessage(undefined);
+    setDiagnosticError(undefined);
     try {
       const result = await createConnect({
         data: {
@@ -210,6 +256,7 @@ function EarningsCurrencyCard({
     }
     setBusy("onboarding");
     setMessage(undefined);
+    setDiagnosticError(undefined);
     try {
       const result = await createOnboarding({
         data: {
@@ -255,6 +302,7 @@ function EarningsCurrencyCard({
     ) return;
     setBusy("transfer");
     setMessage(undefined);
+    setDiagnosticError(undefined);
     try {
       const result = await beginPayout({
         data: {
@@ -287,6 +335,7 @@ function EarningsCurrencyCard({
   async function openExpressDashboard() {
     setBusy("express_dashboard");
     setMessage(undefined);
+    setDiagnosticError(undefined);
     try {
       const result = await createExpressLoginLink({
         data: {
@@ -295,12 +344,23 @@ function EarningsCurrencyCard({
         },
       });
       if (result.kind === "ok") {
-        window.open(result.url, "_blank", "noopener,noreferrer");
-      } else {
-        setMessage(actionMessage(result.code));
+        const popup = window.open(result.url, "_blank", "noopener,noreferrer");
+        if (popup === null) {
+          reportSsoFailure("Allow pop-ups for this site, then try again.");
+          return;
+        }
+        expressActionRef.current?.focus();
+        return;
       }
+      reportSsoFailure(ssoFailureNextStep(result.code));
     } catch (cause) {
-      setMessage(degrade(cause, "Could not open Stripe Express dashboard. Try again.", { site: "openExpressDashboard", reason: "source_unavailable" }));
+      degrade(cause, WHAT_HAPPENED, {
+        site: "openExpressDashboard",
+        reason: "source_unavailable",
+      });
+      reportSsoFailure(
+        "Please refresh your session or try again in a few moments.",
+      );
     } finally {
       setBusy(undefined);
     }
@@ -315,6 +375,7 @@ function EarningsCurrencyCard({
       return;
     setBusy("refresh");
     setMessage(undefined);
+    setDiagnosticError(undefined);
     try {
       const result = await readOwnerPayoutTransferServer({
         data: {
@@ -431,12 +492,38 @@ function EarningsCurrencyCard({
             ? "Your payout account is ready. You can approve a payout after provider earnings reach the minimum shown above."
             : "Payouts become available when your payout account and provider configuration are ready."}
         </p>
-        <div className="flex flex-wrap gap-2">
+        <div
+          className="grid min-h-[7.5rem] gap-2 rounded-lg border bg-muted/20 p-3"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            {expressStatusBadge(accountState)}
+            {stripeAccountId !== undefined ? (
+              <span
+                className="font-mono text-xs tabular-nums text-muted-foreground"
+                aria-label={`Stripe Express account ending ${stripeAccountId.slice(-4)}`}
+              >
+                acct_••••{stripeAccountId.slice(-4)}
+              </span>
+            ) : (
+              <span className="text-xs text-muted-foreground">
+                Stripe account not bound yet.
+              </span>
+            )}
+          </div>
+          <p className="m-0 text-sm text-muted-foreground">
+            {expressStatusExplanation(accountState)}
+          </p>
+          <p className="m-0 text-xs text-muted-foreground">
+            Direct AUD bank credits are managed directly in Stripe Express.
+            Agentic Economy never stores bank account credentials.
+          </p>
+        </div>
+        <div className="flex min-h-touch flex-wrap gap-2">
           {canApprovePayout ? (
             <Button
               ref={payoutActionRef}
               type="button"
-              className="min-h-touch"
+              className={`min-h-touch ${TACTILE}`}
               disabled={busy !== undefined}
               onClick={() => setConfirmAction("transfer")}
             >
@@ -445,22 +532,28 @@ function EarningsCurrencyCard({
           ) : null}
           {accountState === "ready" && stripeAccountId !== undefined ? (
             <Button
+              ref={expressActionRef}
               type="button"
-              variant="outline"
-              className="min-h-touch"
+              variant={canApprovePayout ? "outline" : "secondary"}
+              className={`min-h-touch gap-2 ${TACTILE}`}
               disabled={busy !== undefined}
               onClick={() => void openExpressDashboard()}
             >
-              {busy === "express_dashboard"
-                ? "Opening Stripe Express…"
-                : "View Stripe Express Dashboard"}
+              {busy === "express_dashboard" ? (
+                "Opening Stripe…"
+              ) : (
+                <>
+                  View Bank Payouts on Stripe
+                  <ExternalLinkIcon className="size-4" aria-hidden />
+                </>
+              )}
             </Button>
           ) : accountState === "ready" ? null : stripeAccountId === undefined ? (
             <Button
               ref={payoutActionRef}
               type="button"
               variant="secondary"
-              className="min-h-touch"
+              className={`min-h-touch ${TACTILE}`}
               disabled={busy !== undefined}
               onClick={() => setConfirmAction("connect")}
             >
@@ -473,7 +566,7 @@ function EarningsCurrencyCard({
               ref={payoutActionRef}
               type="button"
               variant="secondary"
-              className="min-h-touch"
+              className={`min-h-touch ${TACTILE}`}
               disabled={busy !== undefined}
               onClick={() => setConfirmAction("onboarding")}
             >
@@ -485,11 +578,6 @@ function EarningsCurrencyCard({
             </Button>
           )}
         </div>
-        {accountState === "ready" && (
-          <p className="m-0 text-xs text-muted-foreground">
-            Bank deposits, tax reports (1099), and transfer history are managed securely in the Stripe Express portal.
-          </p>
-        )}
         <AeConfirmDialog
           open={confirmAction !== undefined}
           onOpenChange={(open) => {
@@ -506,12 +594,20 @@ function EarningsCurrencyCard({
           onConfirm={confirmPayoutAuthority}
           returnFocusRef={payoutActionRef}
         />
-        <div
-          role="status"
-          aria-live="polite"
-          className="min-h-5 text-sm text-muted-foreground"
-        >
-          {message}
+        <div aria-live="polite" className="min-h-[5.5rem]">
+          {diagnosticError !== undefined ? (
+            <Alert variant="destructive">
+              <AlertTitle className="text-sm font-medium">
+                {diagnosticError.whatHappened}
+              </AlertTitle>
+              <AlertDescription className="grid gap-1 text-xs">
+                <span>{diagnosticError.financialImpact}</span>
+                <span>{diagnosticError.nextStep}</span>
+              </AlertDescription>
+            </Alert>
+          ) : message === undefined ? null : (
+            <p className="m-0 text-sm text-muted-foreground">{message}</p>
+          )}
         </div>
       </div>
       {account.earnings.truncated ? (
@@ -522,6 +618,65 @@ function EarningsCurrencyCard({
       ) : null}
     </section>
   );
+}
+
+function expressStatusBadge(accountState: string) {
+  if (accountState === "ready") {
+    return (
+      <Badge variant="success" className="gap-1">
+        <CheckCircle2Icon className="size-3" />
+        Stripe Express Account Active
+      </Badge>
+    );
+  }
+  if (accountState === "submitted" || accountState === "onboarding_started") {
+    return (
+      <Badge variant="warning" className="gap-1">
+        <AlertCircleIcon className="size-3" />
+        Verification Pending
+      </Badge>
+    );
+  }
+  if (accountState === "restricted") {
+    return (
+      <Badge variant="destructive" className="gap-1">
+        <AlertCircleIcon className="size-3" />
+        Action Required
+      </Badge>
+    );
+  }
+  return (
+    <Badge variant="warning" className="gap-1">
+      <AlertCircleIcon className="size-3" />
+      Action Required
+    </Badge>
+  );
+}
+
+function expressStatusExplanation(accountState: string): string {
+  if (accountState === "ready") {
+    return "Manage bank account details, view payout transfer receipts, and download annual tax statements.";
+  }
+  if (accountState === "submitted" || accountState === "onboarding_started") {
+    return "Stripe is still verifying this payout account. Bank details, receipts, and tax statements open in Express once verification completes.";
+  }
+  if (accountState === "restricted") {
+    return "Stripe needs more information before Express can be opened. Continue onboarding to resolve outstanding requirements.";
+  }
+  return "Connect Stripe Express to manage bank details, payout receipts, and annual tax statements.";
+}
+
+function ssoFailureNextStep(code: string): string {
+  if (code === "billing_identity_missing") {
+    return "Sign in again as the owner, then try again.";
+  }
+  if (code === "payout_not_ready") {
+    return "Finish payout verification, then try again.";
+  }
+  if (code === "stripe_setup_required") {
+    return "Stripe Express is temporarily unavailable. Try again in a few moments.";
+  }
+  return "Please refresh your session or try again in a few moments.";
 }
 
 function payoutAccountLabel(state: string): string {

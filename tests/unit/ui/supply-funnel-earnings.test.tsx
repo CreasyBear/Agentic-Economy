@@ -5,6 +5,83 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { AeSupplyEarningsCard } from "@/components/ae/supply/AeSupplyEarningsCard";
+import { toast } from "@/lib/ui/toast";
+
+vi.mock("@/lib/ui/toast", () => ({
+  toast: { success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn() },
+}));
+
+const TACTILE_CLASS_FRAGMENT = "active:scale-[0.98]";
+
+function readyExpressConnect(
+  stripeAccountId: string,
+  exact: { currency: string; units: string; exponent: number },
+) {
+  return {
+    kind: "available" as const,
+    businessId: "business-1",
+    accountsTruncated: false,
+    accounts: [
+      {
+        currency: "USD",
+        account: {
+          businessId: "business-1",
+          currency: "USD",
+          exponent: 2,
+          stripeAccountId,
+          state: "ready" as const,
+          detailsSubmitted: true,
+          recipientCapabilityActive: true,
+          version: 5,
+        },
+        payout: {
+          businessId: "business-1",
+          accountState: "ready" as const,
+          providerNet: exact,
+          minimumPayout: { ...exact, units: "1000" },
+          evidence: "source" as const,
+        },
+      },
+    ],
+  };
+}
+
+function readyEarningsReadback(
+  exact: { currency: string; units: string; exponent: number },
+) {
+  return {
+    kind: "available" as const,
+    businessId: "business-1",
+    accountsTruncated: false,
+    accounts: [
+      {
+        currency: "USD",
+        earnings: {
+          kind: "ok" as const,
+          businessId: "business-1",
+          grossAccrual: exact,
+          rake: { ...exact, units: "50" },
+          providerNet: exact,
+          paidOut: { ...exact, units: "0" },
+          held: exact,
+          recoveryDue: { ...exact, units: "0" },
+          truncated: false,
+          evidence: "source" as const,
+        },
+        payout: {
+          kind: "ok" as const,
+          businessId: "business-1",
+          accountState: "ready" as const,
+          payoutState: "held_threshold" as const,
+          payoutRef: "payout-1",
+          providerNet: exact,
+          minimumPayout: { ...exact, units: "1000" },
+          evidence: "source" as const,
+        },
+      },
+    ],
+  };
+}
 
 describe("current supply funnel", () => {
   it("explains a ready account's held payout threshold without mutation controls", () => {
@@ -588,13 +665,62 @@ describe("current supply funnel", () => {
     );
   });
 
-  it("renders View Stripe Express Dashboard and opens SSO link when account is ready", async () => {
-    const windowOpenSpy = vi.spyOn(window, "open").mockImplementation(() => null);
+  it("renders View Bank Payouts on Stripe and opens SSO link when account is ready", async () => {
+    const windowOpenSpy = vi
+      .spyOn(window, "open")
+      .mockImplementation(() => ({}) as Window);
     moneyServerMocks.createOwnerExpressLoginLinkServer.mockResolvedValue({
       kind: "ok",
       url: "https://connect.stripe.com/express/test_session",
     });
 
+    const exact = { currency: "USD", units: "500", exponent: 2 };
+    const { container } = render(
+      <AeSupplyEarningsCard
+        readback={readyEarningsReadback(exact)}
+        connect={readyExpressConnect("acct_ready123", exact)}
+      />,
+    );
+
+    const ssoBtn = screen.getByRole("button", {
+      name: /view bank payouts on stripe/i,
+    });
+    expect(ssoBtn).toBeDefined();
+    expect(ssoBtn.className).toContain(TACTILE_CLASS_FRAGMENT);
+    expect(screen.getByText("Stripe Express Account Active")).toBeDefined();
+    expect(screen.getByText("acct_••••y123")).toBeDefined();
+    expect(
+      screen.getByText(
+        "Manage bank account details, view payout transfer receipts, and download annual tax statements.",
+      ),
+    ).toBeDefined();
+    expect(
+      screen.getByText(
+        "Direct AUD bank credits are managed directly in Stripe Express. Agentic Economy never stores bank account credentials.",
+      ),
+    ).toBeDefined();
+    expect(
+      container.querySelector('[aria-live="polite"].min-h-\\[5\\.5rem\\]'),
+    ).not.toBeNull();
+
+    fireEvent.click(ssoBtn);
+    await waitFor(() => {
+      expect(moneyServerMocks.createOwnerExpressLoginLinkServer).toHaveBeenCalledWith({
+        data: {
+          businessId: "business-1",
+          currency: "USD",
+        },
+      });
+      expect(windowOpenSpy).toHaveBeenCalledWith(
+        "https://connect.stripe.com/express/test_session",
+        "_blank",
+        "noopener,noreferrer",
+      );
+    });
+    windowOpenSpy.mockRestore();
+  });
+
+  it("shows Verification Pending for onboarding_started without SSO button", () => {
     const exact = { currency: "USD", units: "500", exponent: 2 };
     render(
       <AeSupplyEarningsCard
@@ -619,7 +745,8 @@ describe("current supply funnel", () => {
             payout: {
               kind: "ok",
               businessId: "business-1",
-              accountState: "ready",
+              accountState: "onboarding_started",
+              accountVersion: 4,
               payoutState: "held_threshold",
               payoutRef: "payout-1",
               providerNet: exact,
@@ -638,15 +765,18 @@ describe("current supply funnel", () => {
               businessId: "business-1",
               currency: "USD",
               exponent: 2,
-              stripeAccountId: "acct_ready123",
-              state: "ready",
-              detailsSubmitted: true,
-              recipientCapabilityActive: true,
-              version: 5,
+              stripeAccountId: "acct_9876",
+              state: "onboarding_started",
+              detailsSubmitted: false,
+              recipientCapabilityActive: false,
+              version: 4,
             },
             payout: {
               businessId: "business-1",
-              accountState: "ready",
+              accountState: "onboarding_started",
+              accountVersion: 4,
+              payoutState: "held_threshold",
+              payoutRef: "payout-1",
               providerNet: exact,
               minimumPayout: { ...exact, units: "1000" },
               evidence: "source",
@@ -656,23 +786,190 @@ describe("current supply funnel", () => {
       />,
     );
 
-    const ssoBtn = screen.getByRole("button", { name: /view stripe express dashboard/i });
-    expect(ssoBtn).toBeDefined();
-    expect(screen.getByText(/bank deposits, tax reports \(1099\), and transfer history are managed securely in the stripe express portal/i)).toBeDefined();
+    expect(screen.getByText("Verification Pending")).toBeDefined();
+    expect(
+      screen.queryByRole("button", { name: /view bank payouts on stripe/i }),
+    ).toBeNull();
+    const continueBtn = screen.getByRole("button", { name: "Continue onboarding" });
+    expect(continueBtn.className).toContain(TACTILE_CLASS_FRAGMENT);
+  });
 
-    fireEvent.click(ssoBtn);
-    await waitFor(() => {
-      expect(moneyServerMocks.createOwnerExpressLoginLinkServer).toHaveBeenCalledWith({
-        data: {
+  it("shows Action Required for restricted without SSO button", () => {
+    const exact = { currency: "USD", units: "500", exponent: 2 };
+    render(
+      <AeSupplyEarningsCard
+        readback={{
+          kind: "available",
           businessId: "business-1",
-          currency: "USD",
-        },
-      });
-      expect(windowOpenSpy).toHaveBeenCalledWith(
-        "https://connect.stripe.com/express/test_session",
-        "_blank",
-        "noopener,noreferrer",
+          accountsTruncated: false,
+          accounts: [{
+            currency: "USD",
+            earnings: {
+              kind: "ok",
+              businessId: "business-1",
+              grossAccrual: exact,
+              rake: { ...exact, units: "50" },
+              providerNet: exact,
+              paidOut: { ...exact, units: "0" },
+              held: exact,
+              recoveryDue: { ...exact, units: "0" },
+              truncated: false,
+              evidence: "source",
+            },
+            payout: {
+              kind: "ok",
+              businessId: "business-1",
+              accountState: "restricted",
+              accountVersion: 3,
+              payoutState: "held_threshold",
+              payoutRef: "payout-1",
+              providerNet: exact,
+              minimumPayout: { ...exact, units: "1000" },
+              evidence: "source",
+            },
+          }],
+        }}
+        connect={{
+          kind: "available",
+          businessId: "business-1",
+          accountsTruncated: false,
+          accounts: [{
+            currency: "USD",
+            account: {
+              businessId: "business-1",
+              currency: "USD",
+              exponent: 2,
+              stripeAccountId: "acct_restricted",
+              state: "restricted",
+              detailsSubmitted: true,
+              recipientCapabilityActive: false,
+              version: 3,
+            },
+            payout: {
+              businessId: "business-1",
+              accountState: "restricted",
+              accountVersion: 3,
+              payoutState: "held_threshold",
+              payoutRef: "payout-1",
+              providerNet: exact,
+              minimumPayout: { ...exact, units: "1000" },
+              evidence: "source",
+            },
+          }],
+        }}
+      />,
+    );
+
+    expect(screen.getByText("Action Required")).toBeDefined();
+    expect(
+      screen.queryByRole("button", { name: /view bank payouts on stripe/i }),
+    ).toBeNull();
+  });
+
+  it("shows Rule 4 diagnostic and toast when SSO link generation fails", async () => {
+    vi.mocked(toast.error).mockClear();
+    moneyServerMocks.createOwnerExpressLoginLinkServer.mockResolvedValue({
+      kind: "refused",
+      code: "payout_not_ready",
+      retryable: false,
+    });
+
+    const exact = { currency: "USD", units: "500", exponent: 2 };
+    render(
+      <AeSupplyEarningsCard
+        readback={readyEarningsReadback(exact)}
+        connect={readyExpressConnect("acct_ready123", exact)}
+      />,
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /view bank payouts on stripe/i }),
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Could not open Stripe Express dashboard.")).toBeDefined();
+      expect(
+        screen.getByText(
+          "A$0.00 affected — your earnings and payout configuration remain safe.",
+        ),
+      ).toBeDefined();
+      expect(
+        screen.getByText("Finish payout verification, then try again."),
+      ).toBeDefined();
+      expect(toast.error).toHaveBeenCalledWith(
+        "Could not open Stripe Express dashboard.",
+        { description: "Finish payout verification, then try again." },
       );
     });
+  });
+
+  it("shows pop-up blocked guidance when window.open returns null", async () => {
+    vi.spyOn(window, "open").mockImplementation(() => null);
+    moneyServerMocks.createOwnerExpressLoginLinkServer.mockResolvedValue({
+      kind: "ok",
+      url: "https://connect.stripe.com/express/test_session",
+    });
+
+    const exact = { currency: "USD", units: "500", exponent: 2 };
+    render(
+      <AeSupplyEarningsCard
+        readback={readyEarningsReadback(exact)}
+        connect={readyExpressConnect("acct_ready123", exact)}
+      />,
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /view bank payouts on stripe/i }),
+    );
+
+    await waitFor(() => {
+      expect(
+        screen.getByText("Allow pop-ups for this site, then try again."),
+      ).toBeDefined();
+    });
+  });
+
+  it("applies tactile press classes to payout action buttons", () => {
+    const exact = { currency: "USD", units: "500", exponent: 2 };
+    render(
+      <AeSupplyEarningsCard
+        readback={{
+          kind: "available",
+          businessId: "business-1",
+          accountsTruncated: false,
+          accounts: [
+            {
+              currency: "USD",
+              earnings: {
+                kind: "ok",
+                businessId: "business-1",
+                grossAccrual: exact,
+                rake: { ...exact, units: "50" },
+                providerNet: exact,
+                paidOut: { ...exact, units: "0" },
+                held: exact,
+                recoveryDue: { ...exact, units: "0" },
+                truncated: false,
+                evidence: "source",
+              },
+              payout: {
+                kind: "ok",
+                businessId: "business-1",
+                accountState: "not_started",
+                payoutState: "held_threshold",
+                payoutRef: "payout-1",
+                providerNet: exact,
+                minimumPayout: { ...exact, units: "1000" },
+                evidence: "source",
+              },
+            },
+          ],
+        }}
+      />,
+    );
+
+    expect(
+      screen.getByRole("button", { name: "Set up payouts" }).className,
+    ).toContain(TACTILE_CLASS_FRAGMENT);
   });
 });

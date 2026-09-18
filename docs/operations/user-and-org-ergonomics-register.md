@@ -16,9 +16,9 @@
 | :--- | :---: | :--- | :---: | :---: | :---: | :---: |
 | **Wave 1: Buyer Onboarding & Developer Launchpad** | 6 | `W-01`, `W-02`, `W-25`, `W-26`, `W-27`, `W-29` | 6 | 0 | 0 | **VERIFIED** |
 | **Wave 2: Financial Peace-of-Mind & Spend Observability** | 8 | `W-20`, `W-21`, `W-22`, `W-23`, `W-24`, `W-38`, `W-39`, `W-40` | 8 | 0 | 0 | **VERIFIED** |
-| **Wave 3: Supplier Monetization & Testing Playground** | 8 | `W-30`, `W-31`, `W-32`, `W-33`, `W-34`, `W-35`, `W-36`, `W-37` | 1 | 0 | 7 | `IN PROGRESS` |
+| **Wave 3: Supplier Monetization & Testing Playground** | 8 | `W-30`, `W-31`, `W-32`, `W-33`, `W-34`, `W-35`, `W-36`, `W-37` | 2 | 0 | 6 | `IN PROGRESS` |
 | **Wave 4: Team Operations, Identity & Tactile Standards** | 22 | `W-03`–`W-09`, `W-10`–`W-19`, `W-28`, `W-41`–`W-44` | 0 | 0 | 22 | `PENDING` |
-| **Total** | **44** | **All 44 Standard Workflows** | **15** | **0** | **29** | `IN PROGRESS` |
+| **Total** | **44** | **All 44 Standard Workflows** | **16** | **0** | **28** | `IN PROGRESS` |
 
 ---
 
@@ -263,15 +263,19 @@
 ---
 
 ### W-31: Stripe Express Dashboard SSO Portal
-- **Surfaces:** `src/routes/_operator/owner.payouts.sso.ts`, `src/components/ae/supply/AeSupplyEarningsCard.tsx`
+- **Surfaces:** `src/components/ae/supply/AeSupplyEarningsCard.tsx`, `tests/unit/ui/supply-funnel-earnings.test.tsx`
 - **Incumbent Baseline:** Link generating Stripe Express SSO login URL.
 - **Ergonomic Gap:** User doesn't know what they will find in the Express dashboard; lacks fallback if account is in pending verification.
 - **Target Ergonomic Spec:**
-  - Dedicated card displaying *"Stripe Express Account Active"* with bank account last 4 digits.
-  - 1-click *"View Bank Payouts on Stripe"* opening in a secure popup with focus return handler.
-  - Clear explanation: *"Manage bank account details, view payout transfer receipts, and download annual tax statements"*.
-- **Subagent Assignment:** Grok (Scout) $\rightarrow$ Composer (Craft) $\rightarrow$ Orchestrator (Verify)
-- **Status:** `PENDING`
+  - Dedicated always-mounted status well (`min-h-[7.5rem]`) with semantic badges (`Stripe Express Account Active`, `Verification Pending`, `Action Required`).
+  - Account reference display with masked account id (`acct_••••{last4}`).
+  - 1-click tactile action *"View Bank Payouts on Stripe"* with `ExternalLink` icon and focus return handler after tab switch.
+  - State-specific guidance: *"Manage bank account details, view payout transfer receipts, and download annual tax statements"*.
+  - Australian banking reassurance: *"Direct AUD bank credits are managed directly in Stripe Express. Agentic Economy never stores bank account credentials."*
+  - Rule 4 diagnostic alert triplet and `toast.error` for SSO link generation and pop-up blocker failures with `A$0.00 affected — your earnings and payout configuration remain safe.`
+  - Zero-CLS reserved diagnostic slot (`min-h-[5.5rem]`) and button row (`min-h-touch`).
+- **Subagent Assignment:** Grok (Scout: `38f6e711-8c8b-4ad7-8c47-dea2d3b7b5b5`) $\rightarrow$ Composer (Craft: `163f3456-bb7b-48bb-9967-4e99928a77d7`) $\rightarrow$ Orchestrator (Verify)
+- **Status:** `VERIFIED`
 
 ---
 
