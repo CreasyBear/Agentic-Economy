@@ -37,7 +37,7 @@ export function ProviderWorkspacePayoutPolicyPanel({
   const configurePayoutPreferences = useMutation(configurePayoutPreferencesRef)
 
   if (preferences === undefined) {
-    return <Skeleton className="h-48 w-full" aria-busy="true" />
+    return <Skeleton className="min-h-[26rem] w-full" aria-busy="true" />
   }
 
   return (

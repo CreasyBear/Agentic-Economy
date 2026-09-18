@@ -1,17 +1,33 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { AlertCircleIcon } from 'lucide-react'
 
-import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
+import { cn } from '@/lib/utils'
 import { parseDecimalExactAmount } from '@/modules/money/public'
 import { toast } from '@/lib/ui/toast'
 
-export type PayoutScheduleType = 'monthly' | 'weekly' | 'manual'
+import {
+  BELOW_MINIMUM_DIAGNOSTIC,
+  BECS_REASSURANCE,
+  buildNextPayoutStatement,
+  buildThresholdSummary,
+  CONFLICT_DIAGNOSTIC,
+  INVALID_AMOUNT_DIAGNOSTIC,
+  NETWORK_DIAGNOSTIC,
+  PAYOUT_THRESHOLD_PRESETS,
+  TACTILE,
+  type PayoutPolicyDiagnostic,
+  type PayoutScheduleType,
+} from './payout-policy-copy'
+
+export type { PayoutScheduleType } from './payout-policy-copy'
 
 export type AePayoutPolicyFormProps = Readonly<{
   businessId: string
@@ -28,15 +44,47 @@ export type AePayoutPolicyFormProps = Readonly<{
   }) => Promise<{ kind: 'updated'; revision: number } | { kind: 'conflict'; currentRevision: number }>
 }>
 
+const SCHEDULE_OPTIONS: ReadonlyArray<{
+  value: PayoutScheduleType
+  id: string
+  title: string
+  subtitle: string
+}> = [
+  {
+    value: 'weekly',
+    id: 'schedule-weekly',
+    title: 'Weekly on Monday',
+    subtitle: 'Transferred every Monday 10:00 AM AEST',
+  },
+  {
+    value: 'monthly',
+    id: 'schedule-monthly',
+    title: 'Monthly on the 1st',
+    subtitle: 'Transferred on the 1st of each month',
+  },
+  {
+    value: 'manual',
+    id: 'schedule-manual',
+    title: 'Manual Approval',
+    subtitle: 'Funds accumulate until you review and trigger payout',
+  },
+]
+
+const RADIO_CARD_CLASS = cn(
+  'grid min-h-touch cursor-pointer grid-cols-[auto_minmax(0,1fr)] items-start gap-3 rounded-md border border-border px-3 py-3',
+  'has-[[data-state=checked]]:border-foreground has-[[data-state=checked]]:bg-muted',
+  TACTILE,
+)
+
 function unitsToDecimalString(units: string | undefined): string {
   if (!units) return '50'
   try {
     const raw = BigInt(units)
-    const factor = 1_000_000n // AUD exponent 6
+    const factor = 1_000_000n
     const whole = raw / factor
     return whole.toString()
   } catch (cause) {
-    void cause;
+    void cause
     return '50'
   }
 }
@@ -49,25 +97,46 @@ export function AePayoutPolicyForm({
   initialRevision = 0,
   onSavePreferences,
 }: AePayoutPolicyFormProps) {
-  const [thresholdDollars, setThresholdDollars] = useState(() => unitsToDecimalString(initialThresholdUnits))
+  const [thresholdDollars, setThresholdDollars] = useState(() =>
+    unitsToDecimalString(initialThresholdUnits),
+  )
   const [schedule, setSchedule] = useState<PayoutScheduleType>(initialSchedule)
   const [revision, setRevision] = useState(initialRevision)
-  const [error, setError] = useState<string>()
+  const [diagnostic, setDiagnostic] = useState<PayoutPolicyDiagnostic | null>(null)
   const [pending, setPending] = useState(false)
+
+  useEffect(() => {
+    setThresholdDollars(unitsToDecimalString(initialThresholdUnits))
+    setSchedule(initialSchedule)
+    setRevision(initialRevision)
+  }, [initialThresholdUnits, initialSchedule, initialRevision])
+
+  const clearDiagnostic = () => setDiagnostic(null)
+
+  const resetDraftFromProps = () => {
+    setThresholdDollars(unitsToDecimalString(initialThresholdUnits))
+    setSchedule(initialSchedule)
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    setError(undefined)
+    setDiagnostic(null)
 
     const exactAmount = parseDecimalExactAmount('AUD', thresholdDollars, 6)
     if (!exactAmount) {
-      setError('Enter a valid dollar amount.')
+      setDiagnostic(INVALID_AMOUNT_DIAGNOSTIC)
+      toast.error(INVALID_AMOUNT_DIAGNOSTIC.whatHappened, {
+        description: INVALID_AMOUNT_DIAGNOSTIC.nextStep,
+      })
       return
     }
 
     const units = BigInt(exactAmount.units)
-    if (units < 10_000_000n) { // Min A$10.00
-      setError('Minimum payout threshold must be at least A$10.00.')
+    if (units < 10_000_000n) {
+      setDiagnostic(BELOW_MINIMUM_DIAGNOSTIC)
+      toast.error(BELOW_MINIMUM_DIAGNOSTIC.whatHappened, {
+        description: BELOW_MINIMUM_DIAGNOSTIC.nextStep,
+      })
       return
     }
 
@@ -85,47 +154,102 @@ export function AePayoutPolicyForm({
 
       if (result.kind === 'updated') {
         setRevision(result.revision)
-        toast.success('Payout preferences updated')
+        clearDiagnostic()
+        toast.success('Payout preferences saved', {
+          description: `${buildNextPayoutStatement(schedule)} ${buildThresholdSummary(thresholdDollars)}`,
+        })
       } else {
         setRevision(result.currentRevision)
-        setError('Preferences were modified concurrently. Reloaded current settings.')
-        toast.error('Update conflict')
+        resetDraftFromProps()
+        setDiagnostic(CONFLICT_DIAGNOSTIC)
+        toast.error(CONFLICT_DIAGNOSTIC.whatHappened, {
+          description: CONFLICT_DIAGNOSTIC.nextStep,
+        })
       }
     } catch (cause) {
-      void cause;
-      setError('Network error saving payout preferences.')
-      toast.error('Network error')
+      void cause
+      setDiagnostic(NETWORK_DIAGNOSTIC)
+      toast.error(NETWORK_DIAGNOSTIC.whatHappened, {
+        description: NETWORK_DIAGNOSTIC.nextStep,
+      })
     } finally {
       setPending(false)
     }
   }
 
   return (
-    <div className="grid gap-4 rounded-xl border bg-card p-5 shadow-xs">
-      <div className="flex items-center justify-between">
-        <div>
-          <h4 className="text-sm font-semibold text-foreground">
-            Payout Schedule & Threshold
-          </h4>
-          <p className="text-xs text-muted-foreground">
-            Configure settlement frequency and minimum accumulation threshold before funds transfer to Stripe Express.
-          </p>
-        </div>
+    <div className="grid min-h-[26rem] gap-4 rounded-xl border bg-card p-5 shadow-xs">
+      <div>
+        <h4 className="text-sm font-semibold text-foreground">Payout Schedule & Threshold</h4>
+        <p className="text-xs text-muted-foreground">
+          Choose how often accumulated AUD earnings leave your provider balance, and the minimum that
+          must accumulate first.
+        </p>
       </div>
 
-      <form onSubmit={(e) => void handleSubmit(e)} className="grid gap-4 pt-1">
-        {error && (
-          <Alert variant="destructive" className="py-2">
-            <AlertCircleIcon className="size-4" />
-            <AlertDescription className="text-xs">{error}</AlertDescription>
-          </Alert>
-        )}
-
+      <form onSubmit={(e) => void handleSubmit(e)} className="grid gap-4">
         <FieldGroup className="grid gap-3">
+          <Field>
+            <FieldLabel className="text-xs">Payout frequency</FieldLabel>
+            <RadioGroup
+              value={schedule}
+              onValueChange={(val) => {
+                setSchedule(val as PayoutScheduleType)
+                clearDiagnostic()
+              }}
+              className="grid gap-2 pt-1"
+              disabled={pending}
+            >
+              {SCHEDULE_OPTIONS.map((option) => (
+                <Label key={option.value} htmlFor={option.id} className={RADIO_CARD_CLASS}>
+                  <RadioGroupItem value={option.value} id={option.id} />
+                  <div className="grid gap-0.5">
+                    <span className="text-xs font-medium">{option.title}</span>
+                    <span className="text-[11px] text-muted-foreground">{option.subtitle}</span>
+                  </div>
+                </Label>
+              ))}
+            </RadioGroup>
+          </Field>
+
+          <div className="min-h-[2.75rem] flex items-center">
+            <div
+              role="status"
+              aria-live="polite"
+              className="font-mono text-sm tabular-nums text-muted-foreground"
+            >
+              {buildNextPayoutStatement(schedule)}
+            </div>
+          </div>
+
           <Field>
             <FieldLabel htmlFor="payout-threshold" className="text-xs">
               Minimum payout threshold (A$)
             </FieldLabel>
+            <div className="flex flex-wrap gap-2 pb-2">
+              {PAYOUT_THRESHOLD_PRESETS.map((preset) => {
+                const selected = thresholdDollars === preset.dollars
+                return (
+                  <button
+                    key={preset.id}
+                    type="button"
+                    aria-pressed={selected}
+                    disabled={pending}
+                    onClick={() => {
+                      setThresholdDollars(preset.dollars)
+                      clearDiagnostic()
+                    }}
+                    className={cn(
+                      'rounded-full border border-border bg-container px-3 py-1.5 text-xs font-medium font-mono tabular-nums',
+                      TACTILE,
+                      selected && 'border-foreground bg-muted',
+                    )}
+                  >
+                    {preset.label}
+                  </button>
+                )
+              })}
+            </div>
             <div className="relative max-w-xs">
               <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-muted-foreground text-xs">
                 A$
@@ -138,61 +262,41 @@ export function AePayoutPolicyForm({
                 disabled={pending}
                 onChange={(e) => {
                   setThresholdDollars(e.target.value)
-                  setError(undefined)
+                  clearDiagnostic()
                 }}
-                className="pl-8 text-sm font-mono"
+                className="pl-8 text-sm font-mono tabular-nums"
               />
             </div>
+            <p className="font-mono text-xs tabular-nums text-muted-foreground">
+              {buildThresholdSummary(thresholdDollars)}
+            </p>
             <FieldDescription className="text-[11px]">
-              Earnings below this amount remain held in your provider account until reached. Minimum A$10.00.
+              Minimum A$10.00. Earnings below this amount stay in your provider balance.
             </FieldDescription>
-          </Field>
-
-          <Field>
-            <FieldLabel className="text-xs">Settlement Schedule</FieldLabel>
-            <RadioGroup
-              value={schedule}
-              onValueChange={(val) => setSchedule(val as PayoutScheduleType)}
-              className="grid gap-2 pt-1"
-              disabled={pending}
-            >
-              <div className="flex items-center gap-2">
-                <RadioGroupItem value="monthly" id="schedule-monthly" />
-                <label
-                  htmlFor="schedule-monthly"
-                  className="text-xs font-medium cursor-pointer"
-                >
-                  Monthly (1st of each month)
-                </label>
-              </div>
-              <div className="flex items-center gap-2">
-                <RadioGroupItem value="weekly" id="schedule-weekly" />
-                <label
-                  htmlFor="schedule-weekly"
-                  className="text-xs font-medium cursor-pointer"
-                >
-                  Weekly (Every Monday)
-                </label>
-              </div>
-              <div className="flex items-center gap-2">
-                <RadioGroupItem value="manual" id="schedule-manual" />
-                <label
-                  htmlFor="schedule-manual"
-                  className="text-xs font-medium cursor-pointer"
-                >
-                  Manual (Transfer only when manually reviewed and approved)
-                </label>
-              </div>
-            </RadioGroup>
           </Field>
         </FieldGroup>
 
-        <div className="flex justify-end pt-2">
+        <p className="text-xs text-muted-foreground">{BECS_REASSURANCE}</p>
+
+        <div className="min-h-[3rem]" aria-live="polite">
+          {diagnostic ? (
+            <Alert variant="destructive">
+              <AlertCircleIcon className="size-4" />
+              <AlertTitle>{diagnostic.whatHappened}</AlertTitle>
+              <AlertDescription className="grid gap-0.5">
+                <span>{diagnostic.financialImpact}</span>
+                <span>{diagnostic.nextStep}</span>
+              </AlertDescription>
+            </Alert>
+          ) : null}
+        </div>
+
+        <div className="flex justify-end">
           <Button
             type="submit"
             size="sm"
             disabled={pending}
-            className="min-h-touch"
+            className={cn('min-h-touch', TACTILE)}
           >
             {pending ? 'Saving preferences...' : 'Save Payout Preferences'}
           </Button>

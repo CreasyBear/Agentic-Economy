@@ -16,9 +16,9 @@
 | :--- | :---: | :--- | :---: | :---: | :---: | :---: |
 | **Wave 1: Buyer Onboarding & Developer Launchpad** | 6 | `W-01`, `W-02`, `W-25`, `W-26`, `W-27`, `W-29` | 6 | 0 | 0 | **VERIFIED** |
 | **Wave 2: Financial Peace-of-Mind & Spend Observability** | 8 | `W-20`, `W-21`, `W-22`, `W-23`, `W-24`, `W-38`, `W-39`, `W-40` | 8 | 0 | 0 | **VERIFIED** |
-| **Wave 3: Supplier Monetization & Testing Playground** | 8 | `W-30`, `W-31`, `W-32`, `W-33`, `W-34`, `W-35`, `W-36`, `W-37` | 2 | 0 | 6 | `IN PROGRESS` |
+| **Wave 3: Supplier Monetization & Testing Playground** | 8 | `W-30`, `W-31`, `W-32`, `W-33`, `W-34`, `W-35`, `W-36`, `W-37` | 3 | 0 | 5 | `IN PROGRESS` |
 | **Wave 4: Team Operations, Identity & Tactile Standards** | 22 | `W-03`–`W-09`, `W-10`–`W-19`, `W-28`, `W-41`–`W-44` | 0 | 0 | 22 | `PENDING` |
-| **Total** | **44** | **All 44 Standard Workflows** | **16** | **0** | **28** | `IN PROGRESS` |
+| **Total** | **44** | **All 44 Standard Workflows** | **17** | **0** | **27** | `IN PROGRESS` |
 
 ---
 
@@ -280,15 +280,19 @@
 ---
 
 ### W-32: Predictable Payout Policy & Frequency Preferences
-- **Surfaces:** `src/components/ae/supply/AePayoutPolicyForm.tsx`, `convex/moneyPayoutPolicy.ts`
+- **Surfaces:** `src/components/ae/supply/AePayoutPolicyForm.tsx`, `src/components/ae/supply/payout-policy-copy.ts`, `src/components/ae/offerings/ProviderWorkspacePayoutPolicyPanel.tsx`, `tests/unit/components/ae-payout-policy-form.test.tsx`
 - **Incumbent Baseline:** Radio buttons for payout frequency.
 - **Ergonomic Gap:** Supplier cannot see when their next payout will actually land or what balance has accumulated.
 - **Target Ergonomic Spec:**
-  - Tactile frequency selector: `Weekly on Monday`, `Monthly on the 1st`, or `Balance Threshold (Min A$10.00)`.
-  - Real-time countdown calculation: *"Next payout scheduled for Monday 10:00 AM AEST (Estimated: A$142.50)"*.
-  - Inline validation preventing thresholds below A$10.00.
-- **Subagent Assignment:** Grok (Scout) $\rightarrow$ Composer (Craft) $\rightarrow$ Orchestrator (Verify)
-- **Status:** `PENDING`
+  - Tactile frequency selector cards: `Weekly on Monday` (*"Transferred every Monday 10:00 AM AEST"*), `Monthly on the 1st` (*"Transferred on the 1st of each month"*), or `Manual Approval` (*"Funds accumulate until you review and trigger payout"*).
+  - Live projection schedule statement (*"Next scheduled payout: Monday 10:00 AM AEST"* / *"1st of next month"* / *"Payouts paused until manual review"*) in reserved status slot.
+  - Formatted preset threshold chips (`A$10.00 (Min)`, `A$50.00 (Standard)`, `A$100.00`, `A$500.00`) with tactile press physics and `aria-pressed` states.
+  - Live threshold summary line (*"Transfers will trigger when accumulated balance reaches A$50.00."*) with `font-mono tabular-nums`.
+  - BECS direct credit reassurance copy regarding Australian bank settlement timing.
+  - Rule 4 diagnostic alert triplets and toasts for below minimum, invalid amount, concurrent conflict, and network failure (`A$0.00 affected`).
+  - Zero-CLS reserved shell (`min-h-[26rem]`), reserved diagnostic slot (`min-h-[3rem]`), and skeleton parity (`min-h-[26rem]`).
+- **Subagent Assignment:** Grok (Scout: `0bd2f9f4-075a-4c6d-9770-eca7a4a73f5c`) $\rightarrow$ Composer (Craft: `ffe3edf8-6438-4aa4-ab7a-9a6aeec6128d`) $\rightarrow$ Orchestrator (Verify)
+- **Status:** `VERIFIED`
 
 ---
 
