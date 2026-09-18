@@ -15,10 +15,10 @@
 | Wave | Workflows | Scope | Verified | In Review | Pending | Target Status |
 | :--- | :---: | :--- | :---: | :---: | :---: | :---: |
 | **Wave 1: Buyer Onboarding & Developer Launchpad** | 6 | `W-01`, `W-02`, `W-25`, `W-26`, `W-27`, `W-29` | 6 | 0 | 0 | **VERIFIED** |
-| **Wave 2: Financial Peace-of-Mind & Spend Observability** | 8 | `W-20`, `W-21`, `W-22`, `W-23`, `W-24`, `W-38`, `W-39`, `W-40` | 1 | 0 | 7 | `IN PROGRESS` |
+| **Wave 2: Financial Peace-of-Mind & Spend Observability** | 8 | `W-20`, `W-21`, `W-22`, `W-23`, `W-24`, `W-38`, `W-39`, `W-40` | 2 | 0 | 6 | `IN PROGRESS` |
 | **Wave 3: Supplier Monetization & Testing Playground** | 8 | `W-30`, `W-31`, `W-32`, `W-33`, `W-34`, `W-35`, `W-36`, `W-37` | 0 | 0 | 8 | `PENDING` |
 | **Wave 4: Team Operations, Identity & Tactile Standards** | 22 | `W-03`–`W-09`, `W-10`–`W-19`, `W-28`, `W-41`–`W-44` | 0 | 0 | 22 | `PENDING` |
-| **Total** | **44** | **All 44 Standard Workflows** | **7** | **0** | **37** | `IN PROGRESS` |
+| **Total** | **44** | **All 44 Standard Workflows** | **8** | **0** | **36** | `IN PROGRESS` |
 
 ---
 
@@ -124,16 +124,19 @@
 
 ---
 
-### W-21: Auto-Recharge Predictive Timeline
-- **Surfaces:** `src/components/ae/console/AeAutoRechargeCard.tsx`, `convex/moneyAutoRecharge.ts`
+### W-21: Auto-Recharge Trigger & Safety Controls
+- **Surfaces:** `src/components/ae/console/AeAutoRechargeCard.tsx`, `src/components/ae/console/auto-recharge-copy.ts`, `src/components/ae/console/AeOwnerCredit.tsx`, `convex/moneyAutoRecharge.ts`
 - **Incumbent Baseline:** Toggle switch with threshold and recharge amount inputs.
 - **Ergonomic Gap:** Unclear trigger logic; operator cannot see when auto-recharge last triggered or whether it succeeded.
 - **Target Ergonomic Spec:**
-  - Visual linked slider: Trigger threshold $\rightarrow$ Top-up amount.
-  - Plain-English trigger statement: *"When balance dips below A$20.00, automatically add A$50.00 from your primary card"*.
-  - Mini audit timeline showing the last 3 automated recharge events with timestamps and receipts.
-- **Subagent Assignment:** Grok (Scout) $\rightarrow$ Composer (Craft) $\rightarrow$ Orchestrator (Verify)
-- **Status:** `PENDING`
+  - Dynamic plain-English trigger statement in reserved `min-h-[2.75rem]` slot: *"When balance dips below A$20.00, automatically add A$50.00 using your default payment method."* (or disabled status).
+  - Quick setup preset chips (Conservative, Standard, Intensive) with tactile press physics and `aria-pressed` states.
+  - Monospace tabular numbers on all money inputs (`font-mono tabular-nums`) with clear range helper text.
+  - Reserved `min-h-[5.5rem]` status slot displaying pulsing indicator for pending top-ups, mandate requirements, and Rule 4 diagnostic triplets on refusal.
+  - Amount-aware `toast.success` affirming active standing orders and A$0.00 safety reassurance.
+  - Zero-CLS loading skeleton in owner credit console.
+- **Subagent Assignment:** Grok (Scout: `f664de54-3639-47a5-be12-4096f24d5294`) $\rightarrow$ Composer (Craft: `9b118d29-8d5c-4d56-96f6-a42df320b18b`) $\rightarrow$ Orchestrator (Verify)
+- **Status:** `VERIFIED`
 
 ---
 

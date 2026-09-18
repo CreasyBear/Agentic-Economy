@@ -5,6 +5,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import '../../setup/jsdom-platform'
 
 import { AeAutoRechargeCard } from '@/components/ae/console/AeAutoRechargeCard'
+import { toast } from '@/lib/ui/toast'
+
+vi.mock('@/lib/ui/toast', () => ({
+  toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() },
+}))
 
 type AeAutoRechargeCardProps = Readonly<{
   settings: Readonly<{
@@ -13,7 +18,7 @@ type AeAutoRechargeCardProps = Readonly<{
     rechargeAmountUnits: string
     revision: number
   }>
-  mandateState: 'ready' | 'missing' | 'authentication_required'
+  mandateState: 'ready' | 'missing' | 'authentication_required' | 'failed'
   pendingTopup?: Readonly<{ commandRef: string }> | null
   onSave: (payload: Readonly<{
     enabled: boolean
@@ -51,7 +56,7 @@ describe('AeAutoRechargeCard (W-21)', () => {
   })
 
   it('U2: valid save submits parsed units and expected revision', async () => {
-    const onSave = vi.fn()
+    const onSave = vi.fn().mockResolvedValue(undefined)
     render(
       <AeAutoRechargeCard
         settings={{ ...defaultSettings, revision: 2 }}
@@ -105,5 +110,139 @@ describe('AeAutoRechargeCard (W-21)', () => {
     )
 
     expect(screen.getByText(/top-up in progress/i)).toBeInTheDocument()
+  })
+
+  it('U5: live trigger statement when enabled with valid default amounts', () => {
+    const onSave = vi.fn()
+    render(
+      <AeAutoRechargeCard
+        settings={{ ...defaultSettings, enabled: true }}
+        mandateState="ready"
+        onSave={onSave}
+      />,
+    )
+
+    expect(screen.getByRole('status')).toHaveTextContent(/when balance dips below/i)
+    expect(screen.getByRole('status')).toHaveTextContent(/automatically add/i)
+  })
+
+  it('U6: live statement when disabled shows disabled copy', () => {
+    const onSave = vi.fn()
+    render(
+      <AeAutoRechargeCard
+        settings={defaultSettings}
+        mandateState="ready"
+        onSave={onSave}
+      />,
+    )
+
+    expect(screen.getByRole('status')).toHaveTextContent('Auto-recharge is currently disabled.')
+  })
+
+  it('U7: quick setup chip updates inputs and aria-pressed', () => {
+    const onSave = vi.fn()
+    render(
+      <AeAutoRechargeCard
+        settings={defaultSettings}
+        mandateState="ready"
+        onSave={onSave}
+      />,
+    )
+
+    const conservativeChip = screen.getByRole('button', { name: /conservative/i })
+    fireEvent.click(conservativeChip)
+
+    expect(screen.getByLabelText(/low balance threshold/i)).toHaveValue('10')
+    expect(screen.getByLabelText(/recharge amount/i)).toHaveValue('25')
+    expect(conservativeChip).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  it('U8: invalid save shows Rule 4 playbook and does not call onSave', async () => {
+    const onSave = vi.fn()
+    render(
+      <AeAutoRechargeCard
+        settings={defaultSettings}
+        mandateState="ready"
+        onSave={onSave}
+      />,
+    )
+
+    fireEvent.change(screen.getByLabelText(/low balance threshold/i), { target: { value: 'not-a-number' } })
+    fireEvent.change(screen.getByLabelText(/recharge amount/i), { target: { value: 'also-bad' } })
+    fireEvent.click(screen.getByRole('button', { name: /save/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText(/that is not a valid aud amount/i)).toBeInTheDocument()
+      expect(screen.getByText(/a\$0\.00 charged — your balance is unchanged/i)).toBeInTheDocument()
+      expect(screen.getByText(/enter dollars and cents, or choose a quick-setup chip/i)).toBeInTheDocument()
+    })
+    expect(onSave).not.toHaveBeenCalled()
+  })
+
+  it('U9: successful save triggers toast.success with policy description', async () => {
+    const onSave = vi.fn().mockResolvedValue(undefined)
+    render(
+      <AeAutoRechargeCard
+        settings={{ ...defaultSettings, enabled: true }}
+        mandateState="ready"
+        onSave={onSave}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: /save/i }))
+
+    await waitFor(() => {
+      expect(toast.success).toHaveBeenCalledWith(
+        'Auto-recharge on',
+        expect.objectContaining({
+          description: expect.stringMatching(/when balance dips below/i),
+        }),
+      )
+    })
+  })
+
+  it('U10: pending topup shows pulsing dot and waiting copy', () => {
+    const onSave = vi.fn()
+    const { container } = render(
+      <AeAutoRechargeCard
+        settings={defaultSettings}
+        mandateState="ready"
+        pendingTopup={{ commandRef: 'auto-recharge:pending-one' }}
+        onSave={onSave}
+      />,
+    )
+
+    expect(container.querySelector('.animate-pulse')).toBeTruthy()
+    expect(screen.getByText(/auto-recharge is waiting/i)).toBeInTheDocument()
+    expect(screen.getByText(/a\$0\.00 will be charged for a duplicate top-up/i)).toBeInTheDocument()
+  })
+
+  it('U11: authentication required disables switch and shows bank guidance', () => {
+    const onSave = vi.fn()
+    render(
+      <AeAutoRechargeCard
+        settings={defaultSettings}
+        mandateState="authentication_required"
+        onSave={onSave}
+      />,
+    )
+
+    expect(screen.getByRole('switch', { name: /auto-recharge/i })).toBeDisabled()
+    expect(screen.getByText(/bank authentication required/i)).toBeInTheDocument()
+    expect(screen.getByText(/finish authentication via payment methods/i)).toBeInTheDocument()
+  })
+
+  it('U12: money inputs use monospace tabular styling', () => {
+    const onSave = vi.fn()
+    render(
+      <AeAutoRechargeCard
+        settings={defaultSettings}
+        mandateState="ready"
+        onSave={onSave}
+      />,
+    )
+
+    expect(screen.getByLabelText(/low balance threshold/i)).toHaveClass('font-mono', 'tabular-nums')
+    expect(screen.getByLabelText(/recharge amount/i)).toHaveClass('font-mono', 'tabular-nums')
   })
 })

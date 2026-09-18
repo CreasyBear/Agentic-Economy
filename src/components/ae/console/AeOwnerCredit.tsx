@@ -248,13 +248,34 @@ export function AeOwnerCredit({
             onManage={onManageSavedPaymentMethods}
           />
         ) : null}
-        {autoRechargeSettings !== undefined && onSaveAutoRecharge !== undefined ? (
-          <AeAutoRechargeCard
-            settings={autoRechargeSettings}
-            mandateState={autoRechargeMandateState}
-            {...(autoRechargePendingTopup === undefined ? {} : { pendingTopup: autoRechargePendingTopup })}
-            onSave={onSaveAutoRecharge}
-          />
+        {onSaveAutoRecharge !== undefined ? (
+          autoRechargeSettings !== undefined ? (
+            <AeAutoRechargeCard
+              settings={autoRechargeSettings}
+              mandateState={autoRechargeMandateState}
+              {...(autoRechargePendingTopup === undefined ? {} : { pendingTopup: autoRechargePendingTopup })}
+              onSave={onSaveAutoRecharge}
+            />
+          ) : (
+            <div
+              className="grid gap-3 rounded-xl border border-border/70 p-4"
+              aria-busy="true"
+              aria-label="Loading auto-recharge settings"
+            >
+              <Skeleton className="h-5 w-32" />
+              <Skeleton className="min-h-[2.75rem] w-full" />
+              <div className="flex flex-wrap gap-2">
+                <Skeleton className="h-8 w-40 rounded-full" />
+                <Skeleton className="h-8 w-36 rounded-full" />
+                <Skeleton className="h-8 w-40 rounded-full" />
+              </div>
+              <Skeleton className="h-6 w-full max-w-xs" />
+              <Skeleton className="h-9 w-full" />
+              <Skeleton className="h-9 w-full" />
+              <Skeleton className="min-h-[5.5rem] w-full" />
+              <Skeleton className="h-9 w-20" />
+            </div>
+          )
         ) : null}
         <div className="grid gap-3 rounded-xl border border-border/70 p-4">
           <div>
