@@ -16,9 +16,9 @@
 | :--- | :---: | :--- | :---: | :---: | :---: | :---: |
 | **Wave 1: Buyer Onboarding & Developer Launchpad** | 6 | `W-01`, `W-02`, `W-25`, `W-26`, `W-27`, `W-29` | 6 | 0 | 0 | **VERIFIED** |
 | **Wave 2: Financial Peace-of-Mind & Spend Observability** | 8 | `W-20`, `W-21`, `W-22`, `W-23`, `W-24`, `W-38`, `W-39`, `W-40` | 8 | 0 | 0 | **VERIFIED** |
-| **Wave 3: Supplier Monetization & Testing Playground** | 8 | `W-30`, `W-31`, `W-32`, `W-33`, `W-34`, `W-35`, `W-36`, `W-37` | 0 | 0 | 8 | `PENDING` |
+| **Wave 3: Supplier Monetization & Testing Playground** | 8 | `W-30`, `W-31`, `W-32`, `W-33`, `W-34`, `W-35`, `W-36`, `W-37` | 1 | 0 | 7 | `IN PROGRESS` |
 | **Wave 4: Team Operations, Identity & Tactile Standards** | 22 | `W-03`–`W-09`, `W-10`–`W-19`, `W-28`, `W-41`–`W-44` | 0 | 0 | 22 | `PENDING` |
-| **Total** | **44** | **All 44 Standard Workflows** | **14** | **0** | **30** | `IN PROGRESS` |
+| **Total** | **44** | **All 44 Standard Workflows** | **15** | **0** | **29** | `IN PROGRESS` |
 
 ---
 
@@ -245,15 +245,20 @@
 # Wave 3: Supplier Monetization & Testing Playground
 
 ### W-30: Supplier Activation & Guided Onboarding
-- **Surfaces:** `src/components/ae/supply/AeSupplierOnboardingWizard.tsx`, `src/components/ae/offerings/AeProviderWorkspace.tsx`
+- **Surfaces:** `src/components/ae/supply/AeSupplierOnboardingWizard.tsx`, `src/components/ae/offerings/AeProviderWorkspace.tsx`, `tests/unit/components/ae-supplier-onboarding-wizard.test.tsx`
 - **Incumbent Baseline:** 3-step profile form and Connect redirect.
 - **Ergonomic Gap:** Stepper looks like static text; estimated completion times not provided; provider lacks clarity on KYC requirements.
 - **Target Ergonomic Spec:**
-  - Visual interactive progress stepper: `1. Provider Identity` $\rightarrow$ `2. Payout Account (Stripe)` $\rightarrow$ `3. First Tool Publication`.
-  - Estimated time chips (`~2 mins`) and reassurance copy regarding Australian banking compliance.
-  - Smooth animation between wizard steps without scroll jumping.
-- **Subagent Assignment:** Grok (Scout) $\rightarrow$ Composer (Craft) $\rightarrow$ Orchestrator (Verify)
-- **Status:** `PENDING`
+  - Interactive stepper navigation (`<nav aria-label="Supplier activation">`) with tactile buttons, `aria-current="step"`, and completion checkmarks.
+  - Duration chips (`~2 mins`, `~3 mins`, `~1 min`) establishing clear time expectations per step.
+  - Reassurance copy for Australian banking (Stripe Express KYC, BSB + Account Number direct credit, AE never stores bank numbers).
+  - Live ABN input formatting (`XX XXX XXX XXX`) with tabular monospace digits (`font-mono tabular-nums`).
+  - Zero-CLS shell (`min-h-[28rem]`) with reserved diagnostic slot (`min-h-[3rem]`, `aria-live="polite"`).
+  - Rule 4 diagnostic triplets for validation and network errors with explicit `A$0.00 affected — profile was not updated` financial reassurance.
+  - Celebratory feedback via `toast.success('Provider profile saved')` upon completion.
+  - Semantic payout status badges (`Ready` / `Action Required`) with tactile action buttons.
+- **Subagent Assignment:** Grok (Scout: `eb766448-175d-4a01-b5df-93bdef95cef9`) $\rightarrow$ Composer (Craft: `b5070776-1c39-4977-8932-dc6c9acd09b8`) $\rightarrow$ Orchestrator (Verify)
+- **Status:** `VERIFIED`
 
 ---
 

@@ -87,13 +87,22 @@ export function AeProviderWorkspace(props: WorkspaceProps) {
                   },
                 })
                 if (created.kind === 'refused') {
-                  return { kind: 'error', message: `Failed to create provider: ${created.code}` }
+                  const message =
+                    created.code === 'unauthenticated'
+                      ? 'Sign in required. Sign in as the workspace owner, then save again.'
+                      : created.code === 'slug_taken'
+                        ? 'That provider name is already taken. Choose a different supplier / brand name.'
+                        : 'Could not save provider profile. Review name and website, then try again.'
+                  return { kind: 'error', message }
                 }
                 await router.invalidate()
                 return { kind: 'ok' }
               } catch (cause) {
                 void cause
-                return { kind: 'error', message: 'Network error creating provider workspace.' }
+                return {
+                  kind: 'error',
+                  message: 'Could not save provider profile. Please check connection and try again.',
+                }
               }
             }}
           />
@@ -150,6 +159,7 @@ function AvailableWorkspace({
   const [earningsPending, setEarningsPending] = useState(false)
   const [earningsUnavailable, setEarningsUnavailable] = useState(false)
   const [earningsDetail, setEarningsDetail] = useState<Readonly<{ earnings: OwnerProviderEarningsReadback; connect: OwnerConnectReadinessReadback }>>()
+  const [payoutSummary, setPayoutSummary] = useState<ProviderWorkspacePayoutResult>()
   const compatibilitySearch = location.search as Record<string, unknown>
   const validatedCompatibilitySearch = parseOwnerToolsCompatibilitySearch(compatibilitySearch)
   const x402Handoff = parseOwnerToolsX402ConnectionSearch(compatibilitySearch)
@@ -228,6 +238,25 @@ function AvailableWorkspace({
   }, [identityDetail, loadIdentity])
 
   useEffect(() => {
+    if (payouts === undefined) return
+    void payouts
+      .then(setPayoutSummary)
+      .catch((cause) => {
+        captureClientExceptionOnClient(cause)
+        setPayoutSummary({ kind: 'unavailable' })
+      })
+  }, [payouts])
+
+  const connectPayoutsReady =
+    earningsDetail?.connect?.kind === 'available'
+    && earningsDetail.connect.accounts.some((account) => account.account.state === 'ready')
+
+  const payoutSummaryReady =
+    payoutSummary?.kind === 'available' && payoutSummary.value.readyAccounts > 0
+
+  const payoutsConfiguredForWizard = connectPayoutsReady || payoutSummaryReady
+
+  useEffect(() => {
     if (location.hash.startsWith('provider-connection-')) openConnections()
     if (hasX402Handoff) openConnections()
     if (location.hash === 'earnings' || compatibilityConnect === 'return' || compatibilityConnect === 'refresh') openEarnings()
@@ -263,9 +292,9 @@ function AvailableWorkspace({
       {inventory.tools.length === 0 && (
         <div className="mb-2">
           <AeSupplierOnboardingWizard
-            currentStep={earningsDetail?.connect?.kind === 'available' && earningsDetail.connect.accounts.some((a) => a.account.state === 'ready') ? 'first_tool' : 'payouts'}
+            currentStep={payoutsConfiguredForWizard ? 'first_tool' : 'payouts'}
             providerName={inventory.provider.name}
-            payoutsConfigured={earningsDetail?.connect?.kind === 'available' && earningsDetail.connect.accounts.some((a) => a.account.state === 'ready')}
+            payoutsConfigured={payoutsConfiguredForWizard}
             onConnectPayouts={() => {
               openEarnings()
             }}
