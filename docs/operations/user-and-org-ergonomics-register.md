@@ -14,11 +14,11 @@
 
 | Wave | Workflows | Scope | Verified | In Review | Pending | Target Status |
 | :--- | :---: | :--- | :---: | :---: | :---: | :---: |
-| **Wave 1: Buyer Onboarding & Developer Launchpad** | 6 | `W-01`, `W-02`, `W-25`, `W-26`, `W-27`, `W-29` | 1 | 0 | 5 | `IN PROGRESS` |
+| **Wave 1: Buyer Onboarding & Developer Launchpad** | 6 | `W-01`, `W-02`, `W-25`, `W-26`, `W-27`, `W-29` | 2 | 0 | 4 | `IN PROGRESS` |
 | **Wave 2: Financial Peace-of-Mind & Spend Observability** | 8 | `W-20`, `W-21`, `W-22`, `W-23`, `W-24`, `W-38`, `W-39`, `W-40` | 0 | 0 | 8 | `PENDING` |
 | **Wave 3: Supplier Monetization & Testing Playground** | 8 | `W-30`, `W-31`, `W-32`, `W-33`, `W-34`, `W-35`, `W-36`, `W-37` | 0 | 0 | 8 | `PENDING` |
 | **Wave 4: Team Operations, Identity & Tactile Standards** | 22 | `W-03`–`W-09`, `W-10`–`W-19`, `W-28`, `W-41`–`W-44` | 0 | 0 | 22 | `PENDING` |
-| **Total** | **44** | **All 44 Standard Workflows** | **1** | **0** | **43** | `IN PROGRESS` |
+| **Total** | **44** | **All 44 Standard Workflows** | **2** | **0** | **42** | `IN PROGRESS` |
 
 ---
 
@@ -42,11 +42,11 @@
 - **Incumbent Baseline:** Functional 2-step onboarding form with role selection radio buttons and workspace name input.
 - **Ergonomic Gap:** Text-heavy role selection; manual company naming; no visual dopamine or celebration upon workspace creation.
 - **Target Ergonomic Spec:**
-  - Visual role selection cards: "Build & Deploy Agents" (Buyer) vs "Monetize Custom Tools" (Supplier) with keyboard shortcuts (`1` / `2`).
-  - Auto-extract suggested workspace name from email domain (e.g., `user@acme.corp` $\rightarrow$ `Acme Corp`).
+  - Visual role selection cards: "Buyer / Agent Operator" vs "Supplier / Tool Provider" with keyboard shortcuts (`1` / `2`).
+  - Auto-extract suggested workspace name with sanitized company fallback.
   - Instant optimistic workspace creation with celebratory welcome toast: *"Workspace Acme created. Let's make your first Call."*
-- **Subagent Assignment:** Grok (Scout) $\rightarrow$ Composer (Craft) $\rightarrow$ Orchestrator (Verify)
-- **Status:** `PENDING`
+- **Subagent Assignment:** Grok (Scout: `6af0f291-522a-477a-a659-f1fb82ffb629`) $\rightarrow$ Composer (Craft: `4b79191e-5e49-4eca-a0c8-901c464ed0fc`) $\rightarrow$ Orchestrator (Verify)
+- **Status:** `VERIFIED`
 
 ---
 

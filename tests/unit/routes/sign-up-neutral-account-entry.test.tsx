@@ -3,6 +3,8 @@
  */
 import { cleanup, render, screen } from '@testing-library/react'
 import type { ComponentType, ReactNode } from 'react'
+
+import { SignUpClerkFallback } from '@/routes/sign-up.$'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import '../../setup/jsdom-platform'
 
@@ -50,7 +52,8 @@ describe('sign-up account entry', () => {
     render(<Component />)
 
     expect(screen.getByRole('heading', { name: 'Create an account' })).toBeTruthy()
-    expect(screen.getByText('After you create your account, you’ll set up your workspace.')).toBeTruthy()
+    expect(screen.getByText(/Use email, Google, GitHub, or a passkey/)).toBeTruthy()
+    expect(screen.getByText(/you’ll set up your workspace/)).toBeTruthy()
     expect(document.body.textContent?.toLowerCase()).not.toContain('supplier')
     expect(document.body.textContent).not.toContain('manage Operations')
     expect(document.body.textContent?.toLowerCase()).toContain('workspace')
@@ -60,6 +63,10 @@ describe('sign-up account entry', () => {
       signInFallbackRedirectUrl: '/owner/settings',
       signInUrl: '/sign-in',
     })
+    expect(routeState.clerkProps?.fallback).toBeTruthy()
+    const { container } = render(<>{routeState.clerkProps?.fallback as ReactNode}</>)
+    expect(container.querySelector('[data-slot="ae-site-auth-clerk-fallback"]')).toBeTruthy()
+    expect(container.querySelectorAll('.min-h-touch').length).toBeGreaterThanOrEqual(4)
   })
 
   it('S2: preserves supplier copy while continuing through onboarding with redirect', () => {
@@ -70,7 +77,8 @@ describe('sign-up account entry', () => {
     render(<Component />)
 
     expect(screen.getByRole('heading', { name: 'Create a Provider account' })).toBeTruthy()
-    expect(screen.getByText('After you create your account, you’ll continue to the Tool publishing workspace.')).toBeTruthy()
+    expect(screen.getByText(/Use email, Google, GitHub, or a passkey/)).toBeTruthy()
+    expect(screen.getByText(/Tool publishing workspace/)).toBeTruthy()
     expect(routeState.clerkProps).toMatchObject({
       fallbackRedirectUrl: '/onboarding?redirect=%2Fowner%2Fsupply',
       forceRedirectUrl: '/onboarding?redirect=%2Fowner%2Fsupply',
@@ -87,12 +95,20 @@ describe('sign-up account entry', () => {
     render(<Component />)
 
     expect(screen.getByRole('heading', { name: 'Create an account to connect an agent' })).toBeTruthy()
-    expect(screen.getByText('After you create your account, you’ll return to the agent connection you started.')).toBeTruthy()
+    expect(screen.getByText(/Use email, Google, GitHub, or a passkey/)).toBeTruthy()
+    expect(screen.getByText(/agent connection you started/)).toBeTruthy()
     expect(routeState.clerkProps).toMatchObject({
       fallbackRedirectUrl: '/onboarding?redirect=%2Fagent-access',
       forceRedirectUrl: '/onboarding?redirect=%2Fagent-access',
       signInFallbackRedirectUrl: '/agent-access',
       signInUrl: '/sign-in',
     })
+  })
+
+  it('S4: exports a sign-up fallback skeleton with reserved height', () => {
+    const { container } = render(<SignUpClerkFallback />)
+    const fallback = container.querySelector('[data-slot="ae-site-auth-clerk-fallback"]')
+    expect(fallback?.className).toContain('min-h-96')
+    expect(fallback?.className).toContain('gap-related')
   })
 })
