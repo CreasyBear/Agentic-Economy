@@ -15,10 +15,10 @@
 | Wave | Workflows | Scope | Verified | In Review | Pending | Target Status |
 | :--- | :---: | :--- | :---: | :---: | :---: | :---: |
 | **Wave 1: Buyer Onboarding & Developer Launchpad** | 6 | `W-01`, `W-02`, `W-25`, `W-26`, `W-27`, `W-29` | 6 | 0 | 0 | **VERIFIED** |
-| **Wave 2: Financial Peace-of-Mind & Spend Observability** | 8 | `W-20`, `W-21`, `W-22`, `W-23`, `W-24`, `W-38`, `W-39`, `W-40` | 2 | 0 | 6 | `IN PROGRESS` |
+| **Wave 2: Financial Peace-of-Mind & Spend Observability** | 8 | `W-20`, `W-21`, `W-22`, `W-23`, `W-24`, `W-38`, `W-39`, `W-40` | 3 | 0 | 5 | `IN PROGRESS` |
 | **Wave 3: Supplier Monetization & Testing Playground** | 8 | `W-30`, `W-31`, `W-32`, `W-33`, `W-34`, `W-35`, `W-36`, `W-37` | 0 | 0 | 8 | `PENDING` |
 | **Wave 4: Team Operations, Identity & Tactile Standards** | 22 | `W-03`–`W-09`, `W-10`–`W-19`, `W-28`, `W-41`–`W-44` | 0 | 0 | 22 | `PENDING` |
-| **Total** | **44** | **All 44 Standard Workflows** | **8** | **0** | **36** | `IN PROGRESS` |
+| **Total** | **44** | **All 44 Standard Workflows** | **9** | **0** | **35** | `IN PROGRESS` |
 
 ---
 
@@ -140,16 +140,21 @@
 
 ---
 
-### W-22: Saved Payment Methods Vault
+### W-22: Stored Payment Methods & Stripe Customer Portal
 - **Surfaces:** `src/components/ae/console/AeSavedPaymentMethodsCard.tsx`, `src/lib/server/stripe-customer-portal.ts`
 - **Incumbent Baseline:** External Stripe portal redirect button.
 - **Ergonomic Gap:** User cannot see their current default card brand, last 4 digits, or expiry date without leaving the application.
 - **Target Ergonomic Spec:**
-  - In-app card summary display: Card brand icon (Visa/Mastercard/Amex), `•••• 4242`, Expiry date.
-  - Expiry warning chip if the card expires within 30 days (`Expires next month`).
-  - 1-click *"Update Payment Method"* jumping directly into Stripe billing portal.
-- **Subagent Assignment:** Grok (Scout) $\rightarrow$ Composer (Craft) $\rightarrow$ Orchestrator (Verify)
-- **Status:** `PENDING`
+  - Card brand well glyph (`V`, `MC`, `AX`, `EF`, etc.) with semantic badges and `Default` status indicator.
+  - Masked PAN formatted as `•••• 4242` with `font-mono tabular-nums`.
+  - Expiry date display with automated `Expired` or `Expires next month` status badges.
+  - Persistent PCI trust reassurance line: *"Stored securely by Stripe, never touches our servers."*
+  - Clear portal intent helper explaining Stripe hosted management of payment cards.
+  - External link affordance with Emil Kowalski press physics on action buttons.
+  - Reserved diagnostic slot with Rule 4 triplet and toast error on portal generation failure.
+  - Complete skeleton height parity to eliminate CLS.
+- **Subagent Assignment:** Grok (Scout: `35970f03-ae22-49d6-912d-4e8c08a8b616`) $\rightarrow$ Composer (Craft: `e6d0c3b5-9dd0-4d52-9d68-05817815b21d`) $\rightarrow$ Orchestrator (Verify)
+- **Status:** `VERIFIED`
 
 ---
 
