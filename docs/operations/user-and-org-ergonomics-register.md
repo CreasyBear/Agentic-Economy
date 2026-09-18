@@ -15,10 +15,10 @@
 | Wave | Workflows | Scope | Verified | In Review | Pending | Target Status |
 | :--- | :---: | :--- | :---: | :---: | :---: | :---: |
 | **Wave 1: Buyer Onboarding & Developer Launchpad** | 6 | `W-01`, `W-02`, `W-25`, `W-26`, `W-27`, `W-29` | 6 | 0 | 0 | **VERIFIED** |
-| **Wave 2: Financial Peace-of-Mind & Spend Observability** | 8 | `W-20`, `W-21`, `W-22`, `W-23`, `W-24`, `W-38`, `W-39`, `W-40` | 7 | 0 | 1 | `IN PROGRESS` |
+| **Wave 2: Financial Peace-of-Mind & Spend Observability** | 8 | `W-20`, `W-21`, `W-22`, `W-23`, `W-24`, `W-38`, `W-39`, `W-40` | 8 | 0 | 0 | **VERIFIED** |
 | **Wave 3: Supplier Monetization & Testing Playground** | 8 | `W-30`, `W-31`, `W-32`, `W-33`, `W-34`, `W-35`, `W-36`, `W-37` | 0 | 0 | 8 | `PENDING` |
 | **Wave 4: Team Operations, Identity & Tactile Standards** | 22 | `W-03`–`W-09`, `W-10`–`W-19`, `W-28`, `W-41`–`W-44` | 0 | 0 | 22 | `PENDING` |
-| **Total** | **44** | **All 44 Standard Workflows** | **13** | **0** | **31** | `IN PROGRESS` |
+| **Total** | **44** | **All 44 Standard Workflows** | **14** | **0** | **30** | `IN PROGRESS` |
 
 ---
 
@@ -226,16 +226,19 @@
 
 ---
 
-### W-40: RFC 4180 CSV Export Hub
-- **Surfaces:** `src/lib/export/csv-export.ts`, `src/routes/_operator/activity.tsx`
+### W-40: Multi-Format Data Export (CSV, JSON)
+- **Surfaces:** `src/lib/export/csv-export.ts`, `src/routes/_operator/activity.tsx`, `src/components/ae/console/AeInvoiceHistoryTable.tsx`, `tests/unit/export/csv-export.test.ts`
 - **Incumbent Baseline:** Button triggering browser download of CSV string.
 - **Ergonomic Gap:** No export options; cannot filter export by date or outcome; lacks visual feedback during file generation.
 - **Target Ergonomic Spec:**
-  - Export modal offering date range filtering and column customization.
-  - Instant client-side streaming generation with UTF-8 BOM encoding for Excel compatibility.
-  - Actionable toast notification upon download: *"Export complete: 142 calls saved to CSV. [Open]"*.
-- **Subagent Assignment:** Grok (Scout) $\rightarrow$ Composer (Craft) $\rightarrow$ Orchestrator (Verify)
-- **Status:** `PENDING`
+  - Multi-format data export engine supporting RFC 4180 CSV with Excel UTF-8 BOM (`\uFEFF`) and pretty-printed JSON envelopes.
+  - Reserved toolbar cluster with dynamic preview statement (*"Exporting 12 records"* or *"Exporting 12 loaded records"*).
+  - Tactile format triggers (`CSV` and `JSON`) with Download icons and Emil Kowalski press physics.
+  - Count-aware celebratory toasts (*"Exported 12 records to CSV"* / *"Exported 12 records to JSON"*).
+  - Rule 4 playbooks and toast error handling for export failures (*"A$0.00 charged — your account data is unaffected"*).
+  - Zero-CLS loading skeleton toolbar matching loaded cluster dimensions.
+- **Subagent Assignment:** Grok (Scout: `fddb3598-c8ad-46eb-8feb-10b925ad7cf6`) $\rightarrow$ Composer (Craft: `96c44b81-2a8a-4bdd-9cc5-5c63e4a0e064`) $\rightarrow$ Orchestrator (Verify)
+- **Status:** `VERIFIED`
 
 ---
 

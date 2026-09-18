@@ -9,7 +9,7 @@ import {
   type AeInvoiceHistoryRow,
 } from '@/components/ae/console/AeInvoiceHistoryTable'
 import { formatAudAmountString } from '@/components/ae/console/credit-top-up-format'
-import { downloadCsv } from '@/lib/export/csv-export'
+import { downloadCsv, downloadJson } from '@/lib/export/csv-export'
 import { toast } from '@/lib/ui/toast'
 import { formatTimestamp } from '@/lib/ui/format-time'
 import { calculateAudGstSplit } from '@/modules/money/public'
@@ -23,6 +23,7 @@ vi.mock('@/lib/export/csv-export', async (importOriginal) => {
   return {
     ...actual,
     downloadCsv: vi.fn(),
+    downloadJson: vi.fn(),
   }
 })
 
@@ -187,13 +188,16 @@ describe('AeInvoiceHistoryTable (W-24)', () => {
     expect(onViewStripeReceipt).toHaveBeenCalledWith(paidRow)
   })
 
-  it('loading skeleton renders table structure and 3 skeleton rows', () => {
-    renderTable({ isLoading: true })
+  it('loading skeleton renders table structure, export toolbar placeholders, and 3 skeleton rows', () => {
+    const { container } = renderTable({ isLoading: true })
 
     expect(screen.getByRole('status', { name: 'Loading invoice history' })).toHaveAttribute(
       'aria-busy',
       'true',
     )
+    const toolbar = container.querySelector('.min-h-touch.flex-wrap.items-center.justify-end')
+    expect(toolbar).toBeTruthy()
+    expect(toolbar?.querySelectorAll('[data-slot="skeleton"]').length).toBeGreaterThanOrEqual(3)
     expect(screen.getByText('Date')).toBeInTheDocument()
     expect(screen.getByText('Actions')).toBeInTheDocument()
     const table = screen.getByRole('table')
@@ -232,10 +236,16 @@ describe('AeInvoiceHistoryTable (W-24)', () => {
     expect(screen.getByText(/tax invoice pending generation/i)).toBeInTheDocument()
   })
 
-  it('export CSV produces 8 columns including GST AUD and Net AUD, and calls toast.success', () => {
+  it('shows export preview text for row count', () => {
     renderTable()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Export CSV' }))
+    expect(screen.getByText('Exporting 1 record')).toBeInTheDocument()
+  })
+
+  it('export CSV produces 8 columns including GST AUD and Net AUD, and count-aware toast', () => {
+    renderTable()
+
+    fireEvent.click(screen.getByRole('button', { name: /^CSV$/u }))
 
     expect(downloadCsv).toHaveBeenCalledOnce()
     const csvContent = vi.mocked(downloadCsv).mock.calls[0]?.[1] ?? ''
@@ -243,7 +253,23 @@ describe('AeInvoiceHistoryTable (W-24)', () => {
     expect(headerLine).toContain('GST AUD')
     expect(headerLine).toContain('Net AUD')
     expect(headerLine.split(',')).toHaveLength(8)
-    expect(toast.success).toHaveBeenCalledWith('Invoice history exported to CSV')
+    expect(toast.success).toHaveBeenCalledWith('Exported 1 record to CSV')
+  })
+
+  it('export JSON downloads billing-topups document and count-aware toast', () => {
+    renderTable()
+
+    fireEvent.click(screen.getByRole('button', { name: /^JSON$/u }))
+
+    expect(downloadJson).toHaveBeenCalledOnce()
+    expect(vi.mocked(downloadJson).mock.calls[0]?.[0]).toMatch(/billing-topups-.*\.json/u)
+    const payload = vi.mocked(downloadJson).mock.calls[0]?.[1] as {
+      exportKind: string
+      recordCount: number
+    }
+    expect(payload.exportKind).toBe('billing-topups')
+    expect(payload.recordCount).toBe(1)
+    expect(toast.success).toHaveBeenCalledWith('Exported 1 record to JSON')
   })
 
   it('download Tax Invoice failure triggers toast.error with Rule 4 money safety description', async () => {

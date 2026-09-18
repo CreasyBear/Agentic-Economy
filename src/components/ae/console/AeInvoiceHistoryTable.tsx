@@ -14,7 +14,17 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { downloadCsv, formatCsvRow } from '@/lib/export/csv-export'
+import {
+  downloadCsv,
+  downloadJson,
+  EXPORT_ERROR_IMPACT,
+  EXPORT_ERROR_WHAT,
+  formatExportSuccessToast,
+  formatExportingPreview,
+  generateInvoicesCsv,
+  toExportDocument,
+  type InvoiceExportRow,
+} from '@/lib/export/csv-export'
 import { toast } from '@/lib/ui/toast'
 import { formatTimestamp } from '@/lib/ui/format-time'
 import { calculateAudGstSplit } from '@/modules/money/public'
@@ -23,6 +33,9 @@ const AUD_INCLUSIVE_GST_BPS = 1_000
 
 const TACTILE_BUTTON_CLASS =
   'min-h-touch enabled:active:scale-[0.98] transition-transform duration-100 ease-out motion-reduce:transition-none motion-reduce:active:scale-100'
+
+const EXPORT_FORMAT_BUTTON_CLASS =
+  'min-h-touch min-w-[4.75rem] enabled:active:scale-[0.98] transition-transform duration-100 ease-out motion-reduce:transition-none motion-reduce:active:scale-100'
 
 const MONEY_SAFE_ERROR_DESCRIPTION =
   'A$0.00 charged — your account balance is unaffected. Please refresh the page or contact support if the issue persists.'
@@ -64,6 +77,20 @@ function taxInvoiceCsvValue(row: AeInvoiceHistoryRow): string {
   return 'unavailable'
 }
 
+function invoiceHistoryToExportRow(row: AeInvoiceHistoryRow): InvoiceExportRow {
+  const split = calculateAudGstSplit(row.totalUnits, AUD_INCLUSIVE_GST_BPS)
+  return {
+    date: row.createdAt ? new Date(row.createdAt).toISOString() : '',
+    commandRef: row.commandRef,
+    description: row.description,
+    amountAud: unitsToAudDollarsFixed(row.totalUnits),
+    gstAud: split === undefined ? '' : unitsToAudDollarsFixed(split.gstUnits),
+    netAud: split === undefined ? '' : unitsToAudDollarsFixed(split.netUnits),
+    status: statusLabel(row.status),
+    taxInvoice: taxInvoiceCsvValue(row),
+  }
+}
+
 function InvoiceHistoryLoadingSkeleton() {
   return (
     <div
@@ -72,8 +99,10 @@ function InvoiceHistoryLoadingSkeleton() {
       role="status"
       aria-label="Loading invoice history"
     >
-      <div className="flex justify-end">
-        <Skeleton className="h-7 w-24" />
+      <div className="flex min-h-touch flex-wrap items-center justify-end gap-2">
+        <Skeleton className="h-4 w-48" />
+        <Skeleton className="min-h-touch min-w-[4.75rem] w-[4.75rem]" />
+        <Skeleton className="min-h-touch min-w-[4.75rem] w-[4.75rem]" />
       </div>
       <Table>
         <TableHeader>
@@ -263,46 +292,58 @@ export function AeInvoiceHistoryTable({
     return <InvoiceHistoryEmptyState />
   }
 
+  const exportRows = rows.map(invoiceHistoryToExportRow)
+  const exportDateSuffix = new Date().toISOString().slice(0, 10)
+
   const handleExportCsv = () => {
-    const headers = formatCsvRow([
-      'Date',
-      'Command Ref',
-      'Description',
-      'Amount AUD',
-      'GST AUD',
-      'Net AUD',
-      'Status',
-      'Tax Invoice',
-    ])
-    const dataRows = rows.map((row) => {
-      const split = calculateAudGstSplit(row.totalUnits, AUD_INCLUSIVE_GST_BPS)
-      return formatCsvRow([
-        row.createdAt ? new Date(row.createdAt).toISOString() : '',
-        row.commandRef,
-        row.description,
-        unitsToAudDollarsFixed(row.totalUnits),
-        split === undefined ? '' : unitsToAudDollarsFixed(split.gstUnits),
-        split === undefined ? '' : unitsToAudDollarsFixed(split.netUnits),
-        statusLabel(row.status),
-        taxInvoiceCsvValue(row),
-      ])
-    })
-    const csvContent = [headers, ...dataRows].join('\r\n')
-    downloadCsv(`billing-topups-${new Date().toISOString().slice(0, 10)}.csv`, csvContent)
-    toast.success('Invoice history exported to CSV')
+    try {
+      const csvContent = generateInvoicesCsv(exportRows)
+      downloadCsv(`billing-topups-${exportDateSuffix}.csv`, csvContent)
+      toast.success(formatExportSuccessToast(exportRows.length, 'CSV'))
+    } catch {
+      toast.error(EXPORT_ERROR_WHAT, { description: EXPORT_ERROR_IMPACT })
+    }
+  }
+
+  const handleExportJson = () => {
+    try {
+      const document = toExportDocument('billing-topups', exportRows)
+      downloadJson(`billing-topups-${exportDateSuffix}.json`, document)
+      toast.success(formatExportSuccessToast(exportRows.length, 'JSON'))
+    } catch {
+      toast.error(EXPORT_ERROR_WHAT, { description: EXPORT_ERROR_IMPACT })
+    }
   }
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex justify-end">
+      <div className="flex min-h-touch flex-wrap items-center justify-end gap-2">
+        <span className="min-w-[12rem] text-xs text-muted-foreground">
+          <span className="font-mono tabular-nums">
+            {formatExportingPreview(rows.length)}
+          </span>
+        </span>
         <Button
           type="button"
           variant="outline"
           size="sm"
-          className={`h-7 text-xs ${TACTILE_BUTTON_CLASS}`}
+          className={`h-7 text-xs ${EXPORT_FORMAT_BUTTON_CLASS}`}
+          disabled={rows.length === 0}
           onClick={handleExportCsv}
         >
-          Export CSV
+          <Download className="size-3.5 shrink-0" aria-hidden="true" />
+          CSV
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className={`h-7 text-xs ${EXPORT_FORMAT_BUTTON_CLASS}`}
+          disabled={rows.length === 0}
+          onClick={handleExportJson}
+        >
+          <Download className="size-3.5 shrink-0" aria-hidden="true" />
+          JSON
         </Button>
       </div>
       <Table>

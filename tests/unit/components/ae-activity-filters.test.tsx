@@ -5,7 +5,7 @@ import type { ReactNode } from 'react'
 
 import { ActivityPage } from '@/routes/_operator/activity'
 import { toast } from '@/lib/ui/toast'
-import { downloadCsv } from '@/lib/export/csv-export'
+import { downloadCsv, downloadJson } from '@/lib/export/csv-export'
 
 afterEach(cleanup)
 
@@ -18,6 +18,7 @@ vi.mock('@/lib/export/csv-export', async (importOriginal) => {
   return {
     ...actual,
     downloadCsv: vi.fn(),
+    downloadJson: vi.fn(),
   }
 })
 
@@ -116,6 +117,7 @@ describe('ActivityPage & Filtering (W-38)', () => {
 
   beforeEach(() => {
     vi.mocked(downloadCsv).mockClear()
+    vi.mocked(downloadJson).mockClear()
     vi.mocked(toast.success).mockClear()
   })
 
@@ -189,13 +191,19 @@ describe('ActivityPage & Filtering (W-38)', () => {
     expect(screen.getByText('Payment: Released')).toBeTruthy()
   })
 
-  it('exports CSV with nine columns and shows success toast', () => {
+  it('shows export preview text for loaded record count', () => {
     renderActivity()
 
-    fireEvent.click(screen.getByRole('button', { name: /Export CSV/u }))
+    expect(screen.getByText('Exporting 2 records')).toBeTruthy()
+  })
+
+  it('exports CSV with nine columns, tool labels, and count-aware success toast', () => {
+    renderActivity()
+
+    fireEvent.click(screen.getByRole('button', { name: /^CSV$/u }))
 
     expect(downloadCsv).toHaveBeenCalledTimes(1)
-    expect(toast.success).toHaveBeenCalledWith('Activity log exported to CSV')
+    expect(toast.success).toHaveBeenCalledWith('Exported 2 records to CSV')
 
     const csvArg = vi.mocked(downloadCsv).mock.calls[0]?.[1]
     expect(typeof csvArg).toBe('string')
@@ -203,6 +211,51 @@ describe('ActivityPage & Filtering (W-38)', () => {
     const columns = headerLine.split(',')
     expect(columns).toHaveLength(9)
     expect(columns).toContain('Net AUD')
+    expect(csvArg).toContain('Australian Tax Calculator')
+  })
+
+  it('exports JSON with export document and count-aware success toast', () => {
+    renderActivity()
+
+    fireEvent.click(screen.getByRole('button', { name: /^JSON$/u }))
+
+    expect(downloadJson).toHaveBeenCalledTimes(1)
+    expect(toast.success).toHaveBeenCalledWith('Exported 2 records to JSON')
+    const payload = vi.mocked(downloadJson).mock.calls[0]?.[1] as {
+      exportKind: string
+      recordCount: number
+    }
+    expect(payload.exportKind).toBe('activity-calls')
+    expect(payload.recordCount).toBe(2)
+  })
+
+  it('disables CSV and JSON export when no calls match filters', () => {
+    renderActivity()
+
+    fireEvent.click(screen.getByRole('button', { name: /Needs Attention\s+0/u }))
+
+    expect(screen.getByRole('button', { name: /^CSV$/u })).toHaveProperty('disabled', true)
+    expect(screen.getByRole('button', { name: /^JSON$/u })).toHaveProperty('disabled', true)
+  })
+
+  it('shows loaded-only preview when more history is available', () => {
+    render(
+      <ActivityPage
+        result={{
+          kind: 'available',
+          calls: {
+            ...sampleCalls,
+            isDone: false,
+            continueCursor: 'cursor:next',
+          },
+          usage: sampleUsage,
+          spend: sampleSpend,
+          periodStart: '2026-09',
+        }}
+      />,
+    )
+
+    expect(screen.getByText('Exporting 2 loaded records')).toBeTruthy()
   })
 
   it('shows filter empty message when no calls match', () => {

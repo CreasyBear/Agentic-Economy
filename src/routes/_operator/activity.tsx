@@ -30,13 +30,25 @@ import { toast } from '@/lib/ui/toast'
 import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
 import { captureRouteException } from '@/lib/observability/capture-route-exception'
 import { formatUtcTimestamp } from '@/lib/ui/format-time'
-import { downloadCsv, generateCallsCsv } from '@/lib/export/csv-export'
+import {
+  downloadCsv,
+  downloadJson,
+  EXPORT_ERROR_IMPACT,
+  EXPORT_ERROR_WHAT,
+  formatExportSuccessToast,
+  formatExportingPreview,
+  generateCallsCsv,
+  toExportDocument,
+} from '@/lib/export/csv-export'
 import { AeTableEmptyState } from '@/components/ae/feedback/AeTableEmptyState'
 
 const AUD_INCLUSIVE_GST_BPS = 1_000
 
 const TACTILE_PRESS_CLASS =
   'enabled:active:scale-[0.98] transition-transform duration-100 ease-out motion-reduce:transition-none motion-reduce:active:scale-100'
+
+const EXPORT_FORMAT_BUTTON_CLASS =
+  'min-h-touch min-w-[4.75rem] enabled:active:scale-[0.98] transition-transform duration-100 ease-out motion-reduce:transition-none motion-reduce:active:scale-100'
 
 function unitsToAudDollarsFixed(units: string): string {
   if (!units) return '0.00'
@@ -257,6 +269,24 @@ function useCallPagination(initial: CallPage, principalRef?: string) {
   }
 
   return { state, loadNextPage }
+}
+
+function buildActivityExportRows(items: readonly CallRow[]) {
+  return items.map((item) => {
+    const grossUnits = item.audAmountUnits ?? '0'
+    const split = calculateAudGstSplit(grossUnits, AUD_INCLUSIVE_GST_BPS)
+    return {
+      date: item.createdAt ? new Date(item.createdAt).toISOString() : '',
+      callRef: item.callRef,
+      toolName: item.toolLabel,
+      provider: 'Agentic Economy Seller',
+      agentName: item.principalRef ?? 'Unspecified Agent',
+      costAud: unitsToAudDollarsFixed(grossUnits),
+      gstAud: split === undefined ? '0.00' : unitsToAudDollarsFixed(split.gstUnits),
+      netAud: split === undefined ? '0.00' : unitsToAudDollarsFixed(split.netUnits),
+      status: projectCallSummaryPurchaseStatus(item).label,
+    }
+  })
 }
 
 function ActivityAvailable({
@@ -484,34 +514,54 @@ function ActivityAvailable({
                 </Button>
               ) : null}
 
+              <span className="min-w-[12rem] text-xs text-muted-foreground">
+                <span className="font-mono tabular-nums">
+                  {formatExportingPreview(filteredItems.length, {
+                    ...(pagination.cursor === undefined ? {} : { loadedOnly: true }),
+                  })}
+                </span>
+              </span>
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
-                className={`h-7 text-xs min-h-touch ${TACTILE_PRESS_CLASS}`}
+                className={`h-7 text-xs ${EXPORT_FORMAT_BUTTON_CLASS}`}
+                disabled={filteredItems.length === 0}
                 onClick={() => {
-                  const exportRows = filteredItems.map((item) => {
-                    const grossUnits = item.audAmountUnits ?? '0'
-                    const split = calculateAudGstSplit(grossUnits, AUD_INCLUSIVE_GST_BPS)
-                    return {
-                      date: item.createdAt ? new Date(item.createdAt).toISOString() : '',
-                      callRef: item.callRef,
-                      toolName: item.toolRef,
-                      provider: 'Agentic Economy Seller',
-                      agentName: item.principalRef ?? 'Unspecified Agent',
-                      costAud: unitsToAudDollarsFixed(grossUnits),
-                      gstAud: split === undefined ? '0.00' : unitsToAudDollarsFixed(split.gstUnits),
-                      netAud: split === undefined ? '0.00' : unitsToAudDollarsFixed(split.netUnits),
-                      status: projectCallSummaryPurchaseStatus(item).label,
-                    }
-                  })
-                  const csv = generateCallsCsv(exportRows)
-                  downloadCsv(`activity-calls-${new Date().toISOString().slice(0, 10)}.csv`, csv)
-                  toast.success('Activity log exported to CSV')
+                  try {
+                    const exportRows = buildActivityExportRows(filteredItems)
+                    const count = exportRows.length
+                    const csv = generateCallsCsv(exportRows)
+                    downloadCsv(`activity-calls-${new Date().toISOString().slice(0, 10)}.csv`, csv)
+                    toast.success(formatExportSuccessToast(count, 'CSV'))
+                  } catch {
+                    toast.error(EXPORT_ERROR_WHAT, { description: EXPORT_ERROR_IMPACT })
+                  }
                 }}
               >
                 <Download className="size-3.5 shrink-0" aria-hidden="true" />
-                Export CSV
+                CSV
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className={`h-7 text-xs ${EXPORT_FORMAT_BUTTON_CLASS}`}
+                disabled={filteredItems.length === 0}
+                onClick={() => {
+                  try {
+                    const exportRows = buildActivityExportRows(filteredItems)
+                    const count = exportRows.length
+                    const document = toExportDocument('activity-calls', exportRows)
+                    downloadJson(`activity-calls-${new Date().toISOString().slice(0, 10)}.json`, document)
+                    toast.success(formatExportSuccessToast(count, 'JSON'))
+                  } catch {
+                    toast.error(EXPORT_ERROR_WHAT, { description: EXPORT_ERROR_IMPACT })
+                  }
+                }}
+              >
+                <Download className="size-3.5 shrink-0" aria-hidden="true" />
+                JSON
               </Button>
             </div>
           </div>
