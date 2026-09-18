@@ -16,9 +16,9 @@
 | :--- | :---: | :--- | :---: | :---: | :---: | :---: |
 | **Wave 1: Buyer Onboarding & Developer Launchpad** | 6 | `W-01`, `W-02`, `W-25`, `W-26`, `W-27`, `W-29` | 6 | 0 | 0 | **VERIFIED** |
 | **Wave 2: Financial Peace-of-Mind & Spend Observability** | 8 | `W-20`, `W-21`, `W-22`, `W-23`, `W-24`, `W-38`, `W-39`, `W-40` | 8 | 0 | 0 | **VERIFIED** |
-| **Wave 3: Supplier Monetization & Testing Playground** | 8 | `W-30`, `W-31`, `W-32`, `W-33`, `W-34`, `W-35`, `W-36`, `W-37` | 3 | 0 | 5 | `IN PROGRESS` |
+| **Wave 3: Supplier Monetization & Testing Playground** | 8 | `W-30`, `W-31`, `W-32`, `W-33`, `W-34`, `W-35`, `W-36`, `W-37` | 4 | 0 | 4 | `IN PROGRESS` |
 | **Wave 4: Team Operations, Identity & Tactile Standards** | 22 | `W-03`–`W-09`, `W-10`–`W-19`, `W-28`, `W-41`–`W-44` | 0 | 0 | 22 | `PENDING` |
-| **Total** | **44** | **All 44 Standard Workflows** | **17** | **0** | **27** | `IN PROGRESS` |
+| **Total** | **44** | **All 44 Standard Workflows** | **18** | **0** | **26** | `IN PROGRESS` |
 
 ---
 
@@ -297,15 +297,19 @@
 ---
 
 ### W-33: Connect Return Poller & Health Monitor
-- **Surfaces:** `src/components/ae/supply/AeConnectReturnPoller.tsx`
+- **Surfaces:** `src/components/ae/supply/AeConnectReturnPoller.tsx`, `src/components/ae/supply/connect-return-poller-copy.ts`, `src/components/ae/offerings/AeProviderWorkspace.tsx`, `tests/unit/components/ae-connect-return-poller.test.tsx`
 - **Incumbent Baseline:** Alert banner polling readiness on return.
 - **Ergonomic Gap:** Static polling text; if verification fails or requires additional documents, the user is left guessing.
 - **Target Ergonomic Spec:**
-  - Animated radar pulse indicator: *"Verifying your payout setup with Stripe..."*.
-  - Transitions into green checkmark card upon success: *"Payouts enabled. Your tools are now ready to monetize."*
-  - If additional KYC is required: displays exact missing requirement (e.g. *"Stripe requires photo ID verification"*) with 1-click resume button.
-- **Subagent Assignment:** Grok (Scout) $\rightarrow$ Composer (Craft) $\rightarrow$ Orchestrator (Verify)
-- **Status:** `PENDING`
+  - Animated radar pulse indicator (*"Verifying your payout setup with Stripe..."*) replacing generic spinner.
+  - Celebratory success card (*"Payouts enabled. Your tools are now ready to monetize."*) with tactile primary action (*"Add your first Tool"*) linking to `/owner/operations/new`.
+  - Single-shot celebratory toast (`toast.success('Payout setup verified', ...)`) guarded against poll re-renders.
+  - Labelled Rule 4 diagnostic playbooks for restricted/missing KYC documents and processing timeouts (`A$0.00 affected`).
+  - Tactile action buttons (*"Resume Stripe verification"*, *"Update verification documents"*, *"Check again"*).
+  - Wired `onResumeVerification` in `AeProviderWorkspace.tsx` to open earnings and focus section.
+  - Zero-CLS shell parity with `min-h-[11rem]` across all four poller states.
+- **Subagent Assignment:** Grok (Scout: `214bd4b7-44f2-483c-8885-80fb35dbc5ed`) $\rightarrow$ Composer (Craft: `ce24da75-f4ce-4832-afc4-254d3537ca2d`) $\rightarrow$ Orchestrator (Verify)
+- **Status:** `VERIFIED`
 
 ---
 

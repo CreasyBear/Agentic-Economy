@@ -287,6 +287,10 @@ function AvailableWorkspace({
           {...(earningsDetail?.connect === undefined ? {} : { initialReadiness: earningsDetail.connect })}
           onPollReadiness={readConnect}
           onReadinessAchieved={() => void router.invalidate()}
+          onResumeVerification={() => {
+            openEarnings()
+            focusSection('earnings')
+          }}
         />
       )}
       {inventory.tools.length === 0 && (
