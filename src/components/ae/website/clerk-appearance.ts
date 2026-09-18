@@ -6,8 +6,48 @@
  * surface. Auth pages layer `clerkAuthSurfaceAppearance` to drop Clerk's card.
  */
 
-const aeInk = 'oklch(0.215 0.004 106)'
-const aeWhite = 'oklch(1 0 0)'
+const clerkSemanticVariables = {
+  colorPrimary: 'var(--foreground)',
+  colorBackground: 'var(--container)',
+  colorText: 'var(--foreground)',
+  colorInputBackground: 'var(--container)',
+  colorInputText: 'var(--foreground)',
+  colorNeutral: 'var(--muted-foreground)',
+  colorDanger: 'var(--destructive)',
+}
+
+const clerkPrimaryButtonClasses =
+  'min-h-touch rounded-none bg-foreground text-background shadow-none hover:bg-foreground/90 enabled:active:scale-[0.98] transition-transform duration-100 ease-out motion-reduce:transition-none motion-reduce:active:scale-100'
+
+const clerkSocialButtonClasses =
+  'min-h-touch rounded-none border-border bg-container hover:bg-muted enabled:active:scale-[0.98] transition-transform duration-100 ease-out motion-reduce:transition-none motion-reduce:active:scale-100'
+
+const clerkFormFieldInputClasses =
+  'min-h-touch rounded-none border-border bg-container text-base md:text-sm outline-none transition-[border-color,box-shadow] duration-fast ease-standard focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring aria-invalid:border-destructive aria-invalid:ring-2 aria-invalid:ring-inset aria-invalid:ring-destructive'
+
+const clerkCardBoxClasses =
+  'min-h-96 w-full shadow-none transition-[min-height,opacity] duration-base ease-standard motion-reduce:transition-none'
+
+const clerkFooterLinkClasses =
+  'text-foreground underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring'
+
+const clerkAuthInteractiveElements = {
+  socialButtonsBlockButton: clerkSocialButtonClasses,
+  formButtonPrimary: clerkPrimaryButtonClasses,
+  formFieldInput: clerkFormFieldInputClasses,
+  formFieldInputShowPasswordButton: 'min-h-touch min-w-touch',
+  identityPreviewEditButton: '!min-h-touch !min-w-touch',
+  formFieldRow__password: 'aria-hidden:!hidden',
+  formFieldErrorText: 'text-sm text-destructive',
+  alertText: 'text-sm text-destructive',
+  alert: 'border border-destructive bg-destructive/10 text-destructive',
+  badge: 'bg-brand-muted text-info-foreground text-xs font-medium',
+  headerTitle: 'font-sans text-xl font-semibold tracking-tight',
+  headerSubtitle: 'text-muted-foreground',
+  footerActionLink: clerkFooterLinkClasses,
+  logoBox: 'hidden',
+  logoImage: 'hidden',
+}
 
 export const clerkAppearance = {
   cssLayerName: 'clerk',
@@ -16,31 +56,14 @@ export const clerkAppearance = {
     fontSize: '0.875rem',
     spacing: '0.875rem',
     borderRadius: '0px',
-    colorPrimary: aeInk,
-    colorBackground: aeWhite,
-    colorText: aeInk,
-    colorInputBackground: aeWhite,
-    colorInputText: aeInk,
+    ...clerkSemanticVariables,
   },
   layout: {
     logoPlacement: 'none' as const,
     socialButtonsPlacement: 'bottom' as const,
     socialButtonsVariant: 'blockButton' as const,
   },
-  elements: {
-    socialButtonsBlockButton: 'min-h-touch rounded-none border-border bg-container',
-    formButtonPrimary:
-      'min-h-touch rounded-none bg-foreground text-background shadow-none hover:bg-foreground/90',
-    formFieldInput: 'min-h-touch rounded-none border-border bg-container',
-    formFieldInputShowPasswordButton: 'min-h-touch min-w-touch',
-    identityPreviewEditButton: '!min-h-touch !min-w-touch',
-    formFieldRow__password: 'aria-hidden:!hidden',
-    headerTitle: 'font-sans text-xl font-semibold tracking-tight',
-    headerSubtitle: 'text-muted-foreground',
-    footerActionLink: 'text-foreground underline-offset-4 hover:underline',
-    logoBox: 'hidden',
-    logoImage: 'hidden',
-  },
+  elements: clerkAuthInteractiveElements,
   options: {
     unsafe_disableDevelopmentModeWarnings: true,
   },
@@ -53,12 +76,11 @@ export const clerkAuthSurfaceAppearance = {
   },
   elements: {
     rootBox: 'w-full',
-    cardBox: 'w-full shadow-none',
+    cardBox: clerkCardBoxClasses,
     card: 'w-full border-0 bg-transparent p-0 shadow-none',
     header: 'hidden',
     footer: 'hidden',
-    logoBox: 'hidden',
-    logoImage: 'hidden',
+    ...clerkAuthInteractiveElements,
   },
 }
 
@@ -69,14 +91,12 @@ export const clerkSignInSurfaceAppearance = {
   },
   elements: {
     rootBox: 'w-full',
-    cardBox: 'w-full shadow-none',
+    cardBox: clerkCardBoxClasses,
     card: 'w-full border-0 bg-transparent p-0 shadow-none',
     header: 'hidden',
     footer: 'border-0 bg-none bg-transparent text-foreground',
     footerAction: 'bg-transparent',
     footerActionText: 'text-muted-foreground',
-    footerActionLink: 'text-foreground underline-offset-4 hover:underline',
-    logoBox: 'hidden',
-    logoImage: 'hidden',
+    ...clerkAuthInteractiveElements,
   },
 }

@@ -1,5 +1,7 @@
 import { SignIn } from '@clerk/tanstack-react-start'
 import { createFileRoute } from '@tanstack/react-router'
+import type { SignInProps } from '@clerk/shared/types'
+import type { ReactNode } from 'react'
 
 import { AePublicPage } from '@/components/ae/layout/AePublicPage'
 import {
@@ -11,6 +13,23 @@ import { sanitizeAuthRedirectTarget } from '@/lib/client/auth-redirect'
 
 type SignInSearch = {
   redirect?: string
+}
+
+const authMethodClause = 'Use email, Google, GitHub, or a passkey.'
+
+export function SignInClerkFallback() {
+  return (
+    <div
+      data-slot="ae-site-auth-clerk-fallback"
+      className="grid min-h-96 w-full gap-related"
+      aria-hidden
+    >
+      <div className="min-h-touch bg-muted" />
+      <div className="min-h-touch bg-foreground/20" />
+      <div className="min-h-touch border border-border bg-muted/40" />
+      <div className="min-h-touch border border-border bg-muted/40" />
+    </div>
+  )
 }
 
 export const Route = createFileRoute('/sign-in/$')({
@@ -37,10 +56,19 @@ function SignInRoute() {
       ? 'Sign in to manage Tools'
       : 'Sign in'
   const body = isAgentAccessFlow
-    ? 'After you sign in, you’ll return to the agent connection you started.'
+    ? `${authMethodClause} After you sign in, you’ll return to the agent connection you started.`
     : isProviderFlow
-      ? 'After you sign in, you’ll return to your Provider workspace.'
-      : 'After you sign in, you’ll return to where you left off.'
+      ? `${authMethodClause} After you sign in, you’ll return to your Provider workspace.`
+      : `${authMethodClause} After you sign in, you’ll return to where you left off.`
+
+  const signInProps: SignInProps & { fallback?: ReactNode } = {
+    appearance: clerkSignInSurfaceAppearance,
+    fallback: <SignInClerkFallback />,
+    fallbackRedirectUrl: redirect ?? '/owner/settings',
+    signUpFallbackRedirectUrl: redirect ?? '/owner/settings',
+    signUpUrl: '/sign-up',
+  }
+
   return (
     <AePublicPage>
       <AeSiteAuthStage labelledBy="sign-in-context-heading" url="/sign-in">
@@ -50,12 +78,7 @@ function SignInRoute() {
           titleId="sign-in-context-heading"
           body={body}
         >
-          <SignIn
-            appearance={clerkSignInSurfaceAppearance}
-            fallbackRedirectUrl={redirect ?? '/owner/settings'}
-            signUpFallbackRedirectUrl={redirect ?? '/owner/settings'}
-            signUpUrl="/sign-up"
-          />
+          <SignIn {...signInProps} />
         </AeSiteAuthPanel>
       </AeSiteAuthStage>
     </AePublicPage>
