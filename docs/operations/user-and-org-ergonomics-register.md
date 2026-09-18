@@ -15,10 +15,10 @@
 | Wave | Workflows | Scope | Verified | In Review | Pending | Target Status |
 | :--- | :---: | :--- | :---: | :---: | :---: | :---: |
 | **Wave 1: Buyer Onboarding & Developer Launchpad** | 6 | `W-01`, `W-02`, `W-25`, `W-26`, `W-27`, `W-29` | 6 | 0 | 0 | **VERIFIED** |
-| **Wave 2: Financial Peace-of-Mind & Spend Observability** | 8 | `W-20`, `W-21`, `W-22`, `W-23`, `W-24`, `W-38`, `W-39`, `W-40` | 4 | 0 | 4 | `IN PROGRESS` |
+| **Wave 2: Financial Peace-of-Mind & Spend Observability** | 8 | `W-20`, `W-21`, `W-22`, `W-23`, `W-24`, `W-38`, `W-39`, `W-40` | 5 | 0 | 3 | `IN PROGRESS` |
 | **Wave 3: Supplier Monetization & Testing Playground** | 8 | `W-30`, `W-31`, `W-32`, `W-33`, `W-34`, `W-35`, `W-36`, `W-37` | 0 | 0 | 8 | `PENDING` |
 | **Wave 4: Team Operations, Identity & Tactile Standards** | 22 | `W-03`–`W-09`, `W-10`–`W-19`, `W-28`, `W-41`–`W-44` | 0 | 0 | 22 | `PENDING` |
-| **Total** | **44** | **All 44 Standard Workflows** | **10** | **0** | **34** | `IN PROGRESS` |
+| **Total** | **44** | **All 44 Standard Workflows** | **11** | **0** | **33** | `IN PROGRESS` |
 
 ---
 
@@ -175,16 +175,21 @@
 
 ---
 
-### W-24: ATO-Compliant Tax Invoices & Billing History
-- **Surfaces:** `src/components/ae/console/AeInvoiceHistoryTable.tsx`, `src/components/ae/settings/TaxProfileForm.tsx`
+### W-24: ATO Tax Invoice Generation & Itemized GST
+- **Surfaces:** `src/components/ae/console/AeInvoiceHistoryTable.tsx`, `src/components/ae/console/AeOwnerCredit.tsx`, `src/routes/_operator/owner.credit.tsx`, `tests/unit/components/invoice-history-table.test.tsx`
 - **Incumbent Baseline:** Table listing invoices with external links.
 - **Ergonomic Gap:** Invoices cannot be searched by number; tax facts cannot be updated inline; no batch download for accounting.
 - **Target Ergonomic Spec:**
-  - Table search by invoice number and date range.
-  - 1-click direct PDF download with itemized GST, ABN, and seller details.
-  - 1-click *"Download All Invoices for Financial Year (ZIP)"* for accountant handoff.
-- **Subagent Assignment:** Grok (Scout) $\rightarrow$ Composer (Craft) $\rightarrow$ Orchestrator (Verify)
-- **Status:** `PENDING`
+  - Table loading skeleton matching 5-column layout to prevent layout shift on load.
+  - Dedicated structured empty card explaining receipt and ATO tax invoice preservation.
+  - Itemized Australian GST breakdown (`A$X.XX GST included`) alongside gross amount in tabular numbers.
+  - Semantic status badges (`Paid` secondary badge, `Reversed` outline badge).
+  - Tactile action buttons with icons (`Download` icon for Tax Invoices, `ExternalLink` for Stripe receipts).
+  - Contextual tax withhold guidance linking directly to `/owner/workspace` for ABN setup.
+  - Enhanced 8-column RFC 4180 CSV export with gross, GST, and net AUD columns and celebratory success toast.
+  - Rule 4 playbooks and toast error handling for invoice/receipt download failures.
+- **Subagent Assignment:** Grok (Scout: `7b169543-75f4-49a4-8815-1a1c091d147c`) $\rightarrow$ Composer (Craft: `314d4ffc-fd54-43bc-ab39-af15052b5a69`) $\rightarrow$ Orchestrator (Verify)
+- **Status:** `VERIFIED`
 
 ---
 

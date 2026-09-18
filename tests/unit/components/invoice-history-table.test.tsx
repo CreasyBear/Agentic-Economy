@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 import '@testing-library/jest-dom/vitest'
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import '../../setup/jsdom-platform'
 
@@ -9,7 +9,22 @@ import {
   type AeInvoiceHistoryRow,
 } from '@/components/ae/console/AeInvoiceHistoryTable'
 import { formatAudAmountString } from '@/components/ae/console/credit-top-up-format'
+import { downloadCsv } from '@/lib/export/csv-export'
+import { toast } from '@/lib/ui/toast'
 import { formatTimestamp } from '@/lib/ui/format-time'
+import { calculateAudGstSplit } from '@/modules/money/public'
+
+vi.mock('@/lib/ui/toast', () => ({
+  toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() },
+}))
+
+vi.mock('@/lib/export/csv-export', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/export/csv-export')>()
+  return {
+    ...actual,
+    downloadCsv: vi.fn(),
+  }
+})
 
 const createdAt = 1_800_000_000_000
 
@@ -55,6 +70,26 @@ const withheldPolicyRow: AeInvoiceHistoryRow = {
   },
 }
 
+const withheldPendingRow: AeInvoiceHistoryRow = {
+  commandRef: 'funding:w24:u5:pending',
+  createdAt,
+  description: 'Account top-up',
+  totalUnits: '5280000',
+  status: 'succeeded',
+  appliedTransactionRef: 'formance:tx:w24:u5',
+  hasPaymentReceipt: true,
+  taxInvoice: {
+    kind: 'withheld',
+    reason: 'tax_invoice_not_generated',
+  },
+}
+
+const reversedRow: AeInvoiceHistoryRow = {
+  ...paidRow,
+  commandRef: 'funding:w24:u6:reversed',
+  status: 'reversed',
+}
+
 const noReceiptRow: AeInvoiceHistoryRow = {
   ...paidRow,
   commandRef: 'funding:w24:u4:no-receipt',
@@ -64,8 +99,9 @@ const noReceiptRow: AeInvoiceHistoryRow = {
 function renderTable(
   props: Readonly<{
     rows?: readonly AeInvoiceHistoryRow[]
-    onDownloadTaxInvoice?: (row: AeInvoiceHistoryRow) => void
-    onViewStripeReceipt?: (row: AeInvoiceHistoryRow) => void
+    isLoading?: boolean
+    onDownloadTaxInvoice?: (row: AeInvoiceHistoryRow) => void | Promise<void>
+    onViewStripeReceipt?: (row: AeInvoiceHistoryRow) => void | Promise<void>
   }> = {},
 ) {
   const onDownloadTaxInvoice = props.onDownloadTaxInvoice ?? vi.fn()
@@ -76,6 +112,7 @@ function renderTable(
     ...render(
       <AeInvoiceHistoryTable
         rows={props.rows ?? [paidRow]}
+        {...(props.isLoading === undefined ? {} : { isLoading: props.isLoading })}
         onDownloadTaxInvoice={onDownloadTaxInvoice}
         onViewStripeReceipt={onViewStripeReceipt}
       />,
@@ -104,15 +141,16 @@ describe('AeInvoiceHistoryTable (W-24)', () => {
     renderTable({ rows: [withheldMissingFactsRow] })
 
     expect(screen.getByRole('button', { name: 'Download Tax Invoice' })).toBeDisabled()
-    const workspaceLink = screen.getByRole('link', { name: /tax details/i })
+    const workspaceLink = screen.getByRole('link', { name: /tax details missing/i })
     expect(workspaceLink).toHaveAttribute('href', '/owner/workspace')
+    expect(workspaceLink.textContent).toMatch(/abn/i)
   })
 
   it('U3: withheld row for policy disabled does not blame missing ABN', () => {
     renderTable({ rows: [withheldPolicyRow] })
 
     expect(screen.queryByText(/abn/i)).not.toBeInTheDocument()
-    expect(screen.getByText(/not enabled in this environment/i)).toBeInTheDocument()
+    expect(screen.getByText(/disabled for this environment/i)).toBeInTheDocument()
   })
 
   it('U4: row without hasPaymentReceipt disables or hides View Stripe Receipt', () => {
@@ -125,7 +163,8 @@ describe('AeInvoiceHistoryTable (W-24)', () => {
   it('U5: empty history displays no paid top-ups yet', () => {
     renderTable({ rows: [] })
 
-    expect(screen.getByText('No paid top-ups yet')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'No paid top-ups yet' })).toBeInTheDocument()
+    expect(screen.getByText(/workspace tax profile allows issuance/i)).toBeInTheDocument()
   })
 
   it('U6: clicking Download Tax Invoice triggers onDownloadTaxInvoice(row)', () => {
@@ -148,9 +187,94 @@ describe('AeInvoiceHistoryTable (W-24)', () => {
     expect(onViewStripeReceipt).toHaveBeenCalledWith(paidRow)
   })
 
-  it('renders Export CSV button and allows exporting rows', () => {
+  it('loading skeleton renders table structure and 3 skeleton rows', () => {
+    renderTable({ isLoading: true })
+
+    expect(screen.getByRole('status', { name: 'Loading invoice history' })).toHaveAttribute(
+      'aria-busy',
+      'true',
+    )
+    expect(screen.getByText('Date')).toBeInTheDocument()
+    expect(screen.getByText('Actions')).toBeInTheDocument()
+    const table = screen.getByRole('table')
+    const bodyRows = within(table).getAllByRole('row').slice(1)
+    expect(bodyRows).toHaveLength(3)
+  })
+
+  it('empty state renders structured empty card', () => {
+    const { container } = renderTable({ rows: [] })
+
+    const card = container.querySelector('.rounded-lg.border')
+    expect(card).toBeTruthy()
+    expect(within(card as HTMLElement).getByRole('heading')).toHaveTextContent('No paid top-ups yet')
+  })
+
+  it('amount shows GST included line when split is available', () => {
+    renderTable()
+    const split = calculateAudGstSplit('5280000', 1_000)
+    expect(split).toBeDefined()
+    if (split === undefined) return
+    expect(
+      screen.getByText(`${formatAudAmountString(split.gstUnits)} GST included`),
+    ).toBeInTheDocument()
+  })
+
+  it('badges are used for Paid and Reversed', () => {
+    renderTable({ rows: [paidRow, reversedRow] })
+
+    expect(screen.getByText('Paid').closest('[data-slot="badge"]')).toBeTruthy()
+    expect(screen.getByText('Reversed').closest('[data-slot="badge"]')).toBeTruthy()
+  })
+
+  it('tax invoice pending generation copy for tax_invoice_not_generated', () => {
+    renderTable({ rows: [withheldPendingRow] })
+
+    expect(screen.getByText(/tax invoice pending generation/i)).toBeInTheDocument()
+  })
+
+  it('export CSV produces 8 columns including GST AUD and Net AUD, and calls toast.success', () => {
     renderTable()
 
-    expect(screen.getByRole('button', { name: 'Export CSV' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Export CSV' }))
+
+    expect(downloadCsv).toHaveBeenCalledOnce()
+    const csvContent = vi.mocked(downloadCsv).mock.calls[0]?.[1] ?? ''
+    const headerLine = csvContent.split('\r\n')[0] ?? ''
+    expect(headerLine).toContain('GST AUD')
+    expect(headerLine).toContain('Net AUD')
+    expect(headerLine.split(',')).toHaveLength(8)
+    expect(toast.success).toHaveBeenCalledWith('Invoice history exported to CSV')
+  })
+
+  it('download Tax Invoice failure triggers toast.error with Rule 4 money safety description', async () => {
+    const onDownloadTaxInvoice = vi.fn().mockRejectedValue(new Error('network'))
+    renderTable({ onDownloadTaxInvoice })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Download Tax Invoice' }))
+
+    await vi.waitFor(() => {
+      expect(toast.error).toHaveBeenCalledWith(
+        'Could not open tax invoice.',
+        expect.objectContaining({
+          description: expect.stringMatching(/A\$0\.00 charged/i),
+        }),
+      )
+    })
+  })
+
+  it('view Stripe Receipt failure triggers toast.error with Rule 4 money safety description', async () => {
+    const onViewStripeReceipt = vi.fn().mockRejectedValue(new Error('network'))
+    renderTable({ onViewStripeReceipt })
+
+    fireEvent.click(screen.getByRole('button', { name: 'View Stripe Receipt' }))
+
+    await vi.waitFor(() => {
+      expect(toast.error).toHaveBeenCalledWith(
+        'Could not open Stripe receipt.',
+        expect.objectContaining({
+          description: expect.stringMatching(/A\$0\.00 charged/i),
+        }),
+      )
+    })
   })
 })
