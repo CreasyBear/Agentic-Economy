@@ -15,10 +15,10 @@
 | Wave | Workflows | Scope | Verified | In Review | Pending | Target Status |
 | :--- | :---: | :--- | :---: | :---: | :---: | :---: |
 | **Wave 1: Buyer Onboarding & Developer Launchpad** | 6 | `W-01`, `W-02`, `W-25`, `W-26`, `W-27`, `W-29` | 6 | 0 | 0 | **VERIFIED** |
-| **Wave 2: Financial Peace-of-Mind & Spend Observability** | 8 | `W-20`, `W-21`, `W-22`, `W-23`, `W-24`, `W-38`, `W-39`, `W-40` | 5 | 0 | 3 | `IN PROGRESS` |
+| **Wave 2: Financial Peace-of-Mind & Spend Observability** | 8 | `W-20`, `W-21`, `W-22`, `W-23`, `W-24`, `W-38`, `W-39`, `W-40` | 6 | 0 | 2 | `IN PROGRESS` |
 | **Wave 3: Supplier Monetization & Testing Playground** | 8 | `W-30`, `W-31`, `W-32`, `W-33`, `W-34`, `W-35`, `W-36`, `W-37` | 0 | 0 | 8 | `PENDING` |
 | **Wave 4: Team Operations, Identity & Tactile Standards** | 22 | `W-03`–`W-09`, `W-10`–`W-19`, `W-28`, `W-41`–`W-44` | 0 | 0 | 22 | `PENDING` |
-| **Total** | **44** | **All 44 Standard Workflows** | **11** | **0** | **33** | `IN PROGRESS` |
+| **Total** | **44** | **All 44 Standard Workflows** | **12** | **0** | **32** | `IN PROGRESS` |
 
 ---
 
@@ -193,16 +193,20 @@
 
 ---
 
-### W-38: High-Density Activity Feed with Faceted Search
-- **Surfaces:** `src/routes/_operator/activity.tsx`, `src/components/ae/console/AeAgentCallHistoryTable.tsx`
+### W-38: Consolidated Call Activity Log & Filtering
+- **Surfaces:** `src/routes/_operator/activity.tsx`, `src/lib/export/csv-export.ts`, `tests/unit/components/ae-activity-filters.test.tsx`
 - **Incumbent Baseline:** Table of Calls with basic agent filter.
 - **Ergonomic Gap:** Lacks multi-criteria filtering; execution latency and cost breakdown are not scannable; no date range picker.
 - **Target Ergonomic Spec:**
-  - Faceted filter bar: Filter by Agent, by Tool, by Outcome (`Delivered`, `Refunded`, `Failed`), and Date Range.
-  - Monospace latency telemetry badge (`⚡ 240ms`) and exact cost (`A$0.10`).
-  - Clickable row opens instant slide-over Call Receipt.
-- **Subagent Assignment:** Grok (Scout) $\rightarrow$ Composer (Craft) $\rightarrow$ Orchestrator (Verify)
-- **Status:** `PENDING`
+  - Separate Status (delivery state) and Purchase status (commercial resolution) badge columns with payment status cues.
+  - Reserved `min-h-[3rem]` filter bar with date-scoped live count chips (All, Completed, Refused, Needs Attention).
+  - Sentence-case date range chips (All time, Today, 7d, 30d) with tactile active press and `aria-pressed` states.
+  - 1-click dismissible Agent filter pill directly integrated into the filter bar.
+  - Zero-CLS queue empty states preserving section geometry when filters match 0 calls.
+  - Enhanced 9-column RFC 4180 CSV export with gross, GST, and net AUD columns and celebratory success toast.
+  - Rule 4 playbooks and money-safety alerts ("A$0.00 affected") for pagination and summary recovery.
+- **Subagent Assignment:** Grok (Scout: `62e2290e-3513-45be-9789-5ce77041e51d`) $\rightarrow$ Composer (Craft: `cf05390a-7b4c-405b-800c-05ce18604e36`) $\rightarrow$ Orchestrator (Verify)
+- **Status:** `VERIFIED`
 
 ---
 

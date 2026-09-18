@@ -1,7 +1,7 @@
 import { Link, createFileRoute, useRouter } from '@tanstack/react-router'
 import { useMemo, useState } from 'react'
 import type { ColumnDef } from '@tanstack/react-table'
-import { Activity } from 'lucide-react'
+import { Activity, Download } from 'lucide-react'
 
 import { AeEmptyState } from '@/components/ae/feedback/AeEmptyState'
 import { AeDegradedState } from '@/components/ae/feedback/AeDegradedState'
@@ -12,21 +12,95 @@ import {
   AeRecordTable,
 } from '@/components/ae/operator/AeOperatorDataTable'
 import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { operatorRouteOptions } from '@/lib/operator/route-options'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
-import { projectCallSummaryPurchaseStatus } from '@/modules/capability-execution/call-receipt-view'
+import {
+  projectCallSummaryPurchaseStatus,
+  type BuyerCallSummaryFacts,
+} from '@/modules/capability-execution/call-receipt-view'
 import {
   readOwnerCallsServer,
   readOwnerSpendServer,
   readOwnerUsageServer,
 } from '@/lib/server/call-history.functions'
-import { formatDisplayAmount } from '@/modules/money/public'
+import { calculateAudGstSplit, formatDisplayAmount } from '@/modules/money/public'
+import { toast } from '@/lib/ui/toast'
 import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
 import { captureRouteException } from '@/lib/observability/capture-route-exception'
 import { formatUtcTimestamp } from '@/lib/ui/format-time'
 import { downloadCsv, generateCallsCsv } from '@/lib/export/csv-export'
 import { AeTableEmptyState } from '@/components/ae/feedback/AeTableEmptyState'
+
+const AUD_INCLUSIVE_GST_BPS = 1_000
+
+const TACTILE_PRESS_CLASS =
+  'enabled:active:scale-[0.98] transition-transform duration-100 ease-out motion-reduce:transition-none motion-reduce:active:scale-100'
+
+function unitsToAudDollarsFixed(units: string): string {
+  if (!units) return '0.00'
+  return (Number(units) / 1_000_000).toFixed(2)
+}
+
+function formatPaymentStateLabel(
+  paymentState: BuyerCallSummaryFacts['paymentState'],
+): string {
+  switch (paymentState) {
+    case 'settled':
+      return 'Settled'
+    case 'released':
+      return 'Released'
+    case 'unknown':
+      return 'Unknown'
+    case 'not_applicable':
+      return 'Not applicable'
+    default: {
+      const _exhaustive: never = paymentState
+      return _exhaustive
+    }
+  }
+}
+
+function callStateStatusBadge(state: BuyerCallSummaryFacts['state']) {
+  switch (state) {
+    case 'completed':
+      return <Badge variant="secondary">Completed</Badge>
+    case 'refused':
+      return <Badge variant="outline">Refused</Badge>
+    case 'outcome_unknown':
+      return (
+        <Badge variant="outline" className="border-warning/50 text-warning">
+          Needs Attention
+        </Badge>
+      )
+    default: {
+      const _exhaustive: never = state
+      return _exhaustive
+    }
+  }
+}
+
+function purchaseStatusBadge(purchase: ReturnType<typeof projectCallSummaryPurchaseStatus>) {
+  switch (purchase.kind) {
+    case 'delivered':
+      return <Badge variant="secondary">{purchase.label}</Badge>
+    case 'refunded':
+    case 'failed':
+      return <Badge variant="outline">{purchase.label}</Badge>
+    case 'uncertain':
+    case 'pending':
+      return (
+        <Badge variant="outline" className="border-warning/50 text-warning">
+          {purchase.label}
+        </Badge>
+      )
+    default: {
+      const _exhaustive: never = purchase.kind
+      return _exhaustive
+    }
+  }
+}
 
 export const Route = createFileRoute('/_operator/activity')({
   staticData: {
@@ -205,21 +279,46 @@ function ActivityAvailable({
   const [dateRangeFilter, setDateRangeFilter] = useState<'all' | 'today' | '7d' | '30d'>('all')
   const [nowMs] = useState(() => Date.now())
 
+  const dateFilteredItems = useMemo(() => {
+    if (dateRangeFilter === 'all') return pagination.items
+    const cutoff = dateRangeFilter === 'today'
+      ? nowMs - 24 * 60 * 60 * 1000
+      : dateRangeFilter === '7d'
+        ? nowMs - 7 * 24 * 60 * 60 * 1000
+        : nowMs - 30 * 24 * 60 * 60 * 1000
+    return pagination.items.filter((item) => item.createdAt >= cutoff)
+  }, [pagination.items, dateRangeFilter, nowMs])
+
+  const statusCounts = useMemo(() => ({
+    all: dateFilteredItems.length,
+    completed: dateFilteredItems.filter((item) => item.state === 'completed').length,
+    refused: dateFilteredItems.filter((item) => item.state === 'refused').length,
+    outcome_unknown: dateFilteredItems.filter((item) => item.state === 'outcome_unknown').length,
+  }), [dateFilteredItems])
+
   const filteredItems = useMemo(() => {
-    let result = pagination.items
-    if (statusFilter !== 'all') {
-      result = result.filter((item) => item.state === statusFilter)
-    }
-    if (dateRangeFilter !== 'all') {
-      const cutoff = dateRangeFilter === 'today'
-        ? nowMs - 24 * 60 * 60 * 1000
-        : dateRangeFilter === '7d'
-          ? nowMs - 7 * 24 * 60 * 60 * 1000
-          : nowMs - 30 * 24 * 60 * 60 * 1000
-      result = result.filter((item) => item.createdAt >= cutoff)
-    }
-    return result
-  }, [pagination.items, statusFilter, dateRangeFilter, nowMs])
+    if (statusFilter === 'all') return dateFilteredItems
+    return dateFilteredItems.filter((item) => item.state === statusFilter)
+  }, [dateFilteredItems, statusFilter])
+
+  const filtersActive = statusFilter !== 'all'
+    || dateRangeFilter !== 'all'
+    || filteredAgent !== undefined
+
+  const statusChipLabel = (s: 'all' | 'completed' | 'refused' | 'outcome_unknown') => {
+    if (s === 'all') return 'All'
+    if (s === 'completed') return 'Completed'
+    if (s === 'refused') return 'Refused'
+    return 'Needs Attention'
+  }
+
+  const dateChipLabel = (d: 'all' | 'today' | '7d' | '30d') => {
+    if (d === 'all') return 'All time'
+    if (d === 'today') return 'Today'
+    return d
+  }
+
+  const filteredAgentShortId = filteredAgent?.split(':').pop()
 
   const attention = filteredItems.filter((item) => projectCallSummaryPurchaseStatus(item).attention)
   const recent = filteredItems.filter((item) => !projectCallSummaryPurchaseStatus(item).attention)
@@ -268,10 +367,26 @@ function ActivityAvailable({
         ),
       },
       {
+        id: 'status',
+        accessorFn: (item) => item.state,
+        header: ({ column }) => <AeOperatorSortableHeader label="Status" column={column} />,
+        cell: ({ row }) => callStateStatusBadge(row.original.state),
+      },
+      {
         id: 'outcome',
         accessorFn: (item) => projectCallSummaryPurchaseStatus(item).label,
         header: ({ column }) => <AeOperatorSortableHeader label="Purchase status" column={column} />,
-        cell: ({ row }) => projectCallSummaryPurchaseStatus(row.original).label,
+        cell: ({ row }) => {
+          const purchase = projectCallSummaryPurchaseStatus(row.original)
+          return (
+            <div className="grid gap-1">
+              {purchaseStatusBadge(purchase)}
+              <div className="text-xs text-muted-foreground">
+                Payment: {formatPaymentStateLabel(row.original.paymentState)}
+              </div>
+            </div>
+          )
+        },
       },
       {
         id: 'when',
@@ -295,19 +410,8 @@ function ActivityAvailable({
       currentPath="/activity"
     >
       <div className="grid gap-section">
-        {filteredAgent && (
-          <div className="flex items-center justify-between rounded-md border border-border bg-muted/30 px-3 py-2 text-xs">
-            <span className="text-muted-foreground">
-              Filtered by Agent: <code className="font-mono font-medium text-foreground">{filteredAgent}</code>
-            </span>
-            <Button asChild variant="ghost" size="sm" className="h-7 text-xs">
-              <Link to="/activity">Clear filter</Link>
-            </Button>
-          </div>
-        )}
-
         {pagination.items.length > 0 ? (
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-card p-3">
+          <div className="flex min-h-[3rem] flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-card p-3">
             <div className="flex flex-wrap items-center gap-3">
               <div className="flex items-center gap-2">
                 <span className="text-xs font-medium text-muted-foreground">Status:</span>
@@ -318,10 +422,13 @@ function ActivityAvailable({
                       type="button"
                       variant={statusFilter === s ? 'secondary' : 'ghost'}
                       size="sm"
-                      className="h-7 text-xs capitalize"
+                      className={`h-7 text-xs ${TACTILE_PRESS_CLASS}`}
+                      aria-pressed={statusFilter === s}
                       onClick={() => setStatusFilter(s)}
                     >
-                      {s === 'all' ? 'All' : s.replace('_', ' ')}
+                      {statusChipLabel(s)}
+                      {' '}
+                      <span className="font-mono tabular-nums">{statusCounts[s]}</span>
                     </Button>
                   ))}
                 </div>
@@ -336,53 +443,77 @@ function ActivityAvailable({
                       type="button"
                       variant={dateRangeFilter === d ? 'secondary' : 'ghost'}
                       size="sm"
-                      className="h-7 text-xs uppercase"
+                      className={`h-7 text-xs ${TACTILE_PRESS_CLASS}`}
+                      aria-pressed={dateRangeFilter === d}
                       onClick={() => setDateRangeFilter(d)}
                     >
-                      {d === 'all' ? 'All time' : d}
+                      {dateChipLabel(d)}
                     </Button>
                   ))}
                 </div>
               </div>
+
+              {filteredAgentShortId ? (
+                <div className="flex items-center gap-1 rounded-full border border-border bg-muted/40 px-2.5 py-1 text-xs">
+                  <span className="text-muted-foreground">
+                    Agent · <span className="font-mono text-foreground">{filteredAgentShortId}</span>
+                  </span>
+                  <Button asChild variant="ghost" size="sm" className={`h-6 px-1.5 text-xs ${TACTILE_PRESS_CLASS}`}>
+                    <Link to="/activity" aria-label="Clear agent filter">×</Link>
+                  </Button>
+                </div>
+              ) : null}
             </div>
 
-            {(statusFilter !== 'all' || dateRangeFilter !== 'all') ? (
+            <div className="flex flex-wrap items-center gap-2">
+              {filtersActive ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className={`h-7 text-xs text-muted-foreground ${TACTILE_PRESS_CLASS}`}
+                  onClick={() => {
+                    setStatusFilter('all')
+                    setDateRangeFilter('all')
+                    if (filteredAgent !== undefined) {
+                      void router.navigate({ to: '/activity' })
+                    }
+                  }}
+                >
+                  Reset filters
+                </Button>
+              ) : null}
+
               <Button
                 type="button"
-                variant="ghost"
+                variant="outline"
                 size="sm"
-                className="h-7 text-xs text-muted-foreground"
+                className={`h-7 text-xs min-h-touch ${TACTILE_PRESS_CLASS}`}
                 onClick={() => {
-                  setStatusFilter('all')
-                  setDateRangeFilter('all')
+                  const exportRows = filteredItems.map((item) => {
+                    const grossUnits = item.audAmountUnits ?? '0'
+                    const split = calculateAudGstSplit(grossUnits, AUD_INCLUSIVE_GST_BPS)
+                    return {
+                      date: item.createdAt ? new Date(item.createdAt).toISOString() : '',
+                      callRef: item.callRef,
+                      toolName: item.toolRef,
+                      provider: 'Agentic Economy Seller',
+                      agentName: item.principalRef ?? 'Unspecified Agent',
+                      costAud: unitsToAudDollarsFixed(grossUnits),
+                      gstAud: split === undefined ? '0.00' : unitsToAudDollarsFixed(split.gstUnits),
+                      netAud: split === undefined ? '0.00' : unitsToAudDollarsFixed(split.netUnits),
+                      status: projectCallSummaryPurchaseStatus(item).label,
+                    }
+                  })
+                  const csv = generateCallsCsv(exportRows)
+                  downloadCsv(`activity-calls-${new Date().toISOString().slice(0, 10)}.csv`, csv)
+                  toast.success('Activity log exported to CSV')
                 }}
               >
-                Reset filters
+                <Download className="size-3.5 shrink-0" aria-hidden="true" />
+                Export CSV
               </Button>
-            ) : null}
-
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="h-7 text-xs"
-              onClick={() => {
-                const exportRows = filteredItems.map((item) => ({
-                  date: item.createdAt ? new Date(item.createdAt).toISOString() : '',
-                  callRef: item.callRef,
-                  toolName: item.toolRef,
-                  provider: 'Agentic Economy Seller',
-                  agentName: item.principalRef ?? 'Unspecified Agent',
-                  costAud: item.audAmountUnits ? (Number(item.audAmountUnits) / 1_000_000).toFixed(2) : '0.00',
-                  gstAud: item.audAmountUnits ? (Number(item.audAmountUnits) / 11_000_000).toFixed(2) : '0.00',
-                  status: projectCallSummaryPurchaseStatus(item).label,
-                }))
-                const csv = generateCallsCsv(exportRows)
-                downloadCsv(`activity-calls-${new Date().toISOString().slice(0, 10)}.csv`, csv)
-              }}
-            >
-              Export CSV
-            </Button>
+            </div>
           </div>
         ) : null}
         {pagination.items.length === 0 && pagination.cursor === undefined ? (
@@ -390,6 +521,11 @@ function ActivityAvailable({
             title="No Calls yet"
             description="Find a Tool and complete one Call. Its task, outcome, amount, and receipt will appear here."
             action={<Button asChild className="min-h-touch"><Link to="/owner/market">Find Tools</Link></Button>}
+          />
+        ) : filteredItems.length === 0 ? (
+          <AeEmptyState
+            title="No calls match these filters"
+            description="No calls match the current filter criteria."
           />
         ) : (
           <>
@@ -482,12 +618,17 @@ function CallPaginationControl({
   return (
     <div className="flex flex-col items-center gap-intra border-t border-border pt-related">
       {pagination.status === 'failed' ? (
-        <p role="alert" className="text-sm text-muted-foreground">More Calls could not be loaded. Current Calls and the continuation are unchanged.</p>
+        <Alert>
+          <AlertTitle>Could not load older calls.</AlertTitle>
+          <AlertDescription>
+            A$0.00 affected — your account balance is unchanged. Check your connection and try loading more again.
+          </AlertDescription>
+        </Alert>
       ) : null}
       <Button
         type="button"
         variant="secondary"
-        className="min-h-touch"
+        className={`min-h-touch ${TACTILE_PRESS_CLASS}`}
         disabled={pagination.status === 'loading'}
         aria-busy={pagination.status === 'loading' || undefined}
         onClick={() => { void onLoadMore() }}
@@ -518,8 +659,17 @@ function MonthlyCallSummary({
         <Alert>
           <AlertTitle>Some summaries are unavailable</AlertTitle>
           <AlertDescription className="flex flex-wrap items-center gap-3">
-            <span>Available Calls remain visible. No missing count or amount is being inferred.</span>
-            <Button type="button" variant="secondary" disabled={retryPending} onClick={onRetry}>
+            <span>
+              Call history is still on this page. A$0.00 affected — your account balance is unchanged.
+              Check your connection and try refreshing summaries again.
+            </span>
+            <Button
+              type="button"
+              variant="secondary"
+              className={TACTILE_PRESS_CLASS}
+              disabled={retryPending}
+              onClick={onRetry}
+            >
               {retryPending ? 'Refreshing…' : 'Refresh summaries'}
             </Button>
           </AlertDescription>

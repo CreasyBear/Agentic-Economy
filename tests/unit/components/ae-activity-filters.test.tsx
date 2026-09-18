@@ -1,18 +1,32 @@
 /** @vitest-environment jsdom */
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ReactNode } from 'react'
 
 import { ActivityPage } from '@/routes/_operator/activity'
+import { toast } from '@/lib/ui/toast'
+import { downloadCsv } from '@/lib/export/csv-export'
 
 afterEach(cleanup)
+
+vi.mock('@/lib/ui/toast', () => ({
+  toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() },
+}))
+
+vi.mock('@/lib/export/csv-export', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/export/csv-export')>()
+  return {
+    ...actual,
+    downloadCsv: vi.fn(),
+  }
+})
 
 vi.mock('@tanstack/react-router', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@tanstack/react-router')>()
   return {
     ...actual,
     Link: ({ children, to }: { children: ReactNode; to: string }) => <a href={to}>{children}</a>,
-    useRouter: () => ({ invalidate: vi.fn(), routesByPath: {} }),
+    useRouter: () => ({ invalidate: vi.fn(), navigate: vi.fn(), routesByPath: {} }),
     useMatches: () => [],
   }
 })
@@ -85,7 +99,7 @@ describe('ActivityPage & Filtering (W-38)', () => {
     authoritativeForConsequences: false as const,
   }
 
-  it('renders table columns for Task, Caller Agent, Duration, Amount, and When', () => {
+  const renderActivity = (overrides?: { filteredAgent?: string }) => {
     render(
       <ActivityPage
         result={{
@@ -94,9 +108,19 @@ describe('ActivityPage & Filtering (W-38)', () => {
           usage: sampleUsage,
           spend: sampleSpend,
           periodStart: '2026-09',
+          ...(overrides?.filteredAgent === undefined ? {} : { filteredAgent: overrides.filteredAgent }),
         }}
       />,
     )
+  }
+
+  beforeEach(() => {
+    vi.mocked(downloadCsv).mockClear()
+    vi.mocked(toast.success).mockClear()
+  })
+
+  it('renders table columns for Task, Caller Agent, Duration, Amount, and When', () => {
+    renderActivity()
 
     expect(screen.getByText('Australian Tax Calculator')).toBeTruthy()
     expect(screen.getByText('Postal Address Lookup')).toBeTruthy()
@@ -106,33 +130,96 @@ describe('ActivityPage & Filtering (W-38)', () => {
     expect(screen.getByText('85ms')).toBeTruthy()
   })
 
+  it('shows status chips with counts from loaded calls', () => {
+    renderActivity()
+
+    expect(screen.getByRole('button', { name: /All\s+2/u })).toBeTruthy()
+    expect(screen.getByRole('button', { name: /Completed\s+1/u })).toBeTruthy()
+    expect(screen.getByRole('button', { name: /Refused\s+1/u })).toBeTruthy()
+    expect(screen.getByRole('button', { name: /Needs Attention\s+0/u })).toBeTruthy()
+  })
+
+  it('shows date range chips with labels and aria-pressed', () => {
+    renderActivity()
+
+    const allTime = screen.getByRole('button', { name: 'All time' })
+    const today = screen.getByRole('button', { name: 'Today' })
+    const sevenDay = screen.getByRole('button', { name: '7d' })
+    const thirtyDay = screen.getByRole('button', { name: '30d' })
+
+    expect(allTime.getAttribute('aria-pressed')).toBe('true')
+    expect(today.getAttribute('aria-pressed')).toBe('false')
+    expect(sevenDay.getAttribute('aria-pressed')).toBe('false')
+    expect(thirtyDay.getAttribute('aria-pressed')).toBe('false')
+  })
+
   it('filters calls by status and date range', () => {
-    render(
-      <ActivityPage
-        result={{
-          kind: 'available',
-          calls: sampleCalls,
-          usage: sampleUsage,
-          spend: sampleSpend,
-          periodStart: '2026-09',
-        }}
-      />,
-    )
+    renderActivity()
 
-    // Filter by completed status
-    const completedFilter = screen.getByRole('button', { name: /^completed$/i })
-    fireEvent.click(completedFilter)
+    fireEvent.click(screen.getByRole('button', { name: /Completed\s+1/u }))
 
     expect(screen.getByText('Australian Tax Calculator')).toBeTruthy()
     expect(screen.queryByText('Postal Address Lookup')).toBeNull()
 
-    // Filter by date range: today
-    const allStatus = screen.getByRole('button', { name: /^all$/i })
-    fireEvent.click(allStatus)
-    const todayFilter = screen.getByRole('button', { name: /^today$/i })
-    fireEvent.click(todayFilter)
+    fireEvent.click(screen.getByRole('button', { name: /All\s+2/u }))
+    fireEvent.click(screen.getByRole('button', { name: 'Today' }))
 
     expect(screen.getByText('Australian Tax Calculator')).toBeTruthy()
     expect(screen.queryByText('Postal Address Lookup')).toBeNull()
+  })
+
+  it('resets status and date filters', () => {
+    renderActivity()
+
+    fireEvent.click(screen.getByRole('button', { name: /Completed\s+1/u }))
+    expect(screen.queryByText('Postal Address Lookup')).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Reset filters' }))
+    expect(screen.getByText('Postal Address Lookup')).toBeTruthy()
+  })
+
+  it('renders status and purchase status badges with payment line', () => {
+    renderActivity()
+
+    expect(screen.getAllByText('Completed').length).toBeGreaterThanOrEqual(1)
+    expect(screen.getAllByText('Refused').length).toBeGreaterThanOrEqual(1)
+    expect(screen.getByText('Resolved — delivered')).toBeTruthy()
+    expect(screen.getByText('Resolved — refunded')).toBeTruthy()
+    expect(screen.getByText('Payment: Settled')).toBeTruthy()
+    expect(screen.getByText('Payment: Released')).toBeTruthy()
+  })
+
+  it('exports CSV with nine columns and shows success toast', () => {
+    renderActivity()
+
+    fireEvent.click(screen.getByRole('button', { name: /Export CSV/u }))
+
+    expect(downloadCsv).toHaveBeenCalledTimes(1)
+    expect(toast.success).toHaveBeenCalledWith('Activity log exported to CSV')
+
+    const csvArg = vi.mocked(downloadCsv).mock.calls[0]?.[1]
+    expect(typeof csvArg).toBe('string')
+    const headerLine = (csvArg as string).split('\r\n')[0] ?? ''
+    const columns = headerLine.split(',')
+    expect(columns).toHaveLength(9)
+    expect(columns).toContain('Net AUD')
+  })
+
+  it('shows filter empty message when no calls match', () => {
+    renderActivity()
+
+    fireEvent.click(screen.getByRole('button', { name: /Needs Attention\s+0/u }))
+
+    expect(screen.getByText('No calls match these filters')).toBeTruthy()
+    expect(screen.getByText('No calls match the current filter criteria.')).toBeTruthy()
+  })
+
+  it('shows agent filter pill in the filter bar', () => {
+    renderActivity({ filteredAgent: 'agent:alpha' })
+
+    expect(screen.getByText(/Agent ·/u)).toBeTruthy()
+    expect(within(screen.getByText(/Agent ·/u).parentElement as HTMLElement).getByText('alpha')).toBeTruthy()
+    const dismissLinks = screen.getAllByRole('link').filter((link) => link.getAttribute('href') === '/activity')
+    expect(dismissLinks.length).toBeGreaterThanOrEqual(1)
   })
 })

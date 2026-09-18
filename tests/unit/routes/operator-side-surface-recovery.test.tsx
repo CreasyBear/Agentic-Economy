@@ -195,9 +195,8 @@ describe('Calls side-surface recovery', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Load more' }))
     const failure = await screen.findByRole('alert')
-    expect(failure.textContent).toContain('Current Calls and the continuation are unchanged')
-    expect(failure.className).toContain('text-muted-foreground')
-    expect(failure.className).not.toContain('text-destructive')
+    expect(failure.textContent).toContain('Could not load older calls.')
+    expect(failure.textContent).toContain('A$0.00 affected')
     expect(screen.getByText('Tool newer')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Try loading more again' }))
 
