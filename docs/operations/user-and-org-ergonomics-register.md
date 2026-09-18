@@ -14,11 +14,11 @@
 
 | Wave | Workflows | Scope | Verified | In Review | Pending | Target Status |
 | :--- | :---: | :--- | :---: | :---: | :---: | :---: |
-| **Wave 1: Buyer Onboarding & Developer Launchpad** | 6 | `W-01`, `W-02`, `W-25`, `W-26`, `W-27`, `W-29` | 5 | 0 | 1 | `IN PROGRESS` |
+| **Wave 1: Buyer Onboarding & Developer Launchpad** | 6 | `W-01`, `W-02`, `W-25`, `W-26`, `W-27`, `W-29` | 6 | 0 | 0 | **VERIFIED** |
 | **Wave 2: Financial Peace-of-Mind & Spend Observability** | 8 | `W-20`, `W-21`, `W-22`, `W-23`, `W-24`, `W-38`, `W-39`, `W-40` | 0 | 0 | 8 | `PENDING` |
 | **Wave 3: Supplier Monetization & Testing Playground** | 8 | `W-30`, `W-31`, `W-32`, `W-33`, `W-34`, `W-35`, `W-36`, `W-37` | 0 | 0 | 8 | `PENDING` |
 | **Wave 4: Team Operations, Identity & Tactile Standards** | 22 | `W-03`–`W-09`, `W-10`–`W-19`, `W-28`, `W-41`–`W-44` | 0 | 0 | 22 | `PENDING` |
-| **Total** | **44** | **All 44 Standard Workflows** | **5** | **0** | **39** | `IN PROGRESS` |
+| **Total** | **44** | **All 44 Standard Workflows** | **6** | **0** | **38** | `IN PROGRESS` |
 
 ---
 
@@ -94,15 +94,16 @@
 ---
 
 ### W-29: Contextual Quickstart Snippets
-- **Surfaces:** `src/modules/agent-access/config-snippets.ts`, `src/components/ae/console/AeKeyRevealDialog.tsx`
+- **Surfaces:** `src/modules/agent-access/config-snippets.ts`, `src/components/ae/console/AeKeyRevealDialog.tsx`, `src/components/ae/data/AeCopyCommand.tsx`
 - **Incumbent Baseline:** Static code string templates in helper functions.
 - **Ergonomic Gap:** Not integrated with syntax highlighting; no 1-click `.env` or `mcp.json` file download option.
 - **Target Ergonomic Spec:**
-  - Syntax-highlighted code blocks with theme-aware styling.
-  - 1-click *"Download .env"* or *"Download mcp.json"* button for immediate project drops.
-  - Inline "Verify Connection" status radar that detects when the first Call is received with the new key.
-- **Subagent Assignment:** Grok (Scout) $\rightarrow$ Composer (Craft) $\rightarrow$ Orchestrator (Verify)
-- **Status:** `PENDING`
+  - Theme-aware code card with monospace typography and tactile copy button.
+  - 1-click *"Download mcp.json"* (Cursor) and *"Download .env"* (general/Python) with full secret embed and destination toast.
+  - Inline Connection status radar with animated ping dot (*"Waiting for first Call from {displayName}..."*) and static verified state (*"First request received"*).
+  - Zero-CLS reserved slots for destination, snippet, download, and radar regions.
+- **Subagent Assignment:** Grok (Scout: `5e5eb93d-7eeb-45c7-ba88-6819794f64a9`) $\rightarrow$ Composer (Craft: `930c935f-02c7-4d2b-b88e-b673f2e78df0`) $\rightarrow$ Orchestrator (Verify)
+- **Status:** `VERIFIED`
 
 ---
 

@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest'
 import {
   AGENT_ACCESS_SNIPPET_COPY_HINTS,
   AGENT_ACCESS_SNIPPET_DESTINATIONS,
+  AGENT_ACCESS_SNIPPET_DOWNLOADS,
   buildAgentAccessConfigSnippets,
+  buildAgentAccessEnvFile,
 } from '@/modules/agent-access/config-snippets'
 
 describe('buildAgentAccessConfigSnippets (W-27)', () => {
@@ -73,5 +75,46 @@ describe('buildAgentAccessConfigSnippets (W-27)', () => {
     const snippets = buildAgentAccessConfigSnippets({ secret: awkwardSecret, canonicalBaseUrl })
     const parsed = JSON.parse(snippets.cursor)
     expect(parsed.mcpServers['agentic-economy'].headers.Authorization).toBe(`Bearer ${awkwardSecret}`)
+  })
+
+  it('T8: buildAgentAccessEnvFile emits API key and trimmed base URL lines', () => {
+    const env = buildAgentAccessEnvFile({ secret, canonicalBaseUrl })
+    expect(env).toBe(
+      `AGENTIC_ECONOMY_API_KEY=${secret}\nAGENTIC_ECONOMY_BASE_URL=https://market.example.com\n`,
+    )
+  })
+
+  it('T9: cursor snippet from buildAgentAccessConfigSnippets parses as JSON with mcpServers', () => {
+    const snippets = buildAgentAccessConfigSnippets({ secret, canonicalBaseUrl })
+    const parsed = JSON.parse(snippets.cursor) as {
+      mcpServers: Record<string, { url: string; headers: { Authorization: string } }>
+    }
+    expect(Object.keys(parsed.mcpServers)).toContain('agentic-economy')
+    const cursorServer = parsed.mcpServers['agentic-economy']
+    expect(cursorServer?.url).toBe('https://market.example.com/mcp')
+  })
+
+  it('T10: cursor JSON Authorization header uses Bearer prefix with embedded secret', () => {
+    const snippets = buildAgentAccessConfigSnippets({ secret, canonicalBaseUrl })
+    const parsed = JSON.parse(snippets.cursor) as {
+      mcpServers: Record<string, { headers: { Authorization: string } }>
+    }
+    const cursorServer = parsed.mcpServers['agentic-economy']
+    expect(cursorServer?.headers.Authorization).toBe(`Bearer ${secret}`)
+  })
+
+  it('T11: AGENT_ACCESS_SNIPPET_DOWNLOADS defines filename, label, and mime per harness', () => {
+    expect(AGENT_ACCESS_SNIPPET_DOWNLOADS.cursor).toEqual({
+      filename: 'mcp.json',
+      label: 'Download mcp.json',
+      mime: 'application/json;charset=utf-8',
+    })
+    expect(AGENT_ACCESS_SNIPPET_DOWNLOADS.claude).toEqual({
+      filename: '.env',
+      label: 'Download .env',
+      mime: 'text/plain;charset=utf-8',
+    })
+    expect(AGENT_ACCESS_SNIPPET_DOWNLOADS.python.filename).toBe('.env')
+    expect(AGENT_ACCESS_SNIPPET_DOWNLOADS.curl.label).toBe('Download .env')
   })
 })

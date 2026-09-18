@@ -25,6 +25,38 @@ function trimTrailingSlashes(url: string): string {
   return url.replace(/\/+$/, '')
 }
 
+export const AGENT_ACCESS_SNIPPET_DOWNLOADS: Readonly<
+  Record<AgentAccessConfigSnippetId, { filename: string; label: string; mime: string }>
+> = {
+  cursor: {
+    filename: 'mcp.json',
+    label: 'Download mcp.json',
+    mime: 'application/json;charset=utf-8',
+  },
+  claude: {
+    filename: '.env',
+    label: 'Download .env',
+    mime: 'text/plain;charset=utf-8',
+  },
+  python: {
+    filename: '.env',
+    label: 'Download .env',
+    mime: 'text/plain;charset=utf-8',
+  },
+  curl: {
+    filename: '.env',
+    label: 'Download .env',
+    mime: 'text/plain;charset=utf-8',
+  },
+}
+
+export function buildAgentAccessEnvFile(input: Readonly<{
+  secret: string
+  canonicalBaseUrl: string
+}>): string {
+  return `AGENTIC_ECONOMY_API_KEY=${input.secret}\nAGENTIC_ECONOMY_BASE_URL=${trimTrailingSlashes(input.canonicalBaseUrl)}\n`
+}
+
 /**
  * Builds developer quick-start configuration snippets embedding an issued Agentic Economy bearer token.
  * Note: Cursor currently prefers OAuth discovery over static headers if OAuth endpoints are discovered.

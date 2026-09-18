@@ -5,6 +5,7 @@ import {
   AlertTriangleIcon,
   CheckIcon,
   CopyIcon,
+  DownloadIcon,
   EyeIcon,
   EyeOffIcon,
 } from 'lucide-react'
@@ -30,17 +31,25 @@ import { toast } from '@/lib/ui/toast'
 import {
   AGENT_ACCESS_SNIPPET_COPY_HINTS,
   AGENT_ACCESS_SNIPPET_DESTINATIONS,
+  AGENT_ACCESS_SNIPPET_DOWNLOADS,
   buildAgentAccessConfigSnippets,
+  buildAgentAccessEnvFile,
+  type AgentAccessConfigSnippetId,
 } from '@/modules/agent-access/config-snippets'
 import type { IssuedAgentAccessReveal } from './AeConnectAgentWizardDialog'
 
 const MASKED_SECRET_DISPLAY = '••••••••••••••••'
+
+const DOWNLOAD_ERROR_WHAT = 'Could not save the file to your computer.'
+const DOWNLOAD_ERROR_FINANCIAL = 'A$0.00 deducted — your balance is safe.'
+const DOWNLOAD_ERROR_NEXT = 'Copy the snippet instead, or try Download again.'
 
 export type AeKeyRevealDialogProps = Readonly<{
   reveal: IssuedAgentAccessReveal | undefined
   open: boolean
   onOpenChange: (open: boolean) => void
   canonicalBaseUrl?: string
+  connectionStatus?: 'waiting' | 'verified'
 }>
 
 export function AeKeyRevealDialog({
@@ -48,12 +57,16 @@ export function AeKeyRevealDialog({
   open,
   onOpenChange,
   canonicalBaseUrl,
+  connectionStatus = 'waiting',
 }: AeKeyRevealDialogProps) {
   const [acknowledged, setAcknowledged] = useState(false)
   const [copiedSecret, setCopiedSecret] = useState(false)
   const [copySecretFailed, setCopySecretFailed] = useState(false)
   const [secretVisible, setSecretVisible] = useState(false)
   const [dismissBlocked, setDismissBlocked] = useState(false)
+  const [activeTab, setActiveTab] = useState<AgentAccessConfigSnippetId>('cursor')
+  const [downloadStatus, setDownloadStatus] = useState('')
+  const [downloadFailed, setDownloadFailed] = useState(false)
   const acknowledgeCheckboxRef = useRef<HTMLButtonElement>(null)
   const dismissBlockedTimeoutRef = useRef<number | undefined>(undefined)
 
@@ -63,6 +76,9 @@ export function AeKeyRevealDialog({
     setCopySecretFailed(false)
     setSecretVisible(false)
     setDismissBlocked(false)
+    setActiveTab('cursor')
+    setDownloadStatus('')
+    setDownloadFailed(false)
   }, [reveal?.keyId])
 
   useEffect(() => {
@@ -147,6 +163,43 @@ export function AeKeyRevealDialog({
     secretVisible
       ? { code: snippet }
       : { code: redactSnippet(snippet), copyText: snippet }
+
+  const handleDownloadSnippet = () => {
+    const meta = AGENT_ACCESS_SNIPPET_DOWNLOADS[activeTab]
+    const content =
+      activeTab === 'cursor'
+        ? snippets.cursor
+        : buildAgentAccessEnvFile({
+            secret: reveal.secret,
+            canonicalBaseUrl: effectiveOrigin,
+          })
+
+    try {
+      const blob = new Blob([content], { type: meta.mime })
+      const objectUrl = URL.createObjectURL(blob)
+      const anchor = document.createElement('a')
+      anchor.href = objectUrl
+      anchor.download = meta.filename
+      anchor.style.display = 'none'
+      document.body.append(anchor)
+      anchor.click()
+      anchor.remove()
+      URL.revokeObjectURL(objectUrl)
+
+      const successMessage =
+        activeTab === 'cursor'
+          ? 'Downloaded mcp.json — drop it into .cursor/mcp.json'
+          : 'Downloaded .env — add it to your project root'
+      setDownloadFailed(false)
+      setDownloadStatus(successMessage)
+      toast.success(successMessage)
+    } catch (cause) {
+      setDownloadFailed(true)
+      setDownloadStatus(`${DOWNLOAD_ERROR_WHAT} ${DOWNLOAD_ERROR_FINANCIAL} ${DOWNLOAD_ERROR_NEXT}`)
+      degrade(cause, undefined, { site: 'AeKeyRevealDialog.downloadSnippet', reason: 'source_unavailable' })
+      toast.error(`${DOWNLOAD_ERROR_WHAT} ${DOWNLOAD_ERROR_FINANCIAL} ${DOWNLOAD_ERROR_NEXT}`)
+    }
+  }
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -246,7 +299,15 @@ export function AeKeyRevealDialog({
 
           <div className="grid gap-2 pt-2">
             <Label className="text-xs font-medium text-foreground">Quickstart configuration</Label>
-            <Tabs defaultValue="cursor" className="w-full">
+            <Tabs
+              value={activeTab}
+              onValueChange={(value) => {
+                setActiveTab(value as AgentAccessConfigSnippetId)
+                setDownloadStatus('')
+                setDownloadFailed(false)
+              }}
+              className="w-full"
+            >
               <TabsList className="grid grid-cols-4 w-full">
                 <TabsTrigger
                   value="cursor"
@@ -274,11 +335,12 @@ export function AeKeyRevealDialog({
                 </TabsTrigger>
               </TabsList>
 
-              <div className="min-h-48 overflow-y-auto">
-                <TabsContent value="cursor" className="pt-2">
-                  <p className="text-xs text-muted-foreground mb-2">
-                    {AGENT_ACCESS_SNIPPET_DESTINATIONS.cursor}
-                  </p>
+              <p className="min-h-8 pt-2 text-xs text-muted-foreground">
+                {AGENT_ACCESS_SNIPPET_DESTINATIONS[activeTab]}
+              </p>
+
+              <div className="min-h-72 overflow-y-auto rounded-md">
+                <TabsContent value="cursor" className="mt-0">
                   <AeCopyCommand
                     label="Cursor configuration"
                     {...snippetCopyProps(snippets.cursor)}
@@ -288,10 +350,7 @@ export function AeKeyRevealDialog({
                   />
                 </TabsContent>
 
-                <TabsContent value="claude" className="pt-2">
-                  <p className="text-xs text-muted-foreground mb-2">
-                    {AGENT_ACCESS_SNIPPET_DESTINATIONS.claude}
-                  </p>
+                <TabsContent value="claude" className="mt-0">
                   <AeCopyCommand
                     label="Claude Code command"
                     {...snippetCopyProps(snippets.claude)}
@@ -300,10 +359,7 @@ export function AeKeyRevealDialog({
                   />
                 </TabsContent>
 
-                <TabsContent value="python" className="pt-2">
-                  <p className="text-xs text-muted-foreground mb-2">
-                    {AGENT_ACCESS_SNIPPET_DESTINATIONS.python}
-                  </p>
+                <TabsContent value="python" className="mt-0">
                   <AeCopyCommand
                     label="Python snippet"
                     {...snippetCopyProps(snippets.python)}
@@ -313,10 +369,7 @@ export function AeKeyRevealDialog({
                   />
                 </TabsContent>
 
-                <TabsContent value="curl" className="pt-2">
-                  <p className="text-xs text-muted-foreground mb-2">
-                    {AGENT_ACCESS_SNIPPET_DESTINATIONS.curl}
-                  </p>
+                <TabsContent value="curl" className="mt-0">
                   <AeCopyCommand
                     label="cURL request"
                     {...snippetCopyProps(snippets.curl)}
@@ -325,7 +378,68 @@ export function AeKeyRevealDialog({
                   />
                 </TabsContent>
               </div>
+
+              <div className="flex min-h-10 items-center justify-between pt-1">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  className="gap-1.5 min-h-touch enabled:active:scale-[0.98] transition-transform duration-100 ease-out motion-reduce:transition-none motion-reduce:active:scale-100"
+                  onClick={handleDownloadSnippet}
+                >
+                  <DownloadIcon className="size-4" aria-hidden="true" />
+                  {AGENT_ACCESS_SNIPPET_DOWNLOADS[activeTab].label}
+                </Button>
+              </div>
+
+              <p
+                role="status"
+                aria-live="polite"
+                className={cn(
+                  'min-h-4 text-xs',
+                  downloadFailed ? 'text-destructive' : 'text-muted-foreground',
+                )}
+              >
+                {downloadStatus}
+              </p>
             </Tabs>
+          </div>
+
+          <div
+            role="status"
+            aria-live="polite"
+            className="flex min-h-14 items-start gap-2.5 rounded-md border border-border bg-muted/30 px-3 py-2.5"
+          >
+            {connectionStatus === 'waiting' ? (
+              <>
+                <span className="relative flex size-2 mt-1.5">
+                  <span className="absolute inline-flex size-full animate-ping rounded-full bg-warning-foreground opacity-75 motion-reduce:animate-none" />
+                  <span className="relative inline-flex size-2 rounded-full bg-warning-foreground" />
+                </span>
+                <div className="grid gap-0.5">
+                  <p className="text-sm font-medium text-foreground">
+                    Waiting for first Call from {reveal.displayName}...
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Run the cURL command above or launch your agent to complete verification.
+                  </p>
+                </div>
+              </>
+            ) : (
+              <>
+                <span className="relative flex size-2 mt-1.5">
+                  <span className="relative inline-flex size-2 rounded-full bg-success" />
+                </span>
+                <div className="grid gap-0.5">
+                  <p className="text-sm font-medium text-foreground">
+                    First request received from {reveal.displayName}.
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    You can save the secret and close this dialog.
+                  </p>
+                </div>
+              </>
+            )}
           </div>
 
           <div

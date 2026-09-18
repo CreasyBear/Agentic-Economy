@@ -9,6 +9,7 @@ import type { IssuedAgentAccessReveal } from '@/components/ae/console/AeConnectA
 import {
   AGENT_ACCESS_SNIPPET_COPY_HINTS,
   AGENT_ACCESS_SNIPPET_DESTINATIONS,
+  buildAgentAccessEnvFile,
 } from '@/modules/agent-access/config-snippets'
 
 const mockToast = vi.hoisted(() => ({
@@ -304,6 +305,219 @@ describe('AeKeyRevealDialog (W-27)', () => {
     expect(
       screen.getByText('Confirm you have saved the secret before closing.'),
     ).toBeInTheDocument()
+  })
+
+  it('T13: Download mcp.json on Cursor tab uses full secret in blob content', async () => {
+    const createObjectURL = vi.fn<(obj: Blob) => string>(() => 'blob:mock-mcp')
+    const revokeObjectURL = vi.fn()
+    Object.assign(URL, { createObjectURL, revokeObjectURL })
+
+    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+
+    render(
+      <AeKeyRevealDialog
+        open={true}
+        reveal={baseReveal}
+        onOpenChange={vi.fn()}
+        canonicalBaseUrl={canonicalBaseUrl}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: /download mcp\.json/i }))
+
+    await waitFor(() => {
+      expect(createObjectURL).toHaveBeenCalled()
+    })
+
+    expect(createObjectURL.mock.calls[0]?.[0]).toBeInstanceOf(Blob)
+    const blobArg = createObjectURL.mock.calls[0]![0]
+    const text = await blobArg.text()
+    expect(text).toContain(baseReveal.secret)
+    expect(JSON.parse(text).mcpServers['agentic-economy'].headers.Authorization).toBe(
+      `Bearer ${baseReveal.secret}`,
+    )
+
+    clickSpy.mockRestore()
+  })
+
+  it('T14: Download .env on Claude tab emits env file with full secret', async () => {
+    const createObjectURL = vi.fn<(obj: Blob) => string>(() => 'blob:mock-env')
+    const revokeObjectURL = vi.fn()
+    Object.assign(URL, { createObjectURL, revokeObjectURL })
+
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+
+    render(
+      <AeKeyRevealDialog
+        open={true}
+        reveal={baseReveal}
+        onOpenChange={vi.fn()}
+        canonicalBaseUrl={canonicalBaseUrl}
+      />,
+    )
+
+    fireEvent.mouseDown(screen.getByRole('tab', { name: /claude code/i }))
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /download \.env/i })).toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: /download \.env/i }))
+
+    await waitFor(() => {
+      expect(createObjectURL).toHaveBeenCalled()
+    })
+
+    expect(createObjectURL.mock.calls[0]?.[0]).toBeInstanceOf(Blob)
+    const blobArg = createObjectURL.mock.calls[0]![0]
+    const text = await blobArg.text()
+    expect(text).toBe(
+      buildAgentAccessEnvFile({ secret: baseReveal.secret, canonicalBaseUrl }),
+    )
+  })
+
+  it('T15: successful Cursor download shows toast and inline destination cue', async () => {
+    Object.assign(URL, {
+      createObjectURL: vi.fn(() => 'blob:ok'),
+      revokeObjectURL: vi.fn(),
+    })
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+
+    render(
+      <AeKeyRevealDialog
+        open={true}
+        reveal={baseReveal}
+        onOpenChange={vi.fn()}
+        canonicalBaseUrl={canonicalBaseUrl}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: /download mcp\.json/i }))
+
+    const successMessage = 'Downloaded mcp.json — drop it into .cursor/mcp.json'
+    await waitFor(() => {
+      expect(mockToast.success).toHaveBeenCalledWith(successMessage)
+      expect(screen.getByText(successMessage)).toBeInTheDocument()
+    })
+  })
+
+  it('T16: successful .env download shows project-root toast cue', async () => {
+    Object.assign(URL, {
+      createObjectURL: vi.fn(() => 'blob:ok-env'),
+      revokeObjectURL: vi.fn(),
+    })
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+
+    render(
+      <AeKeyRevealDialog
+        open={true}
+        reveal={baseReveal}
+        onOpenChange={vi.fn()}
+        canonicalBaseUrl={canonicalBaseUrl}
+      />,
+    )
+
+    fireEvent.mouseDown(screen.getByRole('tab', { name: /python/i }))
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /download \.env/i })).toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: /download \.env/i }))
+
+    const successMessage = 'Downloaded .env — add it to your project root'
+    await waitFor(() => {
+      expect(mockToast.success).toHaveBeenCalledWith(successMessage)
+    })
+  })
+
+  it('T17: download revokes object URL after anchor click', async () => {
+    const revokeObjectURL = vi.fn()
+    Object.assign(URL, {
+      createObjectURL: vi.fn(() => 'blob:revoke-test'),
+      revokeObjectURL,
+    })
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+
+    render(
+      <AeKeyRevealDialog
+        open={true}
+        reveal={baseReveal}
+        onOpenChange={vi.fn()}
+        canonicalBaseUrl={canonicalBaseUrl}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: /download mcp\.json/i }))
+
+    await waitFor(() => {
+      expect(revokeObjectURL).toHaveBeenCalledWith('blob:revoke-test')
+    })
+  })
+
+  it('T18: waiting connectionStatus shows amber radar copy for display name', () => {
+    render(
+      <AeKeyRevealDialog
+        open={true}
+        reveal={baseReveal}
+        onOpenChange={vi.fn()}
+        canonicalBaseUrl={canonicalBaseUrl}
+        connectionStatus="waiting"
+      />,
+    )
+
+    expect(
+      screen.getByText(`Waiting for first Call from ${baseReveal.displayName}...`),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        'Run the cURL command above or launch your agent to complete verification.',
+      ),
+    ).toBeInTheDocument()
+  })
+
+  it('T19: verified connectionStatus shows success radar copy', () => {
+    render(
+      <AeKeyRevealDialog
+        open={true}
+        reveal={baseReveal}
+        onOpenChange={vi.fn()}
+        canonicalBaseUrl={canonicalBaseUrl}
+        connectionStatus="verified"
+      />,
+    )
+
+    expect(
+      screen.getByText(`First request received from ${baseReveal.displayName}.`),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText('You can save the secret and close this dialog.'),
+    ).toBeInTheDocument()
+  })
+
+  it('T20: download failure shows Rule 4 triplet in status and toast.error', async () => {
+    Object.assign(URL, {
+      createObjectURL: vi.fn(() => {
+        throw new Error('blob_failed')
+      }),
+      revokeObjectURL: vi.fn(),
+    })
+
+    render(
+      <AeKeyRevealDialog
+        open={true}
+        reveal={baseReveal}
+        onOpenChange={vi.fn()}
+        canonicalBaseUrl={canonicalBaseUrl}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: /download mcp\.json/i }))
+
+    const triplet =
+      'Could not save the file to your computer. A$0.00 deducted — your balance is safe. Copy the snippet instead, or try Download again.'
+    await waitFor(() => {
+      expect(mockToast.error).toHaveBeenCalledWith(triplet)
+      expect(screen.getByText(triplet)).toBeInTheDocument()
+    })
   })
 
   it('T12: checking the box enables Done and allows closing via close button', () => {

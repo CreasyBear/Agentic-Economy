@@ -46,7 +46,7 @@ export function AeCopyCommand({
 
   return (
     <div className={cn('grid min-w-0 gap-1.5', className)}>
-      <div className={cn('flex min-w-0 items-start gap-2 rounded-md border bg-muted/35', compact ? 'p-2' : comfortable ? 'p-related' : 'p-3')}>
+      <div className={cn('flex min-w-0 items-start gap-2 rounded-md border border-border bg-muted/40 dark:bg-muted/25', compact ? 'p-2' : comfortable ? 'p-related' : 'p-3')}>
         {comfortable && prompt ? (
           <span className="mt-0.5 font-mono text-sm text-muted-foreground" aria-hidden="true">
             $
@@ -59,7 +59,10 @@ export function AeCopyCommand({
           type="button"
           variant="ghost"
           size={comfortable ? 'icon' : 'icon-sm'}
-          className={cn('relative shrink-0', comfortable && 'min-h-touch min-w-touch')}
+          className={cn(
+            'relative shrink-0 enabled:active:scale-[0.98] transition-transform duration-100 ease-out motion-reduce:transition-none motion-reduce:active:scale-100',
+            comfortable && 'min-h-touch min-w-touch',
+          )}
           aria-label={copied ? `${label} copied` : `Copy ${label}`}
           onClick={() => { void copy() }}
         >
