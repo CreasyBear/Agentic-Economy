@@ -10,12 +10,23 @@ export const CLERK_SECURITY_EVENT_TYPES = [
   'session.ended',
   'session.revoked',
   'user.updated',
+  'user.deleted',
 ] as const
 
 export const CLERK_SECURITY_OBSERVE_OPERATION = 'securityAccountHistory.recordClerkSecurityEventForServer'
 export const CLERK_SECURITY_OBSERVE_SCOPE = 'account_security:observe'
 
+export const PERSONAL_ACCOUNT_RETIRE_OPERATION = 'personalAccount.retirePersonalAccountForServer'
+export const PERSONAL_ACCOUNT_RETIRE_SCOPE = 'personal_account:retire_for_server'
+
+export const CLERK_SECURITY_ACTIONS = [
+  'observe_only',
+  'revoke_interactive_credentials',
+  'retire_personal_account',
+] as const
+
 export type ClerkSecurityEventType = (typeof CLERK_SECURITY_EVENT_TYPES)[number]
+export type ClerkSecurityAction = (typeof CLERK_SECURITY_ACTIONS)[number]
 
 /** Redacted, signed command accepted from the maintained Clerk webhook adapter. */
 export type ClerkSecurityObservation = Readonly<{
@@ -24,6 +35,10 @@ export type ClerkSecurityObservation = Readonly<{
   eventType: ClerkSecurityEventType
   targetRefHash: string
   observedAt: number
+  /** Set by the Clerk webhook adapter once W-03 projection is implemented. */
+  securityAction?: ClerkSecurityAction
+  /** Redacted display name from Clerk profile fields when a name change is observed. */
+  profileDisplayName?: string
 }>
 
 export type ClerkSecurityObservationResult =

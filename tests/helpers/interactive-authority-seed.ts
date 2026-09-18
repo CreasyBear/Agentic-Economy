@@ -31,7 +31,7 @@ export type InteractiveAuthoritySeedOptions = Readonly<{
   principalLifecycle?: 'active' | 'suspended'
   principalKind?: 'human' | 'agent' | 'workload'
   addMembershipToOwnership?: boolean
-  accountLifecycle?: 'active' | 'suspended'
+  accountLifecycle?: 'active' | 'suspended' | 'closed'
   accountCurrentOwnershipRef?: string
   currentOwnershipAccountRef?: string
   currentOwnershipLifecycle?: 'active' | 'ended'

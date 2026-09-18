@@ -83,9 +83,31 @@ export type SourceFieldState = Readonly<{
 }>
 
 export function sourceInput(value: SourceFieldState): SupplySourceInput | undefined {
-  if (value.sourceKind === 'openapi') return value.definitionUrl.trim() === '' ? undefined : { kind: 'openapi', definitionUrl: value.definitionUrl.trim(), environment: value.environment }
+  if (value.sourceKind === 'openapi') {
+    const trimmed = value.definitionUrl.trim()
+    if (trimmed === '') return undefined
+    try {
+      const u = new URL(trimmed)
+      if (u.protocol !== 'https:') return undefined
+    } catch (cause) {
+      void cause
+      return undefined
+    }
+    return { kind: 'openapi', definitionUrl: trimmed, environment: value.environment }
+  }
   if (value.sourceKind === 'mcp') {
-    if (value.mcpLocator === 'url') return value.serverUrl.trim() === '' ? undefined : { kind: 'mcp', serverUrl: value.serverUrl.trim(), environment: value.environment }
+    if (value.mcpLocator === 'url') {
+      const trimmed = value.serverUrl.trim()
+      if (trimmed === '') return undefined
+      try {
+        const u = new URL(trimmed)
+        if (u.protocol !== 'https:') return undefined
+      } catch (cause) {
+        void cause
+        return undefined
+      }
+      return { kind: 'mcp', serverUrl: trimmed, environment: value.environment }
+    }
     return value.registryName.trim() === '' ? undefined : {
       kind: 'mcp',
       registryName: value.registryName.trim(),
@@ -104,13 +126,56 @@ export function sourceInput(value: SourceFieldState): SupplySourceInput | undefi
       environment: value.environment,
     }
   }
-  return value.resourceUrl.trim() === '' ? undefined : { kind: 'x402', resourceUrl: value.resourceUrl.trim(), method: value.x402Method, environment: value.environment }
+  const trimmedResource = value.resourceUrl.trim()
+  if (trimmedResource === '') return undefined
+  try {
+    const u = new URL(trimmedResource)
+    if (u.protocol !== 'https:') return undefined
+  } catch (cause) {
+    void cause
+    return undefined
+  }
+  return { kind: 'x402', resourceUrl: trimmedResource, method: value.x402Method, environment: value.environment }
 }
 
-export function sourceInputError(kind: SourceKind, locator: 'url' | 'registry'): string {
-  if (kind === 'openapi') return 'Enter the public HTTPS URL for the OpenAPI document.'
-  if (kind === 'mcp') return locator === 'url' ? 'Enter the MCP server URL.' : 'Enter its MCP Registry name.'
+export function sourceInputError(kind: SourceKind, locator: 'url' | 'registry', value?: SourceFieldState): string {
+  if (kind === 'openapi') {
+    if (value?.definitionUrl) {
+      try {
+        const u = new URL(value.definitionUrl.trim())
+        if (u.protocol !== 'https:') return 'OpenAPI URL must be a public HTTPS endpoint.'
+      } catch (cause) {
+        void cause
+        return 'Enter a valid HTTPS URL for the OpenAPI document.'
+      }
+    }
+    return 'Enter the public HTTPS URL for the OpenAPI document.'
+  }
+  if (kind === 'mcp') {
+    if (locator === 'url') {
+      if (value?.serverUrl) {
+        try {
+          const u = new URL(value.serverUrl.trim())
+          if (u.protocol !== 'https:') return 'MCP server URL must use HTTPS.'
+        } catch (cause) {
+          void cause
+          return 'Enter a valid HTTPS URL for the MCP server.'
+        }
+      }
+      return 'Enter the MCP server URL.'
+    }
+    return 'Enter its MCP Registry name.'
+  }
   if (kind === 'agent_plugin') return 'Provide valid plugin.json and mcp.json documents.'
+  if (value?.resourceUrl) {
+    try {
+      const u = new URL(value.resourceUrl.trim())
+      if (u.protocol !== 'https:') return 'x402 resource URL must use HTTPS.'
+    } catch (cause) {
+      void cause
+      return 'Enter a valid HTTPS x402 resource URL.'
+    }
+  }
   return 'Enter the x402 resource URL.'
 }
 

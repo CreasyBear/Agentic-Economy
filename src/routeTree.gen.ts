@@ -16,6 +16,7 @@ import { Route as SitemapDotxmlRouteImport } from './routes/sitemap[.]xml'
 import { Route as RobotsDottxtRouteImport } from './routes/robots[.]txt'
 import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as OpenapiDotjsonRouteImport } from './routes/openapi[.]json'
+import { Route as OnboardingRouteImport } from './routes/onboarding'
 import { Route as McpRouteImport } from './routes/mcp'
 import { Route as MarketRouteImport } from './routes/market'
 import { Route as LlmsDottxtRouteImport } from './routes/llms[.]txt'
@@ -77,6 +78,8 @@ import { Route as ApiClerkWebhookRouteImport } from './routes/api.clerk.webhook'
 import { Route as ApiChatAnonymousRouteImport } from './routes/api.chat.anonymous'
 import { Route as ApiBusinessesSearchRouteImport } from './routes/api.businesses.search'
 import { Route as ApiBusinessesSlugRouteImport } from './routes/api.businesses.$slug'
+import { Route as OperatorOwnerTeamRouteImport } from './routes/_operator/owner.team'
+import { Route as OperatorOwnerWorkspaceRouteImport } from './routes/_operator/owner.workspace'
 import { Route as OperatorOwnerSettingsRouteImport } from './routes/_operator/owner.settings'
 import { Route as OperatorOwnerOperationsRouteImport } from './routes/_operator/owner.operations'
 import { Route as OperatorOwnerMarketRouteImport } from './routes/_operator/owner.market'
@@ -160,6 +163,11 @@ const PrivacyRoute = PrivacyRouteImport.update({
 const OpenapiDotjsonRoute = OpenapiDotjsonRouteImport.update({
   id: '/openapi.json',
   path: '/openapi.json',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const OnboardingRoute = OnboardingRouteImport.update({
+  id: '/onboarding',
+  path: '/onboarding',
   getParentRoute: () => rootRouteImport,
 } as any)
 const McpRoute = McpRouteImport.update({
@@ -474,6 +482,16 @@ const ApiBusinessesSlugRoute = ApiBusinessesSlugRouteImport.update({
   path: '/$slug',
   getParentRoute: () => ApiBusinessesRoute,
 } as any)
+const OperatorOwnerTeamRoute = OperatorOwnerTeamRouteImport.update({
+  id: '/owner/team',
+  path: '/owner/team',
+  getParentRoute: () => OperatorRoute,
+} as any)
+const OperatorOwnerWorkspaceRoute = OperatorOwnerWorkspaceRouteImport.update({
+  id: '/owner/workspace',
+  path: '/owner/workspace',
+  getParentRoute: () => OperatorRoute,
+} as any)
 const OperatorOwnerSettingsRoute = OperatorOwnerSettingsRouteImport.update({
   id: '/owner/settings',
   path: '/owner/settings',
@@ -754,6 +772,7 @@ export interface FileRoutesByFullPath {
   '/llms.txt': typeof LlmsDottxtRoute
   '/market': typeof MarketRoute
   '/mcp': typeof McpRoute
+  '/onboarding': typeof OnboardingRoute
   '/openapi.json': typeof OpenapiDotjsonRoute
   '/privacy': typeof PrivacyRouteWithChildren
   '/robots.txt': typeof RobotsDottxtRoute
@@ -797,6 +816,8 @@ export interface FileRoutesByFullPath {
   '/owner/market': typeof OperatorOwnerMarketRoute
   '/owner/operations': typeof OperatorOwnerOperationsRouteWithChildren
   '/owner/settings': typeof OperatorOwnerSettingsRoute
+  '/owner/team': typeof OperatorOwnerTeamRoute
+  '/owner/workspace': typeof OperatorOwnerWorkspaceRoute
   '/api/businesses/$slug': typeof ApiBusinessesSlugRoute
   '/api/businesses/search': typeof ApiBusinessesSearchRoute
   '/api/chat/anonymous': typeof ApiChatAnonymousRoute
@@ -872,6 +893,7 @@ export interface FileRoutesByTo {
   '/llms.txt': typeof LlmsDottxtRoute
   '/market': typeof MarketRoute
   '/mcp': typeof McpRoute
+  '/onboarding': typeof OnboardingRoute
   '/openapi.json': typeof OpenapiDotjsonRoute
   '/privacy': typeof PrivacyRouteWithChildren
   '/robots.txt': typeof RobotsDottxtRoute
@@ -915,6 +937,8 @@ export interface FileRoutesByTo {
   '/owner/market': typeof OperatorOwnerMarketRoute
   '/owner/operations': typeof OperatorOwnerOperationsRouteWithChildren
   '/owner/settings': typeof OperatorOwnerSettingsRoute
+  '/owner/team': typeof OperatorOwnerTeamRoute
+  '/owner/workspace': typeof OperatorOwnerWorkspaceRoute
   '/api/businesses/$slug': typeof ApiBusinessesSlugRoute
   '/api/businesses/search': typeof ApiBusinessesSearchRoute
   '/api/chat/anonymous': typeof ApiChatAnonymousRoute
@@ -992,6 +1016,7 @@ export interface FileRoutesById {
   '/llms.txt': typeof LlmsDottxtRoute
   '/market': typeof MarketRoute
   '/mcp': typeof McpRoute
+  '/onboarding': typeof OnboardingRoute
   '/openapi.json': typeof OpenapiDotjsonRoute
   '/privacy': typeof PrivacyRouteWithChildren
   '/robots.txt': typeof RobotsDottxtRoute
@@ -1035,6 +1060,8 @@ export interface FileRoutesById {
   '/_operator/owner/market': typeof OperatorOwnerMarketRoute
   '/_operator/owner/operations': typeof OperatorOwnerOperationsRouteWithChildren
   '/_operator/owner/settings': typeof OperatorOwnerSettingsRoute
+  '/_operator/owner/team': typeof OperatorOwnerTeamRoute
+  '/_operator/owner/workspace': typeof OperatorOwnerWorkspaceRoute
   '/api/businesses/$slug': typeof ApiBusinessesSlugRoute
   '/api/businesses/search': typeof ApiBusinessesSearchRoute
   '/api/chat/anonymous': typeof ApiChatAnonymousRoute
@@ -1112,6 +1139,7 @@ export interface FileRouteTypes {
     | '/llms.txt'
     | '/market'
     | '/mcp'
+    | '/onboarding'
     | '/openapi.json'
     | '/privacy'
     | '/robots.txt'
@@ -1155,6 +1183,8 @@ export interface FileRouteTypes {
     | '/owner/market'
     | '/owner/operations'
     | '/owner/settings'
+    | '/owner/team'
+    | '/owner/workspace'
     | '/api/businesses/$slug'
     | '/api/businesses/search'
     | '/api/chat/anonymous'
@@ -1230,6 +1260,7 @@ export interface FileRouteTypes {
     | '/llms.txt'
     | '/market'
     | '/mcp'
+    | '/onboarding'
     | '/openapi.json'
     | '/privacy'
     | '/robots.txt'
@@ -1273,6 +1304,8 @@ export interface FileRouteTypes {
     | '/owner/market'
     | '/owner/operations'
     | '/owner/settings'
+    | '/owner/team'
+    | '/owner/workspace'
     | '/api/businesses/$slug'
     | '/api/businesses/search'
     | '/api/chat/anonymous'
@@ -1349,6 +1382,7 @@ export interface FileRouteTypes {
     | '/llms.txt'
     | '/market'
     | '/mcp'
+    | '/onboarding'
     | '/openapi.json'
     | '/privacy'
     | '/robots.txt'
@@ -1392,6 +1426,8 @@ export interface FileRouteTypes {
     | '/_operator/owner/market'
     | '/_operator/owner/operations'
     | '/_operator/owner/settings'
+    | '/_operator/owner/team'
+    | '/_operator/owner/workspace'
     | '/api/businesses/$slug'
     | '/api/businesses/search'
     | '/api/chat/anonymous'
@@ -1469,6 +1505,7 @@ export interface RootRouteChildren {
   LlmsDottxtRoute: typeof LlmsDottxtRoute
   MarketRoute: typeof MarketRoute
   McpRoute: typeof McpRoute
+  OnboardingRoute: typeof OnboardingRoute
   OpenapiDotjsonRoute: typeof OpenapiDotjsonRoute
   PrivacyRoute: typeof PrivacyRouteWithChildren
   RobotsDottxtRoute: typeof RobotsDottxtRoute
@@ -1593,6 +1630,13 @@ declare module '@tanstack/react-router' {
       path: '/openapi.json'
       fullPath: '/openapi.json'
       preLoaderRoute: typeof OpenapiDotjsonRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/onboarding': {
+      id: '/onboarding'
+      path: '/onboarding'
+      fullPath: '/onboarding'
+      preLoaderRoute: typeof OnboardingRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/mcp': {
@@ -2022,6 +2066,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiBusinessesSlugRouteImport
       parentRoute: typeof ApiBusinessesRoute
     }
+    '/_operator/owner/team': {
+      id: '/_operator/owner/team'
+      path: '/owner/team'
+      fullPath: '/owner/team'
+      preLoaderRoute: typeof OperatorOwnerTeamRouteImport
+      parentRoute: typeof OperatorRoute
+    }
+    '/_operator/owner/workspace': {
+      id: '/_operator/owner/workspace'
+      path: '/owner/workspace'
+      fullPath: '/owner/workspace'
+      preLoaderRoute: typeof OperatorOwnerWorkspaceRouteImport
+      parentRoute: typeof OperatorRoute
+    }
     '/_operator/owner/settings': {
       id: '/_operator/owner/settings'
       path: '/owner/settings'
@@ -2415,6 +2473,8 @@ interface OperatorRouteChildren {
   OperatorOwnerMarketRoute: typeof OperatorOwnerMarketRoute
   OperatorOwnerOperationsRoute: typeof OperatorOwnerOperationsRouteWithChildren
   OperatorOwnerSettingsRoute: typeof OperatorOwnerSettingsRoute
+  OperatorOwnerTeamRoute: typeof OperatorOwnerTeamRoute
+  OperatorOwnerWorkspaceRoute: typeof OperatorOwnerWorkspaceRoute
   OperatorOwnerIndexRoute: typeof OperatorOwnerIndexRoute
   OperatorOwnerSupplyConnectionsNewRoute: typeof OperatorOwnerSupplyConnectionsNewRoute
   OperatorOwnerSupplyConnectionsOauthCallbackRoute: typeof OperatorOwnerSupplyConnectionsOauthCallbackRoute
@@ -2430,6 +2490,8 @@ const OperatorRouteChildren: OperatorRouteChildren = {
   OperatorOwnerMarketRoute: OperatorOwnerMarketRoute,
   OperatorOwnerOperationsRoute: OperatorOwnerOperationsRouteWithChildren,
   OperatorOwnerSettingsRoute: OperatorOwnerSettingsRoute,
+  OperatorOwnerTeamRoute: OperatorOwnerTeamRoute,
+  OperatorOwnerWorkspaceRoute: OperatorOwnerWorkspaceRoute,
   OperatorOwnerIndexRoute: OperatorOwnerIndexRoute,
   OperatorOwnerSupplyConnectionsNewRoute:
     OperatorOwnerSupplyConnectionsNewRoute,
@@ -2578,6 +2640,7 @@ const rootRouteChildren: RootRouteChildren = {
   LlmsDottxtRoute: LlmsDottxtRoute,
   MarketRoute: MarketRoute,
   McpRoute: McpRoute,
+  OnboardingRoute: OnboardingRoute,
   OpenapiDotjsonRoute: OpenapiDotjsonRoute,
   PrivacyRoute: PrivacyRouteWithChildren,
   RobotsDottxtRoute: RobotsDottxtRoute,

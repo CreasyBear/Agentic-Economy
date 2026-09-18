@@ -45,7 +45,16 @@ export function createConvexMoneyQueryPort(): MoneyQueryPort {
         principalId: result.principalId,
         accountId: result.accountId,
         balance: result.balance,
-        ...(result.pendingTopup === undefined ? {} : { pendingTopup: result.pendingTopup }),
+        ...(result.pendingTopup === undefined ? {} : {
+          pendingTopup: {
+            commandRef: result.pendingTopup.commandRef,
+            amount: result.pendingTopup.amount,
+            state: result.pendingTopup.state,
+            ...(result.pendingTopup.externalRef === undefined
+              ? {}
+              : { externalRef: result.pendingTopup.externalRef }),
+          },
+        }),
         autoRecharge: {
           enabled: result.autoRecharge.enabled,
           threshold: result.autoRecharge.threshold,

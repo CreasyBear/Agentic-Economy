@@ -24,6 +24,8 @@ import {
 } from '@/components/ui/sidebar'
 
 import { useOperatorSidebarChrome } from '@/components/ae/layout/AeOperatorPage'
+import { AeOrganizationSwitcher } from '@/components/ae/layout/AeOrganizationSwitcher'
+import { ThemeToggle } from '@/components/ae/layout/ThemeToggle'
 import {
   ownerWorkspaceOwnerForPath,
   roleHomeHref,
@@ -53,7 +55,7 @@ function showsAdvancedOperatorNav(): boolean {
 function resolveCurrentHref(role: OperatorRole, currentPath: string, hrefs: readonly string[]): string | undefined {
   if (role === 'owner') {
     const owner = ownerWorkspaceOwnerForPath(currentPath)
-    const canonicalHref = owner === 'operations' ? '/owner/operations' : owner === 'account' ? '/owner/settings' : undefined
+    const canonicalHref = owner === 'operations' ? '/owner/operations' : owner === 'account' ? '/owner/settings' : owner === 'workspace' ? '/owner/workspace' : owner === 'team' ? '/owner/team' : undefined
     if (canonicalHref !== undefined) {
       return hrefs.includes(canonicalHref) ? canonicalHref : undefined
     }
@@ -217,6 +219,9 @@ export function AeOperatorSidebar({ operatorRole, operatorContext, currentPath, 
                 </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>
+            <SidebarMenuItem className="pt-1">
+              <AeOrganizationSwitcher isCollapsed={isCollapsed} />
+            </SidebarMenuItem>
           </SidebarMenu>
         </SidebarHeader>
         <SidebarContent>
@@ -283,6 +288,11 @@ export function AeOperatorSidebar({ operatorRole, operatorContext, currentPath, 
                 </SidebarMenuItem>
               )
             })}
+          </SidebarMenu>
+          <SidebarMenu>
+            <SidebarMenuItem>
+              <ThemeToggle />
+            </SidebarMenuItem>
           </SidebarMenu>
           <SidebarMenu>
             <SidebarMenuItem>

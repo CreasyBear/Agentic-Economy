@@ -22,10 +22,14 @@ import {
 import { literalUnion } from '../src/modules/common/convex-literals'
 import { CLERK_USER_PROVIDER_NAMESPACE } from '../src/modules/principal-account/external-identity/public'
 
+import type { Doc } from './_generated/dataModel'
 import { env, mutation, query, type MutationCtx } from './_generated/server'
+import { persistAgentAudit } from './lib/agentAccess/principals/records'
 import { serviceAssertion } from './serviceAssertion'
 import { persistAuditEvent } from './securityShared'
 import { resolveInteractiveAuthorityContext } from './interactiveAuthority'
+
+const MACHINE_AGENT_CASCADE_CAP = 64
 
 const digestPattern = /^sha256:[0-9a-f]{64}$/u
 const providerIdentifierPattern = /^https?:\/\/[^\s|]{1,500}\|user_[A-Za-z0-9_-]{1,195}$/u
@@ -40,6 +44,7 @@ const clerkSecurityEventTypeValue = v.union(
   v.literal('session.ended'),
   v.literal('session.revoked'),
   v.literal('user.updated'),
+  v.literal('user.deleted'),
 )
 
 const observationArgs = {
@@ -48,6 +53,14 @@ const observationArgs = {
   eventType: clerkSecurityEventTypeValue,
   targetRefHash: v.string(),
   observedAt: v.number(),
+  securityAction: v.optional(
+    v.union(
+      v.literal('observe_only'),
+      v.literal('revoke_interactive_credentials'),
+      v.literal('retire_personal_account'),
+    ),
+  ),
+  profileDisplayName: v.optional(v.string()),
 }
 
 const observationResult = v.union(
@@ -117,21 +130,29 @@ export const recordClerkSecurityEventForServer = mutation({
         .eq('ownerPrincipalRef', principal.principalRef)
         .eq('lifecycle', 'active'))
       .take(2)
-    const ownership = ownershipRows[0]
-    if (ownershipRows.length !== 1 || ownership === undefined) {
-      return { kind: 'refused', code: 'authority_conflict' }
+    let accountRef: string | undefined = ownershipRows[0]?.accountRef
+    if (accountRef === undefined) {
+      const membershipRows = await ctx.db.query('memberships')
+        .withIndex('by_memberPrincipalRef_and_lifecycle', (index) => index
+          .eq('memberPrincipalRef', principal.principalRef)
+          .eq('lifecycle', 'active'))
+        .take(2)
+      accountRef = membershipRows[0]?.accountRef
+      if (accountRef === undefined) {
+        return { kind: 'refused', code: 'authority_conflict' }
+      }
     }
     const account = await ctx.db.query('accounts')
-      .withIndex('by_accountRef', (index) => index.eq('accountRef', ownership.accountRef))
+      .withIndex('by_accountRef', (index) => index.eq('accountRef', accountRef))
       .unique()
-    if (account === null || account.lifecycle !== 'active'
-      || account.currentOwnershipRef !== ownership.ownershipRef) {
+    if (account === null || account.lifecycle !== 'active') {
       return { kind: 'refused', code: 'authority_conflict' }
     }
 
     return await persistObservation(ctx, observation, {
       accountRef: account.accountRef,
       principalRef: principal.principalRef,
+      bindingRef: binding.bindingRef,
     })
   },
 })
@@ -267,12 +288,16 @@ function validObservation(value: ClerkSecurityObservation): boolean {
     && providerIdentifierPattern.test(value.providerIdentifier)
     && Number.isSafeInteger(value.observedAt)
     && value.observedAt >= 0
+    && (value.profileDisplayName === undefined
+      || (typeof value.profileDisplayName === 'string'
+        && value.profileDisplayName.length > 0
+        && value.profileDisplayName.length <= 200))
 }
 
 async function persistObservation(
   ctx: Pick<MutationCtx, 'db'>,
   observation: ClerkSecurityObservation,
-  authority: Readonly<{ accountRef: string; principalRef: string }>,
+  authority: Readonly<{ accountRef: string; principalRef: string; bindingRef: string }>,
 ): Promise<ObservationResult> {
   const digestValue = observation.deliveryRefHash.slice('sha256:'.length)
   const eventRef = `audit:clerk:${digestValue}`
@@ -314,7 +339,199 @@ async function persistObservation(
   })
   if (!audit.valid) throw new Error(`clerk_security_audit_invalid:${audit.reason}`)
   await persistAuditEvent(ctx.db, audit.event)
+  if (observation.profileDisplayName !== undefined) {
+    const principal = await ctx.db.query('principals')
+      .withIndex('by_principalRef', (index) => index.eq('principalRef', authority.principalRef))
+      .unique()
+    if (
+      principal !== null
+      && principal.kind === 'human'
+      && principal.lifecycle === 'active'
+      && principal.displayName !== observation.profileDisplayName
+      && observation.observedAt >= principal.updatedAt
+    ) {
+      await ctx.db.patch(principal._id, {
+        displayName: observation.profileDisplayName,
+        revision: principal.revision + 1,
+        updatedAt: createdAt,
+      })
+    }
+  }
+  const machineCascadeApplies = observation.securityAction === 'revoke_interactive_credentials'
+    && observation.eventType === 'user.updated'
+  if (observation.securityAction === 'revoke_interactive_credentials') {
+    await revokeInteractiveCredentialsForObservation(ctx, observation, authority, createdAt)
+  }
+  if (machineCascadeApplies) {
+    await revokeMachineAgentsForCreatorObservation(ctx, observation, authority, createdAt, toolRef)
+  }
   return { kind: 'accepted', status: 'applied', eventRef }
+}
+
+async function revokeMachineAgentsForCreatorObservation(
+  ctx: Pick<MutationCtx, 'db'>,
+  observation: ClerkSecurityObservation,
+  authority: Readonly<{ principalRef: string }>,
+  createdAt: number,
+  correlationRef: string,
+): Promise<void> {
+  const accountRefs = new Set<string>()
+  const ownershipRows = await ctx.db.query('accountOwnerships')
+    .withIndex('by_ownerPrincipalRef_and_lifecycle', (index) => index
+      .eq('ownerPrincipalRef', authority.principalRef)
+      .eq('lifecycle', 'active'))
+    .collect()
+  for (const ownership of ownershipRows) accountRefs.add(ownership.accountRef)
+
+  const membershipRows = await ctx.db.query('memberships')
+    .withIndex('by_memberPrincipalRef_and_lifecycle', (index) => index
+      .eq('memberPrincipalRef', authority.principalRef)
+      .eq('lifecycle', 'active'))
+    .collect()
+  for (const membership of membershipRows) accountRefs.add(membership.accountRef)
+
+  const matchedAgents: Doc<'agentAccessPrincipals'>[] = []
+  for (const accountRef of accountRefs) {
+    if (matchedAgents.length >= MACHINE_AGENT_CASCADE_CAP) break
+    const agents = await ctx.db.query('agentAccessPrincipals')
+      .withIndex('by_ownerId_and_lifecycle', (index) => index
+        .eq('ownerId', accountRef)
+        .eq('lifecycle', 'active'))
+      .collect()
+    for (const agent of agents) {
+      if (matchedAgents.length >= MACHINE_AGENT_CASCADE_CAP) break
+      if (!await machineAgentCreatedByHuman(ctx, agent, accountRef, authority.principalRef, observation.providerIdentifier)) {
+        continue
+      }
+      matchedAgents.push(agent)
+    }
+  }
+
+  for (const agent of matchedAgents) {
+    await revokeMachineAgentAdmissionAndDependents(ctx, agent, observation, authority, createdAt, correlationRef)
+  }
+}
+
+async function machineAgentCreatedByHuman(
+  ctx: Pick<MutationCtx, 'db'>,
+  agent: Doc<'agentAccessPrincipals'>,
+  accountRef: string,
+  humanPrincipalRef: string,
+  providerIdentifier: string,
+): Promise<boolean> {
+  if (agent.ownerTokenIdentifier === providerIdentifier) return true
+  if (agent.ownerTokenIdentifier !== undefined) return false
+  const membership = await ctx.db.query('memberships')
+    .withIndex('by_accountRef_and_memberPrincipalRef_and_lifecycle', (index) => index
+      .eq('accountRef', accountRef)
+      .eq('memberPrincipalRef', agent.principalId)
+      .eq('lifecycle', 'active'))
+    .unique()
+  return membership?.createdBy.actorPrincipalRef === humanPrincipalRef
+}
+
+async function revokeMachineAgentAdmissionAndDependents(
+  ctx: Pick<MutationCtx, 'db'>,
+  agent: Doc<'agentAccessPrincipals'>,
+  observation: ClerkSecurityObservation,
+  authority: Readonly<{ principalRef: string }>,
+  createdAt: number,
+  correlationRef: string,
+): Promise<void> {
+  if (agent.lifecycle !== 'revoked') {
+    await ctx.db.patch(agent._id, { lifecycle: 'revoked', lastSeenAt: createdAt })
+  }
+
+  const grants = await ctx.db.query('agentAccessGrants')
+    .withIndex('by_principalId', (index) => index.eq('principalId', agent.principalId))
+    .collect()
+  for (const grant of grants) {
+    if (grant.lifecycle !== 'active') continue
+    await ctx.db.patch(grant._id, { lifecycle: 'revoked', updatedAt: createdAt })
+  }
+
+  const families = await ctx.db.query('agentAccessOAuthRefreshFamilies')
+    .withIndex('by_principalRef_and_lifecycle', (index) => index
+      .eq('principalRef', agent.principalId)
+      .eq('lifecycle', 'active'))
+    .collect()
+  for (const family of families) {
+    await ctx.db.patch(family._id, {
+      lifecycle: 'revoked',
+      revocationReason: 'clerk_password_reset',
+      updatedAt: createdAt,
+    })
+  }
+
+  for (const lifecycle of ['active', 'stale'] as const) {
+    const credentials = await ctx.db.query('credentials')
+      .withIndex('by_principalRef_and_lifecycle', (index) => index
+        .eq('principalRef', agent.principalId)
+        .eq('lifecycle', lifecycle))
+      .collect()
+    for (const credential of credentials) {
+      await ctx.db.patch(credential._id, {
+        lifecycle: 'revoked',
+        revokedAt: observation.observedAt,
+        revision: credential.revision + 1,
+        updatedAt: createdAt,
+      })
+    }
+  }
+
+  const delegations = await ctx.db.query('authorityDelegationGrants')
+    .withIndex('by_subjectPrincipalRef_and_lifecycle', (index) => index
+      .eq('subjectPrincipalRef', agent.principalId)
+      .eq('lifecycle', 'active'))
+    .collect()
+  for (const delegation of delegations) {
+    await ctx.db.patch(delegation._id, { lifecycle: 'revoked' })
+  }
+
+  await persistAgentAudit(ctx, {
+    eventType: 'agent.disconnected',
+    actorPrincipalRef: authority.principalRef,
+    activeAccountRef: agent.ownerId,
+    agentRef: agent.principalId,
+    correlationRef,
+    idempotencyRef: canonicalDigest({
+      format: 'clerk-machine-cascade-disconnect:v1',
+      correlationRef,
+      agentPrincipalRef: agent.principalId,
+      deliveryRefHash: observation.deliveryRefHash,
+    } as never),
+    beforeState: 'connected_or_attention',
+    outcome: 'disconnected',
+    occurredAt: createdAt,
+  })
+}
+
+async function revokeInteractiveCredentialsForObservation(
+  ctx: Pick<MutationCtx, 'db'>,
+  observation: ClerkSecurityObservation,
+  authority: Readonly<{ principalRef: string; bindingRef: string }>,
+  createdAt: number,
+): Promise<void> {
+  for (const lifecycle of ['active', 'stale'] as const) {
+    const credentials = await ctx.db.query('credentials')
+      .withIndex('by_principalRef_and_lifecycle', (index) => index
+        .eq('principalRef', authority.principalRef)
+        .eq('lifecycle', lifecycle))
+      .collect()
+    for (const credential of credentials) {
+      if (credential.type !== 'provider_token'
+        || credential.bindingRef !== authority.bindingRef
+        || credential.issuedAt > observation.observedAt) {
+        continue
+      }
+      await ctx.db.patch(credential._id, {
+        lifecycle: 'revoked',
+        revokedAt: observation.observedAt,
+        revision: credential.revision + 1,
+        updatedAt: createdAt,
+      })
+    }
+  }
 }
 
 function eventProjection(

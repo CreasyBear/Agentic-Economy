@@ -399,7 +399,8 @@ export function validUtcPeriod(
       ? currentUtcDayBounds(periodStartAt)
       : currentUtcMonthBounds(periodStartAt)
     return expected.periodStartAt === periodStartAt && expected.periodEndAt === periodEndAt
-  } catch {
+  } catch (cause) {
+    void cause;
     return false
   }
 }

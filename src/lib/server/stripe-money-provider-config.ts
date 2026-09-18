@@ -120,7 +120,8 @@ export function validateStripeMoneyProviderConfig(
   if (expectedMode !== undefined) {
     try {
       assertStripeMoneyModeFence(config, expectedMode);
-    } catch {
+    } catch (cause) {
+      void cause;
       return refusal("stripe_setup_required", false);
     }
   }

@@ -4,6 +4,7 @@ import {
   admitTaxInvoiceIssuance,
   calculateAudGstSplit,
   isValidAbn,
+  normalizeAbn,
   SANDBOX_COMMERCIAL_POLICY_CONTROLS,
 } from '../../../src/modules/money/public'
 
@@ -27,6 +28,29 @@ describe('tax invoice issuance control', () => {
     expect(isValidAbn('5182475355')).toBe(false)
     expect(isValidAbn('5182475355a')).toBe(false)
     expect(isValidAbn('')).toBe(false)
+  })
+
+  describe('normalizeAbn', () => {
+    it('V4: strips spaces and hyphens before checksum validation', () => {
+      expect(isValidAbn('51 824 753 556')).toBe(false)
+      expect(isValidAbn('51-824-753-556')).toBe(false)
+      expect(normalizeAbn('51 824 753 556')).toBe('51824753556')
+      expect(normalizeAbn('51-824-753-556')).toBe('51824753556')
+      expect(isValidAbn(normalizeAbn('51 824 753 556'))).toBe(true)
+    })
+
+    it('V5: normalizes the official ATO worked example', () => {
+      expect(normalizeAbn('51 824 753 556')).toBe('51824753556')
+      expect(isValidAbn(normalizeAbn('51 824 753 556'))).toBe(true)
+    })
+
+    it.each([
+      ['5182475355612', '12 digits after strip'],
+      ['00000000000', 'all zeros'],
+      ['01824753556', 'leading zero first digit'],
+    ] as const)('V6: rejects invalid normalized ABN (%s)', (value, _label) => {
+      expect(isValidAbn(normalizeAbn(value))).toBe(false)
+    })
   })
 
   describe('admitTaxInvoiceIssuance', () => {

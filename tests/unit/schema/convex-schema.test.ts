@@ -36,8 +36,12 @@ const durableTables = [
   'principals',
   'accounts',
   'accountOwnerships',
+  'accountExternalOrganizationBindings',
+  'accountSecurityPolicies',
   'memberships',
   'externalIdentityBindings',
+  'interactiveSessionSelections',
+  'interactiveOnboardingCompletions',
   'credentials',
   'consequenceProofUses',
   'authorityDelegationGrants',
@@ -60,6 +64,10 @@ const durableTables = [
   'moneyFundingCommands',
   'moneyLegalCustomerBindings',
   'moneyCustomerTaxFacts',
+  'moneyAutoRechargeSettings',
+  'moneyMonthlySpendBudgets',
+  'moneySupplierPreferences',
+  'moneyStripeCustomerBindings',
   'moneyTreasuryObservations',
   'moneyProviderObligations',
   'moneyConnectAccountCommands',
@@ -110,6 +118,9 @@ const durableTables = [
   'actionExecutionControls',
   'actionExecutionAttempts',
   'actionExecutionHistory',
+  'notificationDeliveries',
+  'principalNotificationEmails',
+  'userNotificationPreferences',
   'marketActiveTools',
   'marketActiveProviders',
   'marketEvidenceFacts',
@@ -197,6 +208,10 @@ const requiredIndexes = {
   moneyTreasuryObservations: ['by_observationRef', 'by_custody_and_observedAt'],
   moneyLegalCustomerBindings: ['by_accountRef', 'by_legalCustomerRef_and_state'],
   moneyCustomerTaxFacts: ['by_accountRef'],
+  moneyAutoRechargeSettings: ['by_accountRef'],
+  moneyMonthlySpendBudgets: ['by_accountRef'],
+  moneySupplierPreferences: ['by_businessId_and_currency'],
+  moneyStripeCustomerBindings: ['by_accountRef', 'by_stripeCustomerId'],
   moneyProviderObligations: ['by_obligationRef', 'by_callRef', 'by_buyerAccountRef_and_createdAt', 'by_providerRef_and_createdAt'],
   moneyStripeWebhookInbox: ['by_stripeEventId', 'by_state_and_receivedAt'],
   moneyStripeEvents: ['by_stripeEventId'],
@@ -374,7 +389,7 @@ describe('Convex schema', () => {
   const exported = SchemaExport.parse(JSON.parse(String(exportSchema.call(schema))))
 
   it('contains exactly the source-owned durable tables', () => {
-    expect(durableTables).toHaveLength(89)
+    expect(durableTables).toHaveLength(100)
     expect(exported.tables.map((table) => table.tableName).sort()).toEqual([...durableTables].sort())
   })
 

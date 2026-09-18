@@ -3,7 +3,7 @@ import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { resolveServiceMode, serviceModeAllowsEnvironment } from '@/lib/deployment/service-mode'
 
 import { internal } from './_generated/api'
-import { action, env, internalMutation, internalQuery, type MutationCtx } from './_generated/server'
+import { action, env, internalMutation, internalQuery, type ActionCtx, type MutationCtx } from './_generated/server'
 import { readCurrentPublishedTool, readManagedX402InspectionTarget } from './capabilitySupplyCurrentTool'
 import { readCommercialPolicyGate } from './moneyCommercialPolicy'
 import { principalAndSourceArgs, principalValue } from './lib/callLifecycle/contracts'
@@ -60,6 +60,7 @@ import {
   quoteFormanceSnapshotIsCurrent,
   quoteFundingContinuation,
   quoteLiveX402IsCurrent,
+  quoteOrganizationMonthlySpendAdmission,
   quotePaidPeriodAdmission,
   quotePartiesFromPublishedTool,
   refuse as buildQuoteRefusal,
@@ -216,6 +217,11 @@ const formanceFinancialSnapshot = v.object({
     evidenceRef: v.string(),
     evidenceDigest: v.string(),
   })),
+  organizationMonthlySpend: v.optional(v.object({
+    enabled: v.boolean(),
+    ceilingUnits: v.optional(v.string()),
+    monthSpendUnits: v.optional(v.string()),
+  })),
 })
 
 const financialSubjectsResult = v.union(
@@ -245,11 +251,39 @@ const financialSubjectsResult = v.union(
       evidenceRef: v.string(),
       evidenceDigest: v.string(),
     })),
+    organizationMonthlySpendBudget: v.optional(v.object({
+      enabled: v.literal(true),
+      ceilingUnits: v.string(),
+    })),
   }),
   v.object({ kind: v.literal('refused'), code: quoteRefusalCode, reason: v.optional(v.string()) }),
 )
 
 type FinancialSubjectsResult = Infer<typeof financialSubjectsResult>
+
+type PreparedFinancialSubjects = Extract<FinancialSubjectsResult, { kind: 'prepared' }>
+
+async function readOrganizationMonthlySpendSnapshotForQuote(
+  ctx: { runAction: ActionCtx['runAction'] },
+  subjects: PreparedFinancialSubjects,
+): Promise<Infer<typeof formanceFinancialSnapshot>['organizationMonthlySpend']> {
+  if (subjects.organizationMonthlySpendBudget === undefined) return undefined
+  const { periodStartAt, periodEndAt } = currentUtcMonthWindow()
+  const accountSpend = await ctx.runAction(internal.moneyFormance.readPeriodSpend, {
+    accountRef: subjects.accountRef,
+    periodStartAt,
+    periodEndAt,
+  })
+  return {
+    enabled: true,
+    ceilingUnits: subjects.organizationMonthlySpendBudget.ceilingUnits,
+    ...(accountSpend.kind === 'available'
+      ? { monthSpendUnits: accountSpend.spendUnits }
+      : accountSpend.kind === 'empty'
+        ? { monthSpendUnits: '0' }
+        : {}),
+  }
+}
 
 const spendingPeriodPreparationResult = v.union(
   v.object({
@@ -259,6 +293,14 @@ const spendingPeriodPreparationResult = v.union(
   }),
   v.object({ kind: v.literal('refused'), reason: v.string() }),
 )
+
+function currentUtcMonthWindow(): { periodStartAt: number; periodEndAt: number } {
+  const now = new Date()
+  return {
+    periodStartAt: Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1),
+    periodEndAt: Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1),
+  }
+}
 
 function cdpX402CustodyEnvironment(): StringEnvironment {
   return {
@@ -395,6 +437,13 @@ async function prepareFinancialSubjectsHandler(
     spendingPeriods = prepared.spendingPeriods
     spendingPeriodCommands = [...prepared.commands]
   }
+  const monthlySpendBudgetRow = await ctx.db
+    .query('moneyMonthlySpendBudgets')
+    .withIndex('by_accountRef', (query) => query.eq('accountRef', authority.principal.ownerId))
+    .unique()
+  const organizationMonthlySpendBudget = monthlySpendBudgetRow !== null && monthlySpendBudgetRow.enabled
+    ? { enabled: true as const, ceilingUnits: monthlySpendBudgetRow.ceilingUnits }
+    : undefined
   return {
     kind: 'prepared',
     accountRef: authority.principal.ownerId,
@@ -425,6 +474,7 @@ async function prepareFinancialSubjectsHandler(
             evidenceDigest: observation.evidenceDigest,
           },
         }),
+    ...(organizationMonthlySpendBudget === undefined ? {} : { organizationMonthlySpendBudget }),
   }
 }
 
@@ -512,6 +562,12 @@ async function issueQuoteHandler(
     : splitInclusiveAudTax(pricing.price.units, args.formance.buyerTaxBps)
   if (buyerSale === undefined) return refuse(args, 'pricing_setup_required', false)
   const paid = pricing.price.units !== '0'
+  const organizationMonthlyAdmission = quoteOrganizationMonthlySpendAdmission(
+    args,
+    pricing.price.units,
+    args.formance.organizationMonthlySpend,
+  )
+  if (organizationMonthlyAdmission !== undefined) return quoteRefusal(organizationMonthlyAdmission)
   const spendingPeriods = paid ? args.formance.spendingPeriods : undefined
   const periodAdmission = await quotePaidPeriodAdmission(ctx, args, {
     paid,
@@ -747,7 +803,8 @@ export const prepareSpendingPeriods = internalMutation({
     let grant
     try {
       grant = normalizeStoredAgentAccessGrant(grantRow as never)
-    } catch {
+    } catch (cause) {
+      void cause
       return { kind: 'refused' as const, reason: 'spending_period_authority_stale' }
     }
     if (grant === undefined || grant.generation !== authority.grantGeneration) {
@@ -830,6 +887,7 @@ export const quote = action({
     const referenceRate = live.kind === 'observed' ? await fetchCoinbaseReferenceRate() : undefined
     if (live.kind === 'observed' && referenceRate === undefined) return refuse(args, 'pricing_setup_required', true, { reason: 'AUD reference price temporarily unavailable' })
     if (subjects.financialMode === 'none') {
+      const organizationMonthlySpend = await readOrganizationMonthlySpendSnapshotForQuote(ctx, subjects)
       return await ctx.runMutation(internal.capabilityQuotes.issueQuote, {
         ...args,
         formance: {
@@ -846,6 +904,7 @@ export const quote = action({
           formanceSchemaVersion: PACKAGE4_FORMANCE_REQUIREMENTS.schemaVersion,
           buyerTaxBps: subjects.buyerTaxBps,
           observedAt: Date.now(),
+          ...(organizationMonthlySpend === undefined ? {} : { organizationMonthlySpend }),
         },
       })
     }
@@ -925,6 +984,7 @@ export const quote = action({
       exposure.observedAt,
       treasury?.observedAt ?? Number.MAX_SAFE_INTEGER,
     )
+    const organizationMonthlySpend = await readOrganizationMonthlySpendSnapshotForQuote(ctx, subjects)
     return await ctx.runMutation(
       internal.capabilityQuotes.issueQuote,
       {
@@ -952,6 +1012,7 @@ export const quote = action({
           formanceSchemaVersion: PACKAGE4_FORMANCE_REQUIREMENTS.schemaVersion,
           buyerTaxBps: subjects.buyerTaxBps,
           observedAt,
+          ...(organizationMonthlySpend === undefined ? {} : { organizationMonthlySpend }),
           ...(subjects.treasury === undefined || treasury === undefined
             ? {}
             : {

@@ -41,6 +41,7 @@ vi.mock('@clerk/tanstack-react-start', async (importOriginal) => ({
     shellMocks.userButton(props)
     return <button type="button" aria-label="Account menu" />
   },
+  OrganizationSwitcher: () => <div data-testid="organization-switcher" />,
   SignOutButton: ({ children }: { children: ReactElement }) => children,
   Show: ({ when, children, fallback }: { when: string; children: ReactElement; fallback?: ReactElement }) =>
     when === 'signed-out' ? (shellMocks.useUser().isSignedIn ? (fallback ?? null) : children)
@@ -353,6 +354,7 @@ describe('owner mobile navigation', () => {
     expect(within(sidebarNav).getByRole('link', { name: 'Balance' })).toBeTruthy()
     expect(within(sidebarNav).queryByRole('link', { name: 'Provider' })).toBeNull()
     expect(within(sidebarNav).queryByRole('link', { name: 'Publish' })).toBeNull()
+    expect(within(sidebarNav).getByRole('link', { name: 'Workspace' })).toBeTruthy()
     expect(within(sidebarNav).getByRole('link', { name: 'Account & security' })).toBeTruthy()
 
     owner.unmount()
@@ -577,6 +579,16 @@ function renderAt(ui: ReactElement, pathname: string) {
       getParentRoute: () => rootRoute,
       path: '/owner/operations',
       staticData: { nav: { label: 'Tools', operator: { roles: ['owner'], group: 'Supply', groupOrder: 1, order: 0, icon: NavIcon, tier: 'core', mobilePrimary: true, mobileOrder: 30 } } },
+    }),
+    createRoute({
+      getParentRoute: () => rootRoute,
+      path: '/owner/workspace',
+      staticData: { nav: { label: 'Workspace', operator: { roles: ['owner'], group: 'Workspace', groupOrder: 0, order: 1, icon: NavIcon, tier: 'core' } } },
+    }),
+    createRoute({
+      getParentRoute: () => rootRoute,
+      path: '/owner/team',
+      staticData: { nav: { label: 'Team', operator: { roles: ['owner'], group: 'Workspace', groupOrder: 0, order: 2, icon: NavIcon, tier: 'core' } } },
     }),
     createRoute({
       getParentRoute: () => rootRoute,

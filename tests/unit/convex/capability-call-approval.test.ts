@@ -644,6 +644,8 @@ describe('bounded mandate invocation dispatch', () => {
             return activeGrant
           case 'moneyManagedCall:readBooking':
             return { kind: 'not_required' }
+          case 'moneyMonthlySpendBudget:readOrganizationMonthlySpendBudgetForAccount':
+            return { enabled: false, ceilingUnits: '0' }
           default:
             throw new Error(`unexpected_query:${functionPath(reference)}`)
         }
@@ -737,6 +739,8 @@ describe('invocation admission after an empty pending replay', () => {
             return { toolRef, state: 'pending' }
           case 'moneyManagedCall:readBooking':
             return { kind: 'not_required' }
+          case 'moneyMonthlySpendBudget:readOrganizationMonthlySpendBudgetForAccount':
+            return { enabled: false, ceilingUnits: '0' }
           default:
             throw new Error(`unexpected_query:${functionPath(reference)}`)
         }

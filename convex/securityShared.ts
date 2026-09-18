@@ -147,7 +147,9 @@ export async function persistAuditEvent(
       targetType: event.targetType,
       targetRef: event.targetRef,
       ...(event.beforeState === undefined ? {} : { beforeState: event.beforeState }),
-      ...(event.afterState === undefined ? {} : { afterState: event.afterState }),
+      ...(event.afterState === undefined
+        ? {}
+        : { afterState: event.afterState, outcome: event.afterState }),
       idempotencyKey: event.idempotencyKey,
       correlationId: event.correlationId,
       ...(event.reasonCode === undefined ? {} : { reasonCode: event.reasonCode }),

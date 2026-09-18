@@ -525,4 +525,48 @@ describe('source-native Provider start', () => {
       environment: 'sandbox',
     }, expect.any(String))
   })
+
+  it('validates URLs inline with helpful error messages on invalid formats', async () => {
+    render(
+      <AeSupplySourceNativeStart
+        businessRef="business:one"
+        onPreview={vi.fn()}
+        onConnect={vi.fn()}
+        onSelectCandidate={vi.fn()}
+        onPublish={vi.fn()}
+      />,
+    )
+
+    // Select OpenAPI
+    fireEvent.click(screen.getByRole('button', { name: 'Other source types' }))
+    fireEvent.mouseDown(screen.getByRole('tab', { name: 'OpenAPI' }))
+
+    // Enter non-https URL
+    const openApiInput = screen.getByLabelText('OpenAPI URL')
+    fireEvent.change(openApiInput, { target: { value: 'http://insecure.example.com/openapi.json' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Discover endpoints' }))
+
+    expect(await screen.findByText(/OpenAPI URL must be a public HTTPS endpoint/i)).toBeTruthy()
+  })
+
+  it('refuses non-HTTPS MCP server URLs inline before discovery', async () => {
+    render(
+      <AeSupplySourceNativeStart
+        businessRef="business:one"
+        onPreview={vi.fn()}
+        onConnect={vi.fn()}
+        onSelectCandidate={vi.fn()}
+        onPublish={vi.fn()}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Other source types' }))
+    fireEvent.mouseDown(screen.getByRole('tab', { name: 'MCP' }))
+
+    const mcpInput = screen.getByLabelText('MCP server URL')
+    fireEvent.change(mcpInput, { target: { value: 'http://insecure.example.com/mcp' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Discover endpoints' }))
+
+    expect(await screen.findByText(/MCP server URL must use HTTPS/i)).toBeTruthy()
+  })
 })

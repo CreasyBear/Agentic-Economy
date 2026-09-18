@@ -187,7 +187,8 @@ async function attachPurchaseResolutionToStatus(
     return purchaseResolution === null
       ? result
       : { ...result, purchaseResolution }
-  } catch {
+  } catch (cause) {
+    void cause;
     return result
   }
 }

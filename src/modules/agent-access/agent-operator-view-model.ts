@@ -83,6 +83,9 @@ export type AgentDirectoryItem = Readonly<{
   connectionCount: number
   connectorDisplayNames: readonly string[]
   authorityMode: AgentAccessKeyInventoryItem['authorityMode']
+  monthlySettledSpend?: ExactAmount | undefined
+  monthlyLimit?: ExactAmount | undefined
+  monthlySpendCoverage?: 'complete' | 'incomplete' | undefined
 }>
 
 /**

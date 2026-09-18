@@ -131,6 +131,196 @@ describe('Clerk security webhook', () => {
     expect(verify).not.toHaveBeenCalled()
   })
 
+  it('A1: maps session.revoked to revoke_interactive_credentials', async () => {
+    const applied: ClerkSecurityObservation[] = []
+    const response = await handleClerkSecurityWebhookRequest(request('delivery_revoked'), {
+      issuer,
+      verify: async () => sessionEvent('session.revoked'),
+      apply: async (command) => {
+        applied.push(command)
+        return { kind: 'accepted', status: 'applied' }
+      },
+    })
+    expect(response.status).toBe(200)
+    expect(applied[0]?.securityAction).toBe('revoke_interactive_credentials')
+  })
+
+  it.each(['session.created', 'session.ended'] as const)(
+    'A2: maps %s to observe_only',
+    async (eventType) => {
+      const applied: ClerkSecurityObservation[] = []
+      const response = await handleClerkSecurityWebhookRequest(request(`delivery_${eventType}`), {
+        issuer,
+        verify: async () => sessionEvent(eventType),
+        apply: async (command) => {
+          applied.push(command)
+          return { kind: 'accepted', status: 'applied' }
+        },
+      })
+      expect(response.status).toBe(200)
+      expect(applied[0]?.securityAction).toBe('observe_only')
+    },
+  )
+
+  it('A3: maps password reset user.updated to revoke_interactive_credentials', async () => {
+    const applied: ClerkSecurityObservation[] = []
+    const response = await handleClerkSecurityWebhookRequest(request('delivery_password_reset'), {
+      issuer,
+      verify: async () => ({
+        type: 'user.updated',
+        object: 'event',
+        data: {
+          id: 'user_owner_1',
+          updated_at: 5_000,
+          password_last_updated_at: 5_000,
+        },
+      }),
+      apply: async (command) => {
+        applied.push(command)
+        return { kind: 'accepted', status: 'applied' }
+      },
+    })
+    expect(response.status).toBe(200)
+    expect(applied[0]?.securityAction).toBe('revoke_interactive_credentials')
+  })
+
+  it('A4: maps profile-only user.updated to observe_only', async () => {
+    const applied: ClerkSecurityObservation[] = []
+    const response = await handleClerkSecurityWebhookRequest(request('delivery_profile_edit'), {
+      issuer,
+      verify: async () => ({
+        type: 'user.updated',
+        object: 'event',
+        data: {
+          id: 'user_owner_1',
+          updated_at: 6_000,
+          two_factor_enabled: true,
+        },
+      }),
+      apply: async (command) => {
+        applied.push(command)
+        return { kind: 'accepted', status: 'applied' }
+      },
+    })
+    expect(response.status).toBe(200)
+    expect(applied[0]?.securityAction).toBe('observe_only')
+  })
+
+  describe('W-06 profile display name projection', () => {
+    it('P1: maps first and last name to profileDisplayName with observe_only', async () => {
+      const applied: ClerkSecurityObservation[] = []
+      const response = await handleClerkSecurityWebhookRequest(request('delivery_w06_p1'), {
+        issuer,
+        verify: async () => userUpdatedEvent({
+          first_name: 'Ada',
+          last_name: 'Lovelace',
+        }),
+        apply: async (command) => {
+          applied.push(command)
+          return { kind: 'accepted', status: 'applied' }
+        },
+      })
+      expect(response.status).toBe(200)
+      expect(applied[0]?.securityAction).toBe('observe_only')
+      expect(applied[0]?.profileDisplayName).toBe('Ada Lovelace')
+    })
+
+    it('P2: falls back to username when names are absent', async () => {
+      const applied: ClerkSecurityObservation[] = []
+      const response = await handleClerkSecurityWebhookRequest(request('delivery_w06_p2'), {
+        issuer,
+        verify: async () => userUpdatedEvent({
+          first_name: null,
+          last_name: '',
+          username: 'ada',
+        }),
+        apply: async (command) => {
+          applied.push(command)
+          return { kind: 'accepted', status: 'applied' }
+        },
+      })
+      expect(response.status).toBe(200)
+      expect(applied[0]?.profileDisplayName).toBe('ada')
+    })
+
+    it('P3: omits profileDisplayName for avatar-only updates', async () => {
+      const applied: ClerkSecurityObservation[] = []
+      const response = await handleClerkSecurityWebhookRequest(request('delivery_w06_p3'), {
+        issuer,
+        verify: async () => userUpdatedEvent({
+          has_image: true,
+          image_url: 'https://img.clerk.com/secret-avatar.png',
+        }),
+        apply: async (command) => {
+          applied.push(command)
+          return { kind: 'accepted', status: 'applied' }
+        },
+      })
+      expect(response.status).toBe(200)
+      expect(applied[0]?.profileDisplayName).toBeUndefined()
+      expect(JSON.stringify(applied[0])).not.toContain('secret-avatar')
+    })
+
+    it('P4: keeps display name and never forwards plaintext email', async () => {
+      const applied: ClerkSecurityObservation[] = []
+      const response = await handleClerkSecurityWebhookRequest(request('delivery_w06_p4'), {
+        issuer,
+        verify: async () => userUpdatedEvent({
+          first_name: 'Ada',
+          last_name: 'Lovelace',
+          email_addresses: [{ email_address: 'ada.lovelace@example.test' }],
+        }),
+        apply: async (command) => {
+          applied.push(command)
+          return { kind: 'accepted', status: 'applied' }
+        },
+      })
+      expect(response.status).toBe(200)
+      expect(applied[0]?.profileDisplayName).toBe('Ada Lovelace')
+      expect(JSON.stringify(applied[0])).not.toContain('ada.lovelace@example.test')
+    })
+
+    it.each([
+      ['overlong name', 'A'.repeat(201)],
+      ['control character', 'Ada\u0007Lovelace'],
+    ])('P5: rejects unsafe display name (%s) but accepts delivery', async (_label, firstName) => {
+      const applied: ClerkSecurityObservation[] = []
+      const response = await handleClerkSecurityWebhookRequest(request(`delivery_w06_p5_${_label}`), {
+        issuer,
+        verify: async () => userUpdatedEvent({
+          first_name: firstName,
+          last_name: 'Lovelace',
+        }),
+        apply: async (command) => {
+          applied.push(command)
+          return { kind: 'accepted', status: 'applied' }
+        },
+      })
+      expect(response.status).toBe(200)
+      expect(applied[0]?.profileDisplayName).toBeUndefined()
+    })
+
+    it('P6: password reset still projects profileDisplayName alongside revocation', async () => {
+      const applied: ClerkSecurityObservation[] = []
+      const response = await handleClerkSecurityWebhookRequest(request('delivery_w06_p6'), {
+        issuer,
+        verify: async () => userUpdatedEvent({
+          updated_at: 5_000,
+          password_last_updated_at: 5_000,
+          first_name: 'Ada',
+          last_name: 'Lovelace',
+        }),
+        apply: async (command) => {
+          applied.push(command)
+          return { kind: 'accepted', status: 'applied' }
+        },
+      })
+      expect(response.status).toBe(200)
+      expect(applied[0]?.securityAction).toBe('revoke_interactive_credentials')
+      expect(applied[0]?.profileDisplayName).toBe('Ada Lovelace')
+    })
+  })
+
   it('returns a retryable response when persistence is unavailable', async () => {
     const response = await handleClerkSecurityWebhookRequest(request('delivery_6'), {
       issuer,
@@ -177,4 +367,16 @@ function sensitiveBody(): string {
     email: 'owner@example.test',
     token: 'Bearer private-session-token',
   })
+}
+
+function userUpdatedEvent(data: Record<string, unknown>) {
+  return {
+    type: 'user.updated',
+    object: 'event',
+    data: {
+      id: 'user_owner_1',
+      updated_at: 8_000,
+      ...data,
+    },
+  }
 }

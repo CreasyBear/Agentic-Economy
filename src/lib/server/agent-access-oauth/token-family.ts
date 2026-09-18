@@ -211,7 +211,8 @@ export async function exchangeRefreshToken(form: URLSearchParams, request: Reque
   let committed: Awaited<ReturnType<AgentAccessOAuthRefreshStore['commitRefreshFamilyRotation']>>
   try {
     committed = await refreshStore.commitRefreshFamilyRotation(commitInput)
-  } catch {
+  } catch (cause) {
+    void cause;
     try {
       committed = await refreshStore.commitRefreshFamilyRotation(commitInput)
     } catch (cause) {

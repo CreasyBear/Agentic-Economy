@@ -25,6 +25,8 @@ import { formatDisplayAmount } from '@/modules/money/public'
 import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
 import { captureRouteException } from '@/lib/observability/capture-route-exception'
 import { formatUtcTimestamp } from '@/lib/ui/format-time'
+import { downloadCsv, generateCallsCsv } from '@/lib/export/csv-export'
+import { AeTableEmptyState } from '@/components/ae/feedback/AeTableEmptyState'
 
 export const Route = createFileRoute('/_operator/activity')({
   staticData: {
@@ -45,11 +47,21 @@ export const Route = createFileRoute('/_operator/activity')({
     },
   },
   ...operatorRouteOptions,
-  loader: async (): Promise<ActivityLoaderResult> => {
+  validateSearch: (search: Record<string, unknown>): { agent?: string } => {
+    const agent = typeof search.agent === 'string' && search.agent.trim().length > 0
+      ? search.agent.trim()
+      : undefined
+    return { ...(agent === undefined ? {} : { agent }) }
+  },
+  loaderDeps: ({ search: { agent } }) => ({ agent }),
+  loader: async (ctx): Promise<ActivityLoaderResult> => {
+    const agent = ctx?.deps?.agent
     const periodStart = new Date().toISOString().slice(0, 7)
-    const period = { dimensionKind: 'account' as const, periodKind: 'month' as const, periodStart }
+    const period = agent
+      ? { dimensionKind: 'agent' as const, dimensionRef: agent, periodKind: 'month' as const, periodStart }
+      : { dimensionKind: 'account' as const, periodKind: 'month' as const, periodStart }
     const [calls, usage, spend] = await Promise.allSettled([
-      readOwnerCallsServer({ data: {} }),
+      readOwnerCallsServer({ data: agent ? { principalRef: agent } : {} }),
       readOwnerUsageServer({ data: period }),
       readOwnerSpendServer({ data: period }),
     ])
@@ -63,6 +75,7 @@ export const Route = createFileRoute('/_operator/activity')({
       usage: usage.status === 'fulfilled' ? usage.value : { kind: 'unavailable', code: 'source_unavailable' },
       spend: spend.status === 'fulfilled' ? spend.value : { kind: 'unavailable', code: 'source_unavailable' },
       periodStart,
+      ...(agent === undefined ? {} : { filteredAgent: agent }),
     }
   },
   head: () => ({ meta: [
@@ -114,11 +127,12 @@ export function ActivityPage({ result }: Readonly<{ result: ActivityLoaderResult
     )
   }
   return <ActivityAvailable
-    key={canonicalDigest(result.calls)}
+    key={`${canonicalDigest(result.calls)}:${result.filteredAgent ?? 'all'}`}
     initial={result.calls}
     usage={result.usage}
     spend={result.spend}
     periodStart={result.periodStart}
+    {...(result.filteredAgent === undefined ? {} : { filteredAgent: result.filteredAgent })}
   />
 }
 
@@ -140,7 +154,7 @@ function initialCallPaginationState(source: CallPage): CallPaginationState {
   }
 }
 
-function useCallPagination(initial: CallPage) {
+function useCallPagination(initial: CallPage, principalRef?: string) {
   const [state, setState] = useState(() => initialCallPaginationState(initial))
 
   async function loadNextPage() {
@@ -151,7 +165,7 @@ function useCallPagination(initial: CallPage) {
       ? { ...current, status: 'loading' }
       : current)
     try {
-      const next = await readOwnerCallsServer({ data: { cursor } })
+      const next = await readOwnerCallsServer({ data: { cursor, ...(principalRef ? { principalRef } : {}) } })
       setState((current) => current.source === source && current.cursor === cursor
         ? {
             source,
@@ -176,17 +190,39 @@ function ActivityAvailable({
   usage,
   spend,
   periodStart,
+  filteredAgent,
 }: Readonly<{
   initial: Extract<ActivityLoaderResult, { kind: 'available' }>['calls']
   usage: Extract<ActivityLoaderResult, { kind: 'available' }>['usage']
   spend: Extract<ActivityLoaderResult, { kind: 'available' }>['spend']
   periodStart: string
+  filteredAgent?: string
 }>) {
   const router = useRouter()
   const [summaryRetryPending, setSummaryRetryPending] = useState(false)
-  const { state: pagination, loadNextPage } = useCallPagination(initial)
-  const attention = pagination.items.filter((item) => projectCallSummaryPurchaseStatus(item).attention)
-  const recent = pagination.items.filter((item) => !projectCallSummaryPurchaseStatus(item).attention)
+  const { state: pagination, loadNextPage } = useCallPagination(initial, filteredAgent)
+  const [statusFilter, setStatusFilter] = useState<'all' | 'completed' | 'refused' | 'outcome_unknown'>('all')
+  const [dateRangeFilter, setDateRangeFilter] = useState<'all' | 'today' | '7d' | '30d'>('all')
+  const [nowMs] = useState(() => Date.now())
+
+  const filteredItems = useMemo(() => {
+    let result = pagination.items
+    if (statusFilter !== 'all') {
+      result = result.filter((item) => item.state === statusFilter)
+    }
+    if (dateRangeFilter !== 'all') {
+      const cutoff = dateRangeFilter === 'today'
+        ? nowMs - 24 * 60 * 60 * 1000
+        : dateRangeFilter === '7d'
+          ? nowMs - 7 * 24 * 60 * 60 * 1000
+          : nowMs - 30 * 24 * 60 * 60 * 1000
+      result = result.filter((item) => item.createdAt >= cutoff)
+    }
+    return result
+  }, [pagination.items, statusFilter, dateRangeFilter, nowMs])
+
+  const attention = filteredItems.filter((item) => projectCallSummaryPurchaseStatus(item).attention)
+  const recent = filteredItems.filter((item) => !projectCallSummaryPurchaseStatus(item).attention)
   const columns = useMemo<ColumnDef<CallRow, unknown>[]>(
     () => [
       {
@@ -196,6 +232,26 @@ function ActivityAvailable({
         cell: ({ row }) => (
           <span className="font-medium text-foreground">
             {row.original.toolLabel}
+          </span>
+        ),
+      },
+      {
+        id: 'agent',
+        accessorFn: (item) => item.principalRef,
+        header: ({ column }) => <AeOperatorSortableHeader label="Caller Agent" column={column} />,
+        cell: ({ row }) => (
+          <span className="font-mono text-xs text-muted-foreground truncate max-w-[120px] block" title={row.original.principalRef}>
+            {row.original.principalRef ? row.original.principalRef.split(':').pop() : '—'}
+          </span>
+        ),
+      },
+      {
+        id: 'duration',
+        accessorFn: (item) => item.latencyMs,
+        header: ({ column }) => <AeOperatorSortableHeader label="Duration" column={column} />,
+        cell: ({ row }) => (
+          <span className="font-mono text-xs tabular-nums text-muted-foreground">
+            {row.original.latencyMs > 0 ? `${row.original.latencyMs}ms` : '—'}
           </span>
         ),
       },
@@ -239,6 +295,96 @@ function ActivityAvailable({
       currentPath="/activity"
     >
       <div className="grid gap-section">
+        {filteredAgent && (
+          <div className="flex items-center justify-between rounded-md border border-border bg-muted/30 px-3 py-2 text-xs">
+            <span className="text-muted-foreground">
+              Filtered by Agent: <code className="font-mono font-medium text-foreground">{filteredAgent}</code>
+            </span>
+            <Button asChild variant="ghost" size="sm" className="h-7 text-xs">
+              <Link to="/activity">Clear filter</Link>
+            </Button>
+          </div>
+        )}
+
+        {pagination.items.length > 0 ? (
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-card p-3">
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-medium text-muted-foreground">Status:</span>
+                <div className="flex items-center gap-1">
+                  {(['all', 'completed', 'refused', 'outcome_unknown'] as const).map((s) => (
+                    <Button
+                      key={s}
+                      type="button"
+                      variant={statusFilter === s ? 'secondary' : 'ghost'}
+                      size="sm"
+                      className="h-7 text-xs capitalize"
+                      onClick={() => setStatusFilter(s)}
+                    >
+                      {s === 'all' ? 'All' : s.replace('_', ' ')}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-medium text-muted-foreground">Date:</span>
+                <div className="flex items-center gap-1">
+                  {(['all', 'today', '7d', '30d'] as const).map((d) => (
+                    <Button
+                      key={d}
+                      type="button"
+                      variant={dateRangeFilter === d ? 'secondary' : 'ghost'}
+                      size="sm"
+                      className="h-7 text-xs uppercase"
+                      onClick={() => setDateRangeFilter(d)}
+                    >
+                      {d === 'all' ? 'All time' : d}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {(statusFilter !== 'all' || dateRangeFilter !== 'all') ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 text-xs text-muted-foreground"
+                onClick={() => {
+                  setStatusFilter('all')
+                  setDateRangeFilter('all')
+                }}
+              >
+                Reset filters
+              </Button>
+            ) : null}
+
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-7 text-xs"
+              onClick={() => {
+                const exportRows = filteredItems.map((item) => ({
+                  date: item.createdAt ? new Date(item.createdAt).toISOString() : '',
+                  callRef: item.callRef,
+                  toolName: item.toolRef,
+                  provider: 'Agentic Economy Seller',
+                  agentName: item.principalRef ?? 'Unspecified Agent',
+                  costAud: item.audAmountUnits ? (Number(item.audAmountUnits) / 1_000_000).toFixed(2) : '0.00',
+                  gstAud: item.audAmountUnits ? (Number(item.audAmountUnits) / 11_000_000).toFixed(2) : '0.00',
+                  status: projectCallSummaryPurchaseStatus(item).label,
+                }))
+                const csv = generateCallsCsv(exportRows)
+                downloadCsv(`activity-calls-${new Date().toISOString().slice(0, 10)}.csv`, csv)
+              }}
+            >
+              Export CSV
+            </Button>
+          </div>
+        ) : null}
         {pagination.items.length === 0 && pagination.cursor === undefined ? (
           <AeEmptyState
             title="No Calls yet"
@@ -302,7 +448,12 @@ function CallQueue({
 }>) {
   return (
     <AeSection title={title} description={description}>
-      {rows.length === 0 ? <p className="text-sm text-muted-foreground">{emptyMessage}</p> : (
+      {rows.length === 0 ? (
+        <AeTableEmptyState
+          title={attention ? 'No calls need attention' : 'No calls in history'}
+          description={emptyMessage}
+        />
+      ) : (
         <AeRecordTable
           columns={columns}
           data={rows}
@@ -396,6 +547,7 @@ export type ActivityLoaderResult =
       usage: Awaited<ReturnType<typeof readOwnerUsageServer>> | Readonly<{ kind: 'unavailable'; code: 'source_unavailable' }>
       spend: Awaited<ReturnType<typeof readOwnerSpendServer>> | Readonly<{ kind: 'unavailable'; code: 'source_unavailable' }>
       periodStart: string
+      filteredAgent?: string
     }>
   | Readonly<{ kind: 'unavailable' }>
 

@@ -48,6 +48,8 @@ describe('Provider Tool directory', () => {
     expect(within(screen.getByRole('table')).getAllByRole('columnheader').map((header) => header.textContent)).toEqual([
       'Tool',
       'Status',
+      'Price',
+      'Usage',
       'Next action',
     ])
   })

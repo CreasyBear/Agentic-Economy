@@ -408,7 +408,8 @@ export async function handleToolQuotePost(
     let rawBody: unknown
     try {
       rawBody = JSON.parse(bounded.text)
-    } catch {
+    } catch (cause) {
+      void cause;
       return withRequestCorrelationHeader(problem({
         status: 400,
         kind: 'INVALID_ARGUMENT',
@@ -475,7 +476,8 @@ export async function handleToolCallPost(
     let rawBody: unknown
     try {
       rawBody = JSON.parse(bounded.text)
-    } catch {
+    } catch (cause) {
+      void cause;
       telemetry({ outcome: 'failed', refusalCode: 'invalid_json' })
       return withRequestCorrelationHeader(problem({
         status: 400,
@@ -550,7 +552,8 @@ async function parseRecoveryBody(
   let rawBody: unknown
   try {
     rawBody = JSON.parse(bounded.text)
-  } catch {
+  } catch (cause) {
+    void cause;
     return {
       ok: false,
       response: withRequestCorrelationHeader(problem({

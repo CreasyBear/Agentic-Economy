@@ -41,9 +41,12 @@ function SignUpRoute() {
     : isProviderFlow
       ? 'After you create your account, you’ll continue to the Tool publishing workspace.'
       : redirect === undefined
-        ? 'After you create your account, you’ll return to your account settings.'
+        ? 'After you create your account, you’ll set up your workspace.'
         : 'After you create your account, you’ll return to where you left off.'
   const switchSearch = redirect === undefined ? {} : { redirect }
+  const onboardingRedirectUrl = redirect === undefined
+    ? '/onboarding'
+    : `/onboarding?redirect=${encodeURIComponent(redirect)}`
 
   return (
     <AePublicPage>
@@ -88,7 +91,8 @@ function SignUpRoute() {
         >
           <SignUp
             appearance={clerkAuthSurfaceAppearance}
-            fallbackRedirectUrl={redirect ?? '/owner/settings'}
+            fallbackRedirectUrl={onboardingRedirectUrl}
+            forceRedirectUrl={onboardingRedirectUrl}
             signInFallbackRedirectUrl={redirect ?? '/owner/settings'}
             signInUrl="/sign-in"
           />

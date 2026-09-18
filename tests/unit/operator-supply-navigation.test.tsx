@@ -11,6 +11,7 @@ vi.mock('@clerk/tanstack-react-start', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@clerk/tanstack-react-start')>()),
   useUser: () => ({ isLoaded: true, isSignedIn: true, user: { fullName: 'Owner' } }),
   UserButton: () => <button type="button" aria-label="Account menu" />,
+  OrganizationSwitcher: () => <div data-testid="organization-switcher" />,
 }))
 
 import { AeOperatorSidebar } from '@/components/ae/layout/AeOperatorSidebar'

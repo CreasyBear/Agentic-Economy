@@ -828,7 +828,8 @@ function decodeHistoryCursor(token: string, key: string): HistoryCursor | undefi
   try {
     const parsed = accountHistoryCursorSchema.safeParse(JSON.parse(Buffer.from(match[1], 'base64url').toString('utf8')))
     return parsed.success ? parsed.data : undefined
-  } catch {
+  } catch (cause) {
+    void cause;
     return undefined
   }
 }

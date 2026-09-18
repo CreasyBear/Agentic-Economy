@@ -64,7 +64,8 @@ function validStoredSpendingPeriods(
         : currentUtcMonthBounds(period.periodStartAt)
       return expected.periodStartAt === period.periodStartAt
         && expected.periodEndAt === period.periodEndAt
-    } catch {
+    } catch (cause) {
+      void cause;
       return false
     }
   }

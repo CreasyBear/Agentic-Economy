@@ -112,6 +112,36 @@ describe('direct Quote handlers', () => {
     expect(projected.requiredActions).toMatchObject([{ action: 'review_account_exposure', cta: '/support' }])
   })
 
+  it('refuses issueQuote when organization monthly spend ceiling would be exceeded', async () => {
+    const backend = convexTestWithMarketComponents()
+    const suffix = 'quote-org-monthly-ceiling'
+    const fixture = await publishCurrentTool(backend, suffix)
+    await seedCommercialPolicies(backend, suffix, Date.now())
+    const agent = await seedAgent(backend, { canonicalAccountRef: fixture.accountRef }, fixture.toolRef, suffix, '20000000')
+    await backend.finishAllScheduledFunctions(() => undefined)
+    await observeHealthyReadiness(backend, fixture, suffix)
+    const input = { request: 'Perth' }
+    const subjects = await prepareSubjects(backend, agent, fixture.toolRef, input, suffix)
+    const result = await backend.mutation(internal.capabilityQuotes.issueQuote, {
+      operationKey: `${suffix}:issue`, correlationId: `${suffix}:issue`,
+      principal: agent.principal, toolRef: fixture.toolRef, input,
+      formance: {
+        ...formanceSnapshot(subjects),
+        organizationMonthlySpend: {
+          enabled: true,
+          ceilingUnits: '1',
+          monthSpendUnits: '0',
+        },
+      },
+    })
+    expect(result).toMatchObject({
+      kind: 'refused',
+      code: 'budget_exceeded',
+      reason: 'organization_monthly_ceiling',
+    })
+    expect(await backend.run(ctx => ctx.db.query('capabilityQuotes').take(1))).toEqual([])
+  })
+
   it('refuses production Quote preparation and issuance in hosted alpha before upstream actions', async () => {
     const backend = convexTestWithMarketComponents()
     const suffix = 'quote-hosted-alpha'

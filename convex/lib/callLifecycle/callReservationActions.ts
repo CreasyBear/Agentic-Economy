@@ -21,7 +21,7 @@ import {
   type PublishedTool,
 } from '@/modules/capability-supply/public'
 import { isPublicToolRef } from '@/modules/capability-supply/public'
-import { type AdmitArgs } from './admission'
+import { type AdmitArgs, type ReserveArgs } from './admission'
 import {
   assertCallResultJson,
   callIdentity,
@@ -29,6 +29,40 @@ import {
   type CallIdentityArgs,
 } from './callIdentity'
 import type { ReplayRow } from './callRecoveryActions'
+
+function currentUtcMonthWindow(): { periodStartAt: number; periodEndAt: number } {
+  const now = new Date()
+  return {
+    periodStartAt: Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1),
+    periodEndAt: Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1),
+  }
+}
+
+async function readOrganizationMonthlySpendForReserve(
+  ctx: ActionCtx,
+  ownerId: string,
+): Promise<ReserveArgs['organizationMonthlySpend']> {
+  const budgetRow = await ctx.runQuery(
+    internal.moneyMonthlySpendBudget.readOrganizationMonthlySpendBudgetForAccount,
+    { accountRef: ownerId },
+  )
+  if (!budgetRow.enabled) return undefined
+  const { periodStartAt, periodEndAt } = currentUtcMonthWindow()
+  const accountSpend = await ctx.runAction(internal.moneyFormance.readPeriodSpend, {
+    accountRef: ownerId,
+    periodStartAt,
+    periodEndAt,
+  })
+  return {
+    enabled: true,
+    ceilingUnits: budgetRow.ceilingUnits,
+    ...(accountSpend.kind === 'available'
+      ? { monthSpendUnits: accountSpend.spendUnits }
+      : accountSpend.kind === 'empty'
+        ? { monthSpendUnits: '0' }
+        : {}),
+  }
+}
 
 type CallResultValue = Infer<typeof callResultValue>
 
@@ -188,12 +222,14 @@ async function reserveFormanceBackedInvocation(
   toolJson: string | undefined,
   input: Record<string, unknown>,
 ): Promise<ReservationResult> {
+  const organizationMonthlySpend = await readOrganizationMonthlySpendForReserve(ctx, principal.ownerId)
   const result = await ctx.runMutation(internal.capabilityCalls.reserve, {
     ...reservation,
     ownerId: principal.ownerId,
     ...(toolJson === undefined ? {} : { toolJson }),
     inputJson: JSON.stringify(input),
     now: Date.now(),
+    ...(organizationMonthlySpend === undefined ? {} : { organizationMonthlySpend }),
   })
   if (result.kind !== 'reserved' && result.kind !== 'replayed') return result
   const material = await ctx.runQuery(internal.moneyManagedCall.readBooking, {

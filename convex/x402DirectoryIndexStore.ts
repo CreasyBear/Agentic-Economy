@@ -351,7 +351,8 @@ function providerOfferingPrices(
         }
         return []
       }
-    } catch {
+    } catch (cause) {
+      void cause;
       // fallback to offering presentation price if pricingConfigJson parsing fails
     }
   }

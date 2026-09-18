@@ -27,6 +27,7 @@ export const observabilityTables = {
     targetRef: v.string(),
     beforeState: v.optional(v.string()),
     afterState: v.optional(v.string()),
+    outcome: v.optional(v.string()),
     idempotencyKey: v.string(),
     correlationId: v.string(),
     reasonCode: v.optional(v.string()),

@@ -64,6 +64,27 @@ it('shows one factual Published status and the existing withdraw correction with
   await waitFor(() => expect(withdraw).toHaveBeenCalledTimes(1))
 })
 
+it('opens price update modal and applies new revision when onUpdatePrice is provided', async () => {
+  const onUpdatePrice = vi.fn(async (_price: string) => ({ kind: 'applied' as const, message: 'Price updated.' }))
+  render(
+    <AeProviderToolDetail
+      name="Reference lookup"
+      status={status}
+      currentPrice="A$ 0.10"
+      onUpdatePrice={onUpdatePrice}
+    />,
+  )
+
+  fireEvent.click(screen.getByRole('button', { name: 'Update Price' }))
+  expect(await screen.findByRole('heading', { name: /update price & publish new revision/i })).toBeTruthy()
+
+  const input = screen.getByLabelText(/new price per call \(aud\)/i)
+  fireEvent.change(input, { target: { value: '0.20' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Publish New Revision' }))
+
+  await waitFor(() => expect(onUpdatePrice).toHaveBeenCalledWith('0.20'))
+})
+
 it('renders the single source correction from the shared status contract', async () => {
   const recheck = vi.fn(async () => ({ kind: 'applied' as const, message: 'Source check scheduled.' }))
   render(<AeProviderToolDetail

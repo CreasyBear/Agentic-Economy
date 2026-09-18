@@ -21,7 +21,8 @@ function readOAuthPermanentProblemCode(body: string): OAuthPermanentProblemCode 
   let parsed: unknown
   try {
     parsed = JSON.parse(body) as unknown
-  } catch {
+  } catch (cause) {
+    void cause;
     return undefined
   }
   if (typeof parsed !== 'object' || parsed === null || !('error' in parsed)) return undefined

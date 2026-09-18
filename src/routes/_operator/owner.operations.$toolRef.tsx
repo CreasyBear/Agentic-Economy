@@ -128,6 +128,7 @@ function OwnerSupplyDetailRoute() {
       <AeProviderToolDetail
         name={name}
         status={result.status.status}
+        showTestPlayground={result.status.status.state === 'Published' || Boolean(result.status.status.routeability?.available)}
         {...(resumeHref === undefined ? {} : { resumeHref })}
         onRefresh={async () => {
           await router.invalidate()

@@ -11,7 +11,7 @@ import { readCurrentPublishedTool } from '../../capabilitySupplyTools'
 import { enqueueCallDispatch } from './dispatch'
 import { assertAgentAccessRateAdmission } from '../rateLimit'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
-import { exactAmountSchema, pricingConfigDecisionAmount } from '@/modules/money/public'
+import { exactAmountSchema, evaluateOrganizationMonthlySpendFence, pricingConfigDecisionAmount } from '@/modules/money/public'
 import { isBoundedJsonValue, type JsonValue } from '@/modules/capability-contract/public'
 import { isRecord } from '@/modules/common/is-record'
 import { createPublicToolRef, isPublicToolRef } from '@/modules/capability-supply/public'
@@ -105,6 +105,11 @@ export type ReserveArgs = Readonly<{
   inputJson?: string
   sellerOnboardingCanary?: SellerOnboardingCanaryExecutionEnvelope
   now: number
+  organizationMonthlySpend?: Readonly<{
+    enabled: boolean
+    ceilingUnits?: string
+    monthSpendUnits?: string
+  }>
 }>
 
 export type ReserveResult =
@@ -503,6 +508,55 @@ async function spendingPeriodAdmissionRefusal(
   return null
 }
 
+async function organizationMonthlySpendReserveRefusal(
+  ctx: MutationCtx,
+  args: ReserveArgs,
+  commitment: CommitmentRow | null,
+): Promise<GrantRefusal | null> {
+  if (commitment === null || commitment.decisionAudUnits === '0') return null
+  let snapshot: { enabled: boolean; ceilingUnits?: string; monthSpendUnits?: string } | undefined = args.organizationMonthlySpend
+  if (snapshot === undefined || !snapshot.enabled) {
+    const budgetRow = await ctx.db
+      .query('moneyMonthlySpendBudgets')
+      .withIndex('by_accountRef', (query) => query.eq('accountRef', args.ownerId))
+      .unique()
+    if (budgetRow === null || !budgetRow.enabled) return null
+    snapshot = {
+      enabled: true,
+      ceilingUnits: budgetRow.ceilingUnits,
+    }
+  }
+  const fence = evaluateOrganizationMonthlySpendFence({
+    enabled: true,
+    ...(snapshot.ceilingUnits === undefined ? {} : { ceilingUnits: snapshot.ceilingUnits }),
+    ...(snapshot.monthSpendUnits === undefined ? {} : { monthSpendUnits: snapshot.monthSpendUnits }),
+    requestUnits: commitment.decisionAudUnits,
+  })
+  switch (fence.kind) {
+    case 'not_applicable':
+    case 'admitted':
+      return null
+    case 'refused':
+      return {
+        kind: 'refused',
+        code: 'budget_exceeded',
+        retryable: false,
+        nextAction: 'Request a fresh Quote after the organization monthly spending cap changes.',
+      }
+    case 'unavailable':
+      return {
+        kind: 'refused',
+        code: 'budget_exceeded',
+        retryable: false,
+        nextAction: 'Request a fresh Quote once organization spend can be inspected again.',
+      }
+    default: {
+      const exhaustive: never = fence
+      return exhaustive
+    }
+  }
+}
+
 async function persistReservedCall(
   ctx: MutationCtx,
   args: ReserveArgs,
@@ -564,6 +618,9 @@ export async function reserveHandler(
 
   const periodRefusal = await spendingPeriodAdmissionRefusal(ctx, args, commitment, normalizedGrant)
   if (periodRefusal !== null) return periodRefusal
+
+  const organizationSpendRefusal = await organizationMonthlySpendReserveRefusal(ctx, args, commitment)
+  if (organizationSpendRefusal !== null) return organizationSpendRefusal
 
   const admissionRefusal = await rateAndConcurrencyRefusal(ctx, args, normalizedGrant)
   if (admissionRefusal !== null) return admissionRefusal

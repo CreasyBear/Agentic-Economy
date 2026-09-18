@@ -23,6 +23,9 @@ export type OwnerOfferingSummary = Readonly<{
   blocker?: string
   continuation?: Readonly<{ label: string; href: string }>
   lifecyclePending?: boolean
+  pricingLabel?: string
+  protocolLabel?: string
+  callsCount?: number
 }>
 
 export function toOwnerOfferingSummary(
@@ -117,6 +120,12 @@ export function AeOwnerOfferingsList({
           <Badge variant="outline">
             {row.original.lifecyclePending ? 'Loading…' : row.original.lifecycleLabel ?? statusLabel(row.original.status)}
           </Badge>
+          {row.original.protocolLabel === undefined ? null : (
+            <span className="text-xs text-muted-foreground">Protocol: {row.original.protocolLabel}</span>
+          )}
+          <span className="text-xs text-muted-foreground">
+            Catalog: {statusLabel(row.original.status)}
+          </span>
           {row.original.availability === undefined ? null : (
             <span className="text-xs text-muted-foreground">{availabilityLabel(row.original.availability)}</span>
           )}
@@ -129,6 +138,28 @@ export function AeOwnerOfferingsList({
             <span className="text-xs text-muted-foreground">{row.original.blocker}</span>
           )}
         </div>
+      ),
+    },
+    {
+      id: 'price',
+      accessorFn: (item) => item.pricingLabel ?? '—',
+      header: ({ column }) => <AeOperatorSortableHeader label="Price" column={column} />,
+      cell: ({ row }) => (
+        <span className="font-mono text-xs tabular-nums text-foreground">
+          {row.original.pricingLabel ?? '—'}
+        </span>
+      ),
+    },
+    {
+      id: 'activity',
+      accessorFn: (item) => item.callsCount ?? 0,
+      header: ({ column }) => <AeOperatorSortableHeader label="Usage" column={column} />,
+      cell: ({ row }) => (
+        <span className="text-xs text-muted-foreground">
+          {row.original.callsCount !== undefined
+            ? `${row.original.callsCount} calls`
+            : `${row.original.accessPathCount} access path${row.original.accessPathCount === 1 ? '' : 's'}`}
+        </span>
       ),
     },
   ], [])
@@ -235,5 +266,7 @@ function availabilityLabel(value: 'available' | 'unavailable' | 'unknown'): stri
 function compactSortValue(item: OwnerOfferingSummary, id: string): string {
   if (id === 'name') return item.offering.name
   if (id === 'status') return item.lifecycleLabel ?? statusLabel(item.status)
+  if (id === 'price') return item.pricingLabel ?? ''
+  if (id === 'activity') return String(item.callsCount ?? item.accessPathCount)
   return item.offering.name
 }

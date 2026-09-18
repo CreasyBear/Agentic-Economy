@@ -80,8 +80,9 @@ export type AccountFundingBalance =
       balance: Readonly<{ currency: 'AUD'; units: string; exponent: 6 }>
       locked: boolean
       version: number
-      updatedAt?: number
-      lastTransactionRef?: string
+      updatedAt?: number | undefined
+      lastTransactionRef?: string | undefined
+      pendingTopup?: Readonly<{ commandRef: string }> | null | undefined
     }>
   | MoneyRefusal
 

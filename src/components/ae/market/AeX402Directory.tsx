@@ -65,7 +65,8 @@ function useIndexedPagination(indexed: boolean, catalogue: X402DirectoryCatalogu
       setState(current => current.source === source && current.cursor === cursor
         ? { source, items: [...current.items, ...result.page.items], cursor: result.indexCursor, isDone: result.isDone, status: 'idle' }
         : current)
-    } catch {
+    } catch (cause) {
+      void cause;
       setState(current => current.source === source && current.cursor === cursor ? { ...current, status: 'failed' } : current)
     }
   }

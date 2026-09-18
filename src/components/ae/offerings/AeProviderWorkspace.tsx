@@ -15,13 +15,15 @@ import type { OwnerProviderEarningsReadback } from '@/modules/capability-supply/
 import { readOwnerConnectReadinessServer } from '@/modules/money/money.functions'
 import type { OwnerConnectReadinessReadback } from '@/modules/money/server'
 import { AeOwnerOfferingsList } from './AeOwnerOfferings'
-import { ProviderIdentityForm } from './ProviderIdentityForm'
 import { focusSection, toOfferingSummary, type ProviderWorkspaceProjectionRow } from './provider-workspace-projection'
 import { ProviderWorkspaceEarningsSection } from './ProviderWorkspaceEarningsSection'
 import { ProviderWorkspaceIdentitySection } from './ProviderWorkspaceIdentitySection'
 import { ProviderWorkspaceOffboardingSection } from './ProviderWorkspaceOffboardingSection'
 import { ProviderWorkspaceReadinessSection } from './ProviderWorkspaceReadinessSection'
 import { ProviderWorkspaceToolsSection } from './ProviderWorkspaceToolsSection'
+import { AeConnectReturnPoller } from '@/components/ae/supply/AeConnectReturnPoller'
+import { AeSupplierOnboardingWizard } from '@/components/ae/supply/AeSupplierOnboardingWizard'
+import { ensureProviderBusinessServer } from './provider-identity.functions'
 import type {
   ProviderWorkspaceConnectionsResult,
   ProviderWorkspaceConnectionsDetailResult,
@@ -50,6 +52,7 @@ type WorkspaceProps = Readonly<{
 
 export function AeProviderWorkspace(props: WorkspaceProps) {
   const router = useRouter()
+  const ensureProviderBusiness = useServerFn(ensureProviderBusinessServer)
   const [refreshPending, setRefreshPending] = useState(false)
   const refresh = useCallback(() => {
     if (refreshPending) return
@@ -69,7 +72,32 @@ export function AeProviderWorkspace(props: WorkspaceProps) {
       {...(actions === undefined ? {} : { actions })}
     >
       {props.inventory.kind === 'not_found' ? (
-        <ProviderIdentityForm />
+        <div className="grid gap-6">
+          <AeSupplierOnboardingWizard
+            currentStep="profile"
+            onSaveProfile={async ({ name, website }) => {
+              try {
+                const parsedUrl = new URL(website)
+                const created = await ensureProviderBusiness({
+                  data: {
+                    name,
+                    slug: name,
+                    website: parsedUrl.origin,
+                    providerIdentifier: parsedUrl.hostname,
+                  },
+                })
+                if (created.kind === 'refused') {
+                  return { kind: 'error', message: `Failed to create provider: ${created.code}` }
+                }
+                await router.invalidate()
+                return { kind: 'ok' }
+              } catch (cause) {
+                void cause
+                return { kind: 'error', message: 'Network error creating provider workspace.' }
+              }
+            }}
+          />
+        </div>
       ) : props.inventory.kind === 'conflict' ? (
         <Alert variant="destructive">
           <AlertTitle>Provider identity needs attention</AlertTitle>
@@ -225,6 +253,25 @@ function AvailableWorkspace({
 
   return (
     <div className="grid gap-section">
+      {(compatibilityConnect === 'return' || compatibilityConnect === 'refresh') && (
+        <AeConnectReturnPoller
+          {...(earningsDetail?.connect === undefined ? {} : { initialReadiness: earningsDetail.connect })}
+          onPollReadiness={readConnect}
+          onReadinessAchieved={() => void router.invalidate()}
+        />
+      )}
+      {inventory.tools.length === 0 && (
+        <div className="mb-2">
+          <AeSupplierOnboardingWizard
+            currentStep={earningsDetail?.connect?.kind === 'available' && earningsDetail.connect.accounts.some((a) => a.account.state === 'ready') ? 'first_tool' : 'payouts'}
+            providerName={inventory.provider.name}
+            payoutsConfigured={earningsDetail?.connect?.kind === 'available' && earningsDetail.connect.accounts.some((a) => a.account.state === 'ready')}
+            onConnectPayouts={() => {
+              openEarnings()
+            }}
+          />
+        </div>
+      )}
       <ProviderWorkspaceToolsSection
         inventory={inventory}
         {...(lifecycle === undefined ? {} : { lifecycle })}

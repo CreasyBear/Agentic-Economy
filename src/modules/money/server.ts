@@ -86,6 +86,8 @@ export type { OwnerMoneyServerRuntime } from './internal/payout-http-runtime'
 export {
   createOwnerConnectAccountServer,
   createOwnerConnectAccountThroughSource,
+  createOwnerExpressLoginLinkServer,
+  createOwnerExpressLoginLinkThroughSource,
   createOwnerOnboardingLinkServer,
   createOwnerOnboardingLinkThroughSource,
   readOwnerConnectReadinessThroughSource,
@@ -95,6 +97,8 @@ export type {
   OwnerConnectAccountInput,
   OwnerConnectAccountResult,
   OwnerConnectReadinessReadback,
+  OwnerExpressLoginLinkInput,
+  OwnerExpressLoginLinkResult,
   OwnerOnboardingLinkInput,
   OwnerOnboardingLinkResult,
   OwnerPayoutAuthorityUpdateInput,

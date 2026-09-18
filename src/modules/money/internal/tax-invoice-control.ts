@@ -21,6 +21,10 @@ export type TaxInvoiceIssuanceAdmission =
   | Readonly<{ kind: 'admitted' }>
   | Readonly<{ kind: 'withheld'; reason: TaxInvoiceIssuanceWithheldReason }>
 
+export function normalizeAbn(value: string): string {
+  return value.replace(/[\s-]/gu, '')
+}
+
 export function isValidAbn(abn: string): boolean {
   if (!/^\d{11}$/u.test(abn)) return false
   const digits = [...abn].map(Number)

@@ -419,6 +419,11 @@ function issueTitle(code: string): string {
   if (code === 'cancelled') return 'The Call was cancelled'
   if (code === 'invalidated') return 'The Call is no longer valid'
   if (code === 'provider_output_invalid') return 'The provider output was invalid'
+  if (code === 'provider_timeout' || code === 'upstream_timeout' || code === 'gateway_timeout') return 'Provider timed out'
+  if (code === 'rate_limited' || code === 'provider_rate_limited') return 'Provider rate limit exceeded'
+  if (code === 'input_invalid' || code === 'schema_mismatch' || code === 'input_schema_invalid') {
+    return 'Tool argument schema mismatch'
+  }
   if (code === 'terminal') return 'The Call ended without a completed result'
   return 'The Call did not complete'
 }
@@ -429,6 +434,15 @@ function foundIssueExplanation(code: string): string {
   if (code === 'cancelled') return 'Cancellation was recorded before a completed result.'
   if (code === 'invalidated') return 'The Call can no longer continue under its recorded authority or generation.'
   if (code === 'provider_output_invalid') return 'The provider returned data that did not satisfy the Tool output contract.'
+  if (code === 'provider_timeout' || code === 'upstream_timeout' || code === 'gateway_timeout') {
+    return 'The provider endpoint did not return a response within the maximum execution window. Check endpoint availability or retry with backoff.'
+  }
+  if (code === 'rate_limited' || code === 'provider_rate_limited') {
+    return 'The provider endpoint rejected this request due to concurrency or volume limits. Reduce call frequency and retry.'
+  }
+  if (code === 'input_invalid' || code === 'schema_mismatch' || code === 'input_schema_invalid') {
+    return 'The arguments provided to the tool failed input schema validation. Check tool documentation and update the payload.'
+  }
   if (code === 'terminal') return 'The Call reached a terminal state, but no canonical completed result is recorded.'
   return `The Call ended with ${humanize(code)} and no completed result is claimed.`
 }

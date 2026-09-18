@@ -942,7 +942,7 @@ describe('assistant access components', () => {
     expect(screen.getAllByText('Browse only').length).toBeGreaterThan(0)
     expect(screen.getAllByText('Sandbox').length).toBeGreaterThan(0)
     expect(screen.getByText('30/min · 300/hour')).toBeTruthy()
-    expect(screen.getByText('USD 25.00')).toBeTruthy()
+    expect(screen.getAllByText('USD 25.00').length).toBeGreaterThan(0)
     expect(screen.queryByText(/scope:|data:|principal|clerk_api_key/u)).toBeNull()
   })
 

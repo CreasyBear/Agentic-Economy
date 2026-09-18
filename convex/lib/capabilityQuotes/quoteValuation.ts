@@ -7,6 +7,7 @@ import type { JsonValue } from '@/modules/capability-contract/public'
 import { canonicalDigest, isCanonicalDigest } from '@/modules/common/canonical-digest'
 import {
   audFundingPolicyFromCommercialControls,
+  evaluateOrganizationMonthlySpendFence,
   normalizePricingConfig,
   PACKAGE4_FORMANCE_REQUIREMENTS,
   quoteManagedX402BuyerAud,
@@ -213,6 +214,41 @@ export function quoteFormanceSnapshotIsCurrent(
     && formance.formanceSchemaVersion === PACKAGE4_FORMANCE_REQUIREMENTS.schemaVersion
     && formance.observedAt <= now
     && now - formance.observedAt <= 15_000
+}
+
+export type OrganizationMonthlySpendAdmissionSnapshot = Readonly<{
+  enabled: boolean
+  ceilingUnits?: string | undefined
+  monthSpendUnits?: string | undefined
+}>
+
+export function quoteOrganizationMonthlySpendAdmission(
+  refusalContext: QuoteRefusalContext,
+  requestUnits: string,
+  snapshot: OrganizationMonthlySpendAdmissionSnapshot | undefined,
+): QuoteRefusalResult | undefined {
+  if (snapshot === undefined || !snapshot.enabled) return undefined
+  const fence = evaluateOrganizationMonthlySpendFence({
+    enabled: true,
+    ceilingUnits: snapshot.ceilingUnits,
+    monthSpendUnits: snapshot.monthSpendUnits,
+    requestUnits,
+  })
+  switch (fence.kind) {
+    case 'not_applicable':
+    case 'admitted':
+      return undefined
+    case 'refused':
+      return refuse(refusalContext, 'budget_exceeded', false, { reason: fence.reason })
+    case 'unavailable':
+      return refuse(refusalContext, 'budget_exceeded', false, {
+        reason: 'organization_monthly_spend_unavailable',
+      })
+    default: {
+      const exhaustive: never = fence
+      return exhaustive
+    }
+  }
 }
 
 export async function quotePaidPeriodAdmission(

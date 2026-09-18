@@ -3,6 +3,7 @@ import { SignOutButton, UserProfile } from '@clerk/tanstack-react-start'
 import { AeSection } from '@/components/ae/layout/AeSection'
 import { AeAccountSecurityHistory } from '@/components/ae/settings/AeAccountSecurityHistory'
 import { AeCompromiseRecoveryChecklist } from '@/components/ae/settings/AeCompromiseRecoveryChecklist'
+import { OwnerNotificationSettings } from '@/components/ae/settings/OwnerNotificationSettings'
 import { AeSiteAuthPanel, AeSiteAuthSubmit } from '@/components/ae/website'
 import type { AccountSecurityHistoryResult } from '@/modules/security/account-security'
 
@@ -32,6 +33,20 @@ export function AccountSettingsSection({
         </div>
       </AeSection>
       <AeCompromiseRecoveryChecklist />
+      <AeSection id="notifications" title="Email alerts">
+        <OwnerNotificationSettings
+          preferences={{
+            lowCreditBalance: true,
+            lowCreditThresholdCents: 2500,
+            spendCapWarning: true,
+            callFailureSpike: true,
+            invoiceReady: true,
+            teamMembershipChanged: true,
+            revision: 0,
+          }}
+          onUpdate={() => {}}
+        />
+      </AeSection>
       <AeAccountSecurityHistory initialResult={history} />
     </>
   )

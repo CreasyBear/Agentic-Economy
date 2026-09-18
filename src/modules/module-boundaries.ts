@@ -36,6 +36,8 @@ export type ModuleName =
   | 'security'
   | 'secrets'
   | 'seo'
+  | 'workspace-invitation'
+  | 'workspace-membership'
 
 export type RuntimeImporter = ModuleName | 'adapter' | 'convex'
 
@@ -82,8 +84,8 @@ export const MODULE_BOUNDARY_MANIFEST: ModuleBoundaryManifest = {
     { name: 'business', entrySurfaces: ['public.ts', 'schema.ts'], allowedDependencies: ['common', 'principal-account'] },
     { name: 'security', entrySurfaces: ['public.ts', 'schema.ts', 'source-write-admission.ts', 'admin-readback.functions.ts', 'removal-dispute.functions.ts', 'account-security.ts', 'account-security.functions.ts', 'rate-limit-policy.ts'], allowedDependencies: ['common', 'business', 'capability-contract'] },
     { name: 'capability-contract-registry', entrySurfaces: ['public.ts', 'schema.ts'], allowedDependencies: ['common', 'capability-contract'] },
-    { name: 'agent-access', entrySurfaces: ['public.ts', 'schema.ts', 'contract.ts', 'account.actions.ts', 'issued-agent-binding.ts', 'agent-access.ts', 'agent-access.functions.ts', 'policy.ts', 'policy.functions.ts', 'production-policy.ts', 'sandbox-policy.ts', 'service-auth-envelope.ts', 'agent-access-console.ts', 'agent-operator-view-model.ts', 'consent-read-model.ts', 'oauth-state.ts', 'agent-connection.ts'], allowedDependencies: ['common', 'capability-contract', 'security', 'money', 'principal-account'] },
-    { name: 'money', entrySurfaces: ['public.ts', 'schema.ts', 'server.ts', 'money.functions.ts', 'formance.ts', 'formance-workflows.ts', 'funding-handoff.actions.ts', 'funding-handoff-schemas.ts', 'reference-rate.ts'], allowedDependencies: ['common', 'security'] },
+    { name: 'agent-access', entrySurfaces: ['public.ts', 'schema.ts', 'contract.ts', 'account.actions.ts', 'issued-agent-binding.ts', 'agent-access.ts', 'agent-access.functions.ts', 'policy.ts', 'policy.functions.ts', 'production-policy.ts', 'sandbox-policy.ts', 'service-auth-envelope.ts', 'agent-access-console.ts', 'agent-operator-view-model.ts', 'consent-read-model.ts', 'oauth-state.ts', 'agent-connection.ts', 'config-snippets.ts', 'spending-policy-update.ts'], allowedDependencies: ['common', 'capability-contract', 'security', 'money', 'principal-account'] },
+    { name: 'money', entrySurfaces: ['public.ts', 'schema.ts', 'server.ts', 'money.functions.ts', 'formance.ts', 'formance-workflows.ts', 'funding-handoff.actions.ts', 'funding-handoff-schemas.ts', 'reference-rate.ts', 'internal/auto-recharge-decision.ts', 'internal/organization-monthly-spend-fence.ts'], allowedDependencies: ['common', 'security'] },
     { name: 'observability', entrySurfaces: ['public.ts', 'schema.ts', 'funnel.functions.ts'], allowedDependencies: ['common', 'business'] },
     { name: 'action-execution', entrySurfaces: ['public.ts', 'runtime.ts', 'schema.ts'], allowedDependencies: ['common', 'capability-contract', 'money', 'security', 'network-guard', 'observability'] },
     { name: 'capability-supply', entrySurfaces: ['public.ts', 'server.ts', 'schema.ts', 'convex.ts', 'current-tool.ts', 'tool-projection.ts', 'tool-schemas.ts', 'tool-source.ts', 'provider-approval.ts', 'provider-connection.ts', 'provider-connection-handoff.ts', 'provider-offboarding.ts', 'published-tool.ts', 'route-transport-runtime.ts', 'source-authority-review.functions.ts', 'source-first-owner.ts', 'source-selection-draft.ts', 'supplied-quote.actions.ts', 'supplied-quote.ts', 'supply-actions.ts', 'supply-funnel.functions.ts', 'owner-supply-validators.ts', 'integration-draft.ts', 'tool-health.ts', 'source-preview.ts', 'provider-tool-status.ts', 'supply-publication-v2.ts'], allowedDependencies: ['common', 'network-guard', 'capability-contract', 'capability-contract-registry', 'business', 'security', 'agent-access', 'money', 'observability', 'secrets'] },
@@ -99,6 +101,8 @@ export const MODULE_BOUNDARY_MANIFEST: ModuleBoundaryManifest = {
     { name: 'chat-sharing', entrySurfaces: ['share-token.ts', 'schema.ts', 'convex.ts'], allowedDependencies: ['common'] },
     { name: 'model-gateway', entrySurfaces: ['public.ts'], allowedDependencies: ['common', 'actions'] },
     { name: 'dev', entrySurfaces: ['public.ts'], allowedDependencies: ['common', 'business', 'catalog', 'registry', 'capability-supply', 'capability-execution', 'actions'] },
+    { name: 'workspace-invitation', entrySurfaces: ['organization-invitation-observation.ts'], allowedDependencies: [] },
+    { name: 'workspace-membership', entrySurfaces: ['organization-membership-observation.ts'], allowedDependencies: [] },
   ],
   temporaryRuntimeExceptions: [],
   testOnlyWhiteBoxExceptions: [],

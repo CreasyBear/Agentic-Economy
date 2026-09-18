@@ -9,6 +9,15 @@ export const Package3AuditEventTypeValues = [
   'account.session.ended',
   'account.session.revoked',
   'account.security_profile.updated',
+  'account.workspace_profile.updated',
+  'account.workspace_invitation.created',
+  'account.workspace_invitation.revoked',
+  'account.workspace_membership.created',
+  'account.workspace_membership.updated',
+  'account.workspace_membership.deleted',
+  'account.workspace.closed',
+  'account.workspace.ownership_transferred',
+  'account.personal_account.retired',
   'agent.created',
   'agent.renamed',
   'agent.policy_updated',
@@ -137,6 +146,8 @@ export const AuditEventTypeValues = [
   'billing.reconciliation_failed',
   'billing.reconciliation_repaired',
   'billing.no_repair_marked',
+  'billing.auto_recharge_configured',
+  'billing.monthly_spend_ceiling_configured',
   ...Package3AuditEventTypeValues,
 ] as const
 
@@ -267,6 +278,8 @@ const stateChangingEvents: Partial<Record<AuditEventType, true>> = {
   'billing.reconciliation_failed': true,
   'billing.reconciliation_repaired': true,
   'billing.no_repair_marked': true,
+  'billing.auto_recharge_configured': true,
+  'billing.monthly_spend_ceiling_configured': true,
 }
 
 const auditEventTypes = new Set<string>(AuditEventTypeValues)

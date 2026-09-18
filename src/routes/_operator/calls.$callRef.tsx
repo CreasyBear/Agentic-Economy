@@ -7,6 +7,7 @@ import {
   CallStatusUnchangedView,
 } from '@/components/ae/call-receipt/CallStatusViews'
 import { CallReceiptWorkspace } from '@/components/ae/call-receipt/CallReceiptWorkspace'
+import { CallReceiptSkeleton } from '@/components/ae/call-receipt/CallReceiptSkeleton'
 import { useCallStatusRecovery } from '@/hooks/useCallStatusRecovery'
 import type {
   CallReconciliationForm,
@@ -56,9 +57,7 @@ function CallStatusPending() {
   const { callRef } = Route.useParams()
   return (
     <CallReceiptWorkspace callRef={callRef} description="Checking the exact current owner-scoped Call receipt." pending>
-      <section className="py-page" aria-busy="true" aria-live="polite">
-        <p className="text-muted-foreground">Checking the exact current owner-scoped Call receipt…</p>
-      </section>
+      <CallReceiptSkeleton />
     </CallReceiptWorkspace>
   )
 }

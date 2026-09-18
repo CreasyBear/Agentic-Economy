@@ -28,6 +28,7 @@ import {
 export const moneyServerMocks = {
   beginOwnerPayoutTransferServer: vi.fn(),
   createOwnerConnectAccountServer: vi.fn(),
+  createOwnerExpressLoginLinkServer: vi.fn(),
   createOwnerOnboardingLinkServer: vi.fn(),
   readOwnerPayoutTransferServer: vi.fn(),
 };

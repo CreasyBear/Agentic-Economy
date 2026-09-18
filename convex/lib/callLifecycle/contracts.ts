@@ -312,6 +312,11 @@ export const reserveArgs = {
   inputDigest: v.string(), requestDigest: v.string(), grantGeneration: v.number(), policyDigest: v.string(), grantExpiresAt: v.number(),
   toolJson: v.optional(v.string()), inputJson: v.optional(v.string()), now: v.number(),
   sellerOnboardingCanary: v.optional(sellerOnboardingCanaryExecutionEnvelopeValue),
+  organizationMonthlySpend: v.optional(v.object({
+    enabled: v.boolean(),
+    ceilingUnits: v.optional(v.string()),
+    monthSpendUnits: v.optional(v.string()),
+  })),
 } as const
 export const reservationValue = v.object({
   quoteRef: v.string(),

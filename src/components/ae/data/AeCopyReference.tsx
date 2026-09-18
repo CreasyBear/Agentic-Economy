@@ -2,6 +2,7 @@ import { CheckIcon, CopyIcon } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { useClipboardCopy } from '@/hooks/use-clipboard-copy'
+import { toast } from '@/lib/ui/toast'
 import { cn } from '@/lib/utils'
 
 export function AeCopyReference({
@@ -23,7 +24,13 @@ export function AeCopyReference({
         size="icon-sm"
         className="shrink-0"
         aria-label={copied ? `${label} copied` : `Copy ${label}`}
-        onClick={() => { void copy() }}
+        onClick={() => {
+          void copy().then(() => {
+            toast.success(`Copied ${label} to clipboard`)
+          }).catch(() => {
+            toast.error(`Failed to copy ${label}`)
+          })
+        }}
       >
         {copied
           ? <CheckIcon aria-hidden="true" className="size-4" />

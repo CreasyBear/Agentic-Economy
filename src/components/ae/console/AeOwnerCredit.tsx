@@ -14,12 +14,22 @@ import {
 } from '@/modules/money/public'
 import type { AccountFundingBalance, AccountFundingConstraints } from '@/modules/money/server'
 import type { MoneyDocumentView, MoneyProviderObligationView, MoneyReconciliationCaseView } from '@/lib/server/money-documents.functions'
+import { AeAutoRechargeCard } from './AeAutoRechargeCard'
+import { AeMonthlySpendCeilingCard } from './AeMonthlySpendCeilingCard'
+import {
+  AeSavedPaymentMethodsCard,
+  type SavedPaymentMethodsSummary,
+} from './AeSavedPaymentMethodsCard'
 import { AeAccountFundingPanel, type AccountFundingPort } from './AeCreditTopUpPanel'
 import {
   AccountHistory,
   CreditSectionEmptyState,
   type AccountHistoryPort,
 } from './AeAccountHistoryTable'
+import {
+  AeInvoiceHistoryTable,
+  type AeInvoiceHistoryRow,
+} from './AeInvoiceHistoryTable'
 import {
   documentFacts,
   documentKindLabel,
@@ -52,6 +62,41 @@ export type AeOwnerCreditProps = Readonly<{
     reconciliation?: boolean
     obligations?: boolean
   }>
+  autoRechargeSettings?: Readonly<{
+    enabled: boolean
+    thresholdUnits: string
+    rechargeAmountUnits: string
+    revision: number
+  }>
+  autoRechargeMandateState?: 'missing' | 'ready' | 'authentication_required' | 'failed'
+  autoRechargePendingTopup?: Readonly<{ commandRef: string }> | null
+  onSaveAutoRecharge?: (settings: Readonly<{
+    enabled: boolean
+    thresholdUnits: string
+    rechargeAmountUnits: string
+    expectedRevision: number
+  }>) => Promise<void> | void
+  monthlySpendCeilingSettings?: Readonly<{
+    enabled: boolean
+    ceilingUnits: string
+    revision: number
+  }>
+  monthlySpendMonthSpend?: Readonly<{
+    kind: 'available' | 'empty' | 'unavailable'
+    spendUnits?: string
+  }>
+  onSaveMonthlySpendCeiling?: (settings: Readonly<{
+    enabled: boolean
+    ceilingUnits: string
+    expectedRevision: number
+  }>) => Promise<void> | void
+  savedPaymentMethodsSummary?: SavedPaymentMethodsSummary
+  savedPaymentMethodsLoading?: boolean
+  onManageSavedPaymentMethods?: () => Promise<{ portalUrl?: string } | void> | void
+  invoiceHistoryRows?: readonly AeInvoiceHistoryRow[]
+  invoiceHistoryLoading?: boolean
+  onDownloadTaxInvoice?: (row: AeInvoiceHistoryRow) => Promise<void> | void
+  onViewStripeReceipt?: (row: AeInvoiceHistoryRow) => Promise<void> | void
 }>
 
 type DocumentAction =
@@ -101,6 +146,20 @@ export function AeOwnerCredit({
   onSignDailyClose,
   onOpenDocument,
   unavailable = {},
+  autoRechargeSettings,
+  autoRechargeMandateState = 'missing',
+  autoRechargePendingTopup,
+  onSaveAutoRecharge,
+  monthlySpendCeilingSettings,
+  monthlySpendMonthSpend,
+  onSaveMonthlySpendCeiling,
+  savedPaymentMethodsSummary,
+  savedPaymentMethodsLoading = false,
+  onManageSavedPaymentMethods,
+  invoiceHistoryRows,
+  invoiceHistoryLoading = false,
+  onDownloadTaxInvoice,
+  onViewStripeReceipt,
 }: AeOwnerCreditProps) {
   const balance = accountBalance?.kind === 'available' ? accountBalance.balance : undefined
   const balanceUnavailable = accountBalance === undefined || accountBalance.kind === 'refused'
@@ -175,6 +234,28 @@ export function AeOwnerCredit({
             </AlertDescription>
           </Alert>
         ) : null}
+        {monthlySpendCeilingSettings !== undefined && onSaveMonthlySpendCeiling !== undefined ? (
+          <AeMonthlySpendCeilingCard
+            settings={monthlySpendCeilingSettings}
+            {...(monthlySpendMonthSpend === undefined ? {} : { monthSpend: monthlySpendMonthSpend })}
+            onSave={onSaveMonthlySpendCeiling}
+          />
+        ) : null}
+        {onManageSavedPaymentMethods !== undefined ? (
+          <AeSavedPaymentMethodsCard
+            {...(savedPaymentMethodsSummary === undefined ? {} : { summary: savedPaymentMethodsSummary })}
+            isLoading={savedPaymentMethodsLoading}
+            onManage={onManageSavedPaymentMethods}
+          />
+        ) : null}
+        {autoRechargeSettings !== undefined && onSaveAutoRecharge !== undefined ? (
+          <AeAutoRechargeCard
+            settings={autoRechargeSettings}
+            mandateState={autoRechargeMandateState}
+            {...(autoRechargePendingTopup === undefined ? {} : { pendingTopup: autoRechargePendingTopup })}
+            onSave={onSaveAutoRecharge}
+          />
+        ) : null}
         <div className="grid gap-3 rounded-xl border border-border/70 p-4">
           <div>
             <h3 className="font-medium">Add credit</h3>
@@ -187,6 +268,18 @@ export function AeOwnerCredit({
             {...(onCreditRefresh === undefined ? {} : { onRefresh: onCreditRefresh })}
           />
         </div>
+      </AeSection>
+
+      <AeSection
+        title="Invoice & top-up history"
+        description="Paid top-ups retain Stripe card receipts and Australian tax invoices when your workspace tax profile and environment policy allow issuance."
+      >
+        <AeInvoiceHistoryTable
+          {...(invoiceHistoryRows === undefined ? {} : { rows: invoiceHistoryRows })}
+          isLoading={invoiceHistoryLoading}
+          {...(onDownloadTaxInvoice === undefined ? {} : { onDownloadTaxInvoice })}
+          {...(onViewStripeReceipt === undefined ? {} : { onViewStripeReceipt })}
+        />
       </AeSection>
 
       <AeSection
