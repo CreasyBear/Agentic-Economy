@@ -1,10 +1,10 @@
 import type { ReactNode } from 'react'
 
 import { AeFactList } from '@/components/ae/data/AeFactList'
-import { AePageState } from '@/components/ae/layout/AePageState'
 import { AeSection } from '@/components/ae/layout/AeSection'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { cn } from '@/lib/utils'
 import { projectCallReceipt, type CallReceiptView } from '@/modules/capability-execution/call-receipt-view'
 
 import type {
@@ -16,7 +16,7 @@ import type {
 } from '@/lib/call-recovery/call-status-page-types'
 
 import { CallMoneyFacts } from './CallMoneyFacts'
-import { CallReceiptIssue, CallReceiptRefreshButton, CallReceiptRef, CallReceiptStatusFeedback } from './CallReceiptPrimitives'
+import { CallReceiptIssue, CallReceiptRefreshButton, CallReceiptRef, CallReceiptStatusFeedback, callReceiptTactilePressClassName } from './CallReceiptPrimitives'
 import { CallReceiptTimeline } from './CallReceiptTimeline'
 import { CallReceiptWorkspace } from './CallReceiptWorkspace'
 import { CallRecoveryPanel } from './CallRecoveryPanel'
@@ -62,21 +62,33 @@ export function CallStatusUnchangedView({
 }>) {
   return (
     <CallReceiptWorkspace callRef={result.callRef} description="Checking whether this exact Call has changed.">
-      <AePageState
-        state="pending"
-        title="No status change"
-        description={`This Call remains at version ${result.version}.`}
-        action={actions?.onRefresh === undefined ? undefined : (
+      <section
+        className="grid min-h-[12rem] gap-related rounded-xl border border-border bg-card p-4"
+        aria-labelledby="unchanged-receipt-title"
+      >
+        <div className="flex flex-wrap items-start justify-between gap-intra">
+          <Badge variant="secondary" className="w-fit">No status change</Badge>
+          <CallReceiptRef value={result.callRef} />
+        </div>
+        <div className="grid gap-intra">
+          <h2 id="unchanged-receipt-title" className="text-lg font-semibold tracking-tight text-foreground">
+            No status change
+          </h2>
+          <p className="text-sm text-muted-foreground">
+            The authoritative Call record has not changed since version {result.version}.
+          </p>
+        </div>
+        {actions?.onRefresh === undefined ? null : (
           <Button
             type="button"
-            className="min-h-touch"
+            className={cn('min-h-touch w-fit', callReceiptTactilePressClassName)}
             disabled={actions.refreshPending === true}
             onClick={() => { void actions.onRefresh?.() }}
           >
             {actions.refreshPending === true ? 'Checking…' : 'Check status'}
           </Button>
         )}
-      />
+      </section>
     </CallReceiptWorkspace>
   )
 }
@@ -180,7 +192,10 @@ function CallReceiptBarrierHeader({
     <>
       <div className="grid gap-related">
         <Badge variant="warning" className="w-fit">{badgeLabel}</Badge>
-        {showRefresh && actions !== undefined ? <CallReceiptRefreshButton actions={actions} /> : null}
+        <CallReceiptRef value={callRef} />
+        {showRefresh && actions !== undefined ? (
+          <CallReceiptRefreshButton actions={actions} labelMode="try_again" />
+        ) : null}
         <CallReceiptStatusFeedback feedback={actions?.feedback} callRef={callRef} />
       </div>
       {receiptView.issue === undefined ? null : <CallReceiptIssue issue={receiptView.issue} />}

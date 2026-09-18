@@ -18,7 +18,9 @@ import { reconciliationBindingIdentity } from '@/lib/call-recovery/client-storag
 import type { CallReconciliationForm, CallStatusPageActions, FoundCallStatus } from '@/lib/call-recovery/call-status-page-types'
 import { canRefreshCallStatus } from '@/lib/call-recovery/call-status-refresh'
 
-import { CallReceiptStatusFeedback } from './CallReceiptPrimitives'
+import { cn } from '@/lib/utils'
+
+import { CallReceiptStatusFeedback, callReceiptRefreshLabel, callReceiptTactilePressClassName } from './CallReceiptPrimitives'
 
 type CallRecoveryAvailability = Readonly<{
   canCancelNow: boolean
@@ -82,7 +84,7 @@ export function CallRecoveryPanel({
       </div>
       <CallReceiptStatusFeedback feedback={actions?.feedback} callRef={result.callRef} />
       <ReconciliationBlockers availability={availability} />
-      <RecoveryPrimaryActions availability={availability} {...(actions === undefined ? {} : { actions })} />
+      <RecoveryPrimaryActions availability={availability} result={result} {...(actions === undefined ? {} : { actions })} />
       {availability.canReconcileNow ? (
         <AdvancedReconciliation
           key={reconciliationBindingIdentity(result)}
@@ -102,6 +104,9 @@ function ReconciliationBlockers({ availability }: Readonly<{ availability: CallR
           <AlertTitle>Reconciliation cannot be submitted</AlertTitle>
           <AlertDescription>
             This record does not expose the attempt reference and effect generation required by the reconciliation contract. No evidence is fabricated or submitted from this browser.
+            <p className="mt-intra rounded-lg border border-success-ring bg-success-subtle px-3 py-2 text-sm text-success-foreground">
+              A$0.00 charged — this receipt is unchanged until evidence is accepted.
+            </p>
           </AlertDescription>
         </Alert>
       ) : null}
@@ -110,6 +115,9 @@ function ReconciliationBlockers({ availability }: Readonly<{ availability: CallR
           <AlertTitle>Evidence submission is unavailable</AlertTitle>
           <AlertDescription>
             Permission to submit Provider evidence could not be confirmed from this receipt source. Refresh this exact Call to check again; no evidence can be submitted here until permission is available.
+            <p className="mt-intra rounded-lg border border-success-ring bg-success-subtle px-3 py-2 text-sm text-success-foreground">
+              A$0.00 charged — this receipt is unchanged until evidence is accepted.
+            </p>
           </AlertDescription>
         </Alert>
       ) : null}
@@ -120,9 +128,11 @@ function ReconciliationBlockers({ availability }: Readonly<{ availability: CallR
 function RecoveryPrimaryActions({
   availability,
   actions,
-}: Readonly<{ availability: CallRecoveryAvailability; actions?: CallStatusPageActions }>) {
+  result,
+}: Readonly<{ availability: CallRecoveryAvailability; actions?: CallStatusPageActions; result: FoundCallStatus }>) {
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false)
   const canCancel = availability.canCancelNow && actions?.onCancel !== undefined
+  const refreshLabelMode = result.state === 'retryable' ? 'try_again' as const : 'refresh_status' as const
   if (!availability.canRefreshNow && !canCancel) return null
 
   return (
@@ -131,18 +141,18 @@ function RecoveryPrimaryActions({
         {availability.canRefreshNow ? (
           <Button
             type="button"
-            className="min-h-touch"
+            className={cn('min-h-touch', callReceiptTactilePressClassName)}
             disabled={availability.recoveryPending}
             onClick={() => { void actions?.onRefresh?.() }}
           >
-            {actions?.refreshPending === true ? 'Refreshing current status…' : 'Refresh current status'}
+            {callReceiptRefreshLabel(refreshLabelMode, actions?.refreshPending === true)}
           </Button>
         ) : null}
         {canCancel ? (
           <Button
             type="button"
             variant="secondary"
-            className="min-h-touch"
+            className={cn('min-h-touch', callReceiptTactilePressClassName)}
             disabled={availability.recoveryPending}
             onClick={() => setCancelDialogOpen(true)}
           >
@@ -231,8 +241,8 @@ function AdvancedReconciliation({
             />
           </Field>
           <Field orientation="horizontal">
-            <Button type="submit" className="min-h-touch" disabled={recoveryPending}>
-              {actions?.reconcilePending === true ? 'Reconciling Call…' : 'Submit reconciliation'}
+            <Button type="submit" className={cn('min-h-touch', callReceiptTactilePressClassName)} disabled={recoveryPending}>
+              {actions?.reconcilePending === true ? 'Reconciling Call…' : 'Submit reconciliation evidence'}
             </Button>
           </Field>
         </FieldGroup>

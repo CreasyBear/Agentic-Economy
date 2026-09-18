@@ -157,7 +157,7 @@ describe('public Call receipt projection', () => {
     }
 
     expect(purchaseStatusLabel(input)).toBe('Resolved — refunded')
-    expect(projectCallReceipt(input).issue?.moneyMovement).toBe('The receipt records that the reserved authorization was released.')
+    expect(projectCallReceipt(input).issue?.moneyMovement).toBe('Reserved credit was released back to your balance.')
   })
 
   it('keeps purchase resolution open when completed output has uncertain payment', () => {
@@ -210,9 +210,9 @@ describe('public Call receipt projection', () => {
     expect(view.issue).toEqual({
       title: 'The external outcome needs reconciliation',
       whatHappened: 'The provider boundary may have been crossed, but the final external outcome is not conclusive.',
-      moneyMovement: 'Money movement is not yet conclusive; reconciliation is required.',
-      automaticNext: 'No automatic retry or replacement Call has been started.',
-      userNext: 'Submit evidence for this same Call before any retry.',
+      moneyMovement: 'Money movement is not yet conclusive — do not assume a charge or refund.',
+      automaticNext: 'No duplicate charge and no automatic retry.',
+      userNext: 'Submit reconciliation evidence for this Call before any retry.',
       retainedReference: callRef,
     })
     expect(view.stages.find(({ id }) => id === 'settled')).toMatchObject({ state: 'attention' })
@@ -258,7 +258,24 @@ describe('public Call receipt projection', () => {
     })
     expect(rateLimitView.issue).toMatchObject({
       title: 'Provider rate limit exceeded',
-      whatHappened: expect.stringMatching(/concurrency or volume limits/i),
+      whatHappened: expect.stringMatching(/volume or concurrency limits/i),
+    })
+
+    const rateLimitAliasView = projectCallReceipt({
+      kind: 'found',
+      version: 1,
+      callRef,
+      toolRef,
+      state: 'terminal',
+      result: {
+        kind: 'refused',
+        code: 'rate_limit_exceeded' as unknown as 'rate_limited',
+        retryable: true,
+      },
+    })
+    expect(rateLimitAliasView.issue).toMatchObject({
+      title: 'Provider rate limit exceeded',
+      whatHappened: expect.stringMatching(/volume or concurrency limits/i),
     })
 
     const inputInvalidView = projectCallReceipt({
@@ -275,7 +292,41 @@ describe('public Call receipt projection', () => {
     })
     expect(inputInvalidView.issue).toMatchObject({
       title: 'Tool argument schema mismatch',
-      whatHappened: expect.stringMatching(/input schema validation/i),
+      whatHappened: expect.stringMatching(/input schema/i),
+    })
+
+    const parameterInvalidView = projectCallReceipt({
+      kind: 'found',
+      version: 1,
+      callRef,
+      toolRef,
+      state: 'terminal',
+      result: {
+        kind: 'refused',
+        code: 'parameter_invalid' as unknown as 'input_invalid',
+        retryable: false,
+      },
+    })
+    expect(parameterInvalidView.issue).toMatchObject({
+      title: 'Tool argument schema mismatch',
+      whatHappened: expect.stringMatching(/input schema/i),
+    })
+
+    const insufficientFundsView = projectCallReceipt({
+      kind: 'found',
+      version: 1,
+      callRef,
+      toolRef,
+      state: 'terminal',
+      result: {
+        kind: 'refused',
+        code: 'insufficient_balance',
+        retryable: false,
+      },
+    })
+    expect(insufficientFundsView.issue).toMatchObject({
+      title: 'Insufficient prepaid credit',
+      moneyMovement: 'A$0.00 charged — your prepaid balance is unaffected.',
     })
   })
 
@@ -284,7 +335,9 @@ describe('public Call receipt projection', () => {
 
     expect(view.toolRef).toBeUndefined()
     expect(view.stages.every(({ state }) => state === 'pending')).toBe(true)
-    expect(view.issue?.moneyMovement).toBe('No money movement can be determined from this unavailable record.')
+    expect(view.issue?.moneyMovement).toBe(
+      'Money movement cannot be confirmed while this receipt is unavailable. Do not assume A$0.00 or a charge.',
+    )
     expect(view.issue?.retainedReference).toBe(callRef)
   })
 })

@@ -277,7 +277,7 @@ describe('/calls/$callRef', () => {
     expect(screen.getByText('No canonical result is recorded yet. The state above remains authoritative.')).toBeTruthy()
     expect(screen.queryByText('Completed')).toBeNull()
     expect(screen.getAllByText('What happened').length).toBeGreaterThan(0)
-    expect(screen.getByText('Did money move?')).toBeTruthy()
+    expect(screen.getByText('Financial impact')).toBeTruthy()
     expect(screen.getByText('What happens automatically')).toBeTruthy()
     expect(screen.getByText('What you can do')).toBeTruthy()
     expect(screen.queryByText('Reference kept')).toBeNull()
@@ -301,7 +301,7 @@ describe('/calls/$callRef', () => {
     fireEvent.click(screen.getByRole('option', { name: 'Effect released' }))
     fireEvent.change(screen.getByLabelText('Evidence source'), { target: { value: 'Provider control plane' } })
     fireEvent.change(screen.getByLabelText('Evidence reference'), { target: { value: 'evt_123' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Submit reconciliation' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Submit reconciliation evidence' }))
 
     expect(onReconcile).toHaveBeenCalledWith({
       resolution: 'released',
@@ -325,7 +325,7 @@ describe('/calls/$callRef', () => {
     expect(screen.getByText('Evidence submission is unavailable')).toBeTruthy()
     expect(screen.getByText(/Permission to submit Provider evidence could not be confirmed/)).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Refresh current status' })).toBeTruthy()
-    expect(screen.queryByRole('button', { name: 'Submit reconciliation' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Submit reconciliation evidence' })).toBeNull()
     expect(screen.queryByLabelText('Evidence source')).toBeNull()
   })
 
@@ -509,10 +509,10 @@ describe('/calls/$callRef', () => {
 
     fireEvent.change(screen.getByLabelText('Evidence source'), { target: { value: 'Provider control plane' } })
     fireEvent.change(screen.getByLabelText('Evidence reference'), { target: { value: 'evt_123' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Submit reconciliation' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Submit reconciliation evidence' }))
     expect(await screen.findByText('The reconciliation source is unavailable. No new Call state is claimed.')).toBeTruthy()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Submit reconciliation' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Submit reconciliation evidence' }))
     await waitFor(() => expect(reconcileMock).toHaveBeenCalledTimes(2))
 
     const first = reconcileMock.mock.calls[0]?.[0]?.data
@@ -543,7 +543,7 @@ describe('/calls/$callRef', () => {
     fireEvent.click(screen.getByRole('option', { name: 'Effect released' }))
     fireEvent.change(screen.getByLabelText('Evidence source'), { target: { value: 'Provider control plane' } })
     fireEvent.change(screen.getByLabelText('Evidence reference'), { target: { value: 'evt_123' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Submit reconciliation' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Submit reconciliation evidence' }))
     expect(await screen.findByText('The reconciliation source is unavailable. No new Call state is claimed.')).toBeTruthy()
     firstView.unmount()
 
@@ -551,7 +551,7 @@ describe('/calls/$callRef', () => {
     expect((screen.getByLabelText('Evidence source') as HTMLInputElement).value).toBe('Provider control plane')
     expect((screen.getByLabelText('Evidence reference') as HTMLInputElement).value).toBe('evt_123')
     expect(screen.getByRole('combobox', { name: 'Observed provider outcome' }).textContent).toContain('Effect released')
-    fireEvent.click(screen.getByRole('button', { name: 'Submit reconciliation' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Submit reconciliation evidence' }))
     await waitFor(() => expect(reconcileMock).toHaveBeenCalledTimes(2))
 
     const first = reconcileMock.mock.calls[0]?.[0]?.data
@@ -570,7 +570,7 @@ describe('/calls/$callRef', () => {
     const firstView = renderRouteComponent(result)
     fireEvent.change(screen.getByLabelText('Evidence source'), { target: { value: 'Provider control plane' } })
     fireEvent.change(screen.getByLabelText('Evidence reference'), { target: { value: 'evt_123' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Submit reconciliation' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Submit reconciliation evidence' }))
     expect(await screen.findByText('The reconciliation source is unavailable. No new Call state is claimed.')).toBeTruthy()
     const storageKey = Object.keys(window.sessionStorage)[0]
     if (storageKey === undefined) throw new Error('reconciliation_storage_key_missing')
@@ -595,7 +595,7 @@ describe('/calls/$callRef', () => {
     })
     fireEvent.change(screen.getByLabelText('Evidence source'), { target: { value: 'Provider control plane' } })
     fireEvent.change(screen.getByLabelText('Evidence reference'), { target: { value: 'evt_123' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Submit reconciliation' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Submit reconciliation evidence' }))
     expect(await screen.findByText('The reconciliation source is unavailable. No new Call state is claimed.')).toBeTruthy()
     firstView.unmount()
 
@@ -607,7 +607,7 @@ describe('/calls/$callRef', () => {
     expect((screen.getByLabelText('Evidence reference') as HTMLInputElement).value).toBe('')
     fireEvent.change(screen.getByLabelText('Evidence source'), { target: { value: 'Provider control plane' } })
     fireEvent.change(screen.getByLabelText('Evidence reference'), { target: { value: 'evt_123' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Submit reconciliation' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Submit reconciliation evidence' }))
     await waitFor(() => expect(reconcileMock).toHaveBeenCalledTimes(2))
 
     const first = reconcileMock.mock.calls[0]?.[0]?.data
@@ -631,19 +631,19 @@ describe('/calls/$callRef', () => {
     })
     fireEvent.change(screen.getByLabelText('Evidence source'), { target: { value: 'Old provider source' } })
     fireEvent.change(screen.getByLabelText('Evidence reference'), { target: { value: 'evt_old' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Submit reconciliation' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Submit reconciliation evidence' }))
     expect(await screen.findByText('The reconciliation source is unavailable. No new Call state is claimed.')).toBeTruthy()
 
     fireEvent.click(screen.getByRole('button', { name: 'Refresh current status' }))
     await screen.findByText('Current status refreshed. Purchase status: Open — outcome uncertain.')
     expect((screen.getByLabelText('Evidence source') as HTMLInputElement).value).toBe('')
     expect((screen.getByLabelText('Evidence reference') as HTMLInputElement).value).toBe('')
-    fireEvent.click(screen.getByRole('button', { name: 'Submit reconciliation' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Submit reconciliation evidence' }))
     expect(reconcileMock).toHaveBeenCalledTimes(1)
 
     fireEvent.change(screen.getByLabelText('Evidence source'), { target: { value: 'Current provider source' } })
     fireEvent.change(screen.getByLabelText('Evidence reference'), { target: { value: 'evt_current' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Submit reconciliation' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Submit reconciliation evidence' }))
     await waitFor(() => expect(reconcileMock).toHaveBeenCalledTimes(2))
     const first = reconcileMock.mock.calls[0]?.[0]?.data
     const second = reconcileMock.mock.calls[1]?.[0]?.data
@@ -673,7 +673,7 @@ describe('/calls/$callRef', () => {
     )
     fireEvent.change(screen.getByLabelText('Evidence source'), { target: { value: 'Old provider source' } })
     fireEvent.change(screen.getByLabelText('Evidence reference'), { target: { value: 'evt_old' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Submit reconciliation' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Submit reconciliation evidence' }))
     expect(await screen.findByText('The reconciliation source is unavailable. No new Call state is claimed.')).toBeTruthy()
 
     loader.mockReturnValue(next)
@@ -681,7 +681,7 @@ describe('/calls/$callRef', () => {
 
     expect((screen.getByLabelText('Evidence source') as HTMLInputElement).value).toBe('')
     expect((screen.getByLabelText('Evidence reference') as HTMLInputElement).value).toBe('')
-    fireEvent.click(screen.getByRole('button', { name: 'Submit reconciliation' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Submit reconciliation evidence' }))
     expect(reconcileMock).toHaveBeenCalledTimes(1)
   })
 
@@ -702,11 +702,11 @@ describe('/calls/$callRef', () => {
 
     fireEvent.change(screen.getByLabelText('Evidence source'), { target: { value: 'Provider control plane' } })
     fireEvent.change(screen.getByLabelText('Evidence reference'), { target: { value: 'evt_123' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Submit reconciliation' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Submit reconciliation evidence' }))
     expect(await screen.findByText('The reconciliation source is unavailable. No new Call state is claimed.')).toBeTruthy()
 
     fireEvent.change(screen.getByLabelText('Evidence reference'), { target: { value: 'evt_456' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Submit reconciliation' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Submit reconciliation evidence' }))
     await waitFor(() => expect(reconcileMock).toHaveBeenCalledTimes(2))
 
     const first = reconcileMock.mock.calls[0]?.[0]?.data
@@ -751,7 +751,7 @@ describe('/calls/$callRef', () => {
     renderWithRouter(result, { onRefresh })
 
     expect(screen.getByRole('heading', { level: 1, name: heading })).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Refresh current status' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
     expect(onRefresh).toHaveBeenCalledOnce()
     expect(screen.queryByRole('link', { name: 'Sign in to view current status' })).toBeNull()
   })

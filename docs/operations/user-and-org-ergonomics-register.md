@@ -15,10 +15,10 @@
 | Wave | Workflows | Scope | Verified | In Review | Pending | Target Status |
 | :--- | :---: | :--- | :---: | :---: | :---: | :---: |
 | **Wave 1: Buyer Onboarding & Developer Launchpad** | 6 | `W-01`, `W-02`, `W-25`, `W-26`, `W-27`, `W-29` | 6 | 0 | 0 | **VERIFIED** |
-| **Wave 2: Financial Peace-of-Mind & Spend Observability** | 8 | `W-20`, `W-21`, `W-22`, `W-23`, `W-24`, `W-38`, `W-39`, `W-40` | 6 | 0 | 2 | `IN PROGRESS` |
+| **Wave 2: Financial Peace-of-Mind & Spend Observability** | 8 | `W-20`, `W-21`, `W-22`, `W-23`, `W-24`, `W-38`, `W-39`, `W-40` | 7 | 0 | 1 | `IN PROGRESS` |
 | **Wave 3: Supplier Monetization & Testing Playground** | 8 | `W-30`, `W-31`, `W-32`, `W-33`, `W-34`, `W-35`, `W-36`, `W-37` | 0 | 0 | 8 | `PENDING` |
 | **Wave 4: Team Operations, Identity & Tactile Standards** | 22 | `W-03`–`W-09`, `W-10`–`W-19`, `W-28`, `W-41`–`W-44` | 0 | 0 | 22 | `PENDING` |
-| **Total** | **44** | **All 44 Standard Workflows** | **12** | **0** | **32** | `IN PROGRESS` |
+| **Total** | **44** | **All 44 Standard Workflows** | **13** | **0** | **31** | `IN PROGRESS` |
 
 ---
 
@@ -210,16 +210,19 @@
 
 ---
 
-### W-39: Interactive Purchase Certificate & Call Receipt
-- **Surfaces:** `src/routes/_operator/calls.$callRef.tsx`, `src/modules/capability-execution/call-receipt-view.ts`
+### W-39: Actionable Call Receipt Diagnostic Playbooks
+- **Surfaces:** `src/routes/_operator/calls.$callRef.tsx`, `src/components/ae/call-receipt/CallStatusViews.tsx`, `src/components/ae/call-receipt/CallReceiptPrimitives.tsx`, `src/components/ae/call-receipt/CallRecoveryPanel.tsx`, `src/modules/capability-execution/call-receipt-view.ts`
 - **Incumbent Baseline:** Accordion modal showing receipt stages.
 - **Ergonomic Gap:** Text-heavy stages; raw machine error codes on failure; lacks clear commercial resolution summary.
 - **Target Ergonomic Spec:**
-  - Visual progress stepper: `Authorized` $\rightarrow$ `Reserved` $\rightarrow$ `Executed` $\rightarrow$ `Settled`.
-  - Itemized commercial receipt: Tool Price, Platform Seller Consideration, Australian GST, Final Settlement.
-  - Plain-English diagnostic playbook for failed calls with recommended next actions (e.g., *"Provider rate-limited; zero credit deducted. Retry in 12s"*).
-- **Subagent Assignment:** Grok (Scout) $\rightarrow$ Composer (Craft) $\rightarrow$ Orchestrator (Verify)
-- **Status:** `PENDING`
+  - Standardized Diagnostic Playbook card with 4 labeled sections: What happened, Financial impact, Automatic, What you can do.
+  - Plain-English error code translations and alias normalizations without machine jargon.
+  - Explicit A$ financial peace-of-mind lines (*"A$0.00 charged — your prepaid balance is unaffected"* or *"Reserved credit was released back to your balance"*).
+  - Prominent 1-click copy for Call reference with 2000ms checkmark transition and destination toast cues.
+  - Aligned Zero-CLS skeleton geometry mirroring the loaded 5-region receipt shell.
+  - Tactile active press physics on all recovery actions (Try again, Check status, Submit reconciliation evidence).
+- **Subagent Assignment:** Grok (Scout: `767115bc-f925-4b52-96ee-56a2bb18502a`) $\rightarrow$ Composer (Craft: `ccb2a78d-b734-466c-930e-7b63bcc9ea7e`) $\rightarrow$ Orchestrator (Verify)
+- **Status:** `VERIFIED`
 
 ---
 
